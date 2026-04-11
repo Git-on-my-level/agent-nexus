@@ -82,16 +82,42 @@ type BootstrapStatusResult struct {
 	BootstrapRegistrationAvailable bool `json:"bootstrap_registration_available"`
 }
 
+type PrincipalWorkspaceBinding struct {
+	WorkspaceID string `json:"workspace_id"`
+	Enabled     bool   `json:"enabled"`
+}
+
+type PrincipalRegistration struct {
+	Handle            string                      `json:"handle"`
+	ActorID           string                      `json:"actor_id"`
+	Status            string                      `json:"status"`
+	WorkspaceBindings []PrincipalWorkspaceBinding `json:"workspace_bindings,omitempty"`
+	BridgeInstanceID  string                      `json:"bridge_instance_id,omitempty"`
+	BridgeCheckedInAt string                      `json:"bridge_checked_in_at,omitempty"`
+	BridgeExpiresAt   string                      `json:"bridge_expires_at,omitempty"`
+}
+
+type PrincipalWakeRouting struct {
+	Applicable bool   `json:"applicable"`
+	Handle     string `json:"handle"`
+	Taggable   bool   `json:"taggable"`
+	Online     bool   `json:"online"`
+	State      string `json:"state"`
+	Summary    string `json:"summary"`
+}
+
 type Principal struct {
-	AgentID       string `json:"agent_id"`
-	ActorID       string `json:"actor_id"`
-	Username      string `json:"username"`
-	PrincipalKind string `json:"principal_kind"`
-	AuthMethod    string `json:"auth_method"`
-	CreatedAt     string `json:"created_at"`
-	UpdatedAt     string `json:"updated_at"`
-	Revoked       bool   `json:"revoked"`
-	RevokedAt     string `json:"revoked_at,omitempty"`
+	AgentID       string                 `json:"agent_id"`
+	ActorID       string                 `json:"actor_id"`
+	Username      string                 `json:"username"`
+	PrincipalKind string                 `json:"principal_kind"`
+	AuthMethod    string                 `json:"auth_method"`
+	CreatedAt     string                 `json:"created_at"`
+	UpdatedAt     string                 `json:"updated_at"`
+	Revoked       bool                   `json:"revoked"`
+	RevokedAt     string                 `json:"revoked_at,omitempty"`
+	Registration  *PrincipalRegistration `json:"registration,omitempty"`
+	WakeRouting   *PrincipalWakeRouting  `json:"wake_routing,omitempty"`
 }
 
 type ListPrincipalsResult struct {

@@ -377,6 +377,96 @@ func TestAuthListShowsDefaultProfile(t *testing.T) {
 	}
 }
 
+func TestAuthPrincipalsListTaggableHandles(t *testing.T) {
+	t.Parallel()
+
+	core := newFakeAuthCore(t)
+	core.principals = []map[string]any{
+		{
+			"agent_id":       "agent-milo",
+			"actor_id":       "actor-boss-kid",
+			"username":       "milo",
+			"principal_kind": "agent",
+			"auth_method":    "public_key",
+			"created_at":     "2026-03-19T00:00:00Z",
+			"updated_at":     "2026-03-19T01:00:00Z",
+			"revoked":        false,
+			"wake_routing": map[string]any{
+				"applicable": true,
+				"handle":     "milo",
+				"taggable":   true,
+				"online":     false,
+				"state":      "offline",
+				"summary":    "Offline. The agent is registered for this workspace, but no fresh bridge heartbeat is available.",
+			},
+		},
+		{
+			"agent_id":       "agent-guest",
+			"actor_id":       "actor-guest",
+			"username":       "guest",
+			"principal_kind": "human",
+			"auth_method":    "passkey",
+			"created_at":     "2026-03-19T00:00:00Z",
+			"updated_at":     "2026-03-19T01:00:00Z",
+			"revoked":        false,
+			"wake_routing": map[string]any{
+				"applicable": false,
+				"handle":     "guest",
+				"taggable":   false,
+				"online":     false,
+				"state":      "unknown",
+				"summary":    "",
+			},
+		},
+	}
+	server := httptest.NewServer(http.HandlerFunc(core.handle))
+	defer server.Close()
+
+	home := t.TempDir()
+	env := map[string]string{}
+	_ = runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "register", "--username", "agent.list"})
+
+	profilePath := filepath.Join(home, ".config", "oar", "profiles", "agent-a.json")
+	storedProfile, ok, err := profile.Load(profilePath)
+	if err != nil || !ok {
+		t.Fatalf("load profile after register: ok=%t err=%v", ok, err)
+	}
+	jsonOutput := false
+	storedProfile.JSON = &jsonOutput
+	if err := profile.Save(profilePath, storedProfile); err != nil {
+		t.Fatalf("persist profile with text output default: %v", err)
+	}
+
+	raw := runCLIForTest(t, home, env, nil, []string{"--base-url", server.URL, "--agent", "agent-a", "auth", "principals", "list", "--handles-only"})
+	if !strings.Contains(raw, "Taggable handles (1):") || !strings.Contains(raw, "@milo") {
+		t.Fatalf("expected taggable handles header in output, got %q", raw)
+	}
+
+	handlesJSON := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "principals", "list", "--handles-only"})
+	handlesPayload := assertEnvelopeOK(t, handlesJSON)
+	handlesData, _ := handlesPayload["data"].(map[string]any)
+	handles, _ := handlesData["handles"].([]any)
+	if len(handles) != 1 || strings.TrimSpace(anyStr(handles[0])) != "milo" {
+		t.Fatalf("expected handles=[milo], got %#v", handlesPayload)
+	}
+	if handlesData["handles_only"] != true {
+		t.Fatalf("expected handles_only=true, got %#v", handlesPayload)
+	}
+
+	jsonRaw := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "principals", "list", "--taggable"})
+	jsonPayload := assertEnvelopeOK(t, jsonRaw)
+	jsonData, _ := jsonPayload["data"].(map[string]any)
+	principals, _ := jsonData["principals"].([]any)
+	if len(principals) != 1 {
+		t.Fatalf("expected one taggable principal, got %#v", jsonPayload)
+	}
+	principal, _ := principals[0].(map[string]any)
+	wakeRouting, _ := principal["wake_routing"].(map[string]any)
+	if wakeRouting == nil || wakeRouting["handle"] != "milo" {
+		t.Fatalf("expected wake routing handle in JSON output, got %#v", jsonPayload)
+	}
+}
+
 func TestAuthRegisterInternalErrorIsActionable(t *testing.T) {
 	t.Parallel()
 
@@ -557,6 +647,95 @@ func TestAuthPrincipalsAndAuditList(t *testing.T) {
 	auditData, _ := auditPayload["data"].(map[string]any)
 	if auditData == nil || strings.TrimSpace(anyStr(auditData["next_cursor"])) != "cursor-audit" {
 		t.Fatalf("unexpected auth audit payload: %#v", auditPayload)
+	}
+}
+
+func TestAuthPrincipalsListHandlesOnly(t *testing.T) {
+	t.Parallel()
+
+	core := newFakeAuthCore(t)
+	core.principals = []map[string]any{
+		{
+			"agent_id":       "agent-milo",
+			"actor_id":       "actor-boss-kid",
+			"username":       "milo",
+			"principal_kind": "agent",
+			"auth_method":    "public_key",
+			"created_at":     "2026-03-19T00:00:00Z",
+			"updated_at":     "2026-03-19T01:00:00Z",
+			"revoked":        false,
+			"registration": map[string]any{
+				"handle":   "milo",
+				"actor_id": "actor-boss-kid",
+				"status":   "active",
+				"workspace_bindings": []map[string]any{
+					{"workspace_id": "ws_main", "enabled": true},
+				},
+			},
+			"wake_routing": map[string]any{
+				"applicable": true,
+				"handle":     "milo",
+				"taggable":   true,
+				"online":     false,
+				"state":      "offline",
+				"summary":    "Offline but taggable.",
+			},
+		},
+		{
+			"agent_id":       "agent-jordan",
+			"actor_id":       "actor-human",
+			"username":       "jordan",
+			"principal_kind": "human",
+			"auth_method":    "passkey",
+			"created_at":     "2026-03-19T00:00:00Z",
+			"updated_at":     "2026-03-19T01:00:00Z",
+			"revoked":        false,
+			"wake_routing": map[string]any{
+				"applicable": false,
+				"handle":     "jordan",
+				"taggable":   false,
+				"online":     false,
+				"state":      "unknown",
+				"summary":    "",
+			},
+		},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(core.handle))
+	defer server.Close()
+
+	home := t.TempDir()
+	env := map[string]string{}
+
+	_ = runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "register", "--username", "Agent.One"})
+	profilePath := filepath.Join(home, ".config", "oar", "profiles", "agent-a.json")
+	storedProfile, ok, err := profile.Load(profilePath)
+	if err != nil || !ok {
+		t.Fatalf("load profile after register: ok=%t err=%v", ok, err)
+	}
+	jsonOutput := false
+	storedProfile.JSON = &jsonOutput
+	if err := profile.Save(profilePath, storedProfile); err != nil {
+		t.Fatalf("persist profile with text output default: %v", err)
+	}
+
+	out := runCLIForTest(t, home, env, nil, []string{"--base-url", server.URL, "--agent", "agent-a", "auth", "principals", "list", "--handles-only"})
+	if !strings.Contains(out, "@milo") || strings.Contains(out, "@jordan") {
+		t.Fatalf("expected only taggable handle in text output, got %q", out)
+	}
+
+	raw := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "principals", "list", "--handles-only"})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+	if data == nil {
+		t.Fatalf("unexpected handles-only payload: %#v", payload)
+	}
+	handles, _ := data["handles"].([]any)
+	if len(handles) != 1 || strings.TrimSpace(anyStr(handles[0])) != "milo" {
+		t.Fatalf("expected handles=[milo], got %#v", data)
+	}
+	if data["taggable_only"] != true || data["handles_only"] != true {
+		t.Fatalf("expected handles-only metadata in payload, got %#v", data)
 	}
 }
 

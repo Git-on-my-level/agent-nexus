@@ -78,7 +78,7 @@ var authBootstrapSubcommandSpec = subcommandSpec{
 var authPrincipalsSubcommandSpec = subcommandSpec{
 	command:  "auth principals",
 	valid:    []string{"list", "revoke"},
-	examples: []string{"oar auth principals list", "oar auth principals list --limit 20", "oar auth principals revoke --agent-id <agent-id>", "oar auth principals revoke --agent-id <agent-id> --allow-human-lockout --human-lockout-reason 'incident recovery'"},
+	examples: []string{"oar auth principals list", "oar auth principals list --handles-only", "oar auth principals list --taggable", "oar auth principals list --limit 20", "oar auth principals revoke --agent-id <agent-id>", "oar auth principals revoke --agent-id <agent-id> --allow-human-lockout --human-lockout-reason 'incident recovery'"},
 	aliases: map[string]string{
 		"ls": "list",
 	},

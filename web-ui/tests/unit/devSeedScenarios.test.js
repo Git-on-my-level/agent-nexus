@@ -25,26 +25,58 @@ describe("dev seed scenarios", () => {
     expect(scenario).toMatchObject({
       detectActorId: "actor-boss-kid",
       detectTopicTitle: "Neighborhood Lemonade Stand Master Plan",
-      requireBoards: false,
+      detectBoardTitle: "Saturday Lemonade Stand Mission Board",
+      requireBoards: true,
     });
     expect(scenario.personas.map((persona) => persona.actor_id)).toEqual([
       "actor-boss-kid",
       "actor-sales-kid",
       "actor-backoffice-kid",
     ]);
+    expect(scenario.personas.map((persona) => persona.auth_username)).toEqual([
+      "milo",
+      "ruby",
+      "theo",
+    ]);
     expect(seed.topics.map((topic) => topic.title)).toContain(
       "Neighborhood Lemonade Stand Master Plan",
     );
     expect(seed.artifacts.length).toBeGreaterThan(0);
-    expect(seed.documents[0]).toMatchObject({
-      document: {
-        id: "kid-boss-lemonade-plan",
-        title: "Kid Boss Lemonade Plan",
-      },
-      content_type: "text",
+    const bossDoc = seed.documents.find(
+      (document) => document.id === "kid-boss-lemonade-plan",
+    );
+    expect(bossDoc).toMatchObject({
+      id: "kid-boss-lemonade-plan",
+      title: "Kid Boss Lemonade Plan",
     });
-    expect(seed.boards).toEqual([]);
-    expect(seed.cards).toEqual([]);
+    expect(seed.documentRevisions["kid-boss-lemonade-plan"]).toHaveLength(3);
+    expect(seed.documentRevisions["kid-sales-pitch-notebook"]).toHaveLength(3);
+    expect(seed.documentRevisions["kid-prep-notebook"]).toHaveLength(3);
+    expect(seed.boards[0]).toMatchObject({
+      title: "Saturday Lemonade Stand Mission Board",
+    });
+    expect(seed.cards).toHaveLength(3);
+    expect(
+      seed.cards.some(
+        (card) =>
+          card.summary ===
+          "Rewrite the sign so the price is giant and the joke is small",
+      ),
+    ).toBe(true);
+    expect(
+      seed.events.some(
+        (event) =>
+          event.thread_id === "thread-kids-lemonade-sales" &&
+          event.type === "message_posted",
+      ),
+    ).toBe(true);
+    expect(
+      seed.events.some(
+        (event) =>
+          event.thread_id === "thread-kids-lemonade-backoffice" &&
+          event.type === "message_posted",
+      ),
+    ).toBe(true);
   });
 
   it("returns null for an unknown scenario", async () => {

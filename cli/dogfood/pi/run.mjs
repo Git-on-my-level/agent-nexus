@@ -465,6 +465,7 @@ function commandGuide(baseUrl, defaultUsername, { profileReady = false } = {}) {
         "- Show auth subcommands: `oar auth`",
         "- Verify the pre-registered default profile: `oar auth whoami`",
         "- List local profiles if needed: `oar auth list`",
+        "- List taggable teammate handles directly: `oar auth principals list --taggable --handles-only`",
         "- Inspect linked principals when debugging Access or `@handle` behavior: `oar auth principals list --json`",
       ]
     : [

@@ -208,6 +208,10 @@ OAR_DEV_SEED_SCENARIO=kids-lemonade-stand \
 node ./scripts/seed-core-from-mock.mjs
 ```
 
+`kids-lemonade-stand` is chapter-aware: web dev seeding applies all checked-in
+chapters in sequence by default, so the workspace includes the board, cards,
+message history, and document revision history from the full scenario.
+
 With **`make serve`** (or matching env), the seed also writes **`web-ui/.dev/local-identities.json`**
 (gitignored) when `OAR_DEV_SEED_IDENTITIES=1`, core has `OAR_BOOTSTRAP_TOKEN`, and
 `OAR_DEV_REGISTER_LINKED_ACTORS=1` on oar-core. The sidebar **Fixture persona**

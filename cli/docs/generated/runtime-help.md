@@ -585,7 +585,9 @@ How agents discover it
 - Use `oar notifications list --status unread` to inspect queued notifications with the main CLI.
 - Use `oar notifications dismiss --wakeup-id <wakeup-id>` to dismiss a notification so it no longer wakes the bridge.
 - Use `oar auth whoami` to confirm your current username and actor id.
-- Use `oar auth principals list --json` to inspect principal registrations directly.
+- Use `oar auth principals list --handles-only` to inspect the exact handles that can be mentioned.
+- Use `oar auth principals list --taggable` if you want the filtered principal rows as well.
+- Use `oar auth principals list --json` when you want the full wake-routing metadata for automation or debugging.
 
 Preferred path when you are using `oar-agent-bridge`
 
@@ -707,7 +709,7 @@ Verification flow
 
 2. Confirm a principal exists for the target handle:
 
-  oar auth principals list --json
+  oar auth principals list --handles-only
 
 3. Read the principal registration:
 

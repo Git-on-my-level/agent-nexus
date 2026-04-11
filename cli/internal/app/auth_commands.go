@@ -199,7 +199,7 @@ func (a *App) runAuthAudit(ctx context.Context, service *authcli.Service, args [
 }
 
 func (a *App) runAuthPrincipalsList(ctx context.Context, service *authcli.Service, args []string) (*commandResult, error) {
-	limit, cursor, err := parseAuthListFlags("auth principals list", args)
+	limit, cursor, taggableOnly, handlesOnly, err := parseAuthPrincipalListFlags("auth principals list", args)
 	if err != nil {
 		return nil, err
 	}
@@ -207,40 +207,102 @@ func (a *App) runAuthPrincipalsList(ctx context.Context, service *authcli.Servic
 	if err != nil {
 		return nil, err
 	}
-	if len(result.Principals) == 0 {
+	principals := result.Principals
+	if taggableOnly {
+		principals = filterTaggablePrincipals(principals)
+	}
+	handles := collectPrincipalHandles(principals)
+	if len(principals) == 0 {
 		data := map[string]any{
 			"principals":                   []any{},
+			"handles":                      []any{},
 			"count":                        0,
 			"active_human_principal_count": result.ActiveHumanPrincipalCount,
+			"taggable_only":                taggableOnly,
+			"handles_only":                 handlesOnly,
 		}
 		if result.NextCursor != "" {
 			data["next_cursor"] = result.NextCursor
 		}
+		if handlesOnly {
+			return &commandResult{Text: "No taggable handles found.", Data: data}, nil
+		}
 		return &commandResult{Text: "No principals found.", Data: data}, nil
 	}
 
-	lines := make([]string, 0, len(result.Principals))
-	for _, principal := range result.Principals {
+	if handlesOnly {
+		text := fmt.Sprintf("Taggable handles (%d):\n%s", len(handles), strings.Join(prefixHandles(handles), "\n"))
+		data := map[string]any{
+			"principals":                   principals,
+			"handles":                      handles,
+			"count":                        len(handles),
+			"active_human_principal_count": result.ActiveHumanPrincipalCount,
+			"taggable_only":                true,
+			"handles_only":                 true,
+		}
+		if result.NextCursor != "" {
+			text += "\n\nNext cursor: " + result.NextCursor
+			data["next_cursor"] = result.NextCursor
+		}
+		return &commandResult{Text: text, Data: data}, nil
+	}
+
+	lines := make([]string, 0, len(principals))
+	for _, principal := range principals {
 		status := "active"
 		if principal.Revoked {
 			status = "revoked"
 		}
-		lines = append(
-			lines,
-			fmt.Sprintf("  %s  username=%s  kind=%s  auth=%s  status=%s", principal.AgentID, principal.Username, principal.PrincipalKind, principal.AuthMethod, status),
-		)
+		handle := principalWakeHandle(principal)
+		wakeState := principalWakeState(principal)
+		line := fmt.Sprintf("  %s  username=%s  kind=%s  auth=%s  status=%s", principal.AgentID, principal.Username, principal.PrincipalKind, principal.AuthMethod, status)
+		if handle != "" {
+			line = fmt.Sprintf("%s  handle=@%s  wake=%s", line, handle, wakeState)
+		}
+		lines = append(lines, line)
 	}
-	text := fmt.Sprintf("Principals (%d):\n%s", len(result.Principals), strings.Join(lines, "\n"))
+	text := fmt.Sprintf("Principals (%d):\n%s", len(principals), strings.Join(lines, "\n"))
 	data := map[string]any{
-		"principals":                   result.Principals,
-		"count":                        len(result.Principals),
+		"principals":                   principals,
+		"handles":                      handles,
+		"count":                        len(principals),
 		"active_human_principal_count": result.ActiveHumanPrincipalCount,
+		"taggable_only":                taggableOnly,
+		"handles_only":                 false,
 	}
 	if result.NextCursor != "" {
 		text += "\n\nNext cursor: " + result.NextCursor
 		data["next_cursor"] = result.NextCursor
 	}
 	return &commandResult{Text: text, Data: data}, nil
+}
+
+func parseAuthPrincipalListFlags(commandName string, args []string) (int, string, bool, bool, error) {
+	fs := newSilentFlagSet(commandName)
+	var limitFlag trackedString
+	var cursorFlag trackedString
+	var taggableOnly trackedBool
+	var handlesOnly trackedBool
+	fs.Var(&limitFlag, "limit", "Maximum number of results to return")
+	fs.Var(&cursorFlag, "cursor", "Opaque pagination cursor from a previous response")
+	fs.Var(&taggableOnly, "taggable", "Show only principals whose wake routing is taggable")
+	fs.Var(&handlesOnly, "handles-only", "Print only currently taggable @handles")
+	if err := fs.Parse(args); err != nil {
+		return 0, "", false, false, errnorm.Usage("invalid_auth_list_flags", err.Error())
+	}
+	if len(fs.Args()) > 0 {
+		return 0, "", false, false, errnorm.Usage("invalid_auth_list_args", "unexpected positional arguments")
+	}
+
+	limit := 0
+	if strings.TrimSpace(limitFlag.value) != "" {
+		parsed, err := parsePositiveInt(limitFlag.value)
+		if err != nil {
+			return 0, "", false, false, errnorm.Usage("invalid_request", "limit must be a positive integer")
+		}
+		limit = parsed
+	}
+	return limit, strings.TrimSpace(cursorFlag.value), bool(taggableOnly.value || handlesOnly.value), bool(handlesOnly.value), nil
 }
 
 func (a *App) runAuthRevoke(ctx context.Context, service *authcli.Service, args []string) (*commandResult, error) {
@@ -546,6 +608,65 @@ func authWakeRoutingHint(username string) string {
 		"Wake registration help: oar help bridge; oar meta doc agent-bridge; oar meta doc wake-routing (principal: @%s)",
 		handle,
 	)
+}
+
+func filterTaggablePrincipals(principals []authcli.Principal) []authcli.Principal {
+	filtered := make([]authcli.Principal, 0, len(principals))
+	for _, principal := range principals {
+		if principal.WakeRouting != nil && principal.WakeRouting.Taggable {
+			filtered = append(filtered, principal)
+		}
+	}
+	return filtered
+}
+
+func collectPrincipalHandles(principals []authcli.Principal) []string {
+	seen := map[string]struct{}{}
+	handles := make([]string, 0, len(principals))
+	for _, principal := range principals {
+		if principal.WakeRouting == nil || !principal.WakeRouting.Taggable {
+			continue
+		}
+		handle := principalWakeHandle(principal)
+		if handle == "" {
+			continue
+		}
+		if _, exists := seen[handle]; exists {
+			continue
+		}
+		seen[handle] = struct{}{}
+		handles = append(handles, handle)
+	}
+	return handles
+}
+
+func prefixHandles(handles []string) []string {
+	lines := make([]string, 0, len(handles))
+	for _, handle := range handles {
+		lines = append(lines, "@"+handle)
+	}
+	return lines
+}
+
+func principalWakeHandle(principal authcli.Principal) string {
+	if principal.WakeRouting != nil {
+		handle := strings.TrimSpace(principal.WakeRouting.Handle)
+		if handle != "" {
+			return handle
+		}
+	}
+	return strings.TrimSpace(principal.Username)
+}
+
+func principalWakeState(principal authcli.Principal) string {
+	if principal.WakeRouting == nil {
+		return "unknown"
+	}
+	state := strings.TrimSpace(principal.WakeRouting.State)
+	if state == "" {
+		return "unknown"
+	}
+	return state
 }
 
 func (a *App) runAuthUpdateUsername(ctx context.Context, service *authcli.Service, args []string) (*commandResult, error) {

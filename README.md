@@ -159,7 +159,7 @@ Useful `make serve` toggles:
 
 - `SEED_CORE=0`: skip seeding
 - `FORCE_SEED=1`: seed even when marker data is already present
-- `DEV_SEED_SCENARIO=kids-lemonade-stand`: use an alternate dev seed scenario instead of the default web-ui fixture
+- `DEV_SEED_SCENARIO=kids-lemonade-stand`: use the alternate lemonade dev seed scenario with all checked-in chapters applied in order
 - `OAR_ENABLE_DEV_ACTOR_MODE=1`: enable development actor mode for legacy actor picker/creator UI (default: `false` / auth-first)
 
 ## Local HTTP Recording
