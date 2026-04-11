@@ -193,6 +193,21 @@ func shouldResolveDisplayedShortID(raw string) bool {
 	return len(strings.TrimSpace(raw)) == shortIDLength
 }
 
+func ensureEmptyListDefaults(body map[string]any, nestKey string, fields []string) {
+	if body == nil {
+		return
+	}
+	nested, _ := body[nestKey].(map[string]any)
+	if nested == nil {
+		return
+	}
+	for _, field := range fields {
+		if _, exists := nested[field]; !exists {
+			nested[field] = []any{}
+		}
+	}
+}
+
 func deepCloneJSONValue(value any) any {
 	switch typed := value.(type) {
 	case map[string]any:

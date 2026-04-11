@@ -1495,6 +1495,9 @@ func (a *App) runBoardsCommand(ctx context.Context, args []string, cfg config.Re
 		if err != nil {
 			return nil, "boards create", err
 		}
+		if bodyMap, ok := body.(map[string]any); ok {
+			ensureEmptyListDefaults(bodyMap, "board", []string{"document_refs", "pinned_refs"})
+		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "boards create", "boards.create", nil, nil, body)
 		return result, "boards create", callErr
 	case "get":
