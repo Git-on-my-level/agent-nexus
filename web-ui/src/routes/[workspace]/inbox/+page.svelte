@@ -11,7 +11,6 @@
   import {
     INBOX_CATEGORY_ORDER,
     INBOX_CATEGORY_LABELS,
-    INBOX_CATEGORY_DESCRIPTIONS,
     INBOX_URGENCY_LEVELS,
     INBOX_URGENCY_LABELS,
     decisionGroundingRefForInboxItem,
@@ -80,9 +79,6 @@
         return false;
       }
       if (urgencyFilter === "all") return true;
-      if (urgencyFilter === "aging") {
-        return Number.isFinite(item.age_hours) && item.age_hours >= 24;
-      }
       return item.urgency_level === urgencyFilter;
     }),
   );
@@ -101,9 +97,7 @@
     if (categoryFilter !== "all") {
       parts.push(getInboxCategoryLabel(categoryFilter));
     }
-    if (urgencyFilter === "aging") {
-      parts.push("Aging 24h+");
-    } else if (urgencyFilter !== "all") {
+    if (urgencyFilter !== "all") {
       parts.push(getInboxUrgencyLabel(urgencyFilter));
     }
     return parts;
@@ -183,9 +177,10 @@
         ? normalizedCategory
         : "all";
 
-    const validUrgencies = [...INBOX_URGENCY_LEVELS, "aging"];
     urgencyFilter =
-      rawUrgency && validUrgencies.includes(rawUrgency) ? rawUrgency : "all";
+      rawUrgency && INBOX_URGENCY_LEVELS.includes(rawUrgency)
+        ? rawUrgency
+        : "all";
 
     if (rawCategory || rawUrgency) {
       filtersOpen = true;
@@ -468,8 +463,6 @@
         groundingRef,
       ]),
     );
-    const recommendedAction = item.recommended_action ?? "";
-
     items = items.filter((candidate) => candidate.id !== item.id);
     toggleDecisionForm(item, false);
     updateDecisionField(item.id, "summary", "");
@@ -491,7 +484,6 @@
             payload: {
               notes,
               inbox_item_id: item.id,
-              recommended_action: recommendedAction,
             },
             provenance: {
               sources: ["actor_statement:ui"],
@@ -551,26 +543,27 @@
   }
 
   function categoryBadgeClass(category) {
-    if (category === "decision_needed") return "text-indigo-400";
-    if (category === "intervention_needed") return "text-cyan-400";
-    if (category === "exception") return "text-red-400";
-    if (category === "work_item_risk") return "text-amber-400";
-    if (category === "stale_topic") return "text-orange-400";
-    if (category === "document_attention") return "text-sky-400";
+    if (category === "action_needed") return "text-indigo-400";
+    if (category === "risk_exception") return "text-amber-400";
+    if (category === "attention") return "text-sky-400";
     return "text-[var(--ui-text-muted)]";
   }
 </script>
 
-<div class="flex items-center justify-between mb-4">
+<div
+  class="flex items-center justify-between pb-4 mb-4 border-b border-[var(--ui-border)]"
+>
   <div>
     <h1 class="text-lg font-semibold text-[var(--ui-text)]">Inbox</h1>
     <p class="hidden text-[13px] text-[var(--ui-text-muted)] sm:block">
       Sorted by urgency. Oldest items bubble up.
     </p>
   </div>
-  <div class="flex items-center gap-1.5">
+  <div class="flex items-center gap-2">
     <button
-      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)]"
+      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12px] font-medium transition-colors {hasActiveFilters
+        ? 'border-[var(--ui-accent)]/40 bg-[var(--ui-accent)]/10 text-[var(--ui-accent)] hover:bg-[var(--ui-accent)]/15'
+        : 'border-[var(--ui-border)] bg-[var(--ui-bg-soft)] text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]'}"
       onclick={() => (filtersOpen = !filtersOpen)}
       type="button"
       data-testid="inbox-filters-toggle"
@@ -588,10 +581,13 @@
           d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
         />
       </svg>
-      Filters
+      {hasActiveFilters ? "Filtered" : "Filter"}
     </button>
     <span
-      class="inline-flex items-center gap-1.5 rounded-md bg-[var(--ui-panel)] px-2.5 py-1.5 text-[13px] font-semibold text-[var(--ui-text)]"
+      class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[13px] font-semibold tabular-nums {totalItems >
+      0
+        ? 'bg-[var(--ui-accent)]/10 text-[var(--ui-accent)]'
+        : 'bg-[var(--ui-panel)] text-[var(--ui-text-muted)]'}"
       data-testid="inbox-triage-header"
     >
       {totalItems} open
@@ -614,7 +610,7 @@
 
 {#if filtersOpen}
   <div
-    class="mb-4 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-3"
+    class="mb-4 rounded-lg border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-3"
     data-testid="inbox-filter-panel"
   >
     <div class="grid gap-3 sm:grid-cols-2">
@@ -629,11 +625,9 @@
           }}
           data-testid="inbox-category-filter"
         >
-          <option value="all">All categories</option>
+          <option value="all">All</option>
           {#each INBOX_CATEGORY_ORDER as cat}
-            <option value={cat}>
-              {INBOX_CATEGORY_LABELS[cat]} — {INBOX_CATEGORY_DESCRIPTIONS[cat]}
-            </option>
+            <option value={cat}>{INBOX_CATEGORY_LABELS[cat]}</option>
           {/each}
         </select>
       </label>
@@ -648,11 +642,10 @@
           }}
           data-testid="inbox-urgency-filter"
         >
-          <option value="all">All urgency levels</option>
+          <option value="all">All</option>
           {#each INBOX_URGENCY_LEVELS as level}
             <option value={level}>{INBOX_URGENCY_LABELS[level]}</option>
           {/each}
-          <option value="aging">Aging 24h+</option>
         </select>
       </label>
     </div>
@@ -677,53 +670,57 @@
   </div>
 {/if}
 
-<div class="flex gap-2 mb-4" data-testid="urgency-summary-strip">
+<div class="flex gap-1.5 mb-4" data-testid="urgency-summary-strip">
   <button
-    class="cursor-pointer flex-1 rounded-md border bg-[var(--ui-bg-soft)] px-3 py-2 text-left transition-colors {urgencyCardClass(
+    class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12px] font-medium transition-colors {urgencyCardClass(
       'immediate',
-    )} {urgencySummary.immediate > 0 ? 'bg-red-500/5' : ''}"
+    )} {urgencySummary.immediate > 0
+      ? 'bg-red-500/5'
+      : 'bg-[var(--ui-bg-soft)]'}"
     onclick={() => setUrgencyFromCard("immediate")}
     type="button"
     data-testid="urgency-summary-immediate"
   >
-    <p class="text-[11px] font-medium text-red-400">Immediate</p>
-    <p
-      class="text-lg font-semibold {urgencySummary.immediate > 0
+    <span class="inline-block h-1.5 w-1.5 rounded-full bg-red-500 shrink-0"
+    ></span>
+    <span class="text-red-400">Immediate</span>
+    <span
+      class="tabular-nums {urgencySummary.immediate > 0
         ? 'text-red-400'
-        : 'text-[var(--ui-text)]'}"
+        : 'text-[var(--ui-text-subtle)]'}">{urgencySummary.immediate}</span
     >
-      {urgencySummary.immediate}
-    </p>
   </button>
   <button
-    class="cursor-pointer flex-1 rounded-md border bg-[var(--ui-bg-soft)] px-3 py-2 text-left transition-colors {urgencyCardClass(
+    class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12px] font-medium transition-colors {urgencyCardClass(
       'high',
-    )} {urgencySummary.high > 0 ? 'bg-amber-500/5' : ''}"
+    )} {urgencySummary.high > 0 ? 'bg-amber-500/5' : 'bg-[var(--ui-bg-soft)]'}"
     onclick={() => setUrgencyFromCard("high")}
     type="button"
     data-testid="urgency-summary-high"
   >
-    <p class="text-[11px] font-medium text-amber-400">High</p>
-    <p
-      class="text-lg font-semibold {urgencySummary.high > 0
+    <span class="inline-block h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0"
+    ></span>
+    <span class="text-amber-400">High</span>
+    <span
+      class="tabular-nums {urgencySummary.high > 0
         ? 'text-amber-400'
-        : 'text-[var(--ui-text)]'}"
+        : 'text-[var(--ui-text-subtle)]'}">{urgencySummary.high}</span
     >
-      {urgencySummary.high}
-    </p>
   </button>
   <button
-    class="cursor-pointer flex-1 rounded-md border bg-[var(--ui-bg-soft)] px-3 py-2 text-left transition-colors {urgencyCardClass(
+    class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12px] font-medium transition-colors bg-[var(--ui-bg-soft)] {urgencyCardClass(
       'normal',
     )}"
     onclick={() => setUrgencyFromCard("normal")}
     type="button"
     data-testid="urgency-summary-normal"
   >
-    <p class="text-[11px] font-medium text-[var(--ui-text-muted)]">Normal</p>
-    <p class="text-lg font-semibold text-[var(--ui-text)]">
-      {urgencySummary.normal}
-    </p>
+    <span class="inline-block h-1.5 w-1.5 rounded-full bg-gray-500 shrink-0"
+    ></span>
+    <span class="text-[var(--ui-text-muted)]">Normal</span>
+    <span class="tabular-nums text-[var(--ui-text-subtle)]"
+      >{urgencySummary.normal}</span
+    >
   </button>
 </div>
 
@@ -796,8 +793,25 @@
     Loading inbox...
   </div>
 {:else if totalItems === 0}
-  <div class="mt-8 text-center py-8" data-testid="inbox-empty-state">
-    <h2 class="text-[13px] font-semibold text-[var(--ui-text)]">
+  <div class="mt-8 text-center py-12" data-testid="inbox-empty-state">
+    <div
+      class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[var(--ui-panel)] mb-3"
+    >
+      <svg
+        class="h-6 w-6 text-[var(--ui-text-subtle)]"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        stroke-width="1.5"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+        />
+      </svg>
+    </div>
+    <h2 class="text-[14px] font-semibold text-[var(--ui-text)]">
       Inbox is clear
     </h2>
     <p class="mt-1 text-[13px] text-[var(--ui-text-muted)]">
@@ -805,8 +819,25 @@
     </p>
   </div>
 {:else if !hasFilteredItems}
-  <div class="mt-8 text-center py-8" data-testid="inbox-filter-empty-state">
-    <h2 class="text-[13px] font-semibold text-[var(--ui-text)]">
+  <div class="mt-8 text-center py-12" data-testid="inbox-filter-empty-state">
+    <div
+      class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[var(--ui-panel)] mb-3"
+    >
+      <svg
+        class="h-6 w-6 text-[var(--ui-text-subtle)]"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        stroke-width="1.5"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z"
+        />
+      </svg>
+    </div>
+    <h2 class="text-[14px] font-semibold text-[var(--ui-text)]">
       No items match this view
     </h2>
     <p class="mt-1 text-[13px] text-[var(--ui-text-muted)]">
@@ -814,7 +845,7 @@
       queue.
     </p>
     <button
-      class="cursor-pointer mt-3 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-1.5 text-[13px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]"
+      class="cursor-pointer mt-4 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-1.5 text-[13px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]"
       onclick={resetFilters}
       type="button"
     >
@@ -822,32 +853,32 @@
     </button>
   </div>
 {:else}
-  <div class="space-y-5">
+  <div class="space-y-4">
     {#each visibleGroups as group}
       <section data-testid={`inbox-group-${group.category}`}>
-        <div class="mb-2 flex items-center gap-2">
+        <div class="mb-1.5 flex items-center gap-1.5">
           <h2
-            class="text-[12px] font-semibold uppercase tracking-wide {categoryBadgeClass(
+            class="text-[11px] font-semibold uppercase tracking-wider {categoryBadgeClass(
               group.category,
             )}"
           >
             {getInboxCategoryLabel(group.category)}
           </h2>
-          <span class="text-[11px] text-[var(--ui-text-muted)]"
+          <span class="text-[11px] text-[var(--ui-text-subtle)] tabular-nums"
             >{group.items.length}</span
           >
         </div>
 
-        <div class="space-y-2">
+        <div class="space-y-1.5">
           {#each group.items as item}
             <article
-              class="rounded-md border border-[var(--ui-border)] border-l-[3px] bg-[var(--ui-bg-soft)] px-4 py-3 {urgencyBorderClass(
+              class="rounded-md border border-[var(--ui-border)] border-l-[3px] bg-[var(--ui-bg-soft)] px-3 py-2.5 transition-colors hover:bg-[var(--ui-panel)] {urgencyBorderClass(
                 item.urgency_level,
               )}"
               data-testid={`inbox-card-${item.id}`}
             >
               <div class="flex items-center justify-between gap-2 text-[11px]">
-                <div class="flex min-w-0 items-center gap-2">
+                <div class="flex min-w-0 items-center gap-1.5">
                   <span
                     class="inline-flex h-1.5 w-1.5 shrink-0 rounded-full {urgencyDot(
                       item.urgency_level,
@@ -857,14 +888,14 @@
                     >{item.urgency_label}</span
                   >
                   {#if item.age_label}
-                    <span class="text-[var(--ui-text-muted)]"
-                      >{item.age_label}</span
+                    <span class="text-[var(--ui-text-subtle)]"
+                      >&middot; {item.age_label}</span
                     >
                   {/if}
                 </div>
                 {#if item.has_source_event_time}
                   <span
-                    class="shrink-0 tabular-nums text-[var(--ui-text-muted)]"
+                    class="shrink-0 tabular-nums text-[var(--ui-text-subtle)]"
                     title={item.source_event_time}
                   >
                     {formatAbsoluteDateTime(item.source_event_time)}
@@ -872,7 +903,7 @@
                 {/if}
               </div>
 
-              <div class="mt-1.5 flex flex-wrap items-start gap-2">
+              <div class="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                 <h3
                   class="text-[13px] font-semibold text-[var(--ui-text)] leading-snug"
                 >
@@ -880,7 +911,7 @@
                 </h3>
                 {#if getInboxSubjectLabel(item)}
                   <a
-                    class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] hover:text-[var(--ui-text)]"
+                    class="shrink-0 rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] hover:text-[var(--ui-text)]"
                     href={inboxItemHref(item)}
                   >
                     {getInboxSubjectLabel(item)}
@@ -888,51 +919,41 @@
                 {/if}
               </div>
 
-              {#if item.recommended_action}
-                <div class="mt-2 rounded bg-[var(--ui-bg-soft)] px-3 py-2">
-                  <p
-                    class="text-[11px] font-medium text-indigo-400 uppercase tracking-wide"
-                  >
-                    Recommended
-                  </p>
-                  <MarkdownRenderer
-                    source={item.recommended_action}
-                    class="mt-0.5 text-[13px] text-[var(--ui-text)]"
-                  />
+              {#if getInboxSubjectRef(item) || (item.related_refs ?? []).length > 0}
+                <div
+                  class="mt-1.5 flex flex-wrap items-center gap-1 text-[11px]"
+                >
+                  {#if getInboxSubjectRef(item)}
+                    {@const subjectId = getInboxSubjectId(item)}
+                    <span
+                      class="inline-flex items-center gap-1 rounded bg-[var(--ui-panel)] px-1.5 py-0.5 font-medium text-[var(--ui-text-subtle)]"
+                      title={getInboxSubjectRef(item)}
+                    >
+                      <span>
+                        {getInboxSubjectKind(item)
+                          ? `${getInboxSubjectKind(item)}:`
+                          : "Subject:"}
+                      </span>
+                      <span
+                        >{subjectId.length > 12
+                          ? `${subjectId.slice(0, 8)}…`
+                          : subjectId}</span
+                      >
+                    </span>
+                  {/if}
+                  {#each item.related_refs ?? [] as refValue}
+                    <RefLink
+                      {refValue}
+                      threadId={inboxActionThreadId(item)}
+                      humanize
+                    />
+                  {/each}
                 </div>
               {/if}
 
-              <div class="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
-                {#if getInboxSubjectRef(item)}
-                  {@const subjectId = getInboxSubjectId(item)}
-                  <span
-                    class="inline-flex items-center gap-1 rounded bg-[var(--ui-panel)] px-1.5 py-0.5 font-medium text-[var(--ui-text-muted)]"
-                    title={getInboxSubjectRef(item)}
-                  >
-                    <span class="text-[var(--ui-text-muted)]">
-                      {getInboxSubjectKind(item)
-                        ? `${getInboxSubjectKind(item)}:`
-                        : "Subject:"}
-                    </span>
-                    <span
-                      >{subjectId.length > 12
-                        ? `${subjectId.slice(0, 8)}…`
-                        : subjectId}</span
-                    >
-                  </span>
-                {/if}
-                {#each item.related_refs ?? [] as refValue}
-                  <RefLink
-                    {refValue}
-                    threadId={inboxActionThreadId(item)}
-                    humanize
-                  />
-                {/each}
-              </div>
-
-              <div class="mt-3 flex items-center gap-2">
+              <div class="mt-2 flex flex-wrap items-center gap-1.5">
                 <button
-                  class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] disabled:opacity-50"
+                  class="cursor-pointer rounded border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] disabled:opacity-50"
                   disabled={Boolean(ackInFlightById[item.id])}
                   onclick={() => acknowledgeItem(item)}
                   type="button"
@@ -942,7 +963,7 @@
                     : "Acknowledge"}
                 </button>
                 <button
-                  class="cursor-pointer rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors {getDecisionForm(
+                  class="cursor-pointer rounded px-2.5 py-1 text-[12px] font-medium transition-colors {getDecisionForm(
                     item.id,
                   ).open
                     ? 'border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]'
@@ -992,7 +1013,7 @@
                   {#if getInboxSubjectRef(item)}
                     {@const subjectRef = getInboxSubjectRef(item)}
                     <div
-                      class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] p-3 min-w-0"
+                      class="rounded-lg border border-[var(--ui-border)] bg-[var(--ui-panel)] p-3 min-w-0"
                     >
                       {#if subjectContextLoading[subjectRef]}
                         <div
@@ -1112,7 +1133,7 @@
                             >
                               Related refs
                             </p>
-                            <div class="space-y-1.5">
+                            <div class="flex flex-wrap gap-1.5">
                               {#each subject.related_refs as refValue}
                                 <RefLink
                                   {refValue}
@@ -1140,7 +1161,7 @@
                   {/if}
 
                   <form
-                    class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-3 {inboxActionThreadId(
+                    class="rounded-lg border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-3 {inboxActionThreadId(
                       item,
                     )
                       ? ''

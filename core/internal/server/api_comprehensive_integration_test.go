@@ -226,15 +226,15 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 	for _, item := range inboxItems {
 		categories[asString(item["category"])] = true
 	}
-	if !categories["work_item_risk"] || !categories["stale_topic"] || !categories["decision_needed"] {
-		t.Fatalf("expected inbox categories work_item_risk/stale_topic/decision_needed, got %#v", categories)
+	if !categories["risk_exception"] || !categories["action_needed"] {
+		t.Fatalf("expected inbox categories risk_exception and action_needed, got %#v", categories)
 	}
 
 	decisionItem, ok := findInboxItem(inboxItems, func(item map[string]any) bool {
-		return asString(item["category"]) == "decision_needed" && asString(item["thread_id"]) == threadID
+		return asString(item["category"]) == "action_needed" && asString(item["thread_id"]) == threadID
 	})
 	if !ok {
-		t.Fatalf("expected decision_needed item for thread %s, got %#v", threadID, inboxItems)
+		t.Fatalf("expected action_needed item for thread %s, got %#v", threadID, inboxItems)
 	}
 	decisionItemID := asString(decisionItem["id"])
 
@@ -272,7 +272,7 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 
 	inboxAfterRetrigger := getInboxItems(t, h.baseURL)
 	if _, ok := findInboxItem(inboxAfterRetrigger, func(item map[string]any) bool {
-		return asString(item["category"]) == "decision_needed" && asString(item["source_event_id"]) == newDecisionEventID
+		return asString(item["category"]) == "action_needed" && asString(item["source_event_id"]) == newDecisionEventID
 	}); !ok {
 		t.Fatalf("expected retriggered decision item, got %#v", inboxAfterRetrigger)
 	}

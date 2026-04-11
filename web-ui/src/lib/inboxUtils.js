@@ -1,34 +1,19 @@
 import { parseTimestampMs } from "./dateUtils.js";
 
 export const INBOX_CATEGORY_ORDER = [
-  "decision_needed",
-  "intervention_needed",
-  "exception",
-  "work_item_risk",
-  "stale_topic",
-  "document_attention",
+  "action_needed",
+  "risk_exception",
+  "attention",
 ];
 
 export const INBOX_CATEGORY_LABELS = {
-  decision_needed: "Needs Decision",
-  intervention_needed: "Needs Intervention",
-  exception: "Exception",
-  work_item_risk: "Work item risk",
-  stale_topic: "Stale Topic",
-  document_attention: "Document Attention",
-};
-
-export const INBOX_CATEGORY_DESCRIPTIONS = {
-  decision_needed: "Decision event pending",
-  intervention_needed: "Human action required",
-  exception: "Operational or system exception",
-  work_item_risk: "Work item risk needs review",
-  stale_topic: "Topic appears stale",
-  document_attention: "Document needs attention",
+  action_needed: "Action needed",
+  risk_exception: "Risk / Exception",
+  attention: "Attention",
 };
 
 export function getInboxCategoryLabel(category) {
-  return INBOX_CATEGORY_LABELS[normalizeInboxCategory(category)] ?? category;
+  return INBOX_CATEGORY_LABELS[category] ?? category;
 }
 
 export const INBOX_URGENCY_LEVELS = ["immediate", "high", "normal"];
@@ -40,16 +25,9 @@ export const INBOX_URGENCY_LABELS = {
 };
 
 const INBOX_CATEGORY_URGENCY_BASE = {
-  decision_needed: 76,
-  intervention_needed: 74,
-  exception: 90,
-  work_item_risk: 66,
-  stale_topic: 90,
-  document_attention: 58,
-};
-
-const INBOX_CATEGORY_ALIASES = {
-  risk_review: "work_item_risk",
+  action_needed: 76,
+  risk_exception: 84,
+  attention: 58,
 };
 
 const INBOX_SUBJECT_LABELS = {
@@ -61,8 +39,7 @@ const INBOX_SUBJECT_LABELS = {
 };
 
 export function normalizeInboxCategory(category) {
-  const normalized = String(category ?? "").trim();
-  return INBOX_CATEGORY_ALIASES[normalized] ?? normalized;
+  return String(category ?? "").trim();
 }
 
 export function splitTypedRef(refValue) {

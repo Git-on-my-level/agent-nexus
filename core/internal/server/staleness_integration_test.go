@@ -40,7 +40,7 @@ func TestStalenessRebuildEmitsSingleStaleExceptionAndInboxException(t *testing.T
 
 	items := getInboxItems(t, h.baseURL)
 	if _, ok := findInboxItem(items, func(item map[string]any) bool {
-		return asString(item["category"]) == "stale_topic" && asString(item["thread_id"]) == threadID
+		return asString(item["category"]) == "risk_exception" && asString(item["thread_id"]) == threadID
 	}); !ok {
 		t.Fatalf("expected stale exception inbox item, got %#v", items)
 	}
@@ -66,7 +66,7 @@ func TestStalenessRebuildEmitsSingleStaleExceptionAndInboxException(t *testing.T
 
 	itemsAfterDecision := getInboxItems(t, h.baseURL)
 	if _, ok := findInboxItem(itemsAfterDecision, func(item map[string]any) bool {
-		return asString(item["category"]) == "stale_topic" && asString(item["thread_id"]) == threadID
+		return asString(item["category"]) == "risk_exception" && asString(item["thread_id"]) == threadID
 	}); ok {
 		t.Fatalf("expected stale exception inbox item to be suppressed after new decision activity, got %#v", itemsAfterDecision)
 	}
@@ -114,7 +114,7 @@ func TestStalenessClearsAfterActorStatementAndDocumentActivity(t *testing.T) {
 	}
 	itemsAfterStatement := getInboxItems(t, h.baseURL)
 	if _, ok := findInboxItem(itemsAfterStatement, func(item map[string]any) bool {
-		return asString(item["category"]) == "stale_topic" && asString(item["thread_id"]) == threadID
+		return asString(item["category"]) == "risk_exception" && asString(item["thread_id"]) == threadID
 	}); ok {
 		t.Fatalf("expected stale exception inbox item to be suppressed after actor_statement, got %#v", itemsAfterStatement)
 	}
@@ -157,7 +157,7 @@ func TestStalenessClearsAfterActorStatementAndDocumentActivity(t *testing.T) {
 	}
 	itemsAfterDoc := getInboxItems(t, h.baseURL)
 	if _, ok := findInboxItem(itemsAfterDoc, func(item map[string]any) bool {
-		return asString(item["category"]) == "stale_topic" && asString(item["thread_id"]) == threadID
+		return asString(item["category"]) == "risk_exception" && asString(item["thread_id"]) == threadID
 	}); ok {
 		t.Fatalf("expected stale exception inbox item to stay suppressed after document update, got %#v", itemsAfterDoc)
 	}
@@ -215,7 +215,7 @@ func TestStalenessRebuildTreatsRecentCardActivityAsFresh(t *testing.T) {
 	}
 	items := getInboxItems(t, h.baseURL)
 	if _, ok := findInboxItem(items, func(item map[string]any) bool {
-		return asString(item["category"]) == "stale_topic" && asString(item["thread_id"]) == threadID
+		return asString(item["category"]) == "risk_exception" && asString(item["thread_id"]) == threadID
 	}); ok {
 		t.Fatalf("expected no stale exception inbox item after recent card activity, got %#v", items)
 	}

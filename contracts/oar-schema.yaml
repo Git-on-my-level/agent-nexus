@@ -41,7 +41,11 @@ enums:
 
   inbox_category:
     enum_policy: strict
-    values: [decision_needed, intervention_needed, stale_topic, work_item_risk, document_attention]
+    description: >
+      Three operator-facing inbox buckets. `attention` is reserved for document-review
+      and similar signals when core surfaces them; v0 derivation primarily emits
+      `action_needed` and `risk_exception`.
+    values: [action_needed, risk_exception, attention]
 
   agent_notification_status:
     enum_policy: strict
@@ -500,7 +504,6 @@ derived:
       subject_ref: { type: typed_ref, required: true }
       source_event_ref: { type: typed_ref, required: false }
       title: { type: string, required: true }
-      recommended_action: { type: string, required: true }
       related_refs: { type: "list<typed_ref>", required: true }
 
   agent_notification:
@@ -560,4 +563,4 @@ staleness:
     observed inside its expected operating window.
   on_stale:
     - "Emit exception_raised with subtype stale_topic"
-    - "Surface a derived inbox item in category stale_topic"
+    - "Surface a derived inbox item in category risk_exception (subtype stale_topic identifies the exception shape)"

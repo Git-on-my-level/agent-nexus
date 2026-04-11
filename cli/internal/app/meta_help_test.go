@@ -285,7 +285,7 @@ func TestInboxListHelpMentionsViewingAsAndCategories(t *testing.T) {
 	if !strings.Contains(output, "viewing_as") {
 		t.Fatalf("expected viewing_as scoping guidance output=%s", output)
 	}
-	if !strings.Contains(output, "`decision_needed`") || !strings.Contains(output, "`work_item_risk`") {
+	if !strings.Contains(output, "`action_needed`") || !strings.Contains(output, "`risk_exception`") {
 		t.Fatalf("expected inbox category reference output=%s", output)
 	}
 }

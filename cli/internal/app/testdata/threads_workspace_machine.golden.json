@@ -100,10 +100,10 @@
       "full_id": false,
       "items": [
         {
-          "id": "inbox:decision_needed:thread_123:none:event_ctx_2",
+          "id": "inbox:action_needed:thread_123:none:event_ctx_2",
           "summary": "confirm canonical command labels",
           "thread_id": "thread_123",
-          "type": "decision_needed"
+          "type": "action_needed"
         }
       ],
       "thread_id": "thread_123"
@@ -113,10 +113,10 @@
       "count": 1,
       "items": [
         {
-          "id": "inbox:decision_needed:thread_123:none:event_ctx_2",
+          "id": "inbox:action_needed:thread_123:none:event_ctx_2",
           "summary": "confirm canonical command labels",
           "thread_id": "thread_123",
-          "type": "decision_needed"
+          "type": "action_needed"
         }
       ],
       "thread_id": "thread_123"

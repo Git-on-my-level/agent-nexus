@@ -130,9 +130,9 @@ A dedicated surface showing items that need operator attention.
 
 **Display:**
 
-- Inbox items grouped by category: `decision_needed`, `intervention_needed`, `exception`, `stale_topic`.
-- Within each category, sorted by time or due date (no ranking engine in v0).
-- Each item shows: title, category, recommended action, and a link to the relevant topic/board/card/thread.
+- Inbox items grouped by **`category`** using `enums.inbox_category`: `action_needed`, `risk_exception`, and `attention` (aligned with core and OpenAPI). Core v0 derivation mainly emits the first two; `attention` is the canonical bucket for document-review-style items when surfaced. Unknown categories MUST still appear in their own groups (forward compatibility).
+- Within each group, sorted by inferred **urgency** (from category plus trigger/source recency) and then by **source or trigger time**; v0 does not add a separate ranking engine beyond that ordering.
+- Each item shows: title, category, and a link to the relevant topic/board/card/thread.
 - Inbox item IDs are deterministic (see schema) and stable across rebuilds.
 
 **Actions:**

@@ -96,7 +96,7 @@
   function threadStatusColor(status) {
     switch (status) {
       case "done":
-        return "text-emerald-400";
+        return "text-[var(--ui-text)]";
       case "canceled":
         return "text-[var(--ui-text-muted)]";
       case "paused":

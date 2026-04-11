@@ -3,6 +3,8 @@
 
 # Runtime workspace
 .oar-workspace/
+# Ephemeral workspace roots from seed/verify scripts (unique path per run; same artifacts as above)
+.oar-workspace-seed-verify-*/
 
 # Go build/test artifacts
 bin/

@@ -327,13 +327,14 @@ async function hasExpectedIdentityRegistrations() {
   const principals = Array.isArray(principalsBody?.principals)
     ? principalsBody.principals
     : [];
+  // Match by actor_id: passkey dev registration derives usernames from display_name
+  // (passkey.*) while fixtures use stable dev.* labels — actor_id is authoritative.
   return seedPersonas.every((persona) =>
-    principals.some((principal) =>
-      String(principal?.username ?? "").trim() ===
-        String(persona?.auth_username ?? "").trim() &&
-      String(principal?.actor_id ?? "").trim() ===
-        String(persona?.actor_id ?? "").trim() &&
-      principal?.wake_routing?.taggable === true,
+    principals.some(
+      (principal) =>
+        String(principal?.actor_id ?? "").trim() ===
+          String(persona?.actor_id ?? "").trim() &&
+        principal?.wake_routing?.taggable === true,
     ),
   );
 }
@@ -1292,32 +1293,36 @@ async function seedDevFixtureIdentities() {
     }
     if (reg?.tokens?.access_token) {
       inviteIssuerAccess = reg.tokens.access_token;
+      const registration = {
+        status: "active",
+        workspace_bindings: [
+          {
+            workspace_id: workspaceID,
+            enabled: true,
+          },
+        ],
+      };
+      // Passkey dev register assigns a synthetic username from display_name; PATCH
+      // must not send fixture auth_username as handle (core requires handle == row username).
+      if (!usePasskeyDevHuman) {
+        registration.handle = p.auth_username;
+        registration.actor_id = p.actor_id;
+      }
       await requestAuthJson(
         "PATCH",
         "/agents/me",
-        {
-          registration: {
-            handle: p.auth_username,
-            actor_id: p.actor_id,
-            status: "active",
-            workspace_bindings: [
-              {
-                workspace_id: workspaceID,
-                enabled: true,
-              },
-            ],
-          },
-        },
+        { registration },
         inviteIssuerAccess,
         [200],
       );
     }
     const agent = reg.agent ?? {};
+    const coreUsername = String(agent.username ?? "").trim();
     bundle.push({
       persona_id: p.persona_id,
       actor_id: p.actor_id,
       agent_id: agent.agent_id,
-      auth_username: p.auth_username,
+      auth_username: coreUsername || p.auth_username,
       display_label: p.display_label,
       principal_kind: p.principal_kind,
       dev_bridge: p.dev_bridge,

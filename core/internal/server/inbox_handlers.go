@@ -116,9 +116,21 @@ func typedRefStringsToAnyList(refs []string) []any {
 	return out
 }
 
+func isWorkItemRiskStyleCategory(category string) bool {
+	switch strings.TrimSpace(category) {
+	case "risk_exception", "work_item_risk":
+		return true
+	default:
+		return false
+	}
+}
+
 func isEventSourcedInboxCategory(category string) bool {
 	switch strings.TrimSpace(category) {
-	case "decision_needed", "intervention_needed", "stale_topic":
+	case "action_needed", "risk_exception", "attention":
+		return true
+	// Legacy stored rows may still use pre-simplification category strings.
+	case "decision_needed", "intervention_needed", "stale_topic", "document_attention":
 		return true
 	default:
 		return false
@@ -187,7 +199,7 @@ func backfillInboxRelatedRefsFromStoredData(m map[string]any, h inboxContractHin
 			merged = append(merged, strings.TrimSpace(r))
 		}
 	}
-	if cat == "work_item_risk" {
+	if cat == "risk_exception" || cat == "work_item_risk" {
 		if bid := strings.TrimSpace(anyString(m["board_id"])); bid != "" {
 			merged = append(merged, "board:"+bid)
 		}
@@ -195,7 +207,7 @@ func backfillInboxRelatedRefsFromStoredData(m map[string]any, h inboxContractHin
 	if tid != "" {
 		merged = append(merged, "thread:"+tid)
 	}
-	if cat == "work_item_risk" {
+	if cat == "risk_exception" || cat == "work_item_risk" {
 		if docRef := strings.TrimSpace(anyString(m["document_ref"])); docRef != "" {
 			if _, docID, err := schema.SplitTypedRef(docRef); err == nil && docID != "" {
 				merged = append(merged, "document:"+docID)
@@ -205,9 +217,28 @@ func backfillInboxRelatedRefsFromStoredData(m map[string]any, h inboxContractHin
 	return typedRefStringsToAnyList(mergeUniqueSortedRefs(merged...))
 }
 
+// normalizeInboxCategoryForContract maps legacy stored categories and pre-simplification
+// values onto enums.inbox_category so HTTP payloads stay OpenAPI-valid.
+func normalizeInboxCategoryForContract(category string) string {
+	category = strings.TrimSpace(category)
+	switch category {
+	case "action_needed", "risk_exception", "attention":
+		return category
+	case "decision_needed":
+		return "action_needed"
+	case "intervention_needed", "stale_topic", "work_item_risk", "risk_review":
+		return "risk_exception"
+	case "document_attention":
+		return "attention"
+	default:
+		return category
+	}
+}
+
 // applyInboxContractShape ensures OpenAPI-required InboxItem fields (subject_ref, related_refs)
 // and optional source_event_ref are present for list/get/stream payloads. Callers may rely on
-// this for legacy derived rows that predate contract-first shaping.
+// this for legacy derived rows that predate contract-first shaping. Drops deprecated
+// recommended_action so older stored rows do not leak removed contract fields.
 func applyInboxContractShape(m map[string]any, h inboxContractHint) {
 	if m == nil {
 		return
@@ -216,7 +247,7 @@ func applyInboxContractShape(m map[string]any, h inboxContractHint) {
 	tid := strings.TrimSpace(h.ThreadID)
 
 	if strings.TrimSpace(anyString(m["subject_ref"])) == "" {
-		if cat == "work_item_risk" {
+		if cat == "risk_exception" || cat == "work_item_risk" {
 			if cid := strings.TrimSpace(h.SourceCardID); cid != "" {
 				m["subject_ref"] = "card:" + cid
 			}
@@ -241,6 +272,16 @@ func applyInboxContractShape(m map[string]any, h inboxContractHint) {
 			}
 		}
 	}
+
+	rawCat := strings.TrimSpace(anyString(m["category"]))
+	if rawCat == "" {
+		rawCat = cat
+	}
+	if rawCat != "" {
+		m["category"] = normalizeInboxCategoryForContract(rawCat)
+	}
+
+	delete(m, "recommended_action")
 }
 
 const defaultInboxRiskHorizon = 7 * 24 * time.Hour
@@ -382,8 +423,12 @@ func handleGetInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOpti
 			return
 		}
 
+		wantedIDs := make(map[string]struct{})
+		for _, id := range inboxItemIDVariants(inboxItemID) {
+			wantedIDs[id] = struct{}{}
+		}
 		for _, item := range items {
-			if strings.TrimSpace(item.ID) != inboxItemID {
+			if _, ok := wantedIDs[item.ID]; !ok {
 				continue
 			}
 			writeJSON(w, http.StatusOK, map[string]any{
@@ -411,13 +456,19 @@ func handleGetInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		return
 	}
 
-	item, err := opts.primitiveStore.GetDerivedInboxItem(r.Context(), inboxItemID)
-	if err != nil {
-		if errors.Is(err, primitives.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", "inbox item not found")
+	var item primitives.DerivedInboxItem
+	for _, candidate := range inboxItemIDVariants(inboxItemID) {
+		item, err = opts.primitiveStore.GetDerivedInboxItem(r.Context(), candidate)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, primitives.ErrNotFound) {
+			writeError(w, http.StatusInternalServerError, "internal_error", "failed to load inbox projections")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load inbox projections")
+	}
+	if err != nil {
+		writeError(w, http.StatusNotFound, "not_found", "inbox item not found")
 		return
 	}
 
@@ -715,7 +766,9 @@ func decidedInboxItemIDs(events []map[string]any) map[string]struct{} {
 			if err != nil || prefix != "inbox" {
 				continue
 			}
-			out[value] = struct{}{}
+			for _, variantID := range inboxItemIDVariants(value) {
+				out[variantID] = struct{}{}
+			}
 		}
 	}
 	return out
@@ -754,28 +807,58 @@ func latestInboxAcknowledgments(events []map[string]any) map[string]time.Time {
 	return ackedAt
 }
 
-func inboxAckSuppressionIDs(inboxItemID string) []string {
+// equivalentInboxCategories lists category strings that share the same inbox id tuple
+// (thread, subject, source event) across contract renames, so acks and decision_made
+// refs remain correlated after category enum changes.
+func equivalentInboxCategories(category string) []string {
+	category = strings.TrimSpace(category)
+	switch category {
+	case "action_needed", "decision_needed":
+		return []string{"action_needed", "decision_needed"}
+	case "risk_exception", "intervention_needed", "stale_topic", "work_item_risk", "risk_review":
+		return []string{"risk_exception", "intervention_needed", "stale_topic", "work_item_risk", "risk_review"}
+	case "attention", "document_attention":
+		return []string{"attention", "document_attention"}
+	default:
+		return []string{category}
+	}
+}
+
+func inboxItemIDVariants(inboxItemID string) []string {
 	inboxItemID = strings.TrimSpace(inboxItemID)
 	if inboxItemID == "" {
 		return nil
 	}
-	ids := []string{inboxItemID}
-	parts := strings.SplitN(inboxItemID, ":", 6)
+	parts := strings.SplitN(inboxItemID, ":", 5)
 	if len(parts) != 5 || parts[0] != "inbox" {
-		return ids
+		return []string{inboxItemID}
 	}
 	category := strings.TrimSpace(parts[1])
 	threadID := strings.TrimSpace(parts[2])
 	subjectID := strings.TrimSpace(parts[3])
 	sourceEventID := strings.TrimSpace(parts[4])
-	switch category {
-	case "risk_review":
-		ids = append(ids, makeInboxItemID("work_item_risk", threadID, subjectID, sourceEventID))
-	case "work_item_risk":
-		// Preserve suppression across rebuilds in either direction while the rename settles.
-		ids = append(ids, makeInboxItemID("risk_review", threadID, subjectID, sourceEventID))
+
+	out := make([]string, 0, 8)
+	seen := map[string]struct{}{}
+	add := func(id string) {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			return
+		}
+		if _, ok := seen[id]; ok {
+			return
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
 	}
-	return ids
+	for _, cat := range equivalentInboxCategories(category) {
+		add(makeInboxItemID(cat, threadID, subjectID, sourceEventID))
+	}
+	return out
+}
+
+func inboxAckSuppressionIDs(inboxItemID string) []string {
+	return inboxItemIDVariants(inboxItemID)
 }
 
 func deriveEventBackedInboxItem(event map[string]any) (derivedInboxItem, bool) {
@@ -788,25 +871,19 @@ func deriveEventBackedInboxItem(event map[string]any) (derivedInboxItem, bool) {
 	}
 
 	category := ""
-	recommendedAction := ""
 	titleFallback := ""
 	switch eventType {
 	case "decision_needed":
-		category = "decision_needed"
-		recommendedAction = "make_decision"
+		category = "action_needed"
 		titleFallback = "Decision needed"
 	case "intervention_needed":
-		category = "intervention_needed"
-		recommendedAction = "take_action"
+		category = "risk_exception"
 		titleFallback = "Intervention needed"
 	case "exception_raised":
+		category = "risk_exception"
 		if isStaleTopicException(event) {
-			category = "stale_topic"
-			recommendedAction = "review_topic_cadence"
 			titleFallback = "Topic appears stale"
 		} else {
-			category = "intervention_needed"
-			recommendedAction = "investigate_exception"
 			titleFallback = "Exception raised"
 		}
 	default:
@@ -825,14 +902,13 @@ func deriveEventBackedInboxItem(event map[string]any) (derivedInboxItem, bool) {
 
 	id := makeInboxItemID(category, threadID, "", sourceEventID)
 	data := map[string]any{
-		"id":                 id,
-		"category":           category,
-		"thread_id":          threadID,
-		"source_event_id":    sourceEventID,
-		"subject_ref":        subjectRef,
-		"related_refs":       typedRefStringsToAnyList(related),
-		"title":              title,
-		"recommended_action": recommendedAction,
+		"id":              id,
+		"category":        category,
+		"thread_id":       threadID,
+		"source_event_id": sourceEventID,
+		"subject_ref":     subjectRef,
+		"related_refs":    typedRefStringsToAnyList(related),
+		"title":           title,
 	}
 	if strings.TrimSpace(sourceEventID) != "" {
 		data["source_event_ref"] = "event:" + strings.TrimSpace(sourceEventID)
@@ -873,29 +949,20 @@ func deriveWorkItemRiskInboxItem(card map[string]any, now time.Time, riskHorizon
 		title = "Work item risk"
 	}
 
-	recommendedAction := "follow_up_work_item"
-	switch riskState {
-	case "overdue":
-		recommendedAction = "resolve_overdue_work_item"
-	case "blocked":
-		recommendedAction = "unblock_work_item"
-	}
-
 	subjectRef := "card:" + cardID
 	related := workItemRiskInboxRelatedRefs(card, threadID)
 
-	id := makeInboxItemID("work_item_risk", threadID, cardID, "")
+	id := makeInboxItemID("risk_exception", threadID, cardID, "")
 	data := map[string]any{
-		"id":                 id,
-		"category":           "work_item_risk",
-		"thread_id":          threadID,
-		"card_id":            cardID,
-		"board_id":           nullableStringValue(anyString(card["board_id"])),
-		"subject_ref":        subjectRef,
-		"related_refs":       typedRefStringsToAnyList(related),
-		"title":              title,
-		"risk_state":         riskState,
-		"recommended_action": recommendedAction,
+		"id":           id,
+		"category":     "risk_exception",
+		"thread_id":    threadID,
+		"card_id":      cardID,
+		"board_id":     nullableStringValue(anyString(card["board_id"])),
+		"subject_ref":  subjectRef,
+		"related_refs": typedRefStringsToAnyList(related),
+		"title":        title,
+		"risk_state":   riskState,
 	}
 	if hasDueAt {
 		data["due_at"] = dueAt.Format(time.RFC3339)
@@ -906,7 +973,7 @@ func deriveWorkItemRiskInboxItem(card map[string]any, now time.Time, riskHorizon
 
 	return derivedInboxItem{
 		Data:      data,
-		Category:  "work_item_risk",
+		Category:  "risk_exception",
 		ID:        id,
 		TriggerAt: triggerAt,
 		DueAt:     dueAt,
@@ -1007,11 +1074,14 @@ func parseOptionalRFC3339(raw string) (time.Time, bool) {
 
 func sortInboxItems(items []derivedInboxItem) {
 	categoryOrder := map[string]int{
+		"action_needed":       0,
 		"decision_needed":     0,
+		"risk_exception":      1,
 		"intervention_needed": 1,
-		"stale_topic":         2,
-		"work_item_risk":      3,
-		"document_attention":  4,
+		"stale_topic":         1,
+		"work_item_risk":      1,
+		"attention":           2,
+		"document_attention":  2,
 	}
 
 	sort.Slice(items, func(i int, j int) bool {
@@ -1030,7 +1100,7 @@ func sortInboxItems(items []derivedInboxItem) {
 			return leftOrder < rightOrder
 		}
 
-		if left.Category == "work_item_risk" && right.Category == "work_item_risk" {
+		if isWorkItemRiskStyleCategory(left.Category) && isWorkItemRiskStyleCategory(right.Category) {
 			if left.HasDueAt && right.HasDueAt && !left.DueAt.Equal(right.DueAt) {
 				return left.DueAt.Before(right.DueAt)
 			}

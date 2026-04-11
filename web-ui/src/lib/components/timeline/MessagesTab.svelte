@@ -385,7 +385,7 @@
     </p>
   {:else if !hasMessages}
     <p class="text-[13px] text-[var(--ui-text-muted)]">
-      No messages in view. Turn on Show archived to see archived topics.
+      No messages in view. Turn on Show archived to see archived messages.
     </p>
   {:else}
     {#if lifecycleError}

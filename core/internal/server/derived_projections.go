@@ -68,7 +68,7 @@ func refreshDerivedTopicProjection(ctx context.Context, opts handlerOptions, thr
 	rawKeyArtifacts, _ := extractStringSlice(thread["key_artifacts"])
 	pendingDecisions := 0
 	for _, item := range inboxItems {
-		if item.Category == "decision_needed" {
+		if item.Category == "action_needed" {
 			pendingDecisions++
 		}
 	}

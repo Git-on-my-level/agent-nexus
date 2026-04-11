@@ -849,11 +849,9 @@ Note: by default, archived and trashed events are excluded from the timeline out
   - Switch perspective with ` + "`--agent <profile>`" + ` or ` + "`OAR_AGENT`" + ` before reading or acting.
 
 Inbox categories:
-  - ` + "`decision_needed`" + `: A human must choose among multiple viable paths.
-  - ` + "`intervention_needed`" + `: The next step is clear, but a human must act because the agent cannot execute it.
-  - ` + "`work_item_risk`" + `: A card or work item is at risk or overdue and needs follow-up.
-  - ` + "`stale_topic`" + `: A topic appears stale; review cadence or recent activity.
-  - ` + "`document_attention`" + `: A document needs human review or follow-up.`)
+  - ` + "`action_needed`" + `: A human must decide, take direct action, or own the next step (includes prior decision and intervention queue signals).
+  - ` + "`risk_exception`" + `: Exceptions, stale cadence, or at-risk work items that need follow-up.
+  - ` + "`attention`" + `: Review or lighter operator focus (for example document attention).`)
 	case "inbox.acknowledge":
 		return strings.TrimSpace(`CLI flags (` + "`inbox acknowledge`" + ` / ` + "`inbox ack`" + `):
   --inbox-item-id <id>   Inbox item id or list alias (see ` + "`inbox list`" + `).

@@ -116,13 +116,11 @@ Urgency escalation follows a fixed hue ladder. Apply these consistently across i
 
 Inbox categories use a fixed color assignment. Use these whenever a category label or count is rendered as a signal (summary cards, badges, section headers):
 
-| Category              | Text              | Badge background     |
-|-----------------------|-------------------|----------------------|
-| `intervention_needed` | `text-red-400`    | `bg-red-500/10`      |
-| `decision_needed`     | `text-indigo-400` | `bg-indigo-500/10`   |
-| `work_item_risk`      | `text-amber-400`  | `bg-amber-500/10`    |
-| `stale_topic`         | `text-orange-400` | `bg-orange-500/10`   |
-| `document_attention`  | `text-sky-400`    | `bg-sky-500/10`      |
+| Category          | Text              | Badge background     |
+|-------------------|-------------------|----------------------|
+| `action_needed`   | `text-indigo-400` | `bg-indigo-500/10`   |
+| `risk_exception`  | `text-amber-400`  | `bg-amber-500/10`    |
+| `attention`       | `text-sky-400`    | `bg-sky-500/10`      |
 
 **Rule:** Color the count only when it is non-zero. Zero counts and category labels for empty queues stay muted. Never apply category color decoratively — only when it carries a live signal.
 

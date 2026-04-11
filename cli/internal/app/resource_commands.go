@@ -879,7 +879,7 @@ func (a *App) runThreadsRecommendationsCommand(ctx context.Context, args []strin
 	}
 	inboxData := asMap(inboxResult.Data)
 	inboxBody := extractNestedMap(inboxData, "body")
-	pendingDecisions := filteredInboxItems(asSlice(inboxBody["items"]), []string{resolvedThreadID}, []string{"decision_needed"})
+	pendingDecisions := filteredInboxItems(asSlice(inboxBody["items"]), []string{resolvedThreadID}, []string{"action_needed"})
 	relatedThreadReview, err := a.collectRelatedThreadRecommendationReview(ctx, cfg, resolvedThreadID, body, selection.threadContextSelection, selection.includeRelatedEventContent)
 	if err != nil {
 		return nil, err
@@ -2852,7 +2852,7 @@ func (a *App) runInboxList(ctx context.Context, args []string, cfg config.Resolv
 		}
 		threadIDs = resolvedThreadIDs
 	}
-	typeFilters := normalizeStringFilters(typeFlags.values)
+	typeFilters := normalizeInboxListTypeFilters(normalizeStringFilters(typeFlags.values))
 
 	result, err := a.invokeTypedJSON(ctx, cfg, "inbox list", "inbox.list", nil, nil, nil)
 	if err != nil {
@@ -4600,6 +4600,45 @@ func normalizeIDFilters(rawIDs []string) []string {
 	return out
 }
 
+// normalizeInboxCategoryForCLIFilter maps legacy inbox category/type strings onto the
+// canonical contract enum so `inbox list --type` stays usable after API normalization.
+// Mirrors core normalizeInboxCategoryForContract.
+func normalizeInboxCategoryForCLIFilter(category string) string {
+	category = strings.TrimSpace(category)
+	switch category {
+	case "action_needed", "risk_exception", "attention":
+		return category
+	case "decision_needed":
+		return "action_needed"
+	case "intervention_needed", "stale_topic", "work_item_risk", "risk_review":
+		return "risk_exception"
+	case "document_attention":
+		return "attention"
+	default:
+		return category
+	}
+}
+
+func normalizeInboxListTypeFilters(types []string) []string {
+	if len(types) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(types))
+	seen := make(map[string]struct{}, len(types))
+	for _, inboxType := range types {
+		canon := normalizeInboxCategoryForCLIFilter(inboxType)
+		if canon == "" {
+			continue
+		}
+		if _, ok := seen[canon]; ok {
+			continue
+		}
+		seen[canon] = struct{}{}
+		out = append(out, canon)
+	}
+	return out
+}
+
 func filteredInboxItems(items []any, threadIDs []string, types []string) []any {
 	if len(items) == 0 {
 		return []any{}
@@ -4618,7 +4657,7 @@ func filteredInboxItems(items []any, threadIDs []string, types []string) []any {
 		if inboxType == "" {
 			continue
 		}
-		typeFilter[inboxType] = struct{}{}
+		typeFilter[normalizeInboxCategoryForCLIFilter(inboxType)] = struct{}{}
 	}
 
 	filtered := make([]any, 0, len(items))
@@ -4634,7 +4673,8 @@ func filteredInboxItems(items []any, threadIDs []string, types []string) []any {
 			}
 		}
 		if len(typeFilter) > 0 {
-			if _, ok := typeFilter[inboxItemType(item)]; !ok {
+			canon := normalizeInboxCategoryForCLIFilter(inboxItemType(item))
+			if _, ok := typeFilter[canon]; !ok {
 				continue
 			}
 		}

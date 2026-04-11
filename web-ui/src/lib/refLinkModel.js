@@ -40,8 +40,8 @@ function compactValue(value) {
 
 function humanizedLabelForPrefix(prefix, value) {
   const short = compactValue(value);
-  if (prefix === "artifact") return "Artifact";
-  if (prefix === "card") return "Card";
+  if (prefix === "artifact") return `Artifact ${short}`.trim();
+  if (prefix === "card") return `Card ${short}`.trim();
   if (prefix === "thread") return `Thread ${short}`.trim();
   if (prefix === "topic") return `Topic ${short}`.trim();
   if (prefix === "event") return "Event";

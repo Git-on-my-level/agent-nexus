@@ -138,7 +138,7 @@ func buildThreadWorkspacePayload(ctx context.Context, opts handlerOptions, threa
 	if err != nil {
 		return nil, err
 	}
-	pendingDecisions := filterThreadWorkspaceInboxItems(inboxItems, []string{"decision_needed"})
+	pendingDecisions := filterThreadWorkspaceInboxItems(inboxItems, []string{"action_needed"})
 
 	relatedThreadReview := buildEmptyRelatedThreadReview()
 	if related, err := buildThreadWorkspaceRelatedThreadReview(ctx, opts, threadID, contextBody, options); err != nil {

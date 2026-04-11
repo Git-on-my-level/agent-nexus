@@ -98,12 +98,12 @@
       "items": [
         {
           "alias": "ibx_483c273add26",
-          "id": "inbox:decision_needed:thread_123:none:event_ctx_2",
-          "short_id": "inbox:decisi",
+          "id": "inbox:action_needed:thread_123:none:event_ctx_2",
+          "short_id": "inbox:action",
           "summary": "confirm canonical command labels",
           "thread_id": "thread_123",
           "thread_short_id": "thread_123",
-          "type": "decision_needed"
+          "type": "action_needed"
         }
       ],
       "thread_id": "thread_123"

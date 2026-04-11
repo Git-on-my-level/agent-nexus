@@ -214,7 +214,7 @@ func TestInboxGetAliasMapsToList(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"items":[{"id":"inbox:1","thread_id":"thread_1","category":"decision_needed"}]}`))
+		_, _ = w.Write([]byte(`{"items":[{"id":"inbox:1","thread_id":"thread_1","category":"action_needed"}]}`))
 	}))
 	defer server.Close()
 
@@ -231,7 +231,7 @@ func TestInboxGetAliasMapsToList(t *testing.T) {
 		t.Fatalf("expected viewing_as actor_id actor_123, got %#v", payload)
 	}
 	categoryReference, _ := data["category_reference"].(map[string]any)
-	if got := anyStringValue(categoryReference["decision_needed"]); !strings.Contains(got, "multiple viable paths") {
+	if got := anyStringValue(categoryReference["action_needed"]); !strings.Contains(got, "must decide") {
 		t.Fatalf("expected category reference in alias response, got %#v", payload)
 	}
 	items, _ := data["items"].([]any)
@@ -239,7 +239,7 @@ func TestInboxGetAliasMapsToList(t *testing.T) {
 		t.Fatalf("expected one inbox item, got %#v", payload)
 	}
 	item, _ := items[0].(map[string]any)
-	if got := anyStringValue(item["category_description"]); !strings.Contains(got, "multiple viable paths") {
+	if got := anyStringValue(item["category_description"]); !strings.Contains(got, "must decide") {
 		t.Fatalf("expected per-item category_description in alias response, got %#v", payload)
 	}
 }
@@ -247,7 +247,7 @@ func TestInboxGetAliasMapsToList(t *testing.T) {
 func TestInboxListIncludesAliasesAndLinkedShortIDs(t *testing.T) {
 	t.Parallel()
 
-	const inboxID = "inbox:decision_needed:thread_1234567890:none:event_1234567890"
+	const inboxID = "inbox:action_needed:thread_1234567890:none:event_1234567890"
 	const threadID = "thread_1234567890"
 	const eventID = "event_1234567890"
 
@@ -288,7 +288,7 @@ func TestInboxListIncludesAliasesAndLinkedShortIDs(t *testing.T) {
 func TestInboxListSupportsClientSideThreadAndTypeFilters(t *testing.T) {
 	t.Parallel()
 
-	const matchingID = "inbox:decision_needed:thread_1234567890:none:event_1234567890"
+	const matchingID = "inbox:action_needed:thread_1234567890:none:event_1234567890"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet || r.URL.Path != "/inbox" {
@@ -297,8 +297,8 @@ func TestInboxListSupportsClientSideThreadAndTypeFilters(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"items":[
-			{"id":"` + matchingID + `","thread_id":"thread_1234567890","type":"decision_needed","summary":"needs approval"},
-			{"id":"inbox:decision_needed:thread_other:none:event_other","thread_id":"thread_other","type":"decision_needed","summary":"other thread"},
+			{"id":"` + matchingID + `","thread_id":"thread_1234567890","type":"action_needed","summary":"needs approval"},
+			{"id":"inbox:action_needed:thread_other:none:event_other","thread_id":"thread_other","type":"action_needed","summary":"other thread"},
 			{"id":"inbox:review:thread_1234567890:none:event_review","thread_id":"thread_1234567890","type":"review_needed","summary":"other type"}
 		]}`))
 	}))
@@ -310,7 +310,7 @@ func TestInboxListSupportsClientSideThreadAndTypeFilters(t *testing.T) {
 		"--base-url", server.URL,
 		"inbox", "list",
 		"--thread-id", "thread_1234567890",
-		"--type", "decision_needed",
+		"--type", "action_needed",
 		"--full-id",
 	})
 	payload := assertEnvelopeOK(t, raw)
@@ -323,7 +323,7 @@ func TestInboxListSupportsClientSideThreadAndTypeFilters(t *testing.T) {
 		t.Fatalf("expected full_id=true, got %#v", data)
 	}
 	types := stringList(data["types"])
-	if len(types) != 1 || types[0] != "decision_needed" {
+	if len(types) != 1 || types[0] != "action_needed" {
 		t.Fatalf("expected filtered types, got %#v", data)
 	}
 	items, _ := data["items"].([]any)
@@ -339,17 +339,17 @@ func TestInboxListSupportsClientSideThreadAndTypeFilters(t *testing.T) {
 		"--base-url", server.URL,
 		"inbox", "list",
 		"--thread-id", "thread_1234567890",
-		"--type", "decision_needed",
+		"--type", "action_needed",
 	})
 	if !strings.Contains(human, "total_items: 3") || !strings.Contains(human, "returned_items: 1") {
 		t.Fatalf("expected rendered inbox counts in human output, got:\n%s", human)
 	}
 }
 
-func TestInboxListIncludesViewingAsAndCategoryReference(t *testing.T) {
+func TestInboxListTypeFilterAcceptsLegacyCategoryAliases(t *testing.T) {
 	t.Parallel()
 
-	const inboxID = "inbox:decision_needed:thread_123:none:event_123"
+	const matchingID = "inbox:action_needed:thread_1234567890:none:event_1234567890"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet || r.URL.Path != "/inbox" {
@@ -357,7 +357,49 @@ func TestInboxListIncludesViewingAsAndCategoryReference(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"items":[{"id":"` + inboxID + `","thread_id":"thread_123","category":"decision_needed","title":"Choose launch date"}]}`))
+		_, _ = w.Write([]byte(`{"items":[
+			{"id":"` + matchingID + `","thread_id":"thread_1234567890","category":"action_needed","summary":"needs approval"},
+			{"id":"inbox:risk_exception:thread_1234567890:none:event_other","thread_id":"thread_1234567890","category":"risk_exception","summary":"risk"}
+		]}`))
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"inbox", "list",
+		"--thread-id", "thread_1234567890",
+		"--type", "decision_needed",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+	types := stringList(data["types"])
+	if len(types) != 1 || types[0] != "action_needed" {
+		t.Fatalf("expected normalized types in response, got %#v", data)
+	}
+	items, _ := data["items"].([]any)
+	if len(items) != 1 {
+		t.Fatalf("expected one filtered inbox item, got %#v", data)
+	}
+	item, _ := items[0].(map[string]any)
+	if got := anyStringValue(item["id"]); got != matchingID {
+		t.Fatalf("expected matching inbox item %q, got %#v", matchingID, data)
+	}
+}
+
+func TestInboxListIncludesViewingAsAndCategoryReference(t *testing.T) {
+	t.Parallel()
+
+	const inboxID = "inbox:action_needed:thread_123:none:event_123"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/inbox" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items":[{"id":"` + inboxID + `","thread_id":"thread_123","category":"action_needed","title":"Choose launch date"}]}`))
 	}))
 	defer server.Close()
 
@@ -383,15 +425,15 @@ func TestInboxListIncludesViewingAsAndCategoryReference(t *testing.T) {
 		t.Fatalf("expected viewing_as actor_id actor_123, got %#v", data)
 	}
 	categoryReference, _ := data["category_reference"].(map[string]any)
-	if got := anyStringValue(categoryReference["decision_needed"]); !strings.Contains(got, "multiple viable paths") {
-		t.Fatalf("expected decision_needed category description, got %#v", data)
+	if got := anyStringValue(categoryReference["action_needed"]); !strings.Contains(got, "must decide") {
+		t.Fatalf("expected action_needed category description, got %#v", data)
 	}
 	items, _ := data["items"].([]any)
 	if len(items) != 1 {
 		t.Fatalf("expected one inbox item, got %#v", data)
 	}
 	item, _ := items[0].(map[string]any)
-	if got := anyStringValue(item["category_description"]); !strings.Contains(got, "multiple viable paths") {
+	if got := anyStringValue(item["category_description"]); !strings.Contains(got, "must decide") {
 		t.Fatalf("expected item category_description, got %#v", item)
 	}
 
@@ -403,7 +445,7 @@ func TestInboxListIncludesViewingAsAndCategoryReference(t *testing.T) {
 	if !strings.Contains(human, "viewing_as: profile=agent-a :: username=agent.alpha :: actor_id=actor_123") {
 		t.Fatalf("expected viewing_as summary in human output, got:\n%s", human)
 	}
-	if !strings.Contains(human, "category_reference:") || !strings.Contains(human, "decision_needed: A human must choose among multiple viable paths.") {
+	if !strings.Contains(human, "category_reference:") || !strings.Contains(human, "action_needed: A human must decide") {
 		t.Fatalf("expected category reference in human output, got:\n%s", human)
 	}
 }
@@ -411,8 +453,8 @@ func TestInboxListIncludesViewingAsAndCategoryReference(t *testing.T) {
 func TestInboxAliasStableAcrossListMembershipChanges(t *testing.T) {
 	t.Parallel()
 
-	const targetID = "inbox:decision_needed:thread_target:none:event_target"
-	const otherID = "inbox:decision_needed:thread_other:none:event_other"
+	const targetID = "inbox:action_needed:thread_target:none:event_target"
+	const otherID = "inbox:action_needed:thread_other:none:event_other"
 
 	aliasSingle := inboxAliasByID([]string{targetID})[targetID]
 	aliasWithOther := inboxAliasByID([]string{targetID, otherID})[targetID]
@@ -430,7 +472,7 @@ func TestInboxAliasStableAcrossListMembershipChanges(t *testing.T) {
 func TestInboxAckAliasUsesSubjectRefFromInboxList(t *testing.T) {
 	t.Parallel()
 
-	const inboxID = "inbox:decision_needed:thread_42:none:event_42"
+	const inboxID = "inbox:action_needed:thread_42:none:event_42"
 	alias := inboxAliasByID([]string{inboxID})[inboxID]
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1710,7 +1752,7 @@ func TestNormalizeMutationBodyIDsResolvesInboxAcknowledgeSubjectRef(t *testing.T
 
 	body := map[string]any{
 		"subject_ref":   "thread:thread_12345",
-		"inbox_item_id": "inbox:decision_needed:thread_1234567890:none:event_1",
+		"inbox_item_id": "inbox:action_needed:thread_1234567890:none:event_1",
 	}
 
 	normalizedAny, err := app.normalizeMutationBodyIDs(
@@ -2615,7 +2657,7 @@ func TestThreadsInspectBuildsCoordinationView(t *testing.T) {
 	t.Parallel()
 
 	const eventID = "event_1234567890abcdef"
-	const inboxID = "inbox:decision_needed:thread_1:none:event_1234567890abcdef"
+	const inboxID = "inbox:action_needed:thread_1:none:event_1234567890abcdef"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -2632,8 +2674,8 @@ func TestThreadsInspectBuildsCoordinationView(t *testing.T) {
 			}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
 			_, _ = w.Write([]byte(`{"items":[
-				{"id":"` + inboxID + `","thread_id":"thread_1","type":"decision_needed","summary":"launch date still needs acknowledgement"},
-				{"id":"inbox:decision_needed:thread_2:none:event_other","thread_id":"thread_2","type":"decision_needed","summary":"other thread"}
+				{"id":"` + inboxID + `","thread_id":"thread_1","type":"action_needed","summary":"launch date still needs acknowledgement"},
+				{"id":"inbox:action_needed:thread_2:none:event_other","thread_id":"thread_2","type":"action_needed","summary":"other thread"}
 			]}`))
 		default:
 			http.NotFound(w, r)
@@ -2757,7 +2799,7 @@ func TestThreadsRecommendationsBuildsFocusedReview(t *testing.T) {
 	const recommendationID = "event_rec_1234567890abcdef"
 	const decisionNeededID = "event_need_1"
 	const decisionMadeID = "event_done_1"
-	const inboxID = "inbox:decision_needed:thread_1:none:event_need_1"
+	const inboxID = "inbox:action_needed:thread_1:none:event_need_1"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -2775,8 +2817,8 @@ func TestThreadsRecommendationsBuildsFocusedReview(t *testing.T) {
 			}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
 			_, _ = w.Write([]byte(`{"items":[
-				{"id":"` + inboxID + `","thread_id":"thread_1","type":"decision_needed","summary":"launch date still needs acknowledgement"},
-				{"id":"inbox:decision_needed:thread_2:none:event_other","thread_id":"thread_2","type":"decision_needed","summary":"other thread"}
+				{"id":"` + inboxID + `","thread_id":"thread_1","type":"action_needed","summary":"launch date still needs acknowledgement"},
+				{"id":"inbox:action_needed:thread_2:none:event_other","thread_id":"thread_2","type":"action_needed","summary":"other thread"}
 			]}`))
 		default:
 			http.NotFound(w, r)
@@ -3385,7 +3427,7 @@ func TestThreadsRecommendationsFullSummaryToggle(t *testing.T) {
 func TestThreadsRecommendationsCountsPendingDecisionsInTotalWhenRecentWindowExcludesReviewEvents(t *testing.T) {
 	t.Parallel()
 
-	const pendingInboxID = "inbox:decision_needed:thread_1:none:event_pending_1"
+	const pendingInboxID = "inbox:action_needed:thread_1:none:event_pending_1"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
@@ -3400,7 +3442,7 @@ func TestThreadsRecommendationsCountsPendingDecisionsInTotalWhenRecentWindowExcl
 			}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
 			_, _ = w.Write([]byte(`{"items":[
-				{"id":"` + pendingInboxID + `","thread_id":"thread_1","type":"decision_needed","summary":"pending approval remains"}
+				{"id":"` + pendingInboxID + `","thread_id":"thread_1","type":"action_needed","summary":"pending approval remains"}
 			]}`))
 		default:
 			http.NotFound(w, r)
@@ -3969,7 +4011,7 @@ func TestInboxAckPositionalInboxItemIDRequiresSubjectRefFromInboxList(t *testing
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"items":[{"id":"inbox:decision_needed:thread_42:none:event_1","thread_id":"thread_42"}],"generated_at":"2026-03-05T00:00:00Z"}`))
+			_, _ = w.Write([]byte(`{"items":[{"id":"inbox:action_needed:thread_42:none:event_1","thread_id":"thread_42"}],"generated_at":"2026-03-05T00:00:00Z"}`))
 			return
 		default:
 			http.NotFound(w, r)
@@ -3983,7 +4025,7 @@ func TestInboxAckPositionalInboxItemIDRequiresSubjectRefFromInboxList(t *testing
 		"--json",
 		"--base-url", server.URL,
 		"inbox", "ack",
-		"inbox:decision_needed:thread_42:none:event_1",
+		"inbox:action_needed:thread_42:none:event_1",
 	})
 	payload := assertEnvelopeError(t, raw)
 	errObj, _ := payload["error"].(map[string]any)
@@ -4322,14 +4364,14 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 					"inbox":{
 						"thread_id":"thread_123",
 						"items":[
-							{"id":"inbox:decision_needed:thread_123:none:event_ctx_2","thread_id":"thread_123","type":"decision_needed","summary":"confirm canonical command labels"}
+							{"id":"inbox:action_needed:thread_123:none:event_ctx_2","thread_id":"thread_123","type":"action_needed","summary":"confirm canonical command labels"}
 						],
 						"count":1
 					},
 					"pending_decisions":{
 						"thread_id":"thread_123",
 						"items":[
-							{"id":"inbox:decision_needed:thread_123:none:event_ctx_2","thread_id":"thread_123","type":"decision_needed","summary":"confirm canonical command labels"}
+							{"id":"inbox:action_needed:thread_123:none:event_ctx_2","thread_id":"thread_123","type":"action_needed","summary":"confirm canonical command labels"}
 						],
 						"count":1
 					},
@@ -4385,7 +4427,7 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 					"count":1
 				},
 				"documents":{"items":[{"id":"doc_ctx_1","title":"Runbook","state":"active"}],"count":1},
-				"inbox":{"items":[{"id":"inbox:decision_needed:thread_123:none:event_ctx_2","thread_id":"thread_123","type":"decision_needed"}],"count":1},
+				"inbox":{"items":[{"id":"inbox:action_needed:thread_123:none:event_ctx_2","thread_id":"thread_123","type":"action_needed"}],"count":1},
 				"board_summary":{
 					"card_count":1,
 					"cards_by_column":{"backlog":0,"ready":0,"in_progress":1,"blocked":0,"review":0,"done":0},
@@ -4402,8 +4444,8 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{
 					"items":[
-					{"id":"inbox:decision_needed:thread_123:none:event_ctx_2","thread_id":"thread_123","type":"decision_needed","summary":"confirm canonical command labels"},
-					{"id":"inbox:decision_needed:thread_other:none:event_other","thread_id":"thread_other","type":"decision_needed","summary":"ignore other thread"}
+					{"id":"inbox:action_needed:thread_123:none:event_ctx_2","thread_id":"thread_123","type":"action_needed","summary":"confirm canonical command labels"},
+					{"id":"inbox:action_needed:thread_other:none:event_other","thread_id":"thread_other","type":"action_needed","summary":"ignore other thread"}
 				]
 			}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/events/stream":

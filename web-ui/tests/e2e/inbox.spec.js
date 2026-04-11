@@ -12,27 +12,24 @@ test("inbox triage shows urgency summary and acknowledging removes an item", asy
   let inboxItems = [
     {
       id: "inbox-001",
-      category: "decision_needed",
+      category: "action_needed",
       title: "Approve onboarding exception handling",
-      recommended_action: "Record a decision on escalation path.",
       thread_id: "thread-onboarding",
       related_refs: ["thread:thread-onboarding"],
       source_event_time: hoursAgo(30),
     },
     {
       id: "inbox-002",
-      category: "exception",
+      category: "risk_exception",
       title: "Missing legal signer",
-      recommended_action: "Acknowledge and assign owner.",
       thread_id: "thread-onboarding",
       related_refs: ["event:evt-1001"],
       source_event_time: hoursAgo(1),
     },
     {
       id: "inbox-003",
-      category: "work_item_risk",
-      title: "Work item risk",
-      recommended_action: "Adjust due date.",
+      category: "attention",
+      title: "Review updated runbook draft",
       thread_id: "thread-incident-42",
       related_refs: ["thread:thread-incident-42"],
       source_event_time: hoursAgo(60),
@@ -112,30 +109,27 @@ test("inbox urgency filters reduce visible cards", async ({ page }) => {
   const inboxItems = [
     {
       id: "inbox-001",
-      category: "decision_needed",
+      category: "action_needed",
       title: "Approve onboarding exception handling",
-      recommended_action: "Record a decision on escalation path.",
       thread_id: "thread-onboarding",
       related_refs: ["thread:thread-onboarding"],
       source_event_time: hoursAgo(30),
     },
     {
       id: "inbox-002",
-      category: "exception",
+      category: "risk_exception",
       title: "Missing legal signer",
-      recommended_action: "Acknowledge and assign owner.",
       thread_id: "thread-onboarding",
       related_refs: ["event:evt-1001"],
-      source_event_time: hoursAgo(1),
+      source_event_time: hoursAgo(9), // 9h old → 84+6=90 → immediate
     },
     {
       id: "inbox-003",
-      category: "work_item_risk",
-      title: "Work item risk",
-      recommended_action: "Adjust due date.",
+      category: "attention",
+      title: "Needs attention",
       thread_id: "thread-incident-42",
       related_refs: ["thread:thread-incident-42"],
-      source_event_time: hoursAgo(60),
+      source_event_time: hoursAgo(1),
     },
   ];
 
@@ -183,11 +177,6 @@ test("inbox urgency filters reduce visible cards", async ({ page }) => {
   await expect(page.getByTestId("inbox-card-inbox-002")).toBeVisible();
   await expect(page.getByTestId("inbox-card-inbox-001")).toHaveCount(0);
   await expect(page.getByTestId("inbox-card-inbox-003")).toHaveCount(0);
-
-  await urgencySelect.selectOption("aging");
-  await expect(page.getByTestId("inbox-card-inbox-003")).toBeVisible();
-  await expect(page.getByTestId("inbox-card-inbox-001")).toBeVisible();
-  await expect(page.getByTestId("inbox-card-inbox-002")).toHaveCount(0);
 });
 
 test("recording a decision marks only the selected inbox item", async ({
@@ -202,18 +191,16 @@ test("recording a decision marks only the selected inbox item", async ({
   let inboxItems = [
     {
       id: decidedItemId,
-      category: "decision_needed",
+      category: "action_needed",
       title: "Approve onboarding exception handling",
-      recommended_action: "Record a decision on escalation path.",
       thread_id: sharedThreadId,
       related_refs: [`thread:${sharedThreadId}`],
       source_event_time: hoursAgo(30),
     },
     {
       id: otherItemId,
-      category: "exception",
+      category: "risk_exception",
       title: "Missing legal signer",
-      recommended_action: "Acknowledge and assign owner.",
       thread_id: sharedThreadId,
       related_refs: ["event:evt-1001"],
       source_event_time: hoursAgo(1),
@@ -310,18 +297,16 @@ test("undo returns a queued inbox decision before it is sent to core", async ({
   const inboxItems = [
     {
       id: decidedItemId,
-      category: "decision_needed",
+      category: "action_needed",
       title: "Approve onboarding exception handling",
-      recommended_action: "Record a decision on escalation path.",
       thread_id: sharedThreadId,
       related_refs: [`thread:${sharedThreadId}`],
       source_event_time: hoursAgo(30),
     },
     {
       id: otherItemId,
-      category: "exception",
+      category: "risk_exception",
       title: "Missing legal signer",
-      recommended_action: "Acknowledge and assign owner.",
       thread_id: sharedThreadId,
       related_refs: ["event:evt-1001"],
       source_event_time: hoursAgo(1),
@@ -488,9 +473,8 @@ test("inbox thread context shows subject link for decisions", async ({
         items: [
           {
             id: "inbox-001",
-            category: "decision_needed",
+            category: "action_needed",
             title: "Approve onboarding exception handling",
-            recommended_action: "Record a decision on escalation path.",
             thread_id: threadId,
             refs: [`thread:${threadId}`],
             source_event_time: hoursAgo(4),

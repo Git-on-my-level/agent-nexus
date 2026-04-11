@@ -310,7 +310,7 @@ Topics define work freshness; staleness is evaluated against topic activity and 
 When staleness is detected by background maintenance or a deterministic derived
 rebuild, oar-core MUST:
 - Emit an `exception_raised` event with subtype `stale_topic`.
-- Surface the topic as an inbox item with category `stale_topic`.
+- Surface the topic as an inbox item with category `risk_exception` (the exception subtype remains `stale_topic` on the event).
 
 Read handlers MUST NOT mint stale-topic exceptions as a side effect of GET
 requests.
