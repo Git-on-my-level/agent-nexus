@@ -58,6 +58,9 @@ func (a *App) runTopicsCommand(ctx context.Context, args []string, cfg config.Re
 		if err != nil {
 			return nil, "topics create", err
 		}
+		if bodyMap, ok := body.(map[string]any); ok {
+			ensureEmptyListDefaults(bodyMap, "topic", []string{"owner_refs", "document_refs", "board_refs", "related_refs"})
+		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "topics create", "topics.create", nil, nil, body)
 		return result, "topics create", callErr
 	case "patch":
@@ -130,6 +133,9 @@ func (a *App) runCardsCommand(ctx context.Context, args []string, cfg config.Res
 		body, err := a.parseJSONBodyInput(args[1:], "cards create")
 		if err != nil {
 			return nil, "cards create", err
+		}
+		if bodyMap, ok := body.(map[string]any); ok {
+			ensureEmptyListDefaults(bodyMap, "card", []string{"assignee_refs", "resolution_refs", "related_refs"})
 		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "cards create", "cards.create", nil, nil, body)
 		return result, "cards create", callErr

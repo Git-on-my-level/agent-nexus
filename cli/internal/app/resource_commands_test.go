@@ -4895,3 +4895,223 @@ func anyBoolValue(raw any) bool {
 	value, _ := raw.(bool)
 	return value
 }
+
+func TestEnsureEmptyListDefaults(t *testing.T) {
+	t.Parallel()
+
+	t.Run("injects_missing_fields", func(t *testing.T) {
+		t.Parallel()
+		body := map[string]any{
+			"topic": map[string]any{
+				"title": "test",
+			},
+		}
+		ensureEmptyListDefaults(body, "topic", []string{"owner_refs", "document_refs", "board_refs", "related_refs"})
+		topic := body["topic"].(map[string]any)
+		for _, field := range []string{"owner_refs", "document_refs", "board_refs", "related_refs"} {
+			val, ok := topic[field].([]any)
+			if !ok || len(val) != 0 {
+				t.Fatalf("expected %s to be empty slice, got %#v", field, topic[field])
+			}
+		}
+	})
+
+	t.Run("preserves_existing_values", func(t *testing.T) {
+		t.Parallel()
+		body := map[string]any{
+			"card": map[string]any{
+				"title":         "test",
+				"assignee_refs": []any{"actor:abc"},
+				"related_refs":  []any{},
+			},
+		}
+		ensureEmptyListDefaults(body, "card", []string{"assignee_refs", "resolution_refs", "related_refs"})
+		card := body["card"].(map[string]any)
+		if got := card["assignee_refs"].([]any); len(got) != 1 || got[0] != "actor:abc" {
+			t.Fatalf("expected assignee_refs preserved, got %#v", got)
+		}
+		if got := card["related_refs"].([]any); len(got) != 0 {
+			t.Fatalf("expected related_refs preserved as empty, got %#v", got)
+		}
+		if got := card["resolution_refs"].([]any); len(got) != 0 {
+			t.Fatalf("expected resolution_refs defaulted to empty, got %#v", got)
+		}
+	})
+
+	t.Run("no_op_when_nest_missing", func(t *testing.T) {
+		t.Parallel()
+		body := map[string]any{"title": "test"}
+		ensureEmptyListDefaults(body, "topic", []string{"owner_refs"})
+		if _, exists := body["owner_refs"]; exists {
+			t.Fatal("should not inject at root level")
+		}
+	})
+
+	t.Run("no_op_when_nil", func(t *testing.T) {
+		t.Parallel()
+		ensureEmptyListDefaults(nil, "topic", []string{"owner_refs"})
+	})
+}
+
+func TestCreateCommandsDefaultEmptyListFields(t *testing.T) {
+	t.Parallel()
+
+	t.Run("topics_create", func(t *testing.T) {
+		t.Parallel()
+		var receivedBody map[string]any
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodPost && r.URL.Path == "/topics" {
+				body, _ := io.ReadAll(r.Body)
+				json.Unmarshal(body, &receivedBody)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusCreated)
+				_, _ = w.Write([]byte(`{"topic":{"id":"t1","type":"case","status":"active","title":"T","summary":"S","owner_refs":[],"document_refs":[],"board_refs":[],"related_refs":[],"provenance":{"sources":[]}}}`))
+				return
+			}
+			http.NotFound(w, r)
+		}))
+		defer server.Close()
+
+		home := t.TempDir()
+		env := map[string]string{}
+		input := `{"topic":{"type":"case","status":"active","title":"T","summary":"S","provenance":{"sources":[]}}}`
+		result := runCLIForTest(t, home, env, strings.NewReader(input), []string{"--json", "--base-url", server.URL, "topics", "create"})
+		assertEnvelopeOK(t, result)
+
+		topic := receivedBody["topic"].(map[string]any)
+		for _, field := range []string{"owner_refs", "document_refs", "board_refs", "related_refs"} {
+			val, ok := topic[field].([]any)
+			if !ok || len(val) != 0 {
+				t.Fatalf("expected %s to be empty slice, got %#v", field, topic[field])
+			}
+		}
+	})
+
+	t.Run("boards_create", func(t *testing.T) {
+		t.Parallel()
+		var receivedBody map[string]any
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodPost && r.URL.Path == "/boards" {
+				body, _ := io.ReadAll(r.Body)
+				json.Unmarshal(body, &receivedBody)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusCreated)
+				_, _ = w.Write([]byte(`{"board":{"id":"b1","title":"B","status":"active","document_refs":[],"pinned_refs":[],"provenance":{"sources":[]}}}`))
+				return
+			}
+			http.NotFound(w, r)
+		}))
+		defer server.Close()
+
+		home := t.TempDir()
+		env := map[string]string{}
+		input := `{"board":{"title":"B","status":"active","provenance":{"sources":[]}}}`
+		result := runCLIForTest(t, home, env, strings.NewReader(input), []string{"--json", "--base-url", server.URL, "boards", "create"})
+		assertEnvelopeOK(t, result)
+
+		board := receivedBody["board"].(map[string]any)
+		for _, field := range []string{"document_refs", "pinned_refs"} {
+			val, ok := board[field].([]any)
+			if !ok || len(val) != 0 {
+				t.Fatalf("expected %s to be empty slice, got %#v", field, board[field])
+			}
+		}
+	})
+
+	t.Run("cards_create", func(t *testing.T) {
+		t.Parallel()
+		var receivedBody map[string]any
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodPost && r.URL.Path == "/cards" {
+				body, _ := io.ReadAll(r.Body)
+				json.Unmarshal(body, &receivedBody)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusCreated)
+				_, _ = w.Write([]byte(`{"card":{"id":"c1","board_id":"board_1","title":"C","summary":"S","column_key":"backlog","assignee_refs":[],"resolution_refs":[],"related_refs":[],"provenance":{"sources":[]}}}`))
+				return
+			}
+			http.NotFound(w, r)
+		}))
+		defer server.Close()
+
+		home := t.TempDir()
+		env := map[string]string{}
+		input := `{"board_ref":"board:board_1","card":{"title":"C","summary":"S","column_key":"backlog","provenance":{"sources":[]}}}`
+		result := runCLIForTest(t, home, env, strings.NewReader(input), []string{"--json", "--base-url", server.URL, "cards", "create"})
+		assertEnvelopeOK(t, result)
+
+		card := receivedBody["card"].(map[string]any)
+		for _, field := range []string{"assignee_refs", "resolution_refs", "related_refs"} {
+			val, ok := card[field].([]any)
+			if !ok || len(val) != 0 {
+				t.Fatalf("expected %s to be empty slice, got %#v", field, card[field])
+			}
+		}
+	})
+
+	t.Run("boards_cards_create", func(t *testing.T) {
+		t.Parallel()
+		var receivedBody map[string]any
+		boardID := "board_1"
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodPost && r.URL.Path == "/boards/"+boardID+"/cards" {
+				body, _ := io.ReadAll(r.Body)
+				json.Unmarshal(body, &receivedBody)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusCreated)
+				_, _ = w.Write([]byte(`{"board":{"id":"` + boardID + `","updated_at":"2026-04-12T00:00:00Z"},"card":{"id":"c1","board_id":"` + boardID + `","title":"C","column_key":"backlog","assignee_refs":[],"resolution_refs":[],"related_refs":[],"provenance":{"sources":[]}}}`))
+				return
+			}
+			http.NotFound(w, r)
+		}))
+		defer server.Close()
+
+		home := t.TempDir()
+		env := map[string]string{}
+		input := `{"card":{"title":"C","column_key":"backlog","provenance":{"sources":[]}}}`
+		result := runCLIForTest(t, home, env, strings.NewReader(input), []string{"--json", "--base-url", server.URL, "boards", "cards", "create", "--board-id", boardID})
+		assertEnvelopeOK(t, result)
+
+		card := receivedBody["card"].(map[string]any)
+		for _, field := range []string{"assignee_refs", "resolution_refs", "related_refs"} {
+			val, ok := card[field].([]any)
+			if !ok || len(val) != 0 {
+				t.Fatalf("expected %s to be empty slice, got %#v", field, card[field])
+			}
+		}
+	})
+
+	t.Run("explicit_values_preserved", func(t *testing.T) {
+		t.Parallel()
+		var receivedBody map[string]any
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodPost && r.URL.Path == "/topics" {
+				body, _ := io.ReadAll(r.Body)
+				json.Unmarshal(body, &receivedBody)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusCreated)
+				_, _ = w.Write([]byte(`{"topic":{"id":"t1"}}`))
+				return
+			}
+			http.NotFound(w, r)
+		}))
+		defer server.Close()
+
+		home := t.TempDir()
+		env := map[string]string{}
+		input := `{"topic":{"type":"case","status":"active","title":"T","summary":"S","owner_refs":["actor:x"],"document_refs":[],"board_refs":["board:y"],"related_refs":[],"provenance":{"sources":[]}}}`
+		result := runCLIForTest(t, home, env, strings.NewReader(input), []string{"--json", "--base-url", server.URL, "topics", "create"})
+		assertEnvelopeOK(t, result)
+
+		topic := receivedBody["topic"].(map[string]any)
+		if refs := topic["owner_refs"].([]any); len(refs) != 1 || refs[0] != "actor:x" {
+			t.Fatalf("expected owner_refs preserved, got %#v", refs)
+		}
+		if refs := topic["document_refs"].([]any); len(refs) != 0 {
+			t.Fatalf("expected document_refs preserved as empty, got %#v", refs)
+		}
+		if refs := topic["board_refs"].([]any); len(refs) != 1 || refs[0] != "board:y" {
+			t.Fatalf("expected board_refs preserved, got %#v", refs)
+		}
+	})
+}
