@@ -49,9 +49,9 @@ describe("dev seed scenarios", () => {
       id: "kid-boss-lemonade-plan",
       title: "Kid Boss Lemonade Plan",
     });
-    expect(seed.documentRevisions["kid-boss-lemonade-plan"]).toHaveLength(3);
-    expect(seed.documentRevisions["kid-sales-pitch-notebook"]).toHaveLength(3);
-    expect(seed.documentRevisions["kid-prep-notebook"]).toHaveLength(3);
+    expect(seed.documentRevisions["kid-boss-lemonade-plan"]).toHaveLength(5);
+    expect(seed.documentRevisions["kid-sales-pitch-notebook"]).toHaveLength(5);
+    expect(seed.documentRevisions["kid-prep-notebook"]).toHaveLength(5);
     expect(seed.boards[0]).toMatchObject({
       title: "Saturday Lemonade Stand Mission Board",
     });
@@ -60,7 +60,7 @@ describe("dev seed scenarios", () => {
       seed.cards.some(
         (card) =>
           card.summary ===
-          "Rewrite the sign so the price is giant and the joke is small",
+          "Sales combo pitch: launch Halftime Happy Combo without overselling mint",
       ),
     ).toBe(true);
     expect(
@@ -75,6 +75,14 @@ describe("dev seed scenarios", () => {
         (event) =>
           event.thread_id === "thread-kids-lemonade-backoffice" &&
           event.type === "message_posted",
+      ),
+    ).toBe(true);
+    expect(
+      seed.events.some(
+        (event) =>
+          event.type === "message_posted" &&
+          String(event.payload?.text ?? "").includes("@ruby") &&
+          String(event.payload?.text ?? "").includes("@theo"),
       ),
     ).toBe(true);
   });

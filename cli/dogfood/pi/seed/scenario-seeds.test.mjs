@@ -20,9 +20,9 @@ test("kids lemonade stand returns all chapters for web-ui seeds", () => {
 
   assert.equal(seed.boards.length, 1);
   assert.equal(seed.cards.length, 3);
-  assert.equal(seed.documentRevisions["kid-boss-lemonade-plan"].length, 3);
-  assert.equal(seed.documentRevisions["kid-sales-pitch-notebook"].length, 3);
-  assert.equal(seed.documentRevisions["kid-prep-notebook"].length, 3);
+  assert.equal(seed.documentRevisions["kid-boss-lemonade-plan"].length, 5);
+  assert.equal(seed.documentRevisions["kid-sales-pitch-notebook"].length, 5);
+  assert.equal(seed.documentRevisions["kid-prep-notebook"].length, 5);
   assert.ok(
     seed.events.some(
       (event) =>
@@ -35,6 +35,14 @@ test("kids lemonade stand returns all chapters for web-ui seeds", () => {
       (event) =>
         event.thread_id === "thread-kids-lemonade-backoffice" &&
         event.type === "message_posted",
+    ),
+  );
+  assert.ok(
+    seed.events.some(
+      (event) =>
+        event.type === "message_posted" &&
+        String(event.payload?.text ?? "").includes("@ruby") &&
+        String(event.payload?.text ?? "").includes("@theo"),
     ),
   );
 });

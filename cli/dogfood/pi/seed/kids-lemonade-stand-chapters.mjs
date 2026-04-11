@@ -1,6 +1,6 @@
 import { getKidsLemonadeStandSeedData as getKidsLemonadeStandBaseSeedData } from "./kids-lemonade-stand-data.mjs";
 
-export const KIDS_LEMONADE_STAND_CHAPTER_IDS = ["chapter-1", "chapter-2"];
+export const KIDS_LEMONADE_STAND_CHAPTER_IDS = ["chapter-1", "chapter-2", "chapter-3"];
 
 const documentThreadIds = {
   "kid-boss-lemonade-plan": "thread-kids-lemonade-main",
@@ -290,6 +290,173 @@ End-of-chapter-2 goal:
 `,
     },
   },
+  "chapter-3": {
+    "kid-boss-lemonade-plan": [
+      {
+        created_by: "actor-boss-kid",
+        content: `# Kid Boss Lemonade Plan
+
+Status: CHAPTER 3 MIDWAY - paper cups secured, combo idea under review, waiting on teammate replies
+Mood: loud, cooperative, and a tiny bit smug because tagging is finally doing real work
+
+What changed right away:
+- Paper cups ARRIVED. The stand lives to sell another hour.
+- Theo says the mint test PASSED, but only as a tiny special with strict limits.
+- The cookie-table kids are friendly, not rivals. They want to do a snack-break combo instead of a feud.
+- A soccer coach asked for a fast organized option for the post-practice crowd.
+
+Open questions I tagged the team about:
+- @ruby: what is the best combo wording that sounds fun and readable from the sidewalk?
+- @theo: what exact cap can the kitchen support without the supply plan turning into a puddle?
+- Nobody announces the combo until both replies land. This is a BOSSLY patience exercise.
+
+Temporary ruling:
+- Regular lemonade stays the headline.
+- Mint stays whisper-only.
+- Cookie team-up is possible, not promised yet.
+- Board card updated to show we are in combo-planning mode, not random chaos mode.
+`,
+      },
+      {
+        created_by: "actor-boss-kid",
+        content: `# Kid Boss Lemonade Plan
+
+Status: final chapter 3 plan locked
+Mood: cooperative chaos with actual handoffs, which is my favorite kind
+
+Chapter 3 outcome:
+- Paper cups saved the stand. Panic level dropped from 'serve in hands' to 'normal dramatic.'
+- Theo gave the mint batch a cautious thumbs-up and capped it at 4 secret-menu cups per round.
+- Ruby tested the combo pitch and got the best reaction from "Halftime Happy Combo" because kids liked the name and the coach could repeat it easily.
+- The cookie-table siblings are allies now. No rivalry, just snack diplomacy.
+
+Final cooperative plan:
+- Regular menu: lemonade first, always visible, fast line for the team crowd
+- Combo special: "Halftime Happy Combo" = one lemonade + one cookie while the friendly cookie team still has stock
+- Secret menu: whisper-only mint add-on, offered only after Theo says the cups and ice can handle it
+- Ruby announces combo wording only after Theo's cap and Milo's sign-off
+- Theo posts the supply cap and pings the team if cup count drops again
+- Milo updates the board after every big handoff so nobody has to guess
+
+Who tagged whom and why it mattered:
+- Milo tagged @ruby for pitch wording and @theo for the safe combo cap before making the final ruling
+- Ruby tagged @theo to confirm the mint limit and tagged @milo to lock the customer-facing wording
+- Theo tagged @ruby when the mint cups were actually ready and tagged @milo with the hard combo cap
+- Because the team waited for replies instead of freelancing, the combo launched without overselling or supply panic
+
+End-of-chapter goal reached:
+- The stand looks organized
+- The combo is real
+- The board shows ownership
+- The team sounds like teammates, not three separate radio stations
+`,
+      },
+    ],
+    "kid-sales-pitch-notebook": [
+      {
+        created_by: "actor-sales-kid",
+        content: `# Ruby Pitch Notebook
+
+## Front stand update
+- Paper cups are here. I can breathe again.
+- The cookie-table siblings are nice and weird in the best way. They want a friendly combo, not a showdown.
+- Coach asked for something quick to shout to the whole team after practice.
+
+## Tagged questions I sent
+- @theo: exactly how many mint cups can I whisper about before the kitchen mutinies?
+- @milo: if I pitch a cookie combo, what is the official boss-approved wording?
+
+## Best wording ideas so far
+- "Halftime Happy Combo"
+- "Lemon + Cookie Victory Snack"
+- "Post-Practice Power Combo"
+
+## Temporary rule until replies land
+- Do NOT promise mint to everyone
+- Do NOT promise endless combos
+- Keep the main sign about regular lemonade first
+`,
+      },
+      {
+        created_by: "actor-sales-kid",
+        content: `# Ruby Pitch Notebook
+
+## Winning line
+- "Halftime Happy Combo" is the winner
+- Kids liked that it sounded like a little prize
+- Coach repeated it back without asking me to explain it twice, which means it works
+
+## Tagged handoff results
+- @theo said mint stays tiny: 4 secret-menu cups per round, only after the regular line is stable
+- @milo approved the combo wording and told me to keep regular lemonade as the giant visible headline
+- I replied to both and adjusted the pitch so I am not selling imaginary lemonade
+
+## Final sales plan
+- Main sign: regular lemonade first, still readable from far away
+- Spoken combo pitch: "Halftime Happy Combo" for one lemonade plus one cookie while supplies last
+- Secret menu stays whisper-only and only for adventurous kids after Theo gives the nod
+- If the combo line gets too long, I slow it down instead of making promises the kitchen cannot keep
+
+## Customer reactions
+- Soccer kids liked the combo name instantly
+- Adults liked that the stand sounded organized instead of chaotic
+- The cookie-table siblings laughed when I said we were now "snack allies"
+
+## Team note
+- Tagging helped because I stopped guessing and started confirming
+- Theo saved me from overselling mint
+- Milo turned my three dramatic slogans into one actual plan
+`,
+      },
+    ],
+    "kid-prep-notebook": [
+      {
+        created_by: "actor-backoffice-kid",
+        content: `# Theo Prep Log - Chapter 3 Midway
+
+## Supply reset
+- Paper cups arrived from Milo's heroic store run. We are no longer one spilled cup away from collapse.
+- Pitcher two is holding.
+- Mint test PASSED, but only barely. It tastes fresh, not weird, if I keep it small.
+
+## Tagged messages I sent
+- @milo: hard cap for any combo needs to stay small and orderly
+- @ruby: do not advertise mint like it is unlimited treasure
+
+## Kitchen rules
+- Mint special = 4 cups per round, max
+- Regular lemonade stays priority one
+- Cookie combo is fine only if the line stays moving and nobody makes me open the cooler every 30 seconds
+`,
+      },
+      {
+        created_by: "actor-backoffice-kid",
+        content: `# Theo Prep Log - Chapter 3 Final Update
+
+## Kitchen verdict
+- Paper cup crisis is over for now
+- Mint special is APPROVED as a tiny whisper menu, 4 cups per round and no more without a new check
+- Cookie combo is approved because the cookie-table siblings handle their own side and Ruby agreed not to oversell mine
+
+## Tagged handoff outcomes
+- I tagged @milo with the hard combo cap so the boss plan would stay realistic
+- I tagged @ruby the moment the mint cups were ready so she could whisper to the right customers instead of the whole sidewalk
+- Ruby actually listened, which I am writing down because it is historic
+
+## Supply guardrails
+- Keep regular lemonade as the main line
+- Mint only after the main line is calm
+- If cups dip again, combo pitch pauses first before regular lemonade does
+- Cooler remains sacred, obviously
+
+## Kitchen mood
+- Cooperative
+- Slightly sticky
+- Weirdly proud of our tiny snack alliance
+`,
+      },
+    ],
+  },
 };
 
 const chapterBoardStates = {
@@ -361,6 +528,88 @@ const chapterBoardStates = {
         related_refs: [
           "artifact:artifact-sales-scoreboard",
           "artifact:artifact-sign-slogans",
+          "thread:thread-kids-lemonade-sales",
+          "topic:thread-kids-lemonade-sales",
+        ],
+        assignee_refs: ["actor:actor-sales-kid"],
+        risk: "medium",
+        created_by: "actor-sales-kid",
+        updated_by: "actor-sales-kid",
+      },
+    ],
+  },
+  "chapter-3": {
+    boards: [
+      {
+        id: "991a7ede-c737-4040-b44a-ca225a20b496",
+        title: "Saturday Lemonade Stand Mission Board",
+        status: "active",
+        created_by: "actor-boss-kid",
+        updated_by: "actor-boss-kid",
+        document_refs: ["document:kid-boss-lemonade-plan"],
+        pinned_refs: [
+          "artifact:artifact-sales-scoreboard",
+          "artifact:artifact-prep-checklist",
+          "artifact:artifact-supply-stash",
+          "artifact:artifact-rival-stand-rumor",
+          "artifact:artifact-secret-menu-sketch",
+        ],
+        primary_topic_ref: "topic:thread-kids-lemonade-main",
+        provenance: {
+          sources: ["inferred"],
+          notes: "Updated during chapter 3 to reflect the cooperative combo plan and tagged handoffs.",
+        },
+      },
+    ],
+    cards: [
+      {
+        id: "0cfdd886-64dd-4d08-9ded-551605254d71",
+        board_id: "991a7ede-c737-4040-b44a-ca225a20b496",
+        column_key: "done",
+        summary: "Boss kid coordination: lock the halftime combo after Ruby and Theo reply in-thread",
+        title: "Boss kid coordination: lock the halftime combo after Ruby and Theo reply in-thread",
+        related_refs: [
+          "artifact:artifact-prep-checklist",
+          "artifact:artifact-rival-stand-rumor",
+          "artifact:artifact-sales-scoreboard",
+          "artifact:artifact-supply-stash",
+          "artifact:artifact-secret-menu-sketch",
+          "thread:thread-kids-lemonade-main",
+          "topic:thread-kids-lemonade-main",
+        ],
+        assignee_refs: ["actor:actor-boss-kid"],
+        risk: "medium",
+        created_by: "actor-boss-kid",
+        updated_by: "actor-boss-kid",
+      },
+      {
+        id: "3c552c4c-ddf4-4e76-84ca-aebd7d8d8cc4",
+        board_id: "991a7ede-c737-4040-b44a-ca225a20b496",
+        column_key: "in_progress",
+        summary: "Kitchen Prep: guard the mint cap, paper cups, and combo-safe supply limits",
+        title: "Kitchen Prep: guard the mint cap, paper cups, and combo-safe supply limits",
+        related_refs: [
+          "artifact:artifact-prep-checklist",
+          "artifact:artifact-supply-stash",
+          "artifact:artifact-secret-menu-sketch",
+          "thread:thread-kids-lemonade-backoffice",
+          "topic:thread-kids-lemonade-backoffice",
+        ],
+        assignee_refs: ["actor:actor-backoffice-kid"],
+        risk: "medium",
+        created_by: "actor-backoffice-kid",
+        updated_by: "actor-backoffice-kid",
+      },
+      {
+        id: "3d051f3d-3dcc-4e8e-9ccd-6b5f1c524195",
+        board_id: "991a7ede-c737-4040-b44a-ca225a20b496",
+        column_key: "done",
+        summary: "Sales combo pitch: launch Halftime Happy Combo without overselling mint",
+        title: "Sales combo pitch: launch Halftime Happy Combo without overselling mint",
+        related_refs: [
+          "artifact:artifact-sales-scoreboard",
+          "artifact:artifact-sign-slogans",
+          "artifact:artifact-secret-menu-sketch",
           "thread:thread-kids-lemonade-sales",
           "topic:thread-kids-lemonade-sales",
         ],
@@ -956,6 +1205,278 @@ const chapterEvents = {
       ts: "2026-04-10T17:29:29.321831Z",
     },
   ],
+  "chapter-3": [
+    {
+      id: "evt-kids-ch3-main-message-001",
+      actor_id: "actor-boss-kid",
+      type: "message_posted",
+      thread_id: "thread-kids-lemonade-main",
+      refs: [
+        "thread:thread-kids-lemonade-main",
+        "board:991a7ede-c737-4040-b44a-ca225a20b496",
+      ],
+      summary: "Message: paper cups rescued us, now I need tagged answers before the combo goes live",
+      payload: {
+        text: "TEAM UPDATE. I am back from the corner store and the paper cups are HERE. We are no longer one spill away from serving lemonade in our hands. Also the cookie-table siblings are actually nice, which is rude because I was emotionally ready for a rivalry.\n\nA soccer coach just asked if we have a quick snack-break option for the team, so I am considering a friendly combo instead of a snack war. But I am not launching that plan on vibes alone.\n\n- @ruby: I need your best coach-friendly combo wording. Something fun, short, and shoutable from the sidewalk.\n- @theo: I need the REAL cap. How many combo orders and mint whispers can the kitchen support before you throw a lemon at me?\n\nReply here before I lock the plan. Board card is updated. We are doing actual teamwork now.",
+      },
+      provenance: {
+        sources: ["inferred"],
+      },
+      ts: "2026-04-11T01:12:11.101000Z",
+    },
+    {
+      id: "evt-kids-ch3-main-message-002",
+      actor_id: "actor-sales-kid",
+      type: "message_posted",
+      thread_id: "thread-kids-lemonade-main",
+      refs: ["thread:thread-kids-lemonade-main"],
+      summary: "Message: Ruby tags the team with combo wording ideas and asks for hard limits",
+      payload: {
+        text: "RUBY REPORTING. I just talked to the coach and the cookie-table siblings and everybody is weirdly into being snack allies. My current winning combo name is 'Halftime Happy Combo' because kids grin at it and the coach can actually repeat it.\n\nQuestions before I start pitching it:\n- @theo: can I whisper mint as a tiny bonus or is this still four cups max and then absolutely no more?\n- @milo: if I sell the combo, do you want the sign to mention cookies at all or should regular lemonade stay the giant obvious headline?\n\nI can make this sound adorable OR organized. Preferably both. But I need your answers so I do not become a chaos merchant.",
+      },
+      provenance: {
+        sources: [
+          "artifact:artifact-sales-scoreboard",
+          "artifact:artifact-sign-slogans",
+        ],
+      },
+      ts: "2026-04-11T01:12:39.551000Z",
+    },
+    {
+      id: "evt-kids-ch3-main-message-003",
+      actor_id: "actor-backoffice-kid",
+      type: "message_posted",
+      thread_id: "thread-kids-lemonade-main",
+      refs: ["thread:thread-kids-lemonade-main"],
+      summary: "Message: Theo tags the team with the kitchen cap and mint guardrails",
+      payload: {
+        text: "KITCHEN ANSWER TIME. Good news: Milo's paper-cup rescue means I am no longer calculating servings like a haunted accountant. Better news: the mint test PASSED. It tastes fresh, not like toothpaste soup.\n\nNow the hard limits:\n- @milo: hard cap the combo at 12 quick orders before we pause and recount cups. I want a real checkpoint, not a motivational speech.\n- @ruby: mint stays whisper-only and 4 cups per round MAX. Do not shout it at the whole sidewalk like it is a carnival ride.\n\nRegular lemonade is still priority one. Combo is fine. Chaos is not. Cooler remains sacred.",
+      },
+      provenance: {
+        sources: [
+          "artifact:artifact-prep-checklist",
+          "artifact:artifact-supply-stash",
+          "artifact:artifact-secret-menu-sketch",
+        ],
+      },
+      ts: "2026-04-11T01:13:08.890000Z",
+    },
+    {
+      id: "evt-kids-ch3-main-reply-001",
+      actor_id: "actor-boss-kid",
+      type: "message_posted",
+      thread_id: "thread-kids-lemonade-main",
+      refs: [
+        "thread:thread-kids-lemonade-main",
+        "event:evt-kids-ch3-main-message-003",
+      ],
+      summary: "Message reply: Milo accepts Theo's cap and keeps the combo on a leash",
+      payload: {
+        text: "Theo this is EXACTLY the kind of hard number I needed. Combo cap is now officially 12 quick orders before the mandatory cup recount. I am writing that into the plan so Ruby cannot accidentally sell the moon.\n\nAlso the mint guardrails are accepted: whisper-only, 4 cups per round, regular lemonade stays the main character. @ruby please reply once you have adjusted the pitch to match Theo's limits. I want the cute version AND the responsible version.",
+      },
+      provenance: {
+        sources: ["inferred"],
+      },
+      ts: "2026-04-11T01:13:31.701000Z",
+    },
+    {
+      id: "evt-kids-ch3-main-reply-002",
+      actor_id: "actor-sales-kid",
+      type: "message_posted",
+      thread_id: "thread-kids-lemonade-main",
+      refs: [
+        "thread:thread-kids-lemonade-main",
+        "event:evt-kids-ch3-main-message-003",
+      ],
+      summary: "Message reply: Ruby accepts the mint cap and narrows the pitch",
+      payload: {
+        text: "Theo I ACCEPT THE LAWS OF THE KITCHEN. Mint stays whisper-only and tiny. I will treat it like a treasure chest, not a parade.\n\nAdjusted pitch:\n- Main shout: regular lemonade is still the giant obvious thing\n- Combo line: 'Halftime Happy Combo' while supplies last\n- Secret menu mint: only whispered to brave little weirdos after you give the nod\n\n@milo if that sounds boss-approved, I am ready to go sell this like a very responsible tiny entrepreneur.",
+      },
+      provenance: {
+        sources: ["inferred"],
+      },
+      ts: "2026-04-11T01:13:58.446000Z",
+    },
+    {
+      id: "evt-kids-ch3-main-reply-003",
+      actor_id: "actor-boss-kid",
+      type: "message_posted",
+      thread_id: "thread-kids-lemonade-main",
+      refs: [
+        "thread:thread-kids-lemonade-main",
+        "event:evt-kids-ch3-main-message-002",
+      ],
+      summary: "Message reply: final boss ruling - Halftime Happy Combo is official",
+      payload: {
+        text: "FINAL RULING. 'Halftime Happy Combo' is excellent and now official. It sounds fun, the coach can repeat it, and it does not make us sound like a confusing restaurant.\n\nRules are locked:\n- Regular lemonade stays on the sign as the giant headline\n- Combo is spoken and optional, not a whole second billboard\n- Theo's cap rules everything: 12 quick combo orders, then recount; mint whisper-only at 4 cups per round\n- Cookie-table siblings stay friendly allies, not enemies\n\n@ruby launch the combo voice line. @theo ping the thread when the first mint cups are actually ready. I am updating the board and the doc right now because this is the most organized we have ever been.",
+      },
+      provenance: {
+        sources: ["inferred"],
+      },
+      ts: "2026-04-11T01:14:30.228000Z",
+    },
+    {
+      id: "evt-kids-ch3-sales-message-001",
+      actor_id: "actor-sales-kid",
+      type: "message_posted",
+      thread_id: "thread-kids-lemonade-sales",
+      refs: ["thread:thread-kids-lemonade-sales"],
+      summary: "Sales thread update: combo wording locked, mint stays whisper-only",
+      payload: {
+        text: "Sales thread update! The team actually answered each other like professionals, except tiny and sticky.\n\nFinal front-stand plan:\n- Main sign still screams regular lemonade first\n- Spoken add-on is 'Halftime Happy Combo' with the friendly cookie-table siblings\n- Mint is NOT a giant sign thing. It is a whisper thing after Theo says go\n\nBest part: the coach liked the combo name immediately. That means the wording works on real humans, not just me.",
+      },
+      provenance: {
+        sources: [
+          "artifact:artifact-sales-scoreboard",
+          "artifact:artifact-sign-slogans",
+        ],
+      },
+      ts: "2026-04-11T01:15:01.980000Z",
+    },
+    {
+      id: "evt-kids-ch3-backoffice-message-001",
+      actor_id: "actor-backoffice-kid",
+      type: "message_posted",
+      thread_id: "thread-kids-lemonade-backoffice",
+      refs: ["thread:thread-kids-lemonade-backoffice"],
+      summary: "Kitchen thread update: first mint cups ready, combo can proceed under the cap",
+      payload: {
+        text: "Kitchen thread update. First four mint cups are READY and they taste like fresh lemonade with manners.\n\n@ruby you may do your tiny whisper act now, but only to the adventurous kids and only until these four cups are gone. @milo cup count still looks fine for the first combo wave, but we stop and recount after 12 combo orders exactly like I said.\n\nThis is a miracle: you both listened to the kitchen.",
+      },
+      provenance: {
+        sources: [
+          "artifact:artifact-prep-checklist",
+          "artifact:artifact-secret-menu-sketch",
+        ],
+      },
+      ts: "2026-04-11T01:15:39.777000Z",
+    },
+    {
+      id: "evt-kids-ch3-main-reply-004",
+      actor_id: "actor-sales-kid",
+      type: "message_posted",
+      thread_id: "thread-kids-lemonade-main",
+      refs: [
+        "thread:thread-kids-lemonade-main",
+        "event:evt-kids-ch3-backoffice-message-001",
+      ],
+      summary: "Message reply: Ruby acknowledges the ready signal and keeps the mint pitch tiny",
+      payload: {
+        text: "Theo, whisper mode engaged. I am only offering mint to the bravest little lemonade goblins and I am not promising a fifth cup to anybody. The main line is still moving and the combo is landing great with the coach crowd.\n\nMilo, your combo ruling worked. People get it fast. This is annoyingly effective.",
+      },
+      provenance: {
+        sources: ["inferred"],
+      },
+      ts: "2026-04-11T01:16:02.911000Z",
+    },
+    {
+      id: "evt-kids-ch3-main-actor-001",
+      actor_id: "actor-boss-kid",
+      type: "actor_statement",
+      thread_id: "thread-kids-lemonade-main",
+      refs: [
+        "thread:thread-kids-lemonade-main",
+        "thread:thread-kids-lemonade-sales",
+        "thread:thread-kids-lemonade-backoffice",
+        "document:kid-boss-lemonade-plan",
+        "board:991a7ede-c737-4040-b44a-ca225a20b496",
+        "card:0cfdd886-64dd-4d08-9ded-551605254d71",
+        "artifact:artifact-secret-menu-sketch",
+      ],
+      summary: "Boss kid chapter 3 statement: the combo only worked because the tags turned into real handoffs",
+      payload: {
+        evidence: [
+          "Paper cups arrived and removed the immediate cup panic.",
+          "Milo tagged @ruby for combo wording and @theo for the hard supply cap before locking the plan.",
+          "Theo replied with a real cap: 12 combo orders before recount, mint whisper-only at 4 cups per round.",
+          "Ruby adjusted the pitch in-thread after Theo's reply and waited for Milo's sign-off before launching it.",
+          "Board coordination card moved to done once the combo rules, ownership, and handoffs were explicit.",
+          "Main plan document gained two more revisions in chapter 3: midway waiting state and final locked plan.",
+        ],
+        follow_ups: [
+          "Ruby: keep the combo spoken and short, not a second giant sign.",
+          "Theo: trigger the recount after 12 combo orders and pause the combo before regular lemonade if supplies tighten again.",
+          "Milo: keep the board honest if the cookie-table alliance changes shape later.",
+        ],
+        recommendation: "Tagging made the stand smarter. The kids stopped guessing and started confirming. That kept the combo playful without becoming a supply lie. Future chapters should keep using direct tags for any decision that depends on another role's real constraint.",
+      },
+      provenance: {
+        sources: ["inferred"],
+      },
+      ts: "2026-04-11T01:16:41.111000Z",
+    },
+    {
+      id: "evt-kids-ch3-main-actor-002",
+      actor_id: "actor-sales-kid",
+      type: "actor_statement",
+      thread_id: "thread-kids-lemonade-main",
+      refs: [
+        "thread:thread-kids-lemonade-main",
+        "thread:thread-kids-lemonade-sales",
+        "document:kid-sales-pitch-notebook",
+        "card:3d051f3d-3dcc-4e8e-9ccd-6b5f1c524195",
+        "artifact:artifact-sales-scoreboard",
+        "artifact:artifact-sign-slogans",
+      ],
+      summary: "Sales kid chapter 3 statement: tags stopped me from overselling and made the combo sound real",
+      payload: {
+        evidence: [
+          "Ruby tagged @theo for the real mint limit and @milo for approval on the combo wording.",
+          "Theo's reply forced the pitch to stay whisper-only on mint, which prevented overselling.",
+          "Milo approved 'Halftime Happy Combo' only after the kitchen cap was visible in-thread.",
+          "Coach and soccer kids reacted well to the combo name because it was short and easy to repeat.",
+          "Sales card moved to done after the final wording and guardrails were locked.",
+          "Sales notebook gained two more revisions during chapter 3 instead of one final dump.",
+        ],
+        follow_ups: [
+          "Keep regular lemonade as the giant visible headline.",
+          "Keep mint weird and tiny on purpose.",
+          "If the combo line slows down, drop the combo pitch before dropping the main lemonade pitch.",
+        ],
+        recommendation: "The combo worked because the front stand finally used the kitchen's numbers instead of dramatic optimism. Tag first, pitch second.",
+      },
+      provenance: {
+        sources: ["inferred"],
+      },
+      ts: "2026-04-11T01:17:06.442000Z",
+    },
+    {
+      id: "evt-kids-ch3-main-actor-003",
+      actor_id: "actor-backoffice-kid",
+      type: "actor_statement",
+      thread_id: "thread-kids-lemonade-main",
+      refs: [
+        "thread:thread-kids-lemonade-main",
+        "thread:thread-kids-lemonade-backoffice",
+        "document:kid-prep-notebook",
+        "card:3c552c4c-ddf4-4e76-84ca-aebd7d8d8cc4",
+        "artifact:artifact-prep-checklist",
+        "artifact:artifact-supply-stash",
+        "artifact:artifact-secret-menu-sketch",
+      ],
+      summary: "Backoffice kid chapter 3 statement: the kitchen trusted the combo because the tags carried real constraints",
+      payload: {
+        evidence: [
+          "Paper cups from Milo removed the immediate cup failure mode.",
+          "Mint test passed and stayed limited to 4 cups per round.",
+          "Theo tagged @milo with the hard 12-order combo cap and tagged @ruby when the mint cups were actually ready.",
+          "Ruby respected the mint guardrails instead of shouting them to the whole sidewalk.",
+          "Backoffice thread gained a fresh tagged update, and the prep log gained two more revisions during the chapter.",
+          "Kitchen card stayed in progress because supply watching never truly ends, even in victory.",
+        ],
+        follow_ups: [
+          "Pause the combo before regular lemonade if cup pressure rises again.",
+          "Keep the cooler sacred forever.",
+          "Do not let success trick anyone into thinking the mint special is infinite.",
+        ],
+        recommendation: "The cooperative combo is safe only because the thread shows real limits, not hopeful guesses. Keep tagging the kitchen any time sales wants to get creative.",
+      },
+      provenance: {
+        sources: ["inferred"],
+      },
+      ts: "2026-04-11T01:17:33.005000Z",
+    },
+  ],
 };
 
 function deepClone(value) {
@@ -1016,14 +1537,19 @@ function buildChapteredDocuments(baseSeed) {
 
 function appendChapterDocumentRevisions(documentRevisions, chapterID) {
   const chapterDocs = chapterDocumentContents[chapterID] ?? {};
-  for (const [documentID, revision] of Object.entries(chapterDocs)) {
+  for (const [documentID, revisionOrRevisions] of Object.entries(chapterDocs)) {
     const existing = documentRevisions[documentID] ?? [];
-    existing.push({
-      revision_number: existing.length + 1,
-      content: revision.content,
-      content_type: "text",
-      created_by: revision.created_by,
-    });
+    const revisions = Array.isArray(revisionOrRevisions)
+      ? revisionOrRevisions
+      : [revisionOrRevisions];
+    for (const revision of revisions) {
+      existing.push({
+        revision_number: existing.length + 1,
+        content: revision.content,
+        content_type: "text",
+        created_by: revision.created_by,
+      });
+    }
     documentRevisions[documentID] = existing;
   }
 }

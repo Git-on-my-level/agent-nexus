@@ -454,7 +454,9 @@ function hydrateContinuationHomes({ previousRunDir, runDir, agents }) {
       throw new Error(`missing prior agent home for ${agent.agentId}: ${sourceHome}`);
     }
     const targetHome = agentHomeDir(runDir, agent.agentId);
+    ensureDir(path.dirname(targetHome));
     copyDirectory(sourceHome, targetHome);
+    ensureDir(agent.workspaceDir);
   }
   return true;
 }
@@ -555,6 +557,75 @@ async function apiJSON(baseUrl, apiPath) {
     throw new Error(`GET ${apiPath} failed with status ${response.status}`);
   }
   return response.json();
+}
+
+async function apiJSONWithToken(baseUrl, apiPath, { method = "GET", accessToken = "", body = undefined, expectedStatuses = [200] } = {}) {
+  const response = await fetch(`${baseUrl}${apiPath}`, {
+    method,
+    headers: {
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+    },
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+  });
+  if (!expectedStatuses.includes(response.status)) {
+    throw new Error(`${method} ${apiPath} failed with status ${response.status}`);
+  }
+  return response.json();
+}
+
+function workspaceID() {
+  return String(process.env.OAR_WORKSPACE_ID ?? "ws_main").trim() || "ws_main";
+}
+
+function agentProfilePath(homeDir, agentId) {
+  return path.join(homeDir, ".config", "oar", "profiles", `${agentId}.json`);
+}
+
+function loadAgentProfile(homeDir, agentId) {
+  const profilePath = agentProfilePath(homeDir, agentId);
+  return JSON.parse(fs.readFileSync(profilePath, "utf8"));
+}
+
+async function ensureAgentWakeRegistration(baseUrl, oarBin, agent) {
+  runOarJSON({
+    cwd: agent.workspaceDir,
+    oarBin,
+    baseUrl,
+    homeDir: agent.homeDir,
+    agentId: agent.agentId,
+    args: ["auth", "whoami"],
+  });
+  const profile = loadAgentProfile(agent.homeDir, agent.agentId);
+  const accessToken = String(profile?.access_token ?? "").trim();
+  const actorID = String(agent.actorId ?? profile?.actor_id ?? "").trim();
+  if (!accessToken || !actorID) {
+    throw new Error(`missing auth state needed to register wake routing for ${agent.agentId}`);
+  }
+  await apiJSONWithToken(baseUrl, "/agents/me", {
+    method: "PATCH",
+    accessToken,
+    body: {
+      registration: {
+        handle: agent.agentUsername,
+        actor_id: actorID,
+        status: "active",
+        workspace_bindings: [
+          {
+            workspace_id: workspaceID(),
+            enabled: true,
+          },
+        ],
+      },
+    },
+    expectedStatuses: [200],
+  });
+}
+
+async function ensureAgentWakeRegistrations(baseUrl, oarBin, agents) {
+  for (const agent of agents) {
+    await ensureAgentWakeRegistration(baseUrl, oarBin, agent);
+  }
 }
 
 async function listEvents(baseUrl, { threadID = "", eventTypes = [] } = {}) {
@@ -1817,6 +1888,8 @@ async function main() {
           bootstrapToken: core.bootstrapToken,
           agents: pendingAgents,
         });
+
+    await ensureAgentWakeRegistrations(core.baseUrl, oarBin, pendingAgents);
 
     const agentPlans = pendingAgents.map((agent) => {
       return {

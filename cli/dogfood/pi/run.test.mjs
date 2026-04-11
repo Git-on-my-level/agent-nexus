@@ -97,6 +97,13 @@ test("loadScenarioContent appends chapter markdown after the base scenario", () 
   assert.match(loaded.combinedMarkdown, /`http:\/\/127\.0\.0\.1:43210`/);
 });
 
+test("loadScenarioContent can load the cooperative tagging follow-up chapter", () => {
+  const loaded = loadScenarioContent("kids-lemonade-stand", "chapter-3", "http://127.0.0.1:43210");
+  assert.match(loaded.combinedMarkdown, /# Chapter 3:/);
+  assert.match(loaded.chapterMarkdown, /auth principals list --taggable/);
+  assert.match(loaded.chapterMarkdown, /triangle of tags and replies/i);
+});
+
 test("roleCardState prefers the existing card tied to the role thread", () => {
   const role = { name: "sales-kid", actorId: "actor-sales-kid" };
   const targets = {
