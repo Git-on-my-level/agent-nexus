@@ -92,12 +92,6 @@
   let enrichedInboxItems = $derived(
     (workspace?.inbox?.items ?? []).map((item) => enrichInboxItem(item)),
   );
-  let resolvedCards = $derived(
-    (workspace?.cards?.items ?? []).filter((card) => {
-      const r = String(card?.membership?.resolution ?? "").trim();
-      return r === "done" || r === "canceled";
-    }),
-  );
   let actorOptions = $derived(
     $actorRegistry.map((actor) => ({
       id: actor.id,
@@ -154,21 +148,6 @@
   function closeCardDetailModal() {
     detailModalCard = null;
     replaceState(withUpdatedSearchParams($page.url, { card: "" }), {});
-  }
-
-  function cardResolutionLabel(resolution) {
-    switch (String(resolution ?? "").trim()) {
-      case "done":
-      case "completed":
-        return "Done";
-      case "canceled":
-      case "cancelled":
-        return "Canceled";
-      case "superseded":
-        return "Superseded";
-      default:
-        return "Open";
-    }
   }
 
   function openBoardEditForm() {
@@ -1275,51 +1254,6 @@
             <p class="mt-2 text-[11px] text-[var(--ui-text-muted)]">
               Showing {BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT} of {workspace
                 .documents.items.length}
-            </p>
-          {/if}
-        {/if}
-      </div>
-    </section>
-
-    <section
-      class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]"
-    >
-      <div class="border-b border-[var(--ui-border)] px-4 py-2.5">
-        <h2 class="text-[13px] font-medium text-[var(--ui-text)]">
-          Resolved cards
-        </h2>
-        <p class="mt-1 text-[11px] text-[var(--ui-text-muted)]">
-          First-class cards with explicit resolution state and evidence refs.
-        </p>
-      </div>
-      <div class="px-4 py-3">
-        {#if resolvedCards.length === 0}
-          <p class="text-[12px] text-[var(--ui-text-muted)]">
-            No resolved cards in this board slice.
-          </p>
-        {:else}
-          <div class="space-y-2">
-            {#each resolvedCards.slice(0, BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT) as cardItem}
-              {@const membership = cardItem.membership}
-              <div
-                class="rounded border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-2"
-              >
-                <div class="text-[12px] font-medium text-[var(--ui-text)]">
-                  {membership.title || membership.id}
-                </div>
-                <div class="mt-1 text-[11px] text-[var(--ui-text-muted)]">
-                  {cardResolutionLabel(membership.resolution)} · Due
-                  {formatTimestamp(membership.due_at) || "—"}
-                  {#if Array.isArray(membership.resolution_refs) && membership.resolution_refs.length > 0}
-                    · {membership.resolution_refs.length} evidence refs
-                  {/if}
-                </div>
-              </div>
-            {/each}
-          </div>
-          {#if resolvedCards.length > BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT}
-            <p class="mt-2 text-[11px] text-[var(--ui-text-muted)]">
-              Showing {BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT} of {resolvedCards.length}
             </p>
           {/if}
         {/if}
