@@ -18,32 +18,26 @@ describe("inbox grouping", () => {
     const grouped = groupInboxItems(
       [
         {
-          id: "new-decision",
-          category: "decision_needed",
-          title: "Decision just raised",
+          id: "new-action",
+          category: "action_needed",
+          title: "Action just raised",
           source_event_time: "2026-03-07T11:00:00.000Z",
         },
         {
           id: "old-risk",
-          category: "work_item_risk",
+          category: "risk_exception",
           title: "Aging risk",
           source_event_time: "2026-03-03T10:00:00.000Z",
         },
         {
-          id: "new-intervention",
-          category: "intervention_needed",
-          title: "Human needs to publish the approved post",
-          source_event_time: "2026-03-07T11:30:00.000Z",
-        },
-        {
-          id: "old-decision",
-          category: "decision_needed",
+          id: "old-action",
+          category: "action_needed",
           source_event_time: "2026-03-03T10:00:00.000Z",
-          title: "Decision waiting for days",
+          title: "Action waiting for days",
         },
         {
-          id: "fresh-exception",
-          category: "exception",
+          id: "fresh-risk",
+          category: "risk_exception",
           source_event_time: "2026-03-07T10:00:00.000Z",
           title: "Fresh exception",
         },
@@ -52,50 +46,46 @@ describe("inbox grouping", () => {
     );
 
     expect(grouped.map((group) => group.category)).toEqual([
-      "decision_needed",
-      "intervention_needed",
-      "exception",
-      "work_item_risk",
-      "stale_topic",
-      "document_attention",
+      "action_needed",
+      "risk_exception",
+      "attention",
     ]);
 
     expect(grouped[0].items.map((item) => item.id)).toEqual([
-      "old-decision",
-      "new-decision",
+      "old-action",
+      "new-action",
     ]);
     expect(grouped[1].items.map((item) => item.id)).toEqual([
-      "new-intervention",
+      "old-risk",
+      "fresh-risk",
     ]);
-    expect(grouped[2].items.map((item) => item.id)).toEqual([
-      "fresh-exception",
-    ]);
-    expect(grouped[3].items.map((item) => item.id)).toEqual(["old-risk"]);
-    expect(grouped[4].items).toEqual([]);
-    expect(grouped[5].items).toEqual([]);
+    expect(grouped[2].items).toEqual([]);
   });
 });
 
 describe("inbox urgency derivation", () => {
   it("derives urgency level from category + source event age", () => {
     const now = "2026-03-07T12:00:00.000Z";
+    // risk_exception base=84, aged 8h → 84+6=90 → immediate
     const immediate = deriveInboxUrgency(
       {
-        category: "exception",
-        source_event_time: "2026-03-07T10:00:00.000Z",
+        category: "risk_exception",
+        source_event_time: "2026-03-07T04:00:00.000Z",
       },
       { now },
     );
+    // action_needed base=76, fresh → 76 → high (>=74)
     const high = deriveInboxUrgency(
       {
-        category: "decision_needed",
+        category: "action_needed",
         source_event_time: "2026-03-07T11:30:00.000Z",
       },
       { now },
     );
+    // attention base=58, fresh → 58 → normal
     const normal = deriveInboxUrgency(
       {
-        category: "work_item_risk",
+        category: "attention",
         source_event_time: "2026-03-07T11:30:00.000Z",
       },
       { now },
@@ -107,9 +97,10 @@ describe("inbox urgency derivation", () => {
   });
 
   it("parses ISO now values when computing age-based urgency boosts", () => {
+    // action_needed base=76, aged 26h → 76+10=86 → high
     const urgency = deriveInboxUrgency(
       {
-        category: "decision_needed",
+        category: "action_needed",
         source_event_time: "2026-03-06T10:00:00.000Z",
       },
       { now: "2026-03-07T12:00:00.000Z" },
@@ -125,17 +116,17 @@ describe("inbox urgency derivation", () => {
     const items = [
       {
         id: "1",
-        category: "exception",
-        source_event_time: "2026-03-07T10:00:00.000Z",
+        category: "risk_exception",
+        source_event_time: "2026-03-07T04:00:00.000Z", // 8h old → 84+6=90 → immediate
       },
       {
         id: "2",
-        category: "decision_needed",
-        source_event_time: "2026-03-07T11:00:00.000Z",
+        category: "action_needed",
+        source_event_time: "2026-03-07T11:00:00.000Z", // fresh → 76 → high
       },
       {
         id: "3",
-        category: "work_item_risk",
+        category: "attention", // no timestamp → base 58 → normal
       },
     ];
 
@@ -261,7 +252,7 @@ describe("inbox typed-ref rendering targets", () => {
   it("formats board panel resource line from subject_ref, not misleading topic_id", () => {
     const cardAnchored = enrichInboxItem({
       id: "1",
-      category: "work_item_risk",
+      category: "risk_exception",
       subject_ref: "card:card-1",
       title: "Risk",
       topic_id: "topic-extra",
@@ -273,7 +264,7 @@ describe("inbox typed-ref rendering targets", () => {
 
     const topicAnchored = enrichInboxItem({
       id: "2",
-      category: "stale_topic",
+      category: "risk_exception",
       subject_ref: "topic:topic-1",
       title: "Stale",
       thread_id: "thread-1",
@@ -284,7 +275,7 @@ describe("inbox typed-ref rendering targets", () => {
 
     const threadAnchored = enrichInboxItem({
       id: "3",
-      category: "decision_needed",
+      category: "action_needed",
       subject_ref: "thread:thread-1",
       title: "Decide",
       topic_id: "topic-1",
@@ -297,7 +288,7 @@ describe("inbox typed-ref rendering targets", () => {
       formatInboxItemBoardPanelResourceLine(
         enrichInboxItem({
           id: "4",
-          category: "document_attention",
+          category: "attention",
           subject_ref: "document:doc-1",
           title: "Doc",
         }),
@@ -309,7 +300,7 @@ describe("inbox typed-ref rendering targets", () => {
         enrichInboxItem({
           id: "5",
           thread_id: "thread-only",
-          category: "stale_topic",
+          category: "risk_exception",
           title: "Legacy",
         }),
       ),

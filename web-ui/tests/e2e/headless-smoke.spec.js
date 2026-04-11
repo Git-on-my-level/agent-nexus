@@ -54,9 +54,8 @@ test("mocked core smoke flow: inbox -> threads -> thread detail -> post message 
         items: [
           {
             id: "inbox-100",
-            category: "decision_needed",
+            category: "action_needed",
             title: "Approve onboarding exception handling",
-            recommended_action: "Record a decision on escalation path.",
             thread_id: "thread-onboarding",
             refs: ["thread:thread-onboarding"],
           },

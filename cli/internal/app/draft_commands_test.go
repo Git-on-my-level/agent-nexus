@@ -198,7 +198,7 @@ func TestValidateDraftBodySupportsInboxAcknowledge(t *testing.T) {
 	errors := validateDraftBody("inbox.acknowledge", map[string]any{
 		"actor_id":      "actor_1",
 		"subject_ref":   "thread:thread_1",
-		"inbox_item_id": "inbox:decision_needed:thread_1:none:event_1",
+		"inbox_item_id": "inbox:action_needed:thread_1:none:event_1",
 	})
 	if len(errors) != 0 {
 		t.Fatalf("expected inbox.acknowledge draft validation to pass, got %#v", errors)

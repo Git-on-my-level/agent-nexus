@@ -198,7 +198,9 @@ func (s *Store) ListDerivedInboxItems(ctx context.Context, filter DerivedInboxLi
 		if leftOrder != rightOrder {
 			return leftOrder < rightOrder
 		}
-		if left.Category == "work_item_risk" && right.Category == "work_item_risk" && left.HasDueAt && right.HasDueAt && left.DueAt != right.DueAt {
+		if (left.Category == "risk_exception" || left.Category == "work_item_risk") &&
+			(right.Category == "risk_exception" || right.Category == "work_item_risk") &&
+			left.HasDueAt && right.HasDueAt && left.DueAt != right.DueAt {
 			return left.DueAt < right.DueAt
 		}
 		if left.TriggerAt != right.TriggerAt {
@@ -581,16 +583,12 @@ func boolToInt(value bool) int {
 
 func derivedInboxCategoryOrder(category string) int {
 	switch strings.TrimSpace(category) {
-	case "decision_needed":
+	case "action_needed", "decision_needed":
 		return 0
-	case "intervention_needed":
+	case "risk_exception", "intervention_needed", "stale_topic", "work_item_risk":
 		return 1
-	case "stale_topic":
+	case "attention", "document_attention":
 		return 2
-	case "work_item_risk":
-		return 3
-	case "document_attention":
-		return 4
 	default:
 		return 99
 	}

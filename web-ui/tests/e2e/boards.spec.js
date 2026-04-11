@@ -164,7 +164,7 @@ function buildWorkspace(
             decision_request_count: workspaceInbox.filter(
               (item) =>
                 item.thread_id === card.thread_id &&
-                item.category === "decision_needed",
+                item.category === "action_needed",
             ).length,
             decision_count: 0,
             recommendation_count: 0,
@@ -315,7 +315,7 @@ test("board UI supports create/edit and card mutation flows", async ({
     {
       id: "inbox-review-1",
       thread_id: "thread-review",
-      category: "decision_needed",
+      category: "action_needed",
       title: "Need sign-off on review prep",
       refs: ["thread:thread-review"],
       source_event_time: "2026-03-05T05:30:00.000Z",

@@ -11,27 +11,16 @@ import {
 describe("dashboard summaries", () => {
   it("summarizes inbox categories in expected order", () => {
     const summary = buildInboxCategorySummary([
-      { category: "exception" },
-      { category: "decision_needed" },
-      { category: "decision_needed" },
+      { category: "risk_exception" },
+      { category: "action_needed" },
+      { category: "action_needed" },
       { category: "unknown" },
     ]);
 
     expect(summary).toEqual([
-      { category: "decision_needed", label: "Needs Decision", count: 2 },
-      {
-        category: "intervention_needed",
-        label: "Needs Intervention",
-        count: 0,
-      },
-      { category: "exception", label: "Exception", count: 1 },
-      { category: "work_item_risk", label: "Work item risk", count: 0 },
-      { category: "stale_topic", label: "Stale Topic", count: 0 },
-      {
-        category: "document_attention",
-        label: "Document Attention",
-        count: 0,
-      },
+      { category: "action_needed", label: "Action needed", count: 2 },
+      { category: "risk_exception", label: "Risk / Exception", count: 1 },
+      { category: "attention", label: "Attention", count: 0 },
       { category: "unknown", label: "unknown", count: 1 },
     ]);
   });

@@ -11,13 +11,13 @@ import (
 func TestMakeInboxItemIDDeterministic(t *testing.T) {
 	t.Parallel()
 
-	first := makeInboxItemID("decision_needed", "thread-1", "", "event-1")
-	second := makeInboxItemID("decision_needed", "thread-1", "", "event-1")
+	first := makeInboxItemID("action_needed", "thread-1", "", "event-1")
+	second := makeInboxItemID("action_needed", "thread-1", "", "event-1")
 	if first != second {
 		t.Fatalf("expected deterministic inbox id, got %q and %q", first, second)
 	}
 
-	want := "inbox:decision_needed:thread-1:none:event-1"
+	want := "inbox:action_needed:thread-1:none:event-1"
 	if first != want {
 		t.Fatalf("unexpected inbox id: got %q want %q", first, want)
 	}
@@ -26,8 +26,8 @@ func TestMakeInboxItemIDDeterministic(t *testing.T) {
 func TestMakeInboxItemIDDefaultsNone(t *testing.T) {
 	t.Parallel()
 
-	got := makeInboxItemID("work_item_risk", "thread-1", "", "")
-	want := "inbox:work_item_risk:thread-1:none:none"
+	got := makeInboxItemID("risk_exception", "thread-1", "", "")
+	want := "inbox:risk_exception:thread-1:none:none"
 	if got != want {
 		t.Fatalf("unexpected inbox id defaults: got %q want %q", got, want)
 	}
@@ -44,10 +44,10 @@ func TestLatestInboxAcknowledgmentsMapsLegacyRiskReviewIDs(t *testing.T) {
 		},
 	})
 
-	canonicalID := makeInboxItemID("work_item_risk", "thread-1", "card-1", "")
+	canonicalID := makeInboxItemID("risk_exception", "thread-1", "card-1", "")
 	acked, ok := ackedAt[canonicalID]
 	if !ok {
-		t.Fatalf("expected canonical work_item_risk id %q to be ack-suppressed, got %#v", canonicalID, ackedAt)
+		t.Fatalf("expected canonical risk_exception id %q to be ack-suppressed, got %#v", canonicalID, ackedAt)
 	}
 	if !acked.Equal(time.Date(2026, 4, 5, 0, 0, 0, 0, time.UTC)) {
 		t.Fatalf("unexpected acknowledgment time: %#v", acked)
@@ -93,7 +93,7 @@ func TestDeriveEventBackedInboxItemSubjectFallsBackToThread(t *testing.T) {
 		"id":        "evt-int-2",
 		"thread_id": "thr-z",
 		"ts":        "2026-04-05T12:00:00Z",
-		"refs":      []any{"inbox:inbox:decision_needed:thr-z:none:e1"},
+		"refs":      []any{"inbox:inbox:action_needed:thr-z:none:e1"},
 		"summary":   "Act",
 	}
 	item, ok := deriveEventBackedInboxItem(ev)
@@ -153,16 +153,18 @@ func TestPayloadFromDerivedInboxItemBackfillsLegacyShape(t *testing.T) {
 		TriggerAt:     "2026-04-05T00:00:00Z",
 		SourceEventID: "",
 		Data: map[string]any{
-			"id":                 "inbox:work_item_risk:thr-1:card-9:none",
-			"category":           "work_item_risk",
-			"thread_id":          "thr-1",
-			"card_id":            "card-9",
-			"board_id":           "brd-9",
-			"title":              "Legacy row",
-			"recommended_action": "follow_up_work_item",
+			"id":        "inbox:work_item_risk:thr-1:card-9:none",
+			"category":  "work_item_risk",
+			"thread_id": "thr-1",
+			"card_id":   "card-9",
+			"board_id":  "brd-9",
+			"title":     "Legacy row",
 		},
 	}
 	out := payloadFromDerivedInboxItem(item)
+	if got := out["category"]; got != "risk_exception" {
+		t.Fatalf("category: got %#v want risk_exception (legacy row normalized for contract)", got)
+	}
 	if got := out["subject_ref"]; got != "card:card-9" {
 		t.Fatalf("subject_ref: got %#v", got)
 	}
@@ -181,15 +183,17 @@ func TestPayloadFromDerivedInboxItemBackfillsLegacyShape(t *testing.T) {
 		SourceEventID: "evt-old",
 		TriggerAt:     "2026-04-05T01:00:00Z",
 		Data: map[string]any{
-			"id":                 "inbox:decision_needed:thr-x:none:evt-old",
-			"category":           "decision_needed",
-			"thread_id":          "thr-x",
-			"source_event_id":    "evt-old",
-			"title":              "Old",
-			"recommended_action": "make_decision",
+			"id":              "inbox:decision_needed:thr-x:none:evt-old",
+			"category":        "decision_needed",
+			"thread_id":       "thr-x",
+			"source_event_id": "evt-old",
+			"title":           "Old",
 		},
 	}
 	out2 := payloadFromDerivedInboxItem(evItem)
+	if got := out2["category"]; got != "action_needed" {
+		t.Fatalf("category: got %#v want action_needed (legacy row normalized for contract)", got)
+	}
 	if got := out2["subject_ref"]; got != "thread:thr-x" {
 		t.Fatalf("event legacy subject_ref: got %#v", got)
 	}

@@ -185,17 +185,17 @@ export function inboxSummarySentence(categorySummary) {
     return "Inbox is clear.";
   }
 
-  const decisionEntry = categorySummary.find(
-    (entry) => entry.category === "decision_needed",
+  const actionEntry = categorySummary.find(
+    (entry) => entry.category === "action_needed",
   );
-  const decisions = decisionEntry ? decisionEntry.count : 0;
+  const actions = actionEntry ? actionEntry.count : 0;
 
   const itemWord = total === 1 ? "work item needs" : "work items need";
   const base = `${total} ${itemWord} your attention`;
 
-  if (decisions > 0) {
-    const decisionWord = decisions === 1 ? "decision" : "decisions";
-    return `${base}, including ${decisions} ${decisionWord}.`;
+  if (actions > 0) {
+    const actionWord = actions === 1 ? "action item" : "action items";
+    return `${base}, including ${actions} ${actionWord}.`;
   }
 
   return `${base}.`;

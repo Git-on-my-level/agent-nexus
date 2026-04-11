@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 )
@@ -50,10 +51,10 @@ func TestInboxDerivationAndAcknowledgmentSuppression(t *testing.T) {
 
 	items := getInboxItems(t, h.baseURL)
 	decisionItem, ok := findInboxItem(items, func(item map[string]any) bool {
-		return asString(item["category"]) == "decision_needed" && asString(item["source_event_id"]) == firstDecisionEventID
+		return asString(item["category"]) == "action_needed" && asString(item["source_event_id"]) == firstDecisionEventID
 	})
 	if !ok {
-		t.Fatalf("expected decision_needed inbox item for source_event_id=%s, got %#v", firstDecisionEventID, items)
+		t.Fatalf("expected action_needed inbox item for source_event_id=%s, got %#v", firstDecisionEventID, items)
 	}
 	firstDecisionItemID := asString(decisionItem["id"])
 	if firstDecisionItemID == "" {
@@ -103,7 +104,7 @@ func TestInboxDerivationAndAcknowledgmentSuppression(t *testing.T) {
 
 	itemsAfterNewDecision := getInboxItems(t, h.baseURL)
 	secondDecisionItem, ok := findInboxItem(itemsAfterNewDecision, func(item map[string]any) bool {
-		return asString(item["category"]) == "decision_needed" && asString(item["source_event_id"]) == secondDecisionEventID
+		return asString(item["category"]) == "action_needed" && asString(item["source_event_id"]) == secondDecisionEventID
 	})
 	if !ok {
 		t.Fatalf("expected new decision item after retrigger, got %#v", itemsAfterNewDecision)
@@ -161,10 +162,10 @@ func TestInboxDerivationAndAcknowledgmentSuppression(t *testing.T) {
 
 	itemsWithRisk := getInboxItems(t, h.baseURL)
 	riskItem, ok := findInboxItem(itemsWithRisk, func(item map[string]any) bool {
-		return asString(item["category"]) == "work_item_risk" && asString(item["card_id"]) == cardID
+		return asString(item["category"]) == "risk_exception" && asString(item["card_id"]) == cardID
 	})
 	if !ok {
-		t.Fatalf("expected work_item_risk inbox item, got %#v", itemsWithRisk)
+		t.Fatalf("expected risk_exception inbox item, got %#v", itemsWithRisk)
 	}
 	riskItemID := asString(riskItem["id"])
 
@@ -177,7 +178,7 @@ func TestInboxDerivationAndAcknowledgmentSuppression(t *testing.T) {
 	if _, exists := findInboxItem(itemsAfterRiskAck, func(item map[string]any) bool {
 		return asString(item["id"]) == riskItemID
 	}); exists {
-		t.Fatalf("expected acknowledged work_item_risk item to be suppressed, got %#v", itemsAfterRiskAck)
+		t.Fatalf("expected acknowledged risk_exception item to be suppressed, got %#v", itemsAfterRiskAck)
 	}
 
 	patchResp := patchJSONExpectStatus(t, h.baseURL+"/cards/"+cardID, `{
@@ -192,9 +193,9 @@ func TestInboxDerivationAndAcknowledgmentSuppression(t *testing.T) {
 		return asString(item["id"]) == riskItemID
 	})
 	if !ok {
-		t.Fatalf("expected work_item_risk item to reappear after new trigger, got %#v", itemsAfterStatusChange)
+		t.Fatalf("expected risk_exception item to reappear after new trigger, got %#v", itemsAfterStatusChange)
 	}
-	if asString(reappearedRisk["category"]) != "work_item_risk" {
+	if asString(reappearedRisk["category"]) != "risk_exception" {
 		t.Fatalf("unexpected reappeared risk item: %#v", reappearedRisk)
 	}
 }
@@ -251,7 +252,7 @@ func TestInboxAcknowledgmentResolvesTopicSubjectRefToBackingThread(t *testing.T)
 
 	items := getInboxItems(t, h.baseURL)
 	decisionItem, ok := findInboxItem(items, func(item map[string]any) bool {
-		return asString(item["category"]) == "decision_needed" && asString(item["thread_id"]) == backingThreadID
+		return asString(item["category"]) == "action_needed" && asString(item["thread_id"]) == backingThreadID
 	})
 	if !ok {
 		t.Fatalf("expected decision inbox item, got %#v", items)
@@ -328,10 +329,10 @@ func TestInboxAcknowledgmentResolvesCardSubjectRefViaCardRelatedThread(t *testin
 
 	items := getInboxItems(t, h.baseURL)
 	riskItem, ok := findInboxItem(items, func(item map[string]any) bool {
-		return asString(item["category"]) == "work_item_risk" && asString(item["card_id"]) == cardID
+		return asString(item["category"]) == "risk_exception" && asString(item["card_id"]) == cardID
 	})
 	if !ok {
-		t.Fatalf("expected work_item_risk inbox item, got %#v", items)
+		t.Fatalf("expected risk_exception inbox item, got %#v", items)
 	}
 	inboxItemID := asString(riskItem["id"])
 
@@ -412,10 +413,10 @@ func TestLegacyRiskReviewAckStillSuppressesWorkItemRiskAfterRebuild(t *testing.T
 
 	itemsWithRisk := getInboxItems(t, h.baseURL)
 	riskItem, ok := findInboxItem(itemsWithRisk, func(item map[string]any) bool {
-		return asString(item["category"]) == "work_item_risk" && asString(item["card_id"]) == cardID
+		return asString(item["category"]) == "risk_exception" && asString(item["card_id"]) == cardID
 	})
 	if !ok {
-		t.Fatalf("expected work_item_risk inbox item, got %#v", itemsWithRisk)
+		t.Fatalf("expected risk_exception inbox item, got %#v", itemsWithRisk)
 	}
 	canonicalRiskID := asString(riskItem["id"])
 	legacyRiskID := makeInboxItemID("risk_review", threadID, cardID, "")
@@ -429,9 +430,9 @@ func TestLegacyRiskReviewAckStillSuppressesWorkItemRiskAfterRebuild(t *testing.T
 
 	itemsAfterAckAndRebuild := getInboxItems(t, h.baseURL)
 	if _, exists := findInboxItem(itemsAfterAckAndRebuild, func(item map[string]any) bool {
-		return asString(item["id"]) == canonicalRiskID || (asString(item["category"]) == "work_item_risk" && asString(item["card_id"]) == cardID)
+		return asString(item["id"]) == canonicalRiskID || (asString(item["category"]) == "risk_exception" && asString(item["card_id"]) == cardID)
 	}); exists {
-		t.Fatalf("expected legacy risk_review ack to suppress canonical work_item_risk item after rebuild, got %#v", itemsAfterAckAndRebuild)
+		t.Fatalf("expected legacy risk_review ack to suppress canonical risk_exception item after rebuild, got %#v", itemsAfterAckAndRebuild)
 	}
 }
 
@@ -469,7 +470,7 @@ func TestInboxAcknowledgmentRejectsTopicSubjectRefWhenNoTopicRow(t *testing.T) {
 
 	items := getInboxItems(t, h.baseURL)
 	decisionItem, ok := findInboxItem(items, func(item map[string]any) bool {
-		return asString(item["category"]) == "decision_needed" && asString(item["thread_id"]) == threadID
+		return asString(item["category"]) == "action_needed" && asString(item["thread_id"]) == threadID
 	})
 	if !ok {
 		t.Fatalf("expected decision inbox item, got %#v", items)
@@ -518,7 +519,7 @@ func TestInboxAcknowledgmentRejectsLegacyThreadIDBody(t *testing.T) {
 
 	items := getInboxItems(t, h.baseURL)
 	decisionItem, ok := findInboxItem(items, func(item map[string]any) bool {
-		return asString(item["category"]) == "decision_needed" && asString(item["thread_id"]) == threadID
+		return asString(item["category"]) == "action_needed" && asString(item["thread_id"]) == threadID
 	})
 	if !ok {
 		t.Fatalf("expected decision inbox item, got %#v", items)
@@ -620,14 +621,11 @@ func TestInterventionNeededDerivesInboxItem(t *testing.T) {
 	}
 
 	items := getInboxItems(t, h.baseURL)
-	item, ok := findInboxItem(items, func(item map[string]any) bool {
-		return asString(item["category"]) == "intervention_needed" && asString(item["source_event_id"]) == eventID
+	_, ok := findInboxItem(items, func(item map[string]any) bool {
+		return asString(item["category"]) == "risk_exception" && asString(item["source_event_id"]) == eventID
 	})
 	if !ok {
-		t.Fatalf("expected intervention_needed inbox item for source_event_id=%s, got %#v", eventID, items)
-	}
-	if got := asString(item["recommended_action"]); got != "take_action" {
-		t.Fatalf("expected recommended_action take_action, got %#v", item)
+		t.Fatalf("expected risk_exception inbox item for source_event_id=%s, got %#v", eventID, items)
 	}
 }
 
@@ -667,10 +665,10 @@ func TestDecisionNeedeSuppressedByDecisionMade(t *testing.T) {
 
 	items := getInboxItems(t, h.baseURL)
 	decisionItem, ok := findInboxItem(items, func(item map[string]any) bool {
-		return asString(item["category"]) == "decision_needed" && asString(item["thread_id"]) == threadID
+		return asString(item["category"]) == "action_needed" && asString(item["thread_id"]) == threadID
 	})
 	if !ok {
-		t.Fatalf("expected decision_needed inbox item, got %#v", items)
+		t.Fatalf("expected action_needed inbox item, got %#v", items)
 	}
 	inboxItemID := asString(decisionItem["id"])
 	if inboxItemID == "" {
@@ -695,7 +693,7 @@ func TestDecisionNeedeSuppressedByDecisionMade(t *testing.T) {
 	if _, stillThere := findInboxItem(itemsAfterDecision, func(item map[string]any) bool {
 		return asString(item["id"]) == inboxItemID
 	}); stillThere {
-		t.Fatalf("expected decision_needed inbox item to be suppressed after decision_made, got %#v", itemsAfterDecision)
+		t.Fatalf("expected action_needed inbox item to be suppressed after decision_made, got %#v", itemsAfterDecision)
 	}
 
 	// A new decision_needed on the same thread should still appear (no over-suppression).
@@ -714,9 +712,9 @@ func TestDecisionNeedeSuppressedByDecisionMade(t *testing.T) {
 
 	itemsAfterRetrigger := getInboxItems(t, h.baseURL)
 	if _, ok := findInboxItem(itemsAfterRetrigger, func(item map[string]any) bool {
-		return asString(item["category"]) == "decision_needed" && asString(item["thread_id"]) == threadID
+		return asString(item["category"]) == "action_needed" && asString(item["thread_id"]) == threadID
 	}); !ok {
-		t.Fatalf("expected new decision_needed inbox item after retrigger, got %#v", itemsAfterRetrigger)
+		t.Fatalf("expected new action_needed inbox item after retrigger, got %#v", itemsAfterRetrigger)
 	}
 }
 
@@ -832,7 +830,7 @@ func TestInboxCustomRiskHorizonRetainsStaleExceptions(t *testing.T) {
 	}
 
 	staleItem, ok := findInboxItem(payload.Items, func(item map[string]any) bool {
-		return asString(item["category"]) == "stale_topic" && asString(item["thread_id"]) == threadID
+		return asString(item["category"]) == "risk_exception" && asString(item["thread_id"]) == threadID
 	})
 	if !ok {
 		t.Fatalf("expected stale exception on custom-horizon inbox read, got %#v", payload.Items)
@@ -860,6 +858,29 @@ func TestInboxCustomRiskHorizonRetainsStaleExceptions(t *testing.T) {
 	}
 	if got := asString(detailPayload.Item["id"]); got != inboxItemID {
 		t.Fatalf("expected stale inbox item id %q, got %q payload=%#v", inboxItemID, got, detailPayload)
+	}
+
+	parts := strings.SplitN(inboxItemID, ":", 5)
+	if len(parts) != 5 || parts[0] != "inbox" {
+		t.Fatalf("unexpected inbox id shape %q", inboxItemID)
+	}
+	legacyID := strings.Join([]string{parts[0], "intervention_needed", parts[2], parts[3], parts[4]}, ":")
+	legacyDetailResp, err := http.Get(h.baseURL + "/inbox/" + url.PathEscape(legacyID) + "?risk_horizon_days=30")
+	if err != nil {
+		t.Fatalf("GET /inbox/{legacy-id}?risk_horizon_days=30: %v", err)
+	}
+	defer legacyDetailResp.Body.Close()
+	if legacyDetailResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected GET /inbox/{legacy-id}?risk_horizon_days=30 status: %d", legacyDetailResp.StatusCode)
+	}
+	var legacyDetail struct {
+		Item map[string]any `json:"item"`
+	}
+	if err := json.NewDecoder(legacyDetailResp.Body).Decode(&legacyDetail); err != nil {
+		t.Fatalf("decode legacy-id inbox item response: %v", err)
+	}
+	if got := asString(legacyDetail.Item["id"]); got != inboxItemID {
+		t.Fatalf("expected legacy id lookup to return canonical id %q, got %q", inboxItemID, got)
 	}
 }
 

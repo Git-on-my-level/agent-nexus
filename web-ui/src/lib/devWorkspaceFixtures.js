@@ -732,6 +732,26 @@ const events = [
     provenance: { sources: ["actor_statement:evt-price-008"] },
   },
   {
+    id: "evt-price-008b",
+    ts: new Date(
+      now - 9 * 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000 + 5 * 60 * 1000,
+    ).toISOString(),
+    type: "inbox_item_acknowledged",
+    actor_id: "actor-ops-ai",
+    thread_id: "thread-pricing-glitch",
+    refs: [
+      "thread:thread-pricing-glitch",
+      "inbox:inbox:action_needed:thread-pricing-glitch:none:evt-price-003",
+    ],
+    summary:
+      "OpsAI acknowledged decision inbox item after decision was recorded.",
+    payload: {
+      inbox_item_id:
+        "inbox:action_needed:thread-pricing-glitch:none:evt-price-003",
+    },
+    provenance: { sources: ["actor_statement:evt-price-008b"] },
+  },
+  {
     id: "evt-price-009",
     ts: new Date(now - 8 * 24 * 60 * 60 * 1000).toISOString(),
     type: "receipt_added",

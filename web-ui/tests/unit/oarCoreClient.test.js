@@ -320,13 +320,13 @@ describe("oarCoreClient error messaging", () => {
     });
 
     await client.ackInboxItem({
-      inbox_item_id: "inbox:decision_needed:thread-1:none:evt-1",
+      inbox_item_id: "inbox:action_needed:thread-1:none:evt-1",
       subject_ref: "thread:thread-1",
     });
 
     expect(seenRequests).toEqual([
       {
-        url: "http://core.test/inbox/inbox%3Adecision_needed%3Athread-1%3Anone%3Aevt-1/acknowledge",
+        url: "http://core.test/inbox/inbox%3Aaction_needed%3Athread-1%3Anone%3Aevt-1/acknowledge",
         method: "POST",
         body: expect.any(String),
       },

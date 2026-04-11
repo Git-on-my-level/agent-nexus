@@ -79,11 +79,9 @@ var conceptsGuidePrimitives = []conceptsPrimitive{
 }
 
 var inboxCategoryReference = []namedDescription{
-	{Name: "decision_needed", Description: "A human must choose among multiple viable paths."},
-	{Name: "intervention_needed", Description: "The next step is clear, but a human must act because the agent cannot execute it."},
-	{Name: "work_item_risk", Description: "A card or work item is at risk or overdue and needs follow-up."},
-	{Name: "stale_topic", Description: "A topic appears stale; review cadence or recent activity."},
-	{Name: "document_attention", Description: "A document needs human review or follow-up."},
+	{Name: "action_needed", Description: "A human must decide, take direct action, or own the next step (includes prior decision and intervention queue signals)."},
+	{Name: "risk_exception", Description: "Exceptions, stale cadence, or at-risk work items that need follow-up."},
+	{Name: "attention", Description: "Review or lighter operator focus (for example document attention)."},
 }
 
 func inboxCategoryReferenceMap() map[string]string {
