@@ -3,7 +3,9 @@
   import { page } from "$app/stores";
   import BoardCard from "$lib/components/BoardCard.svelte";
   import CardDetailModal from "$lib/components/CardDetailModal.svelte";
+  import ArchiveButton from "$lib/components/ArchiveButton.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
+  import TrashButton from "$lib/components/TrashButton.svelte";
   import GuidedTypedRefsInput from "$lib/components/GuidedTypedRefsInput.svelte";
   import SearchableEntityPicker from "$lib/components/SearchableEntityPicker.svelte";
   import SearchableMultiEntityPicker from "$lib/components/SearchableMultiEntityPicker.svelte";
@@ -634,26 +636,6 @@
 
       {#if !board.trashed_at}
         <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
-          {#if !board.archived_at}
-            <button
-              aria-label="Archive"
-              class="cursor-pointer rounded-md p-1.5 text-[var(--ui-text-muted)] hover:bg-[var(--ui-border)] hover:text-[var(--ui-accent)] disabled:opacity-50"
-              disabled={boardLifecycleBusy}
-              onclick={() => (confirmModal = { open: true, action: "archive" })}
-              type="button"
-            >
-              <svg
-                class="h-4 w-4"
-                fill="currentColor"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-              >
-                <path
-                  d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m8.25 3v6.75m0 0l-3-3m3 3l3-3M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"
-                />
-              </svg>
-            </button>
-          {/if}
           <button
             class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] hover:text-[var(--ui-text)]"
             onclick={openBoardEditForm}
@@ -668,27 +650,19 @@
           >
             {showAddCardForm ? "Close" : "Add card"}
           </button>
-          <button
-            aria-label="Move board to trash"
-            class="cursor-pointer rounded-md p-1.5 text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border)] hover:text-red-400 disabled:opacity-50"
-            disabled={boardLifecycleBusy}
-            onclick={() => (confirmModal = { open: true, action: "trash" })}
-            type="button"
-          >
-            <svg
-              class="h-4 w-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
-              />
-            </svg>
-          </button>
+          {#if !board.archived_at}
+            <ArchiveButton
+              busy={boardLifecycleBusy}
+              size="md"
+              onarchive={() =>
+                (confirmModal = { open: true, action: "archive" })}
+            />
+          {/if}
+          <TrashButton
+            busy={boardLifecycleBusy}
+            size="md"
+            ontrash={() => (confirmModal = { open: true, action: "trash" })}
+          />
         </div>
       {/if}
     </div>
