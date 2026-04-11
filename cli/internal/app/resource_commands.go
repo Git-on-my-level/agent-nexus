@@ -1815,6 +1815,9 @@ func (a *App) runBoardCardsCommand(ctx context.Context, args []string, cfg confi
 		if err != nil {
 			return nil, "boards cards create", err
 		}
+		if bodyMap, ok := body.(map[string]any); ok {
+			ensureEmptyListDefaults(bodyMap, "card", []string{"assignee_refs", "resolution_refs", "related_refs"})
+		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "boards cards create", "boards.cards.create", map[string]string{"board_id": boardID}, nil, body)
 		return result, "boards cards create", callErr
 	case "get":

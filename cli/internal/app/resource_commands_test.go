@@ -5007,6 +5007,38 @@ func TestCreateCommandsDefaultEmptyListFields(t *testing.T) {
 		}
 	})
 
+	t.Run("boards_cards_create", func(t *testing.T) {
+		t.Parallel()
+		var receivedBody map[string]any
+		boardID := "board_1"
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodPost && r.URL.Path == "/boards/"+boardID+"/cards" {
+				body, _ := io.ReadAll(r.Body)
+				json.Unmarshal(body, &receivedBody)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusCreated)
+				_, _ = w.Write([]byte(`{"board":{"id":"` + boardID + `","updated_at":"2026-04-12T00:00:00Z"},"card":{"id":"c1","board_id":"` + boardID + `","title":"C","column_key":"backlog","assignee_refs":[],"resolution_refs":[],"related_refs":[],"provenance":{"sources":[]}}}`))
+				return
+			}
+			http.NotFound(w, r)
+		}))
+		defer server.Close()
+
+		home := t.TempDir()
+		env := map[string]string{}
+		input := `{"card":{"title":"C","column_key":"backlog","provenance":{"sources":[]}}}`
+		result := runCLIForTest(t, home, env, strings.NewReader(input), []string{"--json", "--base-url", server.URL, "boards", "cards", "create", "--board-id", boardID})
+		assertEnvelopeOK(t, result)
+
+		card := receivedBody["card"].(map[string]any)
+		for _, field := range []string{"assignee_refs", "resolution_refs", "related_refs"} {
+			val, ok := card[field].([]any)
+			if !ok || len(val) != 0 {
+				t.Fatalf("expected %s to be empty slice, got %#v", field, card[field])
+			}
+		}
+	})
+
 	t.Run("explicit_values_preserved", func(t *testing.T) {
 		t.Parallel()
 		var receivedBody map[string]any
