@@ -30,6 +30,10 @@ type binarySet struct {
 var (
 	buildOnce sync.Once
 	binaries  binarySet
+	// coreBindMu serializes ephemeral port reservation + oar-core bind + readyz.
+	// Parallel tests otherwise risk reusing the same port between listener close
+	// and core Listen (TOCTOU), which can mis-route CLI calls or fail binds.
+	coreBindMu sync.Mutex
 )
 
 type liveCoreHarness struct {
@@ -432,6 +436,8 @@ func newLiveCoreHarness(t *testing.T) *liveCoreHarness {
 	}
 
 	bootstrapToken := "it-bs-" + runToken()
+	coreBindMu.Lock()
+	defer coreBindMu.Unlock()
 	port := allocatePort(t)
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 	cmd := exec.Command(coreBin,
@@ -439,7 +445,13 @@ func newLiveCoreHarness(t *testing.T) *liveCoreHarness {
 		"--workspace-root", workspace,
 		"--schema-path", filepath.Join(root, "contracts", "oar-schema.yaml"),
 	)
-	cmd.Env = append(os.Environ(), "OAR_BOOTSTRAP_TOKEN="+bootstrapToken)
+	// Background projection maintenance contends with API SQLite transactions; on
+	// slow CI busy_timeout(20s) can expire and surface as 500s on mutating requests.
+	// These scenarios do not rely on derived topic projections, so use manual mode.
+	cmd.Env = append(os.Environ(),
+		"OAR_BOOTSTRAP_TOKEN="+bootstrapToken,
+		"OAR_PROJECTION_MODE=manual",
+	)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	if err := cmd.Start(); err != nil {

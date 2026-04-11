@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -12,7 +12,7 @@ import {
   sleep,
   waitForCore,
 } from "../../scripts/seed-core-lib.mjs";
-import { DEV_FIXTURE_PERSONAS, getDevSeedData } from "../src/lib/devSeedData.js";
+import { getDevSeedScenarioConfig } from "./dev-seed-scenarios.mjs";
 
 const coreBaseUrl = normalizeBaseUrl(
   process.env.OAR_CORE_BASE_URL ?? "http://127.0.0.1:8000",
@@ -20,6 +20,17 @@ const coreBaseUrl = normalizeBaseUrl(
 const forceSeed = process.env.OAR_FORCE_SEED === "1";
 const skipIfPresent = process.env.OAR_SEED_SKIP_IF_PRESENT !== "0";
 const waitTimeoutMs = Number(process.env.OAR_CORE_WAIT_TIMEOUT_MS ?? 20000);
+const scenarioName = String(
+  process.env.OAR_DEV_SEED_SCENARIO ?? "default",
+).trim();
+const workspaceID =
+  String(process.env.OAR_WORKSPACE_ID ?? "ws_main").trim() || "ws_main";
+const devIdentityBundlePath = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+  ".dev",
+  "local-identities.json",
+);
 
 if (!coreBaseUrl) {
   failWithPrefix(
@@ -28,8 +39,20 @@ if (!coreBaseUrl) {
   );
 }
 
-const seed = getDevSeedData();
-const defaultActorId = seed.actors[0]?.id ?? "actor-ops-ai";
+const scenarioConfig = getDevSeedScenarioConfig(scenarioName);
+if (!scenarioConfig) {
+  const requested = scenarioName || "default";
+  failWithPrefix(
+    "seed-core-from-mock failed",
+    `unknown dev seed scenario: ${requested}`,
+  );
+}
+
+const seed = scenarioConfig.getSeedData();
+const seedPersonas = Array.isArray(scenarioConfig.personas)
+  ? scenarioConfig.personas
+  : [];
+const defaultActorId = seed.actors[0]?.id ?? scenarioConfig.defaultActorId;
 
 function normalizeSeedCardResolution(raw) {
   const s = String(raw ?? "").trim();
@@ -61,6 +84,8 @@ async function main() {
     probes: ["/version", "/readyz"],
   });
 
+  console.log(`Using dev seed scenario: ${scenarioName || "default"}`);
+
   let domainSeeded = true;
   if (skipIfPresent && !forceSeed) {
     const alreadySeeded = await detectSeededState();
@@ -77,15 +102,18 @@ async function main() {
     await seedBoards();
     await seedPackets();
     await seedArtifacts();
+    // Register seeded agent principals before posting mention-heavy events so
+    // @handle routing resolves against durable auth principals during seeding.
+    if (process.env.OAR_DEV_SEED_IDENTITIES === "1") {
+      await seedDevFixtureIdentities();
+    }
     const eventStats = await seedEvents();
     await rebuildDerived();
 
     console.log(
       `Seed complete. Events posted=${eventStats.posted}, events skipped=${eventStats.skipped}.`,
     );
-  }
-
-  if (process.env.OAR_DEV_SEED_IDENTITIES === "1") {
+  } else if (process.env.OAR_DEV_SEED_IDENTITIES === "1") {
     await seedDevFixtureIdentities();
   }
 }
@@ -103,13 +131,220 @@ async function detectSeededState() {
   const threadTitles = new Set(
     (topicsBody?.topics ?? []).map((topic) => String(topic?.title ?? "")),
   );
+  const boardTitles = new Set(
+    (boardsBody?.boards ?? []).map((boardEntry) =>
+      String(boardEntry?.title ?? boardEntry?.board?.title ?? ""),
+    ),
+  );
   const boardCount = (boardsBody?.boards ?? []).length;
 
-  return (
-    actorIds.has("actor-ops-ai") &&
-    threadTitles.has("Emergency: Lemon Supply Disruption") &&
-    boardCount > 0
+  const basicScenarioMarkersPresent =
+    actorIds.has(scenarioConfig.detectActorId) &&
+    threadTitles.has(scenarioConfig.detectTopicTitle) &&
+    (!scenarioConfig.requireBoards || boardCount > 0) &&
+    (!scenarioConfig.detectBoardTitle ||
+      boardTitles.has(scenarioConfig.detectBoardTitle));
+
+  if (!basicScenarioMarkersPresent) {
+    return false;
+  }
+
+  const needsDocumentRevisionCheck = expectedDocumentRevisionCounts().size > 0;
+  const needsCardCheck = expectedSeedCards().length > 0;
+  const needsEventCheck = expectedSeedEventIDs().length > 0;
+  const needsIdentityCheck =
+    process.env.OAR_DEV_SEED_IDENTITIES === "1" && seedPersonas.length > 0;
+
+  if (
+    !needsDocumentRevisionCheck &&
+    !needsCardCheck &&
+    !needsEventCheck &&
+    !needsIdentityCheck
+  ) {
+    return true;
+  }
+
+  const [docsBody, cardsBody, eventsBody] = await Promise.all([
+    needsDocumentRevisionCheck ? request("GET", "/docs") : Promise.resolve(null),
+    needsCardCheck ? request("GET", "/cards") : Promise.resolve(null),
+    needsEventCheck
+      ? request("GET", `/events?limit=${Math.max(expectedSeedEventIDs().length + 20, 200)}`)
+      : Promise.resolve(null),
+  ]);
+
+  const domainReady =
+    hasExpectedDocumentRevisions(docsBody) &&
+    hasExpectedCards(cardsBody) &&
+    hasExpectedEvents(eventsBody);
+  if (!domainReady) {
+    return false;
+  }
+  if (!needsIdentityCheck) {
+    return true;
+  }
+  return hasExpectedIdentityRegistrations();
+}
+
+function expectedDocumentRevisionCounts() {
+  const revisionsByDocument =
+    seed.documentRevisions && typeof seed.documentRevisions === "object"
+      ? seed.documentRevisions
+      : {};
+  const counts = new Map();
+
+  for (const [documentId, revisions] of Object.entries(revisionsByDocument)) {
+    const normalizedId = String(documentId ?? "").trim();
+    if (!normalizedId || !Array.isArray(revisions) || revisions.length === 0) {
+      continue;
+    }
+    counts.set(normalizedId, revisions.length);
+  }
+
+  return counts;
+}
+
+function hasExpectedDocumentRevisions(docsBody) {
+  const expectedCounts = expectedDocumentRevisionCounts();
+  if (expectedCounts.size === 0) {
+    return true;
+  }
+
+  const actualCounts = new Map();
+  for (const document of docsBody?.documents ?? []) {
+    const documentId = String(document?.id ?? "").trim();
+    if (!documentId) {
+      continue;
+    }
+    const revisionNumber =
+      Number(document?.head_revision_number ?? 0) ||
+      Number(document?.head_revision?.revision_number ?? 0);
+    actualCounts.set(documentId, revisionNumber);
+  }
+
+  for (const [documentId, expectedCount] of expectedCounts.entries()) {
+    if ((actualCounts.get(documentId) ?? 0) < expectedCount) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function expectedSeedCards() {
+  return Array.isArray(seed.cards) ? seed.cards : [];
+}
+
+function expectedSeedEventIDs() {
+  return Array.isArray(seed.events)
+    ? seed.events
+        .map((event) => String(event?.id ?? "").trim())
+        .filter(Boolean)
+    : [];
+}
+
+function hasExpectedCards(cardsBody) {
+  const expectedCards = expectedSeedCards();
+  if (expectedCards.length === 0) {
+    return true;
+  }
+
+  const actualCards = Array.isArray(cardsBody?.cards) ? cardsBody.cards : [];
+  if (actualCards.length < expectedCards.length) {
+    return false;
+  }
+
+  const actualCardIds = new Set(
+    actualCards.map((card) => String(card?.id ?? "").trim()).filter(Boolean),
   );
+  const actualSummaries = new Set(
+    actualCards.map((card) => String(card?.summary ?? "").trim()).filter(Boolean),
+  );
+
+  return expectedCards.every((card) => {
+    const expectedId = String(card?.id ?? "").trim();
+    if (expectedId && actualCardIds.has(expectedId)) {
+      return true;
+    }
+    const expectedSummary = String(card?.summary ?? card?.title ?? "").trim();
+    return Boolean(expectedSummary) && actualSummaries.has(expectedSummary);
+  });
+}
+
+function hasExpectedEvents(eventsBody) {
+  const expectedIDs = expectedSeedEventIDs();
+  if (expectedIDs.length === 0) {
+    return true;
+  }
+
+  const actualEventIDs = new Set(
+    (eventsBody?.events ?? [])
+      .map((event) => String(event?.id ?? "").trim())
+      .filter(Boolean),
+  );
+  return expectedIDs.every((eventID) => actualEventIDs.has(eventID));
+}
+
+async function hasExpectedIdentityRegistrations() {
+  const bundle = await readDevIdentityBundle();
+  if (!bundle || !Array.isArray(bundle.personas) || bundle.personas.length === 0) {
+    return false;
+  }
+
+  const probePersona = bundle.personas.find((persona) =>
+    String(persona?.refresh_token ?? "").trim(),
+  );
+  if (!probePersona) {
+    return false;
+  }
+
+  let accessToken = "";
+  try {
+    const tokenResponse = await requestJson(coreBaseUrl, "POST", "/auth/token", {
+      grant_type: "refresh_token",
+      refresh_token: probePersona.refresh_token,
+    });
+    accessToken = String(tokenResponse?.tokens?.access_token ?? "").trim();
+  } catch {
+    return false;
+  }
+  if (!accessToken) {
+    return false;
+  }
+
+  let principalsBody;
+  try {
+    principalsBody = await requestAuthJson(
+      "GET",
+      "/auth/principals",
+      undefined,
+      accessToken,
+      [200],
+    );
+  } catch {
+    return false;
+  }
+
+  const principals = Array.isArray(principalsBody?.principals)
+    ? principalsBody.principals
+    : [];
+  return seedPersonas.every((persona) =>
+    principals.some((principal) =>
+      String(principal?.username ?? "").trim() ===
+        String(persona?.auth_username ?? "").trim() &&
+      String(principal?.actor_id ?? "").trim() ===
+        String(persona?.actor_id ?? "").trim() &&
+      principal?.wake_routing?.taggable === true,
+    ),
+  );
+}
+
+async function readDevIdentityBundle() {
+  try {
+    const raw = await readFile(devIdentityBundlePath, "utf8");
+    return parseJson(raw);
+  } catch {
+    return null;
+  }
 }
 
 async function seedActors() {
@@ -225,6 +460,11 @@ async function seedDocuments() {
       : {};
 
   for (const sourceDocument of sourceDocuments) {
+    if (sourceDocument?.document && typeof sourceDocument.document === "object") {
+      await seedInlineDocument(sourceDocument);
+      continue;
+    }
+
     const documentId = String(sourceDocument.id ?? "").trim();
     if (!documentId) {
       console.warn("Skipping document with no id in mock seed data.");
@@ -338,6 +578,58 @@ async function seedDocuments() {
       );
     }
   }
+}
+
+/**
+ * Keep the legacy revision-based seed shape, but also accept the simpler
+ * inline doc shape used by Pi scenarios so `make serve` can switch scenarios
+ * without maintaining a second seeding script.
+ */
+async function seedInlineDocument(sourceDocument) {
+  const document = { ...(sourceDocument.document ?? {}) };
+  const documentId = String(document.id ?? "").trim();
+  if (!documentId) {
+    console.warn("Skipping inline document with no id in mock seed data.");
+    return;
+  }
+
+  const actorId = pickActorId(sourceDocument.actor_id ?? document.owner);
+
+  try {
+    const createResponse = await requestRetryOnServerError(
+      "POST",
+      "/docs",
+      {
+        actor_id: actorId,
+        document: sanitizeInlineDocumentWrite(document),
+        refs: mapRefs(sourceDocument.refs),
+        content: sourceDocument.content,
+        content_type: normalizeDocumentContentType(sourceDocument.content_type),
+      },
+      [201, 409],
+    );
+    const newDocumentId = String(createResponse?.document?.id ?? "").trim();
+    if (newDocumentId) {
+      documentIdMap.set(documentId, newDocumentId);
+      return;
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (isAlreadyExistsConflict(msg)) {
+      documentIdMap.set(documentId, documentId);
+      return;
+    }
+    throw err;
+  }
+
+  documentIdMap.set(documentId, documentId);
+}
+
+function sanitizeInlineDocumentWrite(document) {
+  const next = { ...(document ?? {}) };
+  delete next.status;
+  delete next.state;
+  return next;
 }
 
 async function trashSeedArtifactIfNeeded(sourceArtifact) {
@@ -944,7 +1236,7 @@ async function seedDevFixtureIdentities() {
     return;
   }
 
-  const personas = [...DEV_FIXTURE_PERSONAS].sort(
+  const personas = [...seedPersonas].sort(
     (a, b) => (a.default === true ? 0 : 1) - (b.default === true ? 0 : 1),
   );
   const bundle = [];
@@ -1000,12 +1292,32 @@ async function seedDevFixtureIdentities() {
     }
     if (reg?.tokens?.access_token) {
       inviteIssuerAccess = reg.tokens.access_token;
+      await requestAuthJson(
+        "PATCH",
+        "/agents/me",
+        {
+          registration: {
+            handle: p.auth_username,
+            actor_id: p.actor_id,
+            status: "active",
+            workspace_bindings: [
+              {
+                workspace_id: workspaceID,
+                enabled: true,
+              },
+            ],
+          },
+        },
+        inviteIssuerAccess,
+        [200],
+      );
     }
     const agent = reg.agent ?? {};
     bundle.push({
       persona_id: p.persona_id,
       actor_id: p.actor_id,
       agent_id: agent.agent_id,
+      auth_username: p.auth_username,
       display_label: p.display_label,
       principal_kind: p.principal_kind,
       dev_bridge: p.dev_bridge,

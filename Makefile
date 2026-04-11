@@ -4,6 +4,7 @@ CORE_DIR := core
 CLI_DIR := cli
 WEB_UI_DIR := web-ui
 BRIDGE_DIR := adapters/agent-bridge
+HTTP_RECORD_DIR := tools/oar-http-record
 
 CORE_HOST ?= 127.0.0.1
 CORE_PORT ?= 8000
@@ -18,10 +19,11 @@ CORE_WORKSPACE_ROOT ?= $(CURDIR)/$(CORE_DIR)/.oar-workspace
 RESET_DEV_WORKSPACE ?= 1
 SEED_CORE ?= 1
 FORCE_SEED ?= 0
+DEV_SEED_SCENARIO ?= default
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup check serve serve-control-plane lint test format contract-gen contract-check contract-check-committed workflow-check version-sync version-check e2e-smoke hosted-smoke hosted-ops-test hosted-ops-smoke saas-smoke saas-e2e saas-load-smoke packed-host-smoke cli-check cli-test cli-build cli-integration-test bridge-setup bridge-doctor bridge-test release-check release-patch platform-constraints core-% bridge-% web-ui-%
+.PHONY: help setup check serve serve-control-plane lint test format contract-gen contract-check contract-check-committed workflow-check version-sync version-check e2e-smoke hosted-smoke hosted-ops-test hosted-ops-smoke saas-smoke saas-e2e saas-load-smoke packed-host-smoke cli-check cli-test cli-build cli-integration-test http-record-test http-record-run http-record-compile http-record-replay bridge-setup bridge-doctor bridge-test release-check release-patch platform-constraints core-% bridge-% web-ui-%
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z0-9_.-]+:.*##/ {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -37,6 +39,7 @@ check: ## Run repo, core, cli, and web-ui checks
 	$(MAKE) workflow-check
 	$(MAKE) -C $(CORE_DIR) check
 	$(MAKE) cli-check
+	$(MAKE) http-record-test
 	$(MAKE) -C $(WEB_UI_DIR) check
 
 lint: ## Run lint checks for repo, core, and web-ui
@@ -47,6 +50,7 @@ lint: ## Run lint checks for repo, core, and web-ui
 test: ## Run tests in both core and web-ui
 	$(MAKE) -C $(CORE_DIR) test
 	$(MAKE) cli-test
+	$(MAKE) http-record-test
 	$(MAKE) -C $(WEB_UI_DIR) test
 
 format: ## Apply formatting in both core and web-ui
@@ -89,6 +93,18 @@ cli-build: ## Build CLI binary
 
 cli-integration-test: ## Run CLI real-binary integration tests (non-default)
 	cd $(CLI_DIR) && go test -tags=integration ./integration/...
+
+http-record-test: ## Run tests for the local HTTP recording proxy
+	cd $(HTTP_RECORD_DIR) && go test ./...
+
+http-record-run: ## Run the local HTTP recording proxy (set ARGS='...')
+	./scripts/oar-http-record $(ARGS)
+
+http-record-compile: ## Compile a JSONL recording to replay JSON (set ARGS='...')
+	./scripts/oar-http-compile $(ARGS)
+
+http-record-replay: ## Replay a compiled seed JSON against a core (set ARGS='...')
+	./scripts/oar-http-replay $(ARGS)
 
 bridge-setup: ## Set up the bridge-local Python 3.11 virtualenv and deps
 	$(MAKE) -C $(BRIDGE_DIR) setup
@@ -143,6 +159,7 @@ serve: ## Start core, seed mock dataset into core, then start web-ui
 	WEB_UI_PORT="$(WEB_UI_PORT)" \
 	RESET_DEV_WORKSPACE="$(RESET_DEV_WORKSPACE)" \
 	SEED_CORE="$(SEED_CORE)" \
+	DEV_SEED_SCENARIO="$(DEV_SEED_SCENARIO)" \
 	FORCE_SEED="$(FORCE_SEED)" \
 	./scripts/serve.sh
 

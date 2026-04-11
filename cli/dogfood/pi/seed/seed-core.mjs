@@ -4,9 +4,10 @@ import {
   failWithPrefix,
   normalizeBaseUrl,
   requestJson,
+  sleep,
   waitForCore,
 } from "../../../../scripts/seed-core-lib.mjs";
-import { getPilotRescueSeedData } from "./pilot-rescue-data.mjs";
+import { getScenarioSeedConfig } from "./scenario-seeds.mjs";
 
 const coreBaseUrl = normalizeBaseUrl(
   process.env.OAR_CORE_BASE_URL ?? "http://127.0.0.1:8000",
@@ -14,6 +15,9 @@ const coreBaseUrl = normalizeBaseUrl(
 const forceSeed = process.env.OAR_FORCE_SEED === "1";
 const skipIfPresent = process.env.OAR_SEED_SKIP_IF_PRESENT !== "0";
 const waitTimeoutMs = Number(process.env.OAR_CORE_WAIT_TIMEOUT_MS ?? 20000);
+const scenarioName = String(
+  process.env.OAR_PI_SCENARIO ?? "pilot-rescue",
+).trim();
 
 if (!coreBaseUrl) {
   failWithPrefix(
@@ -22,8 +26,14 @@ if (!coreBaseUrl) {
   );
 }
 
-const seed = getPilotRescueSeedData();
-const defaultActorId = seed.actors[0]?.id ?? "actor-product-lead";
+const scenarioConfig = getScenarioSeedConfig(scenarioName);
+if (!scenarioConfig) {
+  failWithPrefix("cli pi seed failed", `unknown scenario: ${scenarioName}`);
+}
+
+const seed = scenarioConfig.getSeedData();
+const defaultActorId =
+  seed.actors[0]?.id ?? scenarioConfig.defaultActorId;
 const topicIdMap = new Map();
 const threadIdMap = new Map();
 
@@ -67,8 +77,8 @@ async function detectSeededState() {
   );
 
   return (
-    actorIds.has("actor-product-lead") &&
-    topicTitles.has("Pilot Rescue Sprint: NorthWave Launch Readiness")
+    actorIds.has(scenarioConfig.detectActorId) &&
+    topicTitles.has(scenarioConfig.detectTopicTitle)
   );
 }
 
@@ -170,13 +180,21 @@ async function seedArtifacts() {
 
 async function seedDocuments() {
   for (const sourceDocument of seed.documents ?? []) {
-    await request("POST", "/docs", {
-      actor_id: pickActorId(sourceDocument.actor_id),
-      document: sanitizeDocumentWrite(sourceDocument.document),
-      refs: mapRefs(sourceDocument.refs),
-      content: sourceDocument.content,
-      content_type: sourceDocument.content_type,
-    }, [201, 409]);
+    const documentId = String(
+      sourceDocument?.document?.id ?? sourceDocument?.id ?? "",
+    ).trim();
+    try {
+      await requestRetryOnServerError("POST", "/docs", {
+        actor_id: pickActorId(sourceDocument.actor_id),
+        document: sanitizeDocumentWrite(sourceDocument.document),
+        refs: mapRefs(sourceDocument.refs),
+        content: sourceDocument.content,
+        content_type: sourceDocument.content_type,
+      }, [201, 409]);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(`document ${documentId || "(unknown)"}: ${reason}`);
+    }
   }
 }
 
@@ -318,4 +336,29 @@ function normalizeEventRefs(type, refs, mappedThreadId) {
 
 async function request(method, requestPath, body, okStatuses = [200, 201]) {
   return requestJson(coreBaseUrl, method, requestPath, body, okStatuses);
+}
+
+/** Retries writes that fail with transient 5xx startup contention. */
+async function requestRetryOnServerError(
+  method,
+  requestPath,
+  body,
+  okStatuses = [200, 201],
+  { attempts = 4, baseDelayMs = 200 } = {},
+) {
+  let lastError;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await request(method, requestPath, body, okStatuses);
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      const is5xx = /->\s5\d\d:/.test(message);
+      if (!is5xx || attempt === attempts - 1) {
+        throw error;
+      }
+      await sleep(baseDelayMs * (attempt + 1));
+    }
+  }
+  throw lastError;
 }
