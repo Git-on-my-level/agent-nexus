@@ -78,6 +78,42 @@ func TestCompileEntriesReplacesResponseDerivedIDsWithPlaceholders(t *testing.T) 
 	}
 }
 
+func TestCompileEntriesSkipsPrincipalSessionMutations(t *testing.T) {
+	t.Parallel()
+
+	run, err := CompileEntries([]recorder.Entry{
+		{
+			Seq:                  1,
+			Method:               "PATCH",
+			Path:                 "/agents/me",
+			RequestBodyEncoding:  "json",
+			RequestBody:          `{"registration":{"handle":"pi","actor_id":"actor-1"}}`,
+			StatusCode:           200,
+			ResponseBodyEncoding: "json",
+			ResponseBody:         `{"agent":{"agent_id":"agent-1","username":"pi"}}`,
+		},
+		{
+			Seq:                  2,
+			Method:               "POST",
+			Path:                 "/topics",
+			RequestBodyEncoding:  "json",
+			RequestBody:          `{"actor_id":"actor-ops","topic":{"id":"thread-alpha","title":"Alpha"}}`,
+			StatusCode:           201,
+			ResponseBodyEncoding: "json",
+			ResponseBody:         `{"topic":{"id":"topic_123","thread_id":"thread_999"}}`,
+		},
+	}, Options{SourceRecording: "fixture.jsonl"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(run.Exchanges) != 1 {
+		t.Fatalf("expected 1 exchange (topics only), got %d", len(run.Exchanges))
+	}
+	if got := run.Exchanges[0].Path; got != "/topics" {
+		t.Fatalf("expected /topics, got %q", got)
+	}
+}
+
 func TestCompileEntriesRejectsTruncatedRequestBody(t *testing.T) {
 	t.Parallel()
 

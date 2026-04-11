@@ -71,7 +71,16 @@ func shouldCompileEntry(entry recorder.Entry) bool {
 	}
 	switch strings.ToUpper(strings.TrimSpace(entry.Method)) {
 	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
-		return !strings.HasPrefix(entry.Path, "/auth/")
+		path := strings.TrimSpace(entry.Path)
+		if strings.HasPrefix(path, "/auth/") {
+			return false
+		}
+		// Replay drops bearer/session headers; skip current-principal mutations that
+		// cannot succeed without the original recording's credentials.
+		if path == "/agents/me" || strings.HasPrefix(path, "/agents/me/") {
+			return false
+		}
+		return true
 	default:
 		return false
 	}

@@ -467,6 +467,58 @@ func TestAuthPrincipalsListTaggableHandles(t *testing.T) {
 	}
 }
 
+func TestAuthPrincipalsListFilteredEmptyPageShowsNextCursor(t *testing.T) {
+	t.Parallel()
+
+	core := newFakeAuthCore(t)
+	core.principals = []map[string]any{{
+		"agent_id":       "agent-guest",
+		"actor_id":       "actor-guest",
+		"username":       "guest",
+		"principal_kind": "human",
+		"auth_method":    "passkey",
+		"created_at":     "2026-03-19T00:00:00Z",
+		"updated_at":     "2026-03-19T01:00:00Z",
+		"revoked":        false,
+		"wake_routing": map[string]any{
+			"applicable": false,
+			"handle":     "guest",
+			"taggable":   false,
+			"online":     false,
+			"state":      "unknown",
+			"summary":    "",
+		},
+	}}
+	core.principalsNextCursor = "cursor-next-page"
+	server := httptest.NewServer(http.HandlerFunc(core.handle))
+	defer server.Close()
+
+	home := t.TempDir()
+	env := map[string]string{}
+	_ = runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "register", "--username", "agent.list"})
+
+	profilePath := filepath.Join(home, ".config", "oar", "profiles", "agent-a.json")
+	storedProfile, ok, err := profile.Load(profilePath)
+	if err != nil || !ok {
+		t.Fatalf("load profile after register: ok=%t err=%v", ok, err)
+	}
+	jsonOutput := false
+	storedProfile.JSON = &jsonOutput
+	if err := profile.Save(profilePath, storedProfile); err != nil {
+		t.Fatalf("persist profile with text output default: %v", err)
+	}
+
+	taggableText := runCLIForTest(t, home, env, nil, []string{"--base-url", server.URL, "--agent", "agent-a", "auth", "principals", "list", "--taggable"})
+	if !strings.Contains(taggableText, "No principals found.") || !strings.Contains(taggableText, "Next cursor: cursor-next-page") {
+		t.Fatalf("expected empty taggable text with next cursor, got %q", taggableText)
+	}
+
+	handlesText := runCLIForTest(t, home, env, nil, []string{"--base-url", server.URL, "--agent", "agent-a", "auth", "principals", "list", "--handles-only"})
+	if !strings.Contains(handlesText, "No taggable handles found.") || !strings.Contains(handlesText, "Next cursor: cursor-next-page") {
+		t.Fatalf("expected empty handles text with next cursor, got %q", handlesText)
+	}
+}
+
 func TestAuthRegisterInternalErrorIsActionable(t *testing.T) {
 	t.Parallel()
 

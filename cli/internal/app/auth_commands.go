@@ -224,10 +224,14 @@ func (a *App) runAuthPrincipalsList(ctx context.Context, service *authcli.Servic
 		if result.NextCursor != "" {
 			data["next_cursor"] = result.NextCursor
 		}
+		emptyText := "No principals found."
 		if handlesOnly {
-			return &commandResult{Text: "No taggable handles found.", Data: data}, nil
+			emptyText = "No taggable handles found."
 		}
-		return &commandResult{Text: "No principals found.", Data: data}, nil
+		if result.NextCursor != "" {
+			emptyText += "\n\nNext cursor: " + result.NextCursor
+		}
+		return &commandResult{Text: emptyText, Data: data}, nil
 	}
 
 	if handlesOnly {
