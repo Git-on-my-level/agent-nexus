@@ -1462,6 +1462,45 @@ paths:
         '409':
           $ref: '#/components/responses/ErrorResponse'
 
+  /boards/{board_id}/cards/batch:
+    post:
+      operationId: batchCreateBoardCards
+      summary: Batch create cards on board
+      tags: [boards, cards]
+      x-oar-surface: canonical
+      x-oar-command-id: boards.cards.batch_add
+      x-oar-cli-path: boards cards create-batch
+      x-oar-why: Create multiple cards in one transaction using a single board concurrency token.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ board, cards }`."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-oar-concepts: [boards, cards, write]
+      x-oar-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/BoardID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchCreateBoardCardsRequest'
+      responses:
+        '201':
+          description: Cards created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchCreateBoardCardsResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
   /boards/{board_id}/cards/{card_id}:
     get:
       operationId: getBoardCard
@@ -4486,6 +4525,81 @@ components:
           type: string
           format: date-time
       required: [card]
+
+    BatchCreateBoardCardsRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+        request_key: { type: string }
+        if_board_updated_at:
+          type: string
+          format: date-time
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/BoardCardBatchItemInput'
+      required: [items]
+
+    BoardCardBatchItemInput:
+      type: object
+      description: >
+        One card to create; same field conventions as POST /boards/{board_id}/cards for a single
+        card (flat fields and optional nested `card`). Do not send actor_id, request_key,
+        if_board_updated_at, board_id, or board_ref on each item — use the batch envelope.
+      additionalProperties: true
+      properties:
+        card: { $ref: '#/components/schemas/CardCreateInput' }
+        card_id: { type: string }
+        id: { type: string }
+        title: { type: string }
+        summary: { type: string }
+        column_key:
+          type: string
+          enum: [backlog, ready, in_progress, blocked, review, done]
+        before_card_id: { type: string }
+        after_card_id: { type: string }
+        before_thread_id: { type: string }
+        after_thread_id: { type: string }
+        parent_thread: { type: string }
+        thread_id: { type: string }
+        assignee_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        risk:
+          type: string
+          enum: [low, medium, high, critical]
+        resolution:
+          type: string
+          nullable: true
+          enum: [done, canceled]
+        resolution_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        related_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        topic_ref: { $ref: '#/components/schemas/TypedRef' }
+        document_ref: { $ref: '#/components/schemas/TypedRef' }
+        due_at:
+          type: string
+          format: date-time
+          nullable: true
+        definition_of_done:
+          type: array
+          items: { type: string }
+        provenance: { $ref: '#/components/schemas/Provenance' }
+      required: [title]
+
+    BatchCreateBoardCardsResponse:
+      type: object
+      properties:
+        board: { $ref: '#/components/schemas/Board' }
+        cards:
+          type: array
+          items: { $ref: '#/components/schemas/Card' }
+      required: [board, cards]
 
     PatchCardRequest:
       type: object

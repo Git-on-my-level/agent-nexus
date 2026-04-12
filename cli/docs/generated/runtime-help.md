@@ -79,6 +79,7 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 - `boards purge` (command): Permanently delete trashed board
 - `boards cards` (group): Nested generated help topic.
 - `boards cards create` (command): Create card on board
+- `boards cards create-batch` (command): Batch create cards on board
 - `boards cards get` (command): Get board-scoped card
 - `docs list` (command): List documents
 - `docs create` (command): Create document
@@ -1274,6 +1275,13 @@ Commands:
   boards trash             Move board to trash
   boards unarchive         Unarchive board
   boards workspace         Get board workspace view
+
+Batch card creation:
+  boards cards create-batch   POST body via stdin or `--from-file`; profile supplies `actor_id` when omitted. See `oar help boards cards create-batch`.
+
+Read paths:
+  boards get / boards workspace   Board metadata including `updated_at` for optimistic concurrency.
+  boards cards list               Existing cards and refs before adding more.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2570,7 +2578,7 @@ Generated Help: boards list
 - Output: Returns `{ boards, summaries }`.
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `boards`
-- Adjacent commands: `boards archive`, `boards cards create`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
+- Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
 
 
 Global flags:
@@ -2595,7 +2603,7 @@ Generated Help: boards create
 - Output: Returns `{ board }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `boards`, `write`
-- Adjacent commands: `boards archive`, `boards cards create`, `boards cards get`, `boards cards list`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
+- Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
 
 Inputs:
   Required:
@@ -2632,7 +2640,7 @@ Generated Help: boards get
 - Output: Returns `{ board, summary }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `boards`
-- Adjacent commands: `boards archive`, `boards cards create`, `boards cards get`, `boards cards list`, `boards create`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
+- Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
 
 Inputs:
   Required:
@@ -2660,7 +2668,7 @@ Generated Help: boards archive
 - Output: Returns `{ board }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `boards`, `write`
-- Adjacent commands: `boards cards create`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
+- Adjacent commands: `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
 
 Inputs:
   Required:
@@ -2690,7 +2698,7 @@ Generated Help: boards unarchive
 - Output: Returns `{ board }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `boards`, `write`
-- Adjacent commands: `boards archive`, `boards cards create`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards workspace`
+- Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards workspace`
 
 Inputs:
   Required:
@@ -2720,7 +2728,7 @@ Generated Help: boards trash
 - Output: Returns `{ board }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `boards`, `write`
-- Adjacent commands: `boards archive`, `boards cards create`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards unarchive`, `boards workspace`
+- Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards unarchive`, `boards workspace`
 
 Inputs:
   Required:
@@ -2751,7 +2759,7 @@ Generated Help: boards restore
 - Output: Returns `{ board }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `boards`, `write`
-- Adjacent commands: `boards archive`, `boards cards create`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards trash`, `boards unarchive`, `boards workspace`
+- Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards trash`, `boards unarchive`, `boards workspace`
 
 Inputs:
   Required:
@@ -2781,7 +2789,7 @@ Generated Help: boards purge
 - Output: Returns `{ purged, board_id }`.
 - Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `boards`, `write`
-- Adjacent commands: `boards archive`, `boards cards create`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
+- Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
 
 Inputs:
   Required:
@@ -2804,6 +2812,7 @@ Generated Help: boards cards
 
 Commands:
   boards cards create      Create card on board
+  boards cards create-batch Batch create cards on board
   boards cards get         Get board-scoped card
   boards cards list        List board cards
 
@@ -2831,7 +2840,7 @@ Generated Help: boards cards create
 - Output: Returns `{ card }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `boards`, `cards`, `write`
-- Adjacent commands: `boards archive`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
+- Adjacent commands: `boards archive`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
 
 Inputs:
   Required:
@@ -2866,6 +2875,47 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
+## `boards cards create-batch`
+
+Batch create cards on board
+
+```text
+Generated Help: boards cards create-batch
+
+- Command ID: `boards.cards.batch_add`
+- CLI path: `boards cards create-batch`
+- HTTP: `POST /boards/{board_id}/cards/batch`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Create multiple cards in one transaction using a single board concurrency token.
+- Output: Returns `{ board, cards }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `boards`, `cards`, `write`
+- Adjacent commands: `boards archive`, `boards cards create`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
+
+Inputs:
+  Required:
+  - path `board_id`
+  - body `items` (list<any>)
+  Optional:
+  - body `actor_id` (string): Defaults from the active CLI profile when omitted. Non-empty `--actor-id` overrides `actor_id` in the JSON body.
+  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `oar boards get --board-id <board-id>`, `oar boards workspace --board-id <board-id>`, or the latest board mutation response. You may pass `--if-board-updated-at` instead of embedding it in JSON.
+  - body `request_key` (string): Idempotency key for the whole batch. Non-empty `--request-key` overrides `request_key` in the JSON body.
+
+CLI input:
+  - Provide a JSON object on stdin or via `--from-file`; it must include `items` (array of card create payloads).
+  - Board id: `--board-id <id>` or a single positional `<board-id>` before flags (no other positionals).
+  - `actor_id` defaults from the active profile when omitted from JSON; `--actor-id` sets or overrides it.
+  - `--request-key` and `--if-board-updated-at`, when non-empty, override the same keys in the JSON body.
+
+Agent tip: run `oar boards get --board-id <board-id> --json` (or `boards workspace`) first, copy `board.updated_at` into `if_board_updated_at`, or pass `--if-board-updated-at` from that value. Each item's `related_refs` must reference source threads not already backing another card on this board, or the server returns `conflict`.
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json boards cards create-batch ... ; oar boards cards create-batch ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
 ## `boards cards get`
 
 Get board-scoped card
@@ -2882,7 +2932,7 @@ Generated Help: boards cards get
 - Output: Returns `{ card }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `boards`, `cards`
-- Adjacent commands: `boards archive`, `boards cards create`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
+- Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
 
 Inputs:
   Required:

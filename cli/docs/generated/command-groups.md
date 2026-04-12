@@ -91,9 +91,10 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `boards`
 
-- Commands: `13`
+- Commands: `14`
 - Command IDs:
   - `boards.archive` (`boards archive`)
+  - `boards.cards.batch_add` (`boards cards create-batch`)
   - `boards.cards.create` (`boards cards create`)
   - `boards.cards.get` (`boards cards get`)
   - `boards.cards.list` (`boards cards list`)

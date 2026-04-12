@@ -141,6 +141,8 @@ func formatCommandSummary(commandID string, body any) string {
 		return formatBoardCardGetResult(body)
 	case "boards.cards.create":
 		return formatBoardCardMutationResult(body)
+	case "boards.cards.batch_add":
+		return formatBoardCardsBatchCreateResult(body)
 	case "boards.cards.add":
 		return formatBoardCardMutationResult(body)
 	case "boards.cards.remove":
@@ -1562,6 +1564,24 @@ func formatBoardCardBoardAndCardSummary(body any, headline string) string {
 
 func formatBoardCardMutationResult(body any) string {
 	return formatBoardCardBoardAndCardSummary(body, "Card updated:")
+}
+
+func formatBoardCardsBatchCreateResult(body any) string {
+	root := asMap(body)
+	board := extractNestedMap(root, "board")
+	cards := asSlice(root["cards"])
+	lines := []string{fmt.Sprintf("Created %d cards:", len(cards))}
+	if board != nil {
+		lines = appendScalar(lines, "board_updated_at", board, "updated_at")
+	}
+	for i, raw := range cards {
+		card, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("- [%d] %s — %s", i, anyString(card["id"]), strings.TrimSpace(anyString(card["title"]))))
+	}
+	return strings.Join(lines, "\n")
 }
 
 func formatBoardCardRemoveResult(body any) string {

@@ -1820,6 +1820,13 @@ func (a *App) runBoardCardsCommand(ctx context.Context, args []string, cfg confi
 		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "boards cards create", "boards.cards.create", map[string]string{"board_id": boardID}, nil, body)
 		return result, "boards cards create", callErr
+	case "create-batch":
+		boardID, body, err := a.parseBoardBatchCardCreateInput(ctx, args[1:], cfg, "boards cards create-batch")
+		if err != nil {
+			return nil, "boards cards create-batch", err
+		}
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "boards cards create-batch", "boards.cards.batch_add", map[string]string{"board_id": boardID}, nil, body)
+		return result, "boards cards create-batch", callErr
 	case "get":
 		boardID, cardID, err := a.parseBoardCardBoardScopedTarget(args[1:], "boards cards get")
 		if err != nil {
@@ -3335,6 +3342,9 @@ func (a *App) parseBoardCardCreateInput(ctx context.Context, args []string, cfg 
 				return "", nil, err
 			}
 		}
+		if err := finalizeMutationActorID(bodyMap, cfg); err != nil {
+			return "", nil, err
+		}
 		return resolvedBoardID, bodyMap, nil
 	}
 
@@ -3395,6 +3405,74 @@ func (a *App) parseBoardCardCreateInput(ctx context.Context, args []string, cfg 
 		body["pinned_document_id"] = pinnedDocumentID
 	}
 	return resolvedBoardID, body, nil
+}
+
+func (a *App) parseBoardBatchCardCreateInput(ctx context.Context, args []string, cfg config.Resolved, commandName string) (string, any, error) {
+	fs := newSilentFlagSet(commandName)
+	var boardIDFlag, fromFileFlag trackedString
+	var actorIDFlag, requestKeyFlag, ifBoardUpdatedAtFlag trackedString
+	fs.Var(&boardIDFlag, "board-id", "Board id")
+	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
+	fs.Var(&actorIDFlag, "actor-id", "Actor id")
+	fs.Var(&requestKeyFlag, "request-key", "Request key")
+	fs.Var(&ifBoardUpdatedAtFlag, "if-board-updated-at", "Board updated_at concurrency token")
+	if err := fs.Parse(args); err != nil {
+		return "", nil, errnorm.Usage("invalid_flags", err.Error())
+	}
+	positionals := fs.Args()
+	boardID := strings.TrimSpace(boardIDFlag.value)
+	if boardID == "" && len(positionals) > 0 {
+		boardID = strings.TrimSpace(positionals[0])
+		positionals = positionals[1:]
+	}
+	if len(positionals) > 0 {
+		return "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `oar %s`", commandName))
+	}
+	if err := validateID(boardID, "board id"); err != nil {
+		return "", nil, err
+	}
+	payload, err := a.readBodyInput(strings.TrimSpace(fromFileFlag.value))
+	if err != nil {
+		return "", nil, err
+	}
+	if len(payload) == 0 {
+		return "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body is required for `oar %s` (provide stdin or --from-file)", commandName))
+	}
+	body, err := decodeJSONPayload(payload)
+	if err != nil {
+		return "", nil, err
+	}
+	bodyMap, ok := body.(map[string]any)
+	if !ok {
+		return "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `oar %s` must be an object", commandName))
+	}
+	if _, has := bodyMap["items"]; !has {
+		return "", nil, errnorm.Usage("invalid_request", "JSON body must include an items array")
+	}
+	// After JSON decode, non-empty CLI flags override the same keys in the body (explicit CLI wins).
+	if v := strings.TrimSpace(requestKeyFlag.value); v != "" {
+		bodyMap["request_key"] = v
+	}
+	if v := strings.TrimSpace(ifBoardUpdatedAtFlag.value); v != "" {
+		bodyMap["if_board_updated_at"] = v
+	}
+	if strings.TrimSpace(actorIDFlag.value) != "" {
+		aid, err := resolveActorIDAlias(actorIDFlag.value, cfg)
+		if err != nil {
+			return "", nil, err
+		}
+		if aid != "" {
+			bodyMap["actor_id"] = aid
+		}
+	}
+	if err := finalizeMutationActorID(bodyMap, cfg); err != nil {
+		return "", nil, err
+	}
+	resolvedBoardID, err := a.resolveMaybeBoardID(ctx, cfg, boardID)
+	if err != nil {
+		return "", nil, err
+	}
+	return resolvedBoardID, bodyMap, nil
 }
 
 func (a *App) parseBoardCardUpdateInput(ctx context.Context, args []string, cfg config.Resolved, commandName string) (map[string]string, any, error) {
@@ -3567,6 +3645,9 @@ func (a *App) parseBoardCardMoveInput(ctx context.Context, args []string, cfg co
 		if err := a.normalizeBoardMutationCardAnchorField(ctx, cfg, resolvedBoardID, bodyMap, "after_card_id"); err != nil {
 			return "", "", nil, err
 		}
+		if err := finalizeMutationActorID(bodyMap, cfg); err != nil {
+			return "", "", nil, err
+		}
 		return resolvedBoardID, identifier, bodyMap, nil
 	}
 
@@ -3640,6 +3721,9 @@ func (a *App) parseBoardCardArchiveInput(ctx context.Context, args []string, cfg
 		bodyMap, _ := body.(map[string]any)
 		if bodyMap == nil {
 			return nil, nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `oar %s` must be an object", commandName))
+		}
+		if err := finalizeMutationActorID(bodyMap, cfg); err != nil {
+			return nil, nil, err
 		}
 		pathParams, err := buildBoardCardCommandPathParams(cardID)
 		if err != nil {
@@ -3856,6 +3940,9 @@ func (a *App) parseDerivedRebuildBodyInput(args []string, cfg config.Resolved) (
 	if actorID != "" {
 		body["actor_id"] = actorID
 	}
+	if err := finalizeMutationActorID(body, cfg); err != nil {
+		return nil, err
+	}
 	return body, nil
 }
 
@@ -3896,7 +3983,27 @@ func (a *App) parseAckBodyInput(ctx context.Context, args []string, cfg config.R
 		if len(positionals) > 0 {
 			return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar inbox ack`")
 		}
-		return decodeJSONPayload(payload)
+		decoded, err := decodeJSONPayload(payload)
+		if err != nil {
+			return nil, err
+		}
+		bodyMap, ok := decoded.(map[string]any)
+		if !ok {
+			return nil, errnorm.Usage("invalid_request", "JSON body for `oar inbox ack` must be an object")
+		}
+		if strings.TrimSpace(actorIDFlag.value) != "" {
+			aid, err := resolveActorIDAlias(actorIDFlag.value, cfg)
+			if err != nil {
+				return nil, err
+			}
+			if aid != "" {
+				bodyMap["actor_id"] = aid
+			}
+		}
+		if err := finalizeMutationActorID(bodyMap, cfg); err != nil {
+			return nil, err
+		}
+		return bodyMap, nil
 	}
 
 	subjectRef := strings.TrimSpace(subjectRefFlag.value)
@@ -4096,6 +4203,61 @@ func missingInboxItemIDError(rawID string) error {
 			strings.TrimSpace(rawID),
 		),
 	)
+}
+
+// mutationActorRawFromMap returns the trimmed string form of body["actor_id"], or "" if absent/null/blank.
+func mutationActorRawFromMap(body map[string]any) string {
+	v, ok := body["actor_id"]
+	if !ok || v == nil {
+		return ""
+	}
+	switch x := v.(type) {
+	case string:
+		return strings.TrimSpace(x)
+	case json.Number:
+		return strings.TrimSpace(x.String())
+	default:
+		return strings.TrimSpace(fmt.Sprint(v))
+	}
+}
+
+// finalizeMutationActorID resolves actor_id alias "me", and when actor_id is missing or
+// blank fills from resolveActorIDAlias("", cfg) and then cfg.ActorID (same pattern as
+// flag-built mutation bodies for trash/archive-style commands).
+func finalizeMutationActorID(body map[string]any, cfg config.Resolved) error {
+	raw := mutationActorRawFromMap(body)
+	if raw == "" {
+		aid, err := resolveActorIDAlias("", cfg)
+		if err != nil {
+			return err
+		}
+		if aid != "" {
+			body["actor_id"] = aid
+			return nil
+		}
+		if prof := strings.TrimSpace(cfg.ActorID); prof != "" {
+			body["actor_id"] = prof
+		}
+		return nil
+	}
+	aid, err := resolveActorIDAlias(raw, cfg)
+	if err != nil {
+		return err
+	}
+	if aid != "" {
+		body["actor_id"] = aid
+	} else {
+		delete(body, "actor_id")
+	}
+	return nil
+}
+
+// finalizeOptionalMutationBodyActorID applies finalizeMutationActorID to a decoded JSON object body.
+func finalizeOptionalMutationBodyActorID(body map[string]any, cfg config.Resolved) error {
+	if body == nil {
+		return nil
+	}
+	return finalizeMutationActorID(body, cfg)
 }
 
 func resolveActorIDAlias(raw string, cfg config.Resolved) (string, error) {

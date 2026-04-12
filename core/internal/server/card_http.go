@@ -118,6 +118,28 @@ func normalizeBoardCardMutationReplayPayload(payload map[string]any) map[string]
 	return out
 }
 
+func normalizeBatchBoardCardCreatePayload(payload map[string]any) map[string]any {
+	if payload == nil {
+		return nil
+	}
+	out := make(map[string]any, len(payload))
+	for k, v := range payload {
+		out[k] = v
+	}
+	if raw, ok := payload["cards"].([]any); ok && raw != nil {
+		cards := make([]any, 0, len(raw))
+		for _, item := range raw {
+			if c, ok := item.(map[string]any); ok && c != nil {
+				cards = append(cards, publicCardView(c))
+				continue
+			}
+			cards = append(cards, item)
+		}
+		out["cards"] = cards
+	}
+	return out
+}
+
 func publicCardsView(cards []map[string]any) []map[string]any {
 	if cards == nil {
 		return nil

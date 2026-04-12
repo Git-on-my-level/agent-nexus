@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"organization-autorunner-core/internal/primitives"
 )
@@ -66,11 +67,10 @@ func hasBoardCardField(raw map[string]any, cardObj map[string]any, key string) b
 	return ok
 }
 
-func parseAddBoardCardJSON(w http.ResponseWriter, raw map[string]any) (addBoardCardMerged, bool) {
+func mergeAddBoardCardRaw(raw map[string]any) (addBoardCardMerged, error) {
 	var m addBoardCardMerged
 	if raw == nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", "body is required")
-		return m, false
+		return m, errors.New("body is required")
 	}
 
 	m.ActorID = strings.TrimSpace(anyString(raw["actor_id"]))
@@ -91,44 +91,34 @@ func parseAddBoardCardJSON(w http.ResponseWriter, raw map[string]any) (addBoardC
 	pick := func(key string) any { return firstPresentBoardCardValue(raw, cardObj, key) }
 
 	if hasBoardCardField(raw, cardObj, "summary") && (hasBoardCardField(raw, cardObj, "body") || hasBoardCardField(raw, cardObj, "body_markdown")) {
-		writeError(w, http.StatusBadRequest, "invalid_request", mixedBoardCardAliasError("summary", "body", "body_markdown"))
-		return m, false
+		return m, errors.New(mixedBoardCardAliasError("summary", "body", "body_markdown"))
 	}
 	if hasBoardCardField(raw, cardObj, "body") {
-		writeError(w, http.StatusBadRequest, "invalid_request", "body is not supported; use summary")
-		return m, false
+		return m, errors.New("body is not supported; use summary")
 	}
 	if hasBoardCardField(raw, cardObj, "body_markdown") {
-		writeError(w, http.StatusBadRequest, "invalid_request", "body_markdown is not supported; use summary")
-		return m, false
+		return m, errors.New("body_markdown is not supported; use summary")
 	}
 	if hasBoardCardField(raw, cardObj, "assignee") {
-		writeError(w, http.StatusBadRequest, "invalid_request", "assignee is not supported; use assignee_refs")
-		return m, false
+		return m, errors.New("assignee is not supported; use assignee_refs")
 	}
 	if hasBoardCardField(raw, cardObj, "document_ref") && hasBoardCardField(raw, cardObj, "pinned_document_id") {
-		writeError(w, http.StatusBadRequest, "invalid_request", mixedBoardCardAliasError("document_ref", "pinned_document_id"))
-		return m, false
+		return m, errors.New(mixedBoardCardAliasError("document_ref", "pinned_document_id"))
 	}
 	if hasBoardCardField(raw, cardObj, "pinned_document_id") {
-		writeError(w, http.StatusBadRequest, "invalid_request", "pinned_document_id is not supported; use document_ref")
-		return m, false
+		return m, errors.New("pinned_document_id is not supported; use document_ref")
 	}
 	if hasBoardCardField(raw, cardObj, "related_refs") && hasBoardCardField(raw, cardObj, "refs") {
-		writeError(w, http.StatusBadRequest, "invalid_request", mixedBoardCardAliasError("related_refs", "refs"))
-		return m, false
+		return m, errors.New(mixedBoardCardAliasError("related_refs", "refs"))
 	}
 	if hasBoardCardField(raw, cardObj, "refs") {
-		writeError(w, http.StatusBadRequest, "invalid_request", "refs is not supported; use related_refs and topic_ref")
-		return m, false
+		return m, errors.New("refs is not supported; use related_refs and topic_ref")
 	}
 	if hasBoardCardField(raw, cardObj, "priority") {
-		writeError(w, http.StatusBadRequest, "invalid_request", "priority is not supported in the canonical card model")
-		return m, false
+		return m, errors.New("priority is not supported in the canonical card model")
 	}
 	if hasBoardCardField(raw, cardObj, "status") {
-		writeError(w, http.StatusBadRequest, "invalid_request", "status is not supported on card create; column_key and resolution define lifecycle")
-		return m, false
+		return m, errors.New("status is not supported on card create; column_key and resolution define lifecycle")
 	}
 
 	m.CardID = strings.TrimSpace(anyString(pick("card_id")))
@@ -157,8 +147,7 @@ func parseAddBoardCardJSON(w http.ResponseWriter, raw map[string]any) (addBoardC
 	if rawDod := pick("definition_of_done"); rawDod != nil {
 		dod, err := extractStringSlice(rawDod)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "definition_of_done must be a list of strings")
-			return m, false
+			return m, errors.New("definition_of_done must be a list of strings")
 		}
 		m.DefinitionOfDone = uniqueSortedStrings(dod)
 	}
@@ -166,8 +155,7 @@ func parseAddBoardCardJSON(w http.ResponseWriter, raw map[string]any) (addBoardC
 	if rawAR := pick("assignee_refs"); rawAR != nil {
 		ar, err := extractStringSlice(rawAR)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "assignee_refs must be a list of strings")
-			return m, false
+			return m, errors.New("assignee_refs must be a list of strings")
 		}
 		if len(ar) > 0 {
 			m.Assignee = assigneeStorageStringFromRefs(uniqueSortedStrings(ar))
@@ -179,8 +167,7 @@ func parseAddBoardCardJSON(w http.ResponseWriter, raw map[string]any) (addBoardC
 	if dr := strings.TrimSpace(anyString(pick("document_ref"))); dr != "" {
 		pid, err := pinnedDocumentIDFromTypedRef(dr)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
-			return m, false
+			return m, err
 		}
 		if pid != nil && strings.TrimSpace(*pid) != "" {
 			m.PinnedDocumentID = pid
@@ -190,8 +177,7 @@ func parseAddBoardCardJSON(w http.ResponseWriter, raw map[string]any) (addBoardC
 	if rawRfs := pick("resolution_refs"); rawRfs != nil {
 		rfs, err := extractStringSlice(rawRfs)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "resolution_refs must be a list of strings")
-			return m, false
+			return m, errors.New("resolution_refs must be a list of strings")
 		}
 		m.ResolutionRefs = uniqueSortedStrings(rfs)
 	}
@@ -205,8 +191,7 @@ func parseAddBoardCardJSON(w http.ResponseWriter, raw map[string]any) (addBoardC
 	if rawRR := pick("related_refs"); rawRR != nil {
 		rr, err := extractStringSlice(rawRR)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "related_refs must be a list of strings")
-			return m, false
+			return m, errors.New("related_refs must be a list of strings")
 		}
 		refs = append(refs, rr...)
 	}
@@ -221,22 +206,20 @@ func parseAddBoardCardJSON(w http.ResponseWriter, raw map[string]any) (addBoardC
 			r := risk
 			m.Risk = &r
 		default:
-			writeError(w, http.StatusBadRequest, "invalid_request", "risk must be one of: low, medium, high, critical")
-			return m, false
+			return m, errors.New("risk must be one of: low, medium, high, critical")
 		}
 	}
 
 	if m.Title == "" {
-		writeError(w, http.StatusBadRequest, "invalid_request", "title is required")
-		return m, false
+		return m, errors.New("title is required")
 	}
 
 	if m.IfBoardUpdatedAt != nil {
-		normalized, ok := normalizeRequiredTimestamp(w, m.IfBoardUpdatedAt, "if_board_updated_at")
-		if !ok {
-			return m, false
+		rawTs := strings.TrimSpace(*m.IfBoardUpdatedAt)
+		if _, err := time.Parse(time.RFC3339, rawTs); err != nil {
+			return m, errors.New("if_board_updated_at must be an RFC3339 datetime string")
 		}
-		m.IfBoardUpdatedAt = &normalized
+		m.IfBoardUpdatedAt = &rawTs
 	}
 
 	if err := validateBoardCardCreateRequest(
@@ -250,14 +233,21 @@ func parseAddBoardCardJSON(w http.ResponseWriter, raw map[string]any) (addBoardC
 		m.AfterThreadID,
 		m.PinnedDocumentID,
 	); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
-		return m, false
+		return m, err
 	}
 	if err := validateBoardCardCreateResolutionInput(m.Resolution, m.ResolutionRefs, m.ColumnKey); err != nil {
+		return m, err
+	}
+
+	return m, nil
+}
+
+func parseAddBoardCardJSON(w http.ResponseWriter, raw map[string]any) (addBoardCardMerged, bool) {
+	m, err := mergeAddBoardCardRaw(raw)
+	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return m, false
 	}
-
 	return m, true
 }
 

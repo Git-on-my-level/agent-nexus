@@ -85,6 +85,7 @@ type PrimitiveStore interface {
 	ListBoardCards(ctx context.Context, boardID string) ([]map[string]any, error)
 	GetBoardCard(ctx context.Context, boardID string, identifier string) (map[string]any, error)
 	CreateBoardCard(ctx context.Context, actorID string, boardID string, input primitives.AddBoardCardInput) (primitives.BoardCardMutationResult, error)
+	CreateBoardCardsBatch(ctx context.Context, actorID string, boardID string, ifBoard *string, inputs []primitives.AddBoardCardInput) ([]primitives.BoardCardMutationResult, error)
 	AddBoardCard(ctx context.Context, actorID string, boardID string, input primitives.AddBoardCardInput) (primitives.BoardCardMutationResult, error)
 	UpdateBoardCard(ctx context.Context, actorID string, boardID string, threadID string, input primitives.UpdateBoardCardInput) (primitives.BoardCardMutationResult, error)
 	MoveBoardCard(ctx context.Context, actorID string, boardID string, threadID string, input primitives.MoveBoardCardInput) (primitives.BoardCardMutationResult, error)
@@ -1387,6 +1388,11 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
 			}
 			return routeAccessRequirement{}
+		case strings.HasSuffix(remainder, "/cards/batch"):
+			if r.Method == http.MethodPost {
+				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+			}
+			return routeAccessRequirement{}
 		case strings.HasSuffix(remainder, "/cards"):
 			if r.Method == http.MethodGet || r.Method == http.MethodPost {
 				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
@@ -1508,6 +1514,21 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				return
 			}
 			handlePurgeBoard(w, r, opts, boardID)
+			return
+		}
+
+		if strings.HasSuffix(remainder, "/cards/batch") {
+			if r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+				return
+			}
+			boardID := strings.TrimSuffix(remainder, "/cards/batch")
+			boardID = strings.TrimSuffix(boardID, "/")
+			if boardID == "" || strings.Contains(boardID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			handleBatchAddBoardCards(w, r, opts, boardID)
 			return
 		}
 

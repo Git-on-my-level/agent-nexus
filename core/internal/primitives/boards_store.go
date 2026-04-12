@@ -103,6 +103,282 @@ type BoardCardMutationResult struct {
 	Card  map[string]any
 }
 
+// maxBoardCardsBatchSize caps POST /boards/{id}/cards/batch item count.
+const maxBoardCardsBatchSize = 100
+
+type boardCardInsertPrep struct {
+	CardID               string
+	ColumnKey            string
+	Title                string
+	Body                 string
+	SourceThreadID       string
+	BackingThreadID      string
+	Refs                 []string
+	RefsJSON             []byte
+	DueAt                *string
+	DefinitionOfDoneJSON []byte
+	Assignee             *string
+	Priority             *string
+	PinnedDocumentID     *string
+	RiskValue            string
+	Status               string
+	Resolution           string
+	ResolutionRefs       []string
+	ResolutionRefsJSON   []byte
+	BeforeCardID         string
+	AfterCardID          string
+}
+
+func prepareBoardCardInsert(input AddBoardCardInput) (boardCardInsertPrep, error) {
+	cardID := strings.TrimSpace(input.CardID)
+	if cardID == "" {
+		cardID = uuid.NewString()
+	}
+	if err := validateCardID(cardID); err != nil {
+		return boardCardInsertPrep{}, invalidBoardRequestError(err)
+	}
+
+	columnKey := strings.TrimSpace(input.ColumnKey)
+	if columnKey == "" {
+		columnKey = boardDefaultColumn
+	}
+	if err := validateBoardColumnKey(columnKey); err != nil {
+		return boardCardInsertPrep{}, invalidBoardRequestError(err)
+	}
+	if err := ValidateBoardPlacementAnchors(input.BeforeCardID, input.AfterCardID); err != nil {
+		return boardCardInsertPrep{}, invalidBoardRequestError(err)
+	}
+	if err := validateBoardCardStatus(input.Status, true); err != nil {
+		return boardCardInsertPrep{}, invalidBoardRequestError(err)
+	}
+
+	refs := uniqueSortedStrings(input.Refs)
+	refsJSON, err := json.Marshal(refs)
+	if err != nil {
+		return boardCardInsertPrep{}, fmt.Errorf("marshal card refs: %w", err)
+	}
+
+	sourceThreadID := strings.TrimSpace(input.ParentThreadID)
+	if sourceThreadID == "" {
+		derived, derr := SoleThreadRefIDFromRefs(refs)
+		if derr != nil {
+			return boardCardInsertPrep{}, invalidBoardRequestError(derr)
+		}
+		sourceThreadID = derived
+	}
+	if sourceThreadID != "" {
+		if err := validateThreadID(sourceThreadID); err != nil {
+			return boardCardInsertPrep{}, invalidBoardRequestError(err)
+		}
+	}
+	backingThreadID := uuid.NewString()
+
+	title := strings.TrimSpace(input.Title)
+	body := strings.TrimSpace(input.Body)
+	status := normalizeBoardCardStatus(input.Status)
+	dueAt := normalizeBoardOptionalPointer(input.DueAt)
+	definitionOfDone := uniqueSortedStrings(input.DefinitionOfDone)
+	definitionOfDoneJSON, err := json.Marshal(definitionOfDone)
+	if err != nil {
+		return boardCardInsertPrep{}, fmt.Errorf("marshal card definition_of_done: %w", err)
+	}
+	resolution := normalizeCardResolution(input.Resolution, status)
+	if err := validateCardResolution(resolution, true); err != nil {
+		return boardCardInsertPrep{}, invalidBoardRequestError(err)
+	}
+	resolutionRefs := uniqueSortedStrings(input.ResolutionRefs)
+	resolutionRefsJSON, err := json.Marshal(resolutionRefs)
+	if err != nil {
+		return boardCardInsertPrep{}, fmt.Errorf("marshal card resolution refs: %w", err)
+	}
+	assignee := normalizeBoardOptionalPointer(input.Assignee)
+	priority := normalizeBoardOptionalPointer(input.Priority)
+	pinnedDocumentID := normalizeBoardOptionalPointer(input.PinnedDocumentID)
+	riskValue := canonicalBoardCardRisk("")
+	if input.Risk != nil {
+		riskValue = canonicalBoardCardRisk(*input.Risk)
+	}
+
+	return boardCardInsertPrep{
+		CardID:               cardID,
+		ColumnKey:            columnKey,
+		Title:                title,
+		Body:                 body,
+		SourceThreadID:       sourceThreadID,
+		BackingThreadID:      backingThreadID,
+		Refs:                 refs,
+		RefsJSON:             refsJSON,
+		DueAt:                dueAt,
+		DefinitionOfDoneJSON: definitionOfDoneJSON,
+		Assignee:             assignee,
+		Priority:             priority,
+		PinnedDocumentID:     pinnedDocumentID,
+		RiskValue:            riskValue,
+		Status:               status,
+		Resolution:           resolution,
+		ResolutionRefs:       resolutionRefs,
+		ResolutionRefsJSON:   resolutionRefsJSON,
+		BeforeCardID:         input.BeforeCardID,
+		AfterCardID:          input.AfterCardID,
+	}, nil
+}
+
+func (s *Store) execBoardCardInsert(ctx context.Context, tx *sql.Tx, boardRow boardRow, actorID, boardID string, prep boardCardInsertPrep) (boardRow, boardCardRow, error) {
+	cardID := prep.CardID
+	columnKey := prep.ColumnKey
+	sourceThreadID := prep.SourceThreadID
+	title := prep.Title
+	body := prep.Body
+	status := prep.Status
+	dueAt := prep.DueAt
+	assignee := prep.Assignee
+	priority := prep.Priority
+	pinnedDocumentID := prep.PinnedDocumentID
+	riskValue := prep.RiskValue
+	resolutionStr := prep.Resolution
+	refs := prep.Refs
+	refsJSON := prep.RefsJSON
+	definitionOfDoneJSON := prep.DefinitionOfDoneJSON
+	resolutionRefsJSON := prep.ResolutionRefsJSON
+	backingThreadID := prep.BackingThreadID
+
+	if sourceThreadID != "" {
+		if err := ensureThreadExists(ctx, tx, sourceThreadID); err != nil {
+			return boardRow, boardCardRow{}, err
+		}
+		if sourceThreadID == boardRow.ThreadID {
+			return boardRow, boardCardRow{}, invalidBoardRequest("board.thread_id cannot be added as a board card")
+		}
+		if err := ensureBoardCardParentThreadAvailable(ctx, tx, boardID, sourceThreadID, ""); err != nil {
+			return boardRow, boardCardRow{}, err
+		}
+	}
+	if title == "" {
+		if derivedTitle, err := loadThreadTitleForBoardCard(ctx, tx, sourceThreadID); err == nil {
+			title = derivedTitle
+		} else if !errors.Is(err, ErrNotFound) {
+			return boardRow, boardCardRow{}, err
+		}
+	}
+	if title == "" {
+		title = cardID
+	}
+	if title == "" {
+		return boardRow, boardCardRow{}, invalidBoardRequest("card.title is required")
+	}
+	if pinnedDocumentID != nil {
+		if err := ensureDocumentExists(ctx, tx, *pinnedDocumentID); err != nil {
+			return boardRow, boardCardRow{}, err
+		}
+	}
+
+	beforeCardID, afterCardID, err := resolveBoardPlacementAnchors(ctx, tx, boardID, prep.BeforeCardID, prep.AfterCardID)
+	if err != nil {
+		return boardRow, boardCardRow{}, err
+	}
+	rank, err := s.allocateBoardCardRank(ctx, tx, boardID, columnKey, beforeCardID, afterCardID, "")
+	if err != nil {
+		return boardRow, boardCardRow{}, err
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	provenanceJSON := inferredProvenanceJSON()
+	if err := ensureCardBackingThreadTx(ctx, tx, actorID, cardID, backingThreadID, title, now); err != nil {
+		return boardRow, boardCardRow{}, err
+	}
+
+	if _, err := tx.ExecContext(
+		ctx,
+		`INSERT INTO cards(
+			id, board_id, thread_id, title, body_markdown, due_at, definition_of_done_json, column_key, rank, version,
+			parent_thread_id, pinned_document_id, assignee, priority, risk, status, resolution, resolution_refs_json, refs_json,
+			created_at, created_by, updated_at, updated_by, provenance_json
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		cardID,
+		boardID,
+		backingThreadID,
+		title,
+		body,
+		nullableString(derefBoardString(dueAt)),
+		string(definitionOfDoneJSON),
+		columnKey,
+		rank,
+		1,
+		nullableString(sourceThreadID),
+		nullableString(derefBoardString(pinnedDocumentID)),
+		nullableString(derefBoardString(assignee)),
+		nullableString(derefBoardString(priority)),
+		riskValue,
+		status,
+		nullableString(resolutionStr),
+		string(resolutionRefsJSON),
+		string(refsJSON),
+		now,
+		actorID,
+		now,
+		actorID,
+		provenanceJSON,
+	); err != nil {
+		if isUniqueViolation(err) {
+			return boardRow, boardCardRow{}, ErrConflict
+		}
+		return boardRow, boardCardRow{}, fmt.Errorf("insert card: %w", err)
+	}
+
+	if _, err := tx.ExecContext(
+		ctx,
+		`INSERT INTO card_versions(
+			card_id, version, board_id, thread_id, title, body_markdown, due_at, definition_of_done_json, column_key, rank,
+			parent_thread_id, pinned_document_id, assignee, priority, risk, status, resolution, resolution_refs_json, refs_json,
+			created_at, created_by, provenance_json
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		cardID,
+		1,
+		boardID,
+		backingThreadID,
+		title,
+		body,
+		nullableString(derefBoardString(dueAt)),
+		string(definitionOfDoneJSON),
+		columnKey,
+		rank,
+		nullableString(sourceThreadID),
+		nullableString(derefBoardString(pinnedDocumentID)),
+		nullableString(derefBoardString(assignee)),
+		nullableString(derefBoardString(priority)),
+		riskValue,
+		status,
+		nullableString(resolutionStr),
+		string(resolutionRefsJSON),
+		string(refsJSON),
+		now,
+		actorID,
+		provenanceJSON,
+	); err != nil {
+		return boardRow, boardCardRow{}, fmt.Errorf("insert card version: %w", err)
+	}
+
+	if err := upsertBoardCardRefEdge(ctx, tx, boardID, cardID, columnKey, rank); err != nil {
+		return boardRow, boardCardRow{}, err
+	}
+	cardTargets := typedRefEdgeTargets(refEdgeTypeRef, refs)
+	cardTargets = appendRefEdgeTarget(cardTargets, refEdgeTypeCardParentThread, "thread", sourceThreadID)
+	cardTargets = appendRefEdgeTarget(cardTargets, refEdgeTypeCardPinnedDocument, "document", derefBoardString(pinnedDocumentID))
+	if err := replaceRefEdges(ctx, tx, "card", cardID, cardTargets); err != nil {
+		return boardRow, boardCardRow{}, err
+	}
+
+	boardRow, err = touchBoardRow(ctx, tx, boardRow, actorID)
+	if err != nil {
+		return boardRow, boardCardRow{}, err
+	}
+	cardRow, err := s.loadBoardCardByIdentifier(ctx, tx, boardID, cardID, true)
+	if err != nil {
+		return boardRow, boardCardRow{}, err
+	}
+	return boardRow, cardRow, nil
+}
+
 type BoardCardRemovalResult struct {
 	Board           map[string]any
 	Card            map[string]any
@@ -927,81 +1203,14 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 	if strings.TrimSpace(actorID) == "" {
 		return BoardCardMutationResult{}, invalidBoardRequest("actorID is required")
 	}
-
-	cardID := strings.TrimSpace(input.CardID)
-	if cardID == "" {
-		cardID = uuid.NewString()
-	}
-	if err := validateCardID(cardID); err != nil {
-		return BoardCardMutationResult{}, invalidBoardRequestError(err)
-	}
-
-	columnKey := strings.TrimSpace(input.ColumnKey)
-	if columnKey == "" {
-		columnKey = boardDefaultColumn
-	}
-	if err := validateBoardColumnKey(columnKey); err != nil {
-		return BoardCardMutationResult{}, invalidBoardRequestError(err)
-	}
-	if err := ValidateBoardPlacementAnchors(input.BeforeCardID, input.AfterCardID); err != nil {
-		return BoardCardMutationResult{}, invalidBoardRequestError(err)
-	}
-	if err := validateBoardCardStatus(input.Status, true); err != nil {
-		return BoardCardMutationResult{}, invalidBoardRequestError(err)
-	}
-
-	refs := uniqueSortedStrings(input.Refs)
-	refsJSON, err := json.Marshal(refs)
+	prep, err := prepareBoardCardInsert(input)
 	if err != nil {
-		return BoardCardMutationResult{}, fmt.Errorf("marshal card refs: %w", err)
+		return BoardCardMutationResult{}, err
 	}
-
-	sourceThreadID := strings.TrimSpace(input.ParentThreadID)
-	if sourceThreadID == "" {
-		derived, derr := SoleThreadRefIDFromRefs(refs)
-		if derr != nil {
-			return BoardCardMutationResult{}, invalidBoardRequestError(derr)
-		}
-		sourceThreadID = derived
-	}
-	if sourceThreadID != "" {
-		if err := validateThreadID(sourceThreadID); err != nil {
-			return BoardCardMutationResult{}, invalidBoardRequestError(err)
-		}
-	}
-	backingThreadID := uuid.NewString()
-
-	title := strings.TrimSpace(input.Title)
-	body := strings.TrimSpace(input.Body)
-	status := normalizeBoardCardStatus(input.Status)
-	dueAt := normalizeBoardOptionalPointer(input.DueAt)
-	definitionOfDone := uniqueSortedStrings(input.DefinitionOfDone)
-	definitionOfDoneJSON, err := json.Marshal(definitionOfDone)
-	if err != nil {
-		return BoardCardMutationResult{}, fmt.Errorf("marshal card definition_of_done: %w", err)
-	}
-	resolution := normalizeCardResolution(input.Resolution, status)
-	if err := validateCardResolution(resolution, true); err != nil {
-		return BoardCardMutationResult{}, invalidBoardRequestError(err)
-	}
-	resolutionRefs := uniqueSortedStrings(input.ResolutionRefs)
-	resolutionRefsJSON, err := json.Marshal(resolutionRefs)
-	if err != nil {
-		return BoardCardMutationResult{}, fmt.Errorf("marshal card resolution refs: %w", err)
-	}
-	assignee := normalizeBoardOptionalPointer(input.Assignee)
-	priority := normalizeBoardOptionalPointer(input.Priority)
-	pinnedDocumentID := normalizeBoardOptionalPointer(input.PinnedDocumentID)
-	riskValue := canonicalBoardCardRisk("")
-	if input.Risk != nil {
-		riskValue = canonicalBoardCardRisk(*input.Risk)
-	}
-
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return BoardCardMutationResult{}, fmt.Errorf("begin board card create transaction: %w", err)
 	}
-
 	boardRow, err := loadBoardRow(ctx, tx, boardID)
 	if err != nil {
 		_ = tx.Rollback()
@@ -1011,161 +1220,15 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 		_ = tx.Rollback()
 		return BoardCardMutationResult{}, err
 	}
-	if sourceThreadID != "" {
-		if err := ensureThreadExists(ctx, tx, sourceThreadID); err != nil {
-			_ = tx.Rollback()
-			return BoardCardMutationResult{}, err
-		}
-		if sourceThreadID == boardRow.ThreadID {
-			_ = tx.Rollback()
-			return BoardCardMutationResult{}, invalidBoardRequest("board.thread_id cannot be added as a board card")
-		}
-		if err := ensureBoardCardParentThreadAvailable(ctx, tx, boardID, sourceThreadID, ""); err != nil {
-			_ = tx.Rollback()
-			return BoardCardMutationResult{}, err
-		}
-	}
-	if title == "" {
-		if derivedTitle, err := loadThreadTitleForBoardCard(ctx, tx, sourceThreadID); err == nil {
-			title = derivedTitle
-		} else if !errors.Is(err, ErrNotFound) {
-			_ = tx.Rollback()
-			return BoardCardMutationResult{}, err
-		}
-	}
-	if title == "" {
-		title = cardID
-	}
-	if title == "" {
-		_ = tx.Rollback()
-		return BoardCardMutationResult{}, invalidBoardRequest("card.title is required")
-	}
-	if pinnedDocumentID != nil {
-		if err := ensureDocumentExists(ctx, tx, *pinnedDocumentID); err != nil {
-			_ = tx.Rollback()
-			return BoardCardMutationResult{}, err
-		}
-	}
-
-	beforeCardID, afterCardID, err := resolveBoardPlacementAnchors(ctx, tx, boardID, input.BeforeCardID, input.AfterCardID)
+	boardRow, cardRow, err := s.execBoardCardInsert(ctx, tx, boardRow, actorID, boardID, prep)
 	if err != nil {
 		_ = tx.Rollback()
 		return BoardCardMutationResult{}, err
 	}
-	rank, err := s.allocateBoardCardRank(ctx, tx, boardID, columnKey, beforeCardID, afterCardID, "")
-	if err != nil {
-		_ = tx.Rollback()
-		return BoardCardMutationResult{}, err
-	}
-
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	provenanceJSON := inferredProvenanceJSON()
-	if err := ensureCardBackingThreadTx(ctx, tx, actorID, cardID, backingThreadID, title, now); err != nil {
-		_ = tx.Rollback()
-		return BoardCardMutationResult{}, err
-	}
-
-	if _, err := tx.ExecContext(
-		ctx,
-		`INSERT INTO cards(
-			id, board_id, thread_id, title, body_markdown, due_at, definition_of_done_json, column_key, rank, version,
-			parent_thread_id, pinned_document_id, assignee, priority, risk, status, resolution, resolution_refs_json, refs_json,
-			created_at, created_by, updated_at, updated_by, provenance_json
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		cardID,
-		boardID,
-		backingThreadID,
-		title,
-		body,
-		nullableString(derefBoardString(dueAt)),
-		string(definitionOfDoneJSON),
-		columnKey,
-		rank,
-		1,
-		nullableString(sourceThreadID),
-		nullableString(derefBoardString(pinnedDocumentID)),
-		nullableString(derefBoardString(assignee)),
-		nullableString(derefBoardString(priority)),
-		riskValue,
-		status,
-		nullableString(resolution),
-		string(resolutionRefsJSON),
-		string(refsJSON),
-		now,
-		actorID,
-		now,
-		actorID,
-		provenanceJSON,
-	); err != nil {
-		_ = tx.Rollback()
-		if isUniqueViolation(err) {
-			return BoardCardMutationResult{}, ErrConflict
-		}
-		return BoardCardMutationResult{}, fmt.Errorf("insert card: %w", err)
-	}
-
-	if _, err := tx.ExecContext(
-		ctx,
-		`INSERT INTO card_versions(
-			card_id, version, board_id, thread_id, title, body_markdown, due_at, definition_of_done_json, column_key, rank,
-			parent_thread_id, pinned_document_id, assignee, priority, risk, status, resolution, resolution_refs_json, refs_json,
-			created_at, created_by, provenance_json
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		cardID,
-		1,
-		boardID,
-		backingThreadID,
-		title,
-		body,
-		nullableString(derefBoardString(dueAt)),
-		string(definitionOfDoneJSON),
-		columnKey,
-		rank,
-		nullableString(sourceThreadID),
-		nullableString(derefBoardString(pinnedDocumentID)),
-		nullableString(derefBoardString(assignee)),
-		nullableString(derefBoardString(priority)),
-		riskValue,
-		status,
-		nullableString(resolution),
-		string(resolutionRefsJSON),
-		string(refsJSON),
-		now,
-		actorID,
-		provenanceJSON,
-	); err != nil {
-		_ = tx.Rollback()
-		return BoardCardMutationResult{}, fmt.Errorf("insert card version: %w", err)
-	}
-
-	if err := upsertBoardCardRefEdge(ctx, tx, boardID, cardID, columnKey, rank); err != nil {
-		_ = tx.Rollback()
-		return BoardCardMutationResult{}, err
-	}
-	cardTargets := typedRefEdgeTargets(refEdgeTypeRef, refs)
-	cardTargets = appendRefEdgeTarget(cardTargets, refEdgeTypeCardParentThread, "thread", sourceThreadID)
-	cardTargets = appendRefEdgeTarget(cardTargets, refEdgeTypeCardPinnedDocument, "document", derefBoardString(pinnedDocumentID))
-	if err := replaceRefEdges(ctx, tx, "card", cardID, cardTargets); err != nil {
-		_ = tx.Rollback()
-		return BoardCardMutationResult{}, err
-	}
-
-	boardRow, err = touchBoardRow(ctx, tx, boardRow, actorID)
-	if err != nil {
-		_ = tx.Rollback()
-		return BoardCardMutationResult{}, err
-	}
-	cardRow, err := s.loadBoardCardByIdentifier(ctx, tx, boardID, cardID, true)
-	if err != nil {
-		_ = tx.Rollback()
-		return BoardCardMutationResult{}, err
-	}
-
 	if err := tx.Commit(); err != nil {
 		_ = tx.Rollback()
 		return BoardCardMutationResult{}, fmt.Errorf("commit board card create transaction: %w", err)
 	}
-
 	boardMap, err := boardRow.toMap()
 	if err != nil {
 		return BoardCardMutationResult{}, err
@@ -1175,6 +1238,72 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 		return BoardCardMutationResult{}, err
 	}
 	return BoardCardMutationResult{Board: boardMap, Card: cardMap}, nil
+}
+
+func (s *Store) CreateBoardCardsBatch(ctx context.Context, actorID, boardID string, ifBoard *string, inputs []AddBoardCardInput) ([]BoardCardMutationResult, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("primitives store database is not initialized")
+	}
+	if strings.TrimSpace(actorID) == "" {
+		return nil, invalidBoardRequest("actorID is required")
+	}
+	if len(inputs) == 0 {
+		return nil, invalidBoardRequest("items must include at least one card")
+	}
+	if len(inputs) > maxBoardCardsBatchSize {
+		return nil, invalidBoardRequest(fmt.Sprintf("items exceeds maximum batch size of %d", maxBoardCardsBatchSize))
+	}
+	preps := make([]boardCardInsertPrep, len(inputs))
+	for i := range inputs {
+		in := inputs[i]
+		if strings.TrimSpace(in.Status) == "" {
+			in.Status = inferLegacyBoardCardStatus(in.ColumnKey)
+		}
+		in.IfBoardUpdatedAt = nil
+		prep, err := prepareBoardCardInsert(in)
+		if err != nil {
+			return nil, fmt.Errorf("items[%d]: %w", i, err)
+		}
+		preps[i] = prep
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin board cards batch transaction: %w", err)
+	}
+	boardRow, err := loadBoardRow(ctx, tx, boardID)
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+	if err := ensureBoardUpdatedAtMatches(boardRow, ifBoard); err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+	results := make([]BoardCardMutationResult, 0, len(preps))
+	for i, prep := range preps {
+		var cardRow boardCardRow
+		boardRow, cardRow, err = s.execBoardCardInsert(ctx, tx, boardRow, actorID, boardID, prep)
+		if err != nil {
+			_ = tx.Rollback()
+			return nil, fmt.Errorf("items[%d]: %w", i, err)
+		}
+		boardMap, terr := boardRow.toMap()
+		if terr != nil {
+			_ = tx.Rollback()
+			return nil, terr
+		}
+		cardMap, terr := cardRow.toMap()
+		if terr != nil {
+			_ = tx.Rollback()
+			return nil, terr
+		}
+		results = append(results, BoardCardMutationResult{Board: boardMap, Card: cardMap})
+	}
+	if err := tx.Commit(); err != nil {
+		_ = tx.Rollback()
+		return nil, fmt.Errorf("commit board cards batch transaction: %w", err)
+	}
+	return results, nil
 }
 
 func (s *Store) AddBoardCard(ctx context.Context, actorID, boardID string, input AddBoardCardInput) (BoardCardMutationResult, error) {

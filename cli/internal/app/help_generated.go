@@ -558,6 +558,13 @@ func localGroupHelpSupplement(topic string) string {
   meta doc                Print one bundled Markdown topic, for example ` + "`oar meta doc agent-guide`" + `.
   meta skill              Render a bundled editor-specific skill file, for example ` + "`oar meta skill cursor`" + `.
   Tip: use ` + "`oar help meta`" + ` for the short runtime surface, ` + "`oar meta docs`" + ` for the full shipped reference, and ` + "`oar meta skill cursor --write-dir ~/.cursor/skills/oar-cli-onboard`" + ` to export a Cursor skill.`)
+	case "boards":
+		return strings.TrimSpace(`Batch card creation:
+  boards cards create-batch   POST body via stdin or ` + "`--from-file`" + `; profile supplies ` + "`actor_id`" + ` when omitted. See ` + "`oar help boards cards create-batch`" + `.
+
+Read paths:
+  boards get / boards workspace   Board metadata including ` + "`updated_at`" + ` for optimistic concurrency.
+  boards cards list               Existing cards and refs before adding more.`)
 	case "auth":
 		return strings.TrimSpace(`Local auth lifecycle helpers:
   auth whoami             Validate the active profile against the server and show resolved identity.
@@ -742,8 +749,14 @@ func fieldHelpText(commandID string, name string) string {
 	commandID = strings.TrimSpace(commandID)
 	name = strings.TrimSpace(name)
 	switch {
+	case name == "if_board_updated_at" && commandID == "boards.cards.batch_add":
+		return "Optimistic concurrency token. Copy `board.updated_at` from `oar boards get --board-id <board-id>`, `oar boards workspace --board-id <board-id>`, or the latest board mutation response. You may pass `--if-board-updated-at` instead of embedding it in JSON."
 	case name == "if_board_updated_at":
 		return "Optimistic concurrency token. Copy `board.updated_at` from `oar boards get --board-id <board-id>`, `oar boards workspace --board-id <board-id>`, or the latest board mutation response."
+	case name == "actor_id" && commandID == "boards.cards.batch_add":
+		return "Defaults from the active CLI profile when omitted. Non-empty `--actor-id` overrides `actor_id` in the JSON body."
+	case name == "request_key" && commandID == "boards.cards.batch_add":
+		return "Idempotency key for the whole batch. Non-empty `--request-key` overrides `request_key` in the JSON body."
 	case name == "if_base_revision":
 		return "Optimistic concurrency token. Copy the current head revision id from `oar docs get --document-id <document-id>` before updating."
 	case strings.HasPrefix(name, "if_"):
@@ -860,6 +873,14 @@ Inbox categories:
   --from-file <path>     JSON body file (API request shape).
   Positional: inbox item id when not given via ` + "`--inbox-item-id`" + `.
   Otherwise: JSON object on stdin (` + "`inbox_item_id`" + `, ` + "`subject_ref`" + `, optional fields).`)
+	case "boards.cards.batch_add":
+		return strings.TrimSpace(`CLI input:
+  - Provide a JSON object on stdin or via ` + "`--from-file`" + `; it must include ` + "`items`" + ` (array of card create payloads).
+  - Board id: ` + "`--board-id <id>`" + ` or a single positional ` + "`<board-id>`" + ` before flags (no other positionals).
+  - ` + "`actor_id`" + ` defaults from the active profile when omitted from JSON; ` + "`--actor-id`" + ` sets or overrides it.
+  - ` + "`--request-key`" + ` and ` + "`--if-board-updated-at`" + `, when non-empty, override the same keys in the JSON body.
+
+Agent tip: run ` + "`oar boards get --board-id <board-id> --json`" + ` (or ` + "`boards workspace`" + `) first, copy ` + "`board.updated_at`" + ` into ` + "`if_board_updated_at`" + `, or pass ` + "`--if-board-updated-at`" + ` from that value. Each item's ` + "`related_refs`" + ` must reference source threads not already backing another card on this board, or the server returns ` + "`conflict`" + `.`)
 	default:
 		return ""
 	}

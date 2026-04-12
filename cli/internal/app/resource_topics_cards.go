@@ -89,11 +89,17 @@ func (a *App) runTopicsCommand(ctx context.Context, args []string, cfg config.Re
 		if err != nil {
 			return nil, "topics archive", err
 		}
+		if err := finalizeOptionalMutationBodyActorID(body, cfg); err != nil {
+			return nil, "topics archive", err
+		}
 		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "topics archive", "topics.archive", "topic_id", id, topicIDLookupSpec, nil, body)
 		return result, "topics archive", callErr
 	case "unarchive":
 		id, body, err := a.parseTopicIDAndOptionalJSONBody(args[1:], "topics unarchive")
 		if err != nil {
+			return nil, "topics unarchive", err
+		}
+		if err := finalizeOptionalMutationBodyActorID(body, cfg); err != nil {
 			return nil, "topics unarchive", err
 		}
 		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "topics unarchive", "topics.unarchive", "topic_id", id, topicIDLookupSpec, nil, body)
@@ -103,11 +109,17 @@ func (a *App) runTopicsCommand(ctx context.Context, args []string, cfg config.Re
 		if err != nil {
 			return nil, "topics trash", err
 		}
+		if err := finalizeOptionalMutationBodyActorID(body, cfg); err != nil {
+			return nil, "topics trash", err
+		}
 		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "topics trash", "topics.trash", "topic_id", id, topicIDLookupSpec, nil, body)
 		return result, "topics trash", callErr
 	case "restore":
 		id, body, err := a.parseTopicIDAndOptionalJSONBody(args[1:], "topics restore")
 		if err != nil {
+			return nil, "topics restore", err
+		}
+		if err := finalizeOptionalMutationBodyActorID(body, cfg); err != nil {
 			return nil, "topics restore", err
 		}
 		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "topics restore", "topics.restore", "topic_id", id, topicIDLookupSpec, nil, body)
@@ -134,10 +146,15 @@ func (a *App) runCardsCommand(ctx context.Context, args []string, cfg config.Res
 		if err != nil {
 			return nil, "cards create", err
 		}
-		if bodyMap, ok := body.(map[string]any); ok {
-			ensureEmptyListDefaults(bodyMap, "card", []string{"assignee_refs", "resolution_refs", "related_refs"})
+		bodyMap, ok := body.(map[string]any)
+		if !ok {
+			return nil, "cards create", errnorm.Usage("invalid_request", "JSON body for `oar cards create` must be an object")
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "cards create", "cards.create", nil, nil, body)
+		ensureEmptyListDefaults(bodyMap, "card", []string{"assignee_refs", "resolution_refs", "related_refs"})
+		if err := finalizeOptionalMutationBodyActorID(bodyMap, cfg); err != nil {
+			return nil, "cards create", err
+		}
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "cards create", "cards.create", nil, nil, bodyMap)
 		return result, "cards create", callErr
 	case "get":
 		id, err := parseIDArg(args[1:], "card-id", "card id")
@@ -161,8 +178,15 @@ func (a *App) runCardsCommand(ctx context.Context, args []string, cfg config.Res
 		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "cards patch", "cards.patch", "card_id", id, cardIDLookupSpec, nil, body)
 		return result, "cards patch", callErr
 	case "move":
-		id, body, err := a.parseIDAndBodyInput(args[1:], "card-id", "card id", "cards move")
+		id, bodyAny, err := a.parseIDAndBodyInput(args[1:], "card-id", "card id", "cards move")
 		if err != nil {
+			return nil, "cards move", err
+		}
+		body, ok := bodyAny.(map[string]any)
+		if !ok {
+			return nil, "cards move", errnorm.Usage("invalid_request", "JSON body for `oar cards move` must be an object")
+		}
+		if err := finalizeOptionalMutationBodyActorID(body, cfg); err != nil {
 			return nil, "cards move", err
 		}
 		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "cards move", "cards.move", "card_id", id, cardIDLookupSpec, nil, body)
@@ -172,11 +196,21 @@ func (a *App) runCardsCommand(ctx context.Context, args []string, cfg config.Res
 		if err != nil {
 			return nil, "cards archive", err
 		}
+		if err := finalizeOptionalMutationBodyActorID(body, cfg); err != nil {
+			return nil, "cards archive", err
+		}
 		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "cards archive", "cards.archive", "card_id", id, cardIDLookupSpec, nil, body)
 		return result, "cards archive", callErr
 	case "trash":
-		id, body, err := a.parseIDAndBodyInput(args[1:], "card-id", "card id", "cards trash")
+		id, bodyAny, err := a.parseIDAndBodyInput(args[1:], "card-id", "card id", "cards trash")
 		if err != nil {
+			return nil, "cards trash", err
+		}
+		body, ok := bodyAny.(map[string]any)
+		if !ok {
+			return nil, "cards trash", errnorm.Usage("invalid_request", "JSON body for `oar cards trash` must be an object")
+		}
+		if err := finalizeOptionalMutationBodyActorID(body, cfg); err != nil {
 			return nil, "cards trash", err
 		}
 		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "cards trash", "cards.trash", "card_id", id, cardIDLookupSpec, nil, body)
@@ -186,11 +220,17 @@ func (a *App) runCardsCommand(ctx context.Context, args []string, cfg config.Res
 		if err != nil {
 			return nil, "cards restore", err
 		}
+		if err := finalizeOptionalMutationBodyActorID(body, cfg); err != nil {
+			return nil, "cards restore", err
+		}
 		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "cards restore", "cards.restore", "card_id", id, cardIDLookupSpec, nil, body)
 		return result, "cards restore", callErr
 	case "purge":
 		id, body, err := a.parseCardIDAndOptionalJSONBody(args[1:], "cards purge")
 		if err != nil {
+			return nil, "cards purge", err
+		}
+		if err := finalizeOptionalMutationBodyActorID(body, cfg); err != nil {
 			return nil, "cards purge", err
 		}
 		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "cards purge", "cards.purge", "card_id", id, cardIDLookupSpec, nil, body)
@@ -371,6 +411,43 @@ func (a *App) normalizeMutationCommandBodyLegacy(ctx context.Context, cfg config
 				return err
 			}
 			return a.normalizeBoardMutationCardAnchorField(ctx, cfg, resolvedBoard, cardNest, "after_card_id")
+		}
+		return nil
+	case "boards.cards.batch_add":
+		if pathParams == nil {
+			return nil
+		}
+		rawBoardID := strings.TrimSpace(pathParams["board_id"])
+		if rawBoardID == "" {
+			return nil
+		}
+		resolvedBoard, err := a.resolveMaybeBoardID(ctx, cfg, rawBoardID)
+		if err != nil {
+			return err
+		}
+		rawItems, ok := body["items"].([]any)
+		if !ok {
+			return nil
+		}
+		for _, el := range rawItems {
+			item, ok := el.(map[string]any)
+			if !ok {
+				continue
+			}
+			if err := a.normalizeBoardMutationCardAnchorField(ctx, cfg, resolvedBoard, item, "before_card_id"); err != nil {
+				return err
+			}
+			if err := a.normalizeBoardMutationCardAnchorField(ctx, cfg, resolvedBoard, item, "after_card_id"); err != nil {
+				return err
+			}
+			if cardNest, ok := item["card"].(map[string]any); ok && cardNest != nil {
+				if err := a.normalizeBoardMutationCardAnchorField(ctx, cfg, resolvedBoard, cardNest, "before_card_id"); err != nil {
+					return err
+				}
+				if err := a.normalizeBoardMutationCardAnchorField(ctx, cfg, resolvedBoard, cardNest, "after_card_id"); err != nil {
+					return err
+				}
+			}
 		}
 		return nil
 	case "docs.create", "docs.update", "docs.revisions.create":

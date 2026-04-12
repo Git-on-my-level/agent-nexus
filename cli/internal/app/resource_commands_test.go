@@ -4061,6 +4061,93 @@ func TestInboxAckActorIDMeRequiresProfileActorID(t *testing.T) {
 	}
 }
 
+func TestBoardCardsCreateBatchActorIDFromProfileAndFlagOverrides(t *testing.T) {
+	t.Parallel()
+
+	const boardID = "board_batch_test_123"
+	const profileActor = "actor_batch_profile"
+	const flagActor = "actor_batch_flag"
+
+	t.Run("profile_defaults_actor_id", func(t *testing.T) {
+		t.Parallel()
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost || r.URL.Path != "/boards/"+boardID+"/cards/batch" {
+				http.NotFound(w, r)
+				return
+			}
+			body, _ := io.ReadAll(r.Body)
+			var payload map[string]any
+			if err := json.Unmarshal(body, &payload); err != nil {
+				t.Fatalf("decode batch body: %v", err)
+			}
+			if got := strings.TrimSpace(anyStringValue(payload["actor_id"])); got != profileActor {
+				t.Fatalf("expected actor_id %q, got %q body=%s", profileActor, got, string(body))
+			}
+			items, _ := payload["items"].([]any)
+			if len(items) != 1 {
+				t.Fatalf("expected 1 item, got %#v", payload)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"board":{"id":"` + boardID + `"},"cards":[]}`))
+		}))
+		defer server.Close()
+
+		home := t.TempDir()
+		writeAgentProfile(t, home, "agent-b", `{"agent":"agent-b","actor_id":"`+profileActor+`","access_token":"t","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+
+		stdin := strings.NewReader(`{"items":[{"title":"A"}]}`)
+		raw := runCLIForTest(t, home, map[string]string{}, stdin, []string{
+			"--json", "--base-url", server.URL, "--agent", "agent-b",
+			"boards", "cards", "create-batch", "--board-id", boardID,
+		})
+		assertEnvelopeOK(t, raw)
+	})
+
+	t.Run("flags_override_json_envelope", func(t *testing.T) {
+		t.Parallel()
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost || r.URL.Path != "/boards/"+boardID+"/cards/batch" {
+				http.NotFound(w, r)
+				return
+			}
+			body, _ := io.ReadAll(r.Body)
+			var payload map[string]any
+			if err := json.Unmarshal(body, &payload); err != nil {
+				t.Fatalf("decode batch body: %v", err)
+			}
+			if got := strings.TrimSpace(anyStringValue(payload["actor_id"])); got != flagActor {
+				t.Fatalf("expected actor_id %q, got %q body=%s", flagActor, got, string(body))
+			}
+			if got := strings.TrimSpace(anyStringValue(payload["request_key"])); got != "req_cli" {
+				t.Fatalf("expected request_key req_cli, got %q body=%s", got, string(body))
+			}
+			if got := strings.TrimSpace(anyStringValue(payload["if_board_updated_at"])); got != "2026-04-12T00:00:00Z" {
+				t.Fatalf("expected if_board_updated_at, got %q body=%s", got, string(body))
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"board":{"id":"` + boardID + `"},"cards":[]}`))
+		}))
+		defer server.Close()
+
+		home := t.TempDir()
+		writeAgentProfile(t, home, "agent-b", `{"agent":"agent-b","actor_id":"`+profileActor+`","access_token":"t","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+
+		stdin := strings.NewReader(`{"items":[{"title":"A"}],"actor_id":"actor_from_json","request_key":"req_json","if_board_updated_at":"1999-01-01T00:00:00Z"}`)
+		raw := runCLIForTest(t, home, map[string]string{}, stdin, []string{
+			"--json", "--base-url", server.URL, "--agent", "agent-b",
+			"boards", "cards", "create-batch", "--board-id", boardID,
+			"--actor-id", flagActor,
+			"--request-key", "req_cli",
+			"--if-board-updated-at", "2026-04-12T00:00:00Z",
+		})
+		assertEnvelopeOK(t, raw)
+	})
+}
+
 func TestArtifactContentRaw(t *testing.T) {
 	t.Parallel()
 

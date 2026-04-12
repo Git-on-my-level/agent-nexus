@@ -148,7 +148,7 @@ var artifactsSubcommandSpec = subcommandSpec{
 var boardsSubcommandSpec = subcommandSpec{
 	command:  "boards",
 	valid:    []string{"list", "create", "get", "update", "workspace", "archive", "unarchive", "trash", "restore", "purge", "cards"},
-	examples: []string{"oar boards list --status active", "oar boards workspace --board-id <board-id>", "oar boards cards create --board-id <board-id> --title \"Buy groceries\" --column backlog"},
+	examples: []string{"oar boards list --status active", "oar boards workspace --board-id <board-id>", "oar boards get --board-id <board-id> --json", "oar boards cards create --board-id <board-id> --title \"Buy groceries\" --column backlog"},
 	aliases: map[string]string{
 		"ls":   "list",
 		"show": "get",
@@ -157,11 +157,12 @@ var boardsSubcommandSpec = subcommandSpec{
 
 var boardsCardsSubcommandSpec = subcommandSpec{
 	command:  "boards cards",
-	valid:    []string{"list", "create", "get", "update", "move", "archive"},
-	examples: []string{"oar boards cards list --board-id <board-id>", "oar boards cards create --board-id <board-id> --title \"Buy groceries\" --column backlog", "oar boards cards update --card-id <card-id> --if-updated-at <card-updated-at> --status done"},
+	valid:    []string{"list", "create", "create-batch", "get", "update", "move", "archive"},
+	examples: []string{"oar boards cards list --board-id <board-id>", "oar boards cards create --board-id <board-id> --title \"Buy groceries\" --column backlog", "oar boards get --board-id <board-id> --json   # copy board.updated_at for the next command", "oar boards cards create-batch --board-id <board-id> --from-file batch.json", "oar boards cards create-batch <board-id> --from-file batch.json --request-key my-run-1 --if-board-updated-at \"<board-updated-at>\"", "oar boards cards update --card-id <card-id> --if-updated-at <card-updated-at> --status done"},
 	aliases: map[string]string{
 		"ls":     "list",
 		"add":    "create",
+		"batch":  "create-batch",
 		"remove": "archive",
 		"show":   "get",
 	},

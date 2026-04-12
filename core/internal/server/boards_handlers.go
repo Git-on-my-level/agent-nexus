@@ -14,6 +14,8 @@ import (
 	"organization-autorunner-core/internal/schema"
 )
 
+const boardCardsBatchMaxItems = 100
+
 func handleListBoards(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
@@ -626,6 +628,130 @@ func addBoardCardFromRaw(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		return
 	}
 	writeJSON(w, status, normalizeBoardCardMutationReplayPayload(payload))
+}
+
+func handleBatchAddBoardCards(w http.ResponseWriter, r *http.Request, opts handlerOptions, boardID string) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	var raw map[string]any
+	if !decodeJSONBody(w, r, &raw) {
+		return
+	}
+	rawItems, has := raw["items"]
+	if !has {
+		writeError(w, http.StatusBadRequest, "invalid_request", "items is required")
+		return
+	}
+	list, ok := rawItems.([]any)
+	if !ok || len(list) == 0 {
+		writeError(w, http.StatusBadRequest, "invalid_request", "items must be a non-empty array")
+		return
+	}
+	if len(list) > boardCardsBatchMaxItems {
+		writeError(w, http.StatusBadRequest, "invalid_request", fmt.Sprintf("items exceeds maximum batch size of %d", boardCardsBatchMaxItems))
+		return
+	}
+
+	actorIDField := strings.TrimSpace(anyString(raw["actor_id"]))
+	batchRequestKey := strings.TrimSpace(anyString(raw["request_key"]))
+	var ifBoardTok *string
+	if rawIf, ok := raw["if_board_updated_at"]; ok && rawIf != nil {
+		s := strings.TrimSpace(anyString(rawIf))
+		if s != "" {
+			if _, err := time.Parse(time.RFC3339, s); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_request", "if_board_updated_at must be an RFC3339 datetime string")
+				return
+			}
+			ifBoardTok = &s
+		}
+	}
+
+	actorID, ok := resolveWriteActorID(w, r, opts, actorIDField)
+	if !ok {
+		return
+	}
+
+	replayStatus, replayPayload, replayed, err := readIdempotencyReplay(r.Context(), opts.primitiveStore, "boards.cards.batch_add", actorID, batchRequestKey, raw)
+	if writeIdempotencyError(w, err) {
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load idempotency replay")
+		return
+	}
+	if replayed {
+		writeJSON(w, replayStatus, normalizeBatchBoardCardCreatePayload(replayPayload))
+		return
+	}
+
+	inputs := make([]primitives.AddBoardCardInput, 0, len(list))
+	for i, elem := range list {
+		itemMap, ok := elem.(map[string]any)
+		if !ok {
+			writeError(w, http.StatusBadRequest, "invalid_request", fmt.Sprintf("items[%d] must be an object", i))
+			return
+		}
+		m, err := mergeAddBoardCardRaw(itemMap)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", fmt.Sprintf("items[%d]: %s", i, err.Error()))
+			return
+		}
+		if strings.TrimSpace(batchRequestKey) != "" && strings.TrimSpace(m.CardID) == "" {
+			m.CardID = deriveRequestScopedID("boards.cards.batch_create", actorID, fmt.Sprintf("%s#%d", batchRequestKey, i), "card")
+		}
+		createStatus := "todo"
+		if strings.TrimSpace(m.ColumnKey) == "done" {
+			createStatus = "done"
+		}
+		in := addBoardCardStoreInput(m, createStatus)
+		in.IfBoardUpdatedAt = nil
+		inputs = append(inputs, in)
+	}
+
+	results, err := opts.primitiveStore.CreateBoardCardsBatch(r.Context(), actorID, boardID, ifBoardTok, inputs)
+	if err != nil {
+		switch {
+		case errors.Is(err, primitives.ErrInvalidBoardRequest):
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		case errors.Is(err, primitives.ErrNotFound):
+			writeError(w, http.StatusNotFound, "not_found", "board, thread, or document not found")
+		case errors.Is(err, primitives.ErrConflict):
+			writeError(w, http.StatusConflict, "conflict", "board membership already exists or board has changed; refresh and retry")
+		default:
+			message := "failed to create board cards batch"
+			if opts.allowUnauthenticatedWrites {
+				message = fmt.Sprintf("%s: %v", message, err)
+			}
+			writeError(w, http.StatusInternalServerError, "internal_error", message)
+		}
+		return
+	}
+
+	for _, res := range results {
+		emitCardLifecycleEventBestEffort(r.Context(), opts, actorID, buildCardCreatedEvent(res.Board, res.Card))
+		emitBoardLifecycleEventBestEffort(r.Context(), opts, actorID, buildBoardCardAddedEvent(res.Board, res.Card))
+	}
+
+	finalBoard := results[len(results)-1].Board
+	cardPayloads := make([]map[string]any, len(results))
+	for i := range results {
+		cardPayloads[i] = results[i].Card
+	}
+	response := map[string]any{
+		"board": finalBoard,
+		"cards": cardPayloads,
+	}
+	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "boards.cards.batch_add", actorID, batchRequestKey, raw, http.StatusCreated, response)
+	if writeIdempotencyError(w, err) {
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to persist idempotency replay")
+		return
+	}
+	writeJSON(w, status, normalizeBatchBoardCardCreatePayload(payload))
 }
 
 func handleUpdateBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, boardID, cardKey string) {

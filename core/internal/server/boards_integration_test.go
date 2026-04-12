@@ -1605,6 +1605,76 @@ func TestCardMoveResolutionTransitionsAndEvents(t *testing.T) {
 	}
 }
 
+func TestBoardBatchCreateCardsOneConcurrencyToken(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	threadA := createBoardThreadViaHTTP(t, h, "Batch thread A")
+	threadB := createBoardThreadViaHTTP(t, h, "Batch thread B")
+	threadC := createBoardThreadViaHTTP(t, h, "Batch thread C")
+	primaryThreadID := createBoardThreadViaHTTP(t, h, "Batch primary")
+
+	createBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
+		"actor_id":"actor-1",
+		"board":{
+			"title":"Batch Board",
+			"refs":["thread:`+primaryThreadID+`"]
+		}
+	}`, http.StatusCreated)
+	defer createBoardResp.Body.Close()
+
+	var createBoardPayload struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(createBoardResp.Body).Decode(&createBoardPayload); err != nil {
+		t.Fatalf("decode create board response: %v", err)
+	}
+	boardID := asString(createBoardPayload.Board["id"])
+	if boardID == "" {
+		t.Fatal("expected created board id")
+	}
+	boardTok := asString(createBoardPayload.Board["updated_at"])
+
+	batchBody := `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"` + boardTok + `",
+		"items":[
+			{"title":"Card A","related_refs":["thread:` + threadA + `"],"column_key":"ready"},
+			{"title":"Card B","related_refs":["thread:` + threadB + `"],"column_key":"ready"},
+			{"title":"Card C","related_refs":["thread:` + threadC + `"],"column_key":"ready"}
+		]
+	}`
+	batchResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards/batch", batchBody, http.StatusCreated)
+	defer batchResp.Body.Close()
+
+	var batchOut struct {
+		Board map[string]any   `json:"board"`
+		Cards []map[string]any `json:"cards"`
+	}
+	if err := json.NewDecoder(batchResp.Body).Decode(&batchOut); err != nil {
+		t.Fatalf("decode batch response: %v", err)
+	}
+	if len(batchOut.Cards) != 3 {
+		t.Fatalf("expected 3 cards, got %d", len(batchOut.Cards))
+	}
+	for i, title := range []string{"Card A", "Card B", "Card C"} {
+		if asString(batchOut.Cards[i]["title"]) != title {
+			t.Fatalf("item %d title: got %v want %q", i, batchOut.Cards[i]["title"], title)
+		}
+	}
+
+	staleResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+boardTok+`",
+		"title":"Stale after batch",
+		"related_refs":["thread:`+threadA+`"],
+		"column_key":"ready"
+	}`, http.StatusConflict)
+	defer staleResp.Body.Close()
+}
+
 func createBoardThreadViaHTTP(t *testing.T, h primitivesTestHarness, title string) string {
 	t.Helper()
 	return integrationSeedThread(t, h, "actor-1", map[string]any{

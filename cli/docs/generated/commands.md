@@ -4,7 +4,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.3.0`
-- Commands: `110`
+- Commands: `111`
 
 ## `actors.create`
 
@@ -412,6 +412,18 @@ Generated from `contracts/oar-openapi.yaml`.
 - Concepts: `boards`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ board }`.
+
+## `boards.cards.batch_add`
+
+- CLI path: `boards cards create-batch`
+- HTTP: `POST /boards/{board_id}/cards/batch`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Create multiple cards in one transaction using a single board concurrency token.
+- Concepts: `boards`, `cards`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Output: Returns `{ board, cards }`.
 
 ## `boards.cards.create`
 

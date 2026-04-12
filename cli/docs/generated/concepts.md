@@ -74,9 +74,10 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `boards`
 
-- Commands: `15`
+- Commands: `16`
 - Command IDs:
   - `boards.archive`
+  - `boards.cards.batch_add`
   - `boards.cards.create`
   - `boards.cards.get`
   - `boards.cards.list`
@@ -94,8 +95,9 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `cards`
 
-- Commands: `13`
+- Commands: `14`
 - Command IDs:
+  - `boards.cards.batch_add`
   - `boards.cards.create`
   - `boards.cards.get`
   - `boards.cards.list`
@@ -308,7 +310,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `write`
 
-- Commands: `42`
+- Commands: `43`
 - Command IDs:
   - `agent.notifications.dismiss`
   - `agent.notifications.read`
@@ -319,6 +321,7 @@ Generated from `contracts/oar-openapi.yaml`.
   - `artifacts.trash`
   - `artifacts.unarchive`
   - `boards.archive`
+  - `boards.cards.batch_add`
   - `boards.cards.create`
   - `boards.create`
   - `boards.patch`

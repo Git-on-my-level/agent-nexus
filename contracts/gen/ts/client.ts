@@ -1460,6 +1460,7 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "adjacent_commands": [
       "boards.cards.create",
+      "boards.cards.batch_add",
       "boards.cards.get",
       "boards.cards.list",
       "boards.create",
@@ -1474,6 +1475,77 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "go_method": "BoardsArchive",
     "ts_method": "boardsArchive"
+  },
+  {
+    "command_id": "boards.cards.batch_add",
+    "cli_path": "boards cards create-batch",
+    "group": "boards",
+    "method": "POST",
+    "path": "/boards/{board_id}/cards/batch",
+    "operation_id": "batchCreateBoardCards",
+    "summary": "Batch create cards on board",
+    "why": "Create multiple cards in one transaction using a single board concurrency token.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ board, cards }`.",
+    "error_codes": [
+      "auth_required",
+      "invalid_request",
+      "invalid_token",
+      "not_found",
+      "conflict"
+    ],
+    "concepts": [
+      "boards",
+      "cards",
+      "write"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "body_schema": {
+      "required": [
+        {
+          "name": "items",
+          "type": "list\u003cany\u003e"
+        }
+      ],
+      "optional": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        },
+        {
+          "name": "if_board_updated_at",
+          "type": "datetime"
+        },
+        {
+          "name": "request_key",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "board_id"
+    ],
+    "adjacent_commands": [
+      "boards.archive",
+      "boards.cards.create",
+      "boards.cards.get",
+      "boards.cards.list",
+      "boards.create",
+      "boards.get",
+      "boards.list",
+      "boards.patch",
+      "boards.purge",
+      "boards.restore",
+      "boards.trash",
+      "boards.unarchive",
+      "boards.workspace"
+    ],
+    "go_method": "BoardsCardsBatchAdd",
+    "ts_method": "boardsCardsBatchAdd"
   },
   {
     "command_id": "boards.cards.create",
@@ -1616,6 +1688,7 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "adjacent_commands": [
       "boards.archive",
+      "boards.cards.batch_add",
       "boards.cards.get",
       "boards.cards.list",
       "boards.create",
@@ -1663,6 +1736,7 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "boards.archive",
       "boards.cards.create",
+      "boards.cards.batch_add",
       "boards.cards.list",
       "boards.create",
       "boards.get",
@@ -1708,6 +1782,7 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "boards.archive",
       "boards.cards.create",
+      "boards.cards.batch_add",
       "boards.cards.get",
       "boards.create",
       "boards.get",
@@ -1793,6 +1868,7 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "boards.archive",
       "boards.cards.create",
+      "boards.cards.batch_add",
       "boards.cards.get",
       "boards.cards.list",
       "boards.get",
@@ -1837,6 +1913,7 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "boards.archive",
       "boards.cards.create",
+      "boards.cards.batch_add",
       "boards.cards.get",
       "boards.cards.list",
       "boards.create",
@@ -1877,6 +1954,7 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "boards.archive",
       "boards.cards.create",
+      "boards.cards.batch_add",
       "boards.cards.get",
       "boards.cards.list",
       "boards.create",
@@ -1970,6 +2048,7 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "boards.archive",
       "boards.cards.create",
+      "boards.cards.batch_add",
       "boards.cards.get",
       "boards.cards.list",
       "boards.create",
@@ -2025,6 +2104,7 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "boards.archive",
       "boards.cards.create",
+      "boards.cards.batch_add",
       "boards.cards.get",
       "boards.cards.list",
       "boards.create",
@@ -2080,6 +2160,7 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "boards.archive",
       "boards.cards.create",
+      "boards.cards.batch_add",
       "boards.cards.get",
       "boards.cards.list",
       "boards.create",
@@ -2141,6 +2222,7 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "boards.archive",
       "boards.cards.create",
+      "boards.cards.batch_add",
       "boards.cards.get",
       "boards.cards.list",
       "boards.create",
@@ -2196,6 +2278,7 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "boards.archive",
       "boards.cards.create",
+      "boards.cards.batch_add",
       "boards.cards.get",
       "boards.cards.list",
       "boards.create",
@@ -2241,6 +2324,7 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "boards.archive",
       "boards.cards.create",
+      "boards.cards.batch_add",
       "boards.cards.get",
       "boards.cards.list",
       "boards.create",
@@ -5802,6 +5886,10 @@ export class OarClient {
 
   boardsArchive(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("boards.archive", pathParams, options);
+  }
+
+  boardsCardsBatchAdd(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("boards.cards.batch_add", pathParams, options);
   }
 
   boardsCardsCreate(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
