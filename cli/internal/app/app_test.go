@@ -45,7 +45,9 @@ func TestRunVersionJSON(t *testing.T) {
 }
 
 func TestRunVersionUsesProfileJSONDefault(t *testing.T) {
-	t.Parallel()
+	// Not parallel: clears process env so inherited OAR_BASE_URL does not override profile.
+	t.Setenv("OAR_BASE_URL", "")
+	t.Setenv("OAR_AGENT", "")
 
 	home := t.TempDir()
 	profilesDir := filepath.Join(home, ".config", "oar", "profiles")

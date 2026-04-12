@@ -188,6 +188,9 @@ func (a *App) renderError(identity machineCommandIdentity, jsonMode bool, err er
 		_ = output.WriteEnvelopeJSON(a.Stdout, envelope)
 	} else {
 		_, _ = io.WriteString(a.Stderr, fmt.Sprintf("Error (%s): %s\n", normalized.Code, normalized.Message))
+		if strings.TrimSpace(normalized.Hint) != "" {
+			_, _ = io.WriteString(a.Stderr, "Hint: "+strings.TrimSpace(normalized.Hint)+"\n")
+		}
 	}
 	return errnorm.ExitCode(err)
 }

@@ -103,6 +103,7 @@ func Normalize(err error) *Error {
 			typed.Message = typed.Error()
 		}
 		applyErrorMetadata(typed)
+		enrichLocalInvalidRequest(typed)
 		return typed
 	}
 	normalized := &Error{
@@ -155,6 +156,7 @@ func FromHTTPFailure(status int, body []byte) *Error {
 		out.Hint = strings.TrimSpace(rawHint)
 	}
 	applyErrorMetadata(out)
+	enrichRemoteError(out, status)
 	return out
 }
 
