@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -555,12 +556,17 @@ func (a *App) runAuthRegister(ctx context.Context, service *authcli.Service, arg
 		return nil, err
 	}
 	cfg := service.Config()
+	agentName := strings.TrimSpace(registered.Profile.Agent)
+	activeProfileHint := "Active profile (optional, persistent home): oar config use " + agentName
+	activeProfileHint += " (same as: oar auth default " + agentName + ")."
+	activeProfileHint += " Later commands can omit repeated --base-url / --agent; use oar config show to inspect effective settings."
 	text := strings.Join([]string{
 		"Registered agent profile successfully.",
 		"Agent: " + registered.Profile.Agent,
 		"Agent ID: " + registered.Profile.AgentID,
 		"Username: " + registered.Profile.Username,
 		"Profile path: " + cfg.ProfilePath,
+		activeProfileHint,
 		authWakeRoutingHint(registered.Profile.Username),
 	}, "\n")
 	data := map[string]any{
@@ -568,6 +574,8 @@ func (a *App) runAuthRegister(ctx context.Context, service *authcli.Service, arg
 		"registered":   registered.Agent,
 		"active_key":   registered.Key,
 		"profile_path": cfg.ProfilePath,
+		"hint_config_use": fmt.Sprintf("oar config use %s", agentName),
+		"hint_auth_default": fmt.Sprintf("oar auth default %s", agentName),
 	}
 	return &commandResult{Text: text, Data: data}, nil
 }
@@ -741,14 +749,15 @@ func (a *App) runAuthDefault(args []string) (*commandResult, error) {
 	if err != nil {
 		return nil, errnorm.Wrap(errnorm.KindLocal, "home_dir", "failed to determine home directory", err)
 	}
-	profilePath := profile.ProfilePath(homeDir, agentName)
-	if _, ok, err := profile.Load(profilePath); err != nil {
+	profilePath, err := profile.SetActiveAgent(homeDir, agentName)
+	if err != nil {
+		if errors.Is(err, profile.ErrProfileNotFound) {
+			return nil, errnorm.Local("profile_not_found", "profile not found; run `oar auth list` to inspect available profiles")
+		}
+		if errors.Is(err, profile.ErrPersistDefaultMarker) {
+			return nil, errnorm.Wrap(errnorm.KindLocal, "default_profile_persist_failed", "failed to persist default profile selection", err)
+		}
 		return nil, errnorm.Wrap(errnorm.KindLocal, "profile_read_failed", "failed to read profile", err)
-	} else if !ok {
-		return nil, errnorm.Local("profile_not_found", "profile not found; run `oar auth list` to inspect available profiles")
-	}
-	if err := profile.SaveDefaultAgent(homeDir, agentName); err != nil {
-		return nil, errnorm.Wrap(errnorm.KindLocal, "default_profile_persist_failed", "failed to persist default profile selection", err)
 	}
 	return &commandResult{
 		Text: "Default profile: " + agentName,

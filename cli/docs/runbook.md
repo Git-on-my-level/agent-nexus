@@ -24,6 +24,8 @@ go run ./cmd/oar --json --base-url http://127.0.0.1:8000 --agent local auth regi
 go run ./cmd/oar --agent local version
 ```
 
+**Active profile (recommended for interactive use):** after you have at least one profile under `~/.config/oar/profiles/`, run `oar config use <name>` (or `oar auth default <name>`) once. The CLI stores the choice in `~/.config/oar/default-profile` and loads `base_url` and credentials from `~/.config/oar/profiles/<name>.json`, so later commands can omit `--base-url` and `--agent`. Inspect merged settings with `oar config show` (tokens are redacted). Clear the marker with `oar config unset` if you want to rely on single-profile auto-select or explicit flags/env only.
+
 Global config precedence:
 
 1. command-line flags
@@ -33,7 +35,7 @@ Global config precedence:
 
 **Default base URL:** when no `OAR_BASE_URL`, no `--base-url`, and the profile does not override it, the CLI uses `http://127.0.0.1:8000`. That makes local reads easy to try but is portable to **only** matching cores; automation should always pass `--base-url` / `OAR_BASE_URL` explicitly.
 
-**Multiple profiles:** with more than one `~/.config/oar/profiles/*.json` and no explicit `--agent` / `OAR_AGENT` / `oar auth default`, config resolution fails until you name a profile.
+**Multiple profiles:** with more than one `~/.config/oar/profiles/*.json` and no explicit `--agent` / `OAR_AGENT` / `oar config use` / `oar auth default`, config resolution fails until you name a profile.
 
 Supported env vars:
 

@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -117,6 +118,41 @@ func LoadDefaultAgent(homeDir string) (string, bool, error) {
 		return "", false, nil
 	}
 	return agent, true, nil
+}
+
+// ErrProfileNotFound means no profile JSON exists for the requested agent name.
+var ErrProfileNotFound = errors.New("profile not found")
+
+// ErrPersistDefaultMarker wraps failures writing ~/.config/oar/default-profile.
+var ErrPersistDefaultMarker = errors.New("persist default profile marker")
+
+// SetActiveAgent writes the default profile marker after verifying the profile file exists.
+func SetActiveAgent(homeDir, agentName string) (profilePath string, err error) {
+	agentName = strings.TrimSpace(agentName)
+	if agentName == "" {
+		return "", fmt.Errorf("agent name is required")
+	}
+	profilePath = ProfilePath(homeDir, agentName)
+	_, ok, err := Load(profilePath)
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		return "", ErrProfileNotFound
+	}
+	if err := SaveDefaultAgent(homeDir, agentName); err != nil {
+		return "", fmt.Errorf("%w: %w", ErrPersistDefaultMarker, err)
+	}
+	return profilePath, nil
+}
+
+// ClearDefaultAgent removes the persisted default profile marker, if present.
+func ClearDefaultAgent(homeDir string) error {
+	path := DefaultAgentPath(homeDir)
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove default profile marker: %w", err)
+	}
+	return nil
 }
 
 func Save(path string, profile Profile) error {

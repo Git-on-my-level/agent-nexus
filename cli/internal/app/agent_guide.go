@@ -81,9 +81,9 @@ func agentGuideSections() []guideSection {
 		{
 			Title: "Configuration",
 			Lines: []string{
-				"- Set the target core with `--base-url` or `OAR_BASE_URL`.",
-				"- Reuse identity/config with `--agent` or `OAR_AGENT`.",
-				"- Use env vars in scripts so command bodies stay portable and short.",
+				"- On a durable workstation, set the active profile once with `oar config use <profile>` (equivalent to `oar auth default <profile>`). Later commands can omit repeated `--base-url` / `--agent`; inspect merged settings with `oar config show` (tokens redacted).",
+				"- Override per command with `--base-url` or `OAR_BASE_URL` and `--agent` or `OAR_AGENT` when needed.",
+				"- Prefer `OAR_BASE_URL` and `OAR_AGENT` in scripts, CI, or environments without a persistent `~/.config/oar`.",
 				"- If available, run `oar doctor` when config or connectivity is unclear.",
 				"- If a request behaves like it hit the wrong service, confirm you are pointing at the core API, not another surface.",
 				"",

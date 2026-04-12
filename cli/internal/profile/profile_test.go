@@ -2,6 +2,7 @@ package profile
 
 import (
 	"crypto/ed25519"
+	"errors"
 	"path/filepath"
 	"testing"
 )
@@ -96,5 +97,45 @@ func TestSaveLoadDefaultAgent(t *testing.T) {
 	}
 	if agent != "agent-two" {
 		t.Fatalf("unexpected default agent: %q", agent)
+	}
+}
+
+func TestSetActiveAgentAndClearDefaultAgent(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	if err := EnsureDirs(home); err != nil {
+		t.Fatalf("ensure dirs: %v", err)
+	}
+	if err := Save(ProfilePath(home, "p1"), Profile{Agent: "p1", BaseURL: "http://127.0.0.1:8000"}); err != nil {
+		t.Fatalf("save profile: %v", err)
+	}
+
+	path, err := SetActiveAgent(home, "p1")
+	if err != nil {
+		t.Fatalf("SetActiveAgent: %v", err)
+	}
+	if path != ProfilePath(home, "p1") {
+		t.Fatalf("unexpected profile path: %s", path)
+	}
+	agent, ok, err := LoadDefaultAgent(home)
+	if err != nil || !ok || agent != "p1" {
+		t.Fatalf("expected default p1, ok=%t agent=%q err=%v", ok, agent, err)
+	}
+
+	if err := ClearDefaultAgent(home); err != nil {
+		t.Fatalf("ClearDefaultAgent: %v", err)
+	}
+	_, ok, err = LoadDefaultAgent(home)
+	if err != nil {
+		t.Fatalf("LoadDefaultAgent: %v", err)
+	}
+	if ok {
+		t.Fatal("expected no default profile after clear")
+	}
+
+	_, err = SetActiveAgent(home, "missing")
+	if !errors.Is(err, ErrProfileNotFound) {
+		t.Fatalf("expected ErrProfileNotFound, got %v", err)
 	}
 }

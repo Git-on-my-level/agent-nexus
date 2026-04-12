@@ -48,6 +48,9 @@ func (a *App) runCommand(ctx context.Context, args []string, cfg config.Resolved
 	case "auth":
 		result, name, err := a.runAuth(ctx, args[1:], cfg)
 		return name, result, err
+	case "config":
+		result, name, err := a.runConfig(ctx, args[1:], cfg)
+		return name, result, err
 	case "meta":
 		result, name, err := a.runMeta(ctx, args[1:], cfg)
 		return name, result, err

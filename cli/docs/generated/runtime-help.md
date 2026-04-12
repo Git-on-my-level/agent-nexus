@@ -14,6 +14,9 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 - `auth whoami` (manual): Validate the active profile, print resolved identity metadata, and point agents at wake-registration next steps.
 - `auth list` (manual): List local CLI profiles and the active profile.
 - `auth default` (manual): Persist the default CLI profile used when no explicit agent is selected.
+- `config use` (manual): Set the active CLI profile used when --agent and OAR_AGENT are omitted.
+- `config show` (manual): Print effective CLI settings and per-field sources (tokens redacted).
+- `config unset` (manual): Clear the persisted default profile marker (~/.config/oar/default-profile).
 - `auth update-username` (manual): Rename the authenticated agent and sync the local profile.
 - `auth rotate` (manual): Rotate the active agent key and refresh stored credentials.
 - `auth revoke` (manual): Revoke the active agent and mark the local profile revoked. Use explicit human-lockout flags only for break-glass recovery.
@@ -150,14 +153,15 @@ Onboarding: first steps (agents / automation)
 This CLI is for agent principals. For the full operating model, read `oar meta doc agent-guide`.
 
 1. Point the CLI at the core API with `--base-url` or `OAR_BASE_URL`.
-2. Choose a profile name and pass it with `--agent` (or `OAR_AGENT`).
+2. Choose a profile name and pass it with `--agent` (or `OAR_AGENT`) for registration and first checks below.
 3. Run `oar doctor`, then `oar auth bootstrap status` to see whether first-principal bootstrap is still open on this workspace.
 4. Register the agent profile:
    - If bootstrap is available: `oar auth register --username <username> --bootstrap-token <token>` (token comes from workspace operators / deployment).
    - If bootstrap is closed: obtain a one-time invite (`auth invites create --kind agent` from an already-authorized principal on that workspace), then `oar auth register --username <username> --invite-token <token>`.
-5. Confirm with `oar auth whoami`, run a cheap read (`topics list`), then mutate deliberately.
-6. Use `oar meta skill cursor` to export a bundled Cursor skill from the shipped guide if desired.
-7. Read `oar meta doc wake-routing` if this agent should be wakeable via thread-message `@handle` mentions.
+5. On a machine where `~/.config` persists, set the active profile once: `oar config use <agent>` (same as `oar auth default <agent>`). Later commands can omit `--base-url` / `--agent`; use `oar config show` to verify. For CI or ephemeral environments, keep using env vars or flags instead.
+6. Confirm with `oar auth whoami`, run a cheap read (`topics list`), then mutate deliberately.
+7. Use `oar meta skill cursor` to export a bundled Cursor skill from the shipped guide if desired.
+8. Read `oar meta doc wake-routing` if this agent should be wakeable via thread-message `@handle` mentions.
 
 First commands to run
 
@@ -165,6 +169,7 @@ First commands to run
   oar --base-url http://127.0.0.1:8000 --agent <agent> auth bootstrap status
   oar --base-url http://127.0.0.1:8000 --agent <agent> auth register --username <username> --bootstrap-token <token>   # only when bootstrap is open
   oar --base-url http://127.0.0.1:8000 --agent <new-agent> auth register --username <username> --invite-token <token>   # when bootstrap is closed
+  oar config use <agent>   # optional after register: shorter commands on this machine (same as: oar auth default <agent>)
   oar --agent <agent> auth whoami
   oar --agent <agent> topics list
   oar --agent <agent> inbox stream --max-events 1
@@ -314,9 +319,9 @@ For interrupt-driven work, a common loop is: `inbox` -> inspect the related `top
 
 Configuration
 
-- Set the target core with `--base-url` or `OAR_BASE_URL`.
-- Reuse identity/config with `--agent` or `OAR_AGENT`.
-- Use env vars in scripts so command bodies stay portable and short.
+- On a durable workstation, set the active profile once with `oar config use <profile>` (equivalent to `oar auth default <profile>`). Later commands can omit repeated `--base-url` / `--agent`; inspect merged settings with `oar config show` (tokens redacted).
+- Override per command with `--base-url` or `OAR_BASE_URL` and `--agent` or `OAR_AGENT` when needed.
+- Prefer `OAR_BASE_URL` and `OAR_AGENT` in scripts, CI, or environments without a persistent `~/.config/oar`.
 - If available, run `oar doctor` when config or connectivity is unclear.
 - If a request behaves like it hit the wrong service, confirm you are pointing at the core API, not another surface.
 
@@ -916,6 +921,72 @@ Examples:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: oar --json auth default ... ; oar auth default ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `config use`
+
+Set the active CLI profile used when --agent and OAR_AGENT are omitted.
+
+```text
+Local Help: config use
+
+Persist the named profile as the active default used when --agent and OAR_AGENT are omitted.
+
+Usage:
+  oar config use <profile>
+
+Examples:
+  oar config use agent-a
+  oar --json config use agent-a
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json config use ... ; oar config use ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `config show`
+
+Print effective CLI settings and per-field sources (tokens redacted).
+
+```text
+Local Help: config show
+
+Print effective CLI settings and the source of each field (access tokens are redacted).
+
+Usage:
+  oar config show
+
+Examples:
+  oar config show
+  oar --json config show
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json config show ... ; oar config show ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `config unset`
+
+Clear the persisted default profile marker (~/.config/oar/default-profile).
+
+```text
+Local Help: config unset
+
+Remove the default profile marker file so the CLI falls back to single-profile auto-select or explicit flags/env.
+
+Usage:
+  oar config unset
+
+Examples:
+  oar config unset
+  oar --json config unset
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json config unset ... ; oar config unset ... --json
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 

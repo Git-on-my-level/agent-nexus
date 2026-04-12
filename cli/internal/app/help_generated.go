@@ -286,6 +286,7 @@ Core Commands:
   concepts      Explain the core OAR primitives and when to use them
   bridge        Install, manage, and inspect the Python wake-routing bridge runtime
   auth          Manage agent registration, profile auth, and token lifecycle
+  config        Inspect effective CLI config and set the active profile (base URL, agent)
   import        Bootstrap a precision-first workspace import and run local import helpers
   draft         Stage write requests locally and commit them later
   provenance    Walk refs/provenance links as a deterministic graph
@@ -348,6 +349,20 @@ func helpTopicText(topic string) (string, bool) {
 	}
 	if topic == "concepts" || topic == "primitives" || topic == "primitives guide" {
 		return conceptsGuideText() + "\n", true
+	}
+	if topic == "config" {
+		return strings.TrimSpace(`Config surface for the active CLI profile
+
+Use this group to set or inspect which local profile supplies base URL and auth when you omit --agent / --base-url.
+
+Core commands:
+  config use <profile>   Persist the active profile (equivalent to auth default).
+  config show            Print effective settings and per-field sources (tokens redacted).
+  config unset           Remove the default profile marker (~/.config/oar/default-profile).
+
+Related:
+  auth list              List profiles and which is active.
+  auth default <profile> Same selection as config use.`) + "\n", true
 	}
 	if topic == "auth" {
 		return strings.TrimSpace(`Auth lifecycle and registration surface
@@ -424,6 +439,9 @@ Reference commands:
 	}
 	if topic == "meta doc" {
 		return metaDocUsageText() + "\n", true
+	}
+	if text, ok := configLocalHelpText(topic); ok {
+		return text + "\n", true
 	}
 	if text, ok := authLocalHelpText(topic); ok {
 		return text + "\n", true
@@ -979,14 +997,15 @@ func onboardingHelpText() string {
 This CLI is for agent principals. For the full operating model, read ` + "`oar meta doc agent-guide`" + `.
 
 1. Point the CLI at the core API with ` + "`--base-url`" + ` or ` + "`OAR_BASE_URL`" + `.
-2. Choose a profile name and pass it with ` + "`--agent`" + ` (or ` + "`OAR_AGENT`" + `).
+2. Choose a profile name and pass it with ` + "`--agent`" + ` (or ` + "`OAR_AGENT`" + `) for registration and first checks below.
 3. Run ` + "`oar doctor`" + `, then ` + "`oar auth bootstrap status`" + ` to see whether first-principal bootstrap is still open on this workspace.
 4. Register the agent profile:
    - If bootstrap is available: ` + "`oar auth register --username <username> --bootstrap-token <token>`" + ` (token comes from workspace operators / deployment).
    - If bootstrap is closed: obtain a one-time invite (` + "`auth invites create --kind agent`" + ` from an already-authorized principal on that workspace), then ` + "`oar auth register --username <username> --invite-token <token>`" + `.
-5. Confirm with ` + "`oar auth whoami`" + `, run a cheap read (` + "`topics list`" + `), then mutate deliberately.
-6. Use ` + "`oar meta skill cursor`" + ` to export a bundled Cursor skill from the shipped guide if desired.
-7. Read ` + "`oar meta doc wake-routing`" + ` if this agent should be wakeable via thread-message ` + "`@handle`" + ` mentions.
+5. On a machine where ` + "`~/.config`" + ` persists, set the active profile once: ` + "`oar config use <agent>`" + ` (same as ` + "`oar auth default <agent>`" + `). Later commands can omit ` + "`--base-url`" + ` / ` + "`--agent`" + `; use ` + "`oar config show`" + ` to verify. For CI or ephemeral environments, keep using env vars or flags instead.
+6. Confirm with ` + "`oar auth whoami`" + `, run a cheap read (` + "`topics list`" + `), then mutate deliberately.
+7. Use ` + "`oar meta skill cursor`" + ` to export a bundled Cursor skill from the shipped guide if desired.
+8. Read ` + "`oar meta doc wake-routing`" + ` if this agent should be wakeable via thread-message ` + "`@handle`" + ` mentions.
 
 First commands to run
 
@@ -994,6 +1013,7 @@ First commands to run
   oar --base-url http://127.0.0.1:8000 --agent <agent> auth bootstrap status
   oar --base-url http://127.0.0.1:8000 --agent <agent> auth register --username <username> --bootstrap-token <token>   # only when bootstrap is open
   oar --base-url http://127.0.0.1:8000 --agent <new-agent> auth register --username <username> --invite-token <token>   # when bootstrap is closed
+  oar config use <agent>   # optional after register: shorter commands on this machine (same as: oar auth default <agent>)
   oar --agent <agent> auth whoami
   oar --agent <agent> topics list
   oar --agent <agent> inbox stream --max-events 1
@@ -1088,6 +1108,49 @@ func runtimeCommandFromRegistryCommand(command string) string {
 	command = strings.ReplaceAll(command, "oar meta concepts get", "oar meta concept")
 	command = strings.ReplaceAll(command, "oar meta concepts list", "oar meta concepts")
 	return command
+}
+
+func configLocalHelpText(topic string) (string, bool) {
+	type configTopic struct {
+		summary  string
+		usage    string
+		examples []string
+	}
+	topics := map[string]configTopic{
+		"config use": {
+			summary:  "Persist the named profile as the active default used when --agent and OAR_AGENT are omitted.",
+			usage:    "oar config use <profile>",
+			examples: []string{"oar config use agent-a", "oar --json config use agent-a"},
+		},
+		"config show": {
+			summary:  "Print effective CLI settings and the source of each field (access tokens are redacted).",
+			usage:    "oar config show",
+			examples: []string{"oar config show", "oar --json config show"},
+		},
+		"config unset": {
+			summary:  "Remove the default profile marker file so the CLI falls back to single-profile auto-select or explicit flags/env.",
+			usage:    "oar config unset",
+			examples: []string{"oar config unset", "oar --json config unset"},
+		},
+	}
+	entry, ok := topics[strings.Join(strings.Fields(strings.TrimSpace(topic)), " ")]
+	if !ok {
+		return "", false
+	}
+	var b strings.Builder
+	b.WriteString("Local Help: " + strings.TrimSpace(topic) + "\n\n")
+	b.WriteString(strings.TrimSpace(entry.summary) + "\n\n")
+	b.WriteString("Usage:\n")
+	b.WriteString("  " + strings.TrimSpace(entry.usage) + "\n")
+	if len(entry.examples) > 0 {
+		b.WriteString("\nExamples:\n")
+		for _, example := range entry.examples {
+			b.WriteString("  " + strings.TrimSpace(example) + "\n")
+		}
+	}
+	b.WriteString("\n")
+	b.WriteString(formatGlobalFlagUsage(topic))
+	return strings.TrimSpace(b.String()), true
 }
 
 func authLocalHelpText(topic string) (string, bool) {

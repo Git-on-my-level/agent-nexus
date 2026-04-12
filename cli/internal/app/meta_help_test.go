@@ -724,6 +724,9 @@ func TestRunOnboardingHelpTopic(t *testing.T) {
 	if !strings.Contains(output, "1. Point the CLI at the core API") {
 		t.Fatalf("expected base-url step output=%s", output)
 	}
+	if !strings.Contains(output, "`oar config use <agent>`") {
+		t.Fatalf("expected active profile step output=%s", output)
+	}
 	if !strings.Contains(output, "Next step") || !strings.Contains(output, "oar meta doc agent-guide") || !strings.Contains(output, "oar meta doc wake-routing") {
 		t.Fatalf("expected follow-up guidance output=%s", output)
 	}

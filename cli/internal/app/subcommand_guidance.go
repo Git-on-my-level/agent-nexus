@@ -36,6 +36,17 @@ var notificationsSubcommandSpec = subcommandSpec{
 	},
 }
 
+var configSubcommandSpec = subcommandSpec{
+	command: "config",
+	valid:   []string{"use", "show", "unset"},
+	examples: []string{
+		"oar config use agent-a",
+		"oar config show",
+		"oar config show --json",
+		"oar config unset",
+	},
+}
+
 var authSubcommandSpec = subcommandSpec{
 	command: "auth",
 	valid:   []string{"register", "whoami", "list", "default", "update-username", "rotate", "revoke", "token-status", "invites", "bootstrap", "principals", "audit"},

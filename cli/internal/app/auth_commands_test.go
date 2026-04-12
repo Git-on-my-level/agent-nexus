@@ -30,7 +30,17 @@ func TestAuthRegisterLifecycleCommands(t *testing.T) {
 	env := map[string]string{}
 
 	registerOut := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "register", "--username", "Agent.One"})
-	assertEnvelopeOK(t, registerOut)
+	registerPayload := assertEnvelopeOK(t, registerOut)
+	regData, _ := registerPayload["data"].(map[string]any)
+	if regData == nil {
+		t.Fatalf("expected register data: %#v", registerPayload)
+	}
+	if got := strings.TrimSpace(anyStr(regData["hint_config_use"])); got != "oar config use agent-a" {
+		t.Fatalf("unexpected hint_config_use: %#v", regData["hint_config_use"])
+	}
+	if got := strings.TrimSpace(anyStr(regData["hint_auth_default"])); got != "oar auth default agent-a" {
+		t.Fatalf("unexpected hint_auth_default: %#v", regData["hint_auth_default"])
+	}
 
 	profilePath := filepath.Join(home, ".config", "oar", "profiles", "agent-a.json")
 	storedProfile, ok, err := profile.Load(profilePath)
@@ -174,6 +184,9 @@ func TestAuthTextOutputIncludesWakeRoutingNextSteps(t *testing.T) {
 		"auth", "register",
 		"--username", "agent.text",
 	})
+	if !strings.Contains(registerOut, "oar config use agent-text") {
+		t.Fatalf("expected active profile hint in register output=%s", registerOut)
+	}
 	if !strings.Contains(registerOut, "Wake registration help: oar help bridge; oar meta doc agent-bridge; oar meta doc wake-routing (principal: @agent.text)") {
 		t.Fatalf("expected wake registration hint in register output=%s", registerOut)
 	}
