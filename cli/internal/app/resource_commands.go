@@ -485,6 +485,9 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 		if err := fs.Parse(args[1:]); err != nil {
 			return nil, "threads list", errnorm.Usage("invalid_flags", err.Error())
 		}
+		if err := validateLifecycleFilterFlags(includeArchived, archivedOnly, includeTrashed, trashedOnly); err != nil {
+			return nil, "threads list", err
+		}
 		if len(fs.Args()) > 0 {
 			return nil, "threads list", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar threads list`")
 		}
@@ -552,6 +555,9 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 		fs.BoolVar(&trashedOnly, "trashed-only", false, "Show only trashed events")
 		if err := fs.Parse(args[1:]); err != nil {
 			return nil, "threads timeline", errnorm.Usage("invalid_flags", err.Error())
+		}
+		if err := validateLifecycleFilterFlags(includeArchived, archivedOnly, includeTrashed, trashedOnly); err != nil {
+			return nil, "threads timeline", err
 		}
 		positionals := fs.Args()
 		id := strings.TrimSpace(threadIDFlag.value)
@@ -1212,6 +1218,9 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 		if err := fs.Parse(args[1:]); err != nil {
 			return nil, "artifacts list", errnorm.Usage("invalid_flags", err.Error())
 		}
+		if err := validateLifecycleFilterFlags(includeArchived, archivedOnly, includeTrashed, trashedOnly); err != nil {
+			return nil, "artifacts list", err
+		}
 		if len(fs.Args()) > 0 {
 			return nil, "artifacts list", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar artifacts list`")
 		}
@@ -1493,6 +1502,9 @@ func (a *App) runBoardsCommand(ctx context.Context, args []string, cfg config.Re
 		fs.BoolVar(&trashedOnly, "trashed-only", false, "Show only trashed boards")
 		if err := fs.Parse(args[1:]); err != nil {
 			return nil, "boards list", errnorm.Usage("invalid_flags", err.Error())
+		}
+		if err := validateLifecycleFilterFlags(includeArchived, archivedOnly, includeTrashed, trashedOnly); err != nil {
+			return nil, "boards list", err
 		}
 		if len(fs.Args()) > 0 {
 			return nil, "boards list", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar boards list`")
@@ -1928,6 +1940,9 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 		fs.Var(&cursorFlag, "cursor", "Pagination cursor from a previous list response")
 		if err := fs.Parse(args[1:]); err != nil {
 			return nil, "docs list", errnorm.Usage("invalid_flags", err.Error())
+		}
+		if err := validateLifecycleFilterFlags(includeArchived, archivedOnly, includeTrashed, trashedOnly); err != nil {
+			return nil, "docs list", err
 		}
 		if len(fs.Args()) > 0 {
 			return nil, "docs list", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar docs list`")
@@ -2625,6 +2640,9 @@ func (a *App) runEventsListCommand(ctx context.Context, args []string, cfg confi
 	fs.BoolVar(&trashedOnly, "trashed-only", false, "Show only trashed events")
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
+	}
+	if err := validateLifecycleFilterFlags(includeArchived, archivedOnly, includeTrashed, trashedOnly); err != nil {
+		return nil, err
 	}
 
 	positionals := append([]string(nil), fs.Args()...)
@@ -5186,6 +5204,21 @@ func filterEventsByActorID(events []any, actorID string) []any {
 		filtered = append(filtered, event)
 	}
 	return filtered
+}
+
+// validateLifecycleFilterFlags rejects mutually-exclusive combinations of the
+// archived/trashed lifecycle filter flags commonly exposed on list-style
+// commands. It returns a usage-kind error when the caller mixes
+// --include-archived with --archived-only or --include-trashed with
+// --trashed-only.
+func validateLifecycleFilterFlags(includeArchived, archivedOnly, includeTrashed, trashedOnly bool) error {
+	if includeArchived && archivedOnly {
+		return errnorm.Usage("invalid_flags", "--include-archived and --archived-only are mutually exclusive")
+	}
+	if includeTrashed && trashedOnly {
+		return errnorm.Usage("invalid_flags", "--include-trashed and --trashed-only are mutually exclusive")
+	}
+	return nil
 }
 
 func filterEventsByLifecycleState(events []any, includeArchived, archivedOnly, includeTrashed, trashedOnly bool) []any {

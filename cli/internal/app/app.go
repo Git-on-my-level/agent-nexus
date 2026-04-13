@@ -83,6 +83,15 @@ func New() *App {
 	return app
 }
 
+// writeOutput writes s to w, logging a warning to stderr if the write fails.
+// To avoid infinite recursion the warning is suppressed when w is already
+// a.Stderr (or os.Stderr).
+func (a *App) writeOutput(w io.Writer, s string) {
+	if _, err := io.WriteString(w, s); err != nil && w != a.Stderr && w != os.Stderr {
+		fmt.Fprintf(os.Stderr, "warning: output write failed: %v\n", err)
+	}
+}
+
 func (a *App) Run(args []string) int {
 	overrides, remaining, helpRequested, parseErr := parseGlobalFlags(args)
 	if parseErr != nil {
@@ -95,9 +104,11 @@ func (a *App) Run(args []string) int {
 		text := a.rootUsageText()
 		if jsonMode {
 			envelope := output.Envelope{OK: true, Command: "help", Data: map[string]any{"help_text": text}}
-			_ = output.WriteEnvelopeJSON(a.Stdout, envelope)
+			if err := output.WriteEnvelopeJSON(a.Stdout, envelope); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: output write failed: %v\n", err)
+			}
 		} else {
-			_, _ = io.WriteString(a.Stdout, text)
+			a.writeOutput(a.Stdout, text)
 		}
 		return 0
 	}
@@ -138,7 +149,7 @@ func (a *App) Run(args []string) int {
 	identity := resolveMachineCommandIdentity(commandName)
 	if runErr != nil {
 		if result != nil && strings.TrimSpace(result.Text) != "" && !resolved.JSON {
-			_, _ = io.WriteString(a.Stderr, result.Text+"\n")
+			a.writeOutput(a.Stderr, result.Text+"\n")
 		}
 		return a.renderError(identity, resolved.JSON, runErr)
 	}
@@ -152,14 +163,14 @@ func (a *App) Run(args []string) int {
 			envelope.Data = flattenEnvelopeData(result.Data, resolved.Headers || resolved.Verbose)
 		}
 		if err := output.WriteEnvelopeJSON(a.Stdout, envelope); err != nil {
-			_, _ = io.WriteString(a.Stderr, "failed to write JSON envelope: "+err.Error()+"\n")
+			a.writeOutput(a.Stderr, "failed to write JSON envelope: "+err.Error()+"\n")
 			return 1
 		}
 		return 0
 	}
 
 	if result != nil && strings.TrimSpace(result.Text) != "" {
-		_, _ = io.WriteString(a.Stdout, result.Text+"\n")
+		a.writeOutput(a.Stdout, result.Text+"\n")
 	}
 	return 0
 }
@@ -185,11 +196,13 @@ func (a *App) renderError(identity machineCommandIdentity, jsonMode bool, err er
 				Details:     normalized.Details,
 			},
 		}
-		_ = output.WriteEnvelopeJSON(a.Stdout, envelope)
+		if err := output.WriteEnvelopeJSON(a.Stdout, envelope); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: output write failed: %v\n", err)
+		}
 	} else {
-		_, _ = io.WriteString(a.Stderr, fmt.Sprintf("Error (%s): %s\n", normalized.Code, normalized.Message))
+		a.writeOutput(a.Stderr, fmt.Sprintf("Error (%s): %s\n", normalized.Code, normalized.Message))
 		if strings.TrimSpace(normalized.Hint) != "" {
-			_, _ = io.WriteString(a.Stderr, "Hint: "+strings.TrimSpace(normalized.Hint)+"\n")
+			a.writeOutput(a.Stderr, "Hint: "+strings.TrimSpace(normalized.Hint)+"\n")
 		}
 	}
 	return errnorm.ExitCode(err)
