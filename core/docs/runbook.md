@@ -118,10 +118,18 @@ enabled, seeds the dev workspace, and starts the web UI.
 
 ## Control-plane local development run
 
-Run the control plane in a second terminal when working on SaaS-v-next flows:
+Run the **full local SaaS stack** (control plane + web UI + workspace cores) from
+the repo root:
 
 ```bash
-make serve-control-plane PORT=8100 WORKSPACE_ROOT="$(pwd)/.oar-control-plane"
+# Default: clears core/.oar-control-plane each start; persist with RESET_CONTROL_PLANE_WORKSPACE=0
+make serve-control-plane
+```
+
+Control-plane HTTP only (no UI / no core sync):
+
+```bash
+make -C core serve-control-plane
 ```
 
 Or invoke the helper script directly:

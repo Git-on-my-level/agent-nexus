@@ -38,17 +38,55 @@ function mapCredentialDescriptor(descriptor) {
   };
 }
 
+/**
+ * oar-control-plane returns the inner PublicKeyCredential* options as
+ * `public_key_options`. The Credential API expects `{ publicKey: { ... } }`.
+ * Also accept that shape when callers already wrap.
+ */
+function normalizeCredentialCreationOptions(options) {
+  if (!options || typeof options !== "object") {
+    return { publicKey: {} };
+  }
+  if (
+    options.publicKey &&
+    typeof options.publicKey === "object" &&
+    !Array.isArray(options.publicKey)
+  ) {
+    return options;
+  }
+  return { publicKey: options };
+}
+
+function normalizeCredentialRequestOptions(options) {
+  if (!options || typeof options !== "object") {
+    return { publicKey: {} };
+  }
+  if (
+    options.publicKey &&
+    typeof options.publicKey === "object" &&
+    !Array.isArray(options.publicKey)
+  ) {
+    return options;
+  }
+  return { publicKey: options };
+}
+
 function mapCreationOptions(options) {
+  const normalized = normalizeCredentialCreationOptions(options);
+  const pk = normalized.publicKey;
+  const user = pk.user;
   return {
-    ...options,
+    ...normalized,
     publicKey: {
-      ...options.publicKey,
-      challenge: decodeBase64Url(options.publicKey.challenge),
-      user: {
-        ...options.publicKey.user,
-        id: decodeBase64Url(options.publicKey.user.id),
-      },
-      excludeCredentials: (options.publicKey.excludeCredentials ?? []).map(
+      ...pk,
+      challenge: decodeBase64Url(pk.challenge),
+      user: user
+        ? {
+            ...user,
+            id: decodeBase64Url(user.id),
+          }
+        : pk.user,
+      excludeCredentials: (pk.excludeCredentials ?? []).map(
         mapCredentialDescriptor,
       ),
     },
@@ -56,12 +94,14 @@ function mapCreationOptions(options) {
 }
 
 function mapRequestOptions(options) {
+  const normalized = normalizeCredentialRequestOptions(options);
+  const pk = normalized.publicKey;
   return {
-    ...options,
+    ...normalized,
     publicKey: {
-      ...options.publicKey,
-      challenge: decodeBase64Url(options.publicKey.challenge),
-      allowCredentials: (options.publicKey.allowCredentials ?? []).map(
+      ...pk,
+      challenge: decodeBase64Url(pk.challenge),
+      allowCredentials: (pk.allowCredentials ?? []).map(
         mapCredentialDescriptor,
       ),
     },

@@ -127,7 +127,7 @@ func main() {
 	}
 	defer workspace.Close()
 
-	service := controlplane.NewService(workspace, controlplane.Config{
+	serviceConfig := controlplane.Config{
 		PublicBaseURL:        normalizedPublicBaseURL,
 		SessionTTL:           sessionTTL,
 		CeremonyTTL:          ceremonyTTL,
@@ -151,7 +151,32 @@ func main() {
 				"enterprise": stripeEnterprisePriceID,
 			},
 		},
-	})
+	}
+	if packedStartStr := strings.TrimSpace(os.Getenv("OAR_CONTROL_PLANE_DEV_PACKED_LISTEN_START")); packedStartStr != "" {
+		packedStart, err := strconv.Atoi(packedStartStr)
+		if err != nil || packedStart <= 0 {
+			fmt.Fprintf(os.Stderr, "invalid OAR_CONTROL_PLANE_DEV_PACKED_LISTEN_START: %q\n", packedStartStr)
+			os.Exit(1)
+		}
+		packedEnd := packedStart + 1990
+		if packedEndStr := strings.TrimSpace(os.Getenv("OAR_CONTROL_PLANE_DEV_PACKED_LISTEN_END")); packedEndStr != "" {
+			packedEnd, err = strconv.Atoi(packedEndStr)
+			if err != nil || packedEnd < packedStart {
+				fmt.Fprintf(os.Stderr, "invalid OAR_CONTROL_PLANE_DEV_PACKED_LISTEN_END: %q\n", packedEndStr)
+				os.Exit(1)
+			}
+		}
+		packedWSRoot := strings.TrimSpace(os.Getenv("OAR_CONTROL_PLANE_DEV_PACKED_WORKSPACES_ROOT"))
+		serviceConfig.PackedHosts = []controlplane.PackedHost{
+			{
+				ListenPortStart: packedStart,
+				ListenPortEnd:   packedEnd,
+				WorkspacesRoot:  packedWSRoot,
+			},
+		}
+	}
+
+	service := controlplane.NewService(workspace, serviceConfig)
 
 	backupMaintenanceCtx, cancelBackupMaintenance := context.WithCancel(context.Background())
 	defer cancelBackupMaintenance()

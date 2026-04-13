@@ -8,6 +8,9 @@ node_modules/
 _src_core/
 # Local dev-only encryption key for `make serve` (workspace secrets)
 core/.oar-dev-secrets-key
+core/.oar-dev-saas-ed25519
+# Local control-plane workspace for `make serve-control-plane` / dev-control-plane
+core/.oar-control-plane/
 # Regenerated when `make serve` seeds dev identities (contains invite tokens)
 cli/dogfood-resources/*.generated.json
 # Ad-hoc local `go build` outputs under cli/

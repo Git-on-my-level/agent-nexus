@@ -80,8 +80,8 @@ make contract-gen
 - before UI startup, `web-ui/scripts/seed-core-from-mock.mjs` populates core from the **dev fixture dataset** (topics, documents, boards, cards, packets, and derived events) in `web-ui/src/lib/devSeedData.js`
 - after fixture **identities** seed (default), the same step writes **single-use agent invite tokens** under `cli/dogfood-resources/` for registering the `oar` CLI against local core (bootstrap is already consumed by the seeded human). See `cli/dogfood-resources/README.md` and `cli/docs/runbook.md`.
 
-For SaaS-v-next control-plane work, start the shared control plane in a second
-terminal:
+For SaaS packed-host work, start the full local stack (control plane, web UI,
+and auto-started workspace cores) in a second terminal:
 
 ```bash
 make serve-control-plane
@@ -90,6 +90,10 @@ make serve-control-plane
 Defaults:
 
 - control plane: `http://127.0.0.1:8100`
+- web UI / passkey origin: `http://localhost:5173` (open `localhost`, not `127.0.0.1`, for WebAuthn)
+- workspace cores: loopback ports from `SAAS_DEV_PACKED_LISTEN_START` (default `18000`) upward
+
+Control-plane only (no UI): `make -C core serve-control-plane`.
 
 ## Installing the CLI
 

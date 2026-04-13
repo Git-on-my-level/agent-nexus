@@ -153,10 +153,28 @@ export function createWorkspaceCatalog({
 export function loadWorkspaceCatalog(env = privateEnv) {
   const resolved = resolveWorkspaceEnv(env);
   const configuredWorkspaces = parseWorkspaceEntries(resolved.OAR_WORKSPACES);
-  const workspaces =
-    configuredWorkspaces.length > 0
-      ? configuredWorkspaces
-      : fallbackSingleWorkspace(env);
+  const saasPackedHostDev =
+    env.OAR_SAAS_PACKED_HOST_DEV === "true" ||
+    env.OAR_SAAS_PACKED_HOST_DEV === "1";
+
+  let workspaces;
+  if (configuredWorkspaces.length > 0) {
+    workspaces = configuredWorkspaces;
+  } else if (saasPackedHostDev) {
+    // SaaS dev: routing comes from the control plane after sign-in. Do not fall
+    // back to OAR_CORE_BASE_URL from .env (often http://127.0.0.1:8000) or
+    // `make serve` will hijack /local and proxy to a core that is not running.
+    workspaces = [
+      {
+        slug: DEFAULT_WORKSPACE_SLUG,
+        label: "Local",
+        description: "",
+        coreBaseUrl: "",
+      },
+    ];
+  } else {
+    workspaces = fallbackSingleWorkspace(env);
+  }
   const devActorMode =
     env.OAR_DEV_ACTOR_MODE === "true" || env.OAR_DEV_ACTOR_MODE === "1";
 

@@ -4,7 +4,9 @@ set -euo pipefail
 # Default core URL for local UI dev when unset (matches seed-core-from-mock.mjs).
 # Without this, `[workspace]/+layout.js` schema verification hits the proxy with an
 # empty workspace coreBaseUrl and returns HTTP 500 on /local.
-if [[ -z "${OAR_CORE_BASE_URL:-}" ]]; then
+# SaaS packed-host dev (`scripts/serve-control-plane.sh`) sets OAR_SAAS_PACKED_HOST_DEV=1
+# and leaves OAR_CORE_BASE_URL unset so routing stays control-plane-driven.
+if [[ "${OAR_SAAS_PACKED_HOST_DEV:-0}" != "1" ]] && [[ -z "${OAR_CORE_BASE_URL:-}" ]]; then
 	export OAR_CORE_BASE_URL="http://127.0.0.1:8000"
 fi
 

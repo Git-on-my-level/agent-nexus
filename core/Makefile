@@ -3,6 +3,9 @@
 HOST ?= 127.0.0.1
 PORT ?= 8000
 WORKSPACE_ROOT ?= $(CURDIR)/.oar-workspace
+CONTROL_PLANE_WORKSPACE_ROOT ?= $(CURDIR)/.oar-control-plane
+# Like repo `make serve` + RESET_DEV_WORKSPACE: wipe control-plane SQLite before each dev start unless 0.
+RESET_CONTROL_PLANE_WORKSPACE ?= 1
 SCHEMA_PATH ?= $(CURDIR)/../contracts/oar-schema.yaml
 
 # For offline/air-gapped environments (e.g., agent sandboxes), set GOTOOLCHAIN=local
@@ -12,7 +15,7 @@ SCHEMA_PATH ?= $(CURDIR)/../contracts/oar-schema.yaml
 help:
 	@echo "Common targets:"
 	@echo "  make serve      - run oar-core locally (development mode)"
-	@echo "  make serve-control-plane - run oar-control-plane locally"
+	@echo "  make serve-control-plane - run oar-control-plane only (full SaaS UI stack: make serve-control-plane from repo root)"
 	@echo "  make fmt        - format Go files in-place"
 	@echo "  make fmt-check  - verify Go files are gofmt-clean"
 	@echo "  make check      - run formatting + cheap checks locally"
@@ -40,7 +43,8 @@ serve:
 serve-control-plane:
 	@HOST="$(HOST)" \
 	PORT="$(PORT)" \
-	CONTROL_PLANE_WORKSPACE_ROOT="$(WORKSPACE_ROOT)" \
+	CONTROL_PLANE_WORKSPACE_ROOT="$(CONTROL_PLANE_WORKSPACE_ROOT)" \
+	RESET_CONTROL_PLANE_WORKSPACE="$(RESET_CONTROL_PLANE_WORKSPACE)" \
 	./scripts/dev-control-plane
 
 run-prod: build-prod
@@ -98,7 +102,6 @@ smoke:
 smoke-control-plane:
 	@HOST="$(HOST)" \
 	PORT="$(PORT)" \
-	CONTROL_PLANE_WORKSPACE_ROOT="$(WORKSPACE_ROOT)" \
 	./scripts/smoke-control-plane
 
 smoke-control-plane-human:

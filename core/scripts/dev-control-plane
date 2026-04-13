@@ -7,6 +7,19 @@ cd "$ROOT_DIR"
 HOST="${HOST:-127.0.0.1}"
 PORT="${PORT:-8100}"
 WORKSPACE_ROOT="${CONTROL_PLANE_WORKSPACE_ROOT:-$ROOT_DIR/.oar-control-plane}"
+RESET_CONTROL_PLANE_WORKSPACE="${RESET_CONTROL_PLANE_WORKSPACE:-1}"
+
+if command -v lsof >/dev/null 2>&1; then
+	if lsof -nP -iTCP:"${PORT}" -sTCP:LISTEN >/dev/null 2>&1; then
+		echo "Port ${PORT} is already in use. Stop the process listening there (often: oar-control-plane) or set PORT to a free port." >&2
+		exit 1
+	fi
+fi
+
+if [ "$RESET_CONTROL_PLANE_WORKSPACE" = "1" ]; then
+	echo "Clearing control-plane dev workspace (set RESET_CONTROL_PLANE_WORKSPACE=0 to keep data): ${WORKSPACE_ROOT}" >&2
+	rm -rf "${WORKSPACE_ROOT}"
+fi
 
 exec go run ./cmd/oar-control-plane \
   --host "$HOST" \

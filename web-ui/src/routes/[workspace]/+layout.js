@@ -12,6 +12,11 @@ export async function load({ fetch, data }) {
     return;
   }
 
+  const coreBaseUrl = String(data.workspace?.coreBaseUrl ?? "").trim();
+  if (!coreBaseUrl) {
+    return;
+  }
+
   if (!schemaCheckPromises.has(workspaceSlug)) {
     const client = createOarCoreClient({
       fetchFn: fetch,

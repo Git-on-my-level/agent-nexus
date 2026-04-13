@@ -9,6 +9,11 @@ HTTP_RECORD_DIR := tools/oar-http-record
 CORE_HOST ?= 127.0.0.1
 CORE_PORT ?= 8000
 CONTROL_PLANE_PORT ?= 8100
+CONTROL_PLANE_WORKSPACE_ROOT ?= $(CURDIR)/$(CORE_DIR)/.oar-control-plane
+RESET_CONTROL_PLANE_WORKSPACE ?= 1
+SYNC_WORKSPACE_CORES ?= 1
+SAAS_DEV_PACKED_LISTEN_START ?= 18000
+SAAS_DEV_PACKED_LISTEN_END ?= 19990
 WEB_UI_PORT ?= 5173
 CORE_BASE_URL ?= http://$(CORE_HOST):$(CORE_PORT)
 ACTIONLINT_BIN := $(CURDIR)/.bin/actionlint
@@ -163,8 +168,15 @@ serve: ## Start core, seed mock dataset into core, then start web-ui
 	FORCE_SEED="$(FORCE_SEED)" \
 	./scripts/serve.sh
 
-serve-control-plane: ## Start the SaaS control-plane service locally
-	$(MAKE) -C $(CORE_DIR) serve-control-plane HOST="$(CORE_HOST)" PORT="$(CONTROL_PLANE_PORT)"
+serve-control-plane: ## Local SaaS stack: control plane + web UI + workspace cores (control-plane-only: make -C core serve-control-plane)
+	@CONTROL_PLANE_PORT="$(CONTROL_PLANE_PORT)" \
+	WEB_UI_PORT="$(WEB_UI_PORT)" \
+	CONTROL_PLANE_WORKSPACE_ROOT="$(CONTROL_PLANE_WORKSPACE_ROOT)" \
+	RESET_CONTROL_PLANE_WORKSPACE="$(RESET_CONTROL_PLANE_WORKSPACE)" \
+	SYNC_WORKSPACE_CORES="$(SYNC_WORKSPACE_CORES)" \
+	SAAS_DEV_PACKED_LISTEN_START="$(SAAS_DEV_PACKED_LISTEN_START)" \
+	SAAS_DEV_PACKED_LISTEN_END="$(SAAS_DEV_PACKED_LISTEN_END)" \
+	./scripts/serve-control-plane.sh
 
 core-%: ## Pass-through target to core Makefile
 	$(MAKE) -C $(CORE_DIR) $*

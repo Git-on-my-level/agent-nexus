@@ -126,10 +126,17 @@ making SaaS self-serve identity coherent.
 
 ### Control-plane startup
 
-Start the control plane from the repo root:
+Start the **full local SaaS dev stack** (control plane, web UI, and workspace
+`oar-core` processes) from the repo root:
 
 ```bash
 make serve-control-plane
+```
+
+Control-plane HTTP only:
+
+```bash
+make -C core serve-control-plane
 # or directly:
 go run ./core/cmd/oar-control-plane --listen-addr 127.0.0.1:8100 --workspace-root .oar-control-plane
 ```

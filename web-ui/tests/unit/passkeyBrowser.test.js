@@ -105,6 +105,28 @@ describe("passkeyBrowser", () => {
     });
   });
 
+  it("accepts flat public key options from control plane (no publicKey wrapper)", async () => {
+    const credential = makeRegistrationCredential();
+    setBrowserSupport({ createResult: credential });
+
+    await createPasskeyCredential({
+      challenge: "AQID",
+      user: {
+        id: "BAUG",
+      },
+    });
+
+    expect(navigator.credentials.create).toHaveBeenCalledWith({
+      publicKey: {
+        challenge: byteArray(1, 2, 3),
+        user: {
+          id: byteArray(4, 5, 6),
+        },
+        excludeCredentials: [],
+      },
+    });
+  });
+
   it("serializes non-enumerable assertion credential fields", async () => {
     const credential = makeAssertionCredential();
     setBrowserSupport({ getResult: credential });
@@ -125,6 +147,25 @@ describe("passkeyBrowser", () => {
         userHandle: "ERI",
       },
       type: "public-key",
+    });
+  });
+
+  it("accepts flat assertion options from control plane (no publicKey wrapper)", async () => {
+    const credential = makeAssertionCredential();
+    setBrowserSupport({ getResult: credential });
+
+    await getPasskeyAssertion({
+      challenge: "AQID",
+      rpId: "localhost",
+      allowCredentials: [],
+    });
+
+    expect(navigator.credentials.get).toHaveBeenCalledWith({
+      publicKey: {
+        challenge: byteArray(1, 2, 3),
+        rpId: "localhost",
+        allowCredentials: [],
+      },
     });
   });
 });
