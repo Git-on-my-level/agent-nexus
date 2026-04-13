@@ -1,5 +1,5 @@
-#!/bin/sh
-set -eu
+#!/usr/bin/env bash
+set -euo pipefail
 
 REPO="Git-on-my-level/organization-autorunner"
 INSTALL_DIR="${INSTALL_DIR:-${HOME}/.local/bin}"

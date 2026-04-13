@@ -28,7 +28,7 @@ DEV_SEED_SCENARIO ?= default
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup check serve serve-control-plane lint test format contract-gen contract-check contract-check-committed workflow-check version-sync version-check e2e-smoke hosted-smoke hosted-ops-test hosted-ops-smoke saas-smoke saas-e2e saas-load-smoke packed-host-smoke cli-check cli-test cli-build cli-integration-test http-record-test http-record-run http-record-compile http-record-replay bridge-setup bridge-doctor bridge-test release-check release-patch platform-constraints core-% bridge-% web-ui-%
+.PHONY: help setup check serve serve-control-plane lint test format contract-gen contract-check contract-check-committed workflow-check version-sync version-check e2e-smoke hosted-smoke hosted-ops-test hosted-ops-smoke saas-smoke saas-e2e saas-load-smoke packed-host-smoke cli-check cli-build cli-integration-test http-record-test http-record-run http-record-compile http-record-replay bridge-setup bridge-doctor bridge-test release-check release-patch platform-constraints core-% bridge-% web-ui-%
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z0-9_.-]+:.*##/ {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -54,7 +54,7 @@ lint: ## Run lint checks for repo, core, and web-ui
 
 test: ## Run tests in both core and web-ui
 	$(MAKE) -C $(CORE_DIR) test
-	$(MAKE) cli-test
+	$(MAKE) cli-check
 	$(MAKE) http-record-test
 	$(MAKE) -C $(WEB_UI_DIR) test
 
@@ -86,9 +86,6 @@ docs-ref-audit: ## Audit agent-facing docs for broken local path references
 
 cli-check: ## Run CLI checks
 	$(MAKE) version-check
-	cd $(CLI_DIR) && go test ./...
-
-cli-test: ## Run CLI tests
 	cd $(CLI_DIR) && go test ./...
 
 CLI_VERSION ?= $(shell ./scripts/read-version.sh)
