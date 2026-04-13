@@ -123,7 +123,17 @@ func (a *App) runDocsProposeUpdateCommand(ctx context.Context, args []string, cf
 		return nil, err
 	}
 
-	currentResult, callErr := a.invokeTypedJSON(ctx, cfg, "docs get", "docs.get", map[string]string{"document_id": id}, nil, nil)
+	currentResult, callErr := a.invokeTypedJSONWithIDResolution(
+		ctx,
+		cfg,
+		"docs get",
+		"docs.get",
+		"document_id",
+		id,
+		documentIDLookupSpec,
+		nil,
+		nil,
+	)
 	if callErr != nil {
 		return nil, callErr
 	}

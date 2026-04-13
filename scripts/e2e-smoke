@@ -347,8 +347,8 @@ fi
 printf '{"patch":{"summary":"smoke updated"}}\n' \
   | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" topics patch --topic-id "$MAIN_TOPIC_ID" >"$TMP_DIR/topic-update.json"
 
-RECEIPT_ID="artifact-receipt-smoke"
-REVIEW_ID="artifact-review-smoke"
+RECEIPT_ID="rc-smoke"
+REVIEW_ID="rv-smoke"
 THREAD_ID="$MAIN_TOPIC_THREAD_ID"
 
 # Board smoke: create a board, add/reorder/move/archive cards, and verify the

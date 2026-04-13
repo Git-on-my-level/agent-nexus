@@ -112,7 +112,7 @@ func handleCreateTopic(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		return
 	}
 	if strings.TrimSpace(req.RequestKey) != "" && firstNonEmptyString(req.Topic["id"]) == "" {
-		req.Topic["id"] = deriveRequestScopedID("topics.create", actorID, req.RequestKey, "topic")
+		req.Topic["id"] = deriveRequestScopedID("topics.create", actorID, req.RequestKey, "tp")
 	}
 
 	replayStatus, replayPayload, replayed, err := readIdempotencyReplay(r.Context(), opts.primitiveStore, "topics.create", actorID, req.RequestKey, req)

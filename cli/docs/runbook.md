@@ -26,6 +26,8 @@ go run ./cmd/oar --agent local version
 
 **Output modes:** concise text is the default for direct reading (including LLM tool output). JSON mode is for programmatic consumers (`jq`, CI, services). `auth register` does **not** write `"json": true` into the profile; older profiles may still set it—use `--json=false` / `OAR_JSON=false` for a single command if needed.
 
+**Short ids:** list-style JSON and default text rows use **10-character** `short_id` prefixes derived from canonical ids. You can paste those prefixes back into commands; the CLI resolves a unique match via list APIs (or returns a clear ambiguous/missing error). Use `--full-id` when you need canonical ids in the output or when resolution fails.
+
 **Active profile (recommended for interactive use):** after you have at least one profile under `~/.config/oar/profiles/`, run `oar config use <name>` (or `oar auth default <name>`) once. The CLI stores the choice in `~/.config/oar/default-profile` and loads `base_url` and credentials from `~/.config/oar/profiles/<name>.json`, so later commands can omit `--base-url` and `--agent`. Inspect merged settings with `oar config show` (tokens are redacted). Clear the marker with `oar config unset` if you want to rely on single-profile auto-select or explicit flags/env only.
 
 Global config precedence:

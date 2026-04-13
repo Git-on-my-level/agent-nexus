@@ -110,7 +110,7 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 		return
 	}
 	if strings.TrimSpace(req.RequestKey) != "" && firstNonEmptyString(req.Document["document_id"], req.Document["id"]) == "" {
-		req.Document["document_id"] = deriveRequestScopedID("docs.create", actorID, req.RequestKey, "doc")
+		req.Document["document_id"] = deriveRequestScopedID("docs.create", actorID, req.RequestKey, "dc")
 	}
 	replayStatus, replayPayload, replayed, err := readIdempotencyReplay(r.Context(), opts.primitiveStore, "docs.create", actorID, req.RequestKey, req)
 	if writeIdempotencyError(w, err) {

@@ -154,7 +154,7 @@ test("submit review from receipt artifact and see payload + revise follow-up lin
     notes: "Needs additional hardening.",
     evidence_refs: ["artifact:artifact-evidence-1"],
   });
-  expect(reviewPayload.packet.review_id).toMatch(/^artifact-review-/);
+  expect(reviewPayload.packet.review_id).toMatch(/^rv-/);
   expect(reviewPayload.artifact.refs).toEqual([
     cardRef,
     `artifact:${receiptId}`,

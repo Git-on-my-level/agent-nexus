@@ -274,14 +274,14 @@ func TestInboxListIncludesAliasesAndLinkedShortIDs(t *testing.T) {
 	if got := anyStringValue(item["alias"]); got != expectedAlias {
 		t.Fatalf("expected alias %q, got %q payload=%#v", expectedAlias, got, payload)
 	}
-	if got := anyStringValue(item["short_id"]); got != inboxID[:12] {
-		t.Fatalf("expected short_id %q, got %q payload=%#v", inboxID[:12], got, payload)
+	if got := anyStringValue(item["short_id"]); got != shortID(inboxID) {
+		t.Fatalf("expected short_id %q, got %q payload=%#v", shortID(inboxID), got, payload)
 	}
-	if got := anyStringValue(item["thread_short_id"]); got != threadID[:12] {
-		t.Fatalf("expected thread_short_id %q, got %q payload=%#v", threadID[:12], got, payload)
+	if got := anyStringValue(item["thread_short_id"]); got != shortID(threadID) {
+		t.Fatalf("expected thread_short_id %q, got %q payload=%#v", shortID(threadID), got, payload)
 	}
-	if got := anyStringValue(item["source_event_short_id"]); got != eventID[:12] {
-		t.Fatalf("expected source_event_short_id %q, got %q payload=%#v", eventID[:12], got, payload)
+	if got := anyStringValue(item["source_event_short_id"]); got != shortID(eventID) {
+		t.Fatalf("expected source_event_short_id %q, got %q payload=%#v", shortID(eventID), got, payload)
 	}
 }
 
@@ -335,14 +335,14 @@ func TestInboxListSupportsClientSideThreadAndTypeFilters(t *testing.T) {
 		t.Fatalf("expected matching inbox item %q, got %#v", matchingID, data)
 	}
 
-	human := runCLIForTest(t, home, map[string]string{}, nil, []string{
+	textOut := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--base-url", server.URL,
 		"inbox", "list",
 		"--thread-id", "thread_1234567890",
 		"--type", "action_needed",
 	})
-	if !strings.Contains(human, "total_items: 3") || !strings.Contains(human, "returned_items: 1") {
-		t.Fatalf("expected rendered inbox counts in human output, got:\n%s", human)
+	if !strings.Contains(textOut, "total_items: 3") || !strings.Contains(textOut, "returned_items: 1") {
+		t.Fatalf("expected rendered inbox counts in default text output, got:\n%s", textOut)
 	}
 }
 
@@ -437,16 +437,16 @@ func TestInboxListIncludesViewingAsAndCategoryReference(t *testing.T) {
 		t.Fatalf("expected item category_description, got %#v", item)
 	}
 
-	human := runCLIForTest(t, home, map[string]string{}, nil, []string{
+	textOut := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--base-url", server.URL,
 		"--agent", "agent-a",
 		"inbox", "list",
 	})
-	if !strings.Contains(human, "viewing_as: profile=agent-a :: username=agent.alpha :: actor_id=actor_123") {
-		t.Fatalf("expected viewing_as summary in human output, got:\n%s", human)
+	if !strings.Contains(textOut, "viewing_as: profile=agent-a :: username=agent.alpha :: actor_id=actor_123") {
+		t.Fatalf("expected viewing_as summary in default text output, got:\n%s", textOut)
 	}
-	if !strings.Contains(human, "category_reference:") || !strings.Contains(human, "action_needed: A human must decide") {
-		t.Fatalf("expected category reference in human output, got:\n%s", human)
+	if !strings.Contains(textOut, "category_reference:") || !strings.Contains(textOut, "action_needed: A human must decide") {
+		t.Fatalf("expected category reference in default text output, got:\n%s", textOut)
 	}
 }
 
@@ -591,15 +591,15 @@ func TestEventsListCommandFiltersAndLimits(t *testing.T) {
 		t.Fatalf("expected most recent matching event event_3, got %#v", data)
 	}
 
-	human := runCLIForTest(t, home, map[string]string{}, nil, []string{
+	textOut := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--base-url", server.URL,
 		"events", "list",
 		"--thread-id", "thread_1",
 		"--type", "actor_statement",
 		"--max-events", "1",
 	})
-	if !strings.Contains(human, "types:") || !strings.Contains(human, "- actor_statement") {
-		t.Fatalf("expected human output to include selected filter types, got:\n%s", human)
+	if !strings.Contains(textOut, "types:") || !strings.Contains(textOut, "- actor_statement") {
+		t.Fatalf("expected default text output to include selected filter types, got:\n%s", textOut)
 	}
 }
 
@@ -694,7 +694,7 @@ func TestEventsListCommandSupportsMineActorFilterAndFullID(t *testing.T) {
 		t.Fatalf("expected payload preview summary, got %#v", event)
 	}
 
-	humanFull := runCLIForTest(t, home, map[string]string{}, nil, []string{
+	textFull := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--base-url", server.URL,
 		"--agent", "agent-a",
 		"events", "list",
@@ -703,11 +703,11 @@ func TestEventsListCommandSupportsMineActorFilterAndFullID(t *testing.T) {
 		"--mine",
 		"--full-id",
 	})
-	if !strings.Contains(humanFull, mineEventID) || !strings.Contains(humanFull, "Ship Friday rescue scope") {
-		t.Fatalf("expected full id + preview in human output, got:\n%s", humanFull)
+	if !strings.Contains(textFull, mineEventID) || !strings.Contains(textFull, "Ship Friday rescue scope") {
+		t.Fatalf("expected full id + preview in default text output, got:\n%s", textFull)
 	}
 
-	humanShort := runCLIForTest(t, home, map[string]string{}, nil, []string{
+	textShort := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--base-url", server.URL,
 		"--agent", "agent-a",
 		"events", "list",
@@ -715,11 +715,11 @@ func TestEventsListCommandSupportsMineActorFilterAndFullID(t *testing.T) {
 		"--type", "actor_statement",
 		"--mine",
 	})
-	if strings.Contains(humanShort, mineEventID) {
-		t.Fatalf("expected default short-id rendering without --full-id, got:\n%s", humanShort)
+	if strings.Contains(textShort, mineEventID) {
+		t.Fatalf("expected default short-id rendering without --full-id, got:\n%s", textShort)
 	}
-	if !strings.Contains(humanShort, mineEventID[:12]) {
-		t.Fatalf("expected short id rendering by default, got:\n%s", humanShort)
+	if !strings.Contains(textShort, shortID(mineEventID)) {
+		t.Fatalf("expected short id rendering by default, got:\n%s", textShort)
 	}
 }
 
@@ -1683,7 +1683,7 @@ func TestNormalizeMutationBodyIDsSkipsNestedStructuredDocContent(t *testing.T) {
 	body := map[string]any{
 		"document":     map[string]any{"id": "doc_1"},
 		"content_type": "structured",
-		"refs":         []any{"thread:thread_12345"},
+		"refs":         []any{"thread:thread_123"},
 		"content": map[string]any{
 			"thread_id": "thread_12345",
 			"nested": map[string]any{
@@ -1719,7 +1719,7 @@ func TestNormalizeMutationBodyIDsPreservesUnsupportedTypedRefsVerbatim(t *testin
 	body := map[string]any{
 		"event": map[string]any{
 			"type":      "actor_statement",
-			"thread_id": "thread_1",
+			"thread_id": "thread_123456789",
 			"refs":      []any{"CuStOmType:ABC123"},
 		},
 	}
@@ -1751,7 +1751,7 @@ func TestNormalizeMutationBodyIDsResolvesInboxAcknowledgeSubjectRef(t *testing.T
 	defer server.Close()
 
 	body := map[string]any{
-		"subject_ref":   "thread:thread_12345",
+		"subject_ref":   "thread:thread_123",
 		"inbox_item_id": "inbox:action_needed:thread_1234567890:none:event_1",
 	}
 
@@ -1771,7 +1771,7 @@ func TestNormalizeMutationBodyIDsResolvesInboxAcknowledgeSubjectRef(t *testing.T
 	}
 }
 
-func TestCommitmentsGetHumanOutputIsRemoved(t *testing.T) {
+func TestCommitmentsGetTextOutputIsRemoved(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
@@ -1884,13 +1884,13 @@ func TestThreadsContextIncludesCollaborationSummarySections(t *testing.T) {
 		t.Fatalf("expected decision_count=1, got %#v", collaboration)
 	}
 
-	human := runCLIForTest(t, home, map[string]string{}, nil, []string{
+	textOut := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--base-url", server.URL,
 		"threads", "context",
 		"--thread-id", "thread_1",
 	})
-	if !strings.Contains(human, "recommendations (1):") || !strings.Contains(human, "decision_requests (1):") || !strings.Contains(human, "decisions (1):") {
-		t.Fatalf("expected collaboration sections in human output, got:\n%s", human)
+	if !strings.Contains(textOut, "recommendations (1):") || !strings.Contains(textOut, "decision_requests (1):") || !strings.Contains(textOut, "decisions (1):") {
+		t.Fatalf("expected collaboration sections in default text output, got:\n%s", textOut)
 	}
 }
 
@@ -1950,12 +1950,12 @@ func TestCardsTimelineDispatchesToAPI(t *testing.T) {
 		t.Fatalf("expected one event in timeline data, got %#v", data)
 	}
 
-	human := runCLIForTest(t, home, map[string]string{}, nil, []string{
+	textOut := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--base-url", server.URL,
 		"cards", "timeline", "--card-id", cardID,
 	})
-	if !strings.Contains(human, cardID) || !strings.Contains(human, "events: 1") {
-		t.Fatalf("expected card id and event count in human output, got:\n%s", human)
+	if !strings.Contains(textOut, shortID(cardID)) || !strings.Contains(textOut, "events: 1") {
+		t.Fatalf("expected card short id and event count in default text output, got:\n%s", textOut)
 	}
 }
 
@@ -2117,14 +2117,14 @@ func TestBoardsListAddsNestedShortIDAndWorkspaceResolvesShortBoardID(t *testing.
 	t.Parallel()
 
 	const canonicalID = "board_1234567890abcdef"
-	const shortID = "board_123456"
+	prefixID := shortID(canonicalID)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/boards":
 			_, _ = w.Write([]byte(`{"boards":[{"board":{"id":"` + canonicalID + `","title":"Ops Board","status":"active"},"summary":{"card_count":0,"cards_by_column":{"backlog":0,"ready":0,"in_progress":0,"blocked":0,"review":0,"done":0},"unresolved_card_count":0,"document_count":0,"latest_activity_at":null,"has_document_refs":false}}]}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/boards/"+shortID+"/workspace":
+		case r.Method == http.MethodGet && r.URL.Path == "/boards/"+prefixID+"/workspace":
 			w.WriteHeader(http.StatusNotFound)
 			_, _ = w.Write([]byte(`{"error":{"code":"not_found","message":"board not found"}}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/boards/"+canonicalID+"/workspace":
@@ -2149,15 +2149,15 @@ func TestBoardsListAddsNestedShortIDAndWorkspaceResolvesShortBoardID(t *testing.
 	}
 	item, _ := items[0].(map[string]any)
 	board, _ := item["board"].(map[string]any)
-	if got := anyStringValue(board["short_id"]); got != shortID {
-		t.Fatalf("expected board short_id %q, got %#v", shortID, listPayload)
+	if got := anyStringValue(board["short_id"]); got != prefixID {
+		t.Fatalf("expected board short_id %q, got %#v", prefixID, listPayload)
 	}
 
 	workspacePayload := assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
 		"--base-url", server.URL,
 		"boards", "workspace",
-		"--board-id", shortID,
+		"--board-id", prefixID,
 	}))
 	workspaceData, _ := workspacePayload["data"].(map[string]any)
 	if got := anyStringValue(workspaceData["board_id"]); got != canonicalID {
@@ -2520,14 +2520,14 @@ func TestThreadsContextAggregatesAcrossMultipleThreads(t *testing.T) {
 		t.Fatalf("expected decision_count=1, got %#v", collaboration)
 	}
 
-	human := runCLIForTest(t, home, map[string]string{}, nil, []string{
+	textOut := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--base-url", server.URL,
 		"threads", "context",
 		"--thread-id", "thread_1",
 		"--thread-id", "thread_2",
 	})
-	if !strings.Contains(human, "Thread contexts (2):") || !strings.Contains(human, "recommendations (2):") {
-		t.Fatalf("expected aggregate context sections in human output, got:\n%s", human)
+	if !strings.Contains(textOut, "Thread contexts (2):") || !strings.Contains(textOut, "recommendations (2):") {
+		t.Fatalf("expected aggregate context sections in default text output, got:\n%s", textOut)
 	}
 }
 
@@ -2618,38 +2618,38 @@ func TestThreadsContextSupportsFullIDForEventSections(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	humanFull := runCLIForTest(t, home, map[string]string{}, nil, []string{
+	textFull := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--base-url", server.URL,
 		"threads", "context",
 		"--thread-id", "thread_1",
 		"--full-id",
 	})
-	if !strings.Contains(humanFull, eventID) {
-		t.Fatalf("expected full event id in output, got:\n%s", humanFull)
+	if !strings.Contains(textFull, eventID) {
+		t.Fatalf("expected full event id in output, got:\n%s", textFull)
 	}
-	if !strings.Contains(humanFull, artifactID) {
-		t.Fatalf("expected full artifact id in output, got:\n%s", humanFull)
+	if !strings.Contains(textFull, artifactID) {
+		t.Fatalf("expected full artifact id in output, got:\n%s", textFull)
 	}
-	if !strings.Contains(humanFull, cardID) {
-		t.Fatalf("expected full card id in output, got:\n%s", humanFull)
+	if !strings.Contains(textFull, cardID) {
+		t.Fatalf("expected full card id in output, got:\n%s", textFull)
 	}
 
-	humanShort := runCLIForTest(t, home, map[string]string{}, nil, []string{
+	textShort := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--base-url", server.URL,
 		"threads", "context",
 		"--thread-id", "thread_1",
 	})
-	if strings.Contains(humanShort, eventID) {
-		t.Fatalf("expected short-id rendering without --full-id, got:\n%s", humanShort)
+	if strings.Contains(textShort, eventID) {
+		t.Fatalf("expected short-id rendering without --full-id, got:\n%s", textShort)
 	}
-	if !strings.Contains(humanShort, eventID[:12]) {
-		t.Fatalf("expected short event id in default output, got:\n%s", humanShort)
+	if !strings.Contains(textShort, shortID(eventID)) {
+		t.Fatalf("expected short event id in default output, got:\n%s", textShort)
 	}
-	if strings.Contains(humanShort, artifactID) || !strings.Contains(humanShort, artifactID[:12]) {
-		t.Fatalf("expected short artifact id in default output, got:\n%s", humanShort)
+	if strings.Contains(textShort, artifactID) || !strings.Contains(textShort, shortID(artifactID)) {
+		t.Fatalf("expected short artifact id in default output, got:\n%s", textShort)
 	}
-	if strings.Contains(humanShort, cardID) || !strings.Contains(humanShort, cardID[:12]) {
-		t.Fatalf("expected short card id in default output, got:\n%s", humanShort)
+	if strings.Contains(textShort, cardID) || !strings.Contains(textShort, shortID(cardID)) {
+		t.Fatalf("expected short card id in default output, got:\n%s", textShort)
 	}
 }
 
@@ -2722,17 +2722,17 @@ func TestThreadsInspectBuildsCoordinationView(t *testing.T) {
 		t.Fatalf("expected inbox item %q, got %#v", inboxID, data)
 	}
 
-	humanFull := runCLIForTest(t, home, map[string]string{}, nil, []string{
+	textFull := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--base-url", server.URL,
 		"threads", "inspect",
 		"--thread-id", "thread_1",
 		"--full-id",
 	})
-	if !strings.Contains(humanFull, eventID) {
-		t.Fatalf("expected full event id in inspect output, got:\n%s", humanFull)
+	if !strings.Contains(textFull, eventID) {
+		t.Fatalf("expected full event id in inspect output, got:\n%s", textFull)
 	}
-	if !strings.Contains(humanFull, "inbox_items (1):") {
-		t.Fatalf("expected inbox section in inspect output, got:\n%s", humanFull)
+	if !strings.Contains(textFull, "inbox_items (1):") {
+		t.Fatalf("expected inbox section in inspect output, got:\n%s", textFull)
 	}
 }
 
@@ -2878,17 +2878,17 @@ func TestThreadsRecommendationsBuildsFocusedReview(t *testing.T) {
 		t.Fatalf("expected events_get_examples follow-up commands, got %#v", followUp)
 	}
 
-	human := runCLIForTest(t, home, map[string]string{}, nil, []string{
+	textOut := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--base-url", server.URL,
 		"threads", "recommendations",
 		"--thread-id", "thread_1",
 		"--full-id",
 	})
-	if !strings.Contains(human, "actor=agent-pm") || !strings.Contains(human, "at=2026-03-07T12:00:00Z") {
-		t.Fatalf("expected provenance fields in human output, got:\n%s", human)
+	if !strings.Contains(textOut, "actor=agent-pm") || !strings.Contains(textOut, "at=2026-03-07T12:00:00Z") {
+		t.Fatalf("expected provenance fields in default text output, got:\n%s", textOut)
 	}
-	if !strings.Contains(human, "follow_up:") || !strings.Contains(human, "events_get_template: oar events get --event-id <event-id> --json") {
-		t.Fatalf("expected follow-up guidance in human output, got:\n%s", human)
+	if !strings.Contains(textOut, "follow_up:") || !strings.Contains(textOut, "events_get_template: oar events get --event-id <event-id> --json") {
+		t.Fatalf("expected follow-up guidance in default text output, got:\n%s", textOut)
 	}
 }
 
@@ -3033,6 +3033,91 @@ func TestThreadsRecommendationsIncludesRelatedThreadReview(t *testing.T) {
 	}
 }
 
+func TestThreadsWorkspaceJSONIncludesShortIDs(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodGet && r.URL.Path == "/threads/thread_ws_main/workspace" {
+			_, _ = w.Write([]byte(`{
+				"thread_id":"thread_ws_main",
+				"thread":{"id":"thread_ws_main","title":"T"},
+				"context":{
+					"recent_events":[{"id":"event_ws_1","thread_id":"thread_ws_main","type":"actor_statement"}],
+					"key_artifacts":[],
+					"open_cards":[],
+					"documents":[]
+				},
+				"collaboration":{
+					"recommendations":[{"id":"event_ws_1","thread_id":"thread_ws_main","type":"actor_statement"}],
+					"decision_requests":[],
+					"decisions":[],
+					"key_artifacts":[],
+					"open_cards":[],
+					"recommendation_count":1,
+					"decision_request_count":0,
+					"decision_count":0,
+					"artifact_count":0,
+					"open_card_count":0
+				},
+				"inbox":{"thread_id":"thread_ws_main","items":[],"count":0},
+				"pending_decisions":{"thread_id":"thread_ws_main","items":[],"count":0},
+				"related_threads":{"count":1,"items":[{"thread":{"id":"thread_ws_related","title":"R"},"match_reason":"ref"}]},
+				"related_recommendations":{"count":1,"items":[{"thread":{"id":"thread_ws_related","title":"R"},"event":{"id":"event_ws_rel","thread_id":"thread_ws_related","type":"actor_statement"}}]},
+				"related_decision_requests":{"count":0,"items":[]},
+				"related_decisions":{"count":0,"items":[]},
+				"total_review_items":1
+			}`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json", "--base-url", server.URL,
+		"threads", "workspace", "--thread-id", "thread_ws_main",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+
+	mainID := "thread_ws_main"
+	threadObj := asMap(data["thread"])
+	if threadObj == nil {
+		t.Fatalf("expected thread object in data, got %#v", data)
+	}
+	if got := anyStringValue(threadObj["short_id"]); got != shortID(mainID) {
+		t.Fatalf("thread.short_id: want %q got %q", shortID(mainID), got)
+	}
+
+	ctx := asMap(data["context"])
+	if ctx == nil {
+		t.Fatalf("expected context, got %#v", data)
+	}
+	events, _ := ctx["recent_events"].([]any)
+	ev0, _ := events[0].(map[string]any)
+	if got := anyStringValue(ev0["short_id"]); got != shortID("event_ws_1") {
+		t.Fatalf("context.recent_events[0].short_id: want %q got %q", shortID("event_ws_1"), got)
+	}
+
+	rt := asMap(data["related_threads"])
+	rtItems, _ := rt["items"].([]any)
+	rt0, _ := rtItems[0].(map[string]any)
+	rtThread := asMap(rt0["thread"])
+	if got := anyStringValue(rtThread["short_id"]); got != shortID("thread_ws_related") {
+		t.Fatalf("related_threads[0].thread.short_id: want %q got %q", shortID("thread_ws_related"), got)
+	}
+
+	rr := asMap(data["related_recommendations"])
+	rrItems, _ := rr["items"].([]any)
+	rr0, _ := rrItems[0].(map[string]any)
+	rrEv := asMap(rr0["event"])
+	if got := anyStringValue(rrEv["short_id"]); got != shortID("event_ws_rel") {
+		t.Fatalf("related_recommendations[0].event.short_id: want %q got %q", shortID("event_ws_rel"), got)
+	}
+}
+
 func TestThreadsRecommendationsSkipsMissingRelatedThreadsWithWarnings(t *testing.T) {
 	t.Parallel()
 
@@ -3100,13 +3185,13 @@ func TestThreadsRecommendationsSkipsMissingRelatedThreadsWithWarnings(t *testing
 		t.Fatalf("expected skipped related thread warning, got %#v", warning)
 	}
 
-	human := runCLIForTest(t, home, map[string]string{}, nil, []string{
+	textOut := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--base-url", server.URL,
 		"threads", "recommendations",
 		"--thread-id", "thread_main",
 	})
-	if !strings.Contains(human, "warnings:") || !strings.Contains(human, "thread_missing") {
-		t.Fatalf("expected warning section in human output, got:\n%s", human)
+	if !strings.Contains(textOut, "warnings:") || !strings.Contains(textOut, "thread_missing") {
+		t.Fatalf("expected warning section in default text output, got:\n%s", textOut)
 	}
 }
 
@@ -3582,7 +3667,7 @@ func TestThreadsRecommendationsDiscoveryErrors(t *testing.T) {
 	}
 }
 
-func TestThreadsContextHumanOutputIsPayloadFirst(t *testing.T) {
+func TestThreadsContextTextOutputIsPayloadFirst(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -3918,8 +4003,8 @@ func TestThreadsListIncludesShortID(t *testing.T) {
 		t.Fatalf("expected one thread in list payload, got %#v", payload)
 	}
 	thread, _ := threads[0].(map[string]any)
-	if got := anyStringValue(thread["short_id"]); got != canonicalID[:12] {
-		t.Fatalf("expected short_id %q, got %q payload=%#v", canonicalID[:12], got, payload)
+	if got := anyStringValue(thread["short_id"]); got != shortID(canonicalID) {
+		t.Fatalf("expected short_id %q, got %q payload=%#v", shortID(canonicalID), got, payload)
 	}
 }
 
@@ -3927,6 +4012,11 @@ func TestInboxAckActorIDMeAliasFromProfile(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/threads" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"threads":[{"id":"thread_1"}]}`))
+			return
+		}
 		if r.Method != http.MethodPost || r.URL.Path != "/inbox/"+url.PathEscape("inbox:1")+"/acknowledge" {
 			http.NotFound(w, r)
 			return

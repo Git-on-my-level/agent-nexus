@@ -492,6 +492,17 @@ func (a *App) normalizeMutationCommandBodyLegacy(ctx context.Context, cfg config
 			{key: "receipt_ref", kind: mutationFieldTypedRef},
 			{key: "evidence_refs", kind: mutationFieldTypedRefList},
 		})
+	case "agent.notifications.read", "agent.notifications.dismiss":
+		raw := strings.TrimSpace(anyString(body["wakeup_id"]))
+		if raw == "" || !shouldResolveDisplayedShortID(raw) || !strings.HasPrefix(raw, "artifact_") {
+			return nil
+		}
+		resolved, err := a.resolveResourceIDFromList(ctx, cfg, raw, artifactIDLookupSpec)
+		if err != nil {
+			return err
+		}
+		body["wakeup_id"] = resolved
+		return nil
 	default:
 		return nil
 	}

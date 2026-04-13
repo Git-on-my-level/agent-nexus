@@ -1,5 +1,6 @@
 // Package app implements CLI commands. Large pieces live in adjacent files:
 // resource_transport.go (invokeTypedJSON, headers, commandSpecByID),
+// text_output.go (default non-JSON summaries for typed commands),
 // resource_streaming.go (tail stream loop),
 // event_reference_preflight.go (embedded contract rules for events create).
 package app
@@ -26,7 +27,7 @@ import (
 
 var idPattern = regexp.MustCompile(`^[A-Za-z0-9._:@/-]+$`)
 
-const shortIDLength = 12
+const shortIDLength = 10
 const inboxAliasPrefix = "ibx_"
 const inboxAliasDigestLength = 12
 
@@ -95,7 +96,25 @@ var (
 		listCommand:    "boards cards list",
 		listCommandID:  "boards.cards.list",
 		listField:      "cards",
-		notFoundHints:  []string{"board not found"},
+		notFoundHints:  []string{"board not found", "board or card not found", "board card not found"},
+	}
+	documentIDLookupSpec = resourceIDLookupSpec{
+		idLabel:        "document id",
+		resource:       "document",
+		resourcePlural: "documents",
+		listCommand:    "docs list",
+		listCommandID:  "docs.list",
+		listField:      "documents",
+		notFoundHints:  []string{"document not found"},
+	}
+	eventIDLookupSpec = resourceIDLookupSpec{
+		idLabel:        "event id",
+		resource:       "event",
+		resourcePlural: "events",
+		listCommand:    "events list",
+		listCommandID:  "events.list",
+		listField:      "events",
+		notFoundHints:  []string{"event not found"},
 	}
 )
 
@@ -623,7 +642,7 @@ func parseThreadContextSelectionArgs(args []string, commandName string) (threadC
 	fs.Var(&typeFlag, "type", "Discover threads by type (local filter after list)")
 	fs.Var(&maxEventsFlag, "max-events", "Maximum recent events to include")
 	fs.Var(&includeArtifactContentFlag, "include-artifact-content", "Include key artifact content previews")
-	fs.Var(&fullIDFlag, "full-id", "Render full ids in human output")
+	fs.Var(&fullIDFlag, "full-id", "Render full ids in default text output (non-JSON)")
 	if err := fs.Parse(args); err != nil {
 		return threadContextSelection{}, errnorm.Usage("invalid_flags", err.Error())
 	}
@@ -676,8 +695,8 @@ func parseThreadRecommendationsArgs(args []string) (threadRecommendationsSelecti
 	fs.Var(&maxEventsFlag, "max-events", "Maximum recent events to include")
 	fs.Var(&includeArtifactContentFlag, "include-artifact-content", "Include key artifact content previews")
 	fs.Var(&includeRelatedEventContentFlag, "include-related-event-content", "Hydrate related review items with full events.get payloads")
-	fs.Var(&fullIDFlag, "full-id", "Render full ids in human output")
-	fs.Var(&fullSummaryFlag, "full-summary", "Show full recommendation summaries in human output")
+	fs.Var(&fullIDFlag, "full-id", "Render full ids in default text output (non-JSON)")
+	fs.Var(&fullSummaryFlag, "full-summary", "Show full recommendation summaries in default text output (non-JSON)")
 	if err := fs.Parse(args); err != nil {
 		return threadRecommendationsSelection{}, errnorm.Usage("invalid_flags", err.Error())
 	}
@@ -1043,7 +1062,21 @@ func (a *App) hydrateRelatedReviewEvents(ctx context.Context, cfg config.Resolve
 			out = append(out, item)
 			continue
 		}
-		result, err := a.invokeTypedJSON(ctx, cfg, "events get", "events.get", map[string]string{"event_id": eventID}, nil, nil)
+		resolvedEventID := eventID
+		if shouldResolveDisplayedShortID(eventID) {
+			var resolveErr error
+			resolvedEventID, resolveErr = a.resolveResourceIDFromList(ctx, cfg, eventID, eventIDLookupSpec)
+			if resolveErr != nil {
+				warnings = append(warnings, map[string]any{
+					"thread_id": threadID,
+					"event_id":  eventID,
+					"message":   fmt.Sprintf("kept summary-only related event %s: %s", eventID, resolveErr.Error()),
+				})
+				out = append(out, item)
+				continue
+			}
+		}
+		result, err := a.invokeTypedJSON(ctx, cfg, "events get", "events.get", map[string]string{"event_id": resolvedEventID}, nil, nil)
 		if err != nil {
 			warnings = append(warnings, map[string]any{
 				"thread_id": threadID,
@@ -1288,7 +1321,7 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 		if strings.TrimSpace(reasonFlag.value) != "" {
 			body["reason"] = strings.TrimSpace(reasonFlag.value)
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "artifacts trash", "artifacts.trash", map[string]string{"artifact_id": id}, nil, body)
+		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "artifacts trash", "artifacts.trash", "artifact_id", id, artifactIDLookupSpec, nil, body)
 		return result, "artifacts trash", callErr
 	case "archive":
 		fs := newSilentFlagSet("artifacts archive")
@@ -1326,7 +1359,7 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 		if strings.TrimSpace(reasonFlag.value) != "" {
 			body["reason"] = strings.TrimSpace(reasonFlag.value)
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "artifacts archive", "artifacts.archive", map[string]string{"artifact_id": id}, nil, body)
+		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "artifacts archive", "artifacts.archive", "artifact_id", id, artifactIDLookupSpec, nil, body)
 		return result, "artifacts archive", callErr
 	case "unarchive":
 		fs := newSilentFlagSet("artifacts unarchive")
@@ -1364,7 +1397,7 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 		if strings.TrimSpace(reasonFlag.value) != "" {
 			body["reason"] = strings.TrimSpace(reasonFlag.value)
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "artifacts unarchive", "artifacts.unarchive", map[string]string{"artifact_id": id}, nil, body)
+		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "artifacts unarchive", "artifacts.unarchive", "artifact_id", id, artifactIDLookupSpec, nil, body)
 		return result, "artifacts unarchive", callErr
 	case "restore":
 		fs := newSilentFlagSet("artifacts restore")
@@ -1402,7 +1435,7 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 		if strings.TrimSpace(reasonFlag.value) != "" {
 			body["reason"] = strings.TrimSpace(reasonFlag.value)
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "artifacts restore", "artifacts.restore", map[string]string{"artifact_id": id}, nil, body)
+		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "artifacts restore", "artifacts.restore", "artifact_id", id, artifactIDLookupSpec, nil, body)
 		return result, "artifacts restore", callErr
 	case "purge":
 		fs := newSilentFlagSet("artifacts purge")
@@ -1429,7 +1462,7 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 		if strings.TrimSpace(reasonFlag.value) != "" {
 			body["reason"] = strings.TrimSpace(reasonFlag.value)
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "artifacts purge", "artifacts.purge", map[string]string{"artifact_id": id}, nil, body)
+		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "artifacts purge", "artifacts.purge", "artifact_id", id, artifactIDLookupSpec, nil, body)
 		return result, "artifacts purge", callErr
 	default:
 		return nil, "artifacts", artifactsSubcommandSpec.unknownError(args[0])
@@ -1832,28 +1865,42 @@ func (a *App) runBoardCardsCommand(ctx context.Context, args []string, cfg confi
 		if err != nil {
 			return nil, "boards cards get", err
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "boards cards get", "boards.cards.get", map[string]string{"board_id": boardID, "id": cardID}, nil, nil)
+		resolvedBoard, err := a.resolveMaybeBoardID(ctx, cfg, boardID)
+		if err != nil {
+			return nil, "boards cards get", err
+		}
+		resolvedCard, err := a.resolveMaybeBoardCardID(ctx, cfg, resolvedBoard, cardID)
+		if err != nil {
+			return nil, "boards cards get", err
+		}
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "boards cards get", "boards.cards.get", map[string]string{"board_id": resolvedBoard, "id": resolvedCard}, nil, nil)
 		return result, "boards cards get", callErr
 	case "update":
 		pathParams, body, err := a.parseBoardCardUpdateInput(ctx, args[1:], cfg, "boards cards update")
 		if err != nil {
 			return nil, "boards cards update", err
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "boards cards update", "cards.patch", pathParams, nil, body)
+		rawCardID := strings.TrimSpace(pathParams["card_id"])
+		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "boards cards update", "cards.patch", "card_id", rawCardID, cardIDLookupSpec, nil, body)
 		return result, "boards cards update", callErr
 	case "move":
 		boardID, identifier, body, err := a.parseBoardCardMoveInput(ctx, args[1:], cfg, "boards cards move")
 		if err != nil {
 			return nil, "boards cards move", err
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "boards cards move", "cards.move", map[string]string{"card_id": identifier, "board_id": boardID}, nil, body)
+		resolvedCard, err := a.resolveMaybeBoardCardID(ctx, cfg, boardID, identifier)
+		if err != nil {
+			return nil, "boards cards move", err
+		}
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "boards cards move", "cards.move", map[string]string{"card_id": resolvedCard}, nil, body)
 		return result, "boards cards move", callErr
 	case "archive":
 		pathParams, body, err := a.parseBoardCardArchiveInput(ctx, args[1:], cfg, "boards cards archive")
 		if err != nil {
 			return nil, "boards cards archive", err
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "boards cards archive", "cards.archive", pathParams, nil, body)
+		rawCardID := strings.TrimSpace(pathParams["card_id"])
+		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "boards cards archive", "cards.archive", "card_id", rawCardID, cardIDLookupSpec, nil, body)
 		return result, "boards cards archive", callErr
 	default:
 		return nil, "boards cards", boardsCardsSubcommandSpec.unknownError(args[0])
@@ -1940,7 +1987,17 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 		if err != nil {
 			return nil, "docs get", err
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "docs get", "docs.get", map[string]string{"document_id": id}, nil, nil)
+		result, callErr := a.invokeTypedJSONWithIDResolution(
+			ctx,
+			cfg,
+			"docs get",
+			"docs.get",
+			"document_id",
+			id,
+			documentIDLookupSpec,
+			nil,
+			nil,
+		)
 		return result, "docs get", callErr
 	case "content":
 		result, callErr := a.runDocsContentCommand(ctx, args[1:], cfg)
@@ -1970,7 +2027,17 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 		if err != nil {
 			return nil, "docs history", err
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "docs history", "docs.revisions.list", map[string]string{"document_id": id}, nil, nil)
+		result, callErr := a.invokeTypedJSONWithIDResolution(
+			ctx,
+			cfg,
+			"docs history",
+			"docs.revisions.list",
+			"document_id",
+			id,
+			documentIDLookupSpec,
+			nil,
+			nil,
+		)
 		return result, "docs history", callErr
 	case "revision":
 		if len(args) < 2 {
@@ -2009,15 +2076,7 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 			return nil, "docs revision get", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar docs revision get`")
 		}
 
-		result, callErr := a.invokeTypedJSON(
-			ctx,
-			cfg,
-			"docs revision get",
-			"docs.revisions.get",
-			map[string]string{"document_id": documentID, "revision_id": revisionID},
-			nil,
-			nil,
-		)
+		result, callErr := a.invokeDocsRevisionGetWithIDResolution(ctx, cfg, documentID, revisionID)
 		return result, "docs revision get", callErr
 	case "trash":
 		fs := newSilentFlagSet("docs trash")
@@ -2055,7 +2114,7 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 		if strings.TrimSpace(reasonFlag.value) != "" {
 			body["reason"] = strings.TrimSpace(reasonFlag.value)
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "docs trash", "docs.trash", map[string]string{"document_id": id}, nil, body)
+		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "docs trash", "docs.trash", "document_id", id, documentIDLookupSpec, nil, body)
 		return result, "docs trash", callErr
 	case "archive":
 		fs := newSilentFlagSet("docs archive")
@@ -2093,7 +2152,7 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 		if strings.TrimSpace(reasonFlag.value) != "" {
 			body["reason"] = strings.TrimSpace(reasonFlag.value)
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "docs archive", "docs.archive", map[string]string{"document_id": id}, nil, body)
+		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "docs archive", "docs.archive", "document_id", id, documentIDLookupSpec, nil, body)
 		return result, "docs archive", callErr
 	case "unarchive":
 		fs := newSilentFlagSet("docs unarchive")
@@ -2131,7 +2190,7 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 		if strings.TrimSpace(reasonFlag.value) != "" {
 			body["reason"] = strings.TrimSpace(reasonFlag.value)
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "docs unarchive", "docs.unarchive", map[string]string{"document_id": id}, nil, body)
+		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "docs unarchive", "docs.unarchive", "document_id", id, documentIDLookupSpec, nil, body)
 		return result, "docs unarchive", callErr
 	case "restore":
 		fs := newSilentFlagSet("docs restore")
@@ -2169,7 +2228,7 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 		if strings.TrimSpace(reasonFlag.value) != "" {
 			body["reason"] = strings.TrimSpace(reasonFlag.value)
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "docs restore", "docs.restore", map[string]string{"document_id": id}, nil, body)
+		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "docs restore", "docs.restore", "document_id", id, documentIDLookupSpec, nil, body)
 		return result, "docs restore", callErr
 	case "purge":
 		fs := newSilentFlagSet("docs purge")
@@ -2196,7 +2255,7 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 		if strings.TrimSpace(reasonFlag.value) != "" {
 			body["reason"] = strings.TrimSpace(reasonFlag.value)
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "docs purge", "docs.purge", map[string]string{"document_id": id}, nil, body)
+		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "docs purge", "docs.purge", "document_id", id, documentIDLookupSpec, nil, body)
 		return result, "docs purge", callErr
 	default:
 		return nil, "docs", docsSubcommandSpec.unknownError(args[0])
@@ -2217,7 +2276,17 @@ func (a *App) runEventsCommand(ctx context.Context, args []string, cfg config.Re
 		if err != nil {
 			return nil, "events get", err
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "events get", "events.get", map[string]string{"event_id": id}, nil, nil)
+		result, callErr := a.invokeTypedJSONWithIDResolution(
+			ctx,
+			cfg,
+			"events get",
+			"events.get",
+			"event_id",
+			id,
+			eventIDLookupSpec,
+			nil,
+			nil,
+		)
 		return result, "events get", callErr
 	case "create":
 		body, dryRun, err := a.parseJSONBodyInputWithOptions(args[1:], "events create", jsonBodyInputOptions{
@@ -2288,7 +2357,7 @@ func (a *App) runEventsCommand(ctx context.Context, args []string, cfg config.Re
 		if strings.TrimSpace(reasonFlag.value) != "" {
 			body["reason"] = strings.TrimSpace(reasonFlag.value)
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "events archive", "events.archive", map[string]string{"event_id": id}, nil, body)
+		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "events archive", "events.archive", "event_id", id, eventIDLookupSpec, nil, body)
 		return result, "events archive", callErr
 	case "unarchive":
 		fs := newSilentFlagSet("events unarchive")
@@ -2326,7 +2395,7 @@ func (a *App) runEventsCommand(ctx context.Context, args []string, cfg config.Re
 		if strings.TrimSpace(reasonFlag.value) != "" {
 			body["reason"] = strings.TrimSpace(reasonFlag.value)
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "events unarchive", "events.unarchive", map[string]string{"event_id": id}, nil, body)
+		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "events unarchive", "events.unarchive", "event_id", id, eventIDLookupSpec, nil, body)
 		return result, "events unarchive", callErr
 	case "trash":
 		fs := newSilentFlagSet("events trash")
@@ -2364,7 +2433,7 @@ func (a *App) runEventsCommand(ctx context.Context, args []string, cfg config.Re
 		if strings.TrimSpace(reasonFlag.value) != "" {
 			body["reason"] = strings.TrimSpace(reasonFlag.value)
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "events trash", "events.trash", map[string]string{"event_id": id}, nil, body)
+		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "events trash", "events.trash", "event_id", id, eventIDLookupSpec, nil, body)
 		return result, "events trash", callErr
 	case "restore":
 		fs := newSilentFlagSet("events restore")
@@ -2402,7 +2471,7 @@ func (a *App) runEventsCommand(ctx context.Context, args []string, cfg config.Re
 		if strings.TrimSpace(reasonFlag.value) != "" {
 			body["reason"] = strings.TrimSpace(reasonFlag.value)
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "events restore", "events.restore", map[string]string{"event_id": id}, nil, body)
+		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "events restore", "events.restore", "event_id", id, eventIDLookupSpec, nil, body)
 		return result, "events restore", callErr
 	default:
 		return nil, "events", eventsSubcommandSpec.unknownError(args[0])
@@ -2485,7 +2554,17 @@ func (a *App) runDocsContentCommand(ctx context.Context, args []string, cfg conf
 	if err != nil {
 		return nil, err
 	}
-	result, callErr := a.invokeTypedJSON(ctx, cfg, "docs content", "docs.get", map[string]string{"document_id": id}, nil, nil)
+	result, callErr := a.invokeTypedJSONWithIDResolution(
+		ctx,
+		cfg,
+		"docs get",
+		"docs.get",
+		"document_id",
+		id,
+		documentIDLookupSpec,
+		nil,
+		nil,
+	)
 	if callErr != nil {
 		return nil, callErr
 	}
@@ -2519,7 +2598,7 @@ func (a *App) runDocsUpdateCommand(ctx context.Context, args []string, cfg confi
 		return nil, err
 	}
 	wireBody := normalizeDocsRevisionRequestForContract(body)
-	return a.invokeTypedJSON(ctx, cfg, "docs update", "docs.revisions.create", map[string]string{"document_id": id}, nil, wireBody)
+	return a.invokeTypedJSONWithIDResolution(ctx, cfg, "docs update", "docs.revisions.create", "document_id", id, documentIDLookupSpec, nil, wireBody)
 }
 
 func (a *App) runEventsListCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
@@ -2537,7 +2616,7 @@ func (a *App) runEventsListCommand(ctx context.Context, args []string, cfg confi
 	fs.Var(&typesCSVFlag, "types", "Comma-separated event types")
 	fs.Var(&actorIDFlag, "actor-id", "Filter by actor id")
 	fs.Var(&mineFlag, "mine", "Filter to events authored by active profile actor_id")
-	fs.Var(&fullIDFlag, "full-id", "Render full IDs in human output")
+	fs.Var(&fullIDFlag, "full-id", "Render full IDs in default text output (non-JSON)")
 	fs.Var(&maxEventsFlag, "max-events", "Return at most N most-recent matching events (0 means unlimited)")
 	fs.Var(&maxEventsFlag, "max", "Alias for --max-events")
 	fs.BoolVar(&includeArchived, "include-archived", false, "Include archived events")
@@ -2844,7 +2923,7 @@ func (a *App) runInboxList(ctx context.Context, args []string, cfg config.Resolv
 	var fullIDFlag trackedBool
 	fs.Var(&threadIDFlags, "thread-id", "Filter by thread id (repeatable)")
 	fs.Var(&typeFlags, "type", "Filter by inbox item type/category/kind (repeatable)")
-	fs.Var(&fullIDFlag, "full-id", "Render full inbox ids in human output")
+	fs.Var(&fullIDFlag, "full-id", "Render full inbox ids in default text output (non-JSON)")
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
@@ -4278,6 +4357,111 @@ func resolveActorIDAlias(raw string, cfg config.Resolved) (string, error) {
 	)
 }
 
+func remoteNotFoundMessage(err error) string {
+	normalized := errnorm.Normalize(err)
+	if normalized == nil || normalized.Kind != errnorm.KindRemote || normalized.Code != "not_found" {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(normalized.Message))
+}
+
+func revisionIDsFromDocsHistoryResult(result *commandResult) []string {
+	if result == nil {
+		return nil
+	}
+	data, _ := result.Data.(map[string]any)
+	body, _ := data["body"].(map[string]any)
+	if body == nil {
+		return nil
+	}
+	rawItems, _ := body["revisions"].([]any)
+	out := make([]string, 0, len(rawItems))
+	for _, rawItem := range rawItems {
+		item, _ := rawItem.(map[string]any)
+		if item == nil {
+			continue
+		}
+		if id := strings.TrimSpace(anyString(item["id"])); id != "" {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+func (a *App) resolveRevisionIDPrefix(ctx context.Context, cfg config.Resolved, documentID, rawRevisionID string) (string, error) {
+	result, err := a.invokeTypedJSON(ctx, cfg, "docs history", "docs.revisions.list", map[string]string{"document_id": documentID}, nil, nil)
+	if err != nil {
+		return "", err
+	}
+	ids := revisionIDsFromDocsHistoryResult(result)
+	rawRevisionID = strings.TrimSpace(rawRevisionID)
+	for _, id := range ids {
+		if id == rawRevisionID {
+			return id, nil
+		}
+	}
+	matches := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if strings.HasPrefix(id, rawRevisionID) {
+			matches = append(matches, id)
+		}
+	}
+	if len(matches) == 1 {
+		return matches[0], nil
+	}
+	if len(matches) > 1 {
+		sort.Strings(matches)
+		samples := matches
+		if len(samples) > 3 {
+			samples = samples[:3]
+		}
+		return "", errnorm.Usage(
+			"invalid_request",
+			fmt.Sprintf(
+				"revision id %q is ambiguous: %d revisions share that prefix. Use a longer prefix or canonical id. Matches: %s",
+				rawRevisionID,
+				len(matches),
+				strings.Join(samples, ", "),
+			),
+		)
+	}
+	return "", errnorm.Usage(
+		"invalid_request",
+		fmt.Sprintf("revision id %q is missing: no matching revision on document %q", rawRevisionID, documentID),
+	)
+}
+
+func (a *App) invokeDocsRevisionGetWithIDResolution(ctx context.Context, cfg config.Resolved, documentID, revisionID string) (*commandResult, error) {
+	invoke := func(docID, revID string) (*commandResult, error) {
+		return a.invokeTypedJSON(ctx, cfg, "docs revision get", "docs.revisions.get", map[string]string{"document_id": docID, "revision_id": revID}, nil, nil)
+	}
+	resDoc := strings.TrimSpace(documentID)
+	resRev := strings.TrimSpace(revisionID)
+	result, err := invoke(resDoc, resRev)
+	if err == nil {
+		return result, nil
+	}
+	if remoteNotFoundMessage(err) == "document not found" {
+		resolvedDoc, resolveErr := a.resolveResourceIDFromList(ctx, cfg, resDoc, documentIDLookupSpec)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		resDoc = resolvedDoc
+		result, err = invoke(resDoc, resRev)
+		if err == nil {
+			return result, nil
+		}
+	}
+	if remoteNotFoundMessage(err) == "document revision not found" {
+		resolvedRev, resolveErr := a.resolveRevisionIDPrefix(ctx, cfg, resDoc, resRev)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		return invoke(resDoc, resolvedRev)
+	}
+	return nil, err
+}
+
 func (a *App) resolveResourceIDFromList(ctx context.Context, cfg config.Resolved, rawID string, spec resourceIDLookupSpec) (string, error) {
 	result, err := a.invokeTypedJSON(ctx, cfg, spec.listCommand, spec.listCommandID, nil, nil, nil)
 	if err != nil {
@@ -4419,13 +4603,148 @@ func enrichListBodyWithShortIDs(commandID string, body any) (any, bool) {
 		return body, addShortIDToListField(typedBody, "artifacts")
 	case "boards.list":
 		return body, addShortIDToNestedListField(typedBody, "boards", []string{"board"})
+	case "docs.list":
+		return body, addShortIDToListField(typedBody, "documents")
 	case "inbox.list":
 		return body, addInboxAliasesToListField(typedBody, "items")
 	case "inbox.get":
 		return body, addInboxAliasToItemField(typedBody, "item")
+	case "threads.workspace":
+		return body, enrichThreadWorkspaceBodyWithShortIDs(typedBody)
 	default:
 		return body, false
 	}
+}
+
+func addShortIDToObjectIfPresent(obj map[string]any) bool {
+	if obj == nil {
+		return false
+	}
+	id := strings.TrimSpace(anyString(obj["id"]))
+	if id == "" {
+		return false
+	}
+	expectedShortID := shortID(id)
+	if strings.TrimSpace(anyString(obj["short_id"])) == expectedShortID {
+		return false
+	}
+	obj["short_id"] = expectedShortID
+	return true
+}
+
+func addShortIDsToObjectSlice(slice []any) bool {
+	changed := false
+	for _, raw := range slice {
+		item, _ := raw.(map[string]any)
+		if item == nil {
+			continue
+		}
+		if addShortIDToObjectIfPresent(item) {
+			changed = true
+		}
+	}
+	return changed
+}
+
+// enrichThreadWorkspaceBodyWithShortIDs mirrors list-response short_id enrichment for GET /threads/{id}/workspace.
+func enrichThreadWorkspaceBodyWithShortIDs(body map[string]any) bool {
+	if body == nil {
+		return false
+	}
+	changed := false
+	if thread := asMap(body["thread"]); thread != nil {
+		changed = addShortIDToObjectIfPresent(thread) || changed
+	}
+	contextSliceKeys := []string{"recent_events", "key_artifacts", "open_cards", "documents"}
+	if ctx := asMap(body["context"]); ctx != nil {
+		for _, key := range contextSliceKeys {
+			if items, ok := ctx[key].([]any); ok {
+				changed = addShortIDsToObjectSlice(items) || changed
+			}
+		}
+	}
+	collabSliceKeys := []string{"recommendations", "decision_requests", "decisions", "key_artifacts", "open_cards"}
+	if collab := asMap(body["collaboration"]); collab != nil {
+		for _, key := range collabSliceKeys {
+			if items, ok := collab[key].([]any); ok {
+				changed = addShortIDsToObjectSlice(items) || changed
+			}
+		}
+	}
+	if inbox := asMap(body["inbox"]); inbox != nil {
+		changed = addInboxAliasesToListField(inbox, "items") || changed
+	}
+	if pending := asMap(body["pending_decisions"]); pending != nil {
+		changed = addInboxAliasesToListField(pending, "items") || changed
+	}
+	if memberships := asMap(body["board_memberships"]); memberships != nil {
+		if items, ok := memberships["items"].([]any); ok {
+			for _, raw := range items {
+				item, _ := raw.(map[string]any)
+				if item == nil {
+					continue
+				}
+				if board := asMap(item["board"]); board != nil {
+					if addShortIDToObjectIfPresent(board) {
+						changed = true
+					}
+				}
+				if card := asMap(item["card"]); card != nil {
+					if addShortIDToObjectIfPresent(card) {
+						changed = true
+					}
+				}
+			}
+		}
+	}
+	if rt := asMap(body["related_threads"]); rt != nil {
+		if items, ok := rt["items"].([]any); ok {
+			for _, raw := range items {
+				item, _ := raw.(map[string]any)
+				if item == nil {
+					continue
+				}
+				if t := asMap(item["thread"]); t != nil {
+					if addShortIDToObjectIfPresent(t) {
+						changed = true
+					}
+				}
+				for _, sec := range []string{"recommendations", "decision_requests", "decisions"} {
+					if secMap := asMap(item[sec]); secMap != nil {
+						if nestedItems, ok := secMap["items"].([]any); ok {
+							changed = addShortIDsToObjectSlice(nestedItems) || changed
+						}
+					}
+				}
+			}
+		}
+	}
+	for _, sectionKey := range []string{"related_recommendations", "related_decision_requests", "related_decisions"} {
+		if sec := asMap(body[sectionKey]); sec != nil {
+			if items, ok := sec["items"].([]any); ok {
+				for _, raw := range items {
+					item, _ := raw.(map[string]any)
+					if item == nil {
+						continue
+					}
+					if addShortIDToObjectIfPresent(item) {
+						changed = true
+					}
+					if t := asMap(item["thread"]); t != nil {
+						if addShortIDToObjectIfPresent(t) {
+							changed = true
+						}
+					}
+					if ev := asMap(item["event"]); ev != nil {
+						if addShortIDToObjectIfPresent(ev) {
+							changed = true
+						}
+					}
+				}
+			}
+		}
+	}
+	return changed
 }
 
 func addShortIDToListField(body map[string]any, field string) bool {
@@ -4439,17 +4758,9 @@ func addShortIDToListField(body map[string]any, field string) bool {
 		if item == nil {
 			continue
 		}
-		id := strings.TrimSpace(anyString(item["id"]))
-		if id == "" {
-			continue
+		if addShortIDToObjectIfPresent(item) {
+			changed = true
 		}
-		currentShortID := strings.TrimSpace(anyString(item["short_id"]))
-		expectedShortID := shortID(id)
-		if currentShortID == expectedShortID {
-			continue
-		}
-		item["short_id"] = expectedShortID
-		changed = true
 	}
 	return changed
 }
@@ -4477,16 +4788,9 @@ func addShortIDToNestedListField(body map[string]any, field string, path []strin
 		if target == nil {
 			continue
 		}
-		id := strings.TrimSpace(anyString(target["id"]))
-		if id == "" {
-			continue
+		if addShortIDToObjectIfPresent(target) {
+			changed = true
 		}
-		expectedShortID := shortID(id)
-		if strings.TrimSpace(anyString(target["short_id"])) == expectedShortID {
-			continue
-		}
-		target["short_id"] = expectedShortID
-		changed = true
 	}
 	return changed
 }

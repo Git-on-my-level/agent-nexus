@@ -419,7 +419,7 @@ func (s *Service) emitException(ctx context.Context, threadID string, eventID st
 
 func (s *Service) appendThreadEvent(ctx context.Context, requestKey string, event map[string]any) error {
 	if strings.TrimSpace(requestKey) != "" && strings.TrimSpace(anyString(event["id"])) == "" {
-		event["id"] = deriveRequestScopedID("events.create", s.cfg.ActorID, requestKey, "event")
+		event["id"] = deriveRequestScopedID("events.create", s.cfg.ActorID, requestKey, "ev")
 	}
 	err := s.deps.AppendEvent(ctx, s.cfg.ActorID, event)
 	if err != nil {

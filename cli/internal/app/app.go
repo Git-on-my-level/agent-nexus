@@ -210,8 +210,8 @@ func parseGlobalFlags(args []string) (config.Overrides, []string, bool, error) {
 	fs.Var(&baseURLFlag, "base-url", "Core base URL")
 	fs.Var(&agentFlag, "agent", "Agent profile name")
 	fs.Var(&noColorFlag, "no-color", "Disable colorized output")
-	fs.Var(&verboseFlag, "verbose", "Show the full response payload for human-readable commands")
-	fs.Var(&headersFlag, "headers", "Include response status and headers in human-readable output")
+	fs.Var(&verboseFlag, "verbose", "Show the full response payload for default text output (non-JSON)")
+	fs.Var(&headersFlag, "headers", "Include response status and headers in default text output (non-JSON)")
 	fs.Var(&timeoutFlag, "timeout", "HTTP timeout duration")
 
 	var helpRequested bool

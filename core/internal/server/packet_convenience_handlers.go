@@ -49,6 +49,17 @@ type packetCreateRequest struct {
 	EventRefs  func(artifactID string, threadID string, subjectRef string, packet map[string]any) []string
 }
 
+func packetIDLabel(kind string) string {
+	switch kind {
+	case "receipt":
+		return "rc"
+	case "review":
+		return "rv"
+	default:
+		return kind[:min(3, len(kind))]
+	}
+}
+
 func createPacketArtifactAndEvent(w http.ResponseWriter, r *http.Request, opts handlerOptions, request packetCreateRequest) {
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
@@ -94,7 +105,6 @@ func createPacketArtifactAndEvent(w http.ResponseWriter, r *http.Request, opts h
 	}
 	req.Artifact["kind"] = request.PacketKind
 	scope := "packets." + request.PacketKind + ".create"
-	packetIDLabel := "artifact-" + strings.ReplaceAll(request.PacketKind, "_", "-")
 	idField, hasIDField := packetIDFieldName(request.PacketKind)
 	if !hasIDField {
 		writeError(w, http.StatusBadRequest, "invalid_request", "packet id rule is not defined")
@@ -103,7 +113,7 @@ func createPacketArtifactAndEvent(w http.ResponseWriter, r *http.Request, opts h
 	artifactID := firstNonEmptyString(req.Artifact["id"])
 	if artifactID == "" {
 		if strings.TrimSpace(req.RequestKey) != "" {
-			artifactID = deriveRequestScopedID(scope, actorID, req.RequestKey, packetIDLabel)
+			artifactID = deriveRequestScopedID(scope, actorID, req.RequestKey, packetIDLabel(request.PacketKind))
 		} else {
 			artifactID = uuid.NewString()
 		}
@@ -178,7 +188,7 @@ func createPacketArtifactAndEvent(w http.ResponseWriter, r *http.Request, opts h
 		"provenance": actorStatementProvenance(),
 	}
 	if strings.TrimSpace(req.RequestKey) != "" {
-		event["id"] = deriveRequestScopedID(scope, actorID, req.RequestKey, packetIDLabel+"-event")
+		event["id"] = deriveRequestScopedID(scope, actorID, req.RequestKey, packetIDLabel(request.PacketKind)+"e")
 	}
 
 	artifact, storedEvent, err := opts.primitiveStore.CreateArtifactAndEvent(r.Context(), actorID, req.Artifact, req.Packet, "structured", event)

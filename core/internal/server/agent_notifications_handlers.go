@@ -212,7 +212,7 @@ func handleMutateAgentNotification(
 
 	requestKey := agentNotificationRequestKey(eventType, actorID, notificationID)
 	event := map[string]any{
-		"id":        deriveRequestScopedID(eventType, actorID, requestKey, "event"),
+		"id":        deriveRequestScopedID(eventType, actorID, requestKey, "ev"),
 		"type":      eventType,
 		"thread_id": notification.ThreadID,
 		"refs":      notification.eventRefs(),

@@ -110,7 +110,8 @@ func agentGuideSections() []guideSection {
 			Title: "Command habits",
 			Lines: []string{
 				"- Use list/get/context/workspace commands to orient before editing.",
-				"- Use `--full-id` when an ID will be reused in later commands.",
+				"- Default text and JSON list payloads use a 10-character `short_id` prefix; the CLI resolves that prefix to a canonical id when you pass it back into commands. Use `--full-id` when a value is ambiguous or you need the full id for copy/paste.",
+				"- In default text resource lists (threads, boards, topics, etc.), the first column may show a short scan label derived after the type prefix (not the same as `short_id`); use `--json` `id`/`short_id` or `--full-id` when passing ids back into commands.",
 				"- Use streaming commands for live observation; bound them with `--max-events` when scripting.",
 				"- Use `draft` or proposal/apply flows when the CLI exposes them and the change benefits from reviewability.",
 				"- Prefer narrow filters over broad listings when triaging large state.",

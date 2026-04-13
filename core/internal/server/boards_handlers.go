@@ -101,7 +101,7 @@ func handleCreateBoard(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	}
 	derivedBoardID := false
 	if strings.TrimSpace(req.RequestKey) != "" && firstNonEmptyString(req.Board["id"]) == "" {
-		req.Board["id"] = deriveRequestScopedID("boards.create", actorID, req.RequestKey, "board")
+		req.Board["id"] = deriveRequestScopedID("boards.create", actorID, req.RequestKey, "bd")
 		derivedBoardID = true
 	}
 
@@ -549,7 +549,7 @@ func addBoardCardFromRaw(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		if idempotencyOp == "cards.create" {
 			deriveScope = "cards.create"
 		}
-		req.CardID = deriveRequestScopedID(deriveScope, actorID, req.RequestKey, "card")
+		req.CardID = deriveRequestScopedID(deriveScope, actorID, req.RequestKey, "cd")
 		derivedCardID = true
 	}
 	explicitReplayCardID := strings.TrimSpace(req.CardID)
@@ -699,7 +699,7 @@ func handleBatchAddBoardCards(w http.ResponseWriter, r *http.Request, opts handl
 			return
 		}
 		if strings.TrimSpace(batchRequestKey) != "" && strings.TrimSpace(m.CardID) == "" {
-			m.CardID = deriveRequestScopedID("boards.cards.batch_create", actorID, fmt.Sprintf("%s#%d", batchRequestKey, i), "card")
+			m.CardID = deriveRequestScopedID("boards.cards.batch_create", actorID, fmt.Sprintf("%s#%d", batchRequestKey, i), "cd")
 		}
 		createStatus := "todo"
 		if strings.TrimSpace(m.ColumnKey) == "done" {

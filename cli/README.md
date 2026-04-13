@@ -32,7 +32,7 @@ API shape and errors: `../contracts/oar-openapi.yaml` (`/secrets`). Core enforce
 Generated command/concept docs are under `docs/generated/`.
 The shipped runtime reference is available from the binary with `oar meta docs` / `oar meta doc <topic>`, including the bundled `agent-guide` topic. Editor-specific agent skill exports are available with `oar meta skill <target>`, for example `oar meta skill cursor --write-dir ~/.cursor/skills/oar-cli-onboard`. The checked-in runtime-help artifact is regenerated with `go run ./cmd/oar-docs-gen`.
 
-Default text output uses payload-first summaries. Use `--verbose` to print the full response body and `--headers` to opt into response status/header framing when debugging.
+Default text output uses payload-first summaries; list-style payloads include **10-character** `short_id` fields, and the CLI resolves those prefixes (and other supported short ids) to canonical ids on subsequent commands. Use `--full-id` when you need full ids or hit ambiguous-prefix errors. Use `--verbose` to print the full response body and `--headers` to opt into response status/header framing when debugging.
 
 ## Command-shape compatibility aliases
 

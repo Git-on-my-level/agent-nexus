@@ -935,8 +935,8 @@
                           : "Subject:"}
                       </span>
                       <span
-                        >{subjectId.length > 12
-                          ? `${subjectId.slice(0, 8)}…`
+                        >{subjectId.length > 10
+                          ? `${subjectId.slice(0, 10)}…`
                           : subjectId}</span
                       >
                     </span>

@@ -68,7 +68,7 @@ func init() {
 				{Name: "--inventory <path>", Description: "Inventory produced by `oar import scan`. Positional form also supported."},
 				{Name: "--dedupe <path>", Description: "Dedupe report. Defaults to sibling `dedupe.json`."},
 				{Name: "--out <dir>", Description: "Output directory. Defaults to the inventory directory."},
-				{Name: "--source-name <name>", Description: "High-signal human name used in titles, tags, and provenance. Defaults from the inventory directory."},
+				{Name: "--source-name <name>", Description: "High-signal display name used in titles, tags, and provenance. Defaults from the inventory directory."},
 				{Name: "--collector-threshold <n>", Description: "Minimum cluster size that triggers a collector thread."},
 			},
 		},

@@ -63,7 +63,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--mine", Description: "Resolve to the active profile actor_id."},
 			{Name: "--max-events <n>", Description: "Keep the most recent matching events."},
 			{Name: "--max <n>", Description: "Alias for --max-events."},
-			{Name: "--full-id", Description: "Render full event ids in human output."},
+			{Name: "--full-id", Description: "Render full event ids in default text output (non-JSON)."},
 			{Name: "--include-archived", Description: "Include archived events in results."},
 			{Name: "--archived-only", Description: "Show only archived events."},
 			{Name: "--include-trashed", Description: "Include trashed events in results."},
@@ -87,7 +87,7 @@ var localHelperTopics = []localHelperTopic{
 		Path:        "events explain",
 		Summary:     "Explain known event-type conventions, required refs, and validation hints, including when `message_posted` targets a backing-thread message stream.",
 		JSONShape:   "`event_type`, `known`, `required_refs`, `payload_requirements`, `examples`, `hint`",
-		Composition: "Formats the embedded event reference and validation guidance into a human-readable reference without sending a request. Use it to confirm when `message_posted` is required for a visible backing-thread message in the web UI Messages tab.",
+		Composition: "Formats the embedded event reference and validation guidance into a plain-text reference without sending a request. Use it to confirm when `message_posted` is required for a visible backing-thread message in the web UI Messages tab.",
 		Examples: []string{
 			`oar events explain`,
 			`oar events explain message_posted`,
@@ -129,7 +129,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--type <thread-type>", Description: "Local discovery filter after `threads list`."},
 			{Name: "--max-events <n>", Description: "Maximum recent context events to include."},
 			{Name: "--include-artifact-content", Description: "Include artifact content previews from the underlying read-only thread views."},
-			{Name: "--full-id", Description: "Render full event and inbox ids in human output."},
+			{Name: "--full-id", Description: "Render full event and inbox ids in default text output (non-JSON)."},
 		},
 	},
 	{
@@ -151,8 +151,8 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--type <thread-type>", Description: "Local discovery filter after `threads list`."},
 			{Name: "--max-events <n>", Description: "Maximum recent context events to include."},
 			{Name: "--include-artifact-content", Description: "Include artifact content previews from the underlying read-only thread views."},
-			{Name: "--full-summary", Description: "Show full recommendation/decision summaries in human output."},
-			{Name: "--full-id", Description: "Render full event and inbox ids in human output."},
+			{Name: "--full-summary", Description: "Show full recommendation/decision summaries in default text output (non-JSON)."},
+			{Name: "--full-id", Description: "Render full event and inbox ids in default text output (non-JSON)."},
 		},
 	},
 	{
@@ -175,8 +175,8 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--max-events <n>", Description: "Maximum recent context events to include."},
 			{Name: "--include-artifact-content", Description: "Include artifact content previews from the underlying read-only thread views."},
 			{Name: "--include-related-event-content", Description: "Hydrate related review items with full `events.get` payloads."},
-			{Name: "--full-summary", Description: "Show full recommendation/decision summaries in human output."},
-			{Name: "--full-id", Description: "Render full event and inbox ids in human output."},
+			{Name: "--full-summary", Description: "Show full recommendation/decision summaries in default text output (non-JSON)."},
+			{Name: "--full-id", Description: "Render full event and inbox ids in default text output (non-JSON)."},
 		},
 	},
 	{

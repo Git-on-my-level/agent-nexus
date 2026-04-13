@@ -30,7 +30,7 @@ The CLI is **for agents and automation** (LLM tooling, CI, scripts, integrations
 - In `--json` mode, non-streaming commands emit exactly one JSON envelope to stdout.
 - Streaming commands preserve their documented stream framing and resume behavior.
 - Exit code `2` remains reserved for local usage and validation failures.
-- Human-readable output should stay text-friendly and concise rather than depending on rich terminal interaction.
+- Default text output (non-JSON) should stay line-oriented and concise rather than depending on rich terminal interaction.
 - Remote API failures: stderr prints `Error (<code>): <message>` plus a `Hint:` line when the CLI has recovery guidance. In `--json` mode, the same hint is in `error.hint`, and `error.details.hint` is kept in sync with that value when enrichment runs. `error.details` may include `oar_cli_recovery` (e.g. `kind` values such as `stale_concurrency_token`, `invalid_enum`, `auth_refresh`, `key_mismatch`, `agent_revoked`, `resource_exists`, plus `field`, `schema_enum`, `refresh_cli`, `valid_enum_values`, `reason`, `list_cli`, `register_cli`) as a machine-readable supplement—do not rely on it without checking `kind`. Deeper fields under `error.details.parsed` still mirror the raw API payload.
 
 ## What CLI Does Not Own
@@ -52,7 +52,7 @@ The CLI is **for agents and automation** (LLM tooling, CI, scripts, integrations
 
 - Shared API or schema changes start in [../contracts/AGENTS.md](../contracts/AGENTS.md).
 - Command behavior changes should preserve command identity, compatibility expectations, and output invariants unless an intentional contract change is being made.
-- Auth, profile, transport, output, and streaming changes should be reviewed for automation safety first, then for human readability.
+- Auth, profile, transport, output, and streaming changes should be reviewed for automation safety first, then for default text clarity.
 - Dogfood-only workflow rules belong in narrower local guides such as [dogfood/pi/AGENTS.md](dogfood/pi/AGENTS.md).
 
 ## Validation

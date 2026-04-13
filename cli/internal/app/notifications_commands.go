@@ -58,15 +58,15 @@ func (a *App) runNotificationsList(ctx context.Context, args []string, cfg confi
 		query = append(query, queryParam{name: "status", values: []string{status}})
 	}
 	query = append(query, queryParam{name: "order", values: []string{order}})
-	return a.invokeTypedJSON(ctx, cfg, "notifications list", "notifications.list", nil, query, nil)
+	return a.invokeTypedJSON(ctx, cfg, "agent notifications list", "agent.notifications.list", nil, query, nil)
 }
 
 func (a *App) runNotificationsRead(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
-	return a.runNotificationMutation(ctx, args, cfg, "notifications read", "notifications.read")
+	return a.runNotificationMutation(ctx, args, cfg, "notifications read", "agent.notifications.read")
 }
 
 func (a *App) runNotificationsDismiss(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
-	return a.runNotificationMutation(ctx, args, cfg, "notifications dismiss", "notifications.dismiss")
+	return a.runNotificationMutation(ctx, args, cfg, "notifications dismiss", "agent.notifications.dismiss")
 }
 
 func (a *App) runNotificationMutation(ctx context.Context, args []string, cfg config.Resolved, commandName string, commandID string) (*commandResult, error) {

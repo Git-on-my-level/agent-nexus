@@ -124,7 +124,7 @@ Keep these together so request wiring remains centralized:
 - auth token attachment,
 - generated headers,
 - command ID -> method/path resolution,
-- response formatting for human and JSON output.
+- response formatting for default text and JSON output.
 
 These helpers are shared with `cli/internal/app/draft_commands.go`, so the move must preserve their signatures and package-level visibility.
 
@@ -172,7 +172,7 @@ At the end of the move series, `resource_commands.go` should contain only `runTy
 
 ### Output and transport behavior
 
-- Preserve `invokeTypedJSON(...)` human text formatting and JSON envelope data shape.
+- Preserve `invokeTypedJSON(...)` default text formatting and JSON envelope data shape.
 - Preserve `artifacts content` dual behavior:
   - raw bytes when not in `--json`,
   - `status_code` / `headers` / `body_base64` / optional `body_text` when in `--json`.

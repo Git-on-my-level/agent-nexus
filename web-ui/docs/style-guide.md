@@ -310,7 +310,7 @@ Internal navigation links that sit inline: `text-indigo-400 hover:text-indigo-30
 
 Long identifiers (UUIDs, thread IDs, content hashes) are common in OAR data. Display rules:
 
-1. **Truncate in list contexts.** Show the first 8 characters followed by `…` for UUIDs and hashes. Use `title` attribute or copy-on-click for the full value.
+1. **Truncate in list contexts.** Show the first 10 characters followed by `…` for UUIDs and hashes. Use `title` attribute or copy-on-click for the full value.
 2. **Monospace for IDs.** Use `font-mono text-[11px]` for raw identifiers to distinguish them from prose.
 3. **Separate ref links.** When displaying multiple refs on one line, separate them with `·` in `text-[var(--ui-text-subtle)]` or use distinct labeled groups (`Thread`, `Topic`, `Card`). Never concatenate bare ref strings.
 4. **Readable metadata on list rows.** In artifact/thread/document list views, metadata lines should use structured labels (`Thread:`, `Topic:`, `Card:`) before each ref link. Avoid dumping raw refs as a run-on string.
@@ -464,5 +464,5 @@ When displaying counts that exclude certain items, label them explicitly. Exampl
 4. Keep semantic colors to the opacity-based pattern.
 5. **Verify contrast:** all readable text must be `gray-500` or brighter on `gray-100` surfaces. Use the contrast table in the Accessibility section as reference.
 6. Maintain compact spacing — prefer `py-2.5` over `py-4`, prefer `text-[13px]` over `text-sm`.
-7. Truncate IDs and hashes in list views — show 8 characters max with `title` for the full value.
+7. Truncate IDs and hashes in list views — show 10 characters max with `title` for the full value.
 8. Use `text-[var(--ui-text-muted)]` (not `text-[var(--ui-text-subtle)]`) for secondary metadata that operators need to read.

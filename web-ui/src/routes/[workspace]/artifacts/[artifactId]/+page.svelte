@@ -174,7 +174,7 @@
     return { outcome: "accept", notes: "", evidenceRefsInput: "" };
   }
   function generateReviewId() {
-    return `artifact-review-${Math.random().toString(36).slice(2, 10)}`;
+    return `rv-${Math.random().toString(36).slice(2, 10)}`;
   }
 
   function buildRefSuggestions(candidates = []) {

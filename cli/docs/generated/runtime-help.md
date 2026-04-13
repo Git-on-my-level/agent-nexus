@@ -346,7 +346,8 @@ Use help output as the source of truth for exact flags, request shapes, enums, a
 Command habits
 
 - Use list/get/context/workspace commands to orient before editing.
-- Use `--full-id` when an ID will be reused in later commands.
+- Default text and JSON list payloads use a 10-character `short_id` prefix; the CLI resolves that prefix to a canonical id when you pass it back into commands. Use `--full-id` when a value is ambiguous or you need the full id for copy/paste.
+- In default text resource lists (threads, boards, topics, etc.), the first column may show a short scan label derived after the type prefix (not the same as `short_id`); use `--json` `id`/`short_id` or `--full-id` when passing ids back into commands.
 - Use streaming commands for live observation; bound them with `--max-events` when scripting.
 - Use `draft` or proposal/apply flows when the CLI exposes them and the change benefits from reviewability.
 - Prefer narrow filters over broad listings when triaging large state.
@@ -3947,7 +3948,7 @@ Flags:
   --mine                       Resolve to the active profile actor_id.
   --max-events <n>             Keep the most recent matching events.
   --max <n>                    Alias for --max-events.
-  --full-id                    Render full event ids in human output.
+  --full-id                    Render full event ids in default text output (non-JSON).
   --include-archived           Include archived events in results.
   --archived-only              Show only archived events.
   --include-trashed            Include trashed events in results.
@@ -3994,7 +3995,7 @@ Local Help: events explain
 
 - Kind: `local helper`
 - Summary: Explain known event-type conventions, required refs, and validation hints, including when `message_posted` targets a backing-thread message stream.
-- Composition: Formats the embedded event reference and validation guidance into a human-readable reference without sending a request. Use it to confirm when `message_posted` is required for a visible backing-thread message in the web UI Messages tab.
+- Composition: Formats the embedded event reference and validation guidance into a plain-text reference without sending a request. Use it to confirm when `message_posted` is required for a visible backing-thread message in the web UI Messages tab.
 - JSON body: `event_type`, `known`, `required_refs`, `payload_requirements`, `examples`, `hint`
 - Examples:
   - `oar events explain`
@@ -4061,7 +4062,7 @@ Flags:
   --type <thread-type>         Local discovery filter after `threads list`.
   --max-events <n>             Maximum recent context events to include.
   --include-artifact-content   Include artifact content previews from the underlying read-only thread views.
-  --full-id                    Render full event and inbox ids in human output.
+  --full-id                    Render full event and inbox ids in default text output (non-JSON).
 
 
 Global flags:
@@ -4095,8 +4096,8 @@ Flags:
   --type <thread-type>         Local discovery filter after `threads list`.
   --max-events <n>             Maximum recent context events to include.
   --include-artifact-content   Include artifact content previews from the underlying read-only thread views.
-  --full-summary               Show full recommendation/decision summaries in human output.
-  --full-id                    Render full event and inbox ids in human output.
+  --full-summary               Show full recommendation/decision summaries in default text output (non-JSON).
+  --full-id                    Render full event and inbox ids in default text output (non-JSON).
 
 
 Global flags:
@@ -4131,8 +4132,8 @@ Flags:
   --max-events <n>             Maximum recent context events to include.
   --include-artifact-content   Include artifact content previews from the underlying read-only thread views.
   --include-related-event-content Hydrate related review items with full `events.get` payloads.
-  --full-summary               Show full recommendation/decision summaries in human output.
-  --full-id                    Render full event and inbox ids in human output.
+  --full-summary               Show full recommendation/decision summaries in default text output (non-JSON).
+  --full-id                    Render full event and inbox ids in default text output (non-JSON).
 
 
 Global flags:
@@ -4662,7 +4663,7 @@ Flags:
   --inventory <path>           Inventory produced by `oar import scan`. Positional form also supported.
   --dedupe <path>              Dedupe report. Defaults to sibling `dedupe.json`.
   --out <dir>                  Output directory. Defaults to the inventory directory.
-  --source-name <name>         High-signal human name used in titles, tags, and provenance. Defaults from the inventory directory.
+  --source-name <name>         High-signal display name used in titles, tags, and provenance. Defaults from the inventory directory.
   --collector-threshold <n>    Minimum cluster size that triggers a collector thread.
 
 

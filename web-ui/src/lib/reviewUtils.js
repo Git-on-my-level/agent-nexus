@@ -80,7 +80,7 @@ export function validateReviewDraft(draft, options = {}) {
 export function buildReviewPayload(draft, options = {}) {
   const reviewId =
     String(options.reviewId ?? "").trim() ||
-    `artifact-review-${Math.random().toString(36).slice(2, 10)}`;
+    `rv-${Math.random().toString(36).slice(2, 10)}`;
   const validation = validateReviewDraft(draft, { ...options, reviewId });
   if (!validation.valid) {
     return {

@@ -41,7 +41,7 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		return
 	}
 	if strings.TrimSpace(req.RequestKey) != "" && firstNonEmptyString(req.Event["id"]) == "" {
-		req.Event["id"] = deriveRequestScopedID("events.create", actorID, req.RequestKey, "event")
+		req.Event["id"] = deriveRequestScopedID("events.create", actorID, req.RequestKey, "ev")
 	}
 	replayStatus, replayPayload, replayed, err := readIdempotencyReplay(r.Context(), opts.primitiveStore, "events.create", actorID, req.RequestKey, req)
 	if writeIdempotencyError(w, err) {

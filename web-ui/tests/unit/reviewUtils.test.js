@@ -41,6 +41,24 @@ describe("review draft/payload builder", () => {
     reviewId: "artifact-review-1",
   };
 
+  it("generates an rv- prefixed review_id when reviewId is omitted", () => {
+    const result = buildReviewPayload(
+      {
+        outcome: "accept",
+        notes: "Looks good.",
+        evidenceRefsInput: "artifact:artifact-evidence-1",
+      },
+      {
+        subjectRef: "card:card-1",
+        receiptId: "artifact-receipt-1",
+        reviewId: "",
+      },
+    );
+
+    expect(result.valid).toBe(true);
+    expect(result.packet.review_id).toMatch(/^rv-/);
+  });
+
   it("builds valid payload with evidence_refs", () => {
     const result = buildReviewPayload(
       {

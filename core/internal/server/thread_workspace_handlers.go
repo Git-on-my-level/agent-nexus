@@ -754,10 +754,10 @@ func workspaceTruncatePreview(raw string) string {
 
 func workspaceShortID(id string) string {
 	id = strings.TrimSpace(id)
-	if len(id) <= 12 {
+	if len(id) <= 10 {
 		return id
 	}
-	return id[:12]
+	return id[:10]
 }
 
 func workspaceIntValue(raw any) int {

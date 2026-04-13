@@ -65,6 +65,63 @@ func TestFormatCardRecord_Trashed(t *testing.T) {
 	}
 }
 
+func TestFormatBoardsList_TextScanStripsBoardPrefix(t *testing.T) {
+	t.Parallel()
+	body := map[string]any{
+		"boards": []any{
+			map[string]any{
+				"board": map[string]any{
+					"id":     "board-summer-menu-plan",
+					"title":  "Summer menu",
+					"status": "active",
+				},
+				"summary": map[string]any{"card_count": 2, "unresolved_card_count": 1, "document_count": 0},
+			},
+		},
+	}
+	got := formatBoardsList(body)
+	// Tail after "board-" is summer-menu-plan; first shortIDLength (10) runes: summer-men
+	if !strings.Contains(got, "summer-men") || strings.Contains(got, "board-su") {
+		t.Fatalf("expected scan-style id tail (10 runes) without redundant board- prefix, got:\n%s", got)
+	}
+}
+
+func TestFormatNamedList_ThreadsScanStripsThreadPrefix(t *testing.T) {
+	t.Parallel()
+	body := map[string]any{
+		"threads": []any{
+			map[string]any{
+				"id":     "thread-kids-lemonade-main",
+				"title":  "Lemonade plan",
+				"status": "active",
+			},
+		},
+	}
+	got := formatNamedList(body, "threads", "Threads", "thread", renderThreadListItem)
+	// Tail after "thread-" is kids-lemonade-main; first shortIDLength (10) runes: kids-lemon
+	if !strings.Contains(got, "kids-lemon") || strings.Contains(got, "thread-k") {
+		t.Fatalf("expected scan-style id (10 runes) after thread- prefix, got:\n%s", got)
+	}
+}
+
+func TestDisambiguateListScanIDs_AppendsShortWhenCollision(t *testing.T) {
+	t.Parallel()
+	items := []map[string]any{
+		{"board": map[string]any{"id": "board-summer-menu-a", "title": "A"}},
+		{"board": map[string]any{"id": "board-summer-menu-b", "title": "B"}},
+	}
+	got := disambiguateListScanIDs(items, "board", false)
+	if len(got) != 2 {
+		t.Fatalf("expected 2 labels, got %#v", got)
+	}
+	// Both tails share the same first 10 runes (summer-men), so labels must disambiguate with brackets.
+	for i, label := range got {
+		if !strings.HasPrefix(label, "summer-men [") || !strings.Contains(label, "]") {
+			t.Fatalf("expected disambiguated 10-rune scan prefix with bracket suffix, got[%d]=%q", i, label)
+		}
+	}
+}
+
 func TestFormatBoardCardRemoveResult_LegacyRemovedThreadOnly(t *testing.T) {
 	t.Parallel()
 	body := map[string]any{

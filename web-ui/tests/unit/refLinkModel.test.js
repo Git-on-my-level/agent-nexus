@@ -164,13 +164,13 @@ describe("RefLink model", () => {
     });
   });
 
-  it("truncates UUID values in humanized labels to 8 chars", () => {
+  it("truncates UUID values in humanized labels to 10 chars", () => {
     const threadRef = resolveRefLink(
       "thread:be0ef636-4ec0-4284-b65c-a868acf124be",
       { humanize: true },
     );
     expect(threadRef).toMatchObject({
-      primaryLabel: "Thread be0ef636",
+      primaryLabel: "Thread be0ef636-4",
       secondaryLabel: "thread:be0ef636-4ec0-4284-b65c-a868acf124be",
     });
 
@@ -179,7 +179,7 @@ describe("RefLink model", () => {
       { humanize: true },
     );
     expect(topicRef).toMatchObject({
-      primaryLabel: "Topic a1b2c3d4",
+      primaryLabel: "Topic a1b2c3d4-e",
     });
 
     const nonUuidRef = resolveRefLink("thread:thread-onboarding", {

@@ -43,21 +43,21 @@ func formatArtifactContentText(statusCode int, headers map[string][]string, body
 func formatCommandSummary(commandID string, body any) string {
 	switch strings.TrimSpace(commandID) {
 	case "threads.list":
-		return formatNamedList(body, "threads", "Threads", renderThreadListItem)
+		return formatNamedList(body, "threads", "Threads", "thread", renderThreadListItem)
 	case "topics.list":
-		return formatNamedList(body, "topics", "Topics", renderTopicListItem)
+		return formatNamedList(body, "topics", "Topics", "topic", renderTopicListItem)
 	case "cards.list":
-		return formatNamedList(body, "cards", "Cards", renderCardListItem)
+		return formatNamedList(body, "cards", "Cards", "card", renderCardListItem)
 	case "artifacts.list":
-		return formatNamedList(body, "artifacts", "Artifacts", renderArtifactListItem)
+		return formatNamedList(body, "artifacts", "Artifacts", "artifact", renderArtifactListItem)
 	case "docs.list":
-		return formatNamedList(body, "documents", "Documents", renderDocumentListItem)
+		return formatNamedList(body, "documents", "Documents", "document", renderDocumentListItem)
 	case "events.list":
 		return formatEventsList(body)
 	case "inbox.list":
 		return formatInboxList(body)
 	case "docs.history", "docs.revisions.list":
-		return formatNamedList(body, "revisions", "Revisions", renderRevisionListItem)
+		return formatNamedList(body, "revisions", "Revisions", "revision", renderRevisionListItem)
 	case "topics.get", "topics.create", "topics.patch":
 		return formatTopicRecord(extractNestedMap(body, "topic"))
 	case "topics.timeline":
@@ -193,7 +193,7 @@ func formatThreadContextAggregate(root map[string]any, fullID bool) string {
 		documents := len(asSlice(context["documents"]))
 		lines = append(lines, fmt.Sprintf(
 			"- %s :: recommendations=%d :: decision_requests=%d :: decisions=%d :: open_cards=%d :: documents=%d",
-			displayID(thread),
+			displayListScanID(thread, "thread", false),
 			recommendations,
 			decisionRequests,
 			decisions,
@@ -342,15 +342,15 @@ func formatThreadWorkspace(body any) string {
 	return strings.Join(lines, "\n")
 }
 
-func renderTopicListItem(item map[string]any) string {
+func renderTopicListItem(item map[string]any, listID string) string {
 	return compactSummary(
-		displayID(item),
+		listID,
 		firstNonEmpty(anyString(item["status"]), anyString(item["type"])),
 		firstNonEmpty(anyString(item["title"]), anyString(item["summary"])),
 	)
 }
 
-func renderCardListItem(item map[string]any) string {
+func renderCardListItem(item map[string]any, listID string) string {
 	subject := firstNonEmpty(anyString(item["title"]), anyString(item["summary"]))
 	refs := make([]string, 0, 4)
 	if ref := strings.TrimSpace(anyString(item["board_ref"])); ref != "" {
@@ -368,7 +368,7 @@ func renderCardListItem(item map[string]any) string {
 	if rank := strings.TrimSpace(anyString(item["rank"])); rank != "" {
 		refs = append(refs, "rank="+rank)
 	}
-	return compactSummary(displayID(item), subject, strings.Join(refs, " :: "))
+	return compactSummary(listID, subject, strings.Join(refs, " :: "))
 }
 
 func formatTopicRecord(topic map[string]any) string {
@@ -441,62 +441,13 @@ func formatCardTimeline(body any) string {
 
 func formatTopicWorkspace(body any) string {
 	root := asMap(body)
+	fullID := asBool(root["full_id"])
 	lines := []string{formatTopicRecord(extractNestedMap(root, "topic"))}
-	if cards := asSlice(root["cards"]); len(cards) > 0 {
-		lines = append(lines, "")
-		lines = append(lines, fmt.Sprintf("Cards (%d):", len(cards)))
-		for _, raw := range cards {
-			card := asMap(raw)
-			if card == nil {
-				continue
-			}
-			lines = append(lines, "- "+renderCardListItem(card))
-		}
-	}
-	if boards := asSlice(root["boards"]); len(boards) > 0 {
-		lines = append(lines, "")
-		lines = append(lines, fmt.Sprintf("Boards (%d):", len(boards)))
-		for _, raw := range boards {
-			board := asMap(raw)
-			if board == nil {
-				continue
-			}
-			lines = append(lines, "- "+compactSummary(displayID(board), anyString(board["status"]), anyString(board["title"])))
-		}
-	}
-	if documents := asSlice(root["documents"]); len(documents) > 0 {
-		lines = append(lines, "")
-		lines = append(lines, fmt.Sprintf("Documents (%d):", len(documents)))
-		for _, raw := range documents {
-			document := asMap(raw)
-			if document == nil {
-				continue
-			}
-			lines = append(lines, "- "+renderDocumentListItem(document))
-		}
-	}
-	if threads := asSlice(root["threads"]); len(threads) > 0 {
-		lines = append(lines, "")
-		lines = append(lines, fmt.Sprintf("Threads (%d):", len(threads)))
-		for _, raw := range threads {
-			thread := asMap(raw)
-			if thread == nil {
-				continue
-			}
-			lines = append(lines, "- "+renderThreadListItem(thread))
-		}
-	}
-	if inbox := asSlice(root["inbox"]); len(inbox) > 0 {
-		lines = append(lines, "")
-		lines = append(lines, fmt.Sprintf("Inbox (%d):", len(inbox)))
-		for _, raw := range inbox {
-			item := asMap(raw)
-			if item == nil {
-				continue
-			}
-			lines = append(lines, "- "+renderInboxItem(item))
-		}
-	}
+	lines = appendGroupedScanList(lines, "Cards", asSlice(root["cards"]), "card", fullID, renderCardListItem)
+	lines = appendGroupedScanList(lines, "Boards", asSlice(root["boards"]), "board", fullID, renderBoardRowFlat)
+	lines = appendGroupedScanList(lines, "Documents", asSlice(root["documents"]), "document", fullID, renderDocumentListItem)
+	lines = appendGroupedScanList(lines, "Threads", asSlice(root["threads"]), "thread", fullID, renderThreadListItem)
+	lines = appendGroupedScanList(lines, "Inbox", asSlice(root["inbox"]), "inbox", fullID, renderInboxListRow)
 	if generatedAt := strings.TrimSpace(anyString(root["generated_at"])); generatedAt != "" {
 		lines = append(lines, "")
 		lines = append(lines, "generated_at: "+generatedAt)
@@ -721,22 +672,181 @@ func formatRevisionRecord(revision map[string]any) string {
 	return strings.Join(lines, "\n")
 }
 
-func formatNamedList(body any, field string, label string, render func(map[string]any) string) string {
-	root := asMap(body)
-	items := asSlice(root[field])
-	lines := []string{fmt.Sprintf("%s (%d):", label, len(items))}
-	for _, raw := range items {
-		item := asMap(raw)
-		if item == nil {
+const textListScanTailRunes = shortIDLength
+
+func listKindIDPrefixes(kind string) []string {
+	switch strings.TrimSpace(kind) {
+	case "board":
+		return []string{"bd-", "board-"}
+	case "thread":
+		return []string{"thread-", "thread_"}
+	case "document":
+		return []string{"dc-", "document-", "document_", "doc-", "doc_"}
+	case "artifact":
+		return []string{"rc-", "rv-", "rce-", "rve-", "artifact-", "artifact_"}
+	case "topic":
+		return []string{"tp-", "topic-", "topic_"}
+	case "card":
+		return []string{"cd-", "card-", "card_"}
+	case "event":
+		return []string{"ev-", "event-", "event_"}
+	default:
+		return nil
+	}
+}
+
+func stripListKindPrefix(kind, id string) (tail string, ok bool) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return "", false
+	}
+	for _, prefix := range listKindIDPrefixes(kind) {
+		if prefix != "" && strings.HasPrefix(id, prefix) {
+			t := strings.TrimPrefix(id, prefix)
+			if t != "" {
+				return t, true
+			}
+		}
+	}
+	return "", false
+}
+
+func truncateFirstRunes(s string, n int) string {
+	if n <= 0 || s == "" {
+		return ""
+	}
+	var b strings.Builder
+	count := 0
+	for _, r := range s {
+		b.WriteRune(r)
+		count++
+		if count >= n {
+			break
+		}
+	}
+	return b.String()
+}
+
+func listItemIdentityForScan(item map[string]any, kind string) map[string]any {
+	if item == nil {
+		return nil
+	}
+	switch strings.TrimSpace(kind) {
+	case "artifact":
+		if nested := asMap(item["artifact"]); nested != nil {
+			return nested
+		}
+	case "board":
+		if nested := asMap(item["board"]); nested != nil {
+			return nested
+		}
+	}
+	return item
+}
+
+func displayListScanID(item map[string]any, kind string, fullID bool) string {
+	target := listItemIdentityForScan(item, kind)
+	if target == nil {
+		return ""
+	}
+	if fullID {
+		id := strings.TrimSpace(anyString(target["id"]))
+		if id == "" {
+			id = strings.TrimSpace(anyString(target["revision_id"]))
+		}
+		return id
+	}
+	id := strings.TrimSpace(anyString(target["id"]))
+	if id == "" {
+		id = strings.TrimSpace(anyString(target["revision_id"]))
+	}
+	if tail, ok := stripListKindPrefix(kind, id); ok {
+		return truncateFirstRunes(tail, textListScanTailRunes)
+	}
+	return displayCompactIDWithMode(target, false)
+}
+
+func disambiguateListScanIDs(items []map[string]any, kind string, fullID bool) []string {
+	n := len(items)
+	out := make([]string, n)
+	if n == 0 {
+		return out
+	}
+	if fullID {
+		for i, item := range items {
+			out[i] = displayListScanID(item, kind, true)
+		}
+		return out
+	}
+	scans := make([]string, n)
+	for i, item := range items {
+		scans[i] = displayListScanID(item, kind, false)
+	}
+	counts := make(map[string]int, n)
+	for _, s := range scans {
+		if s != "" {
+			counts[s]++
+		}
+	}
+	for i, item := range items {
+		s := scans[i]
+		if s == "" {
+			out[i] = displayCompactIDWithMode(listItemIdentityForScan(item, kind), false)
 			continue
 		}
-		lines = append(lines, "- "+render(item))
+		if counts[s] <= 1 {
+			out[i] = s
+			continue
+		}
+		short := displayCompactIDWithMode(listItemIdentityForScan(item, kind), false)
+		if short == "" {
+			out[i] = s
+		} else {
+			out[i] = s + " [" + short + "]"
+		}
+	}
+	return out
+}
+
+func appendGroupedScanList(lines []string, sectionTitle string, rawItems []any, kind string, fullID bool, renderRow func(item map[string]any, listID string) string) []string {
+	items := make([]map[string]any, 0, len(rawItems))
+	for _, raw := range rawItems {
+		if m := asMap(raw); m != nil {
+			items = append(items, m)
+		}
+	}
+	if len(items) == 0 {
+		return lines
+	}
+	lines = append(lines, "")
+	lines = append(lines, fmt.Sprintf("%s (%d):", sectionTitle, len(items)))
+	labels := disambiguateListScanIDs(items, kind, fullID)
+	for i, item := range items {
+		lines = append(lines, "- "+renderRow(item, labels[i]))
+	}
+	return lines
+}
+
+func formatNamedList(body any, field string, label string, kind string, render func(map[string]any, string) string) string {
+	root := asMap(body)
+	rawItems := asSlice(root[field])
+	items := make([]map[string]any, 0, len(rawItems))
+	for _, raw := range rawItems {
+		if item := asMap(raw); item != nil {
+			items = append(items, item)
+		}
+	}
+	fullID := asBool(root["full_id"])
+	scanIDs := disambiguateListScanIDs(items, kind, fullID)
+	lines := []string{fmt.Sprintf("%s (%d):", label, len(items))}
+	for i, item := range items {
+		lines = append(lines, "- "+render(item, scanIDs[i]))
 	}
 	return strings.Join(lines, "\n")
 }
 
-func renderThreadListItem(item map[string]any) string {
-	return compactSummary(displayID(item), firstNonEmpty(anyString(item["status"]), anyString(item["priority"])), firstNonEmpty(anyString(item["title"]), anyString(item["current_summary"])))
+func renderThreadListItem(item map[string]any, listID string) string {
+	return compactSummary(listID, firstNonEmpty(anyString(item["status"]), anyString(item["priority"])), firstNonEmpty(anyString(item["title"]), anyString(item["current_summary"])))
 }
 
 func renderOpenCardListItem(item map[string]any) string {
@@ -747,11 +857,19 @@ func renderOpenCardListItemWithMode(item map[string]any, fullID bool) string {
 	return compactSummary(displayCompactIDWithMode(item, fullID), firstNonEmpty(anyString(item["status"]), anyString(item["owner"])), firstNonEmpty(anyString(item["title"]), anyString(item["summary"])))
 }
 
-func renderArtifactListItem(item map[string]any) string {
-	return renderArtifactListItemWithMode(item, false)
+func renderArtifactListItem(item map[string]any, listID string) string {
+	return renderArtifactListItemRow(item, listID)
 }
 
 func renderArtifactListItemWithMode(item map[string]any, fullID bool) string {
+	artifact := item
+	if nested := asMap(item["artifact"]); nested != nil {
+		artifact = nested
+	}
+	return renderArtifactListItemRow(item, displayCompactIDWithMode(artifact, fullID))
+}
+
+func renderArtifactListItemRow(item map[string]any, listID string) string {
 	artifact := item
 	if nested := asMap(item["artifact"]); nested != nil {
 		artifact = nested
@@ -764,7 +882,7 @@ func renderArtifactListItemWithMode(item map[string]any, fullID bool) string {
 	if ref != "" {
 		summary = firstNonEmpty(summary, "ref="+ref)
 	}
-	return compactSummary(displayCompactIDWithMode(artifact, fullID), anyString(artifact["kind"]), summary)
+	return compactSummary(listID, anyString(artifact["kind"]), summary)
 }
 
 func renderEventListItem(item map[string]any) string {
@@ -773,6 +891,18 @@ func renderEventListItem(item map[string]any) string {
 
 func renderInboxItem(item map[string]any) string {
 	return renderInboxItemWithMode(item, false)
+}
+
+func renderBoardRowFlat(board map[string]any, listID string) string {
+	return compactSummary(listID, anyString(board["status"]), anyString(board["title"]))
+}
+
+func renderInboxListRow(item map[string]any, listID string) string {
+	return compactSummary(
+		listID,
+		firstNonEmpty(anyString(item["type"]), anyString(item["category"]), anyString(item["kind"])),
+		firstNonEmpty(anyString(item["title"]), anyString(item["summary"]), anyString(item["thread_id"])),
+	)
 }
 
 func renderInboxItemWithMode(item map[string]any, fullID bool) string {
@@ -789,11 +919,11 @@ func renderInboxItemWithMode(item map[string]any, fullID bool) string {
 	)
 }
 
-func renderRevisionListItem(item map[string]any) string {
-	return compactSummary(displayID(item), anyString(item["revision_number"]), anyString(item["created_at"]))
+func renderRevisionListItem(item map[string]any, listID string) string {
+	return compactSummary(listID, anyString(item["revision_number"]), anyString(item["created_at"]))
 }
 
-func renderDocumentListItem(item map[string]any) string {
+func renderDocumentListItem(item map[string]any, listID string) string {
 	headRevision := asMap(item["head_revision"])
 	stateParts := make([]string, 0, 3)
 	if status := strings.TrimSpace(anyString(item["status"])); status != "" {
@@ -806,7 +936,7 @@ func renderDocumentListItem(item map[string]any) string {
 		stateParts = append(stateParts, contentType)
 	}
 	return compactSummary(
-		displayID(item),
+		listID,
 		strings.Join(stateParts, " "),
 		firstNonEmpty(anyString(item["title"]), anyString(item["slug"])),
 		firstNonEmpty(anyString(item["updated_at"]), anyString(headRevision["created_at"])),
@@ -1050,24 +1180,7 @@ func displayID(item map[string]any) string {
 }
 
 func displayIDWithMode(item map[string]any, fullID bool) string {
-	if item == nil {
-		return ""
-	}
-	id := strings.TrimSpace(anyString(item["id"]))
-	if id == "" {
-		id = strings.TrimSpace(anyString(item["revision_id"]))
-	}
-	if fullID && id != "" {
-		return id
-	}
-	short := strings.TrimSpace(anyString(item["short_id"]))
-	if short == "" && id != "" {
-		short = shortID(id)
-	}
-	if short != "" && id != "" && short != id {
-		return short + " (id=" + id + ")"
-	}
-	return firstNonEmpty(id, short)
+	return displayCompactIDWithMode(item, fullID)
 }
 
 func renderEventListItemWithMode(item map[string]any, fullID bool) string {
@@ -1271,32 +1384,39 @@ var canonicalColumnOrder = []string{"backlog", "ready", "in_progress", "blocked"
 
 func formatBoardsList(body any) string {
 	root := asMap(body)
-	items := asSlice(root["boards"])
-	lines := []string{fmt.Sprintf("Boards (%d):", len(items))}
-	for _, raw := range items {
-		item := asMap(raw)
-		if item == nil {
+	rawItems := asSlice(root["boards"])
+	wrappers := make([]map[string]any, 0, len(rawItems))
+	for _, raw := range rawItems {
+		if item := asMap(raw); item != nil {
+			wrappers = append(wrappers, item)
+		}
+	}
+	validWrappers := make([]map[string]any, 0, len(wrappers))
+	for _, item := range wrappers {
+		if item == nil || asMap(item["board"]) == nil {
 			continue
 		}
+		validWrappers = append(validWrappers, item)
+	}
+	fullID := asBool(root["full_id"])
+	scanIDs := disambiguateListScanIDs(validWrappers, "board", fullID)
+	lines := []string{fmt.Sprintf("Boards (%d):", len(validWrappers))}
+	for i, item := range validWrappers {
 		board := asMap(item["board"])
 		summary := asMap(item["summary"])
-		if board == nil {
-			continue
-		}
-		lines = append(lines, "- "+renderBoardListItem(board, summary))
+		lines = append(lines, "- "+renderBoardListItem(board, summary, scanIDs[i]))
 	}
 	return strings.Join(lines, "\n")
 }
 
-func renderBoardListItem(board map[string]any, summary map[string]any) string {
-	id := displayID(board)
+func renderBoardListItem(board map[string]any, summary map[string]any, listID string) string {
 	title := anyString(board["title"])
 	status := anyString(board["status"])
 	cardCount := intValue(summary["card_count"])
 	unresolved := intValue(summary["unresolved_card_count"])
 	docCount := intValue(summary["document_count"])
 	return compactSummary(
-		id,
+		listID,
 		status,
 		title,
 		fmt.Sprintf("cards=%d", cardCount),

@@ -236,7 +236,7 @@ test("golden path integration runs against a real oar-core", async ({
   );
   const resolvedCardId = String(cardBody?.card?.id ?? cardLocalId).trim();
 
-  receiptId = `artifact-receipt-${runSuffix.replace(/[^a-z0-9]+/gi, "-").slice(0, 24)}`;
+  receiptId = `rc-${runSuffix.replace(/[^a-z0-9]+/gi, "-").slice(0, 24)}`;
   const receiptBody = await postCoreJson(
     request,
     coreBaseUrl,
@@ -260,7 +260,7 @@ test("golden path integration runs against a real oar-core", async ({
     },
   );
   receiptId = String(receiptBody?.artifact?.id ?? receiptId).trim();
-  expect(receiptId).toMatch(/^artifact-receipt-/);
+  expect(receiptId).toMatch(/^rc-/);
 
   await openThreadDetailFromNav(page, threadTitle);
 
@@ -307,7 +307,7 @@ test("golden path integration runs against a real oar-core", async ({
   const createReviewResponse = await createReviewResponsePromise;
   const createReviewBody = await createReviewResponse.json();
   reviewId = String(createReviewBody?.artifact?.id ?? "");
-  expect(reviewId).toMatch(/^artifact-review-/);
+  expect(reviewId).toMatch(/^rv-/);
 
   const reviewArtifactsBody = await getUiJson(
     request,

@@ -55,7 +55,7 @@ For interrupt-driven work, a common loop is: `inbox` -> inspect related `thread`
 
 ## Configuration
 
-- Local **`make serve`**: bootstrap is usually **already consumed** by the seeded human; register the CLI with a **single-use invite** from `cli/dogfood-resources/invites.generated.json` (regenerated each serve) or from `oar auth invites create --kind agent` on an existing principal. See `cli/docs/runbook.md` (fixture seed) and `cli/README.md` (`oar secret` quirks).
+- Local **`make serve`**: bootstrap is usually **already consumed** by the seeded operator account; register the CLI with a **single-use invite** from `cli/dogfood-resources/invites.generated.json` (regenerated each serve) or from `oar auth invites create --kind agent` on an existing principal. See `cli/docs/runbook.md` (fixture seed) and `cli/README.md` (`oar secret` quirks).
 - On a durable workstation, set the active profile once with `oar config use <profile>` (equivalent to `oar auth default <profile>`). Later commands can omit repeated `--base-url` / `--agent`; inspect merged settings with `oar config show` (tokens redacted).
 - Override per command with `--base-url` or `OAR_BASE_URL` and `--agent` or `OAR_AGENT` when needed.
 - Prefer `OAR_BASE_URL` and `OAR_AGENT` in scripts, CI, or environments without a persistent `~/.config/oar`.
@@ -79,7 +79,7 @@ Use help output as the source of truth for exact flags, request shapes, enums, a
 ## Command habits
 
 - Use list/get/context/workspace commands to orient before editing.
-- Use `--full-id` when an ID will be reused in later commands.
+- Default output uses **10-character** `short_id` prefixes; the CLI **resolves** those prefixes to canonical ids on input. Use `--full-id` when you need full ids for copy/paste or when resolution reports an ambiguous prefix.
 - Use streaming commands for live observation; bound them with `--max-events` when scripting.
 - Use `draft` or proposal/apply flows when the CLI exposes them and the change benefits from reviewability.
 - Prefer narrow filters over broad listings when triaging large state.
