@@ -1418,6 +1418,7 @@ async function seedDevFixtureIdentities() {
       auth_username: coreUsername || p.auth_username,
       display_label: p.display_label,
       principal_kind: p.principal_kind,
+      default: p.default === true,
       dev_bridge: p.dev_bridge,
       refresh_token: reg.tokens?.refresh_token,
     });

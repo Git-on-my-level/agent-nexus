@@ -7,6 +7,7 @@ import {
   loadWorkspaceAuthenticatedAgent,
   refreshWorkspaceAuthSession,
   resolveWorkspaceSlugFromEvent,
+  writeWorkspaceAccessToken,
   writeWorkspaceRefreshToken,
 } from "$lib/server/authSession.js";
 import { loadWorkspaceCatalog } from "$lib/server/workspaceCatalog.js";
@@ -17,6 +18,34 @@ function allowDevIdentityRoutes() {
   }
   const catalog = loadWorkspaceCatalog(privateEnv);
   return catalog.devActorMode === true;
+}
+
+/**
+ * Call core's POST /auth/passkey/dev/login to obtain fresh tokens without
+ * needing the original (possibly consumed) refresh token from the bundle.
+ */
+async function devLoginForFreshTokens(coreBaseUrl, username) {
+  const url = new URL("/auth/passkey/dev/login", `${coreBaseUrl}/`).toString();
+  const body = username ? { username } : {};
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    return null;
+  }
+  const payload = await response.json();
+  const tokens = payload?.tokens ?? {};
+  const accessToken = String(tokens.access_token ?? "").trim();
+  const refreshToken = String(tokens.refresh_token ?? "").trim();
+  if (!accessToken) {
+    return null;
+  }
+  return { agent: payload.agent ?? null, accessToken, refreshToken };
 }
 
 export async function POST(event) {
@@ -43,61 +72,100 @@ export async function POST(event) {
 
   const bundle = await readLocalDevIdentityBundle();
   const persona = bundle?.personas?.find((p) => p.persona_id === personaId);
-  const refreshToken = String(persona?.refresh_token ?? "").trim();
-  if (!refreshToken) {
+  if (!persona) {
     return json({ error: { code: "unknown_persona" } }, { status: 404 });
   }
 
-  writeWorkspaceRefreshToken(event, resolved.workspaceSlug, refreshToken);
-
+  // ── 1. Reuse existing session if it already matches this persona ──────
   try {
-    await refreshWorkspaceAuthSession({
+    const existingAgent = await loadWorkspaceAuthenticatedAgent({
       event,
       workspaceSlug: resolved.workspaceSlug,
       coreBaseUrl: resolved.coreBaseUrl,
     });
-  } catch (error) {
-    if (isRetryableWorkspaceAuthSessionError(error)) {
+    if (existingAgent?.actor_id === persona.actor_id) {
       return json(
-        {
-          error: {
-            code: error.code,
-            message: error.message,
-          },
-        },
-        { status: 503, headers: { "cache-control": "no-store" } },
+        { ok: true, agent: existingAgent },
+        { headers: { "cache-control": "no-store" } },
       );
     }
-    return json(
-      {
-        error: {
-          code: "auth_failed",
-          message: error instanceof Error ? error.message : String(error),
-        },
-      },
-      { status: 502, headers: { "cache-control": "no-store" } },
-    );
+  } catch {
+    // No valid existing session — proceed to establish one.
   }
 
-  try {
-    const agent = await loadWorkspaceAuthenticatedAgent({
+  // ── 2. Try the bundle's refresh token (works on first use) ────────────
+  const bundleRefreshToken = String(persona.refresh_token ?? "").trim();
+  if (bundleRefreshToken) {
+    writeWorkspaceRefreshToken(
       event,
-      workspaceSlug: resolved.workspaceSlug,
-      coreBaseUrl: resolved.coreBaseUrl,
-    });
-    return json(
-      { ok: true, agent: agent ?? null },
-      { headers: { "cache-control": "no-store" } },
+      resolved.workspaceSlug,
+      bundleRefreshToken,
     );
-  } catch (error) {
-    return json(
-      {
-        error: {
-          code: "session_load_failed",
-          message: error instanceof Error ? error.message : String(error),
-        },
-      },
-      { status: 502, headers: { "cache-control": "no-store" } },
-    );
+    try {
+      await refreshWorkspaceAuthSession({
+        event,
+        workspaceSlug: resolved.workspaceSlug,
+        coreBaseUrl: resolved.coreBaseUrl,
+      });
+      const agent = await loadWorkspaceAuthenticatedAgent({
+        event,
+        workspaceSlug: resolved.workspaceSlug,
+        coreBaseUrl: resolved.coreBaseUrl,
+      });
+      if (agent) {
+        return json(
+          { ok: true, agent },
+          { headers: { "cache-control": "no-store" } },
+        );
+      }
+    } catch (error) {
+      if (isRetryableWorkspaceAuthSessionError(error)) {
+        return json(
+          { error: { code: error.code, message: error.message } },
+          { status: 503, headers: { "cache-control": "no-store" } },
+        );
+      }
+      // Bundle token consumed — fall through to dev login.
+    }
   }
+
+  // ── 3. Fallback: dev login to get fresh tokens (handles rotated tokens)
+  const username = String(persona.auth_username ?? "").trim();
+  try {
+    const loginResult = await devLoginForFreshTokens(
+      resolved.coreBaseUrl,
+      username,
+    );
+    if (loginResult) {
+      if (loginResult.refreshToken) {
+        writeWorkspaceRefreshToken(
+          event,
+          resolved.workspaceSlug,
+          loginResult.refreshToken,
+        );
+      }
+      writeWorkspaceAccessToken(
+        event,
+        resolved.workspaceSlug,
+        loginResult.accessToken,
+      );
+      return json(
+        { ok: true, agent: loginResult.agent ?? null },
+        { headers: { "cache-control": "no-store" } },
+      );
+    }
+  } catch {
+    // Dev login unavailable.
+  }
+
+  return json(
+    {
+      error: {
+        code: "auth_failed",
+        message:
+          "Could not establish a dev session. The refresh token may be consumed and dev login unavailable. Re-run `make serve` to re-seed.",
+      },
+    },
+    { status: 502, headers: { "cache-control": "no-store" } },
+  );
 }
