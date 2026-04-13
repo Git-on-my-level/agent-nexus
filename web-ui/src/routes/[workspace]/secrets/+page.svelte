@@ -1,7 +1,10 @@
 <script>
   import { page } from "$app/stores";
 
-  import { authenticatedAgent } from "$lib/authSession";
+  import {
+    authenticatedAgent,
+    isHumanWorkspacePrincipal,
+  } from "$lib/authSession";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
@@ -24,11 +27,17 @@
   let revealingId = $state("");
 
   const agent = $derived($authenticatedAgent);
-  const isHuman = $derived(agent?.principal_kind === "human");
+  const isHuman = $derived(isHumanWorkspacePrincipal(agent));
   const workspaceSlug = $derived($page.params.workspace ?? "");
 
   $effect(() => {
-    loadSecrets();
+    if (!isHuman) {
+      loading = false;
+      pageError = "";
+      secrets = [];
+      return;
+    }
+    void loadSecrets();
   });
 
   async function loadSecrets() {

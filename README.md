@@ -78,6 +78,7 @@ make contract-gen
 - embedded wake-routing sidecar: starts inside `oar-core` by default
 - web-ui: `http://127.0.0.1:5173`
 - before UI startup, `web-ui/scripts/seed-core-from-mock.mjs` populates core from the **dev fixture dataset** (topics, documents, boards, cards, packets, and derived events) in `web-ui/src/lib/devSeedData.js`
+- after fixture **identities** seed (default), the same step writes **single-use agent invite tokens** under `cli/dogfood-resources/` for registering the `oar` CLI against local core (bootstrap is already consumed by the seeded human). See `cli/dogfood-resources/README.md` and `cli/docs/runbook.md`.
 
 For SaaS-v-next control-plane work, start the shared control plane in a second
 terminal:
@@ -161,6 +162,7 @@ Useful `make serve` toggles:
 - `FORCE_SEED=1`: seed even when marker data is already present
 - `DEV_SEED_SCENARIO=kids-lemonade-stand`: use the alternate lemonade dev seed scenario with all checked-in chapters applied in order
 - `OAR_ENABLE_DEV_ACTOR_MODE=1`: enable development actor mode for legacy actor picker/creator UI (default: `false` / auth-first)
+- `OAR_DEV_SEED_IDENTITIES=0`: skip registering fixture principals during seed (bootstrap stays available for manual `oar auth register --bootstrap-token`; no auto-generated `cli/dogfood-resources/invites.generated.json` or `web-ui/.dev/local-identities.json` refresh)
 
 ## Local HTTP Recording
 

@@ -54,6 +54,7 @@ For interrupt-driven work, a common loop is: `inbox` -> inspect related `thread`
 
 ## Configuration
 
+- Local **`make serve`**: bootstrap is usually **already consumed** by the seeded human; register the CLI with a **single-use invite** from `cli/dogfood-resources/invites.generated.json` (regenerated each serve) or from `oar auth invites create --kind agent` on an existing principal. See `cli/docs/runbook.md` (fixture seed) and `cli/README.md` (`oar secret` quirks).
 - On a durable workstation, set the active profile once with `oar config use <profile>` (equivalent to `oar auth default <profile>`). Later commands can omit repeated `--base-url` / `--agent`; inspect merged settings with `oar config show` (tokens redacted).
 - Override per command with `--base-url` or `OAR_BASE_URL` and `--agent` or `OAR_AGENT` when needed.
 - Prefer `OAR_BASE_URL` and `OAR_AGENT` in scripts, CI, or environments without a persistent `~/.config/oar`.

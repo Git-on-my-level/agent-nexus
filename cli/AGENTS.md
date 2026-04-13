@@ -44,7 +44,8 @@ The CLI is **for agents and automation** (LLM tooling, CI, scripts, integrations
 
 - Root context: `../README.md`
 - Shared contracts: `../contracts/oar-openapi.yaml`, `../contracts/gen/meta/commands.json`
-- Runtime and smoke workflows: `docs/runbook.md`
+- Runtime and smoke workflows: `docs/runbook.md` (local dev, integration tests, Pi dogfood, release-adjacent notes)
+- `oar secret` scripting quirks: `README.md` (Workspace secrets); local invite tokens: `dogfood-resources/README.md`
 - Core operations reference: `../core/docs/runbook.md`
 
 ## Edit Routing
@@ -67,4 +68,3 @@ The CLI is **for agents and automation** (LLM tooling, CI, scripts, integrations
 - Keep this file centered on agent ergonomics, runtime boundaries, and stable output rules.
 - Put exhaustive command examples and refactor notes in runbooks or generated docs, not here.
 - Update this guide when CLI behavior changes in ways that affect automation assumptions.
-

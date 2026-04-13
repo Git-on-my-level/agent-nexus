@@ -22,11 +22,13 @@
     authenticatedAgent,
     authSessionReady,
     initializeAuthSession,
+    isHumanWorkspacePrincipal,
     logoutAuthSession,
   } from "$lib/authSession";
   import { listAllPrincipals } from "$lib/authPrincipals";
   import CommandPalette from "$lib/components/CommandPalette.svelte";
   import { coreClient } from "$lib/coreClient";
+  import { DEV_FIXTURE_PERSONAS } from "$lib/devWorkspaceFixtures.js";
   import {
     getShellContentConfig,
     isMoreHubActivePath,
@@ -91,12 +93,19 @@
   let principalActorId = $derived($authenticatedAgent?.actor_id ?? "");
   let activeActorId = $derived(principalActorId || $selectedActorId);
   let onLoginRoute = $derived(currentAppPath === "/login");
+  // oar-core human-only routes (e.g. /secrets) need a passkey or dev-bypass session
+  // even when dev actor mode allows unauthenticated browsing elsewhere.
+  let requiresHumanSession = $derived(currentAppPath === "/secrets");
+  let hasHumanAuthSession = $derived(
+    isHumanWorkspacePrincipal($authenticatedAgent),
+  );
   let gateVisible = $derived(
     activeWorkspaceSlug &&
       identityReady &&
       !$authenticatedAgent &&
       !onLoginRoute &&
       $devActorMode &&
+      !requiresHumanSession &&
       shouldShowActorGate($actorSessionReady, $selectedActorId),
   );
   let renderLoginOnly = $derived(
@@ -109,9 +118,9 @@
     activeWorkspaceSlug &&
       identityReady &&
       $devActorModeReady &&
-      !$authenticatedAgent &&
       !onLoginRoute &&
-      !$devActorMode,
+      ((!$devActorMode && !$authenticatedAgent) ||
+        ($devActorMode && requiresHumanSession && !hasHumanAuthSession)),
   );
   let awaitingIdentityMode = $derived(
     activeWorkspaceSlug &&
@@ -227,10 +236,15 @@
     }
   }
 
-  async function switchDevFixturePersona(personaId) {
+  /**
+   * Writes the workspace refresh cookie from `.dev/local-identities.json` and
+   * hydrates UI state. Used by the fixture dropdown and by the actor gate when
+   * picking a seeded human (Secrets and other authenticated routes need this).
+   */
+  async function activateDevPersonaSession(personaId) {
     const trimmed = String(personaId ?? "").trim();
-    if (!activeWorkspaceSlug || devPersonaBusy || !trimmed) {
-      return;
+    if (!activeWorkspaceSlug || !trimmed) {
+      return { ok: false, status: 0 };
     }
     devPersonaBusy = true;
     try {
@@ -240,11 +254,41 @@
         body: JSON.stringify({ persona_id: trimmed }),
       });
       if (!response.ok) {
-        return;
+        return { ok: false, status: response.status };
       }
       await hydrateWorkspace(activeWorkspaceSlug);
+      return { ok: true };
     } finally {
       devPersonaBusy = false;
+    }
+  }
+
+  async function switchDevFixturePersona(personaId) {
+    const trimmed = String(personaId ?? "").trim();
+    if (!activeWorkspaceSlug || devPersonaBusy || !trimmed) {
+      return;
+    }
+    await activateDevPersonaSession(trimmed);
+  }
+
+  async function establishDevHumanSessionForActor(actorId) {
+    if (!browser || !$devActorMode || !activeWorkspaceSlug) {
+      return;
+    }
+    const personaId = DEV_FIXTURE_PERSONAS.find(
+      (p) => p.actor_id === actorId && p.principal_kind === "human",
+    )?.persona_id;
+    if (!personaId) {
+      return;
+    }
+    const result = await activateDevPersonaSession(personaId);
+    if (!result.ok) {
+      actorError =
+        result.status === 404
+          ? "No dev auth token for this human identity. Use `make serve` with default identity seeding, or sign in without passkey on /login."
+          : "Could not open a dev auth session for this identity.";
+    } else {
+      actorError = "";
     }
   }
 
@@ -337,11 +381,12 @@
     }
   }
 
-  function selectActor(actorId) {
-    if ($authenticatedAgent || !activeWorkspaceSlug) {
+  async function selectActor(actorId) {
+    if ($authenticatedAgent || !activeWorkspaceSlug || devPersonaBusy) {
       return;
     }
     chooseActor(actorId, localStorage, activeWorkspaceSlug);
+    await establishDevHumanSessionForActor(actorId);
   }
 
   async function switchIdentity() {
@@ -531,7 +576,8 @@
             {#each $actorRegistry as actor}
               <button
                 class="actor-gate-item"
-                onclick={() => selectActor(actor.id)}
+                disabled={devPersonaBusy}
+                onclick={() => void selectActor(actor.id)}
                 type="button"
               >
                 <span class="actor-gate-avatar" aria-hidden="true"

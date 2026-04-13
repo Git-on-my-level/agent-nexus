@@ -127,6 +127,26 @@ if [ "$RESET_DEV_WORKSPACE" = "1" ] && [ "$SEED_CORE" = "1" ]; then
 	rm -rf "${CORE_WORKSPACE_ROOT}"
 fi
 
+# Workspace secrets (/secrets) need OAR_SECRETS_KEY (32 bytes as 64 hex chars).
+# If unset, load or create a stable repo-local dev key so restarts keep decrypting
+# the same SQLite workspace. Override with OAR_SECRETS_KEY or OAR_SECRETS_KEY_FILE.
+if [ -z "${OAR_SECRETS_KEY:-}" ]; then
+	OAR_SECRETS_KEY_FILE="${OAR_SECRETS_KEY_FILE:-${REPO_ROOT}/core/.oar-dev-secrets-key}"
+	if [ -f "${OAR_SECRETS_KEY_FILE}" ]; then
+		OAR_SECRETS_KEY="$(tr -d '[:space:]' <"${OAR_SECRETS_KEY_FILE}")"
+	fi
+	if [ -z "${OAR_SECRETS_KEY:-}" ] || [[ ! "${OAR_SECRETS_KEY:-}" =~ ^[0-9a-fA-F]{64}$ ]]; then
+		if ! command -v openssl >/dev/null 2>&1; then
+			echo "OAR_SECRETS_KEY is unset and openssl is not available to generate one." >&2
+			exit 1
+		fi
+		OAR_SECRETS_KEY="$(openssl rand -hex 32)"
+		umask 077
+		printf '%s\n' "${OAR_SECRETS_KEY}" >"${OAR_SECRETS_KEY_FILE}"
+	fi
+	export OAR_SECRETS_KEY
+fi
+
 OAR_ALLOW_UNAUTHENTICATED_WRITES="${OAR_ALLOW_UNAUTHENTICATED_WRITES:-1}"
 export OAR_ALLOW_UNAUTHENTICATED_WRITES
 OAR_ALLOW_PASSKEY_DEV_BYPASS="${OAR_ALLOW_PASSKEY_DEV_BYPASS:-1}"
@@ -145,8 +165,14 @@ HOST="${CORE_HOST}" \
 	"${REPO_ROOT}/core/scripts/dev" &
 CORE_PID=$!
 
+# CLI dogfood: drop stale invite bundles before seed repopulates them.
+CLI_DOGFOOD_DIR="${REPO_ROOT}/cli/dogfood-resources"
+mkdir -p "${CLI_DOGFOOD_DIR}"
+rm -f "${CLI_DOGFOOD_DIR}"/*.generated.json
+
 if [ "$SEED_CORE" = "1" ]; then
 	OAR_BOOTSTRAP_TOKEN="${OAR_BOOTSTRAP_TOKEN}" \
+		OAR_CLI_DOGFOOD_RESOURCES_DIR="${CLI_DOGFOOD_DIR}" \
 		OAR_CORE_BASE_URL="${CORE_BASE_URL}" \
 		OAR_DEV_SEED_SCENARIO="${DEV_SEED_SCENARIO}" \
 		OAR_DEV_SEED_IDENTITIES="${OAR_DEV_SEED_IDENTITIES:-1}" \

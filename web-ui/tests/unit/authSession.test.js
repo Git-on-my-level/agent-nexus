@@ -7,6 +7,7 @@ import {
   completeAuthSession,
   initializeAuthSession,
   isAuthenticated,
+  isHumanWorkspacePrincipal,
   logoutAuthSession,
 } from "../../src/lib/authSession.js";
 import { WORKSPACE_HEADER } from "../../src/lib/workspacePaths.js";
@@ -18,6 +19,25 @@ afterEach(() => {
 });
 
 describe("authSession", () => {
+  it("classifies human principals for workspace auth", () => {
+    expect(isHumanWorkspacePrincipal(null)).toBe(false);
+    expect(
+      isHumanWorkspacePrincipal({ agent_id: "a", auth_method: "public_key" }),
+    ).toBe(false);
+    expect(
+      isHumanWorkspacePrincipal({ agent_id: "a", principal_kind: "human" }),
+    ).toBe(true);
+    expect(
+      isHumanWorkspacePrincipal({ agent_id: "a", auth_method: "passkey" }),
+    ).toBe(true);
+    expect(
+      isHumanWorkspacePrincipal({
+        agent_id: "a",
+        auth_method: "control_plane",
+      }),
+    ).toBe(true);
+  });
+
   it("keeps the authenticated agent in memory", () => {
     completeAuthSession(
       { agent_id: "agent-1", actor_id: "actor-1", username: "passkey.user" },

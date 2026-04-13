@@ -90,6 +90,23 @@ oar --agent agent-a auth whoami
 oar --agent agent-a auth token-status
 ```
 
+When `bootstrap_registration_available` is **false**, bootstrap registration is closed (typical after the first principal has onboarded). Register additional agent profiles with a **one-time invite** from an operator who can run `oar auth invites create --kind agent` (or use a deployment-supplied invite):
+
+```bash
+oar --json --base-url http://127.0.0.1:8000 --agent agent-b auth register --username agent.b --invite-token <oinv_...>
+```
+
+### Local `make serve` (fixture seed)
+
+The default dev stack runs `web-ui/scripts/seed-core-from-mock.mjs`, which registers the seeded **human** operator with the workspace bootstrap token. That **consumes** bootstrap; you cannot register a second principal with `--bootstrap-token` against the same fresh workspace.
+
+For local CLI dogfooding, each `make serve` run refreshes **pre-issued agent invites** created via the normal `POST /auth/invites` API (human session → invites). Read:
+
+- `cli/dogfood-resources/README.md` (usage)
+- `cli/dogfood-resources/invites.generated.json` (gitignored; three single-use `oinv_` tokens after a successful identity seed)
+
+If that file is missing, `GET /auth/bootstrap/status` on your core and either reset the dev workspace / re-run serve with seeding, or obtain an invite from an existing principal. Turning off fixture identities (`OAR_DEV_SEED_IDENTITIES=0`) leaves bootstrap open longer but skips auto-generated invites and `web-ui/.dev/local-identities.json` refresh.
+
 Rotation/update/revoke:
 
 ```bash
@@ -117,6 +134,7 @@ go test -tags=integration ./integration/...
 ```
 
 These tests:
+
 - build the real `oar` and `oar-core` binaries
 - use an empty temp workspace (fresh `state.sqlite` per run) with an ephemeral `OAR_BOOTSTRAP_TOKEN` so registration matches core auth state
 - run multi-step thread/event, docs/conflict, and provenance flows through the real CLI
@@ -137,6 +155,7 @@ pnpm --dir cli/dogfood/pi run pilot-rescue -- \
 ```
 
 The runner:
+
 - builds `oar` and `oar-core`
 - starts a managed temporary core on a random local port
 - seeds that core from CLI-owned dogfood data under `cli/dogfood/pi/seed/`
@@ -237,8 +256,8 @@ Maintainer checklist:
 2. Create and push a release tag (for example `v0.2.0`).
 3. Verify release assets and `checksums.txt` on the GitHub release page.
 4. Verify handshake compatibility with a live core:
-   - `oar --json meta command meta.handshake`
-   - `oar --json --base-url <core> --agent <agent> api call --path /meta/handshake`
+  - `oar --json meta command meta.handshake`
+  - `oar --json --base-url <core> --agent <agent> api call --path /meta/handshake`
 
 ## Troubleshooting
 
@@ -259,9 +278,9 @@ Actions:
 oar --json --agent <agent> auth token-status
 ```
 
-2. Verify profile file exists and is readable (`~/.config/oar/profiles/<agent>.json`).
-3. If key mismatch after key/manual edits, run `auth rotate` (if possible) or `auth register` with a new agent profile.
-4. If revoked, create/register a new agent profile; revoked profiles cannot recover tokens.
+1. Verify profile file exists and is readable (`~/.config/oar/profiles/<agent>.json`).
+2. If key mismatch after key/manual edits, run `auth rotate` (if possible) or `auth register` with a new agent profile.
+3. If revoked, create/register a new agent profile; revoked profiles cannot recover tokens.
 
 ### Version mismatch
 
@@ -278,14 +297,14 @@ Actions:
 oar --json --base-url <core> --agent <agent> api call --path /meta/handshake
 ```
 
-2. Compare current CLI version against:
+1. Compare current CLI version against:
 
 - `min_cli_version`
 - `recommended_cli_version`
 - `cli_download_url`
 
-3. Run `oar update --check` to inspect the selected target, then `oar update` to replace the current binary in place. Use `oar update --version <tag>` to pin a specific release.
-4. Re-run `oar version` + `oar doctor`.
+1. Run `oar update --check` to inspect the selected target, then `oar update` to replace the current binary in place. Use `oar update --version <tag>` to pin a specific release.
+2. Re-run `oar version` + `oar doctor`.
 
 ### SSE stream issues (`events stream` / `inbox stream`)
 
@@ -304,14 +323,15 @@ curl -N -H 'Accept: text/event-stream' http://127.0.0.1:8000/events/stream
 curl -N -H 'Accept: text/event-stream' http://127.0.0.1:8000/inbox/stream
 ```
 
-2. Use explicit cursor controls:
+1. Use explicit cursor controls:
 
 - `--last-event-id <id>`
 - `--cursor <id>` (alias)
 
-3. For deterministic scripts use bounded streams:
+1. For deterministic scripts use bounded streams:
 
 - `--max-events <n>`
 - omit `--follow` (default drains and exits)
 
-4. Verify server-side poll cadence and stream health in core logs.
+1. Verify server-side poll cadence and stream health in core logs.
+

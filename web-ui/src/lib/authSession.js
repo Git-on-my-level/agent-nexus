@@ -152,6 +152,20 @@ export function isAuthenticated(workspaceSlug = getCurrentWorkspaceSlug()) {
   return Boolean(getAuthenticatedAgent(workspaceSlug)?.agent_id);
 }
 
+/** Human principals for workspace auth (passkey, control plane). Matches core `human_only` routes. */
+export function isHumanWorkspacePrincipal(agent) {
+  if (!agent || typeof agent !== "object") {
+    return false;
+  }
+  if (agent.principal_kind === "human") {
+    return true;
+  }
+  const method = String(agent.auth_method ?? "")
+    .trim()
+    .toLowerCase();
+  return method === "passkey" || method === "control_plane";
+}
+
 export function completeAuthSession(
   agent,
   workspaceSlug = getCurrentWorkspaceSlug(),

@@ -6,6 +6,13 @@ node_modules/
 .DS_Store
 
 _src_core/
+# Local dev-only encryption key for `make serve` (workspace secrets)
+core/.oar-dev-secrets-key
+# Regenerated when `make serve` seeds dev identities (contains invite tokens)
+cli/dogfood-resources/*.generated.json
+# Ad-hoc local `go build` outputs under cli/
+cli/oar-dogfood
+cli/oar-dogfood-bin
 _src_ui/
 _ui_working_tree.patch
 

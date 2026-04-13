@@ -41,6 +41,7 @@ It gives operators fast, glanceable visibility into the shared workspace maintai
 
 ## Edit Routing
 - Shared API or schema changes start in [../contracts/AGENTS.md](../contracts/AGENTS.md).
+- Changes to `scripts/seed-core-from-mock.mjs` (or env it relies on) can affect **CLI-local artifacts** under `../cli/dogfood-resources/`; coordinate with [../cli/AGENTS.md](../cli/AGENTS.md) and `../cli/docs/runbook.md`.
 - UI behavior changes should be checked against operator clarity first, then contract compatibility.
 - Routing and **core proxy** behavior must preserve the single-source-of-truth model (no in-UI synthetic core APIs) and startup compatibility checks.
 - Presentation changes should preserve glanceability and safe fallback behavior for unknown data.

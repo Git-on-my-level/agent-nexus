@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -25,6 +25,14 @@ const scenarioName = String(
 ).trim();
 const workspaceID =
   String(process.env.OAR_WORKSPACE_ID ?? "ws_main").trim() || "ws_main";
+const repoRoot = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+);
+const cliDogfoodResourcesDir =
+  String(process.env.OAR_CLI_DOGFOOD_RESOURCES_DIR ?? "").trim() ||
+  path.join(repoRoot, "cli", "dogfood-resources");
 const devIdentityBundlePath = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
@@ -1193,6 +1201,65 @@ async function ed25519PublicKeyBase64() {
   return Buffer.from(raw).toString("base64");
 }
 
+const cliDogfoodInviteSlots = [
+  { slot: "dogfood-agent-1", summary: "Primary CLI / agent registration" },
+  { slot: "dogfood-agent-2", summary: "Second profile or machine" },
+  { slot: "dogfood-agent-3", summary: "Spare (experiments, CI local, etc.)" },
+];
+
+/**
+ * After the seeded human is registered, issue agent invites via the normal API
+ * and write tokens for local CLI dogfooding (see cli/dogfood-resources/README.md).
+ */
+async function writeCliDogfoodInviteArtifacts({
+  cliDogfoodDir,
+  coreBaseUrl,
+  humanAccessToken,
+}) {
+  if (!humanAccessToken) {
+    return;
+  }
+  await mkdir(cliDogfoodDir, { recursive: true });
+  const outPath = path.join(cliDogfoodDir, "invites.generated.json");
+  try {
+    await unlink(outPath);
+  } catch (err) {
+    if (err?.code !== "ENOENT") {
+      throw err;
+    }
+  }
+
+  const invites = [];
+  for (const { slot, summary } of cliDogfoodInviteSlots) {
+    const created = await requestAuthJson(
+      "POST",
+      "/auth/invites",
+      { kind: "agent" },
+      humanAccessToken,
+      [201],
+    );
+    invites.push({
+      slot,
+      summary,
+      kind: "agent",
+      token: created.token,
+      invite: created.invite,
+    });
+  }
+
+  const doc = {
+    generated_at: new Date().toISOString(),
+    core_base_url: coreBaseUrl,
+    issued_by:
+      "First seeded human principal; invites created with POST /auth/invites",
+    invites,
+  };
+  await writeFile(outPath, `${JSON.stringify(doc, null, 2)}\n`, "utf8");
+  console.log(
+    `Wrote CLI dogfood invite bundle (${invites.length} invites) to ${outPath}`,
+  );
+}
+
 async function requestAuthJson(
   method,
   requestPath,
@@ -1242,6 +1309,7 @@ async function seedDevFixtureIdentities() {
   );
   const bundle = [];
   let inviteIssuerAccess = null;
+  let humanInviteIssuerAccess = null;
 
   for (let i = 0; i < personas.length; i++) {
     const p = personas[i];
@@ -1293,6 +1361,12 @@ async function seedDevFixtureIdentities() {
     }
     if (reg?.tokens?.access_token) {
       inviteIssuerAccess = reg.tokens.access_token;
+      if (
+        humanInviteIssuerAccess == null &&
+        String(p.principal_kind).toLowerCase() === "human"
+      ) {
+        humanInviteIssuerAccess = reg.tokens.access_token;
+      }
       const registration = {
         status: "active",
         workspace_bindings: [
@@ -1345,6 +1419,12 @@ async function seedDevFixtureIdentities() {
   console.log(
     `Wrote dev identity bundle (${bundle.length} personas) to ${outPath}`,
   );
+
+  await writeCliDogfoodInviteArtifacts({
+    cliDogfoodDir: cliDogfoodResourcesDir,
+    coreBaseUrl,
+    humanAccessToken: humanInviteIssuerAccess,
+  });
 
   const bridgePersonas = bundle.filter((row) => row.dev_bridge === true);
   if (bridgePersonas.length > 0) {
