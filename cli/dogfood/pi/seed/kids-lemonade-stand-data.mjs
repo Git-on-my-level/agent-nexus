@@ -25,6 +25,12 @@ export function getKidsLemonadeStandSeedData() {
         tags: ["kid", "prep", "supplies"],
         created_at: iso(-12 * 24 * 60 * 60 * 1000),
       },
+      {
+        id: "actor-parent-operator",
+        display_name: "Pat (Parent operator)",
+        tags: ["human", "operator", "parent"],
+        created_at: iso(-15 * 24 * 60 * 60 * 1000),
+      },
     ],
     threads: [
       {

@@ -295,7 +295,7 @@
   async function hydrateWorkspace(workspaceSlug) {
     setDevActorModeReady(false);
     initializeActorSession(localStorage, workspaceSlug);
-    const agent = await initializeAuthSession({
+    let agent = await initializeAuthSession({
       fetchFn: globalThis.fetch.bind(globalThis),
       workspaceSlug,
     });
@@ -304,6 +304,43 @@
       const handshake = await coreClient.getHandshake();
       const devActorModeEnabled = handshake.dev_actor_mode === true;
       setDevActorMode(devActorModeEnabled);
+
+      if (devActorModeEnabled && !agent) {
+        try {
+          const res = await fetch(appPath("/auth/dev/default-persona"));
+          if (res.ok) {
+            const data = await res.json();
+            if (data?.persona?.persona_id) {
+              devPersonaBusy = true;
+              try {
+                const sessionRes = await fetch(appPath("/auth/dev/session"), {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({
+                    persona_id: data.persona.persona_id,
+                  }),
+                });
+                if (sessionRes.ok) {
+                  const sessionAgent = await initializeAuthSession({
+                    fetchFn: globalThis.fetch.bind(globalThis),
+                    workspaceSlug,
+                  });
+                  if (sessionAgent) {
+                    agent = sessionAgent;
+                    replacePrincipalRegistry([agent], workspaceSlug);
+                    chooseActor(agent.actor_id, localStorage, workspaceSlug);
+                  }
+                }
+              } finally {
+                devPersonaBusy = false;
+              }
+            }
+          }
+        } catch {
+          void 0;
+        }
+      }
+
       if (devActorModeEnabled || agent?.actor_id) {
         await refreshActors(workspaceSlug);
       } else {

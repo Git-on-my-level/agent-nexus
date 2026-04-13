@@ -29,6 +29,7 @@
   let devLoginDisplayName = $state("");
   let devLoginError = $state("");
   let loadingDevLogin = $state(false);
+  let devAutoLoginAttempted = $state(false);
   let workspaceSlug = $derived($page.params.workspace);
 
   onMount(async () => {
@@ -58,6 +59,14 @@
     if ($authenticatedAgent) {
       goto(workspacePath(workspaceSlug));
     }
+  });
+
+  $effect(() => {
+    if (loadingBootstrapStatus) return;
+    if (!devPasskeyBypassAvailable) return;
+    if (devAutoLoginAttempted) return;
+    devAutoLoginAttempted = true;
+    void handleDevLogin();
   });
 
   async function handleRegistration() {
@@ -222,40 +231,26 @@
             Sign in
           </p>
           <h1 class="mt-1 text-lg font-semibold text-[var(--ui-text)]">
-            Sign in with a passkey
+            {#if devPasskeyBypassAvailable}
+              Sign in
+            {:else}
+              Sign in with a passkey
+            {/if}
           </h1>
           <p class="mt-2 text-[13px] text-[var(--ui-text-muted)]">
-            Use your existing passkey to authenticate. All writes are locked to
-            your principal actor.
+            {#if devPasskeyBypassAvailable}
+              Dev sign-in is the default in local mode. Expand the section below
+              if you need WebAuthn passkey authentication.
+            {:else}
+              Use your existing passkey to authenticate. All writes are locked
+              to your principal actor.
+            {/if}
           </p>
         </div>
 
         <div class="space-y-3 px-4 py-3">
-          <button
-            class="cursor-pointer w-full rounded-md bg-indigo-600 px-3 py-2 text-[12px] font-medium text-white hover:bg-indigo-500"
-            disabled={loadingLogin}
-            onclick={handleLogin}
-            type="button"
-          >
-            {loadingLogin
-              ? "Waiting for passkey..."
-              : "Sign in with existing passkey"}
-          </button>
-
-          {#if loginError}
-            <div
-              class="rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
-            >
-              {loginError}
-            </div>
-          {/if}
-
-          <p class="text-[12px] text-[var(--ui-text-muted)]">
-            This uses discoverable WebAuthn login. No username step is required.
-          </p>
-
           {#if devPasskeyBypassAvailable}
-            <div class="mt-4 space-y-3 border-t border-[var(--ui-border)] pt-3">
+            <div class="space-y-3">
               <p
                 class="text-[11px] font-medium uppercase tracking-wide text-[var(--ui-text-muted)]"
               >
@@ -298,14 +293,12 @@
                 />
               </div>
               <button
-                class="cursor-pointer w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-[12px] font-medium text-[var(--ui-text)] hover:bg-[var(--ui-border-subtle)] disabled:opacity-50"
+                class="cursor-pointer w-full rounded-md bg-indigo-600 px-3 py-2 text-[12px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
                 disabled={loadingDevLogin}
                 onclick={handleDevLogin}
                 type="button"
               >
-                {loadingDevLogin
-                  ? "Signing in..."
-                  : "Sign in without passkey (dev)"}
+                {loadingDevLogin ? "Signing in..." : "Sign in (dev)"}
               </button>
               {#if devLoginError}
                 <div
@@ -315,6 +308,63 @@
                 </div>
               {/if}
             </div>
+
+            <details class="mt-4 border-t border-[var(--ui-border)] pt-3">
+              <summary
+                class="cursor-pointer text-[12px] font-medium text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]"
+              >
+                Sign in with passkey
+              </summary>
+              <div class="mt-3 space-y-3">
+                <button
+                  class="cursor-pointer w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-[12px] font-medium text-[var(--ui-text)] hover:bg-[var(--ui-border-subtle)] disabled:opacity-50"
+                  disabled={loadingLogin}
+                  onclick={handleLogin}
+                  type="button"
+                >
+                  {loadingLogin
+                    ? "Waiting for passkey..."
+                    : "Sign in with existing passkey"}
+                </button>
+
+                {#if loginError}
+                  <div
+                    class="rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
+                  >
+                    {loginError}
+                  </div>
+                {/if}
+
+                <p class="text-[12px] text-[var(--ui-text-muted)]">
+                  This uses discoverable WebAuthn login. No username step is
+                  required.
+                </p>
+              </div>
+            </details>
+          {:else}
+            <button
+              class="cursor-pointer w-full rounded-md bg-indigo-600 px-3 py-2 text-[12px] font-medium text-white hover:bg-indigo-500"
+              disabled={loadingLogin}
+              onclick={handleLogin}
+              type="button"
+            >
+              {loadingLogin
+                ? "Waiting for passkey..."
+                : "Sign in with existing passkey"}
+            </button>
+
+            {#if loginError}
+              <div
+                class="rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
+              >
+                {loginError}
+              </div>
+            {/if}
+
+            <p class="text-[12px] text-[var(--ui-text-muted)]">
+              This uses discoverable WebAuthn login. No username step is
+              required.
+            </p>
           {/if}
         </div>
       </section>

@@ -1307,6 +1307,25 @@ async function seedDevFixtureIdentities() {
   const personas = [...seedPersonas].sort(
     (a, b) => (a.default === true ? 0 : 1) - (b.default === true ? 0 : 1),
   );
+  const defaultHumanPersona = personas.find(
+    (p) =>
+      String(p.principal_kind).toLowerCase() === "human" &&
+      p.default === true,
+  );
+  if (!defaultHumanPersona && !scenarioConfig?.noDefaultHuman) {
+    const hasAnyHuman = personas.some(
+      (p) => String(p.principal_kind).toLowerCase() === "human",
+    );
+    console.warn(
+      hasAnyHuman
+        ? `Warning: scenario "${scenarioName}" has a human persona but none ` +
+            `with default: true. Auto-auth requires a default human persona.`
+        : `Warning: scenario "${scenarioName}" has no human persona. ` +
+            `Add a persona with principal_kind: "human" and default: true ` +
+            `for seamless dev auto-auth. Set noDefaultHuman: true on the ` +
+            `scenario config to suppress this warning.`,
+    );
+  }
   const bundle = [];
   let inviteIssuerAccess = null;
   let humanInviteIssuerAccess = null;

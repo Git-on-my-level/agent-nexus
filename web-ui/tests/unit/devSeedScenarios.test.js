@@ -29,15 +29,21 @@ describe("dev seed scenarios", () => {
       requireBoards: true,
     });
     expect(scenario.personas.map((persona) => persona.actor_id)).toEqual([
+      "actor-parent-operator",
       "actor-boss-kid",
       "actor-sales-kid",
       "actor-backoffice-kid",
     ]);
     expect(scenario.personas.map((persona) => persona.auth_username)).toEqual([
+      "dev.pat",
       "milo",
       "ruby",
       "theo",
     ]);
+    expect(scenario.personas[0]).toMatchObject({
+      principal_kind: "human",
+      default: true,
+    });
     expect(seed.topics.map((topic) => topic.title)).toContain(
       "Neighborhood Lemonade Stand Master Plan",
     );

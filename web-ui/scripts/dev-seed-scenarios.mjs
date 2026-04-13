@@ -3,12 +3,21 @@ import { DEV_FIXTURE_PERSONAS, getDevSeedData } from "../src/lib/devSeedData.js"
 
 const KIDS_LEMONADE_STAND_PERSONAS = [
   {
+    persona_id: "pat",
+    actor_id: "actor-parent-operator",
+    auth_username: "dev.pat",
+    display_label: "Pat (Parent operator)",
+    principal_kind: "human",
+    default: true,
+    dev_bridge: false,
+  },
+  {
     persona_id: "milo",
     actor_id: "actor-boss-kid",
     auth_username: "milo",
     display_label: "Milo Bosserson",
     principal_kind: "agent",
-    default: true,
+    default: false,
     dev_bridge: false,
   },
   {
@@ -35,6 +44,15 @@ const kidsLemonadeStandScenarioConfig = getScenarioSeedConfig(
   "kids-lemonade-stand",
 );
 
+/**
+ * Dev seed scenario registry.
+ *
+ * Convention: every scenario should include a persona with
+ * `principal_kind: "human"` and `default: true` so that `make serve`
+ * auto-authenticates the human operator on page load. If a scenario
+ * intentionally has no human operator, set `noDefaultHuman: true` on
+ * its config entry to suppress the seed-time warning.
+ */
 const scenarioConfigs = {
   default: {
     defaultActorId: "actor-ops-ai",
