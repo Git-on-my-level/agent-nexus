@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -258,11 +259,15 @@ func (s *Store) rebuildBlobUsageLedger(ctx context.Context) (BlobUsageLedgerRebu
 	}
 
 	if _, err := tx.ExecContext(ctx, `DELETE FROM blob_usage_ledger`); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BlobUsageLedgerRebuildResult{}, fmt.Errorf("clear blob usage ledger: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM blob_usage_totals WHERE id = ?`, blobUsageTotalsRowID); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BlobUsageLedgerRebuildResult{}, fmt.Errorf("clear blob usage totals: %w", err)
 	}
 
@@ -279,7 +284,9 @@ func (s *Store) rebuildBlobUsageLedger(ctx context.Context) (BlobUsageLedgerRebu
 			continue
 		}
 		if err != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return BlobUsageLedgerRebuildResult{}, fmt.Errorf("inspect blob %s during rebuild: %w", contentHash, err)
 		}
 
@@ -292,7 +299,9 @@ func (s *Store) rebuildBlobUsageLedger(ctx context.Context) (BlobUsageLedgerRebu
 			now,
 			now,
 		); err != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return BlobUsageLedgerRebuildResult{}, fmt.Errorf("insert blob usage ledger rebuild entry: %w", err)
 		}
 		blobBytes += stat.Bytes
@@ -309,7 +318,9 @@ func (s *Store) rebuildBlobUsageLedger(ctx context.Context) (BlobUsageLedgerRebu
 		now,
 		now,
 	); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BlobUsageLedgerRebuildResult{}, fmt.Errorf("insert blob usage totals rebuild row: %w", err)
 	}
 

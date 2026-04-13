@@ -116,9 +116,6 @@ func (s *Store) List(ctx context.Context) ([]SecretMetadata, error) {
 		}
 		result = append(result, m)
 	}
-	if result == nil {
-		result = []SecretMetadata{}
-	}
 	return result, rows.Err()
 }
 

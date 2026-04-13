@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -269,20 +270,26 @@ func (s *Store) registerAgentOnce(ctx context.Context, username string, publicKe
 	}
 
 	if err := s.consumeOnboardingClaimTx(ctx, tx, claim, agentID, actorID, now); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return Agent{}, AgentKey{}, TokenBundle{}, err
 	}
 
 	if strings.TrimSpace(existingActorID) != "" {
 		if err := s.ensureExistingActorReadyForAgentLinkTx(ctx, tx, actorID); err != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return Agent{}, AgentKey{}, TokenBundle{}, err
 		}
 	}
 
 	agentMetadataJSON, err := principalMetadataJSON(PrincipalKindAgent, AuthMethodPublicKey, nil)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return Agent{}, AgentKey{}, TokenBundle{}, fmt.Errorf("encode agent metadata: %w", err)
 	}
 	_, err = tx.ExecContext(
@@ -297,7 +304,9 @@ func (s *Store) registerAgentOnce(ctx context.Context, username string, publicKe
 		agentMetadataJSON,
 	)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		if strings.Contains(err.Error(), "UNIQUE constraint failed: agents.username") {
 			return Agent{}, AgentKey{}, TokenBundle{}, ErrUsernameTaken
 		}
@@ -307,7 +316,9 @@ func (s *Store) registerAgentOnce(ctx context.Context, username string, publicKe
 	if strings.TrimSpace(existingActorID) == "" {
 		actorMetadataValue, err := actorMetadataJSON(PrincipalKindAgent, AuthMethodPublicKey, nil)
 		if err != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return Agent{}, AgentKey{}, TokenBundle{}, fmt.Errorf("encode agent actor metadata: %w", err)
 		}
 		_, err = tx.ExecContext(
@@ -321,7 +332,9 @@ func (s *Store) registerAgentOnce(ctx context.Context, username string, publicKe
 			actorMetadataValue,
 		)
 		if err != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return Agent{}, AgentKey{}, TokenBundle{}, fmt.Errorf("insert mapped actor: %w", err)
 		}
 	}
@@ -336,7 +349,9 @@ func (s *Store) registerAgentOnce(ctx context.Context, username string, publicKe
 		nowText,
 	)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return Agent{}, AgentKey{}, TokenBundle{}, fmt.Errorf("insert agent key: %w", err)
 	}
 
@@ -355,18 +370,24 @@ func (s *Store) registerAgentOnce(ctx context.Context, username string, publicKe
 			"onboarding_mode": string(claim.Mode),
 		},
 	}); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return Agent{}, AgentKey{}, TokenBundle{}, err
 	}
 
 	tokens, _, err := s.issueTokenBundleTx(ctx, tx, agentID, now)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return Agent{}, AgentKey{}, TokenBundle{}, err
 	}
 
 	if err := tx.Commit(); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return Agent{}, AgentKey{}, TokenBundle{}, fmt.Errorf("commit register agent transaction: %w", err)
 	}
 
@@ -433,7 +454,9 @@ func (s *Store) IssueTokenFromAssertion(ctx context.Context, input AssertionInpu
 		keyID,
 	).Scan(&storedAgentID, &revokedAt, &algorithm, &publicKey, &keyRevokedAt)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		if errors.Is(err, sql.ErrNoRows) {
 			return TokenBundle{}, ErrKeyMismatch
 		}
@@ -441,36 +464,50 @@ func (s *Store) IssueTokenFromAssertion(ctx context.Context, input AssertionInpu
 	}
 
 	if revokedAt.Valid {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return TokenBundle{}, ErrAgentRevoked
 	}
 	if keyRevokedAt.Valid {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return TokenBundle{}, ErrKeyMismatch
 	}
 	if strings.TrimSpace(algorithm) != "ed25519" {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return TokenBundle{}, ErrKeyMismatch
 	}
 
 	publicKeyBytes, err := decodeEd25519PublicKey(publicKey)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return TokenBundle{}, ErrKeyMismatch
 	}
 	signatureBytes, err := decodeBase64(signature)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return TokenBundle{}, ErrKeyMismatch
 	}
 
 	message := BuildAssertionMessage(agentID, keyID, signedAt)
 	if !ed25519.Verify(publicKeyBytes, []byte(message), signatureBytes) {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return TokenBundle{}, ErrKeyMismatch
 	}
 	if err := s.recordAssertionUseTx(ctx, tx, message, signature, now); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		if errors.Is(err, ErrKeyMismatch) {
 			return TokenBundle{}, ErrKeyMismatch
 		}
@@ -479,7 +516,9 @@ func (s *Store) IssueTokenFromAssertion(ctx context.Context, input AssertionInpu
 
 	tokens, _, err := s.issueTokenBundleTx(ctx, tx, storedAgentID, now)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return TokenBundle{}, err
 	}
 
@@ -548,7 +587,9 @@ func (s *Store) IssueTokenFromRefresh(ctx context.Context, refreshToken string) 
 		hashToken(refreshToken),
 	).Scan(&sessionID, &agentID, &expiresAtRaw, &revokedAt, &replacedBy, &agentRevoked)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		if errors.Is(err, sql.ErrNoRows) {
 			return TokenBundle{}, ErrInvalidToken
 		}
@@ -556,29 +597,39 @@ func (s *Store) IssueTokenFromRefresh(ctx context.Context, refreshToken string) 
 	}
 
 	if revokedAt.Valid || replacedBy.Valid {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return TokenBundle{}, ErrInvalidToken
 	}
 
 	expiresAt, err := time.Parse(time.RFC3339Nano, expiresAtRaw)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return TokenBundle{}, fmt.Errorf("parse refresh token expiry: %w", err)
 	}
 	if time.Now().UTC().After(expiresAt) {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return TokenBundle{}, ErrInvalidToken
 	}
 
 	if agentRevoked.Valid {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return TokenBundle{}, ErrAgentRevoked
 	}
 
 	now := time.Now().UTC()
 	tokens, newSessionID, err := s.issueTokenBundleTx(ctx, tx, agentID, now)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return TokenBundle{}, err
 	}
 
@@ -592,7 +643,9 @@ func (s *Store) IssueTokenFromRefresh(ctx context.Context, refreshToken string) 
 		sessionID,
 	)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return TokenBundle{}, fmt.Errorf("rotate refresh session: %w", err)
 	}
 
@@ -785,14 +838,18 @@ func (s *Store) UpdateUsername(ctx context.Context, agentID string, username str
 
 	var authMethod string
 	if err := tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT %s FROM agents a WHERE a.id = ?`, authMethodExpr("a")), agentID).Scan(&authMethod); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		if errors.Is(err, sql.ErrNoRows) {
 			return Agent{}, ErrAgentNotFound
 		}
 		return Agent{}, fmt.Errorf("query agent auth method before update username: %w", err)
 	}
 	if strings.TrimSpace(authMethod) == AuthMethodControlPlane {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return Agent{}, fmt.Errorf("%w: control-plane-backed principals cannot be renamed locally", ErrInvalidRequest)
 	}
 
@@ -806,7 +863,9 @@ func (s *Store) UpdateUsername(ctx context.Context, agentID string, username str
 		agentID,
 	)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		if strings.Contains(err.Error(), "UNIQUE constraint failed: agents.username") {
 			return Agent{}, ErrUsernameTaken
 		}
@@ -815,11 +874,15 @@ func (s *Store) UpdateUsername(ctx context.Context, agentID string, username str
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return Agent{}, fmt.Errorf("read update username rows affected: %w", err)
 	}
 	if rowsAffected == 0 {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return Agent{}, ErrAgentNotFound
 	}
 
@@ -832,7 +895,9 @@ func (s *Store) UpdateUsername(ctx context.Context, agentID string, username str
 		agentID,
 	)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return Agent{}, fmt.Errorf("update mapped actor display name: %w", err)
 	}
 
@@ -870,14 +935,18 @@ func (s *Store) UpdateRegistration(ctx context.Context, agentID string, registra
 		fmt.Sprintf(`SELECT a.username, a.actor_id, %s, a.metadata_json FROM agents a WHERE a.id = ?`, authMethodExpr("a")),
 		agentID,
 	).Scan(&username, &actorID, &authMethod, &metadataJSON); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		if errors.Is(err, sql.ErrNoRows) {
 			return Agent{}, ErrAgentNotFound
 		}
 		return Agent{}, fmt.Errorf("query agent registration target: %w", err)
 	}
 	if strings.TrimSpace(authMethod) == AuthMethodControlPlane {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return Agent{}, fmt.Errorf("%w: control-plane-backed principals cannot modify workspace-local registration state", ErrInvalidRequest)
 	}
 
@@ -886,21 +955,27 @@ func (s *Store) UpdateRegistration(ctx context.Context, agentID string, registra
 		normalized.Handle = strings.TrimSpace(username)
 	}
 	if normalized.Handle != strings.TrimSpace(username) {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return Agent{}, fmt.Errorf("%w: registration.handle must match the authenticated agent username", ErrInvalidRequest)
 	}
 	if normalized.ActorID == "" {
 		normalized.ActorID = strings.TrimSpace(actorID)
 	}
 	if normalized.ActorID != strings.TrimSpace(actorID) {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return Agent{}, fmt.Errorf("%w: registration.actor_id must match the authenticated agent actor_id", ErrInvalidRequest)
 	}
 	normalized.UpdatedAt = nowText
 
 	nextMetadataJSON, err := mergeRegistrationMetadataJSON(metadataJSON, normalized)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return Agent{}, fmt.Errorf("merge registration metadata: %w", err)
 	}
 	result, err := tx.ExecContext(
@@ -913,16 +988,22 @@ func (s *Store) UpdateRegistration(ctx context.Context, agentID string, registra
 		agentID,
 	)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return Agent{}, fmt.Errorf("update agent registration: %w", err)
 	}
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return Agent{}, fmt.Errorf("read update registration rows affected: %w", err)
 	}
 	if rowsAffected == 0 {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return Agent{}, ErrAgentNotFound
 	}
 	if err := tx.Commit(); err != nil {
@@ -958,18 +1039,24 @@ func (s *Store) RotateKey(ctx context.Context, agentID string, publicKey string)
 	var authMethod string
 	err = tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT revoked_at, %s FROM agents a WHERE id = ?`, authMethodExpr("a")), agentID).Scan(&revokedAt, &authMethod)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		if errors.Is(err, sql.ErrNoRows) {
 			return AgentKey{}, ErrAgentNotFound
 		}
 		return AgentKey{}, fmt.Errorf("query agent before key rotation: %w", err)
 	}
 	if revokedAt.Valid {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return AgentKey{}, ErrAgentRevoked
 	}
 	if strings.TrimSpace(authMethod) == AuthMethodControlPlane {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return AgentKey{}, fmt.Errorf("%w: control-plane-backed principals cannot rotate workspace-local keys", ErrInvalidRequest)
 	}
 
@@ -982,7 +1069,9 @@ func (s *Store) RotateKey(ctx context.Context, agentID string, publicKey string)
 		agentID,
 	)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return AgentKey{}, fmt.Errorf("revoke existing keys: %w", err)
 	}
 
@@ -996,7 +1085,9 @@ func (s *Store) RotateKey(ctx context.Context, agentID string, publicKey string)
 		nowText,
 	)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return AgentKey{}, fmt.Errorf("insert rotated key: %w", err)
 	}
 
@@ -1007,7 +1098,9 @@ func (s *Store) RotateKey(ctx context.Context, agentID string, publicKey string)
 		agentID,
 	)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return AgentKey{}, fmt.Errorf("update agent timestamp during key rotation: %w", err)
 	}
 
@@ -1069,7 +1162,9 @@ func (s *Store) RevokeAgent(ctx context.Context, agentID string, input RevokeAge
 		agentID,
 	).Scan(&subjectActorID, &existingRevoked)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		if errors.Is(err, sql.ErrNoRows) {
 			return RevokeAgentResult{}, ErrAgentNotFound
 		}
@@ -1077,7 +1172,9 @@ func (s *Store) RevokeAgent(ctx context.Context, agentID string, input RevokeAge
 	}
 	if existingRevoked.Valid {
 		principal, loadErr := s.getPrincipalSummaryTx(ctx, tx, agentID)
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		if loadErr != nil {
 			return RevokeAgentResult{}, loadErr
 		}
@@ -1089,25 +1186,35 @@ func (s *Store) RevokeAgent(ctx context.Context, agentID string, input RevokeAge
 
 	principal, err = s.getPrincipalSummaryTx(ctx, tx, agentID)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return RevokeAgentResult{}, err
 	}
 	if principal.AuthMethod == AuthMethodControlPlane {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return RevokeAgentResult{}, fmt.Errorf("%w: control-plane-backed principals cannot be revoked locally", ErrInvalidRequest)
 	}
 	activeHumanCount, err := s.countActiveHumanPrincipalsTx(ctx, tx)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return RevokeAgentResult{}, err
 	}
 	if principal.PrincipalKind == "human" && activeHumanCount == 1 && !input.AllowHumanLockout {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return RevokeAgentResult{}, ErrLastActivePrincipal
 	}
 	usedHumanLockout := principal.PrincipalKind == "human" && activeHumanCount == 1 && input.AllowHumanLockout
 	if input.AllowHumanLockout && !usedHumanLockout {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return RevokeAgentResult{}, fmt.Errorf("%w: allow_human_lockout is only permitted when revoking the last active human principal", ErrInvalidRequest)
 	}
 
@@ -1121,7 +1228,9 @@ func (s *Store) RevokeAgent(ctx context.Context, agentID string, input RevokeAge
 		agentID,
 	)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return RevokeAgentResult{}, fmt.Errorf("revoke agent: %w", err)
 	}
 
@@ -1134,7 +1243,9 @@ func (s *Store) RevokeAgent(ctx context.Context, agentID string, input RevokeAge
 		agentID,
 	)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return RevokeAgentResult{}, fmt.Errorf("revoke agent keys: %w", err)
 	}
 
@@ -1163,13 +1274,17 @@ func (s *Store) RevokeAgent(ctx context.Context, agentID string, input RevokeAge
 		SubjectActorID: subjectActorID,
 		Metadata:       metadata,
 	}); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return RevokeAgentResult{}, err
 	}
 
 	principal, err = s.getPrincipalSummaryTx(ctx, tx, agentID)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return RevokeAgentResult{}, err
 	}
 

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"time"
@@ -92,7 +93,9 @@ func (s *Store) ReplaceDerivedInboxItems(ctx context.Context, threadID string, i
 		return fmt.Errorf("begin derived inbox transaction: %w", err)
 	}
 	defer func() {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 	}()
 
 	if _, err := tx.ExecContext(ctx, `DELETE FROM derived_inbox_items WHERE thread_id = ?`, threadID); err != nil {
@@ -620,7 +623,9 @@ func (s *Store) MarkTopicProjectionsDirty(ctx context.Context, threadIDs []strin
 		return fmt.Errorf("begin projection refresh dirty transaction: %w", err)
 	}
 	defer func() {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 	}()
 
 	for _, threadID := range threadIDs {
@@ -680,7 +685,9 @@ func (s *Store) RequeueTopicProjectionRefresh(ctx context.Context, threadID stri
 		return fmt.Errorf("begin projection refresh requeue transaction: %w", err)
 	}
 	defer func() {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 	}()
 
 	if _, err := tx.ExecContext(
@@ -738,7 +745,9 @@ func (s *Store) MarkTopicProjectionRefreshStarted(ctx context.Context, threadID 
 		return 0, fmt.Errorf("begin projection refresh started transaction: %w", err)
 	}
 	defer func() {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 	}()
 
 	if _, err := tx.ExecContext(

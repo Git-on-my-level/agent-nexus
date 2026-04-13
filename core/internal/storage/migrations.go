@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 )
 
 const createMigrationsTableSQL = `
@@ -595,13 +596,17 @@ func applyMigrations(ctx context.Context, db *sql.DB) error {
 
 		for _, statement := range m.Statements {
 			if _, err := tx.ExecContext(ctx, statement); err != nil {
-				_ = tx.Rollback()
+				if rbErr := tx.Rollback(); rbErr != nil {
+					log.Printf("migration rollback failed: %v", rbErr)
+				}
 				return fmt.Errorf("apply migration %d: %w", m.Version, err)
 			}
 		}
 		if m.AfterApply != nil {
 			if err := m.AfterApply(ctx, tx); err != nil {
-				_ = tx.Rollback()
+				if rbErr := tx.Rollback(); rbErr != nil {
+					log.Printf("migration rollback failed: %v", rbErr)
+				}
 				return fmt.Errorf("apply migration %d after hook: %w", m.Version, err)
 			}
 		}
@@ -611,7 +616,9 @@ func applyMigrations(ctx context.Context, db *sql.DB) error {
 			`INSERT INTO schema_migrations(version, applied_at) VALUES (?, CURRENT_TIMESTAMP)`,
 			m.Version,
 		); err != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("migration rollback failed: %v", rbErr)
+			}
 			return fmt.Errorf("record migration %d: %w", m.Version, err)
 		}
 

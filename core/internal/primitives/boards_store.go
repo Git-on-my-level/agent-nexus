@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"sort"
 	"strconv"
@@ -544,7 +545,9 @@ func (s *Store) CreateBoard(ctx context.Context, actorID string, board map[strin
 	}
 
 	if err := ensureBoardBackingThreadTx(ctx, tx, actorID, boardID, threadID, title, now); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, err
 	}
 
@@ -568,19 +571,25 @@ func (s *Store) CreateBoard(ctx context.Context, actorID string, board map[strin
 		actorID,
 	)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		if isUniqueViolation(err) {
 			return nil, ErrConflict
 		}
 		return nil, fmt.Errorf("insert board: %w", err)
 	}
 	if err := replaceRefEdges(ctx, tx, "board", boardID, typedRefEdgeTargets(refEdgeTypeRef, refs)); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, err
 	}
 
 	if err := tx.Commit(); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, fmt.Errorf("commit board create transaction: %w", err)
 	}
 
@@ -945,25 +954,35 @@ func (s *Store) UpdateBoard(ctx context.Context, actorID, boardID string, patch 
 
 	result, err := tx.ExecContext(ctx, query, args...)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, fmt.Errorf("update board: %w", err)
 	}
 	if err := requireIfUpdatedAtRowsAffected(result, ifUpdatedAt, "board update"); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, err
 	}
 
 	if err := replaceRefEdges(ctx, tx, "board", boardID, typedRefEdgeTargets(refEdgeTypeRef, nextRefs)); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, err
 	}
 	if err := ensureBoardBackingThreadTx(ctx, tx, actorID, boardID, currentRow.ThreadID, nextTitle, now); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, err
 	}
 
 	if err := tx.Commit(); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, fmt.Errorf("commit board update transaction: %w", err)
 	}
 
@@ -1213,20 +1232,28 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 	}
 	boardRow, err := loadBoardRow(ctx, tx, boardID)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, err
 	}
 	if err := ensureBoardUpdatedAtMatches(boardRow, input.IfBoardUpdatedAt); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, err
 	}
 	boardRow, cardRow, err := s.execBoardCardInsert(ctx, tx, boardRow, actorID, boardID, prep)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, err
 	}
 	if err := tx.Commit(); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, fmt.Errorf("commit board card create transaction: %w", err)
 	}
 	boardMap, err := boardRow.toMap()
@@ -1272,11 +1299,15 @@ func (s *Store) CreateBoardCardsBatch(ctx context.Context, actorID, boardID stri
 	}
 	boardRow, err := loadBoardRow(ctx, tx, boardID)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, err
 	}
 	if err := ensureBoardUpdatedAtMatches(boardRow, ifBoard); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, err
 	}
 	results := make([]BoardCardMutationResult, 0, len(preps))
@@ -1284,23 +1315,31 @@ func (s *Store) CreateBoardCardsBatch(ctx context.Context, actorID, boardID stri
 		var cardRow boardCardRow
 		boardRow, cardRow, err = s.execBoardCardInsert(ctx, tx, boardRow, actorID, boardID, prep)
 		if err != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return nil, fmt.Errorf("items[%d]: %w", i, err)
 		}
 		boardMap, terr := boardRow.toMap()
 		if terr != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return nil, terr
 		}
 		cardMap, terr := cardRow.toMap()
 		if terr != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return nil, terr
 		}
 		results = append(results, BoardCardMutationResult{Board: boardMap, Card: cardMap})
 	}
 	if err := tx.Commit(); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, fmt.Errorf("commit board cards batch transaction: %w", err)
 	}
 	return results, nil
@@ -1333,35 +1372,47 @@ func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifie
 		cardRow, err = s.loadBoardCardByGlobalID(ctx, tx, identifier, true)
 	}
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, err
 	}
 	var boardRow boardRow
 	if err := ensureBoardCardMutable(cardRow); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, err
 	}
 	if strings.TrimSpace(boardID) == "" {
 		if err := ensureUpdatedAtMatches(cardRow.UpdatedAt, input.IfBoardUpdatedAt); err != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return BoardCardMutationResult{}, err
 		}
 		boardID = cardRow.BoardID
 		if strings.TrimSpace(boardID) != "" {
 			boardRow, err = loadBoardRow(ctx, tx, boardID)
 			if err != nil {
-				_ = tx.Rollback()
+				if rbErr := tx.Rollback(); rbErr != nil {
+					log.Printf("tx rollback failed: %v", rbErr)
+				}
 				return BoardCardMutationResult{}, err
 			}
 		}
 	} else {
 		boardRow, err = loadBoardRow(ctx, tx, boardID)
 		if err != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return BoardCardMutationResult{}, err
 		}
 		if err := ensureBoardUpdatedAtMatches(boardRow, input.IfBoardUpdatedAt); err != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return BoardCardMutationResult{}, err
 		}
 	}
@@ -1370,7 +1421,9 @@ func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifie
 	if input.Title != nil {
 		nextTitle = strings.TrimSpace(*input.Title)
 		if nextTitle == "" {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return BoardCardMutationResult{}, invalidBoardRequest("card.title must not be empty")
 		}
 	}
@@ -1392,7 +1445,9 @@ func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifie
 		definitionOfDone := uniqueSortedStrings(*input.DefinitionOfDone)
 		definitionOfDoneBytes, marshalErr := json.Marshal(definitionOfDone)
 		if marshalErr != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return BoardCardMutationResult{}, fmt.Errorf("marshal card definition_of_done: %w", marshalErr)
 		}
 		nextDefinitionOfDoneJSON = string(definitionOfDoneBytes)
@@ -1408,7 +1463,9 @@ func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifie
 	nextStatus := cardRow.Status
 	if input.Status != nil {
 		if err := validateBoardCardStatus(*input.Status, false); err != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return BoardCardMutationResult{}, invalidBoardRequestError(err)
 		}
 		nextStatus = normalizeBoardCardStatus(*input.Status)
@@ -1422,7 +1479,9 @@ func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifie
 		nextResolution = normalizeIncomingCardResolution(strings.TrimSpace(*input.Resolution))
 	}
 	if err := validateCardResolution(nextResolution, true); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, invalidBoardRequestError(err)
 	}
 	nextResolutionRefsJSON := cardRow.ResolutionRefsJSON
@@ -1430,7 +1489,9 @@ func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifie
 		resolutionRefs := uniqueSortedStrings(*input.ResolutionRefs)
 		resolutionRefsBytes, marshalErr := json.Marshal(resolutionRefs)
 		if marshalErr != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return BoardCardMutationResult{}, fmt.Errorf("marshal card resolution refs: %w", marshalErr)
 		}
 		nextResolutionRefsJSON = string(resolutionRefsBytes)
@@ -1440,7 +1501,9 @@ func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifie
 		refs := uniqueSortedStrings(*input.Refs)
 		refsBytes, marshalErr := json.Marshal(refs)
 		if marshalErr != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return BoardCardMutationResult{}, fmt.Errorf("marshal card refs: %w", marshalErr)
 		}
 		nextRefsJSON = string(refsBytes)
@@ -1452,21 +1515,29 @@ func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifie
 
 	if nextParentThread != "" {
 		if err := ensureThreadExists(ctx, tx, nextParentThread); err != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return BoardCardMutationResult{}, err
 		}
 		if nextParentThread == boardRow.ThreadID {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return BoardCardMutationResult{}, invalidBoardRequest("board.thread_id cannot be added as a board card")
 		}
 		if err := ensureBoardCardParentThreadAvailable(ctx, tx, boardID, nextParentThread, cardRow.CardID); err != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return BoardCardMutationResult{}, err
 		}
 	}
 	if nextPinnedDocumentID != "" {
 		if err := ensureDocumentExists(ctx, tx, nextPinnedDocumentID); err != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return BoardCardMutationResult{}, err
 		}
 	}
@@ -1486,15 +1557,21 @@ func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifie
 		nextRisk == canonicalBoardCardRisk(cardRow.Risk) {
 		boardMap, mapErr := boardRow.toMap()
 		if mapErr != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return BoardCardMutationResult{}, mapErr
 		}
 		cardMap, mapErr := cardRow.toMap()
 		if mapErr != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return BoardCardMutationResult{}, mapErr
 		}
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{Board: boardMap, Card: cardMap}, nil
 	}
 
@@ -1530,7 +1607,9 @@ func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifie
 		actorID,
 		cardRow.ProvenanceJSON,
 	); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, fmt.Errorf("insert board card version: %w", err)
 	}
 	if _, err := tx.ExecContext(
@@ -1562,12 +1641,16 @@ func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifie
 		actorID,
 		cardRow.CardID,
 	); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, fmt.Errorf("update board card: %w", err)
 	}
 	var refsForEdges []string
 	if err := json.Unmarshal([]byte(nextRefsJSON), &refsForEdges); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, fmt.Errorf("unmarshal card refs for ref_edges: %w", err)
 	}
 	refsForEdges = uniqueSortedStrings(refsForEdges)
@@ -1575,27 +1658,37 @@ func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifie
 	cardTargets = appendRefEdgeTarget(cardTargets, refEdgeTypeCardParentThread, "thread", nextParentThread)
 	cardTargets = appendRefEdgeTarget(cardTargets, refEdgeTypeCardPinnedDocument, "document", nextPinnedDocumentID)
 	if err := replaceRefEdges(ctx, tx, "card", cardRow.CardID, cardTargets); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, err
 	}
 	if err := upsertBoardCardRefEdge(ctx, tx, boardID, cardRow.CardID, cardRow.ColumnKey, cardRow.Rank); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, err
 	}
 
 	boardRow, err = touchBoardRow(ctx, tx, boardRow, actorID)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, err
 	}
 	cardRow, err = s.loadBoardCardByIdentifier(ctx, tx, boardID, cardRow.CardID, true)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, err
 	}
 
 	if err := tx.Commit(); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, fmt.Errorf("commit board card update transaction: %w", err)
 	}
 
@@ -1638,64 +1731,88 @@ func (s *Store) MoveBoardCard(ctx context.Context, actorID, boardID, identifier 
 	if strings.TrimSpace(boardID) == "" {
 		cardRow, err = s.loadBoardCardByGlobalID(ctx, tx, identifier, true)
 		if err != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return BoardCardMutationResult{}, err
 		}
 		boardID = cardRow.BoardID
 		boardRow, err = loadBoardRow(ctx, tx, boardID)
 		if err != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return BoardCardMutationResult{}, err
 		}
 		if err := ensureBoardUpdatedAtMatches(boardRow, input.IfBoardUpdatedAt); err != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return BoardCardMutationResult{}, err
 		}
 	} else {
 		boardRow, err = loadBoardRow(ctx, tx, boardID)
 		if err != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return BoardCardMutationResult{}, err
 		}
 		if err := ensureBoardUpdatedAtMatches(boardRow, input.IfBoardUpdatedAt); err != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return BoardCardMutationResult{}, err
 		}
 		cardRow, err = s.loadBoardCardByIdentifier(ctx, tx, boardID, identifier, true)
 	}
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, err
 	}
 	if err := ensureBoardCardMutable(cardRow); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, err
 	}
 	beforeCardID, afterCardID, err := resolveBoardPlacementAnchors(ctx, tx, boardID, input.BeforeCardID, input.AfterCardID)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, err
 	}
 	if err := validateBoardAnchors(ctx, tx, boardID, columnKey, beforeCardID, afterCardID, cardRow.CardID); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, err
 	}
 
 	rank, err := s.allocateBoardCardRank(ctx, tx, boardID, columnKey, beforeCardID, afterCardID, cardRow.CardID)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, err
 	}
 
 	nextResolution, nextResolutionRefsJSON, updateCard, err := resolveBoardCardMoveResolution(cardRow, columnKey, input)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, err
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if err := upsertBoardCardRefEdge(ctx, tx, boardID, cardRow.CardID, columnKey, rank); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, err
 	}
 
@@ -1731,7 +1848,9 @@ func (s *Store) MoveBoardCard(ctx context.Context, actorID, boardID, identifier 
 			actorID,
 			cardRow.ProvenanceJSON,
 		); err != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return BoardCardMutationResult{}, fmt.Errorf("insert board card version: %w", err)
 		}
 		if _, err := tx.ExecContext(
@@ -1751,12 +1870,16 @@ func (s *Store) MoveBoardCard(ctx context.Context, actorID, boardID, identifier 
 			actorID,
 			cardRow.CardID,
 		); err != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return BoardCardMutationResult{}, fmt.Errorf("update board card resolution: %w", err)
 		}
 		cardRow, err = s.loadBoardCardByIdentifier(ctx, tx, boardID, cardRow.CardID, true)
 		if err != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return BoardCardMutationResult{}, err
 		}
 	} else {
@@ -1766,12 +1889,16 @@ func (s *Store) MoveBoardCard(ctx context.Context, actorID, boardID, identifier 
 
 	boardRow, err = touchBoardRow(ctx, tx, boardRow, actorID)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, err
 	}
 
 	if err := tx.Commit(); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, fmt.Errorf("commit board card move transaction: %w", err)
 	}
 
@@ -1819,53 +1946,73 @@ func (s *Store) ArchiveBoardCard(ctx context.Context, actorID, boardID, identifi
 		cardRow, err = s.loadBoardCardByGlobalID(ctx, tx, identifier, true)
 	}
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, err
 	}
 	boardID = cardRow.BoardID
 	boardRow, err := loadBoardRow(ctx, tx, boardID)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, err
 	}
 	if err := ensureBoardUpdatedAtMatches(boardRow, input.IfBoardUpdatedAt); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, err
 	}
 	if cardRow.TrashedAt.Valid && strings.TrimSpace(cardRow.TrashedAt.String) != "" {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, ErrAlreadyTrashed
 	}
 	if cardRow.ArchivedAt.Valid && strings.TrimSpace(cardRow.ArchivedAt.String) != "" {
 		boardMap, mapErr := boardRow.toMap()
 		if mapErr != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return BoardCardMutationResult{}, mapErr
 		}
 		cardMap, mapErr := cardRow.toMap()
 		if mapErr != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return BoardCardMutationResult{}, mapErr
 		}
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{Board: boardMap, Card: cardMap}, nil
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if _, err := tx.ExecContext(ctx, `UPDATE cards SET archived_at = ?, archived_by = ? WHERE id = ?`, now, actorID, cardRow.CardID); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, fmt.Errorf("archive board card: %w", err)
 	}
 	boardRow, err = touchBoardRow(ctx, tx, boardRow, actorID)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, err
 	}
 	cardRow.ArchivedAt = sql.NullString{String: now, Valid: true}
 	cardRow.ArchivedBy = sql.NullString{String: actorID, Valid: true}
 
 	if err := tx.Commit(); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, fmt.Errorf("commit board card archive transaction: %w", err)
 	}
 
@@ -1900,17 +2047,23 @@ func (s *Store) RestoreArchivedBoardCard(ctx context.Context, actorID, boardID, 
 		cardRow, err = s.loadBoardCardByGlobalID(ctx, tx, identifier, true)
 	}
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, err
 	}
 	boardID = cardRow.BoardID
 	boardRow, err := loadBoardRow(ctx, tx, boardID)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, err
 	}
 	if err := ensureBoardUpdatedAtMatches(boardRow, input.IfBoardUpdatedAt); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, err
 	}
 	trashed := cardRow.TrashedAt.Valid && strings.TrimSpace(cardRow.TrashedAt.String) != ""
@@ -1918,21 +2071,29 @@ func (s *Store) RestoreArchivedBoardCard(ctx context.Context, actorID, boardID, 
 	if !trashed && !archived {
 		boardMap, mapErr := boardRow.toMap()
 		if mapErr != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return BoardCardMutationResult{}, mapErr
 		}
 		cardMap, mapErr := cardRow.toMap()
 		if mapErr != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return BoardCardMutationResult{}, mapErr
 		}
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{Board: boardMap, Card: cardMap}, nil
 	}
 
 	if trashed {
 		if _, err := tx.ExecContext(ctx, `UPDATE cards SET trashed_at = NULL, trashed_by = NULL, trash_reason = NULL WHERE id = ?`, cardRow.CardID); err != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return BoardCardMutationResult{}, fmt.Errorf("restore trashed board card: %w", err)
 		}
 		cardRow.TrashedAt = sql.NullString{}
@@ -1940,7 +2101,9 @@ func (s *Store) RestoreArchivedBoardCard(ctx context.Context, actorID, boardID, 
 		cardRow.TrashReason = sql.NullString{}
 	} else {
 		if _, err := tx.ExecContext(ctx, `UPDATE cards SET archived_at = NULL, archived_by = NULL WHERE id = ?`, cardRow.CardID); err != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return BoardCardMutationResult{}, fmt.Errorf("restore board card: %w", err)
 		}
 		cardRow.ArchivedAt = sql.NullString{}
@@ -1949,12 +2112,16 @@ func (s *Store) RestoreArchivedBoardCard(ctx context.Context, actorID, boardID, 
 
 	boardRow, err = touchBoardRow(ctx, tx, boardRow, actorID)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, err
 	}
 
 	if err := tx.Commit(); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, fmt.Errorf("commit board card restore transaction: %w", err)
 	}
 
@@ -2056,32 +2223,44 @@ func (s *Store) TrashBoardCard(ctx context.Context, actorID, boardID, identifier
 		cardRow, err = s.loadBoardCardByGlobalID(ctx, tx, identifier, true)
 	}
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, err
 	}
 	boardID = cardRow.BoardID
 	boardRow, err := loadBoardRow(ctx, tx, boardID)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, err
 	}
 	if err := ensureBoardUpdatedAtMatches(boardRow, input.IfBoardUpdatedAt); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, err
 	}
 	if cardRow.TrashedAt.Valid && strings.TrimSpace(cardRow.TrashedAt.String) != "" {
 		boardMap, mapErr := boardRow.toMap()
 		if mapErr != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return BoardCardMutationResult{}, mapErr
 		}
 		cardMap, mapErr := cardRow.toMap()
 		if mapErr != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return BoardCardMutationResult{}, mapErr
 		}
 		cardMap["_mutation_applied"] = false
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{Board: boardMap, Card: cardMap}, nil
 	}
 
@@ -2091,7 +2270,9 @@ func (s *Store) TrashBoardCard(ctx context.Context, actorID, boardID, identifier
 		`UPDATE cards SET trashed_at = ?, trashed_by = ?, trash_reason = ?, archived_at = NULL, archived_by = NULL WHERE id = ?`,
 		now, actorID, reason, cardRow.CardID,
 	); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, fmt.Errorf("trash board card: %w", err)
 	}
 	cardRow.TrashedAt = sql.NullString{String: now, Valid: true}
@@ -2106,12 +2287,16 @@ func (s *Store) TrashBoardCard(ctx context.Context, actorID, boardID, identifier
 
 	boardRow, err = touchBoardRow(ctx, tx, boardRow, actorID)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, err
 	}
 
 	if err := tx.Commit(); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return BoardCardMutationResult{}, fmt.Errorf("commit board card trash transaction: %w", err)
 	}
 

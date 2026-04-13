@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"regexp"
 	"strings"
 	"time"
@@ -101,20 +102,26 @@ func (s *Store) RegisterPasskeyAgent(ctx context.Context, input RegisterPasskeyA
 	}
 
 	if err := s.consumeOnboardingClaimTx(ctx, tx, claim, agentID, actorID, now); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return Agent{}, TokenBundle{}, err
 	}
 
 	if existingActorID != "" {
 		if err := s.ensureExistingActorReadyForAgentLinkTx(ctx, tx, actorID); err != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return Agent{}, TokenBundle{}, err
 		}
 	}
 
 	agentMetadataJSON, err := principalMetadataJSON(PrincipalKindHuman, AuthMethodPasskey, nil)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return Agent{}, TokenBundle{}, fmt.Errorf("encode passkey agent metadata: %w", err)
 	}
 	_, err = tx.ExecContext(
@@ -129,13 +136,17 @@ func (s *Store) RegisterPasskeyAgent(ctx context.Context, input RegisterPasskeyA
 		agentMetadataJSON,
 	)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return Agent{}, TokenBundle{}, fmt.Errorf("insert passkey agent: %w", err)
 	}
 
 	actorMetadataValue, err := actorMetadataJSON(PrincipalKindHuman, AuthMethodPasskey, nil)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return Agent{}, TokenBundle{}, fmt.Errorf("encode passkey actor metadata: %w", err)
 	}
 	if existingActorID == "" {
@@ -150,7 +161,9 @@ func (s *Store) RegisterPasskeyAgent(ctx context.Context, input RegisterPasskeyA
 			actorMetadataValue,
 		)
 		if err != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return Agent{}, TokenBundle{}, fmt.Errorf("insert passkey actor: %w", err)
 		}
 	} else {
@@ -161,13 +174,17 @@ func (s *Store) RegisterPasskeyAgent(ctx context.Context, input RegisterPasskeyA
 			actorID,
 		)
 		if err != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return Agent{}, TokenBundle{}, fmt.Errorf("update linked actor metadata for passkey: %w", err)
 		}
 	}
 
 	if err := insertPasskeyCredentialTx(ctx, tx, agentID, input.UserHandle, *input.Credential, nowText); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		if errors.Is(err, ErrInvalidRequest) {
 			return Agent{}, TokenBundle{}, err
 		}
@@ -189,18 +206,24 @@ func (s *Store) RegisterPasskeyAgent(ctx context.Context, input RegisterPasskeyA
 			"onboarding_mode": string(claim.Mode),
 		},
 	}); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return Agent{}, TokenBundle{}, err
 	}
 
 	tokens, _, err := s.issueTokenBundleTx(ctx, tx, agentID, now)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return Agent{}, TokenBundle{}, err
 	}
 
 	if err := tx.Commit(); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return Agent{}, TokenBundle{}, fmt.Errorf("commit register passkey transaction: %w", err)
 	}
 
@@ -234,19 +257,25 @@ func (s *Store) IssueTokenForPasskey(ctx context.Context, agentID string, creden
 	var revokedAt sql.NullString
 	err = tx.QueryRowContext(ctx, `SELECT revoked_at FROM agents WHERE id = ?`, agentID).Scan(&revokedAt)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		if errors.Is(err, sql.ErrNoRows) {
 			return TokenBundle{}, ErrAgentNotFound
 		}
 		return TokenBundle{}, fmt.Errorf("load passkey agent: %w", err)
 	}
 	if revokedAt.Valid {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return TokenBundle{}, ErrAgentRevoked
 	}
 
 	if err := updatePasskeyCredentialTx(ctx, tx, agentID, credential); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		if errors.Is(err, ErrPasskeyNotFound) {
 			return TokenBundle{}, ErrPasskeyNotFound
 		}
@@ -255,7 +284,9 @@ func (s *Store) IssueTokenForPasskey(ctx context.Context, agentID string, creden
 
 	tokens, _, err := s.issueTokenBundleTx(ctx, tx, agentID, time.Now().UTC())
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return TokenBundle{}, err
 	}
 

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -334,7 +335,9 @@ func (s *Store) RecordSecretAuditEvent(ctx context.Context, input AuthAuditEvent
 		return fmt.Errorf("begin audit tx: %w", err)
 	}
 	if err := s.recordAuthAuditEventTx(ctx, tx, input); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return err
 	}
 	if err := tx.Commit(); err != nil {

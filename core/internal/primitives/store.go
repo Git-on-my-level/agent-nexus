@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -324,29 +325,39 @@ func (s *Store) CreateArtifact(ctx context.Context, actorID string, artifact map
 		string(refsJSON),
 		string(metadataJSON),
 	); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		if isUniqueViolation(err) {
 			return nil, ErrConflict
 		}
 		return nil, fmt.Errorf("insert artifact: %w", err)
 	}
 	if err := replaceRefEdges(ctx, tx, "artifact", artifactID, typedRefEdgeTargets(refEdgeTypeRef, refs)); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, err
 	}
 
 	if err := s.applyBlobLedgerWritePlanTx(ctx, tx, blobPlan); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, err
 	}
 
 	if err := stagedContent.Promote(); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, fmt.Errorf("finalize artifact content: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, fmt.Errorf("commit artifact transaction: %w", err)
 	}
 
@@ -446,34 +457,46 @@ func (s *Store) CreateArtifactAndEvent(ctx context.Context, actorID string, arti
 		string(artifactRefsJSON),
 		string(artifactMetadataJSON),
 	); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		if isUniqueViolation(err) {
 			return nil, nil, ErrConflict
 		}
 		return nil, nil, fmt.Errorf("insert artifact: %w", err)
 	}
 	if err := replaceRefEdges(ctx, tx, "artifact", artifactID, typedRefEdgeTargets(refEdgeTypeRef, artifactRefs)); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, nil, err
 	}
 
 	if err := insertPreparedEvent(ctx, tx, preparedEvent); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, nil, err
 	}
 
 	if err := s.applyBlobLedgerWritePlanTx(ctx, tx, blobPlan); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, nil, err
 	}
 
 	if err := stagedContent.Promote(); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, nil, fmt.Errorf("finalize artifact content: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, nil, fmt.Errorf("commit transaction: %w", err)
 	}
 
@@ -1608,11 +1631,15 @@ func (s *Store) applyThreadPatch(ctx context.Context, actorID string, id string,
 	updateQuery, updateArgs = appendIfUpdatedAtClause(updateQuery, updateArgs, ifUpdatedAt)
 	updateResult, err := tx.ExecContext(ctx, updateQuery, updateArgs...)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return ThreadMutationResult{}, fmt.Errorf("update thread: %w", err)
 	}
 	if err := requireIfUpdatedAtRowsAffected(updateResult, ifUpdatedAt, "patch thread"); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return ThreadMutationResult{}, err
 	}
 
@@ -1632,15 +1659,21 @@ func (s *Store) applyThreadPatch(ctx context.Context, actorID string, id string,
 
 	preparedEvent, err := prepareEventForInsert(actorID, event)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return ThreadMutationResult{}, fmt.Errorf("prepare thread_updated event: %w", err)
 	}
 	if err := insertPreparedEvent(ctx, tx, preparedEvent); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return ThreadMutationResult{}, fmt.Errorf("emit thread_updated event: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return ThreadMutationResult{}, fmt.Errorf("commit thread patch transaction: %w", err)
 	}
 
@@ -1718,7 +1751,9 @@ func (s *Store) CreateThread(ctx context.Context, actorID string, thread map[str
 		filterColumns.TagsJSON,
 	)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		if isUniqueViolation(err) {
 			return ThreadMutationResult{}, ErrConflict
 		}
@@ -1742,15 +1777,21 @@ func (s *Store) CreateThread(ctx context.Context, actorID string, thread map[str
 	}
 	preparedEvent, err := prepareEventForInsert(actorID, event)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return ThreadMutationResult{}, fmt.Errorf("prepare thread_created event: %w", err)
 	}
 	if err := insertPreparedEvent(ctx, tx, preparedEvent); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return ThreadMutationResult{}, fmt.Errorf("emit thread_created event: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return ThreadMutationResult{}, fmt.Errorf("commit thread create transaction: %w", err)
 	}
 

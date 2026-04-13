@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"path/filepath"
 	"strings"
 	"time"
@@ -319,7 +320,9 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		return nil, nil, fmt.Errorf("begin document create transaction: %w", err)
 	}
 	if threadID, err = ensureDocumentBackingThreadTx(ctx, tx, actorID, documentID, threadID, title, now); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, nil, err
 	}
 
@@ -337,14 +340,18 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		string(refsJSON),
 		string(artifactMetadataJSON),
 	); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		if isUniqueViolation(err) {
 			return nil, nil, ErrConflict
 		}
 		return nil, nil, fmt.Errorf("insert document artifact: %w", err)
 	}
 	if err := replaceRefEdges(ctx, tx, "artifact", artifactID, typedRefEdgeTargets(refEdgeTypeRef, revisionRefs)); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, nil, err
 	}
 
@@ -371,14 +378,18 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		now,
 		actorID,
 	); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		if isUniqueViolation(err) {
 			return nil, nil, ErrConflict
 		}
 		return nil, nil, fmt.Errorf("insert document: %w", err)
 	}
 	if err := replaceRefEdges(ctx, tx, "document", documentID, documentResourceRefEdgeTargets(threadID, docResourceRefs)); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, nil, err
 	}
 
@@ -397,14 +408,18 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		now,
 		actorID,
 	); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		if isUniqueViolation(err) {
 			return nil, nil, ErrConflict
 		}
 		return nil, nil, fmt.Errorf("insert document revision: %w", err)
 	}
 	if err := replaceRefEdges(ctx, tx, "document_revision", revisionID, typedRefEdgeTargets(refEdgeTypeRef, revisionRefs)); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, nil, err
 	}
 
@@ -419,26 +434,36 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		nil,
 	))
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, nil, err
 	}
 	if err := insertPreparedEvent(ctx, tx, lifecycleEvent); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, nil, err
 	}
 
 	if err := s.applyBlobLedgerWritePlanTx(ctx, tx, blobPlan); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, nil, err
 	}
 
 	if err := stagedContent.Promote(); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, nil, fmt.Errorf("finalize document content: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, nil, fmt.Errorf("commit document create transaction: %w", err)
 	}
 
@@ -686,7 +711,9 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		return nil, nil, fmt.Errorf("begin document update transaction: %w", err)
 	}
 	if nextThreadID, err = ensureDocumentBackingThreadTx(ctx, tx, actorID, documentID, nextThreadID, nextTitle, now); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, nil, err
 	}
 
@@ -704,14 +731,18 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		string(refsJSON),
 		string(artifactMetadataJSON),
 	); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		if isUniqueViolation(err) {
 			return nil, nil, ErrConflict
 		}
 		return nil, nil, fmt.Errorf("insert document artifact: %w", err)
 	}
 	if err := replaceRefEdges(ctx, tx, "artifact", artifactID, typedRefEdgeTargets(refEdgeTypeRef, revisionRefs)); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, nil, err
 	}
 
@@ -731,14 +762,18 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		now,
 		actorID,
 	); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		if isUniqueViolation(err) {
 			return nil, nil, ErrConflict
 		}
 		return nil, nil, fmt.Errorf("insert document revision: %w", err)
 	}
 	if err := replaceRefEdges(ctx, tx, "document_revision", revisionID, typedRefEdgeTargets(refEdgeTypeRef, revisionRefs)); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, nil, err
 	}
 
@@ -755,11 +790,15 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		},
 	))
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, nil, err
 	}
 	if err := insertPreparedEvent(ctx, tx, lifecycleEvent); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, nil, err
 	}
 
@@ -793,41 +832,57 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		ifBaseRevision,
 	)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, nil, fmt.Errorf("update document head: %w", err)
 	}
 	affected, err := result.RowsAffected()
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, nil, fmt.Errorf("read document head update result: %w", err)
 	}
 	if affected == 0 {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, nil, ErrConflict
 	}
 	if err := replaceRefEdges(ctx, tx, "document", documentID, documentResourceRefEdgeTargets(nextThreadID, nextDocRefs)); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, nil, err
 	}
 	if nullStringValue(doc.ThreadID) != nextThreadID {
 		if err := clearDocumentBackingThreadSubjectTx(ctx, tx, actorID, nullStringValue(doc.ThreadID), documentID, now); err != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
 			return nil, nil, err
 		}
 	}
 
 	if err := s.applyBlobLedgerWritePlanTx(ctx, tx, blobPlan); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, nil, err
 	}
 
 	if err := stagedContent.Promote(); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, nil, fmt.Errorf("finalize document content: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, nil, fmt.Errorf("commit document update transaction: %w", err)
 	}
 
@@ -979,7 +1034,9 @@ func (s *Store) TrashDocument(ctx context.Context, actorID string, documentID st
 		now, actorID, strings.TrimSpace(reason), documentID,
 	)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, nil, fmt.Errorf("trash document: %w", err)
 	}
 
@@ -996,15 +1053,21 @@ func (s *Store) TrashDocument(ctx context.Context, actorID string, documentID st
 		},
 	))
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, nil, err
 	}
 	if err := insertPreparedEvent(ctx, tx, lifecycleEvent); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, nil, err
 	}
 	if err := tx.Commit(); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, nil, fmt.Errorf("commit document trash transaction: %w", err)
 	}
 
@@ -1138,7 +1201,9 @@ func (s *Store) RestoreDocument(ctx context.Context, actorID, documentID string,
 		documentID,
 	)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, nil, fmt.Errorf("restore document: %w", err)
 	}
 
@@ -1155,15 +1220,21 @@ func (s *Store) RestoreDocument(ctx context.Context, actorID, documentID string,
 		},
 	))
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, nil, err
 	}
 	if err := insertPreparedEvent(ctx, tx, lifecycleEvent); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, nil, err
 	}
 	if err := tx.Commit(); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return nil, nil, fmt.Errorf("commit document restore transaction: %w", err)
 	}
 

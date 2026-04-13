@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -211,7 +212,9 @@ func (s *Store) CreateInvite(ctx context.Context, createdBy Principal, input Cre
 		expiresAtText,
 	)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return Invite{}, "", fmt.Errorf("insert auth invite: %w", err)
 	}
 
@@ -227,12 +230,16 @@ func (s *Store) CreateInvite(ctx context.Context, createdBy Principal, input Cre
 		InviteID:     inviteID,
 		Metadata:     metadata,
 	}); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return Invite{}, "", err
 	}
 
 	if err := tx.Commit(); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return Invite{}, "", fmt.Errorf("commit create invite transaction: %w", err)
 	}
 
@@ -327,19 +334,25 @@ func (s *Store) RevokeInvite(ctx context.Context, inviteID string, revokedBy Pri
 		inviteID,
 	)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return Invite{}, fmt.Errorf("revoke auth invite: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return Invite{}, fmt.Errorf("read revoke invite rows affected: %w", err)
 	}
 
 	invite, err := getInviteByIDWithQuerier(ctx, tx, inviteID)
 	if err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		if errors.Is(err, ErrInviteNotFound) {
 			return Invite{}, ErrInviteNotFound
 		}
@@ -347,7 +360,9 @@ func (s *Store) RevokeInvite(ctx context.Context, inviteID string, revokedBy Pri
 	}
 
 	if rowsAffected == 0 {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return invite, nil
 	}
 
@@ -361,12 +376,16 @@ func (s *Store) RevokeInvite(ctx context.Context, inviteID string, revokedBy Pri
 			"kind": invite.Kind,
 		},
 	}); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return Invite{}, err
 	}
 
 	if err := tx.Commit(); err != nil {
-		_ = tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
 		return Invite{}, fmt.Errorf("commit revoke invite transaction: %w", err)
 	}
 
