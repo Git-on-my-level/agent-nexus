@@ -48,6 +48,7 @@
     workspacePath,
     stripBasePath,
     stripWorkspacePath,
+    WORKSPACE_HEADER,
   } from "$lib/workspacePaths";
 
   let { children, data } = $props();
@@ -222,7 +223,9 @@
 
   async function loadDevFixturePersonas() {
     try {
-      const response = await fetch(appPath("/auth/dev/identities"));
+      const response = await fetch(appPath("/auth/dev/identities"), {
+        headers: { [WORKSPACE_HEADER]: activeWorkspaceSlug },
+      });
       if (!response.ok) {
         devFixturePersonas = [];
         return;
@@ -250,7 +253,10 @@
     try {
       const response = await fetch(appPath("/auth/dev/session"), {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          [WORKSPACE_HEADER]: activeWorkspaceSlug,
+        },
         body: JSON.stringify({ persona_id: trimmed }),
       });
       if (!response.ok) {
@@ -307,7 +313,9 @@
 
       if (devActorModeEnabled && !agent) {
         try {
-          const res = await fetch(appPath("/auth/dev/default-persona"));
+          const res = await fetch(appPath("/auth/dev/default-persona"), {
+            headers: { [WORKSPACE_HEADER]: workspaceSlug },
+          });
           if (res.ok) {
             const data = await res.json();
             if (data?.persona?.persona_id) {
@@ -315,7 +323,10 @@
               try {
                 const sessionRes = await fetch(appPath("/auth/dev/session"), {
                   method: "POST",
-                  headers: { "content-type": "application/json" },
+                  headers: {
+                    "content-type": "application/json",
+                    [WORKSPACE_HEADER]: workspaceSlug,
+                  },
                   body: JSON.stringify({
                     persona_id: data.persona.persona_id,
                   }),

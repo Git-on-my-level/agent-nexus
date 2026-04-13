@@ -29,7 +29,6 @@
   let devLoginDisplayName = $state("");
   let devLoginError = $state("");
   let loadingDevLogin = $state(false);
-  let devAutoLoginAttempted = $state(false);
   let workspaceSlug = $derived($page.params.workspace);
 
   onMount(async () => {
@@ -59,14 +58,6 @@
     if ($authenticatedAgent) {
       goto(workspacePath(workspaceSlug));
     }
-  });
-
-  $effect(() => {
-    if (loadingBootstrapStatus) return;
-    if (!devPasskeyBypassAvailable) return;
-    if (devAutoLoginAttempted) return;
-    devAutoLoginAttempted = true;
-    void handleDevLogin();
   });
 
   async function handleRegistration() {
