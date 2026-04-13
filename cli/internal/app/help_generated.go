@@ -290,6 +290,7 @@ Core Commands:
   import        Bootstrap a precision-first workspace import and run local import helpers
   draft         Stage write requests locally and commit them later
   provenance    Walk refs/provenance links as a deterministic graph
+  secret        Manage workspace secrets for agent credential injection
   api call      Perform an arbitrary HTTP API request
   help [topic]  Show onboarding help or generated command help
 `) + "\n")

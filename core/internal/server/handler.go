@@ -18,6 +18,7 @@ import (
 	"organization-autorunner-core/internal/controlplaneauth"
 	"organization-autorunner-core/internal/primitives"
 	"organization-autorunner-core/internal/schema"
+	"organization-autorunner-core/internal/secrets"
 )
 
 type HealthCheckFunc func(ctx context.Context) error
@@ -169,6 +170,7 @@ type handlerOptions struct {
 	workspaceID                    string
 	readinessChecks                []namedReadinessCheck
 	opsHealthSections              map[string]OpsHealthSectionFunc
+	secretsStore                   *secrets.Store
 }
 
 func WithHealthCheck(healthCheck HealthCheckFunc) HandlerOption {
@@ -359,6 +361,12 @@ func WithWorkspaceServiceIdentity(identity *controlplaneauth.WorkspaceServiceIde
 func WithWorkspaceID(workspaceID string) HandlerOption {
 	return func(opts *handlerOptions) {
 		opts.workspaceID = strings.TrimSpace(workspaceID)
+	}
+}
+
+func WithSecretsStore(store *secrets.Store) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.secretsStore = store
 	}
 }
 
@@ -885,6 +893,76 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			return
 		}
 		handlePasskeyDevLogin(w, r, opts)
+	})
+
+	registerRoute("/secrets", exactRouteAccess(routeAccessAuthenticatedPrincipal, http.MethodGet, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			handleListSecrets(w, r, opts)
+		case http.MethodPost:
+			handleCreateSecret(w, r, opts)
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET and POST are supported")
+		}
+	})
+
+	registerRoute("/secrets/reveal-batch", exactRouteAccess(routeAccessAuthenticatedPrincipal, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+			return
+		}
+		handleRevealSecretsBatch(w, r, opts)
+	})
+
+	registerRoute("/secrets/", func(r *http.Request) routeAccessRequirement {
+		remainder := strings.TrimPrefix(r.URL.Path, "/secrets/")
+		if remainder == "" {
+			return routeAccessRequirement{}
+		}
+		if strings.HasSuffix(remainder, "/reveal") {
+			secretID := strings.TrimSuffix(remainder, "/reveal")
+			if strings.TrimSpace(secretID) == "" || strings.Contains(secretID, "/") {
+				return routeAccessRequirement{}
+			}
+			return exactRouteAccess(routeAccessAuthenticatedPrincipal, http.MethodPost)(r)
+		}
+		if strings.Contains(remainder, "/") {
+			return routeAccessRequirement{}
+		}
+		return exactRouteAccess(routeAccessAuthenticatedPrincipal, http.MethodPut, http.MethodDelete)(r)
+	}, func(w http.ResponseWriter, r *http.Request) {
+		remainder := strings.TrimPrefix(r.URL.Path, "/secrets/")
+		if remainder == "" {
+			writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+			return
+		}
+		if strings.HasSuffix(remainder, "/reveal") {
+			secretID := strings.TrimSuffix(remainder, "/reveal")
+			secretID = strings.TrimRight(secretID, "/")
+			if secretID == "" || strings.Contains(secretID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			if r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+				return
+			}
+			handleRevealSecret(w, r, opts, secretID)
+			return
+		}
+		if strings.Contains(remainder, "/") {
+			writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+			return
+		}
+		secretID := remainder
+		switch r.Method {
+		case http.MethodPut:
+			handleUpdateSecret(w, r, opts, secretID)
+		case http.MethodDelete:
+			handleDeleteSecret(w, r, opts, secretID)
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only PUT and DELETE are supported")
+		}
 	})
 
 	registerRoute("/agents/me", exactRouteAccess(routeAccessAuthenticatedPrincipal, http.MethodGet, http.MethodPatch), func(w http.ResponseWriter, r *http.Request) {

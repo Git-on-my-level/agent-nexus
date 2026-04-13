@@ -140,6 +140,12 @@ export declare class OarClient {
     packetsReceiptsCreate(options?: RequestOptions): Promise<InvokeResult>;
     packetsReviewsCreate(options?: RequestOptions): Promise<InvokeResult>;
     refEdgesList(options?: RequestOptions): Promise<InvokeResult>;
+    secretsCreate(options?: RequestOptions): Promise<InvokeResult>;
+    secretsDelete(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    secretsList(options?: RequestOptions): Promise<InvokeResult>;
+    secretsReveal(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    secretsRevealBatch(options?: RequestOptions): Promise<InvokeResult>;
+    secretsUpdate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     threadsContext(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     threadsInspect(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     threadsList(options?: RequestOptions): Promise<InvokeResult>;

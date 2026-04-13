@@ -4,7 +4,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.3.0`
-- Groups: `17`
+- Groups: `18`
 
 ## `topics`
 
@@ -201,4 +201,15 @@ Generated from `contracts/oar-openapi.yaml`.
 - Commands: `1`
 - Command IDs:
   - `ref_edges.list` (`ref-edges list`)
+
+## `secret`
+
+- Commands: `6`
+- Command IDs:
+  - `secrets.create` (`secret create`)
+  - `secrets.delete` (`secret delete`)
+  - `secrets.list` (`secret list`)
+  - `secrets.reveal` (`secret get --reveal`)
+  - `secrets.reveal-batch` (`secret exec`)
+  - `secrets.update` (`secret update`)
 

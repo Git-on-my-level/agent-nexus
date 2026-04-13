@@ -4,7 +4,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.3.0`
-- Commands: `111`
+- Commands: `117`
 
 ## `actors.create`
 
@@ -1153,6 +1153,83 @@ Generated from `contracts/oar-openapi.yaml`.
 - Concepts: `refs`, `inspection`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Output: Returns `{ ref_edges }`.
+
+## `secrets.create`
+
+- CLI path: `secret create`
+- HTTP: `POST /secrets`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Store an encrypted workspace credential with metadata.
+- Concepts: `secrets`, `write`
+- Error codes: `auth_required`, `invalid_token`, `human_only`, `invalid_request`, `resource_exists`, `secrets_not_configured`
+- Output: Returns `{ secret }` (metadata only, value is not echoed).
+- Agent notes: Only human principals may create secrets.
+
+## `secrets.delete`
+
+- CLI path: `secret delete`
+- HTTP: `DELETE /secrets/{secret_id}`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Permanently remove a secret and its encrypted value.
+- Concepts: `secrets`, `write`
+- Error codes: `auth_required`, `invalid_token`, `human_only`, `not_found`, `secrets_not_configured`
+- Output: Returns `{ deleted: true, secret_id }`.
+- Agent notes: Only human principals may delete secrets.
+
+## `secrets.list`
+
+- CLI path: `secret list`
+- HTTP: `GET /secrets`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: List workspace secret metadata without exposing values.
+- Concepts: `secrets`
+- Error codes: `auth_required`, `invalid_token`
+- Output: Returns `{ secrets }`.
+
+## `secrets.reveal`
+
+- CLI path: `secret get --reveal`
+- HTTP: `POST /secrets/{secret_id}/reveal`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Decrypt and return a secret value. Logged in audit.
+- Concepts: `secrets`
+- Error codes: `auth_required`, `invalid_token`, `not_found`, `secrets_not_configured`
+- Output: Returns `{ name, value }`.
+- Agent notes: Every reveal is logged in auth audit. POST (not GET) to prevent caching.
+
+## `secrets.reveal-batch`
+
+- CLI path: `secret exec`
+- HTTP: `POST /secrets/reveal-batch`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Batch-fetch secrets for env injection. Each reveal is audited.
+- Concepts: `secrets`
+- Error codes: `auth_required`, `invalid_token`, `not_found`, `invalid_request`, `secrets_not_configured`
+- Output: Returns `{ secrets: [{ name, value }] }`.
+- Agent notes: Each resolved secret generates an audit event. Missing names return not_found.
+
+## `secrets.update`
+
+- CLI path: `secret update`
+- HTTP: `PUT /secrets/{secret_id}`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Replace an encrypted secret value.
+- Concepts: `secrets`, `write`
+- Error codes: `auth_required`, `invalid_token`, `human_only`, `not_found`, `invalid_request`, `secrets_not_configured`
+- Output: Returns `{ secret }` (metadata only).
+- Agent notes: Only human principals may update secrets.
 
 ## `threads.context`
 

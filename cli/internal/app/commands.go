@@ -66,6 +66,9 @@ func (a *App) runCommand(ctx context.Context, args []string, cfg config.Resolved
 	case "provenance":
 		result, name, err := a.runProvenanceCommand(ctx, args[1:], cfg)
 		return name, result, err
+	case "secret":
+		result, name, err := a.runSecretCommand(ctx, args[1:], cfg)
+		return name, result, err
 	case "concepts":
 		if len(args) > 1 {
 			return "concepts", nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar concepts`")

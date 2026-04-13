@@ -4,7 +4,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.3.0`
-- Concepts: `30`
+- Concepts: `31`
 
 ## `actors`
 
@@ -267,6 +267,17 @@ Generated from `contracts/oar-openapi.yaml`.
   - `docs.revisions.get`
   - `docs.revisions.list`
 
+## `secrets`
+
+- Commands: `6`
+- Command IDs:
+  - `secrets.create`
+  - `secrets.delete`
+  - `secrets.list`
+  - `secrets.reveal`
+  - `secrets.reveal-batch`
+  - `secrets.update`
+
 ## `threads`
 
 - Commands: `5`
@@ -310,7 +321,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `write`
 
-- Commands: `43`
+- Commands: `46`
 - Command IDs:
   - `agent.notifications.dismiss`
   - `agent.notifications.read`
@@ -349,6 +360,9 @@ Generated from `contracts/oar-openapi.yaml`.
   - `events.trash`
   - `events.unarchive`
   - `inbox.acknowledge`
+  - `secrets.create`
+  - `secrets.delete`
+  - `secrets.update`
   - `topics.archive`
   - `topics.create`
   - `topics.patch`

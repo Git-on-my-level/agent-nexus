@@ -51,6 +51,12 @@ export const settingsNavItems = [
     icon: "access",
     hint: "Manage principals and invites",
   },
+  {
+    label: "Secrets",
+    href: "/secrets",
+    icon: "secrets",
+    hint: "Manage workspace credentials",
+  },
 ];
 
 const SHELL_CONTENT_RULES = [

@@ -24,6 +24,7 @@ describe("navigation model", () => {
       "Artifacts",
       "Trash",
       "Access",
+      "Secrets",
     ]);
   });
 
@@ -35,6 +36,7 @@ describe("navigation model", () => {
     expect(isKnownSection("/artifacts")).toBe(true);
     expect(isKnownSection("/trash")).toBe(true);
     expect(isKnownSection("/access")).toBe(true);
+    expect(isKnownSection("/secrets")).toBe(true);
     expect(isKnownSection("/missing")).toBe(false);
   });
 
@@ -51,6 +53,7 @@ describe("navigation model", () => {
     expect(isMoreHubActivePath("/artifacts/abc")).toBe(true);
     expect(isMoreHubActivePath("/trash")).toBe(true);
     expect(isMoreHubActivePath("/access")).toBe(true);
+    expect(isMoreHubActivePath("/secrets")).toBe(true);
     expect(isMoreHubActivePath("/inbox")).toBe(false);
     expect(isMoreHubActivePath("/")).toBe(false);
   });

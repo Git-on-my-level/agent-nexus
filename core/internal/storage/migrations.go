@@ -554,6 +554,23 @@ var migrations = []migration{
 			`ALTER TABLE documents DROP COLUMN status;`,
 		},
 	},
+	{
+		Version: 7,
+		Statements: []string{
+			`CREATE TABLE IF NOT EXISTS secrets (
+			id          TEXT PRIMARY KEY,
+			name        TEXT NOT NULL UNIQUE,
+			description TEXT,
+			ciphertext  BLOB NOT NULL,
+			nonce       BLOB NOT NULL,
+			key_id      TEXT NOT NULL DEFAULT 'v1',
+			actor_id    TEXT NOT NULL,
+			updated_by  TEXT,
+			created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+			updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+		);`,
+		},
+	},
 }
 
 func applyMigrations(ctx context.Context, db *sql.DB) error {

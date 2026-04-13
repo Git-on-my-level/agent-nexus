@@ -3781,6 +3781,213 @@ paths:
         '404':
           $ref: '#/components/responses/ErrorResponse'
 
+  /secrets:
+    get:
+      operationId: listSecrets
+      summary: List secrets
+      tags: [secrets]
+      x-oar-surface: canonical
+      x-oar-command-id: secrets.list
+      x-oar-cli-path: secret list
+      x-oar-why: List workspace secret metadata without exposing values.
+      x-oar-input-mode: none
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ secrets }`."
+      x-oar-error-codes: [auth_required, invalid_token]
+      x-oar-concepts: [secrets]
+      x-oar-stability: beta
+      responses:
+        '200':
+          description: Secret metadata list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecretsResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+    post:
+      operationId: createSecret
+      summary: Create secret
+      tags: [secrets]
+      x-oar-surface: canonical
+      x-oar-command-id: secrets.create
+      x-oar-cli-path: secret create
+      x-oar-why: Store an encrypted workspace credential with metadata.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ secret }` (metadata only, value is not echoed)."
+      x-oar-error-codes: [auth_required, invalid_token, human_only, invalid_request, resource_exists, secrets_not_configured]
+      x-oar-concepts: [secrets, write]
+      x-oar-stability: beta
+      x-oar-agent-notes: "Only human principals may create secrets."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSecretRequest'
+      responses:
+        '201':
+          description: Secret created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecretResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /secrets/{secret_id}:
+    put:
+      operationId: updateSecret
+      summary: Update secret value
+      tags: [secrets]
+      x-oar-surface: canonical
+      x-oar-command-id: secrets.update
+      x-oar-cli-path: secret update
+      x-oar-why: Replace an encrypted secret value.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ secret }` (metadata only)."
+      x-oar-error-codes: [auth_required, invalid_token, human_only, not_found, invalid_request, secrets_not_configured]
+      x-oar-concepts: [secrets, write]
+      x-oar-stability: beta
+      x-oar-agent-notes: "Only human principals may update secrets."
+      parameters:
+        - $ref: '#/components/parameters/SecretID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSecretRequest'
+      responses:
+        '200':
+          description: Secret updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecretResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/ErrorResponse'
+    delete:
+      operationId: deleteSecret
+      summary: Delete secret
+      tags: [secrets]
+      x-oar-surface: canonical
+      x-oar-command-id: secrets.delete
+      x-oar-cli-path: secret delete
+      x-oar-why: Permanently remove a secret and its encrypted value.
+      x-oar-input-mode: none
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ deleted: true, secret_id }`."
+      x-oar-error-codes: [auth_required, invalid_token, human_only, not_found, secrets_not_configured]
+      x-oar-concepts: [secrets, write]
+      x-oar-stability: beta
+      x-oar-agent-notes: "Only human principals may delete secrets."
+      parameters:
+        - $ref: '#/components/parameters/SecretID'
+      responses:
+        '200':
+          description: Secret deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteSecretResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /secrets/{secret_id}/reveal:
+    post:
+      operationId: revealSecret
+      summary: Reveal secret value
+      tags: [secrets]
+      x-oar-surface: canonical
+      x-oar-command-id: secrets.reveal
+      x-oar-cli-path: secret get --reveal
+      x-oar-why: Decrypt and return a secret value. Logged in audit.
+      x-oar-input-mode: none
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ name, value }`."
+      x-oar-error-codes: [auth_required, invalid_token, not_found, secrets_not_configured]
+      x-oar-concepts: [secrets]
+      x-oar-stability: beta
+      x-oar-agent-notes: "Every reveal is logged in auth audit. POST (not GET) to prevent caching."
+      parameters:
+        - $ref: '#/components/parameters/SecretID'
+      responses:
+        '200':
+          description: Decrypted secret value
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevealSecretResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /secrets/reveal-batch:
+    post:
+      operationId: revealSecretsBatch
+      summary: Reveal multiple secrets by name
+      tags: [secrets]
+      x-oar-surface: canonical
+      x-oar-command-id: secrets.reveal-batch
+      x-oar-cli-path: secret exec
+      x-oar-why: Batch-fetch secrets for env injection. Each reveal is audited.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ secrets: [{ name, value }] }`."
+      x-oar-error-codes: [auth_required, invalid_token, not_found, invalid_request, secrets_not_configured]
+      x-oar-concepts: [secrets]
+      x-oar-stability: beta
+      x-oar-agent-notes: "Each resolved secret generates an audit event. Missing names return not_found."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RevealSecretsBatchRequest'
+      responses:
+        '200':
+          description: Batch of decrypted secret values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevealSecretsBatchResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/ErrorResponse'
+
 components:
   responses:
     ErrorResponse:
@@ -3834,6 +4041,11 @@ components:
     InboxID:
       in: path
       name: inbox_id
+      required: true
+      schema: { type: string }
+    SecretID:
+      in: path
+      name: secret_id
       required: true
       schema: { type: string }
 
@@ -5136,3 +5348,90 @@ components:
         if_board_updated_at:
           type: string
           format: date-time
+
+    SecretMetadata:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        created_by: { type: string }
+        updated_by: { type: string }
+      required: [id, name, created_at, updated_at, created_by, updated_by]
+
+    CreateSecretRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Unique secret name (e.g. OPENAI_API_KEY).
+        value:
+          type: string
+          description: Secret plaintext value to encrypt.
+        description:
+          type: string
+          description: Optional note about this secret's purpose.
+      required: [name, value]
+
+    UpdateSecretRequest:
+      type: object
+      properties:
+        value:
+          type: string
+          description: New secret plaintext value.
+        description:
+          type: string
+          description: Updated description (omit to keep current).
+      required: [value]
+
+    SecretResponse:
+      type: object
+      properties:
+        secret: { $ref: '#/components/schemas/SecretMetadata' }
+      required: [secret]
+
+    SecretsResponse:
+      type: object
+      properties:
+        secrets:
+          type: array
+          items: { $ref: '#/components/schemas/SecretMetadata' }
+      required: [secrets]
+
+    DeleteSecretResponse:
+      type: object
+      properties:
+        deleted: { type: boolean }
+        secret_id: { type: string }
+      required: [deleted, secret_id]
+
+    RevealSecretResponse:
+      type: object
+      properties:
+        name: { type: string }
+        value: { type: string }
+      required: [name, value]
+
+    RevealSecretsBatchRequest:
+      type: object
+      properties:
+        names:
+          type: array
+          items: { type: string }
+          description: List of secret names to reveal.
+      required: [names]
+
+    RevealSecretsBatchResponse:
+      type: object
+      properties:
+        secrets:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              value: { type: string }
+            required: [name, value]
+      required: [secrets]

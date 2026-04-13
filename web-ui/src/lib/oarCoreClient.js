@@ -529,6 +529,28 @@ export function createOarCoreClient(options = {}) {
         generated.authAuditList({ query: filters }),
       ),
 
+    listSecrets: () =>
+      invokeJSON("secrets.list", () => generated.secretsList()),
+    createSecret: (payload) =>
+      invokeJSON("secrets.create", () =>
+        generated.secretsCreate({ body: payload }),
+      ),
+    updateSecret: (secretId, payload) =>
+      invokeJSON("secrets.update", () =>
+        generated.secretsUpdate(
+          { secret_id: String(secretId) },
+          { body: payload },
+        ),
+      ),
+    deleteSecret: (secretId) =>
+      invokeJSON("secrets.delete", () =>
+        generated.secretsDelete({ secret_id: String(secretId) }),
+      ),
+    revealSecret: (secretId) =>
+      invokeJSON("secrets.reveal", () =>
+        generated.secretsReveal({ secret_id: String(secretId) }),
+      ),
+
     listThreads: (filters) =>
       invokeJSON("threads.list", () =>
         generated.threadsList({ query: filters }),

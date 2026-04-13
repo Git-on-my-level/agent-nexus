@@ -25,6 +25,10 @@ const (
 	AuthAuditEventPrincipalHumanLockoutRevoked = "principal_human_lockout_revoked"
 	AuthAuditEventPrincipalRevoked             = "principal_revoked"
 	AuthAuditEventPrincipalSelfRevoked         = "principal_self_revoked"
+	AuthAuditEventSecretCreated                = "secret.created"
+	AuthAuditEventSecretUpdated                = "secret.updated"
+	AuthAuditEventSecretDeleted                = "secret.deleted"
+	AuthAuditEventSecretRevealed               = "secret.revealed"
 )
 
 type AuthPrincipalListFilter struct {
@@ -317,6 +321,24 @@ func (s *Store) recordAuthAuditEventTx(ctx context.Context, tx *sql.Tx, input Au
 	)
 	if err != nil {
 		return fmt.Errorf("insert auth audit event: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) RecordSecretAuditEvent(ctx context.Context, input AuthAuditEventInput) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("auth store database is not initialized")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin audit tx: %w", err)
+	}
+	if err := s.recordAuthAuditEventTx(ctx, tx, input); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit audit tx: %w", err)
 	}
 	return nil
 }

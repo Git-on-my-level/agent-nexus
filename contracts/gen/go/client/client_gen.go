@@ -1134,6 +1134,75 @@ var CommandRegistry = []CommandSpec{
 		Concepts:  []string{"refs", "inspection"},
 	},
 	{
+		CommandID: "secrets.create",
+		CLIPath:   "secret create",
+		Group:     "secret",
+		Method:    "POST",
+		Path:      "/secrets",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"secrets", "write"},
+		Adjacent:  []string{"secrets.delete", "secrets.reveal-batch", "secrets.reveal", "secrets.list", "secrets.update"},
+	},
+	{
+		CommandID:  "secrets.delete",
+		CLIPath:    "secret delete",
+		Group:      "secret",
+		Method:     "DELETE",
+		Path:       "/secrets/{secret_id}",
+		PathParams: []string{"secret_id"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"secrets", "write"},
+		Adjacent:   []string{"secrets.create", "secrets.reveal-batch", "secrets.reveal", "secrets.list", "secrets.update"},
+	},
+	{
+		CommandID: "secrets.list",
+		CLIPath:   "secret list",
+		Group:     "secret",
+		Method:    "GET",
+		Path:      "/secrets",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"secrets"},
+		Adjacent:  []string{"secrets.create", "secrets.delete", "secrets.reveal-batch", "secrets.reveal", "secrets.update"},
+	},
+	{
+		CommandID:  "secrets.reveal",
+		CLIPath:    "secret get --reveal",
+		Group:      "secret",
+		Method:     "POST",
+		Path:       "/secrets/{secret_id}/reveal",
+		PathParams: []string{"secret_id"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"secrets"},
+		Adjacent:   []string{"secrets.create", "secrets.delete", "secrets.reveal-batch", "secrets.list", "secrets.update"},
+	},
+	{
+		CommandID: "secrets.reveal-batch",
+		CLIPath:   "secret exec",
+		Group:     "secret",
+		Method:    "POST",
+		Path:      "/secrets/reveal-batch",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"secrets"},
+		Adjacent:  []string{"secrets.create", "secrets.delete", "secrets.reveal", "secrets.list", "secrets.update"},
+	},
+	{
+		CommandID:  "secrets.update",
+		CLIPath:    "secret update",
+		Group:      "secret",
+		Method:     "PUT",
+		Path:       "/secrets/{secret_id}",
+		PathParams: []string{"secret_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"secrets", "write"},
+		Adjacent:   []string{"secrets.create", "secrets.delete", "secrets.reveal-batch", "secrets.reveal", "secrets.list"},
+	},
+	{
 		CommandID:  "threads.context",
 		CLIPath:    "threads context",
 		Group:      "threads",
@@ -1810,6 +1879,30 @@ func (c *Client) PacketsReviewsCreate(ctx context.Context, opts RequestOptions) 
 
 func (c *Client) RefEdgesList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "ref_edges.list", nil, opts)
+}
+
+func (c *Client) SecretsCreate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "secrets.create", nil, opts)
+}
+
+func (c *Client) SecretsDelete(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "secrets.delete", pathParams, opts)
+}
+
+func (c *Client) SecretsList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "secrets.list", nil, opts)
+}
+
+func (c *Client) SecretsReveal(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "secrets.reveal", pathParams, opts)
+}
+
+func (c *Client) SecretsRevealBatch(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "secrets.reveal-batch", nil, opts)
+}
+
+func (c *Client) SecretsUpdate(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "secrets.update", pathParams, opts)
 }
 
 func (c *Client) ThreadsContext(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {

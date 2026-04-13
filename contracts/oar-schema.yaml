@@ -557,6 +557,22 @@ grounding_rules:
       - "topic.summary"
       - "card.summary"
 
+operational:
+  secret:
+    description: >
+      Workspace-scoped encrypted credential. Secrets store sensitive values
+      (API keys, tokens, service accounts) that agents consume via environment
+      injection. Values are encrypted at rest with AES-256-GCM; only metadata
+      is returned by default — the plaintext requires an explicit reveal action.
+    fields:
+      id: { type: string, required: true }
+      name: { type: string, required: true, description: "Unique human-readable key (e.g. OPENAI_API_KEY). Used as the env var name in `oar secret exec`." }
+      description: { type: string, required: false, description: "Optional human note about this secret's purpose." }
+      created_at: { type: datetime, required: true }
+      updated_at: { type: datetime, required: true }
+      created_by: { type: string, required: true }
+      updated_by: { type: string, required: true }
+
 staleness:
   rule: >
     A topic is stale when no linked thread, document, or card activity has been

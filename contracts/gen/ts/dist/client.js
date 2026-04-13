@@ -4847,6 +4847,277 @@ export const commandRegistry = [
         "ts_method": "refEdgesList"
     },
     {
+        "command_id": "secrets.create",
+        "cli_path": "secret create",
+        "group": "secret",
+        "method": "POST",
+        "path": "/secrets",
+        "operation_id": "createSecret",
+        "summary": "Create secret",
+        "why": "Store an encrypted workspace credential with metadata.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ secret }` (metadata only, value is not echoed).",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "human_only",
+            "invalid_request",
+            "resource_exists",
+            "secrets_not_configured"
+        ],
+        "concepts": [
+            "secrets",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Only human principals may create secrets.",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "name",
+                    "type": "string"
+                },
+                {
+                    "name": "value",
+                    "type": "string"
+                }
+            ],
+            "optional": [
+                {
+                    "name": "description",
+                    "type": "string"
+                }
+            ]
+        },
+        "adjacent_commands": [
+            "secrets.delete",
+            "secrets.reveal-batch",
+            "secrets.reveal",
+            "secrets.list",
+            "secrets.update"
+        ],
+        "go_method": "SecretsCreate",
+        "ts_method": "secretsCreate"
+    },
+    {
+        "command_id": "secrets.delete",
+        "cli_path": "secret delete",
+        "group": "secret",
+        "method": "DELETE",
+        "path": "/secrets/{secret_id}",
+        "operation_id": "deleteSecret",
+        "summary": "Delete secret",
+        "why": "Permanently remove a secret and its encrypted value.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ deleted: true, secret_id }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "human_only",
+            "not_found",
+            "secrets_not_configured"
+        ],
+        "concepts": [
+            "secrets",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Only human principals may delete secrets.",
+        "path_params": [
+            "secret_id"
+        ],
+        "adjacent_commands": [
+            "secrets.create",
+            "secrets.reveal-batch",
+            "secrets.reveal",
+            "secrets.list",
+            "secrets.update"
+        ],
+        "go_method": "SecretsDelete",
+        "ts_method": "secretsDelete"
+    },
+    {
+        "command_id": "secrets.list",
+        "cli_path": "secret list",
+        "group": "secret",
+        "method": "GET",
+        "path": "/secrets",
+        "operation_id": "listSecrets",
+        "summary": "List secrets",
+        "why": "List workspace secret metadata without exposing values.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ secrets }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token"
+        ],
+        "concepts": [
+            "secrets"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "adjacent_commands": [
+            "secrets.create",
+            "secrets.delete",
+            "secrets.reveal-batch",
+            "secrets.reveal",
+            "secrets.update"
+        ],
+        "go_method": "SecretsList",
+        "ts_method": "secretsList"
+    },
+    {
+        "command_id": "secrets.reveal",
+        "cli_path": "secret get --reveal",
+        "group": "secret",
+        "method": "POST",
+        "path": "/secrets/{secret_id}/reveal",
+        "operation_id": "revealSecret",
+        "summary": "Reveal secret value",
+        "why": "Decrypt and return a secret value. Logged in audit.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ name, value }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "not_found",
+            "secrets_not_configured"
+        ],
+        "concepts": [
+            "secrets"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Every reveal is logged in auth audit. POST (not GET) to prevent caching.",
+        "path_params": [
+            "secret_id"
+        ],
+        "adjacent_commands": [
+            "secrets.create",
+            "secrets.delete",
+            "secrets.reveal-batch",
+            "secrets.list",
+            "secrets.update"
+        ],
+        "go_method": "SecretsReveal",
+        "ts_method": "secretsReveal"
+    },
+    {
+        "command_id": "secrets.reveal-batch",
+        "cli_path": "secret exec",
+        "group": "secret",
+        "method": "POST",
+        "path": "/secrets/reveal-batch",
+        "operation_id": "revealSecretsBatch",
+        "summary": "Reveal multiple secrets by name",
+        "why": "Batch-fetch secrets for env injection. Each reveal is audited.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ secrets: [{ name, value }] }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "not_found",
+            "invalid_request",
+            "secrets_not_configured"
+        ],
+        "concepts": [
+            "secrets"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Each resolved secret generates an audit event. Missing names return not_found.",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "names",
+                    "type": "list\u003cstring\u003e"
+                }
+            ]
+        },
+        "adjacent_commands": [
+            "secrets.create",
+            "secrets.delete",
+            "secrets.reveal",
+            "secrets.list",
+            "secrets.update"
+        ],
+        "go_method": "SecretsRevealBatch",
+        "ts_method": "secretsRevealBatch"
+    },
+    {
+        "command_id": "secrets.update",
+        "cli_path": "secret update",
+        "group": "secret",
+        "method": "PUT",
+        "path": "/secrets/{secret_id}",
+        "operation_id": "updateSecret",
+        "summary": "Update secret value",
+        "why": "Replace an encrypted secret value.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ secret }` (metadata only).",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "human_only",
+            "not_found",
+            "invalid_request",
+            "secrets_not_configured"
+        ],
+        "concepts": [
+            "secrets",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Only human principals may update secrets.",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "value",
+                    "type": "string"
+                }
+            ],
+            "optional": [
+                {
+                    "name": "description",
+                    "type": "string"
+                }
+            ]
+        },
+        "path_params": [
+            "secret_id"
+        ],
+        "adjacent_commands": [
+            "secrets.create",
+            "secrets.delete",
+            "secrets.reveal-batch",
+            "secrets.reveal",
+            "secrets.list"
+        ],
+        "go_method": "SecretsUpdate",
+        "ts_method": "secretsUpdate"
+    },
+    {
         "command_id": "threads.context",
         "cli_path": "threads context",
         "group": "threads",
@@ -5985,6 +6256,24 @@ export class OarClient {
     }
     refEdgesList(options = {}) {
         return this.invoke("ref_edges.list", {}, options);
+    }
+    secretsCreate(options = {}) {
+        return this.invoke("secrets.create", {}, options);
+    }
+    secretsDelete(pathParams, options = {}) {
+        return this.invoke("secrets.delete", pathParams, options);
+    }
+    secretsList(options = {}) {
+        return this.invoke("secrets.list", {}, options);
+    }
+    secretsReveal(pathParams, options = {}) {
+        return this.invoke("secrets.reveal", pathParams, options);
+    }
+    secretsRevealBatch(options = {}) {
+        return this.invoke("secrets.reveal-batch", {}, options);
+    }
+    secretsUpdate(pathParams, options = {}) {
+        return this.invoke("secrets.update", pathParams, options);
     }
     threadsContext(pathParams, options = {}) {
         return this.invoke("threads.context", pathParams, options);

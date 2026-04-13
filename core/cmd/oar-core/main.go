@@ -25,6 +25,7 @@ import (
 	"organization-autorunner-core/internal/primitives"
 	"organization-autorunner-core/internal/router"
 	"organization-autorunner-core/internal/schema"
+	"organization-autorunner-core/internal/secrets"
 	"organization-autorunner-core/internal/server"
 	"organization-autorunner-core/internal/sidecar"
 	"organization-autorunner-core/internal/storage"
@@ -100,6 +101,7 @@ func main() {
 		controlPlaneTokenAudience  = envString("OAR_CONTROL_PLANE_TOKEN_AUDIENCE", "")
 		controlPlaneWorkspaceID    = envString("OAR_CONTROL_PLANE_WORKSPACE_ID", "")
 		workspaceID                = envString("OAR_WORKSPACE_ID", "")
+		secretsKey                 = envString("OAR_SECRETS_KEY", "")
 		workspaceName              = envString("OAR_WORKSPACE_NAME", "Main")
 		controlPlaneTokenPublicKey = envString("OAR_CONTROL_PLANE_TOKEN_PUBLIC_KEY", "")
 		workspaceServiceID         = envString("OAR_WORKSPACE_SERVICE_ID", "")
@@ -164,6 +166,29 @@ func main() {
 		os.Exit(1)
 	}
 	defer workspace.Close()
+
+	var secretsEncryptor *secrets.Encryptor
+	if strings.TrimSpace(secretsKey) != "" {
+		enc, err := secrets.NewEncryptor(secretsKey, "v1")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "invalid OAR_SECRETS_KEY: %v\n", err)
+			os.Exit(1)
+		}
+		secretsEncryptor = enc
+	}
+	secretsStore := secrets.NewStore(workspace.DB(), secretsEncryptor)
+
+	if secretsEncryptor == nil {
+		hasSecrets, err := secretsStore.HasSecrets(context.Background())
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to check secrets table: %v\n", err)
+			os.Exit(1)
+		}
+		if hasSecrets {
+			fmt.Fprintf(os.Stderr, "error: secrets exist in the database but OAR_SECRETS_KEY is not set.\nSet OAR_SECRETS_KEY to the encryption key used when the secrets were created.\nRefusing to start — decryption would be impossible.\n")
+			os.Exit(1)
+		}
+	}
 
 	contract, err := schema.Load(schemaPath)
 	if err != nil {
@@ -411,6 +436,7 @@ func main() {
 		server.WithControlPlaneHumanVerifier(controlPlaneVerifier),
 		server.WithWorkspaceServiceIdentity(serviceIdentity),
 		server.WithWorkspaceID(workspaceID),
+		server.WithSecretsStore(secretsStore),
 		server.WithEnableDevActorMode(enableDevActorMode),
 		server.WithAllowPasskeyDevBypass(passkeyDevBypassEffective),
 		server.WithAllowUnauthenticatedWrites(allowUnauthenticatedWrites),
