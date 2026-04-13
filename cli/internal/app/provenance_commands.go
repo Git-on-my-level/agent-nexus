@@ -634,7 +634,8 @@ Heuristics
 - Prefer shallow depths like 1-3 before broader traversals.
 
 Examples:
+  oar provenance walk --from event:event_123 --depth 2
+  oar provenance walk --from topic:topic_123 --depth 1
   oar --json provenance walk --from event:event_123 --depth 2
-  oar --json provenance walk --from topic:topic_123 --depth 1
   oar provenance walk --from event:event_123 --depth 3 --include-event-chain`)
 }

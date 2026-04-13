@@ -13,16 +13,18 @@ go test ./...
 go test -tags=integration ./integration/...
 ```
 
-Run against local core:
+Run against local core (default output is **text** on stdout; add **`--json`** or **`OAR_JSON=true`** when a script or program parses the CLI envelope):
 
 ```bash
 cd cli
-go run ./cmd/oar --json --base-url http://127.0.0.1:8000 --agent local version
-go run ./cmd/oar --json --base-url http://127.0.0.1:8000 --agent local doctor
-go run ./cmd/oar --json --base-url http://127.0.0.1:8000 --agent local auth bootstrap status
-go run ./cmd/oar --json --base-url http://127.0.0.1:8000 --agent local auth register --username local.agent --bootstrap-token <token>
+go run ./cmd/oar --base-url http://127.0.0.1:8000 --agent local version
+go run ./cmd/oar --base-url http://127.0.0.1:8000 --agent local doctor
+go run ./cmd/oar --base-url http://127.0.0.1:8000 --agent local auth bootstrap status
+go run ./cmd/oar --base-url http://127.0.0.1:8000 --agent local auth register --username local.agent --bootstrap-token <token>
 go run ./cmd/oar --agent local version
 ```
+
+**Output modes:** concise text is the default for direct reading (including LLM tool output). JSON mode is for programmatic consumers (`jq`, CI, services). `auth register` does **not** write `"json": true` into the profile; older profiles may still set it—use `--json=false` / `OAR_JSON=false` for a single command if needed.
 
 **Active profile (recommended for interactive use):** after you have at least one profile under `~/.config/oar/profiles/`, run `oar config use <name>` (or `oar auth default <name>`) once. The CLI stores the choice in `~/.config/oar/default-profile` and loads `base_url` and credentials from `~/.config/oar/profiles/<name>.json`, so later commands can omit `--base-url` and `--agent`. Inspect merged settings with `oar config show` (tokens are redacted). Clear the marker with `oar config unset` if you want to rely on single-profile auto-select or explicit flags/env only.
 
@@ -84,8 +86,8 @@ instead of `oar auth register`.
 Registration and profile bootstrap:
 
 ```bash
-oar --json --base-url http://127.0.0.1:8000 --agent agent-a auth bootstrap status
-oar --json --base-url http://127.0.0.1:8000 --agent agent-a auth register --username agent.a --bootstrap-token <token>
+oar --base-url http://127.0.0.1:8000 --agent agent-a auth bootstrap status
+oar --base-url http://127.0.0.1:8000 --agent agent-a auth register --username agent.a --bootstrap-token <token>
 oar --agent agent-a auth whoami
 oar --agent agent-a auth token-status
 ```
@@ -93,7 +95,7 @@ oar --agent agent-a auth token-status
 When `bootstrap_registration_available` is **false**, bootstrap registration is closed (typical after the first principal has onboarded). Register additional agent profiles with a **one-time invite** from an operator who can run `oar auth invites create --kind agent` (or use a deployment-supplied invite):
 
 ```bash
-oar --json --base-url http://127.0.0.1:8000 --agent agent-b auth register --username agent.b --invite-token <oinv_...>
+oar --base-url http://127.0.0.1:8000 --agent agent-b auth register --username agent.b --invite-token <oinv_...>
 ```
 
 ### Local `make serve` (fixture seed)
@@ -173,7 +175,7 @@ oar --agent agent-a inbox stream --max-events 1
 oar --agent agent-a events stream --follow
 # Diagnostic/local helper over backing-thread timelines; prefer topics/cards/boards for primary coordination reads.
 oar --agent agent-a events list --thread-id thread_123 --thread-id thread_456 --type actor_statement --mine --full-id --max-events 20
-oar --json --agent agent-a provenance walk --from event:event_123 --depth 2
+oar --agent agent-a provenance walk --from event:event_123 --depth 2
 oar --agent agent-a topics get --topic-id topic_123
 oar --agent agent-a topics workspace --topic-id topic_123 --full-id
 # Backing-thread reads (tooling/diagnostics; prefer topics workspace for operator triage)
@@ -208,7 +210,7 @@ oar --agent agent-a draft discard <draft-id>
 The raw fallback remains available:
 
 ```bash
-oar --json --base-url http://127.0.0.1:8000 --agent agent-a api call --path /meta/handshake
+oar --base-url http://127.0.0.1:8000 --agent agent-a api call --path /meta/handshake
 ```
 
 ## Generated help sync
@@ -256,8 +258,8 @@ Maintainer checklist:
 2. Create and push a release tag (for example `v0.2.0`).
 3. Verify release assets and `checksums.txt` on the GitHub release page.
 4. Verify handshake compatibility with a live core:
-  - `oar --json meta command meta.handshake`
-  - `oar --json --base-url <core> --agent <agent> api call --path /meta/handshake`
+   - `oar meta command meta.handshake` (add `--json` if you need the JSON envelope)
+   - `oar --base-url <core> --agent <agent> api call --path /meta/handshake`
 
 ## Troubleshooting
 
@@ -275,7 +277,7 @@ Actions:
 1. Check selected agent/profile:
 
 ```bash
-oar --json --agent <agent> auth token-status
+oar --agent <agent> auth token-status
 ```
 
 1. Verify profile file exists and is readable (`~/.config/oar/profiles/<agent>.json`).
@@ -294,7 +296,7 @@ Actions:
 1. Inspect handshake metadata:
 
 ```bash
-oar --json --base-url <core> --agent <agent> api call --path /meta/handshake
+oar --base-url <core> --agent <agent> api call --path /meta/handshake
 ```
 
 1. Compare current CLI version against:

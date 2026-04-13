@@ -702,8 +702,8 @@ func formatGlobalFlagUsage(topic string) string {
 	}
 	return strings.TrimSpace(fmt.Sprintf(`Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json %s ... ; oar %s ... --json
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>`, path, path))
+  Examples: oar %s ... ; oar --json %s ... ; oar %s ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>`, path, path, path))
 }
 
 func formatInputSchemaBlock(cmd registry.Command) string {

@@ -4962,8 +4962,8 @@ func TestFilterEventsByLifecycleState(t *testing.T) {
 }
 
 func Example_oarThreadsList() {
-	fmt.Println("oar --json threads list --status active")
-	// Output: oar --json threads list --status active
+	fmt.Println("oar threads list --status active")
+	// Output: oar threads list --status active
 }
 
 func writeAgentProfile(t *testing.T, home string, agent string, profileJSON string) {

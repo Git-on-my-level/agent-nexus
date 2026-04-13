@@ -405,8 +405,7 @@ Options:
 
 Examples:
   oar meta docs
-  oar meta docs --write-dir ./docs/generated
-  oar --json meta docs`)
+  oar meta docs --write-dir ./docs/generated`)
 }
 
 func metaDocUsageText() string {
@@ -420,8 +419,7 @@ Print one bundled Markdown topic from the runtime help catalog.
 
 Examples:
   oar meta doc agent-guide
-  oar meta doc "docs trash"
-  oar --json meta doc --topic "threads workspace"`)
+  oar meta doc "docs trash"`)
 }
 
 func metaSkillUsageText() string {
@@ -443,6 +441,5 @@ Options:
 Examples:
   oar meta skill cursor
   oar meta skill cursor --write-dir ~/.cursor/skills/oar-cli-onboard
-  oar meta skill --target cursor --write-file ./SKILL.md
-  oar --json meta skill cursor`)
+  oar meta skill --target cursor --write-file ./SKILL.md`)
 }

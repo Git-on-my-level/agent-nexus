@@ -42,7 +42,7 @@ var configSubcommandSpec = subcommandSpec{
 	examples: []string{
 		"oar config use agent-a",
 		"oar config show",
-		"oar config show --json",
+		"oar config show --json   # optional: JSON envelope for scripts",
 		"oar config unset",
 	},
 }

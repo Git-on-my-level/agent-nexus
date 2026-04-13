@@ -269,7 +269,8 @@ Operating posture
 
 - Treat `oar` as the contract-aligned interface to an OAR core API.
 - Prefer read-before-write: inspect state, choose the right object, then mutate deliberately.
-- Prefer `--json` for automation, default output for quick human inspection.
+- Prefer **default (non-JSON) output** for normal agent work: concise text for direct consumption, usually fewer tokens than JSON envelopes.
+- Use **`--json`** or **`OAR_JSON=true`** when the consumer is code, a shell script, CI, or anything that parses the stable JSON envelope (including rich `error.details`).
 - Prefer profiles and env vars over repeated flags.
 - Prefer discovery from the CLI itself over memorizing exact subcommands.
 
@@ -351,10 +352,10 @@ Command habits
 - Prefer narrow filters over broad listings when triaging large state.
 
 
-Automation
+Programmatic output (`--json`)
 
-- Use `--json` for machine consumption.
-- Parse the response envelope, not formatted text.
+- Use `--json` or `OAR_JSON=true` when you are parsing output in code or scripts (not for default agent readbacks).
+- Parse the response envelope; do not assume the same shape for default text output.
 - Treat `error.code`, `error.message`, `hint`, and `recoverable` as the control surface for retries and repair.
 - Keep scripts idempotent where possible: read state, compare, then write only when needed.
 
@@ -372,7 +373,7 @@ When starting in a new environment:
 
 When stuck:
 
-- Re-run with `--json` to inspect structured failure details.
+- Re-run with `--json` when structured failure fields (`error.details`, etc.) would help.
 - Check help for the exact command path you are using.
 - Verify auth, base URL, and profile resolution before debugging payload shape.
 
@@ -591,7 +592,7 @@ How agents discover it
 - Use `oar auth whoami` to confirm your current username and actor id.
 - Use `oar auth principals list --handles-only` to inspect the exact handles that can be mentioned.
 - Use `oar auth principals list --taggable` if you want the filtered principal rows as well.
-- Use `oar auth principals list --json` when you want the full wake-routing metadata for automation or debugging.
+- Use `oar auth principals list` for readable rows; add `--json` when you need the full wake-routing metadata in a parseable envelope (scripts, debugging).
 
 Preferred path when you are using `oar-agent-bridge`
 
@@ -715,7 +716,7 @@ Verification flow
 
   oar auth principals list --handles-only
 
-3. Read the principal registration:
+3. Read the principal registration (`--json` when a script parses the full payload):
 
   oar auth principals list --json
 
@@ -726,7 +727,7 @@ Verification flow
   - `workspace_bindings` contains the current workspace id with `enabled: true`
   - `status` is `active`
   - if you need online delivery right now, `bridge_checkin_event_id` is present on the registration
-  - if you need online delivery right now, `oar events get --event-id <bridge-checkin-event-id> --json` returns an `agent_bridge_checked_in` event
+  - if you need online delivery right now, `oar events get --event-id <bridge-checkin-event-id>` (add `--json` for the CLI JSON envelope) returns an `agent_bridge_checked_in` event
   - if you need online delivery right now, that event actor id matches the principal actor
   - if you need online delivery right now, that event `expires_at` is still in the future
 
@@ -850,8 +851,9 @@ Heuristics
 - Prefer shallow depths like 1-3 before broader traversals.
 
 Examples:
+  oar provenance walk --from event:event_123 --depth 2
+  oar provenance walk --from topic:topic_123 --depth 1
   oar --json provenance walk --from event:event_123 --depth 2
-  oar --json provenance walk --from topic:topic_123 --depth 1
   oar provenance walk --from event:event_123 --depth 3 --include-event-chain
 ```
 
@@ -876,7 +878,7 @@ Next steps:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json auth whoami ... ; oar auth whoami ... --json
+  Examples: oar auth whoami ... ; oar --json auth whoami ... ; oar auth whoami ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -898,7 +900,7 @@ Examples:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json auth list ... ; oar auth list ... --json
+  Examples: oar auth list ... ; oar --json auth list ... ; oar auth list ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -920,7 +922,7 @@ Examples:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json auth default ... ; oar auth default ... --json
+  Examples: oar auth default ... ; oar --json auth default ... ; oar auth default ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -942,7 +944,7 @@ Examples:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json config use ... ; oar config use ... --json
+  Examples: oar config use ... ; oar --json config use ... ; oar config use ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -964,7 +966,7 @@ Examples:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json config show ... ; oar config show ... --json
+  Examples: oar config show ... ; oar --json config show ... ; oar config show ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -986,7 +988,7 @@ Examples:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json config unset ... ; oar config unset ... --json
+  Examples: oar config unset ... ; oar --json config unset ... ; oar config unset ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1007,7 +1009,7 @@ Examples:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json auth update-username ... ; oar auth update-username ... --json
+  Examples: oar auth update-username ... ; oar --json auth update-username ... ; oar auth update-username ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1029,7 +1031,7 @@ Examples:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json auth rotate ... ; oar auth rotate ... --json
+  Examples: oar auth rotate ... ; oar --json auth rotate ... ; oar auth rotate ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1051,7 +1053,7 @@ Examples:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json auth revoke ... ; oar auth revoke ... --json
+  Examples: oar auth revoke ... ; oar --json auth revoke ... ; oar auth revoke ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1073,7 +1075,7 @@ Examples:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json auth token-status ... ; oar auth token-status ... --json
+  Examples: oar auth token-status ... ; oar --json auth token-status ... ; oar auth token-status ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1239,7 +1241,7 @@ Primary operator coordination:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json topics ... ; oar topics ... --json
+  Examples: oar topics ... ; oar --json topics ... ; oar topics ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `oar help <command path>` for full command-level generated details.
@@ -1266,7 +1268,7 @@ Commands:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json cards ... ; oar cards ... --json
+  Examples: oar cards ... ; oar --json cards ... ; oar cards ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `oar help <command path>` for full command-level generated details.
@@ -1295,7 +1297,7 @@ Read-only backing-thread diagnostics (tooling):
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json threads ... ; oar threads ... --json
+  Examples: oar threads ... ; oar --json threads ... ; oar threads ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `oar help <command path>` for full command-level generated details.
@@ -1323,7 +1325,7 @@ Local inspection helper:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json artifacts ... ; oar artifacts ... --json
+  Examples: oar artifacts ... ; oar --json artifacts ... ; oar artifacts ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `oar help <command path>` for full command-level generated details.
@@ -1356,7 +1358,7 @@ Read paths:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json boards ... ; oar boards ... --json
+  Examples: oar boards ... ; oar --json boards ... ; oar boards ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `oar help <command path>` for full command-level generated details.
@@ -1389,7 +1391,7 @@ Local inspection helpers:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json docs ... ; oar docs ... --json
+  Examples: oar docs ... ; oar --json docs ... ; oar docs ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `oar help <command path>` for full command-level generated details.
@@ -1421,7 +1423,7 @@ Local inspection helpers:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json events ... ; oar events ... --json
+  Examples: oar events ... ; oar --json events ... ; oar events ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `oar help <command path>` for full command-level generated details.
@@ -1442,7 +1444,7 @@ Commands:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json inbox ... ; oar inbox ... --json
+  Examples: oar inbox ... ; oar --json inbox ... ; oar inbox ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `oar help <command path>` for full command-level generated details.
@@ -1460,7 +1462,7 @@ Commands:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json receipts ... ; oar receipts ... --json
+  Examples: oar receipts ... ; oar --json receipts ... ; oar receipts ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `oar help <command path>` for full command-level generated details.
@@ -1478,7 +1480,7 @@ Commands:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json reviews ... ; oar reviews ... --json
+  Examples: oar reviews ... ; oar --json reviews ... ; oar reviews ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `oar help <command path>` for full command-level generated details.
@@ -1543,7 +1545,7 @@ Generated Help: auth invites list
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json auth invites list ... ; oar auth invites list ... --json
+  Examples: oar auth invites list ... ; oar --json auth invites list ... ; oar auth invites list ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1568,7 +1570,7 @@ Generated Help: auth invites create
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json auth invites create ... ; oar auth invites create ... --json
+  Examples: oar auth invites create ... ; oar --json auth invites create ... ; oar auth invites create ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1596,7 +1598,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json auth invites revoke ... ; oar auth invites revoke ... --json
+  Examples: oar auth invites revoke ... ; oar --json auth invites revoke ... ; oar auth invites revoke ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1620,7 +1622,7 @@ Generated Help: auth bootstrap status
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json auth bootstrap status ... ; oar auth bootstrap status ... --json
+  Examples: oar auth bootstrap status ... ; oar --json auth bootstrap status ... ; oar auth bootstrap status ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1645,7 +1647,7 @@ Generated Help: threads list
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json threads list ... ; oar threads list ... --json
+  Examples: oar threads list ... ; oar --json threads list ... ; oar threads list ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1673,7 +1675,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json threads get ... ; oar threads get ... --json
+  Examples: oar threads get ... ; oar --json threads get ... ; oar threads get ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1709,7 +1711,7 @@ Note: by default, archived and trashed events are excluded from the timeline out
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json threads timeline ... ; oar threads timeline ... --json
+  Examples: oar threads timeline ... ; oar --json threads timeline ... ; oar threads timeline ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1737,7 +1739,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json threads context ... ; oar threads context ... --json
+  Examples: oar threads context ... ; oar --json threads context ... ; oar threads context ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1762,7 +1764,7 @@ Generated Help: topics list
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json topics list ... ; oar topics list ... --json
+  Examples: oar topics list ... ; oar --json topics list ... ; oar topics list ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1790,7 +1792,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json topics get ... ; oar topics get ... --json
+  Examples: oar topics get ... ; oar --json topics get ... ; oar topics get ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1831,7 +1833,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json topics create ... ; oar topics create ... --json
+  Examples: oar topics create ... ; oar --json topics create ... ; oar topics create ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1873,7 +1875,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json topics patch ... ; oar topics patch ... --json
+  Examples: oar topics patch ... ; oar --json topics patch ... ; oar topics patch ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1901,7 +1903,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json topics timeline ... ; oar topics timeline ... --json
+  Examples: oar topics timeline ... ; oar --json topics timeline ... ; oar topics timeline ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1929,7 +1931,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json topics workspace ... ; oar topics workspace ... --json
+  Examples: oar topics workspace ... ; oar --json topics workspace ... ; oar topics workspace ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1959,7 +1961,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json topics archive ... ; oar topics archive ... --json
+  Examples: oar topics archive ... ; oar --json topics archive ... ; oar topics archive ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1989,7 +1991,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json topics unarchive ... ; oar topics unarchive ... --json
+  Examples: oar topics unarchive ... ; oar --json topics unarchive ... ; oar topics unarchive ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2020,7 +2022,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json topics trash ... ; oar topics trash ... --json
+  Examples: oar topics trash ... ; oar --json topics trash ... ; oar topics trash ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2050,7 +2052,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json topics restore ... ; oar topics restore ... --json
+  Examples: oar topics restore ... ; oar --json topics restore ... ; oar topics restore ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2075,7 +2077,7 @@ Generated Help: cards list
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json cards list ... ; oar cards list ... --json
+  Examples: oar cards list ... ; oar --json cards list ... ; oar cards list ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2103,7 +2105,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json cards get ... ; oar cards get ... --json
+  Examples: oar cards get ... ; oar --json cards get ... ; oar cards get ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2153,7 +2155,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json cards create ... ; oar cards create ... --json
+  Examples: oar cards create ... ; oar --json cards create ... ; oar cards create ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2198,7 +2200,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json cards patch ... ; oar cards patch ... --json
+  Examples: oar cards patch ... ; oar --json cards patch ... ; oar cards patch ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2241,7 +2243,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json cards move ... ; oar cards move ... --json
+  Examples: oar cards move ... ; oar --json cards move ... ; oar cards move ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2272,7 +2274,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json cards archive ... ; oar cards archive ... --json
+  Examples: oar cards archive ... ; oar --json cards archive ... ; oar cards archive ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2304,7 +2306,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json cards trash ... ; oar cards trash ... --json
+  Examples: oar cards trash ... ; oar --json cards trash ... ; oar cards trash ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2334,7 +2336,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json cards purge ... ; oar cards purge ... --json
+  Examples: oar cards purge ... ; oar --json cards purge ... ; oar cards purge ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2365,7 +2367,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json cards restore ... ; oar cards restore ... --json
+  Examples: oar cards restore ... ; oar --json cards restore ... ; oar cards restore ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2393,7 +2395,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json cards timeline ... ; oar cards timeline ... --json
+  Examples: oar cards timeline ... ; oar --json cards timeline ... ; oar cards timeline ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2418,7 +2420,7 @@ Generated Help: artifacts list
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json artifacts list ... ; oar artifacts list ... --json
+  Examples: oar artifacts list ... ; oar --json artifacts list ... ; oar artifacts list ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2446,7 +2448,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json artifacts get ... ; oar artifacts get ... --json
+  Examples: oar artifacts get ... ; oar --json artifacts get ... ; oar artifacts get ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2478,7 +2480,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json artifacts create ... ; oar artifacts create ... --json
+  Examples: oar artifacts create ... ; oar --json artifacts create ... ; oar artifacts create ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2508,7 +2510,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json artifacts archive ... ; oar artifacts archive ... --json
+  Examples: oar artifacts archive ... ; oar --json artifacts archive ... ; oar artifacts archive ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2538,7 +2540,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json artifacts unarchive ... ; oar artifacts unarchive ... --json
+  Examples: oar artifacts unarchive ... ; oar --json artifacts unarchive ... ; oar artifacts unarchive ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2569,7 +2571,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json artifacts trash ... ; oar artifacts trash ... --json
+  Examples: oar artifacts trash ... ; oar --json artifacts trash ... ; oar artifacts trash ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2599,7 +2601,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json artifacts restore ... ; oar artifacts restore ... --json
+  Examples: oar artifacts restore ... ; oar --json artifacts restore ... ; oar artifacts restore ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2629,7 +2631,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json artifacts purge ... ; oar artifacts purge ... --json
+  Examples: oar artifacts purge ... ; oar --json artifacts purge ... ; oar artifacts purge ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2654,7 +2656,7 @@ Generated Help: boards list
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json boards list ... ; oar boards list ... --json
+  Examples: oar boards list ... ; oar --json boards list ... ; oar boards list ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2691,7 +2693,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json boards create ... ; oar boards create ... --json
+  Examples: oar boards create ... ; oar --json boards create ... ; oar boards create ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2719,7 +2721,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json boards get ... ; oar boards get ... --json
+  Examples: oar boards get ... ; oar --json boards get ... ; oar boards get ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2749,7 +2751,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json boards archive ... ; oar boards archive ... --json
+  Examples: oar boards archive ... ; oar --json boards archive ... ; oar boards archive ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2779,7 +2781,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json boards unarchive ... ; oar boards unarchive ... --json
+  Examples: oar boards unarchive ... ; oar --json boards unarchive ... ; oar boards unarchive ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2810,7 +2812,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json boards trash ... ; oar boards trash ... --json
+  Examples: oar boards trash ... ; oar --json boards trash ... ; oar boards trash ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2840,7 +2842,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json boards restore ... ; oar boards restore ... --json
+  Examples: oar boards restore ... ; oar --json boards restore ... ; oar boards restore ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2870,7 +2872,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json boards purge ... ; oar boards purge ... --json
+  Examples: oar boards purge ... ; oar --json boards purge ... ; oar boards purge ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2889,7 +2891,7 @@ Commands:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json boards cards ... ; oar boards cards ... --json
+  Examples: oar boards cards ... ; oar --json boards cards ... ; oar boards cards ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `oar help <command path>` for full command-level generated details.
@@ -2942,7 +2944,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json boards cards create ... ; oar boards cards create ... --json
+  Examples: oar boards cards create ... ; oar --json boards cards create ... ; oar boards cards create ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2983,7 +2985,7 @@ Agent tip: run `oar boards get --board-id <board-id> --json` (or `boards workspa
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json boards cards create-batch ... ; oar boards cards create-batch ... --json
+  Examples: oar boards cards create-batch ... ; oar --json boards cards create-batch ... ; oar boards cards create-batch ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3012,7 +3014,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json boards cards get ... ; oar boards cards get ... --json
+  Examples: oar boards cards get ... ; oar --json boards cards get ... ; oar boards cards get ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3037,7 +3039,7 @@ Generated Help: docs list
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json docs list ... ; oar docs list ... --json
+  Examples: oar docs list ... ; oar --json docs list ... ; oar docs list ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3073,7 +3075,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json docs create ... ; oar docs create ... --json
+  Examples: oar docs create ... ; oar --json docs create ... ; oar docs create ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3101,7 +3103,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json docs get ... ; oar docs get ... --json
+  Examples: oar docs get ... ; oar --json docs get ... ; oar docs get ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3132,7 +3134,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json docs trash ... ; oar docs trash ... --json
+  Examples: oar docs trash ... ; oar --json docs trash ... ; oar docs trash ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3162,7 +3164,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json docs archive ... ; oar docs archive ... --json
+  Examples: oar docs archive ... ; oar --json docs archive ... ; oar docs archive ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3192,7 +3194,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json docs unarchive ... ; oar docs unarchive ... --json
+  Examples: oar docs unarchive ... ; oar --json docs unarchive ... ; oar docs unarchive ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3223,7 +3225,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json docs restore ... ; oar docs restore ... --json
+  Examples: oar docs restore ... ; oar --json docs restore ... ; oar docs restore ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3253,7 +3255,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json docs purge ... ; oar docs purge ... --json
+  Examples: oar docs purge ... ; oar --json docs purge ... ; oar docs purge ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3281,7 +3283,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json events get ... ; oar events get ... --json
+  Examples: oar events get ... ; oar --json events get ... ; oar events get ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3345,7 +3347,7 @@ Local CLI notes:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json events create ... ; oar events create ... --json
+  Examples: oar events create ... ; oar --json events create ... ; oar events create ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3370,7 +3372,7 @@ Generated Help: events stream
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json events stream ... ; oar events stream ... --json
+  Examples: oar events stream ... ; oar --json events stream ... ; oar events stream ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3395,7 +3397,7 @@ Generated Help: events tail
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json events tail ... ; oar events tail ... --json
+  Examples: oar events tail ... ; oar --json events tail ... ; oar events tail ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3425,7 +3427,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json events archive ... ; oar events archive ... --json
+  Examples: oar events archive ... ; oar --json events archive ... ; oar events archive ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3455,7 +3457,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json events unarchive ... ; oar events unarchive ... --json
+  Examples: oar events unarchive ... ; oar --json events unarchive ... ; oar events unarchive ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3486,7 +3488,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json events trash ... ; oar events trash ... --json
+  Examples: oar events trash ... ; oar --json events trash ... ; oar events trash ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3516,7 +3518,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json events restore ... ; oar events restore ... --json
+  Examples: oar events restore ... ; oar --json events restore ... ; oar events restore ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3551,7 +3553,7 @@ Inbox categories:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json inbox list ... ; oar inbox list ... --json
+  Examples: oar inbox list ... ; oar --json inbox list ... ; oar inbox list ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3579,7 +3581,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json inbox get ... ; oar inbox get ... --json
+  Examples: oar inbox get ... ; oar --json inbox get ... ; oar inbox get ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3621,7 +3623,7 @@ CLI flags (`inbox acknowledge` / `inbox ack`):
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json inbox acknowledge ... ; oar inbox acknowledge ... --json
+  Examples: oar inbox acknowledge ... ; oar --json inbox acknowledge ... ; oar inbox acknowledge ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3663,7 +3665,7 @@ CLI flags (`inbox acknowledge` / `inbox ack`):
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json inbox ack ... ; oar inbox ack ... --json
+  Examples: oar inbox ack ... ; oar --json inbox ack ... ; oar inbox ack ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3688,7 +3690,7 @@ Generated Help: inbox stream
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json inbox stream ... ; oar inbox stream ... --json
+  Examples: oar inbox stream ... ; oar --json inbox stream ... ; oar inbox stream ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3713,7 +3715,7 @@ Generated Help: inbox tail
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json inbox tail ... ; oar inbox tail ... --json
+  Examples: oar inbox tail ... ; oar --json inbox tail ... ; oar inbox tail ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3737,7 +3739,7 @@ Generated Help: derived rebuild
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json derived rebuild ... ; oar derived rebuild ... --json
+  Examples: oar derived rebuild ... ; oar --json derived rebuild ... ; oar derived rebuild ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3762,7 +3764,7 @@ Generated Help: meta commands
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json meta commands ... ; oar meta commands ... --json
+  Examples: oar meta commands ... ; oar --json meta commands ... ; oar meta commands ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3790,7 +3792,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json meta command ... ; oar meta command ... --json
+  Examples: oar meta command ... ; oar --json meta command ... ; oar meta command ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3815,7 +3817,7 @@ Generated Help: meta concepts
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json meta concepts ... ; oar meta concepts ... --json
+  Examples: oar meta concepts ... ; oar --json meta concepts ... ; oar meta concepts ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3843,7 +3845,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json meta concept ... ; oar meta concept ... --json
+  Examples: oar meta concept ... ; oar --json meta concept ... ; oar meta concept ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3880,7 +3882,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json receipts create ... ; oar receipts create ... --json
+  Examples: oar receipts create ... ; oar --json receipts create ... ; oar receipts create ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3918,7 +3920,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json reviews create ... ; oar reviews create ... --json
+  Examples: oar reviews create ... ; oar --json reviews create ... ; oar reviews create ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3954,7 +3956,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json events list ... ; oar events list ... --json
+  Examples: oar events list ... ; oar --json events list ... ; oar events list ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3979,7 +3981,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json events validate ... ; oar events validate ... --json
+  Examples: oar events validate ... ; oar --json events validate ... ; oar events validate ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4005,7 +4007,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json events explain ... ; oar events explain ... --json
+  Examples: oar events explain ... ; oar --json events explain ... ; oar events explain ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4030,7 +4032,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json artifacts inspect ... ; oar artifacts inspect ... --json
+  Examples: oar artifacts inspect ... ; oar --json artifacts inspect ... ; oar artifacts inspect ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4064,7 +4066,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json threads inspect ... ; oar threads inspect ... --json
+  Examples: oar threads inspect ... ; oar --json threads inspect ... ; oar threads inspect ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4099,7 +4101,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json threads workspace ... ; oar threads workspace ... --json
+  Examples: oar threads workspace ... ; oar --json threads workspace ... ; oar threads workspace ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4135,7 +4137,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json threads recommendations ... ; oar threads recommendations ... --json
+  Examples: oar threads recommendations ... ; oar --json threads recommendations ... ; oar threads recommendations ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4160,7 +4162,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json boards workspace ... ; oar boards workspace ... --json
+  Examples: oar boards workspace ... ; oar --json boards workspace ... ; oar boards workspace ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4184,7 +4186,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json boards cards list ... ; oar boards cards list ... --json
+  Examples: oar boards cards list ... ; oar --json boards cards list ... ; oar boards cards list ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4211,7 +4213,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json docs propose-update ... ; oar docs propose-update ... --json
+  Examples: oar docs propose-update ... ; oar --json docs propose-update ... ; oar docs propose-update ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4236,7 +4238,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json docs content ... ; oar docs content ... --json
+  Examples: oar docs content ... ; oar --json docs content ... ; oar docs content ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4263,7 +4265,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json docs validate-update ... ; oar docs validate-update ... --json
+  Examples: oar docs validate-update ... ; oar --json docs validate-update ... ; oar docs validate-update ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4288,7 +4290,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json docs apply ... ; oar docs apply ... --json
+  Examples: oar docs apply ... ; oar --json docs apply ... ; oar docs apply ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4317,7 +4319,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json meta skill ... ; oar meta skill ... --json
+  Examples: oar meta skill ... ; oar --json meta skill ... ; oar meta skill ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4346,7 +4348,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json bridge install ... ; oar bridge install ... --json
+  Examples: oar bridge install ... ; oar --json bridge install ... ; oar bridge install ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4372,7 +4374,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json bridge import-auth ... ; oar bridge import-auth ... --json
+  Examples: oar bridge import-auth ... ; oar --json bridge import-auth ... ; oar bridge import-auth ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4401,7 +4403,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json bridge init-config ... ; oar bridge init-config ... --json
+  Examples: oar bridge init-config ... ; oar --json bridge init-config ... ; oar bridge init-config ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4427,7 +4429,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json bridge workspace-id ... ; oar bridge workspace-id ... --json
+  Examples: oar bridge workspace-id ... ; oar --json bridge workspace-id ... ; oar bridge workspace-id ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4455,7 +4457,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json bridge doctor ... ; oar bridge doctor ... --json
+  Examples: oar bridge doctor ... ; oar --json bridge doctor ... ; oar bridge doctor ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4481,7 +4483,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json bridge start ... ; oar bridge start ... --json
+  Examples: oar bridge start ... ; oar --json bridge start ... ; oar bridge start ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4507,7 +4509,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json bridge stop ... ; oar bridge stop ... --json
+  Examples: oar bridge stop ... ; oar --json bridge stop ... ; oar bridge stop ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4532,7 +4534,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json bridge restart ... ; oar bridge restart ... --json
+  Examples: oar bridge restart ... ; oar --json bridge restart ... ; oar bridge restart ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4558,7 +4560,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json bridge status ... ; oar bridge status ... --json
+  Examples: oar bridge status ... ; oar --json bridge status ... ; oar bridge status ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4583,7 +4585,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json bridge logs ... ; oar bridge logs ... --json
+  Examples: oar bridge logs ... ; oar --json bridge logs ... ; oar bridge logs ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4611,7 +4613,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json import scan ... ; oar import scan ... --json
+  Examples: oar import scan ... ; oar --json import scan ... ; oar import scan ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4637,7 +4639,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json import dedupe ... ; oar import dedupe ... --json
+  Examples: oar import dedupe ... ; oar --json import dedupe ... ; oar import dedupe ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4666,7 +4668,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json import plan ... ; oar import plan ... --json
+  Examples: oar import plan ... ; oar --json import plan ... ; oar import plan ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4693,6 +4695,6 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json import apply ... ; oar import apply ... --json
+  Examples: oar import apply ... ; oar --json import apply ... ; oar import apply ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```

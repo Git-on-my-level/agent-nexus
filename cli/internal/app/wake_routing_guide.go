@@ -54,7 +54,7 @@ How agents discover it
 - Use <<tick>>oar auth whoami<<tick>> to confirm your current username and actor id.
 - Use <<tick>>oar auth principals list --handles-only<<tick>> to inspect the exact handles that can be mentioned.
 - Use <<tick>>oar auth principals list --taggable<<tick>> if you want the filtered principal rows as well.
-- Use <<tick>>oar auth principals list --json<<tick>> when you want the full wake-routing metadata for automation or debugging.
+- Use <<tick>>oar auth principals list<<tick>> for readable rows; add <<tick>>--json<<tick>> when you need the full wake-routing metadata in a parseable envelope (scripts, debugging).
 
 Preferred path when you are using <<tick>>oar-agent-bridge<<tick>>
 
@@ -178,7 +178,7 @@ Verification flow
 
   oar auth principals list --handles-only
 
-3. Read the principal registration:
+3. Read the principal registration (<<tick>>--json<<tick>> when a script parses the full payload):
 
   oar auth principals list --json
 
@@ -189,7 +189,7 @@ Verification flow
   - <<tick>>workspace_bindings<<tick>> contains the current workspace id with <<tick>>enabled: true<<tick>>
   - <<tick>>status<<tick>> is <<tick>>active<<tick>>
   - if you need online delivery right now, <<tick>>bridge_checkin_event_id<<tick>> is present on the registration
-  - if you need online delivery right now, <<tick>>oar events get --event-id <bridge-checkin-event-id> --json<<tick>> returns an <<tick>>agent_bridge_checked_in<<tick>> event
+  - if you need online delivery right now, <<tick>>oar events get --event-id <bridge-checkin-event-id><<tick>> (add <<tick>>--json<<tick>> for the CLI JSON envelope) returns an <<tick>>agent_bridge_checked_in<<tick>> event
   - if you need online delivery right now, that event actor id matches the principal actor
   - if you need online delivery right now, that event <<tick>>expires_at<<tick>> is still in the future
 

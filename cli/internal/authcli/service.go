@@ -246,7 +246,6 @@ func (s *Service) RegisterWithToken(ctx context.Context, username, bootstrapToke
 		Version:              profile.ProfileVersion,
 		Agent:                s.cfg.Agent,
 		BaseURL:              s.cfg.BaseURL,
-		JSON:                 boolPtr(s.cfg.JSON),
 		Username:             firstNonEmpty(serverUsername, username),
 		AgentID:              agentID,
 		ActorID:              actorID,
@@ -960,10 +959,6 @@ func classifyRegisterHTTPFailure(statusCode int, responseBody []byte) error {
 		)
 	}
 	return failure
-}
-
-func boolPtr(v bool) *bool {
-	return &v
 }
 
 func isTokenInvalid(status int, body []byte) bool {

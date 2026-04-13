@@ -301,24 +301,19 @@ func TestAuthRegisterPersistsProfileDefaults(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("load profile: ok=%t err=%v", ok, err)
 	}
-	if storedProfile.JSON == nil || !*storedProfile.JSON {
-		t.Fatalf("expected profile json=true, profile=%#v", storedProfile)
+	if storedProfile.JSON != nil {
+		t.Fatalf("expected register not to persist json output preference, profile=%#v", storedProfile)
 	}
 	if storedProfile.BaseURL != server.URL {
 		t.Fatalf("expected profile base_url=%s, got %s", server.URL, storedProfile.BaseURL)
 	}
 
-	versionRaw := runCLIForTest(t, home, env, nil, []string{"--agent", "agent-profile-defaults", "version"})
-	var payload map[string]any
-	if err := json.Unmarshal([]byte(versionRaw), &payload); err != nil {
-		t.Fatalf("expected JSON output from profile json default, err=%v raw=%s", err, versionRaw)
+	versionRaw := strings.TrimSpace(runCLIForTest(t, home, env, nil, []string{"--agent", "agent-profile-defaults", "version"}))
+	if strings.HasPrefix(versionRaw, "{") {
+		t.Fatalf("expected text version output without --json, got possible JSON: %q", versionRaw)
 	}
-	if payload["ok"] != true {
-		t.Fatalf("unexpected version payload: %#v", payload)
-	}
-	data, _ := payload["data"].(map[string]any)
-	if data == nil || strings.TrimSpace(anyStr(data["base_url"])) != server.URL {
-		t.Fatalf("unexpected version payload data: %#v", payload)
+	if !strings.Contains(versionRaw, "Base URL: "+server.URL) {
+		t.Fatalf("expected text version with base url, got=%q", versionRaw)
 	}
 }
 

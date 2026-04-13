@@ -192,7 +192,8 @@ sha256sum -c checksums.txt --ignore-missing
 2. Verify handshake compatibility with live core:
 
 ```bash
-oar --json --base-url http://127.0.0.1:8000 --agent release-check api call --path /meta/handshake
+oar --base-url http://127.0.0.1:8000 --agent release-check api call --path /meta/handshake
+# Add --json if you need the CLI JSON envelope (e.g. scripted parsing).
 ```
 
 3. Confirm generated docs and meta are current:

@@ -21,7 +21,7 @@ The CLI is **for agents and automation** (LLM tooling, CI, scripts, integrations
 - Map stable command identities to contract-defined API behavior.
 - Optimize for agent and script use: no prompts, no hidden interactivity, and explicit side effects.
 - Preserve deterministic I/O across flags, env vars, profiles, stdin, stdout, stderr, and exit codes.
-- Provide dual output modes: concise human-readable summaries by default and strict machine-readable `--json` envelopes for automation.
+- Provide dual output modes: concise **text by default** (direct consumption, including LLM tool output) and strict **`--json` envelopes** for programmatic use (scripts, services, `jq`).
 - Normalize transport and API errors into stable local behavior that orchestrators can reason about.
 
 ## Output And Runtime Invariants

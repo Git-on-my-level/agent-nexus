@@ -1,7 +1,7 @@
 ---
 name: oar-cli-onboard
 description: >-
-  Use the `oar` CLI effectively: configure base URL/auth/profile, discover the available command surface, choose the right primitive or higher-level abstraction, and operate safely in human or JSON modes. Apply when running `oar`, interpreting its help/errors, or automating OAR workflows.
+  Use the `oar` CLI effectively: configure base URL/auth/profile, discover the available command surface, choose the right primitive or higher-level abstraction, and choose text (default, LLM-friendly) or `--json` (programmatic) output as appropriate. Apply when running `oar`, interpreting its help/errors, or automating OAR workflows.
 ---
 
 # OAR CLI guide for agents
@@ -12,7 +12,8 @@ Use this guide when you need to operate `oar` well, not just get it running. Fav
 
 - Treat `oar` as the contract-aligned interface to an OAR core API.
 - Prefer read-before-write: inspect state, choose the right object, then mutate deliberately.
-- Prefer `--json` for automation, default output for quick human inspection.
+- Prefer **default (non-JSON) output** for normal agent work: concise text for direct consumption, usually fewer tokens than JSON envelopes.
+- Use **`--json`** or **`OAR_JSON=true`** when the consumer is code, a shell script, CI, or anything that parses the stable JSON envelope (including rich `error.details`).
 - Prefer profiles and env vars over repeated flags.
 - Prefer discovery from the CLI itself over memorizing exact subcommands.
 
@@ -83,10 +84,10 @@ Use help output as the source of truth for exact flags, request shapes, enums, a
 - Use `draft` or proposal/apply flows when the CLI exposes them and the change benefits from reviewability.
 - Prefer narrow filters over broad listings when triaging large state.
 
-## Automation
+## Programmatic output (`--json`)
 
-- Use `--json` for machine consumption.
-- Parse the response envelope, not formatted text.
+- Use `--json` or `OAR_JSON=true` when you are parsing output in code or scripts (not for default agent readbacks).
+- Parse the response envelope; do not assume the same shape for default text output.
 - Treat `error.code`, `error.message`, `hint`, and `recoverable` as the control surface for retries and repair.
 - Keep scripts idempotent where possible: read state, compare, then write only when needed.
 
@@ -101,7 +102,7 @@ When starting in a new environment:
 
 When stuck:
 
-- Re-run with `--json` to inspect structured failure details.
+- Re-run with `--json` when structured failure fields (`error.details`, etc.) would help.
 - Check help for the exact command path you are using.
 - Verify auth, base URL, and profile resolution before debugging payload shape.
 
