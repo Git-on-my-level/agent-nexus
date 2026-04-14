@@ -3,6 +3,7 @@
   import { page } from "$app/stores";
   import { onDestroy, onMount } from "svelte";
 
+  import CompactFilterBar from "$lib/components/CompactFilterBar.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
   import { coreClient } from "$lib/coreClient";
@@ -17,7 +18,6 @@
     enrichInboxItem,
     getInboxCategoryLabel,
     normalizeInboxCategory,
-    getInboxUrgencyLabel,
     getInboxSubjectId,
     getInboxSubjectKind,
     getInboxSubjectLabel,
@@ -91,29 +91,6 @@
   let hasActiveFilters = $derived(
     categoryFilter !== "all" || urgencyFilter !== "all",
   );
-
-  let activeFilterChips = $derived.by(() => {
-    const chips = [];
-    if (categoryFilter !== "all") {
-      chips.push({
-        key: "category",
-        label: getInboxCategoryLabel(categoryFilter),
-      });
-    }
-    if (urgencyFilter !== "all") {
-      chips.push({
-        key: "urgency",
-        label: getInboxUrgencyLabel(urgencyFilter),
-      });
-    }
-    return chips;
-  });
-
-  function removeFilterChip(key) {
-    if (key === "category") categoryFilter = "all";
-    if (key === "urgency") urgencyFilter = "all";
-    applyFilters();
-  }
 
   function workspaceHref(pathname = "/") {
     return workspacePath(workspaceSlug, pathname);
@@ -604,97 +581,58 @@
   </div>
 </div>
 
-{#if hasActiveFilters}
-  <div
-    class="mb-4 flex flex-wrap items-center gap-1.5 text-[12px]"
-    data-testid="inbox-active-filters-summary"
-  >
-    {#each activeFilterChips as chip (chip.key)}
-      <button
-        type="button"
-        class="cursor-pointer inline-flex items-center gap-1 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2 py-0.5 font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border)] hover:text-[var(--ui-text)]"
-        onclick={() => removeFilterChip(chip.key)}
-        title="Remove {chip.label} filter"
-        aria-label="Remove {chip.label} filter"
-      >
-        <span>{chip.label}</span>
-        <svg
-          class="h-3 w-3"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          stroke-width="2.5"
-          aria-hidden="true"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            d="M6 18L18 6M6 6l12 12"
-          />
-        </svg>
-      </button>
-    {/each}
-    <button
-      type="button"
-      class="cursor-pointer rounded-md px-2 py-0.5 text-[var(--ui-text-muted)] hover:bg-[var(--ui-border)] hover:text-[var(--ui-text)]"
-      onclick={resetFilters}
-    >
-      Clear all
-    </button>
-  </div>
-{/if}
-
 {#if filtersOpen}
-  <div
-    class="mb-4 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-3"
-    data-testid="inbox-filter-panel"
-  >
-    <div class="grid gap-3 sm:grid-cols-2">
-      <label class="text-[12px]">
-        <span class="font-medium text-[var(--ui-text-muted)]">Category</span>
-        <select
-          class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
-          value={categoryFilter}
-          onchange={(e) => {
-            categoryFilter = e.currentTarget.value;
-            applyFilters();
-          }}
-          data-testid="inbox-category-filter"
-        >
-          <option value="all">All</option>
-          {#each INBOX_CATEGORY_ORDER as cat}
-            <option value={cat}>{INBOX_CATEGORY_LABELS[cat]}</option>
-          {/each}
-        </select>
-      </label>
-      <label class="text-[12px]">
-        <span class="font-medium text-[var(--ui-text-muted)]">Urgency</span>
-        <select
-          class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
-          value={urgencyFilter}
-          onchange={(e) => {
-            urgencyFilter = e.currentTarget.value;
-            applyFilters();
-          }}
-          data-testid="inbox-urgency-filter"
-        >
-          <option value="all">All</option>
-          {#each INBOX_URGENCY_LEVELS as level}
-            <option value={level}>{INBOX_URGENCY_LABELS[level]}</option>
-          {/each}
-        </select>
-      </label>
-    </div>
-    <div class="mt-3 flex gap-1.5">
-      <button
-        class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]"
-        onclick={resetFilters}
-        type="button"
+  <CompactFilterBar testId="inbox-filter-panel">
+    {#snippet children()}
+      <div
+        class="flex flex-wrap items-end gap-3 sm:flex-nowrap sm:items-end sm:gap-4"
       >
-        Reset
-      </button>
-    </div>
-  </div>
+        <label class="min-w-[11rem] flex-1 text-[12px] sm:min-w-[13rem]">
+          <span class="font-medium text-[var(--ui-text-muted)]">Category</span>
+          <select
+            class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
+            value={categoryFilter}
+            onchange={(e) => {
+              categoryFilter = e.currentTarget.value;
+              applyFilters();
+            }}
+            data-testid="inbox-category-filter"
+          >
+            <option value="all">All</option>
+            {#each INBOX_CATEGORY_ORDER as cat}
+              <option value={cat}>{INBOX_CATEGORY_LABELS[cat]}</option>
+            {/each}
+          </select>
+        </label>
+        <label class="min-w-[11rem] flex-1 text-[12px] sm:min-w-[13rem]">
+          <span class="font-medium text-[var(--ui-text-muted)]">Urgency</span>
+          <select
+            class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
+            value={urgencyFilter}
+            onchange={(e) => {
+              urgencyFilter = e.currentTarget.value;
+              applyFilters();
+            }}
+            data-testid="inbox-urgency-filter"
+          >
+            <option value="all">All</option>
+            {#each INBOX_URGENCY_LEVELS as level}
+              <option value={level}>{INBOX_URGENCY_LABELS[level]}</option>
+            {/each}
+          </select>
+        </label>
+        {#if hasActiveFilters}
+          <button
+            class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)] sm:ml-auto"
+            onclick={resetFilters}
+            type="button"
+          >
+            Clear filters
+          </button>
+        {/if}
+      </div>
+    {/snippet}
+  </CompactFilterBar>
 {/if}
 
 {#if error}

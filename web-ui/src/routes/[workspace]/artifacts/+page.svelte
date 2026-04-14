@@ -2,6 +2,7 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
 
+  import CompactFilterBar from "$lib/components/CompactFilterBar.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
   import {
     DEFAULT_ARTIFACT_LIST_FILTERS,
@@ -216,67 +217,71 @@
 </div>
 
 {#if filtersOpen}
-  <form
-    class="mb-4 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-3"
-    onsubmit={(event) => {
-      event.preventDefault();
-      void applyFilters();
-    }}
-  >
-    <div class="grid gap-3 sm:grid-cols-2">
-      <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
-        Kind
-        <select
-          bind:value={filters.kind}
-          class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
-        >
-          <option value="">All</option>
-          {#each Object.entries(KIND_LABELS) as [value, label]}
-            <option {value}>{label}</option>
-          {/each}
-        </select>
-      </label>
-      <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
-        Topic ID
-        <input
-          bind:value={filters.thread_id}
-          class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
-          placeholder="thread-onboarding"
-        />
-      </label>
-      <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
-        Created after
-        <input
-          value={dateInputs.created_after}
-          class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
-          type="datetime-local"
-          oninput={(event) =>
-            updateDateFilter("created_after", event.currentTarget.value)}
-        />
-      </label>
-      <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
-        Created before
-        <input
-          value={dateInputs.created_before}
-          class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
-          type="datetime-local"
-          oninput={(event) =>
-            updateDateFilter("created_before", event.currentTarget.value)}
-        />
-      </label>
-    </div>
-    <div class="mt-3 flex gap-1.5">
-      <button
-        class="cursor-pointer rounded-md bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text)] hover:bg-[var(--ui-border)]"
-        type="submit">Apply</button
+  <CompactFilterBar testId="artifacts-filter-panel">
+    {#snippet children()}
+      <form
+        class="contents"
+        onsubmit={(event) => {
+          event.preventDefault();
+          void applyFilters();
+        }}
       >
-      <button
-        class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]"
-        onclick={clearFilters}
-        type="button">Clear</button
-      >
-    </div>
-  </form>
+        <div class="grid gap-3 sm:grid-cols-2">
+          <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
+            Kind
+            <select
+              bind:value={filters.kind}
+              class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
+            >
+              <option value="">All</option>
+              {#each Object.entries(KIND_LABELS) as [value, label]}
+                <option {value}>{label}</option>
+              {/each}
+            </select>
+          </label>
+          <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
+            Topic ID
+            <input
+              bind:value={filters.thread_id}
+              class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
+              placeholder="thread-onboarding"
+            />
+          </label>
+          <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
+            Created after
+            <input
+              value={dateInputs.created_after}
+              class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
+              type="datetime-local"
+              oninput={(event) =>
+                updateDateFilter("created_after", event.currentTarget.value)}
+            />
+          </label>
+          <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
+            Created before
+            <input
+              value={dateInputs.created_before}
+              class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
+              type="datetime-local"
+              oninput={(event) =>
+                updateDateFilter("created_before", event.currentTarget.value)}
+            />
+          </label>
+        </div>
+        <div class="mt-3 flex gap-1.5">
+          <button
+            class="cursor-pointer rounded-md bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text)] hover:bg-[var(--ui-border)]"
+            type="submit">Apply</button
+          >
+          <button
+            class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]"
+            onclick={clearFilters}
+            type="button">Clear filters</button
+          >
+        </div>
+      </form>
+    {/snippet}
+  </CompactFilterBar>
 {/if}
 
 {#if loading}

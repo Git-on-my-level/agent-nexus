@@ -64,15 +64,39 @@ func buildListDocumentsQuery(filter DocumentListFilter) (string, []any) {
 		conditions = append(conditions, "d.thread_id = ?")
 		args = append(args, threadID)
 	}
-	if filter.TrashedOnly {
-		conditions = append(conditions, "d.trashed_at IS NOT NULL")
-	} else if !filter.IncludeTrashed {
-		conditions = append(conditions, "d.trashed_at IS NULL")
+	state := strings.TrimSpace(filter.State)
+	if state != "" {
+		switch state {
+		case "active":
+			conditions = append(conditions, "d.archived_at IS NULL AND d.trashed_at IS NULL")
+		case "archived":
+			conditions = append(conditions, "d.archived_at IS NOT NULL AND d.trashed_at IS NULL")
+		case "trashed":
+			conditions = append(conditions, "d.trashed_at IS NOT NULL")
+		default:
+			conditions = append(conditions, "1=0")
+		}
+	} else {
+		if filter.TrashedOnly {
+			conditions = append(conditions, "d.trashed_at IS NOT NULL")
+		} else if !filter.IncludeTrashed {
+			conditions = append(conditions, "d.trashed_at IS NULL")
+		}
+		if filter.ArchivedOnly {
+			conditions = append(conditions, "d.archived_at IS NOT NULL AND d.trashed_at IS NULL")
+		} else if !filter.IncludeArchived {
+			conditions = append(conditions, "d.archived_at IS NULL")
+		}
 	}
-	if filter.ArchivedOnly {
-		conditions = append(conditions, "d.archived_at IS NOT NULL AND d.trashed_at IS NULL")
-	} else if !filter.IncludeArchived {
-		conditions = append(conditions, "d.archived_at IS NULL")
+	labelFilters := uniqueNormalizedStrings(filter.Labels)
+	if len(labelFilters) > 0 {
+		// Match boards list: json_each on labels_json with exact value match (OR across requested labels).
+		parts := make([]string, 0, len(labelFilters))
+		for _, label := range labelFilters {
+			parts = append(parts, "EXISTS (SELECT 1 FROM json_each(d.labels_json) WHERE value = ?)")
+			args = append(args, label)
+		}
+		conditions = append(conditions, "("+strings.Join(parts, " OR ")+")")
 	}
 	if q := strings.TrimSpace(filter.Query); q != "" {
 		searchPattern := "%" + strings.ToLower(q) + "%"

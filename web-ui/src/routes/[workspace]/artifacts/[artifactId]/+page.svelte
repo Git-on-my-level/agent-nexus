@@ -207,11 +207,42 @@
     return `${text.slice(0, max)}...`;
   }
 
+  function firstTypedRefValue(refs, prefix) {
+    const list = Array.isArray(refs) ? refs : [];
+    const needle = `${String(prefix ?? "").trim()}:`;
+    if (!needle || needle === ":") return "";
+    const hit = list.find((r) => String(r ?? "").startsWith(needle));
+    if (!hit) return "";
+    return String(parseRef(String(hit)).value ?? "").trim();
+  }
+
+  let docArtifactDocPath = $derived.by(() => {
+    if (!artifact || String(artifact.kind ?? "").trim() !== "doc") return "";
+    const docId =
+      String(artifact.document_id ?? "").trim() ||
+      firstTypedRefValue(artifact.refs, "document");
+    return docId ? `/docs/${encodeURIComponent(docId)}` : "";
+  });
+
+  let docArtifactRevisionPath = $derived.by(() => {
+    if (!artifact || String(artifact.kind ?? "").trim() !== "doc") return "";
+    const revId =
+      String(artifact.revision_id ?? "").trim() ||
+      firstTypedRefValue(artifact.refs, "document_revision");
+    return revId ? `/docs/revisions/${encodeURIComponent(revId)}` : "";
+  });
+
   function buildArtifactRefHints() {
     const hints = {};
     if (!artifact) return hints;
     hints[`artifact:${artifact.id}`] =
       `This ${kindLabel(artifact.kind).toLowerCase()}`;
+    if (artifact.kind === "doc") {
+      const docId = String(artifact.document_id ?? "").trim();
+      if (docId) hints[`document:${docId}`] = "Document";
+      const revId = String(artifact.revision_id ?? "").trim();
+      if (revId) hints[`document_revision:${revId}`] = "Document revision";
+    }
     if (artifact.thread_id)
       hints[`thread:${artifact.thread_id}`] = "Thread (timeline)";
     if (receiptPacket?.receipt_id)
@@ -547,6 +578,24 @@
         >by {actorName(artifact.created_by)}</span
       >
     </div>
+    {#if docArtifactDocPath}
+      <div
+        class="mt-1.5 flex flex-wrap items-center gap-2 text-[12px] text-[var(--ui-text-muted)]"
+      >
+        <a
+          class="inline-flex items-center rounded-md border border-fuchsia-500/35 bg-fuchsia-500/10 px-2 py-0.5 font-medium text-fuchsia-300 transition-colors hover:bg-fuchsia-500/20"
+          href={workspaceHref(docArtifactDocPath)}
+        >
+          Open in Docs
+        </a>
+        {#if docArtifactRevisionPath}
+          <a
+            class="text-indigo-400 underline decoration-dotted underline-offset-2 transition-colors hover:text-indigo-300"
+            href={workspaceHref(docArtifactRevisionPath)}>This revision</a
+          >
+        {/if}
+      </div>
+    {/if}
     {#if artifact.thread_id && artifactTopicHref}
       <div class="mt-1.5 text-[12px] text-[var(--ui-text-muted)]">
         <span class="text-[var(--ui-text-muted)]">Topic</span>

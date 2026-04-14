@@ -7,6 +7,7 @@
   import ArchiveButton from "$lib/components/ArchiveButton.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import TrashButton from "$lib/components/TrashButton.svelte";
+  import CompactFilterBar from "$lib/components/CompactFilterBar.svelte";
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
   import {
@@ -31,10 +32,31 @@
   } from "$lib/boardUtils";
   import { boardRowInspectNav } from "$lib/topicRouteUtils";
 
+  const defaultBoardListFilters = {
+    showArchived: false,
+    status: "",
+    labels: "",
+    owners: "",
+    q: "",
+  };
+
   let boards = $state([]);
   let loading = $state(false);
   let error = $state("");
-  let showArchived = $state(false);
+  let filtersOpen = $state(false);
+  let boardFiltersDraft = $state({ ...defaultBoardListFilters });
+  let boardFiltersApplied = $state({ ...defaultBoardListFilters });
+  let boardListGeneration = $state(0);
+  let hasActiveFilters = $derived.by(() => {
+    const f = boardFiltersApplied;
+    return (
+      f.showArchived ||
+      Boolean(f.status) ||
+      Boolean(f.labels.trim()) ||
+      Boolean(f.owners.trim()) ||
+      Boolean(f.q.trim())
+    );
+  });
   let archiveBusyId = $state("");
   let confirmModal = $state({ open: false, action: "", entityId: "" });
   let trashBusyId = $state("");
@@ -105,8 +127,16 @@
     loading = true;
     error = "";
     try {
+      const f = boardFiltersApplied;
       const filters = {};
-      if (showArchived) filters.include_archived = "true";
+      if (f.showArchived) filters.include_archived = "true";
+      if (f.status) filters.status = f.status;
+      const labels = parseDelimitedValues(f.labels);
+      if (labels.length > 0) filters.label = labels;
+      const owners = parseDelimitedValues(f.owners);
+      if (owners.length > 0) filters.owner = owners;
+      const q = f.q.trim();
+      if (q) filters.q = q;
       const data = await coreClient.listBoards(filters);
       boards = data.boards ?? [];
     } catch (e) {
@@ -167,7 +197,7 @@
   }
 
   $effect(() => {
-    showArchived;
+    boardListGeneration;
     if (workspaceSlug) {
       void loadBoards();
     }
@@ -231,6 +261,18 @@
     if (action === "archive") void archiveBoard(id);
     else if (action === "trash") void trashBoard(id);
   }
+
+  function applyBoardFilters() {
+    boardFiltersApplied = { ...boardFiltersDraft };
+    boardListGeneration++;
+  }
+
+  function resetBoardFilters() {
+    boardFiltersDraft = { ...defaultBoardListFilters };
+    boardFiltersApplied = { ...defaultBoardListFilters };
+    boardListGeneration++;
+    filtersOpen = false;
+  }
 </script>
 
 <div class="mb-4 flex flex-wrap items-start justify-between gap-4">
@@ -239,16 +281,34 @@
   </div>
 
   <div class="flex flex-wrap items-center gap-3">
-    <label
-      class="inline-flex cursor-pointer items-center gap-1.5 text-[12px] text-[var(--ui-text-muted)]"
+    <button
+      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12px] font-medium transition-colors {hasActiveFilters
+        ? 'border-[var(--ui-accent)]/40 bg-[var(--ui-accent)]/10 text-[var(--ui-accent)] hover:bg-[var(--ui-accent)]/15'
+        : 'border-[var(--ui-border)] bg-[var(--ui-bg-soft)] text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]'}"
+      onclick={() => {
+        if (!filtersOpen) {
+          boardFiltersDraft = { ...boardFiltersApplied };
+        }
+        filtersOpen = !filtersOpen;
+      }}
+      type="button"
+      data-testid="boards-filters-toggle"
     >
-      <input
-        bind:checked={showArchived}
-        class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--ui-border)] bg-[var(--ui-bg)] text-[var(--ui-accent-strong)] focus:ring-2 focus:ring-[var(--ui-accent)] focus:ring-offset-0"
-        type="checkbox"
-      />
-      Show archived
-    </label>
+      <svg
+        class="h-3.5 w-3.5"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        stroke-width="2"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+        />
+      </svg>
+      {hasActiveFilters ? "Filtered" : "Filters"}
+    </button>
     <button
       class="rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500"
       onclick={() => {
@@ -261,6 +321,84 @@
     </button>
   </div>
 </div>
+
+{#if filtersOpen}
+  <CompactFilterBar testId="boards-filter-panel">
+    {#snippet children()}
+      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <label class="text-[12px]">
+          <span class="font-medium text-[var(--ui-text-muted)]">Status</span>
+          <select
+            bind:value={boardFiltersDraft.status}
+            class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
+          >
+            <option value="">All</option>
+            {#each Object.entries(BOARD_STATUS_LABELS) as [value, label]}
+              <option {value}>{label}</option>
+            {/each}
+          </select>
+        </label>
+        <label class="text-[12px] sm:col-span-2 lg:col-span-2">
+          <span class="font-medium text-[var(--ui-text-muted)]">Search</span>
+          <input
+            bind:value={boardFiltersDraft.q}
+            class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
+            placeholder="Title or board id"
+            type="text"
+          />
+        </label>
+        <label class="text-[12px] sm:col-span-2 lg:col-span-1">
+          <span class="font-medium text-[var(--ui-text-muted)]"
+            >Labels (comma-separated)</span
+          >
+          <input
+            bind:value={boardFiltersDraft.labels}
+            class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
+            placeholder="product, launch"
+            type="text"
+          />
+        </label>
+        <label class="text-[12px] sm:col-span-2 lg:col-span-2">
+          <span class="font-medium text-[var(--ui-text-muted)]"
+            >Owners (comma-separated ids)</span
+          >
+          <input
+            bind:value={boardFiltersDraft.owners}
+            class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
+            placeholder="actor-ops-ai"
+            type="text"
+          />
+        </label>
+        <label
+          class="flex items-end gap-1.5 pb-0.5 text-[12px] text-[var(--ui-text-muted)] sm:col-span-2 lg:col-span-3"
+        >
+          <input
+            bind:checked={boardFiltersDraft.showArchived}
+            class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--ui-border)] bg-[var(--ui-bg)] text-[var(--ui-accent-strong)] focus:ring-2 focus:ring-[var(--ui-accent)] focus:ring-offset-0"
+            type="checkbox"
+          />
+          Show archived
+        </label>
+      </div>
+      <div class="mt-3 flex flex-wrap gap-1.5">
+        <button
+          class="cursor-pointer rounded-md bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text)] hover:bg-[var(--ui-border)]"
+          onclick={applyBoardFilters}
+          type="button"
+        >
+          Apply
+        </button>
+        <button
+          class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]"
+          onclick={resetBoardFilters}
+          type="button"
+        >
+          Clear filters
+        </button>
+      </div>
+    {/snippet}
+  </CompactFilterBar>
+{/if}
 
 {#if error}
   <div class="mb-4 rounded-md bg-red-500/10 px-3 py-2 text-[13px] text-red-400">

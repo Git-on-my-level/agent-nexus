@@ -14,13 +14,30 @@
   import ArchiveButton from "$lib/components/ArchiveButton.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import TrashButton from "$lib/components/TrashButton.svelte";
+  import CompactFilterBar from "$lib/components/CompactFilterBar.svelte";
+  import { parseDelimitedValues } from "$lib/boardUtils";
 
-  const DOC_STATUS_LABELS = { draft: "Draft", active: "Active" };
+  const DOC_STATE_LABELS = {
+    active: "Active",
+    archived: "Archived",
+    trashed: "Trashed",
+  };
+
+  const defaultDocListFilters = {
+    labels: "",
+    showArchived: false,
+  };
 
   let documents = $state([]);
   let loading = $state(false);
   let error = $state("");
-  let showArchived = $state(false);
+  let filtersOpen = $state(false);
+  let docFiltersDraft = $state({ ...defaultDocListFilters });
+  let docFiltersApplied = $state({ ...defaultDocListFilters });
+  let hasActiveFilters = $derived.by(() => {
+    const f = docFiltersApplied;
+    return f.showArchived || Boolean(f.labels.trim());
+  });
   let archiveBusyId = $state("");
   let confirmModal = $state({ open: false, action: "", entityId: "" });
   let trashBusyId = $state("");
@@ -84,25 +101,29 @@
   }
 
   $effect(() => {
-    showArchived;
-    const threadId = scopedThreadId;
-    if (threadId && createOpen) {
+    workspaceSlug;
+    scopedThreadId;
+    if (scopedThreadId && createOpen) {
       createOpen = false;
       createError = "";
       resetDraft();
     }
     if (workspaceSlug) {
-      void loadDocuments(threadId);
+      void loadDocuments();
     }
   });
 
-  async function loadDocuments(threadId = "") {
+  async function loadDocuments() {
     loading = true;
     error = "";
     try {
+      const f = docFiltersApplied;
       const filters = {};
-      if (threadId) filters.thread_id = threadId;
-      if (showArchived) filters.include_archived = "true";
+      const threadFromUrl = String(scopedThreadId ?? "").trim();
+      if (threadFromUrl) filters.thread_id = threadFromUrl;
+      if (f.showArchived) filters.include_archived = "true";
+      const labels = parseDelimitedValues(f.labels);
+      if (labels.length > 0) filters.label = labels;
       const data = await coreClient.listDocuments(filters);
       documents = filterTopLevelDocuments(data.documents);
     } catch (e) {
@@ -173,7 +194,7 @@
       if (newDocId) {
         await goto(workspaceHref(`/docs/${newDocId}`));
       } else {
-        await loadDocuments(scopedThreadId);
+        await loadDocuments();
       }
     } catch (e) {
       createError = `Failed to create document: ${e instanceof Error ? e.message : String(e)}`;
@@ -182,10 +203,23 @@
     }
   }
 
-  function statusColor(status) {
-    if (status === "active") return "text-emerald-400 bg-emerald-500/10";
-    if (status === "draft") return "text-amber-400 bg-amber-500/10";
+  function docStateColor(state) {
+    if (state === "active") return "text-emerald-400 bg-emerald-500/10";
+    if (state === "archived") return "text-amber-400 bg-amber-500/10";
+    if (state === "trashed") return "text-slate-300 bg-slate-500/10";
     return "text-[var(--ui-text-muted)] bg-[var(--ui-border)]";
+  }
+
+  function applyDocFilters() {
+    docFiltersApplied = { ...docFiltersDraft };
+    void loadDocuments();
+  }
+
+  function resetDocFilters() {
+    docFiltersDraft = { ...defaultDocListFilters };
+    docFiltersApplied = { ...defaultDocListFilters };
+    filtersOpen = false;
+    void loadDocuments();
   }
 
   function isDocArchived(doc) {
@@ -200,7 +234,7 @@
     error = "";
     try {
       await coreClient.archiveDocument(id, {});
-      await loadDocuments(scopedThreadId);
+      await loadDocuments();
     } catch (e) {
       error = `Archive failed: ${e instanceof Error ? e.message : String(e)}`;
     } finally {
@@ -215,7 +249,7 @@
     error = "";
     try {
       await coreClient.unarchiveDocument(id, {});
-      await loadDocuments(scopedThreadId);
+      await loadDocuments();
     } catch (e) {
       error = `Unarchive failed: ${e instanceof Error ? e.message : String(e)}`;
     } finally {
@@ -231,7 +265,7 @@
     try {
       await coreClient.trashDocument(id, {});
       confirmModal = { open: false, action: "", entityId: "" };
-      await loadDocuments(scopedThreadId);
+      await loadDocuments();
     } catch (e) {
       error = `Trash failed: ${e instanceof Error ? e.message : String(e)}`;
     } finally {
@@ -264,16 +298,34 @@
     {/if}
   </div>
   <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-1.5">
-    <label
-      class="inline-flex cursor-pointer items-center gap-1.5 text-[12px] text-[var(--ui-text-muted)]"
+    <button
+      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12px] font-medium transition-colors {hasActiveFilters
+        ? 'border-[var(--ui-accent)]/40 bg-[var(--ui-accent)]/10 text-[var(--ui-accent)] hover:bg-[var(--ui-accent)]/15'
+        : 'border-[var(--ui-border)] bg-[var(--ui-bg-soft)] text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]'}"
+      onclick={() => {
+        if (!filtersOpen) {
+          docFiltersDraft = { ...docFiltersApplied };
+        }
+        filtersOpen = !filtersOpen;
+      }}
+      type="button"
+      data-testid="docs-filters-toggle"
     >
-      <input
-        bind:checked={showArchived}
-        class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--ui-border)] bg-[var(--ui-bg)] text-[var(--ui-accent-strong)] focus:ring-2 focus:ring-[var(--ui-accent)] focus:ring-offset-0"
-        type="checkbox"
-      />
-      Show archived
-    </label>
+      <svg
+        class="h-3.5 w-3.5"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        stroke-width="2"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+        />
+      </svg>
+      {hasActiveFilters ? "Filtered" : "Filters"}
+    </button>
     <button
       class="cursor-pointer inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium transition-colors {groupByLabel
         ? 'bg-[var(--ui-accent-strong)] text-white'
@@ -326,6 +378,52 @@
     </button>
   </div>
 </div>
+
+{#if filtersOpen}
+  <CompactFilterBar testId="docs-filter-panel">
+    {#snippet children()}
+      <div class="grid gap-3">
+        <label class="text-[12px]">
+          <span class="font-medium text-[var(--ui-text-muted)]"
+            >Labels (comma-separated, any match)</span
+          >
+          <input
+            bind:value={docFiltersDraft.labels}
+            class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
+            placeholder="ops, runbook"
+            type="text"
+          />
+        </label>
+        <label
+          class="inline-flex cursor-pointer items-center gap-1.5 text-[12px] text-[var(--ui-text-muted)]"
+        >
+          <input
+            bind:checked={docFiltersDraft.showArchived}
+            class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--ui-border)] bg-[var(--ui-bg)] text-[var(--ui-accent-strong)] focus:ring-2 focus:ring-[var(--ui-accent)] focus:ring-offset-0"
+            type="checkbox"
+          />
+          Show archived
+        </label>
+      </div>
+      <div class="mt-3 flex flex-wrap gap-1.5">
+        <button
+          class="cursor-pointer rounded-md bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text)] hover:bg-[var(--ui-border)]"
+          onclick={applyDocFilters}
+          type="button"
+        >
+          Apply
+        </button>
+        <button
+          class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]"
+          onclick={resetDocFilters}
+          type="button"
+        >
+          Clear filters
+        </button>
+      </div>
+    {/snippet}
+  </CompactFilterBar>
+{/if}
 
 {#if scopedThreadId}
   <div
@@ -492,17 +590,11 @@
   >
     <a class="min-w-0 flex-1" href={workspaceHref(`/docs/${doc.id}`)}>
       <div class="flex flex-wrap items-center gap-2">
-        {#if doc.status}
+        {#if doc.state}
           <span
-            class="inline-flex rounded px-1.5 py-0.5 text-[11px] font-semibold {statusColor(
-              doc.status,
-            )}">{DOC_STATUS_LABELS[doc.status] ?? doc.status}</span
-          >
-        {/if}
-        {#if isDocArchived(doc)}
-          <span
-            class="rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-medium text-amber-400"
-            >Archived</span
+            class="inline-flex rounded px-1.5 py-0.5 text-[11px] font-semibold {docStateColor(
+              doc.state,
+            )}">{DOC_STATE_LABELS[doc.state] ?? doc.state}</span
           >
         {/if}
         {#each (doc.labels ?? []).slice(0, 3) as label}

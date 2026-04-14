@@ -3299,6 +3299,7 @@ export const commandRegistry: CommandSpec[] = [
     "output_envelope": "Returns `{ documents }`.",
     "error_codes": [
       "auth_required",
+      "invalid_request",
       "invalid_token"
     ],
     "concepts": [

@@ -746,7 +746,7 @@ Generated from `contracts/oar-openapi.yaml`.
 - Input mode: `none`
 - Why: Scan canonical document lineages.
 - Concepts: `docs`
-- Error codes: `auth_required`, `invalid_token`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Output: Returns `{ documents }`.
 
 ## `docs.purge`

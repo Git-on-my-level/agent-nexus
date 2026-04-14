@@ -18,12 +18,12 @@
     formatCadenceLabel,
     getPriorityLabel,
     parseTopicListSearchParams,
-    parseTagFilterInput,
     validateCadenceSelection,
   } from "$lib/topicFilters";
   import { workspacePath } from "$lib/workspacePaths";
   import { describeCron } from "$lib/topicPatch";
   import ArchiveButton from "$lib/components/ArchiveButton.svelte";
+  import CompactFilterBar from "$lib/components/CompactFilterBar.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import TrashButton from "$lib/components/TrashButton.svelte";
 
@@ -292,37 +292,6 @@
     }
   }
 
-  let activeFilterSummaryParts = $derived.by(() => {
-    const parts = [];
-    if (filters.openOnly) {
-      parts.push("Open (not closed)");
-    } else if (filters.status) {
-      parts.push(
-        `${filters.status[0].toUpperCase()}${filters.status.slice(1)}`,
-      );
-    }
-    if (filters.highPriorityTier) {
-      parts.push("High (P0 & P1)");
-    } else if (filters.priority) {
-      parts.push(TOPIC_PRIORITY_LABELS[filters.priority] ?? filters.priority);
-    }
-    if (filters.cadence) {
-      parts.push(
-        TOPIC_SCHEDULE_PRESET_LABELS[filters.cadence] ?? filters.cadence,
-      );
-    }
-    if (filters.staleness === "stale") {
-      parts.push("Stale");
-    } else if (filters.staleness === "fresh") {
-      parts.push("Fresh");
-    }
-    const tags = parseTagFilterInput(filters.tagInput);
-    if (tags.length > 0) {
-      parts.push(`Tags: ${tags.join(", ")}`);
-    }
-    return parts;
-  });
-
   function priorityDot(priority) {
     const colors = {
       p0: "bg-red-500/100",
@@ -437,28 +406,13 @@
         />
         Show archived
       </label>
-      <span
-        class="hidden items-center gap-1 rounded border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2 py-1 text-[11px] text-[var(--ui-text-muted)] sm:inline-flex"
-      >
-        <svg
-          class="h-3 w-3"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          stroke-width="2"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-          />
-        </svg>
-        <kbd class="font-mono text-[10px]">⌘K</kbd>
-      </span>
       <button
-        class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)]"
+        class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12px] font-medium transition-colors {hasActiveFilters
+          ? 'border-[var(--ui-accent)]/40 bg-[var(--ui-accent)]/10 text-[var(--ui-accent)] hover:bg-[var(--ui-accent)]/15'
+          : 'border-[var(--ui-border)] bg-[var(--ui-bg-soft)] text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]'}"
         onclick={() => (filtersOpen = !filtersOpen)}
         type="button"
+        data-testid="topics-filters-toggle"
       >
         <svg
           class="h-3.5 w-3.5"
@@ -473,7 +427,7 @@
             d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
           />
         </svg>
-        Filters
+        {hasActiveFilters ? "Filtered" : "Filters"}
       </button>
       <button
         class="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text)] transition-colors hover:bg-[var(--ui-border)]"
@@ -499,9 +453,12 @@
       </button>
     {:else}
       <button
-        class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)]"
+        class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12px] font-medium transition-colors {hasActiveFilters
+          ? 'border-[var(--ui-accent)]/40 bg-[var(--ui-accent)]/10 text-[var(--ui-accent)] hover:bg-[var(--ui-accent)]/15'
+          : 'border-[var(--ui-border)] bg-[var(--ui-bg-soft)] text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]'}"
         onclick={() => (filtersOpen = !filtersOpen)}
         type="button"
+        data-testid="topics-filters-toggle"
       >
         <svg
           class="h-3.5 w-3.5"
@@ -516,7 +473,7 @@
             d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
           />
         </svg>
-        Filters
+        {hasActiveFilters ? "Filtered" : "Filters"}
       </button>
       <a
         class="rounded-md bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text)] transition-colors hover:bg-[var(--ui-border)]"
@@ -525,22 +482,6 @@
     {/if}
   </div>
 </div>
-
-{#if (listSurface === "topics" || listSurface === "threads") && hasActiveFilters}
-  <div
-    class="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-[var(--ui-text-muted)]"
-    data-testid="topics-active-filters-summary"
-  >
-    <span class="font-medium text-[var(--ui-text)]">Active filters</span>
-    <span class="text-[var(--ui-text-subtle)]">·</span>
-    {#each activeFilterSummaryParts as part, i}
-      {#if i > 0}
-        <span class="text-[var(--ui-text-subtle)]">·</span>
-      {/if}
-      <span>{part}</span>
-    {/each}
-  </div>
-{/if}
 
 {#if error}
   <div
@@ -552,85 +493,86 @@
 {/if}
 
 {#if (listSurface === "topics" || listSurface === "threads") && filtersOpen}
-  <div
-    class="mb-4 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-3"
-  >
-    <div class="grid gap-3 sm:grid-cols-5">
-      <label class="text-[12px]">
-        <span class="font-medium text-[var(--ui-text-muted)]">Status</span>
-        <select
-          class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
-          onchange={(event) => onStatusFilterChange(event.currentTarget.value)}
-          value={statusFilterSelectValue()}
+  <CompactFilterBar testId="topics-filter-panel">
+    {#snippet children()}
+      <div class="grid gap-3 sm:grid-cols-5">
+        <label class="text-[12px]">
+          <span class="font-medium text-[var(--ui-text-muted)]">Status</span>
+          <select
+            class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
+            onchange={(event) =>
+              onStatusFilterChange(event.currentTarget.value)}
+            value={statusFilterSelectValue()}
+          >
+            <option value="">All</option>
+            <option value={STATUS_OPEN_NOT_CLOSED}>Open (not closed)</option>
+            {#each TOPIC_STATUSES as status}<option value={status}
+                >{status[0].toUpperCase() + status.slice(1)}</option
+              >{/each}
+          </select>
+        </label>
+        <label class="text-[12px]">
+          <span class="font-medium text-[var(--ui-text-muted)]">Priority</span>
+          <select
+            class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
+            onchange={(event) =>
+              onPriorityFilterChange(event.currentTarget.value)}
+            value={priorityFilterSelectValue()}
+          >
+            <option value="">All</option>
+            <option value={PRIORITY_HIGH_TIER}>High (P0 &amp; P1)</option>
+            {#each TOPIC_PRIORITIES as priority}<option value={priority}
+                >{TOPIC_PRIORITY_LABELS[priority]}</option
+              >{/each}
+          </select>
+        </label>
+        <label class="text-[12px]">
+          <span class="font-medium text-[var(--ui-text-muted)]">Cadence</span>
+          <select
+            bind:value={filters.cadence}
+            class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
+          >
+            <option value="">All</option>
+            {#each TOPIC_SCHEDULE_PRESETS as cadence}<option value={cadence}
+                >{TOPIC_SCHEDULE_PRESET_LABELS[cadence]}</option
+              >{/each}
+          </select>
+        </label>
+        <label class="text-[12px]">
+          <span class="font-medium text-[var(--ui-text-muted)]">Staleness</span>
+          <select
+            bind:value={filters.staleness}
+            class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
+          >
+            <option value="all">All</option>
+            <option value="stale">Stale</option>
+            <option value="fresh">Fresh</option>
+          </select>
+        </label>
+        <label class="text-[12px]">
+          <span class="font-medium text-[var(--ui-text-muted)]">Tags</span>
+          <input
+            bind:value={filters.tagInput}
+            class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
+            placeholder="ops, customer"
+            type="text"
+          />
+        </label>
+      </div>
+      <div class="mt-3 flex gap-1.5">
+        <button
+          class="cursor-pointer rounded-md bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text)] hover:bg-[var(--ui-border)]"
+          onclick={applyFilters}
+          type="button">Apply</button
         >
-          <option value="">All</option>
-          <option value={STATUS_OPEN_NOT_CLOSED}>Open (not closed)</option>
-          {#each TOPIC_STATUSES as status}<option value={status}
-              >{status[0].toUpperCase() + status.slice(1)}</option
-            >{/each}
-        </select>
-      </label>
-      <label class="text-[12px]">
-        <span class="font-medium text-[var(--ui-text-muted)]">Priority</span>
-        <select
-          class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
-          onchange={(event) =>
-            onPriorityFilterChange(event.currentTarget.value)}
-          value={priorityFilterSelectValue()}
+        <button
+          class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]"
+          onclick={resetFilters}
+          type="button">Clear filters</button
         >
-          <option value="">All</option>
-          <option value={PRIORITY_HIGH_TIER}>High (P0 &amp; P1)</option>
-          {#each TOPIC_PRIORITIES as priority}<option value={priority}
-              >{TOPIC_PRIORITY_LABELS[priority]}</option
-            >{/each}
-        </select>
-      </label>
-      <label class="text-[12px]">
-        <span class="font-medium text-[var(--ui-text-muted)]">Cadence</span>
-        <select
-          bind:value={filters.cadence}
-          class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
-        >
-          <option value="">All</option>
-          {#each TOPIC_SCHEDULE_PRESETS as cadence}<option value={cadence}
-              >{TOPIC_SCHEDULE_PRESET_LABELS[cadence]}</option
-            >{/each}
-        </select>
-      </label>
-      <label class="text-[12px]">
-        <span class="font-medium text-[var(--ui-text-muted)]">Staleness</span>
-        <select
-          bind:value={filters.staleness}
-          class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
-        >
-          <option value="all">All</option>
-          <option value="stale">Stale</option>
-          <option value="fresh">Fresh</option>
-        </select>
-      </label>
-      <label class="text-[12px]">
-        <span class="font-medium text-[var(--ui-text-muted)]">Tags</span>
-        <input
-          bind:value={filters.tagInput}
-          class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
-          placeholder="ops, customer"
-          type="text"
-        />
-      </label>
-    </div>
-    <div class="mt-3 flex gap-1.5">
-      <button
-        class="cursor-pointer rounded-md bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text)] hover:bg-[var(--ui-border)]"
-        onclick={applyFilters}
-        type="button">Apply</button
-      >
-      <button
-        class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]"
-        onclick={resetFilters}
-        type="button">Reset</button
-      >
-    </div>
-  </div>
+      </div>
+    {/snippet}
+  </CompactFilterBar>
 {/if}
 
 {#if listSurface === "topics" && createOpen}

@@ -755,6 +755,42 @@ a:focus-visible {
   font-size: 0.8125rem;
 }
 
+.shell-mobile-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.shell-mobile-search {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  padding: 0.45rem;
+  border: 1px solid var(--ui-border);
+  background: var(--ui-panel);
+  color: var(--ui-text-muted);
+  border-radius: var(--ui-radius-sm);
+  cursor: pointer;
+  transition:
+    background 0.1s,
+    color 0.1s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.shell-mobile-search:hover {
+  background: var(--ui-panel-muted);
+  color: var(--ui-text);
+}
+
+.shell-mobile-search-icon {
+  width: 1.125rem;
+  height: 1.125rem;
+  flex-shrink: 0;
+}
+
 .shell-mobile-identity {
   border: 1px solid var(--ui-border);
   background: var(--ui-panel);

@@ -3033,7 +3033,7 @@ Generated Help: docs list
 - Input mode: `none`
 - Why: Scan canonical document lineages.
 - Output: Returns `{ documents }`.
-- Error codes: `auth_required`, `invalid_token`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `docs`
 - Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs purge`, `docs restore`, `docs revisions create`, `docs revisions get`, `docs revisions list`, `docs trash`, `docs unarchive`
 

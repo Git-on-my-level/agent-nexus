@@ -1000,11 +1000,22 @@
                         {/if}
                       {/if}
                     </div>
-                    <p
-                      class="truncate font-mono text-[10px] text-[var(--ui-text-muted)] sm:hidden"
+                    <div
+                      class="mt-0.5 flex min-w-0 items-center gap-1.5 text-[10px] text-[var(--ui-text-muted)]"
                     >
-                      {truncateId(principal.agent_id, 28)}
-                    </p>
+                      <span
+                        class="min-w-0 flex-1 truncate font-mono"
+                        title={principal.agent_id}
+                      >
+                        {principal.agent_id}
+                      </span>
+                      <span class="shrink-0">
+                        <CopyButton
+                          value={principal.agent_id}
+                          label="Copy agent ID"
+                        />
+                      </span>
+                    </div>
                   </div>
                   <div
                     class="hidden shrink-0 text-right text-[11px] leading-4 text-[var(--ui-text-muted)] sm:block"
@@ -1036,36 +1047,6 @@
                     </span>
                   {/if}
                 </div>
-                <details
-                  class="mt-0.5 hidden pl-[calc(theme(spacing.6)+0.625rem)] text-[10px] text-[var(--ui-text-muted)] sm:block [&[open]>summary>svg]:rotate-90"
-                >
-                  <summary
-                    class="inline-flex cursor-pointer list-none items-center gap-1 rounded px-1 -ml-1 py-0.5 hover:bg-[var(--ui-border-subtle)] hover:text-[var(--ui-text)]"
-                  >
-                    <svg
-                      class="h-2.5 w-2.5 transition-transform"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      stroke-width="2.5"
-                      aria-hidden="true"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        d="M9 5l7 7-7 7"
-                      />
-                    </svg>
-                    <span>ID</span>
-                  </summary>
-                  <div class="mt-1 flex items-center gap-1.5">
-                    <span class="truncate font-mono">{principal.agent_id}</span>
-                    <CopyButton
-                      value={principal.agent_id}
-                      label="Copy agent ID"
-                    />
-                  </div>
-                </details>
               </div>
             {/each}
           </div>

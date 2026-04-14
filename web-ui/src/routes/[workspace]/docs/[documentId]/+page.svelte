@@ -559,14 +559,6 @@
                 {headContentType} — edit via CLI
               </span>
             {/if}
-            {#if !document.archived_at}
-              <ArchiveButton
-                busy={docLifecycleBusy}
-                size="md"
-                onarchive={() =>
-                  (confirmModal = { open: true, action: "archive" })}
-              />
-            {/if}
             <button
               class="cursor-pointer shrink-0 inline-flex items-center gap-1.5 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)]"
               onclick={loadHistory}
@@ -587,6 +579,14 @@
               </svg>
               Revision history
             </button>
+            {#if !document.archived_at}
+              <ArchiveButton
+                busy={docLifecycleBusy}
+                size="md"
+                onarchive={() =>
+                  (confirmModal = { open: true, action: "archive" })}
+              />
+            {/if}
             <TrashButton
               busy={docLifecycleBusy}
               size="md"

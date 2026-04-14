@@ -51,6 +51,8 @@ type ArtifactListFilter struct {
 
 type DocumentListFilter struct {
 	ThreadID        string
+	State           string
+	Labels          []string
 	IncludeTrashed  bool
 	TrashedOnly     bool
 	IncludeArchived bool

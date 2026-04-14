@@ -686,9 +686,69 @@ paths:
       x-oar-input-mode: none
       x-oar-streaming: { mode: none }
       x-oar-output-envelope: "Returns `{ documents }`."
-      x-oar-error-codes: [auth_required, invalid_token]
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token]
       x-oar-concepts: [docs]
       x-oar-stability: beta
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema: { type: string }
+          description: Search documents by id or title substring.
+        - name: thread_id
+          in: query
+          required: false
+          schema: { type: string }
+          description: Restrict results to documents bound to this thread id.
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string }
+          description: Opaque pagination cursor from a previous list response.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+          description: Page size; omit to return the full matching set.
+        - name: include_trashed
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: Include trashed documents (ignored when state is set).
+        - name: trashed_only
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: Return only trashed documents (ignored when state is set).
+        - name: include_archived
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: Include archived documents (ignored when state is set).
+        - name: archived_only
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: Return only archived documents (ignored when state is set).
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [active, archived, trashed]
+          description: Filter by canonical document lifecycle state (document.state). When set, overrides include_trashed, trashed_only, include_archived, and archived_only for SQL filtering.
+        - name: label
+          in: query
+          required: false
+          schema:
+            type: array
+            items: { type: string }
+          style: form
+          explode: true
+          description: Match documents having any of these labels (OR semantics); repeat the parameter for multiple values.
       responses:
         '200':
           description: Document list
@@ -696,6 +756,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DocumentsResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
         '401':
           $ref: '#/components/responses/ErrorResponse'
     post:
