@@ -305,11 +305,14 @@ func newRaceTestService(t *testing.T) (*cpstorage.Workspace, *Service, time.Time
 		t.Fatalf("initialize workspace: %v", err)
 	}
 	now := time.Date(2026, 3, 22, 12, 0, 0, 0, time.UTC)
-	service := NewService(workspace, Config{
+	service, err := NewService(workspace, Config{
 		Now: func() time.Time {
 			return now
 		},
 	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
 	return workspace, service, now
 }
 

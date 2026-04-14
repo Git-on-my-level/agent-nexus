@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -176,7 +177,10 @@ func main() {
 		}
 	}
 
-	service := controlplane.NewService(workspace, serviceConfig)
+	service, err := controlplane.NewService(workspace, serviceConfig)
+	if err != nil {
+		log.Fatalf("control-plane service: %v", err)
+	}
 
 	backupMaintenanceCtx, cancelBackupMaintenance := context.WithCancel(context.Background())
 	defer cancelBackupMaintenance()

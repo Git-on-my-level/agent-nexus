@@ -1920,7 +1920,10 @@ func newControlPlaneTestEnvWithConfig(t *testing.T, root string, hostedScriptsDi
 	if mutate != nil {
 		mutate(&serviceConfig)
 	}
-	service := controlplane.NewService(workspace, serviceConfig)
+	service, err := controlplane.NewService(workspace, serviceConfig)
+	if err != nil {
+		t.Fatalf("controlplane.NewService: %v", err)
+	}
 	server := httptest.NewServer(NewHandler(service, Config{
 		HealthCheck: workspace.Ping,
 		WebAuthnConfig: WebAuthnConfig{

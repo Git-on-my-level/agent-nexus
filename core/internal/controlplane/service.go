@@ -115,7 +115,7 @@ type JobsFilter struct {
 	Page           PageRequest
 }
 
-func NewService(workspace *cpstorage.Workspace, config Config) *Service {
+func NewService(workspace *cpstorage.Workspace, config Config) (*Service, error) {
 	sessionTTL := config.SessionTTL
 	if sessionTTL <= 0 {
 		sessionTTL = defaultSessionTTL
@@ -138,14 +138,14 @@ func NewService(workspace *cpstorage.Workspace, config Config) *Service {
 	}
 	publicBaseURL, err := NormalizePublicBaseURL(config.PublicBaseURL)
 	if err != nil {
-		panic(fmt.Sprintf("invalid control-plane public base URL: %v", err))
+		return nil, fmt.Errorf("invalid control-plane public base URL: %w", err)
 	}
 	workspaceURLTemplate := strings.TrimSpace(config.WorkspaceURLTemplate)
 	if workspaceURLTemplate == "" {
 		if publicBaseURL != "" {
 			workspaceURLTemplate, err = WorkspaceURLTemplateFromPublicBase(publicBaseURL)
 			if err != nil {
-				panic(fmt.Sprintf("invalid control-plane public base URL: %v", err))
+				return nil, fmt.Errorf("invalid control-plane public base URL: %w", err)
 			}
 		} else {
 			workspaceURLTemplate = defaultWorkspaceURL
@@ -156,7 +156,7 @@ func NewService(workspace *cpstorage.Workspace, config Config) *Service {
 		if publicBaseURL != "" {
 			inviteURLTemplate, err = InviteURLTemplateFromPublicBase(publicBaseURL)
 			if err != nil {
-				panic(fmt.Sprintf("invalid control-plane public base URL: %v", err))
+				return nil, fmt.Errorf("invalid control-plane public base URL: %w", err)
 			}
 		} else {
 			inviteURLTemplate = defaultInviteURL
@@ -197,7 +197,7 @@ func NewService(workspace *cpstorage.Workspace, config Config) *Service {
 		verifySchemaPath:     verifySchemaPath,
 		stripe:               normalizeStripeConfig(config.Stripe),
 		now:                  nowFn,
-	}
+	}, nil
 }
 
 func (s *Service) StartPasskeyRegistration(ctx context.Context, email string, displayName string, rpID string, origin string) (string, map[string]any, Account, error) {
