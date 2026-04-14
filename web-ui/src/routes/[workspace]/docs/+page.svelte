@@ -251,10 +251,6 @@
 <div class="flex items-center justify-between mb-4">
   <div>
     <h1 class="text-lg font-semibold text-[var(--ui-text)]">Docs</h1>
-    <p class="mt-1 hidden text-[12px] text-[var(--ui-text-muted)] sm:block">
-      Canonical document lineages with a mutable head revision and auditable
-      history.
-    </p>
     {#if scopedThreadId}
       <p class="mt-1 text-[12px] text-[var(--ui-text-muted)]">
         Scoped to backing thread
@@ -285,6 +281,8 @@
       onclick={toggleGrouping}
       type="button"
       title="Group by label"
+      aria-label="Group by label"
+      aria-pressed={groupByLabel}
     >
       <svg
         class="h-3.5 w-3.5"
@@ -522,11 +520,6 @@
           doc.updated_at,
         ) || "—"} by {actorName(doc.updated_by)}
       </p>
-      {#if doc.thread_id && !scopedThreadId}
-        <p class="mt-0.5 text-[11px] text-[var(--ui-text-muted)]">
-          Backing thread (timeline): {doc.thread_id}
-        </p>
-      {/if}
     </a>
     <div
       class="hidden shrink-0 items-center gap-1 sm:flex"

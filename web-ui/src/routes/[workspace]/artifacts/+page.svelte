@@ -12,12 +12,7 @@
     parseArtifactListSearchParams,
   } from "$lib/artifactFilters";
   import { coreClient } from "$lib/coreClient";
-  import {
-    KIND_LABELS,
-    kindLabel,
-    kindDescription,
-    kindColor,
-  } from "$lib/artifactKinds";
+  import { KIND_LABELS, kindLabel } from "$lib/artifactKinds";
   import { formatTimestamp } from "$lib/formatDate";
   import { workspacePath } from "$lib/workspacePaths";
   import {
@@ -326,7 +321,7 @@
   >
     {#each artifacts as artifact, i}
       <div
-        class="px-4 py-3 transition-colors hover:bg-[var(--ui-border-subtle)] {i >
+        class="px-4 py-2 transition-colors hover:bg-[var(--ui-border-subtle)] {i >
         0
           ? 'border-t border-[var(--ui-border)]'
           : ''}"
@@ -337,30 +332,19 @@
             href={workspaceHref(`/artifacts/${artifact.id}`)}
           >
             <div class="flex flex-wrap items-center gap-2">
-              <span
-                class="inline-flex rounded px-1.5 py-0.5 text-[11px] font-semibold {kindColor(
-                  artifact.kind,
-                )}"
-              >
-                {kindLabel(artifact.kind)}
-              </span>
+              <p class="truncate text-[13px] font-medium text-[var(--ui-text)]">
+                {rowHeading(artifact)}
+              </p>
               {#if isArtifactArchived(artifact)}
                 <span
                   class="rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-medium text-amber-400"
                   >Archived</span
                 >
               {/if}
-              <span class="text-[11px] text-[var(--ui-text-muted)]"
-                >{kindDescription(artifact.kind)}</span
-              >
             </div>
-            <p
-              class="mt-1 truncate text-[13px] font-medium text-[var(--ui-text)]"
-            >
-              {rowHeading(artifact)}
-            </p>
             <p class="text-[11px] text-[var(--ui-text-muted)]">
-              Created {formatTimestamp(artifact.created_at) || "—"} by {actorName(
+              <span class="font-medium">{kindLabel(artifact.kind)}</span>
+              · Created {formatTimestamp(artifact.created_at) || "—"} by {actorName(
                 artifact.created_by,
               )}
             </p>

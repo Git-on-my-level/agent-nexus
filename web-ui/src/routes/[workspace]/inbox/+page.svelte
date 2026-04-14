@@ -92,16 +92,28 @@
     categoryFilter !== "all" || urgencyFilter !== "all",
   );
 
-  let activeFilterSummaryParts = $derived.by(() => {
-    const parts = [];
+  let activeFilterChips = $derived.by(() => {
+    const chips = [];
     if (categoryFilter !== "all") {
-      parts.push(getInboxCategoryLabel(categoryFilter));
+      chips.push({
+        key: "category",
+        label: getInboxCategoryLabel(categoryFilter),
+      });
     }
     if (urgencyFilter !== "all") {
-      parts.push(getInboxUrgencyLabel(urgencyFilter));
+      chips.push({
+        key: "urgency",
+        label: getInboxUrgencyLabel(urgencyFilter),
+      });
     }
-    return parts;
+    return chips;
   });
+
+  function removeFilterChip(key) {
+    if (key === "category") categoryFilter = "all";
+    if (key === "urgency") urgencyFilter = "all";
+    applyFilters();
+  }
 
   function workspaceHref(pathname = "/") {
     return workspacePath(workspaceSlug, pathname);
@@ -555,9 +567,6 @@
 >
   <div>
     <h1 class="text-lg font-semibold text-[var(--ui-text)]">Inbox</h1>
-    <p class="hidden text-[13px] text-[var(--ui-text-muted)] sm:block">
-      Sorted by urgency. Oldest items bubble up.
-    </p>
   </div>
   <div class="flex items-center gap-2">
     <button
@@ -597,20 +606,47 @@
 
 {#if hasActiveFilters}
   <div
-    class="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-[var(--ui-text-muted)]"
+    class="mb-4 flex flex-wrap items-center gap-1.5 text-[12px]"
     data-testid="inbox-active-filters-summary"
   >
-    <span class="font-medium text-[var(--ui-text)]">Active filters</span>
-    {#each activeFilterSummaryParts as part}
-      <span class="text-[var(--ui-text-subtle)]">&middot;</span>
-      <span>{part}</span>
+    {#each activeFilterChips as chip (chip.key)}
+      <button
+        type="button"
+        class="cursor-pointer inline-flex items-center gap-1 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2 py-0.5 font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border)] hover:text-[var(--ui-text)]"
+        onclick={() => removeFilterChip(chip.key)}
+        title="Remove {chip.label} filter"
+        aria-label="Remove {chip.label} filter"
+      >
+        <span>{chip.label}</span>
+        <svg
+          class="h-3 w-3"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          stroke-width="2.5"
+          aria-hidden="true"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M6 18L18 6M6 6l12 12"
+          />
+        </svg>
+      </button>
     {/each}
+    <button
+      type="button"
+      class="cursor-pointer rounded-md px-2 py-0.5 text-[var(--ui-text-muted)] hover:bg-[var(--ui-border)] hover:text-[var(--ui-text)]"
+      onclick={resetFilters}
+    >
+      Clear all
+    </button>
   </div>
 {/if}
 
 {#if filtersOpen}
   <div
-    class="mb-4 rounded-lg border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-3"
+    class="mb-4 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-3"
     data-testid="inbox-filter-panel"
   >
     <div class="grid gap-3 sm:grid-cols-2">
@@ -888,19 +924,14 @@
                     >{item.urgency_label}</span
                   >
                   {#if item.age_label}
-                    <span class="text-[var(--ui-text-subtle)]"
-                      >&middot; {item.age_label}</span
+                    <span
+                      class="text-[var(--ui-text-muted)]"
+                      title={item.has_source_event_time
+                        ? formatAbsoluteDateTime(item.source_event_time)
+                        : undefined}>&middot; {item.age_label}</span
                     >
                   {/if}
                 </div>
-                {#if item.has_source_event_time}
-                  <span
-                    class="shrink-0 tabular-nums text-[var(--ui-text-subtle)]"
-                    title={item.source_event_time}
-                  >
-                    {formatAbsoluteDateTime(item.source_event_time)}
-                  </span>
-                {/if}
               </div>
 
               <div class="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
@@ -926,7 +957,7 @@
                   {#if getInboxSubjectRef(item)}
                     {@const subjectId = getInboxSubjectId(item)}
                     <span
-                      class="inline-flex items-center gap-1 rounded bg-[var(--ui-panel)] px-1.5 py-0.5 font-medium text-[var(--ui-text-subtle)]"
+                      class="inline-flex items-center gap-1 rounded bg-[var(--ui-panel)] px-1.5 py-0.5 font-medium text-[var(--ui-text-muted)]"
                       title={getInboxSubjectRef(item)}
                     >
                       <span>
@@ -1013,7 +1044,7 @@
                   {#if getInboxSubjectRef(item)}
                     {@const subjectRef = getInboxSubjectRef(item)}
                     <div
-                      class="rounded-lg border border-[var(--ui-border)] bg-[var(--ui-panel)] p-3 min-w-0"
+                      class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] p-3 min-w-0"
                     >
                       {#if subjectContextLoading[subjectRef]}
                         <div
@@ -1161,7 +1192,7 @@
                   {/if}
 
                   <form
-                    class="rounded-lg border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-3 {inboxActionThreadId(
+                    class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-3 {inboxActionThreadId(
                       item,
                     )
                       ? ''

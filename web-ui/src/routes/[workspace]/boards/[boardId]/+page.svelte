@@ -547,6 +547,10 @@
   )}
   {@const backlogCards = cardsByColumn["backlog"] ?? []}
   {@const doneCards = cardsByColumn["done"] ?? []}
+  {@const boardIsEmpty =
+    backlogCards.length === 0 &&
+    doneCards.length === 0 &&
+    activeColumns.every((c) => (cardsByColumn[c.key] ?? []).length === 0)}
 
   {#if board.trashed_at}
     <div
@@ -1049,143 +1053,144 @@
   {/snippet}
 
   <section class="mb-3">
-    <div class="mb-2 flex items-baseline justify-between gap-3">
-      <div>
-        <h2 class="text-[13px] font-medium text-[var(--ui-text)]">
-          Visual progress map
-        </h2>
+    {#if boardIsEmpty}
+      <div
+        class="rounded-md border border-dashed border-[var(--ui-border)] bg-[var(--ui-panel)] px-6 py-16 text-center"
+      >
+        <p class="text-[13px] font-medium text-[var(--ui-text)]">
+          No cards on this board yet
+        </p>
         <p class="mt-1 text-[12px] text-[var(--ui-text-muted)]">
-          Canonical board membership drives the columns below. Derived scan
-          badges only appear when their freshness is current.
+          Cards appear here when topics are added to the board's columns.
         </p>
       </div>
-    </div>
-
-    <div
-      class="mb-3 rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]"
-    >
-      <button
-        class="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--ui-border-subtle)]"
-        onclick={() => {
-          backlogOpen = !backlogOpen;
-        }}
-        type="button"
+    {:else}
+      <div
+        class="mb-3 rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]"
       >
-        <svg
-          class="h-3.5 w-3.5 shrink-0 text-[var(--ui-text-muted)] transition-transform {backlogOpen
-            ? 'rotate-90'
-            : ''}"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          stroke-width="2"><path d="M9 5l7 7-7 7" /></svg
+        <button
+          class="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--ui-border-subtle)]"
+          onclick={() => {
+            backlogOpen = !backlogOpen;
+          }}
+          type="button"
         >
-        <span class="text-[12px] font-medium text-[var(--ui-text-muted)]"
-          >Backlog</span
-        >
-        <span
-          class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] text-[var(--ui-text-muted)]"
-          >{backlogCards.length}</span
-        >
-      </button>
-      {#if backlogOpen}
-        <div class="space-y-2 border-t border-[var(--ui-border)] px-3 py-2">
-          {#if backlogCards.length === 0}
-            <p class="text-[11px] text-[var(--ui-text-muted)]">No cards</p>
-          {:else}
-            {#each backlogCards as cardItem}
-              {@render renderCard(cardItem)}
-            {/each}
-          {/if}
-        </div>
-      {/if}
-    </div>
-
-    <div class="flex gap-3 overflow-x-auto pb-4">
-      {#each activeColumns as column}
-        {@const cards = cardsByColumn[column.key] ?? []}
-        {@const isBlocked = column.key === "blocked"}
-        <div
-          class="flex min-w-[260px] flex-1 flex-col rounded-md bg-[var(--ui-panel-muted)]"
-        >
-          <div class="flex items-center justify-between px-3 py-2.5">
-            <h3
-              class="text-[11px] font-semibold uppercase tracking-wide {isBlocked &&
-              cards.length > 0
-                ? 'text-amber-400'
-                : 'text-[var(--ui-text-muted)]'}"
-            >
-              {column.title ||
-                boardColumnTitle(column.key, board.column_schema)}
-            </h3>
-            <span
-              class="min-w-[1.25rem] rounded px-1.5 py-0.5 text-center text-[11px] {isBlocked &&
-              cards.length > 0
-                ? 'bg-amber-500/15 text-amber-400'
-                : 'bg-[var(--ui-border)] text-[var(--ui-text-muted)]'}"
-            >
-              {cards.length}
-            </span>
-          </div>
-          <div
-            class="flex-1 space-y-2 overflow-y-auto px-2 pb-2"
-            style="max-height: calc(100vh - 260px); min-height: 120px;"
+          <svg
+            class="h-3.5 w-3.5 shrink-0 text-[var(--ui-text-muted)] transition-transform {backlogOpen
+              ? 'rotate-90'
+              : ''}"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            stroke-width="2"><path d="M9 5l7 7-7 7" /></svg
           >
-            {#if cards.length === 0}
-              <div
-                class="flex items-center justify-center rounded-md border border-dashed border-[var(--ui-border)] px-3 py-10 text-[11px] text-[var(--ui-text-muted)]"
-              >
-                No cards
-              </div>
+          <span class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+            >Backlog</span
+          >
+          <span
+            class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] text-[var(--ui-text-muted)]"
+            >{backlogCards.length}</span
+          >
+        </button>
+        {#if backlogOpen}
+          <div class="space-y-2 border-t border-[var(--ui-border)] px-3 py-2">
+            {#if backlogCards.length === 0}
+              <p class="text-[11px] text-[var(--ui-text-muted)]">No cards</p>
             {:else}
-              {#each cards as cardItem}
+              {#each backlogCards as cardItem}
                 {@render renderCard(cardItem)}
               {/each}
             {/if}
           </div>
-        </div>
-      {/each}
-    </div>
+        {/if}
+      </div>
 
-    <div
-      class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]"
-    >
-      <button
-        class="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--ui-border-subtle)]"
-        onclick={() => {
-          doneOpen = !doneOpen;
-        }}
-        type="button"
+      <div class="flex gap-3 overflow-x-auto pb-4">
+        {#each activeColumns as column}
+          {@const cards = cardsByColumn[column.key] ?? []}
+          {@const isBlocked = column.key === "blocked"}
+          <div
+            class="flex min-w-[260px] flex-1 flex-col rounded-md bg-[var(--ui-panel-muted)]"
+          >
+            <div class="flex items-center justify-between px-3 py-2.5">
+              <h3
+                class="text-[11px] font-semibold uppercase tracking-wide {isBlocked &&
+                cards.length > 0
+                  ? 'text-amber-400'
+                  : 'text-[var(--ui-text-muted)]'}"
+              >
+                {column.title ||
+                  boardColumnTitle(column.key, board.column_schema)}
+              </h3>
+              <span
+                class="min-w-[1.25rem] rounded px-1.5 py-0.5 text-center text-[11px] {isBlocked &&
+                cards.length > 0
+                  ? 'bg-amber-500/15 text-amber-400'
+                  : 'bg-[var(--ui-border)] text-[var(--ui-text-muted)]'}"
+              >
+                {cards.length}
+              </span>
+            </div>
+            <div
+              class="flex-1 space-y-2 overflow-y-auto px-2 pb-2"
+              style="max-height: calc(100vh - 260px); min-height: 120px;"
+            >
+              {#if cards.length === 0}
+                <div
+                  class="flex items-center justify-center rounded-md border border-dashed border-[var(--ui-border)] px-3 py-10 text-[11px] text-[var(--ui-text-muted)]"
+                >
+                  No cards
+                </div>
+              {:else}
+                {#each cards as cardItem}
+                  {@render renderCard(cardItem)}
+                {/each}
+              {/if}
+            </div>
+          </div>
+        {/each}
+      </div>
+
+      <div
+        class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]"
       >
-        <svg
-          class="h-3.5 w-3.5 shrink-0 text-[var(--ui-text-muted)] transition-transform {doneOpen
-            ? 'rotate-90'
-            : ''}"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          stroke-width="2"><path d="M9 5l7 7-7 7" /></svg
+        <button
+          class="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--ui-border-subtle)]"
+          onclick={() => {
+            doneOpen = !doneOpen;
+          }}
+          type="button"
         >
-        <span class="text-[12px] font-medium text-[var(--ui-text-muted)]"
-          >Done</span
-        >
-        <span
-          class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] text-[var(--ui-text-muted)]"
-          >{doneCards.length}</span
-        >
-      </button>
-      {#if doneOpen}
-        <div class="space-y-2 border-t border-[var(--ui-border)] px-3 py-2">
-          {#if doneCards.length === 0}
-            <p class="text-[11px] text-[var(--ui-text-muted)]">No cards</p>
-          {:else}
-            {#each doneCards as cardItem}
-              {@render renderCard(cardItem)}
-            {/each}
-          {/if}
-        </div>
-      {/if}
-    </div>
+          <svg
+            class="h-3.5 w-3.5 shrink-0 text-[var(--ui-text-muted)] transition-transform {doneOpen
+              ? 'rotate-90'
+              : ''}"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            stroke-width="2"><path d="M9 5l7 7-7 7" /></svg
+          >
+          <span class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+            >Done</span
+          >
+          <span
+            class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] text-[var(--ui-text-muted)]"
+            >{doneCards.length}</span
+          >
+        </button>
+        {#if doneOpen}
+          <div class="space-y-2 border-t border-[var(--ui-border)] px-3 py-2">
+            {#if doneCards.length === 0}
+              <p class="text-[11px] text-[var(--ui-text-muted)]">No cards</p>
+            {:else}
+              {#each doneCards as cardItem}
+                {@render renderCard(cardItem)}
+              {/each}
+            {/if}
+          </div>
+        {/if}
+      </div>
+    {/if}
   </section>
 
   <div class="grid gap-3 lg:grid-cols-3">
@@ -1196,10 +1201,6 @@
         <h2 class="text-[13px] font-medium text-[var(--ui-text)]">
           Workspace docs
         </h2>
-        <p class="mt-1 text-[11px] text-[var(--ui-text-muted)]">
-          Canonical doc lineages linked from this board's backing thread
-          timeline and cards.
-        </p>
       </div>
       <div class="px-4 py-3">
         {#if (workspace.documents?.items ?? []).length === 0}

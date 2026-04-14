@@ -3,6 +3,7 @@
 
   import { authenticatedAgent } from "$lib/authSession";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
+  import CopyButton from "$lib/components/CopyButton.svelte";
   import { coreClient } from "$lib/coreClient";
   import { formatAbsoluteDateTime, formatTimestamp } from "$lib/formatDate";
   import { buildRegistrationMessage } from "$lib/inviteRegistrationMessage";
@@ -402,7 +403,7 @@
     if (invite?.consumed_at) {
       return { label: "Consumed", class: "bg-blue-500/10 text-blue-400" };
     }
-    return { label: "Pending", class: "bg-amber-500/10 text-amber-400" };
+    return null;
   }
 
   function principalLabel(principal) {
@@ -807,17 +808,25 @@
                   ? 'opacity-60'
                   : ''}"
               >
-                <span
-                  class="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium {badge.class}"
-                >
-                  {badge.label}
-                </span>
-                <div class="min-w-0 flex-1">
-                  <p
-                    class="truncate font-mono text-[12px] text-[var(--ui-text)]"
+                {#if badge}
+                  <span
+                    class="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium {badge.class}"
                   >
-                    {invite.id}
-                  </p>
+                    {badge.label}
+                  </span>
+                {/if}
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-1.5">
+                    <p
+                      class="truncate font-mono text-[12px] text-[var(--ui-text)]"
+                      title={invite.id}
+                    >
+                      {invite.id.length > 14
+                        ? `${invite.id.slice(0, 14)}…`
+                        : invite.id}
+                    </p>
+                    <CopyButton value={invite.id} label="Copy invite ID" />
+                  </div>
                   <p class="text-[11px] text-[var(--ui-text-muted)]">
                     {invite.kind}
                   </p>
@@ -1027,11 +1036,36 @@
                     </span>
                   {/if}
                 </div>
-                <div
-                  class="mt-0.5 hidden items-center gap-2 pl-[calc(theme(spacing.6)+0.625rem)] text-[10px] text-[var(--ui-text-muted)] sm:flex"
+                <details
+                  class="mt-0.5 hidden pl-[calc(theme(spacing.6)+0.625rem)] text-[10px] text-[var(--ui-text-muted)] sm:block [&[open]>summary>svg]:rotate-90"
                 >
-                  <span class="truncate font-mono">{principal.agent_id}</span>
-                </div>
+                  <summary
+                    class="inline-flex cursor-pointer list-none items-center gap-1 rounded px-1 -ml-1 py-0.5 hover:bg-[var(--ui-border-subtle)] hover:text-[var(--ui-text)]"
+                  >
+                    <svg
+                      class="h-2.5 w-2.5 transition-transform"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      aria-hidden="true"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M9 5l7 7-7 7"
+                      />
+                    </svg>
+                    <span>ID</span>
+                  </summary>
+                  <div class="mt-1 flex items-center gap-1.5">
+                    <span class="truncate font-mono">{principal.agent_id}</span>
+                    <CopyButton
+                      value={principal.agent_id}
+                      label="Copy agent ID"
+                    />
+                  </div>
+                </details>
               </div>
             {/each}
           </div>

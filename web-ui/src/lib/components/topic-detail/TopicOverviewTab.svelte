@@ -155,9 +155,7 @@
     <div
       class="flex items-center justify-between border-b border-[var(--ui-border-subtle)] px-4 py-2.5"
     >
-      <h2
-        class="text-[12px] font-semibold uppercase tracking-wider text-[var(--ui-text-muted)]"
-      >
+      <h2 class="text-[12px] font-medium text-[var(--ui-text-muted)]">
         Details
       </h2>
       <button
@@ -170,34 +168,21 @@
     </div>
 
     <div
-      class="grid grid-cols-2 gap-x-6 gap-y-2 px-4 py-3 text-[13px] sm:grid-cols-4"
+      class="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 py-2.5 text-[12px] text-[var(--ui-text-muted)]"
     >
-      <div>
-        <p class="text-[12px] text-[var(--ui-text-muted)]">Type</p>
-        <p class="capitalize text-[var(--ui-text)]">{topic.type}</p>
-      </div>
-      <div>
-        <p class="text-[12px] text-[var(--ui-text-muted)]">Cadence</p>
-        <p class="text-[var(--ui-text)]">
-          {formatCadenceLabel(topic.cadence)}
-        </p>
-      </div>
-      <div>
-        <p class="text-[12px] text-[var(--ui-text-muted)]">Next check-in</p>
-        <p class="text-[var(--ui-text)]">
-          {topic.next_check_in_at
-            ? formatTimestamp(topic.next_check_in_at)
-            : "—"}
-        </p>
-      </div>
-      <div>
-        <p class="text-[12px] text-[var(--ui-text-muted)]">Updated</p>
-        <p class="text-[var(--ui-text)]">
-          {formatTimestamp(topic.updated_at) || "—"} by {actorName(
-            topic.updated_by,
-          )}
-        </p>
-      </div>
+      <span class="capitalize text-[var(--ui-text)]">{topic.type}</span>
+      <span aria-hidden="true">·</span>
+      <span>{formatCadenceLabel(topic.cadence)}</span>
+      {#if topic.next_check_in_at}
+        <span aria-hidden="true">·</span>
+        <span>next check-in {formatTimestamp(topic.next_check_in_at)}</span>
+      {/if}
+      <span aria-hidden="true">·</span>
+      <span
+        >updated {formatTimestamp(topic.updated_at) || "—"} by {actorName(
+          topic.updated_by,
+        )}</span
+      >
     </div>
 
     {#if (topic.tags ?? []).length > 0}

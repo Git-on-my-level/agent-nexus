@@ -236,10 +236,6 @@
 <div class="mb-4 flex flex-wrap items-start justify-between gap-4">
   <div>
     <h1 class="text-lg font-semibold text-[var(--ui-text)]">Boards</h1>
-    <p class="mt-1 hidden text-[12px] text-[var(--ui-text-muted)] sm:block">
-      Canonical visual progress maps over live work. Use them as a trusted scan
-      surface, not a disposable kanban layer.
-    </p>
   </div>
 
   <div class="flex flex-wrap items-center gap-3">

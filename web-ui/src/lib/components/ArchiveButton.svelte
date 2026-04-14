@@ -35,6 +35,7 @@
     disabled={busy}
     onclick={onarchive}
     title="Archive"
+    aria-label="Archive"
     type="button"
   >
     <svg

@@ -16,6 +16,7 @@
   disabled={busy}
   onclick={ontrash}
   title="Move to trash"
+  aria-label="Move to trash"
   type="button"
 >
   <svg

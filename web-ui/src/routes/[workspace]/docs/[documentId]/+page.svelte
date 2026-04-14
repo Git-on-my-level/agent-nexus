@@ -3,6 +3,7 @@
   import { page } from "$app/stores";
   import ArchiveButton from "$lib/components/ArchiveButton.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
+  import CopyButton from "$lib/components/CopyButton.svelte";
   import TrashButton from "$lib/components/TrashButton.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import { coreClient } from "$lib/coreClient";
@@ -503,9 +504,9 @@
           </div>
           {#if document.thread_id && documentTopicHref}
             <p class="mt-0.5 text-[12px] text-[var(--ui-text-muted)]">
-              Thread (timeline):
+              <span class="text-[var(--ui-text-muted)]">Topic</span>
               <a
-                class="text-indigo-400 transition-colors hover:text-indigo-300"
+                class="ml-1 text-indigo-400 transition-colors hover:text-indigo-300"
                 href={workspaceHref(documentTopicHref)}
                 >{String(document.subject_ref ?? "")
                   .replace(/^topic:/, "")
@@ -759,11 +760,17 @@
             <div class="px-4 pb-3 pt-1 space-y-2">
               {#if displayedRevision.content_hash}
                 <div>
-                  <p
-                    class="text-[11px] uppercase tracking-[0.12em] text-[var(--ui-text-muted)]"
-                  >
-                    Content hash
-                  </p>
+                  <div class="flex items-center justify-between gap-2">
+                    <p
+                      class="text-[11px] uppercase tracking-[0.12em] text-[var(--ui-text-muted)]"
+                    >
+                      Content hash
+                    </p>
+                    <CopyButton
+                      value={displayedRevision.content_hash}
+                      label="Copy content hash"
+                    />
+                  </div>
                   <p
                     class="mt-1 break-all font-mono text-[12px] text-[var(--ui-text-muted)]"
                   >
@@ -773,11 +780,17 @@
               {/if}
               {#if displayedRevision.revision_hash}
                 <div>
-                  <p
-                    class="text-[11px] uppercase tracking-[0.12em] text-[var(--ui-text-muted)]"
-                  >
-                    Revision hash
-                  </p>
+                  <div class="flex items-center justify-between gap-2">
+                    <p
+                      class="text-[11px] uppercase tracking-[0.12em] text-[var(--ui-text-muted)]"
+                    >
+                      Revision hash
+                    </p>
+                    <CopyButton
+                      value={displayedRevision.revision_hash}
+                      label="Copy revision hash"
+                    />
+                  </div>
                   <p
                     class="mt-1 break-all font-mono text-[12px] text-[var(--ui-text-muted)]"
                   >
@@ -796,6 +809,12 @@
             class="cursor-pointer px-4 py-2.5 text-[11px] text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]"
             >Raw metadata JSON</summary
           >
+          <div class="flex justify-end px-4 pt-1">
+            <CopyButton
+              value={JSON.stringify(document, null, 2)}
+              label="Copy metadata JSON"
+            />
+          </div>
           <pre
             class="overflow-auto px-4 pb-3 text-[11px] text-[var(--ui-text-muted)]">{JSON.stringify(
               document,

@@ -58,11 +58,7 @@
     class="flex items-center justify-between border-b border-[var(--ui-border-subtle)] px-4 py-2.5"
   >
     <div>
-      <h2
-        class="text-[12px] font-semibold uppercase tracking-wider text-[var(--ui-text-muted)]"
-      >
-        Docs
-      </h2>
+      <h2 class="text-[12px] font-medium text-[var(--ui-text-muted)]">Docs</h2>
       <p class="mt-0.5 text-[12px] text-[var(--ui-text-muted)]">
         Topic-linked documents and current head revisions.
       </p>

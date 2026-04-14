@@ -405,7 +405,7 @@
   {#if isHumanPrincipal && !loading && activeItems.length > 0 && activeTab !== "topics" && (activeTab !== "cards" || $devActorMode)}
     <div class="shrink-0">
       <button
-        class="cursor-pointer rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-[12px] font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+        class="cursor-pointer rounded-md px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-red-500/10 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-50"
         disabled={Boolean(busyItemId) || purgeAllBusy}
         onclick={() => {
           purgeAllOpen = true;
@@ -534,7 +534,7 @@
               </button>
               {#if isHumanPrincipal}
                 <button
-                  class="cursor-pointer rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-[12px] font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                  class="cursor-pointer rounded-md px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-red-500/10 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-50"
                   disabled={Boolean(busyItemId)}
                   onclick={() => {
                     purgeModal = {
@@ -613,7 +613,7 @@
               </button>
               {#if isHumanPrincipal}
                 <button
-                  class="cursor-pointer rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-[12px] font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                  class="cursor-pointer rounded-md px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-red-500/10 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-50"
                   disabled={Boolean(busyItemId)}
                   onclick={() => {
                     purgeModal = { open: true, type: "documents", id: doc.id };
@@ -763,7 +763,7 @@
               </button>
               {#if isHumanPrincipal}
                 <button
-                  class="cursor-pointer rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-[12px] font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                  class="cursor-pointer rounded-md px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-red-500/10 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-50"
                   disabled={Boolean(busyItemId)}
                   onclick={() => {
                     purgeModal = { open: true, type: "boards", id: board.id };
@@ -885,7 +885,7 @@
                 </button>
                 {#if isHumanPrincipal}
                   <button
-                    class="cursor-pointer rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-[12px] font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                    class="cursor-pointer rounded-md px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-red-500/10 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-50"
                     disabled={Boolean(busyItemId)}
                     onclick={() => {
                       purgeModal = { open: true, type: "cards", id: card.id };

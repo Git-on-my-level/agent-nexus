@@ -412,10 +412,7 @@
       {listSurface === "topics" ? "Topics" : "Threads"}
     </h1>
     {#if listSurface === "topics"}
-      <p class="mt-1 hidden text-[12px] text-[var(--ui-text-muted)] sm:block">
-        Primary organizational surface. Each topic has a backing thread for
-        events and provenance.
-      </p>
+      <!-- subtitle removed; heading is self-evident -->
     {:else}
       <p class="mt-1 hidden text-[12px] text-[var(--ui-text-muted)] sm:block">
         Diagnostic list of append-only backing threads (timelines). Not every
@@ -821,9 +818,11 @@
               </p>
             </div>
             <div class="flex shrink-0 items-center gap-1.5 text-[11px]">
-              <span class="font-medium capitalize {statusColor(topic.status)}"
-                >{topic.status}</span
-              >
+              {#if topic.status && topic.status !== "active"}
+                <span class="font-medium capitalize {statusColor(topic.status)}"
+                  >{topic.status}</span
+                >
+              {/if}
               <span
                 class="hidden rounded border border-[var(--ui-border)] px-1.5 py-0.5 text-[10px] text-[var(--ui-text-muted)] sm:inline"
                 >{formatCadenceLabel(topic.cadence, {

@@ -7,9 +7,7 @@
   import {
     buildInboxCategorySummary,
     buildTopicHealthSummary,
-    inboxSummarySentence,
     selectRecentlyUpdatedTopics,
-    topicHealthSentence,
   } from "$lib/dashboardSummary";
   import { formatTimestamp } from "$lib/formatDate";
   import {
@@ -40,7 +38,7 @@
   let workspaceSlug = $derived($page.params.workspace);
 
   let inboxSummary = $derived(buildInboxCategorySummary(inboxState.items));
-  let topInboxItems = $derived(sortInboxItems(inboxState.items).slice(0, 5));
+  let topInboxItems = $derived(sortInboxItems(inboxState.items).slice(0, 3));
 
   let topicHealth = $derived(buildTopicHealthSummary(topicsState.items));
   let recentTopics = $derived(
@@ -266,12 +264,6 @@
           href={workspaceHref("/inbox")}>View all</a
         >
       </div>
-      {#if inboxState.status === "ready"}
-        <p class="text-[13px] text-gray-500 mt-1 mb-2">
-          {inboxSummarySentence(inboxSummary)}
-        </p>
-      {/if}
-
       {#if loading && inboxState.status === "idle"}
         <div
           class="flex items-center gap-2 py-6 text-[13px] text-[var(--ui-text-muted)]"
@@ -376,12 +368,6 @@
           href={workspaceHref("/topics")}>View all</a
         >
       </div>
-      {#if topicsState.status === "ready"}
-        <p class="text-[13px] text-gray-500 mt-1 mb-2">
-          {topicHealthSentence(topicHealth)}
-        </p>
-      {/if}
-
       {#if loading && topicsState.status === "idle"}
         <div
           class="flex items-center gap-2 py-6 text-[13px] text-[var(--ui-text-muted)]"
