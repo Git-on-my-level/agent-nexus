@@ -88,11 +88,7 @@
       </div>
     </header>
 
-    {#if error}
-      <div class="rounded-md bg-red-500/10 px-4 py-3 text-[13px] text-red-400">
-        {error}
-      </div>
-    {:else if organizations.length === 0}
+    {#if organizations.length === 0}
       <div
         class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-4 py-8"
       >
@@ -109,6 +105,15 @@
         </div>
       </div>
     {:else}
+      {#if error}
+        <div
+          class="mb-4 rounded-md bg-red-500/10 px-4 py-3 text-[13px] text-red-400"
+          role="alert"
+          aria-live="polite"
+        >
+          {error}
+        </div>
+      {/if}
       <form
         class="space-y-4"
         onsubmit={(e) => {
@@ -127,6 +132,7 @@
             bind:value={selectedOrgId}
             class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-[13px] text-[var(--ui-text)]"
             id="org-select"
+            required
           >
             {#each organizations as org}
               <option value={org.id}>
@@ -148,6 +154,7 @@
             class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-[13px] text-[var(--ui-text)]"
             id="workspace-slug"
             placeholder="my-workspace"
+            required
             type="text"
           />
         </div>
@@ -164,6 +171,7 @@
             class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-[13px] text-[var(--ui-text)]"
             id="workspace-display-name"
             placeholder="My Workspace"
+            required
             type="text"
           />
         </div>
@@ -179,6 +187,7 @@
             bind:value={newRegion}
             class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-[13px] text-[var(--ui-text)]"
             id="workspace-region"
+            required
           >
             <option value="us-east-1">US East (N. Virginia)</option>
             <option value="us-west-2">US West (Oregon)</option>
@@ -199,6 +208,7 @@
             class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-[13px] text-[var(--ui-text)]"
             id="workspace-service-identity-id"
             placeholder="svc_my_workspace"
+            required
             type="text"
           />
         </div>
@@ -215,6 +225,7 @@
             class="mt-1 min-h-28 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 font-mono text-[13px] text-[var(--ui-text)]"
             id="workspace-service-identity-public-key"
             placeholder="Base64-encoded Ed25519 public key"
+            required
           ></textarea>
           <p class="mt-1 text-[12px] text-[var(--ui-text-muted)]">
             This must match the workspace service identity private key used by
