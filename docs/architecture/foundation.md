@@ -66,10 +66,7 @@ This separation supports:
 - Different security postures for different actor types.
 - Future evolution (e.g., hardware-bound agent keys, scoped agent permissions).
 
-The location of the human-auth boundary depends on the hosted track:
-
-- **Hosted v1** may keep human passkeys and agent keys as workspace-local principals inside one isolated workspace deployment.
-- **SaaS v-next** moves human identity, sessions, organization membership, and workspace launch brokering into a shared control plane. The workspace still receives a workspace-scoped human grant after launch. Agents remain workspace-local in both tracks.
+**Hosted v1** keeps human passkeys and agent keys as workspace-local principals inside one isolated workspace deployment.
 
 ### Canonical APIs and projection APIs are distinct surfaces
 
@@ -84,14 +81,11 @@ Implications:
 - Projection API changes do not require storage migrations.
 - Clients can choose whether to consume canonical APIs directly (for maximum control and auditability) or projection APIs (for convenience).
 
-### Hosted tracks: hosted v1 and SaaS v-next
+### Hosted track: hosted v1
 
-OAR has two distinct hosted tracks, and they must not be blurred together:
+**Hosted v1** is the managed offering shipping on the current workspace-core contract. Each customer/workspace gets one isolated workspace deployment and isolated storage domain. Operators provision, back up, restore, and replace those deployments with managed workflows.
 
-- **Hosted v1** is the managed offering shipping on the current workspace-core contract. Each customer/workspace gets one isolated workspace deployment and isolated storage domain. Operators provision, back up, restore, and replace those deployments with managed workflows.
-- **SaaS v-next** is the self-serve direction. It adds a shared control plane and shared human app entry surface on top of isolated workspace cores. The control plane owns human accounts, organizations, workspace registry, provisioning/lifecycle jobs, usage/quota envelopes, and fleet metadata. It does **not** collapse workspace cores into shared row-level multitenancy.
-
-Shared invariants across both tracks:
+Invariants:
 
 - **Workspace isolation stays in core**: durable workspace truth remains inside each workspace core.
 - **No shared row-level multitenancy in core**: the control plane coordinates isolated workspaces rather than replacing them with one shared tenant table.

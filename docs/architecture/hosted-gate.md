@@ -2,8 +2,7 @@
 
 Use these as fixed assumptions for the hosted-v1 ticket pack:
 
-- managed hosted offering now; SaaS v-next may add a control plane, but
-  hosted-v1 work does not depend on it
+- managed hosted offering now
 - one isolated workspace deployment per customer/workspace
 - no shared row-level multitenancy
 - auth required on workspace data routes outside development mode

@@ -6,28 +6,16 @@ workspace. This document is the operator runbook for that model.
 It is intentionally not a self-service control plane. Provisioning, bootstrap,
 backup, restore, and restore verification are all operator-driven steps.
 
-## Hosted v1 vs SaaS v-next
+## Hosted v1 model
 
-Hosted v1 and SaaS v-next are separate deployment models:
+Hosted v1 is:
 
-**Hosted v1** (this document):
 - One isolated deployment per workspace/customer
 - Operator-driven provisioning and lifecycle
 - No shared control plane
 - Workspace-local auth for both humans and agents
 - Manual backup scheduling and DR drills
 - No fine-grained RBAC (authenticated principals share authority)
-
-**SaaS v-next** (see `docs/architecture/saas-v-next.md`):
-- One shared control plane for accounts, organizations, workspace registry
-- Self-serve workspace creation and onboarding
-- Control-plane-managed human auth with workspace-scoped launch grants
-- Workspace-local agent auth (unchanged)
-- Automated backup scheduling and fleet operations
-- Per-organization quota and usage envelopes
-
-The hosted v1 scripts under `scripts/hosted/` are intentionally separate from
-the SaaS control-plane paths. Do not mix these models in a single deployment.
 
 ## What the bundle does
 
@@ -329,3 +317,4 @@ Not automated in hosted v1:
 - independent S3 object snapshotting or bucket/prefix migration
 - invite delivery to end users
 - any self-service tenant control plane
+

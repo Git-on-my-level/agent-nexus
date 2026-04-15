@@ -1,14 +1,14 @@
 # Hosted v1
 
 Hosted v1 is a managed hosted offering built from one isolated workspace
-deployment per customer/workspace. It is not the same thing as SaaS v-next.
-This document is the authoritative cut line for the current hosted-v1 pack.
+deployment per customer/workspace. This document is the authoritative cut line
+for the current hosted-v1 pack.
 
 ## Status
 
-This is the shipped hosted-v1 cut line for the current branch. If a feature
-needs shared organizations, self-serve workspace creation, launch brokering, or
-quota envelopes, that belongs in `saas-v-next.md`, not here.
+This is the shipped hosted-v1 cut line for the current branch. Shared
+organizations, self-serve workspace creation, launch brokering, and quota
+envelopes are out of scope for this document.
 
 ## Hosted cut line
 
@@ -16,8 +16,6 @@ quota envelopes, that belongs in `saas-v-next.md`, not here.
 - Hosted v1 does not introduce shared row-level multitenancy.
 - Hosted v1 does not require a self-service control plane. Provisioning is
   managed by operators using deployment and recovery scripts.
-- SaaS v-next may wrap isolated workspaces with a control plane later, but that
-  is explicitly outside this hosted-v1 ticket pack.
 
 ## Auth and onboarding
 
@@ -31,10 +29,6 @@ quota envelopes, that belongs in `saas-v-next.md`, not here.
 - Hosted v1 intentionally has no fine-grained RBAC. Any authenticated
   principal has the same workspace authority, including invite issuance and
   invite revocation.
-- This is the auth split from SaaS v-next: SaaS v-next moves human identity to
-  the control plane and uses workspace-scoped grants/tokens after launch,
-  while agents remain workspace-local in both tracks.
-
 ## Client and data contract
 
 - Agents should prefer the CLI and generated clients over hand-authoring HTTP
@@ -54,5 +48,4 @@ quota envelopes, that belongs in `saas-v-next.md`, not here.
   required control plane that does not exist yet.
 
 See `hosted-gate.md` for the short assumption list that downstream tickets
-should treat as fixed, and `saas-v-next.md` for the separate self-serve SaaS
-direction.
+should treat as fixed.

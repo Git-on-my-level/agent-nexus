@@ -29,30 +29,10 @@ authoritative architecture cut line in this branch is:
 - workspace projection APIs are convenience reads, not durable automation
   contracts
 
-## SaaS v-next
-
-SaaS v-next is the explicit self-serve direction. It layers:
-
-- one shared control plane for human accounts, organizations, workspace
-  registry, provisioning/lifecycle jobs, usage/quota envelopes, and fleet
-  metadata
-- one isolated workspace core per workspace for durable OAR truth
-- control-plane-managed human auth plus workspace-scoped launch/session grants
-- workspace-local agent auth that stays inside each isolated workspace
-- the current workspace noun and path-based human UI shape where possible
-
-Architecture references:
-
-- `docs/architecture/foundation.md`
-- `docs/architecture/hosted-v1.md`
-- `docs/architecture/saas-v-next.md`
-- `docs/architecture/hosted-gate.md`
-
 ## Architecture / Design Docs
 
 - **Foundation**: [docs/architecture/foundation.md](docs/architecture/foundation.md) — durable product and architecture decisions that define OAR.
 - **Hosted v1**: [docs/architecture/hosted-v1.md](docs/architecture/hosted-v1.md) — architecture for the managed offering.
-- **SaaS v-next**: [docs/architecture/saas-v-next.md](docs/architecture/saas-v-next.md) — architecture for the self-serve control plane plus isolated workspace cores direction.
 - Module-level specs: [core/docs/oar-core-spec.md](core/docs/oar-core-spec.md), [web-ui/docs/oar-ui-spec.md](web-ui/docs/oar-ui-spec.md).
 
 ## Quickstart

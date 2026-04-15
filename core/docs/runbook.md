@@ -258,10 +258,11 @@ passkey bypass additionally requires the workspace marker
 root. Production-like runs should leave these unset unless an explicitly open
 local workflow is required.
 
-`OAR_HUMAN_AUTH_MODE=control_plane` enables the SaaS-v-next split. In that
-mode, workspace-local passkey human auth is disabled, workspace-local Ed25519
-agent auth remains enabled, and startup fails closed unless the
-`OAR_CONTROL_PLANE_TOKEN_*` and `OAR_WORKSPACE_SERVICE_*` settings are valid.
+`OAR_HUMAN_AUTH_MODE=control_plane` switches human auth to control-plane-issued
+workspace grants. In that mode, workspace-local passkey human auth is disabled,
+workspace-local Ed25519 agent auth remains enabled, and startup fails closed
+unless the `OAR_CONTROL_PLANE_TOKEN_*` and `OAR_WORKSPACE_SERVICE_*` settings
+are valid.
 
 Set `OAR_CONTROL_PLANE_BASE_URL` to enable the workspace heartbeat reporter.
 When enabled, `oar-core` reuses `OAR_WORKSPACE_SERVICE_ID` and

@@ -197,11 +197,11 @@ access in v1 — any authenticated principal can perform any operation. The
 registry exists for display, attribution, and future evolution (authority
 tiers, reliability scores, invite lifecycle metadata, etc.).
 
-SaaS-v-next introduces a second human-auth mode. In `control_plane` human auth
-mode, the workspace trusts signed control-plane-issued workspace grants,
-hydrates a stable local shadow principal on first access, and preserves that
-the human auth method is `control_plane` in auth inventory/audit metadata.
-Workspace-local Ed25519 agent auth remains unchanged in both modes.
+In `control_plane` human auth mode, the workspace trusts signed
+control-plane-issued workspace grants, hydrates a stable local shadow principal
+on first access, and preserves that the human auth method is `control_plane` in
+auth inventory/audit metadata. Workspace-local Ed25519 agent auth remains
+unchanged in both modes.
 
 **Fields:** per `oar-schema.yaml` → `actor.registry_fields`
 

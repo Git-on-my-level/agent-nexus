@@ -3,7 +3,7 @@ info:
   title: Organization Autorunner Control Plane HTTP API
   version: 0.1.0
   description: |
-    Canonical control-plane HTTP contract for Organization Autorunner SaaS v-next.
+    Canonical control-plane HTTP contract for Organization Autorunner.
 
     This surface owns shared human accounts, organizations, workspace registry,
     provisioning lifecycle, launch brokering, and usage envelopes. Workspace core
