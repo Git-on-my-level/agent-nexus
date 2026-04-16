@@ -163,7 +163,11 @@ export function isHumanWorkspacePrincipal(agent) {
   const method = String(agent.auth_method ?? "")
     .trim()
     .toLowerCase();
-  return method === "passkey" || method === "control_plane";
+  return (
+    method === "passkey" ||
+    method === "control_plane" ||
+    method === "external_grant"
+  );
 }
 
 export function completeAuthSession(

@@ -572,6 +572,16 @@ var migrations = []migration{
 		);`,
 		},
 	},
+	{
+		Version: 8,
+		Statements: []string{
+			`CREATE TABLE IF NOT EXISTS consumed_grant_jtis (
+				jti TEXT PRIMARY KEY,
+				consumed_at TEXT NOT NULL
+			);`,
+			`CREATE INDEX IF NOT EXISTS idx_consumed_grant_jtis_consumed_at ON consumed_grant_jtis (consumed_at);`,
+		},
+	},
 }
 
 func applyMigrations(ctx context.Context, db *sql.DB) error {

@@ -7,8 +7,9 @@ import (
 )
 
 const (
-	AuthMethodPublicKey = "public_key"
-	AuthMethodPasskey   = "passkey"
+	AuthMethodPublicKey     = "public_key"
+	AuthMethodPasskey       = "passkey"
+	AuthMethodExternalGrant = "external_grant"
 )
 
 func principalKindExpr(agentAlias string) string {

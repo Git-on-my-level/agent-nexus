@@ -51,52 +51,55 @@ const (
 
 func main() {
 	var (
-		host                      = envString("OAR_HOST", defaultHost)
-		port                      = envInt("OAR_PORT", defaultPort)
-		listenAddress             = envString("OAR_LISTEN_ADDR", "")
-		schemaPath                = envString("OAR_SCHEMA_PATH", defaultSchemaPath)
-		workspaceRoot             = envString("OAR_WORKSPACE_ROOT", defaultWorkspaceRoot)
-		blobBackend               = envString("OAR_BLOB_BACKEND", "filesystem")
-		blobRoot                  = envString("OAR_BLOB_ROOT", "")
-		blobS3Bucket              = envString("OAR_BLOB_S3_BUCKET", "")
-		blobS3Prefix              = envString("OAR_BLOB_S3_PREFIX", "")
-		blobS3Region              = envString("OAR_BLOB_S3_REGION", "")
-		blobS3Endpoint            = envString("OAR_BLOB_S3_ENDPOINT", "")
-		blobS3AccessKeyID         = envString("OAR_BLOB_S3_ACCESS_KEY_ID", "")
-		blobS3SecretAccessKey     = envString("OAR_BLOB_S3_SECRET_ACCESS_KEY", "")
-		blobS3SessionToken        = envString("OAR_BLOB_S3_SESSION_TOKEN", "")
-		blobS3ForcePathStyle      = envBool("OAR_BLOB_S3_FORCE_PATH_STYLE", false)
-		coreVersion               = envString("OAR_CORE_VERSION", buildinfo.Current)
-		coreBaseURL               = envString("OAR_CORE_BASE_URL", "")
-		apiVersion                = envString("OAR_API_VERSION", defaultAPIVersion)
-		minCLIVersion             = envString("OAR_MIN_CLI_VERSION", buildinfo.Current)
-		recommendedCLIVersion     = envString("OAR_RECOMMENDED_CLI_VERSION", buildinfo.Current)
-		cliDownloadURL            = envString("OAR_CLI_DOWNLOAD_URL", "")
-		coreInstanceID            = envString("OAR_CORE_INSTANCE_ID", defaultInstanceID)
-		metaCommandsPath          = envString("OAR_META_COMMANDS_PATH", "")
-		streamPollInterval        = envDuration("OAR_STREAM_POLL_INTERVAL", time.Second)
-		projectionMode            = envString("OAR_PROJECTION_MODE", server.ProjectionModeBackground)
-		projectionPollInterval    = envDuration("OAR_PROJECTION_MAINTENANCE_INTERVAL", 5*time.Second)
-		staleScanInterval         = envDuration("OAR_PROJECTION_STALE_SCAN_INTERVAL", 30*time.Second)
-		projectionBatchSize       = envInt("OAR_PROJECTION_MAINTENANCE_BATCH_SIZE", 50)
-		devRegisterLinkedActors   = envBool("OAR_DEV_REGISTER_LINKED_ACTORS", false)
-		allowLoopbackVerifyReads  = envBool("OAR_ALLOW_LOOPBACK_VERIFICATION_READS", false)
-		bootstrapToken            = envString("OAR_BOOTSTRAP_TOKEN", "")
-		webAuthnRPID              = envString("OAR_WEBAUTHN_RPID", "")
-		webAuthnOrigin            = envString("OAR_WEBAUTHN_ORIGIN", "")
-		webAuthnAllowedOrigins    = envCSV("OAR_WEBAUTHN_ALLOWED_ORIGINS")
-		webAuthnDisplayName       = envString("OAR_WEBAUTHN_RP_DISPLAY_NAME", "OAR")
-		workspaceID               = envString("OAR_WORKSPACE_ID", "")
-		secretsKey                = envString("OAR_SECRETS_KEY", "")
-		workspaceName             = envString("OAR_WORKSPACE_NAME", "Main")
-		corsAllowedOrigins        = envString("OAR_CORS_ALLOWED_ORIGINS", "")
-		sidecarRouterEnabled      = envBool("OAR_SIDECAR_ROUTER_ENABLED", true)
-		sidecarRouterStatePath    = envString("OAR_SIDECAR_ROUTER_STATE_PATH", "")
-		sidecarRouterPollInterval = envDuration("OAR_SIDECAR_ROUTER_POLL_INTERVAL", time.Second)
-		sidecarRouterCacheTTL     = envDuration("OAR_SIDECAR_ROUTER_PRINCIPAL_CACHE_TTL", time.Minute)
-		shutdownTimeout           = envDuration("OAR_SHUTDOWN_TIMEOUT", 15*time.Second)
-		enforceLocalQuotas        = envBool("OAR_ENFORCE_LOCAL_QUOTAS", true)
-		workspaceQuota            = primitives.WorkspaceQuota{
+		host                        = envString("OAR_HOST", defaultHost)
+		port                        = envInt("OAR_PORT", defaultPort)
+		listenAddress               = envString("OAR_LISTEN_ADDR", "")
+		schemaPath                  = envString("OAR_SCHEMA_PATH", defaultSchemaPath)
+		workspaceRoot               = envString("OAR_WORKSPACE_ROOT", defaultWorkspaceRoot)
+		blobBackend                 = envString("OAR_BLOB_BACKEND", "filesystem")
+		blobRoot                    = envString("OAR_BLOB_ROOT", "")
+		blobS3Bucket                = envString("OAR_BLOB_S3_BUCKET", "")
+		blobS3Prefix                = envString("OAR_BLOB_S3_PREFIX", "")
+		blobS3Region                = envString("OAR_BLOB_S3_REGION", "")
+		blobS3Endpoint              = envString("OAR_BLOB_S3_ENDPOINT", "")
+		blobS3AccessKeyID           = envString("OAR_BLOB_S3_ACCESS_KEY_ID", "")
+		blobS3SecretAccessKey       = envString("OAR_BLOB_S3_SECRET_ACCESS_KEY", "")
+		blobS3SessionToken          = envString("OAR_BLOB_S3_SESSION_TOKEN", "")
+		blobS3ForcePathStyle        = envBool("OAR_BLOB_S3_FORCE_PATH_STYLE", false)
+		coreVersion                 = envString("OAR_CORE_VERSION", buildinfo.Current)
+		coreBaseURL                 = envString("OAR_CORE_BASE_URL", "")
+		apiVersion                  = envString("OAR_API_VERSION", defaultAPIVersion)
+		minCLIVersion               = envString("OAR_MIN_CLI_VERSION", buildinfo.Current)
+		recommendedCLIVersion       = envString("OAR_RECOMMENDED_CLI_VERSION", buildinfo.Current)
+		cliDownloadURL              = envString("OAR_CLI_DOWNLOAD_URL", "")
+		coreInstanceID              = envString("OAR_CORE_INSTANCE_ID", defaultInstanceID)
+		metaCommandsPath            = envString("OAR_META_COMMANDS_PATH", "")
+		streamPollInterval          = envDuration("OAR_STREAM_POLL_INTERVAL", time.Second)
+		projectionMode              = envString("OAR_PROJECTION_MODE", server.ProjectionModeBackground)
+		projectionPollInterval      = envDuration("OAR_PROJECTION_MAINTENANCE_INTERVAL", 5*time.Second)
+		staleScanInterval           = envDuration("OAR_PROJECTION_STALE_SCAN_INTERVAL", 30*time.Second)
+		projectionBatchSize         = envInt("OAR_PROJECTION_MAINTENANCE_BATCH_SIZE", 50)
+		devRegisterLinkedActors     = envBool("OAR_DEV_REGISTER_LINKED_ACTORS", false)
+		allowLoopbackVerifyReads    = envBool("OAR_ALLOW_LOOPBACK_VERIFICATION_READS", false)
+		bootstrapToken              = envString("OAR_BOOTSTRAP_TOKEN", "")
+		webAuthnRPID                = envString("OAR_WEBAUTHN_RPID", "")
+		webAuthnOrigin              = envString("OAR_WEBAUTHN_ORIGIN", "")
+		webAuthnAllowedOrigins      = envCSV("OAR_WEBAUTHN_ALLOWED_ORIGINS")
+		webAuthnDisplayName         = envString("OAR_WEBAUTHN_RP_DISPLAY_NAME", "OAR")
+		workspaceID                 = envString("OAR_WORKSPACE_ID", "")
+		workspaceHumanGrantIssuer   = envString("OAR_WORKSPACE_HUMAN_GRANT_ISSUER", "")
+		workspaceHumanGrantAudience = envString("OAR_WORKSPACE_HUMAN_GRANT_AUDIENCE", "")
+		workspaceHumanGrantLeeway   = envDuration("OAR_WORKSPACE_HUMAN_GRANT_LEEWAY", auth.DefaultWorkspaceHumanGrantLeeway)
+		secretsKey                  = envString("OAR_SECRETS_KEY", "")
+		workspaceName               = envString("OAR_WORKSPACE_NAME", "Main")
+		corsAllowedOrigins          = envString("OAR_CORS_ALLOWED_ORIGINS", "")
+		sidecarRouterEnabled        = envBool("OAR_SIDECAR_ROUTER_ENABLED", true)
+		sidecarRouterStatePath      = envString("OAR_SIDECAR_ROUTER_STATE_PATH", "")
+		sidecarRouterPollInterval   = envDuration("OAR_SIDECAR_ROUTER_POLL_INTERVAL", time.Second)
+		sidecarRouterCacheTTL       = envDuration("OAR_SIDECAR_ROUTER_PRINCIPAL_CACHE_TTL", time.Minute)
+		shutdownTimeout             = envDuration("OAR_SHUTDOWN_TIMEOUT", 15*time.Second)
+		enforceLocalQuotas          = envBool("OAR_ENFORCE_LOCAL_QUOTAS", true)
+		workspaceQuota              = primitives.WorkspaceQuota{
 			MaxBlobBytes:         envInt64("OAR_WORKSPACE_MAX_BLOB_BYTES", defaultWorkspaceMaxBlobBytes),
 			MaxArtifacts:         envInt64("OAR_WORKSPACE_MAX_ARTIFACTS", defaultWorkspaceMaxArtifacts),
 			MaxDocuments:         envInt64("OAR_WORKSPACE_MAX_DOCUMENTS", defaultWorkspaceMaxDocuments),
@@ -209,6 +212,40 @@ func main() {
 	if strings.TrimSpace(workspaceName) == "" {
 		workspaceName = "Main"
 	}
+	if workspaceHumanGrantLeeway <= 0 {
+		workspaceHumanGrantLeeway = auth.DefaultWorkspaceHumanGrantLeeway
+	}
+	workspaceHumanGrantReplayRetention := auth.DefaultWorkspaceHumanGrantTTL + workspaceHumanGrantLeeway
+	var workspaceHumanGrantVerifier auth.WorkspaceHumanGrantIdentityVerifier
+	if strings.TrimSpace(workspaceHumanGrantIssuer) != "" || strings.TrimSpace(workspaceHumanGrantAudience) != "" {
+		if strings.TrimSpace(workspaceHumanGrantIssuer) == "" || strings.TrimSpace(workspaceHumanGrantAudience) == "" {
+			fmt.Fprintln(os.Stderr, "both OAR_WORKSPACE_HUMAN_GRANT_ISSUER and OAR_WORKSPACE_HUMAN_GRANT_AUDIENCE are required to enable external workspace grants")
+			os.Exit(1)
+		}
+		jwksURL, err := auth.WorkspaceHumanGrantJWKSURL(workspaceHumanGrantIssuer)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "invalid OAR_WORKSPACE_HUMAN_GRANT_ISSUER: %v\n", err)
+			os.Exit(1)
+		}
+		jwksResolver, err := auth.NewWorkspaceHumanGrantJWKResolver(auth.WorkspaceHumanGrantJWKResolverConfig{
+			JWKSURL: jwksURL,
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to initialize workspace grant jwks resolver: %v\n", err)
+			os.Exit(1)
+		}
+		workspaceHumanGrantVerifier, err = auth.NewWorkspaceHumanGrantVerifier(auth.WorkspaceHumanGrantVerifierConfig{
+			Issuer:      workspaceHumanGrantIssuer,
+			Audience:    workspaceHumanGrantAudience,
+			WorkspaceID: workspaceID,
+			Leeway:      workspaceHumanGrantLeeway,
+			Resolver:    jwksResolver,
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to initialize workspace human grant verifier: %v\n", err)
+			os.Exit(1)
+		}
+	}
 	if strings.TrimSpace(sidecarRouterStatePath) == "" {
 		sidecarRouterStatePath = filepath.Join(workspace.Layout().RootDir, "router", "router-state.json")
 	}
@@ -306,6 +343,7 @@ func main() {
 		server.WithReadinessCheck("sidecars", "sidecar_unavailable", "sidecar readiness check failed", sidecarHost.Ready),
 		server.WithActorRegistry(actorRegistry),
 		server.WithAuthStore(authStore),
+		server.WithWorkspaceHumanGrantVerifier(workspaceHumanGrantVerifier),
 		server.WithPasskeySessionStore(passkeySessionStore),
 		server.WithPrimitiveStore(primitiveStore),
 		server.WithSchemaContract(contract),
@@ -350,10 +388,25 @@ func main() {
 		go projectionMaintainer.Run(maintenanceCtx)
 	}
 	sidecarHost.Run(maintenanceCtx)
+	go runDailyAtUTC(maintenanceCtx, 3, 0, func(jobCtx context.Context) {
+		deleted, err := authStore.PurgeConsumedGrantJTIs(jobCtx, workspaceHumanGrantReplayRetention)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to purge consumed workspace grant JTIs: %v\n", err)
+			return
+		}
+		if deleted > 0 {
+			fmt.Printf("purged %d consumed workspace grant JTIs\n", deleted)
+		}
+	})
 	go func() {
+		humanAuthMode := auth.HumanAuthModeWorkspaceLocal
+		if workspaceHumanGrantVerifier != nil {
+			humanAuthMode = auth.HumanAuthModeExternalGrant
+		}
 		fmt.Printf("oar-core listening on http://%s\n", addr)
 		fmt.Printf("  projection mode: %s\n", projectionMode)
 		fmt.Printf("  sidecars: router=%t (workspace_id=%s, workspace_name=%s)\n", sidecarRouterEnabled, workspaceID, workspaceName)
+		fmt.Printf("  human auth mode: %s\n", humanAuthMode)
 		if allowLoopbackVerifyReads {
 			fmt.Println("  WARNING: loopback verification reads enabled (read-only loopback bypass)")
 		}
@@ -378,6 +431,35 @@ func main() {
 		}
 		fmt.Println("server stopped")
 	}
+}
+
+func runDailyAtUTC(ctx context.Context, hour int, minute int, fn func(context.Context)) {
+	if fn == nil {
+		return
+	}
+	timer := time.NewTimer(durationUntilNextUTCRun(time.Now().UTC(), hour, minute))
+	defer timer.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+			runCtx, cancel := context.WithTimeout(ctx, time.Minute)
+			fn(runCtx)
+			cancel()
+			timer.Reset(durationUntilNextUTCRun(time.Now().UTC(), hour, minute))
+		}
+	}
+}
+
+func durationUntilNextUTCRun(now time.Time, hour int, minute int) time.Duration {
+	now = now.UTC()
+	next := time.Date(now.Year(), now.Month(), now.Day(), hour, minute, 0, 0, time.UTC)
+	if !next.After(now) {
+		next = next.Add(24 * time.Hour)
+	}
+	return next.Sub(now)
 }
 
 func envString(name string, fallback string) string {

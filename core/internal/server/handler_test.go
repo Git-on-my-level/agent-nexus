@@ -15,6 +15,12 @@ import (
 	"organization-autorunner-core/internal/storage"
 )
 
+type rejectingWorkspaceGrantVerifier struct{}
+
+func (rejectingWorkspaceGrantVerifier) Verify(context.Context, string) (auth.WorkspaceHumanGrantIdentity, error) {
+	return auth.WorkspaceHumanGrantIdentity{}, auth.ErrExternalGrantInvalid
+}
+
 func TestHealthEndpoint(t *testing.T) {
 	t.Parallel()
 
@@ -142,6 +148,28 @@ func TestHandshakeIncludesCommandRegistryDigest(t *testing.T) {
 	}
 	if payload["human_auth_mode"] != "workspace_local" {
 		t.Fatalf("expected human_auth_mode=workspace_local by default, got %#v", payload["human_auth_mode"])
+	}
+}
+
+func TestHandshakeReportsExternalGrantHumanAuthModeWhenConfigured(t *testing.T) {
+	t.Parallel()
+
+	handler := NewHandler("0.2.2", WithWorkspaceHumanGrantVerifier(rejectingWorkspaceGrantVerifier{}))
+	req := httptest.NewRequest(http.MethodGet, "/meta/handshake", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("unexpected status: got %d", rr.Code)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode body: %v", err)
+	}
+	if payload["human_auth_mode"] != "external_grant" {
+		t.Fatalf("expected human_auth_mode=external_grant, got %#v", payload["human_auth_mode"])
 	}
 }
 
@@ -314,6 +342,44 @@ func TestAuthRouteRateLimitingScopesByForwardedClientAddrWhenProxyIsLoopback(t *
 
 	if rr2.Code == http.StatusTooManyRequests {
 		t.Fatalf("expected different callers to get separate auth rate limits, got 429 with body %s", rr2.Body.String())
+	}
+}
+
+func TestWorkspaceHumanGrantRateLimitingReturnsRetryAfter(t *testing.T) {
+	t.Parallel()
+
+	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	handler := NewHandler(
+		"0.2.2",
+		WithAuthStore(auth.NewStore(workspace.DB())),
+		WithWorkspaceHumanGrantVerifier(rejectingWorkspaceGrantVerifier{}),
+	)
+
+	for attempt := 0; attempt < 10; attempt++ {
+		req := httptest.NewRequest(http.MethodPost, "/auth/token", strings.NewReader(`{"grant_type":"workspace_human_grant","assertion":"invalid"}`))
+		req.RemoteAddr = "198.51.100.42:43123"
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		if rr.Code != http.StatusUnauthorized {
+			t.Fatalf("attempt %d unexpected status: got %d want %d body=%s", attempt+1, rr.Code, http.StatusUnauthorized, rr.Body.String())
+		}
+	}
+
+	limitedReq := httptest.NewRequest(http.MethodPost, "/auth/token", strings.NewReader(`{"grant_type":"workspace_human_grant","assertion":"invalid"}`))
+	limitedReq.RemoteAddr = "198.51.100.42:43123"
+	limitedRes := httptest.NewRecorder()
+	handler.ServeHTTP(limitedRes, limitedReq)
+
+	if limitedRes.Code != http.StatusTooManyRequests {
+		t.Fatalf("unexpected status: got %d want %d body=%s", limitedRes.Code, http.StatusTooManyRequests, limitedRes.Body.String())
+	}
+	if retryAfter := limitedRes.Header().Get("Retry-After"); retryAfter == "" {
+		t.Fatalf("expected Retry-After header, body=%s", limitedRes.Body.String())
 	}
 }
 

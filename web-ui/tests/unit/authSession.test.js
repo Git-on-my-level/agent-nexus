@@ -36,6 +36,12 @@ describe("authSession", () => {
         auth_method: "control_plane",
       }),
     ).toBe(true);
+    expect(
+      isHumanWorkspacePrincipal({
+        agent_id: "a",
+        auth_method: "external_grant",
+      }),
+    ).toBe(true);
   });
 
   it("keeps the authenticated agent in memory", () => {

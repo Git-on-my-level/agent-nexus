@@ -7,6 +7,8 @@ import (
 	"os"
 	"sort"
 	"strings"
+
+	"organization-autorunner-core/internal/auth"
 )
 
 func handleMetaHandshake(w http.ResponseWriter, _ *http.Request, opts handlerOptions, schemaVersion string) {
@@ -23,6 +25,10 @@ func handshakePayload(opts handlerOptions, schemaVersion string) (map[string]any
 	if err != nil {
 		return nil, err
 	}
+	humanAuthMode := auth.HumanAuthModeWorkspaceLocal
+	if opts.workspaceHumanGrantVerifier != nil {
+		humanAuthMode = auth.HumanAuthModeExternalGrant
+	}
 	payload := map[string]any{
 		"core_version":            strings.TrimSpace(opts.coreVersion),
 		"api_version":             strings.TrimSpace(opts.apiVersion),
@@ -33,7 +39,7 @@ func handshakePayload(opts handlerOptions, schemaVersion string) (map[string]any
 		"cli_download_url":        strings.TrimSpace(opts.cliDownloadURL),
 		"core_instance_id":        strings.TrimSpace(opts.coreInstanceID),
 		"dev_actor_mode":          opts.enableDevActorMode,
-		"human_auth_mode":         "workspace_local",
+		"human_auth_mode":         humanAuthMode,
 	}
 	return payload, nil
 }

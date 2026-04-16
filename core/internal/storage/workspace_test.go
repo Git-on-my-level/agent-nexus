@@ -63,6 +63,7 @@ func TestWorkspaceInitializationAndRestart(t *testing.T) {
 		"auth_refresh_sessions",
 		"auth_access_tokens",
 		"auth_used_assertions",
+		"consumed_grant_jtis",
 		"auth_bootstrap_state",
 		"auth_invites",
 		"auth_audit_events",

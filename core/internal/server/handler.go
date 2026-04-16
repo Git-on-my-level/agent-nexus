@@ -142,6 +142,7 @@ type handlerOptions struct {
 	healthCheck                    HealthCheckFunc
 	actorRegistry                  ActorRegistry
 	authStore                      *auth.Store
+	workspaceHumanGrantVerifier    auth.WorkspaceHumanGrantIdentityVerifier
 	passkeySessionStore            *auth.PasskeySessionStore
 	primitiveStore                 PrimitiveStore
 	contract                       *schema.Contract
@@ -164,6 +165,7 @@ type handlerOptions struct {
 	requestBodyLimits              RequestBodyLimits
 	routeRateLimits                RouteRateLimits
 	rateLimiter                    *routeRateLimiter
+	workspaceHumanGrantRateLimiter *routeRateLimiter
 	workspaceID                    string
 	readinessChecks                []namedReadinessCheck
 	opsHealthSections              map[string]OpsHealthSectionFunc
@@ -209,6 +211,12 @@ func WithActorRegistry(actorRegistry ActorRegistry) HandlerOption {
 func WithAuthStore(authStore *auth.Store) HandlerOption {
 	return func(opts *handlerOptions) {
 		opts.authStore = authStore
+	}
+}
+
+func WithWorkspaceHumanGrantVerifier(verifier auth.WorkspaceHumanGrantIdentityVerifier) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.workspaceHumanGrantVerifier = verifier
 	}
 }
 
@@ -536,6 +544,14 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 	opts.requestBodyLimits = opts.requestBodyLimits.normalize()
 	opts.routeRateLimits = opts.routeRateLimits.normalize()
 	opts.rateLimiter = newRouteRateLimiter(opts.routeRateLimits)
+	if opts.workspaceHumanGrantVerifier != nil && opts.workspaceHumanGrantRateLimiter == nil {
+		opts.workspaceHumanGrantRateLimiter = newRouteRateLimiter(RouteRateLimits{
+			AuthRequestsPerMinute:  10,
+			AuthBurst:              10,
+			WriteRequestsPerMinute: 1,
+			WriteBurst:             1,
+		})
+	}
 
 	mux := http.NewServeMux()
 	registerRoute := func(pattern string, classify routeAccessClassifier, handler http.HandlerFunc) {

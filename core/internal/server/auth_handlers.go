@@ -93,6 +93,7 @@ func handleIssueAuthToken(w http.ResponseWriter, r *http.Request, opts handlerOp
 		KeyID        string `json:"key_id"`
 		SignedAt     string `json:"signed_at"`
 		Signature    string `json:"signature"`
+		Assertion    string `json:"assertion"`
 	}
 	if !decodeJSONBody(w, r, &req) {
 		return
@@ -112,8 +113,52 @@ func handleIssueAuthToken(w http.ResponseWriter, r *http.Request, opts handlerOp
 			SignedAt:  req.SignedAt,
 			Signature: req.Signature,
 		})
+	case auth.TokenGrantTypeWorkspaceHuman:
+		if opts.workspaceHumanGrantVerifier == nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", "grant_type workspace_human_grant is not enabled")
+			return
+		}
+		if opts.workspaceHumanGrantRateLimiter != nil {
+			scope := "anonymous"
+			if host := requestClientHost(r); host != "" {
+				scope = "addr:" + host
+			}
+			if allowed, retryAfter := opts.workspaceHumanGrantRateLimiter.allow("auth", scope, time.Now().UTC()); !allowed {
+				writeRateLimitedError(w, auth.TokenGrantTypeWorkspaceHuman, retryAfter)
+				return
+			}
+		}
+		identity, verifyErr := opts.workspaceHumanGrantVerifier.Verify(r.Context(), req.Assertion)
+		if verifyErr != nil {
+			switch {
+			case errors.Is(verifyErr, auth.ErrExternalGrantUnavailable):
+				writeError(w, http.StatusServiceUnavailable, "auth_unavailable", "workspace grant verification is temporarily unavailable")
+			default:
+				writeError(w, http.StatusUnauthorized, "invalid_token", "workspace grant assertion could not be validated")
+			}
+			return
+		}
+		agent, issuedTokens, exchangeErr := opts.authStore.IssueTokenFromWorkspaceHumanGrant(r.Context(), identity)
+		if exchangeErr != nil {
+			switch {
+			case errors.Is(exchangeErr, auth.ErrExternalGrantReplay):
+				writeError(w, http.StatusUnauthorized, "invalid_token", "workspace grant assertion has already been consumed")
+			case errors.Is(exchangeErr, auth.ErrAgentRevoked):
+				writeError(w, http.StatusForbidden, "agent_revoked", "agent has been revoked")
+			case errors.Is(exchangeErr, auth.ErrInvalidRequest):
+				writeError(w, http.StatusBadRequest, "invalid_request", sanitizeAuthError(exchangeErr))
+			default:
+				writeError(w, http.StatusInternalServerError, "internal_error", "failed to issue token")
+			}
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"agent":  agent,
+			"tokens": issuedTokens,
+		})
+		return
 	default:
-		writeError(w, http.StatusBadRequest, "invalid_request", "grant_type must be refresh_token or assertion")
+		writeError(w, http.StatusBadRequest, "invalid_request", "grant_type must be refresh_token, assertion, or workspace_human_grant")
 		return
 	}
 
