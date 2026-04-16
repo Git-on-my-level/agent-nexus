@@ -4,7 +4,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.3.0`
-- Groups: `18`
+- Groups: `19`
 
 ## `topics`
 
@@ -212,4 +212,10 @@ Generated from `contracts/oar-openapi.yaml`.
   - `secrets.reveal` (`secret get --reveal`)
   - `secrets.reveal-batch` (`secret exec`)
   - `secrets.update` (`secret update`)
+
+## `usage`
+
+- Commands: `1`
+- Command IDs:
+  - `usage.summary.v1` (`usage summary --api v1`)
 

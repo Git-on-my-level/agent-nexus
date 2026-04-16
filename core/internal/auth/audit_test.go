@@ -139,57 +139,6 @@ func TestListPrincipalsIncludesDerivedLastSeenAtFromAuthTokens(t *testing.T) {
 	}
 }
 
-func TestGetPrincipalSummaryUsesUpdatedAtForControlPlaneLastSeen(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
-	if err != nil {
-		t.Fatalf("initialize workspace: %v", err)
-	}
-	defer workspace.Close()
-
-	store := NewStore(workspace.DB())
-	createdAt := time.Date(2026, 3, 21, 10, 0, 0, 0, time.UTC).Format(time.RFC3339Nano)
-	updatedAt := time.Date(2026, 3, 24, 8, 45, 0, 0, time.UTC).Format(time.RFC3339Nano)
-	if _, err := workspace.DB().ExecContext(
-		ctx,
-		`INSERT INTO actors(id, display_name, tags_json, created_at, metadata_json)
-		 VALUES (?, ?, ?, ?, ?)`,
-		"actor-cp-human",
-		"Casey Human",
-		`["human","control-plane"]`,
-		createdAt,
-		`{"principal_kind":"human","auth_method":"control_plane"}`,
-	); err != nil {
-		t.Fatalf("insert control-plane actor: %v", err)
-	}
-	if _, err := workspace.DB().ExecContext(
-		ctx,
-		`INSERT INTO agents(id, username, actor_id, created_at, updated_at, revoked_at, metadata_json)
-		 VALUES (?, ?, ?, ?, ?, NULL, ?)`,
-		"agent-cp-human",
-		"cp.casey",
-		"actor-cp-human",
-		createdAt,
-		updatedAt,
-		`{"principal_kind":"human","auth_method":"control_plane"}`,
-	); err != nil {
-		t.Fatalf("insert control-plane principal: %v", err)
-	}
-
-	summary, err := store.GetPrincipalSummary(ctx, "agent-cp-human")
-	if err != nil {
-		t.Fatalf("get principal summary: %v", err)
-	}
-	if summary.LastSeenAt != updatedAt {
-		t.Fatalf("expected control-plane last_seen_at=%q, got %#v", updatedAt, summary)
-	}
-	if summary.AuthMethod != AuthMethodControlPlane {
-		t.Fatalf("expected control-plane auth method, got %#v", summary)
-	}
-}
-
 func recordAuthAuditEventForTest(t *testing.T, ctx context.Context, store *Store, input AuthAuditEventInput) string {
 	t.Helper()
 

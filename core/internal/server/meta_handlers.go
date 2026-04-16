@@ -33,10 +33,7 @@ func handshakePayload(opts handlerOptions, schemaVersion string) (map[string]any
 		"cli_download_url":        strings.TrimSpace(opts.cliDownloadURL),
 		"core_instance_id":        strings.TrimSpace(opts.coreInstanceID),
 		"dev_actor_mode":          opts.enableDevActorMode,
-		"human_auth_mode":         strings.TrimSpace(opts.humanAuthMode),
-	}
-	if opts.workspaceServiceIdentity != nil && strings.TrimSpace(opts.workspaceServiceIdentity.ID()) != "" {
-		payload["workspace_service_identity_id"] = strings.TrimSpace(opts.workspaceServiceIdentity.ID())
+		"human_auth_mode":         "workspace_local",
 	}
 	return payload, nil
 }

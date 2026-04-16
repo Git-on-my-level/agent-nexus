@@ -6,7 +6,6 @@ This repo currently includes:
 - `docs/`: spec + HTTP contract
 - `../contracts/oar-schema.yaml`: shared schema
 - `cmd/oar-core`: HTTP server (`/health`, `/livez`, `/readyz`, `/ops/health`, `/version`) with SQLite+filesystem workspace init
-- `cmd/oar-control-plane`: SaaS control-plane HTTP server for accounts, organizations, workspace registry, jobs, invites, and audit state
 - `scripts/dev`, `scripts/lint`, `scripts/test`: local workflows
 
 ## Quickstart
@@ -14,7 +13,6 @@ This repo currently includes:
 ```bash
 ./scripts/test
 ./scripts/dev
-./scripts/dev-control-plane
 ```
 
 ## Workspace Layout

@@ -39,7 +39,6 @@ cd "$ROOT_DIR"
 
 if [[ "${COMMITTED_CHECK}" == true ]]; then
   git diff --exit-code -- contracts/gen
-  git diff --exit-code -- contracts/gen/control
   git diff --exit-code -- cli/internal/registry/commands.json cli/internal/registry/concepts.json cli/internal/registry/help.json cli/internal/registry/event_ref_rules.json
   git diff --exit-code -- cli/docs/generated/commands.md cli/docs/generated/command-groups.md cli/docs/generated/concepts.md cli/docs/generated/x-oar-authoring.md
   git diff --exit-code -- web-ui/src/lib/generated/event_ref_rules.json
@@ -50,10 +49,4 @@ fi
   go test ./...
 )
 
-(
-  cd contracts/gen/control/go
-  go test ./...
-)
-
 pnpm exec tsc --project contracts/gen/ts/tsconfig.json --pretty false
-pnpm exec tsc --project contracts/gen/control/ts/tsconfig.json --pretty false

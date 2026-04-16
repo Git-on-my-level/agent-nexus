@@ -16,7 +16,7 @@ var defaultErrorMetadata = map[string]errorMetadata{
 	"auth_required":              {Recoverable: true, Hint: "Attach a valid Bearer token and retry."},
 	"cli_outdated":               {Recoverable: true, Hint: "Upgrade CLI to the minimum compatible version exposed by `/meta/handshake`."},
 	"conflict":                   {Recoverable: true, Hint: "Reload current state and retry with a fresh concurrency token."},
-	"dev_actor_mode_required":    {Recoverable: true, Hint: "Enable `OAR_ENABLE_DEV_ACTOR_MODE=1` only for explicit local development flows."},
+	"dev_actor_mode_required":    {Recoverable: true, Hint: "This endpoint is disabled outside dedicated development/test builds."},
 	"invalid_json":               {Recoverable: true, Hint: "Provide valid JSON request body and retry."},
 	"invalid_request":            {Recoverable: true, Hint: "Fix request shape/fields and retry."},
 	"invalid_token":              {Recoverable: true, Hint: "Refresh or rotate credentials, then retry."},

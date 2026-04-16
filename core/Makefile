@@ -1,11 +1,8 @@
-.PHONY: help serve serve-control-plane build-prod run-prod fmt fmt-check vet test check check-ci lint ci-smoke smoke smoke-control-plane smoke-control-plane-human
+.PHONY: help serve build-prod run-prod fmt fmt-check vet test check check-ci lint ci-smoke smoke
 
 HOST ?= 127.0.0.1
 PORT ?= 8000
 WORKSPACE_ROOT ?= $(CURDIR)/.oar-workspace
-CONTROL_PLANE_WORKSPACE_ROOT ?= $(CURDIR)/.oar-control-plane
-# Like repo `make serve` + RESET_DEV_WORKSPACE: wipe control-plane SQLite before each dev start unless 0.
-RESET_CONTROL_PLANE_WORKSPACE ?= 1
 SCHEMA_PATH ?= $(CURDIR)/../contracts/oar-schema.yaml
 
 # For offline/air-gapped environments (e.g., agent sandboxes), set GOTOOLCHAIN=local
@@ -15,7 +12,6 @@ SCHEMA_PATH ?= $(CURDIR)/../contracts/oar-schema.yaml
 help:
 	@echo "Common targets:"
 	@echo "  make serve      - run oar-core locally (development mode)"
-	@echo "  make serve-control-plane - run oar-control-plane only (full SaaS UI stack: make serve-control-plane from repo root)"
 	@echo "  make fmt        - format Go files in-place"
 	@echo "  make fmt-check  - verify Go files are gofmt-clean"
 	@echo "  make check      - run formatting + cheap checks locally"
@@ -25,8 +21,6 @@ help:
 	@echo "  make lint       - run repository lint script"
 	@echo "  make ci-smoke   - run CI smoke test script"
 	@echo "  make smoke      - run end-to-end API smoke script"
-	@echo "  make smoke-control-plane - start the control plane and verify /health"
-	@echo "  make smoke-control-plane-human - verify a signed control-plane human workspace request"
 	@echo "  make build-prod - build production binary"
 	@echo "  make run-prod   - build+run production-like binary locally"
 
@@ -39,13 +33,6 @@ serve:
 	WORKSPACE_ROOT="$(WORKSPACE_ROOT)" \
 	SCHEMA_PATH="$(SCHEMA_PATH)" \
 	./scripts/dev
-
-serve-control-plane:
-	@HOST="$(HOST)" \
-	PORT="$(PORT)" \
-	CONTROL_PLANE_WORKSPACE_ROOT="$(CONTROL_PLANE_WORKSPACE_ROOT)" \
-	RESET_CONTROL_PLANE_WORKSPACE="$(RESET_CONTROL_PLANE_WORKSPACE)" \
-	./scripts/dev-control-plane
 
 run-prod: build-prod
 	@WORKSPACE_ROOT="$(WORKSPACE_ROOT)" \
@@ -98,13 +85,3 @@ ci-smoke:
 
 smoke:
 	@./scripts/smoke
-
-smoke-control-plane:
-	@HOST="$(HOST)" \
-	PORT="$(PORT)" \
-	./scripts/smoke-control-plane
-
-smoke-control-plane-human:
-	@PORT="$(PORT)" \
-	WORKSPACE_ROOT="$(WORKSPACE_ROOT)" \
-	./scripts/smoke-control-plane-human

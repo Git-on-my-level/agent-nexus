@@ -7,8 +7,8 @@
 
 ## Running services
 - `make serve` starts the full stack: core on `:8000`, web-ui on `:5173`, and seeds mock data automatically. See `README.md` for toggles (`SEED_CORE`, `FORCE_SEED`).
-- Core runs with `OAR_ALLOW_UNAUTHENTICATED_WRITES=1` in dev mode, so API writes work without crypto key auth.
-- The web-ui actor gate requires selecting an actor identity on first load; seeded actors include `Zara (OpsAI)`, `SqueezeBot 3000`, `FlavorMind`, `SupplyRover`, and `Till-E`.
+- Core enforces authenticated writes. For local work, seed identities or register a principal with bootstrap/invite and use normal bearer-token auth.
+- The web UI uses auth-first routing; unauthenticated users are sent through passkey/agent onboarding flows.
 
 ## Checks and testing
 - Component checks: `make -C core check`, `make cli-check`, `make -C web-ui check` (lint + unit tests; web-ui check skips Playwright e2e by default).

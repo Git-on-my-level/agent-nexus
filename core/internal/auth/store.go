@@ -836,23 +836,6 @@ func (s *Store) UpdateUsername(ctx context.Context, agentID string, username str
 		return Agent{}, fmt.Errorf("begin update username transaction: %w", err)
 	}
 
-	var authMethod string
-	if err := tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT %s FROM agents a WHERE a.id = ?`, authMethodExpr("a")), agentID).Scan(&authMethod); err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
-		if errors.Is(err, sql.ErrNoRows) {
-			return Agent{}, ErrAgentNotFound
-		}
-		return Agent{}, fmt.Errorf("query agent auth method before update username: %w", err)
-	}
-	if strings.TrimSpace(authMethod) == AuthMethodControlPlane {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
-		return Agent{}, fmt.Errorf("%w: control-plane-backed principals cannot be renamed locally", ErrInvalidRequest)
-	}
-
 	result, err := tx.ExecContext(
 		ctx,
 		`UPDATE agents
@@ -927,14 +910,15 @@ func (s *Store) UpdateRegistration(ctx context.Context, agentID string, registra
 	var (
 		username     string
 		actorID      string
-		authMethod   string
 		metadataJSON string
 	)
 	if err := tx.QueryRowContext(
 		ctx,
-		fmt.Sprintf(`SELECT a.username, a.actor_id, %s, a.metadata_json FROM agents a WHERE a.id = ?`, authMethodExpr("a")),
+		`SELECT a.username, a.actor_id, a.metadata_json
+		 FROM agents a
+		 WHERE a.id = ?`,
 		agentID,
-	).Scan(&username, &actorID, &authMethod, &metadataJSON); err != nil {
+	).Scan(&username, &actorID, &metadataJSON); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
 		}
@@ -942,12 +926,6 @@ func (s *Store) UpdateRegistration(ctx context.Context, agentID string, registra
 			return Agent{}, ErrAgentNotFound
 		}
 		return Agent{}, fmt.Errorf("query agent registration target: %w", err)
-	}
-	if strings.TrimSpace(authMethod) == AuthMethodControlPlane {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
-		return Agent{}, fmt.Errorf("%w: control-plane-backed principals cannot modify workspace-local registration state", ErrInvalidRequest)
 	}
 
 	normalized := normalizeAgentRegistration(registration)
@@ -1036,8 +1014,7 @@ func (s *Store) RotateKey(ctx context.Context, agentID string, publicKey string)
 	}
 
 	var revokedAt sql.NullString
-	var authMethod string
-	err = tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT revoked_at, %s FROM agents a WHERE id = ?`, authMethodExpr("a")), agentID).Scan(&revokedAt, &authMethod)
+	err = tx.QueryRowContext(ctx, `SELECT revoked_at FROM agents WHERE id = ?`, agentID).Scan(&revokedAt)
 	if err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -1052,12 +1029,6 @@ func (s *Store) RotateKey(ctx context.Context, agentID string, publicKey string)
 			log.Printf("tx rollback failed: %v", rbErr)
 		}
 		return AgentKey{}, ErrAgentRevoked
-	}
-	if strings.TrimSpace(authMethod) == AuthMethodControlPlane {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
-		return AgentKey{}, fmt.Errorf("%w: control-plane-backed principals cannot rotate workspace-local keys", ErrInvalidRequest)
 	}
 
 	_, err = tx.ExecContext(
@@ -1191,12 +1162,6 @@ func (s *Store) RevokeAgent(ctx context.Context, agentID string, input RevokeAge
 		}
 		return RevokeAgentResult{}, err
 	}
-	if principal.AuthMethod == AuthMethodControlPlane {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
-		return RevokeAgentResult{}, fmt.Errorf("%w: control-plane-backed principals cannot be revoked locally", ErrInvalidRequest)
-	}
 	activeHumanCount, err := s.countActiveHumanPrincipalsTx(ctx, tx)
 	if err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
@@ -1305,8 +1270,7 @@ func (s *Store) countActiveHumanPrincipalsTx(ctx context.Context, tx *sql.Tx) (i
 		fmt.Sprintf(`SELECT COUNT(1)
 		 FROM agents a
 		 WHERE a.revoked_at IS NULL
-		   AND %s = 'human'
-		   AND %s != '%s'`, principalKindExpr("a"), authMethodExpr("a"), AuthMethodControlPlane),
+		   AND %s = 'human'`, principalKindExpr("a")),
 	).Scan(&count); err != nil {
 		return 0, fmt.Errorf("count active human principals: %w", err)
 	}
@@ -1323,8 +1287,7 @@ func (s *Store) CountActiveHumanPrincipals(ctx context.Context) (int, error) {
 		fmt.Sprintf(`SELECT COUNT(1)
 		 FROM agents a
 		 WHERE a.revoked_at IS NULL
-		   AND %s = 'human'
-		   AND %s != '%s'`, principalKindExpr("a"), authMethodExpr("a"), AuthMethodControlPlane),
+		   AND %s = 'human'`, principalKindExpr("a")),
 	).Scan(&count); err != nil {
 		return 0, fmt.Errorf("count active human principals: %w", err)
 	}

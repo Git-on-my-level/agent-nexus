@@ -20,8 +20,6 @@ envelopes are out of scope for this document.
 ## Auth and onboarding
 
 - Outside development mode, all workspace data routes require authentication.
-- `OAR_ALLOW_UNAUTHENTICATED_WRITES` and UI actor-selection/dev-actor style
-  flows are development-only escape hatches.
 - Hosted v1 is not open signup. New principals enter through managed bootstrap
   or invite-gated onboarding.
 - Hosted v1 may keep passkey-authenticated humans and Ed25519 key-pair agents

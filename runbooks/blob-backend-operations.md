@@ -6,7 +6,7 @@ This runbook covers blob backend choices and operational procedures for Organiza
 
 | Backend | Use case | Recommendation |
 |---|---|---|
-| `filesystem` | Local disk storage | Default for self-host and PMF packed-host |
+| `filesystem` | Local disk storage | Default for self-host |
 | `s3` | S3-compatible object storage | Optional for off-host durability or storage expansion |
 
 ### Filesystem backend
@@ -151,7 +151,8 @@ S3 backend:
 - Not a second independent full copy of the object store
 - Operator owns bucket/prefix lifecycle separately
 
-See [`packed-host-backup-restore.md`](packed-host-backup-restore.md) for backup/restore procedures.
+Use the backup/restore scripts in `scripts/hosted/` for local workspace backup
+bundles and restore drills.
 
 ## Troubleshooting
 

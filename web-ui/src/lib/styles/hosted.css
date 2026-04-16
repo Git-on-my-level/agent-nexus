@@ -1,0 +1,317 @@
+/**
+ * Hosted / control-plane account flows (signup, onboarding, etc.).
+ * Uses the same :root design tokens as the workspace shell (app.css).
+ */
+
+.hosted-shell {
+  min-height: 100vh;
+  background: var(--ui-bg);
+}
+
+.hosted-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem 1.5rem;
+  padding: 0.75rem 1.25rem;
+  background: var(--ui-panel);
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.hosted-brand {
+  font-weight: 600;
+  color: var(--ui-text);
+}
+
+.hosted-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+}
+
+.hosted-nav-link {
+  color: var(--ui-text-muted);
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+
+.hosted-nav-link:hover {
+  color: var(--ui-text);
+  text-decoration: underline;
+}
+
+.hosted-nav-link--active {
+  color: var(--ui-text);
+  font-weight: 500;
+}
+
+.hosted-page {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 3rem;
+  line-height: 1.5;
+  color: var(--ui-text);
+}
+
+.hosted-page--narrow {
+  max-width: 26rem;
+}
+
+.hosted-page--wide {
+  max-width: 44rem;
+}
+
+.hosted-page--hero {
+  max-width: 36rem;
+  margin: 2.5rem auto;
+  padding: 0 1.25rem;
+  line-height: 1.55;
+}
+
+.hosted-title {
+  font-size: 1.35rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+  color: var(--ui-text);
+}
+
+.hosted-title--hero {
+  font-size: 1.65rem;
+  margin: 0 0 0.75rem;
+}
+
+.hosted-sub,
+.hosted-lede {
+  margin: 0 0 1.5rem;
+  color: var(--ui-text-muted);
+  font-size: 0.95rem;
+}
+
+.hosted-lede {
+  font-size: 1.02rem;
+  line-height: 1.55;
+}
+
+.hosted-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.hosted-btn {
+  display: inline-block;
+  padding: 0.65rem 1.15rem;
+  border-radius: var(--ui-radius-md);
+  font-weight: 600;
+  text-decoration: none;
+  font-size: 0.95rem;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: center;
+}
+
+.hosted-btn--primary {
+  background: var(--ui-accent);
+  color: #fff;
+}
+
+.hosted-btn--primary:hover {
+  background: var(--ui-accent-strong);
+}
+
+a.hosted-btn--primary {
+  color: #fff;
+}
+
+.hosted-btn--secondary {
+  background: var(--ui-panel-muted);
+  color: var(--ui-text);
+  border-color: var(--ui-border);
+}
+
+.hosted-btn--secondary:hover {
+  border-color: var(--ui-border-strong);
+  background: var(--ui-bg-soft);
+}
+
+.hosted-dash {
+  margin: 0 0 1rem;
+  font-size: 0.95rem;
+}
+
+.hosted-dev-hint {
+  margin: 2rem 0 0;
+  font-size: 0.88rem;
+  color: var(--ui-text-muted);
+}
+
+.hosted-card {
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-md);
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+  box-shadow: var(--ui-shadow-subtle);
+}
+
+.hosted-card h2 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0 0 0.75rem;
+  color: var(--ui-text);
+}
+
+.hosted-card > .hosted-field {
+  margin-bottom: 0.75rem;
+}
+
+.hosted-card .hosted-row .hosted-field {
+  margin-bottom: 0;
+}
+
+.hosted-card > .hosted-btn-submit {
+  margin-top: 0.25rem;
+}
+
+.hosted-hint {
+  font-size: 0.88rem;
+  color: var(--ui-text-muted);
+  margin: 0 0 1rem;
+}
+
+.hosted-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.hosted-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  margin-bottom: 0;
+  color: var(--ui-text-muted);
+}
+
+.hosted-input,
+.hosted-field select,
+.hosted-field textarea {
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-sm);
+  font: inherit;
+  background: var(--ui-input-bg);
+  color: var(--ui-text);
+}
+
+.hosted-field textarea {
+  padding: 0.45rem 0.55rem;
+  resize: vertical;
+}
+
+.hosted-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+@media (max-width: 520px) {
+  .hosted-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.hosted-btn-submit {
+  margin-top: 0.25rem;
+  padding: 0.6rem 1rem;
+  border: none;
+  border-radius: var(--ui-radius-sm);
+  font: inherit;
+  font-weight: 600;
+  background: var(--ui-accent);
+  color: #fff;
+  cursor: pointer;
+}
+
+.hosted-btn-submit:hover:not(:disabled) {
+  background: var(--ui-accent-strong);
+}
+
+.hosted-btn-submit:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.hosted-link {
+  color: var(--ui-accent);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.hosted-link:hover {
+  text-decoration: underline;
+}
+
+.hosted-foot {
+  margin-top: 1.5rem;
+  font-size: 0.9rem;
+  color: var(--ui-text-muted);
+}
+
+.hosted-error {
+  margin: 0;
+  color: var(--ui-danger);
+  font-size: 0.9rem;
+}
+
+.hosted-linkish-btn {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--ui-accent);
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.hosted-ws-list {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.hosted-ws-list li {
+  margin-bottom: 0.5rem;
+}
+
+.hosted-muted {
+  color: var(--ui-text-muted);
+}
+
+.hosted-status {
+  font-size: 0.85rem;
+  text-transform: capitalize;
+}
+
+.hosted-page code,
+.hosted-card code {
+  font-size: 0.85em;
+  padding: 0.1em 0.35em;
+  border-radius: 0.25rem;
+  background: var(--ui-panel-muted);
+  border: 1px solid var(--ui-border-subtle);
+}
+
+.hosted-bullets {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.hosted-bullets li {
+  margin-bottom: 0.65rem;
+}

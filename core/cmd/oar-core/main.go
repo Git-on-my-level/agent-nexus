@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"net"
@@ -10,7 +9,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"runtime/debug"
 	"strconv"
 	"strings"
 	"syscall"
@@ -20,8 +18,6 @@ import (
 	"organization-autorunner-core/internal/auth"
 	"organization-autorunner-core/internal/blob"
 	"organization-autorunner-core/internal/buildinfo"
-	"organization-autorunner-core/internal/controlplaneauth"
-	"organization-autorunner-core/internal/controlplaneauth/heartbeat"
 	"organization-autorunner-core/internal/primitives"
 	"organization-autorunner-core/internal/router"
 	"organization-autorunner-core/internal/schema"
@@ -32,13 +28,12 @@ import (
 )
 
 const (
-	defaultHost                = "127.0.0.1"
-	defaultPort                = 8000
-	defaultSchemaPath          = "../contracts/oar-schema.yaml"
-	defaultWorkspaceRoot       = ".oar-workspace"
-	defaultAPIVersion          = "v0"
-	defaultInstanceID          = "core-local"
-	devPasskeyBypassMarkerName = ".oar-dev-insecure-auth"
+	defaultHost          = "127.0.0.1"
+	defaultPort          = 8000
+	defaultSchemaPath    = "../contracts/oar-schema.yaml"
+	defaultWorkspaceRoot = ".oar-workspace"
+	defaultAPIVersion    = "v0"
+	defaultInstanceID    = "core-local"
 
 	defaultWorkspaceMaxBlobBytes         int64 = 1 << 30
 	defaultWorkspaceMaxArtifacts         int64 = 100000
@@ -56,63 +51,52 @@ const (
 
 func main() {
 	var (
-		host                       = envString("OAR_HOST", defaultHost)
-		port                       = envInt("OAR_PORT", defaultPort)
-		listenAddress              = envString("OAR_LISTEN_ADDR", "")
-		schemaPath                 = envString("OAR_SCHEMA_PATH", defaultSchemaPath)
-		workspaceRoot              = envString("OAR_WORKSPACE_ROOT", defaultWorkspaceRoot)
-		blobBackend                = envString("OAR_BLOB_BACKEND", "filesystem")
-		blobRoot                   = envString("OAR_BLOB_ROOT", "")
-		blobS3Bucket               = envString("OAR_BLOB_S3_BUCKET", "")
-		blobS3Prefix               = envString("OAR_BLOB_S3_PREFIX", "")
-		blobS3Region               = envString("OAR_BLOB_S3_REGION", "")
-		blobS3Endpoint             = envString("OAR_BLOB_S3_ENDPOINT", "")
-		blobS3AccessKeyID          = envString("OAR_BLOB_S3_ACCESS_KEY_ID", "")
-		blobS3SecretAccessKey      = envString("OAR_BLOB_S3_SECRET_ACCESS_KEY", "")
-		blobS3SessionToken         = envString("OAR_BLOB_S3_SESSION_TOKEN", "")
-		blobS3ForcePathStyle       = envBool("OAR_BLOB_S3_FORCE_PATH_STYLE", false)
-		coreVersion                = envString("OAR_CORE_VERSION", buildinfo.Current)
-		coreBaseURL                = envString("OAR_CORE_BASE_URL", "")
-		apiVersion                 = envString("OAR_API_VERSION", defaultAPIVersion)
-		minCLIVersion              = envString("OAR_MIN_CLI_VERSION", buildinfo.Current)
-		recommendedCLIVersion      = envString("OAR_RECOMMENDED_CLI_VERSION", buildinfo.Current)
-		cliDownloadURL             = envString("OAR_CLI_DOWNLOAD_URL", "")
-		coreInstanceID             = envString("OAR_CORE_INSTANCE_ID", defaultInstanceID)
-		metaCommandsPath           = envString("OAR_META_COMMANDS_PATH", "")
-		streamPollInterval         = envDuration("OAR_STREAM_POLL_INTERVAL", time.Second)
-		projectionMode             = envString("OAR_PROJECTION_MODE", server.ProjectionModeBackground)
-		projectionPollInterval     = envDuration("OAR_PROJECTION_MAINTENANCE_INTERVAL", 5*time.Second)
-		staleScanInterval          = envDuration("OAR_PROJECTION_STALE_SCAN_INTERVAL", 30*time.Second)
-		projectionBatchSize        = envInt("OAR_PROJECTION_MAINTENANCE_BATCH_SIZE", 50)
-		enableDevActorMode         = envBool("OAR_ENABLE_DEV_ACTOR_MODE", false)
-		allowPasskeyDevBypass      = envBool("OAR_ALLOW_PASSKEY_DEV_BYPASS", false)
-		devRegisterLinkedActors    = envBool("OAR_DEV_REGISTER_LINKED_ACTORS", false)
-		allowUnauthenticatedWrites = envBool("OAR_ALLOW_UNAUTHENTICATED_WRITES", false)
-		allowLoopbackVerifyReads   = envBool("OAR_ALLOW_LOOPBACK_VERIFICATION_READS", false)
-		bootstrapToken             = envString("OAR_BOOTSTRAP_TOKEN", "")
-		webAuthnRPID               = envString("OAR_WEBAUTHN_RPID", "")
-		webAuthnOrigin             = envString("OAR_WEBAUTHN_ORIGIN", "")
-		webAuthnAllowedOrigins     = envCSV("OAR_WEBAUTHN_ALLOWED_ORIGINS")
-		webAuthnDisplayName        = envString("OAR_WEBAUTHN_RP_DISPLAY_NAME", "OAR")
-		humanAuthMode              = envString("OAR_HUMAN_AUTH_MODE", controlplaneauth.HumanAuthModeWorkspaceLocal)
-		controlPlaneBaseURL        = envString("OAR_CONTROL_PLANE_BASE_URL", "")
-		controlPlaneHeartbeatIntvl = envDuration("OAR_CONTROL_PLANE_HEARTBEAT_INTERVAL", heartbeat.DefaultInterval)
-		controlPlaneTokenIssuer    = envString("OAR_CONTROL_PLANE_TOKEN_ISSUER", "")
-		controlPlaneTokenAudience  = envString("OAR_CONTROL_PLANE_TOKEN_AUDIENCE", "")
-		controlPlaneWorkspaceID    = envString("OAR_CONTROL_PLANE_WORKSPACE_ID", "")
-		workspaceID                = envString("OAR_WORKSPACE_ID", "")
-		secretsKey                 = envString("OAR_SECRETS_KEY", "")
-		workspaceName              = envString("OAR_WORKSPACE_NAME", "Main")
-		controlPlaneTokenPublicKey = envString("OAR_CONTROL_PLANE_TOKEN_PUBLIC_KEY", "")
-		workspaceServiceID         = envString("OAR_WORKSPACE_SERVICE_ID", "")
-		workspaceServicePrivateKey = envString("OAR_WORKSPACE_SERVICE_PRIVATE_KEY", "")
-		corsAllowedOrigins         = envString("OAR_CORS_ALLOWED_ORIGINS", "")
-		sidecarRouterEnabled       = envBool("OAR_SIDECAR_ROUTER_ENABLED", true)
-		sidecarRouterStatePath     = envString("OAR_SIDECAR_ROUTER_STATE_PATH", "")
-		sidecarRouterPollInterval  = envDuration("OAR_SIDECAR_ROUTER_POLL_INTERVAL", time.Second)
-		sidecarRouterCacheTTL      = envDuration("OAR_SIDECAR_ROUTER_PRINCIPAL_CACHE_TTL", time.Minute)
-		shutdownTimeout            = envDuration("OAR_SHUTDOWN_TIMEOUT", 15*time.Second)
-		workspaceQuota             = primitives.WorkspaceQuota{
+		host                      = envString("OAR_HOST", defaultHost)
+		port                      = envInt("OAR_PORT", defaultPort)
+		listenAddress             = envString("OAR_LISTEN_ADDR", "")
+		schemaPath                = envString("OAR_SCHEMA_PATH", defaultSchemaPath)
+		workspaceRoot             = envString("OAR_WORKSPACE_ROOT", defaultWorkspaceRoot)
+		blobBackend               = envString("OAR_BLOB_BACKEND", "filesystem")
+		blobRoot                  = envString("OAR_BLOB_ROOT", "")
+		blobS3Bucket              = envString("OAR_BLOB_S3_BUCKET", "")
+		blobS3Prefix              = envString("OAR_BLOB_S3_PREFIX", "")
+		blobS3Region              = envString("OAR_BLOB_S3_REGION", "")
+		blobS3Endpoint            = envString("OAR_BLOB_S3_ENDPOINT", "")
+		blobS3AccessKeyID         = envString("OAR_BLOB_S3_ACCESS_KEY_ID", "")
+		blobS3SecretAccessKey     = envString("OAR_BLOB_S3_SECRET_ACCESS_KEY", "")
+		blobS3SessionToken        = envString("OAR_BLOB_S3_SESSION_TOKEN", "")
+		blobS3ForcePathStyle      = envBool("OAR_BLOB_S3_FORCE_PATH_STYLE", false)
+		coreVersion               = envString("OAR_CORE_VERSION", buildinfo.Current)
+		coreBaseURL               = envString("OAR_CORE_BASE_URL", "")
+		apiVersion                = envString("OAR_API_VERSION", defaultAPIVersion)
+		minCLIVersion             = envString("OAR_MIN_CLI_VERSION", buildinfo.Current)
+		recommendedCLIVersion     = envString("OAR_RECOMMENDED_CLI_VERSION", buildinfo.Current)
+		cliDownloadURL            = envString("OAR_CLI_DOWNLOAD_URL", "")
+		coreInstanceID            = envString("OAR_CORE_INSTANCE_ID", defaultInstanceID)
+		metaCommandsPath          = envString("OAR_META_COMMANDS_PATH", "")
+		streamPollInterval        = envDuration("OAR_STREAM_POLL_INTERVAL", time.Second)
+		projectionMode            = envString("OAR_PROJECTION_MODE", server.ProjectionModeBackground)
+		projectionPollInterval    = envDuration("OAR_PROJECTION_MAINTENANCE_INTERVAL", 5*time.Second)
+		staleScanInterval         = envDuration("OAR_PROJECTION_STALE_SCAN_INTERVAL", 30*time.Second)
+		projectionBatchSize       = envInt("OAR_PROJECTION_MAINTENANCE_BATCH_SIZE", 50)
+		devRegisterLinkedActors   = envBool("OAR_DEV_REGISTER_LINKED_ACTORS", false)
+		allowLoopbackVerifyReads  = envBool("OAR_ALLOW_LOOPBACK_VERIFICATION_READS", false)
+		bootstrapToken            = envString("OAR_BOOTSTRAP_TOKEN", "")
+		webAuthnRPID              = envString("OAR_WEBAUTHN_RPID", "")
+		webAuthnOrigin            = envString("OAR_WEBAUTHN_ORIGIN", "")
+		webAuthnAllowedOrigins    = envCSV("OAR_WEBAUTHN_ALLOWED_ORIGINS")
+		webAuthnDisplayName       = envString("OAR_WEBAUTHN_RP_DISPLAY_NAME", "OAR")
+		workspaceID               = envString("OAR_WORKSPACE_ID", "")
+		secretsKey                = envString("OAR_SECRETS_KEY", "")
+		workspaceName             = envString("OAR_WORKSPACE_NAME", "Main")
+		corsAllowedOrigins        = envString("OAR_CORS_ALLOWED_ORIGINS", "")
+		sidecarRouterEnabled      = envBool("OAR_SIDECAR_ROUTER_ENABLED", true)
+		sidecarRouterStatePath    = envString("OAR_SIDECAR_ROUTER_STATE_PATH", "")
+		sidecarRouterPollInterval = envDuration("OAR_SIDECAR_ROUTER_POLL_INTERVAL", time.Second)
+		sidecarRouterCacheTTL     = envDuration("OAR_SIDECAR_ROUTER_PRINCIPAL_CACHE_TTL", time.Minute)
+		shutdownTimeout           = envDuration("OAR_SHUTDOWN_TIMEOUT", 15*time.Second)
+		enforceLocalQuotas        = envBool("OAR_ENFORCE_LOCAL_QUOTAS", true)
+		workspaceQuota            = primitives.WorkspaceQuota{
 			MaxBlobBytes:         envInt64("OAR_WORKSPACE_MAX_BLOB_BYTES", defaultWorkspaceMaxBlobBytes),
 			MaxArtifacts:         envInt64("OAR_WORKSPACE_MAX_ARTIFACTS", defaultWorkspaceMaxArtifacts),
 			MaxDocuments:         envInt64("OAR_WORKSPACE_MAX_DOCUMENTS", defaultWorkspaceMaxDocuments),
@@ -151,7 +135,12 @@ func main() {
 	flag.DurationVar(&projectionPollInterval, "projection-maintenance-interval", projectionPollInterval, "poll interval used by background projection maintenance")
 	flag.DurationVar(&staleScanInterval, "projection-stale-scan-interval", staleScanInterval, "interval used by background stale-thread scanning")
 	flag.IntVar(&projectionBatchSize, "projection-maintenance-batch-size", projectionBatchSize, "max dirty thread projections refreshed per maintenance pass")
+	flag.BoolVar(&enforceLocalQuotas, "enforce-local-quotas", enforceLocalQuotas, "enforce workspace-local write quotas")
 	flag.Parse()
+
+	if !enforceLocalQuotas {
+		workspaceQuota = primitives.WorkspaceQuota{}
+	}
 
 	parsedProjectionMode, err := server.ParseProjectionMode(projectionMode)
 	if err != nil {
@@ -215,9 +204,6 @@ func main() {
 		coreBaseURL = defaultCoreBaseURL(addr)
 	}
 	if strings.TrimSpace(workspaceID) == "" {
-		workspaceID = strings.TrimSpace(controlPlaneWorkspaceID)
-	}
-	if strings.TrimSpace(workspaceID) == "" {
 		workspaceID = "ws_main"
 	}
 	if strings.TrimSpace(workspaceName) == "" {
@@ -251,63 +237,13 @@ func main() {
 		fmt.Fprintf(os.Stderr, "failed to seed system actor: %v\n", err)
 		os.Exit(1)
 	}
-	passkeyDevBypassConfigured := allowPasskeyDevBypass
-	passkeyDevBypassMarkerPath := filepath.Join(workspace.Layout().RootDir, devPasskeyBypassMarkerName)
-	passkeyDevBypassMarkerPresent, err := fileExists(passkeyDevBypassMarkerPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to inspect passkey dev bypass marker: %v\n", err)
-		os.Exit(1)
-	}
-	passkeyDevBypassEffective := passkeyDevBypassConfigured && passkeyDevBypassMarkerPresent
 	authStore := auth.NewStore(
 		workspace.DB(),
 		auth.WithBootstrapToken(bootstrapToken),
-		auth.WithAllowDevRegisterLinkedActor(passkeyDevBypassEffective && devRegisterLinkedActors),
+		auth.WithAllowDevRegisterLinkedActor(devRegisterLinkedActors),
 	)
 	passkeySessionStore := auth.NewPasskeySessionStore(auth.DefaultPasskeySessionTTL)
 	defer passkeySessionStore.Close()
-	var (
-		controlPlaneVerifier *controlplaneauth.WorkspaceHumanVerifier
-		serviceIdentity      *controlplaneauth.WorkspaceServiceIdentity
-	)
-	needsWorkspaceServiceIdentity := strings.TrimSpace(humanAuthMode) == controlplaneauth.HumanAuthModeControlPlane || strings.TrimSpace(controlPlaneBaseURL) != ""
-	switch strings.TrimSpace(humanAuthMode) {
-	case controlplaneauth.HumanAuthModeWorkspaceLocal:
-	case controlplaneauth.HumanAuthModeControlPlane:
-		publicKey, err := controlplaneauth.ParseEd25519PublicKeyBase64(controlPlaneTokenPublicKey)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "invalid OAR_CONTROL_PLANE_TOKEN_PUBLIC_KEY: %v\n", err)
-			os.Exit(1)
-		}
-		controlPlaneVerifier, err = controlplaneauth.NewWorkspaceHumanVerifier(controlplaneauth.WorkspaceHumanVerifierConfig{
-			Issuer:      controlPlaneTokenIssuer,
-			Audience:    controlPlaneTokenAudience,
-			WorkspaceID: controlPlaneWorkspaceID,
-			PublicKey:   publicKey,
-		})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "invalid control-plane human auth configuration: %v\n", err)
-			os.Exit(1)
-		}
-	default:
-		fmt.Fprintf(os.Stderr, "invalid OAR_HUMAN_AUTH_MODE %q (supported: %s, %s)\n", humanAuthMode, controlplaneauth.HumanAuthModeWorkspaceLocal, controlplaneauth.HumanAuthModeControlPlane)
-		os.Exit(1)
-	}
-	if needsWorkspaceServiceIdentity {
-		servicePrivateKey, err := controlplaneauth.ParseEd25519PrivateKeyBase64(workspaceServicePrivateKey)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "invalid OAR_WORKSPACE_SERVICE_PRIVATE_KEY: %v\n", err)
-			os.Exit(1)
-		}
-		serviceIdentity, err = controlplaneauth.NewWorkspaceServiceIdentity(controlplaneauth.WorkspaceServiceIdentityConfig{
-			ID:         workspaceServiceID,
-			PrivateKey: servicePrivateKey,
-		})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "invalid workspace service identity configuration: %v\n", err)
-			os.Exit(1)
-		}
-	}
 	primitiveStore := primitives.NewStore(workspace.DB(), blobBackendImpl, effectiveBlobRoot, primitives.WithWorkspaceQuota(workspaceQuota))
 	projectionMaintainer := server.NewProjectionMaintainer(server.ProjectionMaintainerConfig{
 		PrimitiveStore:    primitiveStore,
@@ -364,59 +300,6 @@ func main() {
 			Enabled: true,
 		})
 	}
-	var heartbeatReporter *heartbeat.Reporter
-	if strings.TrimSpace(controlPlaneBaseURL) != "" {
-		heartbeatReporter, err = heartbeat.NewReporter(heartbeat.ReporterConfig{
-			BaseURL:     controlPlaneBaseURL,
-			WorkspaceID: controlPlaneWorkspaceID,
-			Interval:    controlPlaneHeartbeatIntvl,
-			Version:     coreVersion,
-			Build:       detectBuildString(coreInstanceID, coreVersion),
-			Identity:    serviceIdentity,
-			ReadinessSummary: func(ctx context.Context) map[string]any {
-				if err := workspace.Ping(ctx); err != nil {
-					return map[string]any{
-						"ok": false,
-						"error": map[string]any{
-							"code":    "storage_unavailable",
-							"message": "storage health check failed",
-						},
-					}
-				}
-				summary := map[string]any{"ok": true}
-				if err := sidecarHost.Ready(ctx); err != nil {
-					return map[string]any{
-						"ok": false,
-						"error": map[string]any{
-							"code":    "sidecar_unavailable",
-							"message": "sidecar readiness check failed",
-						},
-						"sidecars": sidecarHost.Snapshot(ctx),
-					}
-				}
-				summary["sidecars"] = sidecarHost.Snapshot(ctx)
-				return summary
-			},
-			ProjectionMaintenanceSummary: func(ctx context.Context, now time.Time) map[string]any {
-				return toStringAnyMap(projectionMaintainer.Snapshot(ctx, now))
-			},
-			UsageSummary: func(ctx context.Context) (map[string]any, error) {
-				summary, err := primitiveStore.GetWorkspaceUsageSummary(ctx)
-				if err != nil {
-					return nil, err
-				}
-				return toStringAnyMap(summary), nil
-			},
-			LastSuccessfulBackupAt: func(ctx context.Context) (*string, error) {
-				_ = ctx
-				return heartbeat.DiscoverLastSuccessfulBackupAt(workspace.Layout().RootDir)
-			},
-		})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "invalid heartbeat reporter configuration: %v\n", err)
-			os.Exit(1)
-		}
-	}
 	handler := server.NewHandler(
 		contract.Version,
 		server.WithHealthCheck(workspace.Ping),
@@ -432,14 +315,8 @@ func main() {
 			RPOrigin:       webAuthnOrigin,
 			AllowedOrigins: webAuthnAllowedOrigins,
 		}),
-		server.WithHumanAuthMode(humanAuthMode),
-		server.WithControlPlaneHumanVerifier(controlPlaneVerifier),
-		server.WithWorkspaceServiceIdentity(serviceIdentity),
 		server.WithWorkspaceID(workspaceID),
 		server.WithSecretsStore(secretsStore),
-		server.WithEnableDevActorMode(enableDevActorMode),
-		server.WithAllowPasskeyDevBypass(passkeyDevBypassEffective),
-		server.WithAllowUnauthenticatedWrites(allowUnauthenticatedWrites),
 		server.WithAllowLoopbackVerificationReads(allowLoopbackVerifyReads),
 		server.WithCoreVersion(coreVersion),
 		server.WithAPIVersion(apiVersion),
@@ -473,30 +350,10 @@ func main() {
 		go projectionMaintainer.Run(maintenanceCtx)
 	}
 	sidecarHost.Run(maintenanceCtx)
-	if heartbeatReporter != nil {
-		go heartbeatReporter.Run(maintenanceCtx)
-	}
 	go func() {
 		fmt.Printf("oar-core listening on http://%s\n", addr)
 		fmt.Printf("  projection mode: %s\n", projectionMode)
 		fmt.Printf("  sidecars: router=%t (workspace_id=%s, workspace_name=%s)\n", sidecarRouterEnabled, workspaceID, workspaceName)
-		if heartbeatReporter != nil {
-			fmt.Printf("  control-plane heartbeat: %s (workspace_id=%s, interval=%s)\n", controlPlaneBaseURL, controlPlaneWorkspaceID, controlPlaneHeartbeatIntvl)
-		}
-		if enableDevActorMode {
-			fmt.Println("  WARNING: dev actor mode enabled (anonymous workspace reads and legacy actor flows)")
-		}
-		if passkeyDevBypassEffective {
-			fmt.Printf("  WARNING: passkey dev bypass enabled (marker=%s)\n", passkeyDevBypassMarkerPath)
-		} else if passkeyDevBypassConfigured {
-			fmt.Printf("  WARNING: passkey dev bypass requested but inactive (missing marker %s)\n", passkeyDevBypassMarkerPath)
-		}
-		if strings.TrimSpace(humanAuthMode) == controlplaneauth.HumanAuthModeControlPlane {
-			fmt.Printf("  human auth mode: %s (workspace_id=%s, service_identity=%s)\n", humanAuthMode, controlPlaneWorkspaceID, serviceIdentity.ID())
-		}
-		if allowUnauthenticatedWrites {
-			fmt.Println("  WARNING: unauthenticated writes enabled (dev mode)")
-		}
 		if allowLoopbackVerifyReads {
 			fmt.Println("  WARNING: loopback verification reads enabled (read-only loopback bypass)")
 		}
@@ -521,17 +378,6 @@ func main() {
 		}
 		fmt.Println("server stopped")
 	}
-}
-
-func fileExists(path string) (bool, error) {
-	_, err := os.Stat(strings.TrimSpace(path))
-	if err == nil {
-		return true, nil
-	}
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-	return false, err
 }
 
 func envString(name string, fallback string) string {
@@ -613,56 +459,6 @@ func envBool(name string, fallback bool) bool {
 		os.Exit(1)
 	}
 	return parsed
-}
-
-func toStringAnyMap(value any) map[string]any {
-	raw, err := json.Marshal(value)
-	if err != nil {
-		return map[string]any{}
-	}
-	out := map[string]any{}
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return map[string]any{}
-	}
-	return out
-}
-
-func detectBuildString(coreInstanceID string, coreVersion string) string {
-	parts := make([]string, 0, 3)
-	if info, ok := debug.ReadBuildInfo(); ok {
-		if version := strings.TrimSpace(info.Main.Version); version != "" && version != "(devel)" {
-			parts = append(parts, version)
-		}
-		revision := ""
-		modified := false
-		for _, setting := range info.Settings {
-			switch setting.Key {
-			case "vcs.revision":
-				revision = strings.TrimSpace(setting.Value)
-			case "vcs.modified":
-				modified = strings.TrimSpace(setting.Value) == "true"
-			}
-		}
-		if len(revision) > 12 {
-			revision = revision[:12]
-		}
-		if revision != "" {
-			parts = append(parts, revision)
-		}
-		if modified {
-			parts = append(parts, "dirty")
-		}
-	}
-	if len(parts) > 0 {
-		return strings.Join(parts, "+")
-	}
-	if strings.TrimSpace(coreInstanceID) != "" {
-		return strings.TrimSpace(coreInstanceID)
-	}
-	if strings.TrimSpace(coreVersion) != "" {
-		return strings.TrimSpace(coreVersion)
-	}
-	return "oar-core"
 }
 
 func defaultCoreBaseURL(addr string) string {

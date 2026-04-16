@@ -1422,7 +1422,6 @@ async function startManagedCore(runDir, coreBin, requestedBaseUrl, scenario, con
   const baseUrl = `http://${host}:${port}`;
   const bootstrapToken = continuation ? "" : `pi-bs-${runToken()}`;
   ensureDir(workspaceDir);
-  writeFile(path.join(workspaceDir, ".oar-dev-insecure-auth"), "");
   const logStream = fs.createWriteStream(logPath, { flags: "a" });
 
   const child = spawn(coreBin, [
@@ -1438,9 +1437,6 @@ async function startManagedCore(runDir, coreBin, requestedBaseUrl, scenario, con
     cwd: path.join(repoRoot, "core"),
     env: {
       ...process.env,
-      OAR_ENABLE_DEV_ACTOR_MODE: "1",
-      OAR_ALLOW_PASSKEY_DEV_BYPASS: "1",
-      OAR_ALLOW_UNAUTHENTICATED_WRITES: "1",
       OAR_DEV_REGISTER_LINKED_ACTORS: "1",
       ...(bootstrapToken ? { OAR_BOOTSTRAP_TOKEN: bootstrapToken } : {}),
     },

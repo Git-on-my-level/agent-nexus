@@ -3,12 +3,6 @@
 This runbook covers local integration and production-like serving for the
 workspace-aware `oar-ui`.
 
-For packed-host SaaS operations, see:
-
-- Architecture: [`../docs/architecture/saas-packed-host-v1.md`](../docs/architecture/saas-packed-host-v1.md)
-- Configuration: [`../runbooks/packed-host-configuration.md`](../runbooks/packed-host-configuration.md)
-- Linux deployment: [`../deploy/linux-packed-host.md`](../deploy/linux-packed-host.md)
-
 ## Configuration
 
 ### Workspace catalog
@@ -69,19 +63,6 @@ Single-core fallback:
   `./scripts/e2e-smoke`) or set `OAR_WORKSPACES` / `OAR_CORE_BASE_URL` per
   **Local integration** below.
 
-### SaaS packed-host workspace routing
-
-- In SaaS packed-host mode, a signed-in control-plane session can resolve
-  `/:workspace/...` routes dynamically from the control plane.
-- This allows newly created control-plane-managed workspaces to load through the
-  shared UI without editing `OAR_WORKSPACES` or restarting `oar-ui`.
-- The UI keeps a short-lived in-memory cache of control-plane workspace routing
-  metadata so proxied requests do not re-query the control plane every time.
-- If no control-plane session is present, the UI stays on the static
-  `OAR_WORKSPACES` or `OAR_CORE_BASE_URL` path.
-- If a SaaS workspace is missing, revoked, or still provisioning, the UI returns
-  an explicit routing error instead of a generic upstream proxy failure.
-
 ### Required oar-core endpoints
 
 The UI expects these HTTP endpoints (see `docs/http-api.md` for the full
@@ -120,29 +101,17 @@ contract):
 
 Identity is workspace-scoped.
 
-- **Auth-first model (default)**:
-  - When `dev_actor_mode=false` (default), users MUST authenticate via passkey to access the workspace.
+- **Auth-first model**:
+  - Users authenticate via passkey or agent token flows to access workspace routes.
   - Passkey registration creates a new agent with `principal_kind=human`, `auth_method=passkey`.
   - Authenticated writes lock to the principal's linked actor.
-  - The legacy actor picker/creator flow is hidden.
   - Unauthenticated users are redirected to `/login`.
-- **Development actor mode (dev convenience)**:
-  - When `dev_actor_mode=true` (set via `OAR_ENABLE_DEV_ACTOR_MODE=1` on core), the legacy actor selection flow is available.
-  - Selected actor is stored in `localStorage` per workspace.
-  - Useful for local workflows when core allows unauthenticated writes.
-  - Clearly labeled as "development-only" in the UI.
 - Passkey-authenticated mode:
   - Refresh/session state is carried in a same-origin `Secure`, `HttpOnly`, `SameSite=Lax` cookie per workspace.
   - Browser JavaScript does not read or write refresh tokens.
   - Access tokens stay on the server side and are refreshed through the cookie-backed session endpoint.
   - Browser API calls go through the same-origin BFF/proxy surface.
   - Authenticated writes lock to that workspace's principal actor.
-- Actor-selection mode (dev only):
-  - Selected actor is stored in `localStorage` per workspace.
-  - Only available when `dev_actor_mode=true`.
-  - Writes still go to **oar-core** via the proxy; core may honor the dev-selected
-    `actor_id` only when dev/unauthenticated-write flags allow it.
-  - This is a local-development convenience only; it is not an auth boundary.
 
 Switching from `/dtrinity/...` to `/scalingforever/...` preserves each workspace's
 own auth and actor state independently.

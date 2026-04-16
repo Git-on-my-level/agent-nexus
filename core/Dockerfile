@@ -32,7 +32,6 @@ ENV OAR_WORKSPACE_ROOT=/var/lib/oar/workspace
 ENV OAR_SCHEMA_PATH=/app/contracts/oar-schema.yaml
 ENV OAR_META_COMMANDS_PATH=/app/contracts/gen/meta/commands.json
 ENV OAR_LISTEN_ADDR=0.0.0.0:8000
-ENV OAR_ALLOW_UNAUTHENTICATED_WRITES=false
 
 VOLUME ["/var/lib/oar/workspace"]
 

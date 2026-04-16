@@ -161,4 +161,5 @@ export declare class OarClient {
     topicsTrash(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     topicsUnarchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     topicsWorkspace(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    usageSummaryV1(options?: RequestOptions): Promise<InvokeResult>;
 }

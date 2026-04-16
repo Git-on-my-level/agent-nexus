@@ -96,6 +96,27 @@ describe("workspaceCatalog", () => {
     expect(catalog.defaultWorkspace.slug).toBe("local");
   });
 
+  it("should allow an empty catalog for SaaS packed-host dev", () => {
+    const env = {
+      OAR_SAAS_PACKED_HOST_DEV: "1",
+    };
+    const catalog = loadWorkspaceCatalog(env);
+    expect(catalog.defaultWorkspace).toBeNull();
+    expect(catalog.workspaces).toHaveLength(0);
+    expect(catalog.hostedDevEmpty).toBe(true);
+  });
+
+  it("should prefer OAR_SAAS_DEV_PRECONFIGURED_WORKSPACES when OAR_WORKSPACES is unset", () => {
+    const env = {
+      OAR_SAAS_PACKED_HOST_DEV: "1",
+      OAR_SAAS_DEV_PRECONFIGURED_WORKSPACES:
+        '[{"slug":"demo","label":"Demo","coreBaseUrl":"http://127.0.0.1:9000"}]',
+    };
+    const catalog = loadWorkspaceCatalog(env);
+    expect(catalog.defaultWorkspace.slug).toBe("demo");
+    expect(catalog.workspaces[0].coreBaseUrl).toBe("http://127.0.0.1:9000");
+  });
+
   it("should throw a helpful error when OAR_WORKSPACES is not valid JSON", () => {
     const env = {
       OAR_WORKSPACES:
@@ -149,5 +170,17 @@ describe("toPublicWorkspaceCatalog", () => {
     };
     const publicCatalog = toPublicWorkspaceCatalog(catalog);
     expect(publicCatalog.devActorMode).toBe(false);
+  });
+
+  it("should expose an empty public catalog when hosted dev has no default workspace", () => {
+    const catalog = {
+      defaultWorkspace: null,
+      workspaces: [],
+      workspaceBySlug: new Map(),
+      devActorMode: false,
+    };
+    const publicCatalog = toPublicWorkspaceCatalog(catalog);
+    expect(publicCatalog.defaultWorkspace).toBeNull();
+    expect(publicCatalog.workspaces).toHaveLength(0);
   });
 });

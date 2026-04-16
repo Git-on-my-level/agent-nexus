@@ -18,7 +18,7 @@ export async function load({ fetch, data }) {
   }
 
   if (!schemaCheckPromises.has(workspaceSlug)) {
-    const client = createOarCoreClient({
+       const client = createOarCoreClient({
       fetchFn: fetch,
       requestContextHeadersProvider: () => ({
         [WORKSPACE_HEADER]: workspaceSlug,

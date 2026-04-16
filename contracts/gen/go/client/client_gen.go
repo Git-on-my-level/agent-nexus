@@ -1379,6 +1379,16 @@ var CommandRegistry = []CommandSpec{
 		Concepts:   []string{"topics", "workspace"},
 		Adjacent:   []string{"topics.archive", "topics.create", "topics.get", "topics.list", "topics.patch", "topics.restore", "topics.timeline", "topics.trash", "topics.unarchive"},
 	},
+	{
+		CommandID: "usage.summary.v1",
+		CLIPath:   "usage summary --api v1",
+		Group:     "usage",
+		Method:    "GET",
+		Path:      "/v1/usage/summary",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"ops", "quotas"},
+	},
 }
 
 var commandIndex = func() map[string]CommandSpec {
@@ -1963,4 +1973,8 @@ func (c *Client) TopicsUnarchive(ctx context.Context, pathParams map[string]stri
 
 func (c *Client) TopicsWorkspace(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "topics.workspace", pathParams, opts)
+}
+
+func (c *Client) UsageSummaryV1(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "usage.summary.v1", nil, opts)
 }

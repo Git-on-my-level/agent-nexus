@@ -5906,6 +5906,33 @@ export const commandRegistry = [
         ],
         "go_method": "TopicsWorkspace",
         "ts_method": "topicsWorkspace"
+    },
+    {
+        "command_id": "usage.summary.v1",
+        "cli_path": "usage summary --api v1",
+        "group": "usage",
+        "method": "GET",
+        "path": "/v1/usage/summary",
+        "operation_id": "getUsageSummaryV1",
+        "summary": "Versioned workspace usage summary",
+        "why": "Versioned usage envelope for external quota and billing aggregation.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns v1 usage summary JSON.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token"
+        ],
+        "concepts": [
+            "ops",
+            "quotas"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "go_method": "UsageSummaryV1",
+        "ts_method": "usageSummaryV1"
     }
 ];
 const commandIndex = new Map(commandRegistry.map((command) => [command.command_id, command]));
@@ -6320,5 +6347,8 @@ export class OarClient {
     }
     topicsWorkspace(pathParams, options = {}) {
         return this.invoke("topics.workspace", pathParams, options);
+    }
+    usageSummaryV1(options = {}) {
+        return this.invoke("usage.summary.v1", {}, options);
     }
 }

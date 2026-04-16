@@ -248,8 +248,6 @@ generated plist's `EnvironmentVariables` dict. Example additions:
 ```xml
 <key>EnvironmentVariables</key>
 <dict>
-    <key>OAR_ALLOW_UNAUTHENTICATED_WRITES</key>
-    <string>false</string>
     <key>OAR_WEBAUTHN_RPID</key>
     <string>team-alpha.oar.example.com</string>
     <key>OAR_WEBAUTHN_ORIGIN</key>

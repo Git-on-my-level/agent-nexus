@@ -666,8 +666,6 @@ start_core_server() {
   fi
 
   (
-    export OAR_ENABLE_DEV_ACTOR_MODE="$dev_actor_mode"
-    export OAR_ALLOW_UNAUTHENTICATED_WRITES="$allow_unauthenticated_writes"
     export OAR_ALLOW_LOOPBACK_VERIFICATION_READS="$allow_loopback_verification_reads"
     case "$bootstrap_token_mode" in
       unset)

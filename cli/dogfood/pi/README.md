@@ -88,7 +88,7 @@ These run directories are disposable. Delete old `cli/.tmp/pi-dogfood/<run-id>/`
 The runner also:
 - builds temporary `oar` and `oar-core` binaries
 - starts a managed `oar-core` on a random local port
-- starts that managed core with `OAR_ENABLE_DEV_ACTOR_MODE=1` and `OAR_ALLOW_UNAUTHENTICATED_WRITES=1` so the seed phase can bootstrap actors, reads, and threads before agents authenticate
+- starts that managed core with an ephemeral `OAR_BOOTSTRAP_TOKEN` so seed and principal registration flows run through standard authenticated paths
 - starts managed-core runs with an ephemeral `OAR_BOOTSTRAP_TOKEN`, pre-registers the first temp agent profile with that token, then mints invite tokens for the remaining temp agent profiles before Pi starts
 - links scenario temp principals to the seeded scenario actors when the CLI/core path supports `--existing-actor-id`, so Access and actor-aware UI reads line up with the scenario cast
 - seeds the core from CLI-owned scenario data under `cli/dogfood/pi/seed/`

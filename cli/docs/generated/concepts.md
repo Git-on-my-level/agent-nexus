@@ -211,11 +211,12 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `ops`
 
-- Commands: `3`
+- Commands: `4`
 - Command IDs:
   - `ops.blob.usage.rebuild`
   - `ops.health`
   - `ops.usage.summary`
+  - `usage.summary.v1`
 
 ## `packets`
 
@@ -243,9 +244,10 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `quotas`
 
-- Commands: `1`
+- Commands: `2`
 - Command IDs:
   - `ops.usage.summary`
+  - `usage.summary.v1`
 
 ## `readiness`
 

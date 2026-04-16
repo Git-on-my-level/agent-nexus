@@ -6,6 +6,9 @@ import { workspacePath } from "$lib/workspacePaths";
 
 export async function load(event) {
   const catalog = await resolveWorkspaceCatalog(event);
+  if (!catalog.defaultWorkspace) {
+    throw redirect(307, "/hosted/start");
+  }
   const slug = catalog.defaultWorkspace.slug;
   const canonical = await resolveLegacyThreadCanonicalAppPath({
     fetchFn: event.fetch,

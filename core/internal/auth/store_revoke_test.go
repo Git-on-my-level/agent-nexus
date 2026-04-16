@@ -204,49 +204,6 @@ func TestRevokeAgentAllowsNonFinalHumanWithMachinePresent(t *testing.T) {
 	}
 }
 
-func TestRevokeAgentIgnoresControlPlaneShadowHumansForLockout(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
-	if err != nil {
-		t.Fatalf("initialize workspace: %v", err)
-	}
-	defer workspace.Close()
-
-	store := NewStore(workspace.DB())
-	admin := insertAuthAgentForRevokeTest(t, ctx, workspace.DB(), "agent-admin", "actor-admin", "admin.user")
-	human := insertAuthHumanForRevokeTest(t, ctx, workspace.DB(), "agent-human", "actor-human", "human.user")
-
-	if _, err := store.EnsureControlPlanePrincipal(ctx, EnsureControlPlanePrincipalInput{
-		Issuer:         "https://control-plane.example.test",
-		Subject:        "acct_shadow",
-		WorkspaceID:    "ws_test",
-		OrganizationID: "org_test",
-		Email:          "shadow@example.com",
-		DisplayName:    "Shadow User",
-		LaunchID:       "launch_test",
-	}); err != nil {
-		t.Fatalf("ensure control-plane principal: %v", err)
-	}
-
-	count, err := store.CountActiveHumanPrincipals(ctx)
-	if err != nil {
-		t.Fatalf("count active human principals: %v", err)
-	}
-	if count != 1 {
-		t.Fatalf("expected only local passkey humans to count, got %d", count)
-	}
-
-	_, err = store.RevokeAgent(ctx, human.AgentID, RevokeAgentInput{
-		Actor: admin,
-		Mode:  RevocationModeAdmin,
-	})
-	if err == nil || err != ErrLastActivePrincipal {
-		t.Fatalf("expected ErrLastActivePrincipal with only one local human, got %v", err)
-	}
-}
-
 func insertAuthAgentForRevokeTest(t *testing.T, ctx context.Context, db *sql.DB, agentID string, actorID string, username string) Principal {
 	t.Helper()
 

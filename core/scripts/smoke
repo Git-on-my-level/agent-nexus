@@ -7,6 +7,7 @@ cd "$ROOT_DIR"
 PORT="${PORT:-18081}"
 LISTEN_ADDR="127.0.0.1:${PORT}"
 BASE_URL="http://${LISTEN_ADDR}"
+BOOTSTRAP_TOKEN="smoke-bootstrap-token"
 
 TMP_DIR="$(mktemp -d)"
 WORKSPACE_ROOT="$TMP_DIR/workspace"
@@ -34,11 +35,19 @@ trap cleanup EXIT
 post_json() {
   local path="$1"
   local body="$2"
+  if [[ -n "${ACCESS_TOKEN:-}" ]]; then
+    curl -fsS -H "Authorization: Bearer ${ACCESS_TOKEN}" -H "Content-Type: application/json" -d "$body" "${BASE_URL}${path}"
+    return
+  fi
   curl -fsS -H "Content-Type: application/json" -d "$body" "${BASE_URL}${path}"
 }
 
 get_json() {
   local path="$1"
+  if [[ -n "${ACCESS_TOKEN:-}" ]]; then
+    curl -fsS -H "Authorization: Bearer ${ACCESS_TOKEN}" "${BASE_URL}${path}"
+    return
+  fi
   curl -fsS "${BASE_URL}${path}"
 }
 
@@ -94,8 +103,7 @@ wait_for_ready() {
 }
 
 echo "starting oar-core on ${BASE_URL}"
-OAR_ENABLE_DEV_ACTOR_MODE=1 \
-OAR_ALLOW_UNAUTHENTICATED_WRITES=1 \
+OAR_BOOTSTRAP_TOKEN="${BOOTSTRAP_TOKEN}" \
 go run ./cmd/oar-core \
   --listen-addr "$LISTEN_ADDR" \
   --workspace-root "$WORKSPACE_ROOT" \
@@ -112,18 +120,25 @@ fi
 VERSION_JSON="$(get_json "/version")"
 echo "version: ${VERSION_JSON}"
 
-echo "registering actor"
-post_json "/actors" "$(cat <<JSON
+PUBLIC_KEY_B64="$(node -e '
+const { generateKeyPairSync } = require("node:crypto");
+const { publicKey } = generateKeyPairSync("ed25519");
+const der = publicKey.export({ format: "der", type: "spki" });
+process.stdout.write(der.subarray(der.length - 32).toString("base64"));
+')"
+
+echo "registering bootstrap agent"
+REGISTER_RESP_FILE="$TMP_DIR/register.json"
+post_json "/auth/agents/register" "$(cat <<JSON
 {
-  "actor": {
-    "id": "${ACTOR_ID}",
-    "display_name": "Smoke Actor",
-    "tags": ["smoke"],
-    "created_at": "2026-03-04T10:00:00Z"
-  }
+  "username": "smoke-agent",
+  "public_key": "${PUBLIC_KEY_B64}",
+  "bootstrap_token": "${BOOTSTRAP_TOKEN}"
 }
 JSON
-)" >/dev/null
+)" >"$REGISTER_RESP_FILE"
+ACCESS_TOKEN="$(json_get "$REGISTER_RESP_FILE" "tokens.access_token")"
+ACTOR_ID="$(json_get "$REGISTER_RESP_FILE" "agent.actor_id")"
 
 echo "creating topics"
 MAIN_TOPIC_RESP="$(post_json "/topics" "$(cat <<JSON

@@ -2903,6 +2903,31 @@ paths:
         '401':
           $ref: '#/components/responses/ErrorResponse'
 
+  /v1/usage/summary:
+    get:
+      operationId: getUsageSummaryV1
+      summary: Versioned workspace usage summary
+      tags: [ops]
+      x-oar-surface: utility
+      x-oar-command-id: usage.summary.v1
+      x-oar-cli-path: usage summary --api v1
+      x-oar-why: Versioned usage envelope for external quota and billing aggregation.
+      x-oar-input-mode: none
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns v1 usage summary JSON."
+      x-oar-error-codes: [auth_required, invalid_token]
+      x-oar-concepts: [ops, quotas]
+      x-oar-stability: beta
+      responses:
+        '200':
+          description: Usage summary v1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
   /ops/blob-usage/rebuild:
     post:
       operationId: rebuildBlobUsage

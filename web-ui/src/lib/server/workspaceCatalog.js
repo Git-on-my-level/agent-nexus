@@ -6,6 +6,7 @@ import {
 } from "$lib/workspacePaths";
 import { normalizeBaseUrl } from "$lib/config";
 import { resolveWorkspaceEnv } from "$lib/compat/workspaceCompat";
+import { isSaasPackedHostDev } from "$lib/server/controlPlaneWorkspace.js";
 
 /** Shown in parse errors; keep in sync with web-ui README / runbook examples. */
 const OAR_WORKSPACES_JSON_EXAMPLE =
@@ -127,7 +128,19 @@ export function createWorkspaceCatalog({
   defaultWorkspaceSlug = "",
   devActorMode = false,
   usesSyntheticDefaultWorkspace = false,
+  hostedDevAllowEmpty = false,
 }) {
+  if (hostedDevAllowEmpty && workspaces.length === 0) {
+    return {
+      defaultWorkspace: null,
+      workspaces: [],
+      workspaceBySlug: new Map(),
+      devActorMode,
+      usesSyntheticDefaultWorkspace: false,
+      hostedDevEmpty: true,
+    };
+  }
+
   const defaultCandidate = normalizeWorkspaceSlug(
     defaultWorkspaceSlug || workspaces[0]?.slug || DEFAULT_WORKSPACE_SLUG,
   );
@@ -147,33 +160,32 @@ export function createWorkspaceCatalog({
     ),
     devActorMode,
     usesSyntheticDefaultWorkspace,
+    hostedDevEmpty: false,
   };
 }
 
 export function loadWorkspaceCatalog(env = privateEnv) {
   const resolved = resolveWorkspaceEnv(env);
   const configuredWorkspaces = parseWorkspaceEntries(resolved.OAR_WORKSPACES);
-  const saasPackedHostDev =
-    env.OAR_SAAS_PACKED_HOST_DEV === "true" ||
-    env.OAR_SAAS_PACKED_HOST_DEV === "1";
+  const preconfiguredWorkspaces = parseWorkspaceEntries(
+    env.OAR_SAAS_DEV_PRECONFIGURED_WORKSPACES,
+  );
+  const saasPackedHost = isSaasPackedHostDev(env);
 
   let workspaces;
+  let usesSyntheticDefaultWorkspace = false;
   if (configuredWorkspaces.length > 0) {
     workspaces = configuredWorkspaces;
-  } else if (saasPackedHostDev) {
-    // SaaS dev: routing comes from the control plane after sign-in. Do not fall
-    // back to OAR_CORE_BASE_URL from .env (often http://127.0.0.1:8000) or
-    // `make serve` will hijack /local and proxy to a core that is not running.
-    workspaces = [
-      {
-        slug: DEFAULT_WORKSPACE_SLUG,
-        label: "Local",
-        description: "",
-        coreBaseUrl: "",
-      },
-    ];
+    usesSyntheticDefaultWorkspace = false;
+  } else if (preconfiguredWorkspaces.length > 0) {
+    workspaces = preconfiguredWorkspaces;
+    usesSyntheticDefaultWorkspace = false;
+  } else if (saasPackedHost) {
+    workspaces = [];
+    usesSyntheticDefaultWorkspace = false;
   } else {
     workspaces = fallbackSingleWorkspace(env);
+    usesSyntheticDefaultWorkspace = true;
   }
   const devActorMode =
     env.OAR_DEV_ACTOR_MODE === "true" || env.OAR_DEV_ACTOR_MODE === "1";
@@ -182,7 +194,8 @@ export function loadWorkspaceCatalog(env = privateEnv) {
     workspaces,
     defaultWorkspaceSlug: resolved.OAR_DEFAULT_WORKSPACE,
     devActorMode,
-    usesSyntheticDefaultWorkspace: configuredWorkspaces.length === 0,
+    usesSyntheticDefaultWorkspace,
+    hostedDevAllowEmpty: saasPackedHost && workspaces.length === 0,
   });
 }
 
@@ -194,6 +207,13 @@ export function getWorkspaceBySlug(workspaceSlug, env = privateEnv) {
 }
 
 export function toPublicWorkspaceCatalog(catalog) {
+  if (!catalog.defaultWorkspace) {
+    return {
+      defaultWorkspace: null,
+      workspaces: [],
+      devActorMode: catalog.devActorMode ?? false,
+    };
+  }
   return {
     defaultWorkspace: catalog.defaultWorkspace.slug,
     workspaces: catalog.workspaces.map((workspace) => ({

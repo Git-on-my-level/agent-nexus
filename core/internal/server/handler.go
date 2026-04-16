@@ -15,7 +15,6 @@ import (
 
 	"organization-autorunner-core/internal/actors"
 	"organization-autorunner-core/internal/auth"
-	"organization-autorunner-core/internal/controlplaneauth"
 	"organization-autorunner-core/internal/primitives"
 	"organization-autorunner-core/internal/schema"
 	"organization-autorunner-core/internal/secrets"
@@ -51,6 +50,7 @@ type PrimitiveStore interface {
 	GetArtifactContent(ctx context.Context, id string) ([]byte, string, error)
 	ListArtifacts(ctx context.Context, filter primitives.ArtifactListFilter) ([]map[string]any, error)
 	GetWorkspaceUsageSummary(ctx context.Context) (primitives.WorkspaceUsageSummary, error)
+	GetWorkspaceUsageV1Summary(ctx context.Context) (primitives.WorkspaceUsageV1Summary, error)
 	RebuildBlobUsageLedger(ctx context.Context) (primitives.BlobUsageLedgerRebuildResult, error)
 	GetIdempotencyReplay(ctx context.Context, scope string, actorID string, requestKey string) (primitives.IdempotencyReplay, error)
 	PutIdempotencyReplay(ctx context.Context, scope string, actorID string, requestKey string, requestHash string, status int, response map[string]any) error
@@ -164,9 +164,6 @@ type handlerOptions struct {
 	requestBodyLimits              RequestBodyLimits
 	routeRateLimits                RouteRateLimits
 	rateLimiter                    *routeRateLimiter
-	humanAuthMode                  string
-	controlPlaneHumanVerifier      *controlplaneauth.WorkspaceHumanVerifier
-	workspaceServiceIdentity       *controlplaneauth.WorkspaceServiceIdentity
 	workspaceID                    string
 	readinessChecks                []namedReadinessCheck
 	opsHealthSections              map[string]OpsHealthSectionFunc
@@ -337,24 +334,6 @@ func WithCORSAllowedOrigins(origins string) HandlerOption {
 func WithProjectionMaintainer(maintainer *ProjectionMaintainer) HandlerOption {
 	return func(opts *handlerOptions) {
 		opts.projectionMaintainer = maintainer
-	}
-}
-
-func WithHumanAuthMode(mode string) HandlerOption {
-	return func(opts *handlerOptions) {
-		opts.humanAuthMode = strings.TrimSpace(mode)
-	}
-}
-
-func WithControlPlaneHumanVerifier(verifier *controlplaneauth.WorkspaceHumanVerifier) HandlerOption {
-	return func(opts *handlerOptions) {
-		opts.controlPlaneHumanVerifier = verifier
-	}
-}
-
-func WithWorkspaceServiceIdentity(identity *controlplaneauth.WorkspaceServiceIdentity) HandlerOption {
-	return func(opts *handlerOptions) {
-		opts.workspaceServiceIdentity = identity
 	}
 }
 
@@ -532,7 +511,6 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		coreInstanceID:             "core-local",
 		streamPollInterval:         time.Second,
 		allowUnauthenticatedWrites: false,
-		humanAuthMode:              controlplaneauth.HumanAuthModeWorkspaceLocal,
 	}
 	for _, option := range options {
 		option(&opts)
@@ -554,9 +532,6 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 	}
 	if opts.streamPollInterval <= 0 {
 		opts.streamPollInterval = time.Second
-	}
-	if opts.humanAuthMode == "" {
-		opts.humanAuthMode = controlplaneauth.HumanAuthModeWorkspaceLocal
 	}
 	opts.requestBodyLimits = opts.requestBodyLimits.normalize()
 	opts.routeRateLimits = opts.routeRateLimits.normalize()
@@ -645,6 +620,14 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			return
 		}
 		handleGetUsageSummary(w, r, opts)
+	})
+
+	registerRoute("/v1/usage/summary", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+			return
+		}
+		handleGetUsageV1Summary(w, r, opts)
 	})
 
 	registerRoute("/ops/blob-usage/rebuild", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
@@ -2407,7 +2390,7 @@ func shouldEnforceCLIVersion(path string) bool {
 		return false
 	}
 	switch path {
-	case "/health", "/livez", "/readyz", "/ops/health", "/ops/usage-summary", "/ops/blob-usage/rebuild", "/version", "/meta/handshake", "/auth/token", "/auth/agents/register", "/auth/bootstrap/status":
+	case "/health", "/livez", "/readyz", "/ops/health", "/ops/usage-summary", "/v1/usage/summary", "/ops/blob-usage/rebuild", "/version", "/meta/handshake", "/auth/token", "/auth/agents/register", "/auth/bootstrap/status":
 		return false
 	}
 	if strings.HasPrefix(path, "/auth/passkey/") {

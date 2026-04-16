@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -70,12 +71,28 @@ type WorkspaceUsageSummary struct {
 	GeneratedAt string         `json:"generated_at"`
 }
 
+type WorkspaceUsageV1Summary struct {
+	Usage       WorkspaceUsageV1 `json:"usage"`
+	GeneratedAt string           `json:"generated_at"`
+}
+
 type WorkspaceUsage struct {
 	BlobBytes   int64 `json:"blob_bytes"`
 	BlobObjects int64 `json:"blob_objects"`
 	Artifacts   int64 `json:"artifact_count"`
 	Documents   int64 `json:"document_count"`
 	Revisions   int64 `json:"document_revision_count"`
+}
+
+type WorkspaceUsageV1 struct {
+	ArtifactCount int64   `json:"artifact_count"`
+	ArtifactBytes int64   `json:"artifact_bytes"`
+	DocumentCount int64   `json:"document_count"`
+	BlobCount     int64   `json:"blob_count"`
+	BlobBytes     int64   `json:"blob_bytes"`
+	EventCount    int64   `json:"event_count"`
+	AgentCount    int64   `json:"agent_count"`
+	LastActiveAt  *string `json:"last_active_at,omitempty"`
 }
 
 func (s *Store) checkWorkspaceWriteQuota(ctx context.Context, uploadBytes int64, delta quotaWriteDelta, blobPlan blobLedgerWritePlan) error {
@@ -200,12 +217,103 @@ func (s *Store) GetWorkspaceUsageSummary(ctx context.Context) (WorkspaceUsageSum
 	}, nil
 }
 
+func (s *Store) GetWorkspaceUsageV1Summary(ctx context.Context) (WorkspaceUsageV1Summary, error) {
+	if s == nil || s.db == nil {
+		return WorkspaceUsageV1Summary{}, fmt.Errorf("primitives store database is not initialized")
+	}
+
+	usage, err := s.currentWorkspaceUsage(ctx, true)
+	if err != nil {
+		return WorkspaceUsageV1Summary{}, err
+	}
+
+	artifactBytes, err := sumArtifactBytes(ctx, s.db)
+	if err != nil {
+		return WorkspaceUsageV1Summary{}, err
+	}
+	eventCount, err := countTableRows(ctx, s.db, "events")
+	if err != nil {
+		return WorkspaceUsageV1Summary{}, err
+	}
+	agentCount, err := countActiveAgents(ctx, s.db)
+	if err != nil {
+		return WorkspaceUsageV1Summary{}, err
+	}
+	lastActiveAt, err := loadLastWorkspaceActivityAt(ctx, s.db)
+	if err != nil {
+		return WorkspaceUsageV1Summary{}, err
+	}
+
+	return WorkspaceUsageV1Summary{
+		Usage: WorkspaceUsageV1{
+			ArtifactCount: usage.artifacts,
+			ArtifactBytes: artifactBytes,
+			DocumentCount: usage.documents,
+			BlobCount:     usage.blobObjects,
+			BlobBytes:     usage.blobBytes,
+			EventCount:    eventCount,
+			AgentCount:    agentCount,
+			LastActiveAt:  lastActiveAt,
+		},
+		GeneratedAt: time.Now().UTC().Format(time.RFC3339Nano),
+	}, nil
+}
+
 func countTableRows(ctx context.Context, db *sql.DB, table string) (int64, error) {
 	var count int64
 	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+table).Scan(&count); err != nil {
 		return 0, fmt.Errorf("count %s rows: %w", table, err)
 	}
 	return count, nil
+}
+
+func countActiveAgents(ctx context.Context, db *sql.DB) (int64, error) {
+	var count int64
+	if err := db.QueryRowContext(
+		ctx,
+		`SELECT COUNT(*)
+		 FROM agents
+		 WHERE revoked_at IS NULL`,
+	).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count active agents: %w", err)
+	}
+	return count, nil
+}
+
+func sumArtifactBytes(ctx context.Context, db *sql.DB) (int64, error) {
+	var bytes int64
+	if err := db.QueryRowContext(
+		ctx,
+		`SELECT COALESCE(SUM(COALESCE(l.size_bytes, 0)), 0)
+		 FROM artifacts a
+		 LEFT JOIN blob_usage_ledger l ON l.content_hash = a.content_hash`,
+	).Scan(&bytes); err != nil {
+		return 0, fmt.Errorf("sum artifact bytes: %w", err)
+	}
+	return bytes, nil
+}
+
+func loadLastWorkspaceActivityAt(ctx context.Context, db *sql.DB) (*string, error) {
+	var lastActive sql.NullString
+	if err := db.QueryRowContext(
+		ctx,
+		`SELECT MAX(ts)
+		 FROM (
+		   SELECT MAX(created_at) AS ts FROM events
+		   UNION ALL SELECT MAX(created_at) AS ts FROM artifacts
+		   UNION ALL SELECT MAX(updated_at) AS ts FROM documents
+		 )`,
+	).Scan(&lastActive); err != nil {
+		return nil, fmt.Errorf("load last workspace activity: %w", err)
+	}
+	if !lastActive.Valid {
+		return nil, nil
+	}
+	value := strings.TrimSpace(lastActive.String)
+	if value == "" {
+		return nil, nil
+	}
+	return &value, nil
 }
 
 func isQuotaViolationCode(err error, code string) bool {

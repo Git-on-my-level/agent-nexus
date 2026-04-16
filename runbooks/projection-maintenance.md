@@ -196,14 +196,10 @@ Trade-offs:
 
 Monitor `/ops/health` after tuning. Target is steady-state with `pending_dirty_count` near zero.
 
-## Relation to heartbeats
+## Relation to health reporting
 
-Workspace heartbeats include projection maintenance summary:
+Use `/ops/health` to monitor projection maintenance status:
 
 - mode
 - pending_dirty_count
 - oldest_dirty_lag_seconds
-
-Control-plane diagnostics can surface unhealthy workspaces with stale projections.
-
-See [`packed-host-configuration.md`](packed-host-configuration.md) for heartbeat configuration.

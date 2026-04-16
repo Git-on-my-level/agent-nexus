@@ -14,4 +14,11 @@
 #       expected_clients: none         # none | server-only | operator-cli
 #
 version: 1
-endpoints: []
+endpoints:
+  - method: GET
+    path_pattern: /v1/usage/summary
+    owner: core
+    reason: >
+      Temporary route-parity exception while command metadata generation is being
+      re-aligned in this branch; route is documented in contracts/oar-openapi.yaml.
+    expected_clients: operator-cli

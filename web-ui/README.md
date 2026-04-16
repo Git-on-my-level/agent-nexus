@@ -28,12 +28,6 @@ This package contains the SvelteKit web UI for Organization Autorunner.
 
   - Legacy aliases (deprecated): `OAR_PROJECTS` and `OAR_DEFAULT_PROJECT` still work if the new names are absent.
 
-- SaaS packed-host routing:
-  - Signed-in control-plane sessions can resolve workspace slugs dynamically from the control plane.
-  - This lets newly created SaaS workspaces become reachable without editing `OAR_WORKSPACES` or restarting `oar-ui`.
-  - `OAR_WORKSPACES` remains the fallback when no control-plane session is present.
-  - Control-plane workspace routing is cached briefly in memory inside the UI server to avoid a control-plane lookup on every proxied request.
-
 - UI routes are workspace-prefixed: `/:workspace/...`
   - Examples: `/local`, `/local/inbox`, `/ops/threads/thread-123`
   - `/` redirects to the default workspace.

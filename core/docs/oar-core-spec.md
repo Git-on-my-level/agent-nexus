@@ -197,12 +197,6 @@ access in v1 — any authenticated principal can perform any operation. The
 registry exists for display, attribution, and future evolution (authority
 tiers, reliability scores, invite lifecycle metadata, etc.).
 
-In `control_plane` human auth mode, the workspace trusts signed
-control-plane-issued workspace grants, hydrates a stable local shadow principal
-on first access, and preserves that the human auth method is `control_plane` in
-auth inventory/audit metadata. Workspace-local Ed25519 agent auth remains
-unchanged in both modes.
-
 **Fields:** per `oar-schema.yaml` → `actor.registry_fields`
 
 - Actor IDs are referenced by `actor_id` on events, `updated_by` on mutable resources, and `created_by` on artifacts.
@@ -213,10 +207,8 @@ unchanged in both modes.
 ## 7. API surface
 
 oar-core MUST expose a programmatic API (protocol: HTTP/JSON for v0).
-Hosted-v1 target state requires authentication on all workspace data routes
-outside development mode, although some current v0 code paths are still being
-aligned to that target. All write operations require an `actor_id` or an
-authenticated principal that resolves to one.
+All workspace data routes require authenticated principals. Writes require an
+`actor_id` or an authenticated principal that resolves to one.
 
 ### 7.1 Read / query
 - Get topic by ID
@@ -230,7 +222,7 @@ authenticated principal that resolves to one.
 - List artifacts (filters: kind, topic/thread/time range)
 - List documents, get document head, get document history, get document revision
 - Get inbox items (grouped by category, sorted by time/due date)
-- Get workspace usage summary for control-plane consumption
+- Get workspace usage summary for operator telemetry and external aggregation (`/ops/usage-summary`, `/v1/usage/summary`)
 
 ### 7.2 Write / mutate
 - Register actor

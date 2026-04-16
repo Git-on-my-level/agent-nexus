@@ -1,6 +1,6 @@
 [Unit]
 Description=OAR workspace core (%i)
-After=network-online.target oar-control-plane.service
+After=network-online.target
 Wants=network-online.target
 
 [Service]

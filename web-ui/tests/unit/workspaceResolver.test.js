@@ -2,26 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockState = vi.hoisted(() => ({
   env: {},
-  accessToken: "",
-  listWorkspaces: vi.fn(),
-  clearControlAccessToken: vi.fn(),
-  clearControlAccount: vi.fn(),
 }));
 
 vi.mock("$env/dynamic/private", () => ({
   env: mockState.env,
-}));
-
-vi.mock("../../src/lib/server/controlClient.js", () => ({
-  createControlClient: vi.fn(() => ({
-    listWorkspaces: mockState.listWorkspaces,
-  })),
-}));
-
-vi.mock("../../src/lib/server/controlSession.js", () => ({
-  readControlAccessToken: vi.fn(() => mockState.accessToken),
-  clearControlAccessToken: mockState.clearControlAccessToken,
-  clearControlAccount: mockState.clearControlAccount,
 }));
 
 import {
@@ -36,13 +20,6 @@ function createEvent() {
   return {
     params: {},
     request: new Request("https://oar.example.test/api/threads"),
-    cookies: {
-      get() {
-        return null;
-      },
-      set() {},
-      delete() {},
-    },
   };
 }
 
@@ -56,16 +33,14 @@ describe("workspaceResolver", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetEnv();
-    mockState.accessToken = "";
     clearWorkspaceResolutionCache();
   });
 
-  it("falls back to static OAR_WORKSPACES without contacting the control plane", async () => {
+  it("resolves static OAR_WORKSPACES entries", async () => {
     mockState.env.OAR_WORKSPACES =
       '[{"slug":"ops","label":"Ops","coreBaseUrl":"http://127.0.0.1:8001"}]';
 
     const resolved = await resolveWorkspaceBySlug({
-      event: createEvent(),
       workspaceSlug: "ops",
     });
 
@@ -75,210 +50,88 @@ describe("workspaceResolver", () => {
       label: "Ops",
       coreBaseUrl: "http://127.0.0.1:8001",
     });
-    expect(mockState.listWorkspaces).not.toHaveBeenCalled();
   });
 
-  it("resolves dynamic SaaS workspaces from the control plane and caches them briefly", async () => {
-    mockState.accessToken = "control-token";
-    mockState.listWorkspaces.mockResolvedValue({
-      workspaces: [
-        {
-          workspace_id: "ws-123",
-          organization_id: "org-1",
-          slug: "alpha",
-          display_name: "Alpha",
-          workspace_path: "/alpha",
-          public_origin: "https://app.example.test/alpha",
-          core_origin: "https://alpha-core.example.test/",
-        },
-      ],
-    });
-
-    const first = await resolveWorkspaceBySlug({
-      event: createEvent(),
-      workspaceSlug: "alpha",
-    });
-    const second = await resolveProxyWorkspaceTarget({
-      event: createEvent(),
-      workspaceSlug: "alpha",
-    });
-
-    expect(first.error).toBeNull();
-    expect(first.workspace).toMatchObject({
-      slug: "alpha",
-      label: "Alpha",
-      coreBaseUrl: "https://alpha-core.example.test",
-      workspaceId: "ws-123",
-      source: "control-plane",
-    });
-    expect(first.catalog.workspaces).toEqual([
-      expect.objectContaining({ slug: "alpha" }),
-    ]);
-    expect(second).toMatchObject({
-      workspace: {
-        slug: "alpha",
-      },
-      coreBaseUrl: "https://alpha-core.example.test",
-    });
-    expect(mockState.listWorkspaces).toHaveBeenCalledTimes(1);
-  });
-
-  it("uses the control-plane catalog as the default workspace list when static config is synthetic", async () => {
-    mockState.accessToken = "control-token";
-    mockState.listWorkspaces.mockResolvedValue({
-      workspaces: [
-        {
-          workspace_id: "ws-123",
-          organization_id: "org-1",
-          slug: "alpha",
-          display_name: "Alpha",
-          workspace_path: "/alpha",
-          public_origin: "https://app.example.test/alpha",
-          core_origin: "https://alpha-core.example.test/",
-        },
-        {
-          workspace_id: "ws-456",
-          organization_id: "org-1",
-          slug: "beta",
-          display_name: "Beta",
-          workspace_path: "/beta",
-          public_origin: "https://app.example.test/beta",
-          core_origin: "https://beta-core.example.test/",
-        },
-      ],
-    });
+  it("returns configured catalog with static default workspace", async () => {
+    mockState.env.OAR_WORKSPACES =
+      '[{"slug":"ops","label":"Ops","coreBaseUrl":"http://127.0.0.1:8001"}]';
 
     const catalog = await resolveWorkspaceCatalog(createEvent());
-
-    expect(catalog.defaultWorkspace).toMatchObject({
-      slug: "alpha",
-      source: "control-plane",
-    });
-    expect(catalog.workspaces).toEqual([
-      expect.objectContaining({ slug: "alpha", source: "control-plane" }),
-      expect.objectContaining({ slug: "beta", source: "control-plane" }),
-    ]);
-    expect(catalog.workspaceBySlug.has("local")).toBe(false);
+    expect(catalog.defaultWorkspace).toMatchObject({ slug: "ops" });
+    expect(catalog.workspaceBySlug.has("ops")).toBe(true);
   });
 
-  it("returns an operator-friendly 404 when a control-plane workspace is missing or revoked", async () => {
-    mockState.accessToken = "control-token";
-    mockState.listWorkspaces.mockResolvedValue({
-      workspaces: [],
-    });
+  it("returns workspace_not_configured for unknown workspace slug", async () => {
+    mockState.env.OAR_WORKSPACES =
+      '[{"slug":"ops","label":"Ops","coreBaseUrl":"http://127.0.0.1:8001"}]';
 
     const resolved = await resolveWorkspaceBySlug({
-      event: createEvent(),
       workspaceSlug: "missing",
     });
 
     expect(resolved.workspace).toBeNull();
     expect(resolved.error).toMatchObject({
       status: 404,
-      payload: {
-        error: {
-          code: "workspace_unavailable",
-        },
-      },
+      payload: { error: { code: "workspace_not_configured" } },
     });
-    expect(resolved.error.payload.error.message).toContain(
-      "control-plane workspace catalog",
-    );
   });
 
-  it("keeps invalid provided slugs invalid instead of resolving the default workspace", async () => {
+  it("resolves workspace from control plane when SaaS packed-host dev is enabled", async () => {
+    mockState.env.OAR_SAAS_PACKED_HOST_DEV = "1";
+    mockState.env.OAR_CONTROL_BASE_URL = "http://127.0.0.1:8100";
+    mockState.env.OAR_CONTROL_PLANE_DEV_ACCESS_TOKEN = "tok_dev";
+
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      async json() {
+        return {
+          workspaces: [
+            {
+              id: "ws_test",
+              slug: "alpha",
+              display_name: "Alpha",
+              core_origin: "http://127.0.0.1:18001",
+              public_origin: "",
+            },
+          ],
+        };
+      },
+    }));
+
+    const resolved = await resolveWorkspaceBySlug({
+      workspaceSlug: "alpha",
+      event: {
+        fetch: fetchMock,
+        cookies: { get: () => undefined },
+      },
+    });
+
+    expect(fetchMock).toHaveBeenCalled();
+    expect(resolved.error).toBeNull();
+    expect(resolved.workspace).toMatchObject({
+      slug: "alpha",
+      coreBaseUrl: "http://127.0.0.1:18001",
+      id: "ws_test",
+    });
+  });
+
+  it("resolves proxy target from static workspace catalog", async () => {
     mockState.env.OAR_WORKSPACES =
-      '[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"}]';
+      '[{"slug":"ops","label":"Ops","coreBaseUrl":"http://127.0.0.1:8001"}]';
 
-    const resolved = await resolveWorkspaceBySlug({
+    const resolved = await resolveProxyWorkspaceTarget({
       event: createEvent(),
-      workspaceSlug: "@@@",
+      workspaceSlug: "ops",
     });
 
-    expect(resolved.workspace).toBeNull();
-    expect(resolved.workspaceSlug).toBe("@@@");
-    expect(resolved.error).toMatchObject({
-      status: 404,
-      payload: {
-        error: {
-          code: "workspace_not_configured",
-        },
-      },
+    expect(resolved).toMatchObject({
+      workspace: expect.objectContaining({ slug: "ops" }),
+      coreBaseUrl: "http://127.0.0.1:8001",
     });
-    expect(mockState.listWorkspaces).not.toHaveBeenCalled();
   });
 
-  it("prunes expired control-plane workspace cache entries as tokens rotate", async () => {
-    const nowSpy = vi.spyOn(Date, "now");
-    nowSpy.mockReturnValue(0);
-
-    mockState.accessToken = "control-token-a";
-    mockState.listWorkspaces.mockResolvedValueOnce({
-      workspaces: [
-        {
-          workspace_id: "ws-123",
-          organization_id: "org-1",
-          slug: "alpha",
-          display_name: "Alpha",
-          workspace_path: "/alpha",
-          public_origin: "https://app.example.test/alpha",
-          core_origin: "https://alpha-core.example.test/",
-        },
-      ],
-    });
-
-    await resolveWorkspaceBySlug({
-      event: createEvent(),
-      workspaceSlug: "alpha",
-    });
-    expect(getWorkspaceResolutionCacheSize()).toBe(1);
-
-    nowSpy.mockReturnValue(6000);
-    mockState.accessToken = "control-token-b";
-    mockState.listWorkspaces.mockResolvedValueOnce({
-      workspaces: [
-        {
-          workspace_id: "ws-456",
-          organization_id: "org-1",
-          slug: "beta",
-          display_name: "Beta",
-          workspace_path: "/beta",
-          public_origin: "https://app.example.test/beta",
-          core_origin: "https://beta-core.example.test/",
-        },
-      ],
-    });
-
-    await resolveWorkspaceBySlug({
-      event: createEvent(),
-      workspaceSlug: "beta",
-    });
-
-    expect(getWorkspaceResolutionCacheSize()).toBe(1);
-    expect(mockState.listWorkspaces).toHaveBeenCalledTimes(2);
-    nowSpy.mockRestore();
-  });
-
-  it("clears stale control auth and reports an explicit session error", async () => {
-    mockState.accessToken = "expired-token";
-    mockState.listWorkspaces.mockRejectedValue(
-      Object.assign(new Error("unauthorized"), { status: 401 }),
-    );
-
-    const resolved = await resolveWorkspaceBySlug({
-      event: createEvent(),
-      workspaceSlug: "alpha",
-    });
-
-    expect(resolved.error).toMatchObject({
-      status: 401,
-      payload: {
-        error: {
-          code: "control_session_required",
-        },
-      },
-    });
-    expect(mockState.clearControlAccessToken).toHaveBeenCalledTimes(1);
-    expect(mockState.clearControlAccount).toHaveBeenCalledTimes(1);
+  it("keeps cache APIs as no-op for OSS static resolver", () => {
+    clearWorkspaceResolutionCache();
+    expect(getWorkspaceResolutionCacheSize()).toBe(0);
   });
 });

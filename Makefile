@@ -8,12 +8,6 @@ HTTP_RECORD_DIR := tools/oar-http-record
 
 CORE_HOST ?= 127.0.0.1
 CORE_PORT ?= 8000
-CONTROL_PLANE_PORT ?= 8100
-CONTROL_PLANE_WORKSPACE_ROOT ?= $(CURDIR)/$(CORE_DIR)/.oar-control-plane
-RESET_CONTROL_PLANE_WORKSPACE ?= 1
-SYNC_WORKSPACE_CORES ?= 1
-SAAS_DEV_PACKED_LISTEN_START ?= 18000
-SAAS_DEV_PACKED_LISTEN_END ?= 19990
 WEB_UI_PORT ?= 5173
 CORE_BASE_URL ?= http://$(CORE_HOST):$(CORE_PORT)
 ACTIONLINT_BIN := $(CURDIR)/.bin/actionlint
@@ -28,7 +22,7 @@ DEV_SEED_SCENARIO ?= default
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup check serve serve-control-plane lint test format contract-gen contract-check contract-check-committed workflow-check version-sync version-check e2e-smoke hosted-smoke hosted-ops-test hosted-ops-smoke saas-smoke saas-e2e saas-load-smoke packed-host-smoke cli-check cli-build cli-integration-test http-record-test http-record-run http-record-compile http-record-replay bridge-setup bridge-doctor bridge-test release-check release-patch platform-constraints core-% bridge-% web-ui-%
+.PHONY: help setup check serve lint test format contract-gen contract-check contract-check-committed workflow-check version-sync version-check e2e-smoke hosted-smoke hosted-ops-test hosted-ops-smoke cli-check cli-build cli-integration-test http-record-test http-record-run http-record-compile http-record-replay bridge-setup bridge-doctor bridge-test release-check release-patch platform-constraints core-% bridge-% web-ui-%
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z0-9_.-]+:.*##/ {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -140,18 +134,6 @@ hosted-ops-test: ## Run hosted provisioning/backup/restore verification tests
 hosted-ops-smoke: ## Run one hosted provisioning/backup/restore smoke flow
 	./scripts/hosted/smoke-test.sh
 
-saas-smoke: ## Run SaaS control-plane multi-workspace smoke test (account, org, workspaces, invite, launch, session-exchange, workspace-rw)
-	./scripts/saas-smoke
-
-saas-e2e: ## Run extended SaaS e2e flow (multi-workspace isolation, backup, session revocation)
-	./scripts/saas-e2e
-
-saas-load-smoke: ## Run SaaS load smoke test (multiple workspaces with concurrent reads/writes)
-	./scripts/saas-load-smoke
-
-packed-host-smoke: ## Run packed-host PMF deployment smoke (control-plane, web-ui, multi-workspace, heartbeat, backup/restore)
-	./scripts/packed-host-smoke
-
 serve: ## Start core, seed mock dataset into core, then start web-ui
 	@REPO_ROOT="$(CURDIR)" \
 	CORE_HOST="$(CORE_HOST)" \
@@ -164,16 +146,6 @@ serve: ## Start core, seed mock dataset into core, then start web-ui
 	DEV_SEED_SCENARIO="$(DEV_SEED_SCENARIO)" \
 	FORCE_SEED="$(FORCE_SEED)" \
 	./scripts/serve.sh
-
-serve-control-plane: ## Local SaaS stack: control plane + web UI + workspace cores (control-plane-only: make -C core serve-control-plane)
-	@CONTROL_PLANE_PORT="$(CONTROL_PLANE_PORT)" \
-	WEB_UI_PORT="$(WEB_UI_PORT)" \
-	CONTROL_PLANE_WORKSPACE_ROOT="$(CONTROL_PLANE_WORKSPACE_ROOT)" \
-	RESET_CONTROL_PLANE_WORKSPACE="$(RESET_CONTROL_PLANE_WORKSPACE)" \
-	SYNC_WORKSPACE_CORES="$(SYNC_WORKSPACE_CORES)" \
-	SAAS_DEV_PACKED_LISTEN_START="$(SAAS_DEV_PACKED_LISTEN_START)" \
-	SAAS_DEV_PACKED_LISTEN_END="$(SAAS_DEV_PACKED_LISTEN_END)" \
-	./scripts/serve-control-plane.sh
 
 core-%: ## Pass-through target to core Makefile
 	$(MAKE) -C $(CORE_DIR) $*

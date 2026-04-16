@@ -28,6 +28,11 @@
   --ui-radius-md: 0.5rem;
   --ui-radius-lg: 0.625rem;
   --ui-radius-xl: 0.75rem;
+  /* Surfaces + status (hosted account UI + forms share these) */
+  --ui-surface: #181a21;
+  --ui-input-bg: #13151b;
+  --ui-danger: #f87171;
+  --ui-danger-strong: #ef4444;
 }
 
 * {

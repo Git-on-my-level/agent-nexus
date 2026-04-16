@@ -340,10 +340,6 @@ func handlePasskeyLoginVerify(w http.ResponseWriter, r *http.Request, opts handl
 }
 
 func requirePasskeyAuthDeps(w http.ResponseWriter, opts handlerOptions) bool {
-	if controlPlaneHumanAuthEnabled(opts) {
-		writeError(w, http.StatusServiceUnavailable, "auth_unavailable", "workspace-local passkey human auth is disabled on this deployment")
-		return false
-	}
 	if opts.authStore == nil || opts.passkeySessionStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "auth_unavailable", "passkey auth is not configured")
 		return false

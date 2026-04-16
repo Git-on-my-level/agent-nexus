@@ -39,7 +39,7 @@ function mapCredentialDescriptor(descriptor) {
 }
 
 /**
- * oar-control-plane returns the inner PublicKeyCredential* options as
+ * Auth endpoints return the inner PublicKeyCredential* options as
  * `public_key_options`. The Credential API expects `{ publicKey: { ... } }`.
  * Also accept that shape when callers already wrap.
  */

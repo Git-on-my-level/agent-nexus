@@ -575,6 +575,21 @@ func handleGetUsageSummary(w http.ResponseWriter, r *http.Request, opts handlerO
 	writeJSON(w, http.StatusOK, map[string]any{"summary": summary})
 }
 
+func handleGetUsageV1Summary(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+
+	summary, err := opts.primitiveStore.GetWorkspaceUsageV1Summary(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load workspace usage summary")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"summary": summary})
+}
+
 func handleRebuildBlobUsageLedger(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")

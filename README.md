@@ -10,29 +10,22 @@ Monorepo for Organization Autorunner.
 - `web-ui/`: SvelteKit frontend (`oar-ui`)
 - `adapters/`: optional external runtime integrations vendored into the repo when needed
 
-## Hosted v1
+## Scope
 
-Hosted v1 is a managed offering, not a public self-service SaaS. The
-authoritative architecture cut line in this branch is:
+This public repo is the OSS self-hosted workspace product:
 
-- one isolated workspace deployment per customer/workspace
-- managed provisioning plus managed backup/restore scripts
-- no required self-service control plane in this pack
-- no shared row-level multitenancy
-- auth required on all workspace data routes outside development mode
-- `OAR_ALLOW_UNAUTHENTICATED_WRITES` and UI actor-selection flows are
-  development-only
-- passkey humans and Ed25519 key-pair agents are both workspace principals
-- public registration is closed; onboarding is bootstrap/invite-gated
-- no fine-grained RBAC in v1; authenticated principals share the same authority
-- agents should prefer the CLI and generated clients over hand-authored HTTP
-- workspace projection APIs are convenience reads, not durable automation
-  contracts
+- single workspace per deployment
+- workspace-local auth (passkey humans + Ed25519 agent principals)
+- bootstrap/invite-gated principal onboarding
+- no control plane, no billing, no org management, no SaaS account layer
+- no shared row-level multitenancy in `oar-core`
+
+Hosted control-plane architecture and operations live in the private
+`oar-hosted-saas/controlplane` repository.
 
 ## Architecture / Design Docs
 
 - **Foundation**: [docs/architecture/foundation.md](docs/architecture/foundation.md) — durable product and architecture decisions that define OAR.
-- **Hosted v1**: [docs/architecture/hosted-v1.md](docs/architecture/hosted-v1.md) — architecture for the managed offering.
 - Module-level specs: [core/docs/oar-core-spec.md](core/docs/oar-core-spec.md), [web-ui/docs/oar-ui-spec.md](web-ui/docs/oar-ui-spec.md).
 
 ## Quickstart
@@ -60,20 +53,8 @@ make contract-gen
 - before UI startup, `web-ui/scripts/seed-core-from-mock.mjs` populates core from the **dev fixture dataset** (topics, documents, boards, cards, packets, and derived events) in `web-ui/src/lib/devSeedData.js`
 - after fixture **identities** seed (default), the same step writes **single-use agent invite tokens** under `cli/dogfood-resources/` for registering the `oar` CLI against local core (bootstrap is already consumed by the seeded human). See `cli/dogfood-resources/README.md` and `cli/docs/runbook.md`.
 
-For SaaS packed-host work, start the full local stack (control plane, web UI,
-and auto-started workspace cores) in a second terminal:
-
-```bash
-make serve-control-plane
-```
-
-Defaults:
-
-- control plane: `http://127.0.0.1:8100`
-- web UI / passkey origin: `http://localhost:5173` (open `localhost`, not `127.0.0.1`, for WebAuthn)
-- workspace cores: loopback ports from `SAAS_DEV_PACKED_LISTEN_START` (default `18000`) upward
-
-Control-plane only (no UI): `make -C core serve-control-plane`.
+Hosted SaaS/control-plane stack commands live in the private
+`oar-hosted-saas/controlplane` repo.
 
 ## Installing the CLI
 
@@ -120,9 +101,6 @@ See `runbooks/release.md` for version-pinning and custom install directory optio
 - `make hosted-smoke`: run hosted-v1 production smoke suite (auth gate, onboarding, workspace access, staleness)
 - `make hosted-ops-test`: run hosted provisioning/backup/restore verification tests
 - `make hosted-ops-smoke`: run one hosted provisioning/backup/restore smoke flow
-- `make saas-smoke`: run SaaS control-plane multi-workspace smoke (account, org, workspaces, invite, launch, session-exchange)
-- `make saas-e2e`: run extended SaaS e2e flow (workspace isolation, backup, session revocation)
-- `make saas-load-smoke`: run SaaS load smoke test (multiple workspaces with concurrent operations)
 - `make cli-integration-test`: run CLI real-binary integration tests (non-default)
 - `make e2e-smoke`: run live core + CLI + web-ui smoke verification
 - `make bridge-setup`: create the adapter-local Python 3.11 virtualenv and install bridge deps
@@ -145,7 +123,6 @@ Useful `make serve` toggles:
 - `SEED_CORE=0`: skip seeding
 - `FORCE_SEED=1`: seed even when marker data is already present
 - `DEV_SEED_SCENARIO=kids-lemonade-stand`: use the alternate lemonade dev seed scenario with all checked-in chapters applied in order
-- `OAR_ENABLE_DEV_ACTOR_MODE=1`: enable development actor mode for legacy actor picker/creator UI (default: `false` / auth-first)
 - `OAR_DEV_SEED_IDENTITIES=0`: skip registering fixture principals during seed (bootstrap stays available for manual `oar auth register --bootstrap-token`; no auto-generated `cli/dogfood-resources/invites.generated.json` or `web-ui/.dev/local-identities.json` refresh)
 
 ## Local HTTP Recording

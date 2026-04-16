@@ -4,7 +4,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.3.0`
-- Commands: `117`
+- Commands: `118`
 
 ## `actors.create`
 
@@ -1411,4 +1411,16 @@ Generated from `contracts/oar-openapi.yaml`.
 - Concepts: `topics`, `workspace`
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Output: Returns `{ topic, cards, boards, documents, threads, inbox, projection_freshness, generated_at }`.
+
+## `usage.summary.v1`
+
+- CLI path: `usage summary --api v1`
+- HTTP: `GET /v1/usage/summary`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Versioned usage envelope for external quota and billing aggregation.
+- Concepts: `ops`, `quotas`
+- Error codes: `auth_required`, `invalid_token`
+- Output: Returns v1 usage summary JSON.
 

@@ -2,7 +2,8 @@
 
 This runbook describes the repository-level release and verification process for `oar-core`, `oar`, and `oar-ui` contract compatibility.
 
-For packed-host SaaS operations, see [`packed-host-configuration.md`](packed-host-configuration.md) and related runbooks.
+Control-plane SaaS operations and release gates live in the private
+`oar-hosted-saas/controlplane` repo.
 
 ## Pre-release checks
 
@@ -41,33 +42,8 @@ make hosted-smoke
 
 ### SaaS gates
 
-SaaS (self-serve control-plane) validation runs automatically in CI when relevant code changes:
-
-- `make saas-smoke` - multi-workspace control-plane smoke (account, organization, workspace provisioning, invites, launch/session exchange, workspace read/write)
-- `make saas-e2e` - extended flow including workspace isolation, backup jobs, session revocation, and re-authentication
-- `make saas-load-smoke` - basic load test with multiple workspaces and concurrent operations
-
-These gates trigger on changes to core, contracts, web-ui, scripts, deploy, workflow files, and Makefile.
-
-For local validation or pre-release checks outside CI:
-
-```bash
-make saas-smoke
-make saas-e2e
-make saas-load-smoke
-make packed-host-smoke
-```
-
-### Environment variables for load testing
-
-The load smoke test can be tuned:
-
-```bash
-SAAS_LOAD_NUM_WORKSPACES=3    # number of workspaces to provision (default: 3)
-SAAS_LOAD_NUM_THREADS=5       # threads per workspace (default: 5)
-SAAS_LOAD_CONCURRENT=3        # concurrent read requests per workspace (default: 3)
-make saas-load-smoke
-```
+SaaS control-plane validation moved to the private `oar-hosted-saas/controlplane`
+repo and no longer runs from this OSS repository.
 
 ## CLI binary release automation
 

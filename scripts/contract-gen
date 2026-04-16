@@ -12,21 +12,11 @@ go run ./cmd/contract-gen \
   --go-module "organization-autorunner-contracts-go-client" \
   --ts-package "organization-autorunner-contracts-ts-client"
 
-go run ./cmd/contract-gen \
-  --openapi "../contracts/oar-control-openapi.yaml" \
-  --schema "../contracts/oar-schema.yaml" \
-  --out "../contracts/gen/control" \
-  --source-label "contracts/oar-control-openapi.yaml" \
-  --go-module "organization-autorunner-control-contracts-go-client" \
-  --ts-package "organization-autorunner-control-contracts-ts-client" \
-  --emit-event-ref-rules=false
-
 cd "$ROOT_DIR"
 
 # contract-gen writes client.ts only; web-ui imports dist/client.js. Keep dist in sync
 # so command_registry_digest matches core's contracts/gen/meta/commands.json.
 pnpm exec tsc -p contracts/gen/ts/tsconfig.json
-pnpm exec tsc -p contracts/gen/control/ts/tsconfig.json
 
 mkdir -p cli/internal/registry
 cp contracts/gen/meta/commands.json cli/internal/registry/commands.json
