@@ -1516,6 +1516,135 @@ func TestWorkspaceHumanGrantTokenExchangeAndValidation(t *testing.T) {
 			t.Fatalf("expected unknown kid path to trigger jwks refresh, before=%d after=%d", before, after)
 		}
 	})
+
+}
+
+func TestWorkspaceHumanGrantMissingExpRejected(t *testing.T) {
+	t.Parallel()
+
+	const workspaceID = "ws_external_grant_missing_exp"
+	fixture := newWorkspaceHumanGrantTestFixture(t, workspaceID, "oar-core")
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{
+		workspaceID:                 workspaceID,
+		workspaceHumanGrantVerifier: fixture.verifier,
+	})
+	serverURL := env.server.URL
+
+	assertion := fixture.signGrantAssertion(t, workspaceHumanGrantTokenOptions{
+		Subject: "acct_missing_exp",
+		JTI:     "jti-missing-exp",
+		OmitExp: true,
+	})
+	resp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/token", map[string]any{
+		"grant_type": auth.TokenGrantTypeWorkspaceHuman,
+		"assertion":  assertion,
+	}, "", http.StatusUnauthorized)
+	defer resp.Body.Close()
+	assertErrorCode(t, resp, "invalid_token")
+}
+
+func TestWorkspaceHumanGrantUnknownKidRefreshFailureReturnsUnavailable(t *testing.T) {
+	t.Parallel()
+
+	const workspaceID = "ws_external_grant_unknown_kid_unavailable"
+	fixture := newWorkspaceHumanGrantTestFixture(t, workspaceID, "oar-core")
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{
+		workspaceID:                 workspaceID,
+		workspaceHumanGrantVerifier: fixture.verifier,
+	})
+	serverURL := env.server.URL
+
+	prime := fixture.signGrantAssertion(t, workspaceHumanGrantTokenOptions{
+		Subject: "acct_prime_unavailable",
+		JTI:     "jti-prime-unavailable",
+	})
+	primeResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/token", map[string]any{
+		"grant_type": auth.TokenGrantTypeWorkspaceHuman,
+		"assertion":  prime,
+	}, "", http.StatusOK)
+	primeResp.Body.Close()
+
+	fixture.setJWKSStatusCode(http.StatusServiceUnavailable)
+	t.Cleanup(func() {
+		fixture.setJWKSStatusCode(http.StatusOK)
+	})
+
+	unknown := fixture.signGrantAssertion(t, workspaceHumanGrantTokenOptions{
+		Subject:    "acct_unknown_kid_unavailable",
+		JTI:        "jti-unknown-kid-unavailable",
+		KID:        "kid-unknown-unavailable",
+		SigningKey: fixture.secondaryPrivateKey,
+	})
+	resp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/token", map[string]any{
+		"grant_type": auth.TokenGrantTypeWorkspaceHuman,
+		"assertion":  unknown,
+	}, "", http.StatusServiceUnavailable)
+	defer resp.Body.Close()
+	assertErrorCode(t, resp, "auth_unavailable")
+}
+
+func TestWorkspaceHumanGrantReplayBlockedAfterPostConsumptionFailure(t *testing.T) {
+	t.Parallel()
+
+	const workspaceID = "ws_external_grant_replay_after_failure"
+	fixture := newWorkspaceHumanGrantTestFixture(t, workspaceID, "oar-core")
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{
+		workspaceID:                 workspaceID,
+		workspaceHumanGrantVerifier: fixture.verifier,
+	})
+	serverURL := env.server.URL
+
+	seed := fixture.signGrantAssertion(t, workspaceHumanGrantTokenOptions{
+		Subject: "acct_replay_after_failure",
+		JTI:     "jti-seed-replay-after-failure",
+	})
+	seedResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/token", map[string]any{
+		"grant_type": auth.TokenGrantTypeWorkspaceHuman,
+		"assertion":  seed,
+	}, "", http.StatusOK)
+	var seedPayload struct {
+		Agent struct {
+			AgentID string `json:"agent_id"`
+		} `json:"agent"`
+	}
+	if err := json.NewDecoder(seedResp.Body).Decode(&seedPayload); err != nil {
+		seedResp.Body.Close()
+		t.Fatalf("decode seed workspace grant response: %v", err)
+	}
+	seedResp.Body.Close()
+	if strings.TrimSpace(seedPayload.Agent.AgentID) == "" {
+		t.Fatal("expected seed token exchange to return agent id")
+	}
+
+	nowText := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := env.workspace.DB().Exec(
+		`UPDATE agents
+		 SET revoked_at = ?, updated_at = ?
+		 WHERE id = ?`,
+		nowText,
+		nowText,
+		seedPayload.Agent.AgentID,
+	); err != nil {
+		t.Fatalf("revoke seed agent for replay-after-failure scenario: %v", err)
+	}
+
+	assertion := fixture.signGrantAssertion(t, workspaceHumanGrantTokenOptions{
+		Subject: "acct_replay_after_failure",
+		JTI:     "jti-replay-after-failure",
+	})
+	first := postJSONExpectStatusWithAuth(t, serverURL+"/auth/token", map[string]any{
+		"grant_type": auth.TokenGrantTypeWorkspaceHuman,
+		"assertion":  assertion,
+	}, "", http.StatusForbidden)
+	defer first.Body.Close()
+	assertErrorCode(t, first, "agent_revoked")
+
+	second := postJSONExpectStatusWithAuth(t, serverURL+"/auth/token", map[string]any{
+		"grant_type": auth.TokenGrantTypeWorkspaceHuman,
+		"assertion":  assertion,
+	}, "", http.StatusUnauthorized)
+	defer second.Body.Close()
+	assertErrorCode(t, second, "invalid_token")
 }
 
 func TestExplicitDevModeKeepsLegacyActorFlowAndAnonymousWorkspaceAccess(t *testing.T) {
@@ -1932,6 +2061,8 @@ type workspaceHumanGrantTestFixture struct {
 	verifier            auth.WorkspaceHumanGrantIdentityVerifier
 	jwksHits            atomic.Int64
 	jwksServer          *httptest.Server
+	jwksStateMu         sync.Mutex
+	jwksStatusCode      int
 }
 
 type workspaceHumanGrantTokenOptions struct {
@@ -1947,6 +2078,7 @@ type workspaceHumanGrantTokenOptions struct {
 	TTL         time.Duration
 	Email       string
 	DisplayName string
+	OmitExp     bool
 }
 
 func newWorkspaceHumanGrantTestFixture(t *testing.T, workspaceID string, audience string) *workspaceHumanGrantTestFixture {
@@ -1967,6 +2099,7 @@ func newWorkspaceHumanGrantTestFixture(t *testing.T, workspaceID string, audienc
 		primaryKID:          "kid-primary",
 		primaryPrivateKey:   primaryPrivate,
 		secondaryPrivateKey: secondaryPrivate,
+		jwksStatusCode:      http.StatusOK,
 	}
 
 	jwksPayload := map[string]any{
@@ -1983,6 +2116,13 @@ func newWorkspaceHumanGrantTestFixture(t *testing.T, workspaceID string, audienc
 	}
 	fixture.jwksServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fixture.jwksHits.Add(1)
+		fixture.jwksStateMu.Lock()
+		statusCode := fixture.jwksStatusCode
+		fixture.jwksStateMu.Unlock()
+		if statusCode != http.StatusOK {
+			w.WriteHeader(statusCode)
+			return
+		}
 		writeJSON(w, http.StatusOK, jwksPayload)
 	}))
 	t.Cleanup(func() {
@@ -2070,8 +2210,10 @@ func (f *workspaceHumanGrantTestFixture) signGrantAssertion(t *testing.T, option
 			ID:        jti,
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now.Add(-time.Minute)),
-			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
 		},
+	}
+	if !options.OmitExp {
+		claims.ExpiresAt = jwt.NewNumericDate(now.Add(ttl))
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
 	token.Header["kid"] = kid
@@ -2080,6 +2222,12 @@ func (f *workspaceHumanGrantTestFixture) signGrantAssertion(t *testing.T, option
 		t.Fatalf("sign workspace human grant token: %v", err)
 	}
 	return signed
+}
+
+func (f *workspaceHumanGrantTestFixture) setJWKSStatusCode(status int) {
+	f.jwksStateMu.Lock()
+	f.jwksStatusCode = status
+	f.jwksStateMu.Unlock()
 }
 
 func mustGeneratePublicKey(t *testing.T) string {

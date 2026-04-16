@@ -253,6 +253,9 @@ func (v *WorkspaceHumanGrantVerifier) Verify(ctx context.Context, assertion stri
 	if token == nil || !token.Valid {
 		return WorkspaceHumanGrantIdentity{}, fmt.Errorf("%w: workspace grant is invalid", ErrExternalGrantInvalid)
 	}
+	if claims.ExpiresAt == nil {
+		return WorkspaceHumanGrantIdentity{}, fmt.Errorf("%w: exp is required", ErrExternalGrantInvalid)
+	}
 	if strings.TrimSpace(claims.Subject) == "" {
 		return WorkspaceHumanGrantIdentity{}, fmt.Errorf("%w: subject is required", ErrExternalGrantInvalid)
 	}
@@ -318,10 +321,12 @@ func (r *WorkspaceHumanGrantJWKResolver) Resolve(ctx context.Context, kid string
 			return append(ed25519.PublicKey(nil), key...), nil
 		}
 		if r.shouldRefreshUnknownKid(now) {
-			if fetched, fetchErr := r.fetchAndStore(ctx, now); fetchErr == nil {
-				if key, ok := fetched[kid]; ok {
-					return append(ed25519.PublicKey(nil), key...), nil
-				}
+			fetched, fetchErr := r.fetchAndStore(ctx, now)
+			if fetchErr != nil {
+				return nil, fmt.Errorf("%w: refresh jwks for unknown kid: %v", ErrExternalGrantUnavailable, fetchErr)
+			}
+			if key, ok := fetched[kid]; ok {
+				return append(ed25519.PublicKey(nil), key...), nil
 			}
 		}
 		return nil, fmt.Errorf("%w: kid %q not found", ErrExternalGrantInvalid, kid)

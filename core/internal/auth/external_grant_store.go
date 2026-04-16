@@ -27,19 +27,16 @@ func (s *Store) IssueTokenFromWorkspaceHumanGrant(ctx context.Context, identity 
 	now := time.Now().UTC()
 	nowText := now.Format(time.RFC3339Nano)
 
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return Agent{}, TokenBundle{}, fmt.Errorf("begin workspace human grant transaction: %w", err)
-	}
-
-	if err := consumeWorkspaceHumanGrantJTITx(ctx, tx, jti, nowText); err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
+	if err := consumeWorkspaceHumanGrantJTI(ctx, s.db, jti, nowText); err != nil {
 		if err == ErrExternalGrantReplay {
 			return Agent{}, TokenBundle{}, ErrExternalGrantReplay
 		}
 		return Agent{}, TokenBundle{}, err
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Agent{}, TokenBundle{}, fmt.Errorf("begin workspace human grant transaction: %w", err)
 	}
 
 	actorDisplayName := pickExternalGrantDisplayName(identity.DisplayName, identity.Email, username)
@@ -162,8 +159,8 @@ func (s *Store) PurgeConsumedGrantJTIs(ctx context.Context, retention time.Durat
 	return rows, nil
 }
 
-func consumeWorkspaceHumanGrantJTITx(ctx context.Context, tx *sql.Tx, jti string, consumedAt string) error {
-	result, err := tx.ExecContext(
+func consumeWorkspaceHumanGrantJTI(ctx context.Context, db *sql.DB, jti string, consumedAt string) error {
+	result, err := db.ExecContext(
 		ctx,
 		`INSERT INTO consumed_grant_jtis(jti, consumed_at)
 		 VALUES (?, ?)

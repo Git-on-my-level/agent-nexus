@@ -84,8 +84,12 @@ func TestWorkspaceHumanGrantJWKResolverFailureModes(t *testing.T) {
 	nowValue = nowValue.Add(10 * time.Minute)
 	nowMu.Unlock()
 	statusCode = http.StatusServiceUnavailable
-	if _, err := resolver.Resolve(context.Background(), "kid-unknown"); !errors.Is(err, ErrExternalGrantInvalid) {
-		t.Fatalf("expected invalid on unknown kid with warm cache, got %v", err)
+	if _, err := resolver.Resolve(context.Background(), "kid-unknown"); !errors.Is(err, ErrExternalGrantUnavailable) {
+		t.Fatalf("expected unavailable on unknown kid when warm-cache refresh fails, got %v", err)
+	}
+	// Unknown kid refresh attempts are cooldown-limited even after a refresh failure.
+	if _, err := resolver.Resolve(context.Background(), "kid-unknown-2"); !errors.Is(err, ErrExternalGrantInvalid) {
+		t.Fatalf("expected invalid on unknown kid while refresh cooldown is active, got %v", err)
 	}
 	if _, err := resolver.Resolve(context.Background(), "kid-1"); err != nil {
 		t.Fatalf("expected warm cache key to remain usable: %v", err)
