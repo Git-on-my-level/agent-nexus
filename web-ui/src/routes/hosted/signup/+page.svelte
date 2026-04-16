@@ -9,12 +9,17 @@
     hostedCpFetch,
     persistHostedCpAccessToken,
   } from "$lib/hosted/cpFetch.js";
+  import {
+    normalizeHostedLaunchFinishURL,
+    readHostedLaunchParams,
+  } from "$lib/hosted/launchFlow.js";
 
   let email = $state("");
   let displayName = $state("");
   let inviteToken = $state("");
   let busy = $state(false);
   let message = $state("");
+  let continuationQuery = $derived($page.url.search ?? "");
 
   onMount(() => {
     const inv = $page.url.searchParams.get("invite");
@@ -90,12 +95,52 @@
         return;
       }
       persistHostedCpAccessToken(token);
-      await goto("/hosted/onboarding");
+      const continuationHandled = await continueLaunchFlowIfPresent();
+      if (!continuationHandled) {
+        await goto("/hosted/onboarding");
+      }
     } catch (e) {
       message = e instanceof Error ? e.message : "Passkey registration failed.";
     } finally {
       busy = false;
     }
+  }
+
+  async function continueLaunchFlowIfPresent() {
+    const launchParams = readHostedLaunchParams($page.url.searchParams);
+    if (!launchParams.hasContinuation) {
+      return false;
+    }
+
+    const launchResponse = await hostedCpFetch(
+      `workspaces/${encodeURIComponent(launchParams.workspaceId)}/launch-sessions`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          return_path: launchParams.returnPath,
+        }),
+      },
+    );
+    if (!launchResponse.ok) {
+      message = await readError(launchResponse);
+      return true;
+    }
+
+    const launchPayload = await launchResponse.json();
+    const finishURL = normalizeHostedLaunchFinishURL(
+      launchPayload?.launch_session?.finish_url,
+    );
+    if (!finishURL) {
+      message = "Launch session response did not include a valid finish URL.";
+      return true;
+    }
+
+    if (typeof window !== "undefined") {
+      window.location.assign(finishURL);
+      return true;
+    }
+    await goto(finishURL);
+    return true;
   }
 </script>
 
@@ -155,6 +200,8 @@
 
   <p class="hosted-foot">
     Already have an account?
-    <a class="hosted-link" href="/hosted/signin">Sign in</a>
+    <a class="hosted-link" href={`/hosted/signin${continuationQuery}`}
+      >Sign in</a
+    >
   </p>
 </div>

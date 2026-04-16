@@ -97,10 +97,12 @@ type WorkspaceHumanGrantJWKResolver struct {
 	httpClient                *http.Client
 	now                       func() time.Time
 
-	mu                       sync.Mutex
-	keys                     map[string]ed25519.PublicKey
-	fetchedAt                time.Time
-	lastUnknownKidRefreshTry time.Time
+	mu                        sync.Mutex
+	keys                      map[string]ed25519.PublicKey
+	fetchedAt                 time.Time
+	lastUnknownKidRefreshTry  time.Time
+	lastUnknownKidRefreshErr  bool
+	unknownKidRefreshInFlight bool
 }
 
 type workspaceHumanGrantJWKSResponse struct {
@@ -320,14 +322,19 @@ func (r *WorkspaceHumanGrantJWKResolver) Resolve(ctx context.Context, kid string
 		if key, ok := cachedKeys[kid]; ok {
 			return append(ed25519.PublicKey(nil), key...), nil
 		}
-		if r.shouldRefreshUnknownKid(now) {
+		shouldRefresh, hadRecentRefreshFailure := r.shouldRefreshUnknownKid(now)
+		if shouldRefresh {
 			fetched, fetchErr := r.fetchAndStore(ctx, now)
 			if fetchErr != nil {
+				r.markUnknownKidRefreshResult(true)
 				return nil, fmt.Errorf("%w: refresh jwks for unknown kid: %v", ErrExternalGrantUnavailable, fetchErr)
 			}
+			r.markUnknownKidRefreshResult(false)
 			if key, ok := fetched[kid]; ok {
 				return append(ed25519.PublicKey(nil), key...), nil
 			}
+		} else if hadRecentRefreshFailure {
+			return nil, fmt.Errorf("%w: jwks refresh for unknown kid is in cooldown after failure", ErrExternalGrantUnavailable)
 		}
 		return nil, fmt.Errorf("%w: kid %q not found", ErrExternalGrantInvalid, kid)
 	}
@@ -338,11 +345,12 @@ func (r *WorkspaceHumanGrantJWKResolver) Resolve(ctx context.Context, kid string
 				return append(ed25519.PublicKey(nil), key...), nil
 			}
 			return nil, fmt.Errorf("%w: kid %q not found", ErrExternalGrantInvalid, kid)
+		} else {
+			if _, ok := cachedKeys[kid]; ok {
+				return append(ed25519.PublicKey(nil), cachedKeys[kid]...), nil
+			}
+			return nil, fmt.Errorf("%w: refresh jwks: %v", ErrExternalGrantUnavailable, fetchErr)
 		}
-		if key, ok := cachedKeys[kid]; ok {
-			return append(ed25519.PublicKey(nil), key...), nil
-		}
-		return nil, fmt.Errorf("%w: kid %q not found", ErrExternalGrantInvalid, kid)
 	}
 
 	fetched, fetchErr := r.fetchAndStore(ctx, now)
@@ -355,14 +363,26 @@ func (r *WorkspaceHumanGrantJWKResolver) Resolve(ctx context.Context, kid string
 	return nil, fmt.Errorf("%w: kid %q not found", ErrExternalGrantInvalid, kid)
 }
 
-func (r *WorkspaceHumanGrantJWKResolver) shouldRefreshUnknownKid(now time.Time) bool {
+func (r *WorkspaceHumanGrantJWKResolver) shouldRefreshUnknownKid(now time.Time) (bool, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.unknownKidRefreshInFlight {
+		return false, true
+	}
 	if !r.lastUnknownKidRefreshTry.IsZero() && now.Sub(r.lastUnknownKidRefreshTry) < r.unknownKidRefreshCooldown {
-		return false
+		return false, r.lastUnknownKidRefreshErr
 	}
 	r.lastUnknownKidRefreshTry = now
-	return true
+	r.lastUnknownKidRefreshErr = false
+	r.unknownKidRefreshInFlight = true
+	return true, false
+}
+
+func (r *WorkspaceHumanGrantJWKResolver) markUnknownKidRefreshResult(failed bool) {
+	r.mu.Lock()
+	r.lastUnknownKidRefreshErr = failed
+	r.unknownKidRefreshInFlight = false
+	r.mu.Unlock()
 }
 
 func (r *WorkspaceHumanGrantJWKResolver) cachedSnapshot() (map[string]ed25519.PublicKey, time.Time, bool) {

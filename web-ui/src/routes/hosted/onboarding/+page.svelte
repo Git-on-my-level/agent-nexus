@@ -9,7 +9,7 @@
     clearHostedCpAccessToken,
     hostedCpFetch,
   } from "$lib/hosted/cpFetch.js";
-  import { workspacePath } from "$lib/workspacePaths";
+  import { normalizeHostedLaunchFinishURL } from "$lib/hosted/launchFlow.js";
 
   let organizations = $state(/** @type {any[]} */ ([]));
   let workspaces = $state(/** @type {any[]} */ ([]));
@@ -27,6 +27,7 @@
   let busy = $state(false);
   let message = $state("");
   let phase = $state("loading");
+  let launchingWorkspaceId = $state("");
 
   async function readError(res) {
     try {
@@ -164,6 +165,47 @@
     await hostedCpFetch("account/sessions/current", { method: "DELETE" });
     clearHostedCpAccessToken();
     await goto("/hosted/start");
+  }
+
+  async function openWorkspaceLaunch(workspace) {
+    message = "";
+    const workspaceID = String(workspace?.id ?? "").trim();
+    if (!workspaceID) {
+      message = "This workspace is missing an id and cannot be launched.";
+      return;
+    }
+
+    launchingWorkspaceId = workspaceID;
+    try {
+      const launchResponse = await hostedCpFetch(
+        `workspaces/${encodeURIComponent(workspaceID)}/launch-sessions`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            return_path: "/",
+          }),
+        },
+      );
+      if (!launchResponse.ok) {
+        message = await readError(launchResponse);
+        return;
+      }
+      const launchPayload = await launchResponse.json();
+      const finishURL = normalizeHostedLaunchFinishURL(
+        launchPayload?.launch_session?.finish_url,
+      );
+      if (!finishURL) {
+        message = "Launch session response did not include a valid finish URL.";
+        return;
+      }
+      if (typeof window !== "undefined") {
+        window.location.assign(finishURL);
+        return;
+      }
+      await goto(finishURL);
+    } finally {
+      launchingWorkspaceId = "";
+    }
   }
 </script>
 
@@ -309,9 +351,14 @@
               —
               <span class="hosted-status">{ws.status}</span>
               {#if ws.status === "ready" && ws.slug}
-                <a class="hosted-link" href={workspacePath(ws.slug)}
-                  >Open in OAR</a
+                <button
+                  type="button"
+                  class="hosted-linkish-btn"
+                  onclick={() => openWorkspaceLaunch(ws)}
+                  disabled={launchingWorkspaceId === ws.id}
                 >
+                  {launchingWorkspaceId === ws.id ? "Opening…" : "Open in OAR"}
+                </button>
               {/if}
             </li>
           {/each}

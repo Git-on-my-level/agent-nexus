@@ -27,6 +27,7 @@
   } from "$lib/authSession";
   import { listAllPrincipals } from "$lib/authPrincipals";
   import CommandPalette from "$lib/components/CommandPalette.svelte";
+  import { sanitizeHostedReturnPath } from "$lib/hosted/launchFlow.js";
   import { coreClient } from "$lib/coreClient";
   import { DEV_FIXTURE_PERSONAS } from "$lib/devWorkspaceFixtures.js";
   import {
@@ -173,7 +174,15 @@
     if (!browser || !shouldRedirectToLogin) {
       return;
     }
-    goto(workspacePath(activeWorkspaceSlug, "/login"));
+    const loginPath = workspacePath(activeWorkspaceSlug, "/login");
+    const returnTo = sanitizeHostedReturnPath(
+      `${currentAppPath || "/"}${$page.url.search || ""}`,
+    );
+    const params = new URLSearchParams();
+    if (returnTo !== "/") {
+      params.set("return_to", returnTo);
+    }
+    goto(params.size > 0 ? `${loginPath}?${params.toString()}` : loginPath);
   });
 
   $effect(() => {

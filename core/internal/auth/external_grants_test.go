@@ -87,9 +87,10 @@ func TestWorkspaceHumanGrantJWKResolverFailureModes(t *testing.T) {
 	if _, err := resolver.Resolve(context.Background(), "kid-unknown"); !errors.Is(err, ErrExternalGrantUnavailable) {
 		t.Fatalf("expected unavailable on unknown kid when warm-cache refresh fails, got %v", err)
 	}
-	// Unknown kid refresh attempts are cooldown-limited even after a refresh failure.
-	if _, err := resolver.Resolve(context.Background(), "kid-unknown-2"); !errors.Is(err, ErrExternalGrantInvalid) {
-		t.Fatalf("expected invalid on unknown kid while refresh cooldown is active, got %v", err)
+	// Unknown kid refresh attempts are cooldown-limited even after a refresh
+	// failure, and should preserve unavailable semantics during that cooldown.
+	if _, err := resolver.Resolve(context.Background(), "kid-unknown-2"); !errors.Is(err, ErrExternalGrantUnavailable) {
+		t.Fatalf("expected unavailable on unknown kid while refresh cooldown is active after failure, got %v", err)
 	}
 	if _, err := resolver.Resolve(context.Background(), "kid-1"); err != nil {
 		t.Fatalf("expected warm cache key to remain usable: %v", err)
@@ -190,6 +191,98 @@ func TestWorkspaceHumanGrantJWKResolverUnknownKidRefreshCooldown(t *testing.T) {
 	afterThird := hits.Load()
 	if afterThird <= afterSecond {
 		t.Fatalf("expected unknown kid refresh after cooldown, afterSecond=%d afterThird=%d", afterSecond, afterThird)
+	}
+}
+
+func TestWorkspaceHumanGrantJWKResolverUnknownKidRefreshInFlightReturnsUnavailable(t *testing.T) {
+	t.Parallel()
+
+	publicKey, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate keypair: %v", err)
+	}
+
+	var (
+		hits             atomic.Int64
+		blockRefreshCall atomic.Bool
+		statusCode       atomic.Int64
+	)
+	statusCode.Store(http.StatusOK)
+	refreshStarted := make(chan struct{}, 1)
+	releaseRefresh := make(chan struct{})
+
+	jwksPayload := map[string]any{
+		"keys": []map[string]any{{
+			"kty": "OKP",
+			"crv": "Ed25519",
+			"kid": "kid-primary",
+			"x":   base64.RawURLEncoding.EncodeToString(publicKey),
+			"use": "sig",
+			"alg": "EdDSA",
+		}},
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hit := hits.Add(1)
+		if strings.TrimSpace(r.URL.Path) != "/.well-known/jwks.json" {
+			http.NotFound(w, r)
+			return
+		}
+		if blockRefreshCall.Load() && hit >= 2 {
+			select {
+			case refreshStarted <- struct{}{}:
+			default:
+			}
+			<-releaseRefresh
+		}
+		if int(statusCode.Load()) != http.StatusOK {
+			w.WriteHeader(int(statusCode.Load()))
+			return
+		}
+		writeJSONJWKSTest(w, http.StatusOK, jwksPayload)
+	}))
+	defer server.Close()
+
+	jwksURL, err := WorkspaceHumanGrantJWKSURL(server.URL)
+	if err != nil {
+		t.Fatalf("derive jwks url: %v", err)
+	}
+	resolver, err := NewWorkspaceHumanGrantJWKResolver(WorkspaceHumanGrantJWKResolverConfig{
+		JWKSURL:                   jwksURL,
+		UnknownKidRefreshCooldown: time.Minute,
+	})
+	if err != nil {
+		t.Fatalf("new jwks resolver: %v", err)
+	}
+
+	if _, err := resolver.Resolve(context.Background(), "kid-primary"); err != nil {
+		t.Fatalf("prime known kid: %v", err)
+	}
+
+	blockRefreshCall.Store(true)
+	statusCode.Store(http.StatusServiceUnavailable)
+	firstErrCh := make(chan error, 1)
+	go func() {
+		_, resolveErr := resolver.Resolve(context.Background(), "kid-missing-a")
+		firstErrCh <- resolveErr
+	}()
+
+	select {
+	case <-refreshStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for unknown-kid refresh attempt to start")
+	}
+
+	if _, err := resolver.Resolve(context.Background(), "kid-missing-b"); !errors.Is(err, ErrExternalGrantUnavailable) {
+		t.Fatalf("expected in-flight unknown-kid request to return unavailable, got %v", err)
+	}
+
+	close(releaseRefresh)
+	firstErr := <-firstErrCh
+	if !errors.Is(firstErr, ErrExternalGrantUnavailable) {
+		t.Fatalf("expected first unknown-kid request to return unavailable, got %v", firstErr)
+	}
+	if got := hits.Load(); got != 2 {
+		t.Fatalf("expected second unknown-kid call to skip duplicate refresh while in-flight, got hits=%d", got)
 	}
 }
 
