@@ -13,18 +13,21 @@
     normalizeHostedLaunchFinishURL,
     readHostedLaunchParams,
   } from "$lib/hosted/launchFlow.js";
+  import { loadHostedSession } from "$lib/hosted/session.js";
 
   let email = $state("");
   let displayName = $state("");
   let inviteToken = $state("");
   let busy = $state(false);
   let message = $state("");
-  let continuationQuery = $derived($page.url.search ?? "");
+  let showInviteField = $state(false);
+  const continuationQuery = $derived($page.url.search ?? "");
 
   onMount(() => {
     const inv = $page.url.searchParams.get("invite");
     if (inv) {
       inviteToken = inv;
+      showInviteField = true;
     }
   });
 
@@ -40,7 +43,7 @@
   async function submit() {
     message = "";
     if (!email.trim() || !displayName.trim()) {
-      message = "Email and display name are required.";
+      message = "Email and your name are required.";
       return;
     }
     busy = true;
@@ -95,9 +98,10 @@
         return;
       }
       persistHostedCpAccessToken(token);
+      await loadHostedSession();
       const continuationHandled = await continueLaunchFlowIfPresent();
       if (!continuationHandled) {
-        await goto("/hosted/onboarding");
+        await goto("/hosted/dashboard");
       }
     } catch (e) {
       message = e instanceof Error ? e.message : "Passkey registration failed.";
@@ -144,64 +148,100 @@
   }
 </script>
 
-<div class="hosted-page hosted-page--narrow">
-  <h1 class="hosted-title">Create your account</h1>
-  <p class="hosted-sub">
-    Use your email and a passkey (Face ID, Touch ID, Windows Hello, or a
-    security key). You’ll create an organization next.
-  </p>
+<svelte:head>
+  <title>Create your account — OAR</title>
+</svelte:head>
 
-  <form
-    class="hosted-form"
-    onsubmit={(e) => {
-      e.preventDefault();
-      submit();
-    }}
-  >
-    <label class="hosted-field">
-      Email
-      <input
-        class="hosted-input"
-        type="email"
-        autocomplete="email"
-        bind:value={email}
-        disabled={busy}
-        required
-      />
-    </label>
-    <label class="hosted-field">
-      Display name
-      <input
-        class="hosted-input"
-        type="text"
-        autocomplete="name"
-        bind:value={displayName}
-        disabled={busy}
-        required
-      />
-    </label>
-    <label class="hosted-field">
-      Invite token (optional)
-      <input
-        class="hosted-input"
-        type="text"
-        bind:value={inviteToken}
-        disabled={busy}
-        placeholder="If you were invited to an organization"
-      />
-    </label>
-    {#if message}
-      <p class="hosted-error" role="alert">{message}</p>
-    {/if}
-    <button class="hosted-btn-submit" type="submit" disabled={busy}>
-      {busy ? "Continuing…" : "Continue with passkey"}
-    </button>
-  </form>
+<div class="mx-auto max-w-md py-8">
+  <div class="rounded-md border border-gray-200 bg-gray-100 px-6 py-6">
+    <h1 class="text-lg font-semibold text-gray-900">Create your account</h1>
+    <p class="mt-1.5 text-[12px] leading-relaxed text-gray-500">
+      Sign up with a passkey — Face ID, Touch ID, Windows Hello, or a security
+      key. No password to remember, no email round-trip.
+    </p>
 
-  <p class="hosted-foot">
+    <form
+      class="mt-5 space-y-3"
+      onsubmit={(e) => {
+        e.preventDefault();
+        submit();
+      }}
+    >
+      <label class="block text-[12px] font-medium text-gray-600">
+        Work email
+        <input
+          type="email"
+          autocomplete="email"
+          bind:value={email}
+          disabled={busy}
+          required
+          placeholder="you@company.com"
+          class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] text-gray-900 placeholder:text-[var(--ui-text-subtle)]"
+        />
+      </label>
+
+      <label class="block text-[12px] font-medium text-gray-600">
+        Your name
+        <input
+          type="text"
+          autocomplete="name"
+          bind:value={displayName}
+          disabled={busy}
+          required
+          placeholder="Jane Doe"
+          class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] text-gray-900 placeholder:text-[var(--ui-text-subtle)]"
+        />
+      </label>
+
+      {#if showInviteField}
+        <label class="block text-[12px] font-medium text-gray-600">
+          Invite token
+          <input
+            type="text"
+            bind:value={inviteToken}
+            disabled={busy}
+            placeholder="From your invite email"
+            class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] text-gray-900 placeholder:text-[var(--ui-text-subtle)]"
+          />
+        </label>
+      {:else}
+        <button
+          type="button"
+          class="text-[11px] font-medium text-indigo-400 hover:text-indigo-300"
+          onclick={() => (showInviteField = true)}
+        >
+          + I have an invite token
+        </button>
+      {/if}
+
+      {#if message}
+        <p
+          role="alert"
+          class="rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
+        >
+          {message}
+        </p>
+      {/if}
+
+      <button
+        type="submit"
+        disabled={busy}
+        class="w-full rounded-md bg-indigo-600 px-3 py-2 text-[13px] font-medium text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {busy ? "Setting up your passkey…" : "Continue with passkey"}
+      </button>
+
+      <p class="text-[11px] text-gray-500">
+        By continuing you agree to the OAR terms of service.
+      </p>
+    </form>
+  </div>
+
+  <p class="mt-4 text-center text-[12px] text-gray-500">
     Already have an account?
-    <a class="hosted-link" href={`/hosted/signin${continuationQuery}`}
-      >Sign in</a
+    <a
+      class="text-indigo-400 underline underline-offset-2 hover:text-indigo-300"
+      href={`/hosted/signin${continuationQuery}`}>Sign in</a
     >
   </p>
 </div>

@@ -1,33 +1,408 @@
 <script>
+  import { onMount } from "svelte";
+
+  import { browser } from "$app/environment";
+  import { goto } from "$app/navigation";
   import { page } from "$app/stores";
 
   import "$lib/styles/hosted.css";
+  import Avatar from "$lib/hosted/Avatar.svelte";
+  import {
+    hostedSession,
+    initialsFor,
+    loadHostedSession,
+    setActiveOrg,
+    signOutHostedSession,
+  } from "$lib/hosted/session.js";
 
   let { children } = $props();
 
-  const nav = [
-    { href: "/hosted/start", label: "Home" },
-    { href: "/hosted/organizations", label: "Organizations" },
-    { href: "/hosted/signup", label: "Create account" },
-    { href: "/hosted/signin", label: "Sign in" },
-    { href: "/hosted/onboarding", label: "Onboarding" },
-    { href: "/hosted/dev", label: "Developer notes" },
+  /** Routes that don't require auth (and shouldn't load the session). */
+  const PUBLIC_PREFIXES = [
+    "/hosted/start",
+    "/hosted/signup",
+    "/hosted/signin",
+    "/hosted/dev",
+    "/hosted/billing/return",
+    "/hosted/billing/mock-portal",
   ];
+
+  let menuOpen = $state(false);
+  let orgPickerOpen = $state(false);
+
+  const path = $derived($page.url.pathname);
+  const isPublic = $derived(
+    PUBLIC_PREFIXES.some((p) => path === p || path.startsWith(p + "/")),
+  );
+  const session = $derived($hostedSession);
+  const account = $derived(session.account);
+  const orgs = $derived(session.organizations);
+  const activeOrg = $derived(
+    orgs.find((o) => String(o.id) === session.activeOrgId) ?? null,
+  );
+
+  /** Primary nav for signed-in users — anchored to the active org. */
+  const primaryNav = $derived.by(() => {
+    const items = [{ href: "/hosted/dashboard", label: "Dashboard" }];
+    if (activeOrg) {
+      const base = `/hosted/organizations/${encodeURIComponent(activeOrg.id)}`;
+      items.push(
+        { href: base, label: "Overview" },
+        { href: `${base}/usage`, label: "Usage" },
+        { href: `${base}/billing`, label: "Billing" },
+      );
+    } else {
+      items.push({ href: "/hosted/organizations", label: "Organizations" });
+    }
+    return items;
+  });
+
+  function isActive(href) {
+    if (!href) return false;
+    if (href === path) return true;
+    if (href === "/hosted/dashboard" && path === "/hosted/dashboard") {
+      return true;
+    }
+    return path.startsWith(href + "/");
+  }
+
+  onMount(() => {
+    if (!browser) return;
+    if (!isPublic) {
+      void loadHostedSession();
+    }
+  });
+
+  // Close popovers when route changes.
+  $effect(() => {
+    void path;
+    menuOpen = false;
+    orgPickerOpen = false;
+  });
+
+  // If we're on a private route and resolved as unauthed, send the user to /start.
+  $effect(() => {
+    if (!browser) return;
+    if (isPublic) return;
+    if (session.phase === "unauthed") {
+      void goto(
+        `/hosted/start?next=${encodeURIComponent(path + ($page.url.search ?? ""))}`,
+        { replaceState: true },
+      );
+    }
+  });
+
+  async function handleSignOut() {
+    await signOutHostedSession();
+    await goto("/hosted/start");
+  }
+
+  function pickOrg(orgId) {
+    setActiveOrg(orgId);
+    orgPickerOpen = false;
+    void goto(`/hosted/organizations/${encodeURIComponent(orgId)}`);
+  }
 </script>
 
-<div class="hosted-shell">
-  <header class="hosted-header">
-    <span class="hosted-brand">OAR — hosted</span>
-    <nav class="hosted-nav" aria-label="Hosted account">
-      {#each nav as item}
+<div class="min-h-screen bg-[var(--ui-bg)] text-[var(--ui-text)]">
+  <header
+    class="sticky top-0 z-30 border-b border-gray-200 bg-[var(--ui-bg)]/95 backdrop-blur supports-[backdrop-filter]:bg-[var(--ui-bg)]/80"
+  >
+    <div
+      class="mx-auto flex h-12 max-w-6xl items-center justify-between gap-4 px-4"
+    >
+      <div class="flex items-center gap-6">
         <a
-          href={item.href}
-          class="hosted-nav-link"
-          class:hosted-nav-link--active={$page.url.pathname === item.href}
-          data-sveltekit-preload-data="tap">{item.label}</a
+          href={isPublic && session.phase !== "authed"
+            ? "/hosted/start"
+            : "/hosted/dashboard"}
+          class="flex items-center gap-2 text-[13px] font-semibold text-gray-900"
         >
-      {/each}
-    </nav>
+          <span
+            class="inline-flex h-5 w-5 items-center justify-center rounded bg-indigo-500/15 text-[10px] font-bold uppercase text-indigo-400"
+          >
+            O
+          </span>
+          OAR
+        </a>
+
+        {#if session.phase === "authed"}
+          <nav class="hidden items-center gap-1 md:flex" aria-label="Primary">
+            {#each primaryNav as item (item.href)}
+              <a
+                href={item.href}
+                data-sveltekit-preload-data="tap"
+                class="rounded-md px-2.5 py-1.5 text-[12px] font-medium transition-colors {isActive(
+                  item.href,
+                )
+                  ? 'bg-gray-200 text-gray-900'
+                  : 'text-gray-500 hover:bg-gray-200 hover:text-gray-800'}"
+              >
+                {item.label}
+              </a>
+            {/each}
+          </nav>
+        {/if}
+      </div>
+
+      <div class="flex items-center gap-2">
+        {#if session.phase === "authed"}
+          {#if orgs.length > 0}
+            <div class="relative">
+              <button
+                type="button"
+                aria-haspopup="listbox"
+                aria-expanded={orgPickerOpen}
+                onclick={() => (orgPickerOpen = !orgPickerOpen)}
+                class="flex max-w-[16rem] items-center gap-2 rounded-md border border-gray-200 bg-gray-100 px-2 py-1 text-[12px] font-medium text-gray-800 transition-colors hover:bg-gray-200"
+              >
+                {#if activeOrg}
+                  <Avatar
+                    label={activeOrg.display_name || activeOrg.slug}
+                    seed={activeOrg.id || activeOrg.slug}
+                    size="sm"
+                  />
+                {/if}
+                <span class="min-w-0 truncate text-left">
+                  {activeOrg?.display_name ??
+                    activeOrg?.slug ??
+                    "Choose organization"}
+                </span>
+                <svg
+                  class="h-3 w-3 shrink-0 text-gray-500"
+                  viewBox="0 0 12 12"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  aria-hidden="true"
+                >
+                  <path d="M3 4.5l3 3 3-3" />
+                </svg>
+              </button>
+              {#if orgPickerOpen}
+                <div
+                  role="listbox"
+                  class="absolute right-0 top-full z-40 mt-1 w-64 overflow-hidden rounded-md border border-gray-200 bg-gray-100 shadow-lg"
+                >
+                  <div
+                    class="border-b border-gray-200 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-gray-500"
+                  >
+                    Switch organization
+                  </div>
+                  <ul class="max-h-72 overflow-auto py-1">
+                    {#each orgs as org (org.id)}
+                      <li>
+                        <button
+                          type="button"
+                          role="option"
+                          aria-selected={org.id === activeOrg?.id}
+                          onclick={() => pickOrg(org.id)}
+                          class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[12px] text-gray-800 transition-colors hover:bg-gray-200"
+                        >
+                          <Avatar
+                            label={org.display_name || org.slug}
+                            seed={org.id || org.slug}
+                            size="sm"
+                          />
+                          <span class="min-w-0 flex-1">
+                            <span
+                              class="block truncate text-[12px] text-gray-900"
+                            >
+                              {org.display_name || org.slug}
+                            </span>
+                            {#if org.display_name && org.slug && org.display_name !== org.slug}
+                              <span
+                                class="block truncate text-[11px] text-gray-500"
+                              >
+                                {org.slug}
+                              </span>
+                            {/if}
+                          </span>
+                          {#if org.id === activeOrg?.id}
+                            <span
+                              class="shrink-0 text-[11px] font-medium text-indigo-400"
+                              >Active</span
+                            >
+                          {/if}
+                        </button>
+                      </li>
+                    {/each}
+                  </ul>
+                  <div class="border-t border-gray-200 px-1 py-1">
+                    <a
+                      href="/hosted/organizations/new"
+                      class="block rounded px-2 py-1.5 text-[12px] font-medium text-indigo-400 transition-colors hover:bg-gray-200"
+                      >+ New organization</a
+                    >
+                    <a
+                      href="/hosted/organizations"
+                      class="block rounded px-2 py-1.5 text-[12px] text-gray-500 transition-colors hover:bg-gray-200"
+                      >Manage organizations</a
+                    >
+                  </div>
+                </div>
+              {/if}
+            </div>
+          {/if}
+
+          <div class="relative">
+            <button
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              onclick={() => (menuOpen = !menuOpen)}
+              class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-gray-200 text-[11px] font-semibold text-gray-900 transition-colors hover:bg-gray-300"
+              title={account?.email ?? account?.display_name ?? "Account"}
+            >
+              {initialsFor(account)}
+            </button>
+            {#if menuOpen}
+              <div
+                role="menu"
+                class="absolute right-0 top-full z-40 mt-1 w-60 overflow-hidden rounded-md border border-gray-200 bg-gray-100 shadow-lg"
+              >
+                <div
+                  class="flex items-center gap-2 border-b border-gray-200 px-3 py-2"
+                >
+                  <Avatar
+                    label={account?.display_name || account?.email || ""}
+                    seed={account?.email || account?.display_name || ""}
+                    size="md"
+                  />
+                  <div class="min-w-0">
+                    <div class="truncate text-[12px] font-medium text-gray-900">
+                      {account?.display_name || account?.email || "Signed in"}
+                    </div>
+                    {#if account?.email && account?.display_name}
+                      <div class="truncate text-[11px] text-gray-500">
+                        {account.email}
+                      </div>
+                    {:else if !account?.email && !account?.display_name}
+                      <div class="truncate text-[11px] text-gray-500">
+                        Account details unavailable
+                      </div>
+                    {/if}
+                  </div>
+                </div>
+                <ul class="py-1">
+                  <li>
+                    <a
+                      role="menuitem"
+                      href="/hosted/dashboard"
+                      class="block px-3 py-1.5 text-[12px] text-gray-800 transition-colors hover:bg-gray-200"
+                      >Dashboard</a
+                    >
+                  </li>
+                  <li>
+                    <a
+                      role="menuitem"
+                      href="/hosted/organizations"
+                      class="block px-3 py-1.5 text-[12px] text-gray-800 transition-colors hover:bg-gray-200"
+                      >Organizations</a
+                    >
+                  </li>
+                </ul>
+                <div class="border-t border-gray-200 py-1">
+                  <button
+                    role="menuitem"
+                    type="button"
+                    onclick={handleSignOut}
+                    class="block w-full px-3 py-1.5 text-left text-[12px] text-gray-800 transition-colors hover:bg-gray-200"
+                  >
+                    Sign out
+                  </button>
+                </div>
+              </div>
+            {/if}
+          </div>
+        {:else if isPublic && path !== "/hosted/signin"}
+          <a
+            href="/hosted/signin"
+            class="rounded-md px-2.5 py-1.5 text-[12px] font-medium text-gray-500 transition-colors hover:bg-gray-200 hover:text-gray-800"
+            >Sign in</a
+          >
+          {#if path !== "/hosted/signup"}
+            <a
+              href="/hosted/signup"
+              class="rounded-md bg-indigo-600 px-2.5 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500"
+              >Get started</a
+            >
+          {/if}
+        {/if}
+      </div>
+    </div>
+
+    {#if session.phase === "authed"}
+      <nav
+        class="flex items-center gap-1 overflow-x-auto border-t border-gray-200 px-4 py-1 md:hidden"
+        aria-label="Primary mobile"
+      >
+        {#each primaryNav as item (item.href)}
+          <a
+            href={item.href}
+            class="shrink-0 rounded-md px-2.5 py-1.5 text-[12px] font-medium transition-colors {isActive(
+              item.href,
+            )
+              ? 'bg-gray-200 text-gray-900'
+              : 'text-gray-500 hover:bg-gray-200 hover:text-gray-800'}"
+            >{item.label}</a
+          >
+        {/each}
+      </nav>
+    {/if}
   </header>
-  {@render children()}
+
+  <main class="mx-auto w-full max-w-6xl px-4 py-6">
+    {@render children()}
+  </main>
+
+  <footer
+    class="mx-auto mt-8 w-full max-w-6xl border-t border-gray-200 px-4 pb-6 pt-4 text-[11px] text-gray-500"
+  >
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-2">
+        <span
+          class="inline-flex h-4 w-4 items-center justify-center rounded bg-indigo-500/15 text-[9px] font-bold uppercase text-indigo-400"
+          aria-hidden="true">O</span
+        >
+        <span>OAR hosted · &copy; {new Date().getFullYear()}</span>
+      </div>
+      <nav
+        class="flex flex-wrap items-center gap-x-4 gap-y-1"
+        aria-label="Footer"
+      >
+        <a
+          class="transition-colors hover:text-gray-800"
+          href="https://github.com/run-llama/oar"
+          rel="noreferrer"
+          target="_blank">Docs</a
+        >
+        <a
+          class="transition-colors hover:text-gray-800"
+          href="https://github.com/run-llama/oar"
+          rel="noreferrer"
+          target="_blank">GitHub</a
+        >
+        <a
+          class="transition-colors hover:text-gray-800"
+          href="https://status.runoar.com"
+          rel="noreferrer"
+          target="_blank"
+        >
+          <span
+            class="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 align-middle"
+            aria-hidden="true"
+          ></span>
+          Status
+        </a>
+        <a
+          class="transition-colors hover:text-gray-800"
+          href="mailto:support@runoar.com">Support</a
+        >
+        <a class="transition-colors hover:text-gray-800" href="/hosted/dev"
+          >Developer notes</a
+        >
+      </nav>
+    </div>
+  </footer>
 </div>

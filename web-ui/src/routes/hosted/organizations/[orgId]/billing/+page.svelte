@@ -15,6 +15,7 @@
     writeBillingSnapshot,
   } from "$lib/hosted/billingActivation.js";
   import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
+  import { setActiveOrg } from "$lib/hosted/session.js";
 
   const orgId = $derived(String($page.params.orgId ?? ""));
 
@@ -28,6 +29,71 @@
   let activatingBanner = $state(false);
   let activationTimedOut = $state(false);
   let pollStop = $state(() => {});
+  let upgradeBusy = $state("");
+
+  const PLAN_CARDS = [
+    {
+      id: "starter",
+      name: "Starter",
+      price: "$0",
+      priceSuffix: "/mo",
+      tagline: "Free forever — perfect for evaluating.",
+      features: [
+        "1 workspace",
+        "Up to 50 artifacts",
+        "1 GB storage",
+        "Community support",
+      ],
+      ctaLabel: "Free plan",
+      ctaUpgrade: false,
+    },
+    {
+      id: "team",
+      name: "Team",
+      price: "$29",
+      priceSuffix: "/seat / mo",
+      tagline: "For teams shipping with AI agents.",
+      features: [
+        "5 workspaces",
+        "1,000 artifacts / org",
+        "25 GB storage",
+        "Email support",
+      ],
+      highlight: true,
+      ctaLabel: "Upgrade to Team",
+      ctaUpgrade: true,
+    },
+    {
+      id: "scale",
+      name: "Scale",
+      price: "$99",
+      priceSuffix: "/seat / mo",
+      tagline: "Higher limits and SSO-ready.",
+      features: [
+        "20 workspaces",
+        "10,000 artifacts / org",
+        "250 GB storage",
+        "Priority support",
+      ],
+      ctaLabel: "Upgrade to Scale",
+      ctaUpgrade: true,
+    },
+    {
+      id: "enterprise",
+      name: "Enterprise",
+      price: "Custom",
+      priceSuffix: "",
+      tagline: "Dedicated infra, SSO, and contracts.",
+      features: [
+        "Unlimited workspaces",
+        "Custom limits",
+        "SSO + audit logs",
+        "Dedicated support",
+      ],
+      ctaLabel: "Talk to sales",
+      ctaUpgrade: false,
+    },
+  ];
 
   async function readError(res) {
     try {
@@ -60,22 +126,15 @@
   }
 
   function stripActivatingQuery() {
-    if (!browser) {
-      return;
-    }
+    if (!browser) return;
     const u = new URL(window.location.href);
-    if (!u.searchParams.has("activating")) {
-      return;
-    }
+    if (!u.searchParams.has("activating")) return;
     u.searchParams.delete("activating");
     window.history.replaceState({}, "", `${u.pathname}${u.search}${u.hash}`);
   }
 
-  /** Use the live URL, not $page, so async activation polling does not subscribe $effect to the page store. */
   function isActivatingCheckoutFromUrl() {
-    if (!browser) {
-      return false;
-    }
+    if (!browser) return false;
     try {
       return (
         new URL(window.location.href).searchParams.get("activating") === "1"
@@ -107,9 +166,7 @@
     const res = await hostedCpFetch(
       `organizations/${encodeURIComponent(orgId)}/memberships?limit=200`,
     );
-    if (!res.ok) {
-      return;
-    }
+    if (!res.ok) return;
     const body = await res.json();
     const items = body.memberships ?? [];
     managers = items.filter(
@@ -128,9 +185,7 @@
     pollStop();
 
     const got = await fetchBillingSummary();
-    if (!got) {
-      return;
-    }
+    if (!got) return;
     if (got.forbidden) {
       role = "member";
       await loadManagers();
@@ -146,23 +201,15 @@
     await maybeRunActivationPoll(got.summary);
   }
 
-  /**
-   * Post-checkout: poll until plan/subscription changes vs sessionStorage snapshot.
-   * @param {any} initialSummary
-   */
+  /** @param {any} initialSummary */
   async function maybeRunActivationPoll(initialSummary) {
-    if (!browser) {
-      return;
-    }
-    if (!isActivatingCheckoutFromUrl()) {
-      return;
-    }
+    if (!browser) return;
+    if (!isActivatingCheckoutFromUrl()) return;
     const snap = readBillingSnapshot(orgId);
     if (!snap || billingSnapshotExpired(snap)) {
       stripActivatingQuery();
       return;
     }
-    // Snapshot captured pre-redirect; if API already reflects the new state, stop immediately.
     if (billingSnapshotMatchesSummary(snap, initialSummary)) {
       clearBillingSnapshot(orgId);
       activatingBanner = false;
@@ -214,10 +261,8 @@
   }
 
   $effect(() => {
-    if (!browser || !orgId) {
-      return;
-    }
-    // Avoid subscribing this effect to reactive state read inside async load() (e.g. $page), which caused a fetch loop.
+    if (!browser || !orgId) return;
+    setActiveOrg(orgId);
     untrack(() => {
       void load();
     });
@@ -225,41 +270,44 @@
 
   async function checkoutPlan(planTier) {
     message = "";
-    if (!summary) {
-      return;
-    }
-    writeBillingSnapshot(orgId, summary);
-    const res = await hostedCpFetch(
-      `organizations/${encodeURIComponent(orgId)}/billing/checkout-session`,
-      {
-        method: "POST",
-        body: JSON.stringify({ plan_tier: planTier }),
-      },
-    );
-    if (res.status === 401) {
-      await goto("/hosted/start");
-      return;
-    }
-    const body = await res.json().catch(() => ({}));
-    const session = body.session ?? {};
-    if (session.status === "configuration_required") {
-      message =
-        session.note ||
-        "Billing is not fully configured (Stripe env). Check operator docs.";
-      summary = {
-        ...summary,
-        configuration: {
-          ...(summary.configuration ?? {}),
-          missing_configuration: session.missing_configuration ?? [],
+    if (!summary) return;
+    upgradeBusy = planTier;
+    try {
+      writeBillingSnapshot(orgId, summary);
+      const res = await hostedCpFetch(
+        `organizations/${encodeURIComponent(orgId)}/billing/checkout-session`,
+        {
+          method: "POST",
+          body: JSON.stringify({ plan_tier: planTier }),
         },
-      };
-      return;
+      );
+      if (res.status === 401) {
+        await goto("/hosted/start");
+        return;
+      }
+      const body = await res.json().catch(() => ({}));
+      const session = body.session ?? {};
+      if (session.status === "configuration_required") {
+        message =
+          session.note ||
+          "Billing is not fully configured yet. Contact support if this persists.";
+        summary = {
+          ...summary,
+          configuration: {
+            ...(summary.configuration ?? {}),
+            missing_configuration: session.missing_configuration ?? [],
+          },
+        };
+        return;
+      }
+      if (session.status === "created" && session.url) {
+        window.location.assign(session.url);
+        return;
+      }
+      message = await readError(res);
+    } finally {
+      upgradeBusy = "";
     }
-    if (session.status === "created" && session.url) {
-      window.location.assign(session.url);
-      return;
-    }
-    message = await readError(res);
   }
 
   async function openPortal() {
@@ -277,7 +325,7 @@
     if (session.status === "configuration_required") {
       message =
         session.note ||
-        "Customer portal is not fully configured. Check Stripe env.";
+        "Customer portal is not configured yet. Contact support if this persists.";
       return;
     }
     if (session.status === "created" && session.url) {
@@ -290,49 +338,63 @@
   function managerDisplayName(m) {
     const dn = String(m.account_display_name ?? "").trim();
     const em = String(m.account_email ?? "").trim();
-    if (dn) {
-      return dn;
-    }
-    if (em) {
-      return em;
-    }
-    return "Member";
+    return dn || em || "Member";
   }
 </script>
 
-<div class="hosted-page hosted-page--wide">
-  <p class="hosted-crumb">
-    <a href="/hosted/organizations">Organizations</a>
-    <span aria-hidden="true"> / </span>
-    <span>Billing</span>
-  </p>
-  <h1 class="hosted-title">Billing</h1>
-  <p class="hosted-sub">
-    Organization <code class="hosted-code">{orgId}</code>
-  </p>
+<svelte:head>
+  <title>Billing — OAR</title>
+</svelte:head>
+
+<div class="space-y-5">
+  <div>
+    <p class="text-[11px] text-gray-500">
+      <a
+        class="text-gray-500 underline-offset-2 transition-colors hover:text-gray-800 hover:underline"
+        href={`/hosted/organizations/${encodeURIComponent(orgId)}`}
+        >← Overview</a
+      >
+    </p>
+    <h1 class="mt-1 text-lg font-semibold text-gray-900">Billing</h1>
+  </div>
 
   {#if message}
-    <p class="hosted-error">{message}</p>
+    <p
+      role="alert"
+      class="rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
+    >
+      {message}
+    </p>
   {/if}
 
   {#if role === "loading"}
-    <p class="hosted-muted">Loading…</p>
+    <div
+      class="rounded-md border border-gray-200 bg-gray-100 px-4 py-6 text-[13px] text-gray-500"
+    >
+      Loading…
+    </div>
   {:else if role === "member"}
-    <section class="hosted-card">
-      <h2>Who manages billing</h2>
-      <p class="hosted-hint">
-        Billing is managed by your organization owner or admin. Contact one of
-        the people below to change plans, payment method, or invoices.
+    <section class="rounded-md border border-gray-200 bg-gray-100 px-5 py-5">
+      <h2 class="text-[14px] font-semibold text-gray-900">
+        Who manages billing
+      </h2>
+      <p class="mt-1 text-[12px] text-gray-500">
+        Billing is managed by your organization's owner or admin. Reach out to
+        someone below to change plans, payment methods, or invoices.
       </p>
       {#if managers.length === 0}
-        <p class="hosted-muted">No active managers listed.</p>
+        <p class="mt-3 text-[12px] text-gray-500">No active managers listed.</p>
       {:else}
-        <ul class="hosted-manager-list">
+        <ul
+          class="mt-3 divide-y divide-gray-200 rounded-md border border-gray-200 bg-gray-50"
+        >
           {#each managers as m (m.id)}
-            <li>
-              <strong>{managerDisplayName(m)}</strong>
+            <li class="flex items-center justify-between gap-3 px-3 py-2">
+              <span class="text-[13px] font-medium text-gray-900"
+                >{managerDisplayName(m)}</span
+              >
               {#if String(m.account_email ?? "").trim()}
-                <span class="hosted-muted"> · {m.account_email}</span>
+                <span class="text-[11px] text-gray-500">{m.account_email}</span>
               {/if}
             </li>
           {/each}
@@ -341,23 +403,37 @@
     </section>
   {:else if role === "manager" && summary}
     {#if activatingBanner}
-      <div class="hosted-banner" role="status">
-        <strong>Activating your subscription…</strong>
-        <span class="hosted-muted"
-          >We are confirming your plan with Stripe. This usually takes a few
-          seconds.</span
-        >
+      <div
+        class="flex items-start gap-3 rounded-md bg-indigo-500/10 px-3 py-2 text-[12px] text-indigo-300"
+        role="status"
+      >
+        <span
+          class="mt-0.5 inline-block h-2 w-2 animate-pulse rounded-full bg-indigo-400"
+          aria-hidden="true"
+        ></span>
+        <div>
+          <strong class="font-medium">Activating your subscription…</strong>
+          <span class="text-gray-500">
+            We're confirming your plan with Stripe. This usually takes a few
+            seconds.
+          </span>
+        </div>
       </div>
     {/if}
     {#if activationTimedOut}
-      <div class="hosted-banner hosted-banner--warn" role="status">
-        <strong>Still processing</strong>
-        <span class="hosted-muted"
-          >Refresh in a minute or contact support if billing does not update.</span
-        >
+      <div
+        class="flex items-center justify-between gap-3 rounded-md bg-amber-500/10 px-3 py-2 text-[12px] text-amber-400"
+        role="status"
+      >
+        <div>
+          <strong class="font-medium">Still processing.</strong>
+          <span class="text-gray-500">
+            Refresh in a minute or contact support if billing doesn't update.
+          </span>
+        </div>
         <button
           type="button"
-          class="hosted-btn hosted-btn--secondary"
+          class="rounded-md border border-gray-200 bg-gray-100 px-2.5 py-1 text-[12px] font-medium text-gray-600 hover:bg-gray-200"
           onclick={() => refreshAfterTimeout()}>Refresh</button
         >
       </div>
@@ -367,165 +443,150 @@
     {@const ba = summary.billing_account ?? {}}
     {@const us = summary.usage_summary ?? {}}
     {@const plan = us.plan ?? {}}
+    {@const currentTier = String(summary.plan_tier ?? "starter").toLowerCase()}
+    {@const managed = stripeSubscriptionManagedClient(ba)}
+
     {#if cfg.configured === false || (cfg.missing_configuration?.length ?? 0) > 0}
-      <section class="hosted-card">
-        <h2>Billing not yet configured</h2>
-        <p class="hosted-hint">
-          Stripe environment variables are incomplete. In local dev this is
-          expected until you follow
-          <code class="hosted-code">make billing-local-smoke</code>
-          in the control plane.
-        </p>
-        {#if cfg.missing_configuration?.length}
-          <ul class="hosted-missing">
-            {#each cfg.missing_configuration as item (item)}
-              <li>{item}</li>
-            {/each}
-          </ul>
-        {/if}
+      <section
+        class="rounded-md bg-amber-500/10 px-3 py-2 text-[12px] text-amber-400"
+      >
+        <strong class="font-medium">Billing not yet configured.</strong>
+        Stripe is incomplete in this environment. Upgrades will not work until an
+        operator finishes setup.
       </section>
     {/if}
 
-    <section class="hosted-card">
-      <h2>Plan</h2>
-      <p class="hosted-hint">
-        {plan.display_name ?? "—"} ·
-        <code class="hosted-code">{summary.plan_tier}</code>
+    <section class="rounded-md border border-gray-200 bg-gray-100 px-4 py-3">
+      <div class="flex flex-wrap items-baseline justify-between gap-2">
+        <div>
+          <div
+            class="text-[11px] font-medium uppercase tracking-wide text-gray-500"
+          >
+            Current plan
+          </div>
+          <div class="mt-0.5 flex items-center gap-2">
+            <span class="text-[16px] font-semibold text-gray-900"
+              >{plan.display_name ?? "Starter"}</span
+            >
+            <span
+              class="rounded bg-indigo-500/10 px-1.5 py-0.5 text-[11px] font-medium text-indigo-400"
+              >{subscriptionStatusLabel(ba)}</span
+            >
+          </div>
+          {#if ba.current_period_end}
+            <p class="mt-1 text-[11px] text-gray-500">
+              Renews
+              {ba.cancel_at_period_end ? "(canceling)" : ""}
+              <span class="text-gray-800">{ba.current_period_end}</span>
+            </p>
+          {/if}
+        </div>
+        {#if managed}
+          <button
+            type="button"
+            onclick={() => openPortal()}
+            class="rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[12px] font-medium text-gray-800 hover:bg-gray-200"
+            >Manage in Stripe</button
+          >
+        {/if}
+      </div>
+    </section>
+
+    <section>
+      <h2 class="text-[14px] font-semibold text-gray-900">Plans</h2>
+      <p class="mt-1 text-[12px] text-gray-500">
+        Switch any time — you'll only pay the prorated difference.
       </p>
-      <ul class="hosted-kv">
-        <li>
-          <span>Workspaces</span><span>{plan.workspace_limit ?? "—"}</span>
-        </li>
-        <li>
-          <span>Artifacts / workspace</span><span
-            >{plan.max_artifacts_per_workspace ?? "—"}</span
+      <div class="mt-3 grid gap-3 lg:grid-cols-4">
+        {#each PLAN_CARDS as planCard (planCard.id)}
+          {@const isCurrent = planCard.id === currentTier}
+          <article
+            class="flex flex-col rounded-md border bg-gray-100 px-4 py-4 {isCurrent
+              ? 'border-indigo-500 ring-1 ring-indigo-500/30'
+              : planCard.highlight
+                ? 'border-indigo-400/40'
+                : 'border-gray-200'}"
           >
-        </li>
-        <li>
-          <span>Org artifact capacity</span><span
-            >{plan.artifact_capacity ?? "—"}</span
-          >
-        </li>
-        <li>
-          <span>Storage (GB)</span><span>{plan.included_storage_gb ?? "—"}</span
-          >
-        </li>
-      </ul>
-    </section>
-
-    <section class="hosted-card">
-      <h2>Subscription</h2>
-      <ul class="hosted-kv">
-        <li>
-          <span>Billing status</span><span>{ba.billing_status ?? "—"}</span>
-        </li>
-        <li>
-          <span>Stripe subscription</span><span
-            >{subscriptionStatusLabel(ba)}</span
-          >
-        </li>
-        <li>
-          <span>Current period end</span><span
-            >{ba.current_period_end ?? "—"}</span
-          >
-        </li>
-        <li>
-          <span>Cancel at period end</span><span
-            >{ba.cancel_at_period_end ? "Yes" : "No"}</span
-          >
-        </li>
-      </ul>
-    </section>
-
-    <section class="hosted-actions">
-      {#if stripeSubscriptionManagedClient(ba)}
-        <button
-          type="button"
-          class="hosted-btn hosted-btn--primary"
-          onclick={() => openPortal()}>Manage billing</button
-        >
-        <p class="hosted-hint">
-          Opens Stripe Customer Portal for invoices, payment method, upgrades,
-          and cancellation.
-        </p>
-      {:else}
-        <button
-          type="button"
-          class="hosted-btn hosted-btn--primary"
-          onclick={() => checkoutPlan("team")}>Upgrade to Team</button
-        >
-        <button
-          type="button"
-          class="hosted-btn hosted-btn--secondary"
-          onclick={() => checkoutPlan("scale")}>Upgrade to Scale</button
-        >
-        <p class="hosted-hint">
-          Checkout opens in Stripe. After paying, you will return here while we
-          activate your plan.
-        </p>
-      {/if}
+            <div class="flex items-center justify-between">
+              <h3 class="text-[14px] font-semibold text-gray-900">
+                {planCard.name}
+              </h3>
+              {#if isCurrent}
+                <span
+                  class="rounded bg-indigo-500/10 px-1.5 py-0.5 text-[11px] font-medium text-indigo-400"
+                  >Current</span
+                >
+              {:else if planCard.highlight}
+                <span
+                  class="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[11px] font-medium text-emerald-400"
+                  >Popular</span
+                >
+              {/if}
+            </div>
+            <p class="mt-1 text-[12px] text-gray-500">{planCard.tagline}</p>
+            <div class="mt-3 flex items-baseline gap-1">
+              <span class="text-[20px] font-semibold text-gray-900"
+                >{planCard.price}</span
+              >
+              {#if planCard.priceSuffix}
+                <span class="text-[11px] text-gray-500"
+                  >{planCard.priceSuffix}</span
+                >
+              {/if}
+            </div>
+            <ul class="mt-3 space-y-1.5 text-[12px] text-gray-600">
+              {#each planCard.features as feat}
+                <li class="flex items-start gap-1.5">
+                  <span
+                    class="mt-1.5 inline-block h-1 w-1 shrink-0 rounded-full bg-gray-500"
+                    aria-hidden="true"
+                  ></span>
+                  <span>{feat}</span>
+                </li>
+              {/each}
+            </ul>
+            <div class="mt-4">
+              {#if isCurrent}
+                <span
+                  class="block w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-center text-[12px] text-gray-500"
+                  >Current plan</span
+                >
+              {:else if planCard.id === "enterprise"}
+                <a
+                  href="mailto:sales@oar.app?subject=Enterprise%20plan%20inquiry"
+                  class="block w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-center text-[12px] font-medium text-gray-800 hover:bg-gray-200"
+                  >Talk to sales</a
+                >
+              {:else if planCard.ctaUpgrade && managed}
+                <button
+                  type="button"
+                  onclick={() => openPortal()}
+                  class="block w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[12px] font-medium text-gray-800 transition-colors hover:bg-gray-200"
+                  >Switch plan</button
+                >
+              {:else if planCard.ctaUpgrade}
+                <button
+                  type="button"
+                  onclick={() => checkoutPlan(planCard.id)}
+                  disabled={!!upgradeBusy}
+                  class="block w-full rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-60"
+                >
+                  {upgradeBusy === planCard.id
+                    ? "Opening Stripe…"
+                    : planCard.ctaLabel}
+                </button>
+              {:else}
+                <span
+                  class="block w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-center text-[12px] text-gray-500"
+                  >{planCard.ctaLabel}</span
+                >
+              {/if}
+            </div>
+          </article>
+        {/each}
+      </div>
     </section>
   {:else if role === "error"}
-    <p class="hosted-muted">Could not load billing.</p>
+    <p class="text-[12px] text-gray-500">Could not load billing.</p>
   {/if}
 </div>
-
-<style>
-  .hosted-crumb {
-    font-size: 0.88rem;
-    color: var(--ui-text-muted);
-    margin: 0 0 0.75rem;
-  }
-  .hosted-crumb a {
-    color: var(--ui-accent);
-  }
-  .hosted-code {
-    font-size: 0.85em;
-    word-break: break-all;
-  }
-  .hosted-error {
-    color: var(--ui-danger, #c62828);
-    margin: 0 0 1rem;
-  }
-  .hosted-kv {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-  .hosted-kv li {
-    display: flex;
-    justify-content: space-between;
-    gap: 1rem;
-    flex-wrap: wrap;
-    font-size: 0.95rem;
-  }
-  .hosted-kv li span:first-child {
-    color: var(--ui-text-muted);
-  }
-  .hosted-manager-list {
-    margin: 0;
-    padding-left: 1.2rem;
-  }
-  .hosted-missing {
-    margin: 0.5rem 0 0;
-    padding-left: 1.2rem;
-    color: var(--ui-text-muted);
-    font-size: 0.9rem;
-  }
-  .hosted-banner {
-    display: flex;
-    flex-direction: column;
-    gap: 0.35rem;
-    padding: 0.85rem 1rem;
-    border-radius: var(--ui-radius-md);
-    border: 1px solid var(--ui-border);
-    background: color-mix(in srgb, var(--ui-accent) 10%, transparent);
-    margin-bottom: 1rem;
-  }
-  .hosted-banner--warn {
-    background: color-mix(in srgb, var(--ui-warning, #f9a825) 12%, transparent);
-  }
-</style>

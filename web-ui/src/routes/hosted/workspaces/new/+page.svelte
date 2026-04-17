@@ -1,0 +1,237 @@
+<script>
+  import { onMount } from "svelte";
+
+  import { browser } from "$app/environment";
+  import { goto } from "$app/navigation";
+
+  import { env as publicEnv } from "$env/dynamic/public";
+  import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
+  import { hostedSession, loadHostedSession } from "$lib/hosted/session.js";
+
+  let displayName = $state("");
+  let slug = $state("");
+  let slugTouched = $state(false);
+  let serviceId = $state("dev-local-1");
+  let servicePublicKey = $state(
+    String(publicEnv?.PUBLIC_OAR_SAAS_DEV_SERVICE_PUBLIC_KEY ?? "").trim(),
+  );
+  let advancedOpen = $state(false);
+  let busy = $state(false);
+  let message = $state("");
+
+  const session = $derived($hostedSession);
+  const orgs = $derived(session.organizations);
+  const activeOrg = $derived(
+    orgs.find((o) => String(o.id) === session.activeOrgId) ?? null,
+  );
+
+  function slugify(input) {
+    return String(input ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 48);
+  }
+
+  $effect(() => {
+    if (!slugTouched) {
+      slug = slugify(displayName);
+    }
+  });
+
+  $effect(() => {
+    if (!slug.trim()) return;
+    if (serviceId === "dev-local-1" || serviceId.startsWith("dev-")) {
+      serviceId = `dev-${slug.trim()}`;
+    }
+  });
+
+  onMount(async () => {
+    if (!browser) return;
+    if (session.phase !== "authed") {
+      await loadHostedSession();
+    }
+  });
+
+  async function readError(res) {
+    try {
+      const j = await res.json();
+      return j?.error?.message || j?.error?.code || res.statusText;
+    } catch {
+      return res.statusText;
+    }
+  }
+
+  async function submit() {
+    message = "";
+    if (!activeOrg?.id) {
+      message = "Pick an organization first.";
+      return;
+    }
+    if (!displayName.trim() || !slug.trim()) {
+      message = "Workspace name and slug are required.";
+      return;
+    }
+    const pub = servicePublicKey.trim();
+    if (!pub) {
+      advancedOpen = true;
+      message =
+        "Service identity public key is required. Open Advanced settings to paste it from your control plane setup.";
+      return;
+    }
+    const sid = serviceId.trim() || `dev-${slug.trim()}`;
+    busy = true;
+    try {
+      const res = await hostedCpFetch("workspaces", {
+        method: "POST",
+        body: JSON.stringify({
+          organization_id: activeOrg.id,
+          slug: slug.trim(),
+          display_name: displayName.trim(),
+          service_identity_id: sid,
+          service_identity_public_key: pub,
+        }),
+      });
+      if (!res.ok) {
+        message = await readError(res);
+        return;
+      }
+      await goto("/hosted/dashboard");
+    } catch (e) {
+      message = e instanceof Error ? e.message : "Failed to create workspace.";
+    } finally {
+      busy = false;
+    }
+  }
+</script>
+
+<svelte:head>
+  <title>New workspace — OAR</title>
+</svelte:head>
+
+<div class="mx-auto max-w-lg py-6">
+  <p class="text-[12px] text-gray-500">
+    <a class="text-indigo-400 hover:text-indigo-300" href="/hosted/dashboard"
+      >← Dashboard</a
+    >
+  </p>
+  <h1 class="mt-2 text-lg font-semibold text-gray-900">Create a workspace</h1>
+  <p class="mt-1 text-[12px] text-gray-500">
+    Workspaces are isolated environments inside
+    <span class="font-medium text-gray-800"
+      >{activeOrg?.display_name || activeOrg?.slug || "your organization"}</span
+    >. Each one runs its own agent and stores its own threads.
+  </p>
+
+  <form
+    class="mt-5 space-y-3 rounded-md border border-gray-200 bg-gray-100 px-5 py-5"
+    onsubmit={(e) => {
+      e.preventDefault();
+      submit();
+    }}
+  >
+    <label class="block text-[12px] font-medium text-gray-600">
+      Workspace name
+      <input
+        type="text"
+        bind:value={displayName}
+        disabled={busy}
+        required
+        placeholder="Q3 launch"
+        class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] text-gray-900 placeholder:text-[var(--ui-text-subtle)]"
+      />
+    </label>
+
+    <label class="block text-[12px] font-medium text-gray-600">
+      Slug
+      <input
+        type="text"
+        bind:value={slug}
+        oninput={() => (slugTouched = true)}
+        disabled={busy}
+        required
+        placeholder="q3-launch"
+        pattern="[a-z0-9-]+"
+        class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] text-gray-900 placeholder:text-[var(--ui-text-subtle)]"
+      />
+      <span class="mt-1 block text-[11px] text-gray-500">
+        Lowercase letters, numbers, and hyphens. Used in workspace URLs.
+      </span>
+    </label>
+
+    <div class="border-t border-gray-200 pt-3">
+      <button
+        type="button"
+        class="flex items-center gap-1.5 text-[11px] font-medium text-gray-500 hover:text-gray-800"
+        onclick={() => (advancedOpen = !advancedOpen)}
+        aria-expanded={advancedOpen}
+      >
+        <svg
+          viewBox="0 0 12 12"
+          class="h-3 w-3 transition-transform {advancedOpen ? 'rotate-90' : ''}"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.6"
+          aria-hidden="true"
+        >
+          <path d="M4.5 3l3 3-3 3" />
+        </svg>
+        Advanced settings
+      </button>
+
+      {#if advancedOpen}
+        <div
+          class="mt-3 space-y-3 rounded-md border border-gray-200 bg-gray-50 px-3 py-3"
+        >
+          <p class="text-[11px] text-gray-500">
+            Most users can leave these alone — defaults match the local control
+            plane setup. Override only if you're connecting an external service
+            identity.
+          </p>
+          <label class="block text-[12px] font-medium text-gray-600">
+            Service identity id
+            <input
+              type="text"
+              bind:value={serviceId}
+              disabled={busy}
+              class="mt-1 w-full rounded-md border border-gray-200 bg-gray-100 px-3 py-1.5 text-[13px] text-gray-900"
+            />
+          </label>
+          <label class="block text-[12px] font-medium text-gray-600">
+            Service identity public key (base64)
+            <textarea
+              bind:value={servicePublicKey}
+              disabled={busy}
+              rows="3"
+              class="mt-1 w-full rounded-md border border-gray-200 bg-gray-100 px-3 py-1.5 font-mono text-[11px] text-gray-900"
+            ></textarea>
+          </label>
+        </div>
+      {/if}
+    </div>
+
+    {#if message}
+      <p
+        role="alert"
+        class="rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
+      >
+        {message}
+      </p>
+    {/if}
+
+    <div class="flex items-center justify-end gap-2 pt-2">
+      <a
+        class="rounded-md px-3 py-1.5 text-[12px] font-medium text-gray-500 hover:bg-gray-200 hover:text-gray-800"
+        href="/hosted/dashboard">Cancel</a
+      >
+      <button
+        type="submit"
+        disabled={busy || !activeOrg}
+        class="rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-60"
+      >
+        {busy ? "Creating…" : "Create workspace"}
+      </button>
+    </div>
+  </form>
+</div>

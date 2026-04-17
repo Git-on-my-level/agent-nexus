@@ -11,20 +11,31 @@
 </script>
 
 <svelte:head>
-  <title>Hosted SaaS — developer notes</title>
+  <title>Developer notes — OAR</title>
 </svelte:head>
 
-<main class="hosted-page hosted-page--wide">
-  <h1 class="hosted-title">Developer notes</h1>
-  <p class="hosted-lede">
-    Advanced options and environment variables for local hosted SaaS. Most
-    people can ignore this and use <a class="hosted-link" href="/hosted/start"
-      >Home</a
-    >.
+<div class="mx-auto max-w-2xl py-6">
+  <p class="text-[11px] text-gray-500">
+    <a class="text-indigo-400 hover:text-indigo-300" href="/hosted/start"
+      >← Home</a
+    >
   </p>
-  <ul class="hosted-bullets">
+  <h1 class="mt-1 text-lg font-semibold text-gray-900">Developer notes</h1>
+  <p class="mt-1 text-[12px] text-gray-500">
+    Advanced options and environment variables for the local hosted stack. Most
+    people don't need any of this — pick the right plan from
+    <a
+      class="text-indigo-400 underline underline-offset-2 hover:text-indigo-300"
+      href="/hosted/dashboard">your dashboard</a
+    >
+    instead.
+  </p>
+
+  <ul
+    class="mt-4 divide-y divide-gray-200 overflow-hidden rounded-md border border-gray-200 bg-gray-100 text-[12px] text-gray-600"
+  >
     {#each tips as line}
-      <li>{line}</li>
+      <li class="px-4 py-2.5">{line}</li>
     {/each}
   </ul>
-</main>
+</div>

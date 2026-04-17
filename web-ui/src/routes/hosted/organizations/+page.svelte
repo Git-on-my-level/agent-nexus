@@ -3,7 +3,9 @@
 
   import { goto } from "$app/navigation";
 
+  import Avatar from "$lib/hosted/Avatar.svelte";
   import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
+  import { setActiveOrg } from "$lib/hosted/session.js";
 
   let phase = $state("loading");
   let message = $state("");
@@ -17,6 +19,24 @@
     } catch {
       return res.statusText;
     }
+  }
+
+  function planBadgeClasses(planTier) {
+    const t = String(planTier ?? "starter").toLowerCase();
+    if (t === "enterprise") return "text-fuchsia-400 bg-fuchsia-500/10";
+    if (t === "scale") return "text-indigo-400 bg-indigo-500/10";
+    if (t === "team") return "text-emerald-400 bg-emerald-500/10";
+    return "text-gray-500 bg-gray-200";
+  }
+
+  function planLabel(planTier) {
+    const t = String(planTier ?? "starter").toLowerCase();
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  }
+
+  function openOrg(org) {
+    setActiveOrg(String(org.id));
+    void goto(`/hosted/organizations/${encodeURIComponent(org.id)}`);
   }
 
   onMount(async () => {
@@ -41,95 +61,100 @@
   });
 </script>
 
-<div class="hosted-page hosted-page--wide">
-  <h1 class="hosted-title">Organizations</h1>
-  <p class="hosted-sub">
-    Choose an organization to view billing and usage. The URL is the source of
-    truth for which org you are managing.
-  </p>
+<svelte:head>
+  <title>Organizations — OAR</title>
+</svelte:head>
+
+<div class="space-y-5">
+  <div class="flex flex-wrap items-end justify-between gap-3">
+    <div>
+      <h1 class="text-lg font-semibold text-gray-900">Organizations</h1>
+      <p class="mt-1 hidden text-[12px] text-gray-500 sm:block">
+        Pick an organization to manage its workspaces, members, and billing.
+      </p>
+    </div>
+    <a
+      href="/hosted/organizations/new"
+      class="rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500"
+      >+ New organization</a
+    >
+  </div>
+
   {#if message}
-    <p class="hosted-callout" role="status">{message}</p>
+    <div
+      role="status"
+      class="rounded-md bg-amber-500/10 px-3 py-2 text-[12px] text-amber-400"
+    >
+      {message}
+    </div>
   {/if}
+
   {#if phase === "loading"}
-    <p class="hosted-muted">Loading…</p>
+    <div
+      class="rounded-md border border-gray-200 bg-gray-100 px-4 py-6 text-[13px] text-gray-500"
+    >
+      Loading…
+    </div>
   {:else if organizations.length === 0}
-    <p class="hosted-muted">
-      No organizations yet. Continue from
-      <a href="/hosted/onboarding">Dashboard</a>
-      to create one.
-    </p>
+    <div
+      class="rounded-md border border-gray-200 bg-gray-100 px-6 py-8 text-center"
+    >
+      <h2 class="text-[14px] font-semibold text-gray-900">
+        No organizations yet
+      </h2>
+      <p class="mx-auto mt-1.5 max-w-md text-[12px] text-gray-500">
+        Create one to start adding workspaces and inviting teammates.
+      </p>
+      <a
+        href="/hosted/organizations/new"
+        class="mt-4 inline-flex rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500"
+      >
+        Create organization
+      </a>
+    </div>
   {:else}
-    <ul class="hosted-org-list">
-      {#each organizations as org (org.id)}
-        <li class="hosted-org-row">
-          <div class="hosted-org-row-main">
-            <span class="hosted-org-name">{org.display_name || org.slug}</span>
-            <span class="hosted-muted hosted-org-id">{org.id}</span>
+    <div
+      class="space-y-px overflow-hidden rounded-md border border-gray-200 bg-gray-100"
+    >
+      {#each organizations as org, i (org.id)}
+        <button
+          type="button"
+          onclick={() => openOrg(org)}
+          class="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-gray-200 {i >
+          0
+            ? 'border-t border-gray-200'
+            : ''}"
+        >
+          <div class="flex min-w-0 items-center gap-3">
+            <Avatar
+              label={org.display_name || org.slug}
+              seed={org.id || org.slug}
+              size="lg"
+            />
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <span class="truncate text-[13px] font-semibold text-gray-900"
+                  >{org.display_name || org.slug}</span
+                >
+                <span
+                  class="rounded px-1.5 py-0.5 text-[11px] font-medium {planBadgeClasses(
+                    org.plan_tier,
+                  )}"
+                >
+                  {planLabel(org.plan_tier)}
+                </span>
+              </div>
+              <div class="mt-0.5 truncate text-[11px] text-gray-500">
+                {org.slug}
+              </div>
+            </div>
           </div>
-          <div class="hosted-org-row-actions">
-            <a
-              class="hosted-btn hosted-btn--secondary"
-              href="/hosted/organizations/{encodeURIComponent(org.id)}/billing"
-              >Billing</a
-            >
-            <a
-              class="hosted-btn hosted-btn--secondary"
-              href="/hosted/organizations/{encodeURIComponent(org.id)}/usage"
-              >Usage</a
-            >
-          </div>
-        </li>
+          <span
+            class="shrink-0 text-[11px] font-medium text-gray-500"
+            aria-hidden="true">Open →</span
+          >
+        </button>
       {/each}
-    </ul>
+    </div>
   {/if}
 </div>
-
-<style>
-  .hosted-org-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-  }
-  .hosted-org-row {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    padding: 0.85rem 1rem;
-    border: 1px solid var(--ui-border);
-    border-radius: var(--ui-radius-md);
-    background: var(--ui-panel);
-  }
-  .hosted-org-row-main {
-    display: flex;
-    flex-direction: column;
-    gap: 0.2rem;
-    min-width: 12rem;
-  }
-  .hosted-org-name {
-    font-weight: 600;
-  }
-  .hosted-org-id {
-    font-size: 0.8rem;
-  }
-  .hosted-org-row-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-  }
-  .hosted-callout {
-    padding: 0.75rem 1rem;
-    border-radius: var(--ui-radius-md);
-    background: color-mix(in srgb, var(--ui-accent) 12%, transparent);
-    border: 1px solid var(--ui-border);
-    margin: 0 0 1rem;
-  }
-  .hosted-muted {
-    color: var(--ui-text-muted);
-    font-size: 0.95rem;
-  }
-</style>

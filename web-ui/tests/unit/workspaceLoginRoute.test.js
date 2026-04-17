@@ -241,8 +241,7 @@ describe("workspace login route", () => {
           return new Response(
             JSON.stringify({
               launch_session: {
-                finish_url:
-                  "/workspaces/ws_123/launch-finish?lid=launch_abc",
+                finish_url: "/workspaces/ws_123/launch-finish?lid=launch_abc",
               },
             }),
             {
@@ -258,8 +257,7 @@ describe("workspace login route", () => {
 
     await expect(load(event)).rejects.toMatchObject({
       status: 303,
-      location:
-        "/hosted/api/workspaces/ws_123/launch-finish?lid=launch_abc",
+      location: "/hosted/api/workspaces/ws_123/launch-finish?lid=launch_abc",
     });
   });
 
