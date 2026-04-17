@@ -8,11 +8,12 @@ type machineCommandIdentity struct {
 }
 
 var machineCommandIdentityByPath = map[string]machineCommandIdentity{
-	"secret list":   {Command: "secret list", CommandID: "secrets.list"},
-	"secret create": {Command: "secret create", CommandID: "secrets.create"},
-	"secret get":    {Command: "secret get", CommandID: "secrets.get"},
-	"secret delete": {Command: "secret delete", CommandID: "secrets.delete"},
-	"secret exec":   {Command: "secret exec", CommandID: "secrets.exec"},
+	"ask":             {Command: "ask", CommandID: "events.create"},
+	"secret list":     {Command: "secret list", CommandID: "secrets.list"},
+	"secret create":   {Command: "secret create", CommandID: "secrets.create"},
+	"secret get":      {Command: "secret get", CommandID: "secrets.get"},
+	"secret delete":   {Command: "secret delete", CommandID: "secrets.delete"},
+	"secret exec":     {Command: "secret exec", CommandID: "secrets.exec"},
 	"events list":     {Command: "events list", CommandID: "events.list"},
 	"events get":      {Command: "events get", CommandID: "events.get"},
 	"events stream":   {Command: "events stream", CommandID: "events.stream"},

@@ -30,7 +30,13 @@ export function isWebUiOwnedAuthPath(pathname) {
  * @returns {boolean}
  */
 export function isDirectCoreProxyPath(method, pathname) {
-  void method;
-  void pathname;
+  const normalizedMethod = String(method ?? "").toUpperCase();
+  const normalizedPath = String(pathname ?? "").trim();
+  if (
+    normalizedMethod === "POST" &&
+    /^\/inbox\/[^/]+\/respond$/.test(normalizedPath)
+  ) {
+    return true;
+  }
   return false;
 }

@@ -289,6 +289,7 @@ Core Commands:
   config        Inspect effective CLI config and set the active profile (base URL, agent)
   import        Bootstrap a precision-first workspace import and run local import helpers
   draft         Stage write requests locally and commit them later
+  ask           Create an ask inbox item for human guidance via existing event/inbox primitives
   provenance    Walk refs/provenance links as a deterministic graph
   secret        Manage workspace secrets for agent credential injection
   api call      Perform an arbitrary HTTP API request
@@ -341,6 +342,9 @@ func helpTopicText(topic string) (string, bool) {
 	}
 	if topic == "draft" {
 		return draftUsageText(), true
+	}
+	if topic == "ask" {
+		return askUsageText() + "\n", true
 	}
 	if topic == "import" {
 		return importUsageText() + "\n", true

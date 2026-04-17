@@ -859,6 +859,17 @@ export function createOarCoreClient(options = {}) {
 
     listInboxItems: (filters) =>
       invokeJSON("inbox.list", () => generated.inboxList({ query: filters })),
+    getInboxItem: (inboxItemId, filters) => {
+      if (!inboxItemId) {
+        throw new Error("getInboxItem requires inboxItemId.");
+      }
+      return invokeJSON("inbox.get", () =>
+        generated.inboxGet(
+          { inbox_id: String(inboxItemId) },
+          { query: filters ?? {} },
+        ),
+      );
+    },
     ackInboxItem: (payload) => {
       const inboxItemId =
         payload?.inbox_item_id ?? payload?.inbox_id ?? payload?.inboxId;

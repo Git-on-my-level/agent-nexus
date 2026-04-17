@@ -537,6 +537,35 @@
     if (category === "attention") return "text-sky-400";
     return "text-[var(--ui-text-muted)]";
   }
+
+  function inboxItemKind(item) {
+    const explicit = String(item?.kind ?? "").trim().toLowerCase();
+    if (explicit) return explicit;
+    return "tag";
+  }
+
+  function isAskItem(item) {
+    return inboxItemKind(item) === "ask";
+  }
+
+  function inboxKindPillLabel(item) {
+    const kind = inboxItemKind(item);
+    if (kind === "ask") return "ASK";
+    if (kind === "wake") return "WAKE";
+    return "TAG";
+  }
+
+  function askItemHref(item) {
+    const inboxItemID = String(item?.id ?? "").trim();
+    if (!inboxItemID) return workspaceHref("/inbox");
+    return workspaceHref(`/inbox/${encodeURIComponent(inboxItemID)}`);
+  }
+
+  function askActorLabel(item) {
+    const actorID = String(item?.asking_agent_id ?? "").trim();
+    if (!actorID) return "unknown session";
+    return actorID;
+  }
 </script>
 
 <div
@@ -854,6 +883,15 @@
               <div class="flex items-center justify-between gap-2 text-[11px]">
                 <div class="flex min-w-0 items-center gap-1.5">
                   <span
+                    class="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold tracking-wide {inboxItemKind(
+                      item,
+                    ) === 'ask'
+                      ? 'bg-[#ff5c1f]/15 text-[#ff5c1f]'
+                      : 'bg-[var(--ui-border)] text-[var(--ui-text-muted)]'}"
+                  >
+                    {inboxKindPillLabel(item)}
+                  </span>
+                  <span
                     class="inline-flex h-1.5 w-1.5 shrink-0 rounded-full {urgencyDot(
                       item.urgency_level,
                     )}"
@@ -887,6 +925,20 @@
                   </a>
                 {/if}
               </div>
+              {#if isAskItem(item)}
+                <div
+                  class="mt-1 text-[12px] text-[var(--ui-text-muted)]"
+                  data-testid={`inbox-ask-meta-${item.id}`}
+                >
+                  Asked by
+                  <span class="font-mono text-[13px] text-[var(--ui-text)]">
+                    {askActorLabel(item)}
+                  </span>
+                  {#if item.age_label}
+                    &middot; asked {item.age_label.replace(" old", "")} ago
+                  {/if}
+                </div>
+              {/if}
 
               {#if getInboxSubjectRef(item) || (item.related_refs ?? []).length > 0}
                 <div
@@ -910,7 +962,9 @@
                       >
                     </span>
                   {/if}
-                  {#each item.related_refs ?? [] as refValue}
+                  {#each (isAskItem(item)
+                    ? (item.related_refs ?? []).slice(0, 2)
+                    : item.related_refs ?? []) as refValue}
                     <RefLink
                       {refValue}
                       threadId={inboxActionThreadId(item)}
@@ -921,28 +975,53 @@
               {/if}
 
               <div class="mt-2 flex flex-wrap items-center gap-1.5">
-                <button
-                  class="cursor-pointer rounded border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] disabled:opacity-50"
-                  disabled={Boolean(ackInFlightById[item.id])}
-                  onclick={() => acknowledgeItem(item)}
-                  type="button"
-                >
-                  {ackInFlightById[item.id]
-                    ? "Acknowledging..."
-                    : "Acknowledge"}
-                </button>
-                <button
-                  class="cursor-pointer rounded px-2.5 py-1 text-[12px] font-medium transition-colors {getDecisionForm(
-                    item.id,
-                  ).open
-                    ? 'border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]'
-                    : 'bg-indigo-600 text-white hover:bg-indigo-500'}"
-                  onclick={() =>
-                    toggleDecisionForm(item, !getDecisionForm(item.id).open)}
-                  type="button"
-                >
-                  {getDecisionForm(item.id).open ? "Cancel" : "Decide"}
-                </button>
+                {#if isAskItem(item)}
+                  <a
+                    class="cursor-pointer rounded bg-[#ff5c1f] px-2.5 py-1 text-[12px] font-medium text-white transition-colors hover:bg-[#ff5c1f]/90"
+                    href={askItemHref(item)}
+                  >
+                    Answer
+                  </a>
+                  <button
+                    class="cursor-pointer rounded border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] disabled:opacity-50"
+                    disabled={Boolean(ackInFlightById[item.id])}
+                    onclick={() => acknowledgeItem(item)}
+                    type="button"
+                  >
+                    {ackInFlightById[item.id] ? "Deferring..." : "Defer"}
+                  </button>
+                  <button
+                    class="cursor-pointer rounded border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] disabled:opacity-50"
+                    disabled={Boolean(ackInFlightById[item.id])}
+                    onclick={() => acknowledgeItem(item)}
+                    type="button"
+                  >
+                    Not for me
+                  </button>
+                {:else}
+                  <button
+                    class="cursor-pointer rounded border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] disabled:opacity-50"
+                    disabled={Boolean(ackInFlightById[item.id])}
+                    onclick={() => acknowledgeItem(item)}
+                    type="button"
+                  >
+                    {ackInFlightById[item.id]
+                      ? "Acknowledging..."
+                      : "Acknowledge"}
+                  </button>
+                  <button
+                    class="cursor-pointer rounded px-2.5 py-1 text-[12px] font-medium transition-colors {getDecisionForm(
+                      item.id,
+                    ).open
+                      ? 'border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]'
+                      : 'bg-indigo-600 text-white hover:bg-indigo-500'}"
+                    onclick={() =>
+                      toggleDecisionForm(item, !getDecisionForm(item.id).open)}
+                    type="button"
+                  >
+                    {getDecisionForm(item.id).open ? "Cancel" : "Decide"}
+                  </button>
+                {/if}
               </div>
 
               {#if postedDecisionByInboxItem[item.id]}

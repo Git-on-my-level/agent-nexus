@@ -2129,6 +2129,14 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		if remainder == "" {
 			return routeAccessRequirement{}
 		}
+		if r.Method == http.MethodPost && strings.HasSuffix(remainder, "/respond") {
+			prefix := strings.TrimSuffix(remainder, "/respond")
+			prefix = strings.TrimSuffix(prefix, "/")
+			if prefix == "" || strings.Contains(prefix, "/") {
+				return routeAccessRequirement{}
+			}
+			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+		}
 		if r.Method == http.MethodPost && strings.HasSuffix(remainder, "/acknowledge") {
 			prefix := strings.TrimSuffix(remainder, "/acknowledge")
 			prefix = strings.TrimSuffix(prefix, "/")
@@ -2145,6 +2153,16 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		remainder := strings.TrimPrefix(r.URL.Path, "/inbox/")
 		if remainder == "" {
 			writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+			return
+		}
+		if r.Method == http.MethodPost && strings.HasSuffix(remainder, "/respond") {
+			inboxID := strings.TrimSuffix(remainder, "/respond")
+			inboxID = strings.TrimSuffix(inboxID, "/")
+			if inboxID == "" || strings.Contains(inboxID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			handleRespondInboxItem(w, r, opts, inboxID)
 			return
 		}
 		if r.Method == http.MethodPost && strings.HasSuffix(remainder, "/acknowledge") {

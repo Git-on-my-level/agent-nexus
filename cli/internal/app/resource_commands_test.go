@@ -183,6 +183,99 @@ func TestRefEdgesListRequiresExactlyOneSelector(t *testing.T) {
 	}
 }
 
+func TestAskCommandCreatesAgentAskRequestedEvent(t *testing.T) {
+	t.Parallel()
+
+	var captured map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/events" {
+			http.NotFound(w, r)
+			return
+		}
+		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+			t.Fatalf("decode ask body: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"event":{"id":"event_ask_1","type":"agent_ask_requested","thread_id":"thread_1"}}`))
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","username":"agent.alpha","actor_id":"actor_asker","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json", "--base-url", server.URL, "--agent", "agent-a",
+		"ask", "Should we ship Friday?",
+		"--thread-id", "thread_1",
+		"--subject-ref", "topic:launch",
+		"--ref", "artifact:receipt_1",
+		"--coverage-hint", "thin - 0 decisions",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	if got := anyStringValue(payload["command"]); got != "ask" {
+		t.Fatalf("expected ask command, got %#v", payload)
+	}
+	if got := anyStringValue(payload["command_id"]); got != "events.create" {
+		t.Fatalf("expected events.create command id, got %#v", payload)
+	}
+
+	if got := strings.TrimSpace(anyStringValue(captured["actor_id"])); got != "actor_asker" {
+		t.Fatalf("expected actor_id from profile, got %#v", captured)
+	}
+	event, _ := captured["event"].(map[string]any)
+	if got := strings.TrimSpace(anyStringValue(event["type"])); got != "agent_ask_requested" {
+		t.Fatalf("expected agent_ask_requested type, got %#v", captured)
+	}
+	if got := strings.TrimSpace(anyStringValue(event["thread_id"])); got != "thread_1" {
+		t.Fatalf("expected thread_1, got %#v", captured)
+	}
+	rawRefs, _ := event["refs"].([]any)
+	refs := make([]string, 0, len(rawRefs))
+	for _, raw := range rawRefs {
+		refs = append(refs, strings.TrimSpace(anyStringValue(raw)))
+	}
+	if !hasString(refs, "thread:thread_1") || !hasString(refs, "topic:launch") || !hasString(refs, "artifact:receipt_1") {
+		t.Fatalf("expected ask refs to include thread/topic/artifact, got %#v", refs)
+	}
+
+	eventPayload, _ := event["payload"].(map[string]any)
+	if got := strings.TrimSpace(anyStringValue(eventPayload["query_text"])); got != "Should we ship Friday?" {
+		t.Fatalf("expected query text, got %#v", eventPayload)
+	}
+	if got := strings.TrimSpace(anyStringValue(eventPayload["asking_agent_id"])); got != "actor_asker" {
+		t.Fatalf("expected asking_agent_id actor_asker, got %#v", eventPayload)
+	}
+	if got := strings.TrimSpace(anyStringValue(eventPayload["asking_session_id"])); got != "agent-a" {
+		t.Fatalf("expected asking_session_id agent-a, got %#v", eventPayload)
+	}
+}
+
+func TestAskCommandRequiresThreadID(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json", "ask", "Need a decision",
+	})
+	payload := assertEnvelopeError(t, raw)
+	errObj, _ := payload["error"].(map[string]any)
+	if got := anyStringValue(errObj["code"]); got != "invalid_request" {
+		t.Fatalf("expected invalid_request, got %#v", payload)
+	}
+	if got := anyStringValue(errObj["message"]); !strings.Contains(got, "thread id is required") {
+		t.Fatalf("expected thread id validation message, got %#v", payload)
+	}
+}
+
+func hasString(values []string, want string) bool {
+	for _, value := range values {
+		if strings.TrimSpace(value) == strings.TrimSpace(want) {
+			return true
+		}
+	}
+	return false
+}
+
 func TestInboxUnknownSubcommandGuidance(t *testing.T) {
 	t.Parallel()
 

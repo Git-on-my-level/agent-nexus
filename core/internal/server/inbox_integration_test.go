@@ -884,6 +884,150 @@ func TestInboxCustomRiskHorizonRetainsStaleExceptions(t *testing.T) {
 	}
 }
 
+func TestInboxAskItemDerivationAndRespondAppendsAnswer(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	threadID := integrationSeedThread(t, h, "actor-1", map[string]any{
+		"title":            "Ask flow thread",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p1",
+		"tags":             []any{"ops"},
+		"cadence":          "daily",
+		"next_check_in_at": "2026-03-05T00:00:00Z",
+		"current_summary":  "summary",
+		"next_actions":     []any{"do x"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
+
+	askResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
+		"actor_id":"actor-1",
+		"event":{
+			"type":"agent_ask_requested",
+			"thread_id":"`+threadID+`",
+			"refs":["thread:`+threadID+`","topic:topic_launch"],
+			"summary":"Should we ship Friday?",
+			"payload":{
+				"query_text":"Should we ship Friday?",
+				"asking_agent_id":"actor-1",
+				"coverage_hint":"thin - 0 decisions",
+				"subject_ref":"topic:topic_launch",
+				"related_refs":["receipt:receipt_1"]
+			},
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated)
+	defer askResp.Body.Close()
+
+	var createdAsk struct {
+		Event map[string]any `json:"event"`
+	}
+	if err := json.NewDecoder(askResp.Body).Decode(&createdAsk); err != nil {
+		t.Fatalf("decode ask event response: %v", err)
+	}
+	askEventID := asString(createdAsk.Event["id"])
+	if askEventID == "" {
+		t.Fatalf("expected ask event id, got %#v", createdAsk.Event)
+	}
+
+	items := getInboxItems(t, h.baseURL)
+	askItem, ok := findInboxItem(items, func(item map[string]any) bool {
+		return asString(item["kind"]) == "ask" && asString(item["source_event_id"]) == askEventID
+	})
+	if !ok {
+		t.Fatalf("expected ask inbox item for source_event_id=%s, got %#v", askEventID, items)
+	}
+	askItemID := asString(askItem["id"])
+	if askItemID == "" {
+		t.Fatalf("expected ask inbox item id, got %#v", askItem)
+	}
+	if got := asString(askItem["query_text"]); got != "Should we ship Friday?" {
+		t.Fatalf("expected query_text in ask item, got %#v", askItem)
+	}
+
+	respondResp := postJSONExpectStatus(t, h.baseURL+"/inbox/"+url.PathEscape(askItemID)+"/respond", `{
+		"actor_id":"actor-1",
+		"answer":"Ship Friday with rollback plan.",
+		"save_as_decision":false,
+		"notify_asking_agent":true
+	}`, http.StatusCreated)
+	defer respondResp.Body.Close()
+
+	var responded struct {
+		Event          map[string]any `json:"event"`
+		Acknowledgment map[string]any `json:"acknowledgment"`
+	}
+	if err := json.NewDecoder(respondResp.Body).Decode(&responded); err != nil {
+		t.Fatalf("decode respond response: %v", err)
+	}
+	if got := asString(responded.Event["type"]); got != "agent_ask_answered" {
+		t.Fatalf("expected agent_ask_answered event, got %#v", responded.Event)
+	}
+	if got := asString(responded.Acknowledgment["type"]); got != "inbox_item_acknowledged" {
+		t.Fatalf("expected inbox_item_acknowledged event, got %#v", responded.Acknowledgment)
+	}
+}
+
+func TestInboxRespondRejectsNonAskItem(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	threadID := integrationSeedThread(t, h, "actor-1", map[string]any{
+		"title":            "Non ask thread",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p1",
+		"tags":             []any{"ops"},
+		"cadence":          "daily",
+		"next_check_in_at": "2026-03-05T00:00:00Z",
+		"current_summary":  "summary",
+		"next_actions":     []any{"do x"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
+
+	postJSONExpectStatus(t, h.baseURL+"/events", `{
+		"actor_id":"actor-1",
+		"event":{
+			"type":"decision_needed",
+			"thread_id":"`+threadID+`",
+			"refs":["thread:`+threadID+`"],
+			"summary":"Need a decision",
+			"payload":{},
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated).Body.Close()
+
+	items := getInboxItems(t, h.baseURL)
+	decisionItem, ok := findInboxItem(items, func(item map[string]any) bool {
+		return asString(item["category"]) == "action_needed" && asString(item["kind"]) != "ask"
+	})
+	if !ok {
+		t.Fatalf("expected decision-backed inbox item, got %#v", items)
+	}
+
+	resp := postJSONExpectStatus(t, h.baseURL+"/inbox/"+url.PathEscape(asString(decisionItem["id"]))+"/respond", `{
+		"actor_id":"actor-1",
+		"answer":"no-op"
+	}`, http.StatusBadRequest)
+	defer resp.Body.Close()
+
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode respond error payload: %v", err)
+	}
+	errorMap, _ := body["error"].(map[string]any)
+	if got := asString(errorMap["code"]); got != "invalid_request" {
+		t.Fatalf("expected invalid_request code, got %#v", body)
+	}
+}
+
 func getInboxItems(t *testing.T, baseURL string) []map[string]any {
 	t.Helper()
 	resp, err := http.Get(baseURL + "/inbox")

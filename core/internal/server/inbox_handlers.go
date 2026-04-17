@@ -20,6 +20,11 @@ var subjectRefPrefixesPreferred = []string{
 	"topic", "card", "board", "document", "receipt", "artifact", "thread",
 }
 
+const (
+	agentAskRequestedEventType = "agent_ask_requested"
+	agentAskAnsweredEventType  = "agent_ask_answered"
+)
+
 func pickSubjectRefFromEventRefs(refs []string, threadID string) string {
 	threadID = strings.TrimSpace(threadID)
 	for _, wantPrefix := range subjectRefPrefixesPreferred {
@@ -686,7 +691,16 @@ func resolveInboxRiskHorizon(w http.ResponseWriter, r *http.Request, opts handle
 
 func deriveInboxItemsNoStaleEmission(ctx context.Context, opts handlerOptions, now time.Time, riskHorizon time.Duration) ([]derivedInboxItem, error) {
 	events, err := opts.primitiveStore.ListEvents(ctx, primitives.EventListFilter{
-		Types: []string{"decision_needed", "intervention_needed", "exception_raised", "inbox_item_acknowledged", "receipt_added", "decision_made"},
+		Types: []string{
+			"decision_needed",
+			"intervention_needed",
+			"exception_raised",
+			agentAskRequestedEventType,
+			"inbox_item_acknowledged",
+			"receipt_added",
+			"decision_made",
+			agentAskAnsweredEventType,
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -700,8 +714,16 @@ func deriveInboxItemsNoStaleEmission(ctx context.Context, opts handlerOptions, n
 	for _, event := range events {
 		eventType, _ := event["type"].(string)
 		switch eventType {
-		case "decision_needed", "intervention_needed", "exception_raised":
-			item, ok := deriveEventBackedInboxItem(event)
+		case "decision_needed", "intervention_needed", "exception_raised", agentAskRequestedEventType:
+			var (
+				item derivedInboxItem
+				ok   bool
+			)
+			if eventType == agentAskRequestedEventType {
+				item, ok = deriveAgentAskInboxItem(event)
+			} else {
+				item, ok = deriveEventBackedInboxItem(event)
+			}
 			if !ok {
 				continue
 			}
@@ -754,7 +776,7 @@ func decidedInboxItemIDs(events []map[string]any) map[string]struct{} {
 	out := make(map[string]struct{})
 	for _, event := range events {
 		eventType, _ := event["type"].(string)
-		if eventType != "decision_made" {
+		if eventType != "decision_made" && eventType != agentAskAnsweredEventType {
 			continue
 		}
 		refs, err := extractStringSlice(event["refs"])
@@ -917,6 +939,71 @@ func deriveEventBackedInboxItem(event map[string]any) (derivedInboxItem, bool) {
 	return derivedInboxItem{
 		Data:      data,
 		Category:  category,
+		ID:        id,
+		TriggerAt: triggerAt,
+	}, true
+}
+
+func deriveAgentAskInboxItem(event map[string]any) (derivedInboxItem, bool) {
+	threadID := strings.TrimSpace(anyString(event["thread_id"]))
+	sourceEventID := strings.TrimSpace(anyString(event["id"]))
+	triggerAt, ok := parseTimestamp(event["ts"])
+	if threadID == "" || sourceEventID == "" || !ok {
+		return derivedInboxItem{}, false
+	}
+
+	payload, _ := event["payload"].(map[string]any)
+	rawRefs, _ := extractStringSlice(event["refs"])
+
+	subjectRef := strings.TrimSpace(anyString(payload["subject_ref"]))
+	if subjectRef == "" {
+		subjectRef = pickSubjectRefFromEventRefs(rawRefs, threadID)
+	}
+
+	related := make([]string, 0, len(rawRefs)+4)
+	related = append(related, eventBackedInboxRelatedRefs(rawRefs, threadID)...)
+	if additional, err := extractStringSlice(payload["related_refs"]); err == nil {
+		related = append(related, additional...)
+	}
+
+	queryText := strings.TrimSpace(anyString(payload["query_text"]))
+	if queryText == "" {
+		queryText = strings.TrimSpace(anyString(event["summary"]))
+	}
+	if queryText == "" {
+		queryText = "Agent question"
+	}
+
+	askID := strings.TrimSpace(anyString(payload["ask_id"]))
+	if askID == "" {
+		askID = sourceEventID
+	}
+
+	id := makeInboxItemID("action_needed", threadID, askID, sourceEventID)
+	data := map[string]any{
+		"id":              id,
+		"category":        "action_needed",
+		"kind":            "ask",
+		"thread_id":       threadID,
+		"source_event_id": sourceEventID,
+		"subject_ref":     subjectRef,
+		"related_refs":    typedRefStringsToAnyList(mergeUniqueSortedRefs(related...)),
+		"title":           queryText,
+		"query_text":      queryText,
+		"asking_agent_id": strings.TrimSpace(anyString(payload["asking_agent_id"])),
+		"coverage_hint":   strings.TrimSpace(anyString(payload["coverage_hint"])),
+		"asked_at":        strings.TrimSpace(anyString(event["ts"])),
+	}
+	if data["asking_agent_id"] == "" {
+		data["asking_agent_id"] = strings.TrimSpace(anyString(payload["asking_session_id"]))
+	}
+	if sourceEventID != "" {
+		data["source_event_ref"] = "event:" + sourceEventID
+	}
+
+	return derivedInboxItem{
+		Data:      data,
+		Category:  "action_needed",
 		ID:        id,
 		TriggerAt: triggerAt,
 	}, true

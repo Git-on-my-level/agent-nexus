@@ -142,8 +142,16 @@ func deriveThreadInboxItems(opts handlerOptions, events []map[string]any, workIt
 	for _, event := range events {
 		eventType, _ := event["type"].(string)
 		switch eventType {
-		case "decision_needed", "intervention_needed", "exception_raised":
-			item, ok := deriveEventBackedInboxItem(event)
+		case "decision_needed", "intervention_needed", "exception_raised", agentAskRequestedEventType:
+			var (
+				item derivedInboxItem
+				ok   bool
+			)
+			if eventType == agentAskRequestedEventType {
+				item, ok = deriveAgentAskInboxItem(event)
+			} else {
+				item, ok = deriveEventBackedInboxItem(event)
+			}
 			if !ok {
 				continue
 			}
