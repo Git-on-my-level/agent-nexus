@@ -396,7 +396,16 @@
         <li>
           <span>Workspaces</span><span>{plan.workspace_limit ?? "—"}</span>
         </li>
-        <li><span>Seats</span><span>{plan.human_seat_limit ?? "—"}</span></li>
+        <li>
+          <span>Artifacts / workspace</span><span
+            >{plan.max_artifacts_per_workspace ?? "—"}</span
+          >
+        </li>
+        <li>
+          <span>Org artifact capacity</span><span
+            >{plan.artifact_capacity ?? "—"}</span
+          >
+        </li>
         <li>
           <span>Storage (GB)</span><span>{plan.included_storage_gb ?? "—"}</span
           >

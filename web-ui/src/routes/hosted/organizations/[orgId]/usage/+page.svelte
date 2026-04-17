@@ -81,9 +81,14 @@
           >
         </li>
         <li>
-          <span>People (seats)</span><span
-            >{usage.human_seat_count ?? 0} / {plan.human_seat_limit ??
+          <span>Artifacts (org)</span><span
+            >{usage.artifact_count ?? 0} / {plan.artifact_capacity ??
               "—"}</span
+          >
+        </li>
+        <li>
+          <span>Artifacts / workspace (cap)</span><span
+            >{plan.max_artifacts_per_workspace ?? "—"}</span
           >
         </li>
         <li>
@@ -106,7 +111,9 @@
           <span>Workspaces</span><span>{quota.workspaces_remaining ?? 0}</span>
         </li>
         <li>
-          <span>Seats</span><span>{quota.human_seats_remaining ?? 0}</span>
+          <span>Artifacts (headroom)</span><span
+            >{quota.artifacts_remaining ?? 0}</span
+          >
         </li>
         <li>
           <span>Storage (GB)</span><span>{quota.storage_gb_remaining ?? 0}</span
@@ -126,6 +133,7 @@
               <tr>
                 <th>Name</th>
                 <th>Slug</th>
+                <th>Artifacts</th>
                 <th>Storage (GB)</th>
                 <th>Launches (mo)</th>
                 <th>Last active</th>
@@ -136,6 +144,7 @@
                 <tr>
                   <td>{w.display_name || "—"}</td>
                   <td><code class="hosted-code">{w.slug}</code></td>
+                  <td>{w.artifact_count ?? 0}</td>
                   <td>{w.storage_gb ?? 0}</td>
                   <td>{w.monthly_launch_count ?? 0}</td>
                   <td class="hosted-muted">{w.last_active_at ?? "—"}</td>
