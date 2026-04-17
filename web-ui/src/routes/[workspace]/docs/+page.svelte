@@ -91,7 +91,6 @@
   let draft = $state({
     id: "",
     title: "",
-    status: "draft",
     labels: "",
     content: "",
   });
@@ -138,7 +137,6 @@
     draft = {
       id: "",
       title: "",
-      status: "draft",
       labels: "",
       content: "",
     };
@@ -176,7 +174,6 @@
 
       const docPayload = {
         title: draft.title.trim(),
-        status: draft.status,
         labels,
       };
       if (draft.id.trim()) docPayload.id = draft.id.trim();
@@ -481,18 +478,6 @@
           placeholder="auto-generated if empty"
           type="text"
         />
-      </label>
-      <label>
-        <span class="text-[12px] font-medium text-[var(--ui-text-muted)]"
-          >Status</span
-        >
-        <select
-          bind:value={draft.status}
-          class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-2.5 py-1.5 text-[13px] text-[var(--ui-text)]"
-        >
-          <option value="draft">draft</option>
-          <option value="active">active</option>
-        </select>
       </label>
       <label>
         <span class="text-[12px] font-medium text-[var(--ui-text-muted)]"
