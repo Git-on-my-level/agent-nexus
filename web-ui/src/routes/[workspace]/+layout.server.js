@@ -1,7 +1,10 @@
 import { error } from "@sveltejs/kit";
 
 import { toPublicWorkspaceCatalog } from "$lib/server/workspaceCatalog";
-import { resolveWorkspaceBySlug } from "$lib/server/workspaceResolver";
+import {
+  resolveWorkspaceBySlug,
+  resolveWorkspaceCatalog,
+} from "$lib/server/workspaceResolver";
 
 export async function load(event) {
   const resolved = await resolveWorkspaceBySlug({
@@ -18,9 +21,10 @@ export async function load(event) {
   }
 
   const coreBaseUrl = String(resolved.workspace.coreBaseUrl ?? "").trim();
+  const catalog = await resolveWorkspaceCatalog(event);
 
   return {
-    ...toPublicWorkspaceCatalog(resolved.catalog),
+    ...toPublicWorkspaceCatalog(catalog),
     workspace: {
       slug: resolved.workspace.slug,
       label: resolved.workspace.label,

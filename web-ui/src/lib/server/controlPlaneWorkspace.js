@@ -8,6 +8,39 @@ export function isSaasPackedHostDev(env) {
   return v === "1" || v === "true";
 }
 
+/** True when the SvelteKit shell should show hosted-only UI (CP-backed SaaS). */
+export function isHostedWebUiShell(env) {
+  return (
+    isSaasPackedHostDev(env) &&
+    Boolean(normalizeBaseUrl(env?.OAR_CONTROL_BASE_URL ?? ""))
+  );
+}
+
+function mapWorkspaceRowFromControlPlane(match) {
+  if (!match || typeof match !== "object") {
+    return null;
+  }
+  const normalized = normalizeWorkspaceSlug(match.slug);
+  if (!normalized) {
+    return null;
+  }
+  const coreBaseUrl = normalizeBaseUrl(match.core_origin ?? "");
+  if (!coreBaseUrl) {
+    return null;
+  }
+  const organizationId = String(match.organization_id ?? "").trim();
+  return {
+    slug: normalized,
+    label: String(match.display_name ?? match.slug ?? normalized).trim(),
+    description: String(match.description ?? "").trim(),
+    coreBaseUrl,
+    publicOrigin: normalizeBaseUrl(match.public_origin ?? ""),
+    id: String(match.id ?? "").trim(),
+    workspaceId: String(match.id ?? "").trim(),
+    organizationId,
+  };
+}
+
 function controlPlaneDevAccessToken(env, getCookie) {
   let token = String(env?.OAR_CONTROL_PLANE_DEV_ACCESS_TOKEN ?? "").trim();
   if (token || typeof getCookie !== "function") {
@@ -39,25 +72,29 @@ export async function fetchWorkspaceEntryFromControlPlane({
 
   const workspaces = [];
   let cursor = "";
-  for (let page = 0; page < 20; page++) {
-    const url = new URL(`${base}/workspaces`);
-    url.searchParams.set("limit", "200");
-    if (cursor) {
-      url.searchParams.set("cursor", cursor);
+  try {
+    for (let page = 0; page < 20; page++) {
+      const url = new URL(`${base}/workspaces`);
+      url.searchParams.set("limit", "200");
+      if (cursor) {
+        url.searchParams.set("cursor", cursor);
+      }
+      const res = await fetchFn(url.toString(), {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        return null;
+      }
+      const body = await res.json();
+      const batch = body.workspaces ?? [];
+      workspaces.push(...batch);
+      cursor = String(body.next_cursor ?? "").trim();
+      if (!cursor) {
+        break;
+      }
     }
-    const res = await fetchFn(url.toString(), {
-      headers: { authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) {
-      return null;
-    }
-    const body = await res.json();
-    const batch = body.workspaces ?? [];
-    workspaces.push(...batch);
-    cursor = String(body.next_cursor ?? "").trim();
-    if (!cursor) {
-      break;
-    }
+  } catch {
+    return null;
   }
 
   const match = workspaces.find(
@@ -67,18 +104,60 @@ export async function fetchWorkspaceEntryFromControlPlane({
     return null;
   }
 
-  const coreBaseUrl = normalizeBaseUrl(match.core_origin ?? "");
-  if (!coreBaseUrl) {
-    return null;
+  return mapWorkspaceRowFromControlPlane(match);
+}
+
+/**
+ * Lists workspaces for an organization from the hosted control plane.
+ * Returns the same entry shape as fetchWorkspaceEntryFromControlPlane.
+ */
+export async function fetchWorkspaceListFromControlPlane({
+  env,
+  organizationID,
+  fetchFn = fetch,
+  getCookie,
+}) {
+  if (!isSaasPackedHostDev(env)) {
+    return [];
+  }
+  const base = normalizeBaseUrl(env.OAR_CONTROL_BASE_URL);
+  const token = controlPlaneDevAccessToken(env, getCookie);
+  const org = String(organizationID ?? "").trim();
+  if (!base || !token || !org) {
+    return [];
   }
 
-  return {
-    slug: normalized,
-    label: String(match.display_name ?? match.slug ?? normalized).trim(),
-    description: "",
-    coreBaseUrl,
-    publicOrigin: normalizeBaseUrl(match.public_origin ?? ""),
-    id: String(match.id ?? "").trim(),
-    workspaceId: String(match.id ?? "").trim(),
-  };
+  const out = [];
+  let cursor = "";
+  try {
+    for (let page = 0; page < 20; page++) {
+      const url = new URL(`${base}/workspaces`);
+      url.searchParams.set("organization_id", org);
+      url.searchParams.set("limit", "200");
+      if (cursor) {
+        url.searchParams.set("cursor", cursor);
+      }
+      const res = await fetchFn(url.toString(), {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        return [];
+      }
+      const body = await res.json();
+      const batch = body.workspaces ?? [];
+      for (const row of batch) {
+        const mapped = mapWorkspaceRowFromControlPlane(row);
+        if (mapped) {
+          out.push(mapped);
+        }
+      }
+      cursor = String(body.next_cursor ?? "").trim();
+      if (!cursor) {
+        break;
+      }
+    }
+  } catch {
+    return [];
+  }
+  return out;
 }

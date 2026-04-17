@@ -35,6 +35,49 @@ async function readJSONPayload(response) {
   }
 }
 
+/** Node may resolve `localhost` to ::1 while oar-core listens on 127.0.0.1 only. */
+function coreBaseUrlForServerFetch(url) {
+  const trimmed = String(url ?? "").trim();
+  if (!trimmed) {
+    return "";
+  }
+  try {
+    const parsed = new URL(trimmed.endsWith("/") ? trimmed : `${trimmed}/`);
+    if (parsed.hostname === "localhost") {
+      parsed.hostname = "127.0.0.1";
+    }
+    let out = parsed.toString();
+    if (out.endsWith("/")) {
+      out = out.slice(0, -1);
+    }
+    return out;
+  } catch {
+    return trimmed.replace(/\/+$/, "");
+  }
+}
+
+function fetchErrorDetail(err) {
+  if (!err || typeof err !== "object") {
+    return String(err ?? "fetch failed");
+  }
+  const cause = /** @type {{ code?: string, message?: string }} */ (err.cause);
+  if (cause && typeof cause === "object") {
+    const code = String(cause.code ?? "").trim();
+    const msg = String(cause.message ?? "").trim();
+    if (code && msg) {
+      return `${code}: ${msg}`;
+    }
+    if (msg) {
+      return msg;
+    }
+    if (code) {
+      return code;
+    }
+  }
+  const message = String(err.message ?? "").trim();
+  return message || "fetch failed";
+}
+
 async function postJSON(url, body) {
   const response = await fetch(url, {
     method: "POST",
@@ -49,6 +92,23 @@ async function postJSON(url, body) {
     response,
     payload,
   };
+}
+
+async function postJSONWithNetworkRetries(url, body, options) {
+  const attempts = Math.max(1, Number(options?.attempts ?? 8));
+  const delayMs = Math.max(50, Number(options?.delayMs ?? 400));
+  let lastErr = /** @type {unknown} */ (null);
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await postJSON(url, body);
+    } catch (err) {
+      lastErr = err;
+      if (i + 1 < attempts) {
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+    }
+  }
+  throw lastErr;
 }
 
 export async function POST(event) {
@@ -71,7 +131,9 @@ export async function POST(event) {
   }
 
   const workspaceSlug = resolved.workspaceSlug;
-  const coreBaseURL = normalizeBaseUrl(resolved.workspace.coreBaseUrl);
+  const coreBaseURL = coreBaseUrlForServerFetch(
+    normalizeBaseUrl(resolved.workspace.coreBaseUrl),
+  );
   if (!coreBaseURL) {
     return errorResponse(
       503,
@@ -129,10 +191,19 @@ export async function POST(event) {
     `/workspaces/${encodeURIComponent(workspaceID)}/session-exchange`,
     `${controlBaseURL}/`,
   ).toString();
-  const exchanged = await postJSON(sessionExchangeURL, {
-    exchange_token: exchangeToken,
-    state,
-  });
+  let exchanged;
+  try {
+    exchanged = await postJSON(sessionExchangeURL, {
+      exchange_token: exchangeToken,
+      state,
+    });
+  } catch (err) {
+    return errorResponse(
+      503,
+      "session_exchange_unreachable",
+      `Could not reach control plane for session exchange (${fetchErrorDetail(err)}).`,
+    );
+  }
   if (!exchanged.response.ok) {
     return errorResponse(
       exchanged.response.status || 502,
@@ -144,9 +215,7 @@ export async function POST(event) {
     );
   }
 
-  const assertion = String(
-    exchanged.payload?.grant?.bearer_token ?? "",
-  ).trim();
+  const assertion = String(exchanged.payload?.grant?.bearer_token ?? "").trim();
   if (!assertion) {
     return errorResponse(
       502,
@@ -156,10 +225,23 @@ export async function POST(event) {
   }
 
   const authTokenURL = new URL("/auth/token", `${coreBaseURL}/`).toString();
-  const tokenExchange = await postJSON(authTokenURL, {
-    grant_type: "workspace_human_grant",
-    assertion,
-  });
+  let tokenExchange;
+  try {
+    tokenExchange = await postJSONWithNetworkRetries(
+      authTokenURL,
+      {
+        grant_type: "workspace_human_grant",
+        assertion,
+      },
+      { attempts: 10, delayMs: 500 },
+    );
+  } catch (err) {
+    return errorResponse(
+      503,
+      "workspace_core_unreachable",
+      `Could not reach workspace core for token exchange at ${authTokenURL} (${fetchErrorDetail(err)}). If you just created the workspace, wait until oar-core is listening on that port and try again.`,
+    );
+  }
   if (!tokenExchange.response.ok) {
     return errorResponse(
       tokenExchange.response.status || 502,

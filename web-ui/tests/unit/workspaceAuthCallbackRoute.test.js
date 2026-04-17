@@ -111,7 +111,9 @@ describe("workspace auth callback route", () => {
     expect(fetchMock.mock.calls[0][0]).toBe(
       "https://control.example.test/workspaces/ws_123/session-exchange",
     );
-    expect(fetchMock.mock.calls[1][0]).toBe("https://core.example.test/auth/token");
+    expect(fetchMock.mock.calls[1][0]).toBe(
+      "https://core.example.test/auth/token",
+    );
     expect(authSessionMocks.writeWorkspaceRefreshToken).toHaveBeenCalledWith(
       event,
       "acme",

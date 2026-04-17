@@ -86,6 +86,12 @@
   let activeWorkspace = $derived($page.data.workspace ?? null);
   let activeWorkspaceSlug = $derived(activeWorkspace?.slug ?? "");
   let hasMultipleWorkspaces = $derived((data.workspaces ?? []).length > 1);
+  let workspaceSwitcherSub = $derived.by(() => {
+    const d = String(activeWorkspace?.description ?? "").trim();
+    if (d) return d;
+    if (data.hostedMode) return "Workspace";
+    return "OAR Control Surface";
+  });
   let currentAppPath = $derived(
     activeWorkspaceSlug
       ? stripWorkspacePath($page.url.pathname, activeWorkspaceSlug)
@@ -720,7 +726,8 @@
                   <span class="workspace-switcher-name"
                     >{activeWorkspace?.label || activeWorkspaceSlug}</span
                   >
-                  <span class="workspace-switcher-sub">OAR Control Surface</span
+                  <span class="workspace-switcher-sub"
+                    >{workspaceSwitcherSub}</span
                   >
                 </span>
                 <svg
@@ -887,6 +894,30 @@
                 {/each}
               </div>
             </nav>
+            {#if data.hostedMode}
+              <a class="shell-account-link" href={data.hostedAccountPath}>
+                <svg
+                  class="shell-account-icon"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  stroke-width="1.75"
+                  aria-hidden="true"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5M19.5 3v6m0 0h-6m6 0l-9 9"
+                  />
+                </svg>
+                <span class="shell-account-link-text">
+                  <span>Account</span>
+                  <span class="shell-account-hint"
+                    >Manage workspaces & billing</span
+                  >
+                </span>
+              </a>
+            {/if}
             <div class="shell-actor-identity">
               <p class="shell-actor-label">
                 {$authenticatedAgent

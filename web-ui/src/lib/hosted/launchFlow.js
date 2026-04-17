@@ -31,8 +31,12 @@ function containsDotSegmentEscape(candidate) {
 
 export function sanitizeHostedReturnPath(value, fallback = "/") {
   const normalizedFallback =
-    String(fallback ?? "").trim().startsWith("/") &&
-    !String(fallback ?? "").trim().startsWith("//")
+    String(fallback ?? "")
+      .trim()
+      .startsWith("/") &&
+    !String(fallback ?? "")
+      .trim()
+      .startsWith("//")
       ? String(fallback).trim()
       : "/";
   const candidate = String(value ?? "").trim();
@@ -91,7 +95,8 @@ export function buildHostedSignInPath({
     params.set("return_path", sanitizedReturnPath);
   }
 
-  const normalizedTargetPath = String(targetPath ?? "").trim() || "/hosted/signin";
+  const normalizedTargetPath =
+    String(targetPath ?? "").trim() || "/hosted/signin";
   return params.size > 0
     ? `${normalizedTargetPath}?${params.toString()}`
     : normalizedTargetPath;

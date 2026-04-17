@@ -46,7 +46,9 @@ describe("launchFlow helpers", () => {
         workspaceId: "ws_123",
         returnPath: "/threads",
       }),
-    ).toBe("/hosted/signin?workspace=acme-prod&workspace_id=ws_123&return_path=%2Fthreads");
+    ).toBe(
+      "/hosted/signin?workspace=acme-prod&workspace_id=ws_123&return_path=%2Fthreads",
+    );
 
     expect(
       buildHostedSignInPath({
@@ -58,16 +60,18 @@ describe("launchFlow helpers", () => {
   });
 
   it("normalizes control-plane launch finish urls for browser navigation", () => {
-    expect(normalizeHostedLaunchFinishURL("/workspaces/ws/launch-finish?lid=1")).toBe(
-      "/hosted/api/workspaces/ws/launch-finish?lid=1",
-    );
+    expect(
+      normalizeHostedLaunchFinishURL("/workspaces/ws/launch-finish?lid=1"),
+    ).toBe("/hosted/api/workspaces/ws/launch-finish?lid=1");
     expect(
       normalizeHostedLaunchFinishURL(
         "https://control.example.test/workspaces/ws/launch-finish?lid=1",
       ),
     ).toBe("https://control.example.test/workspaces/ws/launch-finish?lid=1");
     expect(
-      normalizeHostedLaunchFinishURL("/hosted/api/workspaces/ws/launch-finish?lid=1"),
+      normalizeHostedLaunchFinishURL(
+        "/hosted/api/workspaces/ws/launch-finish?lid=1",
+      ),
     ).toBe("/hosted/api/workspaces/ws/launch-finish?lid=1");
   });
 });

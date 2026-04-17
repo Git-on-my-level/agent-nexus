@@ -33,7 +33,9 @@ async function loadWorkspaceHumanAuthMode(event, coreBaseUrl) {
 }
 
 function isHostedWorkspaceContext(workspace) {
-  const workspaceID = String(workspace?.workspaceId ?? workspace?.id ?? "").trim();
+  const workspaceID = String(
+    workspace?.workspaceId ?? workspace?.id ?? "",
+  ).trim();
   return workspaceID !== "";
 }
 
@@ -73,12 +75,16 @@ export async function load(event) {
   const hostedWorkspace = isHostedWorkspaceContext(workspace);
   const failClosedToHostedSSO =
     hostedWorkspace &&
-    (!authModeLookup.available || authModeLookup.mode === "external_grant" || authModeLookup.mode === "");
+    (!authModeLookup.available ||
+      authModeLookup.mode === "external_grant" ||
+      authModeLookup.mode === "");
   if (!failClosedToHostedSSO) {
     return;
   }
 
-  const workspaceID = String(workspace.workspaceId ?? workspace.id ?? "").trim();
+  const workspaceID = String(
+    workspace.workspaceId ?? workspace.id ?? "",
+  ).trim();
   const returnPath = sanitizeHostedReturnPath(
     event.url.searchParams.get("return_path") ??
       event.url.searchParams.get("return_to") ??

@@ -7,9 +7,10 @@
 
   const nav = [
     { href: "/hosted/start", label: "Home" },
+    { href: "/hosted/organizations", label: "Organizations" },
     { href: "/hosted/signup", label: "Create account" },
     { href: "/hosted/signin", label: "Sign in" },
-    { href: "/hosted/onboarding", label: "Dashboard" },
+    { href: "/hosted/onboarding", label: "Onboarding" },
     { href: "/hosted/dev", label: "Developer notes" },
   ];
 </script>

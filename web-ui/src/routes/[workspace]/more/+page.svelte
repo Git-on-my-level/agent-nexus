@@ -28,6 +28,10 @@
   let workspaceSlug = $derived($page.params.workspace);
   let workspaces = $derived($page.data?.workspaces ?? []);
   let hasMultipleWorkspaces = $derived(workspaces.length > 1);
+  let hostedMode = $derived(Boolean($page.data?.hostedMode));
+  let hostedAccountPath = $derived(
+    String($page.data?.hostedAccountPath ?? "").trim() || "/hosted/onboarding",
+  );
 
   function workspaceHref(path = "/") {
     return workspacePath(workspaceSlug, path);
@@ -136,6 +140,57 @@
       {/each}
     </div>
   </section>
+
+  {#if hostedMode}
+    <section>
+      <p
+        class="mb-2 text-[11px] font-medium uppercase tracking-wide text-[var(--ui-text-muted)]"
+      >
+        Account
+      </p>
+      <div
+        class="overflow-hidden rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]"
+      >
+        <a
+          class="flex items-center gap-3 px-4 py-3 text-[13px] font-medium text-[var(--ui-text)] transition-colors hover:bg-[var(--ui-border-subtle)]"
+          href={hostedAccountPath}
+        >
+          <svg
+            class="h-4 w-4 shrink-0 text-[var(--ui-text-muted)]"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            stroke-width="1.75"
+            aria-hidden="true"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5M19.5 3v6m0 0h-6m6 0l-9 9"
+            />
+          </svg>
+          <span class="flex-1">Account</span>
+          <span class="text-[11px] text-[var(--ui-text-muted)]"
+            >Organizations, billing, all workspaces</span
+          >
+          <svg
+            class="h-4 w-4 shrink-0 text-[var(--ui-text-muted)]"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            stroke-width="1.5"
+            aria-hidden="true"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M8.25 4.5l7.5 7.5-7.5 7.5"
+            />
+          </svg>
+        </a>
+      </div>
+    </section>
+  {/if}
 
   <!-- Workspace switcher (multi-workspace only) -->
   {#if hasMultipleWorkspaces}

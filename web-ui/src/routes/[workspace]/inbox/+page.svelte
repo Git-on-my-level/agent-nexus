@@ -539,7 +539,9 @@
   }
 
   function inboxItemKind(item) {
-    const explicit = String(item?.kind ?? "").trim().toLowerCase();
+    const explicit = String(item?.kind ?? "")
+      .trim()
+      .toLowerCase();
     if (explicit) return explicit;
     return "tag";
   }
@@ -962,9 +964,7 @@
                       >
                     </span>
                   {/if}
-                  {#each (isAskItem(item)
-                    ? (item.related_refs ?? []).slice(0, 2)
-                    : item.related_refs ?? []) as refValue}
+                  {#each isAskItem(item) ? (item.related_refs ?? []).slice(0, 2) : (item.related_refs ?? []) as refValue}
                     <RefLink
                       {refValue}
                       threadId={inboxActionThreadId(item)}

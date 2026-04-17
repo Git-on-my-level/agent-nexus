@@ -18,8 +18,6 @@
   let orgName = $state("");
   let wsSlug = $state("");
   let wsName = $state("");
-  let region = $state("us-central1");
-  let wsTier = $state("standard");
   let serviceId = $state("dev-local-1");
   let servicePublicKey = $state(
     String(PUBLIC_OAR_SAAS_DEV_SERVICE_PUBLIC_KEY ?? "").trim(),
@@ -143,8 +141,6 @@
           organization_id: selectedOrgId,
           slug: wsSlug.trim(),
           display_name: wsName.trim(),
-          region: region.trim(),
-          workspace_tier: wsTier,
           service_identity_id: sid,
           service_identity_public_key: pub,
         }),
@@ -301,20 +297,6 @@
             disabled={busy}
             placeholder="Demo"
           />
-        </label>
-      </div>
-      <div class="hosted-row">
-        <label class="hosted-field">
-          Region
-          <input class="hosted-input" bind:value={region} disabled={busy} />
-        </label>
-        <label class="hosted-field">
-          Tier
-          <select class="hosted-input" bind:value={wsTier} disabled={busy}>
-            <option value="standard">standard</option>
-            <option value="plus">plus</option>
-            <option value="dedicated">dedicated</option>
-          </select>
         </label>
       </div>
       <label class="hosted-field">

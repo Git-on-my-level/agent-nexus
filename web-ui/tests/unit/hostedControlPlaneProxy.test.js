@@ -16,9 +16,16 @@ describe("allowHostedControlPlanePath", () => {
     expect(allowHostedControlPlanePath("provisioning/jobs/job_1")).toBe(true);
   });
 
+  it("allows billing lookup and webhook paths", () => {
+    expect(allowHostedControlPlanePath("billing/webhooks/stripe")).toBe(true);
+    expect(
+      allowHostedControlPlanePath("billing/checkout-session/cs_test_123"),
+    ).toBe(true);
+  });
+
   it("rejects traversal and unrelated paths", () => {
     expect(allowHostedControlPlanePath("organizations/../billing")).toBe(false);
-    expect(allowHostedControlPlanePath("billing/webhooks/stripe")).toBe(false);
+    expect(allowHostedControlPlanePath("unrelated/api")).toBe(false);
     expect(allowHostedControlPlanePath("")).toBe(false);
   });
 });

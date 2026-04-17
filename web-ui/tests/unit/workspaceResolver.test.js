@@ -88,6 +88,7 @@ describe("workspaceResolver", () => {
           workspaces: [
             {
               id: "ws_test",
+              organization_id: "org_test",
               slug: "alpha",
               display_name: "Alpha",
               core_origin: "http://127.0.0.1:18001",
@@ -112,7 +113,72 @@ describe("workspaceResolver", () => {
       slug: "alpha",
       coreBaseUrl: "http://127.0.0.1:18001",
       id: "ws_test",
+      organizationId: "org_test",
     });
+  });
+
+  it("hydrates workspace catalog from control plane org list in SaaS packed-host mode", async () => {
+    mockState.env.OAR_SAAS_PACKED_HOST_DEV = "1";
+    mockState.env.OAR_CONTROL_BASE_URL = "http://127.0.0.1:8100";
+    mockState.env.OAR_CONTROL_PLANE_DEV_ACCESS_TOKEN = "tok_dev";
+
+    const fetchMock = vi.fn(async (url) => {
+      const u = String(url);
+      if (u.includes("organization_id=org_test")) {
+        return {
+          ok: true,
+          async json() {
+            return {
+              workspaces: [
+                {
+                  id: "ws_a",
+                  organization_id: "org_test",
+                  slug: "alpha",
+                  display_name: "Alpha",
+                  core_origin: "http://127.0.0.1:18001",
+                  public_origin: "",
+                },
+                {
+                  id: "ws_b",
+                  organization_id: "org_test",
+                  slug: "beta",
+                  display_name: "Beta",
+                  core_origin: "http://127.0.0.1:18002",
+                  public_origin: "",
+                },
+              ],
+            };
+          },
+        };
+      }
+      return {
+        ok: true,
+        async json() {
+          return {
+            workspaces: [
+              {
+                id: "ws_a",
+                organization_id: "org_test",
+                slug: "alpha",
+                display_name: "Alpha",
+                core_origin: "http://127.0.0.1:18001",
+                public_origin: "",
+              },
+            ],
+          };
+        },
+      };
+    });
+
+    const catalog = await resolveWorkspaceCatalog({
+      params: { workspace: "alpha" },
+      fetch: fetchMock,
+      cookies: { get: () => undefined },
+    });
+
+    expect(catalog.workspaces).toHaveLength(2);
+    expect(catalog.workspaceBySlug.has("beta")).toBe(true);
+    expect(catalog.defaultWorkspace.slug).toBe("alpha");
   });
 
   it("resolves proxy target from static workspace catalog", async () => {

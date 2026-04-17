@@ -13,7 +13,8 @@ vi.mock("$lib/server/workspaceResolver", () => ({
 }));
 
 vi.mock("$lib/server/authSession", () => ({
-  loadWorkspaceAuthenticatedAgent: authSessionMocks.loadWorkspaceAuthenticatedAgent,
+  loadWorkspaceAuthenticatedAgent:
+    authSessionMocks.loadWorkspaceAuthenticatedAgent,
 }));
 
 import { load } from "../../src/routes/[workspace]/login/+page.server.js";
@@ -24,18 +25,19 @@ function createEvent(overrides = {}) {
       workspace: "acme",
     },
     url: new URL("https://ui.example.test/acme/login"),
-    fetch: vi.fn(async () =>
-      new Response(
-        JSON.stringify({
-          human_auth_mode: "workspace_local",
-        }),
-        {
-          status: 200,
-          headers: {
-            "content-type": "application/json",
+    fetch: vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            human_auth_mode: "workspace_local",
+          }),
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/json",
+            },
           },
-        },
-      ),
+        ),
     ),
     ...overrides,
   };
@@ -57,18 +59,19 @@ describe("workspace login route", () => {
       url: new URL(
         "https://ui.example.test/acme/login?return_to=%2Fthreads%2F123%3Ftab%3Dnotes",
       ),
-      fetch: vi.fn(async () =>
-        new Response(
-          JSON.stringify({
-            human_auth_mode: "external_grant",
-          }),
-          {
-            status: 200,
-            headers: {
-              "content-type": "application/json",
+      fetch: vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              human_auth_mode: "external_grant",
+            }),
+            {
+              status: 200,
+              headers: {
+                "content-type": "application/json",
+              },
             },
-          },
-        ),
+          ),
       ),
     });
 
@@ -129,13 +132,14 @@ describe("workspace login route", () => {
     authSessionMocks.loadWorkspaceAuthenticatedAgent.mockResolvedValue(null);
 
     const event = createEvent({
-      fetch: vi.fn(async () =>
-        new Response(JSON.stringify({ dev_actor_mode: false }), {
-          status: 200,
-          headers: {
-            "content-type": "application/json",
-          },
-        }),
+      fetch: vi.fn(
+        async () =>
+          new Response(JSON.stringify({ dev_actor_mode: false }), {
+            status: 200,
+            headers: {
+              "content-type": "application/json",
+            },
+          }),
       ),
     });
 
