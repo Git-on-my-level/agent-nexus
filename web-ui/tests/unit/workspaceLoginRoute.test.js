@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const workspaceResolverMocks = vi.hoisted(() => ({
   resolveWorkspaceBySlug: vi.fn(),
@@ -6,6 +6,14 @@ const workspaceResolverMocks = vi.hoisted(() => ({
 
 const authSessionMocks = vi.hoisted(() => ({
   loadWorkspaceAuthenticatedAgent: vi.fn(),
+}));
+
+const dynamicPrivateEnv = vi.hoisted(() => ({
+  OAR_CONTROL_BASE_URL: "",
+}));
+
+vi.mock("$env/dynamic/private", () => ({
+  env: dynamicPrivateEnv,
 }));
 
 vi.mock("$lib/server/workspaceResolver", () => ({
@@ -25,6 +33,9 @@ function createEvent(overrides = {}) {
       workspace: "acme",
     },
     url: new URL("https://ui.example.test/acme/login"),
+    cookies: {
+      get: vi.fn(() => ""),
+    },
     fetch: vi.fn(
       async () =>
         new Response(
@@ -42,6 +53,10 @@ function createEvent(overrides = {}) {
     ...overrides,
   };
 }
+
+afterEach(() => {
+  dynamicPrivateEnv.OAR_CONTROL_BASE_URL = "";
+});
 
 describe("workspace login route", () => {
   it("redirects to hosted sign-in for external grant mode when unauthenticated", async () => {
@@ -188,6 +203,114 @@ describe("workspace login route", () => {
     await expect(load(event)).rejects.toMatchObject({
       status: 307,
       location: "/acme",
+    });
+  });
+
+  it("redirects to launch finish when control-plane session cookie can mint a launch session", async () => {
+    dynamicPrivateEnv.OAR_CONTROL_BASE_URL = "https://cp.example.test";
+    workspaceResolverMocks.resolveWorkspaceBySlug.mockResolvedValue({
+      workspaceSlug: "acme",
+      workspace: {
+        coreBaseUrl: "https://core.example.test",
+        workspaceId: "ws_123",
+      },
+      error: null,
+    });
+    authSessionMocks.loadWorkspaceAuthenticatedAgent.mockResolvedValue(null);
+
+    const cookieGet = vi.fn((name) =>
+      name === "oar_cp_dev_access_token" ? "cp-session-token" : "",
+    );
+
+    const event = createEvent({
+      fetch: vi.fn(async (url) => {
+        const u = String(url);
+        if (u.includes("/meta/handshake")) {
+          return new Response(
+            JSON.stringify({
+              human_auth_mode: "external_grant",
+            }),
+            {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            },
+          );
+        }
+        if (u.includes("/workspaces/ws_123/launch-sessions")) {
+          expect(u.startsWith("https://cp.example.test/")).toBe(true);
+          return new Response(
+            JSON.stringify({
+              launch_session: {
+                finish_url:
+                  "/workspaces/ws_123/launch-finish?lid=launch_abc",
+              },
+            }),
+            {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            },
+          );
+        }
+        return new Response("unexpected url", { status: 500 });
+      }),
+      cookies: { get: cookieGet },
+    });
+
+    await expect(load(event)).rejects.toMatchObject({
+      status: 303,
+      location:
+        "/hosted/api/workspaces/ws_123/launch-finish?lid=launch_abc",
+    });
+  });
+
+  it("falls through to hosted sign-in when launch-sessions returns 401", async () => {
+    dynamicPrivateEnv.OAR_CONTROL_BASE_URL = "https://cp.example.test";
+    workspaceResolverMocks.resolveWorkspaceBySlug.mockResolvedValue({
+      workspaceSlug: "acme",
+      workspace: {
+        coreBaseUrl: "https://core.example.test",
+        workspaceId: "ws_123",
+      },
+      error: null,
+    });
+    authSessionMocks.loadWorkspaceAuthenticatedAgent.mockResolvedValue(null);
+
+    const event = createEvent({
+      url: new URL(
+        "https://ui.example.test/acme/login?return_to=%2Fthreads%2F1",
+      ),
+      fetch: vi.fn(async (url) => {
+        const u = String(url);
+        if (u.includes("/meta/handshake")) {
+          return new Response(
+            JSON.stringify({
+              human_auth_mode: "external_grant",
+            }),
+            {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            },
+          );
+        }
+        if (u.includes("/launch-sessions")) {
+          return new Response(
+            JSON.stringify({ error: { code: "unauthorized" } }),
+            { status: 401, headers: { "content-type": "application/json" } },
+          );
+        }
+        return new Response("unexpected", { status: 500 });
+      }),
+      cookies: {
+        get: vi.fn((name) =>
+          name === "oar_cp_dev_access_token" ? "stale-token" : "",
+        ),
+      },
+    });
+
+    await expect(load(event)).rejects.toMatchObject({
+      status: 307,
+      location:
+        "/hosted/signin?workspace=acme&workspace_id=ws_123&return_path=%2Fthreads%2F1",
     });
   });
 });

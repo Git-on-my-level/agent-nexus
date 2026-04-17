@@ -32,6 +32,10 @@
   });
 
   onMount(async () => {
+    const launchFlow = await continueLaunchFlowIfPresent();
+    if (launchFlow.kind === "redirect") {
+      return;
+    }
     try {
       const res = await hostedCpFetch("account/dev/session/options");
       if (!res.ok) {
@@ -99,7 +103,7 @@
       }
       persistHostedCpAccessToken(token);
       const continuationHandled = await continueLaunchFlowIfPresent();
-      if (!continuationHandled) {
+      if (continuationHandled.kind === "noop") {
         await goto("/hosted/onboarding");
       }
     } catch (e) {
@@ -129,7 +133,7 @@
       }
       persistHostedCpAccessToken(token);
       const continuationHandled = await continueLaunchFlowIfPresent();
-      if (!continuationHandled) {
+      if (continuationHandled.kind === "noop") {
         await goto("/hosted/onboarding");
       }
     } catch (e) {
@@ -142,7 +146,7 @@
   async function continueLaunchFlowIfPresent() {
     const launchParams = readHostedLaunchParams($page.url.searchParams);
     if (!launchParams.hasContinuation) {
-      return false;
+      return { kind: "noop" };
     }
 
     const launchResponse = await hostedCpFetch(
@@ -156,7 +160,7 @@
     );
     if (!launchResponse.ok) {
       message = await readError(launchResponse);
-      return true;
+      return { kind: "error" };
     }
 
     const launchPayload = await launchResponse.json();
@@ -165,15 +169,15 @@
     );
     if (!finishURL) {
       message = "Launch session response did not include a valid finish URL.";
-      return true;
+      return { kind: "error" };
     }
 
     if (typeof window !== "undefined") {
       window.location.assign(finishURL);
-      return true;
+      return { kind: "redirect" };
     }
     await goto(finishURL);
-    return true;
+    return { kind: "redirect" };
   }
 </script>
 
