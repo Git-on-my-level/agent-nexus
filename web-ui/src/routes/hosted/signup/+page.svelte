@@ -102,7 +102,7 @@
       await loadHostedSession();
       const continuationHandled = await continueLaunchFlowIfPresent();
       if (!continuationHandled) {
-        await goto("/hosted/dashboard");
+        await goto("/hosted/onboarding/organization");
       }
     } catch (e) {
       message = e instanceof Error ? e.message : "Passkey registration failed.";
