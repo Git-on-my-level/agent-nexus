@@ -22,16 +22,16 @@
 </script>
 
 <article
-  class={`rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] px-4 py-3 ${depth > 0 ? "bg-[var(--ui-panel-muted)]" : ""} ${message.archived_at ? "opacity-60" : ""}`}
+  class={`rounded-md border border-[var(--line)] bg-[var(--panel)] px-4 py-3 ${depth > 0 ? "bg-[var(--bg-soft)]" : ""} ${message.archived_at ? "opacity-60" : ""}`}
   id={`message-${message.id}`}
 >
   <div class="flex items-start justify-between gap-3">
     <div class="min-w-0 flex-1">
       <MarkdownRenderer
         source={message.messageText || message.summary || "Untitled message"}
-        class="text-[13px] text-[var(--ui-text)]"
+        class="text-[13px] text-[var(--fg)]"
       />
-      <p class="mt-1 text-[12px] text-[var(--ui-text-muted)]">
+      <p class="mt-1 text-[12px] text-[var(--fg-muted)]">
         {actorName(message.actor_id)} · {formatTimestamp(message.ts) || "—"}
       </p>
     </div>
@@ -49,7 +49,7 @@
       {/if}
       {#if !message.archived_at && !message.trashed_at}
         <button
-          class="cursor-pointer rounded px-2 py-0.5 text-[12px] text-[var(--ui-text-muted)] hover:bg-[var(--ui-bg-soft)] hover:text-[var(--ui-text)]"
+          class="cursor-pointer rounded px-2 py-0.5 text-[12px] text-[var(--fg-muted)] hover:bg-[var(--bg-soft)] hover:text-[var(--fg)]"
           onclick={() => onReply(message.id)}
           type="button"
         >
@@ -72,7 +72,7 @@
       width; only the left border + pl indent the thread. Reply buttons stay on the
          same right edge as the root message. -->
     <div
-      class="mt-3 -mx-4 space-y-2 border-l border-[var(--ui-border)] pl-2.5 sm:pl-3"
+      class="mt-3 -mx-4 space-y-2 border-l border-[var(--line)] pl-2.5 sm:pl-3"
     >
       {#each message.children as child (child.id)}
         <Self

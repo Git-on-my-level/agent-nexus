@@ -24,9 +24,9 @@
   function planBadgeClasses(planTier) {
     const t = String(planTier ?? "starter").toLowerCase();
     if (t === "enterprise") return "text-fuchsia-400 bg-fuchsia-500/10";
-    if (t === "scale") return "text-indigo-400 bg-indigo-500/10";
-    if (t === "team") return "text-emerald-400 bg-emerald-500/10";
-    return "text-gray-500 bg-gray-200";
+    if (t === "scale") return "text-accent-text bg-accent-soft";
+    if (t === "team") return "text-ok-text bg-ok-soft";
+    return "text-fg-subtle bg-panel-hover";
   }
 
   function planLabel(planTier) {
@@ -68,14 +68,14 @@
 <div class="space-y-5">
   <div class="flex flex-wrap items-end justify-between gap-3">
     <div>
-      <h1 class="text-lg font-semibold text-gray-900">Organizations</h1>
-      <p class="mt-1 hidden text-[12px] text-gray-500 sm:block">
+      <h1 class="text-lg font-semibold text-fg">Organizations</h1>
+      <p class="mt-1 hidden text-[12px] text-fg-subtle sm:block">
         Pick an organization to manage its workspaces, members, and billing.
       </p>
     </div>
     <a
       href="/hosted/organizations/new"
-      class="rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500"
+      class="rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-accent-hover"
       >+ New organization</a
     >
   </div>
@@ -83,7 +83,7 @@
   {#if message}
     <div
       role="status"
-      class="rounded-md bg-amber-500/10 px-3 py-2 text-[12px] text-amber-400"
+      class="rounded-md bg-warn-soft px-3 py-2 text-[12px] text-warn-text"
     >
       {message}
     </div>
@@ -91,38 +91,38 @@
 
   {#if phase === "loading"}
     <div
-      class="rounded-md border border-gray-200 bg-gray-100 px-4 py-6 text-[13px] text-gray-500"
+      class="rounded-md border border-line bg-bg-soft px-4 py-6 text-[13px] text-fg-subtle"
     >
       Loading…
     </div>
   {:else if organizations.length === 0}
     <div
-      class="rounded-md border border-gray-200 bg-gray-100 px-6 py-8 text-center"
+      class="rounded-md border border-line bg-bg-soft px-6 py-8 text-center"
     >
-      <h2 class="text-[14px] font-semibold text-gray-900">
+      <h2 class="text-[14px] font-semibold text-fg">
         No organizations yet
       </h2>
-      <p class="mx-auto mt-1.5 max-w-md text-[12px] text-gray-500">
+      <p class="mx-auto mt-1.5 max-w-md text-[12px] text-fg-subtle">
         Create one to start adding workspaces and inviting teammates.
       </p>
       <a
         href="/hosted/organizations/new"
-        class="mt-4 inline-flex rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500"
+        class="mt-4 inline-flex rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-accent-hover"
       >
         Create organization
       </a>
     </div>
   {:else}
     <div
-      class="space-y-px overflow-hidden rounded-md border border-gray-200 bg-gray-100"
+      class="space-y-px overflow-hidden rounded-md border border-line bg-bg-soft"
     >
       {#each organizations as org, i (org.id)}
         <button
           type="button"
           onclick={() => openOrg(org)}
-          class="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-gray-200 {i >
+          class="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-panel-hover {i >
           0
-            ? 'border-t border-gray-200'
+            ? 'border-t border-line'
             : ''}"
         >
           <div class="flex min-w-0 items-center gap-3">
@@ -133,7 +133,7 @@
             />
             <div class="min-w-0">
               <div class="flex items-center gap-2">
-                <span class="truncate text-[13px] font-semibold text-gray-900"
+                <span class="truncate text-[13px] font-semibold text-fg"
                   >{org.display_name || org.slug}</span
                 >
                 <span
@@ -144,13 +144,13 @@
                   {planLabel(org.plan_tier)}
                 </span>
               </div>
-              <div class="mt-0.5 truncate text-[11px] text-gray-500">
+              <div class="mt-0.5 truncate text-[11px] text-fg-subtle">
                 {org.slug}
               </div>
             </div>
           </div>
           <span
-            class="shrink-0 text-[11px] font-medium text-gray-500"
+            class="shrink-0 text-[11px] font-medium text-fg-subtle"
             aria-hidden="true">Open →</span
           >
         </button>

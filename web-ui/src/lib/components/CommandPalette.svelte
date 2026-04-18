@@ -320,10 +320,10 @@
     max-height: 420px;
     display: flex;
     flex-direction: column;
-    background: var(--ui-panel);
-    border: 1px solid var(--ui-border);
-    border-radius: var(--ui-radius-lg);
-    box-shadow: var(--ui-shadow-elevated);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-modal);
     overflow: hidden;
   }
 
@@ -332,14 +332,14 @@
     align-items: center;
     gap: 8px;
     padding: 10px 14px;
-    border-bottom: 1px solid var(--ui-border);
+    border-bottom: 1px solid var(--line);
   }
 
   .cmd-search-icon {
     width: 16px;
     height: 16px;
     flex-shrink: 0;
-    color: var(--ui-text-muted);
+    color: var(--fg-muted);
   }
 
   .cmd-input {
@@ -347,24 +347,24 @@
     background: transparent;
     border: none;
     outline: none;
-    color: var(--ui-text);
+    color: var(--fg);
     font-size: 13px;
-    font-family: var(--ui-font-sans);
+    font-family: var(--font-sans);
     line-height: 1.4;
   }
 
   .cmd-input::placeholder {
-    color: var(--ui-text-subtle);
+    color: var(--fg-subtle);
   }
 
   .cmd-esc-hint {
     flex-shrink: 0;
     padding: 1px 6px;
     font-size: 10px;
-    font-family: var(--ui-font-sans);
-    color: var(--ui-text-subtle);
-    background: var(--ui-bg);
-    border: 1px solid var(--ui-border);
+    font-family: var(--font-sans);
+    color: var(--fg-subtle);
+    background: var(--bg);
+    border: 1px solid var(--line);
     border-radius: 3px;
     line-height: 1.6;
   }
@@ -379,18 +379,18 @@
     padding: 20px 14px;
     text-align: center;
     font-size: 12px;
-    color: var(--ui-text-muted);
+    color: var(--fg-muted);
   }
 
   .cmd-status--hint {
-    color: var(--ui-text-subtle);
+    color: var(--fg-subtle);
   }
 
   .cmd-group-header {
     padding: 8px 14px 4px;
     font-size: 11px;
     font-weight: 600;
-    color: var(--ui-text-muted);
+    color: var(--fg-muted);
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
@@ -405,20 +405,20 @@
     border: none;
     cursor: pointer;
     text-align: left;
-    color: var(--ui-text);
-    font-family: var(--ui-font-sans);
+    color: var(--fg);
+    font-family: var(--font-sans);
   }
 
   .cmd-result-row:hover,
   .cmd-result-row--active {
-    background: var(--ui-bg-soft);
+    background: var(--bg-soft);
   }
 
   .cmd-result-icon {
     width: 16px;
     height: 16px;
     flex-shrink: 0;
-    color: var(--ui-text-muted);
+    color: var(--fg-muted);
   }
 
   .cmd-result-text {
@@ -432,7 +432,7 @@
   .cmd-result-title {
     font-size: 13px;
     line-height: 1.3;
-    color: var(--ui-text);
+    color: var(--fg);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -441,7 +441,7 @@
   .cmd-result-subtitle {
     font-size: 11px;
     line-height: 1.3;
-    color: var(--ui-text-muted);
+    color: var(--fg-muted);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -452,9 +452,9 @@
     font-size: 10px;
     padding: 1px 6px;
     border-radius: 3px;
-    background: var(--ui-bg);
-    border: 1px solid var(--ui-border);
-    color: var(--ui-text-muted);
+    background: var(--bg);
+    border: 1px solid var(--line);
+    color: var(--fg-muted);
     text-transform: uppercase;
     letter-spacing: 0.03em;
   }

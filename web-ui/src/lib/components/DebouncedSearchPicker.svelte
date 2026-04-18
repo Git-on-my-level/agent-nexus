@@ -154,25 +154,25 @@
     width: 100%;
     padding: 0.5rem 0.75rem;
     border-radius: 0.375rem;
-    border: 1px solid var(--ui-border);
-    background: var(--ui-panel-muted);
-    color: var(--ui-text);
+    border: 1px solid var(--line);
+    background: var(--bg-soft);
+    color: var(--fg);
     font-size: 0.8125rem;
   }
 
   .search-input:focus,
   .manual-input:focus {
     outline: none;
-    border-color: var(--ui-accent-strong);
+    border-color: var(--accent-hover);
   }
 
   .search-results {
     width: 100%;
     padding: 0.5rem;
     border-radius: 0.375rem;
-    border: 1px solid var(--ui-border);
-    background: var(--ui-panel-muted);
-    color: var(--ui-text);
+    border: 1px solid var(--line);
+    background: var(--bg-soft);
+    color: var(--fg);
     font-size: 0.8125rem;
   }
 
@@ -181,13 +181,13 @@
   }
 
   .search-results option:hover {
-    background: var(--ui-accent-strong);
+    background: var(--accent-hover);
     color: white;
   }
 
   .search-status {
     font-size: 0.75rem;
-    color: var(--ui-text-muted);
+    color: var(--fg-muted);
     padding: 0.25rem 0;
   }
 
@@ -200,7 +200,7 @@
   .selected-value {
     font-size: 0.75rem;
     padding: 0.25rem 0;
-    color: var(--ui-text-muted);
+    color: var(--fg-muted);
   }
 
   .selected-label {
@@ -218,12 +218,12 @@
 
   .advanced-summary {
     font-size: 0.75rem;
-    color: var(--ui-text-muted);
+    color: var(--fg-muted);
     cursor: pointer;
     padding: 0.25rem 0;
   }
 
   .advanced-summary:hover {
-    color: var(--ui-text);
+    color: var(--fg);
   }
 </style>

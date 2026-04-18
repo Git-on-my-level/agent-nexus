@@ -381,10 +381,10 @@
   }
 
   function statusColor(status) {
-    if (status === "active") return "text-emerald-400 bg-emerald-500/10";
-    if (status === "paused") return "text-amber-400 bg-amber-500/10";
+    if (status === "active") return "text-ok-text bg-ok-soft";
+    if (status === "paused") return "text-warn-text bg-warn-soft";
     if (status === "closed") return "text-slate-300 bg-slate-500/10";
-    return "text-[var(--ui-text-muted)] bg-[var(--ui-border)]";
+    return "text-[var(--fg-muted)] bg-[var(--line)]";
   }
 
   function boardProjectionMessage(freshness) {
@@ -505,7 +505,7 @@
 
 {#if loading}
   <div
-    class="mt-12 flex items-center justify-center gap-2 text-[13px] text-[var(--ui-text-muted)]"
+    class="mt-12 flex items-center justify-center gap-2 text-[13px] text-[var(--fg-muted)]"
   >
     <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
       <circle
@@ -525,7 +525,7 @@
     Loading board...
   </div>
 {:else if error}
-  <div class="mb-4 rounded-md bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
+  <div class="mb-4 rounded-md bg-danger-soft px-3 py-2 text-[13px] text-danger-text">
     {error}
   </div>
 {:else if workspace}
@@ -554,7 +554,7 @@
 
   {#if board.trashed_at}
     <div
-      class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[13px] text-red-400"
+      class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-[13px] text-danger-text"
     >
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2 font-semibold">
@@ -564,7 +564,7 @@
         {#if board.trash_reason}
           <p class="mt-2">Reason: {board.trash_reason}</p>
         {/if}
-        <p class="mt-1 text-[11px] text-red-400/80">
+        <p class="mt-1 text-[11px] text-danger-text/80">
           Trashed {#if board.trashed_by}by {actorName(board.trashed_by)}{/if}
           {#if board.trashed_at}
             at {formatTimestamp(board.trashed_at)}
@@ -572,7 +572,7 @@
         </p>
       </div>
       <button
-        class="shrink-0 cursor-pointer rounded-md border border-red-500/40 bg-red-500/15 px-2 py-1 text-[12px] font-medium text-red-400 hover:bg-red-500/25 disabled:opacity-50"
+        class="shrink-0 cursor-pointer rounded-md border border-danger/40 bg-danger-soft px-2 py-1 text-[12px] font-medium text-danger-text hover:bg-danger/25 disabled:opacity-50"
         disabled={boardLifecycleBusy}
         onclick={handleRestoreBoard}
         type="button"
@@ -582,7 +582,7 @@
     </div>
   {:else if board.archived_at}
     <div
-      class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[13px] text-amber-400"
+      class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-[13px] text-warn-text"
     >
       <p class="min-w-0 flex-1">
         This board was archived on {formatTimestamp(board.archived_at) ||
@@ -590,7 +590,7 @@
           by {actorName(board.archived_by)}{/if}.
       </p>
       <button
-        class="shrink-0 cursor-pointer rounded-md border border-amber-500/40 bg-amber-500/15 px-2 py-1 text-[12px] font-medium text-amber-400 hover:bg-amber-500/25 disabled:opacity-50"
+        class="shrink-0 cursor-pointer rounded-md border border-warn/40 bg-warn-soft px-2 py-1 text-[12px] font-medium text-warn-text hover:bg-warn/25 disabled:opacity-50"
         disabled={boardLifecycleBusy}
         onclick={handleUnarchiveBoard}
         type="button"
@@ -603,20 +603,20 @@
   <div class="mb-3">
     <div class="flex items-center gap-2 text-[12px]">
       <a
-        class="text-[var(--ui-text-muted)] transition-colors hover:text-[var(--ui-text)]"
+        class="text-[var(--fg-muted)] transition-colors hover:text-[var(--fg)]"
         href={workspaceHref("/boards")}
       >
         Boards
       </a>
-      <span class="text-[var(--ui-text-subtle)]">/</span>
-      <span class="text-[var(--ui-text-muted)]">
+      <span class="text-[var(--fg-subtle)]">/</span>
+      <span class="text-[var(--fg-muted)]">
         {workspace?.board?.title || boardId}
       </span>
     </div>
 
     <div class="mt-1.5 flex items-center justify-between gap-3">
       <div class="flex min-w-0 items-center gap-2">
-        <h1 class="truncate text-lg font-semibold text-[var(--ui-text)]">
+        <h1 class="truncate text-lg font-semibold text-[var(--fg)]">
           {board.title || board.id}
         </h1>
         {#if board.status}
@@ -641,14 +641,14 @@
       {#if !board.trashed_at}
         <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
           <button
-            class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] hover:text-[var(--ui-text)]"
+            class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
             onclick={openBoardEditForm}
             type="button"
           >
             {showBoardEditForm ? "Close" : "Edit"}
           </button>
           <button
-            class="rounded-md bg-indigo-600 px-2.5 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500"
+            class="rounded-md bg-accent px-2.5 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-accent-hover"
             onclick={openAddCardForm}
             type="button"
           >
@@ -673,14 +673,14 @@
 
     <!-- Single context line -->
     <div
-      class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[var(--ui-text-muted)]"
+      class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[var(--fg-muted)]"
     >
       {#if backingThread && boardInspectNav}
-        <span class="text-[var(--ui-text-muted)]"
+        <span class="text-[var(--fg-muted)]"
           >{boardInspectNav.kind === "topic" ? "Topic" : "Backing thread"}</span
         >
         <a
-          class="text-indigo-400 transition-colors hover:text-indigo-300"
+          class="text-accent-text transition-colors hover:text-accent-text"
           href={workspaceHref(
             boardInspectNav.kind === "topic"
               ? `/topics/${encodeURIComponent(boardInspectNav.segment)}`
@@ -689,24 +689,24 @@
         >
           {backingThread.title || boardInspectNav.segment}
         </a>
-        <span class="text-[var(--ui-text-subtle)]">·</span>
+        <span class="text-[var(--fg-subtle)]">·</span>
       {/if}
       <span>
         {workspace.board_summary?.card_count ?? workspace.cards?.count ?? 0}
         cards
       </span>
-      <span class="text-[var(--ui-text-subtle)]">·</span>
+      <span class="text-[var(--fg-subtle)]">·</span>
       <span>
         {workspace.board_summary?.resolved_card_count ?? 0} resolved
       </span>
-      <span class="text-[var(--ui-text-subtle)]">·</span>
+      <span class="text-[var(--fg-subtle)]">·</span>
       <span>
         {workspace.board_summary?.unresolved_card_count ?? 0} open
       </span>
-      <span class="text-[var(--ui-text-subtle)]">·</span>
+      <span class="text-[var(--fg-subtle)]">·</span>
       <span>Board updated {formatTimestamp(board.updated_at) || "—"}</span>
       {#if board.owners?.length > 0}
-        <span class="text-[var(--ui-text-subtle)]">·</span>
+        <span class="text-[var(--fg-subtle)]">·</span>
         <span
           >Owners {board.owners
             .map((owner) => actorName(owner))
@@ -721,21 +721,21 @@
     <div class="mb-3 space-y-2">
       {#if mutationNotice}
         <div
-          class="rounded-md bg-emerald-500/10 px-3 py-2 text-[12px] text-emerald-400"
+          class="rounded-md bg-ok-soft px-3 py-2 text-[12px] text-ok-text"
         >
           {mutationNotice}
         </div>
       {/if}
       {#if conflictWarning}
         <div
-          class="rounded-md bg-amber-500/10 px-3 py-2 text-[12px] text-amber-400"
+          class="rounded-md bg-warn-soft px-3 py-2 text-[12px] text-warn-text"
         >
           {conflictWarning}
         </div>
       {/if}
       {#if mutationError}
         <div
-          class="rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
+          class="rounded-md bg-danger-soft px-3 py-2 text-[12px] text-danger-text"
         >
           {mutationError}
         </div>
@@ -746,30 +746,30 @@
   <!-- Board edit form (collapsible) -->
   {#if showBoardEditForm}
     <section
-      class="mb-4 rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]"
+      class="mb-4 rounded-md border border-[var(--line)] bg-[var(--panel)]"
     >
-      <div class="border-b border-[var(--ui-border)] px-4 py-2.5">
-        <h2 class="text-[13px] font-medium text-[var(--ui-text)]">
+      <div class="border-b border-[var(--line)] px-4 py-2.5">
+        <h2 class="text-[13px] font-medium text-[var(--fg)]">
           Edit board metadata
         </h2>
       </div>
 
       <div class="space-y-3 px-4 py-3">
         <div class="grid gap-3 md:grid-cols-2">
-          <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
+          <label class="text-[12px] font-medium text-[var(--fg-muted)]">
             Board title
             <input
               bind:value={boardTitle}
-              class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-1.5 text-[13px] text-[var(--ui-text)]"
+              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-[13px] text-[var(--fg)]"
               type="text"
             />
           </label>
 
-          <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
+          <label class="text-[12px] font-medium text-[var(--fg-muted)]">
             Status
             <select
               bind:value={boardStatus}
-              class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-1.5 text-[13px] text-[var(--ui-text)]"
+              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-[13px] text-[var(--fg)]"
             >
               {#each Object.entries(BOARD_STATUS_LABELS) as [value, label]}
                 <option {value}>{label}</option>
@@ -789,24 +789,24 @@
           />
 
           <div
-            class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-2 text-[12px] text-[var(--ui-text-muted)]"
+            class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-[12px] text-[var(--fg-muted)]"
           >
             Board thread is fixed after creation (append-only event timeline).
-            <div class="mt-1 text-[var(--ui-text)]">
+            <div class="mt-1 text-[var(--fg)]">
               {backingThread?.title || backingThreadId}
             </div>
-            <div class="mt-1 text-[11px] text-[var(--ui-text-muted)]">
+            <div class="mt-1 text-[11px] text-[var(--fg-muted)]">
               {backingThreadId}
             </div>
           </div>
         </div>
 
         <div class="grid gap-3 md:grid-cols-2">
-          <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
+          <label class="text-[12px] font-medium text-[var(--fg-muted)]">
             Labels
             <textarea
               bind:value={boardLabels}
-              class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-1.5 text-[13px] text-[var(--ui-text)]"
+              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-[13px] text-[var(--fg)]"
               rows="3"
             ></textarea>
           </label>
@@ -824,7 +824,7 @@
         </div>
 
         <div>
-          <p class="text-[12px] font-medium text-[var(--ui-text-muted)]">
+          <p class="text-[12px] font-medium text-[var(--fg-muted)]">
             Pinned refs
           </p>
           <GuidedTypedRefsInput
@@ -840,7 +840,7 @@
 
         <div class="flex flex-wrap gap-2">
           <button
-            class="rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+            class="rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
             disabled={updatingBoard}
             onclick={submitBoardUpdate}
             type="button"
@@ -848,7 +848,7 @@
             {updatingBoard ? "Saving..." : "Save board"}
           </button>
           <button
-            class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] hover:text-[var(--ui-text)]"
+            class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
             onclick={() => {
               showBoardEditForm = false;
               mutationError = "";
@@ -865,28 +865,28 @@
   <!-- Add card form (collapsible) -->
   {#if showAddCardForm}
     <section
-      class="mb-4 rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]"
+      class="mb-4 rounded-md border border-[var(--line)] bg-[var(--panel)]"
     >
-      <div class="border-b border-[var(--ui-border)] px-4 py-2.5">
-        <h2 class="text-[13px] font-medium text-[var(--ui-text)]">Add card</h2>
+      <div class="border-b border-[var(--line)] px-4 py-2.5">
+        <h2 class="text-[13px] font-medium text-[var(--fg)]">Add card</h2>
       </div>
 
       <div class="space-y-3 px-4 py-3">
         <div class="grid gap-3 md:grid-cols-2">
-          <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
+          <label class="text-[12px] font-medium text-[var(--fg-muted)]">
             Card title
             <input
               bind:value={addCardTitle}
-              class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-1.5 text-[13px] text-[var(--ui-text)]"
+              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-[13px] text-[var(--fg)]"
               type="text"
             />
           </label>
 
-          <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
+          <label class="text-[12px] font-medium text-[var(--fg-muted)]">
             Target column
             <select
               bind:value={addCardColumnKey}
-              class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-1.5 text-[13px] text-[var(--ui-text)]"
+              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-[13px] text-[var(--fg)]"
             >
               {#each board.column_schema as column}
                 <option value={column.key}>
@@ -898,12 +898,12 @@
           </label>
 
           <label
-            class="text-[12px] font-medium text-[var(--ui-text-muted)] md:col-span-2"
+            class="text-[12px] font-medium text-[var(--fg-muted)] md:col-span-2"
           >
             Summary
             <textarea
               bind:value={addCardSummary}
-              class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-1.5 text-[13px] text-[var(--ui-text)]"
+              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-[13px] text-[var(--fg)]"
               rows="3"
             ></textarea>
           </label>
@@ -942,11 +942,11 @@
             placeholder="Search actors by name, ID, or tags"
           />
 
-          <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
+          <label class="text-[12px] font-medium text-[var(--fg-muted)]">
             Risk
             <select
               bind:value={addCardRisk}
-              class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-1.5 text-[13px] text-[var(--ui-text)]"
+              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-[13px] text-[var(--fg)]"
             >
               <option value="low">Low</option>
               <option value="medium">Medium</option>
@@ -955,11 +955,11 @@
             </select>
           </label>
 
-          <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
+          <label class="text-[12px] font-medium text-[var(--fg-muted)]">
             Resolution
             <select
               bind:value={addCardResolution}
-              class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-1.5 text-[13px] text-[var(--ui-text)]"
+              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-[13px] text-[var(--fg)]"
             >
               <option value="">Open</option>
               <option value="done">Done</option>
@@ -967,28 +967,28 @@
             </select>
           </label>
 
-          <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
+          <label class="text-[12px] font-medium text-[var(--fg-muted)]">
             Due date
             <input
               bind:value={addCardDueAt}
-              class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-1.5 text-[13px] text-[var(--ui-text)]"
+              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-[13px] text-[var(--fg)]"
               type="datetime-local"
             />
           </label>
 
           <label
-            class="text-[12px] font-medium text-[var(--ui-text-muted)] md:col-span-2"
+            class="text-[12px] font-medium text-[var(--fg-muted)] md:col-span-2"
           >
             Definition of done
             <textarea
               bind:value={addCardDefinitionOfDone}
-              class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-1.5 text-[13px] text-[var(--ui-text)]"
+              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-[13px] text-[var(--fg)]"
               rows="3"
             ></textarea>
           </label>
 
           <div class="md:col-span-2">
-            <p class="text-[12px] font-medium text-[var(--ui-text-muted)]">
+            <p class="text-[12px] font-medium text-[var(--fg-muted)]">
               Related refs
             </p>
             <GuidedTypedRefsInput
@@ -1004,7 +1004,7 @@
           </div>
 
           <div class="md:col-span-2">
-            <p class="text-[12px] font-medium text-[var(--ui-text-muted)]">
+            <p class="text-[12px] font-medium text-[var(--fg-muted)]">
               Resolution evidence
             </p>
             <GuidedTypedRefsInput
@@ -1022,7 +1022,7 @@
 
         <div class="flex flex-wrap gap-2">
           <button
-            class="rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+            class="rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
             disabled={addingCard}
             onclick={submitAddCard}
             type="button"
@@ -1030,7 +1030,7 @@
             {addingCard ? "Adding..." : "Add card"}
           </button>
           <button
-            class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] hover:text-[var(--ui-text)]"
+            class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
             onclick={() => {
               showAddCardForm = false;
               mutationError = "";
@@ -1055,28 +1055,28 @@
   <section class="mb-3">
     {#if boardIsEmpty}
       <div
-        class="rounded-md border border-dashed border-[var(--ui-border)] bg-[var(--ui-panel)] px-6 py-16 text-center"
+        class="rounded-md border border-dashed border-[var(--line)] bg-[var(--panel)] px-6 py-16 text-center"
       >
-        <p class="text-[13px] font-medium text-[var(--ui-text)]">
+        <p class="text-[13px] font-medium text-[var(--fg)]">
           No cards on this board yet
         </p>
-        <p class="mt-1 text-[12px] text-[var(--ui-text-muted)]">
+        <p class="mt-1 text-[12px] text-[var(--fg-muted)]">
           Cards appear here when topics are added to the board's columns.
         </p>
       </div>
     {:else}
       <div
-        class="mb-3 rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]"
+        class="mb-3 rounded-md border border-[var(--line)] bg-[var(--panel)]"
       >
         <button
-          class="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--ui-border-subtle)]"
+          class="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--line-subtle)]"
           onclick={() => {
             backlogOpen = !backlogOpen;
           }}
           type="button"
         >
           <svg
-            class="h-3.5 w-3.5 shrink-0 text-[var(--ui-text-muted)] transition-transform {backlogOpen
+            class="h-3.5 w-3.5 shrink-0 text-[var(--fg-muted)] transition-transform {backlogOpen
               ? 'rotate-90'
               : ''}"
             fill="none"
@@ -1084,18 +1084,18 @@
             stroke="currentColor"
             stroke-width="2"><path d="M9 5l7 7-7 7" /></svg
           >
-          <span class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+          <span class="text-[12px] font-medium text-[var(--fg-muted)]"
             >Backlog</span
           >
           <span
-            class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] text-[var(--ui-text-muted)]"
+            class="rounded bg-[var(--line)] px-1.5 py-0.5 text-[11px] text-[var(--fg-muted)]"
             >{backlogCards.length}</span
           >
         </button>
         {#if backlogOpen}
-          <div class="space-y-2 border-t border-[var(--ui-border)] px-3 py-2">
+          <div class="space-y-2 border-t border-[var(--line)] px-3 py-2">
             {#if backlogCards.length === 0}
-              <p class="text-[11px] text-[var(--ui-text-muted)]">No cards</p>
+              <p class="text-[11px] text-[var(--fg-muted)]">No cards</p>
             {:else}
               {#each backlogCards as cardItem}
                 {@render renderCard(cardItem)}
@@ -1110,14 +1110,14 @@
           {@const cards = cardsByColumn[column.key] ?? []}
           {@const isBlocked = column.key === "blocked"}
           <div
-            class="flex min-w-[260px] flex-1 flex-col rounded-md bg-[var(--ui-panel-muted)]"
+            class="flex min-w-[260px] flex-1 flex-col rounded-md bg-[var(--bg-soft)]"
           >
             <div class="flex items-center justify-between px-3 py-2.5">
               <h3
                 class="text-[11px] font-semibold uppercase tracking-wide {isBlocked &&
                 cards.length > 0
-                  ? 'text-amber-400'
-                  : 'text-[var(--ui-text-muted)]'}"
+                  ? 'text-warn-text'
+                  : 'text-[var(--fg-muted)]'}"
               >
                 {column.title ||
                   boardColumnTitle(column.key, board.column_schema)}
@@ -1125,8 +1125,8 @@
               <span
                 class="min-w-[1.25rem] rounded px-1.5 py-0.5 text-center text-[11px] {isBlocked &&
                 cards.length > 0
-                  ? 'bg-amber-500/15 text-amber-400'
-                  : 'bg-[var(--ui-border)] text-[var(--ui-text-muted)]'}"
+                  ? 'bg-warn-soft text-warn-text'
+                  : 'bg-[var(--line)] text-[var(--fg-muted)]'}"
               >
                 {cards.length}
               </span>
@@ -1137,7 +1137,7 @@
             >
               {#if cards.length === 0}
                 <div
-                  class="flex items-center justify-center rounded-md border border-dashed border-[var(--ui-border)] px-3 py-10 text-[11px] text-[var(--ui-text-muted)]"
+                  class="flex items-center justify-center rounded-md border border-dashed border-[var(--line)] px-3 py-10 text-[11px] text-[var(--fg-muted)]"
                 >
                   No cards
                 </div>
@@ -1152,17 +1152,17 @@
       </div>
 
       <div
-        class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]"
+        class="rounded-md border border-[var(--line)] bg-[var(--panel)]"
       >
         <button
-          class="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--ui-border-subtle)]"
+          class="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--line-subtle)]"
           onclick={() => {
             doneOpen = !doneOpen;
           }}
           type="button"
         >
           <svg
-            class="h-3.5 w-3.5 shrink-0 text-[var(--ui-text-muted)] transition-transform {doneOpen
+            class="h-3.5 w-3.5 shrink-0 text-[var(--fg-muted)] transition-transform {doneOpen
               ? 'rotate-90'
               : ''}"
             fill="none"
@@ -1170,18 +1170,18 @@
             stroke="currentColor"
             stroke-width="2"><path d="M9 5l7 7-7 7" /></svg
           >
-          <span class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+          <span class="text-[12px] font-medium text-[var(--fg-muted)]"
             >Done</span
           >
           <span
-            class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] text-[var(--ui-text-muted)]"
+            class="rounded bg-[var(--line)] px-1.5 py-0.5 text-[11px] text-[var(--fg-muted)]"
             >{doneCards.length}</span
           >
         </button>
         {#if doneOpen}
-          <div class="space-y-2 border-t border-[var(--ui-border)] px-3 py-2">
+          <div class="space-y-2 border-t border-[var(--line)] px-3 py-2">
             {#if doneCards.length === 0}
-              <p class="text-[11px] text-[var(--ui-text-muted)]">No cards</p>
+              <p class="text-[11px] text-[var(--fg-muted)]">No cards</p>
             {:else}
               {#each doneCards as cardItem}
                 {@render renderCard(cardItem)}
@@ -1195,29 +1195,29 @@
 
   <div class="grid gap-3 lg:grid-cols-3">
     <section
-      class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]"
+      class="rounded-md border border-[var(--line)] bg-[var(--panel)]"
     >
-      <div class="border-b border-[var(--ui-border)] px-4 py-2.5">
-        <h2 class="text-[13px] font-medium text-[var(--ui-text)]">
+      <div class="border-b border-[var(--line)] px-4 py-2.5">
+        <h2 class="text-[13px] font-medium text-[var(--fg)]">
           Workspace docs
         </h2>
       </div>
       <div class="px-4 py-3">
         {#if (workspace.documents?.items ?? []).length === 0}
-          <p class="text-[12px] text-[var(--ui-text-muted)]">
+          <p class="text-[12px] text-[var(--fg-muted)]">
             No linked doc lineages yet.
           </p>
         {:else}
           <div class="space-y-2">
             {#each workspace.documents.items.slice(0, BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT) as document}
               <a
-                class="block rounded border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-2 text-[12px] transition-colors hover:border-[var(--ui-border-strong)]"
+                class="block rounded border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-[12px] transition-colors hover:border-[var(--line-strong)]"
                 href={workspaceHref(`/docs/${encodeURIComponent(document.id)}`)}
               >
-                <div class="font-medium text-[var(--ui-text)]">
+                <div class="font-medium text-[var(--fg)]">
                   {document.title || document.id}
                 </div>
-                <div class="mt-1 text-[11px] text-[var(--ui-text-muted)]">
+                <div class="mt-1 text-[11px] text-[var(--fg-muted)]">
                   Head v{document.head_revision_number ?? "—"} · Updated {formatTimestamp(
                     document.updated_at,
                   ) || "—"}
@@ -1226,7 +1226,7 @@
             {/each}
           </div>
           {#if (workspace.documents?.items ?? []).length > BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT}
-            <p class="mt-2 text-[11px] text-[var(--ui-text-muted)]">
+            <p class="mt-2 text-[11px] text-[var(--fg-muted)]">
               Showing {BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT} of {workspace
                 .documents.items.length}
             </p>
@@ -1236,20 +1236,20 @@
     </section>
 
     <section
-      class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]"
+      class="rounded-md border border-[var(--line)] bg-[var(--panel)]"
     >
-      <div class="border-b border-[var(--ui-border)] px-4 py-2.5">
-        <h2 class="text-[13px] font-medium text-[var(--ui-text)]">
+      <div class="border-b border-[var(--line)] px-4 py-2.5">
+        <h2 class="text-[13px] font-medium text-[var(--fg)]">
           Review inbox
         </h2>
-        <p class="mt-1 text-[11px] text-[var(--ui-text-muted)]">
+        <p class="mt-1 text-[11px] text-[var(--fg-muted)]">
           Derived risk and decision signals for resources tied to this board
           (backing threads).
         </p>
       </div>
       <div class="px-4 py-3">
         {#if enrichedInboxItems.length === 0}
-          <p class="text-[12px] text-[var(--ui-text-muted)]">
+          <p class="text-[12px] text-[var(--fg-muted)]">
             No active derived inbox items.
           </p>
         {:else}
@@ -1258,17 +1258,17 @@
               {@const inboxResourceLine =
                 formatInboxItemBoardPanelResourceLine(item)}
               <div
-                class="rounded border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-2"
+                class="rounded border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2"
               >
-                <div class="text-[12px] font-medium text-[var(--ui-text)]">
+                <div class="text-[12px] font-medium text-[var(--fg)]">
                   {item.title || item.summary || item.id}
                 </div>
-                <div class="mt-1 text-[11px] text-[var(--ui-text-muted)]">
+                <div class="mt-1 text-[11px] text-[var(--fg-muted)]">
                   <span
                     class={item.urgency_level === "immediate"
-                      ? "text-red-400"
+                      ? "text-danger-text"
                       : item.urgency_level === "high"
-                        ? "text-amber-400"
+                        ? "text-warn-text"
                         : ""}>{item.urgency_label}</span
                   >
                   {#if inboxResourceLine}
@@ -1279,7 +1279,7 @@
             {/each}
           </div>
           {#if enrichedInboxItems.length > BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT}
-            <p class="mt-2 text-[11px] text-[var(--ui-text-muted)]">
+            <p class="mt-2 text-[11px] text-[var(--fg-muted)]">
               Showing {BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT} of {enrichedInboxItems.length}
             </p>
           {/if}
@@ -1290,12 +1290,12 @@
 
   {#if boardWarnings.length > 0}
     <section
-      class="mt-4 rounded-md border border-amber-500/20 bg-amber-500/10 px-4 py-3"
+      class="mt-4 rounded-md border border-warn/20 bg-warn-soft px-4 py-3"
     >
-      <h2 class="text-[13px] font-medium text-amber-400">Warnings</h2>
+      <h2 class="text-[13px] font-medium text-warn-text">Warnings</h2>
       <div class="mt-2 space-y-1.5">
         {#each boardWarnings as warning}
-          <div class="text-[12px] text-amber-400">
+          <div class="text-[12px] text-warn-text">
             {warning.message || "Workspace warning"}
             {#if warning.topic_id || warning.thread_id}
               {@const warnNav = warningInspectNav(warning)}
@@ -1305,7 +1305,7 @@
                     ? `topic:${warnNav.segment}`
                     : `thread:${warnNav.segment}`}
                 <span
-                  class="ml-1 inline [&_a]:font-medium [&_a]:text-amber-300 [&_a]:underline [&_a]:transition-colors [&_a:hover]:text-amber-200"
+                  class="ml-1 inline [&_a]:font-medium [&_a]:text-warn-text [&_a]:underline [&_a]:transition-colors [&_a:hover]:text-warn-text"
                 >
                   <RefLink refValue={warnRef} {boardId} humanize showRaw />
                 </span>

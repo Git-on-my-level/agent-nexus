@@ -5,10 +5,10 @@
 <div class="flex min-h-[60vh] items-center justify-center">
   <div class="max-w-md text-center">
     <div
-      class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-500/10"
+      class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-danger-soft"
     >
       <svg
-        class="h-6 w-6 text-red-400"
+        class="h-6 w-6 text-danger-text"
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
@@ -21,46 +21,46 @@
         />
       </svg>
     </div>
-    <h1 class="text-lg font-semibold text-[var(--ui-text)]">
+    <h1 class="text-lg font-semibold text-[var(--fg)]">
       Something went wrong
     </h1>
-    <p class="mt-2 text-[13px] text-[var(--ui-text-muted)]">
+    <p class="mt-2 text-[13px] text-[var(--fg-muted)]">
       {$page.error?.message ?? "An unexpected error occurred."}
     </p>
-    <p class="mt-3 text-[13px] text-[var(--ui-text-muted)]">
+    <p class="mt-3 text-[13px] text-[var(--fg-muted)]">
       The backend may be unavailable. Contact your administrator or check the
       service status.
     </p>
     <details
-      class="mt-6 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-4 text-left"
+      class="mt-6 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] p-4 text-left"
     >
       <summary
-        class="cursor-pointer text-[12px] font-medium text-[var(--ui-text-muted)]"
+        class="cursor-pointer text-[12px] font-medium text-[var(--fg-muted)]"
       >
         Technical troubleshooting
       </summary>
       <ol
-        class="mt-2 list-decimal space-y-1.5 pl-5 text-[13px] text-[var(--ui-text-muted)]"
+        class="mt-2 list-decimal space-y-1.5 pl-5 text-[13px] text-[var(--fg-muted)]"
       >
         <li>
           Start the backend: <code
-            class="rounded-md bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] font-medium"
+            class="rounded-md bg-[var(--line)] px-1.5 py-0.5 text-[11px] font-medium"
             >make serve</code
           >
           in
           <code
-            class="rounded-md bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] font-medium"
+            class="rounded-md bg-[var(--line)] px-1.5 py-0.5 text-[11px] font-medium"
             >agent-nexus-core</code
           >
         </li>
         <li>
           Set <code
-            class="rounded-md bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] font-medium"
+            class="rounded-md bg-[var(--line)] px-1.5 py-0.5 text-[11px] font-medium"
             >ANX_WORKSPACES='[&#123;"slug":"local","coreBaseUrl":"http://127.0.0.1:8000"&#125;]'</code
           >
           or the compatibility alias
           <code
-            class="rounded-md bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] font-medium"
+            class="rounded-md bg-[var(--line)] px-1.5 py-0.5 text-[11px] font-medium"
             >ANX_PROJECTS</code
           >
         </li>

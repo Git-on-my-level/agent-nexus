@@ -190,10 +190,10 @@
   }
 
   function statusColor(status) {
-    if (status === "active") return "text-emerald-400 bg-emerald-500/10";
-    if (status === "paused") return "text-amber-400 bg-amber-500/10";
+    if (status === "active") return "text-ok-text bg-ok-soft";
+    if (status === "paused") return "text-warn-text bg-warn-soft";
     if (status === "closed") return "text-slate-300 bg-slate-500/10";
-    return "text-[var(--ui-text-muted)] bg-[var(--ui-border)]";
+    return "text-[var(--fg-muted)] bg-[var(--line)]";
   }
 
   $effect(() => {
@@ -277,14 +277,14 @@
 
 <div class="mb-4 flex flex-wrap items-start justify-between gap-4">
   <div>
-    <h1 class="text-lg font-semibold text-[var(--ui-text)]">Boards</h1>
+    <h1 class="text-lg font-semibold text-[var(--fg)]">Boards</h1>
   </div>
 
   <div class="flex flex-wrap items-center gap-3">
     <button
       class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12px] font-medium transition-colors {hasActiveFilters
-        ? 'border-[var(--ui-accent)]/40 bg-[var(--ui-accent)]/10 text-[var(--ui-accent)] hover:bg-[var(--ui-accent)]/15'
-        : 'border-[var(--ui-border)] bg-[var(--ui-bg-soft)] text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]'}"
+        ? 'border-[var(--accent)]/40 bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/15'
+        : 'border-[var(--line)] bg-[var(--bg-soft)] text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]'}"
       onclick={() => {
         if (!filtersOpen) {
           boardFiltersDraft = { ...boardFiltersApplied };
@@ -310,7 +310,7 @@
       {hasActiveFilters ? "Filtered" : "Filters"}
     </button>
     <button
-      class="rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500"
+      class="rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-accent-hover"
       onclick={() => {
         createError = "";
         showCreateForm = !showCreateForm;
@@ -327,10 +327,10 @@
     {#snippet children()}
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <label class="text-[12px]">
-          <span class="font-medium text-[var(--ui-text-muted)]">Status</span>
+          <span class="font-medium text-[var(--fg-muted)]">Status</span>
           <select
             bind:value={boardFiltersDraft.status}
-            class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
+            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--panel)]"
           >
             <option value="">All</option>
             {#each Object.entries(BOARD_STATUS_LABELS) as [value, label]}
@@ -339,42 +339,42 @@
           </select>
         </label>
         <label class="text-[12px] sm:col-span-2 lg:col-span-2">
-          <span class="font-medium text-[var(--ui-text-muted)]">Search</span>
+          <span class="font-medium text-[var(--fg-muted)]">Search</span>
           <input
             bind:value={boardFiltersDraft.q}
-            class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
+            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--panel)]"
             placeholder="Title or board id"
             type="text"
           />
         </label>
         <label class="text-[12px] sm:col-span-2 lg:col-span-1">
-          <span class="font-medium text-[var(--ui-text-muted)]"
+          <span class="font-medium text-[var(--fg-muted)]"
             >Labels (comma-separated)</span
           >
           <input
             bind:value={boardFiltersDraft.labels}
-            class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
+            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--panel)]"
             placeholder="product, launch"
             type="text"
           />
         </label>
         <label class="text-[12px] sm:col-span-2 lg:col-span-2">
-          <span class="font-medium text-[var(--ui-text-muted)]"
+          <span class="font-medium text-[var(--fg-muted)]"
             >Owners (comma-separated ids)</span
           >
           <input
             bind:value={boardFiltersDraft.owners}
-            class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
+            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--panel)]"
             placeholder="actor-ops-ai"
             type="text"
           />
         </label>
         <label
-          class="flex items-end gap-1.5 pb-0.5 text-[12px] text-[var(--ui-text-muted)] sm:col-span-2 lg:col-span-3"
+          class="flex items-end gap-1.5 pb-0.5 text-[12px] text-[var(--fg-muted)] sm:col-span-2 lg:col-span-3"
         >
           <input
             bind:checked={boardFiltersDraft.showArchived}
-            class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--ui-border)] bg-[var(--ui-bg)] text-[var(--ui-accent-strong)] focus:ring-2 focus:ring-[var(--ui-accent)] focus:ring-offset-0"
+            class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--line)] bg-[var(--bg)] text-[var(--accent-hover)] focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-0"
             type="checkbox"
           />
           Show archived
@@ -382,14 +382,14 @@
       </div>
       <div class="mt-3 flex flex-wrap gap-1.5">
         <button
-          class="cursor-pointer rounded-md bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text)] hover:bg-[var(--ui-border)]"
+          class="cursor-pointer rounded-md bg-[var(--panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--fg)] hover:bg-[var(--line)]"
           onclick={applyBoardFilters}
           type="button"
         >
           Apply
         </button>
         <button
-          class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]"
+          class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]"
           onclick={resetBoardFilters}
           type="button"
         >
@@ -401,17 +401,17 @@
 {/if}
 
 {#if error}
-  <div class="mb-4 rounded-md bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
+  <div class="mb-4 rounded-md bg-danger-soft px-3 py-2 text-[13px] text-danger-text">
     {error}
   </div>
 {/if}
 
 {#if showCreateForm}
   <section
-    class="mb-5 rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]"
+    class="mb-5 rounded-md border border-[var(--line)] bg-[var(--panel)]"
   >
-    <div class="border-b border-[var(--ui-border)] px-4 py-2.5">
-      <h2 class="text-[13px] font-medium text-[var(--ui-text)]">
+    <div class="border-b border-[var(--line)] px-4 py-2.5">
+      <h2 class="text-[13px] font-medium text-[var(--fg)]">
         Create board
       </h2>
     </div>
@@ -419,28 +419,28 @@
     <div class="space-y-3 px-4 py-3">
       {#if createError}
         <div
-          class="rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
+          class="rounded-md bg-danger-soft px-3 py-2 text-[12px] text-danger-text"
         >
           {createError}
         </div>
       {/if}
 
       <div class="grid gap-3 md:grid-cols-2">
-        <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
+        <label class="text-[12px] font-medium text-[var(--fg-muted)]">
           Board title
           <input
             bind:value={createTitle}
-            class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-2 text-[13px] text-[var(--ui-text)]"
+            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-[13px] text-[var(--fg)]"
             placeholder="Q3 launch board"
             type="text"
           />
         </label>
 
-        <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
+        <label class="text-[12px] font-medium text-[var(--fg-muted)]">
           Status
           <select
             bind:value={createStatus}
-            class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-2 text-[13px] text-[var(--ui-text)]"
+            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-[13px] text-[var(--fg)]"
           >
             {#each Object.entries(BOARD_STATUS_LABELS) as [value, label]}
               <option {value}>{label}</option>
@@ -472,11 +472,11 @@
       </div>
 
       <div class="grid gap-3 md:grid-cols-2">
-        <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
+        <label class="text-[12px] font-medium text-[var(--fg-muted)]">
           Labels
           <textarea
             bind:value={createLabels}
-            class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-2 text-[13px] text-[var(--ui-text)]"
+            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-[13px] text-[var(--fg)]"
             placeholder="product, launch"
             rows="3"
           ></textarea>
@@ -495,7 +495,7 @@
       </div>
 
       <div>
-        <p class="text-[12px] font-medium text-[var(--ui-text-muted)]">
+        <p class="text-[12px] font-medium text-[var(--fg-muted)]">
           Pinned refs
         </p>
         <GuidedTypedRefsInput
@@ -511,7 +511,7 @@
 
       <div class="flex flex-wrap gap-2">
         <button
-          class="rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+          class="rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
           disabled={creating}
           onclick={submitCreateBoard}
           type="button"
@@ -519,7 +519,7 @@
           {creating ? "Creating..." : "Create board"}
         </button>
         <button
-          class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] hover:text-[var(--ui-text)]"
+          class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
           onclick={() => {
             showCreateForm = false;
             createError = "";
@@ -535,7 +535,7 @@
 
 {#if loading}
   <div
-    class="mt-12 flex items-center justify-center gap-2 text-[13px] text-[var(--ui-text-muted)]"
+    class="mt-12 flex items-center justify-center gap-2 text-[13px] text-[var(--fg-muted)]"
   >
     <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
       <circle
@@ -556,17 +556,17 @@
   </div>
 {:else if boards.length === 0}
   <div class="mt-8 text-center">
-    <p class="text-[13px] font-medium text-[var(--ui-text-muted)]">
+    <p class="text-[13px] font-medium text-[var(--fg-muted)]">
       No boards yet
     </p>
-    <p class="mt-1 text-[13px] text-[var(--ui-text-muted)]">
+    <p class="mt-1 text-[13px] text-[var(--fg-muted)]">
       No boards yet. Create one to give operators a trustworthy visual map of
       active work.
     </p>
   </div>
 {:else}
   <div
-    class="space-y-px overflow-hidden rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]"
+    class="space-y-px overflow-hidden rounded-md border border-[var(--line)] bg-[var(--panel)]"
   >
     {#each boards as item, i}
       {@const board = item.board}
@@ -576,11 +576,11 @@
       {@const rowNav = boardRowInspectNav(board)}
       <div
         class="flex items-stretch {i > 0
-          ? 'border-t border-[var(--ui-border)]'
+          ? 'border-t border-[var(--line)]'
           : ''}"
       >
         <div
-          class="group relative min-w-0 flex-1 px-4 py-3 text-left transition-colors hover:bg-[var(--ui-border-subtle)]"
+          class="group relative min-w-0 flex-1 px-4 py-3 text-left transition-colors hover:bg-[var(--line-subtle)]"
         >
           <a
             aria-label={`Open board ${board.title || board.id}`}
@@ -603,7 +603,7 @@
                 {/if}
                 {#if isBoardArchived(board)}
                   <span
-                    class="rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-medium text-amber-400"
+                    class="rounded bg-warn-soft px-1.5 py-0.5 text-[11px] font-medium text-warn-text"
                     >Archived</span
                   >
                 {/if}
@@ -618,14 +618,14 @@
                 {/if}
                 {#if summary?.has_document_ref}
                   <span
-                    class="rounded bg-indigo-500/10 px-1.5 py-0.5 text-[10px] text-indigo-300"
+                    class="rounded bg-accent-soft px-1.5 py-0.5 text-[10px] text-accent-text"
                   >
                     Has doc
                   </span>
                 {/if}
                 {#each (board.labels ?? []).slice(0, 3) as label}
                   <span
-                    class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[10px] text-[var(--ui-text-muted)]"
+                    class="rounded bg-[var(--line)] px-1.5 py-0.5 text-[10px] text-[var(--fg-muted)]"
                   >
                     {label}
                   </span>
@@ -633,13 +633,13 @@
               </div>
 
               <span
-                class="mt-1 block truncate text-[13px] font-medium text-[var(--ui-text)] group-hover:text-indigo-300"
+                class="mt-1 block truncate text-[13px] font-medium text-[var(--fg)] group-hover:text-accent-text"
               >
                 {board.title || board.id}
               </span>
 
               <div
-                class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[var(--ui-text-muted)]"
+                class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[var(--fg-muted)]"
               >
                 {#if board.owners?.length > 0}
                   <span>
@@ -650,13 +650,13 @@
                 {/if}
                 {#if rowNav}
                   <span>
-                    <span class="text-[var(--ui-text-muted)]"
+                    <span class="text-[var(--fg-muted)]"
                       >{rowNav.kind === "topic"
                         ? "Topic"
                         : "Backing thread"}:</span
                     >
                     <a
-                      class="pointer-events-auto relative z-20 text-indigo-400 transition-colors hover:text-indigo-300"
+                      class="pointer-events-auto relative z-20 text-accent-text transition-colors hover:text-accent-text"
                       href={workspaceHref(
                         rowNav.kind === "topic"
                           ? `/topics/${encodeURIComponent(rowNav.segment)}`
@@ -668,8 +668,8 @@
                   </span>
                 {:else}
                   <span>
-                    <span class="text-[var(--ui-text-muted)]">Context:</span>
-                    <span class="text-[var(--ui-text-muted)]">—</span>
+                    <span class="text-[var(--fg-muted)]">Context:</span>
+                    <span class="text-[var(--fg-muted)]">—</span>
                   </span>
                 {/if}
                 <span>
@@ -694,14 +694,14 @@
                     {@const count = counts[column.key]}
                     <span
                       class={column.key === "blocked" && count > 0
-                        ? "text-amber-400"
-                        : "text-[var(--ui-text-muted)]"}
+                        ? "text-warn-text"
+                        : "text-[var(--fg-muted)]"}
                     >
                       <span class="font-medium uppercase">{column.title}</span>
                       {count}
                     </span>
                     {#if ci < CANONICAL_BOARD_COLUMNS.length - 1}
-                      <span class="text-[var(--ui-border)]">·</span>
+                      <span class="text-[var(--line)]">·</span>
                     {/if}
                   {/each}
                 </div>

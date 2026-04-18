@@ -183,9 +183,9 @@
 </svelte:head>
 
 <div class="mx-auto max-w-md py-8">
-  <div class="rounded-md border border-gray-200 bg-gray-100 px-6 py-6">
-    <h1 class="text-lg font-semibold text-gray-900">Welcome back</h1>
-    <p class="mt-1.5 text-[12px] leading-relaxed text-gray-500">
+  <div class="rounded-md border border-line bg-bg-soft px-6 py-6">
+    <h1 class="text-lg font-semibold text-fg">Welcome back</h1>
+    <p class="mt-1.5 text-[12px] leading-relaxed text-fg-subtle">
       Enter the email you signed up with. Your browser will prompt you for the
       passkey on this device.
     </p>
@@ -197,7 +197,7 @@
         submit();
       }}
     >
-      <label class="block text-[12px] font-medium text-gray-600">
+      <label class="block text-[12px] font-medium text-fg-muted">
         Email
         <input
           type="email"
@@ -206,14 +206,14 @@
           disabled={busy}
           required
           placeholder="you@company.com"
-          class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] text-gray-900 placeholder:text-[var(--ui-text-subtle)]"
+          class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-1.5 text-[13px] text-fg placeholder:text-[var(--fg-subtle)]"
         />
       </label>
 
       {#if message}
         <p
           role="alert"
-          class="rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
+          class="rounded-md bg-danger-soft px-3 py-2 text-[12px] text-danger-text"
         >
           {message}
         </p>
@@ -222,30 +222,30 @@
       <button
         type="submit"
         disabled={busy}
-        class="w-full rounded-md bg-indigo-600 px-3 py-2 text-[13px] font-medium text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+        class="w-full rounded-md bg-accent px-3 py-2 text-[13px] font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
       >
         {busy ? "Signing in…" : "Continue with passkey"}
       </button>
     </form>
 
     {#if quickAuthOptions?.enabled}
-      <div class="mt-5 border-t border-gray-200 pt-3">
+      <div class="mt-5 border-t border-line pt-3">
         <button
           type="button"
-          class="text-[11px] font-medium text-gray-500 hover:text-gray-800"
+          class="text-[11px] font-medium text-fg-subtle hover:text-fg"
           onclick={() => (showDevShortcut = !showDevShortcut)}
         >
           {showDevShortcut ? "Hide" : "Show"} local dev shortcut
         </button>
         {#if showDevShortcut}
-          <p class="mt-2 text-[11px] text-gray-500">
+          <p class="mt-2 text-[11px] text-fg-subtle">
             Skips the passkey for local resets. Disabled in production.
           </p>
           <button
             type="button"
             onclick={quickSignIn}
             disabled={busy || quickAuthBusy}
-            class="mt-2 w-full rounded-md border border-gray-200 bg-gray-100 px-3 py-1.5 text-[12px] font-medium text-gray-600 hover:bg-gray-200 disabled:opacity-60"
+            class="mt-2 w-full rounded-md border border-line bg-bg-soft px-3 py-1.5 text-[12px] font-medium text-fg-muted hover:bg-panel-hover disabled:opacity-60"
           >
             {quickAuthBusy ? "Signing in…" : quickAuthLabel}
           </button>
@@ -254,10 +254,10 @@
     {/if}
   </div>
 
-  <p class="mt-4 text-center text-[12px] text-gray-500">
+  <p class="mt-4 text-center text-[12px] text-fg-subtle">
     New to ANX?
     <a
-      class="text-indigo-400 underline underline-offset-2 hover:text-indigo-300"
+      class="text-accent-text underline underline-offset-2 hover:text-accent-text"
       href={`/hosted/signup${continuationQuery}`}>Create an account</a
     >
   </p>

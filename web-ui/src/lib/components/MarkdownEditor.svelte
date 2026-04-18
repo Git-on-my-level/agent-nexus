@@ -314,19 +314,19 @@
   }
 
   .md-editor-chrome {
-    border: 1px solid var(--ui-border);
+    border: 1px solid var(--line);
     border-radius: 0.375rem;
-    background: var(--ui-bg);
+    background: var(--bg);
     overflow: hidden;
   }
 
   .md-editor-chrome:focus-within {
-    border-color: var(--ui-accent);
+    border-color: var(--accent);
     box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.2);
   }
 
   .md-editor--readonly .md-editor-chrome:focus-within {
-    border-color: var(--ui-border);
+    border-color: var(--line);
     box-shadow: none;
   }
 
@@ -335,8 +335,8 @@
     align-items: center;
     justify-content: space-between;
     gap: 0.5rem;
-    border-bottom: 1px solid var(--ui-border);
-    background: var(--ui-panel);
+    border-bottom: 1px solid var(--line);
+    background: var(--panel);
     padding: 0 0.5rem;
     min-height: 2.25rem;
     flex-wrap: wrap;
@@ -353,7 +353,7 @@
     padding: 0.375rem 0.625rem;
     font-size: 12px;
     font-weight: 500;
-    color: var(--ui-text-muted);
+    color: var(--fg-muted);
     cursor: pointer;
     border-bottom: 2px solid transparent;
     transition:
@@ -362,12 +362,12 @@
   }
 
   .md-editor-tab:hover {
-    color: var(--ui-text);
+    color: var(--fg);
   }
 
   .md-editor-tab--active {
-    color: var(--ui-text);
-    border-bottom-color: var(--ui-accent);
+    color: var(--fg);
+    border-bottom-color: var(--accent);
   }
 
   .md-editor-actions {
@@ -381,7 +381,7 @@
   .md-editor-sep {
     width: 1px;
     height: 1rem;
-    background: var(--ui-border-strong);
+    background: var(--line-strong);
     margin: 0 0.25rem;
   }
 
@@ -392,7 +392,7 @@
     font-size: 11px;
     font-family:
       ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    color: var(--ui-text-muted);
+    color: var(--fg-muted);
     border-radius: 0.25rem;
     cursor: pointer;
     line-height: 1.4;
@@ -403,8 +403,8 @@
   }
 
   .md-editor-btn:hover {
-    background: var(--ui-border);
-    color: var(--ui-text);
+    background: var(--line);
+    color: var(--fg);
   }
 
   .md-editor-btn--bold {
@@ -427,8 +427,8 @@
     width: 100%;
     min-height: 8rem;
     border: none;
-    background: var(--ui-bg);
-    color: var(--ui-text);
+    background: var(--bg);
+    color: var(--fg);
     padding: 0.625rem 0.75rem;
     font-size: 13px;
     font-family:
@@ -440,7 +440,7 @@
   }
 
   .md-editor-textarea::placeholder {
-    color: var(--ui-text-subtle);
+    color: var(--fg-subtle);
   }
 
   .md-editor-preview {
@@ -452,7 +452,7 @@
   }
 
   .md-editor-empty {
-    color: var(--ui-text-subtle);
+    color: var(--fg-subtle);
     font-style: italic;
     margin: 0;
   }

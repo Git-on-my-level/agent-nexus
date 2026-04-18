@@ -132,10 +132,10 @@
     position: relative;
     width: 380px;
     max-width: calc(100vw - 2rem);
-    background: var(--ui-panel);
-    border: 1px solid var(--ui-border);
-    border-radius: var(--ui-radius-lg);
-    box-shadow: var(--ui-shadow-elevated);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-modal);
     padding: 20px 24px 16px;
   }
 
@@ -143,14 +143,14 @@
     margin: 0;
     font-size: 14px;
     font-weight: 600;
-    color: var(--ui-text);
+    color: var(--fg);
     line-height: 1.3;
   }
 
   .confirm-message {
     margin: 8px 0 0;
     font-size: 13px;
-    color: var(--ui-text-muted);
+    color: var(--fg-muted);
     line-height: 1.5;
   }
 
@@ -162,30 +162,30 @@
   .confirm-typed-label {
     display: block;
     font-size: 12px;
-    color: var(--ui-text-muted);
+    color: var(--fg-muted);
     margin-bottom: 6px;
   }
 
   .confirm-typed-phrase {
     font-weight: 600;
-    color: var(--ui-text);
+    color: var(--fg);
   }
 
   .confirm-typed-input {
     width: 100%;
     padding: 6px 10px;
     font-size: 13px;
-    font-family: var(--ui-font-sans);
-    color: var(--ui-text);
-    background: var(--ui-bg);
-    border: 1px solid var(--ui-border);
-    border-radius: var(--ui-radius-md);
+    font-family: var(--font-sans);
+    color: var(--fg);
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
     outline: none;
     transition: border-color 80ms ease;
   }
 
   .confirm-typed-input:focus {
-    border-color: var(--ui-accent);
+    border-color: var(--accent);
   }
 
   .confirm-actions {
@@ -199,8 +199,8 @@
     padding: 6px 14px;
     font-size: 12px;
     font-weight: 500;
-    font-family: var(--ui-font-sans);
-    border-radius: var(--ui-radius-md);
+    font-family: var(--font-sans);
+    border-radius: var(--radius-md);
     cursor: pointer;
     border: none;
     transition: background 80ms ease;
@@ -212,13 +212,13 @@
   }
 
   .confirm-btn--cancel {
-    background: var(--ui-bg-soft);
-    color: var(--ui-text-muted);
-    border: 1px solid var(--ui-border);
+    background: var(--bg-soft);
+    color: var(--fg-muted);
+    border: 1px solid var(--line);
   }
 
   .confirm-btn--cancel:hover:not(:disabled) {
-    background: var(--ui-border);
+    background: var(--line);
   }
 
   .confirm-btn--danger {

@@ -20,7 +20,7 @@
 
 <button
   type="button"
-  class="cursor-pointer inline-flex items-center gap-1 rounded {padding} text-[11px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border)] hover:text-[var(--ui-text)]"
+  class="cursor-pointer inline-flex items-center gap-1 rounded {padding} text-[11px] font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line)] hover:text-[var(--fg)]"
   onclick={onCopy}
   title={copied ? "Copied" : label}
   aria-label={label}

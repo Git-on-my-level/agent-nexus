@@ -355,12 +355,12 @@
       <div class="flex flex-wrap items-center gap-3">
         {#if archivedMessageCount > 0}
           <label
-            class="flex items-center gap-1.5 text-[11px] text-[var(--ui-text-muted)]"
+            class="flex items-center gap-1.5 text-[11px] text-[var(--fg-muted)]"
           >
             <input
               type="checkbox"
               bind:checked={showArchived}
-              class="accent-[var(--ui-accent)]"
+              class="accent-[var(--accent)]"
             />
             Show archived ({archivedMessageCount})
           </label>
@@ -368,33 +368,33 @@
       </div>
       <div class="min-h-[1rem] text-right" aria-live="polite">
         {#if showSyncStatus}
-          <p class="text-[11px] text-[var(--ui-text-muted)]">Syncing…</p>
+          <p class="text-[11px] text-[var(--fg-muted)]">Syncing…</p>
         {/if}
       </div>
     </div>
   {/if}
   {#if timelineError && !hasAnyNonTrashedMessage}
-    <p class="rounded bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
+    <p class="rounded bg-danger-soft px-3 py-2 text-[13px] text-danger-text">
       {timelineError}
     </p>
   {:else if timelineLoading && !hasAnyNonTrashedMessage}
-    <p class="text-[13px] text-[var(--ui-text-muted)]">Loading messages...</p>
+    <p class="text-[13px] text-[var(--fg-muted)]">Loading messages...</p>
   {:else if !hasAnyNonTrashedMessage}
-    <p class="py-6 text-center text-[13px] text-[var(--ui-text-muted)]">
+    <p class="py-6 text-center text-[13px] text-[var(--fg-muted)]">
       No messages yet. Post a message below to start the conversation.
     </p>
   {:else if !hasMessages}
-    <p class="text-[13px] text-[var(--ui-text-muted)]">
+    <p class="text-[13px] text-[var(--fg-muted)]">
       No messages in view. Turn on Show archived to see archived messages.
     </p>
   {:else}
     {#if lifecycleError}
-      <p class="mb-2 rounded bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
+      <p class="mb-2 rounded bg-danger-soft px-3 py-2 text-[13px] text-danger-text">
         {lifecycleError}
       </p>
     {/if}
     {#if timelineError}
-      <p class="mb-2 rounded bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
+      <p class="mb-2 rounded bg-danger-soft px-3 py-2 text-[13px] text-danger-text">
         {timelineError}
       </p>
     {/if}
@@ -416,14 +416,14 @@
 </div>
 
 <form
-  class="mt-4 rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] p-3"
+  class="mt-4 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3"
   onsubmit={(e) => {
     e.preventDefault();
     void handlePostMessage();
   }}
 >
   {#if postMessageError}
-    <p class="mb-2 rounded bg-red-500/10 px-3 py-1.5 text-[12px] text-red-400">
+    <p class="mb-2 rounded bg-danger-soft px-3 py-1.5 text-[12px] text-danger-text">
       {postMessageError}
     </p>
   {/if}
@@ -432,7 +432,7 @@
       bind:this={textareaRef}
       bind:value={messageText}
       aria-label="Message"
-      class="w-full min-h-[4.25rem] resize-y rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-2 text-[13px] text-[var(--ui-text)]"
+      class="w-full min-h-[4.25rem] resize-y rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-[13px] text-[var(--fg)]"
       id="message-text"
       oninput={updateMentionFromTextarea}
       onclick={updateMentionFromTextarea}
@@ -443,38 +443,38 @@
     ></textarea>
     {#if mentionOpen}
       <div
-        class="absolute bottom-full left-0 right-0 z-20 mb-1 max-h-48 overflow-auto rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] py-1"
+        class="absolute bottom-full left-0 right-0 z-20 mb-1 max-h-48 overflow-auto rounded-md border border-[var(--line)] bg-[var(--panel)] py-1"
         id="message-mention-list"
         role="listbox"
         aria-label="Agent handles"
       >
         {#if mentionLoading}
-          <p class="px-3 py-2 text-[12px] text-[var(--ui-text-muted)]">
+          <p class="px-3 py-2 text-[12px] text-[var(--fg-muted)]">
             Loading handles…
           </p>
         {:else if mentionCandidates.length === 0}
           {#if mentionSignedIn}
-            <p class="px-3 py-2 text-[12px] text-[var(--ui-text-muted)]">
+            <p class="px-3 py-2 text-[12px] text-[var(--fg-muted)]">
               No registered agents are taggable in this workspace. See Access to
               check registration and presence.
             </p>
           {:else}
-            <p class="px-3 py-2 text-[12px] text-[var(--ui-text-muted)]">
+            <p class="px-3 py-2 text-[12px] text-[var(--fg-muted)]">
               No agent handles in this workspace. Sign in or open Access to
               manage agents.
             </p>
           {/if}
         {:else if filteredMentions.length === 0}
-          <p class="px-3 py-2 text-[12px] text-[var(--ui-text-muted)]">
+          <p class="px-3 py-2 text-[12px] text-[var(--fg-muted)]">
             No matching agents.
           </p>
         {:else}
           {#each filteredMentions as row, i (row.handle)}
             <button
               type="button"
-              class="flex w-full cursor-pointer items-baseline gap-2 px-3 py-1.5 text-left text-[12px] hover:bg-[var(--ui-panel-muted)] {i ===
+              class="flex w-full cursor-pointer items-baseline gap-2 px-3 py-1.5 text-left text-[12px] hover:bg-[var(--bg-soft)] {i ===
               mentionHighlight
-                ? 'bg-[var(--ui-panel-muted)]'
+                ? 'bg-[var(--bg-soft)]'
                 : ''}"
               aria-selected={i === mentionHighlight}
               role="option"
@@ -483,10 +483,10 @@
                 void insertMention(row.handle);
               }}
             >
-              <span class="font-medium text-[var(--ui-accent)]"
+              <span class="font-medium text-[var(--accent)]"
                 >@{row.handle}</span
               >
-              <span class="truncate text-[var(--ui-text-muted)]"
+              <span class="truncate text-[var(--fg-muted)]"
                 >{row.displayLabel}</span
               >
               <span
@@ -505,12 +505,12 @@
     class="mt-1.5 flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
   >
     <p
-      class="text-[11px] leading-snug text-[var(--ui-text-muted)] sm:min-w-0 sm:flex-1"
+      class="text-[11px] leading-snug text-[var(--fg-muted)] sm:min-w-0 sm:flex-1"
     >
-      Mention <code class="text-[var(--ui-text)]">@handle</code> to wake a
+      Mention <code class="text-[var(--fg)]">@handle</code> to wake a
       registered agent in this workspace. See
       <a
-        class="text-indigo-400 hover:text-indigo-300"
+        class="text-accent-text hover:text-accent-text"
         href={workspacePath(workspaceSlug, "/access")}>Access</a
       >
       for agent presence and registration status.
@@ -520,14 +520,14 @@
     >
       {#if replyToEventId}
         <span
-          class="max-w-[14rem] truncate text-[11px] text-[var(--ui-text-muted)]"
+          class="max-w-[14rem] truncate text-[11px] text-[var(--fg-muted)]"
         >
           Replying to: {replyTargetMessage?.messageText
             ? replyTargetMessage.messageText.slice(0, 80)
             : "message"}
         </span>
         <button
-          class="cursor-pointer shrink-0 text-[11px] text-indigo-400 hover:text-indigo-300"
+          class="cursor-pointer shrink-0 text-[11px] text-accent-text hover:text-accent-text"
           onclick={clearReplyTarget}
           type="button"
         >
@@ -535,7 +535,7 @@
         </button>
       {/if}
       <button
-        class="cursor-pointer rounded bg-indigo-600 px-3 py-1 text-[12px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+        class="cursor-pointer rounded bg-accent px-3 py-1 text-[12px] font-medium text-white hover:bg-accent-hover disabled:opacity-50"
         disabled={!canPost}
         type="submit"
       >

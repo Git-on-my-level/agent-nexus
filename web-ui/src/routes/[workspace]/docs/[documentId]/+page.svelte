@@ -368,22 +368,22 @@
 </script>
 
 <nav
-  class="mb-3 flex items-center gap-1.5 text-[12px] text-[var(--ui-text-muted)]"
+  class="mb-3 flex items-center gap-1.5 text-[12px] text-[var(--fg-muted)]"
   aria-label="Breadcrumb"
 >
   <a
-    class="transition-colors hover:text-[var(--ui-text)]"
+    class="transition-colors hover:text-[var(--fg)]"
     href={workspaceHref("/docs")}>Docs</a
   >
-  <span class="text-[var(--ui-text-subtle)]">/</span>
-  <span class="truncate text-[var(--ui-text-muted)]"
+  <span class="text-[var(--fg-subtle)]">/</span>
+  <span class="truncate text-[var(--fg-muted)]"
     >{document?.title || documentId}</span
   >
 </nav>
 
 {#if loading}
   <div
-    class="mt-8 flex items-center justify-center gap-2 text-[13px] text-[var(--ui-text-muted)]"
+    class="mt-8 flex items-center justify-center gap-2 text-[13px] text-[var(--fg-muted)]"
   >
     <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
       <circle
@@ -403,13 +403,13 @@
     Loading...
   </div>
 {:else if loadError}
-  <div class="rounded-md bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
+  <div class="rounded-md bg-danger-soft px-3 py-2 text-[13px] text-danger-text">
     {loadError}
   </div>
 {:else if document}
   {#if document.trashed_at}
     <div
-      class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[13px] text-red-400"
+      class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-[13px] text-danger-text"
     >
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2 font-semibold">
@@ -419,7 +419,7 @@
         {#if document.trash_reason}
           <p class="mt-2">Reason: {document.trash_reason}</p>
         {/if}
-        <p class="mt-1 text-[11px] text-red-400/80">
+        <p class="mt-1 text-[11px] text-danger-text/80">
           Trashed {#if document.trashed_by}by {actorName(
               document.trashed_by,
             )}{/if}
@@ -429,7 +429,7 @@
         </p>
       </div>
       <button
-        class="shrink-0 cursor-pointer rounded-md border border-red-500/40 bg-red-500/15 px-2 py-1 text-[12px] font-medium text-red-400 hover:bg-red-500/25 disabled:opacity-50"
+        class="shrink-0 cursor-pointer rounded-md border border-danger/40 bg-danger-soft px-2 py-1 text-[12px] font-medium text-danger-text hover:bg-danger/25 disabled:opacity-50"
         disabled={docLifecycleBusy}
         onclick={handleRestoreDocument}
         type="button"
@@ -439,7 +439,7 @@
     </div>
   {:else if document.archived_at}
     <div
-      class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[13px] text-amber-400"
+      class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-[13px] text-warn-text"
     >
       <p class="min-w-0 flex-1">
         This document was archived on {formatTimestamp(document.archived_at) ||
@@ -447,7 +447,7 @@
           by {actorName(document.archived_by)}{/if}.
       </p>
       <button
-        class="shrink-0 cursor-pointer rounded-md border border-amber-500/40 bg-amber-500/15 px-2 py-1 text-[12px] font-medium text-amber-400 hover:bg-amber-500/25 disabled:opacity-50"
+        class="shrink-0 cursor-pointer rounded-md border border-warn/40 bg-warn-soft px-2 py-1 text-[12px] font-medium text-warn-text hover:bg-warn/25 disabled:opacity-50"
         disabled={docLifecycleBusy}
         onclick={handleUnarchiveDocument}
         type="button"
@@ -461,9 +461,9 @@
     <div class="min-w-0 flex-1">
       <div class="flex items-start justify-between gap-3">
         <div class="min-w-0 flex-1">
-          <h1 class="text-lg font-semibold text-[var(--ui-text)]">
+          <h1 class="text-lg font-semibold text-[var(--fg)]">
             {document.title || ""}{#if !document.title}<span
-                class="font-mono text-[var(--ui-text-muted)]"
+                class="font-mono text-[var(--fg-muted)]"
                 >{document.id}</span
               >{/if}
           </h1>
@@ -472,10 +472,10 @@
               <span
                 class="rounded px-1.5 py-0.5 font-medium {document.state ===
                 'active'
-                  ? 'text-emerald-400 bg-emerald-500/10'
+                  ? 'text-ok-text bg-ok-soft'
                   : document.state === 'trashed'
-                    ? 'text-red-400 bg-red-500/10'
-                    : 'text-amber-400 bg-amber-500/10'}"
+                    ? 'text-danger-text bg-danger-soft'
+                    : 'text-warn-text bg-warn-soft'}"
                 >{{
                   active: "Active",
                   archived: "Archived",
@@ -485,28 +485,28 @@
             {/if}
             {#each document.labels ?? [] as label}
               <span
-                class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[10px] text-[var(--ui-text-muted)]"
+                class="rounded bg-[var(--line)] px-1.5 py-0.5 text-[10px] text-[var(--fg-muted)]"
                 >{label}</span
               >
             {/each}
-            <span class="text-[var(--ui-text-subtle)]">·</span>
-            <span class="text-[var(--ui-text-muted)]"
+            <span class="text-[var(--fg-subtle)]">·</span>
+            <span class="text-[var(--fg-muted)]"
               >v{displayedRevision?.revision_number ?? "\u2014"}</span
             >
-            <span class="text-[var(--ui-text-subtle)]">·</span>
-            <span class="text-[var(--ui-text-muted)]"
+            <span class="text-[var(--fg-subtle)]">·</span>
+            <span class="text-[var(--fg-muted)]"
               >{formatTimestamp(displayedRevision?.created_at) || "—"}</span
             >
-            <span class="text-[var(--ui-text-subtle)]">·</span>
-            <span class="text-[var(--ui-text-muted)]"
+            <span class="text-[var(--fg-subtle)]">·</span>
+            <span class="text-[var(--fg-muted)]"
               >by {actorName(displayedRevision?.created_by)}</span
             >
           </div>
           {#if document.thread_id && documentTopicHref}
-            <p class="mt-0.5 text-[12px] text-[var(--ui-text-muted)]">
-              <span class="text-[var(--ui-text-muted)]">Topic</span>
+            <p class="mt-0.5 text-[12px] text-[var(--fg-muted)]">
+              <span class="text-[var(--fg-muted)]">Topic</span>
               <a
-                class="ml-1 text-indigo-400 transition-colors hover:text-indigo-300"
+                class="ml-1 text-accent-text transition-colors hover:text-accent-text"
                 href={workspaceHref(documentTopicHref)}
                 >{String(document.subject_ref ?? "")
                   .replace(/^topic:/, "")
@@ -519,7 +519,7 @@
           <div class="flex shrink-0 items-center gap-1.5">
             {#if isTextEditable}
               <button
-                class="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-2.5 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500"
+                class="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-accent px-2.5 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-accent-hover"
                 onclick={openEdit}
                 type="button"
               >
@@ -540,7 +540,7 @@
               </button>
             {:else}
               <span
-                class="inline-flex items-center gap-1 rounded-md border border-[var(--ui-border)] px-2.5 py-1.5 text-[12px] text-[var(--ui-text-muted)]"
+                class="inline-flex items-center gap-1 rounded-md border border-[var(--line)] px-2.5 py-1.5 text-[12px] text-[var(--fg-muted)]"
                 title="Content type '{headContentType}' can only be updated via the CLI or API"
               >
                 <svg
@@ -560,7 +560,7 @@
               </span>
             {/if}
             <button
-              class="cursor-pointer shrink-0 inline-flex items-center gap-1.5 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)]"
+              class="cursor-pointer shrink-0 inline-flex items-center gap-1.5 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)]"
               onclick={loadHistory}
               type="button"
             >
@@ -598,7 +598,7 @@
 
       {#if editOpen}
         <form
-          class="mt-3 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-4"
+          class="mt-3 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] p-4"
           onsubmit={(e) => {
             e.preventDefault();
             void handleSave();
@@ -611,7 +611,7 @@
               type="button"
             >
               <svg
-                class="h-3 w-3 text-[var(--ui-text-muted)] transition-transform {metadataExpanded
+                class="h-3 w-3 text-[var(--fg-muted)] transition-transform {metadataExpanded
                   ? 'rotate-90'
                   : ''}"
                 fill="none"
@@ -625,13 +625,13 @@
                   d="M9 5l7 7-7 7"
                 />
               </svg>
-              <span class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+              <span class="text-[12px] font-medium text-[var(--fg-muted)]"
                 >Metadata</span
               >
             </button>
             {#if !metadataExpanded}
               <p
-                class="mt-1 ml-5 truncate text-[11px] text-[var(--ui-text-muted)]"
+                class="mt-1 ml-5 truncate text-[11px] text-[var(--fg-muted)]"
               >
                 Title: {editDraft.title || "—"} · Labels: {editDraft.labels ||
                   "none"}
@@ -641,23 +641,23 @@
               <div class="mt-2 ml-5 grid gap-3 sm:grid-cols-2">
                 <label class="sm:col-span-2">
                   <span
-                    class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+                    class="text-[12px] font-medium text-[var(--fg-muted)]"
                     >Title</span
                   >
                   <input
                     bind:value={editDraft.title}
-                    class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-3 py-1.5 text-[13px] text-[var(--ui-text)]"
+                    class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-[13px] text-[var(--fg)]"
                     type="text"
                   />
                 </label>
                 <label>
                   <span
-                    class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+                    class="text-[12px] font-medium text-[var(--fg-muted)]"
                     >Labels (comma-separated)</span
                   >
                   <input
                     bind:value={editDraft.labels}
-                    class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-3 py-1.5 text-[13px] text-[var(--ui-text)] placeholder:text-[var(--ui-text-subtle)]"
+                    class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-[13px] text-[var(--fg)] placeholder:text-[var(--fg-subtle)]"
                     placeholder="ops, runbook"
                     type="text"
                   />
@@ -667,26 +667,26 @@
           </div>
 
           <label>
-            <span class="text-[12px] font-medium text-[var(--ui-text-muted)]"
-              >Content (Markdown) <span class="text-red-400">*</span></span
+            <span class="text-[12px] font-medium text-[var(--fg-muted)]"
+              >Content (Markdown) <span class="text-danger-text">*</span></span
             >
             <textarea
               bind:value={editDraft.content}
-              class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-3 py-2 text-[13px] text-[var(--ui-text)] font-mono leading-relaxed resize-y"
+              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-2 text-[13px] text-[var(--fg)] font-mono leading-relaxed resize-y"
               rows="20"
             ></textarea>
           </label>
 
           <div class="mt-3 flex items-center gap-2">
             <button
-              class="cursor-pointer rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+              class="cursor-pointer rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-white hover:bg-accent-hover disabled:opacity-50"
               disabled={saving}
               type="submit"
             >
               {saving ? "Saving…" : "Save revision"}
             </button>
             <button
-              class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]"
+              class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]"
               onclick={closeEdit}
               type="button"
             >
@@ -696,13 +696,13 @@
 
           {#if saveError}
             <div
-              class="mt-3 rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
+              class="mt-3 rounded-md bg-danger-soft px-3 py-2 text-[12px] text-danger-text"
               role="alert"
             >
               {saveError}
             </div>
           {/if}
-          <p class="mt-2 text-[11px] text-[var(--ui-text-muted)]">
+          <p class="mt-2 text-[11px] text-[var(--fg-muted)]">
             Base revision: <span class="font-mono"
               >{headRevision?.revision_id ?? "—"}</span
             > — optimistic concurrency is enforced.
@@ -712,7 +712,7 @@
 
       {#if isViewingOldRevision}
         <div
-          class="mt-3 flex items-center gap-2 rounded-md bg-amber-500/10 px-3 py-2 text-[12px] text-amber-400"
+          class="mt-3 flex items-center gap-2 rounded-md bg-warn-soft px-3 py-2 text-[12px] text-warn-text"
         >
           <span
             >Viewing revision {selectedRevision.revision_number} from {formatTimestamp(
@@ -728,33 +728,33 @@
       {/if}
 
       <div
-        class="mt-3 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)]"
+        class="mt-3 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
       >
         <div class="px-4 py-3">
           {#if displayedContent}
             <MarkdownRenderer
               source={displayedContent}
-              class="text-[13px] leading-relaxed text-[var(--ui-text)]"
+              class="text-[13px] leading-relaxed text-[var(--fg)]"
             />
           {:else}
-            <p class="text-[13px] text-[var(--ui-text-muted)]">(No content)</p>
+            <p class="text-[13px] text-[var(--fg-muted)]">(No content)</p>
           {/if}
         </div>
       </div>
 
-      <div class="mt-6 border-t border-[var(--ui-border)] pt-4">
+      <div class="mt-6 border-t border-[var(--line)] pt-4">
         <p
-          class="mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--ui-text-muted)]"
+          class="mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--fg-muted)]"
         >
           Technical details
         </p>
 
         {#if displayedRevision?.content_hash || displayedRevision?.revision_hash}
           <details
-            class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)]"
+            class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
           >
             <summary
-              class="cursor-pointer px-4 py-2.5 text-[11px] text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]"
+              class="cursor-pointer px-4 py-2.5 text-[11px] text-[var(--fg-muted)] hover:text-[var(--fg)]"
               >Integrity hashes</summary
             >
             <div class="px-4 pb-3 pt-1 space-y-2">
@@ -762,7 +762,7 @@
                 <div>
                   <div class="flex items-center justify-between gap-2">
                     <p
-                      class="text-[11px] uppercase tracking-[0.12em] text-[var(--ui-text-muted)]"
+                      class="text-[11px] uppercase tracking-[0.12em] text-[var(--fg-muted)]"
                     >
                       Content hash
                     </p>
@@ -772,7 +772,7 @@
                     />
                   </div>
                   <p
-                    class="mt-1 break-all font-mono text-[12px] text-[var(--ui-text-muted)]"
+                    class="mt-1 break-all font-mono text-[12px] text-[var(--fg-muted)]"
                   >
                     {displayedRevision.content_hash}
                   </p>
@@ -782,7 +782,7 @@
                 <div>
                   <div class="flex items-center justify-between gap-2">
                     <p
-                      class="text-[11px] uppercase tracking-[0.12em] text-[var(--ui-text-muted)]"
+                      class="text-[11px] uppercase tracking-[0.12em] text-[var(--fg-muted)]"
                     >
                       Revision hash
                     </p>
@@ -792,7 +792,7 @@
                     />
                   </div>
                   <p
-                    class="mt-1 break-all font-mono text-[12px] text-[var(--ui-text-muted)]"
+                    class="mt-1 break-all font-mono text-[12px] text-[var(--fg-muted)]"
                   >
                     {displayedRevision.revision_hash}
                   </p>
@@ -803,10 +803,10 @@
         {/if}
 
         <details
-          class="mt-2 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)]"
+          class="mt-2 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
         >
           <summary
-            class="cursor-pointer px-4 py-2.5 text-[11px] text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]"
+            class="cursor-pointer px-4 py-2.5 text-[11px] text-[var(--fg-muted)] hover:text-[var(--fg)]"
             >Raw metadata JSON</summary
           >
           <div class="flex justify-end px-4 pt-1">
@@ -816,7 +816,7 @@
             />
           </div>
           <pre
-            class="overflow-auto px-4 pb-3 text-[11px] text-[var(--ui-text-muted)]">{JSON.stringify(
+            class="overflow-auto px-4 pb-3 text-[11px] text-[var(--fg-muted)]">{JSON.stringify(
               document,
               null,
               2,
@@ -828,16 +828,16 @@
     {#if historyOpen}
       <aside class="w-72 shrink-0">
         <div
-          class="sticky top-4 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)]"
+          class="sticky top-4 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
         >
           <div
-            class="flex items-center justify-between border-b border-[var(--ui-border)] px-4 py-2.5"
+            class="flex items-center justify-between border-b border-[var(--line)] px-4 py-2.5"
           >
-            <h2 class="text-[13px] font-medium text-[var(--ui-text)]">
+            <h2 class="text-[13px] font-medium text-[var(--fg)]">
               Revision history
             </h2>
             <button
-              class="cursor-pointer text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]"
+              class="cursor-pointer text-[var(--fg-muted)] hover:text-[var(--fg)]"
               onclick={() => (historyOpen = false)}
               type="button"
               aria-label="Close history"
@@ -860,7 +860,7 @@
 
           {#if historyLoading}
             <div
-              class="flex items-center gap-2 px-4 py-4 text-[12px] text-[var(--ui-text-muted)]"
+              class="flex items-center gap-2 px-4 py-4 text-[12px] text-[var(--fg-muted)]"
             >
               <svg
                 class="h-3.5 w-3.5 animate-spin"
@@ -884,7 +884,7 @@
               Loading revision history...
             </div>
           {:else if revisions.length === 0}
-            <p class="px-4 py-4 text-[12px] text-[var(--ui-text-muted)]">
+            <p class="px-4 py-4 text-[12px] text-[var(--fg-muted)]">
               No earlier revisions found.
             </p>
           {:else}
@@ -894,10 +894,10 @@
                 {@const isSelected =
                   displayedRevision?.revision_id === rev.revision_id}
                 <button
-                  class="w-full text-left px-4 py-3 transition-colors hover:bg-[var(--ui-border-subtle)] {i >
+                  class="w-full text-left px-4 py-3 transition-colors hover:bg-[var(--line-subtle)] {i >
                   0
-                    ? 'border-t border-[var(--ui-border)]'
-                    : ''} {isSelected ? 'bg-[var(--ui-border-subtle)]' : ''}"
+                    ? 'border-t border-[var(--line)]'
+                    : ''} {isSelected ? 'bg-[var(--line-subtle)]' : ''}"
                   onclick={() => selectRevision(rev)}
                   type="button"
                 >
@@ -905,29 +905,29 @@
                     <div class="relative flex flex-col items-center">
                       <div
                         class="h-2.5 w-2.5 rounded-full {isHead
-                          ? 'bg-emerald-400'
+                          ? 'bg-ok-text'
                           : isSelected
-                            ? 'bg-indigo-400'
-                            : 'bg-[var(--ui-text-subtle)]'}"
+                            ? 'bg-accent-text'
+                            : 'bg-[var(--fg-subtle)]'}"
                       ></div>
                       {#if i < revisions.length - 1}
                         <div
-                          class="absolute top-3 h-full w-px bg-[var(--ui-border)]"
+                          class="absolute top-3 h-full w-px bg-[var(--line)]"
                         ></div>
                       {/if}
                     </div>
                     <div class="min-w-0 flex-1">
-                      <p class="text-[12px] font-medium text-[var(--ui-text)]">
+                      <p class="text-[12px] font-medium text-[var(--fg)]">
                         {#if isHead}Current version{:else}Version {rev.revision_number}{/if}
                       </p>
-                      <p class="text-[11px] text-[var(--ui-text-muted)]">
+                      <p class="text-[11px] text-[var(--fg-muted)]">
                         {formatTimestamp(rev.created_at)} · {actorName(
                           rev.created_by,
                         )}
                       </p>
                       {#if rev.revision_hash}
                         <p
-                          class="mt-0.5 font-mono text-[10px] text-[var(--ui-text-muted)]"
+                          class="mt-0.5 font-mono text-[10px] text-[var(--fg-muted)]"
                         >
                           {rev.revision_hash.slice(0, 12)}...
                         </p>
@@ -943,7 +943,7 @@
     {/if}
   </div>
 {:else}
-  <div class="mt-8 text-center text-[13px] text-[var(--ui-text-muted)]">
+  <div class="mt-8 text-center text-[13px] text-[var(--fg-muted)]">
     Document not found.
   </div>
 {/if}

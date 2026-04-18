@@ -22,7 +22,7 @@
 
 {#if archived}
   <button
-    class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2 py-1 text-[11px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] disabled:cursor-not-allowed disabled:opacity-50"
+    class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-1 text-[11px] font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] disabled:cursor-not-allowed disabled:opacity-50"
     disabled={busy}
     onclick={onunarchive}
     type="button"
@@ -31,7 +31,7 @@
   </button>
 {:else}
   <button
-    class="cursor-pointer rounded-md {padding} text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border)] hover:text-[var(--ui-accent)] disabled:cursor-not-allowed disabled:opacity-50"
+    class="cursor-pointer rounded-md {padding} text-[var(--fg-muted)] transition-colors hover:bg-[var(--line)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
     disabled={busy}
     onclick={onarchive}
     title="Archive"

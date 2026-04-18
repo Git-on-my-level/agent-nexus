@@ -135,14 +135,14 @@
 
 {#if conflictWarning}
   <p
-    class="mt-3 rounded-md bg-amber-500/10 px-3 py-2 text-[12px] text-amber-400"
+    class="mt-3 rounded-md bg-warn-soft px-3 py-2 text-[12px] text-warn-text"
   >
     {conflictWarning}
   </p>
 {/if}
 {#if editNotice}
   <p
-    class="mt-3 rounded-md bg-emerald-500/10 px-3 py-2 text-[12px] text-emerald-400"
+    class="mt-3 rounded-md bg-ok-soft px-3 py-2 text-[12px] text-ok-text"
   >
     {editNotice}
   </p>
@@ -150,16 +150,16 @@
 
 {#if topic}
   <div
-    class="mt-4 rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]"
+    class="mt-4 rounded-md border border-[var(--line)] bg-[var(--panel)]"
   >
     <div
-      class="flex items-center justify-between border-b border-[var(--ui-border-subtle)] px-4 py-2.5"
+      class="flex items-center justify-between border-b border-[var(--line-subtle)] px-4 py-2.5"
     >
-      <h2 class="text-[12px] font-medium text-[var(--ui-text-muted)]">
+      <h2 class="text-[12px] font-medium text-[var(--fg-muted)]">
         Details
       </h2>
       <button
-        class="cursor-pointer rounded px-2 py-1 text-[12px] font-medium text-indigo-400 hover:bg-[var(--ui-bg-soft)] hover:text-indigo-300"
+        class="cursor-pointer rounded px-2 py-1 text-[12px] font-medium text-accent-text hover:bg-[var(--bg-soft)] hover:text-accent-text"
         onclick={editOpen ? cancelEdit : beginEdit}
         type="button"
       >
@@ -168,9 +168,9 @@
     </div>
 
     <div
-      class="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 py-2.5 text-[12px] text-[var(--ui-text-muted)]"
+      class="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 py-2.5 text-[12px] text-[var(--fg-muted)]"
     >
-      <span class="capitalize text-[var(--ui-text)]">{topic.type}</span>
+      <span class="capitalize text-[var(--fg)]">{topic.type}</span>
       <span aria-hidden="true">·</span>
       <span>{formatCadenceLabel(topic.cadence)}</span>
       {#if topic.next_check_in_at}
@@ -186,11 +186,11 @@
     </div>
 
     {#if (topic.tags ?? []).length > 0}
-      <div class="border-t border-[var(--ui-border-subtle)] px-4 py-2.5">
+      <div class="border-t border-[var(--line-subtle)] px-4 py-2.5">
         <div class="flex flex-wrap gap-1.5">
           {#each topic.tags ?? [] as tag}
             <span
-              class="rounded bg-[var(--ui-border)] px-2 py-0.5 text-[12px] text-[var(--ui-text-muted)]"
+              class="rounded bg-[var(--line)] px-2 py-0.5 text-[12px] text-[var(--fg-muted)]"
               >{tag}</span
             >
           {/each}
@@ -198,19 +198,19 @@
       </div>
     {/if}
 
-    <div class="border-t border-[var(--ui-border-subtle)] px-4 py-3">
-      <p class="text-[12px] text-[var(--ui-text-muted)]">Summary</p>
+    <div class="border-t border-[var(--line-subtle)] px-4 py-3">
+      <p class="text-[12px] text-[var(--fg-muted)]">Summary</p>
       <MarkdownRenderer
         source={topic.current_summary}
-        class="mt-1 text-[13px] text-[var(--ui-text)]"
+        class="mt-1 text-[13px] text-[var(--fg)]"
       />
     </div>
 
     {#if (topic.next_actions ?? []).length > 0}
-      <div class="border-t border-[var(--ui-border-subtle)] px-4 py-3">
-        <p class="text-[12px] text-[var(--ui-text-muted)]">Next actions</p>
+      <div class="border-t border-[var(--line-subtle)] px-4 py-3">
+        <p class="text-[12px] text-[var(--fg-muted)]">Next actions</p>
         <ul
-          class="mt-1 list-inside list-disc text-[13px] text-[var(--ui-text)]"
+          class="mt-1 list-inside list-disc text-[13px] text-[var(--fg)]"
         >
           {#each topic.next_actions ?? [] as action}<li>
               {action}
@@ -220,8 +220,8 @@
     {/if}
 
     {#if (topic.key_artifacts ?? []).length > 0}
-      <div class="border-t border-[var(--ui-border-subtle)] px-4 py-3">
-        <p class="text-[12px] text-[var(--ui-text-muted)]">Key artifacts</p>
+      <div class="border-t border-[var(--line-subtle)] px-4 py-3">
+        <p class="text-[12px] text-[var(--fg-muted)]">Key artifacts</p>
         <div class="mt-1 flex flex-wrap gap-2 text-[13px]">
           {#each topic.key_artifacts ?? [] as artifactId}
             <RefLink
@@ -233,17 +233,17 @@
       </div>
     {/if}
 
-    <div class="border-t border-[var(--ui-border-subtle)] px-4 py-2.5">
+    <div class="border-t border-[var(--line-subtle)] px-4 py-2.5">
       <ProvenanceBadge provenance={topic.provenance} />
     </div>
 
-    <details class="border-t border-[var(--ui-border-subtle)]">
+    <details class="border-t border-[var(--line-subtle)]">
       <summary
-        class="cursor-pointer px-4 py-2.5 text-[12px] text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]"
+        class="cursor-pointer px-4 py-2.5 text-[12px] text-[var(--fg-muted)] hover:text-[var(--fg)]"
         >Debug data</summary
       >
       <pre
-        class="overflow-auto px-4 pb-3 text-[11px] text-[var(--ui-text-muted)]">{JSON.stringify(
+        class="overflow-auto px-4 pb-3 text-[11px] text-[var(--fg-muted)]">{JSON.stringify(
           topic,
           null,
           2,
@@ -253,31 +253,31 @@
 
   {#if editOpen && editDraft}
     <form
-      class="mt-3 border-t border-[var(--ui-border)] p-4"
+      class="mt-3 border-t border-[var(--line)] p-4"
       onsubmit={(event) => {
         event.preventDefault();
         void handleSave();
       }}
     >
       {#if editError}<p
-          class="mb-3 rounded bg-red-500/10 px-3 py-1.5 text-[12px] text-red-400"
+          class="mb-3 rounded bg-danger-soft px-3 py-1.5 text-[12px] text-danger-text"
         >
           {editError}
         </p>{/if}
       <div class="grid gap-3 sm:grid-cols-2">
         <label
-          class="text-[12px] font-medium text-[var(--ui-text-muted)] sm:col-span-2"
+          class="text-[12px] font-medium text-[var(--fg-muted)] sm:col-span-2"
           >Title <input
             bind:value={editDraft.title}
-            class="mt-1 w-full rounded border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-2.5 py-1.5 text-[13px] text-[var(--ui-text)]"
+            class="mt-1 w-full rounded border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-[13px] text-[var(--fg)]"
             required
             type="text"
           /></label
         >
-        <label class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+        <label class="text-[12px] font-medium text-[var(--fg-muted)]"
           >Type <select
             bind:value={editDraft.type}
-            class="mt-1 w-full rounded border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-2 py-1.5 text-[13px] text-[var(--ui-text)]"
+            class="mt-1 w-full rounded border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-1.5 text-[13px] text-[var(--fg)]"
             ><option value="case">Case</option><option value="process"
               >Process</option
             ><option value="relationship">Relationship</option><option
@@ -287,19 +287,19 @@
             ></select
           ></label
         >
-        <label class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+        <label class="text-[12px] font-medium text-[var(--fg-muted)]"
           >Status <select
             bind:value={editDraft.status}
-            class="mt-1 w-full rounded border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-2 py-1.5 text-[13px] text-[var(--ui-text)]"
+            class="mt-1 w-full rounded border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-1.5 text-[13px] text-[var(--fg)]"
             ><option value="active">Active</option><option value="paused"
               >Paused</option
             ><option value="closed">Closed</option></select
           ></label
         >
-        <label class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+        <label class="text-[12px] font-medium text-[var(--fg-muted)]"
           >Priority <select
             bind:value={editDraft.priority}
-            class="mt-1 w-full rounded border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-2 py-1.5 text-[13px] text-[var(--ui-text)]"
+            class="mt-1 w-full rounded border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-1.5 text-[13px] text-[var(--fg)]"
             ><option value="p0">Critical (P0)</option><option value="p1"
               >High (P1)</option
             ><option value="p2">Medium (P2)</option><option value="p3"
@@ -307,10 +307,10 @@
             ></select
           ></label
         >
-        <label class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+        <label class="text-[12px] font-medium text-[var(--fg-muted)]"
           >Schedule <select
             bind:value={editDraft.cadencePreset}
-            class="mt-1 w-full rounded border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-2 py-1.5 text-[13px] text-[var(--ui-text)]"
+            class="mt-1 w-full rounded border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-1.5 text-[13px] text-[var(--fg)]"
             >{#each TOPIC_SCHEDULE_PRESETS as cadence}
               <option value={cadence}
                 >{TOPIC_SCHEDULE_PRESET_LABELS[cadence]}</option
@@ -319,52 +319,52 @@
           ></label
         >
         {#if editDraft.cadencePreset === "custom"}
-          <label class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+          <label class="text-[12px] font-medium text-[var(--fg-muted)]"
             >Cron expression <input
               bind:value={editDraft.cadenceCron}
-              class="mt-1 w-full rounded border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-2.5 py-1.5 text-[13px] text-[var(--ui-text)]"
+              class="mt-1 w-full rounded border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-[13px] text-[var(--fg)]"
               placeholder="0 9 * * *"
               type="text"
             />{#if describeCron(editDraft.cadenceCron)}<span
-                class="mt-1 block text-[11px] text-[var(--ui-text-muted)]"
+                class="mt-1 block text-[11px] text-[var(--fg-muted)]"
                 >{describeCron(editDraft.cadenceCron)}</span
               >{/if}<span
-              class="mt-0.5 block text-[11px] text-[var(--ui-text-muted)]"
+              class="mt-0.5 block text-[11px] text-[var(--fg-muted)]"
               >Five cron fields, server timezone.</span
             ></label
           >
         {/if}
-        <label class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+        <label class="text-[12px] font-medium text-[var(--fg-muted)]"
           >Next check-in <input
             bind:value={editDraft.next_check_in_at}
-            class="mt-1 w-full rounded border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-2 py-1.5 text-[13px] text-[var(--ui-text)]"
+            class="mt-1 w-full rounded border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-1.5 text-[13px] text-[var(--fg)]"
             type="datetime-local"
           /></label
         >
-        <label class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+        <label class="text-[12px] font-medium text-[var(--fg-muted)]"
           >Tags (one per line) <textarea
             bind:value={editDraft.tagsInput}
-            class="mt-1 w-full rounded border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-2.5 py-1.5 text-[13px] text-[var(--ui-text)]"
+            class="mt-1 w-full rounded border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-[13px] text-[var(--fg)]"
             rows="2"
           ></textarea></label
         >
         <label
-          class="text-[12px] font-medium text-[var(--ui-text-muted)] sm:col-span-2"
+          class="text-[12px] font-medium text-[var(--fg-muted)] sm:col-span-2"
           >Summary <textarea
             bind:value={editDraft.current_summary}
-            class="mt-1 w-full rounded border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-2.5 py-1.5 text-[13px] text-[var(--ui-text)]"
+            class="mt-1 w-full rounded border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-[13px] text-[var(--fg)]"
             rows="2"
           ></textarea></label
         >
       </div>
       <div class="mt-3 flex gap-2">
         <button
-          class="cursor-pointer rounded bg-indigo-600 px-4 py-1.5 text-[12px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+          class="cursor-pointer rounded bg-accent px-4 py-1.5 text-[12px] font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           disabled={savingEdit}
           type="submit">{savingEdit ? "Saving..." : "Save changes"}</button
         >
         <button
-          class="cursor-pointer rounded px-3 py-1.5 text-[12px] text-[var(--ui-text-muted)] hover:bg-[var(--ui-bg-soft)]"
+          class="cursor-pointer rounded px-3 py-1.5 text-[12px] text-[var(--fg-muted)] hover:bg-[var(--bg-soft)]"
           onclick={cancelEdit}
           type="button">Cancel</button
         >

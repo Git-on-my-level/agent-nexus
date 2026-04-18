@@ -18,11 +18,11 @@ const KIND_COLORS = {
   receipt: "text-emerald-400 bg-emerald-500/10",
   review: "text-amber-400 bg-amber-500/10",
   doc: "text-fuchsia-400 bg-fuchsia-500/10",
-  evidence: "text-[var(--ui-text-muted)] bg-[var(--ui-border)]",
+  evidence: "text-[var(--fg-muted)] bg-[var(--line)]",
   log: "text-teal-400 bg-teal-500/10",
 };
 
-const FALLBACK_COLOR = "text-[var(--ui-text-muted)] bg-[var(--ui-border)]";
+const FALLBACK_COLOR = "text-[var(--fg-muted)] bg-[var(--line)]";
 
 export function kindLabel(kind) {
   return KIND_LABELS[String(kind ?? "").trim()] ?? String(kind ?? "Artifact");

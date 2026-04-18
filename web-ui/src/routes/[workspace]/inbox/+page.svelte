@@ -513,29 +513,29 @@
   }
 
   function urgencyDot(level) {
-    if (level === "immediate") return "bg-red-500/100";
-    if (level === "high") return "bg-amber-400";
-    return "bg-gray-300";
+    if (level === "immediate") return "bg-danger";
+    if (level === "high") return "bg-warn-text";
+    return "bg-line-strong";
   }
 
   function urgencyBorderClass(level) {
-    if (level === "immediate") return "border-l-red-400";
-    if (level === "high") return "border-l-amber-300";
+    if (level === "immediate") return "border-l-danger-text";
+    if (level === "high") return "border-l-warn-text";
     return "border-l-transparent";
   }
 
   function urgencyCardClass(level) {
     const active = urgencyFilter === level;
     if (active)
-      return "ring-1 ring-[var(--ui-accent)] border-[var(--ui-accent)]";
-    return "border-[var(--ui-border)] hover:border-[var(--ui-text-subtle)]";
+      return "ring-1 ring-[var(--accent)] border-[var(--accent)]";
+    return "border-[var(--line)] hover:border-[var(--fg-subtle)]";
   }
 
   function categoryBadgeClass(category) {
-    if (category === "action_needed") return "text-indigo-400";
-    if (category === "risk_exception") return "text-amber-400";
+    if (category === "action_needed") return "text-accent-text";
+    if (category === "risk_exception") return "text-warn-text";
     if (category === "attention") return "text-sky-400";
-    return "text-[var(--ui-text-muted)]";
+    return "text-[var(--fg-muted)]";
   }
 
   function inboxItemKind(item) {
@@ -571,16 +571,16 @@
 </script>
 
 <div
-  class="flex items-center justify-between pb-4 mb-4 border-b border-[var(--ui-border)]"
+  class="flex items-center justify-between pb-4 mb-4 border-b border-[var(--line)]"
 >
   <div>
-    <h1 class="text-lg font-semibold text-[var(--ui-text)]">Inbox</h1>
+    <h1 class="text-lg font-semibold text-[var(--fg)]">Inbox</h1>
   </div>
   <div class="flex items-center gap-2">
     <button
       class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12px] font-medium transition-colors {hasActiveFilters
-        ? 'border-[var(--ui-accent)]/40 bg-[var(--ui-accent)]/10 text-[var(--ui-accent)] hover:bg-[var(--ui-accent)]/15'
-        : 'border-[var(--ui-border)] bg-[var(--ui-bg-soft)] text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]'}"
+        ? 'border-[var(--accent)]/40 bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/15'
+        : 'border-[var(--line)] bg-[var(--bg-soft)] text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]'}"
       onclick={() => (filtersOpen = !filtersOpen)}
       type="button"
       data-testid="inbox-filters-toggle"
@@ -603,8 +603,8 @@
     <span
       class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[13px] font-semibold tabular-nums {totalItems >
       0
-        ? 'bg-[var(--ui-accent)]/10 text-[var(--ui-accent)]'
-        : 'bg-[var(--ui-panel)] text-[var(--ui-text-muted)]'}"
+        ? 'bg-[var(--accent)]/10 text-[var(--accent)]'
+        : 'bg-[var(--panel)] text-[var(--fg-muted)]'}"
       data-testid="inbox-triage-header"
     >
       {totalItems} open
@@ -619,9 +619,9 @@
         class="flex flex-wrap items-end gap-3 sm:flex-nowrap sm:items-end sm:gap-4"
       >
         <label class="min-w-[11rem] flex-1 text-[12px] sm:min-w-[13rem]">
-          <span class="font-medium text-[var(--ui-text-muted)]">Category</span>
+          <span class="font-medium text-[var(--fg-muted)]">Category</span>
           <select
-            class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
+            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--panel)]"
             value={categoryFilter}
             onchange={(e) => {
               categoryFilter = e.currentTarget.value;
@@ -636,9 +636,9 @@
           </select>
         </label>
         <label class="min-w-[11rem] flex-1 text-[12px] sm:min-w-[13rem]">
-          <span class="font-medium text-[var(--ui-text-muted)]">Urgency</span>
+          <span class="font-medium text-[var(--fg-muted)]">Urgency</span>
           <select
-            class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
+            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--panel)]"
             value={urgencyFilter}
             onchange={(e) => {
               urgencyFilter = e.currentTarget.value;
@@ -654,7 +654,7 @@
         </label>
         {#if hasActiveFilters}
           <button
-            class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)] sm:ml-auto"
+            class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)] sm:ml-auto"
             onclick={resetFilters}
             type="button"
           >
@@ -668,7 +668,7 @@
 
 {#if error}
   <div
-    class="mb-4 rounded-md bg-red-500/10 px-3 py-2.5 text-[13px] text-red-400"
+    class="mb-4 rounded-md bg-danger-soft px-3 py-2.5 text-[13px] text-danger-text"
     role="alert"
   >
     {error}
@@ -680,50 +680,50 @@
     class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12px] font-medium transition-colors {urgencyCardClass(
       'immediate',
     )} {urgencySummary.immediate > 0
-      ? 'bg-red-500/5'
-      : 'bg-[var(--ui-bg-soft)]'}"
+      ? 'bg-danger-soft'
+      : 'bg-[var(--bg-soft)]'}"
     onclick={() => setUrgencyFromCard("immediate")}
     type="button"
     data-testid="urgency-summary-immediate"
   >
-    <span class="inline-block h-1.5 w-1.5 rounded-full bg-red-500 shrink-0"
+    <span class="inline-block h-1.5 w-1.5 rounded-full bg-danger shrink-0"
     ></span>
-    <span class="text-red-400">Immediate</span>
+    <span class="text-danger-text">Immediate</span>
     <span
       class="tabular-nums {urgencySummary.immediate > 0
-        ? 'text-red-400'
-        : 'text-[var(--ui-text-subtle)]'}">{urgencySummary.immediate}</span
+        ? 'text-danger-text'
+        : 'text-[var(--fg-subtle)]'}">{urgencySummary.immediate}</span
     >
   </button>
   <button
     class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12px] font-medium transition-colors {urgencyCardClass(
       'high',
-    )} {urgencySummary.high > 0 ? 'bg-amber-500/5' : 'bg-[var(--ui-bg-soft)]'}"
+    )} {urgencySummary.high > 0 ? 'bg-warn/5' : 'bg-[var(--bg-soft)]'}"
     onclick={() => setUrgencyFromCard("high")}
     type="button"
     data-testid="urgency-summary-high"
   >
-    <span class="inline-block h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0"
+    <span class="inline-block h-1.5 w-1.5 rounded-full bg-warn-text shrink-0"
     ></span>
-    <span class="text-amber-400">High</span>
+    <span class="text-warn-text">High</span>
     <span
       class="tabular-nums {urgencySummary.high > 0
-        ? 'text-amber-400'
-        : 'text-[var(--ui-text-subtle)]'}">{urgencySummary.high}</span
+        ? 'text-warn-text'
+        : 'text-[var(--fg-subtle)]'}">{urgencySummary.high}</span
     >
   </button>
   <button
-    class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12px] font-medium transition-colors bg-[var(--ui-bg-soft)] {urgencyCardClass(
+    class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12px] font-medium transition-colors bg-[var(--bg-soft)] {urgencyCardClass(
       'normal',
     )}"
     onclick={() => setUrgencyFromCard("normal")}
     type="button"
     data-testid="urgency-summary-normal"
   >
-    <span class="inline-block h-1.5 w-1.5 rounded-full bg-gray-500 shrink-0"
+    <span class="inline-block h-1.5 w-1.5 rounded-full bg-bg0 shrink-0"
     ></span>
-    <span class="text-[var(--ui-text-muted)]">Normal</span>
-    <span class="tabular-nums text-[var(--ui-text-subtle)]"
+    <span class="text-[var(--fg-muted)]">Normal</span>
+    <span class="tabular-nums text-[var(--fg-subtle)]"
       >{urgencySummary.normal}</span
     >
   </button>
@@ -733,15 +733,15 @@
   <div class="mb-4 space-y-1.5" data-testid="inbox-pending-actions">
     {#each Object.values(pendingAckById) as pending}
       <div
-        class="flex items-center justify-between gap-3 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-[12px] text-[var(--ui-text-muted)]"
+        class="flex items-center justify-between gap-3 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-[12px] text-[var(--fg-muted)]"
       >
         <span class="truncate"
-          >Acknowledged: <span class="font-medium text-[var(--ui-text)]"
+          >Acknowledged: <span class="font-medium text-[var(--fg)]"
             >{pending.item.title ?? pending.item.summary ?? "item"}</span
           ></span
         >
         <button
-          class="cursor-pointer shrink-0 font-medium text-indigo-400 hover:text-indigo-300"
+          class="cursor-pointer shrink-0 font-medium text-accent-text hover:text-accent-text"
           onclick={() => undoAcknowledge(pending.item.id)}
           type="button"
           aria-label="Undo acknowledge for {pending.item.title ??
@@ -754,15 +754,15 @@
     {/each}
     {#each Object.values(pendingDecisionById) as pending}
       <div
-        class="flex items-center justify-between gap-3 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-[12px] text-[var(--ui-text-muted)]"
+        class="flex items-center justify-between gap-3 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-[12px] text-[var(--fg-muted)]"
       >
         <span class="truncate"
-          >Decision pending: <span class="font-medium text-[var(--ui-text)]"
+          >Decision pending: <span class="font-medium text-[var(--fg)]"
             >{pending.item.title ?? pending.item.summary ?? "item"}</span
           ></span
         >
         <button
-          class="cursor-pointer shrink-0 font-medium text-indigo-400 hover:text-indigo-300"
+          class="cursor-pointer shrink-0 font-medium text-accent-text hover:text-accent-text"
           onclick={() => undoPendingDecision(pending.item.id)}
           type="button"
           aria-label="Undo pending decision for {pending.item.title ??
@@ -778,7 +778,7 @@
 
 {#if loading}
   <div
-    class="mt-12 flex items-center justify-center gap-2 text-[13px] text-[var(--ui-text-muted)]"
+    class="mt-12 flex items-center justify-center gap-2 text-[13px] text-[var(--fg-muted)]"
   >
     <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
       <circle
@@ -800,10 +800,10 @@
 {:else if totalItems === 0}
   <div class="mt-8 text-center py-12" data-testid="inbox-empty-state">
     <div
-      class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[var(--ui-panel)] mb-3"
+      class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[var(--panel)] mb-3"
     >
       <svg
-        class="h-6 w-6 text-[var(--ui-text-subtle)]"
+        class="h-6 w-6 text-[var(--fg-subtle)]"
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
@@ -816,20 +816,20 @@
         />
       </svg>
     </div>
-    <h2 class="text-[14px] font-semibold text-[var(--ui-text)]">
+    <h2 class="text-[14px] font-semibold text-[var(--fg)]">
       Inbox is clear
     </h2>
-    <p class="mt-1 text-[13px] text-[var(--ui-text-muted)]">
+    <p class="mt-1 text-[13px] text-[var(--fg-muted)]">
       Nothing needs attention right now.
     </p>
   </div>
 {:else if !hasFilteredItems}
   <div class="mt-8 text-center py-12" data-testid="inbox-filter-empty-state">
     <div
-      class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[var(--ui-panel)] mb-3"
+      class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[var(--panel)] mb-3"
     >
       <svg
-        class="h-6 w-6 text-[var(--ui-text-subtle)]"
+        class="h-6 w-6 text-[var(--fg-subtle)]"
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
@@ -842,15 +842,15 @@
         />
       </svg>
     </div>
-    <h2 class="text-[14px] font-semibold text-[var(--ui-text)]">
+    <h2 class="text-[14px] font-semibold text-[var(--fg)]">
       No items match this view
     </h2>
-    <p class="mt-1 text-[13px] text-[var(--ui-text-muted)]">
+    <p class="mt-1 text-[13px] text-[var(--fg-muted)]">
       Try switching back to <span class="font-semibold">All</span> to see the full
       queue.
     </p>
     <button
-      class="cursor-pointer mt-4 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-1.5 text-[13px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]"
+      class="cursor-pointer mt-4 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-[13px] font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]"
       onclick={resetFilters}
       type="button"
     >
@@ -869,7 +869,7 @@
           >
             {getInboxCategoryLabel(group.category)}
           </h2>
-          <span class="text-[11px] text-[var(--ui-text-subtle)] tabular-nums"
+          <span class="text-[11px] text-[var(--fg-subtle)] tabular-nums"
             >{group.items.length}</span
           >
         </div>
@@ -877,7 +877,7 @@
         <div class="space-y-1.5">
           {#each group.items as item}
             <article
-              class="rounded-md border border-[var(--ui-border)] border-l-[3px] bg-[var(--ui-bg-soft)] px-3 py-2.5 transition-colors hover:bg-[var(--ui-panel)] {urgencyBorderClass(
+              class="rounded-md border border-[var(--line)] border-l-[3px] bg-[var(--bg-soft)] px-3 py-2.5 transition-colors hover:bg-[var(--panel)] {urgencyBorderClass(
                 item.urgency_level,
               )}"
               data-testid={`inbox-card-${item.id}`}
@@ -888,8 +888,8 @@
                     class="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold tracking-wide {inboxItemKind(
                       item,
                     ) === 'ask'
-                      ? 'bg-[#ff5c1f]/15 text-[#ff5c1f]'
-                      : 'bg-[var(--ui-border)] text-[var(--ui-text-muted)]'}"
+                      ? 'bg-accent-soft text-accent-text'
+                      : 'bg-[var(--line)] text-[var(--fg-muted)]'}"
                   >
                     {inboxKindPillLabel(item)}
                   </span>
@@ -898,12 +898,12 @@
                       item.urgency_level,
                     )}"
                   ></span>
-                  <span class="font-medium text-[var(--ui-text-muted)]"
+                  <span class="font-medium text-[var(--fg-muted)]"
                     >{item.urgency_label}</span
                   >
                   {#if item.age_label}
                     <span
-                      class="text-[var(--ui-text-muted)]"
+                      class="text-[var(--fg-muted)]"
                       title={item.has_source_event_time
                         ? formatAbsoluteDateTime(item.source_event_time)
                         : undefined}>&middot; {item.age_label}</span
@@ -914,13 +914,13 @@
 
               <div class="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                 <h3
-                  class="text-[13px] font-semibold text-[var(--ui-text)] leading-snug"
+                  class="text-[13px] font-semibold text-[var(--fg)] leading-snug"
                 >
                   {item.title}
                 </h3>
                 {#if getInboxSubjectLabel(item)}
                   <a
-                    class="shrink-0 rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] hover:text-[var(--ui-text)]"
+                    class="shrink-0 rounded bg-[var(--line)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
                     href={inboxItemHref(item)}
                   >
                     {getInboxSubjectLabel(item)}
@@ -929,11 +929,11 @@
               </div>
               {#if isAskItem(item)}
                 <div
-                  class="mt-1 text-[12px] text-[var(--ui-text-muted)]"
+                  class="mt-1 text-[12px] text-[var(--fg-muted)]"
                   data-testid={`inbox-ask-meta-${item.id}`}
                 >
                   Asked by
-                  <span class="font-mono text-[13px] text-[var(--ui-text)]">
+                  <span class="font-mono text-[13px] text-[var(--fg)]">
                     {askActorLabel(item)}
                   </span>
                   {#if item.age_label}
@@ -949,7 +949,7 @@
                   {#if getInboxSubjectRef(item)}
                     {@const subjectId = getInboxSubjectId(item)}
                     <span
-                      class="inline-flex items-center gap-1 rounded bg-[var(--ui-panel)] px-1.5 py-0.5 font-medium text-[var(--ui-text-muted)]"
+                      class="inline-flex items-center gap-1 rounded bg-[var(--panel)] px-1.5 py-0.5 font-medium text-[var(--fg-muted)]"
                       title={getInboxSubjectRef(item)}
                     >
                       <span>
@@ -977,13 +977,13 @@
               <div class="mt-2 flex flex-wrap items-center gap-1.5">
                 {#if isAskItem(item)}
                   <a
-                    class="cursor-pointer rounded bg-[#ff5c1f] px-2.5 py-1 text-[12px] font-medium text-white transition-colors hover:bg-[#ff5c1f]/90"
+                    class="cursor-pointer rounded bg-accent px-2.5 py-1 text-[12px] font-medium text-white transition-colors hover:bg-accent-hover"
                     href={askItemHref(item)}
                   >
                     Answer
                   </a>
                   <button
-                    class="cursor-pointer rounded border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] disabled:opacity-50"
+                    class="cursor-pointer rounded border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1 text-[12px] font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] disabled:opacity-50"
                     disabled={Boolean(ackInFlightById[item.id])}
                     onclick={() => acknowledgeItem(item)}
                     type="button"
@@ -991,7 +991,7 @@
                     {ackInFlightById[item.id] ? "Deferring..." : "Defer"}
                   </button>
                   <button
-                    class="cursor-pointer rounded border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] disabled:opacity-50"
+                    class="cursor-pointer rounded border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1 text-[12px] font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] disabled:opacity-50"
                     disabled={Boolean(ackInFlightById[item.id])}
                     onclick={() => acknowledgeItem(item)}
                     type="button"
@@ -1000,7 +1000,7 @@
                   </button>
                 {:else}
                   <button
-                    class="cursor-pointer rounded border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] disabled:opacity-50"
+                    class="cursor-pointer rounded border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1 text-[12px] font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] disabled:opacity-50"
                     disabled={Boolean(ackInFlightById[item.id])}
                     onclick={() => acknowledgeItem(item)}
                     type="button"
@@ -1013,8 +1013,8 @@
                     class="cursor-pointer rounded px-2.5 py-1 text-[12px] font-medium transition-colors {getDecisionForm(
                       item.id,
                     ).open
-                      ? 'border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]'
-                      : 'bg-indigo-600 text-white hover:bg-indigo-500'}"
+                      ? 'border border-[var(--line)] bg-[var(--bg-soft)] text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]'
+                      : 'bg-accent text-white hover:bg-accent-hover'}"
                     onclick={() =>
                       toggleDecisionForm(item, !getDecisionForm(item.id).open)}
                     type="button"
@@ -1026,7 +1026,7 @@
 
               {#if postedDecisionByInboxItem[item.id]}
                 <div
-                  class="mt-2 flex items-center gap-2 rounded-md bg-emerald-500/10 px-3 py-2 text-[12px] text-emerald-400"
+                  class="mt-2 flex items-center gap-2 rounded-md bg-ok-soft px-3 py-2 text-[12px] text-ok-text"
                 >
                   <svg
                     class="h-3.5 w-3.5 shrink-0"
@@ -1044,7 +1044,7 @@
                   <span>
                     Decision recorded &mdash;
                     <a
-                      class="font-medium underline hover:text-emerald-300"
+                      class="font-medium underline hover:text-ok-text"
                       href={`${inboxItemHref(item)}#event-${postedDecisionByInboxItem[item.id].id}`}
                     >
                       view in timeline
@@ -1061,11 +1061,11 @@
                   {#if getInboxSubjectRef(item)}
                     {@const subjectRef = getInboxSubjectRef(item)}
                     <div
-                      class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] p-3 min-w-0"
+                      class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-3 min-w-0"
                     >
                       {#if subjectContextLoading[subjectRef]}
                         <div
-                          class="flex items-center gap-2 text-[12px] text-[var(--ui-text-muted)] py-4 justify-center"
+                          class="flex items-center gap-2 text-[12px] text-[var(--fg-muted)] py-4 justify-center"
                         >
                           <svg
                             class="h-3.5 w-3.5 animate-spin"
@@ -1089,7 +1089,7 @@
                           Loading subject context…
                         </div>
                       {:else if subjectContextErrors[subjectRef]}
-                        <div class="text-[12px] text-red-400 py-2">
+                        <div class="text-[12px] text-danger-text py-2">
                           Failed to load subject: {subjectContextErrors[
                             subjectRef
                           ]}
@@ -1100,7 +1100,7 @@
                         {@const related = ctx.related}
                         <div class="flex items-center gap-2 mb-2">
                           <h4
-                            class="text-[13px] font-semibold text-[var(--ui-text)] truncate min-w-0"
+                            class="text-[13px] font-semibold text-[var(--fg)] truncate min-w-0"
                           >
                             {subject?.title ??
                               subject?.summary ??
@@ -1109,21 +1109,21 @@
                               getInboxSubjectLabel(item)}
                           </h4>
                           <span
-                            class="shrink-0 rounded-md border border-[var(--ui-border)] px-1.5 py-0.5 text-[11px] font-medium capitalize {subject?.status ===
+                            class="shrink-0 rounded-md border border-[var(--line)] px-1.5 py-0.5 text-[11px] font-medium capitalize {subject?.status ===
                             'active'
-                              ? 'text-emerald-400'
+                              ? 'text-ok-text'
                               : subject?.status === 'blocked' ||
                                   subject?.status === 'paused'
-                                ? 'text-amber-400'
+                                ? 'text-warn-text'
                                 : subject?.status === 'archived'
-                                  ? 'text-[var(--ui-text-muted)]'
-                                  : 'text-[var(--ui-text-muted)]'}"
+                                  ? 'text-[var(--fg-muted)]'
+                                  : 'text-[var(--fg-muted)]'}"
                           >
                             {subject?.status ?? "unknown"}
                           </span>
                           {#if subject?.type}
                             <span
-                              class="shrink-0 text-[11px] font-medium text-[var(--ui-text-muted)] uppercase"
+                              class="shrink-0 text-[11px] font-medium text-[var(--fg-muted)] uppercase"
                               >{subject.type}</span
                             >
                           {/if}
@@ -1131,7 +1131,7 @@
 
                         {#if subject?.summary || subject?.current_summary}
                           <div
-                            class="mb-2 text-[12px] text-[var(--ui-text)] leading-relaxed"
+                            class="mb-2 text-[12px] text-[var(--fg)] leading-relaxed"
                           >
                             <MarkdownRenderer
                               source={subject.summary ??
@@ -1144,28 +1144,28 @@
                         <div class="flex flex-wrap gap-1.5">
                           {#if subject?.board_ref}
                             <span
-                              class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] text-[var(--ui-text-muted)]"
+                              class="rounded bg-[var(--line)] px-1.5 py-0.5 text-[11px] text-[var(--fg-muted)]"
                             >
                               Board: {subject.board_ref}
                             </span>
                           {/if}
                           {#if subject?.topic_ref}
                             <span
-                              class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] text-[var(--ui-text-muted)]"
+                              class="rounded bg-[var(--line)] px-1.5 py-0.5 text-[11px] text-[var(--fg-muted)]"
                             >
                               Topic: {subject.topic_ref}
                             </span>
                           {/if}
                           {#if subject?.document_ref}
                             <span
-                              class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] text-[var(--ui-text-muted)]"
+                              class="rounded bg-[var(--line)] px-1.5 py-0.5 text-[11px] text-[var(--fg-muted)]"
                             >
                               Doc: {subject.document_ref}
                             </span>
                           {/if}
                           {#if related?.board_summary}
                             <span
-                              class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] text-[var(--ui-text-muted)]"
+                              class="rounded bg-[var(--line)] px-1.5 py-0.5 text-[11px] text-[var(--fg-muted)]"
                             >
                               {related.board_summary.card_count ?? 0} cards
                             </span>
@@ -1174,10 +1174,10 @@
 
                         {#if Array.isArray(subject?.related_refs) && subject.related_refs.length > 0}
                           <div
-                            class="border-t border-[var(--ui-border)] pt-2 mt-2"
+                            class="border-t border-[var(--line)] pt-2 mt-2"
                           >
                             <p
-                              class="text-[11px] font-medium text-[var(--ui-text-muted)] uppercase tracking-wide mb-1.5"
+                              class="text-[11px] font-medium text-[var(--fg-muted)] uppercase tracking-wide mb-1.5"
                             >
                               Related refs
                             </p>
@@ -1195,10 +1195,10 @@
                         {/if}
 
                         <div
-                          class="border-t border-[var(--ui-border)] pt-2 mt-2"
+                          class="border-t border-[var(--line)] pt-2 mt-2"
                         >
                           <a
-                            class="inline-flex items-center gap-1 text-[12px] font-medium text-indigo-400 hover:text-indigo-300 transition-colors"
+                            class="inline-flex items-center gap-1 text-[12px] font-medium text-accent-text hover:text-accent-text transition-colors"
                             href={inboxItemHref(item)}
                           >
                             View subject &rarr;
@@ -1209,7 +1209,7 @@
                   {/if}
 
                   <form
-                    class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-3 {inboxActionThreadId(
+                    class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] p-3 {inboxActionThreadId(
                       item,
                     )
                       ? ''
@@ -1221,13 +1221,13 @@
                     }}
                   >
                     <label
-                      class="block text-[12px] font-medium text-[var(--ui-text-muted)]"
+                      class="block text-[12px] font-medium text-[var(--fg-muted)]"
                       for={`decision-summary-${item.id}`}
                     >
                       Your decision
                     </label>
                     <input
-                      class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-[13px] transition-colors"
+                      class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-[13px] transition-colors"
                       id={`decision-summary-${item.id}`}
                       oninput={(event) =>
                         updateDecisionField(
@@ -1239,21 +1239,21 @@
                       value={getDecisionForm(item.id).summary}
                     />
                     {#if getDecisionFormError(item.id)}
-                      <p class="mt-1 text-[11px] text-red-400">
+                      <p class="mt-1 text-[11px] text-danger-text">
                         {getDecisionFormError(item.id)}
                       </p>
                     {/if}
                     <label
-                      class="mt-2 block text-[12px] font-medium text-[var(--ui-text-muted)]"
+                      class="mt-2 block text-[12px] font-medium text-[var(--fg-muted)]"
                       for={`decision-notes-${item.id}`}
                     >
                       Rationale <span
-                        class="font-normal text-[var(--ui-text-muted)]"
+                        class="font-normal text-[var(--fg-muted)]"
                         >optional</span
                       >
                     </label>
                     <textarea
-                      class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-[13px] transition-colors"
+                      class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-[13px] transition-colors"
                       id={`decision-notes-${item.id}`}
                       oninput={(event) =>
                         updateDecisionField(
@@ -1266,7 +1266,7 @@
                     >
                     <div class="mt-2 flex justify-end">
                       <button
-                        class="cursor-pointer rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+                        class="cursor-pointer rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-white hover:bg-accent-hover disabled:opacity-50"
                         disabled={Boolean(decisionInFlightById[item.id])}
                         type="submit"
                       >

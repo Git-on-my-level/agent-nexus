@@ -13,11 +13,11 @@
   let hasAny = $derived(ownedBoards.length > 0 || boardMemberships.length > 0);
 
   function statusTone(status) {
-    if (status === "active") return "text-emerald-400 bg-emerald-500/10";
-    if (status === "paused") return "text-amber-400 bg-amber-500/10";
+    if (status === "active") return "text-ok-text bg-ok-soft";
+    if (status === "paused") return "text-warn-text bg-warn-soft";
     if (status === "closed")
-      return "text-[var(--ui-text-muted)] bg-[var(--ui-border)]";
-    return "text-[var(--ui-text-muted)] bg-[var(--ui-border)]";
+      return "text-[var(--fg-muted)] bg-[var(--line)]";
+    return "text-[var(--fg-muted)] bg-[var(--line)]";
   }
 
   function columnLabel(key) {
@@ -44,21 +44,21 @@
 </script>
 
 <section
-  class="mt-4 rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]"
+  class="mt-4 rounded-md border border-[var(--line)] bg-[var(--panel)]"
 >
   <div
-    class="flex items-center justify-between border-b border-[var(--ui-border-subtle)] px-4 py-2.5"
+    class="flex items-center justify-between border-b border-[var(--line-subtle)] px-4 py-2.5"
   >
     <div>
-      <h2 class="text-[12px] font-medium text-[var(--ui-text-muted)]">
+      <h2 class="text-[12px] font-medium text-[var(--fg-muted)]">
         Boards
       </h2>
-      <p class="mt-0.5 text-[12px] text-[var(--ui-text-muted)]">
+      <p class="mt-0.5 text-[12px] text-[var(--fg-muted)]">
         Boards owned by or tracking this topic.
       </p>
     </div>
     <a
-      class="text-[12px] font-medium text-indigo-400 transition-colors hover:text-indigo-300"
+      class="text-[12px] font-medium text-accent-text transition-colors hover:text-accent-text"
       href={workspacePath(workspaceSlug, "/boards")}
     >
       All boards
@@ -66,26 +66,26 @@
   </div>
 
   {#if !hasAny}
-    <p class="px-4 py-3 text-[13px] text-[var(--ui-text-muted)]">
+    <p class="px-4 py-3 text-[13px] text-[var(--fg-muted)]">
       This topic isn't tracked on any boards yet.
     </p>
   {:else}
-    <div class="divide-y divide-[var(--ui-border-subtle)]">
+    <div class="divide-y divide-[var(--line-subtle)]">
       {#if ownedBoards.length > 0}
-        <div class="divide-y divide-[var(--ui-border-subtle)]">
+        <div class="divide-y divide-[var(--line-subtle)]">
           <div
-            class="text-[11px] font-semibold uppercase tracking-wide text-[var(--ui-text-muted)] px-4 pt-2.5 pb-1"
+            class="text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-muted)] px-4 pt-2.5 pb-1"
           >
             Owned by this topic
           </div>
           {#each ownedBoards as board}
             <a
-              class="flex items-center justify-between gap-3 px-4 py-2.5 transition-colors hover:bg-[var(--ui-bg-soft)]"
+              class="flex items-center justify-between gap-3 px-4 py-2.5 transition-colors hover:bg-[var(--bg-soft)]"
               href={workspacePath(workspaceSlug, `/boards/${board.id}`)}
             >
               <div class="flex min-w-0 items-center gap-2">
                 <span
-                  class="truncate text-[13px] font-medium text-[var(--ui-text)]"
+                  class="truncate text-[13px] font-medium text-[var(--fg)]"
                 >
                   {board.title || board.id}
                 </span>
@@ -99,7 +99,7 @@
                   </span>
                 {/if}
               </div>
-              <div class="shrink-0 text-[11px] text-[var(--ui-text-muted)]">
+              <div class="shrink-0 text-[11px] text-[var(--fg-muted)]">
                 {board.card_count ?? 0} cards · {formatTimestamp(
                   board.updated_at,
                 ) || "—"}
@@ -110,9 +110,9 @@
       {/if}
 
       {#if boardMemberships.length > 0}
-        <div class="divide-y divide-[var(--ui-border-subtle)]">
+        <div class="divide-y divide-[var(--line-subtle)]">
           <div
-            class="text-[11px] font-semibold uppercase tracking-wide text-[var(--ui-text-muted)] px-4 pt-2.5 pb-1"
+            class="text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-muted)] px-4 pt-2.5 pb-1"
           >
             Appears as card on
           </div>
@@ -137,11 +137,11 @@
               <div class="px-4 py-2.5">
                 <div class="flex items-center justify-between gap-3">
                   <a
-                    class="flex min-w-0 items-center gap-2 transition-colors hover:text-indigo-300"
+                    class="flex min-w-0 items-center gap-2 transition-colors hover:text-accent-text"
                     href={boardCardHref}
                   >
                     <span
-                      class="truncate text-[13px] font-medium text-[var(--ui-text)]"
+                      class="truncate text-[13px] font-medium text-[var(--fg)]"
                     >
                       {boardTitle}
                     </span>
@@ -156,22 +156,22 @@
                     {/if}
                     {#if columnKey}
                       <span
-                        class="shrink-0 rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] text-[var(--ui-text-muted)]"
+                        class="shrink-0 rounded bg-[var(--line)] px-1.5 py-0.5 text-[11px] text-[var(--fg-muted)]"
                       >
                         {columnLabel(columnKey)}
                       </span>
                     {/if}
                   </a>
                   <span
-                    class="shrink-0 text-[11px] text-[var(--ui-text-muted)]"
+                    class="shrink-0 text-[11px] text-[var(--fg-muted)]"
                   >
                     Card
                   </span>
                 </div>
                 {#if pinnedDocumentId}
-                  <div class="mt-1.5 text-[11px] text-[var(--ui-text-muted)]">
+                  <div class="mt-1.5 text-[11px] text-[var(--fg-muted)]">
                     <a
-                      class="text-indigo-400 transition-colors hover:text-indigo-300"
+                      class="text-accent-text transition-colors hover:text-accent-text"
                       href={pinnedDocumentHref(pinnedDocumentId)}
                     >
                       Pinned doc: {pinnedDocumentId}

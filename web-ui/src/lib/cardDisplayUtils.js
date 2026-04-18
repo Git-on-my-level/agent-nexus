@@ -24,7 +24,7 @@ export function cardResolutionTone(resolution) {
     case "superseded":
       return "text-amber-400 bg-amber-500/10";
     default:
-      return "text-[var(--ui-text-muted)] bg-[var(--ui-border)]";
+      return "text-[var(--fg-muted)] bg-[var(--line)]";
   }
 }
 
@@ -37,7 +37,7 @@ export function priorityBadgeClasses(priority) {
     case "p2":
       return "text-blue-400 bg-blue-500/10";
     default:
-      return "text-[var(--ui-text-muted)] bg-[var(--ui-border)]";
+      return "text-[var(--fg-muted)] bg-[var(--line)]";
   }
 }
 

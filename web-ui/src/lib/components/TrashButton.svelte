@@ -12,7 +12,7 @@
 </script>
 
 <button
-  class="cursor-pointer rounded-md {padding} text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border)] hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-50"
+  class="cursor-pointer rounded-md {padding} text-[var(--fg-muted)] transition-colors hover:bg-[var(--line)] hover:text-danger-text disabled:cursor-not-allowed disabled:opacity-50"
   disabled={busy}
   onclick={ontrash}
   title="Move to trash"

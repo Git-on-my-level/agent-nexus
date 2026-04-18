@@ -103,15 +103,15 @@
   function statusClasses(status) {
     const s = String(status ?? "").toLowerCase();
     if (s === "ready" || s === "active") {
-      return "text-emerald-400 bg-emerald-500/10";
+      return "text-ok-text bg-ok-soft";
     }
     if (s === "provisioning" || s === "pending") {
-      return "text-amber-400 bg-amber-500/10";
+      return "text-warn-text bg-warn-soft";
     }
     if (s === "failed" || s === "error") {
-      return "text-red-400 bg-red-500/10";
+      return "text-danger-text bg-danger-soft";
     }
-    return "text-gray-500 bg-gray-200";
+    return "text-fg-subtle bg-panel-hover";
   }
 </script>
 
@@ -122,12 +122,12 @@
 <div class="space-y-6">
   <div class="flex flex-wrap items-end justify-between gap-3">
     <div>
-      <h1 class="text-lg font-semibold text-gray-900">
+      <h1 class="text-lg font-semibold text-fg">
         {activeOrg
           ? `${activeOrg.display_name || activeOrg.slug} workspaces`
           : "Welcome to ANX"}
       </h1>
-      <p class="mt-1 hidden text-[12px] text-gray-500 sm:block">
+      <p class="mt-1 hidden text-[12px] text-fg-subtle sm:block">
         Workspaces are isolated environments where your AI agents do their work.
         Each one has its own threads, topics, and artifacts.
       </p>
@@ -135,7 +135,7 @@
     {#if activeOrg}
       <a
         href="/hosted/workspaces/new"
-        class="rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500"
+        class="rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-accent-hover"
       >
         + New workspace
       </a>
@@ -145,7 +145,7 @@
   {#if message}
     <p
       role="alert"
-      class="rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
+      class="rounded-md bg-danger-soft px-3 py-2 text-[12px] text-danger-text"
     >
       {message}
     </p>
@@ -153,48 +153,48 @@
 
   {#if session.phase === "loading" || session.phase === "idle"}
     <div
-      class="rounded-md border border-gray-200 bg-gray-100 px-4 py-6 text-[13px] text-gray-500"
+      class="rounded-md border border-line bg-bg-soft px-4 py-6 text-[13px] text-fg-subtle"
     >
       Loading…
     </div>
   {:else if orgs.length === 0}
     <div
-      class="rounded-md border border-gray-200 bg-gray-100 px-6 py-8 text-center"
+      class="rounded-md border border-line bg-bg-soft px-6 py-8 text-center"
     >
-      <h2 class="text-[14px] font-semibold text-gray-900">
+      <h2 class="text-[14px] font-semibold text-fg">
         Create your first organization
       </h2>
-      <p class="mx-auto mt-1.5 max-w-md text-[12px] text-gray-500">
+      <p class="mx-auto mt-1.5 max-w-md text-[12px] text-fg-subtle">
         Organizations group workspaces, members, and billing. Most teams need
         just one.
       </p>
       <a
         href="/hosted/organizations/new"
-        class="mt-4 inline-flex rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500"
+        class="mt-4 inline-flex rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-accent-hover"
       >
         Create organization
       </a>
     </div>
   {:else if loadingWorkspaces}
     <div
-      class="rounded-md border border-gray-200 bg-gray-100 px-4 py-6 text-[13px] text-gray-500"
+      class="rounded-md border border-line bg-bg-soft px-4 py-6 text-[13px] text-fg-subtle"
     >
       Loading workspaces…
     </div>
   {:else if workspaces.length === 0}
     <div
-      class="rounded-md border border-gray-200 bg-gray-100 px-6 py-8 text-center"
+      class="rounded-md border border-line bg-bg-soft px-6 py-8 text-center"
     >
-      <h2 class="text-[14px] font-semibold text-gray-900">
+      <h2 class="text-[14px] font-semibold text-fg">
         Spin up your first workspace
       </h2>
-      <p class="mx-auto mt-1.5 max-w-md text-[12px] text-gray-500">
+      <p class="mx-auto mt-1.5 max-w-md text-[12px] text-fg-subtle">
         Workspaces hold the threads, topics, and artifacts your AI agent
         produces. Create one to get started.
       </p>
       <a
         href="/hosted/workspaces/new"
-        class="mt-4 inline-flex rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500"
+        class="mt-4 inline-flex rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-accent-hover"
       >
         Create workspace
       </a>
@@ -203,7 +203,7 @@
     <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {#each workspaces as ws (ws.id)}
         <article
-          class="flex flex-col rounded-md border border-gray-200 bg-gray-100 px-4 py-3"
+          class="flex flex-col rounded-md border border-line bg-bg-soft px-4 py-3"
         >
           <div class="flex items-start justify-between gap-2">
             <div class="flex min-w-0 items-start gap-2.5">
@@ -213,10 +213,10 @@
                 size="md"
               />
               <div class="min-w-0">
-                <h2 class="truncate text-[13px] font-semibold text-gray-900">
+                <h2 class="truncate text-[13px] font-semibold text-fg">
                   {ws.display_name || ws.slug}
                 </h2>
-                <p class="mt-0.5 truncate text-[11px] text-gray-500">
+                <p class="mt-0.5 truncate text-[11px] text-fg-subtle">
                   {ws.slug}
                 </p>
               </div>
@@ -234,7 +234,7 @@
             {#if String(ws.status ?? "").toLowerCase() === "ready" && ws.slug}
               <button
                 type="button"
-                class="rounded-md bg-gray-200 px-2.5 py-1.5 text-[12px] font-medium text-gray-900 transition-colors hover:bg-gray-300 disabled:opacity-60"
+                class="rounded-md bg-panel-hover px-2.5 py-1.5 text-[12px] font-medium text-fg transition-colors hover:bg-line-strong disabled:opacity-60"
                 onclick={() => openWorkspaceLaunch(ws)}
                 disabled={launchingWorkspaceId === ws.id}
               >
@@ -242,7 +242,7 @@
               </button>
             {:else}
               <span
-                class="rounded-md border border-gray-200 px-2.5 py-1.5 text-[11px] text-gray-500"
+                class="rounded-md border border-line px-2.5 py-1.5 text-[11px] text-fg-subtle"
               >
                 {String(ws.status ?? "").toLowerCase() === "provisioning"
                   ? "Setting up…"

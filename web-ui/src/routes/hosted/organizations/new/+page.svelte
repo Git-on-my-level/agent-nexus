@@ -77,27 +77,27 @@
 </svelte:head>
 
 <div class="mx-auto max-w-lg py-6">
-  <p class="text-[12px] text-gray-500">
-    <a class="text-indigo-400 hover:text-indigo-300" href="/hosted/dashboard"
+  <p class="text-[12px] text-fg-subtle">
+    <a class="text-accent-text hover:text-accent-text" href="/hosted/dashboard"
       >← Dashboard</a
     >
   </p>
-  <h1 class="mt-2 text-lg font-semibold text-gray-900">
+  <h1 class="mt-2 text-lg font-semibold text-fg">
     Create an organization
   </h1>
-  <p class="mt-1 text-[12px] text-gray-500">
+  <p class="mt-1 text-[12px] text-fg-subtle">
     Organizations group workspaces, members, and billing. You can rename the
     organization later, but the slug is permanent.
   </p>
 
   <form
-    class="mt-5 space-y-3 rounded-md border border-gray-200 bg-gray-100 px-5 py-5"
+    class="mt-5 space-y-3 rounded-md border border-line bg-bg-soft px-5 py-5"
     onsubmit={(e) => {
       e.preventDefault();
       submit();
     }}
   >
-    <label class="block text-[12px] font-medium text-gray-600">
+    <label class="block text-[12px] font-medium text-fg-muted">
       Organization name
       <input
         type="text"
@@ -105,17 +105,17 @@
         disabled={busy}
         required
         placeholder="Acme Robotics"
-        class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] text-gray-900 placeholder:text-[var(--ui-text-subtle)]"
+        class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-1.5 text-[13px] text-fg placeholder:text-[var(--fg-subtle)]"
       />
     </label>
 
-    <label class="block text-[12px] font-medium text-gray-600">
+    <label class="block text-[12px] font-medium text-fg-muted">
       URL slug
       <div
-        class="mt-1 flex items-stretch overflow-hidden rounded-md border border-gray-200 bg-gray-50"
+        class="mt-1 flex items-stretch overflow-hidden rounded-md border border-line bg-bg"
       >
         <span
-          class="flex items-center border-r border-gray-200 bg-gray-100 px-2.5 text-[12px] text-gray-500"
+          class="flex items-center border-r border-line bg-bg-soft px-2.5 text-[12px] text-fg-subtle"
           >oar.app /</span
         >
         <input
@@ -126,10 +126,10 @@
           required
           placeholder="acme-robotics"
           pattern="[a-z0-9-]+"
-          class="w-full bg-transparent px-2.5 py-1.5 text-[13px] text-gray-900 placeholder:text-[var(--ui-text-subtle)]"
+          class="w-full bg-transparent px-2.5 py-1.5 text-[13px] text-fg placeholder:text-[var(--fg-subtle)]"
         />
       </div>
-      <span class="mt-1 block text-[11px] text-gray-500">
+      <span class="mt-1 block text-[11px] text-fg-subtle">
         Lowercase letters, numbers, and hyphens. Used in URLs.
       </span>
     </label>
@@ -137,7 +137,7 @@
     {#if message}
       <p
         role="alert"
-        class="rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
+        class="rounded-md bg-danger-soft px-3 py-2 text-[12px] text-danger-text"
       >
         {message}
       </p>
@@ -145,13 +145,13 @@
 
     <div class="flex items-center justify-end gap-2 pt-2">
       <a
-        class="rounded-md px-3 py-1.5 text-[12px] font-medium text-gray-500 hover:bg-gray-200 hover:text-gray-800"
+        class="rounded-md px-3 py-1.5 text-[12px] font-medium text-fg-subtle hover:bg-panel-hover hover:text-fg"
         href="/hosted/dashboard">Cancel</a
       >
       <button
         type="submit"
         disabled={busy}
-        class="rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-60"
+        class="rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-60"
       >
         {busy ? "Creating…" : "Create organization"}
       </button>

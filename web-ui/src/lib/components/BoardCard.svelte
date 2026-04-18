@@ -79,15 +79,15 @@
   function threadStatusDotClass(status) {
     switch (status) {
       case "done":
-        return "bg-emerald-400";
+        return "bg-ok-text";
       case "canceled":
-        return "bg-gray-500";
+        return "bg-bg0";
       case "paused":
-        return "bg-amber-400";
+        return "bg-warn-text";
       case "stale":
         return "bg-orange-400";
       case "very-stale":
-        return "bg-red-400";
+        return "bg-danger-text";
       default:
         return "bg-blue-400";
     }
@@ -96,17 +96,17 @@
   function threadStatusColor(status) {
     switch (status) {
       case "done":
-        return "text-[var(--ui-text)]";
+        return "text-[var(--fg)]";
       case "canceled":
-        return "text-[var(--ui-text-muted)]";
+        return "text-[var(--fg-muted)]";
       case "paused":
-        return "text-amber-400";
+        return "text-warn-text";
       case "stale":
         return "text-orange-400";
       case "very-stale":
-        return "text-red-400";
+        return "text-danger-text";
       default:
-        return "text-[var(--ui-text)]";
+        return "text-[var(--fg)]";
     }
   }
 
@@ -150,11 +150,11 @@
 <div
   id={`card-${cardRowId}`}
   data-board-id={boardId || undefined}
-  class="group overflow-hidden rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] transition-colors hover:border-[var(--ui-border-strong)]"
+  class="group overflow-hidden rounded-md border border-[var(--line)] bg-[var(--panel)] transition-colors hover:border-[var(--line-strong)]"
 >
   <div
     aria-label={`Manage ${headerTitle}`}
-    class="cursor-pointer px-2.5 py-2 transition-colors hover:bg-[var(--ui-border-subtle)]/20"
+    class="cursor-pointer px-2.5 py-2 transition-colors hover:bg-[var(--line-subtle)]/20"
     {onclick}
     onkeydown={handleCardKeydown}
     role="button"
@@ -192,7 +192,7 @@
           {#if assigneeVisible.length > 0}
             {#each assigneeVisible as name}
               <span
-                class="max-w-[7rem] truncate rounded-md bg-[var(--ui-border)] px-1 py-0.5 text-[11px] text-[var(--ui-text-muted)]"
+                class="max-w-[7rem] truncate rounded-md bg-[var(--line)] px-1 py-0.5 text-[11px] text-[var(--fg-muted)]"
                 title={name}
               >
                 {name}
@@ -200,7 +200,7 @@
             {/each}
             {#if assigneeMore > 0}
               <span
-                class="rounded-md bg-[var(--ui-border)] px-1 py-0.5 text-[11px] text-[var(--ui-text-muted)]"
+                class="rounded-md bg-[var(--line)] px-1 py-0.5 text-[11px] text-[var(--fg-muted)]"
               >
                 +{assigneeMore} more
               </span>
@@ -210,8 +210,8 @@
           {#if cardDueAt}
             <span
               class="rounded-md px-1 py-0.5 text-[11px] {dueOverdue
-                ? 'bg-red-500/10 text-red-400'
-                : 'bg-[var(--ui-border)] text-[var(--ui-text-muted)]'}"
+                ? 'bg-danger-soft text-danger-text'
+                : 'bg-[var(--line)] text-[var(--fg-muted)]'}"
             >
               Due {formatTimestamp(cardDueAt) || "—"}
             </span>
@@ -229,7 +229,7 @@
         </div>
 
         {#if showSummary}
-          <p class="mt-1 truncate text-[11px] text-[var(--ui-text-muted)]">
+          <p class="mt-1 truncate text-[11px] text-[var(--fg-muted)]">
             {summaryText}
           </p>
         {/if}

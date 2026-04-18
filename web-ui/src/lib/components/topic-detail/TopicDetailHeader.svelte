@@ -18,11 +18,11 @@
   import { workspacePath } from "$lib/workspacePaths";
 
   function topicStatusBadgeClass(status) {
-    if (status === "active") return "bg-emerald-500/10 text-emerald-400";
-    if (status === "paused") return "bg-amber-500/10 text-amber-400";
+    if (status === "active") return "bg-ok-soft text-ok-text";
+    if (status === "paused") return "bg-warn-soft text-warn-text";
     if (status === "closed") return "bg-slate-500/10 text-slate-300";
     if (status === "resolved") return "bg-slate-500/10 text-slate-300";
-    return "bg-[var(--ui-border)] text-[var(--ui-text-muted)]";
+    return "bg-[var(--line)] text-[var(--fg-muted)]";
   }
 
   let { threadId = "", detailAsTopic = true } = $props();
@@ -107,23 +107,23 @@
 </script>
 
 <nav
-  class="mb-3 flex items-center gap-1.5 text-[13px] text-[var(--ui-text-muted)]"
+  class="mb-3 flex items-center gap-1.5 text-[13px] text-[var(--fg-muted)]"
   aria-label="Breadcrumb"
 >
   <a
-    class="hover:text-[var(--ui-text)]"
+    class="hover:text-[var(--fg)]"
     href={workspacePath(workspaceSlug, detailAsTopic ? "/topics" : "/threads")}
     >{detailAsTopic ? "Topics" : "Topic (thread view)"}</a
   >
-  <span class="text-[var(--ui-text-subtle)]">/</span>
-  <span class="truncate text-[var(--ui-text)]" aria-current="page"
+  <span class="text-[var(--fg-subtle)]">/</span>
+  <span class="truncate text-[var(--fg)]" aria-current="page"
     >{topic?.title || ""}</span
   >
 </nav>
 
 {#if topic?.trashed_at}
   <div
-    class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[13px] text-red-400"
+    class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-[13px] text-danger-text"
   >
     <div class="min-w-0 flex-1">
       <div class="flex items-center gap-2 font-semibold">
@@ -133,7 +133,7 @@
       {#if topic.trash_reason}
         <p class="mt-2">Reason: {topic.trash_reason}</p>
       {/if}
-      <p class="mt-1 text-[11px] text-red-400/80">
+      <p class="mt-1 text-[11px] text-danger-text/80">
         Trashed {#if topic.trashed_by}by {actorName(topic.trashed_by)}{/if}
         {#if topic.trashed_at}
           at {formatTimestamp(topic.trashed_at)}
@@ -142,7 +142,7 @@
     </div>
     {#if detailAsTopic}
       <button
-        class="shrink-0 cursor-pointer rounded-md border border-red-500/40 bg-red-500/15 px-2 py-1 text-[12px] font-medium text-red-400 hover:bg-red-500/25 disabled:opacity-50"
+        class="shrink-0 cursor-pointer rounded-md border border-danger/40 bg-danger-soft px-2 py-1 text-[12px] font-medium text-danger-text hover:bg-danger/25 disabled:opacity-50"
         disabled={lifecycleBusy}
         onclick={handleRestore}
         type="button"
@@ -150,7 +150,7 @@
         {lifecycleBusy ? "…" : "Restore"}
       </button>
     {:else}
-      <p class="shrink-0 max-w-xs text-[11px] text-red-400/80">
+      <p class="shrink-0 max-w-xs text-[11px] text-danger-text/80">
         Restore and lifecycle changes use the topic route; this thread view is
         read-only here.
       </p>
@@ -158,7 +158,7 @@
   </div>
 {:else if topic?.archived_at}
   <div
-    class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[13px] text-amber-400"
+    class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-[13px] text-warn-text"
   >
     <p class="min-w-0 flex-1">
       This {detailAsTopic ? "topic" : "thread"} was archived on {formatTimestamp(
@@ -168,7 +168,7 @@
     </p>
     {#if detailAsTopic}
       <button
-        class="shrink-0 cursor-pointer rounded-md border border-amber-500/40 bg-amber-500/15 px-2 py-1 text-[12px] font-medium text-amber-400 hover:bg-amber-500/25 disabled:opacity-50"
+        class="shrink-0 cursor-pointer rounded-md border border-warn/40 bg-warn-soft px-2 py-1 text-[12px] font-medium text-warn-text hover:bg-warn/25 disabled:opacity-50"
         disabled={lifecycleBusy}
         onclick={handleUnarchive}
         type="button"
@@ -176,7 +176,7 @@
         {lifecycleBusy ? "…" : "Unarchive"}
       </button>
     {:else}
-      <p class="shrink-0 max-w-xs text-[11px] text-amber-400/80">
+      <p class="shrink-0 max-w-xs text-[11px] text-warn-text/80">
         Unarchive from the topic route; thread views here are read-only.
       </p>
     {/if}
@@ -185,7 +185,7 @@
 
 {#if topic}
   <div class="flex items-start justify-between gap-4">
-    <h1 class="text-lg font-semibold text-[var(--ui-text)]">
+    <h1 class="text-lg font-semibold text-[var(--fg)]">
       {topic.title}
     </h1>
     <div
@@ -195,7 +195,7 @@
         <span
           class="rounded px-2 py-0.5 {staleness.stale
             ? 'bg-rose-500/10 text-rose-400'
-            : 'bg-emerald-500/10 text-emerald-400'}"
+            : 'bg-ok-soft text-ok-text'}"
         >
           {staleness.label}
         </span>

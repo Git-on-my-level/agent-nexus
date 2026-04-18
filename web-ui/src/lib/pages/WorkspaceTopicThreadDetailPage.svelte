@@ -309,24 +309,24 @@
 <TopicDetailHeader {threadId} {detailAsTopic} />
 
 {#if topicLoading}
-  <p class="text-[13px] text-[var(--ui-text-muted)]">Loading...</p>
+  <p class="text-[13px] text-[var(--fg-muted)]">Loading...</p>
 {:else if topicError}
-  <p class="rounded-md bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
+  <p class="rounded-md bg-danger-soft px-3 py-2 text-[13px] text-danger-text">
     {topicError}
   </p>
 {:else if !topic}
-  <p class="text-[13px] text-[var(--ui-text-muted)]">
+  <p class="text-[13px] text-[var(--fg-muted)]">
     {detailAsTopic ? "Topic not found." : "Thread not found."}
   </p>
 {:else}
   <div
-    class="mt-3 flex gap-0 border-b border-[var(--ui-border)]"
+    class="mt-3 flex gap-0 border-b border-[var(--line)]"
     aria-label="Topic sections"
     role="tablist"
   >
     {#each [["overview", "Overview"], ["messages", "Messages"], ["timeline", "Timeline"]] as [tabId, tabLabel]}
       <button
-        class={`relative cursor-pointer px-3 py-2 text-[13px] font-medium transition-colors ${activeTab === tabId ? "text-[var(--ui-text)]" : "text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]"}`}
+        class={`relative cursor-pointer px-3 py-2 text-[13px] font-medium transition-colors ${activeTab === tabId ? "text-[var(--fg)]" : "text-[var(--fg-muted)] hover:text-[var(--fg)]"}`}
         onclick={() => void setActiveTab(tabId)}
         type="button"
         role="tab"
@@ -336,7 +336,7 @@
         {tabLabel}
         {#if activeTab === tabId}
           <span
-            class="pointer-events-none absolute inset-x-0 -bottom-px h-0.5 bg-indigo-500"
+            class="pointer-events-none absolute inset-x-0 -bottom-px h-0.5 bg-accent"
           ></span>
         {/if}
       </button>

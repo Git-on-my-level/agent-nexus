@@ -116,12 +116,12 @@
       <div class="flex flex-wrap items-center gap-3">
         {#if archivedCount > 0}
           <label
-            class="flex items-center gap-1.5 text-[11px] text-[var(--ui-text-muted)]"
+            class="flex items-center gap-1.5 text-[11px] text-[var(--fg-muted)]"
           >
             <input
               type="checkbox"
               bind:checked={showArchived}
-              class="accent-[var(--ui-accent)]"
+              class="accent-[var(--accent)]"
             />
             Show archived ({archivedCount})
           </label>
@@ -129,30 +129,30 @@
       </div>
       <div class="min-h-[1rem] text-right" aria-live="polite">
         {#if timelineLoading && hasAnyTimelineEvents}
-          <p class="text-[11px] text-[var(--ui-text-muted)]">Syncing…</p>
+          <p class="text-[11px] text-[var(--fg-muted)]">Syncing…</p>
         {/if}
       </div>
     </div>
   {/if}
   {#if timelineError && !hasAnyTimelineEvents}
-    <p class="rounded-md bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
+    <p class="rounded-md bg-danger-soft px-3 py-2 text-[13px] text-danger-text">
       {timelineError}
     </p>
   {:else if timelineLoading && !hasAnyTimelineEvents}
-    <p class="text-[13px] text-[var(--ui-text-muted)]">Loading timeline...</p>
+    <p class="text-[13px] text-[var(--fg-muted)]">Loading timeline...</p>
   {:else if !hasAnyTimelineEvents}
-    <p class="text-[13px] text-[var(--ui-text-muted)]">No events yet.</p>
+    <p class="text-[13px] text-[var(--fg-muted)]">No events yet.</p>
   {:else}
     {#if timelineError}
       <p
-        class="mb-2 rounded-md bg-red-500/10 px-3 py-2 text-[13px] text-red-400"
+        class="mb-2 rounded-md bg-danger-soft px-3 py-2 text-[13px] text-danger-text"
       >
         {timelineError}
       </p>
     {/if}
     {#if lifecycleError}
       <p
-        class="mb-2 rounded-md bg-red-500/10 px-3 py-2 text-[13px] text-red-400"
+        class="mb-2 rounded-md bg-danger-soft px-3 py-2 text-[13px] text-danger-text"
       >
         {lifecycleError}
       </p>
@@ -160,7 +160,7 @@
     <div class="space-y-1">
       {#each filteredTimeline as event (event.id)}
         <div
-          class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] px-4 py-2.5 {event.archived_at
+          class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-4 py-2.5 {event.archived_at
             ? 'opacity-60'
             : ''}"
           id={`event-${event.id}`}
@@ -176,9 +176,9 @@
               <div class="min-w-0 flex-1">
                 <MarkdownRenderer
                   source={event.summary}
-                  class="text-[13px] text-[var(--ui-text)]"
+                  class="text-[13px] text-[var(--fg)]"
                 />
-                <p class="mt-0.5 text-[12px] text-[var(--ui-text-muted)]">
+                <p class="mt-0.5 text-[12px] text-[var(--fg-muted)]">
                   {actorName(event.actor_id)} · {event.typeLabel} · {formatTimestamp(
                     event.ts,
                   ) || "—"}
@@ -215,7 +215,7 @@
             <div class="mt-1.5 flex flex-wrap gap-1 text-[12px]">
               {#each event.changedFields as field}
                 <span
-                  class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[var(--ui-text-muted)]"
+                  class="rounded bg-[var(--line)] px-1.5 py-0.5 text-[var(--fg-muted)]"
                   >{field}</span
                 >
               {/each}
@@ -234,11 +234,11 @@
           {#if !event.isKnownType}
             <details class="mt-1.5">
               <summary
-                class="cursor-pointer text-[12px] text-[var(--ui-text-muted)]"
+                class="cursor-pointer text-[12px] text-[var(--fg-muted)]"
                 >Details</summary
               >
               <pre
-                class="mt-1 overflow-auto rounded bg-[var(--ui-bg-soft)] p-2 text-[11px] text-[var(--ui-text-muted)]">{JSON.stringify(
+                class="mt-1 overflow-auto rounded bg-[var(--bg-soft)] p-2 text-[11px] text-[var(--fg-muted)]">{JSON.stringify(
                   event.payload ?? {},
                   null,
                   2,

@@ -495,12 +495,12 @@
 >
   <div class="cdm-overlay" onclick={handleBackdropClick}></div>
   <div class="cdm-panel">
-    <div class="sticky top-0 z-10 bg-[var(--ui-panel)] px-4 pt-3">
+    <div class="sticky top-0 z-10 bg-[var(--panel)] px-4 pt-3">
       <div class="flex items-start justify-between gap-3">
         <div class="min-w-0 flex-1">
           <div class="flex flex-wrap items-center gap-2">
             <h2
-              class="truncate text-[13px] font-semibold text-[var(--ui-text)]"
+              class="truncate text-[13px] font-semibold text-[var(--fg)]"
             >
               {headerTitle}
             </h2>
@@ -523,8 +523,8 @@
                 class="rounded-md px-1.5 py-0.5 text-[11px] {isOverdue(
                   membership.due_at,
                 )
-                  ? 'bg-red-500/10 text-red-400'
-                  : 'bg-[var(--ui-border)] text-[var(--ui-text-muted)]'}"
+                  ? 'bg-danger-soft text-danger-text'
+                  : 'bg-[var(--line)] text-[var(--fg-muted)]'}"
               >
                 Due {dueDateDisplay(membership.due_at) || "—"}
               </span>
@@ -532,12 +532,12 @@
           </div>
           {#if assigneeNames.length > 0}
             <div class="mt-2 flex flex-wrap items-center gap-1">
-              <span class="text-[11px] text-[var(--ui-text-muted)]"
+              <span class="text-[11px] text-[var(--fg-muted)]"
                 >Assigned</span
               >
               {#each assigneeNames as name}
                 <span
-                  class="max-w-[10rem] truncate rounded-md bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] text-[var(--ui-text-muted)]"
+                  class="max-w-[10rem] truncate rounded-md bg-[var(--line)] px-1.5 py-0.5 text-[11px] text-[var(--fg-muted)]"
                   title={name}
                 >
                   {name}
@@ -545,14 +545,14 @@
               {/each}
             </div>
           {/if}
-          <div class="mt-2 text-[12px] text-[var(--ui-text-muted)]">
-            <span class="text-[var(--ui-text-muted)]">Board</span>
+          <div class="mt-2 text-[12px] text-[var(--fg-muted)]">
+            <span class="text-[var(--fg-muted)]">Board</span>
             {board?.title ?? boardId}
           </div>
         </div>
         <button
           type="button"
-          class="shrink-0 rounded-md border border-[var(--ui-border)] p-1.5 text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] hover:text-[var(--ui-text)]"
+          class="shrink-0 rounded-md border border-[var(--line)] p-1.5 text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
           onclick={() => onclose()}
           aria-label="Close"
         >
@@ -573,7 +573,7 @@
       </div>
 
       <div
-        class="relative mt-3 flex flex-wrap gap-0 border-b border-[var(--ui-border)]"
+        class="relative mt-3 flex flex-wrap gap-0 border-b border-[var(--line)]"
         aria-label="Card sections"
         role="tablist"
       >
@@ -583,7 +583,7 @@
           data-cdm-pane-tab="overview"
           tabindex={cdmDetailPane === "overview" ? 0 : -1}
           aria-selected={cdmDetailPane === "overview"}
-          class={`relative inline-flex cursor-pointer border-0 border-b-2 border-transparent bg-transparent px-3 py-2 text-[13px] font-medium transition-colors ${cdmDetailPane === "overview" ? "border-indigo-500 text-[var(--ui-text)]" : "text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]"}`}
+          class={`relative inline-flex cursor-pointer border-0 border-b-2 border-transparent bg-transparent px-3 py-2 text-[13px] font-medium transition-colors ${cdmDetailPane === "overview" ? "border-accent text-[var(--fg)]" : "text-[var(--fg-muted)] hover:text-[var(--fg)]"}`}
           onpointerdown={() => pickDetailPane("overview")}
           onclick={() => pickDetailPane("overview")}
         >
@@ -596,7 +596,7 @@
           data-testid="cdm-tab-messages"
           tabindex={cdmDetailPane === "messages" ? 0 : -1}
           aria-selected={cdmDetailPane === "messages"}
-          class={`relative inline-flex cursor-pointer border-0 border-b-2 border-transparent bg-transparent px-3 py-2 text-[13px] font-medium transition-colors ${cdmDetailPane === "messages" ? "border-indigo-500 text-[var(--ui-text)]" : "text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]"}`}
+          class={`relative inline-flex cursor-pointer border-0 border-b-2 border-transparent bg-transparent px-3 py-2 text-[13px] font-medium transition-colors ${cdmDetailPane === "messages" ? "border-accent text-[var(--fg)]" : "text-[var(--fg-muted)] hover:text-[var(--fg)]"}`}
           onpointerdown={() => pickDetailPane("messages")}
           onclick={() => pickDetailPane("messages")}
         >
@@ -609,7 +609,7 @@
           data-testid="cdm-tab-timeline"
           tabindex={cdmDetailPane === "timeline" ? 0 : -1}
           aria-selected={cdmDetailPane === "timeline"}
-          class={`relative inline-flex cursor-pointer border-0 border-b-2 border-transparent bg-transparent px-3 py-2 text-[13px] font-medium transition-colors ${cdmDetailPane === "timeline" ? "border-indigo-500 text-[var(--ui-text)]" : "text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]"}`}
+          class={`relative inline-flex cursor-pointer border-0 border-b-2 border-transparent bg-transparent px-3 py-2 text-[13px] font-medium transition-colors ${cdmDetailPane === "timeline" ? "border-accent text-[var(--fg)]" : "text-[var(--fg-muted)] hover:text-[var(--fg)]"}`}
           onpointerdown={() => pickDetailPane("timeline")}
           onclick={() => pickDetailPane("timeline")}
         >
@@ -628,29 +628,29 @@
             <div class="space-y-3">
               {#if saveError}
                 <p
-                  class="rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
+                  class="rounded-md bg-danger-soft px-3 py-2 text-[12px] text-danger-text"
                 >
                   {saveError}
                 </p>
               {/if}
               <div class="grid gap-3 md:grid-cols-2">
                 <label
-                  class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+                  class="text-[12px] font-medium text-[var(--fg-muted)]"
                 >
                   Card title
                   <input
                     bind:value={editTitle}
-                    class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-1.5 text-[13px] text-[var(--ui-text)]"
+                    class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-[13px] text-[var(--fg)]"
                     type="text"
                   />
                 </label>
                 <label
-                  class="text-[12px] font-medium text-[var(--ui-text-muted)] md:col-span-2"
+                  class="text-[12px] font-medium text-[var(--fg-muted)] md:col-span-2"
                 >
                   Summary
                   <textarea
                     bind:value={editSummary}
-                    class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-1.5 text-[13px] text-[var(--ui-text)]"
+                    class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-[13px] text-[var(--fg)]"
                     rows="4"
                   ></textarea>
                 </label>
@@ -686,12 +686,12 @@
                   placeholder="Search actors by name, ID, or tags"
                 />
                 <label
-                  class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+                  class="text-[12px] font-medium text-[var(--fg-muted)]"
                 >
                   Risk
                   <select
                     bind:value={editRisk}
-                    class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-1.5 text-[13px] text-[var(--ui-text)]"
+                    class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-[13px] text-[var(--fg)]"
                   >
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
@@ -700,12 +700,12 @@
                   </select>
                 </label>
                 <label
-                  class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+                  class="text-[12px] font-medium text-[var(--fg-muted)]"
                 >
                   Resolution
                   <select
                     bind:value={editResolution}
-                    class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-1.5 text-[13px] text-[var(--ui-text)]"
+                    class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-[13px] text-[var(--fg)]"
                   >
                     <option value="">Open</option>
                     <option value="done">Done</option>
@@ -713,28 +713,28 @@
                   </select>
                 </label>
                 <label
-                  class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+                  class="text-[12px] font-medium text-[var(--fg-muted)]"
                 >
                   Due date
                   <input
                     bind:value={editDueAt}
-                    class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-1.5 text-[13px] text-[var(--ui-text)]"
+                    class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-[13px] text-[var(--fg)]"
                     type="datetime-local"
                   />
                 </label>
                 <label
-                  class="text-[12px] font-medium text-[var(--ui-text-muted)] md:col-span-2"
+                  class="text-[12px] font-medium text-[var(--fg-muted)] md:col-span-2"
                 >
                   Definition of done
                   <textarea
                     bind:value={editDefinitionOfDone}
-                    class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-1.5 text-[13px] text-[var(--ui-text)]"
+                    class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-[13px] text-[var(--fg)]"
                     rows="3"
                   ></textarea>
                 </label>
                 <div class="md:col-span-2">
                   <p
-                    class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+                    class="text-[12px] font-medium text-[var(--fg-muted)]"
                   >
                     Related refs
                   </p>
@@ -751,7 +751,7 @@
                 </div>
                 <div class="md:col-span-2">
                   <p
-                    class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+                    class="text-[12px] font-medium text-[var(--fg-muted)]"
                   >
                     Resolution evidence
                   </p>
@@ -769,16 +769,16 @@
               </div>
             </div>
           {:else}
-            <div class="space-y-4 text-[13px] text-[var(--ui-text)]">
+            <div class="space-y-4 text-[13px] text-[var(--fg)]">
               {#if showSummary}
                 <section>
                   <h3
-                    class="mb-1.5 text-[12px] font-medium text-[var(--ui-text-muted)]"
+                    class="mb-1.5 text-[12px] font-medium text-[var(--fg-muted)]"
                   >
                     Summary
                   </h3>
                   <div
-                    class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-2"
+                    class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2"
                   >
                     <MarkdownRenderer content={summaryText} />
                   </div>
@@ -788,7 +788,7 @@
               {#if dodItems.length > 0}
                 <section>
                   <h3
-                    class="mb-1.5 text-[12px] font-medium text-[var(--ui-text-muted)]"
+                    class="mb-1.5 text-[12px] font-medium text-[var(--fg-muted)]"
                   >
                     Definition of done
                   </h3>
@@ -803,7 +803,7 @@
               {#if dedupedRelatedRefs.length > 0}
                 <section>
                   <h3
-                    class="mb-1.5 text-[12px] font-medium text-[var(--ui-text-muted)]"
+                    class="mb-1.5 text-[12px] font-medium text-[var(--fg-muted)]"
                   >
                     Related refs
                   </h3>
@@ -826,7 +826,7 @@
               {#if resolutionRefsList.length > 0}
                 <section>
                   <h3
-                    class="mb-1.5 text-[12px] font-medium text-[var(--ui-text-muted)]"
+                    class="mb-1.5 text-[12px] font-medium text-[var(--fg-muted)]"
                   >
                     Resolution refs
                   </h3>
@@ -849,14 +849,14 @@
               <section class="space-y-2 text-[12px]">
                 <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5">
                   <span class="flex items-center gap-1.5">
-                    <span class="text-[var(--ui-text-muted)]">Risk</span>
-                    <span class="font-medium capitalize text-[var(--ui-text)]">
+                    <span class="text-[var(--fg-muted)]">Risk</span>
+                    <span class="font-medium capitalize text-[var(--fg)]">
                       {String(membership?.risk ?? "—")}
                     </span>
                   </span>
                   {#if cardFreshness}
                     <span class="flex items-center gap-1.5">
-                      <span class="text-[var(--ui-text-muted)]">Freshness</span>
+                      <span class="text-[var(--fg-muted)]">Freshness</span>
                       <span
                         class="rounded-md px-1.5 py-0.5 font-medium {freshnessStatusTone(
                           cardFreshness.status,
@@ -865,7 +865,7 @@
                         {freshnessStatusLabel(cardFreshness.status)}
                       </span>
                       {#if cardFreshness.generated_at}
-                        <span class="text-[var(--ui-text-muted)]">
+                        <span class="text-[var(--fg-muted)]">
                           · {formatTimestamp(cardFreshness.generated_at)}
                         </span>
                       {/if}
@@ -873,8 +873,8 @@
                   {/if}
                   {#if derivedSummary?.latest_activity_at}
                     <span class="flex items-center gap-1.5">
-                      <span class="text-[var(--ui-text-muted)]">Activity</span>
-                      <span class="text-[var(--ui-text)]">
+                      <span class="text-[var(--fg-muted)]">Activity</span>
+                      <span class="text-[var(--fg)]">
                         {formatTimestamp(derivedSummary.latest_activity_at) ||
                           "—"}
                       </span>
@@ -882,7 +882,7 @@
                   {/if}
                   {#if derivedSummary?.stale}
                     <span
-                      class="rounded-md bg-amber-500/10 px-1.5 py-0.5 font-medium text-amber-400"
+                      class="rounded-md bg-warn-soft px-1.5 py-0.5 font-medium text-warn-text"
                     >
                       Stale
                     </span>
@@ -892,10 +892,10 @@
                   <div class="flex flex-wrap gap-1.5">
                     {#each nonZeroDerivedCounts as { label, count }}
                       <span
-                        class="rounded-md bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px]"
+                        class="rounded-md bg-[var(--line)] px-1.5 py-0.5 text-[11px]"
                       >
-                        <span class="text-[var(--ui-text-muted)]">{label}</span>
-                        <span class="font-medium text-[var(--ui-text)]">
+                        <span class="text-[var(--fg-muted)]">{label}</span>
+                        <span class="font-medium text-[var(--fg)]">
                           {count}
                         </span>
                       </span>
@@ -906,13 +906,13 @@
 
               {#if cardInspectNav && topicHref}
                 <div class="flex items-center gap-1.5 text-[12px]">
-                  <span class="text-[var(--ui-text-muted)]"
+                  <span class="text-[var(--fg-muted)]"
                     >{cardInspectNav.kind === "topic"
                       ? "Topic"
                       : "Thread"}</span
                   >
                   <a
-                    class="text-indigo-400 hover:text-indigo-300"
+                    class="text-accent-text hover:text-accent-text"
                     href={topicHref}
                   >
                     {topicDisplayName}
@@ -921,10 +921,10 @@
               {/if}
 
               {#if membership?.updated_at}
-                <p class="text-[11px] text-[var(--ui-text-muted)]">
+                <p class="text-[11px] text-[var(--fg-muted)]">
                   Card updated {formatTimestamp(membership.updated_at)}
                   {#if membership?.updated_by}
-                    <span class="text-[var(--ui-text-muted)]">
+                    <span class="text-[var(--fg-muted)]">
                       · {actorName(membership.updated_by)}
                     </span>
                   {/if}
@@ -942,7 +942,7 @@
               workspaceId=""
             />
           {:else}
-            <p class="text-[13px] text-[var(--ui-text-muted)]">
+            <p class="text-[13px] text-[var(--fg-muted)]">
               This card has no backing thread; messages require a linked thread.
             </p>
           {/if}
@@ -952,7 +952,7 @@
           {#if linkedThreadId}
             <TimelineTab threadId={linkedThreadId} />
           {:else}
-            <p class="text-[13px] text-[var(--ui-text-muted)]">
+            <p class="text-[13px] text-[var(--fg-muted)]">
               This card has no backing thread; timeline requires a linked
               thread.
             </p>
@@ -962,16 +962,16 @@
     </div>
 
     <div
-      class="shrink-0 border-t border-[var(--ui-border)] bg-[var(--ui-panel)] px-4 py-3"
+      class="shrink-0 border-t border-[var(--line)] bg-[var(--panel)] px-4 py-3"
     >
       <div
         class="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-end md:justify-between"
       >
         <div
-          class="flex min-w-0 max-w-full items-stretch rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] md:w-60"
+          class="flex min-w-0 max-w-full items-stretch rounded-md border border-[var(--line)] bg-[var(--bg-soft)] md:w-60"
         >
           <span
-            class="flex shrink-0 items-center border-r border-[var(--ui-border)] px-2.5 py-1.5 text-[11px] text-[var(--ui-text-muted)]"
+            class="flex shrink-0 items-center border-r border-[var(--line)] px-2.5 py-1.5 text-[11px] text-[var(--fg-muted)]"
             aria-hidden="true"
           >
             Column
@@ -980,7 +980,7 @@
             bind:value={moveColumnKey}
             onchange={handleColumnSelectChange}
             aria-label="Column"
-            class="min-w-0 flex-1 cursor-pointer rounded-r-md border-0 bg-transparent px-2 py-1.5 pr-7 text-[13px] text-[var(--ui-text)] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[var(--ui-accent)]"
+            class="min-w-0 flex-1 cursor-pointer rounded-r-md border-0 bg-transparent px-2 py-1.5 pr-7 text-[13px] text-[var(--fg)] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[var(--accent)]"
           >
             {#each board?.column_schema ?? [] as column}
               <option value={column.key}>
@@ -995,14 +995,14 @@
             <button
               type="button"
               disabled={savingCard}
-              class="rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+              class="rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
               onclick={() => void handleSave()}
             >
               {savingCard ? "Saving…" : "Save card details"}
             </button>
             <button
               type="button"
-              class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] hover:text-[var(--ui-text)]"
+              class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
               onclick={cancelEdit}
             >
               Cancel
@@ -1010,7 +1010,7 @@
           {:else}
             <button
               type="button"
-              class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text)] transition-colors hover:bg-[var(--ui-border-subtle)]"
+              class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line-subtle)]"
               onclick={beginEdit}
             >
               Edit card
@@ -1018,7 +1018,7 @@
           {/if}
           <button
             type="button"
-            class="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-[12px] font-medium text-red-400 transition-colors hover:bg-red-500/20"
+            class="rounded-md border border-danger/30 bg-danger-soft px-3 py-1.5 text-[12px] font-medium text-danger-text transition-colors hover:bg-danger-soft"
             onclick={() => {
               removeCardConfirmOpen = true;
             }}
@@ -1073,9 +1073,9 @@
     flex-direction: column;
     overflow: hidden;
     border-radius: 0.375rem;
-    border: 1px solid var(--ui-border);
-    background: var(--ui-panel);
-    box-shadow: var(--ui-shadow-elevated);
+    border: 1px solid var(--line);
+    background: var(--panel);
+    box-shadow: var(--shadow-modal);
   }
 
   .cdm-scroll {

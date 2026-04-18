@@ -82,9 +82,9 @@
   function planBadgeClasses(planTier) {
     const t = String(planTier ?? "starter").toLowerCase();
     if (t === "enterprise") return "text-fuchsia-400 bg-fuchsia-500/10";
-    if (t === "scale") return "text-indigo-400 bg-indigo-500/10";
-    if (t === "team") return "text-emerald-400 bg-emerald-500/10";
-    return "text-gray-500 bg-gray-200";
+    if (t === "scale") return "text-accent-text bg-accent-soft";
+    if (t === "team") return "text-ok-text bg-ok-soft";
+    return "text-fg-subtle bg-panel-hover";
   }
 
   function planLabel(planTier) {
@@ -100,9 +100,9 @@
   }
 
   function barColor(p) {
-    if (p >= 90) return "bg-red-500";
-    if (p >= 75) return "bg-amber-500";
-    return "bg-indigo-500";
+    if (p >= 90) return "bg-danger";
+    if (p >= 75) return "bg-warn";
+    return "bg-accent";
   }
 </script>
 
@@ -121,14 +121,14 @@
         />
       {/if}
       <div class="min-w-0">
-        <p class="text-[11px] text-gray-500">
+        <p class="text-[11px] text-fg-subtle">
           <a
-            class="text-gray-500 underline-offset-2 transition-colors hover:text-gray-800 hover:underline"
+            class="text-fg-subtle underline-offset-2 transition-colors hover:text-fg hover:underline"
             href="/hosted/organizations">Organizations</a
           >
         </p>
         <h1
-          class="mt-1 flex items-center gap-2 text-lg font-semibold text-gray-900"
+          class="mt-1 flex items-center gap-2 text-lg font-semibold text-fg"
         >
           <span class="truncate"
             >{organization?.display_name ||
@@ -150,12 +150,12 @@
     <div class="flex flex-wrap items-center gap-2">
       <a
         href={`/hosted/organizations/${encodeURIComponent(orgId)}/billing`}
-        class="rounded-md border border-gray-200 bg-gray-100 px-3 py-1.5 text-[12px] font-medium text-gray-600 transition-colors hover:bg-gray-200"
+        class="rounded-md border border-line bg-bg-soft px-3 py-1.5 text-[12px] font-medium text-fg-muted transition-colors hover:bg-panel-hover"
         >Manage billing</a
       >
       <a
         href="/hosted/workspaces/new"
-        class="rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500"
+        class="rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-accent-hover"
         >+ New workspace</a
       >
     </div>
@@ -164,7 +164,7 @@
   {#if message}
     <div
       role="alert"
-      class="rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
+      class="rounded-md bg-danger-soft px-3 py-2 text-[12px] text-danger-text"
     >
       {message}
     </div>
@@ -172,7 +172,7 @@
 
   {#if phase === "loading"}
     <div
-      class="rounded-md border border-gray-200 bg-gray-100 px-4 py-6 text-[13px] text-gray-500"
+      class="rounded-md border border-line bg-bg-soft px-4 py-6 text-[13px] text-fg-subtle"
     >
       Loading…
     </div>
@@ -182,21 +182,21 @@
     <section class="grid gap-3 sm:grid-cols-3">
       {#each [{ label: "Workspaces", used: u.workspace_count, total: plan.workspace_limit }, { label: "Artifacts", used: u.artifact_count, total: plan.artifact_capacity }, { label: "Storage", used: u.storage_gb, total: plan.included_storage_gb, suffix: " GB" }] as metric}
         {@const p = pct(metric.used, metric.total)}
-        <div class="rounded-md border border-gray-200 bg-gray-100 px-4 py-3">
+        <div class="rounded-md border border-line bg-bg-soft px-4 py-3">
           <div
-            class="flex items-center justify-between text-[11px] font-medium uppercase tracking-wide text-gray-500"
+            class="flex items-center justify-between text-[11px] font-medium uppercase tracking-wide text-fg-subtle"
           >
             <span>{metric.label}</span>
             <span>{p}%</span>
           </div>
-          <div class="mt-2 text-[18px] font-semibold text-gray-900">
+          <div class="mt-2 text-[18px] font-semibold text-fg">
             {Number(metric.used ?? 0)}<span
-              class="text-[12px] font-normal text-gray-500"
+              class="text-[12px] font-normal text-fg-subtle"
               >{metric.suffix ?? ""} / {metric.total ?? "—"}{metric.suffix ??
                 ""}</span
             >
           </div>
-          <div class="mt-2 h-1 overflow-hidden rounded-full bg-gray-200">
+          <div class="mt-2 h-1 overflow-hidden rounded-full bg-panel-hover">
             <div
               class="h-full {barColor(p)} transition-all"
               style="width: {p}%"
@@ -206,30 +206,30 @@
       {/each}
     </section>
 
-    <section class="rounded-md border border-gray-200 bg-gray-100">
+    <section class="rounded-md border border-line bg-bg-soft">
       <div
-        class="flex items-center justify-between border-b border-gray-200 px-4 py-2.5"
+        class="flex items-center justify-between border-b border-line px-4 py-2.5"
       >
-        <h2 class="text-[13px] font-medium text-gray-900">Workspaces</h2>
+        <h2 class="text-[13px] font-medium text-fg">Workspaces</h2>
         <a
           href="/hosted/dashboard"
-          class="text-[11px] font-medium text-gray-500 transition-colors hover:text-gray-800"
+          class="text-[11px] font-medium text-fg-subtle transition-colors hover:text-fg"
           >View all →</a
         >
       </div>
       {#if workspaces.length === 0}
         <div class="px-4 py-6 text-center">
-          <p class="text-[12px] text-gray-500">
+          <p class="text-[12px] text-fg-subtle">
             No workspaces in this organization yet.
           </p>
           <a
             href="/hosted/workspaces/new"
-            class="mt-3 inline-flex rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500"
+            class="mt-3 inline-flex rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-accent-hover"
             >Create your first workspace</a
           >
         </div>
       {:else}
-        <ul class="divide-y divide-gray-200">
+        <ul class="divide-y divide-line">
           {#each workspaces as ws (ws.id)}
             <li class="flex items-center justify-between gap-3 px-4 py-2.5">
               <div class="flex min-w-0 items-center gap-2.5">
@@ -239,10 +239,10 @@
                   size="sm"
                 />
                 <div class="min-w-0">
-                  <div class="truncate text-[13px] font-medium text-gray-900">
+                  <div class="truncate text-[13px] font-medium text-fg">
                     {ws.display_name || ws.slug}
                   </div>
-                  <div class="truncate text-[11px] text-gray-500">
+                  <div class="truncate text-[11px] text-fg-subtle">
                     {ws.slug}
                   </div>
                 </div>
@@ -250,10 +250,10 @@
               <span
                 class="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium {ws.status ===
                 'ready'
-                  ? 'text-emerald-400 bg-emerald-500/10'
+                  ? 'text-ok-text bg-ok-soft'
                   : ws.status === 'provisioning'
-                    ? 'text-amber-400 bg-amber-500/10'
-                    : 'text-gray-500 bg-gray-200'}"
+                    ? 'text-warn-text bg-warn-soft'
+                    : 'text-fg-subtle bg-panel-hover'}"
               >
                 {ws.status || "unknown"}
               </span>
