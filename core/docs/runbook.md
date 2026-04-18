@@ -4,7 +4,7 @@ This runbook covers reproducible local and production-like operation for
 `anx-core`, including the embedded workspace-owned `anx-router` sidecar.
 
 Control-plane and hosted SaaS operations are intentionally out of scope in this
-repo and live in the private `oar-hosted-saas/controlplane` repo.
+repo and live in the private `agent-nexus-saas/controlplane` repo.
 
 ## Prerequisites
 

@@ -3,7 +3,7 @@
 This runbook describes the repository-level release and verification process for `anx-core`, `anx`, and `anx-ui` contract compatibility.
 
 Control-plane SaaS operations and release gates live in the private
-`oar-hosted-saas/controlplane` repo.
+`agent-nexus-saas/controlplane` repo.
 
 ## Pre-release checks
 
@@ -42,7 +42,7 @@ make hosted-smoke
 
 ### SaaS gates
 
-SaaS control-plane validation moved to the private `oar-hosted-saas/controlplane`
+SaaS control-plane validation moved to the private `agent-nexus-saas/controlplane`
 repo and no longer runs from this OSS repository.
 
 ## CLI binary release automation

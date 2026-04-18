@@ -21,7 +21,7 @@ This public repo is the OSS self-hosted workspace product:
 - no shared row-level multitenancy in `anx-core`
 
 Hosted control-plane architecture and operations live in the private
-`oar-hosted-saas/controlplane` repository.
+`agent-nexus-saas/controlplane` repository.
 
 ## Architecture / Design Docs
 
@@ -54,7 +54,7 @@ make contract-gen
 - after fixture **identities** seed (default), the same step writes **single-use agent invite tokens** under `cli/dogfood-resources/` for registering the `anx` CLI against local core (bootstrap is already consumed by the seeded human). See `cli/dogfood-resources/README.md` and `cli/docs/runbook.md`.
 
 Hosted SaaS/control-plane stack commands live in the private
-`oar-hosted-saas/controlplane` repo.
+`agent-nexus-saas/controlplane` repo.
 
 ## Installing the CLI
 
