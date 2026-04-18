@@ -122,12 +122,12 @@
 <div class="space-y-6">
   <div class="flex flex-wrap items-end justify-between gap-3">
     <div>
-      <h1 class="text-lg font-semibold text-fg">
+      <h1 class="text-display text-fg">
         {activeOrg
           ? `${activeOrg.display_name || activeOrg.slug} workspaces`
           : "Welcome to ANX"}
       </h1>
-      <p class="mt-1 hidden text-[12px] text-fg-subtle sm:block">
+      <p class="mt-1 hidden text-meta text-fg-subtle sm:block">
         Workspaces are isolated environments where your AI agents do their work.
         Each one has its own threads, topics, and artifacts.
       </p>
@@ -135,7 +135,7 @@
     {#if activeOrg}
       <a
         href="/hosted/workspaces/new"
-        class="rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-accent-hover"
+        class="rounded-md bg-accent px-3 py-1.5 text-body font-semibold text-white transition-colors hover:bg-accent-hover"
       >
         + New workspace
       </a>
@@ -145,7 +145,7 @@
   {#if message}
     <p
       role="alert"
-      class="rounded-md bg-danger-soft px-3 py-2 text-[12px] text-danger-text"
+      class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
     >
       {message}
     </p>
@@ -153,7 +153,7 @@
 
   {#if session.phase === "loading" || session.phase === "idle"}
     <div
-      class="rounded-md border border-line bg-bg-soft px-4 py-6 text-[13px] text-fg-subtle"
+      class="rounded-md border border-line bg-bg-soft px-4 py-6 text-meta text-fg-subtle"
     >
       Loading…
     </div>
@@ -161,23 +161,23 @@
     <div
       class="rounded-md border border-line bg-bg-soft px-6 py-8 text-center"
     >
-      <h2 class="text-[14px] font-semibold text-fg">
+      <h2 class="text-subtitle text-fg">
         Create your first organization
       </h2>
-      <p class="mx-auto mt-1.5 max-w-md text-[12px] text-fg-subtle">
+      <p class="mx-auto mt-1.5 max-w-md text-meta text-fg-subtle">
         Organizations group workspaces, members, and billing. Most teams need
         just one.
       </p>
       <a
         href="/hosted/organizations/new"
-        class="mt-4 inline-flex rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-accent-hover"
+        class="mt-4 inline-flex rounded-md bg-accent px-3 py-1.5 text-body font-semibold text-white transition-colors hover:bg-accent-hover"
       >
         Create organization
       </a>
     </div>
   {:else if loadingWorkspaces}
     <div
-      class="rounded-md border border-line bg-bg-soft px-4 py-6 text-[13px] text-fg-subtle"
+      class="rounded-md border border-line bg-bg-soft px-4 py-6 text-meta text-fg-subtle"
     >
       Loading workspaces…
     </div>
@@ -185,16 +185,16 @@
     <div
       class="rounded-md border border-line bg-bg-soft px-6 py-8 text-center"
     >
-      <h2 class="text-[14px] font-semibold text-fg">
+      <h2 class="text-subtitle text-fg">
         Spin up your first workspace
       </h2>
-      <p class="mx-auto mt-1.5 max-w-md text-[12px] text-fg-subtle">
+      <p class="mx-auto mt-1.5 max-w-md text-meta text-fg-subtle">
         Workspaces hold the threads, topics, and artifacts your AI agent
         produces. Create one to get started.
       </p>
       <a
         href="/hosted/workspaces/new"
-        class="mt-4 inline-flex rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-accent-hover"
+        class="mt-4 inline-flex rounded-md bg-accent px-3 py-1.5 text-body font-semibold text-white transition-colors hover:bg-accent-hover"
       >
         Create workspace
       </a>
@@ -213,16 +213,16 @@
                 size="md"
               />
               <div class="min-w-0">
-                <h2 class="truncate text-[13px] font-semibold text-fg">
+                <h2 class="truncate text-subtitle text-fg">
                   {ws.display_name || ws.slug}
                 </h2>
-                <p class="mt-0.5 truncate text-[11px] text-fg-subtle">
+                <p class="mt-0.5 truncate font-mono text-mono text-fg-subtle">
                   {ws.slug}
                 </p>
               </div>
             </div>
             <span
-              class="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium {statusClasses(
+              class="shrink-0 rounded px-1.5 py-0.5 text-micro {statusClasses(
                 ws.status,
               )}"
             >
@@ -234,7 +234,7 @@
             {#if String(ws.status ?? "").toLowerCase() === "ready" && ws.slug}
               <button
                 type="button"
-                class="rounded-md bg-panel-hover px-2.5 py-1.5 text-[12px] font-medium text-fg transition-colors hover:bg-line-strong disabled:opacity-60"
+                class="rounded-md bg-panel-hover px-2.5 py-1.5 text-micro text-fg transition-colors hover:bg-line-strong disabled:opacity-60"
                 onclick={() => openWorkspaceLaunch(ws)}
                 disabled={launchingWorkspaceId === ws.id}
               >
@@ -242,7 +242,7 @@
               </button>
             {:else}
               <span
-                class="rounded-md border border-line px-2.5 py-1.5 text-[11px] text-fg-subtle"
+                class="rounded-md border border-line px-2.5 py-1.5 text-micro text-fg-subtle"
               >
                 {String(ws.status ?? "").toLowerCase() === "provisioning"
                   ? "Setting up…"

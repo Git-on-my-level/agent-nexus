@@ -3,7 +3,6 @@
   import { page } from "$app/stores";
 
   import { goto } from "$app/navigation";
-  import { untrack } from "svelte";
 
   import {
     billingPollScheduleDelays,
@@ -348,20 +347,20 @@
 
 <div class="space-y-5">
   <div>
-    <p class="text-[11px] text-fg-subtle">
+    <p class="text-micro text-fg-subtle">
       <a
         class="text-fg-subtle underline-offset-2 transition-colors hover:text-fg hover:underline"
         href={`/hosted/organizations/${encodeURIComponent(orgId)}`}
         >← Overview</a
       >
     </p>
-    <h1 class="mt-1 text-lg font-semibold text-fg">Billing</h1>
+    <h1 class="mt-1 text-display text-fg">Billing</h1>
   </div>
 
   {#if message}
     <p
       role="alert"
-      class="rounded-md bg-danger-soft px-3 py-2 text-[12px] text-danger-text"
+      class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
     >
       {message}
     </p>
@@ -369,32 +368,32 @@
 
   {#if role === "loading"}
     <div
-      class="rounded-md border border-line bg-bg-soft px-4 py-6 text-[13px] text-fg-subtle"
+      class="rounded-md border border-line bg-bg-soft px-4 py-6 text-meta text-fg-subtle"
     >
       Loading…
     </div>
   {:else if role === "member"}
     <section class="rounded-md border border-line bg-bg-soft px-5 py-5">
-      <h2 class="text-[14px] font-semibold text-fg">
+      <h2 class="text-subtitle text-fg">
         Who manages billing
       </h2>
-      <p class="mt-1 text-[12px] text-fg-subtle">
+      <p class="mt-1 text-meta text-fg-subtle">
         Billing is managed by your organization's owner or admin. Reach out to
         someone below to change plans, payment methods, or invoices.
       </p>
       {#if managers.length === 0}
-        <p class="mt-3 text-[12px] text-fg-subtle">No active managers listed.</p>
+        <p class="mt-3 text-meta text-fg-subtle">No active managers listed.</p>
       {:else}
         <ul
           class="mt-3 divide-y divide-line rounded-md border border-line bg-bg"
         >
           {#each managers as m (m.id)}
             <li class="flex items-center justify-between gap-3 px-3 py-2">
-              <span class="text-[13px] font-medium text-fg"
+              <span class="text-body font-medium text-fg"
                 >{managerDisplayName(m)}</span
               >
               {#if String(m.account_email ?? "").trim()}
-                <span class="text-[11px] text-fg-subtle">{m.account_email}</span>
+                <span class="text-micro text-fg-subtle">{m.account_email}</span>
               {/if}
             </li>
           {/each}
@@ -404,7 +403,7 @@
   {:else if role === "manager" && summary}
     {#if activatingBanner}
       <div
-        class="flex items-start gap-3 rounded-md bg-accent-soft px-3 py-2 text-[12px] text-accent-text"
+        class="flex items-start gap-3 rounded-md bg-accent-soft px-3 py-2 text-micro text-accent-text"
         role="status"
       >
         <span
@@ -422,7 +421,7 @@
     {/if}
     {#if activationTimedOut}
       <div
-        class="flex items-center justify-between gap-3 rounded-md bg-warn-soft px-3 py-2 text-[12px] text-warn-text"
+        class="flex items-center justify-between gap-3 rounded-md bg-warn-soft px-3 py-2 text-micro text-warn-text"
         role="status"
       >
         <div>
@@ -433,7 +432,7 @@
         </div>
         <button
           type="button"
-          class="rounded-md border border-line bg-bg-soft px-2.5 py-1 text-[12px] font-medium text-fg-muted hover:bg-panel-hover"
+          class="rounded-md border border-line bg-bg-soft px-2.5 py-1 text-micro text-fg-muted hover:bg-panel-hover"
           onclick={() => refreshAfterTimeout()}>Refresh</button
         >
       </div>
@@ -448,7 +447,7 @@
 
     {#if cfg.configured === false || (cfg.missing_configuration?.length ?? 0) > 0}
       <section
-        class="rounded-md bg-warn-soft px-3 py-2 text-[12px] text-warn-text"
+        class="rounded-md bg-warn-soft px-3 py-2 text-micro text-warn-text"
       >
         <strong class="font-medium">Billing not yet configured.</strong>
         Stripe is incomplete in this environment. Upgrades will not work until an
@@ -460,21 +459,21 @@
       <div class="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <div
-            class="text-[11px] font-medium uppercase tracking-wide text-fg-subtle"
+            class="text-micro uppercase tracking-wide text-fg-subtle"
           >
             Current plan
           </div>
           <div class="mt-0.5 flex items-center gap-2">
-            <span class="text-[16px] font-semibold text-fg"
+            <span class="text-subtitle tabular-nums text-fg"
               >{plan.display_name ?? "Starter"}</span
             >
             <span
-              class="rounded bg-accent-soft px-1.5 py-0.5 text-[11px] font-medium text-accent-text"
+              class="rounded bg-accent-soft px-1.5 py-0.5 text-micro text-accent-text"
               >{subscriptionStatusLabel(ba)}</span
             >
           </div>
           {#if ba.current_period_end}
-            <p class="mt-1 text-[11px] text-fg-subtle">
+            <p class="mt-1 text-micro text-fg-subtle">
               Renews
               {ba.cancel_at_period_end ? "(canceling)" : ""}
               <span class="text-fg">{ba.current_period_end}</span>
@@ -485,7 +484,7 @@
           <button
             type="button"
             onclick={() => openPortal()}
-            class="rounded-md border border-line bg-bg px-3 py-1.5 text-[12px] font-medium text-fg hover:bg-panel-hover"
+            class="rounded-md border border-line bg-bg px-3 py-1.5 text-micro text-fg hover:bg-panel-hover"
             >Manage in Stripe</button
           >
         {/if}
@@ -493,8 +492,8 @@
     </section>
 
     <section>
-      <h2 class="text-[14px] font-semibold text-fg">Plans</h2>
-      <p class="mt-1 text-[12px] text-fg-subtle">
+      <h2 class="text-subtitle text-fg">Plans</h2>
+      <p class="mt-1 text-meta text-fg-subtle">
         Switch any time — you'll only pay the prorated difference.
       </p>
       <div class="mt-3 grid gap-3 lg:grid-cols-4">
@@ -508,33 +507,33 @@
                 : 'border-line'}"
           >
             <div class="flex items-center justify-between">
-              <h3 class="text-[14px] font-semibold text-fg">
+              <h3 class="text-subtitle text-fg">
                 {planCard.name}
               </h3>
               {#if isCurrent}
                 <span
-                  class="rounded bg-accent-soft px-1.5 py-0.5 text-[11px] font-medium text-accent-text"
+                  class="rounded bg-accent-soft px-1.5 py-0.5 text-micro text-accent-text"
                   >Current</span
                 >
               {:else if planCard.highlight}
                 <span
-                  class="rounded bg-ok-soft px-1.5 py-0.5 text-[11px] font-medium text-ok-text"
+                  class="rounded bg-ok-soft px-1.5 py-0.5 text-micro text-ok-text"
                   >Popular</span
                 >
               {/if}
             </div>
-            <p class="mt-1 text-[12px] text-fg-subtle">{planCard.tagline}</p>
+            <p class="mt-1 text-meta text-fg-subtle">{planCard.tagline}</p>
             <div class="mt-3 flex items-baseline gap-1">
-              <span class="text-[20px] font-semibold text-fg"
+              <span class="text-title tabular-nums text-fg"
                 >{planCard.price}</span
               >
               {#if planCard.priceSuffix}
-                <span class="text-[11px] text-fg-subtle"
+                <span class="text-micro text-fg-subtle"
                   >{planCard.priceSuffix}</span
                 >
               {/if}
             </div>
-            <ul class="mt-3 space-y-1.5 text-[12px] text-fg-muted">
+            <ul class="mt-3 space-y-1.5 text-meta text-fg-muted">
               {#each planCard.features as feat}
                 <li class="flex items-start gap-1.5">
                   <span
@@ -548,20 +547,20 @@
             <div class="mt-4">
               {#if isCurrent}
                 <span
-                  class="block w-full rounded-md border border-line bg-bg px-3 py-1.5 text-center text-[12px] text-fg-subtle"
+                  class="block w-full rounded-md border border-line bg-bg px-3 py-1.5 text-center text-micro text-fg-subtle"
                   >Current plan</span
                 >
               {:else if planCard.id === "enterprise"}
                 <a
                   href="mailto:sales@oar.app?subject=Enterprise%20plan%20inquiry"
-                  class="block w-full rounded-md border border-line bg-bg px-3 py-1.5 text-center text-[12px] font-medium text-fg hover:bg-panel-hover"
+                  class="block w-full rounded-md border border-line bg-bg px-3 py-1.5 text-center text-micro text-fg hover:bg-panel-hover"
                   >Talk to sales</a
                 >
               {:else if planCard.ctaUpgrade && managed}
                 <button
                   type="button"
                   onclick={() => openPortal()}
-                  class="block w-full rounded-md border border-line bg-bg px-3 py-1.5 text-[12px] font-medium text-fg transition-colors hover:bg-panel-hover"
+                  class="block w-full rounded-md border border-line bg-bg px-3 py-1.5 text-micro text-fg transition-colors hover:bg-panel-hover"
                   >Switch plan</button
                 >
               {:else if planCard.ctaUpgrade}
@@ -569,7 +568,7 @@
                   type="button"
                   onclick={() => checkoutPlan(planCard.id)}
                   disabled={!!upgradeBusy}
-                  class="block w-full rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-60"
+                  class="block w-full rounded-md bg-accent px-3 py-1.5 text-body font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-60"
                 >
                   {upgradeBusy === planCard.id
                     ? "Opening Stripe…"
@@ -577,7 +576,7 @@
                 </button>
               {:else}
                 <span
-                  class="block w-full rounded-md border border-line bg-bg px-3 py-1.5 text-center text-[12px] text-fg-subtle"
+                  class="block w-full rounded-md border border-line bg-bg px-3 py-1.5 text-center text-micro text-fg-subtle"
                   >{planCard.ctaLabel}</span
                 >
               {/if}
@@ -587,6 +586,6 @@
       </div>
     </section>
   {:else if role === "error"}
-    <p class="text-[12px] text-fg-subtle">Could not load billing.</p>
+    <p class="text-meta text-fg-subtle">Could not load billing.</p>
   {/if}
 </div>

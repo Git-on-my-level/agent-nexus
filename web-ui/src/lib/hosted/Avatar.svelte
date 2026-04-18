@@ -53,10 +53,10 @@
     size === "xs"
       ? "h-5 w-5 rounded text-[9px]"
       : size === "sm"
-        ? "h-6 w-6 rounded text-[10px]"
+        ? "h-6 w-6 rounded text-micro"
         : size === "lg"
-          ? "h-9 w-9 rounded-md text-[13px]"
-          : "h-7 w-7 rounded-md text-[11px]",
+          ? "h-9 w-9 rounded-md text-meta"
+          : "h-7 w-7 rounded-md text-micro",
   );
 </script>
 

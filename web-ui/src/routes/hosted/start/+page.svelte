@@ -45,28 +45,28 @@
 
 <section class="mx-auto max-w-3xl pt-10 pb-12 text-center sm:pt-16">
   <h1
-    class="text-balance text-[28px] font-semibold leading-tight text-fg sm:text-[36px]"
+    class="text-balance text-display text-fg sm:text-[36px]"
   >
     Give your AI agent a workspace,
     <span class="text-accent-text">not just a chat window.</span>
   </h1>
-  <p class="mx-auto mt-4 max-w-xl text-[14px] leading-relaxed text-fg-subtle">
+  <p class="mx-auto mt-4 max-w-xl text-body text-fg-subtle">
     Agent Nexus turns long-running AI work into something you can audit, share,
     and trust. Threads, topics, artifacts, and access — all in one place.
   </p>
 
   <div class="mt-7 flex flex-wrap justify-center gap-2">
     <a
-      class="rounded-md bg-accent px-4 py-2 text-[13px] font-medium text-white shadow-sm transition-colors hover:bg-accent-hover"
+      class="rounded-md bg-accent px-4 py-2 text-body font-semibold text-white shadow-sm transition-colors hover:bg-accent-hover"
       href={`/hosted/signup${continuationQuery}`}>Create your workspace</a
     >
     <a
-      class="rounded-md border border-line bg-bg-soft px-4 py-2 text-[13px] font-medium text-fg transition-colors hover:bg-panel-hover"
+      class="rounded-md border border-line bg-bg-soft px-4 py-2 text-body text-fg transition-colors hover:bg-panel-hover"
       href={`/hosted/signin${continuationQuery}`}>I already have an account</a
     >
   </div>
 
-  <p class="mt-3 text-[11px] text-fg-subtle">
+  <p class="mt-3 text-micro text-fg-subtle">
     Free Starter plan · No credit card required · Passkey sign-in
   </p>
 </section>
@@ -76,10 +76,10 @@
     <div
       class="rounded-md border border-line bg-bg-soft px-4 py-4 text-left"
     >
-      <h3 class="text-[13px] font-semibold text-fg">
+      <h3 class="text-subtitle text-fg">
         {feature.title}
       </h3>
-      <p class="mt-1.5 text-[12px] leading-relaxed text-fg-subtle">
+      <p class="mt-1.5 text-meta text-fg-subtle">
         {feature.body}
       </p>
     </div>
@@ -90,10 +90,10 @@
   class="mx-auto mb-6 grid max-w-5xl gap-3 rounded-md border border-line bg-bg-soft px-5 py-5 sm:grid-cols-[2fr_1fr] sm:items-center"
 >
   <div>
-    <h2 class="text-[14px] font-semibold text-fg">
+    <h2 class="text-subtitle text-fg">
       Need to bring a team along?
     </h2>
-    <p class="mt-1 text-[12px] text-fg-subtle">
+    <p class="mt-1 text-meta text-fg-subtle">
       Start free, then upgrade to Team or Scale when you need more workspaces,
       seats, and storage. Switch plans any time from the billing page.
     </p>
@@ -101,7 +101,7 @@
   <div class="sm:text-right">
     <a
       href="/hosted/signup"
-      class="inline-flex rounded-md bg-panel-hover px-3 py-1.5 text-[12px] font-medium text-fg transition-colors hover:bg-line-strong"
+      class="inline-flex rounded-md bg-panel-hover px-3 py-1.5 text-micro text-fg transition-colors hover:bg-line-strong"
       >Get started free</a
     >
   </div>

@@ -108,15 +108,15 @@
 </svelte:head>
 
 <div class="mx-auto max-w-lg py-6">
-  <p class="text-[12px] text-fg-subtle">
+  <p class="text-micro text-fg-subtle">
     <a class="text-accent-text hover:text-accent-text" href="/hosted/dashboard"
       >← Dashboard</a
     >
   </p>
-  <h1 class="mt-2 text-lg font-semibold text-fg">Create a workspace</h1>
-  <p class="mt-1 text-[12px] text-fg-subtle">
+  <h1 class="mt-2 text-display text-fg">Create a workspace</h1>
+  <p class="mt-1 text-meta text-fg-subtle">
     Workspaces are isolated environments inside
-    <span class="font-medium text-fg"
+    <span class="text-fg"
       >{activeOrg?.display_name || activeOrg?.slug || "your organization"}</span
     >. Each one runs its own agent and stores its own threads.
   </p>
@@ -128,7 +128,7 @@
       submit();
     }}
   >
-    <label class="block text-[12px] font-medium text-fg-muted">
+    <label class="block text-micro text-fg-muted">
       Workspace name
       <input
         type="text"
@@ -136,11 +136,11 @@
         disabled={busy}
         required
         placeholder="Q3 launch"
-        class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-1.5 text-[13px] text-fg placeholder:text-[var(--fg-subtle)]"
+        class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-1.5 text-body text-fg placeholder:text-[var(--fg-subtle)]"
       />
     </label>
 
-    <label class="block text-[12px] font-medium text-fg-muted">
+    <label class="block text-micro text-fg-muted">
       Slug
       <input
         type="text"
@@ -150,9 +150,9 @@
         required
         placeholder="q3-launch"
         pattern="[a-z0-9-]+"
-        class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-1.5 text-[13px] text-fg placeholder:text-[var(--fg-subtle)]"
+        class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-1.5 font-mono text-mono text-fg placeholder:text-[var(--fg-subtle)]"
       />
-      <span class="mt-1 block text-[11px] text-fg-subtle">
+      <span class="mt-1 block text-micro text-fg-subtle">
         Lowercase letters, numbers, and hyphens. Used in workspace URLs.
       </span>
     </label>
@@ -161,7 +161,7 @@
       <div class="border-t border-line pt-3">
         <button
           type="button"
-          class="flex items-center gap-1.5 text-[11px] font-medium text-fg-subtle hover:text-fg"
+          class="flex items-center gap-1.5 text-micro text-fg-subtle hover:text-fg"
           onclick={() => (advancedOpen = !advancedOpen)}
           aria-expanded={advancedOpen}
         >
@@ -182,26 +182,26 @@
           <div
             class="mt-3 space-y-3 rounded-md border border-line bg-bg px-3 py-3"
           >
-            <p class="text-[11px] text-fg-subtle">
+            <p class="text-micro text-fg-subtle">
               Platform provisioning is the default. Set both fields only for
               bring-your-own service identity.
             </p>
-            <label class="block text-[12px] font-medium text-fg-muted">
+            <label class="block text-micro text-fg-muted">
               Service identity id
               <input
                 type="text"
                 bind:value={serviceId}
                 disabled={busy}
-                class="mt-1 w-full rounded-md border border-line bg-bg-soft px-3 py-1.5 text-[13px] text-fg"
+                class="mt-1 w-full rounded-md border border-line bg-bg-soft px-3 py-1.5 text-body text-fg"
               />
             </label>
-            <label class="block text-[12px] font-medium text-fg-muted">
+            <label class="block text-micro text-fg-muted">
               Service identity public key (base64)
               <textarea
                 bind:value={servicePublicKey}
                 disabled={busy}
                 rows="3"
-                class="mt-1 w-full rounded-md border border-line bg-bg-soft px-3 py-1.5 font-mono text-[11px] text-fg"
+                class="mt-1 w-full rounded-md border border-line bg-bg-soft px-3 py-1.5 font-mono text-mono text-fg"
               ></textarea>
             </label>
           </div>
@@ -212,7 +212,7 @@
     {#if message}
       <p
         role="alert"
-        class="rounded-md bg-danger-soft px-3 py-2 text-[12px] text-danger-text"
+        class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
       >
         {message}
       </p>
@@ -220,13 +220,13 @@
 
     <div class="flex items-center justify-end gap-2 pt-2">
       <a
-        class="rounded-md px-3 py-1.5 text-[12px] font-medium text-fg-subtle hover:bg-panel-hover hover:text-fg"
+        class="rounded-md px-3 py-1.5 text-micro text-fg-subtle hover:bg-panel-hover hover:text-fg"
         href="/hosted/dashboard">Cancel</a
       >
       <button
         type="submit"
         disabled={busy || !activeOrg}
-        class="rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-60"
+        class="rounded-md bg-accent px-3 py-1.5 text-body font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-60"
       >
         {busy ? "Creating…" : "Create workspace"}
       </button>

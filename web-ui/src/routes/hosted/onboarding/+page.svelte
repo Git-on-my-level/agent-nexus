@@ -11,4 +11,4 @@
   <title>Redirecting…</title>
 </svelte:head>
 
-<p class="text-[12px] text-fg-subtle">Redirecting to your dashboard…</p>
+<p class="text-micro text-fg-subtle">Redirecting to your dashboard…</p>

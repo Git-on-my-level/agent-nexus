@@ -184,8 +184,8 @@
 
 <div class="mx-auto max-w-md py-8">
   <div class="rounded-md border border-line bg-bg-soft px-6 py-6">
-    <h1 class="text-lg font-semibold text-fg">Welcome back</h1>
-    <p class="mt-1.5 text-[12px] leading-relaxed text-fg-subtle">
+    <h1 class="text-display text-fg">Welcome back</h1>
+    <p class="mt-1.5 text-meta text-fg-subtle">
       Enter the email you signed up with. Your browser will prompt you for the
       passkey on this device.
     </p>
@@ -197,7 +197,7 @@
         submit();
       }}
     >
-      <label class="block text-[12px] font-medium text-fg-muted">
+      <label class="block text-micro text-fg-muted">
         Email
         <input
           type="email"
@@ -206,14 +206,14 @@
           disabled={busy}
           required
           placeholder="you@company.com"
-          class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-1.5 text-[13px] text-fg placeholder:text-[var(--fg-subtle)]"
+          class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-1.5 text-body text-fg placeholder:text-[var(--fg-subtle)]"
         />
       </label>
 
       {#if message}
         <p
           role="alert"
-          class="rounded-md bg-danger-soft px-3 py-2 text-[12px] text-danger-text"
+          class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
         >
           {message}
         </p>
@@ -222,7 +222,7 @@
       <button
         type="submit"
         disabled={busy}
-        class="w-full rounded-md bg-accent px-3 py-2 text-[13px] font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+        class="w-full rounded-md bg-accent px-3 py-2 text-body font-semibold text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
       >
         {busy ? "Signing in…" : "Continue with passkey"}
       </button>
@@ -232,20 +232,20 @@
       <div class="mt-5 border-t border-line pt-3">
         <button
           type="button"
-          class="text-[11px] font-medium text-fg-subtle hover:text-fg"
+          class="text-micro text-fg-subtle hover:text-fg"
           onclick={() => (showDevShortcut = !showDevShortcut)}
         >
           {showDevShortcut ? "Hide" : "Show"} local dev shortcut
         </button>
         {#if showDevShortcut}
-          <p class="mt-2 text-[11px] text-fg-subtle">
+          <p class="mt-2 text-micro text-fg-subtle">
             Skips the passkey for local resets. Disabled in production.
           </p>
           <button
             type="button"
             onclick={quickSignIn}
             disabled={busy || quickAuthBusy}
-            class="mt-2 w-full rounded-md border border-line bg-bg-soft px-3 py-1.5 text-[12px] font-medium text-fg-muted hover:bg-panel-hover disabled:opacity-60"
+            class="mt-2 w-full rounded-md border border-line bg-bg-soft px-3 py-1.5 text-micro text-fg-muted hover:bg-panel-hover disabled:opacity-60"
           >
             {quickAuthBusy ? "Signing in…" : quickAuthLabel}
           </button>
@@ -254,7 +254,7 @@
     {/if}
   </div>
 
-  <p class="mt-4 text-center text-[12px] text-fg-subtle">
+  <p class="mt-4 text-center text-meta text-fg-subtle">
     New to ANX?
     <a
       class="text-accent-text underline underline-offset-2 hover:text-accent-text"

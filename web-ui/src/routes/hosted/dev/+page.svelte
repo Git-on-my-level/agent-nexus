@@ -15,13 +15,13 @@
 </svelte:head>
 
 <div class="mx-auto max-w-2xl py-6">
-  <p class="text-[11px] text-fg-subtle">
+  <p class="text-micro text-fg-subtle">
     <a class="text-accent-text hover:text-accent-text" href="/hosted/start"
       >← Home</a
     >
   </p>
-  <h1 class="mt-1 text-lg font-semibold text-fg">Developer notes</h1>
-  <p class="mt-1 text-[12px] text-fg-subtle">
+  <h1 class="mt-1 text-display text-fg">Developer notes</h1>
+  <p class="mt-1 text-meta text-fg-subtle">
     Advanced options and environment variables for local development. Most
     people don't need any of this — pick the right plan from
     <a
@@ -32,7 +32,7 @@
   </p>
 
   <ul
-    class="mt-4 divide-y divide-line overflow-hidden rounded-md border border-line bg-bg-soft text-[12px] text-fg-muted"
+    class="mt-4 divide-y divide-line overflow-hidden rounded-md border border-line bg-bg-soft text-meta text-fg-muted"
   >
     {#each tips as line}
       <li class="px-4 py-2.5">{line}</li>

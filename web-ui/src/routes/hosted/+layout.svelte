@@ -31,7 +31,7 @@
   let orgPickerOpen = $state(false);
 
   const path = $derived($page.url.pathname);
-  /** Full product name on the public landing page only; app chrome stays “ANX”. */
+  /** Full product name on the public landing page only; app chrome stays "ANX". */
   const isLandingMarketing = $derived(path === "/hosted/start");
   const isPublic = $derived(
     PUBLIC_PREFIXES.some((p) => path === p || path.startsWith(p + "/")),
@@ -118,10 +118,10 @@
           href={isPublic && session.phase !== "authed"
             ? "/hosted/start"
             : "/hosted/dashboard"}
-          class="flex items-center gap-2 text-[13px] font-semibold text-fg whitespace-nowrap"
+          class="flex items-center gap-2 text-meta font-semibold text-fg whitespace-nowrap"
         >
           <span
-            class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded bg-accent-soft text-[10px] font-bold uppercase text-accent-text"
+            class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded bg-accent-soft text-micro font-bold uppercase text-accent-text"
           >
             O
           </span>
@@ -134,7 +134,7 @@
               <a
                 href={item.href}
                 data-sveltekit-preload-data="tap"
-                class="rounded-md px-2.5 py-1.5 text-[12px] font-medium transition-colors {isActive(
+                class="rounded-md px-2.5 py-1.5 text-micro transition-colors {isActive(
                   item.href,
                 )
                   ? 'bg-panel-hover text-fg'
@@ -156,7 +156,7 @@
                 aria-haspopup="listbox"
                 aria-expanded={orgPickerOpen}
                 onclick={() => (orgPickerOpen = !orgPickerOpen)}
-                class="flex max-w-[16rem] items-center gap-2 rounded-md border border-line bg-bg-soft px-2 py-1 text-[12px] font-medium text-fg transition-colors hover:bg-panel-hover"
+                class="flex max-w-[16rem] items-center gap-2 rounded-md border border-line bg-bg-soft px-2 py-1 text-micro text-fg transition-colors hover:bg-panel-hover"
               >
                 {#if activeOrg}
                   <Avatar
@@ -187,7 +187,7 @@
                   class="absolute right-0 top-full z-40 mt-1 w-64 overflow-hidden rounded-md border border-line bg-bg-soft shadow-lg"
                 >
                   <div
-                    class="border-b border-line px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-fg-subtle"
+                    class="border-b border-line px-3 py-2 text-micro uppercase tracking-wide text-fg-subtle"
                   >
                     Switch organization
                   </div>
@@ -199,7 +199,7 @@
                           role="option"
                           aria-selected={org.id === activeOrg?.id}
                           onclick={() => pickOrg(org.id)}
-                          class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[12px] text-fg transition-colors hover:bg-panel-hover"
+                          class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-micro text-fg transition-colors hover:bg-panel-hover"
                         >
                           <Avatar
                             label={org.display_name || org.slug}
@@ -208,13 +208,13 @@
                           />
                           <span class="min-w-0 flex-1">
                             <span
-                              class="block truncate text-[12px] text-fg"
+                              class="block truncate text-micro text-fg"
                             >
                               {org.display_name || org.slug}
                             </span>
                             {#if org.display_name && org.slug && org.display_name !== org.slug}
                               <span
-                                class="block truncate text-[11px] text-fg-subtle"
+                                class="block truncate text-micro text-fg-subtle"
                               >
                                 {org.slug}
                               </span>
@@ -222,7 +222,7 @@
                           </span>
                           {#if org.id === activeOrg?.id}
                             <span
-                              class="shrink-0 text-[11px] font-medium text-accent-text"
+                              class="shrink-0 text-micro text-accent-text"
                               >Active</span
                             >
                           {/if}
@@ -233,12 +233,12 @@
                   <div class="border-t border-line px-1 py-1">
                     <a
                       href="/hosted/organizations/new"
-                      class="block rounded px-2 py-1.5 text-[12px] font-medium text-accent-text transition-colors hover:bg-panel-hover"
+                      class="block rounded px-2 py-1.5 text-micro text-accent-text transition-colors hover:bg-panel-hover"
                       >+ New organization</a
                     >
                     <a
                       href="/hosted/organizations"
-                      class="block rounded px-2 py-1.5 text-[12px] text-fg-subtle transition-colors hover:bg-panel-hover"
+                      class="block rounded px-2 py-1.5 text-micro text-fg-subtle transition-colors hover:bg-panel-hover"
                       >Manage organizations</a
                     >
                   </div>
@@ -253,7 +253,7 @@
               aria-haspopup="menu"
               aria-expanded={menuOpen}
               onclick={() => (menuOpen = !menuOpen)}
-              class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-panel-hover text-[11px] font-semibold text-fg transition-colors hover:bg-line-strong"
+              class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-panel-hover text-micro text-fg transition-colors hover:bg-line-strong"
               title={account?.email ?? account?.display_name ?? "Account"}
             >
               {initialsFor(account)}
@@ -272,15 +272,15 @@
                     size="md"
                   />
                   <div class="min-w-0">
-                    <div class="truncate text-[12px] font-medium text-fg">
+                    <div class="truncate text-micro text-fg">
                       {account?.display_name || account?.email || "Signed in"}
                     </div>
                     {#if account?.email && account?.display_name}
-                      <div class="truncate text-[11px] text-fg-subtle">
+                      <div class="truncate text-micro text-fg-subtle">
                         {account.email}
                       </div>
                     {:else if !account?.email && !account?.display_name}
-                      <div class="truncate text-[11px] text-fg-subtle">
+                      <div class="truncate text-micro text-fg-subtle">
                         Account details unavailable
                       </div>
                     {/if}
@@ -291,7 +291,7 @@
                     <a
                       role="menuitem"
                       href="/hosted/dashboard"
-                      class="block px-3 py-1.5 text-[12px] text-fg transition-colors hover:bg-panel-hover"
+                      class="block px-3 py-1.5 text-micro text-fg transition-colors hover:bg-panel-hover"
                       >Dashboard</a
                     >
                   </li>
@@ -299,7 +299,7 @@
                     <a
                       role="menuitem"
                       href="/hosted/organizations"
-                      class="block px-3 py-1.5 text-[12px] text-fg transition-colors hover:bg-panel-hover"
+                      class="block px-3 py-1.5 text-micro text-fg transition-colors hover:bg-panel-hover"
                       >Organizations</a
                     >
                   </li>
@@ -309,7 +309,7 @@
                     role="menuitem"
                     type="button"
                     onclick={handleSignOut}
-                    class="block w-full px-3 py-1.5 text-left text-[12px] text-fg transition-colors hover:bg-panel-hover"
+                    class="block w-full px-3 py-1.5 text-left text-micro text-fg transition-colors hover:bg-panel-hover"
                   >
                     Sign out
                   </button>
@@ -320,13 +320,13 @@
         {:else if isPublic && path !== "/hosted/signin"}
           <a
             href="/hosted/signin"
-            class="rounded-md px-2.5 py-1.5 text-[12px] font-medium text-fg-subtle transition-colors hover:bg-panel-hover hover:text-fg"
+            class="rounded-md px-2.5 py-1.5 text-micro text-fg-subtle transition-colors hover:bg-panel-hover hover:text-fg"
             >Sign in</a
           >
           {#if path !== "/hosted/signup"}
             <a
               href="/hosted/signup"
-              class="rounded-md bg-accent px-2.5 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-accent-hover"
+              class="rounded-md bg-accent px-2.5 py-1.5 text-micro text-white transition-colors hover:bg-accent-hover"
               >Get started</a
             >
           {/if}
@@ -342,7 +342,7 @@
         {#each primaryNav as item (item.href)}
           <a
             href={item.href}
-            class="shrink-0 rounded-md px-2.5 py-1.5 text-[12px] font-medium transition-colors {isActive(
+            class="shrink-0 rounded-md px-2.5 py-1.5 text-micro transition-colors {isActive(
               item.href,
             )
               ? 'bg-panel-hover text-fg'
@@ -359,7 +359,7 @@
   </main>
 
   <footer
-    class="mx-auto mt-8 w-full max-w-6xl border-t border-line px-4 pb-6 pt-4 text-[11px] text-fg-subtle"
+    class="mx-auto mt-8 w-full max-w-6xl border-t border-line px-4 pb-6 pt-4 text-micro text-fg-subtle"
   >
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div class="flex items-center gap-2">

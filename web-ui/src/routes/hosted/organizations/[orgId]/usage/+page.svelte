@@ -76,20 +76,20 @@
 
 <div class="space-y-5">
   <div>
-    <p class="text-[11px] text-fg-subtle">
+    <p class="text-micro text-fg-subtle">
       <a
         class="text-fg-subtle underline-offset-2 transition-colors hover:text-fg hover:underline"
         href={`/hosted/organizations/${encodeURIComponent(orgId)}`}
         >← Overview</a
       >
     </p>
-    <h1 class="mt-1 text-lg font-semibold text-fg">Usage</h1>
+    <h1 class="mt-1 text-display text-fg">Usage</h1>
   </div>
 
   {#if message}
     <p
       role="alert"
-      class="rounded-md bg-danger-soft px-3 py-2 text-[12px] text-danger-text"
+      class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
     >
       {message}
     </p>
@@ -97,7 +97,7 @@
 
   {#if phase === "loading"}
     <div
-      class="rounded-md border border-line bg-bg-soft px-4 py-6 text-[13px] text-fg-subtle"
+      class="rounded-md border border-line bg-bg-soft px-4 py-6 text-meta text-fg-subtle"
     >
       Loading…
     </div>
@@ -110,17 +110,17 @@
       <div class="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <div
-            class="text-[11px] font-medium uppercase tracking-wide text-fg-subtle"
+            class="text-micro uppercase tracking-wide text-fg-subtle"
           >
             Plan
           </div>
-          <div class="mt-0.5 text-[16px] font-semibold text-fg">
+          <div class="mt-0.5 text-subtitle tabular-nums text-fg">
             {plan.display_name ?? "—"}
           </div>
         </div>
         <a
           href={`/hosted/organizations/${encodeURIComponent(orgId)}/billing`}
-          class="rounded-md border border-line bg-bg px-3 py-1.5 text-[12px] font-medium text-fg hover:bg-panel-hover"
+          class="rounded-md border border-line bg-bg px-3 py-1.5 text-micro text-fg hover:bg-panel-hover"
           >Change plan</a
         >
       </div>
@@ -131,14 +131,14 @@
         {@const p = pct(metric.used, metric.total)}
         <div class="rounded-md border border-line bg-bg-soft px-4 py-3">
           <div
-            class="flex items-center justify-between text-[11px] font-medium uppercase tracking-wide text-fg-subtle"
+            class="flex items-center justify-between text-micro uppercase tracking-wide text-fg-subtle"
           >
             <span>{metric.label}</span>
-            <span>{p}%</span>
+            <span class="tabular-nums">{p}%</span>
           </div>
-          <div class="mt-2 text-[18px] font-semibold text-fg">
+          <div class="mt-2 text-subtitle tabular-nums text-fg">
             {Number(metric.used ?? 0)}<span
-              class="text-[12px] font-normal text-fg-subtle"
+              class="text-meta text-fg-subtle"
               >{metric.suffix ?? ""} / {metric.total ?? "—"}{metric.suffix ??
                 ""}</span
             >
@@ -149,7 +149,7 @@
               style="width: {p}%"
             ></div>
           </div>
-          <p class="mt-2 text-[11px] text-fg-subtle">
+          <p class="mt-2 text-micro text-fg-subtle">
             {Number(metric.remaining ?? 0)}{metric.suffix ?? ""} remaining
             {#if headroomNote(p)}
               · <span class="text-warn-text">{headroomNote(p)}</span>
@@ -161,22 +161,22 @@
 
     <section class="rounded-md border border-line bg-bg-soft px-4 py-3">
       <div class="flex items-center justify-between">
-        <h2 class="text-[13px] font-medium text-fg">This month</h2>
+        <h2 class="text-subtitle text-fg">This month</h2>
       </div>
       <div class="mt-3 grid gap-3 sm:grid-cols-3">
         <div>
-          <div class="text-[11px] uppercase tracking-wide text-fg-subtle">
+          <div class="text-micro uppercase tracking-wide text-fg-subtle">
             Launches
           </div>
-          <div class="mt-1 text-[16px] font-semibold text-fg">
+          <div class="mt-1 text-subtitle tabular-nums text-fg">
             {usage.monthly_launch_count ?? 0}
           </div>
         </div>
         <div>
-          <div class="text-[11px] uppercase tracking-wide text-fg-subtle">
+          <div class="text-micro uppercase tracking-wide text-fg-subtle">
             Artifacts / workspace cap
           </div>
-          <div class="mt-1 text-[16px] font-semibold text-fg">
+          <div class="mt-1 text-subtitle tabular-nums text-fg">
             {plan.max_artifacts_per_workspace ?? "—"}
           </div>
         </div>
@@ -189,43 +189,43 @@
       <div
         class="flex items-center justify-between border-b border-line px-4 py-2.5"
       >
-        <h2 class="text-[13px] font-medium text-fg">
+        <h2 class="text-subtitle text-fg">
           Workspace breakdown
         </h2>
       </div>
       {#if !summary.workspaces || summary.workspaces.length === 0}
-        <p class="px-4 py-4 text-[12px] text-fg-subtle">
+        <p class="px-4 py-4 text-meta text-fg-subtle">
           No workspaces in this organization yet.
         </p>
       {:else}
         <div class="overflow-x-auto">
-          <table class="min-w-full text-[12px]">
+          <table class="min-w-full text-meta">
             <thead>
               <tr
-                class="border-b border-line text-left text-[11px] uppercase tracking-wide text-fg-subtle"
+                class="border-b border-line text-left text-micro uppercase tracking-wide text-fg-subtle"
               >
-                <th class="px-4 py-2 font-medium">Workspace</th>
-                <th class="px-4 py-2 font-medium">Artifacts</th>
-                <th class="px-4 py-2 font-medium">Storage</th>
-                <th class="px-4 py-2 font-medium">Launches (mo)</th>
-                <th class="px-4 py-2 font-medium">Last active</th>
+                <th class="px-4 py-2">Workspace</th>
+                <th class="px-4 py-2">Artifacts</th>
+                <th class="px-4 py-2">Storage</th>
+                <th class="px-4 py-2">Launches (mo)</th>
+                <th class="px-4 py-2">Last active</th>
               </tr>
             </thead>
             <tbody>
               {#each summary.workspaces as w (w.id)}
                 <tr class="border-b border-line last:border-b-0">
                   <td class="px-4 py-2">
-                    <div class="font-medium text-fg">
+                    <div class="text-fg">
                       {w.display_name || w.slug}
                     </div>
-                    <div class="text-[11px] text-fg-subtle">{w.slug}</div>
+                    <div class="font-mono text-micro text-fg-subtle">{w.slug}</div>
                   </td>
-                  <td class="px-4 py-2 text-fg"
+                  <td class="px-4 py-2 tabular-nums text-fg"
                     >{w.artifact_count ?? 0}</td
                   >
-                  <td class="px-4 py-2 text-fg">{w.storage_gb ?? 0} GB</td
+                  <td class="px-4 py-2 tabular-nums text-fg">{w.storage_gb ?? 0} GB</td
                   >
-                  <td class="px-4 py-2 text-fg"
+                  <td class="px-4 py-2 tabular-nums text-fg"
                     >{w.monthly_launch_count ?? 0}</td
                   >
                   <td class="px-4 py-2 text-fg-subtle"

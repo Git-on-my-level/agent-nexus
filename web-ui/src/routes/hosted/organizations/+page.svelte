@@ -68,14 +68,14 @@
 <div class="space-y-5">
   <div class="flex flex-wrap items-end justify-between gap-3">
     <div>
-      <h1 class="text-lg font-semibold text-fg">Organizations</h1>
-      <p class="mt-1 hidden text-[12px] text-fg-subtle sm:block">
+      <h1 class="text-display text-fg">Organizations</h1>
+      <p class="mt-1 hidden text-meta text-fg-subtle sm:block">
         Pick an organization to manage its workspaces, members, and billing.
       </p>
     </div>
     <a
       href="/hosted/organizations/new"
-      class="rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-accent-hover"
+      class="rounded-md bg-accent px-3 py-1.5 text-body font-semibold text-white transition-colors hover:bg-accent-hover"
       >+ New organization</a
     >
   </div>
@@ -83,7 +83,7 @@
   {#if message}
     <div
       role="status"
-      class="rounded-md bg-warn-soft px-3 py-2 text-[12px] text-warn-text"
+      class="rounded-md bg-warn-soft px-3 py-2 text-micro text-warn-text"
     >
       {message}
     </div>
@@ -91,7 +91,7 @@
 
   {#if phase === "loading"}
     <div
-      class="rounded-md border border-line bg-bg-soft px-4 py-6 text-[13px] text-fg-subtle"
+      class="rounded-md border border-line bg-bg-soft px-4 py-6 text-meta text-fg-subtle"
     >
       Loading…
     </div>
@@ -99,15 +99,15 @@
     <div
       class="rounded-md border border-line bg-bg-soft px-6 py-8 text-center"
     >
-      <h2 class="text-[14px] font-semibold text-fg">
+      <h2 class="text-subtitle text-fg">
         No organizations yet
       </h2>
-      <p class="mx-auto mt-1.5 max-w-md text-[12px] text-fg-subtle">
+      <p class="mx-auto mt-1.5 max-w-md text-meta text-fg-subtle">
         Create one to start adding workspaces and inviting teammates.
       </p>
       <a
         href="/hosted/organizations/new"
-        class="mt-4 inline-flex rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-accent-hover"
+        class="mt-4 inline-flex rounded-md bg-accent px-3 py-1.5 text-body font-semibold text-white transition-colors hover:bg-accent-hover"
       >
         Create organization
       </a>
@@ -133,24 +133,24 @@
             />
             <div class="min-w-0">
               <div class="flex items-center gap-2">
-                <span class="truncate text-[13px] font-semibold text-fg"
+                <span class="truncate text-subtitle text-fg"
                   >{org.display_name || org.slug}</span
                 >
                 <span
-                  class="rounded px-1.5 py-0.5 text-[11px] font-medium {planBadgeClasses(
+                  class="rounded px-1.5 py-0.5 text-micro {planBadgeClasses(
                     org.plan_tier,
                   )}"
                 >
                   {planLabel(org.plan_tier)}
                 </span>
               </div>
-              <div class="mt-0.5 truncate text-[11px] text-fg-subtle">
+              <div class="mt-0.5 truncate font-mono text-mono text-fg-subtle">
                 {org.slug}
               </div>
             </div>
           </div>
           <span
-            class="shrink-0 text-[11px] font-medium text-fg-subtle"
+            class="shrink-0 text-micro text-fg-subtle"
             aria-hidden="true">Open →</span
           >
         </button>

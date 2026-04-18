@@ -121,14 +121,14 @@
         />
       {/if}
       <div class="min-w-0">
-        <p class="text-[11px] text-fg-subtle">
+        <p class="text-micro text-fg-subtle">
           <a
             class="text-fg-subtle underline-offset-2 transition-colors hover:text-fg hover:underline"
             href="/hosted/organizations">Organizations</a
           >
         </p>
         <h1
-          class="mt-1 flex items-center gap-2 text-lg font-semibold text-fg"
+          class="mt-1 flex items-center gap-2 text-display text-fg"
         >
           <span class="truncate"
             >{organization?.display_name ||
@@ -137,7 +137,7 @@
           >
           {#if organization}
             <span
-              class="rounded px-1.5 py-0.5 text-[11px] font-medium {planBadgeClasses(
+              class="rounded px-1.5 py-0.5 text-micro {planBadgeClasses(
                 organization.plan_tier,
               )}"
             >
@@ -150,12 +150,12 @@
     <div class="flex flex-wrap items-center gap-2">
       <a
         href={`/hosted/organizations/${encodeURIComponent(orgId)}/billing`}
-        class="rounded-md border border-line bg-bg-soft px-3 py-1.5 text-[12px] font-medium text-fg-muted transition-colors hover:bg-panel-hover"
+        class="rounded-md border border-line bg-bg-soft px-3 py-1.5 text-micro text-fg-muted transition-colors hover:bg-panel-hover"
         >Manage billing</a
       >
       <a
         href="/hosted/workspaces/new"
-        class="rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-accent-hover"
+        class="rounded-md bg-accent px-3 py-1.5 text-body font-semibold text-white transition-colors hover:bg-accent-hover"
         >+ New workspace</a
       >
     </div>
@@ -164,7 +164,7 @@
   {#if message}
     <div
       role="alert"
-      class="rounded-md bg-danger-soft px-3 py-2 text-[12px] text-danger-text"
+      class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
     >
       {message}
     </div>
@@ -172,7 +172,7 @@
 
   {#if phase === "loading"}
     <div
-      class="rounded-md border border-line bg-bg-soft px-4 py-6 text-[13px] text-fg-subtle"
+      class="rounded-md border border-line bg-bg-soft px-4 py-6 text-meta text-fg-subtle"
     >
       Loading…
     </div>
@@ -184,14 +184,14 @@
         {@const p = pct(metric.used, metric.total)}
         <div class="rounded-md border border-line bg-bg-soft px-4 py-3">
           <div
-            class="flex items-center justify-between text-[11px] font-medium uppercase tracking-wide text-fg-subtle"
+            class="flex items-center justify-between text-micro uppercase tracking-wide text-fg-subtle"
           >
             <span>{metric.label}</span>
-            <span>{p}%</span>
+            <span class="tabular-nums">{p}%</span>
           </div>
-          <div class="mt-2 text-[18px] font-semibold text-fg">
+          <div class="mt-2 text-subtitle tabular-nums text-fg">
             {Number(metric.used ?? 0)}<span
-              class="text-[12px] font-normal text-fg-subtle"
+              class="text-meta text-fg-subtle"
               >{metric.suffix ?? ""} / {metric.total ?? "—"}{metric.suffix ??
                 ""}</span
             >
@@ -210,21 +210,21 @@
       <div
         class="flex items-center justify-between border-b border-line px-4 py-2.5"
       >
-        <h2 class="text-[13px] font-medium text-fg">Workspaces</h2>
+        <h2 class="text-subtitle text-fg">Workspaces</h2>
         <a
           href="/hosted/dashboard"
-          class="text-[11px] font-medium text-fg-subtle transition-colors hover:text-fg"
+          class="text-micro text-fg-subtle transition-colors hover:text-fg"
           >View all →</a
         >
       </div>
       {#if workspaces.length === 0}
         <div class="px-4 py-6 text-center">
-          <p class="text-[12px] text-fg-subtle">
+          <p class="text-meta text-fg-subtle">
             No workspaces in this organization yet.
           </p>
           <a
             href="/hosted/workspaces/new"
-            class="mt-3 inline-flex rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-accent-hover"
+            class="mt-3 inline-flex rounded-md bg-accent px-3 py-1.5 text-body font-semibold text-white transition-colors hover:bg-accent-hover"
             >Create your first workspace</a
           >
         </div>
@@ -239,16 +239,16 @@
                   size="sm"
                 />
                 <div class="min-w-0">
-                  <div class="truncate text-[13px] font-medium text-fg">
+                  <div class="truncate text-subtitle text-fg">
                     {ws.display_name || ws.slug}
                   </div>
-                  <div class="truncate text-[11px] text-fg-subtle">
+                  <div class="truncate font-mono text-mono text-fg-subtle">
                     {ws.slug}
                   </div>
                 </div>
               </div>
               <span
-                class="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium {ws.status ===
+                class="shrink-0 rounded px-1.5 py-0.5 text-micro {ws.status ===
                 'ready'
                   ? 'text-ok-text bg-ok-soft'
                   : ws.status === 'provisioning'
