@@ -27,7 +27,7 @@
 
   let variantClass = $derived(
     variant === "primary"
-      ? "bg-accent text-white hover:bg-accent-hover"
+      ? "bg-accent-solid text-white hover:bg-accent"
       : variant === "secondary"
         ? "border border-line bg-transparent text-fg hover:bg-panel-hover"
         : variant === "ghost"
@@ -38,7 +38,6 @@
   let classes = $derived(
     [
       "inline-flex items-center justify-center gap-1.5 rounded cursor-pointer transition-colors",
-      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2",
       "disabled:opacity-50 disabled:cursor-not-allowed",
       sizeClass,
       weightClass,

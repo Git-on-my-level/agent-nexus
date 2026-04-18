@@ -134,7 +134,7 @@
               <a
                 href={item.href}
                 data-sveltekit-preload-data="tap"
-                class="rounded-md px-2.5 py-1.5 text-micro transition-colors {isActive(
+                class="rounded-md px-2.5 py-2 text-micro transition-colors {isActive(
                   item.href,
                 )
                   ? 'bg-panel-hover text-fg'
@@ -156,7 +156,7 @@
                 aria-haspopup="listbox"
                 aria-expanded={orgPickerOpen}
                 onclick={() => (orgPickerOpen = !orgPickerOpen)}
-                class="flex max-w-[16rem] items-center gap-2 rounded-md border border-line bg-bg-soft px-2 py-1 text-micro text-fg transition-colors hover:bg-panel-hover"
+                class="flex max-w-[16rem] items-center gap-2 rounded-md border border-line bg-bg-soft px-2 py-1.5 text-micro text-fg transition-colors hover:bg-panel-hover"
               >
                 {#if activeOrg}
                   <Avatar
@@ -199,7 +199,7 @@
                           role="option"
                           aria-selected={org.id === activeOrg?.id}
                           onclick={() => pickOrg(org.id)}
-                          class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-micro text-fg transition-colors hover:bg-panel-hover"
+                          class="flex w-full items-center gap-2 px-2.5 py-2 text-left text-micro text-fg transition-colors hover:bg-panel-hover"
                         >
                           <Avatar
                             label={org.display_name || org.slug}
@@ -233,12 +233,12 @@
                   <div class="border-t border-line px-1 py-1">
                     <a
                       href="/hosted/organizations/new"
-                      class="block rounded px-2 py-1.5 text-micro text-accent-text transition-colors hover:bg-panel-hover"
+                      class="block rounded px-2 py-2 text-micro text-accent-text transition-colors hover:bg-panel-hover"
                       >+ New organization</a
                     >
                     <a
                       href="/hosted/organizations"
-                      class="block rounded px-2 py-1.5 text-micro text-fg-subtle transition-colors hover:bg-panel-hover"
+                      class="block rounded px-2 py-2 text-micro text-fg-subtle transition-colors hover:bg-panel-hover"
                       >Manage organizations</a
                     >
                   </div>
@@ -252,8 +252,9 @@
               type="button"
               aria-haspopup="menu"
               aria-expanded={menuOpen}
+              aria-label={account?.email ?? account?.display_name ?? "Account menu"}
               onclick={() => (menuOpen = !menuOpen)}
-              class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-panel-hover text-micro text-fg transition-colors hover:bg-line-strong"
+              class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-panel-hover text-micro text-fg transition-colors hover:bg-line-strong"
               title={account?.email ?? account?.display_name ?? "Account"}
             >
               {initialsFor(account)}
@@ -291,7 +292,7 @@
                     <a
                       role="menuitem"
                       href="/hosted/dashboard"
-                      class="block px-3 py-1.5 text-micro text-fg transition-colors hover:bg-panel-hover"
+                      class="block px-3 py-2 text-micro text-fg transition-colors hover:bg-panel-hover"
                       >Dashboard</a
                     >
                   </li>
@@ -299,7 +300,7 @@
                     <a
                       role="menuitem"
                       href="/hosted/organizations"
-                      class="block px-3 py-1.5 text-micro text-fg transition-colors hover:bg-panel-hover"
+                      class="block px-3 py-2 text-micro text-fg transition-colors hover:bg-panel-hover"
                       >Organizations</a
                     >
                   </li>
@@ -309,7 +310,7 @@
                     role="menuitem"
                     type="button"
                     onclick={handleSignOut}
-                    class="block w-full px-3 py-1.5 text-left text-micro text-fg transition-colors hover:bg-panel-hover"
+                    class="block w-full px-3 py-2 text-left text-micro text-fg transition-colors hover:bg-panel-hover"
                   >
                     Sign out
                   </button>
@@ -334,7 +335,7 @@
         {#each primaryNav as item (item.href)}
           <a
             href={item.href}
-            class="shrink-0 rounded-md px-2.5 py-1.5 text-micro transition-colors {isActive(
+            class="shrink-0 rounded-md px-3 py-2 text-micro transition-colors {isActive(
               item.href,
             )
               ? 'bg-panel-hover text-fg'
@@ -366,19 +367,19 @@
         aria-label="Footer"
       >
         <a
-          class="transition-colors hover:text-fg"
+          class="transition-colors hover:text-fg inline-block py-1"
           href="https://github.com/run-llama/oar"
           rel="noreferrer"
           target="_blank">Docs</a
         >
         <a
-          class="transition-colors hover:text-fg"
+          class="transition-colors hover:text-fg inline-block py-1"
           href="https://github.com/run-llama/oar"
           rel="noreferrer"
           target="_blank">GitHub</a
         >
         <a
-          class="transition-colors hover:text-fg"
+          class="transition-colors hover:text-fg inline-block py-1"
           href="https://status.runoar.com"
           rel="noreferrer"
           target="_blank"
@@ -390,10 +391,10 @@
           Status
         </a>
         <a
-          class="transition-colors hover:text-fg"
+          class="transition-colors hover:text-fg inline-block py-1"
           href="mailto:support@runoar.com">Support</a
         >
-        <a class="transition-colors hover:text-fg" href="/hosted/dev"
+        <a class="transition-colors hover:text-fg inline-block py-1" href="/hosted/dev"
           >Developer notes</a
         >
       </nav>

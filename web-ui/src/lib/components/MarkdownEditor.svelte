@@ -388,7 +388,7 @@
   .md-editor-btn {
     border: none;
     background: none;
-    padding: 0.1875rem 0.375rem;
+    padding: 0.375rem 0.5rem;
     font-size: 11px;
     font-family:
       ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;

@@ -18,10 +18,11 @@
 
   --fg:            #e8ebf1;
   --fg-muted:      #a1a7b4;
-  --fg-subtle:     #6b7280;
+  --fg-subtle:     #7b8494;
 
   --accent:        #ff5c1f;
   --accent-hover:  #ff7037;
+  --accent-solid:  #cc440f;
   --accent-text:   #ff8954;
   --accent-soft:   rgba(255, 92, 31, 0.12);
 
@@ -86,19 +87,20 @@
     font: inherit;
   }
 
-  input:focus,
-  select:focus,
-  textarea:focus,
-  button:focus-visible {
-    outline: none;
-    border-color: var(--accent);
-    box-shadow: 0 0 0 2px var(--accent-soft);
-  }
-
-  a:focus-visible {
+  :focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
     border-radius: 2px;
+  }
+
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
   }
 
   ::-webkit-scrollbar {
@@ -118,11 +120,38 @@
   ::-webkit-scrollbar-thumb:hover {
     background: var(--fg-subtle);
   }
+
+  @media (pointer: coarse) {
+    .shell-nav-link,
+    .shell-settings-link,
+    .shell-account-link,
+    .shell-search-trigger,
+    .workspace-switcher-trigger,
+    .workspace-switcher-option,
+    .shell-mobile-identity,
+    .shell-bottom-nav-item,
+    .shell-actor-panel button,
+    .actor-gate-item,
+    .actor-gate-input-row button {
+      min-height: 2.5rem;
+    }
+  }
 }
 
 @keyframes spin {
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 @layer components {

@@ -53,9 +53,9 @@ describe("Button", () => {
         children: () => "Primary",
       });
       const btn = getButton(container);
-      expect(btn.className).toContain("bg-accent");
+      expect(btn.className).toContain("bg-accent-solid");
       expect(btn.className).toContain("text-white");
-      expect(btn.className).toContain("hover:bg-accent-hover");
+      expect(btn.className).toContain("hover:bg-accent");
     });
 
     it("applies secondary classes", () => {
@@ -163,11 +163,11 @@ describe("Button", () => {
     expect(spinner).toBeNull();
   });
 
-  it("applies focus-visible ring classes", () => {
+  it("relies on global focus-visible ring from CSS base layer", () => {
     const { container } = render(Button, { children: () => "Focus" });
     const btn = getButton(container);
-    expect(btn.className).toContain("focus-visible:ring-2");
-    expect(btn.className).toContain("focus-visible:ring-accent");
+    expect(btn.className).not.toContain("focus-visible:ring-2");
+    expect(btn.tagName).toBe("BUTTON");
   });
 
   it("applies disabled opacity class", () => {

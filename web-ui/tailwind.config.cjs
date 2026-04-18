@@ -15,6 +15,7 @@ module.exports = {
       "fg-subtle": "var(--fg-subtle)",
       accent: "var(--accent)",
       "accent-hover": "var(--accent-hover)",
+      "accent-solid": "var(--accent-solid)",
       "accent-text": "var(--accent-text)",
       "accent-soft": "var(--accent-soft)",
       danger: "var(--danger)",
