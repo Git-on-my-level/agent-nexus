@@ -4,6 +4,7 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
 
+  import Button from "$lib/components/Button.svelte";
   import {
     normalizeHostedLaunchFinishURL,
     readHostedLaunchParams,
@@ -219,13 +220,15 @@
         </p>
       {/if}
 
-      <button
+      <Button
         type="submit"
+        variant="primary"
+        {busy}
         disabled={busy}
-        class="w-full rounded-md bg-accent px-3 py-2 text-body font-semibold text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+        class="w-full"
       >
         {busy ? "Signing in…" : "Continue with passkey"}
-      </button>
+      </Button>
     </form>
 
     {#if quickAuthOptions?.enabled}
@@ -241,14 +244,15 @@
           <p class="mt-2 text-micro text-fg-subtle">
             Skips the passkey for local resets. Disabled in production.
           </p>
-          <button
+          <Button
             type="button"
+            variant="secondary"
             onclick={quickSignIn}
             disabled={busy || quickAuthBusy}
-            class="mt-2 w-full rounded-md border border-line bg-bg-soft px-3 py-1.5 text-micro text-fg-muted hover:bg-panel-hover disabled:opacity-60"
+            class="mt-2 w-full"
           >
             {quickAuthBusy ? "Signing in…" : quickAuthLabel}
-          </button>
+          </Button>
         {/if}
       </div>
     {/if}

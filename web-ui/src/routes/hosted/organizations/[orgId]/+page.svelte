@@ -3,6 +3,7 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
 
+  import Button from "$lib/components/Button.svelte";
   import Avatar from "$lib/hosted/Avatar.svelte";
   import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
   import {
@@ -148,16 +149,8 @@
       </div>
     </div>
     <div class="flex flex-wrap items-center gap-2">
-      <a
-        href={`/hosted/organizations/${encodeURIComponent(orgId)}/billing`}
-        class="rounded-md border border-line bg-bg-soft px-3 py-1.5 text-micro text-fg-muted transition-colors hover:bg-panel-hover"
-        >Manage billing</a
-      >
-      <a
-        href="/hosted/workspaces/new"
-        class="rounded-md bg-accent px-3 py-1.5 text-body font-semibold text-white transition-colors hover:bg-accent-hover"
-        >+ New workspace</a
-      >
+      <Button variant="secondary" href={`/hosted/organizations/${encodeURIComponent(orgId)}/billing`}>Manage billing</Button>
+      <Button variant="primary" href="/hosted/workspaces/new">+ New workspace</Button>
     </div>
   </div>
 
@@ -222,11 +215,7 @@
           <p class="text-meta text-fg-subtle">
             No workspaces in this organization yet.
           </p>
-          <a
-            href="/hosted/workspaces/new"
-            class="mt-3 inline-flex rounded-md bg-accent px-3 py-1.5 text-body font-semibold text-white transition-colors hover:bg-accent-hover"
-            >Create your first workspace</a
-          >
+          <Button variant="primary" href="/hosted/workspaces/new">Create your first workspace</Button>
         </div>
       {:else}
         <ul class="divide-y divide-line">

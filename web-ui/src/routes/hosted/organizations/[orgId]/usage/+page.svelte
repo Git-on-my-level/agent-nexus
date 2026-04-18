@@ -4,6 +4,7 @@
 
   import { goto } from "$app/navigation";
 
+  import Button from "$lib/components/Button.svelte";
   import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
   import { setActiveOrg } from "$lib/hosted/session.js";
 
@@ -118,11 +119,7 @@
             {plan.display_name ?? "—"}
           </div>
         </div>
-        <a
-          href={`/hosted/organizations/${encodeURIComponent(orgId)}/billing`}
-          class="rounded-md border border-line bg-bg px-3 py-1.5 text-micro text-fg hover:bg-panel-hover"
-          >Change plan</a
-        >
+        <Button variant="secondary" href={`/hosted/organizations/${encodeURIComponent(orgId)}/billing`}>Change plan</Button>
       </div>
     </section>
 

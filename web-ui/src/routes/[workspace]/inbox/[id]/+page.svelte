@@ -353,13 +353,7 @@
 
         <div class="mt-4 flex items-center justify-between gap-3">
           <p class="text-meta text-fg-muted">Cmd+Enter submits</p>
-          <button
-            type="submit"
-            class="rounded bg-accent px-5 py-2 text-body font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={submitting}
-          >
-            {submitting ? "Sending..." : "Send answer"}
-          </button>
+          <Button type="submit" variant="primary" disabled={submitting}>{submitting ? "Sending…" : "Send answer"}</Button>
         </div>
       </form>
     </section>

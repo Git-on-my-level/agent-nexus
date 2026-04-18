@@ -3,6 +3,7 @@
 
   import { browser } from "$app/environment";
 
+  import Button from "$lib/components/Button.svelte";
   import Avatar from "$lib/hosted/Avatar.svelte";
   import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
   import { normalizeHostedLaunchFinishURL } from "$lib/hosted/launchFlow.js";
@@ -133,12 +134,9 @@
       </p>
     </div>
     {#if activeOrg}
-      <a
-        href="/hosted/workspaces/new"
-        class="rounded-md bg-accent px-3 py-1.5 text-body font-semibold text-white transition-colors hover:bg-accent-hover"
-      >
+      <Button variant="primary" href="/hosted/workspaces/new">
         + New workspace
-      </a>
+      </Button>
     {/if}
   </div>
 
@@ -168,12 +166,9 @@
         Organizations group workspaces, members, and billing. Most teams need
         just one.
       </p>
-      <a
-        href="/hosted/organizations/new"
-        class="mt-4 inline-flex rounded-md bg-accent px-3 py-1.5 text-body font-semibold text-white transition-colors hover:bg-accent-hover"
-      >
+      <Button variant="primary" href="/hosted/organizations/new">
         Create organization
-      </a>
+      </Button>
     </div>
   {:else if loadingWorkspaces}
     <div
@@ -192,12 +187,9 @@
         Workspaces hold the threads, topics, and artifacts your AI agent
         produces. Create one to get started.
       </p>
-      <a
-        href="/hosted/workspaces/new"
-        class="mt-4 inline-flex rounded-md bg-accent px-3 py-1.5 text-body font-semibold text-white transition-colors hover:bg-accent-hover"
-      >
+      <Button variant="primary" href="/hosted/workspaces/new">
         Create workspace
-      </a>
+      </Button>
     </div>
   {:else}
     <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -232,14 +224,14 @@
 
           <div class="mt-4 flex items-center gap-2">
             {#if String(ws.status ?? "").toLowerCase() === "ready" && ws.slug}
-              <button
+              <Button
                 type="button"
-                class="rounded-md bg-panel-hover px-2.5 py-1.5 text-micro text-fg transition-colors hover:bg-line-strong disabled:opacity-60"
+                variant="ghost"
                 onclick={() => openWorkspaceLaunch(ws)}
                 disabled={launchingWorkspaceId === ws.id}
               >
                 {launchingWorkspaceId === ws.id ? "Opening…" : "Open"}
-              </button>
+              </Button>
             {:else}
               <span
                 class="rounded-md border border-line px-2.5 py-1.5 text-micro text-fg-subtle"

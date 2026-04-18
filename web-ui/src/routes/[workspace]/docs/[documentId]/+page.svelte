@@ -2,6 +2,7 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
   import ArchiveButton from "$lib/components/ArchiveButton.svelte";
+  import Button from "$lib/components/Button.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import CopyButton from "$lib/components/CopyButton.svelte";
   import TrashButton from "$lib/components/TrashButton.svelte";
@@ -428,14 +429,15 @@
           {/if}
         </p>
       </div>
-      <button
-        class="shrink-0 cursor-pointer rounded-md border border-danger/40 bg-danger-soft px-2 py-1 text-micro font-medium text-danger-text hover:bg-danger/25 disabled:opacity-50"
+      <Button
+        variant="destructive"
+        size="compact"
         disabled={docLifecycleBusy}
         onclick={handleRestoreDocument}
         type="button"
       >
         {docLifecycleBusy ? "…" : "Restore"}
-      </button>
+      </Button>
     </div>
   {:else if document.archived_at}
     <div
@@ -518,8 +520,9 @@
         {#if !document.trashed_at}
           <div class="flex shrink-0 items-center gap-1.5">
             {#if isTextEditable}
-              <button
-                class="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-accent px-2.5 py-1.5 text-micro font-medium text-white transition-colors hover:bg-accent-hover"
+              <Button
+                variant="primary"
+                size="compact"
                 onclick={openEdit}
                 type="button"
               >
@@ -537,7 +540,7 @@
                   />
                 </svg>
                 New revision
-              </button>
+              </Button>
             {:else}
               <span
                 class="inline-flex items-center gap-1 rounded-md border border-[var(--line)] px-2.5 py-1.5 text-micro text-[var(--fg-muted)]"
@@ -559,8 +562,9 @@
                 {headContentType} — edit via CLI
               </span>
             {/if}
-            <button
-              class="cursor-pointer shrink-0 inline-flex items-center gap-1.5 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)]"
+            <Button
+              variant="secondary"
+              size="compact"
               onclick={loadHistory}
               type="button"
             >
@@ -578,7 +582,7 @@
                 />
               </svg>
               Revision history
-            </button>
+            </Button>
             {#if !document.archived_at}
               <ArchiveButton
                 busy={docLifecycleBusy}
@@ -678,20 +682,22 @@
           </label>
 
           <div class="mt-3 flex items-center gap-2">
-            <button
-              class="cursor-pointer rounded-md bg-accent px-3 py-1.5 text-micro font-medium text-white hover:bg-accent-hover disabled:opacity-50"
-              disabled={saving}
+            <Button
               type="submit"
+              variant="primary"
+              size="compact"
+              disabled={saving}
             >
               {saving ? "Saving…" : "Save revision"}
-            </button>
-            <button
-              class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-micro font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]"
+            </Button>
+            <Button
+              variant="secondary"
+              size="compact"
               onclick={closeEdit}
               type="button"
             >
               Cancel
-            </button>
+            </Button>
           </div>
 
           {#if saveError}

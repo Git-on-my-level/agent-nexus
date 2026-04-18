@@ -8,6 +8,7 @@
     principalRegistry,
   } from "$lib/actorSession";
   import ArchiveButton from "$lib/components/ArchiveButton.svelte";
+  import Button from "$lib/components/Button.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import TrashButton from "$lib/components/TrashButton.svelte";
   import { coreClient } from "$lib/coreClient";
@@ -141,14 +142,14 @@
       </p>
     </div>
     {#if detailAsTopic}
-      <button
-        class="shrink-0 cursor-pointer rounded-md border border-danger/40 bg-danger-soft px-2 py-1 text-micro font-medium text-danger-text hover:bg-danger/25 disabled:opacity-50"
+      <Button
+        variant="destructive"
+        size="compact"
         disabled={lifecycleBusy}
         onclick={handleRestore}
-        type="button"
       >
         {lifecycleBusy ? "…" : "Restore"}
-      </button>
+      </Button>
     {:else}
       <p class="shrink-0 max-w-xs text-micro text-danger-text/80">
         Restore and lifecycle changes use the topic route; this thread view is

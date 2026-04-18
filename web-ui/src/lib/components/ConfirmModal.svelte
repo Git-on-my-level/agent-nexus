@@ -1,4 +1,6 @@
 <script>
+  import Button from "$lib/components/Button.svelte";
+
   let {
     open = false,
     title = "Confirm",
@@ -87,25 +89,24 @@
         </label>
       {/if}
       <div class="confirm-actions">
-        <button
-          class="confirm-btn confirm-btn--cancel"
+        <Button
+          variant="secondary"
+          size="compact"
           disabled={busy}
           onclick={oncancel}
-          type="button"
         >
           {cancelLabel}
-        </button>
-        <button
-          class="confirm-btn {variant === 'danger'
-            ? 'confirm-btn--danger'
-            : 'confirm-btn--warning'}"
+        </Button>
+        <Button
+          variant="destructive"
+          size="compact"
           bind:this={confirmBtnEl}
           disabled={confirmDisabled}
+          busy={busy}
           onclick={onconfirm}
-          type="button"
         >
           {busy ? "Working…" : confirmLabel}
-        </button>
+        </Button>
       </div>
     </div>
   </div>

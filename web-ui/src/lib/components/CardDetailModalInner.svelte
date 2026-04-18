@@ -44,6 +44,7 @@
   } from "$lib/timelineContext";
   import { workspacePath } from "$lib/workspacePaths";
 
+  import Button from "$lib/components/Button.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import GuidedTypedRefsInput from "$lib/components/GuidedTypedRefsInput.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
@@ -992,39 +993,39 @@
         </div>
         <div class="flex flex-wrap items-center gap-2">
           {#if editOpen}
-            <button
-              type="button"
+            <Button
+              variant="primary"
+              size="compact"
               disabled={savingCard}
-              class="rounded-md bg-accent px-3 py-1.5 text-micro font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
               onclick={() => void handleSave()}
             >
               {savingCard ? "Saving…" : "Save card details"}
-            </button>
-            <button
-              type="button"
-              class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-1.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
+            </Button>
+            <Button
+              variant="secondary"
+              size="compact"
               onclick={cancelEdit}
             >
               Cancel
-            </button>
+            </Button>
           {:else}
-            <button
-              type="button"
-              class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-micro font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line-subtle)]"
+            <Button
+              variant="secondary"
+              size="compact"
               onclick={beginEdit}
             >
               Edit card
-            </button>
+            </Button>
           {/if}
-          <button
-            type="button"
-            class="rounded-md border border-danger/30 bg-danger-soft px-3 py-1.5 text-micro font-medium text-danger-text transition-colors hover:bg-danger-soft"
+          <Button
+            variant="destructive"
+            size="compact"
             onclick={() => {
               removeCardConfirmOpen = true;
             }}
           >
             Remove card
-          </button>
+          </Button>
         </div>
       </div>
     </div>

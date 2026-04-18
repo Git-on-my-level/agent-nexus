@@ -2,6 +2,7 @@
   import { page } from "$app/stores";
   import { resolveRefLink } from "$lib/refLinkModel";
   import { parseRef, renderRef } from "$lib/typedRefs";
+  import Button from "$lib/components/Button.svelte";
 
   let {
     value = $bindable(""),
@@ -165,13 +166,13 @@
       placeholder={addInputPlaceholder}
       type="text"
     />
-    <button
-      class="cursor-pointer rounded-md border border-[var(--line-strong)] bg-[var(--bg-soft)] px-3 py-2 text-micro font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line-subtle)]"
+    <Button
+      variant="secondary"
+      size="compact"
       onclick={addCandidate}
-      type="button"
     >
       {addButtonLabel}
-    </button>
+    </Button>
   </div>
 
   {#if localError}
@@ -187,29 +188,29 @@
       </p>
       <div class="mt-1.5 flex flex-wrap gap-1.5">
         {#each normalizedSuggestions as suggestion}
-          <button
-            class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1 text-micro text-[var(--fg-muted)] transition-colors hover:border-accent/30 hover:text-accent-text"
+          <Button
+            variant="secondary"
+            size="compact"
             onclick={() => addSuggestion(suggestion.value)}
-            type="button"
           >
             {suggestion.label}
-          </button>
+          </Button>
         {/each}
       </div>
     </div>
   {/if}
 
-  <button
+  <Button
+    variant="ghost"
+    size="compact"
     aria-controls="guided-refs-advanced"
     aria-expanded={showAdvanced}
-    class="mt-2 cursor-pointer rounded-md px-2 py-1 text-micro text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
     onclick={() => {
       showAdvanced = !showAdvanced;
     }}
-    type="button"
   >
     {showAdvanced ? hideAdvancedToggleLabel : advancedToggleLabel}
-  </button>
+  </Button>
 
   <div id="guided-refs-advanced">
     {#if showAdvanced}

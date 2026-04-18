@@ -4,6 +4,8 @@
 
   import { goto } from "$app/navigation";
 
+  import Button from "$lib/components/Button.svelte";
+
   import {
     billingPollScheduleDelays,
     billingSnapshotExpired,
@@ -430,11 +432,7 @@
             Refresh in a minute or contact support if billing doesn't update.
           </span>
         </div>
-        <button
-          type="button"
-          class="rounded-md border border-line bg-bg-soft px-2.5 py-1 text-micro text-fg-muted hover:bg-panel-hover"
-          onclick={() => refreshAfterTimeout()}>Refresh</button
-        >
+        <Button variant="secondary" onclick={() => refreshAfterTimeout()}>Refresh</Button>
       </div>
     {/if}
 
@@ -481,12 +479,7 @@
           {/if}
         </div>
         {#if managed}
-          <button
-            type="button"
-            onclick={() => openPortal()}
-            class="rounded-md border border-line bg-bg px-3 py-1.5 text-micro text-fg hover:bg-panel-hover"
-            >Manage in Stripe</button
-          >
+          <Button variant="secondary" onclick={() => openPortal()}>Manage in Stripe</Button>
         {/if}
       </div>
     </section>
@@ -557,23 +550,18 @@
                   >Talk to sales</a
                 >
               {:else if planCard.ctaUpgrade && managed}
-                <button
-                  type="button"
-                  onclick={() => openPortal()}
-                  class="block w-full rounded-md border border-line bg-bg px-3 py-1.5 text-micro text-fg transition-colors hover:bg-panel-hover"
-                  >Switch plan</button
-                >
+                <Button variant="secondary" class="block w-full" onclick={() => openPortal()}>Switch plan</Button>
               {:else if planCard.ctaUpgrade}
-                <button
-                  type="button"
+                <Button
+                  variant="primary"
+                  class="block w-full"
                   onclick={() => checkoutPlan(planCard.id)}
                   disabled={!!upgradeBusy}
-                  class="block w-full rounded-md bg-accent px-3 py-1.5 text-body font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-60"
                 >
                   {upgradeBusy === planCard.id
                     ? "Opening Stripe…"
                     : planCard.ctaLabel}
-                </button>
+                </Button>
               {:else}
                 <span
                   class="block w-full rounded-md border border-line bg-bg px-3 py-1.5 text-center text-micro text-fg-subtle"

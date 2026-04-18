@@ -5,6 +5,7 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
 
+  import Button from "$lib/components/Button.svelte";
   import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
 
   /** If the user already has a valid session cookie, skip the marketing page. */
@@ -56,14 +57,8 @@
   </p>
 
   <div class="mt-7 flex flex-wrap justify-center gap-2">
-    <a
-      class="rounded-md bg-accent px-4 py-2 text-body font-semibold text-white shadow-sm transition-colors hover:bg-accent-hover"
-      href={`/hosted/signup${continuationQuery}`}>Create your workspace</a
-    >
-    <a
-      class="rounded-md border border-line bg-bg-soft px-4 py-2 text-body text-fg transition-colors hover:bg-panel-hover"
-      href={`/hosted/signin${continuationQuery}`}>I already have an account</a
-    >
+    <Button variant="primary" size="large" href={`/hosted/signup${continuationQuery}`}>Create your workspace</Button>
+    <Button variant="secondary" size="large" href={`/hosted/signin${continuationQuery}`}>I already have an account</Button>
   </div>
 
   <p class="mt-3 text-micro text-fg-subtle">
@@ -99,10 +94,6 @@
     </p>
   </div>
   <div class="sm:text-right">
-    <a
-      href="/hosted/signup"
-      class="inline-flex rounded-md bg-panel-hover px-3 py-1.5 text-micro text-fg transition-colors hover:bg-line-strong"
-      >Get started free</a
-    >
+    <Button variant="ghost" href="/hosted/signup">Get started free</Button>
   </div>
 </section>

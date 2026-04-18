@@ -1,6 +1,7 @@
 <script>
   import { goto } from "$app/navigation";
 
+  import Button from "$lib/components/Button.svelte";
   import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
   import { loadHostedSession, setActiveOrg } from "$lib/hosted/session.js";
 
@@ -144,17 +145,14 @@
     {/if}
 
     <div class="flex items-center justify-end gap-2 pt-2">
-      <a
-        class="rounded-md px-3 py-1.5 text-micro text-fg-subtle hover:bg-panel-hover hover:text-fg"
-        href="/hosted/dashboard">Cancel</a
-      >
-      <button
+      <Button variant="ghost" href="/hosted/dashboard">Cancel</Button>
+      <Button
         type="submit"
+        variant="primary"
         disabled={busy}
-        class="rounded-md bg-accent px-3 py-1.5 text-body font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-60"
       >
         {busy ? "Creating…" : "Create organization"}
-      </button>
+      </Button>
     </div>
   </form>
 </div>

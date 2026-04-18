@@ -3,6 +3,7 @@
 
   import { authenticatedAgent } from "$lib/authSession";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
+  import Button from "$lib/components/Button.svelte";
   import CopyButton from "$lib/components/CopyButton.svelte";
   import { coreClient } from "$lib/coreClient";
   import { formatAbsoluteDateTime, formatTimestamp } from "$lib/formatDate";
@@ -558,13 +559,9 @@
           Manage workspace access, principals, and invitations
         </p>
       </div>
-      <button
-        class="cursor-pointer rounded-md border border-[var(--line)] px-2.5 py-1.5 text-meta font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)]"
-        onclick={loadAccessData}
-        type="button"
-      >
+      <Button variant="secondary" size="compact" onclick={loadAccessData}>
         Refresh
-      </button>
+      </Button>
     </div>
 
     {#if loading}
@@ -607,31 +604,19 @@
             >
               <span class="flex-1 break-all">{createdToken}</span>
               {#if createdInviteKind === "agent" || createdInviteKind === "any"}
-                <button
-                  class="shrink-0 cursor-pointer rounded px-2 py-1.5 text-micro font-medium text-ok-text hover:bg-ok-soft"
-                  onclick={copyTokenToClipboard}
-                  type="button"
-                >
+                <Button variant="ghost" size="compact" onclick={copyTokenToClipboard}>
                   {tokenCopied ? "Copied" : "Copy token"}
-                </button>
+                </Button>
               {:else}
-                <button
-                  class="shrink-0 cursor-pointer rounded px-2 py-1.5 text-micro font-medium text-ok-text hover:bg-ok-soft"
-                  onclick={copyTokenToClipboard}
-                  type="button"
-                >
+                <Button variant="ghost" size="compact" onclick={copyTokenToClipboard}>
                   {tokenCopied ? "Copied" : "Copy"}
-                </button>
+                </Button>
               {/if}
             </div>
             {#if createdInviteKind === "agent" || createdInviteKind === "any"}
-              <button
-                class="mt-2 cursor-pointer rounded border border-ok/30 px-3 py-1.5 text-micro font-medium text-ok-text hover:bg-ok-soft"
-                onclick={copyRegistrationMessage}
-                type="button"
-              >
+              <Button variant="ghost" size="compact" onclick={copyRegistrationMessage}>
                 {messageCopied ? "Copied" : "Copy registration message"}
-              </button>
+              </Button>
               <p class="mt-1.5 text-micro text-[var(--fg-muted)]">
                 Copies a ready-to-paste command with instructions for your agent
                 to register.
@@ -748,13 +733,9 @@
                 />
               </div>
             {/if}
-            <button
-              class="cursor-pointer rounded-md bg-accent px-3 py-1.5 text-meta font-medium text-white hover:bg-accent-hover disabled:opacity-50"
-              disabled={creatingInvite}
-              type="submit"
-            >
+            <Button variant="primary" size="compact" disabled={creatingInvite} type="submit">
               {creatingInvite ? "Creating..." : "Create invite"}
-            </button>
+            </Button>
           </div>
         </form>
       </div>
@@ -837,16 +818,9 @@
                   {formatTimestamp(invite.created_at)}
                 </span>
                 {#if !invite.revoked_at && !invite.consumed_at}
-                  <button
-                    class="shrink-0 cursor-pointer rounded px-2 py-1 text-micro font-medium text-danger-text hover:bg-danger-soft disabled:opacity-50"
-                    disabled={revokingInviteId === invite.id}
-                    onclick={() => {
-                      revokeInviteConfirm = { open: true, id: invite.id };
-                    }}
-                    type="button"
-                  >
+                  <Button variant="destructive" size="compact" disabled={revokingInviteId === invite.id} onclick={() => { revokeInviteConfirm = { open: true, id: invite.id }; }}>
                     {revokingInviteId === invite.id ? "Revoking..." : "Revoke"}
-                  </button>
+                  </Button>
                 {/if}
               </div>
             {/each}
@@ -1030,15 +1004,9 @@
                   </div>
                   {#if !principal.revoked && !isCurrent}
                     {@const lastHuman = isLastActiveHumanPrincipal(principal)}
-                    <button
-                      class="shrink-0 cursor-pointer rounded px-2 py-1 text-micro font-medium text-danger-text hover:bg-danger-soft disabled:opacity-50"
-                      disabled={principalRevokeConfirming ||
-                        principalRevokeForcing}
-                      onclick={() => startPrincipalRevoke(principal)}
-                      type="button"
-                    >
+                    <Button variant="destructive" size="compact" disabled={principalRevokeConfirming || principalRevokeForcing} onclick={() => startPrincipalRevoke(principal)}>
                       {lastHuman ? "Break glass" : "Revoke"}
-                    </button>
+                    </Button>
                   {:else if !principal.revoked}
                     <span
                       class="shrink-0 rounded bg-[var(--line-subtle)] px-1.5 py-0.5 text-micro font-medium text-[var(--fg-muted)]"
@@ -1052,14 +1020,9 @@
           </div>
           {#if principalsHasMore}
             <div class="mt-2 flex justify-center">
-              <button
-                class="cursor-pointer rounded-md border border-[var(--line)] px-3 py-1.5 text-micro font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)] disabled:opacity-50"
-                disabled={loadingMorePrincipals}
-                onclick={loadMorePrincipals}
-                type="button"
-              >
-                {loadingMorePrincipals ? "Loading..." : "Load more"}
-              </button>
+                <Button variant="secondary" size="compact" disabled={loadingMorePrincipals} onclick={loadMorePrincipals}>
+                  {loadingMorePrincipals ? "Loading..." : "Load more"}
+                </Button>
             </div>
           {/if}
         {/if}
@@ -1140,34 +1103,19 @@
             {/if}
             <div class="mt-3 flex items-center gap-2">
               {#if principalRevokeRequiresHumanLockout}
-                <button
-                  class="cursor-pointer rounded bg-danger px-3 py-1.5 text-micro font-medium text-white hover:bg-danger disabled:opacity-50"
-                  disabled={principalRevokeForcing ||
-                    !principalRevokeBreakGlassReady()}
-                  onclick={forcePrincipalRevoke}
-                  type="button"
-                >
+                <Button variant="destructive" size="compact" class="bg-danger text-white hover:bg-danger" disabled={principalRevokeForcing || !principalRevokeBreakGlassReady()} onclick={forcePrincipalRevoke}>
                   {principalRevokeForcing
                     ? "Revoking..."
                     : "Allow human lockout and revoke"}
-                </button>
+                </Button>
               {:else}
-                <button
-                  class="cursor-pointer rounded bg-danger px-3 py-1.5 text-micro font-medium text-white hover:bg-danger disabled:opacity-50"
-                  disabled={principalRevokeConfirming}
-                  onclick={confirmPrincipalRevoke}
-                  type="button"
-                >
+                <Button variant="destructive" size="compact" class="bg-danger text-white hover:bg-danger" disabled={principalRevokeConfirming} onclick={confirmPrincipalRevoke}>
                   {principalRevokeConfirming ? "Revoking..." : "Confirm revoke"}
-                </button>
+                </Button>
               {/if}
-              <button
-                class="cursor-pointer rounded border border-[var(--line)] px-3 py-1.5 text-micro font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]"
-                onclick={cancelPrincipalRevoke}
-                type="button"
-              >
+              <Button variant="secondary" size="compact" onclick={cancelPrincipalRevoke}>
                 Cancel
-              </button>
+              </Button>
             </div>
           </div>
           <button
@@ -1237,14 +1185,9 @@
           </div>
           {#if auditHasMore}
             <div class="mt-2 flex justify-center">
-              <button
-                class="cursor-pointer rounded-md border border-[var(--line)] px-3 py-1.5 text-micro font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)] disabled:opacity-50"
-                disabled={loadingMoreAudit}
-                onclick={loadMoreAudit}
-                type="button"
-              >
-                {loadingMoreAudit ? "Loading..." : "Load more"}
-              </button>
+                <Button variant="secondary" size="compact" disabled={loadingMoreAudit} onclick={loadMoreAudit}>
+                  {loadingMoreAudit ? "Loading..." : "Load more"}
+                </Button>
             </div>
           {/if}
         {/if}

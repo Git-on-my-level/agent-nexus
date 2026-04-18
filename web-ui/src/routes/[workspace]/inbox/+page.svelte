@@ -5,6 +5,7 @@
 
   import CompactFilterBar from "$lib/components/CompactFilterBar.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
+  import Button from "$lib/components/Button.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
   import { coreClient } from "$lib/coreClient";
   import { formatAbsoluteDateTime } from "$lib/formatDate";
@@ -653,13 +654,14 @@
           </select>
         </label>
         {#if hasActiveFilters}
-          <button
-            class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-micro font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)] sm:ml-auto"
+          <Button
+            variant="secondary"
+            size="compact"
             onclick={resetFilters}
-            type="button"
+            class="sm:ml-auto"
           >
             Clear filters
-          </button>
+          </Button>
         {/if}
       </div>
     {/snippet}
@@ -849,13 +851,14 @@
       Try switching back to <span class="font-semibold">All</span> to see the full
       queue.
     </p>
-    <button
-      class="cursor-pointer mt-4 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-meta font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]"
+    <Button
+      variant="secondary"
+      size="compact"
       onclick={resetFilters}
-      type="button"
+      class="mt-4"
     >
       Clear filters
-    </button>
+    </Button>
   </div>
 {:else}
   <div class="space-y-4">
@@ -976,51 +979,48 @@
 
               <div class="mt-2 flex flex-wrap items-center gap-1.5">
                 {#if isAskItem(item)}
-                  <a
-                    class="cursor-pointer rounded bg-accent px-2.5 py-1 text-micro font-medium text-white transition-colors hover:bg-accent-hover"
+                  <Button
+                    variant="primary"
+                    size="compact"
                     href={askItemHref(item)}
                   >
                     Answer
-                  </a>
-                  <button
-                    class="cursor-pointer rounded border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] disabled:opacity-50"
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="compact"
                     disabled={Boolean(ackInFlightById[item.id])}
                     onclick={() => acknowledgeItem(item)}
-                    type="button"
                   >
                     {ackInFlightById[item.id] ? "Deferring..." : "Defer"}
-                  </button>
-                  <button
-                    class="cursor-pointer rounded border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] disabled:opacity-50"
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="compact"
                     disabled={Boolean(ackInFlightById[item.id])}
                     onclick={() => acknowledgeItem(item)}
-                    type="button"
                   >
                     Not for me
-                  </button>
+                  </Button>
                 {:else}
-                  <button
-                    class="cursor-pointer rounded border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] disabled:opacity-50"
+                  <Button
+                    variant="secondary"
+                    size="compact"
                     disabled={Boolean(ackInFlightById[item.id])}
                     onclick={() => acknowledgeItem(item)}
-                    type="button"
                   >
                     {ackInFlightById[item.id]
                       ? "Acknowledging..."
                       : "Acknowledge"}
-                  </button>
-                  <button
-                    class="cursor-pointer rounded px-2.5 py-1 text-micro font-medium transition-colors {getDecisionForm(
-                      item.id,
-                    ).open
-                      ? 'border border-[var(--line)] bg-[var(--bg-soft)] text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]'
-                      : 'bg-accent text-white hover:bg-accent-hover'}"
+                  </Button>
+                  <Button
+                    variant={getDecisionForm(item.id).open ? "secondary" : "primary"}
+                    size="compact"
                     onclick={() =>
                       toggleDecisionForm(item, !getDecisionForm(item.id).open)}
-                    type="button"
                   >
                     {getDecisionForm(item.id).open ? "Cancel" : "Decide"}
-                  </button>
+                  </Button>
                 {/if}
               </div>
 
@@ -1265,15 +1265,15 @@
                       rows="2">{getDecisionForm(item.id).notes}</textarea
                     >
                     <div class="mt-2 flex justify-end">
-                      <button
-                        class="cursor-pointer rounded-md bg-accent px-3 py-1.5 text-micro font-medium text-white hover:bg-accent-hover disabled:opacity-50"
-                        disabled={Boolean(decisionInFlightById[item.id])}
+                      <Button
                         type="submit"
+                        variant="primary"
+                        disabled={Boolean(decisionInFlightById[item.id])}
                       >
                         {decisionInFlightById[item.id]
                           ? "Recording..."
                           : "Submit decision"}
-                      </button>
+                      </Button>
                     </div>
                   </form>
                 </div>

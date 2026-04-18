@@ -11,6 +11,7 @@
     datetimeLocalToIso,
   } from "$lib/formatDate";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
+  import Button from "$lib/components/Button.svelte";
   import ProvenanceBadge from "$lib/components/ProvenanceBadge.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
   import {
@@ -358,10 +359,12 @@
         >
       </div>
       <div class="mt-3 flex gap-2">
-        <button
-          class="cursor-pointer rounded bg-accent px-4 py-1.5 text-micro font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+        <Button
+          variant="primary"
+          size="compact"
+          type="submit"
           disabled={savingEdit}
-          type="submit">{savingEdit ? "Saving..." : "Save changes"}</button
+          >{savingEdit ? "Saving..." : "Save changes"}</Button
         >
         <button
           class="cursor-pointer rounded px-3 py-1.5 text-micro text-[var(--fg-muted)] hover:bg-[var(--bg-soft)]"

@@ -5,6 +5,7 @@
     authenticatedAgent,
     isHumanWorkspacePrincipal,
   } from "$lib/authSession";
+  import Button from "$lib/components/Button.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
@@ -123,15 +124,14 @@
   <div class="mb-4 flex items-center justify-between">
     <h1 class="text-body font-semibold text-[var(--fg)]">Secrets</h1>
     {#if isHuman}
-      <button
-        class="cursor-pointer rounded-md bg-[var(--accent-hover)] px-3 py-1.5 text-micro font-medium text-white hover:bg-[var(--accent)] disabled:opacity-50"
+      <Button
+        variant="primary"
         onclick={() => {
           showCreateForm = !showCreateForm;
         }}
-        type="button"
       >
         {showCreateForm ? "Cancel" : "New secret"}
-      </button>
+      </Button>
     {/if}
   </div>
 
@@ -199,23 +199,14 @@
           />
         </div>
         <div class="flex justify-end gap-2">
-          <button
-            class="cursor-pointer rounded-md px-3 py-1.5 text-micro font-medium text-[var(--fg-muted)] hover:text-[var(--fg)]"
-            onclick={() => {
-              showCreateForm = false;
-            }}
-            type="button"
-          >
-            Cancel
-          </button>
-          <button
-            class="cursor-pointer rounded-md bg-[var(--accent-hover)] px-3 py-1.5 text-micro font-medium text-white hover:bg-[var(--accent)] disabled:opacity-50"
+          <Button variant="ghost" onclick={() => { showCreateForm = false; }}>Cancel</Button>
+          <Button
+            variant="primary"
             disabled={creating || !newName.trim() || !newValue}
             onclick={handleCreate}
-            type="button"
           >
             {creating ? "Creating..." : "Create"}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -300,20 +291,9 @@
                 </button>
               {/if}
               {#if isHuman}
-                <button
-                  class="cursor-pointer rounded px-2 py-1 text-micro font-medium text-danger-text hover:bg-danger-soft disabled:opacity-50"
-                  disabled={deleting === secret.id}
-                  onclick={() => {
-                    deleteConfirm = {
-                      open: true,
-                      id: secret.id,
-                      name: secret.name,
-                    };
-                  }}
-                  type="button"
-                >
+                <Button variant="destructive" disabled={deleting === secret.id} onclick={() => { deleteConfirm = { open: true, id: secret.id, name: secret.name }; }}>
                   {deleting === secret.id ? "Deleting..." : "Delete"}
-                </button>
+                </Button>
               {/if}
             </div>
           </div>

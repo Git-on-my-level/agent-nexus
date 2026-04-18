@@ -13,6 +13,7 @@
     createPasskeyCredential,
     getPasskeyAssertion,
   } from "$lib/passkeyBrowser";
+  import Button from "$lib/components/Button.svelte";
   import { workspacePath } from "$lib/workspacePaths";
   import { devActorMode } from "$lib/workspaceContext";
 
@@ -283,14 +284,14 @@
                   type="text"
                 />
               </div>
-              <button
-                class="cursor-pointer w-full rounded-md bg-accent px-3 py-2 text-micro font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+              <Button
+                variant="primary"
+                class="w-full"
                 disabled={loadingDevLogin}
                 onclick={handleDevLogin}
-                type="button"
               >
                 {loadingDevLogin ? "Signing in..." : "Sign in (dev)"}
-              </button>
+              </Button>
               {#if devLoginError}
                 <div
                   class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
@@ -307,16 +308,16 @@
                 Sign in with passkey
               </summary>
               <div class="mt-3 space-y-3">
-                <button
-                  class="cursor-pointer w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-micro font-medium text-[var(--fg)] hover:bg-[var(--line-subtle)] disabled:opacity-50"
+                <Button
+                  variant="secondary"
+                  class="w-full"
                   disabled={loadingLogin}
                   onclick={handleLogin}
-                  type="button"
                 >
                   {loadingLogin
                     ? "Waiting for passkey..."
                     : "Sign in with existing passkey"}
-                </button>
+                </Button>
 
                 {#if loginError}
                   <div
@@ -333,16 +334,16 @@
               </div>
             </details>
           {:else}
-            <button
-              class="cursor-pointer w-full rounded-md bg-accent px-3 py-2 text-micro font-medium text-white hover:bg-accent-hover"
+            <Button
+              variant="primary"
+              class="w-full"
               disabled={loadingLogin}
               onclick={handleLogin}
-              type="button"
             >
               {loadingLogin
                 ? "Waiting for passkey..."
                 : "Sign in with existing passkey"}
-            </button>
+            </Button>
 
             {#if loginError}
               <div
@@ -446,37 +447,36 @@
           {/if}
 
           <div class="flex flex-wrap gap-2">
-            <button
-              class="cursor-pointer rounded-md bg-accent px-3 py-2 text-micro font-medium text-white hover:bg-accent-hover disabled:opacity-50"
-              disabled={loadingRegistration || !registrationToken.trim()}
+            <Button
               type="submit"
+              variant="primary"
+              disabled={loadingRegistration || !registrationToken.trim()}
             >
               {loadingRegistration
                 ? "Waiting for passkey..."
                 : "Create passkey and join"}
-            </button>
+            </Button>
             {#if devPasskeyBypassAvailable}
-              <button
-                class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-micro font-medium text-[var(--fg)] hover:bg-[var(--line-subtle)] disabled:opacity-50"
+              <Button
+                variant="secondary"
                 disabled={loadingRegistration || !registrationToken.trim()}
                 onclick={(e) => {
                   e.preventDefault();
                   handleDevRegistration();
                 }}
-                type="button"
               >
                 {loadingRegistration
                   ? "Working..."
                   : "Join without passkey (dev)"}
-              </button>
+              </Button>
             {/if}
             {#if $devActorMode}
-              <a
-                class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-micro font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]"
+              <Button
+                variant="secondary"
                 href={workspacePath(workspaceSlug)}
               >
                 Back to actor mode
-              </a>
+              </Button>
             {/if}
           </div>
         </form>

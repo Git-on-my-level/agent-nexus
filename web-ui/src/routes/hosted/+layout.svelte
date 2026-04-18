@@ -6,6 +6,7 @@
   import { page } from "$app/stores";
 
   import "$lib/styles/hosted.css";
+  import Button from "$lib/components/Button.svelte";
   import Avatar from "$lib/hosted/Avatar.svelte";
   import {
     hostedSession,
@@ -318,17 +319,9 @@
             {/if}
           </div>
         {:else if isPublic && path !== "/hosted/signin"}
-          <a
-            href="/hosted/signin"
-            class="rounded-md px-2.5 py-1.5 text-micro text-fg-subtle transition-colors hover:bg-panel-hover hover:text-fg"
-            >Sign in</a
-          >
+          <Button variant="ghost" href="/hosted/signin">Sign in</Button>
           {#if path !== "/hosted/signup"}
-            <a
-              href="/hosted/signup"
-              class="rounded-md bg-accent px-2.5 py-1.5 text-micro text-white transition-colors hover:bg-accent-hover"
-              >Get started</a
-            >
+            <Button variant="primary" href="/hosted/signup">Get started</Button>
           {/if}
         {/if}
       </div>

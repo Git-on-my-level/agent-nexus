@@ -1,3 +1,7 @@
+<script>
+  import Button from "$lib/components/Button.svelte";
+</script>
+
 <div class="hosted-page hosted-page--narrow">
   <h1 class="hosted-title">Local Stripe mock</h1>
   <p class="hosted-sub">
@@ -5,8 +9,6 @@
     hosts invoices, payment methods, and plan changes here.
   </p>
   <p class="hosted-hint">
-    <a class="hosted-btn hosted-btn--secondary" href="/hosted/organizations"
-      >Back to organizations</a
-    >
+    <Button variant="secondary" href="/hosted/organizations">Back to organizations</Button>
   </p>
 </div>

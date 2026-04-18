@@ -3,6 +3,7 @@
 
   import { goto } from "$app/navigation";
 
+  import Button from "$lib/components/Button.svelte";
   import Avatar from "$lib/hosted/Avatar.svelte";
   import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
   import { setActiveOrg } from "$lib/hosted/session.js";
@@ -73,11 +74,7 @@
         Pick an organization to manage its workspaces, members, and billing.
       </p>
     </div>
-    <a
-      href="/hosted/organizations/new"
-      class="rounded-md bg-accent px-3 py-1.5 text-body font-semibold text-white transition-colors hover:bg-accent-hover"
-      >+ New organization</a
-    >
+    <Button variant="primary" href="/hosted/organizations/new">+ New organization</Button>
   </div>
 
   {#if message}
@@ -105,12 +102,9 @@
       <p class="mx-auto mt-1.5 max-w-md text-meta text-fg-subtle">
         Create one to start adding workspaces and inviting teammates.
       </p>
-      <a
-        href="/hosted/organizations/new"
-        class="mt-4 inline-flex rounded-md bg-accent px-3 py-1.5 text-body font-semibold text-white transition-colors hover:bg-accent-hover"
-      >
+      <Button variant="primary" href="/hosted/organizations/new">
         Create organization
-      </a>
+      </Button>
     </div>
   {:else}
     <div

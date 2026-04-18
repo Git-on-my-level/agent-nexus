@@ -4,6 +4,7 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
 
+  import Button from "$lib/components/Button.svelte";
   import { createPasskeyCredential } from "$lib/passkeyBrowser";
   import {
     hostedCpFetch,
@@ -223,13 +224,15 @@
         </p>
       {/if}
 
-      <button
+      <Button
         type="submit"
+        variant="primary"
+        {busy}
         disabled={busy}
-        class="w-full rounded-md bg-accent px-3 py-2 text-body font-semibold text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+        class="w-full"
       >
         {busy ? "Setting up your passkey…" : "Continue with passkey"}
-      </button>
+      </Button>
 
       <p class="text-micro text-fg-subtle">
         By continuing you agree to the ANX terms of service.

@@ -3,6 +3,7 @@
   import { goto, replaceState } from "$app/navigation";
   import { page } from "$app/stores";
 
+  import Button from "$lib/components/Button.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
   import {
@@ -404,16 +405,16 @@
   </div>
   {#if isHumanPrincipal && !loading && activeItems.length > 0 && activeTab !== "topics" && (activeTab !== "cards" || $devActorMode)}
     <div class="shrink-0">
-      <button
-        class="cursor-pointer rounded-md px-2.5 py-1.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-danger-soft hover:text-danger-text disabled:cursor-not-allowed disabled:opacity-50"
+      <Button
+        variant="destructive"
+        size="compact"
         disabled={Boolean(busyItemId) || purgeAllBusy}
         onclick={() => {
           purgeAllOpen = true;
         }}
-        type="button"
       >
         Permanently delete all ({activeItems.length})
-      </button>
+      </Button>
     </div>
   {/if}
 </div>
@@ -524,17 +525,18 @@
 
           <div class="flex shrink-0 flex-col items-stretch gap-2 lg:items-end">
             <div class="flex flex-wrap justify-end gap-1.5">
-              <button
-                class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1.5 text-micro font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line)] disabled:cursor-not-allowed disabled:opacity-50"
+              <Button
+                variant="secondary"
+                size="compact"
                 disabled={busyItemId === itemBusyKey("artifacts", artifact.id)}
                 onclick={() => restoreEntity("artifacts", artifact.id)}
-                type="button"
               >
                 Restore
-              </button>
+              </Button>
               {#if isHumanPrincipal}
-                <button
-                  class="cursor-pointer rounded-md px-2.5 py-1.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-danger-soft hover:text-danger-text disabled:cursor-not-allowed disabled:opacity-50"
+                <Button
+                  variant="destructive"
+                  size="compact"
                   disabled={Boolean(busyItemId)}
                   onclick={() => {
                     purgeModal = {
@@ -543,10 +545,9 @@
                       id: artifact.id,
                     };
                   }}
-                  type="button"
                 >
                   Permanently delete
-                </button>
+                </Button>
               {/if}
             </div>
           </div>
@@ -603,25 +604,25 @@
           </div>
           <div class="flex shrink-0 flex-col items-stretch gap-2 lg:items-end">
             <div class="flex flex-wrap justify-end gap-1.5">
-              <button
-                class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1.5 text-micro font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line)] disabled:cursor-not-allowed disabled:opacity-50"
+              <Button
+                variant="secondary"
+                size="compact"
                 disabled={busyItemId === itemBusyKey("documents", doc.id)}
                 onclick={() => restoreEntity("documents", doc.id)}
-                type="button"
               >
                 Restore
-              </button>
+              </Button>
               {#if isHumanPrincipal}
-                <button
-                  class="cursor-pointer rounded-md px-2.5 py-1.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-danger-soft hover:text-danger-text disabled:cursor-not-allowed disabled:opacity-50"
+                <Button
+                  variant="destructive"
+                  size="compact"
                   disabled={Boolean(busyItemId)}
                   onclick={() => {
                     purgeModal = { open: true, type: "documents", id: doc.id };
                   }}
-                  type="button"
                 >
                   Permanently delete
-                </button>
+                </Button>
               {/if}
             </div>
           </div>
@@ -691,14 +692,14 @@
           </div>
           <div class="flex shrink-0 flex-col items-stretch gap-2 lg:items-end">
             <div class="flex flex-wrap justify-end gap-1.5">
-              <button
-                class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1.5 text-micro font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line)] disabled:cursor-not-allowed disabled:opacity-50"
+              <Button
+                variant="secondary"
+                size="compact"
                 disabled={busyItemId === itemBusyKey("topics", thread.id)}
                 onclick={() => restoreEntity("topics", thread.id)}
-                type="button"
               >
                 Restore
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -753,25 +754,25 @@
           </div>
           <div class="flex shrink-0 flex-col items-stretch gap-2 lg:items-end">
             <div class="flex flex-wrap justify-end gap-1.5">
-              <button
-                class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1.5 text-micro font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line)] disabled:cursor-not-allowed disabled:opacity-50"
+              <Button
+                variant="secondary"
+                size="compact"
                 disabled={busyItemId === itemBusyKey("boards", board.id)}
                 onclick={() => restoreEntity("boards", board.id)}
-                type="button"
               >
                 Restore
-              </button>
+              </Button>
               {#if isHumanPrincipal}
-                <button
-                  class="cursor-pointer rounded-md px-2.5 py-1.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-danger-soft hover:text-danger-text disabled:cursor-not-allowed disabled:opacity-50"
+                <Button
+                  variant="destructive"
+                  size="compact"
                   disabled={Boolean(busyItemId)}
                   onclick={() => {
                     purgeModal = { open: true, type: "boards", id: board.id };
                   }}
-                  type="button"
                 >
                   Permanently delete
-                </button>
+                </Button>
               {/if}
             </div>
           </div>
@@ -875,25 +876,25 @@
               class="flex shrink-0 flex-col items-stretch gap-2 lg:items-end"
             >
               <div class="flex flex-wrap justify-end gap-1.5">
-                <button
-                  class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1.5 text-micro font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line)] disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={busyItemId === itemBusyKey("cards", card.id)}
-                  onclick={() => restoreEntity("cards", card.id)}
-                  type="button"
-                >
-                  Restore
-                </button>
+                 <Button
+                   variant="secondary"
+                   size="compact"
+                   disabled={busyItemId === itemBusyKey("cards", card.id)}
+                   onclick={() => restoreEntity("cards", card.id)}
+                 >
+                   Restore
+                 </Button>
                 {#if isHumanPrincipal}
-                  <button
-                    class="cursor-pointer rounded-md px-2.5 py-1.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-danger-soft hover:text-danger-text disabled:cursor-not-allowed disabled:opacity-50"
-                    disabled={Boolean(busyItemId)}
-                    onclick={() => {
-                      purgeModal = { open: true, type: "cards", id: card.id };
-                    }}
-                    type="button"
-                  >
-                    Permanently delete
-                  </button>
+                   <Button
+                     variant="destructive"
+                     size="compact"
+                     disabled={Boolean(busyItemId)}
+                     onclick={() => {
+                       purgeModal = { open: true, type: "cards", id: card.id };
+                     }}
+                   >
+                     Permanently delete
+                   </Button>
                 {/if}
               </div>
             </div>
