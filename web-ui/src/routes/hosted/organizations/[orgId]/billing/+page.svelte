@@ -5,6 +5,8 @@
   import { goto } from "$app/navigation";
 
   import Button from "$lib/components/Button.svelte";
+  import Skeleton from "$lib/components/state/Skeleton.svelte";
+  import StateError from "$lib/components/state/StateError.svelte";
 
   import {
     billingPollScheduleDelays,
@@ -16,6 +18,7 @@
     writeBillingSnapshot,
   } from "$lib/hosted/billingActivation.js";
   import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
+  import { errorUserMessage } from "$lib/hosted/fetchState.js";
   import { setActiveOrg } from "$lib/hosted/session.js";
 
   const orgId = $derived(String($page.params.orgId ?? ""));
@@ -31,6 +34,7 @@
   let activationTimedOut = $state(false);
   let pollStop = $state(() => {});
   let upgradeBusy = $state("");
+  let roleRetryBusy = $state(false);
 
   const PLAN_CARDS = [
     {
@@ -202,6 +206,12 @@
     await maybeRunActivationPoll(got.summary);
   }
 
+  async function retryLoad() {
+    roleRetryBusy = true;
+    await load();
+    roleRetryBusy = false;
+  }
+
   /** @param {any} initialSummary */
   async function maybeRunActivationPoll(initialSummary) {
     if (!browser) return;
@@ -369,10 +379,13 @@
   {/if}
 
   {#if role === "loading"}
-    <div
-      class="rounded-md border border-line bg-bg-soft px-4 py-6 text-meta text-fg-subtle"
-    >
-      Loading…
+    <div class="space-y-3">
+      <div class="rounded-md border border-line bg-bg-soft px-4 py-3">
+        <Skeleton rows={2} />
+      </div>
+      <div class="rounded-md border border-line bg-bg-soft px-4 py-4">
+        <Skeleton rows={5} />
+      </div>
     </div>
   {:else if role === "member"}
     <section class="rounded-md border border-line bg-bg-soft px-5 py-5">
@@ -574,6 +587,6 @@
       </div>
     </section>
   {:else if role === "error"}
-    <p class="text-meta text-fg-subtle">Could not load billing.</p>
+    <StateError message={message || "Could not load billing."} onretry={retryLoad} retrying={roleRetryBusy} />
   {/if}
 </div>

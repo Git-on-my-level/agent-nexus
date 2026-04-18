@@ -5,44 +5,45 @@
   import { goto } from "$app/navigation";
 
   import Button from "$lib/components/Button.svelte";
+  import Skeleton from "$lib/components/state/Skeleton.svelte";
+  import StateError from "$lib/components/state/StateError.svelte";
   import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
+  import { classifiedCpFetch, errorUserMessage, isAuthError } from "$lib/hosted/fetchState.js";
   import { setActiveOrg } from "$lib/hosted/session.js";
 
   const orgId = $derived(String($page.params.orgId ?? ""));
 
   let phase = $state("loading");
-  let message = $state("");
+  let loadError = $state("");
+  let retrying = $state(false);
   /** @type {any} */
   let summary = $state(null);
 
-  async function readError(res) {
+  async function load() {
+    phase = "loading";
+    loadError = "";
+    retrying = false;
     try {
-      const j = await res.json();
-      return j?.error?.message || j?.error?.code || res.statusText;
-    } catch {
-      return res.statusText;
+      const res = await classifiedCpFetch(
+        `organizations/${encodeURIComponent(orgId)}/usage-summary`,
+      );
+      const body = await res.json();
+      summary = body.summary ?? null;
+      phase = "ready";
+    } catch (e) {
+      if (isAuthError(e)) {
+        await goto("/hosted/start");
+        return;
+      }
+      loadError = errorUserMessage(e);
+      summary = null;
+      phase = "ready";
     }
   }
 
-  async function load() {
-    phase = "loading";
-    message = "";
-    const res = await hostedCpFetch(
-      `organizations/${encodeURIComponent(orgId)}/usage-summary`,
-    );
-    if (res.status === 401) {
-      await goto("/hosted/start");
-      return;
-    }
-    if (!res.ok) {
-      message = await readError(res);
-      summary = null;
-      phase = "ready";
-      return;
-    }
-    const body = await res.json();
-    summary = body.summary ?? null;
-    phase = "ready";
+  async function retry() {
+    retrying = true;
+    await load();
   }
 
   $effect(() => {
@@ -87,20 +88,25 @@
     <h1 class="mt-1 text-display text-fg">Usage</h1>
   </div>
 
-  {#if message}
-    <p
-      role="alert"
-      class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
-    >
-      {message}
-    </p>
+  {#if loadError}
+    <StateError message={loadError} onretry={retry} retrying={retrying} />
   {/if}
 
   {#if phase === "loading"}
-    <div
-      class="rounded-md border border-line bg-bg-soft px-4 py-6 text-meta text-fg-subtle"
-    >
-      Loading…
+    <div class="space-y-3">
+      <div class="rounded-md border border-line bg-bg-soft px-4 py-3">
+        <Skeleton rows={2} />
+      </div>
+      <div class="grid gap-3 sm:grid-cols-3">
+        {#each [0, 1, 2] as _}
+          <div class="rounded-md border border-line bg-bg-soft px-4 py-3">
+            <Skeleton rows={4} />
+          </div>
+        {/each}
+      </div>
+      <div class="rounded-md border border-line bg-bg-soft px-4 py-4">
+        <Skeleton rows={3} />
+      </div>
     </div>
   {:else if summary}
     {@const plan = summary.plan ?? {}}

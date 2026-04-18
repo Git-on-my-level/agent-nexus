@@ -1,3 +1,4 @@
+<!-- State coverage: static page — no data fetch, no state variants needed. -->
 <script>
   import Button from "$lib/components/Button.svelte";
 </script>

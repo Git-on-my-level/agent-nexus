@@ -1,3 +1,4 @@
+<!-- State coverage: static developer notes page — no data fetch, no state variants needed. -->
 <script>
   const tips = [
     "No workspace cores run until you create a workspace through the control plane (or attach a preconfigured core below).",

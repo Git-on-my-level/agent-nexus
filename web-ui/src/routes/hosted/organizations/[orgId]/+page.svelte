@@ -4,8 +4,13 @@
   import { page } from "$app/stores";
 
   import Button from "$lib/components/Button.svelte";
+  import StateError from "$lib/components/state/StateError.svelte";
+  import StateEmpty from "$lib/components/state/StateEmpty.svelte";
+  import Skeleton from "$lib/components/state/Skeleton.svelte";
+  import SkeletonCard from "$lib/components/state/SkeletonCard.svelte";
   import Avatar from "$lib/hosted/Avatar.svelte";
   import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
+  import { classifiedCpFetch, errorUserMessage, isAuthError } from "$lib/hosted/fetchState.js";
   import {
     hostedSession,
     loadHostedSession,
@@ -21,54 +26,68 @@
   let usage = $state(null);
   let workspaces = $state(/** @type {any[]} */ ([]));
   let phase = $state("loading");
-  let message = $state("");
-
-  async function readError(res) {
-    try {
-      const j = await res.json();
-      return j?.error?.message || j?.error?.code || res.statusText;
-    } catch {
-      return res.statusText;
-    }
-  }
+  let orgError = $state("");
+  let usageError = $state("");
+  let wsError = $state("");
+  let retrying = $state(false);
 
   async function loadAll() {
     phase = "loading";
-    message = "";
+    orgError = "";
+    usageError = "";
+    wsError = "";
+    retrying = false;
     organization = null;
     usage = null;
     workspaces = [];
 
-    const orgRes = await hostedCpFetch(
-      `organizations/${encodeURIComponent(orgId)}`,
-    );
-    if (orgRes.status === 401) {
-      await goto("/hosted/start");
-      return;
-    }
-    if (!orgRes.ok) {
-      message = await readError(orgRes);
+    try {
+      const orgRes = await classifiedCpFetch(
+        `organizations/${encodeURIComponent(orgId)}`,
+      );
+      const orgBody = await orgRes.json();
+      organization = orgBody?.organization ?? null;
+    } catch (e) {
+      if (isAuthError(e)) {
+        await goto("/hosted/start");
+        return;
+      }
+      orgError = errorUserMessage(e);
       phase = "ready";
       return;
     }
-    const orgBody = await orgRes.json();
-    organization = orgBody?.organization ?? null;
 
     const [usageRes, wsRes] = await Promise.all([
-      hostedCpFetch(`organizations/${encodeURIComponent(orgId)}/usage-summary`),
-      hostedCpFetch(
+      classifiedCpFetch(`organizations/${encodeURIComponent(orgId)}/usage-summary`).catch((e) => e),
+      classifiedCpFetch(
         `workspaces?organization_id=${encodeURIComponent(orgId)}&limit=20`,
-      ),
+      ).catch((e) => e),
     ]);
-    if (usageRes.ok) {
-      const u = await usageRes.json();
-      usage = u.summary ?? null;
+
+    if (usageRes instanceof Response) {
+      try {
+        const u = await usageRes.json();
+        usage = u.summary ?? null;
+      } catch { /* ignore parse errors */ }
+    } else {
+      usageError = errorUserMessage(usageRes);
     }
-    if (wsRes.ok) {
-      const w = await wsRes.json();
-      workspaces = w.workspaces ?? [];
+
+    if (wsRes instanceof Response) {
+      try {
+        const w = await wsRes.json();
+        workspaces = w.workspaces ?? [];
+      } catch { /* ignore parse errors */ }
+    } else {
+      wsError = errorUserMessage(wsRes);
     }
+
     phase = "ready";
+  }
+
+  async function retry() {
+    retrying = true;
+    await loadAll();
   }
 
   $effect(() => {
@@ -154,22 +173,28 @@
     </div>
   </div>
 
-  {#if message}
-    <div
-      role="alert"
-      class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
-    >
-      {message}
-    </div>
+  {#if orgError}
+    <StateError message={orgError} onretry={retry} retrying={retrying} />
   {/if}
 
   {#if phase === "loading"}
-    <div
-      class="rounded-md border border-line bg-bg-soft px-4 py-6 text-meta text-fg-subtle"
-    >
-      Loading…
+    <div class="space-y-3">
+      <div class="grid gap-3 sm:grid-cols-3">
+        {#each [0, 1, 2] as _}
+          <div class="rounded-md border border-line bg-bg-soft px-4 py-3">
+            <Skeleton rows={3} />
+          </div>
+        {/each}
+      </div>
+      <div class="rounded-md border border-line bg-bg-soft px-4 py-4">
+        <Skeleton rows={4} />
+      </div>
     </div>
-  {:else if usage}
+  {:else if usage || wsError || usageError}
+    {#if usageError}
+      <StateError message={"Usage data failed to load: " + usageError} onretry={retry} retrying={retrying} />
+    {/if}
+    {#if usage}
     {@const plan = usage.plan ?? {}}
     {@const u = usage.usage ?? {}}
     <section class="grid gap-3 sm:grid-cols-3">
@@ -210,13 +235,18 @@
           >View all →</a
         >
       </div>
-      {#if workspaces.length === 0}
-        <div class="px-4 py-6 text-center">
-          <p class="text-meta text-fg-subtle">
-            No workspaces in this organization yet.
-          </p>
-          <Button variant="primary" href="/hosted/workspaces/new">Create your first workspace</Button>
+      {#if wsError}
+        <div class="px-4 py-3">
+          <StateError message={"Workspaces failed to load: " + wsError} onretry={retry} retrying={retrying} />
         </div>
+      {:else if workspaces.length === 0}
+        <StateEmpty
+          title="No workspaces yet"
+          helper="Create your first workspace in this organization."
+          actionLabel="Create workspace"
+          actionHref="/hosted/workspaces/new"
+          class="border-0 bg-transparent"
+        />
       {:else}
         <ul class="divide-y divide-line">
           {#each workspaces as ws (ws.id)}
@@ -251,5 +281,6 @@
         </ul>
       {/if}
     </section>
+    {/if}
   {/if}
 </div>

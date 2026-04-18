@@ -1,3 +1,4 @@
+<!-- State coverage: static marketing page — no data fetch, no state variants needed. -->
 <script>
   import { onMount } from "svelte";
 

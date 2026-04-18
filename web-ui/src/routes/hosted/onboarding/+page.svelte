@@ -1,3 +1,4 @@
+<!-- State coverage: redirect-only page — no data fetch, no state variants needed. -->
 <script>
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";

@@ -4,14 +4,20 @@
   import { browser } from "$app/environment";
 
   import Button from "$lib/components/Button.svelte";
+  import SkeletonCard from "$lib/components/state/SkeletonCard.svelte";
+  import StateEmpty from "$lib/components/state/StateEmpty.svelte";
+  import StateError from "$lib/components/state/StateError.svelte";
   import Avatar from "$lib/hosted/Avatar.svelte";
   import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
+  import { classifiedCpFetch, errorUserMessage, isAuthError } from "$lib/hosted/fetchState.js";
   import { normalizeHostedLaunchFinishURL } from "$lib/hosted/launchFlow.js";
   import { hostedSession, loadHostedSession } from "$lib/hosted/session.js";
 
   /** @type {any[]} */
   let workspaces = $state([]);
   let loadingWorkspaces = $state(true);
+  let wsError = $state("");
+  let wsRetrying = $state(false);
   let message = $state("");
   let launchingWorkspaceId = $state("");
 
@@ -21,36 +27,35 @@
     orgs.find((o) => String(o.id) === session.activeOrgId) ?? null,
   );
 
-  async function readError(res) {
-    try {
-      const j = await res.json();
-      return j?.error?.message || j?.error?.code || res.statusText;
-    } catch {
-      return res.statusText;
-    }
-  }
-
   async function loadWorkspaces(orgId) {
     if (!orgId) {
       workspaces = [];
       loadingWorkspaces = false;
+      wsError = "";
       return;
     }
     loadingWorkspaces = true;
+    wsError = "";
+    wsRetrying = false;
     try {
-      const res = await hostedCpFetch(
+      const res = await classifiedCpFetch(
         `workspaces?organization_id=${encodeURIComponent(orgId)}&limit=100`,
       );
-      if (!res.ok) {
-        message = await readError(res);
-        workspaces = [];
-        return;
-      }
       const body = await res.json();
       workspaces = body.workspaces ?? [];
+    } catch (e) {
+      if (isAuthError(e)) throw e;
+      wsError = errorUserMessage(e);
+      workspaces = [];
     } finally {
       loadingWorkspaces = false;
     }
+  }
+
+  async function retryWorkspaces() {
+    if (!activeOrg?.id) return;
+    wsRetrying = true;
+    await loadWorkspaces(activeOrg.id);
   }
 
   onMount(async () => {
@@ -60,7 +65,6 @@
     }
   });
 
-  // React to active-org switches.
   $effect(() => {
     if (!browser) return;
     if (session.phase !== "authed") return;
@@ -84,7 +88,12 @@
         },
       );
       if (!res.ok) {
-        message = await readError(res);
+        try {
+          const j = await res.json();
+          message = j?.error?.message || j?.error?.code || res.statusText;
+        } catch {
+          message = res.statusText;
+        }
         return;
       }
       const body = await res.json();
@@ -150,47 +159,25 @@
   {/if}
 
   {#if session.phase === "loading" || session.phase === "idle"}
-    <div
-      class="rounded-md border border-line bg-bg-soft px-4 py-6 text-meta text-fg-subtle"
-    >
-      Loading…
-    </div>
+    <SkeletonCard />
   {:else if orgs.length === 0}
-    <div
-      class="rounded-md border border-line bg-bg-soft px-6 py-8 text-center"
-    >
-      <h2 class="text-subtitle text-fg">
-        Create your first organization
-      </h2>
-      <p class="mx-auto mt-1.5 max-w-md text-meta text-fg-subtle">
-        Organizations group workspaces, members, and billing. Most teams need
-        just one.
-      </p>
-      <Button variant="primary" href="/hosted/organizations/new">
-        Create organization
-      </Button>
-    </div>
-  {:else if loadingWorkspaces}
-    <div
-      class="rounded-md border border-line bg-bg-soft px-4 py-6 text-meta text-fg-subtle"
-    >
-      Loading workspaces…
-    </div>
+    <StateEmpty
+      title="Create your first organization"
+      helper="Organizations group workspaces, members, and billing. Most teams need just one."
+      actionLabel="Create organization"
+      actionHref="/hosted/organizations/new"
+    />
+  {:else if loadingWorkspaces && !wsError}
+    <SkeletonCard />
+  {:else if wsError}
+    <StateError message={wsError} onretry={retryWorkspaces} retrying={wsRetrying} />
   {:else if workspaces.length === 0}
-    <div
-      class="rounded-md border border-line bg-bg-soft px-6 py-8 text-center"
-    >
-      <h2 class="text-subtitle text-fg">
-        Spin up your first workspace
-      </h2>
-      <p class="mx-auto mt-1.5 max-w-md text-meta text-fg-subtle">
-        Workspaces hold the threads, topics, and artifacts your AI agent
-        produces. Create one to get started.
-      </p>
-      <Button variant="primary" href="/hosted/workspaces/new">
-        Create workspace
-      </Button>
-    </div>
+    <StateEmpty
+      title="Spin up your first workspace"
+      helper="Workspaces hold the threads, topics, and artifacts your AI agent produces. Create one to get started."
+      actionLabel="Create workspace"
+      actionHref="/hosted/workspaces/new"
+    />
   {:else}
     <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {#each workspaces as ws (ws.id)}

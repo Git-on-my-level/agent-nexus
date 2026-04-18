@@ -4,23 +4,20 @@
   import { goto } from "$app/navigation";
 
   import Button from "$lib/components/Button.svelte";
+  import StateEmpty from "$lib/components/state/StateEmpty.svelte";
+  import StateError from "$lib/components/state/StateError.svelte";
+  import Skeleton from "$lib/components/state/Skeleton.svelte";
   import Avatar from "$lib/hosted/Avatar.svelte";
   import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
+  import { classifiedCpFetch, errorUserMessage, isAuthError } from "$lib/hosted/fetchState.js";
   import { setActiveOrg } from "$lib/hosted/session.js";
 
   let phase = $state("loading");
+  let loadError = $state("");
+  let retrying = $state(false);
   let message = $state("");
   /** @type {any[]} */
   let organizations = $state([]);
-
-  async function readError(res) {
-    try {
-      const j = await res.json();
-      return j?.error?.message || j?.error?.code || res.statusText;
-    } catch {
-      return res.statusText;
-    }
-  }
 
   function planBadgeClasses(planTier) {
     const t = String(planTier ?? "starter").toLowerCase();
@@ -40,26 +37,36 @@
     void goto(`/hosted/organizations/${encodeURIComponent(org.id)}`);
   }
 
-  onMount(async () => {
-    const res = await hostedCpFetch("organizations?limit=200");
-    if (res.status === 401) {
-      await goto("/hosted/start");
-      return;
-    }
-    if (!res.ok) {
-      message = await readError(res);
+  async function load() {
+    phase = "loading";
+    loadError = "";
+    retrying = false;
+    try {
+      const res = await classifiedCpFetch("organizations?limit=200");
+      const body = await res.json();
+      organizations = body.organizations ?? [];
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("billing_error") === "1") {
+        message =
+          "We could not confirm your checkout session. Open Billing from your organization when ready.";
+      }
       phase = "ready";
-      return;
+    } catch (e) {
+      if (isAuthError(e)) {
+        await goto("/hosted/start");
+        return;
+      }
+      loadError = errorUserMessage(e);
+      phase = "ready";
     }
-    const body = await res.json();
-    organizations = body.organizations ?? [];
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("billing_error") === "1") {
-      message =
-        "We could not confirm your checkout session. Open Billing from your organization when ready.";
-    }
-    phase = "ready";
-  });
+  }
+
+  async function retry() {
+    retrying = true;
+    await load();
+  }
+
+  onMount(load);
 </script>
 
 <svelte:head>
@@ -87,25 +94,18 @@
   {/if}
 
   {#if phase === "loading"}
-    <div
-      class="rounded-md border border-line bg-bg-soft px-4 py-6 text-meta text-fg-subtle"
-    >
-      Loading…
+    <div class="rounded-md border border-line bg-bg-soft px-4 py-4">
+      <Skeleton rows={4} />
     </div>
+  {:else if loadError}
+    <StateError message={loadError} onretry={retry} retrying={retrying} />
   {:else if organizations.length === 0}
-    <div
-      class="rounded-md border border-line bg-bg-soft px-6 py-8 text-center"
-    >
-      <h2 class="text-subtitle text-fg">
-        No organizations yet
-      </h2>
-      <p class="mx-auto mt-1.5 max-w-md text-meta text-fg-subtle">
-        Create one to start adding workspaces and inviting teammates.
-      </p>
-      <Button variant="primary" href="/hosted/organizations/new">
-        Create organization
-      </Button>
-    </div>
+    <StateEmpty
+      title="No organizations yet"
+      helper="Create one to start adding workspaces and inviting teammates."
+      actionLabel="Create organization"
+      actionHref="/hosted/organizations/new"
+    />
   {:else}
     <div
       class="space-y-px overflow-hidden rounded-md border border-line bg-bg-soft"
