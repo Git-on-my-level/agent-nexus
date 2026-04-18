@@ -7,6 +7,9 @@
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import Button from "$lib/components/Button.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
+  import StateEmpty from "$lib/components/state/StateEmpty.svelte";
+  import StateError from "$lib/components/state/StateError.svelte";
+  import SkeletonInboxRow from "$lib/components/state/SkeletonInboxRow.svelte";
   import { coreClient } from "$lib/coreClient";
   import { formatAbsoluteDateTime } from "$lib/formatDate";
   import { workspacePath } from "$lib/workspacePaths";
@@ -34,6 +37,7 @@
 
   let loading = $state(false);
   let error = $state("");
+  let retrying = $state(false);
   let items = $state([]);
   let ackInFlightById = $state({});
   let pendingAckById = $state({});
@@ -42,6 +46,7 @@
   let decisionFormsById = $state({});
   let decisionFormErrorsById = $state({});
   let postedDecisionByInboxItem = $state({});
+  let failedAckById = $state({});
   let urgencyFilter = $state("all");
   let categoryFilter = $state("all");
   let filtersOpen = $state(false);
@@ -211,9 +216,10 @@
     void loadInbox();
   });
 
-  async function loadInbox() {
+  async function loadInbox(isRetry = false) {
     loading = true;
     error = "";
+    retrying = isRetry;
 
     try {
       const response = await coreClient.listInboxItems({ view: "items" });
@@ -222,9 +228,9 @@
       const reason =
         loadError instanceof Error ? loadError.message : String(loadError);
       error = `Failed to load inbox: ${reason}`;
-      items = [];
     } finally {
       loading = false;
+      retrying = false;
     }
   }
 
@@ -376,8 +382,10 @@
       } catch (ackError) {
         const reason =
           ackError instanceof Error ? ackError.message : String(ackError);
-        error = `Failed to acknowledge item: ${reason}`;
-        items = [...items, item];
+        failedAckById = {
+          ...failedAckById,
+          [item.id]: { item, reason },
+        };
       } finally {
         ackInFlightById = { ...ackInFlightById, [item.id]: false };
       }
@@ -396,6 +404,36 @@
     );
 
     items = [...items, pending.item];
+  }
+
+  function dismissFailedAck(itemId) {
+    failedAckById = Object.fromEntries(
+      Object.entries(failedAckById).filter(([k]) => k !== itemId),
+    );
+  }
+
+  async function retryFailedAck(itemId) {
+    const failed = failedAckById[itemId];
+    if (!failed) return;
+
+    ackInFlightById = { ...ackInFlightById, [itemId]: true };
+    try {
+      const subjectRef = getInboxSubjectRef(failed.item);
+      await coreClient.ackInboxItem({
+        inbox_item_id: itemId,
+        subject_ref: subjectRef,
+      });
+      failedAckById = Object.fromEntries(
+        Object.entries(failedAckById).filter(([k]) => k !== itemId),
+      );
+    } catch {
+      failedAckById = {
+        ...failedAckById,
+        [itemId]: { ...failed, reason: "Retry failed. Try again or dismiss." },
+      };
+    } finally {
+      ackInFlightById = { ...ackInFlightById, [itemId]: false };
+    }
   }
 
   function undoPendingDecision(itemId) {
@@ -669,12 +707,12 @@
 {/if}
 
 {#if error}
-  <div
-    class="mb-4 rounded-md bg-danger-soft px-3 py-2.5 text-meta text-danger-text"
-    role="alert"
-  >
-    {error}
-  </div>
+  <StateError
+    message={error}
+    onretry={() => void loadInbox(true)}
+    retrying={retrying}
+    class="mb-4"
+  />
 {/if}
 
 <div class="flex gap-1.5 mb-4" data-testid="urgency-summary-strip">
@@ -778,54 +816,48 @@
   </div>
 {/if}
 
-{#if loading}
-  <div
-    class="mt-12 flex items-center justify-center gap-2 text-meta text-[var(--fg-muted)]"
-  >
-    <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-      <circle
-        class="opacity-25"
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        stroke-width="4"
-      ></circle>
-      <path
-        class="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-      ></path>
-    </svg>
-    Loading inbox...
-  </div>
-{:else if totalItems === 0}
-  <div class="mt-8 text-center py-12" data-testid="inbox-empty-state">
-    <div
-      class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[var(--panel)] mb-3"
-    >
-      <svg
-        class="h-6 w-6 text-[var(--fg-subtle)]"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-        stroke-width="1.5"
+{#if Object.keys(failedAckById).length > 0}
+  <div class="mb-4 space-y-1.5" data-testid="inbox-failed-ack-toast">
+    {#each Object.entries(failedAckById) as [itemId, failed]}
+      <div
+        class="flex items-center justify-between gap-3 rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-micro"
+        role="alert"
       >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-        />
-      </svg>
-    </div>
-    <h2 class="text-body font-semibold text-[var(--fg)]">
-      Inbox is clear
-    </h2>
-    <p class="mt-1 text-meta text-[var(--fg-muted)]">
-      Nothing needs attention right now.
-    </p>
+        <span class="truncate text-danger-text"
+          >Ack failed: <span class="font-medium text-danger-text"
+            >{failed.item.title ?? failed.item.summary ?? "item"}</span
+          > — {failed.reason}</span
+        >
+        <div class="flex shrink-0 gap-2">
+          <button
+            class="cursor-pointer font-medium text-accent-text hover:text-accent-text"
+            onclick={() => void retryFailedAck(itemId)}
+            disabled={Boolean(ackInFlightById[itemId])}
+            type="button"
+          >
+            {ackInFlightById[itemId] ? "Retrying…" : "Retry"}
+          </button>
+          <button
+            class="cursor-pointer font-medium text-[var(--fg-muted)] hover:text-[var(--fg)]"
+            onclick={() => dismissFailedAck(itemId)}
+            type="button"
+          >
+            Dismiss
+          </button>
+        </div>
+      </div>
+    {/each}
   </div>
-{:else if !hasFilteredItems}
+{/if}
+
+{#if loading && items.length === 0}
+  <SkeletonInboxRow count={5} />
+{:else if totalItems === 0 && !error}
+  <StateEmpty
+    title="Inbox is clear"
+    helper="Nothing needs attention right now."
+  />
+{:else if !hasFilteredItems && totalItems > 0}
   <div class="mt-8 text-center py-12" data-testid="inbox-filter-empty-state">
     <div
       class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[var(--panel)] mb-3"
@@ -860,7 +892,7 @@
       Clear filters
     </Button>
   </div>
-{:else}
+{:else if hasFilteredItems}
   <div class="space-y-4">
     {#each visibleGroups as group}
       <section data-testid={`inbox-group-${group.category}`}>

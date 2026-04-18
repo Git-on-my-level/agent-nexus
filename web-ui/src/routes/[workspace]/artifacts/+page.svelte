@@ -24,10 +24,14 @@
   import ArchiveButton from "$lib/components/ArchiveButton.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import TrashButton from "$lib/components/TrashButton.svelte";
+  import Skeleton from "$lib/components/state/Skeleton.svelte";
+  import StateEmpty from "$lib/components/state/StateEmpty.svelte";
+  import StateError from "$lib/components/state/StateError.svelte";
 
   let artifacts = $state([]);
   let loading = $state(false);
   let error = $state("");
+  let retrying = $state(false);
   let confirmModal = $state({ open: false, action: "", entityId: "" });
   let trashBusyId = $state("");
   let archiveBusyId = $state("");
@@ -59,9 +63,10 @@
     void loadArtifactsFromState(parsed);
   });
 
-  async function loadArtifactsFromState(state) {
+  async function loadArtifactsFromState(state, isRetry = false) {
     loading = true;
     error = "";
+    retrying = isRetry;
     try {
       const query = { ...buildArtifactListQuery(state) };
       if (showArchived) {
@@ -70,9 +75,9 @@
       artifacts = (await coreClient.listArtifacts(query)).artifacts ?? [];
     } catch (e) {
       error = `Failed to load artifacts: ${e instanceof Error ? e.message : String(e)}`;
-      artifacts = [];
     } finally {
       loading = false;
+      retrying = false;
     }
   }
 
@@ -284,40 +289,20 @@
   </CompactFilterBar>
 {/if}
 
-{#if loading}
-  <div
-    class="mt-12 flex items-center justify-center gap-2 text-meta text-[var(--fg-muted)]"
-  >
-    <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-      <circle
-        class="opacity-25"
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        stroke-width="4"
-      ></circle>
-      <path
-        class="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-      ></path>
-    </svg>
-    Loading artifacts...
-  </div>
+{#if loading && artifacts.length === 0}
+  <Skeleton rows={6} />
 {:else if error}
-  <div class="mb-4 rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
-    {error}
-  </div>
+  <StateError
+    message={error}
+    onretry={() => void loadArtifactsFromState(filters, true)}
+    retrying={retrying}
+    class="mb-4"
+  />
 {:else if artifacts.length === 0}
-  <div class="mt-8 text-center">
-    <p class="text-meta font-medium text-[var(--fg-muted)]">
-      No matching artifacts
-    </p>
-    <p class="mt-1 text-meta text-[var(--fg-muted)]">
-      Try adjusting filters or clearing the current view.
-    </p>
-  </div>
+  <StateEmpty
+    title="No matching artifacts"
+    helper="Try adjusting filters or clearing the current view."
+  />
 {/if}
 
 {#if !loading && artifacts.length > 0}

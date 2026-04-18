@@ -15,6 +15,9 @@
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import TrashButton from "$lib/components/TrashButton.svelte";
   import CompactFilterBar from "$lib/components/CompactFilterBar.svelte";
+  import Skeleton from "$lib/components/state/Skeleton.svelte";
+  import StateEmpty from "$lib/components/state/StateEmpty.svelte";
+  import StateError from "$lib/components/state/StateError.svelte";
   import { parseDelimitedValues } from "$lib/boardUtils";
 
   const DOC_STATE_LABELS = {
@@ -31,6 +34,7 @@
   let documents = $state([]);
   let loading = $state(false);
   let error = $state("");
+  let retrying = $state(false);
   let filtersOpen = $state(false);
   let docFiltersDraft = $state({ ...defaultDocListFilters });
   let docFiltersApplied = $state({ ...defaultDocListFilters });
@@ -112,9 +116,10 @@
     }
   });
 
-  async function loadDocuments() {
+  async function loadDocuments(isRetry = false) {
     loading = true;
     error = "";
+    retrying = isRetry;
     try {
       const f = docFiltersApplied;
       const filters = {};
@@ -127,9 +132,9 @@
       documents = filterTopLevelDocuments(data.documents);
     } catch (e) {
       error = `Failed to load documents: ${e instanceof Error ? e.message : String(e)}`;
-      documents = [];
     } finally {
       loading = false;
+      retrying = false;
     }
   }
 
@@ -530,41 +535,20 @@
   </form>
 {/if}
 
-{#if loading}
-  <div
-    class="mt-12 flex items-center justify-center gap-2 text-meta text-[var(--fg-muted)]"
-  >
-    <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-      <circle
-        class="opacity-25"
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        stroke-width="4"
-      ></circle>
-      <path
-        class="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-      ></path>
-    </svg>
-    Loading documents...
-  </div>
+{#if loading && documents.length === 0}
+  <Skeleton rows={6} />
 {:else if error}
-  <div class="mb-4 rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
-    {error}
-  </div>
+  <StateError
+    message={error}
+    onretry={() => void loadDocuments(true)}
+    retrying={retrying}
+    class="mb-4"
+  />
 {:else if documents.length === 0}
-  <div class="mt-8 text-center">
-    <p class="text-meta font-medium text-[var(--fg-muted)]">
-      No docs yet
-    </p>
-    <p class="mt-1 text-meta text-[var(--fg-muted)]">
-      No doc lineages yet. Create one to start a head revision and revision
-      history.
-    </p>
-  </div>
+  <StateEmpty
+    title="No docs yet"
+    helper="Create a document lineage to start a head revision and revision history."
+  />
 {/if}
 
 {#snippet docRow(doc, showBorderTop)}

@@ -26,6 +26,9 @@
   import CompactFilterBar from "$lib/components/CompactFilterBar.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import TrashButton from "$lib/components/TrashButton.svelte";
+  import Skeleton from "$lib/components/state/Skeleton.svelte";
+  import StateEmpty from "$lib/components/state/StateEmpty.svelte";
+  import StateError from "$lib/components/state/StateError.svelte";
 
   /** Virtual filter: non-closed topics (matches dashboard "Open"); distinct from status=active|paused. */
   const STATUS_OPEN_NOT_CLOSED = "__open__";
@@ -45,6 +48,7 @@
   let filters = $state({ ...defaultFilters });
   let loading = $state(false);
   let error = $state("");
+  let retrying = $state(false);
   let topics = $state([]);
   let createOpen = $state(false);
   let creatingTopic = $state(false);
@@ -89,9 +93,10 @@
     return s.slice("topic:".length).trim();
   }
 
-  async function loadBackingThreads() {
+  async function loadBackingThreads(isRetry = false) {
     loading = true;
     error = "";
+    retrying = isRetry;
     try {
       const query = buildThreadFilterQueryParamsFromThreadListState(filters);
       const response = await coreClient.listThreads(query);
@@ -100,9 +105,9 @@
       const reason =
         loadError instanceof Error ? loadError.message : String(loadError);
       error = `Failed to load threads: ${reason}`;
-      backingThreads = [];
     } finally {
       loading = false;
+      retrying = false;
     }
   }
 
@@ -128,9 +133,10 @@
     void loadTopicsFromState(parsed);
   });
 
-  async function loadTopicsFromState(state) {
+  async function loadTopicsFromState(state, isRetry = false) {
     loading = true;
     error = "";
+    retrying = isRetry;
 
     try {
       const query = buildTopicListApiQueryParams(state, {
@@ -144,9 +150,9 @@
       const reason =
         loadError instanceof Error ? loadError.message : String(loadError);
       error = `Failed to load topics: ${reason}`;
-      topics = [];
     } finally {
       loading = false;
+      retrying = false;
     }
   }
 
@@ -484,12 +490,12 @@
 </div>
 
 {#if error}
-  <div
-    class="mb-4 rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
-    role="alert"
-  >
-    {error}
-  </div>
+  <StateError
+    message={error}
+    onretry={() => void (listSurface === "topics" ? loadTopicsFromState(filters, true) : loadBackingThreads(true))}
+    retrying={retrying}
+    class="mb-4"
+  />
 {/if}
 
 {#if (listSurface === "topics" || listSurface === "threads") && filtersOpen}
@@ -684,42 +690,15 @@
 {/if}
 
 {#if listSurface === "topics"}
-  {#if loading}
-    <div
-      class="mt-12 flex items-center justify-center gap-2 text-meta text-[var(--fg-muted)]"
-    >
-      <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-        <circle
-          class="opacity-25"
-          cx="12"
-          cy="12"
-          r="10"
-          stroke="currentColor"
-          stroke-width="4"
-        ></circle>
-        <path
-          class="opacity-75"
-          fill="currentColor"
-          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-        ></path>
-      </svg>
-      Loading topics...
-    </div>
-  {:else if topics.length === 0}
-    <div class="mt-8 text-center">
-      <p class="text-meta text-[var(--fg-muted)]">
-        No topics match the current filters.
-      </p>
-      {#if hasActiveFilters}
-        <button
-          class="mt-3 cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-micro font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]"
-          onclick={resetFilters}
-          type="button"
-        >
-          Clear filters
-        </button>
-      {/if}
-    </div>
+  {#if loading && topics.length === 0}
+    <Skeleton rows={8} />
+  {:else if topics.length === 0 && !error}
+    <StateEmpty
+      title={hasActiveFilters ? "No topics match the current filters" : "No topics yet"}
+      helper={hasActiveFilters ? "Try adjusting or clearing the current filters." : "Create a topic to start tracking a thread."}
+      actionLabel={hasActiveFilters ? "Clear filters" : ""}
+      onclick={hasActiveFilters ? resetFilters : undefined}
+    />
   {:else}
     <div
       class="space-y-px overflow-hidden rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
@@ -816,46 +795,19 @@
       {/each}
     </div>
   {/if}
-{:else if loading}
-  <div
-    class="mt-12 flex items-center justify-center gap-2 text-meta text-[var(--fg-muted)]"
-  >
-    <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-      <circle
-        class="opacity-25"
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        stroke-width="4"
-      ></circle>
-      <path
-        class="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-      ></path>
-    </svg>
-    Loading threads...
-  </div>
-{:else if backingThreads.length === 0}
-  <div class="mt-8 text-center">
-    <p class="text-meta text-[var(--fg-muted)]">No threads returned.</p>
-  </div>
+{:else if loading && backingThreads.length === 0}
+  <Skeleton rows={6} />
+{:else if backingThreads.length === 0 && !error}
+  <StateEmpty
+    title="No threads returned"
+    helper="Backing threads are append-only timelines. Not every thread is a topic."
+  />
 {:else if filteredBackingThreads.length === 0}
-  <div class="mt-8 text-center">
-    <p class="text-meta text-[var(--fg-muted)]">
-      No threads match the current filters.
-    </p>
-    {#if hasActiveFilters}
-      <button
-        class="mt-3 cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-micro font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]"
-        onclick={resetFilters}
-        type="button"
-      >
-        Clear filters
-      </button>
-    {/if}
-  </div>
+  <StateEmpty
+    title="No threads match the current filters"
+    actionLabel={hasActiveFilters ? "Clear filters" : ""}
+    onclick={hasActiveFilters ? resetFilters : undefined}
+  />
 {:else}
   <div
     class="space-y-px overflow-hidden rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"

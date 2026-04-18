@@ -8,6 +8,9 @@
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import TrashButton from "$lib/components/TrashButton.svelte";
   import CompactFilterBar from "$lib/components/CompactFilterBar.svelte";
+  import Skeleton from "$lib/components/state/Skeleton.svelte";
+  import StateEmpty from "$lib/components/state/StateEmpty.svelte";
+  import StateError from "$lib/components/state/StateError.svelte";
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
   import {
@@ -43,6 +46,7 @@
   let boards = $state([]);
   let loading = $state(false);
   let error = $state("");
+  let retrying = $state(false);
   let filtersOpen = $state(false);
   let boardFiltersDraft = $state({ ...defaultBoardListFilters });
   let boardFiltersApplied = $state({ ...defaultBoardListFilters });
@@ -123,9 +127,10 @@
     createPinnedRefs = "";
   }
 
-  async function loadBoards() {
+  async function loadBoards(isRetry = false) {
     loading = true;
     error = "";
+    retrying = isRetry;
     try {
       const f = boardFiltersApplied;
       const filters = {};
@@ -141,9 +146,9 @@
       boards = data.boards ?? [];
     } catch (e) {
       error = `Failed to load boards: ${e instanceof Error ? e.message : String(e)}`;
-      boards = [];
     } finally {
       loading = false;
+      retrying = false;
     }
   }
 
@@ -401,9 +406,12 @@
 {/if}
 
 {#if error}
-  <div class="mb-4 rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
-    {error}
-  </div>
+  <StateError
+    message={error}
+    onretry={() => void loadBoards(true)}
+    retrying={retrying}
+    class="mb-4"
+  />
 {/if}
 
 {#if showCreateForm}
@@ -533,37 +541,15 @@
   </section>
 {/if}
 
-{#if loading}
-  <div
-    class="mt-12 flex items-center justify-center gap-2 text-meta text-[var(--fg-muted)]"
-  >
-    <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-      <circle
-        class="opacity-25"
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        stroke-width="4"
-      ></circle>
-      <path
-        class="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-      ></path>
-    </svg>
-    Loading boards...
-  </div>
-{:else if boards.length === 0}
-  <div class="mt-8 text-center">
-    <p class="text-meta font-medium text-[var(--fg-muted)]">
-      No boards yet
-    </p>
-    <p class="mt-1 text-meta text-[var(--fg-muted)]">
-      No boards yet. Create one to give operators a trustworthy visual map of
-      active work.
-    </p>
-  </div>
+{#if loading && boards.length === 0}
+  <Skeleton rows={8} />
+{:else if boards.length === 0 && !error}
+  <StateEmpty
+    title="No boards yet"
+    helper="Create a board to give operators a trustworthy visual map of active work."
+    actionLabel="Create board"
+    onclick={() => (showCreateForm = true)}
+  />
 {:else}
   <div
     class="space-y-px overflow-hidden rounded-md border border-[var(--line)] bg-[var(--panel)]"

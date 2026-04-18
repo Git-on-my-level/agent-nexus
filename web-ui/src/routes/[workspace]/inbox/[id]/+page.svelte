@@ -4,7 +4,10 @@
   import { page } from "$app/stores";
   import { onDestroy, onMount } from "svelte";
 
+  import Button from "$lib/components/Button.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
+  import Skeleton from "$lib/components/state/Skeleton.svelte";
+  import StateError from "$lib/components/state/StateError.svelte";
   import { coreClient } from "$lib/coreClient";
   import {
     appPath,
@@ -246,17 +249,50 @@
 
   {#if loading}
     <div
-      class="rounded border border-[var(--line)] bg-[var(--bg-soft)] p-4 text-meta text-fg-muted"
+      class="rounded border border-[var(--line)] bg-[var(--bg-soft)] p-4"
     >
-      Loading ask context...
+      <Skeleton rows={4} />
     </div>
-  {:else if loadError}
+  {:else if loadError && !askItem}
+    <StateError
+      message={loadError}
+      onretry={() => void loadAskItem()}
+      retrying={loading}
+    />
     <div
-      class="rounded border border-danger/40 bg-danger-soft p-4 text-meta text-danger-text"
-      role="alert"
+      class="mt-4 rounded-md border border-warn/30 bg-warn-soft px-3 py-2.5 text-micro text-warn-text"
+      role="status"
     >
-      {loadError}
+      Context didn't load. Sending anyway may fail if the inbox item is unreachable.
+      <button
+        class="cursor-pointer ml-2 font-medium underline"
+        onclick={() => void loadAskItem()}
+        type="button"
+      >
+        Retry context
+      </button>
     </div>
+    <form
+      class="mt-4 rounded border border-[var(--line)] bg-[var(--bg-soft)] p-4"
+      onsubmit={(event) => {
+        event.preventDefault();
+      }}
+    >
+      <label class="block text-meta text-fg-muted" for="ask-response-input"
+        >Your answer</label
+      >
+      <textarea
+        id="ask-response-input"
+        class="mt-2 min-h-[200px] w-full rounded border border-[var(--line)] bg-white px-4 py-3 text-body text-fg outline-none focus:ring-2 focus:ring-accent"
+        bind:value={answerDraft}
+        onkeydown={handleTextareaKeydown}
+        placeholder="Write the answer the next agent should rely on."
+        disabled
+      ></textarea>
+      <p class="mt-2 text-micro text-[var(--fg-muted)]">
+        Answer input is disabled until context loads successfully.
+      </p>
+    </form>
   {:else if askItem}
     <section class="space-y-4">
       <div
