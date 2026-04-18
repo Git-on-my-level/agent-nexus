@@ -196,7 +196,7 @@
 {#if $authenticatedAgent}
   <main class="min-h-screen bg-[var(--bg)] px-4 py-6 text-[var(--fg)]">
     <div
-      class="mx-auto flex max-w-xl items-center justify-center rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-4 py-6 text-[13px]"
+      class="mx-auto flex max-w-xl items-center justify-center rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-4 py-6 text-meta"
     >
       Redirecting to the workspace...
     </div>
@@ -204,7 +204,7 @@
 {:else if loadingBootstrapStatus}
   <main class="min-h-screen bg-[var(--bg)] px-4 py-6 text-[var(--fg)]">
     <div
-      class="mx-auto flex max-w-xl items-center justify-center rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-4 py-6 text-[13px]"
+      class="mx-auto flex max-w-xl items-center justify-center rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-4 py-6 text-meta"
     >
       Checking workspace status...
     </div>
@@ -217,18 +217,18 @@
       >
         <div class="border-b border-[var(--line)] px-4 py-3">
           <p
-            class="text-[11px] font-medium uppercase tracking-wide text-[var(--fg-muted)]"
+            class="text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)]"
           >
             Sign in
           </p>
-          <h1 class="mt-1 text-lg font-semibold text-[var(--fg)]">
+          <h1 class="mt-1 text-subtitle font-semibold text-[var(--fg)]">
             {#if devPasskeyBypassAvailable}
               Sign in
             {:else}
               Sign in with a passkey
             {/if}
           </h1>
-          <p class="mt-2 text-[13px] text-[var(--fg-muted)]">
+          <p class="mt-2 text-meta text-[var(--fg-muted)]">
             {#if devPasskeyBypassAvailable}
               Dev sign-in is the default in local mode. Expand the section below
               if you need WebAuthn passkey authentication.
@@ -243,11 +243,11 @@
           {#if devPasskeyBypassAvailable}
             <div class="space-y-3">
               <p
-                class="text-[11px] font-medium uppercase tracking-wide text-[var(--fg-muted)]"
+                class="text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)]"
               >
                 Local development
               </p>
-              <p class="text-[12px] text-[var(--fg-muted)]">
+              <p class="text-micro text-[var(--fg-muted)]">
                 Sign in as a human principal without creating a browser passkey.
                 After a fresh <span class="font-mono">make serve</span> seed, leave
                 the fields empty (one passkey principal). With several, set principal
@@ -255,14 +255,14 @@
               </p>
               <div>
                 <label
-                  class="block text-[12px] font-medium text-[var(--fg-muted)]"
+                  class="block text-micro font-medium text-[var(--fg-muted)]"
                   for="dev-login-username"
                 >
                   Principal username (optional)
                 </label>
                 <input
                   bind:value={devLoginUsername}
-                  class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 font-mono text-[13px] text-[var(--fg)]"
+                  class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 font-mono text-meta text-[var(--fg)]"
                   id="dev-login-username"
                   placeholder="e.g. passkey.ops.lead.a1b2"
                   type="text"
@@ -270,21 +270,21 @@
               </div>
               <div>
                 <label
-                  class="block text-[12px] font-medium text-[var(--fg-muted)]"
+                  class="block text-micro font-medium text-[var(--fg-muted)]"
                   for="dev-login-display"
                 >
                   Display name (optional)
                 </label>
                 <input
                   bind:value={devLoginDisplayName}
-                  class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-[13px] text-[var(--fg)]"
+                  class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)]"
                   id="dev-login-display"
                   placeholder="Exact match when username is unknown"
                   type="text"
                 />
               </div>
               <button
-                class="cursor-pointer w-full rounded-md bg-accent px-3 py-2 text-[12px] font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+                class="cursor-pointer w-full rounded-md bg-accent px-3 py-2 text-micro font-medium text-white hover:bg-accent-hover disabled:opacity-50"
                 disabled={loadingDevLogin}
                 onclick={handleDevLogin}
                 type="button"
@@ -293,7 +293,7 @@
               </button>
               {#if devLoginError}
                 <div
-                  class="rounded-md bg-danger-soft px-3 py-2 text-[12px] text-danger-text"
+                  class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
                 >
                   {devLoginError}
                 </div>
@@ -302,13 +302,13 @@
 
             <details class="mt-4 border-t border-[var(--line)] pt-3">
               <summary
-                class="cursor-pointer text-[12px] font-medium text-[var(--fg-muted)] hover:text-[var(--fg)]"
+                class="cursor-pointer text-micro font-medium text-[var(--fg-muted)] hover:text-[var(--fg)]"
               >
                 Sign in with passkey
               </summary>
               <div class="mt-3 space-y-3">
                 <button
-                  class="cursor-pointer w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-[12px] font-medium text-[var(--fg)] hover:bg-[var(--line-subtle)] disabled:opacity-50"
+                  class="cursor-pointer w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-micro font-medium text-[var(--fg)] hover:bg-[var(--line-subtle)] disabled:opacity-50"
                   disabled={loadingLogin}
                   onclick={handleLogin}
                   type="button"
@@ -320,13 +320,13 @@
 
                 {#if loginError}
                   <div
-                    class="rounded-md bg-danger-soft px-3 py-2 text-[12px] text-danger-text"
+                    class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
                   >
                     {loginError}
                   </div>
                 {/if}
 
-                <p class="text-[12px] text-[var(--fg-muted)]">
+                <p class="text-micro text-[var(--fg-muted)]">
                   This uses discoverable WebAuthn login. No username step is
                   required.
                 </p>
@@ -334,7 +334,7 @@
             </details>
           {:else}
             <button
-              class="cursor-pointer w-full rounded-md bg-accent px-3 py-2 text-[12px] font-medium text-white hover:bg-accent-hover"
+              class="cursor-pointer w-full rounded-md bg-accent px-3 py-2 text-micro font-medium text-white hover:bg-accent-hover"
               disabled={loadingLogin}
               onclick={handleLogin}
               type="button"
@@ -346,13 +346,13 @@
 
             {#if loginError}
               <div
-                class="rounded-md bg-danger-soft px-3 py-2 text-[12px] text-danger-text"
+                class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
               >
                 {loginError}
               </div>
             {/if}
 
-            <p class="text-[12px] text-[var(--fg-muted)]">
+            <p class="text-micro text-[var(--fg-muted)]">
               This uses discoverable WebAuthn login. No username step is
               required.
             </p>
@@ -365,11 +365,11 @@
       >
         <div class="border-b border-[var(--line)] px-4 py-3">
           <p
-            class="text-[11px] font-medium uppercase tracking-wide text-[var(--fg-muted)]"
+            class="text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)]"
           >
             New to this workspace?
           </p>
-          <h2 class="mt-1 text-[13px] font-semibold text-[var(--fg)]">
+          <h2 class="mt-1 text-meta font-semibold text-[var(--fg)]">
             Join with an invite token
           </h2>
         </div>
@@ -383,14 +383,14 @@
         >
           <div>
             <label
-              class="block text-[12px] font-medium text-[var(--fg-muted)]"
+              class="block text-micro font-medium text-[var(--fg-muted)]"
               for="display-name"
             >
               Display name
             </label>
             <input
               bind:value={registrationName}
-              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-[13px] text-[var(--fg)]"
+              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)]"
               id="display-name"
               maxlength="120"
               placeholder="Alex Chen"
@@ -400,7 +400,7 @@
 
           <div>
             <label
-              class="block text-[12px] font-medium text-[var(--fg-muted)]"
+              class="block text-micro font-medium text-[var(--fg-muted)]"
               for="invite-token"
             >
               {#if bootstrapAvailable}
@@ -411,7 +411,7 @@
             </label>
             <input
               bind:value={registrationToken}
-              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 font-mono text-[13px] text-[var(--fg)]"
+              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 font-mono text-meta text-[var(--fg)]"
               id="invite-token"
               placeholder={bootstrapAvailable
                 ? "Paste the bootstrap token"
@@ -422,7 +422,7 @@
 
           {#if registrationError}
             <div
-              class="rounded-md bg-danger-soft px-3 py-2 text-[12px] text-danger-text"
+              class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
             >
               {registrationError}
             </div>
@@ -430,7 +430,7 @@
 
           {#if bootstrapAvailable}
             <div
-              class="rounded-md bg-warn-soft px-3 py-2 text-[12px] text-warn-text"
+              class="rounded-md bg-warn-soft px-3 py-2 text-micro text-warn-text"
             >
               Bootstrap registration is available for the first principal and
               requires the workspace bootstrap token. After the first
@@ -438,7 +438,7 @@
             </div>
           {:else}
             <div
-              class="rounded-md bg-accent-soft px-3 py-2 text-[12px] text-accent-text"
+              class="rounded-md bg-accent-soft px-3 py-2 text-micro text-accent-text"
             >
               This workspace requires an invite token to join. Contact your
               workspace administrator for an invitation.
@@ -447,7 +447,7 @@
 
           <div class="flex flex-wrap gap-2">
             <button
-              class="cursor-pointer rounded-md bg-accent px-3 py-2 text-[12px] font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+              class="cursor-pointer rounded-md bg-accent px-3 py-2 text-micro font-medium text-white hover:bg-accent-hover disabled:opacity-50"
               disabled={loadingRegistration || !registrationToken.trim()}
               type="submit"
             >
@@ -457,7 +457,7 @@
             </button>
             {#if devPasskeyBypassAvailable}
               <button
-                class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-[12px] font-medium text-[var(--fg)] hover:bg-[var(--line-subtle)] disabled:opacity-50"
+                class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-micro font-medium text-[var(--fg)] hover:bg-[var(--line-subtle)] disabled:opacity-50"
                 disabled={loadingRegistration || !registrationToken.trim()}
                 onclick={(e) => {
                   e.preventDefault();
@@ -472,7 +472,7 @@
             {/if}
             {#if $devActorMode}
               <a
-                class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-[12px] font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]"
+                class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-micro font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]"
                 href={workspacePath(workspaceSlug)}
               >
                 Back to actor mode

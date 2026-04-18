@@ -31,16 +31,16 @@
   >
     <span>{resolved.primaryLabel}</span>
     {#if showRaw && resolved.secondaryLabel}
-      <span class="text-[11px] text-fg-subtle">{resolved.secondaryLabel}</span>
+      <span class="text-micro text-fg-subtle">{resolved.secondaryLabel}</span>
     {/if}
   </a>
 {:else}
   <span
-    class="inline-flex items-baseline gap-1 text-[11px] text-[var(--fg-muted)]"
+    class="inline-flex items-baseline gap-1 text-micro text-[var(--fg-muted)]"
   >
     <span>{resolved.primaryLabel}</span>
     {#if showRaw && resolved.secondaryLabel}
-      <span class="text-[11px] text-fg-subtle">{resolved.secondaryLabel}</span>
+      <span class="text-micro text-fg-subtle">{resolved.secondaryLabel}</span>
     {/if}
   </span>
 {/if}

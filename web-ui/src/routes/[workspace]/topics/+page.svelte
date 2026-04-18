@@ -377,13 +377,13 @@
 
 <div class="mb-4 flex flex-wrap items-start justify-between gap-4">
   <div class="min-w-0 flex-1">
-    <h1 class="text-lg font-semibold text-[var(--fg)]">
+    <h1 class="text-subtitle font-semibold text-[var(--fg)]">
       {listSurface === "topics" ? "Topics" : "Threads"}
     </h1>
     {#if listSurface === "topics"}
       <!-- subtitle removed; heading is self-evident -->
     {:else}
-      <p class="mt-1 hidden text-[12px] text-[var(--fg-muted)] sm:block">
+      <p class="mt-1 hidden text-micro text-[var(--fg-muted)] sm:block">
         Diagnostic list of append-only backing threads (timelines). Not every
         thread is a topic; prefer
         <a
@@ -397,7 +397,7 @@
   <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-1.5">
     {#if listSurface === "topics"}
       <label
-        class="inline-flex cursor-pointer items-center gap-1.5 text-[12px] text-[var(--fg-muted)]"
+        class="inline-flex cursor-pointer items-center gap-1.5 text-micro text-[var(--fg-muted)]"
       >
         <input
           bind:checked={showArchived}
@@ -407,7 +407,7 @@
         Show archived
       </label>
       <button
-        class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12px] font-medium transition-colors {hasActiveFilters
+        class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-micro font-medium transition-colors {hasActiveFilters
           ? 'border-[var(--accent)]/40 bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/15'
           : 'border-[var(--line)] bg-[var(--bg-soft)] text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]'}"
         onclick={() => (filtersOpen = !filtersOpen)}
@@ -430,7 +430,7 @@
         {hasActiveFilters ? "Filtered" : "Filters"}
       </button>
       <button
-        class="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-[var(--panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line)]"
+        class="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-[var(--panel)] px-3 py-1.5 text-micro font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line)]"
         onclick={() => (createOpen = !createOpen)}
         type="button"
       >
@@ -453,7 +453,7 @@
       </button>
     {:else}
       <button
-        class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12px] font-medium transition-colors {hasActiveFilters
+        class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-micro font-medium transition-colors {hasActiveFilters
           ? 'border-[var(--accent)]/40 bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/15'
           : 'border-[var(--line)] bg-[var(--bg-soft)] text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]'}"
         onclick={() => (filtersOpen = !filtersOpen)}
@@ -476,7 +476,7 @@
         {hasActiveFilters ? "Filtered" : "Filters"}
       </button>
       <a
-        class="rounded-md bg-[var(--panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line)]"
+        class="rounded-md bg-[var(--panel)] px-3 py-1.5 text-micro font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line)]"
         href={workspaceHref("/topics")}>Open topics</a
       >
     {/if}
@@ -485,7 +485,7 @@
 
 {#if error}
   <div
-    class="mb-4 rounded-md bg-danger-soft px-3 py-2 text-[13px] text-danger-text"
+    class="mb-4 rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
     role="alert"
   >
     {error}
@@ -496,10 +496,10 @@
   <CompactFilterBar testId="topics-filter-panel">
     {#snippet children()}
       <div class="grid gap-3 sm:grid-cols-5">
-        <label class="text-[12px]">
+        <label class="text-micro">
           <span class="font-medium text-[var(--fg-muted)]">Status</span>
           <select
-            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--panel)]"
+            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
             onchange={(event) =>
               onStatusFilterChange(event.currentTarget.value)}
             value={statusFilterSelectValue()}
@@ -511,10 +511,10 @@
               >{/each}
           </select>
         </label>
-        <label class="text-[12px]">
+        <label class="text-micro">
           <span class="font-medium text-[var(--fg-muted)]">Priority</span>
           <select
-            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--panel)]"
+            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
             onchange={(event) =>
               onPriorityFilterChange(event.currentTarget.value)}
             value={priorityFilterSelectValue()}
@@ -526,11 +526,11 @@
               >{/each}
           </select>
         </label>
-        <label class="text-[12px]">
+        <label class="text-micro">
           <span class="font-medium text-[var(--fg-muted)]">Cadence</span>
           <select
             bind:value={filters.cadence}
-            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--panel)]"
+            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
           >
             <option value="">All</option>
             {#each TOPIC_SCHEDULE_PRESETS as cadence}<option value={cadence}
@@ -538,22 +538,22 @@
               >{/each}
           </select>
         </label>
-        <label class="text-[12px]">
+        <label class="text-micro">
           <span class="font-medium text-[var(--fg-muted)]">Staleness</span>
           <select
             bind:value={filters.staleness}
-            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--panel)]"
+            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
           >
             <option value="all">All</option>
             <option value="stale">Stale</option>
             <option value="fresh">Fresh</option>
           </select>
         </label>
-        <label class="text-[12px]">
+        <label class="text-micro">
           <span class="font-medium text-[var(--fg-muted)]">Tags</span>
           <input
             bind:value={filters.tagInput}
-            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--panel)]"
+            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
             placeholder="ops, customer"
             type="text"
           />
@@ -561,12 +561,12 @@
       </div>
       <div class="mt-3 flex gap-1.5">
         <button
-          class="cursor-pointer rounded-md bg-[var(--panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--fg)] hover:bg-[var(--line)]"
+          class="cursor-pointer rounded-md bg-[var(--panel)] px-3 py-1.5 text-micro font-medium text-[var(--fg)] hover:bg-[var(--line)]"
           onclick={applyFilters}
           type="button">Apply</button
         >
         <button
-          class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]"
+          class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-micro font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]"
           onclick={resetFilters}
           type="button">Clear filters</button
         >
@@ -585,49 +585,49 @@
   >
     {#if createError}
       <div
-        class="mb-3 rounded-md bg-danger-soft px-3 py-2 text-[13px] text-danger-text"
+        class="mb-3 rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
       >
         {createError}
       </div>
     {/if}
     <div class="grid gap-3 sm:grid-cols-2">
-      <label class="text-[12px] sm:col-span-2">
+      <label class="text-micro sm:col-span-2">
         <span class="font-medium text-[var(--fg-muted)]">Title</span>
         <input
           bind:value={topicDraft.title}
-          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-[13px] transition-colors focus:bg-[var(--panel)]"
+          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta transition-colors focus:bg-[var(--panel)]"
           placeholder="Topic title..."
           required
           type="text"
         />
       </label>
-      <label class="text-[12px]">
+      <label class="text-micro">
         <span class="font-medium text-[var(--fg-muted)]">Status</span>
         <select
           bind:value={topicDraft.status}
-          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-2 text-[13px] transition-colors focus:bg-[var(--panel)]"
+          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-2 text-meta transition-colors focus:bg-[var(--panel)]"
         >
           {#each TOPIC_STATUSES as status}<option value={status}
               >{status[0].toUpperCase() + status.slice(1)}</option
             >{/each}
         </select>
       </label>
-      <label class="text-[12px]">
+      <label class="text-micro">
         <span class="font-medium text-[var(--fg-muted)]">Priority</span>
         <select
           bind:value={topicDraft.priority}
-          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-2 text-[13px] transition-colors focus:bg-[var(--panel)]"
+          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-2 text-meta transition-colors focus:bg-[var(--panel)]"
         >
           {#each TOPIC_PRIORITIES as priority}<option value={priority}
               >{TOPIC_PRIORITY_LABELS[priority]}</option
             >{/each}
         </select>
       </label>
-      <label class="text-[12px]">
+      <label class="text-micro">
         <span class="font-medium text-[var(--fg-muted)]">Schedule</span>
         <select
           bind:value={topicDraft.cadencePreset}
-          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-2 text-[13px] transition-colors focus:bg-[var(--panel)]"
+          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-2 text-meta transition-colors focus:bg-[var(--panel)]"
         >
           {#each TOPIC_SCHEDULE_PRESETS as cadence}<option value={cadence}
               >{TOPIC_SCHEDULE_PRESET_LABELS[cadence]}</option
@@ -635,37 +635,37 @@
         </select>
       </label>
       {#if topicDraft.cadencePreset === "custom"}
-        <label class="text-[12px]">
+        <label class="text-micro">
           <span class="font-medium text-[var(--fg-muted)]"
             >Cron expression</span
           >
           <input
             bind:value={topicDraft.cadenceCron}
-            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-[13px] transition-colors focus:bg-[var(--panel)]"
+            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta transition-colors focus:bg-[var(--panel)]"
             placeholder="0 9 * * *"
             type="text"
           />
           {#if describeCron(topicDraft.cadenceCron)}
-            <span class="mt-1 block text-[11px] text-[var(--fg-muted)]">
+            <span class="mt-1 block text-micro text-[var(--fg-muted)]">
               {describeCron(topicDraft.cadenceCron)}
             </span>
           {/if}
         </label>
       {/if}
-      <label class="text-[12px]">
+      <label class="text-micro">
         <span class="font-medium text-[var(--fg-muted)]">Tags</span>
         <input
           bind:value={topicDraft.tagsInput}
-          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-[13px] transition-colors focus:bg-[var(--panel)]"
+          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta transition-colors focus:bg-[var(--panel)]"
           placeholder="ops, customer"
           type="text"
         />
       </label>
-      <label class="text-[12px] sm:col-span-2">
+      <label class="text-micro sm:col-span-2">
         <span class="font-medium text-[var(--fg-muted)]">Summary</span>
         <textarea
           bind:value={topicDraft.summary}
-          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-[13px] transition-colors focus:bg-[var(--panel)]"
+          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta transition-colors focus:bg-[var(--panel)]"
           placeholder="Brief description..."
           rows="2"
         ></textarea>
@@ -673,7 +673,7 @@
     </div>
     <div class="mt-3 flex justify-end">
       <button
-        class="cursor-pointer rounded-md bg-accent px-4 py-2 text-[12px] font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+        class="cursor-pointer rounded-md bg-accent px-4 py-2 text-micro font-medium text-white hover:bg-accent-hover disabled:opacity-50"
         disabled={creatingTopic}
         type="submit"
       >
@@ -686,7 +686,7 @@
 {#if listSurface === "topics"}
   {#if loading}
     <div
-      class="mt-12 flex items-center justify-center gap-2 text-[13px] text-[var(--fg-muted)]"
+      class="mt-12 flex items-center justify-center gap-2 text-meta text-[var(--fg-muted)]"
     >
       <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
         <circle
@@ -707,12 +707,12 @@
     </div>
   {:else if topics.length === 0}
     <div class="mt-8 text-center">
-      <p class="text-[13px] text-[var(--fg-muted)]">
+      <p class="text-meta text-[var(--fg-muted)]">
         No topics match the current filters.
       </p>
       {#if hasActiveFilters}
         <button
-          class="mt-3 cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]"
+          class="mt-3 cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-micro font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]"
           onclick={resetFilters}
           type="button"
         >
@@ -744,29 +744,29 @@
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-center gap-2">
                 <p
-                  class="truncate text-[13px] font-medium text-[var(--fg)]"
+                  class="truncate text-meta font-medium text-[var(--fg)]"
                 >
                   {topic.title}
                 </p>
                 {#if isTopicArchived(topic)}
                   <span
-                    class="shrink-0 rounded bg-warn-soft px-1.5 py-0.5 text-[11px] font-medium text-warn-text"
+                    class="shrink-0 rounded bg-warn-soft px-1.5 py-0.5 text-micro font-medium text-warn-text"
                     >Archived</span
                   >
                 {/if}
               </div>
-              <p class="truncate text-[12px] text-[var(--fg-muted)]">
+              <p class="truncate text-micro text-[var(--fg-muted)]">
                 {topic.current_summary ?? topic.summary ?? ""}
               </p>
             </div>
-            <div class="flex shrink-0 items-center gap-1.5 text-[11px]">
+            <div class="flex shrink-0 items-center gap-1.5 text-micro">
               {#if topic.status && topic.status !== "active"}
                 <span class="font-medium capitalize {statusColor(topic.status)}"
                   >{topic.status}</span
                 >
               {/if}
               <span
-                class="hidden rounded border border-[var(--line)] px-1.5 py-0.5 text-[10px] text-[var(--fg-muted)] sm:inline"
+                class="hidden rounded border border-[var(--line)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)] sm:inline"
                 >{formatCadenceLabel(topic.cadence, {
                   includeExpression: false,
                 })}</span
@@ -818,7 +818,7 @@
   {/if}
 {:else if loading}
   <div
-    class="mt-12 flex items-center justify-center gap-2 text-[13px] text-[var(--fg-muted)]"
+    class="mt-12 flex items-center justify-center gap-2 text-meta text-[var(--fg-muted)]"
   >
     <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
       <circle
@@ -839,16 +839,16 @@
   </div>
 {:else if backingThreads.length === 0}
   <div class="mt-8 text-center">
-    <p class="text-[13px] text-[var(--fg-muted)]">No threads returned.</p>
+    <p class="text-meta text-[var(--fg-muted)]">No threads returned.</p>
   </div>
 {:else if filteredBackingThreads.length === 0}
   <div class="mt-8 text-center">
-    <p class="text-[13px] text-[var(--fg-muted)]">
+    <p class="text-meta text-[var(--fg-muted)]">
       No threads match the current filters.
     </p>
     {#if hasActiveFilters}
       <button
-        class="mt-3 cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]"
+        class="mt-3 cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-micro font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]"
         onclick={resetFilters}
         type="button"
       >
@@ -872,30 +872,30 @@
           href={workspaceHref(`/threads/${encodeURIComponent(thread.id)}`)}
         >
           <div class="flex flex-wrap items-center gap-2">
-            <p class="truncate text-[13px] font-medium text-[var(--fg)]">
+            <p class="truncate text-meta font-medium text-[var(--fg)]">
               {thread.title || thread.id}
             </p>
             {#if thread.status === "archived"}
               <span
-                class="shrink-0 rounded bg-warn-soft px-1.5 py-0.5 text-[11px] font-medium text-warn-text"
+                class="shrink-0 rounded bg-warn-soft px-1.5 py-0.5 text-micro font-medium text-warn-text"
                 >Archived</span
               >
             {/if}
           </div>
-          <p class="truncate font-mono text-[11px] text-[var(--fg-muted)]">
+          <p class="truncate font-mono text-micro text-[var(--fg-muted)]">
             {thread.id}
           </p>
           {#if topicSeg}
-            <p class="truncate text-[11px] text-[var(--fg-muted)]">
+            <p class="truncate text-micro text-[var(--fg-muted)]">
               Linked topic:
               <span class="text-[var(--fg)]">{topicSeg}</span>
             </p>
           {:else}
-            <p class="truncate text-[11px] text-[var(--fg-muted)]">
+            <p class="truncate text-micro text-[var(--fg-muted)]">
               No topic ref (non-topic or internal timeline)
             </p>
           {/if}
-          <p class="text-[11px] text-[var(--fg-muted)]">
+          <p class="text-micro text-[var(--fg-muted)]">
             Updated {formatTimestamp(thread.updated_at) || "—"}
           </p>
         </a>
@@ -904,7 +904,7 @@
             class="flex shrink-0 items-center border-l border-[var(--line)] px-2"
           >
             <a
-              class="text-[11px] font-medium text-accent-text transition-colors hover:text-accent-text"
+              class="text-micro font-medium text-accent-text transition-colors hover:text-accent-text"
               href={workspaceHref(`/topics/${encodeURIComponent(topicSeg)}`)}
               >Topic</a
             >

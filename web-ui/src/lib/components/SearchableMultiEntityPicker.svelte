@@ -65,9 +65,9 @@
 
 <div class="space-y-2">
   <div>
-    <p class="text-[12px] font-medium text-[var(--fg-muted)]">{label}</p>
+    <p class="text-micro font-medium text-[var(--fg-muted)]">{label}</p>
     {#if helperText}
-      <p class="mt-0.5 text-[11px] text-[var(--fg-muted)]">
+      <p class="mt-0.5 text-micro text-[var(--fg-muted)]">
         {helperText}
       </p>
     {/if}
@@ -77,7 +77,7 @@
     <div class="flex flex-wrap gap-2">
       {#each selectedItems as item}
         <span
-          class="inline-flex items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1 text-[11px] text-[var(--fg)]"
+          class="inline-flex items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1 text-micro text-[var(--fg)]"
         >
           <span>{item.title || item.id}</span>
           <button
@@ -98,7 +98,7 @@
     <input
       aria-label={`${label} search`}
       bind:value={query}
-      class="w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-[13px] text-[var(--fg)] placeholder:text-[var(--fg-subtle)]"
+      class="w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)] placeholder:text-[var(--fg-subtle)]"
       {placeholder}
       type="text"
     />
@@ -108,7 +108,7 @@
     class="max-h-48 overflow-y-auto rounded-md border border-[var(--line)] bg-[var(--panel)]"
   >
     {#if filteredItems.length === 0}
-      <div class="px-3 py-3 text-[12px] text-[var(--fg-muted)]">
+      <div class="px-3 py-3 text-micro text-[var(--fg-muted)]">
         {emptyText}
       </div>
     {:else}
@@ -122,10 +122,10 @@
           type="button"
         >
           <div class="min-w-0">
-            <p class="truncate text-[12px] font-medium text-[var(--fg)]">
+            <p class="truncate text-micro font-medium text-[var(--fg)]">
               {item.title || item.id}
             </p>
-            <p class="mt-0.5 truncate text-[11px] text-[var(--fg-muted)]">
+            <p class="mt-0.5 truncate text-micro text-[var(--fg-muted)]">
               {item.id}
               {#if item.subtitle}
                 · {item.subtitle}
@@ -133,7 +133,7 @@
             </p>
           </div>
           <span
-            class="rounded bg-accent-soft px-1.5 py-0.5 text-[11px] text-accent-text"
+            class="rounded bg-accent-soft px-1.5 py-0.5 text-micro text-accent-text"
           >
             Add
           </span>
@@ -146,7 +146,7 @@
     class="rounded-md border border-[var(--line)] bg-[var(--panel)]"
   >
     <summary
-      class="cursor-pointer px-3 py-2 text-[11px] text-[var(--fg-muted)] hover:text-[var(--fg)]"
+      class="cursor-pointer px-3 py-2 text-micro text-[var(--fg-muted)] hover:text-[var(--fg)]"
     >
       {advancedLabel}
     </summary>
@@ -154,19 +154,19 @@
       class="space-y-2 border-t border-[var(--line)] px-3 py-3 md:flex md:items-end md:gap-2 md:space-y-0"
     >
       <label
-        class="block flex-1 text-[12px] font-medium text-[var(--fg-muted)]"
+        class="block flex-1 text-micro font-medium text-[var(--fg-muted)]"
       >
         {manualLabel}
         <input
           aria-label={manualLabel}
           bind:value={manualEntry}
-          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-[13px] text-[var(--fg)] placeholder:text-[var(--fg-subtle)]"
+          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)] placeholder:text-[var(--fg-subtle)]"
           placeholder={manualPlaceholder}
           type="text"
         />
       </label>
       <button
-        class="rounded-md bg-accent px-3 py-2 text-[12px] font-medium text-white transition-colors hover:bg-accent-hover"
+        class="rounded-md bg-accent px-3 py-2 text-micro font-medium text-white transition-colors hover:bg-accent-hover"
         onclick={() => addValue(manualEntry)}
         type="button"
       >

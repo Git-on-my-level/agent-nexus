@@ -448,7 +448,7 @@
 </script>
 
 <nav
-  class="mb-3 flex items-center gap-1.5 text-[12px] text-[var(--fg-muted)]"
+  class="mb-3 flex items-center gap-1.5 text-micro text-[var(--fg-muted)]"
   aria-label="Breadcrumb"
 >
   <a
@@ -463,7 +463,7 @@
 
 {#if loading}
   <div
-    class="mt-8 flex items-center justify-center gap-2 text-[13px] text-[var(--fg-muted)]"
+    class="mt-8 flex items-center justify-center gap-2 text-meta text-[var(--fg-muted)]"
   >
     <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
       <circle
@@ -483,13 +483,13 @@
     Loading...
   </div>
 {:else if loadError}
-  <div class="rounded-md bg-danger-soft px-3 py-2 text-[13px] text-danger-text">
+  <div class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
     {loadError}
   </div>
 {:else if artifact}
   {#if artifact?.trashed_at}
     <div
-      class="trash-banner mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-[13px] text-danger-text"
+      class="trash-banner mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-meta text-danger-text"
     >
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2 font-semibold">
@@ -499,7 +499,7 @@
         {#if artifact.trash_reason}
           <p class="mt-2">Reason: {artifact.trash_reason}</p>
         {/if}
-        <p class="mt-1 text-[11px] text-danger-text/80">
+        <p class="mt-1 text-micro text-danger-text/80">
           Trashed {#if artifact.trashed_by}by {actorName(
               artifact.trashed_by,
             )}{/if}
@@ -509,7 +509,7 @@
         </p>
       </div>
       <button
-        class="shrink-0 cursor-pointer rounded-md border border-danger/40 bg-danger-soft px-2 py-1 text-[12px] font-medium text-danger-text hover:bg-danger/25 disabled:opacity-50"
+        class="shrink-0 cursor-pointer rounded-md border border-danger/40 bg-danger-soft px-2 py-1 text-micro font-medium text-danger-text hover:bg-danger/25 disabled:opacity-50"
         disabled={lifecycleBusy}
         onclick={handleRestoreArtifact}
         type="button"
@@ -519,7 +519,7 @@
     </div>
   {:else if artifact?.archived_at}
     <div
-      class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-[13px] text-warn-text"
+      class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-meta text-warn-text"
     >
       <p class="min-w-0 flex-1">
         This artifact was archived on {formatTimestamp(artifact.archived_at) ||
@@ -527,7 +527,7 @@
           by {actorName(artifact.archived_by)}{/if}.
       </p>
       <button
-        class="shrink-0 cursor-pointer rounded-md border border-warn/40 bg-warn-soft px-2 py-1 text-[12px] font-medium text-warn-text hover:bg-warn/25 disabled:opacity-50"
+        class="shrink-0 cursor-pointer rounded-md border border-warn/40 bg-warn-soft px-2 py-1 text-micro font-medium text-warn-text hover:bg-warn/25 disabled:opacity-50"
         disabled={lifecycleBusy}
         onclick={handleUnarchiveArtifact}
         type="button"
@@ -541,10 +541,10 @@
   >
     <div class="flex items-start justify-between gap-3">
       <div class="min-w-0 flex-1">
-        <h1 class="text-lg font-semibold text-[var(--fg)]">
+        <h1 class="text-subtitle font-semibold text-[var(--fg)]">
           {artifactHeaderTitle}
         </h1>
-        <p class="mt-0.5 text-[13px] text-[var(--fg-muted)]">
+        <p class="mt-0.5 text-meta text-[var(--fg-muted)]">
           {kindDescription(artifact.kind)}
         </p>
       </div>
@@ -567,7 +567,7 @@
       {/if}
     </div>
 
-    <div class="mt-2 flex flex-wrap items-center gap-2 text-[12px]">
+    <div class="mt-2 flex flex-wrap items-center gap-2 text-micro">
       <span class="rounded px-1.5 py-0.5 font-medium {kindColor(artifact.kind)}"
         >{kindLabel(artifact.kind)}</span
       >
@@ -580,7 +580,7 @@
     </div>
     {#if docArtifactDocPath}
       <div
-        class="mt-1.5 flex flex-wrap items-center gap-2 text-[12px] text-[var(--fg-muted)]"
+        class="mt-1.5 flex flex-wrap items-center gap-2 text-micro text-[var(--fg-muted)]"
       >
         <a
           class="inline-flex items-center rounded-md border border-fuchsia-500/35 bg-fuchsia-500/10 px-2 py-0.5 font-medium text-fuchsia-300 transition-colors hover:bg-fuchsia-500/20"
@@ -597,7 +597,7 @@
       </div>
     {/if}
     {#if artifact.thread_id && artifactTopicHref}
-      <div class="mt-1.5 text-[12px] text-[var(--fg-muted)]">
+      <div class="mt-1.5 text-micro text-[var(--fg-muted)]">
         <span class="text-[var(--fg-muted)]">Topic</span>
         <a
           class="ml-1 text-accent-text transition-colors hover:text-accent-text"
@@ -617,17 +617,17 @@
       class="mt-3 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
     >
       <summary
-        class="cursor-pointer px-4 py-2.5 text-[11px] text-[var(--fg-muted)] hover:text-[var(--fg)]"
+        class="cursor-pointer px-4 py-2.5 text-micro text-[var(--fg-muted)] hover:text-[var(--fg)]"
         >Hashes</summary
       >
       <div class="px-4 pb-3 pt-1">
         <p
-          class="text-[11px] uppercase tracking-[0.12em] text-[var(--fg-muted)]"
+          class="text-micro uppercase tracking-[0.12em] text-[var(--fg-muted)]"
         >
           Content hash
         </p>
         <p
-          class="mt-1 break-all font-mono text-[12px] text-[var(--fg-muted)]"
+          class="mt-1 break-all font-mono text-micro text-[var(--fg-muted)]"
         >
           {artifact.content_hash}
         </p>
@@ -642,10 +642,10 @@
     <div
       class="mt-3 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] p-3"
     >
-      <h2 class="text-[13px] font-medium text-[var(--fg)]">
+      <h2 class="text-meta font-medium text-[var(--fg)]">
         Linked references
       </h2>
-      <div class="mt-1.5 flex flex-wrap gap-1.5 text-[11px]">
+      <div class="mt-1.5 flex flex-wrap gap-1.5 text-micro">
         {#each nonThreadRefs as refValue}
           <RefLink
             humanize
@@ -661,7 +661,7 @@
 
   {#if contentLoadError}
     <div
-      class="mt-3 rounded-md border border-[var(--line)] px-3 py-2 text-[12px] text-[var(--fg-muted)]"
+      class="mt-3 rounded-md border border-[var(--line)] px-3 py-2 text-micro text-[var(--fg-muted)]"
     >
       Content unavailable for this artifact.
     </div>
@@ -669,7 +669,7 @@
 
   {#if !contentLoadError && !isKnownPacketArtifactKind && artifact.kind !== "doc" && !hasTextContent}
     <div
-      class="mt-3 rounded-md bg-warn-soft px-3 py-2 text-[12px] text-warn-text"
+      class="mt-3 rounded-md bg-warn-soft px-3 py-2 text-micro text-warn-text"
     >
       No structured view available for this artifact.
     </div>
@@ -680,11 +680,11 @@
       class="mt-4 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
     >
       <div class="border-b border-[var(--line)] px-4 py-2.5">
-        <h2 class="text-[13px] font-medium text-[var(--fg)]">Receipt</h2>
+        <h2 class="text-meta font-medium text-[var(--fg)]">Receipt</h2>
       </div>
-      <div class="px-4 py-3 text-[13px]">
+      <div class="px-4 py-3 text-meta">
         <div
-          class="flex flex-wrap gap-3 text-[12px] text-[var(--fg-muted)]"
+          class="flex flex-wrap gap-3 text-micro text-[var(--fg-muted)]"
         >
           <span class="flex items-center gap-1"
             >Subject: {#if String(receiptPacket.subject_ref ?? "").trim()}<RefLink
@@ -698,10 +698,10 @@
         </div>
         {#if (receiptPacket.outputs ?? []).length > 0}
           <div class="mt-3">
-            <p class="text-[11px] font-medium text-[var(--fg-muted)]">
+            <p class="text-micro font-medium text-[var(--fg-muted)]">
               Outputs
             </p>
-            <div class="mt-1 flex flex-wrap gap-1.5 text-[11px]">
+            <div class="mt-1 flex flex-wrap gap-1.5 text-micro">
               {#each receiptPacket.outputs as r}<RefLink
                   humanize
                   labelHints={artifactRefHints}
@@ -714,10 +714,10 @@
         {/if}
         {#if (receiptPacket.verification_evidence ?? []).length > 0}
           <div class="mt-3">
-            <p class="text-[11px] font-medium text-[var(--fg-muted)]">
+            <p class="text-micro font-medium text-[var(--fg-muted)]">
               Verification evidence
             </p>
-            <div class="mt-1 flex flex-wrap gap-1.5 text-[11px]">
+            <div class="mt-1 flex flex-wrap gap-1.5 text-micro">
               {#each receiptPacket.verification_evidence as r}<RefLink
                   humanize
                   labelHints={artifactRefHints}
@@ -729,7 +729,7 @@
           </div>
         {/if}
         <div class="mt-3">
-          <p class="text-[11px] font-medium text-[var(--fg-muted)]">
+          <p class="text-micro font-medium text-[var(--fg-muted)]">
             Changes summary
           </p>
           {#if receiptPacket.changes_summary}
@@ -743,7 +743,7 @@
         </div>
         {#if (receiptPacket.known_gaps ?? []).length > 0}
           <div class="mt-3">
-            <p class="text-[11px] font-medium text-[var(--fg-muted)]">
+            <p class="text-micro font-medium text-[var(--fg-muted)]">
               Known gaps
             </p>
             <ul class="mt-1 space-y-0.5 text-[var(--fg-muted)]">
@@ -760,26 +760,26 @@
       </div>
 
       <div class="border-t border-[var(--line)] px-4 py-3">
-        <h3 class="text-[13px] font-medium text-[var(--fg)]">
+        <h3 class="text-meta font-medium text-[var(--fg)]">
           Submit Review
         </h3>
         {#if reviewErrors.length > 0}
           <ul
-            class="mt-2 list-inside list-disc rounded-md bg-danger-soft px-3 py-2 text-[12px] text-danger-text"
+            class="mt-2 list-inside list-disc rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
           >
             {#each reviewErrors as e}<li>{e}</li>{/each}
           </ul>
         {/if}
         {#if reviewNotice}
           <div
-            class="mt-2 rounded-md bg-ok-soft px-3 py-1.5 text-[12px] text-ok-text"
+            class="mt-2 rounded-md bg-ok-soft px-3 py-1.5 text-micro text-ok-text"
           >
             {reviewNotice}
           </div>
         {/if}
         {#if reviseFollowupLink}
           <div
-            class="mt-2 rounded-md bg-warn-soft px-3 py-1.5 text-[12px] text-warn-text"
+            class="mt-2 rounded-md bg-warn-soft px-3 py-1.5 text-micro text-warn-text"
           >
             Outcome is revise.
             <a class="font-medium underline" href={reviseFollowupLink}
@@ -790,12 +790,12 @@
         {/if}
         {#if reviewDraft}
           <form class="mt-2 grid gap-3" onsubmit={submitReview}>
-            <label class="text-[12px] font-medium text-[var(--fg-muted)]"
+            <label class="text-micro font-medium text-[var(--fg-muted)]"
               >Outcome
               <select
                 aria-label="Review outcome"
                 bind:value={reviewDraft.outcome}
-                class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-[13px] focus:bg-[var(--panel)]"
+                class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta focus:bg-[var(--panel)]"
               >
                 <option value="accept">Accept</option><option value="revise"
                   >Revise</option
@@ -803,33 +803,33 @@
               </select>
             </label>
             {#if firstFieldError(reviewFieldErrors, "outcome")}<p
-                class="-mt-1 text-[11px] text-danger-text"
+                class="-mt-1 text-micro text-danger-text"
               >
                 {firstFieldError(reviewFieldErrors, "outcome")}
               </p>{/if}
             {#if reviewOutcomeGuidance}
               <p
-                class="-mt-1 rounded-md bg-[var(--bg-soft)] px-3 py-1.5 text-[12px] text-[var(--fg-muted)]"
+                class="-mt-1 rounded-md bg-[var(--bg-soft)] px-3 py-1.5 text-micro text-[var(--fg-muted)]"
               >
                 {reviewOutcomeGuidance}
               </p>
             {/if}
-            <label class="text-[12px] font-medium text-[var(--fg-muted)]"
+            <label class="text-micro font-medium text-[var(--fg-muted)]"
               >Notes
               <textarea
                 aria-label="Review notes"
                 bind:value={reviewDraft.notes}
-                class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-[13px] focus:bg-[var(--panel)]"
+                class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-meta focus:bg-[var(--panel)]"
                 placeholder="Review notes..."
                 rows="2"
               ></textarea>
             </label>
             {#if firstFieldError(reviewFieldErrors, "notes")}<p
-                class="-mt-1 text-[11px] text-danger-text"
+                class="-mt-1 text-micro text-danger-text"
               >
                 {firstFieldError(reviewFieldErrors, "notes")}
               </p>{/if}
-            <div class="text-[12px] font-medium text-[var(--fg-muted)]">
+            <div class="text-micro font-medium text-[var(--fg-muted)]">
               Evidence refs
               <GuidedTypedRefsInput
                 addButtonLabel="Add review evidence ref"
@@ -848,7 +848,7 @@
             </div>
             <div class="flex justify-end">
               <button
-                class="cursor-pointer rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+                class="cursor-pointer rounded-md bg-accent px-3 py-1.5 text-micro font-medium text-white hover:bg-accent-hover disabled:opacity-50"
                 disabled={submittingReview}
                 type="submit"
                 >{submittingReview ? "Submitting..." : "Submit review"}</button
@@ -857,7 +857,7 @@
           </form>
         {/if}
         {#if createdReview}
-          <div class="mt-2 text-[12px] text-[var(--fg-muted)]">
+          <div class="mt-2 text-micro text-[var(--fg-muted)]">
             Review submitted: <a
               class="font-medium text-accent-text hover:text-accent-text"
               href={workspaceHref(`/artifacts/${createdReview.id}`)}
@@ -869,26 +869,26 @@
 
       {#if threadTimeline.length > 0 || timelineLoading}
         <div class="border-t border-[var(--line)] px-4 py-3">
-          <h3 class="text-[13px] font-medium text-[var(--fg)]">
+          <h3 class="text-meta font-medium text-[var(--fg)]">
             Topic Timeline
           </h3>
           {#if timelineLoading}
-            <div class="mt-2 text-[12px] text-[var(--fg-muted)]">
+            <div class="mt-2 text-micro text-[var(--fg-muted)]">
               Loading...
             </div>
           {:else if timelineError}
-            <p class="mt-2 text-[12px] text-danger-text">{timelineError}</p>
+            <p class="mt-2 text-micro text-danger-text">{timelineError}</p>
           {:else}
             <div class="mt-2 space-y-1">
               {#each timelineView.slice(0, 10) as event}
                 <div
-                  class="rounded-md bg-[var(--bg-soft)] px-3 py-2 text-[12px]"
+                  class="rounded-md bg-[var(--bg-soft)] px-3 py-2 text-micro"
                 >
                   <MarkdownRenderer
                     source={event.summary}
                     class="font-medium text-[var(--fg)]"
                   />
-                  <p class="text-[11px] text-[var(--fg-muted)]">
+                  <p class="text-micro text-[var(--fg-muted)]">
                     {actorName(event.actor_id)} · {event.typeLabel} · {formatTimestamp(
                       event.ts,
                     ) || "—"}
@@ -907,19 +907,19 @@
       class="mt-4 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
     >
       <div class="border-b border-[var(--line)] px-4 py-2.5">
-        <h2 class="text-[13px] font-medium text-[var(--fg)]">Review</h2>
+        <h2 class="text-meta font-medium text-[var(--fg)]">Review</h2>
       </div>
-      <div class="px-4 py-3 text-[13px]">
+      <div class="px-4 py-3 text-meta">
         <div class="flex items-center gap-3">
           <span
-            class="rounded px-1.5 py-0.5 text-[12px] font-medium {reviewPacket.outcome ===
+            class="rounded px-1.5 py-0.5 text-micro font-medium {reviewPacket.outcome ===
             'accept'
               ? 'bg-ok-soft text-ok-text'
               : reviewPacket.outcome === 'revise'
                 ? 'bg-warn-soft text-warn-text'
                 : 'bg-danger-soft text-danger-text'}">{reviewPacket.outcome}</span
           >
-          <span class="text-[12px] text-[var(--fg-muted)]"
+          <span class="text-micro text-[var(--fg-muted)]"
             >Receipt: <RefLink
               humanize
               labelHints={artifactRefHints}
@@ -929,7 +929,7 @@
             /></span
           >
           {#if String(reviewPacket.subject_ref ?? "").trim()}
-            <span class="text-[12px] text-[var(--fg-muted)]"
+            <span class="text-micro text-[var(--fg-muted)]"
               >Subject: <RefLink
                 humanize
                 labelHints={artifactRefHints}
@@ -948,10 +948,10 @@
         {/if}
         {#if (reviewPacket.evidence_refs ?? []).length > 0}
           <div class="mt-3">
-            <p class="text-[11px] font-medium text-[var(--fg-muted)]">
+            <p class="text-micro font-medium text-[var(--fg-muted)]">
               Evidence
             </p>
-            <div class="mt-1 flex flex-wrap gap-1.5 text-[11px]">
+            <div class="mt-1 flex flex-wrap gap-1.5 text-micro">
               {#each reviewPacket.evidence_refs as r}<RefLink
                   humanize
                   labelHints={artifactRefHints}
@@ -973,15 +973,15 @@
       <div
         class="flex items-center justify-between border-b border-[var(--line)] px-4 py-2.5"
       >
-        <h2 class="text-[13px] font-medium text-[var(--fg)]">
+        <h2 class="text-meta font-medium text-[var(--fg)]">
           Text Content
         </h2>
-        <span class="text-[11px] text-[var(--fg-muted)]"
+        <span class="text-micro text-[var(--fg-muted)]"
           >{artifactContentType}</span
         >
       </div>
       <pre
-        class="max-h-[30rem] overflow-auto whitespace-pre-wrap break-words px-4 py-3 font-mono text-[12px] leading-relaxed text-[var(--fg)]">{textContent}</pre>
+        class="max-h-[30rem] overflow-auto whitespace-pre-wrap break-words px-4 py-3 font-mono text-micro leading-relaxed text-[var(--fg)]">{textContent}</pre>
     </div>
   {/if}
 
@@ -989,11 +989,11 @@
     class="mt-4 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
   >
     <summary
-      class="cursor-pointer px-4 py-2.5 text-[11px] text-[var(--fg-muted)] hover:text-[var(--fg)]"
+      class="cursor-pointer px-4 py-2.5 text-micro text-[var(--fg-muted)] hover:text-[var(--fg)]"
       >Raw metadata — ID: {artifact.id}</summary
     >
     <pre
-      class="overflow-auto px-4 pb-3 text-[11px] text-[var(--fg-muted)]">{JSON.stringify(
+      class="overflow-auto px-4 pb-3 text-micro text-[var(--fg-muted)]">{JSON.stringify(
         artifact,
         null,
         2,
@@ -1005,11 +1005,11 @@
       class="mt-2 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
     >
       <summary
-        class="cursor-pointer px-4 py-2.5 text-[11px] text-[var(--fg-muted)] hover:text-[var(--fg)]"
+        class="cursor-pointer px-4 py-2.5 text-micro text-[var(--fg-muted)] hover:text-[var(--fg)]"
         >Raw content JSON</summary
       >
       <pre
-        class="overflow-auto px-4 pb-3 text-[11px] text-[var(--fg-muted)]">{JSON.stringify(
+        class="overflow-auto px-4 pb-3 text-micro text-[var(--fg-muted)]">{JSON.stringify(
           artifactContent,
           null,
           2,
@@ -1017,7 +1017,7 @@
     </details>
   {/if}
 {:else}
-  <div class="mt-8 text-center text-[13px] text-[var(--fg-muted)]">
+  <div class="mt-8 text-center text-meta text-[var(--fg-muted)]">
     Artifact not found.
   </div>
 {/if}

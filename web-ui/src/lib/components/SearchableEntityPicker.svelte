@@ -136,9 +136,9 @@
 <div class="space-y-2">
   <div class="flex items-center justify-between gap-3">
     <div>
-      <p class="text-[12px] font-medium text-[var(--fg-muted)]">{label}</p>
+      <p class="text-micro font-medium text-[var(--fg-muted)]">{label}</p>
       {#if helperText}
-        <p class="mt-0.5 text-[11px] text-[var(--fg-muted)]">
+        <p class="mt-0.5 text-micro text-[var(--fg-muted)]">
           {helperText}
         </p>
       {/if}
@@ -146,7 +146,7 @@
 
     {#if value}
       <button
-        class="rounded border border-[var(--line)] bg-[var(--panel)] px-2 py-1 text-[11px] text-[var(--fg-muted)] transition-colors hover:text-[var(--fg)]"
+        class="rounded border border-[var(--line)] bg-[var(--panel)] px-2 py-1 text-micro text-[var(--fg-muted)] transition-colors hover:text-[var(--fg)]"
         onclick={clearSelection}
         type="button"
       >
@@ -160,20 +160,20 @@
       class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-2"
     >
       {#if selectedItem}
-        <p class="text-[12px] font-medium text-[var(--fg)]">
+        <p class="text-micro font-medium text-[var(--fg)]">
           {selectedItem.title || selectedItem.id}
         </p>
-        <p class="mt-0.5 text-[11px] text-[var(--fg-muted)]">
+        <p class="mt-0.5 text-micro text-[var(--fg-muted)]">
           {selectedItem.id}
           {#if selectedItem.subtitle}
             · {selectedItem.subtitle}
           {/if}
         </p>
       {:else}
-        <p class="text-[12px] font-medium text-[var(--fg)]">
+        <p class="text-micro font-medium text-[var(--fg)]">
           Manual ID selected
         </p>
-        <p class="mt-0.5 font-mono text-[11px] text-[var(--fg-muted)]">
+        <p class="mt-0.5 font-mono text-micro text-[var(--fg-muted)]">
           {value}
         </p>
       {/if}
@@ -185,25 +185,25 @@
     <input
       aria-label={`${label} search`}
       bind:value={query}
-      class="w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-[13px] text-[var(--fg)] placeholder:text-[var(--fg-subtle)]"
+      class="w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)] placeholder:text-[var(--fg-subtle)]"
       {placeholder}
       type="text"
     />
   </label>
 
   {#if searchLoading}
-    <div class="text-[11px] text-[var(--fg-muted)]">Searching…</div>
+    <div class="text-micro text-[var(--fg-muted)]">Searching…</div>
   {/if}
 
   {#if searchError}
-    <div class="text-[11px] text-danger-text">{searchError}</div>
+    <div class="text-micro text-danger-text">{searchError}</div>
   {/if}
 
   <div
     class="max-h-48 overflow-y-auto rounded-md border border-[var(--line)] bg-[var(--panel)]"
   >
     {#if filteredItems.length === 0}
-      <div class="px-3 py-3 text-[12px] text-[var(--fg-muted)]">
+      <div class="px-3 py-3 text-micro text-[var(--fg-muted)]">
         {emptyText}
       </div>
     {:else}
@@ -217,10 +217,10 @@
           type="button"
         >
           <div class="min-w-0">
-            <p class="truncate text-[12px] font-medium text-[var(--fg)]">
+            <p class="truncate text-micro font-medium text-[var(--fg)]">
               {item.title || item.id}
             </p>
-            <p class="mt-0.5 truncate text-[11px] text-[var(--fg-muted)]">
+            <p class="mt-0.5 truncate text-micro text-[var(--fg-muted)]">
               {item.id}
               {#if item.subtitle}
                 · {item.subtitle}
@@ -229,7 +229,7 @@
           </div>
           {#if value === item.id}
             <span
-              class="rounded bg-accent-soft px-1.5 py-0.5 text-[11px] text-accent-text"
+              class="rounded bg-accent-soft px-1.5 py-0.5 text-micro text-accent-text"
             >
               Selected
             </span>
@@ -243,16 +243,16 @@
     class="rounded-md border border-[var(--line)] bg-[var(--panel)]"
   >
     <summary
-      class="cursor-pointer px-3 py-2 text-[11px] text-[var(--fg-muted)] hover:text-[var(--fg)]"
+      class="cursor-pointer px-3 py-2 text-micro text-[var(--fg-muted)] hover:text-[var(--fg)]"
     >
       {advancedLabel}
     </summary>
     <div class="space-y-2 border-t border-[var(--line)] px-3 py-3">
-      <label class="block text-[12px] font-medium text-[var(--fg-muted)]">
+      <label class="block text-micro font-medium text-[var(--fg-muted)]">
         {manualLabel}
         <input
           aria-label={manualLabel}
-          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-[13px] text-[var(--fg)] placeholder:text-[var(--fg-subtle)]"
+          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)] placeholder:text-[var(--fg-subtle)]"
           oninput={(event) => {
             selectedItemOverride = null;
             value = event.currentTarget.value.trim();
@@ -262,7 +262,7 @@
           value={manualValue()}
         />
       </label>
-      <p class="text-[11px] text-[var(--fg-muted)]">
+      <p class="text-micro text-[var(--fg-muted)]">
         Use this only for expert or debugging cases when the normal picker is
         not enough.
       </p>

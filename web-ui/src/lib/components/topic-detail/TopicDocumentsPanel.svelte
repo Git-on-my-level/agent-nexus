@@ -58,13 +58,13 @@
     class="flex items-center justify-between border-b border-[var(--line-subtle)] px-4 py-2.5"
   >
     <div>
-      <h2 class="text-[12px] font-medium text-[var(--fg-muted)]">Docs</h2>
-      <p class="mt-0.5 text-[12px] text-[var(--fg-muted)]">
+      <h2 class="text-micro font-medium text-[var(--fg-muted)]">Docs</h2>
+      <p class="mt-0.5 text-micro text-[var(--fg-muted)]">
         Topic-linked documents and current head revisions.
       </p>
     </div>
     <a
-      class="text-[12px] font-medium text-accent-text transition-colors hover:text-accent-text"
+      class="text-micro font-medium text-accent-text transition-colors hover:text-accent-text"
       href={docsListHref()}
     >
       Open scoped docs
@@ -72,15 +72,15 @@
   </div>
 
   {#if documentsLoading}
-    <p class="px-4 py-3 text-[13px] text-[var(--fg-muted)]">
+    <p class="px-4 py-3 text-meta text-[var(--fg-muted)]">
       Loading docs...
     </p>
   {:else if documentsError}
-    <p class="rounded-md bg-danger-soft px-3 py-2 text-[13px] text-danger-text">
+    <p class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
       {documentsError}
     </p>
   {:else if documents.length === 0}
-    <p class="px-4 py-3 text-[13px] text-[var(--fg-muted)]">
+    <p class="px-4 py-3 text-meta text-[var(--fg-muted)]">
       No documents linked to this topic.
     </p>
   {:else}
@@ -95,44 +95,44 @@
               <div class="flex flex-wrap items-center gap-2">
                 {#if doc.status}
                   <span
-                    class={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${statusTone(doc.status)}`}
+                    class={`rounded px-1.5 py-0.5 text-micro font-semibold ${statusTone(doc.status)}`}
                   >
                     {DOC_STATUS_LABELS[doc.status] ?? doc.status}
                   </span>
                 {/if}
-                <span class="text-[11px] text-[var(--fg-muted)]">
+                <span class="text-micro text-[var(--fg-muted)]">
                   v{doc.head_revision?.revision_number ??
                     doc.head_revision_number ??
                     "?"}
                 </span>
                 {#if doc.head_revision?.content_type}
                   <span
-                    class="rounded bg-[var(--line)] px-1.5 py-0.5 text-[11px] text-[var(--fg-muted)]"
+                    class="rounded bg-[var(--line)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
                   >
                     {doc.head_revision.content_type}
                   </span>
                 {/if}
                 {#each (doc.labels ?? []).slice(0, 3) as label}
                   <span
-                    class="rounded bg-[var(--line)] px-1.5 py-0.5 text-[11px] text-[var(--fg-muted)]"
+                    class="rounded bg-[var(--line)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
                   >
                     {label}
                   </span>
                 {/each}
               </div>
               <p
-                class="mt-1 truncate text-[13px] font-medium text-[var(--fg)]"
+                class="mt-1 truncate text-meta font-medium text-[var(--fg)]"
               >
                 {doc.title || doc.id}
               </p>
-              <p class="mt-1 text-[11px] text-[var(--fg-muted)]">
+              <p class="mt-1 text-micro text-[var(--fg-muted)]">
                 Updated {formatTimestamp(doc.updated_at) || "—"} by {actorName(
                   doc.updated_by,
                 )}
               </p>
             </div>
             <div
-              class="shrink-0 text-right text-[11px] text-[var(--fg-muted)]"
+              class="shrink-0 text-right text-micro text-[var(--fg-muted)]"
             >
               <div>
                 Head revision {doc.head_revision?.revision_number ??

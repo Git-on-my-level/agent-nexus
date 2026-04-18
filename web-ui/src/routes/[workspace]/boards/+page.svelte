@@ -277,12 +277,12 @@
 
 <div class="mb-4 flex flex-wrap items-start justify-between gap-4">
   <div>
-    <h1 class="text-lg font-semibold text-[var(--fg)]">Boards</h1>
+    <h1 class="text-subtitle font-semibold text-[var(--fg)]">Boards</h1>
   </div>
 
   <div class="flex flex-wrap items-center gap-3">
     <button
-      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12px] font-medium transition-colors {hasActiveFilters
+      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-micro font-medium transition-colors {hasActiveFilters
         ? 'border-[var(--accent)]/40 bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/15'
         : 'border-[var(--line)] bg-[var(--bg-soft)] text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]'}"
       onclick={() => {
@@ -310,7 +310,7 @@
       {hasActiveFilters ? "Filtered" : "Filters"}
     </button>
     <button
-      class="rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-accent-hover"
+      class="rounded-md bg-accent px-3 py-1.5 text-micro font-medium text-white transition-colors hover:bg-accent-hover"
       onclick={() => {
         createError = "";
         showCreateForm = !showCreateForm;
@@ -326,11 +326,11 @@
   <CompactFilterBar testId="boards-filter-panel">
     {#snippet children()}
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <label class="text-[12px]">
+        <label class="text-micro">
           <span class="font-medium text-[var(--fg-muted)]">Status</span>
           <select
             bind:value={boardFiltersDraft.status}
-            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--panel)]"
+            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
           >
             <option value="">All</option>
             {#each Object.entries(BOARD_STATUS_LABELS) as [value, label]}
@@ -338,39 +338,39 @@
             {/each}
           </select>
         </label>
-        <label class="text-[12px] sm:col-span-2 lg:col-span-2">
+        <label class="text-micro sm:col-span-2 lg:col-span-2">
           <span class="font-medium text-[var(--fg-muted)]">Search</span>
           <input
             bind:value={boardFiltersDraft.q}
-            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--panel)]"
+            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
             placeholder="Title or board id"
             type="text"
           />
         </label>
-        <label class="text-[12px] sm:col-span-2 lg:col-span-1">
+        <label class="text-micro sm:col-span-2 lg:col-span-1">
           <span class="font-medium text-[var(--fg-muted)]"
             >Labels (comma-separated)</span
           >
           <input
             bind:value={boardFiltersDraft.labels}
-            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--panel)]"
+            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
             placeholder="product, launch"
             type="text"
           />
         </label>
-        <label class="text-[12px] sm:col-span-2 lg:col-span-2">
+        <label class="text-micro sm:col-span-2 lg:col-span-2">
           <span class="font-medium text-[var(--fg-muted)]"
             >Owners (comma-separated ids)</span
           >
           <input
             bind:value={boardFiltersDraft.owners}
-            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--panel)]"
+            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
             placeholder="actor-ops-ai"
             type="text"
           />
         </label>
         <label
-          class="flex items-end gap-1.5 pb-0.5 text-[12px] text-[var(--fg-muted)] sm:col-span-2 lg:col-span-3"
+          class="flex items-end gap-1.5 pb-0.5 text-micro text-[var(--fg-muted)] sm:col-span-2 lg:col-span-3"
         >
           <input
             bind:checked={boardFiltersDraft.showArchived}
@@ -382,14 +382,14 @@
       </div>
       <div class="mt-3 flex flex-wrap gap-1.5">
         <button
-          class="cursor-pointer rounded-md bg-[var(--panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--fg)] hover:bg-[var(--line)]"
+          class="cursor-pointer rounded-md bg-[var(--panel)] px-3 py-1.5 text-micro font-medium text-[var(--fg)] hover:bg-[var(--line)]"
           onclick={applyBoardFilters}
           type="button"
         >
           Apply
         </button>
         <button
-          class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]"
+          class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-micro font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]"
           onclick={resetBoardFilters}
           type="button"
         >
@@ -401,7 +401,7 @@
 {/if}
 
 {#if error}
-  <div class="mb-4 rounded-md bg-danger-soft px-3 py-2 text-[13px] text-danger-text">
+  <div class="mb-4 rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
     {error}
   </div>
 {/if}
@@ -411,7 +411,7 @@
     class="mb-5 rounded-md border border-[var(--line)] bg-[var(--panel)]"
   >
     <div class="border-b border-[var(--line)] px-4 py-2.5">
-      <h2 class="text-[13px] font-medium text-[var(--fg)]">
+      <h2 class="text-meta font-medium text-[var(--fg)]">
         Create board
       </h2>
     </div>
@@ -419,28 +419,28 @@
     <div class="space-y-3 px-4 py-3">
       {#if createError}
         <div
-          class="rounded-md bg-danger-soft px-3 py-2 text-[12px] text-danger-text"
+          class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
         >
           {createError}
         </div>
       {/if}
 
       <div class="grid gap-3 md:grid-cols-2">
-        <label class="text-[12px] font-medium text-[var(--fg-muted)]">
+        <label class="text-micro font-medium text-[var(--fg-muted)]">
           Board title
           <input
             bind:value={createTitle}
-            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-[13px] text-[var(--fg)]"
+            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)]"
             placeholder="Q3 launch board"
             type="text"
           />
         </label>
 
-        <label class="text-[12px] font-medium text-[var(--fg-muted)]">
+        <label class="text-micro font-medium text-[var(--fg-muted)]">
           Status
           <select
             bind:value={createStatus}
-            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-[13px] text-[var(--fg)]"
+            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)]"
           >
             {#each Object.entries(BOARD_STATUS_LABELS) as [value, label]}
               <option {value}>{label}</option>
@@ -472,11 +472,11 @@
       </div>
 
       <div class="grid gap-3 md:grid-cols-2">
-        <label class="text-[12px] font-medium text-[var(--fg-muted)]">
+        <label class="text-micro font-medium text-[var(--fg-muted)]">
           Labels
           <textarea
             bind:value={createLabels}
-            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-[13px] text-[var(--fg)]"
+            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)]"
             placeholder="product, launch"
             rows="3"
           ></textarea>
@@ -495,7 +495,7 @@
       </div>
 
       <div>
-        <p class="text-[12px] font-medium text-[var(--fg-muted)]">
+        <p class="text-micro font-medium text-[var(--fg-muted)]">
           Pinned refs
         </p>
         <GuidedTypedRefsInput
@@ -511,7 +511,7 @@
 
       <div class="flex flex-wrap gap-2">
         <button
-          class="rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+          class="rounded-md bg-accent px-3 py-1.5 text-micro font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
           disabled={creating}
           onclick={submitCreateBoard}
           type="button"
@@ -519,7 +519,7 @@
           {creating ? "Creating..." : "Create board"}
         </button>
         <button
-          class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
+          class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-1.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
           onclick={() => {
             showCreateForm = false;
             createError = "";
@@ -535,7 +535,7 @@
 
 {#if loading}
   <div
-    class="mt-12 flex items-center justify-center gap-2 text-[13px] text-[var(--fg-muted)]"
+    class="mt-12 flex items-center justify-center gap-2 text-meta text-[var(--fg-muted)]"
   >
     <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
       <circle
@@ -556,10 +556,10 @@
   </div>
 {:else if boards.length === 0}
   <div class="mt-8 text-center">
-    <p class="text-[13px] font-medium text-[var(--fg-muted)]">
+    <p class="text-meta font-medium text-[var(--fg-muted)]">
       No boards yet
     </p>
-    <p class="mt-1 text-[13px] text-[var(--fg-muted)]">
+    <p class="mt-1 text-meta text-[var(--fg-muted)]">
       No boards yet. Create one to give operators a trustworthy visual map of
       active work.
     </p>
@@ -594,7 +594,7 @@
               <div class="flex flex-wrap items-center gap-2">
                 {#if board.status}
                   <span
-                    class="inline-flex rounded px-1.5 py-0.5 text-[11px] font-semibold {statusColor(
+                    class="inline-flex rounded px-1.5 py-0.5 text-micro font-semibold {statusColor(
                       board.status,
                     )}"
                   >
@@ -603,13 +603,13 @@
                 {/if}
                 {#if isBoardArchived(board)}
                   <span
-                    class="rounded bg-warn-soft px-1.5 py-0.5 text-[11px] font-medium text-warn-text"
+                    class="rounded bg-warn-soft px-1.5 py-0.5 text-micro font-medium text-warn-text"
                     >Archived</span
                   >
                 {/if}
                 {#if projectionFreshness}
                   <span
-                    class="inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium {freshnessStatusTone(
+                    class="inline-flex rounded px-1.5 py-0.5 text-micro font-medium {freshnessStatusTone(
                       projectionFreshness.status,
                     )}"
                   >
@@ -618,14 +618,14 @@
                 {/if}
                 {#if summary?.has_document_ref}
                   <span
-                    class="rounded bg-accent-soft px-1.5 py-0.5 text-[10px] text-accent-text"
+                    class="rounded bg-accent-soft px-1.5 py-0.5 text-micro text-accent-text"
                   >
                     Has doc
                   </span>
                 {/if}
                 {#each (board.labels ?? []).slice(0, 3) as label}
                   <span
-                    class="rounded bg-[var(--line)] px-1.5 py-0.5 text-[10px] text-[var(--fg-muted)]"
+                    class="rounded bg-[var(--line)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
                   >
                     {label}
                   </span>
@@ -633,13 +633,13 @@
               </div>
 
               <span
-                class="mt-1 block truncate text-[13px] font-medium text-[var(--fg)] group-hover:text-accent-text"
+                class="mt-1 block truncate text-meta font-medium text-[var(--fg)] group-hover:text-accent-text"
               >
                 {board.title || board.id}
               </span>
 
               <div
-                class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[var(--fg-muted)]"
+                class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-micro text-[var(--fg-muted)]"
               >
                 {#if board.owners?.length > 0}
                   <span>
@@ -688,7 +688,7 @@
 
               {#if isFreshnessCurrent(projectionFreshness)}
                 <div
-                  class="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px]"
+                  class="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-micro"
                 >
                   {#each CANONICAL_BOARD_COLUMNS as column, ci}
                     {@const count = counts[column.key]}

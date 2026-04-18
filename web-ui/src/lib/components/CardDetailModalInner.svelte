@@ -500,12 +500,12 @@
         <div class="min-w-0 flex-1">
           <div class="flex flex-wrap items-center gap-2">
             <h2
-              class="truncate text-[13px] font-semibold text-[var(--fg)]"
+              class="truncate text-subtitle font-semibold text-[var(--fg)]"
             >
               {headerTitle}
             </h2>
             <span
-              class="rounded-md px-1.5 py-0.5 text-[11px] font-medium {cardResolutionTone(
+              class="rounded-md px-1.5 py-0.5 text-micro font-medium {cardResolutionTone(
                 cardResolution,
               )}"
             >
@@ -513,14 +513,14 @@
             </span>
             {#if priorityBadge}
               <span
-                class="rounded-md px-1.5 py-0.5 text-[11px] font-medium {priorityBadge.class}"
+                class="rounded-md px-1.5 py-0.5 text-micro font-medium {priorityBadge.class}"
               >
                 {priorityBadge.label}
               </span>
             {/if}
             {#if membership?.due_at}
               <span
-                class="rounded-md px-1.5 py-0.5 text-[11px] {isOverdue(
+                class="rounded-md px-1.5 py-0.5 text-micro {isOverdue(
                   membership.due_at,
                 )
                   ? 'bg-danger-soft text-danger-text'
@@ -532,12 +532,12 @@
           </div>
           {#if assigneeNames.length > 0}
             <div class="mt-2 flex flex-wrap items-center gap-1">
-              <span class="text-[11px] text-[var(--fg-muted)]"
+              <span class="text-micro text-[var(--fg-muted)]"
                 >Assigned</span
               >
               {#each assigneeNames as name}
                 <span
-                  class="max-w-[10rem] truncate rounded-md bg-[var(--line)] px-1.5 py-0.5 text-[11px] text-[var(--fg-muted)]"
+                  class="max-w-[10rem] truncate rounded-md bg-[var(--line)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
                   title={name}
                 >
                   {name}
@@ -545,7 +545,7 @@
               {/each}
             </div>
           {/if}
-          <div class="mt-2 text-[12px] text-[var(--fg-muted)]">
+          <div class="mt-2 text-micro text-[var(--fg-muted)]">
             <span class="text-[var(--fg-muted)]">Board</span>
             {board?.title ?? boardId}
           </div>
@@ -583,7 +583,7 @@
           data-cdm-pane-tab="overview"
           tabindex={cdmDetailPane === "overview" ? 0 : -1}
           aria-selected={cdmDetailPane === "overview"}
-          class={`relative inline-flex cursor-pointer border-0 border-b-2 border-transparent bg-transparent px-3 py-2 text-[13px] font-medium transition-colors ${cdmDetailPane === "overview" ? "border-accent text-[var(--fg)]" : "text-[var(--fg-muted)] hover:text-[var(--fg)]"}`}
+          class={`relative inline-flex cursor-pointer border-0 border-b-2 border-transparent bg-transparent px-3 py-2 text-meta font-medium transition-colors ${cdmDetailPane === "overview" ? "border-accent text-[var(--fg)]" : "text-[var(--fg-muted)] hover:text-[var(--fg)]"}`}
           onpointerdown={() => pickDetailPane("overview")}
           onclick={() => pickDetailPane("overview")}
         >
@@ -596,7 +596,7 @@
           data-testid="cdm-tab-messages"
           tabindex={cdmDetailPane === "messages" ? 0 : -1}
           aria-selected={cdmDetailPane === "messages"}
-          class={`relative inline-flex cursor-pointer border-0 border-b-2 border-transparent bg-transparent px-3 py-2 text-[13px] font-medium transition-colors ${cdmDetailPane === "messages" ? "border-accent text-[var(--fg)]" : "text-[var(--fg-muted)] hover:text-[var(--fg)]"}`}
+          class={`relative inline-flex cursor-pointer border-0 border-b-2 border-transparent bg-transparent px-3 py-2 text-meta font-medium transition-colors ${cdmDetailPane === "messages" ? "border-accent text-[var(--fg)]" : "text-[var(--fg-muted)] hover:text-[var(--fg)]"}`}
           onpointerdown={() => pickDetailPane("messages")}
           onclick={() => pickDetailPane("messages")}
         >
@@ -609,7 +609,7 @@
           data-testid="cdm-tab-timeline"
           tabindex={cdmDetailPane === "timeline" ? 0 : -1}
           aria-selected={cdmDetailPane === "timeline"}
-          class={`relative inline-flex cursor-pointer border-0 border-b-2 border-transparent bg-transparent px-3 py-2 text-[13px] font-medium transition-colors ${cdmDetailPane === "timeline" ? "border-accent text-[var(--fg)]" : "text-[var(--fg-muted)] hover:text-[var(--fg)]"}`}
+          class={`relative inline-flex cursor-pointer border-0 border-b-2 border-transparent bg-transparent px-3 py-2 text-meta font-medium transition-colors ${cdmDetailPane === "timeline" ? "border-accent text-[var(--fg)]" : "text-[var(--fg-muted)] hover:text-[var(--fg)]"}`}
           onpointerdown={() => pickDetailPane("timeline")}
           onclick={() => pickDetailPane("timeline")}
         >
@@ -628,29 +628,29 @@
             <div class="space-y-3">
               {#if saveError}
                 <p
-                  class="rounded-md bg-danger-soft px-3 py-2 text-[12px] text-danger-text"
+                  class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
                 >
                   {saveError}
                 </p>
               {/if}
               <div class="grid gap-3 md:grid-cols-2">
                 <label
-                  class="text-[12px] font-medium text-[var(--fg-muted)]"
+                  class="text-micro font-medium text-[var(--fg-muted)]"
                 >
                   Card title
                   <input
                     bind:value={editTitle}
-                    class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-[13px] text-[var(--fg)]"
+                    class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-meta text-[var(--fg)]"
                     type="text"
                   />
                 </label>
                 <label
-                  class="text-[12px] font-medium text-[var(--fg-muted)] md:col-span-2"
+                  class="text-micro font-medium text-[var(--fg-muted)] md:col-span-2"
                 >
                   Summary
                   <textarea
                     bind:value={editSummary}
-                    class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-[13px] text-[var(--fg)]"
+                    class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-meta text-[var(--fg)]"
                     rows="4"
                   ></textarea>
                 </label>
@@ -686,12 +686,12 @@
                   placeholder="Search actors by name, ID, or tags"
                 />
                 <label
-                  class="text-[12px] font-medium text-[var(--fg-muted)]"
+                  class="text-micro font-medium text-[var(--fg-muted)]"
                 >
                   Risk
                   <select
                     bind:value={editRisk}
-                    class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-[13px] text-[var(--fg)]"
+                    class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-meta text-[var(--fg)]"
                   >
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
@@ -700,12 +700,12 @@
                   </select>
                 </label>
                 <label
-                  class="text-[12px] font-medium text-[var(--fg-muted)]"
+                  class="text-micro font-medium text-[var(--fg-muted)]"
                 >
                   Resolution
                   <select
                     bind:value={editResolution}
-                    class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-[13px] text-[var(--fg)]"
+                    class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-meta text-[var(--fg)]"
                   >
                     <option value="">Open</option>
                     <option value="done">Done</option>
@@ -713,28 +713,28 @@
                   </select>
                 </label>
                 <label
-                  class="text-[12px] font-medium text-[var(--fg-muted)]"
+                  class="text-micro font-medium text-[var(--fg-muted)]"
                 >
                   Due date
                   <input
                     bind:value={editDueAt}
-                    class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-[13px] text-[var(--fg)]"
+                    class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-meta text-[var(--fg)]"
                     type="datetime-local"
                   />
                 </label>
                 <label
-                  class="text-[12px] font-medium text-[var(--fg-muted)] md:col-span-2"
+                  class="text-micro font-medium text-[var(--fg-muted)] md:col-span-2"
                 >
                   Definition of done
                   <textarea
                     bind:value={editDefinitionOfDone}
-                    class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-[13px] text-[var(--fg)]"
+                    class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-meta text-[var(--fg)]"
                     rows="3"
                   ></textarea>
                 </label>
                 <div class="md:col-span-2">
                   <p
-                    class="text-[12px] font-medium text-[var(--fg-muted)]"
+                    class="text-micro font-medium text-[var(--fg-muted)]"
                   >
                     Related refs
                   </p>
@@ -751,7 +751,7 @@
                 </div>
                 <div class="md:col-span-2">
                   <p
-                    class="text-[12px] font-medium text-[var(--fg-muted)]"
+                    class="text-micro font-medium text-[var(--fg-muted)]"
                   >
                     Resolution evidence
                   </p>
@@ -769,11 +769,11 @@
               </div>
             </div>
           {:else}
-            <div class="space-y-4 text-[13px] text-[var(--fg)]">
+            <div class="space-y-4 text-meta text-[var(--fg)]">
               {#if showSummary}
                 <section>
                   <h3
-                    class="mb-1.5 text-[12px] font-medium text-[var(--fg-muted)]"
+                    class="mb-1.5 text-micro font-medium text-[var(--fg-muted)]"
                   >
                     Summary
                   </h3>
@@ -788,11 +788,11 @@
               {#if dodItems.length > 0}
                 <section>
                   <h3
-                    class="mb-1.5 text-[12px] font-medium text-[var(--fg-muted)]"
+                    class="mb-1.5 text-micro font-medium text-[var(--fg-muted)]"
                   >
                     Definition of done
                   </h3>
-                  <ul class="list-inside list-disc space-y-1 text-[12px]">
+                  <ul class="list-inside list-disc space-y-1 text-micro">
                     {#each dodItems as line}
                       <li>{line}</li>
                     {/each}
@@ -803,13 +803,13 @@
               {#if dedupedRelatedRefs.length > 0}
                 <section>
                   <h3
-                    class="mb-1.5 text-[12px] font-medium text-[var(--fg-muted)]"
+                    class="mb-1.5 text-micro font-medium text-[var(--fg-muted)]"
                   >
                     Related refs
                   </h3>
                   <ul class="space-y-1">
                     {#each dedupedRelatedRefs as ref}
-                      <li class="text-[12px]">
+                      <li class="text-micro">
                         <RefLink
                           refValue={ref}
                           {boardId}
@@ -826,13 +826,13 @@
               {#if resolutionRefsList.length > 0}
                 <section>
                   <h3
-                    class="mb-1.5 text-[12px] font-medium text-[var(--fg-muted)]"
+                    class="mb-1.5 text-micro font-medium text-[var(--fg-muted)]"
                   >
                     Resolution refs
                   </h3>
                   <ul class="space-y-1">
                     {#each resolutionRefsList as ref}
-                      <li class="text-[12px]">
+                      <li class="text-micro">
                         <RefLink
                           refValue={ref}
                           {boardId}
@@ -846,7 +846,7 @@
                 </section>
               {/if}
 
-              <section class="space-y-2 text-[12px]">
+              <section class="space-y-2 text-micro">
                 <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5">
                   <span class="flex items-center gap-1.5">
                     <span class="text-[var(--fg-muted)]">Risk</span>
@@ -892,7 +892,7 @@
                   <div class="flex flex-wrap gap-1.5">
                     {#each nonZeroDerivedCounts as { label, count }}
                       <span
-                        class="rounded-md bg-[var(--line)] px-1.5 py-0.5 text-[11px]"
+                        class="rounded-md bg-[var(--line)] px-1.5 py-0.5 text-micro"
                       >
                         <span class="text-[var(--fg-muted)]">{label}</span>
                         <span class="font-medium text-[var(--fg)]">
@@ -905,7 +905,7 @@
               </section>
 
               {#if cardInspectNav && topicHref}
-                <div class="flex items-center gap-1.5 text-[12px]">
+                <div class="flex items-center gap-1.5 text-micro">
                   <span class="text-[var(--fg-muted)]"
                     >{cardInspectNav.kind === "topic"
                       ? "Topic"
@@ -921,7 +921,7 @@
               {/if}
 
               {#if membership?.updated_at}
-                <p class="text-[11px] text-[var(--fg-muted)]">
+                <p class="text-micro text-[var(--fg-muted)]">
                   Card updated {formatTimestamp(membership.updated_at)}
                   {#if membership?.updated_by}
                     <span class="text-[var(--fg-muted)]">
@@ -942,7 +942,7 @@
               workspaceId=""
             />
           {:else}
-            <p class="text-[13px] text-[var(--fg-muted)]">
+            <p class="text-meta text-[var(--fg-muted)]">
               This card has no backing thread; messages require a linked thread.
             </p>
           {/if}
@@ -952,7 +952,7 @@
           {#if linkedThreadId}
             <TimelineTab threadId={linkedThreadId} />
           {:else}
-            <p class="text-[13px] text-[var(--fg-muted)]">
+            <p class="text-meta text-[var(--fg-muted)]">
               This card has no backing thread; timeline requires a linked
               thread.
             </p>
@@ -971,7 +971,7 @@
           class="flex min-w-0 max-w-full items-stretch rounded-md border border-[var(--line)] bg-[var(--bg-soft)] md:w-60"
         >
           <span
-            class="flex shrink-0 items-center border-r border-[var(--line)] px-2.5 py-1.5 text-[11px] text-[var(--fg-muted)]"
+            class="flex shrink-0 items-center border-r border-[var(--line)] px-2.5 py-1.5 text-micro text-[var(--fg-muted)]"
             aria-hidden="true"
           >
             Column
@@ -980,7 +980,7 @@
             bind:value={moveColumnKey}
             onchange={handleColumnSelectChange}
             aria-label="Column"
-            class="min-w-0 flex-1 cursor-pointer rounded-r-md border-0 bg-transparent px-2 py-1.5 pr-7 text-[13px] text-[var(--fg)] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[var(--accent)]"
+            class="min-w-0 flex-1 cursor-pointer rounded-r-md border-0 bg-transparent px-2 py-1.5 pr-7 text-meta text-[var(--fg)] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[var(--accent)]"
           >
             {#each board?.column_schema ?? [] as column}
               <option value={column.key}>
@@ -995,14 +995,14 @@
             <button
               type="button"
               disabled={savingCard}
-              class="rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+              class="rounded-md bg-accent px-3 py-1.5 text-micro font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
               onclick={() => void handleSave()}
             >
               {savingCard ? "Saving…" : "Save card details"}
             </button>
             <button
               type="button"
-              class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
+              class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-1.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
               onclick={cancelEdit}
             >
               Cancel
@@ -1010,7 +1010,7 @@
           {:else}
             <button
               type="button"
-              class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line-subtle)]"
+              class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-micro font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line-subtle)]"
               onclick={beginEdit}
             >
               Edit card
@@ -1018,7 +1018,7 @@
           {/if}
           <button
             type="button"
-            class="rounded-md border border-danger/30 bg-danger-soft px-3 py-1.5 text-[12px] font-medium text-danger-text transition-colors hover:bg-danger-soft"
+            class="rounded-md border border-danger/30 bg-danger-soft px-3 py-1.5 text-micro font-medium text-danger-text transition-colors hover:bg-danger-soft"
             onclick={() => {
               removeCardConfirmOpen = true;
             }}

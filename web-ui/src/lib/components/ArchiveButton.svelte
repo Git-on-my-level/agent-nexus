@@ -22,7 +22,7 @@
 
 {#if archived}
   <button
-    class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-1 text-[11px] font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] disabled:cursor-not-allowed disabled:opacity-50"
+    class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-1 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] disabled:cursor-not-allowed disabled:opacity-50"
     disabled={busy}
     onclick={onunarchive}
     type="button"

@@ -229,15 +229,15 @@
     class="flex items-center justify-between border-b border-[var(--line)] pb-4"
   >
     <div>
-      <h1 class="text-[32px] font-semibold leading-[1.3] text-fg">
+      <h1 class="text-display font-semibold leading-[1.3] text-fg">
         Answer ask
       </h1>
-      <p class="mt-2 text-[16px] text-fg">
+      <p class="mt-2 text-body text-fg">
         Capture a concrete answer for the asking agent.
       </p>
     </div>
     <a
-      class="rounded border border-[var(--line)] px-3 py-2 text-[13px] text-fg-muted hover:bg-[var(--bg-soft)]"
+      class="rounded border border-[var(--line)] px-3 py-2 text-meta text-fg-muted hover:bg-[var(--bg-soft)]"
       href={workspaceHref("/inbox")}
     >
       Back to inbox
@@ -246,13 +246,13 @@
 
   {#if loading}
     <div
-      class="rounded border border-[var(--line)] bg-[var(--bg-soft)] p-4 text-[13px] text-fg-muted"
+      class="rounded border border-[var(--line)] bg-[var(--bg-soft)] p-4 text-meta text-fg-muted"
     >
       Loading ask context...
     </div>
   {:else if loadError}
     <div
-      class="rounded border border-danger/40 bg-danger-soft p-4 text-[13px] text-danger-text"
+      class="rounded border border-danger/40 bg-danger-soft p-4 text-meta text-danger-text"
       role="alert"
     >
       {loadError}
@@ -262,31 +262,31 @@
       <div
         class="rounded border border-[var(--line)] bg-[var(--bg-soft)] p-4"
       >
-        <h2 class="text-[16px] font-semibold text-fg">
+        <h2 class="text-subtitle font-semibold text-fg">
           Context the agent saw
         </h2>
-        <p class="mt-3 text-[16px] text-fg">
+        <p class="mt-3 text-body text-fg">
           {askItem.query_text ?? askItem.title}
         </p>
-        <div class="mt-3 text-[13px] text-fg-muted">
+        <div class="mt-3 text-meta text-fg-muted">
           Asking session:
-          <span class="font-mono text-[14px] text-fg"
+          <span class="font-mono text-mono text-fg"
             >{askItem.asking_agent_id || "unknown session"}</span
           >
         </div>
         <div
-          class="mt-3 rounded border border-[var(--line)] bg-white p-3 text-[13px] text-fg-muted"
+          class="mt-3 rounded border border-[var(--line)] bg-white p-3 text-meta text-fg-muted"
         >
           <p>
             <span class="font-semibold text-fg">coverage_hint</span>
-            <span class="font-mono text-[14px] text-fg">
+            <span class="font-mono text-mono text-fg">
               {askItem.coverage_hint || "n/a"}</span
             >
           </p>
           <p class="mt-2">{coverageHintGloss(askItem.coverage_hint)}</p>
         </div>
         {#if Array.isArray(askItem.related_refs) && askItem.related_refs.length > 0}
-          <div class="mt-3 flex flex-wrap items-center gap-2 text-[13px]">
+          <div class="mt-3 flex flex-wrap items-center gap-2 text-meta">
             {#each askItem.related_refs.slice(0, 2) as refValue}
               <RefLink {refValue} threadId={askItem.thread_id} humanize />
             {/each}
@@ -301,18 +301,18 @@
           void submitResponse();
         }}
       >
-        <label class="block text-[13px] text-fg-muted" for="ask-response-input"
+        <label class="block text-meta text-fg-muted" for="ask-response-input"
           >Your answer</label
         >
         <textarea
           id="ask-response-input"
-          class="mt-2 min-h-[200px] w-full rounded border border-[var(--line)] bg-white px-4 py-3 text-[16px] text-fg outline-none focus:ring-2 focus:ring-accent"
+          class="mt-2 min-h-[200px] w-full rounded border border-[var(--line)] bg-white px-4 py-3 text-body text-fg outline-none focus:ring-2 focus:ring-accent"
           bind:value={answerDraft}
           onkeydown={handleTextareaKeydown}
           placeholder="Write the answer the next agent should rely on."
         ></textarea>
 
-        <div class="mt-4 space-y-2 text-[13px] text-fg">
+        <div class="mt-4 space-y-2 text-meta text-fg">
           <label class="flex items-start gap-2">
             <input type="checkbox" bind:checked={saveAsDecision} class="mt-1" />
             <span>
@@ -337,7 +337,7 @@
 
         {#if submitError}
           <div
-            class="mt-4 rounded border border-danger/40 bg-danger-soft px-3 py-2 text-[13px] text-danger-text"
+            class="mt-4 rounded border border-danger/40 bg-danger-soft px-3 py-2 text-meta text-danger-text"
             role="alert"
           >
             {submitError}
@@ -345,17 +345,17 @@
         {/if}
         {#if submitMessage}
           <div
-            class="mt-4 rounded border border-[var(--line)] bg-white px-3 py-2 text-[13px] text-fg"
+            class="mt-4 rounded border border-[var(--line)] bg-white px-3 py-2 text-meta text-fg"
           >
             {submitMessage}
           </div>
         {/if}
 
         <div class="mt-4 flex items-center justify-between gap-3">
-          <p class="text-[13px] text-fg-muted">Cmd+Enter submits</p>
+          <p class="text-meta text-fg-muted">Cmd+Enter submits</p>
           <button
             type="submit"
-            class="rounded bg-accent px-5 py-2 text-[16px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+            class="rounded bg-accent px-5 py-2 text-body font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
             disabled={submitting}
           >
             {submitting ? "Sending..." : "Send answer"}

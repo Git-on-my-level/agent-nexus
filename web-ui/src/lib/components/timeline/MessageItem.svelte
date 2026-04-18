@@ -29,9 +29,9 @@
     <div class="min-w-0 flex-1">
       <MarkdownRenderer
         source={message.messageText || message.summary || "Untitled message"}
-        class="text-[13px] text-[var(--fg)]"
+        class="text-meta text-[var(--fg)]"
       />
-      <p class="mt-1 text-[12px] text-[var(--fg-muted)]">
+      <p class="mt-1 text-micro text-[var(--fg-muted)]">
         {actorName(message.actor_id)} · {formatTimestamp(message.ts) || "—"}
       </p>
     </div>
@@ -49,7 +49,7 @@
       {/if}
       {#if !message.archived_at && !message.trashed_at}
         <button
-          class="cursor-pointer rounded px-2 py-0.5 text-[12px] text-[var(--fg-muted)] hover:bg-[var(--bg-soft)] hover:text-[var(--fg)]"
+          class="cursor-pointer rounded px-2 py-0.5 text-micro text-[var(--fg-muted)] hover:bg-[var(--bg-soft)] hover:text-[var(--fg)]"
           onclick={() => onReply(message.id)}
           type="button"
         >
@@ -60,7 +60,7 @@
   </div>
 
   {#if message.displayRefs.length > 0}
-    <div class="mt-2 flex flex-wrap gap-1.5 text-[12px]">
+    <div class="mt-2 flex flex-wrap gap-1.5 text-micro">
       {#each message.displayRefs as refValue}
         <RefLink {refValue} {threadId} humanize showRaw />
       {/each}

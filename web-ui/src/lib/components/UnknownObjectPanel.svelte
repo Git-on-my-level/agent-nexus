@@ -7,12 +7,12 @@
   {open}
 >
   <summary
-    class="cursor-pointer text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-muted)]"
+    class="cursor-pointer text-micro font-semibold uppercase tracking-wide text-[var(--fg-muted)]"
   >
     {title}
   </summary>
   <pre
-    class="mt-2 overflow-auto rounded bg-[var(--bg-soft)] p-3 text-[11px] leading-5 text-[var(--fg)]">{JSON.stringify(
+    class="mt-2 overflow-auto rounded bg-[var(--bg-soft)] p-3 text-micro leading-5 text-[var(--fg)]">{JSON.stringify(
       objectData,
       null,
       2,

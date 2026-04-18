@@ -235,8 +235,8 @@
     class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2 min-w-0"
   >
     <div class="min-w-0">
-      <h1 class="text-lg font-semibold text-[var(--fg)]">Dashboard</h1>
-      <p class="mt-0.5 text-[13px] text-[var(--fg-muted)]">
+      <h1 class="text-subtitle font-semibold text-[var(--fg)]">Dashboard</h1>
+      <p class="mt-0.5 text-meta text-[var(--fg-muted)]">
         {#if refreshedAt}
           Updated {formatTimestamp(refreshedAt)}
         {:else if loading}
@@ -246,7 +246,7 @@
     </div>
     <div class="flex shrink-0 flex-wrap items-center gap-2">
       <button
-        class="cursor-pointer rounded-md border border-[var(--line)] px-2.5 py-1.5 text-[13px] font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)]"
+        class="cursor-pointer rounded-md border border-[var(--line)] px-2.5 py-1.5 text-meta font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)]"
         onclick={loadDashboard}
         type="button"
       >
@@ -258,15 +258,15 @@
   <div class="grid gap-5 xl:grid-cols-[1fr_1.5fr] min-w-0">
     <section class="min-w-0">
       <div class="flex items-center justify-between gap-2 mb-2">
-        <h2 class="text-[13px] font-semibold text-[var(--fg)]">Inbox</h2>
+        <h2 class="text-meta font-semibold text-[var(--fg)]">Inbox</h2>
         <a
-          class="text-[12px] font-medium text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors"
+          class="text-micro font-medium text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors"
           href={workspaceHref("/inbox")}>View all</a
         >
       </div>
       {#if loading && inboxState.status === "idle"}
         <div
-          class="flex items-center gap-2 py-6 text-[13px] text-[var(--fg-muted)]"
+          class="flex items-center gap-2 py-6 text-meta text-[var(--fg-muted)]"
         >
           <svg class="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
             <circle
@@ -286,11 +286,11 @@
           Loading...
         </div>
       {:else if inboxState.status === "error"}
-        <p class="rounded-md bg-danger-soft px-3 py-2 text-[13px] text-danger-text">
+        <p class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
           {inboxState.error}
         </p>
       {:else if inboxState.items.length === 0}
-        <p class="text-[13px] text-[var(--fg-muted)] py-3">
+        <p class="text-meta text-[var(--fg-muted)] py-3">
           Nothing needs attention right now.
         </p>
       {:else}
@@ -303,7 +303,7 @@
               href={inboxCategoryHref(summary.category)}
             >
               <p
-                class="text-[11px] font-medium leading-snug text-balance hyphens-manual {inboxCategoryLabelColor(
+                class="text-micro font-medium leading-snug text-balance hyphens-manual {inboxCategoryLabelColor(
                   summary.category,
                   summary.count,
                 )}"
@@ -311,7 +311,7 @@
                 {summary.label}
               </p>
               <p
-                class="text-lg font-semibold {inboxCategoryCountColor(
+                class="text-subtitle font-semibold {inboxCategoryCountColor(
                   summary.category,
                   summary.count,
                 )}"
@@ -335,18 +335,18 @@
             >
               <div class="min-w-0 flex-1">
                 <p
-                  class="truncate text-[13px] font-medium text-[var(--fg)]"
+                  class="truncate text-meta font-medium text-[var(--fg)]"
                 >
                   {item.title}
                 </p>
                 {#if getInboxSubjectLabel(item)}
-                  <p class="text-[11px] text-[var(--fg-muted)]">
+                  <p class="text-micro text-[var(--fg-muted)]">
                     {getInboxSubjectLabel(item)}
                   </p>
                 {/if}
               </div>
               <span
-                class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium {inboxCategoryBadgeClass(
+                class="shrink-0 rounded px-1.5 py-0.5 text-micro font-medium {inboxCategoryBadgeClass(
                   item.category,
                 )}"
               >
@@ -360,17 +360,17 @@
 
     <section class="min-w-0">
       <div class="flex items-center justify-between gap-2 mb-2">
-        <h2 class="text-[13px] font-semibold text-[var(--fg)]">
+        <h2 class="text-meta font-semibold text-[var(--fg)]">
           Topic health
         </h2>
         <a
-          class="text-[12px] font-medium text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors"
+          class="text-micro font-medium text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors"
           href={workspaceHref("/topics")}>View all</a
         >
       </div>
       {#if loading && topicsState.status === "idle"}
         <div
-          class="flex items-center gap-2 py-6 text-[13px] text-[var(--fg-muted)]"
+          class="flex items-center gap-2 py-6 text-meta text-[var(--fg-muted)]"
         >
           <svg class="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
             <circle
@@ -390,11 +390,11 @@
           Loading...
         </div>
       {:else if topicsState.status === "error"}
-        <p class="rounded-md bg-danger-soft px-3 py-2 text-[13px] text-danger-text">
+        <p class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
           {topicsState.error}
         </p>
       {:else if topicsState.items.length === 0}
-        <p class="text-[13px] text-[var(--fg-muted)] py-3">
+        <p class="text-meta text-[var(--fg-muted)] py-3">
           No topics yet. They'll appear here as work begins.
         </p>
       {:else}
@@ -405,10 +405,10 @@
             class="min-w-0 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-2 text-center transition-colors hover:bg-[var(--line-subtle)]"
             href={topicsQueryHref([["open", "1"]])}
           >
-            <p class="text-[11px] font-medium text-[var(--fg-muted)]">
+            <p class="text-micro font-medium text-[var(--fg-muted)]">
               Open
             </p>
-            <p class="text-lg font-semibold text-[var(--fg)]">
+            <p class="text-subtitle font-semibold text-[var(--fg)]">
               {topicHealth.openCount}
             </p>
           </a>
@@ -417,14 +417,14 @@
             href={topicsQueryHref([["stale", "true"]])}
           >
             <p
-              class="text-[11px] font-medium {topicHealth.staleCount > 0
+              class="text-micro font-medium {topicHealth.staleCount > 0
                 ? 'text-warn-text'
                 : 'text-[var(--fg-muted)]'}"
             >
               Stale
             </p>
             <p
-              class="text-lg font-semibold {topicHealth.staleCount > 0
+              class="text-subtitle font-semibold {topicHealth.staleCount > 0
                 ? 'text-warn-text'
                 : 'text-[var(--fg)]'}"
             >
@@ -436,7 +436,7 @@
             href={topicsQueryHref([["high_priority", "1"]])}
           >
             <p
-              class="text-[11px] font-medium leading-snug text-balance hyphens-manual {topicHealth.highPriorityCount >
+              class="text-micro font-medium leading-snug text-balance hyphens-manual {topicHealth.highPriorityCount >
               0
                 ? 'text-danger-text'
                 : 'text-[var(--fg-muted)]'}"
@@ -444,7 +444,7 @@
               High priority
             </p>
             <p
-              class="text-lg font-semibold {topicHealth.highPriorityCount > 0
+              class="text-subtitle font-semibold {topicHealth.highPriorityCount > 0
                 ? 'text-danger-text'
                 : 'text-[var(--fg)]'}"
             >
@@ -455,10 +455,10 @@
             class="min-w-0 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-2 text-center transition-colors hover:bg-[var(--line-subtle)]"
             href={workspaceHref("/topics")}
           >
-            <p class="text-[11px] font-medium text-[var(--fg-muted)]">
+            <p class="text-micro font-medium text-[var(--fg-muted)]">
               Total
             </p>
-            <p class="text-lg font-semibold text-[var(--fg)]">
+            <p class="text-subtitle font-semibold text-[var(--fg)]">
               {topicHealth.totalCount}
             </p>
           </a>
@@ -477,16 +477,16 @@
             >
               <div class="min-w-0 flex-1">
                 <p
-                  class="truncate text-[13px] font-medium text-[var(--fg)]"
+                  class="truncate text-meta font-medium text-[var(--fg)]"
                 >
                   {topic.title}
                 </p>
-                <p class="text-[11px] text-[var(--fg-muted)]">
+                <p class="text-micro text-[var(--fg-muted)]">
                   Updated {formatTimestamp(topic.updated_at)}
                 </p>
               </div>
               <span
-                class="text-[11px] font-medium {priorityBadge(topic.priority)}"
+                class="text-micro font-medium {priorityBadge(topic.priority)}"
                 >{getPriorityLabel(topic.priority)}</span
               >
             </a>
@@ -499,18 +499,18 @@
   <div class="grid gap-5 xl:grid-cols-2 min-w-0">
     <section class="min-w-0">
       <div class="flex items-center justify-between gap-2 mb-2">
-        <h2 class="text-[13px] font-semibold text-[var(--fg)]">
+        <h2 class="text-meta font-semibold text-[var(--fg)]">
           Active boards
         </h2>
         <a
-          class="text-[12px] font-medium text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors"
+          class="text-micro font-medium text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors"
           href={workspaceHref("/boards")}>View all</a
         >
       </div>
 
       {#if loading && boardsState.status === "idle"}
         <div
-          class="flex items-center gap-2 py-6 text-[13px] text-[var(--fg-muted)]"
+          class="flex items-center gap-2 py-6 text-meta text-[var(--fg-muted)]"
         >
           <svg class="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
             <circle
@@ -530,11 +530,11 @@
           Loading...
         </div>
       {:else if boardsState.status === "error"}
-        <p class="rounded-md bg-danger-soft px-3 py-2 text-[13px] text-danger-text">
+        <p class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
           {boardsState.error}
         </p>
       {:else if recentBoards.length === 0}
-        <p class="text-[13px] text-[var(--fg-muted)] py-3">
+        <p class="text-meta text-[var(--fg-muted)] py-3">
           No active boards yet.
         </p>
       {:else}
@@ -552,7 +552,7 @@
               href={workspaceHref(`/boards/${board.id}`)}
             >
               <span
-                class="shrink-0 inline-flex rounded px-1.5 py-0.5 text-[11px] font-semibold {boardStatusColor(
+                class="shrink-0 inline-flex rounded px-1.5 py-0.5 text-micro font-semibold {boardStatusColor(
                   board.status,
                 )}"
               >
@@ -560,11 +560,11 @@
               </span>
               <div class="min-w-0 flex-1">
                 <p
-                  class="truncate text-[13px] font-medium text-[var(--fg)]"
+                  class="truncate text-meta font-medium text-[var(--fg)]"
                 >
                   {board.title || board.id}
                 </p>
-                <p class="text-[11px] text-[var(--fg-muted)]">
+                <p class="text-micro text-[var(--fg-muted)]">
                   {#if summary?.card_count != null}
                     {summary.card_count} card{summary.card_count === 1
                       ? ""
@@ -581,18 +581,18 @@
 
     <section class="min-w-0">
       <div class="flex items-center justify-between gap-2 mb-2">
-        <h2 class="text-[13px] font-semibold text-[var(--fg)]">
+        <h2 class="text-meta font-semibold text-[var(--fg)]">
           Recent Docs
         </h2>
         <a
-          class="text-[12px] font-medium text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors"
+          class="text-micro font-medium text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors"
           href={workspaceHref("/docs")}>View all</a
         >
       </div>
 
       {#if loading && docsState.status === "idle"}
         <div
-          class="flex items-center gap-2 py-6 text-[13px] text-[var(--fg-muted)]"
+          class="flex items-center gap-2 py-6 text-meta text-[var(--fg-muted)]"
         >
           <svg class="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
             <circle
@@ -612,11 +612,11 @@
           Loading...
         </div>
       {:else if docsState.status === "error"}
-        <p class="rounded-md bg-danger-soft px-3 py-2 text-[13px] text-danger-text">
+        <p class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
           {docsState.error}
         </p>
       {:else if recentDocs.length === 0}
-        <p class="text-[13px] text-[var(--fg-muted)] py-3">
+        <p class="text-meta text-[var(--fg-muted)] py-3">
           No documents yet.
         </p>
       {:else}
@@ -632,7 +632,7 @@
               href={workspaceHref(`/docs/${doc.id}`)}
             >
               <span
-                class="shrink-0 inline-flex rounded px-1.5 py-0.5 text-[11px] font-semibold {docStatusColor(
+                class="shrink-0 inline-flex rounded px-1.5 py-0.5 text-micro font-semibold {docStatusColor(
                   doc.status,
                 )}"
               >
@@ -640,11 +640,11 @@
               </span>
               <div class="min-w-0 flex-1">
                 <p
-                  class="truncate text-[13px] font-medium text-[var(--fg)]"
+                  class="truncate text-meta font-medium text-[var(--fg)]"
                 >
                   {doc.title || doc.id}
                 </p>
-                <p class="text-[11px] text-[var(--fg-muted)]">
+                <p class="text-micro text-[var(--fg-muted)]">
                   v{doc.head_revision_number} · Updated {formatTimestamp(
                     doc.updated_at,
                   ) || "—"}

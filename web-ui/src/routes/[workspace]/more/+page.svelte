@@ -87,7 +87,7 @@
   <!-- Settings navigation -->
   <section>
     <p
-      class="mb-2 text-[11px] font-medium uppercase tracking-wide text-[var(--fg-muted)]"
+      class="mb-2 text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)]"
     >
       Settings
     </p>
@@ -96,7 +96,7 @@
     >
       {#each settingsNavItems as item, i}
         <a
-          class="flex items-center gap-3 px-4 py-3 text-[13px] font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line-subtle)] {i >
+          class="flex items-center gap-3 px-4 py-3 text-meta font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line-subtle)] {i >
           0
             ? 'border-t border-[var(--line)]'
             : ''}"
@@ -118,7 +118,7 @@
           </svg>
           <span class="flex-1">{item.label}</span>
           {#if item.hint}
-            <span class="text-[11px] text-[var(--fg-muted)]"
+            <span class="text-micro text-[var(--fg-muted)]"
               >{item.hint}</span
             >
           {/if}
@@ -144,7 +144,7 @@
   {#if hostedMode}
     <section>
       <p
-        class="mb-2 text-[11px] font-medium uppercase tracking-wide text-[var(--fg-muted)]"
+        class="mb-2 text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)]"
       >
         Account
       </p>
@@ -152,7 +152,7 @@
         class="overflow-hidden rounded-md border border-[var(--line)] bg-[var(--panel)]"
       >
         <a
-          class="flex items-center gap-3 px-4 py-3 text-[13px] font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line-subtle)]"
+          class="flex items-center gap-3 px-4 py-3 text-meta font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line-subtle)]"
           href={hostedAccountPath}
         >
           <svg
@@ -170,7 +170,7 @@
             />
           </svg>
           <span class="flex-1">Account</span>
-          <span class="text-[11px] text-[var(--fg-muted)]"
+          <span class="text-micro text-[var(--fg-muted)]"
             >Organizations, billing, all workspaces</span
           >
           <svg
@@ -196,7 +196,7 @@
   {#if hasMultipleWorkspaces}
     <section>
       <p
-        class="mb-2 text-[11px] font-medium uppercase tracking-wide text-[var(--fg-muted)]"
+        class="mb-2 text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)]"
       >
         Workspace
       </p>
@@ -206,7 +206,7 @@
         {#each workspaces as ws, i}
           {@const isCurrent = ws.slug === workspaceSlug}
           <button
-            class="flex w-full items-center gap-3 px-4 py-3 text-left text-[13px] transition-colors hover:bg-[var(--line-subtle)] {i >
+            class="flex w-full items-center gap-3 px-4 py-3 text-left text-meta transition-colors hover:bg-[var(--line-subtle)] {i >
             0
               ? 'border-t border-[var(--line)]'
               : ''} {isCurrent
@@ -245,7 +245,7 @@
   <!-- Identity -->
   <section>
     <p
-      class="mb-2 text-[11px] font-medium uppercase tracking-wide text-[var(--fg-muted)]"
+      class="mb-2 text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)]"
     >
       Identity
     </p>
@@ -262,16 +262,16 @@
           {initials}
         </span>
         <div class="min-w-0 flex-1">
-          <p class="truncate text-[13px] font-medium text-[var(--fg)]">
+          <p class="truncate text-meta font-medium text-[var(--fg)]">
             {selectedActorName}
           </p>
-          <p class="text-[11px] text-[var(--fg-muted)]">
+          <p class="text-micro text-[var(--fg-muted)]">
             {$authenticatedAgent ? "Authenticated principal" : "Dev actor mode"}
           </p>
         </div>
       </div>
       <button
-        class="flex w-full items-center gap-2 px-4 py-3 text-left text-[13px] font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
+        class="flex w-full items-center gap-2 px-4 py-3 text-left text-meta font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
         onclick={switchIdentity}
         type="button"
       >

@@ -393,8 +393,8 @@
 
 <div class="mb-4 flex items-start justify-between gap-4">
   <div>
-    <h1 class="text-lg font-semibold text-[var(--fg)]">Trash</h1>
-    <p class="mt-0.5 text-[12px] text-[var(--fg-muted)]">
+    <h1 class="text-subtitle font-semibold text-[var(--fg)]">Trash</h1>
+    <p class="mt-0.5 text-micro text-[var(--fg-muted)]">
       Trashed items available for restore or permanent deletion. Restore returns
       them to their normal lists; permanent delete removes supported resource
       types (human principals only). Topics can be restored but not permanently
@@ -405,7 +405,7 @@
   {#if isHumanPrincipal && !loading && activeItems.length > 0 && activeTab !== "topics" && (activeTab !== "cards" || $devActorMode)}
     <div class="shrink-0">
       <button
-        class="cursor-pointer rounded-md px-2.5 py-1.5 text-[12px] font-medium text-[var(--fg-muted)] transition-colors hover:bg-danger-soft hover:text-danger-text disabled:cursor-not-allowed disabled:opacity-50"
+        class="cursor-pointer rounded-md px-2.5 py-1.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-danger-soft hover:text-danger-text disabled:cursor-not-allowed disabled:opacity-50"
         disabled={Boolean(busyItemId) || purgeAllBusy}
         onclick={() => {
           purgeAllOpen = true;
@@ -421,7 +421,7 @@
 <div class="mb-4 flex gap-0 border-b border-[var(--line)]" role="tablist">
   {#each tabs as tab}
     <button
-      class="cursor-pointer px-3 py-2 text-[13px] font-medium transition-colors {activeTab ===
+      class="cursor-pointer px-3 py-2 text-meta font-medium transition-colors {activeTab ===
       tab.id
         ? 'border-b-2 border-[var(--accent)] text-[var(--fg)]'
         : 'text-[var(--fg-muted)] hover:text-[var(--fg)]'}"
@@ -432,7 +432,7 @@
     >
       {tab.label}
       {#if tab.count > 0}
-        <span class="ml-1 text-[11px] text-[var(--fg-muted)]"
+        <span class="ml-1 text-micro text-[var(--fg-muted)]"
           >({tab.count})</span
         >
       {/if}
@@ -441,14 +441,14 @@
 </div>
 
 {#if error}
-  <div class="mb-4 rounded-md bg-danger-soft px-3 py-2 text-[13px] text-danger-text">
+  <div class="mb-4 rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
     {error}
   </div>
 {/if}
 
 {#if loading}
   <div
-    class="mt-12 flex items-center justify-center gap-2 text-[13px] text-[var(--fg-muted)]"
+    class="mt-12 flex items-center justify-center gap-2 text-meta text-[var(--fg-muted)]"
   >
     <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
       <circle
@@ -469,7 +469,7 @@
   </div>
 {:else if activeItems.length === 0 && !error}
   <div class="mt-8 text-center">
-    <p class="text-[13px] font-medium text-[var(--fg-muted)]">
+    <p class="text-meta font-medium text-[var(--fg-muted)]">
       {emptyCategoryMessage(activeTab)}
     </p>
   </div>
@@ -489,19 +489,19 @@
           <div class="min-w-0 flex-1">
             <div class="flex flex-wrap items-center gap-2">
               <span
-                class="inline-flex rounded px-1.5 py-0.5 text-[11px] font-semibold {kindColor(
+                class="inline-flex rounded px-1.5 py-0.5 text-micro font-semibold {kindColor(
                   artifact.kind,
                 )}"
               >
                 {kindLabel(artifact.kind)}
               </span>
-              <span class="text-[13px] font-medium text-[var(--fg)]">
+              <span class="text-meta font-medium text-[var(--fg)]">
                 {rowHeading(artifact)}
               </span>
             </div>
 
             <div
-              class="mt-2 grid gap-x-4 gap-y-1 text-[11px] text-[var(--fg-muted)] sm:grid-cols-2 xl:grid-cols-3"
+              class="mt-2 grid gap-x-4 gap-y-1 text-micro text-[var(--fg-muted)] sm:grid-cols-2 xl:grid-cols-3"
             >
               <div>
                 <span class="text-[var(--fg-muted)]">Created</span>
@@ -525,7 +525,7 @@
           <div class="flex shrink-0 flex-col items-stretch gap-2 lg:items-end">
             <div class="flex flex-wrap justify-end gap-1.5">
               <button
-                class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line)] disabled:cursor-not-allowed disabled:opacity-50"
+                class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1.5 text-micro font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line)] disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={busyItemId === itemBusyKey("artifacts", artifact.id)}
                 onclick={() => restoreEntity("artifacts", artifact.id)}
                 type="button"
@@ -534,7 +534,7 @@
               </button>
               {#if isHumanPrincipal}
                 <button
-                  class="cursor-pointer rounded-md px-2.5 py-1.5 text-[12px] font-medium text-[var(--fg-muted)] transition-colors hover:bg-danger-soft hover:text-danger-text disabled:cursor-not-allowed disabled:opacity-50"
+                  class="cursor-pointer rounded-md px-2.5 py-1.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-danger-soft hover:text-danger-text disabled:cursor-not-allowed disabled:opacity-50"
                   disabled={Boolean(busyItemId)}
                   onclick={() => {
                     purgeModal = {
@@ -571,17 +571,17 @@
             <div class="flex flex-wrap items-center gap-2">
               {#if doc.status}
                 <span
-                  class="inline-flex rounded px-1.5 py-0.5 text-[11px] font-semibold {docStatusColor(
+                  class="inline-flex rounded px-1.5 py-0.5 text-micro font-semibold {docStatusColor(
                     doc.status,
                   )}">{DOC_STATUS_LABELS[doc.status] ?? doc.status}</span
                 >
               {/if}
-              <span class="text-[13px] font-medium text-[var(--fg)]">
+              <span class="text-meta font-medium text-[var(--fg)]">
                 {documentTitle(doc)}
               </span>
             </div>
             <div
-              class="mt-2 grid gap-x-4 gap-y-1 text-[11px] text-[var(--fg-muted)] sm:grid-cols-2 xl:grid-cols-3"
+              class="mt-2 grid gap-x-4 gap-y-1 text-micro text-[var(--fg-muted)] sm:grid-cols-2 xl:grid-cols-3"
             >
               <div>
                 <span class="text-[var(--fg-muted)]">Created</span>
@@ -604,7 +604,7 @@
           <div class="flex shrink-0 flex-col items-stretch gap-2 lg:items-end">
             <div class="flex flex-wrap justify-end gap-1.5">
               <button
-                class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line)] disabled:cursor-not-allowed disabled:opacity-50"
+                class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1.5 text-micro font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line)] disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={busyItemId === itemBusyKey("documents", doc.id)}
                 onclick={() => restoreEntity("documents", doc.id)}
                 type="button"
@@ -613,7 +613,7 @@
               </button>
               {#if isHumanPrincipal}
                 <button
-                  class="cursor-pointer rounded-md px-2.5 py-1.5 text-[12px] font-medium text-[var(--fg-muted)] transition-colors hover:bg-danger-soft hover:text-danger-text disabled:cursor-not-allowed disabled:opacity-50"
+                  class="cursor-pointer rounded-md px-2.5 py-1.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-danger-soft hover:text-danger-text disabled:cursor-not-allowed disabled:opacity-50"
                   disabled={Boolean(busyItemId)}
                   onclick={() => {
                     purgeModal = { open: true, type: "documents", id: doc.id };
@@ -644,30 +644,30 @@
         >
           <div class="min-w-0 flex-1">
             <div class="flex flex-wrap items-center gap-2">
-              <span class="text-[13px] font-medium text-[var(--fg)]">
+              <span class="text-meta font-medium text-[var(--fg)]">
                 {String(thread?.title ?? "").trim() || thread.id}
               </span>
               {#if thread.status}
                 <span
-                  class="rounded bg-[var(--panel)] px-1.5 py-0.5 text-[11px] font-medium capitalize {threadStatusColor(
+                  class="rounded bg-[var(--panel)] px-1.5 py-0.5 text-micro font-medium capitalize {threadStatusColor(
                     thread.status,
                   )}">{thread.status}</span
                 >
               {/if}
               {#if thread.priority}
                 <span
-                  class="rounded bg-[var(--panel)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--fg-muted)]"
+                  class="rounded bg-[var(--panel)] px-1.5 py-0.5 text-micro font-medium text-[var(--fg-muted)]"
                   >{getPriorityLabel(thread.priority)}</span
                 >
               {/if}
             </div>
             {#if topicSummary(thread)}
-              <p class="mt-1 text-[12px] text-[var(--fg-muted)]">
+              <p class="mt-1 text-micro text-[var(--fg-muted)]">
                 {topicSummary(thread)}
               </p>
             {/if}
             <div
-              class="mt-2 grid gap-x-4 gap-y-1 text-[11px] text-[var(--fg-muted)] sm:grid-cols-2 xl:grid-cols-3"
+              class="mt-2 grid gap-x-4 gap-y-1 text-micro text-[var(--fg-muted)] sm:grid-cols-2 xl:grid-cols-3"
             >
               <div>
                 <span class="text-[var(--fg-muted)]">Created</span>
@@ -692,7 +692,7 @@
           <div class="flex shrink-0 flex-col items-stretch gap-2 lg:items-end">
             <div class="flex flex-wrap justify-end gap-1.5">
               <button
-                class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line)] disabled:cursor-not-allowed disabled:opacity-50"
+                class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1.5 text-micro font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line)] disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={busyItemId === itemBusyKey("topics", thread.id)}
                 onclick={() => restoreEntity("topics", thread.id)}
                 type="button"
@@ -720,18 +720,18 @@
         >
           <div class="min-w-0 flex-1">
             <div class="flex flex-wrap items-center gap-2">
-              <span class="text-[13px] font-medium text-[var(--fg)]">
+              <span class="text-meta font-medium text-[var(--fg)]">
                 {String(board?.title ?? "").trim() || board.id}
               </span>
               {#if board.status}
                 <span
-                  class="rounded bg-[var(--panel)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--fg-muted)]"
+                  class="rounded bg-[var(--panel)] px-1.5 py-0.5 text-micro font-medium text-[var(--fg-muted)]"
                   >{BOARD_STATUS_LABELS[board.status] ?? board.status}</span
                 >
               {/if}
             </div>
             <div
-              class="mt-2 grid gap-x-4 gap-y-1 text-[11px] text-[var(--fg-muted)] sm:grid-cols-2 xl:grid-cols-3"
+              class="mt-2 grid gap-x-4 gap-y-1 text-micro text-[var(--fg-muted)] sm:grid-cols-2 xl:grid-cols-3"
             >
               <div>
                 <span class="text-[var(--fg-muted)]">Created</span>
@@ -754,7 +754,7 @@
           <div class="flex shrink-0 flex-col items-stretch gap-2 lg:items-end">
             <div class="flex flex-wrap justify-end gap-1.5">
               <button
-                class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line)] disabled:cursor-not-allowed disabled:opacity-50"
+                class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1.5 text-micro font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line)] disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={busyItemId === itemBusyKey("boards", board.id)}
                 onclick={() => restoreEntity("boards", board.id)}
                 type="button"
@@ -763,7 +763,7 @@
               </button>
               {#if isHumanPrincipal}
                 <button
-                  class="cursor-pointer rounded-md px-2.5 py-1.5 text-[12px] font-medium text-[var(--fg-muted)] transition-colors hover:bg-danger-soft hover:text-danger-text disabled:cursor-not-allowed disabled:opacity-50"
+                  class="cursor-pointer rounded-md px-2.5 py-1.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-danger-soft hover:text-danger-text disabled:cursor-not-allowed disabled:opacity-50"
                   disabled={Boolean(busyItemId)}
                   onclick={() => {
                     purgeModal = { open: true, type: "boards", id: board.id };
@@ -794,29 +794,29 @@
         >
           <div class="min-w-0 flex-1">
             <div class="flex flex-wrap items-center gap-2">
-              <span class="text-[13px] font-medium text-[var(--fg)]">
+              <span class="text-meta font-medium text-[var(--fg)]">
                 {String(card?.title ?? "").trim() || card.id}
               </span>
               {#if card.risk}
                 <span
-                  class="rounded bg-[var(--panel)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--fg-muted)]"
+                  class="rounded bg-[var(--panel)] px-1.5 py-0.5 text-micro font-medium text-[var(--fg-muted)]"
                   >{String(card.risk).trim()}</span
                 >
               {/if}
               {#if card.resolution}
                 <span
-                  class="rounded bg-[var(--panel)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--fg-muted)]"
+                  class="rounded bg-[var(--panel)] px-1.5 py-0.5 text-micro font-medium text-[var(--fg-muted)]"
                   >{String(card.resolution).trim()}</span
                 >
               {/if}
             </div>
             {#if card.summary}
-              <p class="mt-1 text-[12px] text-[var(--fg-muted)]">
+              <p class="mt-1 text-micro text-[var(--fg-muted)]">
                 {card.summary}
               </p>
             {/if}
             <div
-              class="mt-2 grid gap-x-4 gap-y-1 text-[11px] text-[var(--fg-muted)] sm:grid-cols-2 xl:grid-cols-3"
+              class="mt-2 grid gap-x-4 gap-y-1 text-micro text-[var(--fg-muted)] sm:grid-cols-2 xl:grid-cols-3"
             >
               <div>
                 <span class="text-[var(--fg-muted)]">Created</span>
@@ -841,7 +841,7 @@
                 {trashReason(card)}
               </div>
             </div>
-            <div class="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+            <div class="mt-2 flex flex-wrap items-center gap-2 text-micro">
               {#if card.board_ref}
                 <span
                   class="rounded bg-[var(--panel)] px-1.5 py-0.5 font-medium text-[var(--fg-muted)]"
@@ -876,7 +876,7 @@
             >
               <div class="flex flex-wrap justify-end gap-1.5">
                 <button
-                  class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line)] disabled:cursor-not-allowed disabled:opacity-50"
+                  class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1.5 text-micro font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line)] disabled:cursor-not-allowed disabled:opacity-50"
                   disabled={busyItemId === itemBusyKey("cards", card.id)}
                   onclick={() => restoreEntity("cards", card.id)}
                   type="button"
@@ -885,7 +885,7 @@
                 </button>
                 {#if isHumanPrincipal}
                   <button
-                    class="cursor-pointer rounded-md px-2.5 py-1.5 text-[12px] font-medium text-[var(--fg-muted)] transition-colors hover:bg-danger-soft hover:text-danger-text disabled:cursor-not-allowed disabled:opacity-50"
+                    class="cursor-pointer rounded-md px-2.5 py-1.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-danger-soft hover:text-danger-text disabled:cursor-not-allowed disabled:opacity-50"
                     disabled={Boolean(busyItemId)}
                     onclick={() => {
                       purgeModal = { open: true, type: "cards", id: card.id };

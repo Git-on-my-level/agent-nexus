@@ -281,9 +281,9 @@
 
 <div class="flex items-center justify-between mb-4">
   <div>
-    <h1 class="text-lg font-semibold text-[var(--fg)]">Docs</h1>
+    <h1 class="text-subtitle font-semibold text-[var(--fg)]">Docs</h1>
     {#if scopedThreadId}
-      <p class="mt-1 text-[12px] text-[var(--fg-muted)]">
+      <p class="mt-1 text-micro text-[var(--fg-muted)]">
         Scoped to backing thread
         <a
           class="text-accent-text transition-colors hover:text-accent-text"
@@ -296,7 +296,7 @@
   </div>
   <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-1.5">
     <button
-      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12px] font-medium transition-colors {hasActiveFilters
+      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-micro font-medium transition-colors {hasActiveFilters
         ? 'border-[var(--accent)]/40 bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/15'
         : 'border-[var(--line)] bg-[var(--bg-soft)] text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]'}"
       onclick={() => {
@@ -324,7 +324,7 @@
       {hasActiveFilters ? "Filtered" : "Filters"}
     </button>
     <button
-      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium transition-colors {groupByLabel
+      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-micro font-medium transition-colors {groupByLabel
         ? 'bg-[var(--accent-hover)] text-white'
         : 'bg-[var(--panel)] text-[var(--fg-muted)] hover:bg-[var(--line)]'}"
       onclick={toggleGrouping}
@@ -348,7 +348,7 @@
       </svg>
     </button>
     <button
-      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-[var(--panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line)] disabled:cursor-not-allowed disabled:opacity-50"
+      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-[var(--panel)] px-3 py-1.5 text-micro font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line)] disabled:cursor-not-allowed disabled:opacity-50"
       disabled={Boolean(scopedThreadId)}
       onclick={toggleCreate}
       type="button"
@@ -380,19 +380,19 @@
   <CompactFilterBar testId="docs-filter-panel">
     {#snippet children()}
       <div class="grid gap-3">
-        <label class="text-[12px]">
+        <label class="text-micro">
           <span class="font-medium text-[var(--fg-muted)]"
             >Labels (comma-separated, any match)</span
           >
           <input
             bind:value={docFiltersDraft.labels}
-            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--panel)]"
+            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
             placeholder="ops, runbook"
             type="text"
           />
         </label>
         <label
-          class="inline-flex cursor-pointer items-center gap-1.5 text-[12px] text-[var(--fg-muted)]"
+          class="inline-flex cursor-pointer items-center gap-1.5 text-micro text-[var(--fg-muted)]"
         >
           <input
             bind:checked={docFiltersDraft.showArchived}
@@ -404,14 +404,14 @@
       </div>
       <div class="mt-3 flex flex-wrap gap-1.5">
         <button
-          class="cursor-pointer rounded-md bg-[var(--panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--fg)] hover:bg-[var(--line)]"
+          class="cursor-pointer rounded-md bg-[var(--panel)] px-3 py-1.5 text-micro font-medium text-[var(--fg)] hover:bg-[var(--line)]"
           onclick={applyDocFilters}
           type="button"
         >
           Apply
         </button>
         <button
-          class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]"
+          class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-micro font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]"
           onclick={resetDocFilters}
           type="button"
         >
@@ -426,15 +426,15 @@
   <div
     class="mb-4 flex items-center justify-between rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2"
   >
-    <p class="text-[12px] text-[var(--fg-muted)]">
+    <p class="text-micro text-[var(--fg-muted)]">
       Showing only documents on this backing thread timeline.
     </p>
-    <p class="text-[12px] text-[var(--fg-muted)]">
+    <p class="text-micro text-[var(--fg-muted)]">
       Create from the unscoped docs view. New document lineages always get their
       own backing thread.
     </p>
     <a
-      class="text-[12px] font-medium text-accent-text transition-colors hover:text-accent-text"
+      class="text-micro font-medium text-accent-text transition-colors hover:text-accent-text"
       href={workspaceHref("/docs")}
     >
       Clear scope
@@ -450,53 +450,53 @@
       void handleCreate();
     }}
   >
-    <h2 class="mb-3 text-[13px] font-semibold text-[var(--fg)]">
+    <h2 class="mb-3 text-meta font-semibold text-[var(--fg)]">
       New doc lineage
     </h2>
-    <p class="mb-3 text-[12px] text-[var(--fg-muted)]">
+    <p class="mb-3 text-micro text-[var(--fg-muted)]">
       Create the lineage metadata and its first head revision together.
     </p>
     <div class="grid gap-3 sm:grid-cols-2">
       <label class="sm:col-span-2">
-        <span class="text-[12px] font-medium text-[var(--fg-muted)]"
+        <span class="text-micro font-medium text-[var(--fg-muted)]"
           >Title <span class="text-danger-text">*</span></span
         >
         <input
           bind:value={draft.title}
-          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-[13px] text-[var(--fg)] placeholder:text-[var(--fg-subtle)]"
+          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-meta text-[var(--fg)] placeholder:text-[var(--fg-subtle)]"
           placeholder="Document title"
           type="text"
         />
       </label>
       <label>
-        <span class="text-[12px] font-medium text-[var(--fg-muted)]"
+        <span class="text-micro font-medium text-[var(--fg-muted)]"
           >ID (optional)</span
         >
         <input
           bind:value={draft.id}
-          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-[13px] text-[var(--fg)] placeholder:text-[var(--fg-subtle)]"
+          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-meta text-[var(--fg)] placeholder:text-[var(--fg-subtle)]"
           placeholder="auto-generated if empty"
           type="text"
         />
       </label>
       <label>
-        <span class="text-[12px] font-medium text-[var(--fg-muted)]"
+        <span class="text-micro font-medium text-[var(--fg-muted)]"
           >Labels (comma-separated)</span
         >
         <input
           bind:value={draft.labels}
-          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-[13px] text-[var(--fg)] placeholder:text-[var(--fg-subtle)]"
+          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-meta text-[var(--fg)] placeholder:text-[var(--fg-subtle)]"
           placeholder="e.g. ops, runbook"
           type="text"
         />
       </label>
       <label class="sm:col-span-2">
-        <span class="text-[12px] font-medium text-[var(--fg-muted)]"
+        <span class="text-micro font-medium text-[var(--fg-muted)]"
           >Head content (Markdown) <span class="text-danger-text">*</span></span
         >
         <textarea
           bind:value={draft.content}
-          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-2 text-[13px] text-[var(--fg)] placeholder:text-[var(--fg-subtle)] font-mono leading-relaxed resize-y"
+          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-2 text-meta text-[var(--fg)] placeholder:text-[var(--fg-subtle)] font-mono leading-relaxed resize-y"
           placeholder="# Document title&#10;&#10;Write your content here..."
           rows="10"
         ></textarea>
@@ -505,7 +505,7 @@
 
     {#if createError}
       <div
-        class="mt-3 rounded-md bg-danger-soft px-3 py-2 text-[12px] text-danger-text"
+        class="mt-3 rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
         role="alert"
       >
         {createError}
@@ -513,14 +513,14 @@
     {/if}
     <div class="mt-3 flex items-center gap-2">
       <button
-        class="cursor-pointer rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+        class="cursor-pointer rounded-md bg-accent px-3 py-1.5 text-micro font-medium text-white hover:bg-accent-hover disabled:opacity-50"
         disabled={creating}
         type="submit"
       >
         {creating ? "Creating…" : "Create doc"}
       </button>
       <button
-        class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]"
+        class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-micro font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]"
         onclick={toggleCreate}
         type="button"
       >
@@ -532,7 +532,7 @@
 
 {#if loading}
   <div
-    class="mt-12 flex items-center justify-center gap-2 text-[13px] text-[var(--fg-muted)]"
+    class="mt-12 flex items-center justify-center gap-2 text-meta text-[var(--fg-muted)]"
   >
     <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
       <circle
@@ -552,15 +552,15 @@
     Loading documents...
   </div>
 {:else if error}
-  <div class="mb-4 rounded-md bg-danger-soft px-3 py-2 text-[13px] text-danger-text">
+  <div class="mb-4 rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
     {error}
   </div>
 {:else if documents.length === 0}
   <div class="mt-8 text-center">
-    <p class="text-[13px] font-medium text-[var(--fg-muted)]">
+    <p class="text-meta font-medium text-[var(--fg-muted)]">
       No docs yet
     </p>
-    <p class="mt-1 text-[13px] text-[var(--fg-muted)]">
+    <p class="mt-1 text-meta text-[var(--fg-muted)]">
       No doc lineages yet. Create one to start a head revision and revision
       history.
     </p>
@@ -577,22 +577,22 @@
       <div class="flex flex-wrap items-center gap-2">
         {#if doc.state}
           <span
-            class="inline-flex rounded px-1.5 py-0.5 text-[11px] font-semibold {docStateColor(
+            class="inline-flex rounded px-1.5 py-0.5 text-micro font-semibold {docStateColor(
               doc.state,
             )}">{DOC_STATE_LABELS[doc.state] ?? doc.state}</span
           >
         {/if}
         {#each (doc.labels ?? []).slice(0, 3) as label}
           <span
-            class="rounded bg-[var(--line)] px-1.5 py-0.5 text-[10px] text-[var(--fg-muted)]"
+            class="rounded bg-[var(--line)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
             >{label}</span
           >
         {/each}
       </div>
-      <p class="mt-1 truncate text-[13px] font-medium text-[var(--fg)]">
+      <p class="mt-1 truncate text-meta font-medium text-[var(--fg)]">
         {doc.title || doc.id}
       </p>
-      <p class="text-[11px] text-[var(--fg-muted)]">
+      <p class="text-micro text-[var(--fg-muted)]">
         Head v{doc.head_revision_number} · Updated {formatTimestamp(
           doc.updated_at,
         ) || "—"} by {actorName(doc.updated_by)}
@@ -603,7 +603,7 @@
       role="presentation"
       onclick={(e) => e.stopPropagation()}
     >
-      <span class="mr-1 shrink-0 text-[11px] text-[var(--fg-muted)]">
+      <span class="mr-1 shrink-0 text-micro text-[var(--fg-muted)]">
         {doc.head_revision_number} revision{doc.head_revision_number === 1
           ? ""
           : "s"}
@@ -664,11 +664,11 @@
                 d="M9 5l7 7-7 7"
               />
             </svg>
-            <span class="text-[12px] font-medium text-[var(--fg)]"
+            <span class="text-micro font-medium text-[var(--fg)]"
               >{displayLabel}</span
             >
             <span
-              class="rounded bg-[var(--line)] px-1.5 py-0.5 text-[10px] text-[var(--fg-muted)]"
+              class="rounded bg-[var(--line)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
               >{docs.length}</span
             >
           </button>

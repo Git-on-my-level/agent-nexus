@@ -439,7 +439,7 @@
   }
 
   .cmd-result-subtitle {
-    font-size: 11px;
+    font-size: 13px;
     line-height: 1.3;
     color: var(--fg-muted);
     white-space: nowrap;

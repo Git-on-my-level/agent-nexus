@@ -107,7 +107,7 @@
 </script>
 
 <nav
-  class="mb-3 flex items-center gap-1.5 text-[13px] text-[var(--fg-muted)]"
+  class="mb-3 flex items-center gap-1.5 text-meta text-[var(--fg-muted)]"
   aria-label="Breadcrumb"
 >
   <a
@@ -123,7 +123,7 @@
 
 {#if topic?.trashed_at}
   <div
-    class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-[13px] text-danger-text"
+    class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-meta text-danger-text"
   >
     <div class="min-w-0 flex-1">
       <div class="flex items-center gap-2 font-semibold">
@@ -133,7 +133,7 @@
       {#if topic.trash_reason}
         <p class="mt-2">Reason: {topic.trash_reason}</p>
       {/if}
-      <p class="mt-1 text-[11px] text-danger-text/80">
+      <p class="mt-1 text-micro text-danger-text/80">
         Trashed {#if topic.trashed_by}by {actorName(topic.trashed_by)}{/if}
         {#if topic.trashed_at}
           at {formatTimestamp(topic.trashed_at)}
@@ -142,7 +142,7 @@
     </div>
     {#if detailAsTopic}
       <button
-        class="shrink-0 cursor-pointer rounded-md border border-danger/40 bg-danger-soft px-2 py-1 text-[12px] font-medium text-danger-text hover:bg-danger/25 disabled:opacity-50"
+        class="shrink-0 cursor-pointer rounded-md border border-danger/40 bg-danger-soft px-2 py-1 text-micro font-medium text-danger-text hover:bg-danger/25 disabled:opacity-50"
         disabled={lifecycleBusy}
         onclick={handleRestore}
         type="button"
@@ -150,7 +150,7 @@
         {lifecycleBusy ? "…" : "Restore"}
       </button>
     {:else}
-      <p class="shrink-0 max-w-xs text-[11px] text-danger-text/80">
+      <p class="shrink-0 max-w-xs text-micro text-danger-text/80">
         Restore and lifecycle changes use the topic route; this thread view is
         read-only here.
       </p>
@@ -158,7 +158,7 @@
   </div>
 {:else if topic?.archived_at}
   <div
-    class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-[13px] text-warn-text"
+    class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-meta text-warn-text"
   >
     <p class="min-w-0 flex-1">
       This {detailAsTopic ? "topic" : "thread"} was archived on {formatTimestamp(
@@ -168,7 +168,7 @@
     </p>
     {#if detailAsTopic}
       <button
-        class="shrink-0 cursor-pointer rounded-md border border-warn/40 bg-warn-soft px-2 py-1 text-[12px] font-medium text-warn-text hover:bg-warn/25 disabled:opacity-50"
+        class="shrink-0 cursor-pointer rounded-md border border-warn/40 bg-warn-soft px-2 py-1 text-micro font-medium text-warn-text hover:bg-warn/25 disabled:opacity-50"
         disabled={lifecycleBusy}
         onclick={handleUnarchive}
         type="button"
@@ -176,7 +176,7 @@
         {lifecycleBusy ? "…" : "Unarchive"}
       </button>
     {:else}
-      <p class="shrink-0 max-w-xs text-[11px] text-warn-text/80">
+      <p class="shrink-0 max-w-xs text-micro text-warn-text/80">
         Unarchive from the topic route; thread views here are read-only.
       </p>
     {/if}
@@ -185,11 +185,11 @@
 
 {#if topic}
   <div class="flex items-start justify-between gap-4">
-    <h1 class="text-lg font-semibold text-[var(--fg)]">
+    <h1 class="text-title font-semibold text-[var(--fg)]">
       {topic.title}
     </h1>
     <div
-      class="flex shrink-0 flex-wrap items-center justify-end gap-2 text-[12px]"
+      class="flex shrink-0 flex-wrap items-center justify-end gap-2 text-micro"
     >
       {#if staleness}
         <span

@@ -141,7 +141,7 @@
 
   .confirm-title {
     margin: 0;
-    font-size: 14px;
+    font-size: 17px;
     font-weight: 600;
     color: var(--fg);
     line-height: 1.3;

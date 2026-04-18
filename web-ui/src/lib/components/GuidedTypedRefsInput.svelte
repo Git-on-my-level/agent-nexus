@@ -112,19 +112,19 @@
 </script>
 
 {#if helperText}
-  <p class="mt-1 text-[11px] text-[var(--fg-muted)]">{helperText}</p>
+  <p class="mt-1 text-micro text-[var(--fg-muted)]">{helperText}</p>
 {/if}
 
 <div
   class="mt-1.5 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] p-2.5"
 >
   {#if refs.length === 0}
-    <p class="text-[11px] text-[var(--fg-muted)]">{emptyText}</p>
+    <p class="text-micro text-[var(--fg-muted)]">{emptyText}</p>
   {:else}
     <div class="flex flex-wrap gap-1.5">
       {#each resolvedRefs as resolved}
         <span
-          class="inline-flex items-center gap-1 rounded-md border border-accent/20 bg-accent-soft px-2 py-0.5 text-[11px] text-accent-text"
+          class="inline-flex items-center gap-1 rounded-md border border-accent/20 bg-accent-soft px-2 py-0.5 text-micro text-accent-text"
         >
           {#if resolved.isLink}
             <a
@@ -140,7 +140,7 @@
           {/if}
           <button
             aria-label={`Remove ${resolved.raw}`}
-            class="cursor-pointer rounded px-1 text-[11px] text-accent-text transition-colors hover:bg-accent-soft hover:text-accent-text"
+            class="cursor-pointer rounded px-1 text-micro text-accent-text transition-colors hover:bg-accent-soft hover:text-accent-text"
             onclick={() => removeRef(resolved.raw)}
             type="button"
           >
@@ -155,7 +155,7 @@
     <input
       aria-label={addInputLabel}
       bind:value={candidateRef}
-      class="min-w-[14rem] flex-1 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-[13px] text-[var(--fg)]"
+      class="min-w-[14rem] flex-1 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)]"
       onkeydown={(event) => {
         if (event.key === "Enter") {
           event.preventDefault();
@@ -166,7 +166,7 @@
       type="text"
     />
     <button
-      class="cursor-pointer rounded-md border border-[var(--line-strong)] bg-[var(--bg-soft)] px-3 py-2 text-[11px] font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line-subtle)]"
+      class="cursor-pointer rounded-md border border-[var(--line-strong)] bg-[var(--bg-soft)] px-3 py-2 text-micro font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line-subtle)]"
       onclick={addCandidate}
       type="button"
     >
@@ -175,20 +175,20 @@
   </div>
 
   {#if localError}
-    <p class="mt-1.5 text-[11px] text-danger-text">{localError}</p>
+    <p class="mt-1.5 text-micro text-danger-text">{localError}</p>
   {/if}
 
   {#if normalizedSuggestions.length > 0}
     <div class="mt-2.5">
       <p
-        class="text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--fg-muted)]"
+        class="text-micro font-medium uppercase tracking-[0.06em] text-[var(--fg-muted)]"
       >
         Quick picks
       </p>
       <div class="mt-1.5 flex flex-wrap gap-1.5">
         {#each normalizedSuggestions as suggestion}
           <button
-            class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1 text-[11px] text-[var(--fg-muted)] transition-colors hover:border-accent/30 hover:text-accent-text"
+            class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1 text-micro text-[var(--fg-muted)] transition-colors hover:border-accent/30 hover:text-accent-text"
             onclick={() => addSuggestion(suggestion.value)}
             type="button"
           >
@@ -202,7 +202,7 @@
   <button
     aria-controls="guided-refs-advanced"
     aria-expanded={showAdvanced}
-    class="mt-2 cursor-pointer rounded-md px-2 py-1 text-[11px] text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
+    class="mt-2 cursor-pointer rounded-md px-2 py-1 text-micro text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
     onclick={() => {
       showAdvanced = !showAdvanced;
     }}
@@ -214,20 +214,20 @@
   <div id="guided-refs-advanced">
     {#if showAdvanced}
       <label
-        class="mt-2 block text-[11px] font-medium text-[var(--fg-muted)]"
+        class="mt-2 block text-micro font-medium text-[var(--fg-muted)]"
         >{advancedLabel}
         <textarea
           aria-label={textareaAriaLabel}
           bind:value
-          class="mt-1.5 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-[13px] text-[var(--fg)]"
+          class="mt-1.5 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)]"
           rows={advancedRows}
         ></textarea></label
       >
-      <p class="mt-1 text-[11px] text-[var(--fg-muted)]">{advancedHint}</p>
+      <p class="mt-1 text-micro text-[var(--fg-muted)]">{advancedHint}</p>
     {/if}
   </div>
 </div>
 
 {#if fieldError}
-  <p class="mt-1.5 text-[11px] text-danger-text">{fieldError}</p>
+  <p class="mt-1.5 text-micro text-danger-text">{fieldError}</p>
 {/if}

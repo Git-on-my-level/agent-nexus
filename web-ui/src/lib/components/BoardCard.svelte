@@ -167,14 +167,14 @@
       ></span>
       <div class="min-w-0 flex-1">
         <span
-          class="block truncate text-[13px] font-medium leading-snug {titleColorClass}"
+          class="block truncate text-meta font-medium leading-snug {titleColorClass}"
         >
           {headerTitle}
         </span>
 
         <div class="mt-1 flex flex-wrap items-center gap-1">
           <span
-            class="rounded-md px-1 py-0.5 text-[11px] font-medium {cardResolutionTone(
+            class="rounded-md px-1 py-0.5 text-micro font-medium {cardResolutionTone(
               cardResolution,
             )}"
           >
@@ -183,7 +183,7 @@
 
           {#if priorityBadge}
             <span
-              class="rounded-md px-1 py-0.5 text-[11px] font-medium {priorityBadge.class}"
+              class="rounded-md px-1 py-0.5 text-micro font-medium {priorityBadge.class}"
             >
               {priorityBadge.label}
             </span>
@@ -192,7 +192,7 @@
           {#if assigneeVisible.length > 0}
             {#each assigneeVisible as name}
               <span
-                class="max-w-[7rem] truncate rounded-md bg-[var(--line)] px-1 py-0.5 text-[11px] text-[var(--fg-muted)]"
+                class="max-w-[7rem] truncate rounded-md bg-[var(--line)] px-1 py-0.5 text-micro text-[var(--fg-muted)]"
                 title={name}
               >
                 {name}
@@ -200,7 +200,7 @@
             {/each}
             {#if assigneeMore > 0}
               <span
-                class="rounded-md bg-[var(--line)] px-1 py-0.5 text-[11px] text-[var(--fg-muted)]"
+                class="rounded-md bg-[var(--line)] px-1 py-0.5 text-micro text-[var(--fg-muted)]"
               >
                 +{assigneeMore} more
               </span>
@@ -209,7 +209,7 @@
 
           {#if cardDueAt}
             <span
-              class="rounded-md px-1 py-0.5 text-[11px] {dueOverdue
+              class="rounded-md px-1 py-0.5 text-micro {dueOverdue
                 ? 'bg-danger-soft text-danger-text'
                 : 'bg-[var(--line)] text-[var(--fg-muted)]'}"
             >
@@ -219,7 +219,7 @@
 
           {#if cardFreshness}
             <span
-              class="rounded-md px-1 py-0.5 text-[11px] {freshnessStatusTone(
+              class="rounded-md px-1 py-0.5 text-micro {freshnessStatusTone(
                 cardFreshness.status,
               )}"
             >
@@ -229,7 +229,7 @@
         </div>
 
         {#if showSummary}
-          <p class="mt-1 truncate text-[11px] text-[var(--fg-muted)]">
+          <p class="mt-1 truncate text-micro text-[var(--fg-muted)]">
             {summaryText}
           </p>
         {/if}
