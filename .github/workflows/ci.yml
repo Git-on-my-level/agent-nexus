@@ -151,7 +151,7 @@ jobs:
 
   web-ui-checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     needs: changes
     if: needs.changes.outputs.web_ui == 'true' || needs.changes.outputs.contracts == 'true' || needs.changes.outputs.node_shared == 'true'
     steps:
@@ -166,6 +166,12 @@ jobs:
 
       - name: Build web-ui
         run: pnpm -C web-ui run build
+
+      - name: Install Playwright Chromium
+        run: pnpm -C web-ui exec playwright install chromium
+
+      - name: Run visual QA diff
+        run: pnpm -C web-ui run qa:diff
 
   cross-platform-build:
     runs-on: ubuntu-latest

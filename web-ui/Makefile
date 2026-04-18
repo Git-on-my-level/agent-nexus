@@ -5,7 +5,7 @@ PORT ?= 5173
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install serve check format unit-test test e2e qa qa-capture qa-viewports
+.PHONY: help install serve check format unit-test test e2e qa qa-capture qa-baseline qa-diff qa-viewports
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z0-9_.-]+:.*##/ {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -36,7 +36,13 @@ test: ## Run full test suite (lint + unit + e2e)
 qa: qa-capture ## Alias for qa-capture
 
 qa-capture: ## Capture QA screenshots of all pages (requires running dev server)
-	node scripts/qa-capture.mjs
+	node scripts/qa-capture.mjs $(QA_CAPTURE_ARGS)
+
+qa-baseline: ## Capture the committed QA baseline into .qa-baseline/
+	node scripts/qa-capture.mjs --baseline
+
+qa-diff: ## Diff current UI against the committed QA baseline
+	$(PNPM) run qa:diff
 
 qa-viewports: ## Dashboard + inbox screenshots at several widths (requires running dev server)
 	for size in 1440x900 1280x900 1120x900 1024x768 900x900; do \

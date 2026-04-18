@@ -97,6 +97,7 @@
       ? stripWorkspacePath($page.url.pathname, activeWorkspaceSlug)
       : stripBasePath($page.url.pathname),
   );
+  let qaMode = $derived($page.url.searchParams.get("qa") === "1");
   let identityReady = $derived($actorSessionReady && $authSessionReady);
   let principalActorId = $derived($authenticatedAgent?.actor_id ?? "");
   let activeActorId = $derived(principalActorId || $selectedActorId);
@@ -174,6 +175,17 @@
     const workspaceLabel = activeWorkspace?.label;
     const parts = [section, workspaceLabel, "ANX"].filter(Boolean);
     return parts.join(" · ");
+  });
+
+  $effect(() => {
+    if (!browser) {
+      return;
+    }
+    if (qaMode) {
+      document.documentElement.dataset.qa = "1";
+      return;
+    }
+    delete document.documentElement.dataset.qa;
   });
 
   $effect(() => {

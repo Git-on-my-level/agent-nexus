@@ -1,3 +1,10 @@
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -49,6 +56,11 @@
   --motion-fast:   120ms cubic-bezier(0.2, 0, 0, 1);
   --motion-base:   180ms cubic-bezier(0.2, 0, 0, 1);
   --motion-modal:  240ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+:root[data-qa="1"] {
+  --font-sans: "Inter", sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
 }
 
 @layer base {
@@ -136,6 +148,20 @@
       min-height: 2.5rem;
     }
   }
+}
+
+:root[data-qa="1"],
+:root[data-qa="1"] body {
+  scroll-behavior: auto !important;
+}
+
+:root[data-qa="1"] *,
+:root[data-qa="1"] *::before,
+:root[data-qa="1"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  caret-color: transparent !important;
 }
 
 @keyframes spin {

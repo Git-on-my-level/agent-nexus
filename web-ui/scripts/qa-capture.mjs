@@ -41,6 +41,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { runQaVisualCommand } from "./qa-visual.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
@@ -62,6 +63,7 @@ function parseArgs(argv) {
     json: false,
     axe: true,
     discoverDetail: true,
+    baseline: false,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -99,6 +101,9 @@ function parseArgs(argv) {
         break;
       case "--json":
         opts.json = true;
+        break;
+      case "--baseline":
+        opts.baseline = true;
         break;
       case "--no-axe":
         opts.axe = false;
@@ -142,6 +147,7 @@ Options:
   --no-full-page        Capture viewport only
   --wait <ms>           Extra settle time after load  (default: 800)
   --compare <dir>       Compare against a previous run directory
+  --baseline            Capture the committed QA baseline into .qa-baseline/
   --json                Print manifest JSON to stdout on completion
   --no-axe              Skip accessibility audits (faster)
   --no-detail           Skip detail page auto-discovery
@@ -149,6 +155,7 @@ Options:
 
 Examples:
   node scripts/qa-capture.mjs
+  node scripts/qa-capture.mjs --baseline
   node scripts/qa-capture.mjs --routes inbox,topics --viewport 768x1024
   node scripts/qa-capture.mjs --compare .qa-captures/2026-04-09_04-00-54_1440x900
   node scripts/qa-capture.mjs --json --no-axe --no-detail
@@ -654,6 +661,17 @@ function formatSummary(manifest) {
 
 async function main() {
   const opts = parseArgs(process.argv);
+
+  if (opts.baseline) {
+    const exitCode = await runQaVisualCommand({
+      mode: "baseline",
+      outDir: path.join(projectRoot, ".qa-baseline"),
+      port: Number(process.env.QA_VISUAL_PORT ?? 4273),
+      thresholdRatio: 0.001,
+      json: opts.json,
+    });
+    process.exit(exitCode);
+  }
 
   const timestamp = new Date()
     .toISOString()

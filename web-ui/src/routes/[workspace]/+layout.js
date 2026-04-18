@@ -6,9 +6,13 @@ import { WORKSPACE_HEADER } from "$lib/workspacePaths";
 
 const schemaCheckPromises = new Map();
 
-export async function load({ fetch, data }) {
+export async function load({ fetch, data, url }) {
   const workspaceSlug = data.workspace?.slug ?? "";
   if (!workspaceSlug) {
+    return;
+  }
+
+  if (url.searchParams.get("qa") === "1") {
     return;
   }
 
