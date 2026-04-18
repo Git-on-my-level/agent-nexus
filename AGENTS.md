@@ -34,6 +34,7 @@ Organization Autorunner is split into a small set of modules with different jobs
 
 ## Cross-Module Boundaries
 - `core` is the system of record. Durable truth lives there, not in the CLI or UI.
+- `core` may consume only a generic heartbeat publisher env contract (`ANX_HEARTBEAT_PUBLISHER_URL`, `ANX_HEARTBEAT_INTERVAL`, `ANX_HEARTBEAT_AUDIENCE`, `ANX_WORKSPACE_SERVICE_ID`, `ANX_WORKSPACE_SERVICE_PRIVATE_KEY`). This is deployment config only; do not add control-plane-specific imports, URLs, or type coupling.
 - `cli` is the automation and agent surface. Preserve deterministic, non-interactive behavior and stable machine-facing output.
 - `web-ui` is the human surface. Preserve readability, provenance visibility, and safe human intervention rather than agent orchestration.
 - `adapters` own integration-side runtime behavior. Keep install/setup discoverable, but do not move durable truth out of OAR primitives.

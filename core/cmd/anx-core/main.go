@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
+	"encoding/base64"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"net"
@@ -18,6 +21,7 @@ import (
 	"agent-nexus-core/internal/auth"
 	"agent-nexus-core/internal/blob"
 	"agent-nexus-core/internal/buildinfo"
+	"agent-nexus-core/internal/heartbeat"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/router"
 	"agent-nexus-core/internal/schema"
@@ -388,6 +392,76 @@ func main() {
 		go projectionMaintainer.Run(maintenanceCtx)
 	}
 	sidecarHost.Run(maintenanceCtx)
+	heartbeatURL := strings.TrimSpace(os.Getenv("ANX_HEARTBEAT_PUBLISHER_URL"))
+	if heartbeatURL == "" {
+		fmt.Println("heartbeat publisher: disabled (ANX_HEARTBEAT_PUBLISHER_URL unset)")
+	} else {
+		serviceIdentityID := strings.TrimSpace(os.Getenv("ANX_WORKSPACE_SERVICE_ID"))
+		serviceIdentityPrivateKeyB64 := strings.TrimSpace(os.Getenv("ANX_WORKSPACE_SERVICE_PRIVATE_KEY"))
+		if serviceIdentityID == "" || serviceIdentityPrivateKeyB64 == "" {
+			fmt.Fprintln(os.Stderr, "heartbeat publisher: ANX_HEARTBEAT_PUBLISHER_URL is set but ANX_WORKSPACE_SERVICE_ID and ANX_WORKSPACE_SERVICE_PRIVATE_KEY are required")
+			os.Exit(1)
+		}
+		serviceIdentityPrivateKey, err := base64.StdEncoding.DecodeString(serviceIdentityPrivateKeyB64)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "heartbeat publisher: invalid ANX_WORKSPACE_SERVICE_PRIVATE_KEY: %v\n", err)
+			os.Exit(1)
+		}
+		if len(serviceIdentityPrivateKey) != ed25519.PrivateKeySize {
+			fmt.Fprintf(os.Stderr, "heartbeat publisher: invalid ANX_WORKSPACE_SERVICE_PRIVATE_KEY length %d (expected %d)\n", len(serviceIdentityPrivateKey), ed25519.PrivateKeySize)
+			os.Exit(1)
+		}
+
+		heartbeatInterval := envDuration("ANX_HEARTBEAT_INTERVAL", heartbeat.DefaultInterval)
+		if heartbeatInterval <= 0 {
+			heartbeatInterval = heartbeat.DefaultInterval
+		}
+		heartbeatAudience := envString("ANX_HEARTBEAT_AUDIENCE", heartbeat.DefaultAudience)
+
+		publisher := &heartbeat.Publisher{
+			URL:         heartbeatURL,
+			Audience:    heartbeatAudience,
+			WorkspaceID: workspaceID,
+			Interval:    heartbeatInterval,
+			Identity: heartbeat.Identity{
+				ID:         serviceIdentityID,
+				PrivateKey: ed25519.PrivateKey(serviceIdentityPrivateKey),
+			},
+			Snapshot: func(ctx context.Context) heartbeat.Snapshot {
+				healthSummary := map[string]any{"ok": true}
+				if err := workspace.Ping(ctx); err != nil {
+					healthSummary["ok"] = false
+					healthSummary["storage_error"] = err.Error()
+				}
+				if err := sidecarHost.Ready(ctx); err != nil {
+					healthSummary["ok"] = false
+					healthSummary["sidecars_error"] = err.Error()
+				}
+
+				projectionSummary := map[string]any{}
+				if projectionMaintainer != nil {
+					projectionSummary = asMapAny(projectionMaintainer.Snapshot(ctx, time.Now().UTC()))
+				}
+
+				usageSummary := map[string]any{}
+				if usage, err := primitiveStore.GetWorkspaceUsageSummary(ctx); err != nil {
+					usageSummary["error"] = err.Error()
+				} else {
+					usageSummary = asMapAny(usage)
+				}
+
+				return heartbeat.Snapshot{
+					Version:                      coreVersion,
+					Build:                        coreVersion,
+					HealthSummary:                healthSummary,
+					ProjectionMaintenanceSummary: projectionSummary,
+					UsageSummary:                 usageSummary,
+				}
+			},
+		}
+		go publisher.Run(maintenanceCtx)
+		fmt.Printf("heartbeat publisher: enabled (url=%s, workspace_id=%s, identity=%s, interval=%s)\n", heartbeatURL, workspaceID, serviceIdentityID, heartbeatInterval)
+	}
 	go runDailyAtUTC(maintenanceCtx, 3, 0, func(jobCtx context.Context) {
 		deleted, err := authStore.PurgeConsumedGrantJTIs(jobCtx, workspaceHumanGrantReplayRetention)
 		if err != nil {
@@ -558,4 +632,22 @@ func defaultCoreBaseURL(addr string) string {
 		host = "127.0.0.1"
 	}
 	return "http://" + net.JoinHostPort(host, port)
+}
+
+func asMapAny(value any) map[string]any {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return map[string]any{}
+	}
+	if len(raw) == 0 || string(raw) == "null" {
+		return map[string]any{}
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		return map[string]any{}
+	}
+	if decoded == nil {
+		return map[string]any{}
+	}
+	return decoded
 }

@@ -40,25 +40,19 @@
 </script>
 
 <svelte:head>
-  <title>ANX — autonomous workspaces for AI teams</title>
+  <title>Agent Nexus — autonomous workspaces for AI teams</title>
 </svelte:head>
 
 <section class="mx-auto max-w-3xl pt-10 pb-12 text-center sm:pt-16">
-  <span
-    class="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-100 px-2.5 py-1 text-[11px] font-medium text-gray-500"
-  >
-    <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
-    Hosted SaaS — early access
-  </span>
   <h1
-    class="mt-5 text-balance text-[28px] font-semibold leading-tight text-gray-900 sm:text-[36px]"
+    class="text-balance text-[28px] font-semibold leading-tight text-gray-900 sm:text-[36px]"
   >
     Give your AI agent a workspace,
     <span class="text-indigo-400">not just a chat window.</span>
   </h1>
   <p class="mx-auto mt-4 max-w-xl text-[14px] leading-relaxed text-gray-500">
-    ANX turns long-running AI work into something you can audit, share, and
-    trust. Threads, topics, artifacts, and access — all in one place.
+    Agent Nexus turns long-running AI work into something you can audit, share,
+    and trust. Threads, topics, artifacts, and access — all in one place.
   </p>
 
   <div class="mt-7 flex flex-wrap justify-center gap-2">

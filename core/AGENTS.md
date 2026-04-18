@@ -21,6 +21,8 @@ It owns the canonical organizational record, validates and records state transit
 - Agent orchestration, dispatch, or lifecycle management.
 - Human-facing operator UX beyond the API contract.
 - Real-world side effects outside the OAR workspace.
+- Control-plane-specific integration types, clients, or endpoint constants.
+  Allowed carve-out: a generic env-driven heartbeat publisher contract.
 
 ## Canonical References
 - System spec: `docs/anx-core-spec.md`
@@ -37,6 +39,13 @@ It owns the canonical organizational record, validates and records state transit
 - Derived views must stay rebuildable from canonical state.
 - Inbox list/get/stream payloads use `related_refs` as the typed-ref collection on each item. Core may still read a legacy `refs` field only when backfilling stored derived rows inside `applyInboxContractShape`; clients and UI code should not treat `refs` as an inbox alias.
 - Core-maintained collaboration state must remain correct without introducing misleading user-visible activity.
+
+## Generic Heartbeat Publisher Contract
+- `ANX_HEARTBEAT_PUBLISHER_URL`: when set, enables periodic signed heartbeat publishing from `anx-core`.
+- `ANX_HEARTBEAT_INTERVAL`: optional interval, default `30s`.
+- `ANX_HEARTBEAT_AUDIENCE`: optional JWT audience, default `anx-control-plane`.
+- `ANX_WORKSPACE_SERVICE_ID`: required identity issuer/subject when publisher is enabled.
+- `ANX_WORKSPACE_SERVICE_PRIVATE_KEY`: required base64 Ed25519 private key when publisher is enabled.
 
 ## Edit Routing
 - Contract or schema changes start in [../contracts/AGENTS.md](../contracts/AGENTS.md).

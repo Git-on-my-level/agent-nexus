@@ -4,17 +4,14 @@
   import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
 
-  import { env as publicEnv } from "$env/dynamic/public";
   import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
   import { hostedSession, loadHostedSession } from "$lib/hosted/session.js";
 
   let displayName = $state("");
   let slug = $state("");
   let slugTouched = $state(false);
-  let serviceId = $state("dev-local-1");
-  let servicePublicKey = $state(
-    String(publicEnv?.PUBLIC_ANX_SAAS_DEV_SERVICE_PUBLIC_KEY ?? "").trim(),
-  );
+  let serviceId = $state("");
+  let servicePublicKey = $state("");
   let advancedOpen = $state(false);
   let busy = $state(false);
   let message = $state("");
@@ -40,12 +37,9 @@
     }
   });
 
-  $effect(() => {
-    if (!slug.trim()) return;
-    if (serviceId === "dev-local-1" || serviceId.startsWith("dev-")) {
-      serviceId = `dev-${slug.trim()}`;
-    }
-  });
+  const canBringOwnServiceIdentity = $derived(
+    Boolean(activeOrg?.flags?.allow_byo_service_identity),
+  );
 
   onMount(async () => {
     if (!browser) return;
@@ -73,25 +67,28 @@
       message = "Workspace name and slug are required.";
       return;
     }
+    const sid = serviceId.trim();
     const pub = servicePublicKey.trim();
-    if (!pub) {
+    if ((sid && !pub) || (!sid && pub)) {
       advancedOpen = true;
       message =
-        "Service identity public key is required. Open Advanced settings to paste it from your control plane setup.";
+        "Service identity fields must both be set (BYO) or both left empty (platform managed).";
       return;
     }
-    const sid = serviceId.trim() || `dev-${slug.trim()}`;
     busy = true;
     try {
+      const body = {
+        organization_id: activeOrg.id,
+        slug: slug.trim(),
+        display_name: displayName.trim(),
+      };
+      if (sid && pub) {
+        body.service_identity_id = sid;
+        body.service_identity_public_key = pub;
+      }
       const res = await hostedCpFetch("workspaces", {
         method: "POST",
-        body: JSON.stringify({
-          organization_id: activeOrg.id,
-          slug: slug.trim(),
-          display_name: displayName.trim(),
-          service_identity_id: sid,
-          service_identity_public_key: pub,
-        }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
         message = await readError(res);
@@ -160,56 +157,57 @@
       </span>
     </label>
 
-    <div class="border-t border-gray-200 pt-3">
-      <button
-        type="button"
-        class="flex items-center gap-1.5 text-[11px] font-medium text-gray-500 hover:text-gray-800"
-        onclick={() => (advancedOpen = !advancedOpen)}
-        aria-expanded={advancedOpen}
-      >
-        <svg
-          viewBox="0 0 12 12"
-          class="h-3 w-3 transition-transform {advancedOpen ? 'rotate-90' : ''}"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.6"
-          aria-hidden="true"
+    {#if canBringOwnServiceIdentity}
+      <div class="border-t border-gray-200 pt-3">
+        <button
+          type="button"
+          class="flex items-center gap-1.5 text-[11px] font-medium text-gray-500 hover:text-gray-800"
+          onclick={() => (advancedOpen = !advancedOpen)}
+          aria-expanded={advancedOpen}
         >
-          <path d="M4.5 3l3 3-3 3" />
-        </svg>
-        Advanced settings
-      </button>
+          <svg
+            viewBox="0 0 12 12"
+            class="h-3 w-3 transition-transform {advancedOpen ? 'rotate-90' : ''}"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            aria-hidden="true"
+          >
+            <path d="M4.5 3l3 3-3 3" />
+          </svg>
+          Advanced settings
+        </button>
 
-      {#if advancedOpen}
-        <div
-          class="mt-3 space-y-3 rounded-md border border-gray-200 bg-gray-50 px-3 py-3"
-        >
-          <p class="text-[11px] text-gray-500">
-            Most users can leave these alone — defaults match the local control
-            plane setup. Override only if you're connecting an external service
-            identity.
-          </p>
-          <label class="block text-[12px] font-medium text-gray-600">
-            Service identity id
-            <input
-              type="text"
-              bind:value={serviceId}
-              disabled={busy}
-              class="mt-1 w-full rounded-md border border-gray-200 bg-gray-100 px-3 py-1.5 text-[13px] text-gray-900"
-            />
-          </label>
-          <label class="block text-[12px] font-medium text-gray-600">
-            Service identity public key (base64)
-            <textarea
-              bind:value={servicePublicKey}
-              disabled={busy}
-              rows="3"
-              class="mt-1 w-full rounded-md border border-gray-200 bg-gray-100 px-3 py-1.5 font-mono text-[11px] text-gray-900"
-            ></textarea>
-          </label>
-        </div>
-      {/if}
-    </div>
+        {#if advancedOpen}
+          <div
+            class="mt-3 space-y-3 rounded-md border border-gray-200 bg-gray-50 px-3 py-3"
+          >
+            <p class="text-[11px] text-gray-500">
+              Platform provisioning is the default. Set both fields only for
+              bring-your-own service identity.
+            </p>
+            <label class="block text-[12px] font-medium text-gray-600">
+              Service identity id
+              <input
+                type="text"
+                bind:value={serviceId}
+                disabled={busy}
+                class="mt-1 w-full rounded-md border border-gray-200 bg-gray-100 px-3 py-1.5 text-[13px] text-gray-900"
+              />
+            </label>
+            <label class="block text-[12px] font-medium text-gray-600">
+              Service identity public key (base64)
+              <textarea
+                bind:value={servicePublicKey}
+                disabled={busy}
+                rows="3"
+                class="mt-1 w-full rounded-md border border-gray-200 bg-gray-100 px-3 py-1.5 font-mono text-[11px] text-gray-900"
+              ></textarea>
+            </label>
+          </div>
+        {/if}
+      </div>
+    {/if}
 
     {#if message}
       <p

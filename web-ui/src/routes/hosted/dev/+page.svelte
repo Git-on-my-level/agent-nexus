@@ -22,7 +22,7 @@
   </p>
   <h1 class="mt-1 text-lg font-semibold text-gray-900">Developer notes</h1>
   <p class="mt-1 text-[12px] text-gray-500">
-    Advanced options and environment variables for the local hosted stack. Most
+    Advanced options and environment variables for local development. Most
     people don't need any of this — pick the right plan from
     <a
       class="text-indigo-400 underline underline-offset-2 hover:text-indigo-300"

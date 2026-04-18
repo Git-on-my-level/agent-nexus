@@ -31,6 +31,8 @@
   let orgPickerOpen = $state(false);
 
   const path = $derived($page.url.pathname);
+  /** Full product name on the public landing page only; app chrome stays “ANX”. */
+  const isLandingMarketing = $derived(path === "/hosted/start");
   const isPublic = $derived(
     PUBLIC_PREFIXES.some((p) => path === p || path.startsWith(p + "/")),
   );
@@ -116,14 +118,14 @@
           href={isPublic && session.phase !== "authed"
             ? "/hosted/start"
             : "/hosted/dashboard"}
-          class="flex items-center gap-2 text-[13px] font-semibold text-gray-900"
+          class="flex items-center gap-2 text-[13px] font-semibold text-gray-900 whitespace-nowrap"
         >
           <span
-            class="inline-flex h-5 w-5 items-center justify-center rounded bg-indigo-500/15 text-[10px] font-bold uppercase text-indigo-400"
+            class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded bg-indigo-500/15 text-[10px] font-bold uppercase text-indigo-400"
           >
             O
           </span>
-          ANX
+          {isLandingMarketing ? "Agent Nexus" : "ANX"}
         </a>
 
         {#if session.phase === "authed"}
@@ -365,7 +367,7 @@
           class="inline-flex h-4 w-4 items-center justify-center rounded bg-indigo-500/15 text-[9px] font-bold uppercase text-indigo-400"
           aria-hidden="true">O</span
         >
-        <span>ANX hosted · &copy; {new Date().getFullYear()}</span>
+        <span>{isLandingMarketing ? "Agent Nexus" : "ANX"} · &copy; {new Date().getFullYear()}</span>
       </div>
       <nav
         class="flex flex-wrap items-center gap-x-4 gap-y-1"
