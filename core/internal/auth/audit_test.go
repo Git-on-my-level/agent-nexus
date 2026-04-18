@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"organization-autorunner-core/internal/storage"
+	"agent-nexus-core/internal/storage"
 )
 
 func TestListAuditEventsOrdersSameSecondByFixedWidthSortKey(t *testing.T) {

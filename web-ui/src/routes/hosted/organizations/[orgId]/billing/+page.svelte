@@ -343,7 +343,7 @@
 </script>
 
 <svelte:head>
-  <title>Billing — OAR</title>
+  <title>Billing — ANX</title>
 </svelte:head>
 
 <div class="space-y-5">

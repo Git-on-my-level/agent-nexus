@@ -5,12 +5,12 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR/core"
 
 go run ./cmd/contract-gen \
-  --openapi "../contracts/oar-openapi.yaml" \
-  --schema "../contracts/oar-schema.yaml" \
+  --openapi "../contracts/anx-openapi.yaml" \
+  --schema "../contracts/anx-schema.yaml" \
   --out "../contracts/gen" \
-  --source-label "contracts/oar-openapi.yaml" \
-  --go-module "organization-autorunner-contracts-go-client" \
-  --ts-package "organization-autorunner-contracts-ts-client"
+  --source-label "contracts/anx-openapi.yaml" \
+  --go-module "agent-nexus-contracts-go-client" \
+  --ts-package "agent-nexus-contracts-ts-client"
 
 cd "$ROOT_DIR"
 
@@ -31,4 +31,4 @@ mkdir -p cli/docs/generated
 cp contracts/gen/docs/commands.md cli/docs/generated/commands.md
 cp contracts/gen/docs/command-groups.md cli/docs/generated/command-groups.md
 cp contracts/gen/docs/concepts.md cli/docs/generated/concepts.md
-cp contracts/gen/docs/x-oar-authoring.md cli/docs/generated/x-oar-authoring.md
+cp contracts/gen/docs/x-anx-authoring.md cli/docs/generated/x-anx-authoring.md

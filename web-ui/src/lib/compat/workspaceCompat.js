@@ -3,23 +3,23 @@ import {
   normalizeWorkspaceSlug,
 } from "$lib/workspacePaths";
 
-const LEGACY_PROJECTS_ENV = "OAR_PROJECTS";
-const LEGACY_DEFAULT_PROJECT_ENV = "OAR_DEFAULT_PROJECT";
+const LEGACY_PROJECTS_ENV = "ANX_PROJECTS";
+const LEGACY_DEFAULT_PROJECT_ENV = "ANX_DEFAULT_PROJECT";
 const LEGACY_PROJECT_HEADER = "x-oar-project-slug";
 
 export function resolveWorkspaceEnv(env) {
-  const workspacesRaw = env.OAR_WORKSPACES ?? env[LEGACY_PROJECTS_ENV];
+  const workspacesRaw = env.ANX_WORKSPACES ?? env[LEGACY_PROJECTS_ENV];
   const defaultWorkspaceRaw =
-    env.OAR_DEFAULT_WORKSPACE ?? env[LEGACY_DEFAULT_PROJECT_ENV];
+    env.ANX_DEFAULT_WORKSPACE ?? env[LEGACY_DEFAULT_PROJECT_ENV];
 
   return {
-    OAR_WORKSPACES: workspacesRaw,
-    OAR_DEFAULT_WORKSPACE: defaultWorkspaceRaw,
+    ANX_WORKSPACES: workspacesRaw,
+    ANX_DEFAULT_WORKSPACE: defaultWorkspaceRaw,
   };
 }
 
 export function getWorkspaceHeader(headers) {
-  const workspaceSlug = headers.get("x-oar-workspace-slug");
+  const workspaceSlug = headers.get("x-anx-workspace-slug");
   if (workspaceSlug) {
     return workspaceSlug;
   }

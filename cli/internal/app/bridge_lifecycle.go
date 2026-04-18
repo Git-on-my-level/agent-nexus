@@ -16,7 +16,7 @@ import (
 	"syscall"
 	"time"
 
-	"organization-autorunner-cli/internal/errnorm"
+	"agent-nexus-cli/internal/errnorm"
 )
 
 func init() {
@@ -32,14 +32,14 @@ func init() {
 			Path:        "bridge start",
 			Summary:     "Start a managed bridge daemon for one config file.",
 			JSONShape:   "`kind`, `config_path`, `pid`, `log_path`, `process_state_path`, `command`",
-			Composition: "Pure local helper. Resolves the installed `oar-agent-bridge` binary, infers the config role, launches the daemon in the background, and records pid/log metadata in a per-config manager directory.",
+			Composition: "Pure local helper. Resolves the installed `anx-agent-bridge` binary, infers the config role, launches the daemon in the background, and records pid/log metadata in a per-config manager directory.",
 			Examples: []string{
-				"oar bridge start --config ./agent.toml",
+				"anx bridge start --config ./agent.toml",
 			},
 			Flags: []localHelperFlag{
 				{Name: "--config <path>", Description: "Bridge config to start. The config must contain `[agent]`."},
 				{Name: "--install-dir <dir>", Description: "Root directory for the managed bridge virtualenv."},
-				{Name: "--bin-dir <dir>", Description: "Directory where the managed `oar-agent-bridge` wrapper should exist."},
+				{Name: "--bin-dir <dir>", Description: "Directory where the managed `anx-agent-bridge` wrapper should exist."},
 			},
 		},
 		localHelperTopic{
@@ -48,7 +48,7 @@ func init() {
 			JSONShape:   "`kind`, `config_path`, `pid`, `stopped_at`, `last_signal`",
 			Composition: "Pure local helper. Reads the per-config manager state, sends SIGTERM, and records the stopped timestamp once the daemon exits.",
 			Examples: []string{
-				"oar bridge stop --config ./agent.toml --force",
+				"anx bridge stop --config ./agent.toml --force",
 			},
 			Flags: []localHelperFlag{
 				{Name: "--config <path>", Description: "Managed config to stop."},
@@ -62,7 +62,7 @@ func init() {
 			JSONShape:   "`kind`, `config_path`, `pid`, `log_path`, `process_state_path`",
 			Composition: "Pure local helper. Stops the existing managed process if one is present, then launches a fresh daemon and updates the manager state.",
 			Examples: []string{
-				"oar bridge restart --config ./agent.toml",
+				"anx bridge restart --config ./agent.toml",
 			},
 			Flags: []localHelperFlag{
 				{Name: "--config <path>", Description: "Managed config to restart."},
@@ -75,12 +75,12 @@ func init() {
 			JSONShape:   "`kind`, `managed`, `running`, `pid`, `log_path`, `process_state_path`, `registration`",
 			Composition: "Pure local helper plus optional bridge CLI calls. Reports the background process state, log path, and agent registration readiness when available.",
 			Examples: []string{
-				"oar bridge status --config ./agent.toml",
+				"anx bridge status --config ./agent.toml",
 			},
 			Flags: []localHelperFlag{
 				{Name: "--config <path>", Description: "Managed config to inspect."},
 				{Name: "--install-dir <dir>", Description: "Root directory for the managed bridge virtualenv."},
-				{Name: "--bin-dir <dir>", Description: "Directory where the managed `oar-agent-bridge` wrapper should exist."},
+				{Name: "--bin-dir <dir>", Description: "Directory where the managed `anx-agent-bridge` wrapper should exist."},
 			},
 		},
 		localHelperTopic{
@@ -89,7 +89,7 @@ func init() {
 			JSONShape:   "`kind`, `config_path`, `log_path`, `lines`, `content`",
 			Composition: "Pure local helper. Reads the per-config managed log file and returns the last N lines without requiring direct shell access.",
 			Examples: []string{
-				"oar bridge logs --config ./agent.toml --lines 200",
+				"anx bridge logs --config ./agent.toml --lines 200",
 			},
 			Flags: []localHelperFlag{
 				{Name: "--config <path>", Description: "Managed config whose log should be tailed."},
@@ -101,7 +101,7 @@ func init() {
 
 func (a *App) runBridgeStart(ctx context.Context, args []string) (*commandResult, error) {
 	if runtime.GOOS == "windows" {
-		return nil, errnorm.Usage("unsupported_platform", "`oar bridge start` currently supports macOS and Linux only")
+		return nil, errnorm.Usage("unsupported_platform", "`anx bridge start` currently supports macOS and Linux only")
 	}
 	fs := newSilentFlagSet("bridge start")
 	var configFlag trackedString
@@ -109,12 +109,12 @@ func (a *App) runBridgeStart(ctx context.Context, args []string) (*commandResult
 	var binDirFlag trackedString
 	fs.Var(&configFlag, "config", "Bridge config to start")
 	fs.Var(&installDirFlag, "install-dir", "Root directory for the managed bridge virtualenv")
-	fs.Var(&binDirFlag, "bin-dir", "Directory where the managed oar-agent-bridge wrapper should exist")
+	fs.Var(&binDirFlag, "bin-dir", "Directory where the managed anx-agent-bridge wrapper should exist")
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	if len(fs.Args()) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar bridge start`")
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx bridge start`")
 	}
 	configPath := strings.TrimSpace(configFlag.value)
 	if configPath == "" {
@@ -160,7 +160,7 @@ func (a *App) runBridgeStart(ctx context.Context, args []string) (*commandResult
 		"PID: " + strconv.Itoa(runtimeState.PID),
 		"Log: " + runtimeState.LogPath,
 		"State: " + runtimeState.ProcessStatePath,
-		"Next step: oar bridge status --config " + shellSingleQuote(runtimeState.ConfigPath),
+		"Next step: anx bridge status --config " + shellSingleQuote(runtimeState.ConfigPath),
 	}
 	return &commandResult{
 		Text: strings.Join(lines, "\n"),
@@ -177,7 +177,7 @@ func (a *App) runBridgeStart(ctx context.Context, args []string) (*commandResult
 
 func (a *App) runBridgeStop(args []string) (*commandResult, error) {
 	if runtime.GOOS == "windows" {
-		return nil, errnorm.Usage("unsupported_platform", "`oar bridge stop` currently supports macOS and Linux only")
+		return nil, errnorm.Usage("unsupported_platform", "`anx bridge stop` currently supports macOS and Linux only")
 	}
 	fs := newSilentFlagSet("bridge stop")
 	var configFlag trackedString
@@ -190,7 +190,7 @@ func (a *App) runBridgeStop(args []string) (*commandResult, error) {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	if len(fs.Args()) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar bridge stop`")
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx bridge stop`")
 	}
 	configPath := strings.TrimSpace(configFlag.value)
 	if configPath == "" {
@@ -248,7 +248,7 @@ func (a *App) runBridgeStop(args []string) (*commandResult, error) {
 
 func (a *App) runBridgeRestart(ctx context.Context, args []string) (*commandResult, error) {
 	if runtime.GOOS == "windows" {
-		return nil, errnorm.Usage("unsupported_platform", "`oar bridge restart` currently supports macOS and Linux only")
+		return nil, errnorm.Usage("unsupported_platform", "`anx bridge restart` currently supports macOS and Linux only")
 	}
 	fs := newSilentFlagSet("bridge restart")
 	var configFlag trackedString
@@ -258,14 +258,14 @@ func (a *App) runBridgeRestart(ctx context.Context, args []string) (*commandResu
 	var force trackedBool
 	fs.Var(&configFlag, "config", "Managed bridge config to restart")
 	fs.Var(&installDirFlag, "install-dir", "Root directory for the managed bridge virtualenv")
-	fs.Var(&binDirFlag, "bin-dir", "Directory where the managed oar-agent-bridge wrapper should exist")
+	fs.Var(&binDirFlag, "bin-dir", "Directory where the managed anx-agent-bridge wrapper should exist")
 	fs.Var(&timeoutFlag, "timeout-seconds", "How long to wait after SIGTERM before failing")
 	fs.Var(&force, "force", "Escalate to SIGKILL if SIGTERM does not stop the daemon")
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	if len(fs.Args()) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar bridge restart`")
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx bridge restart`")
 	}
 	configPath := strings.TrimSpace(configFlag.value)
 	if configPath == "" {
@@ -307,12 +307,12 @@ func (a *App) runBridgeStatus(ctx context.Context, args []string) (*commandResul
 	var binDirFlag trackedString
 	fs.Var(&configFlag, "config", "Managed bridge config to inspect")
 	fs.Var(&installDirFlag, "install-dir", "Root directory for the managed bridge virtualenv")
-	fs.Var(&binDirFlag, "bin-dir", "Directory where the managed oar-agent-bridge wrapper should exist")
+	fs.Var(&binDirFlag, "bin-dir", "Directory where the managed anx-agent-bridge wrapper should exist")
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	if len(fs.Args()) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar bridge status`")
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx bridge status`")
 	}
 	configPath := strings.TrimSpace(configFlag.value)
 	if configPath == "" {
@@ -345,7 +345,7 @@ func (a *App) runBridgeStatus(ctx context.Context, args []string) (*commandResul
 			"Process: not managed",
 			"Log: " + managedConfig.LogPath,
 			"State: " + managedConfig.ProcessStatePath,
-			"Start with: oar bridge start --config " + shellSingleQuote(managedConfig.ConfigPath),
+			"Start with: anx bridge start --config " + shellSingleQuote(managedConfig.ConfigPath),
 		}
 		return &commandResult{
 			Text: strings.Join(lines, "\n"),
@@ -390,7 +390,7 @@ func (a *App) runBridgeStatus(ctx context.Context, args []string) (*commandResul
 		} else if len(registrationData) > 0 {
 			lines = append(lines, "Presence: offline or not ready for live delivery")
 		} else if bridgeBinary == "" {
-			lines = append(lines, "Registration: unavailable because oar-agent-bridge is not installed or not on PATH")
+			lines = append(lines, "Registration: unavailable because anx-agent-bridge is not installed or not on PATH")
 		}
 	}
 	return &commandResult{
@@ -418,7 +418,7 @@ func (a *App) runBridgeLogs(args []string) (*commandResult, error) {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	if len(fs.Args()) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar bridge logs`")
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx bridge logs`")
 	}
 	configPath := strings.TrimSpace(configFlag.value)
 	if configPath == "" {
@@ -448,7 +448,7 @@ func (a *App) runBridgeLogs(args []string) (*commandResult, error) {
 				"Kind: " + managedConfig.RuntimeKind,
 				"Config: " + managedConfig.ConfigPath,
 				"Log: " + logPath,
-				"No managed log file exists yet. Start the runtime with: oar bridge start --config " + shellSingleQuote(managedConfig.ConfigPath),
+				"No managed log file exists yet. Start the runtime with: anx bridge start --config " + shellSingleQuote(managedConfig.ConfigPath),
 			}
 			return &commandResult{
 				Text: strings.Join(lines, "\n"),
@@ -539,7 +539,7 @@ func bridgeManagerDir(configPath string) string {
 	if base == "" {
 		base = "bridge"
 	}
-	return filepath.Join(filepath.Dir(configPath), ".oar-bridge", base+"-"+shortBridgeHash(configPath))
+	return filepath.Join(filepath.Dir(configPath), ".anx-bridge", base+"-"+shortBridgeHash(configPath))
 }
 
 func sanitizeBridgeManagerName(value string) string {
@@ -635,7 +635,7 @@ func defaultBridgeStartManagedProcess(managedConfig bridgeManagedConfig, bridgeB
 			details["log_tail"] = tailText
 		}
 		return bridgeManagedRuntime{}, errnorm.WithDetails(
-			errnorm.Local("bridge_start_failed", "bridge runtime exited immediately; inspect `oar bridge logs --config ...`"),
+			errnorm.Local("bridge_start_failed", "bridge runtime exited immediately; inspect `anx bridge logs --config ...`"),
 			details,
 		)
 	}
@@ -701,7 +701,7 @@ func bridgeManagedRuntimeRunning(runtimeState bridgeManagedRuntime) (bool, strin
 	if err != nil {
 		return false, "pid_reused"
 	}
-	if !strings.Contains(cmdline, "oar-agent-bridge") || !strings.Contains(cmdline, runtimeState.ConfigPath) {
+	if !strings.Contains(cmdline, "anx-agent-bridge") || !strings.Contains(cmdline, runtimeState.ConfigPath) {
 		return false, "pid_reused"
 	}
 	if runtimeState.Kind == "agent" && !strings.Contains(cmdline, "bridge") {
@@ -740,13 +740,13 @@ func resolveBridgeBinary(home string, installDir string, binDir string) (string,
 	if strings.TrimSpace(binDir) == "" {
 		binDir = bridgeDefaultBinDir(home)
 	}
-	bridgeBinary := filepath.Join(binDir, "oar-agent-bridge")
+	bridgeBinary := filepath.Join(binDir, "anx-agent-bridge")
 	if _, err := bridgeStat(bridgeBinary); err == nil {
 		return bridgeBinary, nil
 	}
-	lookup, err := bridgeLookPath("oar-agent-bridge")
+	lookup, err := bridgeLookPath("anx-agent-bridge")
 	if err != nil {
-		return "", errnorm.Local("bridge_binary_missing", "oar-agent-bridge wrapper not found; run `oar bridge install`")
+		return "", errnorm.Local("bridge_binary_missing", "anx-agent-bridge wrapper not found; run `anx bridge install`")
 	}
 	return lookup, nil
 }

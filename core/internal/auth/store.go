@@ -176,7 +176,7 @@ func WithAllowDevRegisterLinkedActor(allow bool) Option {
 }
 
 func BuildAssertionMessage(agentID string, keyID string, signedAt string) string {
-	return "oar-auth-token|" + strings.TrimSpace(agentID) + "|" + strings.TrimSpace(keyID) + "|" + strings.TrimSpace(signedAt)
+	return "anx-auth-token|" + strings.TrimSpace(agentID) + "|" + strings.TrimSpace(keyID) + "|" + strings.TrimSpace(signedAt)
 }
 
 func (s *Store) RegisterAgent(ctx context.Context, input RegisterAgentInput, claim OnboardingClaim) (Agent, AgentKey, TokenBundle, error) {

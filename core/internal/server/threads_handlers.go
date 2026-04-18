@@ -10,9 +10,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"organization-autorunner-core/internal/primitives"
-	"organization-autorunner-core/internal/schedule"
-	"organization-autorunner-core/internal/schema"
+	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/schedule"
+	"agent-nexus-core/internal/schema"
 )
 
 const (

@@ -36,8 +36,8 @@ describe("buildProxyRequestInit", () => {
 
   it("omits body for GET requests", () => {
     const event = {
-      url: new URL("https://oar.example.com/meta/handshake"),
-      request: new Request("https://oar.example.com/meta/handshake", {
+      url: new URL("https://anx.example.com/meta/handshake"),
+      request: new Request("https://anx.example.com/meta/handshake", {
         method: "GET",
       }),
     };
@@ -47,7 +47,7 @@ describe("buildProxyRequestInit", () => {
     expect(requestInit.method).toBe("GET");
     expect("body" in requestInit).toBe(false);
     expect("duplex" in requestInit).toBe(false);
-    expect(requestInit.headers.get("x-forwarded-host")).toBe("oar.example.com");
+    expect(requestInit.headers.get("x-forwarded-host")).toBe("anx.example.com");
     expect(requestInit.headers.get("x-forwarded-proto")).toBe("https");
   });
 });

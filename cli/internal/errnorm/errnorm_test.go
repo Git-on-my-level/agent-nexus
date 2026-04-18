@@ -160,8 +160,8 @@ func TestEnrichBoardStatusMustBeOneOf(t *testing.T) {
 	if !strings.Contains(err.Hint, "board.status") {
 		t.Fatalf("unexpected hint: %q", err.Hint)
 	}
-	if !strings.Contains(err.Hint, "oar help") || !strings.Contains(err.Hint, "boards update") {
-		t.Fatalf("expected oar help discovery for boards update, got %q", err.Hint)
+	if !strings.Contains(err.Hint, "anx help") || !strings.Contains(err.Hint, "boards update") {
+		t.Fatalf("expected anx help discovery for boards update, got %q", err.Hint)
 	}
 }
 
@@ -170,7 +170,7 @@ func TestEnrichSchemaStrictEnumWrappedTopicStatus(t *testing.T) {
 
 	msg := `topic.status: invalid value "nope" for strict enum topic_status (allowed: active, archived, blocked, closed, paused, proposed, resolved)`
 	err := FromHTTPFailure(400, []byte(fmt.Sprintf(`{"error":{"code":"invalid_request","message":%q,"recoverable":true,"hint":"x"}}`, msg)))
-	if !strings.Contains(err.Hint, "topic_status") || !strings.Contains(err.Hint, "oar topics patch --help") {
+	if !strings.Contains(err.Hint, "topic_status") || !strings.Contains(err.Hint, "anx topics patch --help") {
 		t.Fatalf("unexpected hint: %q", err.Hint)
 	}
 }

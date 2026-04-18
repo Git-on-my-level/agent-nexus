@@ -1,0 +1,20 @@
+[Unit]
+Description=OAR shared web UI
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=anx Group=anx EnvironmentFile=/etc/anx/web-ui.env
+WorkingDirectory=/opt/anx/web-ui
+ExecStart=/usr/bin/env node /opt/anx/web-ui/build/index.js
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/anx/web-ui
+
+[Install]
+WantedBy=multi-user.target

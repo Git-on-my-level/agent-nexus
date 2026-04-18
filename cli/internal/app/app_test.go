@@ -45,12 +45,12 @@ func TestRunVersionJSON(t *testing.T) {
 }
 
 func TestRunVersionUsesProfileJSONDefault(t *testing.T) {
-	// Not parallel: clears process env so inherited OAR_BASE_URL does not override profile.
-	t.Setenv("OAR_BASE_URL", "")
-	t.Setenv("OAR_AGENT", "")
+	// Not parallel: clears process env so inherited ANX_BASE_URL does not override profile.
+	t.Setenv("ANX_BASE_URL", "")
+	t.Setenv("ANX_AGENT", "")
 
 	home := t.TempDir()
-	profilesDir := filepath.Join(home, ".config", "oar", "profiles")
+	profilesDir := filepath.Join(home, ".config", "anx", "profiles")
 	if err := os.MkdirAll(profilesDir, 0o700); err != nil {
 		t.Fatalf("mkdir profiles dir: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestRunMetaDocsIsConfigLenient(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
-	profilesDir := filepath.Join(home, ".config", "oar", "profiles")
+	profilesDir := filepath.Join(home, ".config", "anx", "profiles")
 	if err := os.MkdirAll(profilesDir, 0o700); err != nil {
 		t.Fatalf("mkdir profiles dir: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestRunMetaDocsIsConfigLenient(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
-	if !strings.Contains(stdout.String(), "# OAR Runtime Help Reference") {
+	if !strings.Contains(stdout.String(), "# ANX Runtime Help Reference") {
 		t.Fatalf("expected runtime docs output=%s", stdout.String())
 	}
 	if strings.TrimSpace(stderr.String()) != "" {
@@ -156,7 +156,7 @@ func TestRunSubcommandTrailingHelpIsConfigLenientWithMultipleProfiles(t *testing
 	t.Parallel()
 
 	home := t.TempDir()
-	profilesDir := filepath.Join(home, ".config", "oar", "profiles")
+	profilesDir := filepath.Join(home, ".config", "anx", "profiles")
 	if err := os.MkdirAll(profilesDir, 0o700); err != nil {
 		t.Fatalf("mkdir profiles dir: %v", err)
 	}
@@ -217,7 +217,7 @@ func TestRunMetaUtilityCommandsDispatchGeneratedEndpoints(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	profilesDir := filepath.Join(home, ".config", "oar", "profiles")
+	profilesDir := filepath.Join(home, ".config", "anx", "profiles")
 	if err := os.MkdirAll(profilesDir, 0o700); err != nil {
 		t.Fatalf("mkdir profiles dir: %v", err)
 	}

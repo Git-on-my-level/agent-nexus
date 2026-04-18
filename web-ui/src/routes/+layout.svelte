@@ -90,7 +90,7 @@
     const d = String(activeWorkspace?.description ?? "").trim();
     if (d) return d;
     if (data.hostedMode) return "Workspace";
-    return "OAR Control Surface";
+    return "ANX Control Surface";
   });
   let currentAppPath = $derived(
     activeWorkspaceSlug
@@ -101,7 +101,7 @@
   let principalActorId = $derived($authenticatedAgent?.actor_id ?? "");
   let activeActorId = $derived(principalActorId || $selectedActorId);
   let onLoginRoute = $derived(currentAppPath === "/login");
-  // oar-core human-only routes (e.g. /secrets) need a passkey or dev-bypass session
+  // anx-core human-only routes (e.g. /secrets) need a passkey or dev-bypass session
   // even when dev actor mode allows unauthenticated browsing elsewhere.
   let requiresHumanSession = $derived(currentAppPath === "/secrets");
   let hasHumanAuthSession = $derived(
@@ -172,7 +172,7 @@
     );
     const section = navItem?.label;
     const workspaceLabel = activeWorkspace?.label;
-    const parts = [section, workspaceLabel, "OAR"].filter(Boolean);
+    const parts = [section, workspaceLabel, "ANX"].filter(Boolean);
     return parts.join(" · ");
   });
 
@@ -942,7 +942,7 @@
 
       <div class="shell-main">
         <header class="shell-mobile-header">
-          <p>OAR</p>
+          <p>ANX</p>
           <div class="shell-mobile-header-actions">
             <button
               class="shell-mobile-search"

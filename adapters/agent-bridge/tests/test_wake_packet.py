@@ -1,4 +1,4 @@
-from oar_agent_bridge.models import WakePacket
+from anx_agent_bridge.models import WakePacket
 
 
 def test_roundtrip_packet_content():
@@ -16,14 +16,14 @@ def test_roundtrip_packet_content():
         trigger_text="@hermes please help",
         current_summary="summary",
         session_key="oar:ws_main:thread_1:hermes",
-        oar_base_url="http://localhost:8080",
+        anx_base_url="http://localhost:8080",
         thread_context_url="http://localhost:8080/threads/thread_1/context",
         thread_workspace_url="http://localhost:8080/threads/thread_1/workspace",
         trigger_event_url="http://localhost:8080/events/event_1",
-        cli_thread_inspect="oar threads inspect --thread-id thread_1 --json",
-        cli_thread_workspace="oar threads workspace --thread-id thread_1 --json",
+        cli_thread_inspect="anx threads inspect --thread-id thread_1 --json",
+        cli_thread_workspace="anx threads workspace --thread-id thread_1 --json",
         topic_workspace_url="http://localhost:8080/topics/topic_1/workspace",
-        cli_topic_workspace="oar topics workspace --topic-id topic_1 --json",
+        cli_topic_workspace="anx topics workspace --topic-id topic_1 --json",
         subject_ref="topic:topic_1",
         resolved_subject={
             "ref": "topic:topic_1",

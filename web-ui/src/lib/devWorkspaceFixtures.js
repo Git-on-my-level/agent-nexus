@@ -46,7 +46,7 @@ const actors = [
 /**
  * Local-dev fixture personas: stable actor ids aligned with domain seed actors.
  * Auth registration links a dedicated workspace agent to each `actor_id` when
- * `OAR_DEV_SEED_IDENTITIES=1` and core runs with linked-agent registration enabled.
+ * `ANX_DEV_SEED_IDENTITIES=1` and core runs with linked-agent registration enabled.
  */
 export const DEV_FIXTURE_PERSONAS = [
   {

@@ -62,7 +62,7 @@ func TestWakePacketToContentPrefersTopicsWorkspaceWhenTopicCLISet(t *testing.T) 
 		TriggerEventURL:      "http://x/events/e1",
 		CLIThreadInspect:     "inspect",
 		CLIThreadWorkspace:   "ws-cli",
-		CLITopicWorkspace:    "oar topics workspace --topic-id top-1 --json",
+		CLITopicWorkspace:    "anx topics workspace --topic-id top-1 --json",
 		Version:              WakePacketVersion,
 	}
 	content := p.ToContent()

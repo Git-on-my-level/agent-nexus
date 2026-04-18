@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	contractsclient "organization-autorunner-contracts-go-client/client"
+	contractsclient "agent-nexus-contracts-go-client/client"
 
-	"organization-autorunner-cli/internal/buildinfo"
-	"organization-autorunner-cli/internal/config"
+	"agent-nexus-cli/internal/buildinfo"
+	"agent-nexus-cli/internal/config"
 )
 
 var CLIVersion = buildinfo.Current
@@ -186,10 +186,10 @@ func (c *Client) resolveURL(rawPath string) (string, error) {
 func (c *Client) defaultHeaders() map[string]string {
 	headers := map[string]string{
 		"Accept":            "application/json",
-		"X-OAR-CLI-Version": CLIVersion,
+		"X-ANX-CLI-Version": CLIVersion,
 	}
 	if c.agent != "" {
-		headers["X-OAR-Agent"] = c.agent
+		headers["X-ANX-Agent"] = c.agent
 	}
 	if c.accessToken != "" {
 		headers["Authorization"] = "Bearer " + c.accessToken

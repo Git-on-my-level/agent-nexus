@@ -22,9 +22,9 @@
  * the proxy as Bearer tokens. This script isolates the exact point of failure.
  */
 
-const WEB_UI_BASE = process.env.OAR_WEB_UI_BASE_URL || "http://127.0.0.1:5173";
-const WORKSPACE_SLUG = process.env.OAR_WORKSPACE_SLUG || "local";
-const WORKSPACE_HEADER = "x-oar-workspace-slug";
+const WEB_UI_BASE = process.env.ANX_WEB_UI_BASE_URL || "http://127.0.0.1:5173";
+const WORKSPACE_SLUG = process.env.ANX_WORKSPACE_SLUG || "local";
+const WORKSPACE_HEADER = "x-anx-workspace-slug";
 
 const results = [];
 let cookieJar = {};

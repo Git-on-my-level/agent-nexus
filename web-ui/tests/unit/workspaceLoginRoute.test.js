@@ -9,7 +9,7 @@ const authSessionMocks = vi.hoisted(() => ({
 }));
 
 const dynamicPrivateEnv = vi.hoisted(() => ({
-  OAR_CONTROL_BASE_URL: "",
+  ANX_CONTROL_BASE_URL: "",
 }));
 
 vi.mock("$env/dynamic/private", () => ({
@@ -55,7 +55,7 @@ function createEvent(overrides = {}) {
 }
 
 afterEach(() => {
-  dynamicPrivateEnv.OAR_CONTROL_BASE_URL = "";
+  dynamicPrivateEnv.ANX_CONTROL_BASE_URL = "";
 });
 
 describe("workspace login route", () => {
@@ -207,7 +207,7 @@ describe("workspace login route", () => {
   });
 
   it("redirects to launch finish when control-plane session cookie can mint a launch session", async () => {
-    dynamicPrivateEnv.OAR_CONTROL_BASE_URL = "https://cp.example.test";
+    dynamicPrivateEnv.ANX_CONTROL_BASE_URL = "https://cp.example.test";
     workspaceResolverMocks.resolveWorkspaceBySlug.mockResolvedValue({
       workspaceSlug: "acme",
       workspace: {
@@ -262,7 +262,7 @@ describe("workspace login route", () => {
   });
 
   it("falls through to hosted sign-in when launch-sessions returns 401", async () => {
-    dynamicPrivateEnv.OAR_CONTROL_BASE_URL = "https://cp.example.test";
+    dynamicPrivateEnv.ANX_CONTROL_BASE_URL = "https://cp.example.test";
     workspaceResolverMocks.resolveWorkspaceBySlug.mockResolvedValue({
       workspaceSlug: "acme",
       workspace: {

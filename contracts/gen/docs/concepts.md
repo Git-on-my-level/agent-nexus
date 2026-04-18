@@ -1,6 +1,6 @@
 # OAR Concepts
 
-Generated from `contracts/oar-openapi.yaml`.
+Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.3.0`

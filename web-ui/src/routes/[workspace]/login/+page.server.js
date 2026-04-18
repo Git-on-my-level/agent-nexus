@@ -137,7 +137,7 @@ export async function load(event) {
   );
 
   const controlBaseUrl = normalizeBaseUrl(
-    privateEnv.OAR_CONTROL_BASE_URL ?? "",
+    privateEnv.ANX_CONTROL_BASE_URL ?? "",
   );
   const cpAccessToken = String(
     event.cookies.get("oar_cp_dev_access_token") ?? "",

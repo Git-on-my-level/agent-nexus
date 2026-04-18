@@ -36,7 +36,7 @@ Voice and tone: direct, unambiguous, operator-grade. Avoid consumer-app softness
 
 3. **Flat and readable over layered and clever.** Prefer a single bordered container with dividers over nested card hierarchies. Prefer explicit pixel type sizes (`text-[13px]`, `text-[12px]`, `text-[11px]`) over Tailwind utility shorthands (`text-sm`, `text-xs`). Prefer `rounded-md` consistently over mixing radii.
 
-4. **Graceful forward-compatibility.** Unknown event types, artifact kinds, ref prefixes, and object fields must stay visible — never hidden, never silently dropped. The UI is one client among many and must degrade safely when oar-core introduces newer data.
+4. **Graceful forward-compatibility.** Unknown event types, artifact kinds, ref prefixes, and object fields must stay visible — never hidden, never silently dropped. The UI is one client among many and must degrade safely when anx-core introduces newer data.
 
 5. **Intervention, not orchestration.** The UI surfaces human decisions, acknowledgments, reviews, and snapshot edits. It does not automate, orchestrate agents, or maintain its own source of truth. Design affordances that make safe, explicit human action easy, and that surface the evidence behind every consequential state change.
 
@@ -56,4 +56,4 @@ Voice and tone: direct, unambiguous, operator-grade. Avoid consumer-app softness
 | Default radius | `rounded-md` |
 
 Full visual rules: `web-ui/docs/style-guide.md`
-Full product/UX spec: `web-ui/docs/oar-ui-spec.md`
+Full product/UX spec: `web-ui/docs/anx-ui-spec.md`

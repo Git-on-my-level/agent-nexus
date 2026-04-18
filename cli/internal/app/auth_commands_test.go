@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"organization-autorunner-cli/internal/profile"
+	"agent-nexus-cli/internal/profile"
 )
 
 func TestAuthRegisterLifecycleCommands(t *testing.T) {
@@ -35,14 +35,14 @@ func TestAuthRegisterLifecycleCommands(t *testing.T) {
 	if regData == nil {
 		t.Fatalf("expected register data: %#v", registerPayload)
 	}
-	if got := strings.TrimSpace(anyStr(regData["hint_config_use"])); got != "oar config use agent-a" {
+	if got := strings.TrimSpace(anyStr(regData["hint_config_use"])); got != "anx config use agent-a" {
 		t.Fatalf("unexpected hint_config_use: %#v", regData["hint_config_use"])
 	}
-	if got := strings.TrimSpace(anyStr(regData["hint_auth_default"])); got != "oar auth default agent-a" {
+	if got := strings.TrimSpace(anyStr(regData["hint_auth_default"])); got != "anx auth default agent-a" {
 		t.Fatalf("unexpected hint_auth_default: %#v", regData["hint_auth_default"])
 	}
 
-	profilePath := filepath.Join(home, ".config", "oar", "profiles", "agent-a.json")
+	profilePath := filepath.Join(home, ".config", "anx", "profiles", "agent-a.json")
 	storedProfile, ok, err := profile.Load(profilePath)
 	if err != nil {
 		t.Fatalf("load profile after register: %v", err)
@@ -53,7 +53,7 @@ func TestAuthRegisterLifecycleCommands(t *testing.T) {
 	if storedProfile.AgentID == "" || storedProfile.KeyID == "" || storedProfile.AccessToken == "" || storedProfile.RefreshToken == "" {
 		t.Fatalf("unexpected stored profile: %#v", storedProfile)
 	}
-	expectedKeyPath := filepath.Join(home, ".config", "oar", "keys", "agent-a.ed25519")
+	expectedKeyPath := filepath.Join(home, ".config", "anx", "keys", "agent-a.ed25519")
 	if storedProfile.PrivateKeyPath != expectedKeyPath {
 		t.Fatalf("unexpected private key path: got %s want %s", storedProfile.PrivateKeyPath, expectedKeyPath)
 	}
@@ -142,7 +142,7 @@ func TestAuthWhoAmIAutoRefreshesExpiredAccessToken(t *testing.T) {
 
 	_ = runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-refresh", "auth", "register", "--username", "agent.refresh"})
 
-	profilePath := filepath.Join(home, ".config", "oar", "profiles", "agent-refresh.json")
+	profilePath := filepath.Join(home, ".config", "anx", "profiles", "agent-refresh.json")
 	storedProfile, ok, err := profile.Load(profilePath)
 	if err != nil || !ok {
 		t.Fatalf("load profile after register: ok=%t err=%v", ok, err)
@@ -184,10 +184,10 @@ func TestAuthTextOutputIncludesWakeRoutingNextSteps(t *testing.T) {
 		"auth", "register",
 		"--username", "agent.text",
 	})
-	if !strings.Contains(registerOut, "oar config use agent-text") {
+	if !strings.Contains(registerOut, "anx config use agent-text") {
 		t.Fatalf("expected active profile hint in register output=%s", registerOut)
 	}
-	if !strings.Contains(registerOut, "Wake registration help: oar help bridge; oar meta doc agent-bridge; oar meta doc wake-routing (principal: @agent.text)") {
+	if !strings.Contains(registerOut, "Wake registration help: anx help bridge; anx meta doc agent-bridge; anx meta doc wake-routing (principal: @agent.text)") {
 		t.Fatalf("expected wake registration hint in register output=%s", registerOut)
 	}
 
@@ -196,7 +196,7 @@ func TestAuthTextOutputIncludesWakeRoutingNextSteps(t *testing.T) {
 		"--agent", "agent-text",
 		"auth", "whoami",
 	})
-	if !strings.Contains(whoamiOut, "Wake registration help: oar help bridge; oar meta doc agent-bridge; oar meta doc wake-routing (principal: @agent.text)") {
+	if !strings.Contains(whoamiOut, "Wake registration help: anx help bridge; anx meta doc agent-bridge; anx meta doc wake-routing (principal: @agent.text)") {
 		t.Fatalf("expected wake registration hint in whoami output=%s", whoamiOut)
 	}
 	if !strings.Contains(whoamiOut, "Server actor ID: agent-123") {
@@ -256,7 +256,7 @@ func TestAuthWhoAmIHintUsesServerResolvedUsername(t *testing.T) {
 		"--username", "server.name",
 	})
 
-	profilePath := filepath.Join(home, ".config", "oar", "profiles", "agent-renamed.json")
+	profilePath := filepath.Join(home, ".config", "anx", "profiles", "agent-renamed.json")
 	storedProfile, ok, err := profile.Load(profilePath)
 	if err != nil || !ok {
 		t.Fatalf("load profile after register: ok=%t err=%v", ok, err)
@@ -273,7 +273,7 @@ func TestAuthWhoAmIHintUsesServerResolvedUsername(t *testing.T) {
 		"--agent", "agent-renamed",
 		"auth", "whoami",
 	})
-	if !strings.Contains(whoamiOut, "Wake registration help: oar help bridge; oar meta doc agent-bridge; oar meta doc wake-routing (principal: @server.name)") {
+	if !strings.Contains(whoamiOut, "Wake registration help: anx help bridge; anx meta doc agent-bridge; anx meta doc wake-routing (principal: @server.name)") {
 		t.Fatalf("expected server-resolved wake registration hint output=%s", whoamiOut)
 	}
 }
@@ -296,7 +296,7 @@ func TestAuthRegisterPersistsProfileDefaults(t *testing.T) {
 		"--username", "agent.defaults",
 	})
 
-	profilePath := filepath.Join(home, ".config", "oar", "profiles", "agent-profile-defaults.json")
+	profilePath := filepath.Join(home, ".config", "anx", "profiles", "agent-profile-defaults.json")
 	storedProfile, ok, err := profile.Load(profilePath)
 	if err != nil || !ok {
 		t.Fatalf("load profile: ok=%t err=%v", ok, err)
@@ -434,7 +434,7 @@ func TestAuthPrincipalsListTaggableHandles(t *testing.T) {
 	env := map[string]string{}
 	_ = runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "register", "--username", "agent.list"})
 
-	profilePath := filepath.Join(home, ".config", "oar", "profiles", "agent-a.json")
+	profilePath := filepath.Join(home, ".config", "anx", "profiles", "agent-a.json")
 	storedProfile, ok, err := profile.Load(profilePath)
 	if err != nil || !ok {
 		t.Fatalf("load profile after register: ok=%t err=%v", ok, err)
@@ -505,7 +505,7 @@ func TestAuthPrincipalsListFilteredEmptyPageShowsNextCursor(t *testing.T) {
 	env := map[string]string{}
 	_ = runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "register", "--username", "agent.list"})
 
-	profilePath := filepath.Join(home, ".config", "oar", "profiles", "agent-a.json")
+	profilePath := filepath.Join(home, ".config", "anx", "profiles", "agent-a.json")
 	storedProfile, ok, err := profile.Load(profilePath)
 	if err != nil || !ok {
 		t.Fatalf("load profile after register: ok=%t err=%v", ok, err)
@@ -562,7 +562,7 @@ func TestAuthRegisterInternalErrorIsActionable(t *testing.T) {
 	if message := strings.TrimSpace(anyStr(errObj["message"])); !strings.Contains(message, "temporarily unavailable") {
 		t.Fatalf("expected actionable register error message, got %q payload=%#v", message, payload)
 	}
-	if hint := strings.TrimSpace(anyStr(errObj["hint"])); !strings.Contains(hint, "oar api call --path /readyz") {
+	if hint := strings.TrimSpace(anyStr(errObj["hint"])); !strings.Contains(hint, "anx api call --path /readyz") {
 		t.Fatalf("expected readiness hint, got %q payload=%#v", hint, payload)
 	}
 	if recoverable, _ := errObj["recoverable"].(bool); !recoverable {
@@ -608,7 +608,7 @@ func TestAuthInvitesListShowsConsumedInvites(t *testing.T) {
 	env := map[string]string{}
 
 	_ = runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "register", "--username", "Agent.One"})
-	profilePath := filepath.Join(home, ".config", "oar", "profiles", "agent-a.json")
+	profilePath := filepath.Join(home, ".config", "anx", "profiles", "agent-a.json")
 	storedProfile, ok, err := profile.Load(profilePath)
 	if err != nil || !ok {
 		t.Fatalf("load profile after register: ok=%t err=%v", ok, err)
@@ -674,7 +674,7 @@ func TestAuthPrincipalsAndAuditList(t *testing.T) {
 	env := map[string]string{}
 
 	_ = runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "register", "--username", "Agent.One"})
-	profilePath := filepath.Join(home, ".config", "oar", "profiles", "agent-a.json")
+	profilePath := filepath.Join(home, ".config", "anx", "profiles", "agent-a.json")
 	storedProfile, ok, err := profile.Load(profilePath)
 	if err != nil || !ok {
 		t.Fatalf("load profile after register: ok=%t err=%v", ok, err)
@@ -768,7 +768,7 @@ func TestAuthPrincipalsListHandlesOnly(t *testing.T) {
 	env := map[string]string{}
 
 	_ = runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "register", "--username", "Agent.One"})
-	profilePath := filepath.Join(home, ".config", "oar", "profiles", "agent-a.json")
+	profilePath := filepath.Join(home, ".config", "anx", "profiles", "agent-a.json")
 	storedProfile, ok, err := profile.Load(profilePath)
 	if err != nil || !ok {
 		t.Fatalf("load profile after register: ok=%t err=%v", ok, err)
@@ -848,7 +848,7 @@ func TestAuthPrincipalsRevokeRejectsCurrentProfile(t *testing.T) {
 
 	_ = runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "register", "--username", "Agent.One"})
 
-	profilePath := filepath.Join(home, ".config", "oar", "profiles", "agent-a.json")
+	profilePath := filepath.Join(home, ".config", "anx", "profiles", "agent-a.json")
 	storedProfile, ok, err := profile.Load(profilePath)
 	if err != nil || !ok {
 		t.Fatalf("load profile after register: ok=%t err=%v", ok, err)
@@ -863,7 +863,7 @@ func TestAuthPrincipalsRevokeRejectsCurrentProfile(t *testing.T) {
 	if got := strings.TrimSpace(anyStr(errObj["code"])); got != "invalid_request" {
 		t.Fatalf("expected invalid_request code, got %#v", payload)
 	}
-	if msg := strings.TrimSpace(anyStr(errObj["message"])); !strings.Contains(msg, "oar auth revoke") {
+	if msg := strings.TrimSpace(anyStr(errObj["message"])); !strings.Contains(msg, "anx auth revoke") {
 		t.Fatalf("expected self-revoke guidance, got %#v", payload)
 	}
 }
@@ -1013,7 +1013,7 @@ func (f *fakeAuthCore) handle(w http.ResponseWriter, r *http.Request) {
 			}
 			signedAt := strings.TrimSpace(anyStr(req["signed_at"]))
 			signatureB64 := strings.TrimSpace(anyStr(req["signature"]))
-			message := "oar-auth-token|" + f.agentID + "|" + f.keyID + "|" + signedAt
+			message := "anx-auth-token|" + f.agentID + "|" + f.keyID + "|" + signedAt
 			publicKey, err := base64.StdEncoding.DecodeString(f.publicKeyB64)
 			if err != nil || len(publicKey) != ed25519.PublicKeySize {
 				w.WriteHeader(http.StatusUnauthorized)

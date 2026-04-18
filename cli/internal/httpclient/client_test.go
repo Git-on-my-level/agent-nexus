@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"organization-autorunner-cli/internal/config"
+	"agent-nexus-cli/internal/config"
 )
 
 func TestRawCall(t *testing.T) {
@@ -18,8 +18,8 @@ func TestRawCall(t *testing.T) {
 			http.NotFound(w, r)
 			return
 		}
-		if r.Header.Get("X-OAR-CLI-Version") == "" {
-			t.Fatalf("expected X-OAR-CLI-Version header")
+		if r.Header.Get("X-ANX-CLI-Version") == "" {
+			t.Fatalf("expected X-ANX-CLI-Version header")
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"ok":true}`))

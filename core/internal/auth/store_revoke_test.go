@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"organization-autorunner-core/internal/storage"
+	"agent-nexus-core/internal/storage"
 )
 
 func TestRevokeAgentIsIdempotentAndAudited(t *testing.T) {

@@ -7,14 +7,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"organization-autorunner-core/internal/blob"
+	"agent-nexus-core/internal/blob"
 	"path/filepath"
 	"testing"
 
-	"organization-autorunner-core/internal/actors"
-	"organization-autorunner-core/internal/primitives"
-	"organization-autorunner-core/internal/schema"
-	"organization-autorunner-core/internal/storage"
+	"agent-nexus-core/internal/actors"
+	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/schema"
+	"agent-nexus-core/internal/storage"
 )
 
 func TestActorEndpointsRegisterAndListStableOrder(t *testing.T) {
@@ -27,7 +27,7 @@ func TestActorEndpointsRegisterAndListStableOrder(t *testing.T) {
 	defer workspace.Close()
 
 	registry := actors.NewStore(workspace.DB())
-	contractPath := filepath.Join("..", "..", "..", "contracts", "oar-schema.yaml")
+	contractPath := filepath.Join("..", "..", "..", "contracts", "anx-schema.yaml")
 	contract, err := schema.Load(contractPath)
 	if err != nil {
 		t.Fatalf("load schema contract: %v", err)
@@ -83,7 +83,7 @@ func TestPostThreadsRejectsUnknownActorID(t *testing.T) {
 	defer workspace.Close()
 
 	registry := actors.NewStore(workspace.DB())
-	contractPath := filepath.Join("..", "..", "..", "contracts", "oar-schema.yaml")
+	contractPath := filepath.Join("..", "..", "..", "contracts", "anx-schema.yaml")
 	contract, err := schema.Load(contractPath)
 	if err != nil {
 		t.Fatalf("load schema contract: %v", err)

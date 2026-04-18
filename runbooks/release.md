@@ -1,6 +1,6 @@
 # Release Runbook
 
-This runbook describes the repository-level release and verification process for `oar-core`, `oar`, and `oar-ui` contract compatibility.
+This runbook describes the repository-level release and verification process for `anx-core`, `anx`, and `anx-ui` contract compatibility.
 
 Control-plane SaaS operations and release gates live in the private
 `oar-hosted-saas/controlplane` repo.
@@ -134,27 +134,27 @@ pass `RELEASE_ARGS="--no-wait"`.
 One-command install (latest release):
 
 ```bash
-curl -sSfL https://raw.githubusercontent.com/Git-on-my-level/organization-autorunner/main/scripts/install-oar.sh | sh
+curl -sSfL https://raw.githubusercontent.com/Git-on-my-level/agent-nexus/main/scripts/install-anx.sh | sh
 ```
 
 Pin a specific version:
 
 ```bash
-curl -sSfL https://raw.githubusercontent.com/Git-on-my-level/organization-autorunner/main/scripts/install-oar.sh | VERSION="$(./scripts/read-version.sh)" sh
+curl -sSfL https://raw.githubusercontent.com/Git-on-my-level/agent-nexus/main/scripts/install-anx.sh | VERSION="$(./scripts/read-version.sh)" sh
 ```
 
 Custom install directory:
 
 ```bash
-curl -sSfL https://raw.githubusercontent.com/Git-on-my-level/organization-autorunner/main/scripts/install-oar.sh | INSTALL_DIR=/usr/local/bin sh
+curl -sSfL https://raw.githubusercontent.com/Git-on-my-level/agent-nexus/main/scripts/install-anx.sh | INSTALL_DIR=/usr/local/bin sh
 ```
 
-The script detects OS/arch, downloads the correct archive from the GitHub release, verifies the SHA-256 checksum, and places the `oar` binary in `~/.local/bin` (or the specified `INSTALL_DIR`).
+The script detects OS/arch, downloads the correct archive from the GitHub release, verifies the SHA-256 checksum, and places the `anx` binary in `~/.local/bin` (or the specified `INSTALL_DIR`).
 
 After install, register the agent with core:
 
 ```bash
-oar --base-url http://<core-host>:8000 register --agent <agent-name>
+anx --base-url http://<core-host>:8000 register --agent <agent-name>
 ```
 
 ## Post-release validation
@@ -168,7 +168,7 @@ sha256sum -c checksums.txt --ignore-missing
 2. Verify handshake compatibility with live core:
 
 ```bash
-oar --base-url http://127.0.0.1:8000 --agent release-check api call --path /meta/handshake
+anx --base-url http://127.0.0.1:8000 --agent release-check api call --path /meta/handshake
 # Add --json if you need the CLI JSON envelope (e.g. scripted parsing).
 ```
 

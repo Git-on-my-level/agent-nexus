@@ -1,4 +1,4 @@
-module organization-autorunner-core
+module agent-nexus-core
 
 go 1.23.0
 

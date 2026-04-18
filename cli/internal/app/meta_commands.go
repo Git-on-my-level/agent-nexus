@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"organization-autorunner-cli/internal/config"
-	"organization-autorunner-cli/internal/errnorm"
-	"organization-autorunner-cli/internal/httpclient"
-	"organization-autorunner-cli/internal/registry"
+	"agent-nexus-cli/internal/config"
+	"agent-nexus-cli/internal/errnorm"
+	"agent-nexus-cli/internal/httpclient"
+	"agent-nexus-cli/internal/registry"
 )
 
 func (a *App) runMeta(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
@@ -97,7 +97,7 @@ func (a *App) runMetaOps(ctx context.Context, cfg config.Resolved, args []string
 	switch metaOpsSubcommandSpec.normalize(args[0]) {
 	case "health":
 		if len(args) > 1 {
-			return nil, "meta ops health", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar meta ops health`")
+			return nil, "meta ops health", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx meta ops health`")
 		}
 		result, err := a.runMetaRawUtility(ctx, cfg, "meta ops health", "/ops/health")
 		return result, "meta ops health", err
@@ -114,7 +114,7 @@ func (a *App) runMetaCommands(args []string) (*commandResult, error) {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	if len(fs.Args()) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar meta commands`")
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx meta commands`")
 	}
 
 	meta, err := registry.LoadEmbedded()
@@ -172,7 +172,7 @@ func (a *App) runMetaCommand(args []string) (*commandResult, error) {
 		return nil, errnorm.Usage("invalid_request", "command id is required")
 	}
 	if len(positionals) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar meta command`")
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx meta command`")
 	}
 
 	meta, err := registry.LoadEmbedded()
@@ -197,7 +197,7 @@ func (a *App) runMetaConcepts(args []string) (*commandResult, error) {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	if len(fs.Args()) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar meta concepts`")
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx meta concepts`")
 	}
 
 	meta, err := registry.LoadEmbeddedConcepts()
@@ -236,7 +236,7 @@ func (a *App) runMetaConcept(args []string) (*commandResult, error) {
 		return nil, errnorm.Usage("invalid_request", "concept name is required")
 	}
 	if len(positionals) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar meta concept`")
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx meta concept`")
 	}
 
 	meta, err := registry.LoadEmbeddedConcepts()
@@ -265,7 +265,7 @@ func (a *App) runMetaDocs(args []string) (*commandResult, error) {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	if len(fs.Args()) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar meta docs`")
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx meta docs`")
 	}
 
 	markdown, err := RuntimeHelpDocsMarkdown()
@@ -308,10 +308,10 @@ func (a *App) runMetaDoc(args []string) (*commandResult, error) {
 		positionals = nil
 	}
 	if topic == "" {
-		return nil, errnorm.Usage("invalid_request", "topic is required for `oar meta doc`")
+		return nil, errnorm.Usage("invalid_request", "topic is required for `anx meta doc`")
 	}
 	if len(positionals) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar meta doc`")
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx meta doc`")
 	}
 
 	markdown, err := RuntimeHelpDocMarkdown(topic)
@@ -356,10 +356,10 @@ func (a *App) runMetaSkill(args []string) (*commandResult, error) {
 		}
 	}
 	if target == "" {
-		return nil, errnorm.Usage("invalid_request", "skill target is required for `oar meta skill`")
+		return nil, errnorm.Usage("invalid_request", "skill target is required for `anx meta skill`")
 	}
 	if len(positionals) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar meta skill`")
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx meta skill`")
 	}
 
 	var (
@@ -396,50 +396,50 @@ func metaDocsUsageText() string {
 	return strings.TrimSpace(`Shipped runtime docs reference
 
 Usage:
-  oar meta docs [--write-dir <dir>]
+  anx meta docs [--write-dir <dir>]
 
-Print the bundled Markdown reference built from the same runtime help catalog used by ` + "`oar help`" + `.
+Print the bundled Markdown reference built from the same runtime help catalog used by ` + "`anx help`" + `.
 
 Options:
   --write-dir <dir>   Write ` + "`runtime-help.md`" + ` into the target directory.
 
 Examples:
-  oar meta docs
-  oar meta docs --write-dir ./docs/generated`)
+  anx meta docs
+  anx meta docs --write-dir ./docs/generated`)
 }
 
 func metaDocUsageText() string {
 	return strings.TrimSpace(`Shipped runtime doc topic
 
 Usage:
-  oar meta doc <topic>
-  oar meta doc --topic <topic>
+  anx meta doc <topic>
+  anx meta doc --topic <topic>
 
 Print one bundled Markdown topic from the runtime help catalog.
 
 Examples:
-  oar meta doc agent-guide
-  oar meta doc "docs trash"`)
+  anx meta doc agent-guide
+  anx meta doc "docs trash"`)
 }
 
 func metaSkillUsageText() string {
 	return strings.TrimSpace(`Shipped agent skill export
 
 Usage:
-  oar meta skill <target> [--write-file <path> | --write-dir <dir>]
-  oar meta skill --target <target> [--write-file <path> | --write-dir <dir>]
+  anx meta skill <target> [--write-file <path> | --write-dir <dir>]
+  anx meta skill --target <target> [--write-file <path> | --write-dir <dir>]
 
 Render a bundled editor-specific skill file from the canonical agent guide.
 
 Targets:
-  cursor                 Render a Cursor ` + "`SKILL.md`" + ` file for ` + "`oar`" + ` usage.
+  cursor                 Render a Cursor ` + "`SKILL.md`" + ` file for ` + "`anx`" + ` usage.
 
 Options:
   --write-file <path>    Write the rendered skill to this exact path.
   --write-dir <dir>      Write the rendered skill into this directory using its default filename.
 
 Examples:
-  oar meta skill cursor
-  oar meta skill cursor --write-dir ~/.cursor/skills/oar-cli-onboard
-  oar meta skill --target cursor --write-file ./SKILL.md`)
+  anx meta skill cursor
+  anx meta skill cursor --write-dir ~/.cursor/skills/anx-cli-onboard
+  anx meta skill --target cursor --write-file ./SKILL.md`)
 }

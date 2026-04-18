@@ -25,7 +25,7 @@ describe("buildEnv", () => {
     expect(
       parseBuildEnvFile(`
 # comment
-OAR_UI_BASE_PATH=/oar
+ANX_UI_BASE_PATH=/anx
 ADAPTER="node"
 export FEATURE_FLAG='keep-me'
 UNQUOTED=value # inline comment
@@ -33,7 +33,7 @@ UNQUOTED=value # inline comment
     ).toEqual({
       ADAPTER: "node",
       FEATURE_FLAG: "keep-me",
-      OAR_UI_BASE_PATH: "/oar",
+      ANX_UI_BASE_PATH: "/anx",
       UNQUOTED: "value",
     });
   });
@@ -43,12 +43,12 @@ UNQUOTED=value # inline comment
 
     fs.writeFileSync(
       path.join(cwd, BUILD_ENV_FILENAMES[0]),
-      "OAR_UI_BASE_PATH=/from-build\nADAPTER=auto\n",
+      "ANX_UI_BASE_PATH=/from-build\nADAPTER=auto\n",
       "utf8",
     );
     fs.writeFileSync(
       path.join(cwd, BUILD_ENV_FILENAMES[1]),
-      "OAR_UI_BASE_PATH=/from-local\n",
+      "ANX_UI_BASE_PATH=/from-local\n",
       "utf8",
     );
 
@@ -61,7 +61,7 @@ UNQUOTED=value # inline comment
       }),
     ).toMatchObject({
       ADAPTER: "node",
-      OAR_UI_BASE_PATH: "/from-local",
+      ANX_UI_BASE_PATH: "/from-local",
     });
   });
 
@@ -69,17 +69,17 @@ UNQUOTED=value # inline comment
     expect(
       resolveUiBuildConfig({
         env: {
-          OAR_UI_BASE_PATH: " /oar/ ",
+          ANX_UI_BASE_PATH: " /anx/ ",
           ADAPTER: "node",
         },
       }),
     ).toEqual({
-      basePath: "/oar",
+      basePath: "/anx",
       useNodeAdapter: true,
     });
 
     expect(normalizeBasePath("/")).toBe("");
-    expect(normalizeBasePath(" /oar/// ")).toBe("/oar");
+    expect(normalizeBasePath(" /anx/// ")).toBe("/anx");
   });
 
   it("defaults to the node adapter when ADAPTER is unset", () => {
@@ -98,7 +98,7 @@ UNQUOTED=value # inline comment
 });
 
 function createTempDir() {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "oar-ui-build-env-"));
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "anx-ui-build-env-"));
   tempDirs.push(tempDir);
   return tempDir;
 }

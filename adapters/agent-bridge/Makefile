@@ -3,7 +3,7 @@ SHELL := /usr/bin/env bash
 PYTHON ?= python3.11
 VENV ?= .venv
 PYTHON_BIN := $(VENV)/bin/python
-BRIDGE_BIN := $(VENV)/bin/oar-agent-bridge
+BRIDGE_BIN := $(VENV)/bin/anx-agent-bridge
 CONFIG ?= examples/hermes.toml
 
 .DEFAULT_GOAL := help

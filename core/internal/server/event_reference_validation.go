@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"organization-autorunner-core/internal/schema"
+	"agent-nexus-core/internal/schema"
 )
 
 func validateEventReferenceConventions(contract *schema.Contract, event map[string]any, refs []string) error {

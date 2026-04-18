@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"organization-autorunner-core/internal/auth"
+	"agent-nexus-core/internal/auth"
 )
 
 func TestRouteMentionSkipsSelfAuthoredMessages(t *testing.T) {

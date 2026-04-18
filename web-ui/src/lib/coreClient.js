@@ -1,7 +1,7 @@
 import { browser } from "$app/environment";
 import { getAuthenticatedActorId } from "$lib/authSession";
 import { getSelectedActorId } from "$lib/actorSession";
-import { createOarCoreClient } from "$lib/oarCoreClient";
+import { createOarCoreClient } from "$lib/anxCoreClient";
 import { getCurrentWorkspaceSlug } from "$lib/workspaceContext";
 import { WORKSPACE_HEADER } from "$lib/workspacePaths";
 

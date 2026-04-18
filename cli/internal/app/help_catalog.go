@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"organization-autorunner-cli/internal/registry"
+	"agent-nexus-cli/internal/registry"
 )
 
 type runtimeHelpCatalogCommand struct {
@@ -35,18 +35,18 @@ var (
 
 var runtimeHelpManualDocTopics = []runtimeHelpDocTopic{
 	{Path: "onboarding", Kind: "manual", Summary: "Offline quick-start mental model and first command flow."},
-	{Path: "concepts", Kind: "manual", Summary: "Quick guide to the core OAR primitives and when to use each."},
-	{Path: "agent-guide", Kind: "manual", Summary: "Prescriptive agent guide for choosing OAR primitives, operating safely, and automating the CLI well."},
-	{Path: "agent-bridge", Kind: "manual", Summary: "Install, configure, and operate the preferred `oar-agent-bridge` wake-routing runtime on a fresh machine."},
+	{Path: "concepts", Kind: "manual", Summary: "Quick guide to the core ANX primitives and when to use each."},
+	{Path: "agent-guide", Kind: "manual", Summary: "Prescriptive agent guide for choosing ANX primitives, operating safely, and automating the CLI well."},
+	{Path: "agent-bridge", Kind: "manual", Summary: "Install, configure, and operate the preferred `anx-agent-bridge` wake-routing runtime on a fresh machine."},
 	{Path: "wake-routing", Kind: "manual", Summary: "How `@handle` wake routing works, including self-registration, verification, and troubleshooting."},
 	{Path: "draft", Kind: "manual", Summary: "Local draft staging, listing, commit, and discard workflow."},
 	{Path: "provenance", Kind: "manual", Summary: "Deterministic provenance walk reference and examples."},
 	{Path: "auth whoami", Kind: "manual", Summary: "Validate the active profile, print resolved identity metadata, and point agents at wake-registration next steps."},
 	{Path: "auth list", Kind: "manual", Summary: "List local CLI profiles and the active profile."},
 	{Path: "auth default", Kind: "manual", Summary: "Persist the default CLI profile used when no explicit agent is selected."},
-	{Path: "config use", Kind: "manual", Summary: "Set the active CLI profile used when --agent and OAR_AGENT are omitted."},
+	{Path: "config use", Kind: "manual", Summary: "Set the active CLI profile used when --agent and ANX_AGENT are omitted."},
 	{Path: "config show", Kind: "manual", Summary: "Print effective CLI settings and per-field sources (tokens redacted)."},
-	{Path: "config unset", Kind: "manual", Summary: "Clear the persisted default profile marker (~/.config/oar/default-profile)."},
+	{Path: "config unset", Kind: "manual", Summary: "Clear the persisted default profile marker (~/.config/anx/default-profile)."},
 	{Path: "auth update-username", Kind: "manual", Summary: "Rename the authenticated agent and sync the local profile."},
 	{Path: "auth rotate", Kind: "manual", Summary: "Rotate the active agent key and refresh stored credentials."},
 	{Path: "auth revoke", Kind: "manual", Summary: "Revoke the active agent and mark the local profile revoked. Use explicit human-lockout flags only for break-glass recovery."},
@@ -210,8 +210,8 @@ func RuntimeHelpDocMarkdown(topic string) (string, error) {
 func RuntimeHelpDocsMarkdown() (string, error) {
 	topics := runtimeHelpDocTopics()
 	var b strings.Builder
-	b.WriteString("# OAR Runtime Help Reference\n\n")
-	b.WriteString("This reference is bundled with the CLI. Print the full document with `oar meta docs` or one topic with `oar meta doc <topic>`.\n\n")
+	b.WriteString("# ANX Runtime Help Reference\n\n")
+	b.WriteString("This reference is bundled with the CLI. Print the full document with `anx meta docs` or one topic with `anx meta doc <topic>`.\n\n")
 	b.WriteString("## Topics\n\n")
 	for _, topic := range topics {
 		b.WriteString(fmt.Sprintf("- `%s` (%s): %s\n", topic.Path, topic.Kind, topic.Summary))

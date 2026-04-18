@@ -2,7 +2,7 @@ package router
 
 import "strings"
 
-// WakePacketVersion matches adapters/agent-bridge/oar_agent_bridge/models.py WAKE_PACKET_VERSION.
+// WakePacketVersion matches adapters/agent-bridge/anx_agent_bridge/models.py WAKE_PACKET_VERSION.
 const WakePacketVersion = "agent-wake/v1"
 
 type WakePacket struct {

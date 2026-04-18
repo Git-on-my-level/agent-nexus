@@ -5,10 +5,10 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 BIN_DIR="${BIN_DIR:-$ROOT_DIR/.bin}"
-BIN_PATH="${OAR_CORE_BIN:-$BIN_DIR/oar-core}"
+BIN_PATH="${ANX_CORE_BIN:-$BIN_DIR/anx-core}"
 
 mkdir -p "$(dirname "$BIN_PATH")"
 
-echo "Building oar-core → $BIN_PATH"
-go build -trimpath -ldflags='-s -w' -o "$BIN_PATH" ./cmd/oar-core
+echo "Building anx-core → $BIN_PATH"
+go build -trimpath -ldflags='-s -w' -o "$BIN_PATH" ./cmd/anx-core
 echo "Build complete: $BIN_PATH"

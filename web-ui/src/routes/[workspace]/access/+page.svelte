@@ -521,7 +521,7 @@
 </script>
 
 <svelte:head>
-  <title>Access - {workspaceSlug} - OAR</title>
+  <title>Access - {workspaceSlug} - ANX</title>
 </svelte:head>
 
 {#if !canManageAccess}
@@ -960,7 +960,7 @@
                                     class="mt-2 text-[11px] text-[var(--ui-text-muted)]"
                                   >
                                     Copy a sendable CLI setup snippet for this
-                                    agent's existing OAR profile.
+                                    agent's existing ANX profile.
                                   </p>
                                   <button
                                     class="mt-2 cursor-pointer rounded border border-[var(--ui-border)] px-2 py-1 text-[11px] font-medium text-[var(--ui-text)] hover:bg-[var(--ui-border-subtle)]"

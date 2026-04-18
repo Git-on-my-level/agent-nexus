@@ -15,7 +15,7 @@ import (
 	"sync"
 	"testing"
 
-	"organization-autorunner-cli/internal/config"
+	"agent-nexus-cli/internal/config"
 )
 
 func TestListCommandsAcceptPaginationFlags(t *testing.T) {
@@ -290,10 +290,10 @@ func TestInboxUnknownSubcommandGuidance(t *testing.T) {
 	if !strings.Contains(message, "valid subcommands: list, get, acknowledge, ack, stream, tail") {
 		t.Fatalf("expected valid-subcommands guidance, got %q", message)
 	}
-	if !strings.Contains(message, "`oar inbox get --id <id-or-alias>`") || !strings.Contains(message, "`oar inbox acknowledge --inbox-item-id <id-or-alias>`") {
+	if !strings.Contains(message, "`anx inbox get --id <id-or-alias>`") || !strings.Contains(message, "`anx inbox acknowledge --inbox-item-id <id-or-alias>`") {
 		t.Fatalf("expected concrete inbox examples, got %q", message)
 	}
-	if !strings.Contains(message, "did you mean `oar inbox ack --inbox-item-id <id-or-alias>`?") {
+	if !strings.Contains(message, "did you mean `anx inbox ack --inbox-item-id <id-or-alias>`?") {
 		t.Fatalf("expected corrective suggestion, got %q", message)
 	}
 }
@@ -621,10 +621,10 @@ func TestEventsUnknownSubcommandGuidance(t *testing.T) {
 	if !strings.Contains(message, "valid subcommands: list, get, create, validate, stream, tail, explain") {
 		t.Fatalf("expected valid subcommands in message, got %q", message)
 	}
-	if !strings.Contains(message, "did you mean `oar events stream`?") {
+	if !strings.Contains(message, "did you mean `anx events stream`?") {
 		t.Fatalf("expected stream correction, got %q", message)
 	}
-	if !strings.Contains(message, "`oar events list --thread-id <thread-id> --type actor_statement --mine --full-id`") || !strings.Contains(message, "`oar events tail --max-events 20`") {
+	if !strings.Contains(message, "`anx events list --thread-id <thread-id> --type actor_statement --mine --full-id`") || !strings.Contains(message, "`anx events tail --max-events 20`") {
 		t.Fatalf("expected list/tail examples, got %q", message)
 	}
 }
@@ -1009,7 +1009,7 @@ func TestDocsUpdateRequiresActiveActorIdentity(t *testing.T) {
 	if !strings.Contains(message, "No active actor identity") {
 		t.Fatalf("expected missing actor identity guidance, got %q payload=%#v", message, payload)
 	}
-	if !strings.Contains(message, "oar auth register --username <name>") || !strings.Contains(message, "oar auth whoami") {
+	if !strings.Contains(message, "anx auth register --username <name>") || !strings.Contains(message, "anx auth whoami") {
 		t.Fatalf("expected actionable auth guidance, got %q payload=%#v", message, payload)
 	}
 
@@ -1513,10 +1513,10 @@ func TestEventsExplainListMode(t *testing.T) {
 	if !strings.Contains(raw, "- intervention_needed: Use when the next step is clear but a human must perform it.") {
 		t.Fatalf("expected intervention_needed guidance in explain output, got %q", raw)
 	}
-	if !strings.Contains(raw, "- review_completed: prefer `oar reviews create`") {
+	if !strings.Contains(raw, "- review_completed: prefer `anx reviews create`") {
 		t.Fatalf("expected preferred command guidance in explain output, got %q", raw)
 	}
-	if !strings.Contains(raw, "oar events explain <event-type>") {
+	if !strings.Contains(raw, "anx events explain <event-type>") {
 		t.Fatalf("expected follow-up hint in explain output, got %q", raw)
 	}
 }
@@ -1551,7 +1551,7 @@ func TestEventsExplainListModeJSON(t *testing.T) {
 			}
 		case "review_completed":
 			foundReviewCompleted = true
-			if got := anyStringValue(entry["preferred_command"]); got != "oar reviews create" {
+			if got := anyStringValue(entry["preferred_command"]); got != "anx reviews create" {
 				t.Fatalf("expected review_completed preferred command, got %q entry=%#v", got, entry)
 			}
 		}
@@ -2545,7 +2545,7 @@ func TestThreadsContextRejectsMixedSelectionModesWithActionableGuidance(t *testi
 		t.Fatalf("unexpected error payload: %#v", payload)
 	}
 	message := anyStringValue(errObj["message"])
-	if !strings.Contains(message, "--thread-id cannot be combined with discovery filters") || !strings.Contains(message, "oar threads workspace --thread-id <thread-id>") || !strings.Contains(message, "oar threads inspect --thread-id <thread-id>") || !strings.Contains(message, "oar topics workspace") || !strings.Contains(message, "oar threads inspect --status active") {
+	if !strings.Contains(message, "--thread-id cannot be combined with discovery filters") || !strings.Contains(message, "anx threads workspace --thread-id <thread-id>") || !strings.Contains(message, "anx threads inspect --thread-id <thread-id>") || !strings.Contains(message, "anx topics workspace") || !strings.Contains(message, "anx threads inspect --status active") {
 		t.Fatalf("expected actionable threads context guidance, got %#v", payload)
 	}
 }
@@ -2860,7 +2860,7 @@ func TestThreadsInspectDiscoveryRequiresSingleThread(t *testing.T) {
 		t.Fatalf("unexpected error payload: %#v", payload)
 	}
 	msg := anyStringValue(errObj["message"])
-	if !strings.Contains(msg, "exactly one thread") || !strings.Contains(msg, "oar topics workspace") || !strings.Contains(msg, "oar threads workspace") {
+	if !strings.Contains(msg, "exactly one thread") || !strings.Contains(msg, "anx topics workspace") || !strings.Contains(msg, "anx threads workspace") {
 		t.Fatalf("expected single-thread guidance, got %#v", payload)
 	}
 }
@@ -2881,7 +2881,7 @@ func TestThreadsInspectRejectsMixedSelectionModes(t *testing.T) {
 		t.Fatalf("unexpected error payload: %#v", payload)
 	}
 	message := anyStringValue(errObj["message"])
-	if !strings.Contains(message, "--thread-id cannot be combined with discovery filters") || !strings.Contains(message, "oar threads inspect --thread-id <thread-id>") || !strings.Contains(message, "oar threads inspect --status active") {
+	if !strings.Contains(message, "--thread-id cannot be combined with discovery filters") || !strings.Contains(message, "anx threads inspect --thread-id <thread-id>") || !strings.Contains(message, "anx threads inspect --status active") {
 		t.Fatalf("expected shared-selection validation message, got %#v", payload)
 	}
 }
@@ -2967,7 +2967,7 @@ func TestThreadsRecommendationsBuildsFocusedReview(t *testing.T) {
 	}
 	followUp, _ := data["follow_up"].(map[string]any)
 	examples := stringList(followUp["events_get_examples"])
-	if len(examples) == 0 || !strings.Contains(examples[0], "oar events get --event-id") {
+	if len(examples) == 0 || !strings.Contains(examples[0], "anx events get --event-id") {
 		t.Fatalf("expected events_get_examples follow-up commands, got %#v", followUp)
 	}
 
@@ -2980,7 +2980,7 @@ func TestThreadsRecommendationsBuildsFocusedReview(t *testing.T) {
 	if !strings.Contains(textOut, "actor=agent-pm") || !strings.Contains(textOut, "at=2026-03-07T12:00:00Z") {
 		t.Fatalf("expected provenance fields in default text output, got:\n%s", textOut)
 	}
-	if !strings.Contains(textOut, "follow_up:") || !strings.Contains(textOut, "events_get_template: oar events get --event-id <event-id> --json") {
+	if !strings.Contains(textOut, "follow_up:") || !strings.Contains(textOut, "events_get_template: anx events get --event-id <event-id> --json") {
 		t.Fatalf("expected follow-up guidance in default text output, got:\n%s", textOut)
 	}
 }
@@ -3043,7 +3043,7 @@ func TestThreadsRecommendationsIncludesRelatedThreadReview(t *testing.T) {
 				"related_decision_requests":{"count":0,"items":[]},
 				"related_decisions":{"count":0,"items":[]},
 				"total_review_items":2,
-				"follow_up":{"workspace_refresh_command":"oar threads workspace --thread-id thread_main --include-artifact-content --full-id --json"},
+				"follow_up":{"workspace_refresh_command":"anx threads workspace --thread-id thread_main --include-artifact-content --full-id --json"},
 				"section_kinds":{
 					"thread":"canonical",
 					"context":"canonical",
@@ -3417,7 +3417,7 @@ func TestThreadsWorkspaceCanHydrateRelatedEventContent(t *testing.T) {
 				"related_decision_requests":{"count":0,"items":[]},
 				"related_decisions":{"count":0,"items":[]},
 				"total_review_items":2,
-				"follow_up":{"workspace_refresh_command":"oar threads workspace --thread-id thread_main --include-artifact-content --full-id --json"},
+				"follow_up":{"workspace_refresh_command":"anx threads workspace --thread-id thread_main --include-artifact-content --full-id --json"},
 				"section_kinds":{
 					"thread":"canonical",
 					"context":"canonical",
@@ -3672,7 +3672,7 @@ func TestThreadsRecommendationsSelectionValidation(t *testing.T) {
 		t.Fatalf("expected invalid_request for mixed selection, got %#v", mixedSelection)
 	}
 	message := anyStringValue(mixedErr["message"])
-	if !strings.Contains(message, "--thread-id cannot be combined with discovery filters") || !strings.Contains(message, "oar threads recommendations --thread-id <thread-id>") || !strings.Contains(message, "oar threads inspect --status active") {
+	if !strings.Contains(message, "--thread-id cannot be combined with discovery filters") || !strings.Contains(message, "anx threads recommendations --thread-id <thread-id>") || !strings.Contains(message, "anx threads inspect --status active") {
 		t.Fatalf("expected mixed selection guidance, got %#v", mixedSelection)
 	}
 
@@ -4651,14 +4651,14 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 					"related_decisions":{"count":0,"items":[]},
 					"total_review_items":3,
 					"follow_up":{
-						"context_refresh_command":"oar threads context --thread-id thread_123 --include-artifact-content --full-id --json",
-						"decisions_list_command":"oar events list --thread-id thread_123 --type decision_needed --type decision_made --full-id --json",
+						"context_refresh_command":"anx threads context --thread-id thread_123 --include-artifact-content --full-id --json",
+						"decisions_list_command":"anx events list --thread-id thread_123 --type decision_needed --type decision_made --full-id --json",
 						"events_get_examples":[
-							"oar events get --event-id event_ctx_1 --json",
-							"oar events get --event-id event_ctx_2 --json"
+							"anx events get --event-id event_ctx_1 --json",
+							"anx events get --event-id event_ctx_2 --json"
 						],
-						"events_get_template":"oar events get --event-id <event-id> --json",
-						"recommendations_list_command":"oar events list --thread-id thread_123 --type actor_statement --full-id --json"
+						"events_get_template":"anx events get --event-id <event-id> --json",
+						"recommendations_list_command":"anx events list --thread-id thread_123 --type actor_statement --full-id --json"
 					},
 					"context_source":"threads.context",
 					"inbox_source":"inbox.list"
@@ -5108,7 +5108,7 @@ func TestDocsRevisionSubcommandRequiredGuidance(t *testing.T) {
 	if !strings.Contains(message, "expected one of: get") {
 		t.Fatalf("expected valid subcommands in required message, got %q", message)
 	}
-	if !strings.Contains(message, "`oar docs revision get --document-id <document-id> --revision-id <revision-id>`") {
+	if !strings.Contains(message, "`anx docs revision get --document-id <document-id> --revision-id <revision-id>`") {
 		t.Fatalf("expected usage examples in required message, got %q", message)
 	}
 }
@@ -5144,14 +5144,14 @@ func TestFilterEventsByLifecycleState(t *testing.T) {
 	}
 }
 
-func Example_oarThreadsList() {
-	fmt.Println("oar threads list --status active")
-	// Output: oar threads list --status active
+func Example_anxThreadsList() {
+	fmt.Println("anx threads list --status active")
+	// Output: anx threads list --status active
 }
 
 func writeAgentProfile(t *testing.T, home string, agent string, profileJSON string) {
 	t.Helper()
-	profilesDir := filepath.Join(home, ".config", "oar", "profiles")
+	profilesDir := filepath.Join(home, ".config", "anx", "profiles")
 	if err := os.MkdirAll(profilesDir, 0o700); err != nil {
 		t.Fatalf("mkdir profiles dir: %v", err)
 	}

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"organization-autorunner-core/internal/schema"
+	"agent-nexus-core/internal/schema"
 )
 
 func validatePacketArtifactAndContent(contract *schema.Contract, kind string, artifact map[string]any, packet map[string]any) (string, error) {

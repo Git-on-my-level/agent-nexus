@@ -15,7 +15,7 @@ export async function proxyHostedControlPlaneRequest(event, method) {
   if (!isSaasPackedHostDev(privateEnv)) {
     throw error(404, "Not found");
   }
-  const base = normalizeBaseUrl(privateEnv.OAR_CONTROL_BASE_URL);
+  const base = normalizeBaseUrl(privateEnv.ANX_CONTROL_BASE_URL);
   if (!base) {
     throw error(503, "Control plane URL is not configured");
   }

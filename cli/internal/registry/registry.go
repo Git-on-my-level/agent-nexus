@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	contractsclient "organization-autorunner-contracts-go-client/client"
+	contractsclient "agent-nexus-contracts-go-client/client"
 )
 
 //go:embed commands.json

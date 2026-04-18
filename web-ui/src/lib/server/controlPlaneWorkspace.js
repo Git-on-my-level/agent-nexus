@@ -2,7 +2,7 @@ import { normalizeBaseUrl } from "$lib/config.js";
 import { normalizeWorkspaceSlug } from "$lib/workspacePaths.js";
 
 export function isSaasPackedHostDev(env) {
-  const v = String(env?.OAR_SAAS_PACKED_HOST_DEV ?? "")
+  const v = String(env?.ANX_SAAS_PACKED_HOST_DEV ?? "")
     .trim()
     .toLowerCase();
   return v === "1" || v === "true";
@@ -12,7 +12,7 @@ export function isSaasPackedHostDev(env) {
 export function isHostedWebUiShell(env) {
   return (
     isSaasPackedHostDev(env) &&
-    Boolean(normalizeBaseUrl(env?.OAR_CONTROL_BASE_URL ?? ""))
+    Boolean(normalizeBaseUrl(env?.ANX_CONTROL_BASE_URL ?? ""))
   );
 }
 
@@ -42,7 +42,7 @@ function mapWorkspaceRowFromControlPlane(match) {
 }
 
 function controlPlaneDevAccessToken(env, getCookie) {
-  let token = String(env?.OAR_CONTROL_PLANE_DEV_ACCESS_TOKEN ?? "").trim();
+  let token = String(env?.ANX_CONTROL_PLANE_DEV_ACCESS_TOKEN ?? "").trim();
   if (token || typeof getCookie !== "function") {
     return token;
   }
@@ -51,7 +51,7 @@ function controlPlaneDevAccessToken(env, getCookie) {
 
 /**
  * Fetches workspace metadata from the hosted control plane (local or remote).
- * Used when OAR_SAAS_PACKED_HOST_DEV is set and the static catalog has no entry
+ * Used when ANX_SAAS_PACKED_HOST_DEV is set and the static catalog has no entry
  * for the slug — e.g. after creating a workspace via the control plane API.
  */
 export async function fetchWorkspaceEntryFromControlPlane({
@@ -63,7 +63,7 @@ export async function fetchWorkspaceEntryFromControlPlane({
   if (!isSaasPackedHostDev(env)) {
     return null;
   }
-  const base = normalizeBaseUrl(env.OAR_CONTROL_BASE_URL);
+  const base = normalizeBaseUrl(env.ANX_CONTROL_BASE_URL);
   const token = controlPlaneDevAccessToken(env, getCookie);
   const normalized = normalizeWorkspaceSlug(workspaceSlug);
   if (!base || !token || !normalized) {
@@ -120,7 +120,7 @@ export async function fetchWorkspaceListFromControlPlane({
   if (!isSaasPackedHostDev(env)) {
     return [];
   }
-  const base = normalizeBaseUrl(env.OAR_CONTROL_BASE_URL);
+  const base = normalizeBaseUrl(env.ANX_CONTROL_BASE_URL);
   const token = controlPlaneDevAccessToken(env, getCookie);
   const org = String(organizationID ?? "").trim();
   if (!base || !token || !org) {

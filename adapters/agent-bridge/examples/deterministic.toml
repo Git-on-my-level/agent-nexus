@@ -1,8 +1,8 @@
 # Local dev: deterministic wake replies (no Hermes / ZeroClaw).
-# 1) Register auth: oar-agent-bridge auth register --config examples/deterministic.toml --invite-token … --apply-registration
+# 1) Register auth: anx-agent-bridge auth register --config examples/deterministic.toml --invite-token … --apply-registration
 # 2) Run: make -C adapters/agent-bridge bridge-run CONFIG=examples/deterministic.toml
 
-[oar]
+[anx]
 base_url = "http://127.0.0.1:8000"
 workspace_id = "ws_main"
 workspace_name = "Main"

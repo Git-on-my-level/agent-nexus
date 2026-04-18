@@ -6,15 +6,15 @@ This document tracks compatibility shims and legacy surfaces called out in the c
 
 | Surface | Replacement | Removal gate |
 |--------|-------------|--------------|
-| `compat_aliases.go` old command shapes | Current `oar` subcommands per generated registry | Major version or documented breaking window + changelog |
+| `compat_aliases.go` old command shapes | Current `anx` subcommands per generated registry | Major version or documented breaking window + changelog |
 | `--reconnect` on stream commands | `--follow` | Telemetry or deprecation notice in help for one release cycle |
-| `oar bridge workspace-id --document-id agentreg.<handle>` | `--handle <handle>` | Same as above |
+| `anx bridge workspace-id --document-id agentreg.<handle>` | `--handle <handle>` | Same as above |
 
 ## Web UI
 
 | Surface | Replacement | Removal gate |
 |--------|-------------|--------------|
-| `OAR_PROJECTS` / `OAR_DEFAULT_PROJECT` | `OAR_WORKSPACES` / `OAR_DEFAULT_WORKSPACE` | Operator comms; no removal until hosted/docs stop referencing aliases |
+| `ANX_PROJECTS` / `ANX_DEFAULT_PROJECT` | `ANX_WORKSPACES` / `ANX_DEFAULT_WORKSPACE` | Operator comms; no removal until hosted/docs stop referencing aliases |
 | Header `x-oar-project-slug` | Workspace slug header used by current auth | Same |
 
 ## Schema and data

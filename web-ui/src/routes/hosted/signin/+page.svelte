@@ -179,7 +179,7 @@
 </script>
 
 <svelte:head>
-  <title>Sign in — OAR</title>
+  <title>Sign in — ANX</title>
 </svelte:head>
 
 <div class="mx-auto max-w-md py-8">
@@ -255,7 +255,7 @@
   </div>
 
   <p class="mt-4 text-center text-[12px] text-gray-500">
-    New to OAR?
+    New to ANX?
     <a
       class="text-indigo-400 underline underline-offset-2 hover:text-indigo-300"
       href={`/hosted/signup${continuationQuery}`}>Create an account</a

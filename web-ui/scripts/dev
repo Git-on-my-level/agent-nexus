@@ -5,10 +5,10 @@ set -euo pipefail
 # Without this, `[workspace]/+layout.js` schema verification hits the proxy with an
 # empty workspace coreBaseUrl and returns HTTP 500 on /local.
 # Hosted SaaS packed-host dev (make serve-control-plane) leaves this unset so no core
-# is implied until OAR_WORKSPACES / OAR_SAAS_DEV_PRECONFIGURED_WORKSPACES or CP lookup.
-if [[ -z "${OAR_CORE_BASE_URL:-}" ]]; then
-	if [[ "${OAR_SAAS_PACKED_HOST_DEV:-}" != "1" && "${OAR_SAAS_PACKED_HOST_DEV:-}" != "true" ]]; then
-		export OAR_CORE_BASE_URL="http://127.0.0.1:8000"
+# is implied until ANX_WORKSPACES / ANX_SAAS_DEV_PRECONFIGURED_WORKSPACES or CP lookup.
+if [[ -z "${ANX_CORE_BASE_URL:-}" ]]; then
+	if [[ "${ANX_SAAS_PACKED_HOST_DEV:-}" != "1" && "${ANX_SAAS_PACKED_HOST_DEV:-}" != "true" ]]; then
+		export ANX_CORE_BASE_URL="http://127.0.0.1:8000"
 	fi
 fi
 

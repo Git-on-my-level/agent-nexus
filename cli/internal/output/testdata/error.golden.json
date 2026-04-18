@@ -5,7 +5,7 @@
     "code": "invalid_request",
     "message": "path is required",
     "recoverable": true,
-    "hint": "Run `oar help` for supported flags and usage.",
+    "hint": "Run `anx help` for supported flags and usage.",
     "details": {
       "flag": "--path"
     }

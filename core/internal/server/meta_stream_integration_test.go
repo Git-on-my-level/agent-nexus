@@ -8,17 +8,17 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"organization-autorunner-core/internal/blob"
+	"agent-nexus-core/internal/blob"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"organization-autorunner-core/internal/actors"
-	"organization-autorunner-core/internal/auth"
-	"organization-autorunner-core/internal/primitives"
-	"organization-autorunner-core/internal/schema"
-	"organization-autorunner-core/internal/storage"
+	"agent-nexus-core/internal/actors"
+	"agent-nexus-core/internal/auth"
+	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/schema"
+	"agent-nexus-core/internal/storage"
 )
 
 func TestMetaHandshakeAndGeneratedMetaEndpoints(t *testing.T) {
@@ -29,7 +29,7 @@ func TestMetaHandshakeAndGeneratedMetaEndpoints(t *testing.T) {
 		WithAPIVersion("v0"),
 		WithMinCLIVersion("0.9.0"),
 		WithRecommendedCLIVersion("1.1.0"),
-		WithCLIDownloadURL("https://example.com/oar-cli"),
+		WithCLIDownloadURL("https://example.com/anx-cli"),
 		WithCoreInstanceID("instance-test-1"),
 		WithMetaCommandsPath(filepath.Join("..", "..", "..", "contracts", "gen", "meta", "commands.json")),
 	)
@@ -53,7 +53,7 @@ func TestMetaHandshakeAndGeneratedMetaEndpoints(t *testing.T) {
 	if handshake["min_cli_version"] != "0.9.0" || handshake["recommended_cli_version"] != "1.1.0" {
 		t.Fatalf("unexpected cli version metadata: %#v", handshake)
 	}
-	if handshake["cli_download_url"] != "https://example.com/oar-cli" || handshake["core_instance_id"] != "instance-test-1" {
+	if handshake["cli_download_url"] != "https://example.com/anx-cli" || handshake["core_instance_id"] != "instance-test-1" {
 		t.Fatalf("unexpected handshake values: %#v", handshake)
 	}
 	if handshake["dev_actor_mode"] != true {
@@ -137,7 +137,7 @@ func TestVersionHeadersAndCLIOutdatedResponse(t *testing.T) {
 		WithAPIVersion("v0"),
 		WithMinCLIVersion("1.5.0"),
 		WithRecommendedCLIVersion("1.7.0"),
-		WithCLIDownloadURL("https://example.com/oar-cli"),
+		WithCLIDownloadURL("https://example.com/anx-cli"),
 	)
 
 	healthResp, err := http.Get(h.baseURL + "/health")
@@ -145,10 +145,10 @@ func TestVersionHeadersAndCLIOutdatedResponse(t *testing.T) {
 		t.Fatalf("GET /health: %v", err)
 	}
 	defer healthResp.Body.Close()
-	if healthResp.Header.Get("X-OAR-Core-Version") != "2.0.0" {
+	if healthResp.Header.Get("X-ANX-Core-Version") != "2.0.0" {
 		t.Fatalf("missing core version header: %#v", healthResp.Header)
 	}
-	if healthResp.Header.Get("X-OAR-Min-CLI-Version") != "1.5.0" {
+	if healthResp.Header.Get("X-ANX-Min-CLI-Version") != "1.5.0" {
 		t.Fatalf("missing min cli version header: %#v", healthResp.Header)
 	}
 
@@ -156,7 +156,7 @@ func TestVersionHeadersAndCLIOutdatedResponse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build /version request: %v", err)
 	}
-	versionReq.Header.Set("X-OAR-CLI-Version", "0.1.0")
+	versionReq.Header.Set("X-ANX-CLI-Version", "0.1.0")
 	versionResp, err := http.DefaultClient.Do(versionReq)
 	if err != nil {
 		t.Fatalf("GET /version with old cli header: %v", err)
@@ -170,7 +170,7 @@ func TestVersionHeadersAndCLIOutdatedResponse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build /threads request: %v", err)
 	}
-	listThreadsReq.Header.Set("X-OAR-CLI-Version", "1.4.9")
+	listThreadsReq.Header.Set("X-ANX-CLI-Version", "1.4.9")
 	listThreadsResp, err := http.DefaultClient.Do(listThreadsReq)
 	if err != nil {
 		t.Fatalf("GET /threads with old cli header: %v", err)
@@ -438,7 +438,7 @@ func newMetaStreamTestServer(t *testing.T, configure func(*httptest.Server), opt
 		t.Fatalf("initialize workspace: %v", err)
 	}
 
-	contractPath := filepath.Join("..", "..", "..", "contracts", "oar-schema.yaml")
+	contractPath := filepath.Join("..", "..", "..", "contracts", "anx-schema.yaml")
 	contract, err := schema.Load(contractPath)
 	if err != nil {
 		_ = workspace.Close()

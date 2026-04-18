@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"organization-autorunner-core/internal/actors"
-	"organization-autorunner-core/internal/storage"
+	"agent-nexus-core/internal/actors"
+	"agent-nexus-core/internal/storage"
 )
 
 func TestStoreRegisterListAndExists(t *testing.T) {

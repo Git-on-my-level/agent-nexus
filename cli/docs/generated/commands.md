@@ -1,6 +1,6 @@
 # OAR Command Registry
 
-Generated from `contracts/oar-openapi.yaml`.
+Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.3.0`
@@ -300,7 +300,7 @@ Generated from `contracts/oar-openapi.yaml`.
 - Stability: `beta`
 - Surface: `utility`
 - Input mode: `json-body`
-- Why: Local development bypass when OAR_ALLOW_PASSKEY_DEV_BYPASS=1 and the workspace carries the local-only .oar-dev-insecure-auth marker; optional username or display_name, or sole passkey principal.
+- Why: Local development bypass when ANX_ALLOW_PASSKEY_DEV_BYPASS=1 and the workspace carries the local-only .anx-dev-insecure-auth marker; optional username or display_name, or sole passkey principal.
 - Concepts: `auth`, `passkeys`
 - Error codes: `invalid_request`, `not_found`, `dev_passkey_bypass_disabled`
 - Output: Returns `{ agent, tokens }`.
@@ -312,7 +312,7 @@ Generated from `contracts/oar-openapi.yaml`.
 - Stability: `beta`
 - Surface: `utility`
 - Input mode: `json-body`
-- Why: Local development bypass for human onboarding when OAR_ALLOW_PASSKEY_DEV_BYPASS=1 and the workspace carries the local-only .oar-dev-insecure-auth marker; stores a synthetic credential. Optional existing_actor_id links a pre-seeded actor when OAR_DEV_REGISTER_LINKED_ACTORS=1.
+- Why: Local development bypass for human onboarding when ANX_ALLOW_PASSKEY_DEV_BYPASS=1 and the workspace carries the local-only .anx-dev-insecure-auth marker; stores a synthetic credential. Optional existing_actor_id links a pre-seeded actor when ANX_DEV_REGISTER_LINKED_ACTORS=1.
 - Concepts: `auth`, `passkeys`
 - Error codes: `invalid_request`, `invalid_token`, `dev_passkey_bypass_disabled`
 - Output: Returns `{ agent, tokens }`.

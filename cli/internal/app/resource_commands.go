@@ -21,8 +21,8 @@ import (
 	"strings"
 	"time"
 
-	"organization-autorunner-cli/internal/config"
-	"organization-autorunner-cli/internal/errnorm"
+	"agent-nexus-cli/internal/config"
+	"agent-nexus-cli/internal/errnorm"
 )
 
 var idPattern = regexp.MustCompile(`^[A-Za-z0-9._:@/-]+$`)
@@ -123,7 +123,7 @@ func threadsMutationUnsupportedErr(subcmd string) error {
 	return errnorm.Usage(
 		"unsupported_command",
 		fmt.Sprintf(
-			"`oar threads %s` is not supported: backing threads are read-only in the current contract. Use `oar topics ...`, `oar cards ...`, `oar boards ...`, or `oar events create` for writes. For reads, prefer `oar topics workspace` when you have a topic id; use `oar threads list`, `oar threads get`, `oar threads inspect`, `oar threads workspace` (diagnostic projection), or `oar threads timeline` for backing-thread tooling.",
+			"`anx threads %s` is not supported: backing threads are read-only in the current contract. Use `anx topics ...`, `anx cards ...`, `anx boards ...`, or `anx events create` for writes. For reads, prefer `anx topics workspace` when you have a topic id; use `anx threads list`, `anx threads get`, `anx threads inspect`, `anx threads workspace` (diagnostic projection), or `anx threads timeline` for backing-thread tooling.",
 			subcmd,
 		),
 	)
@@ -194,7 +194,7 @@ var knownEventTypeGuidance = []eventTypeGuidance{
 	{
 		Type:             "receipt_added",
 		Group:            "Packet Lifecycle",
-		PreferredCommand: "oar receipts create",
+		PreferredCommand: "anx receipts create",
 		Constraints: []string{
 			`event.refs must include "artifact:<receipt_artifact_id>" and "card:<card_id>".`,
 			`event.payload must include "subject_ref".`,
@@ -203,11 +203,11 @@ var knownEventTypeGuidance = []eventTypeGuidance{
 	{
 		Type:             "review_completed",
 		Group:            "Packet Lifecycle",
-		PreferredCommand: "oar reviews create",
+		PreferredCommand: "anx reviews create",
 		Constraints: []string{
 			`event.refs must include "artifact:<review_artifact_id>", "artifact:<receipt_artifact_id>", and "card:<card_id>".`,
 			`event.payload must include "subject_ref".`,
-			`Local CLI validation for "oar events create" enforces the bundled event reference rules.`,
+			`Local CLI validation for "anx events create" enforces the bundled event reference rules.`,
 		},
 	},
 	{
@@ -333,7 +333,7 @@ var knownEventTypeGuidance = []eventTypeGuidance{
 	{
 		Type:             "inbox_item_acknowledged",
 		Group:            "Inbox Lifecycle",
-		PreferredCommand: "oar inbox ack",
+		PreferredCommand: "anx inbox ack",
 		Constraints: []string{
 			"Usually created through the inbox acknowledgement flow rather than by authoring a raw event.",
 		},
@@ -401,7 +401,7 @@ func (a *App) runActorsCommand(ctx context.Context, args []string, cfg config.Re
 			return nil, "actors list", errnorm.Usage("invalid_flags", err.Error())
 		}
 		if len(fs.Args()) > 0 {
-			return nil, "actors list", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar actors list`")
+			return nil, "actors list", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx actors list`")
 		}
 		if limitFlag.set && (limitFlag.value < 1 || limitFlag.value > 1000) {
 			return nil, "actors list", errnorm.Usage("invalid_request", "limit must be between 1 and 1000")
@@ -426,7 +426,7 @@ func (a *App) runActorsCommand(ctx context.Context, args []string, cfg config.Re
 			return nil, "actors register", errnorm.Usage("invalid_flags", err.Error())
 		}
 		if len(fs.Args()) > 0 {
-			return nil, "actors register", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar actors register`")
+			return nil, "actors register", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx actors register`")
 		}
 		if strings.TrimSpace(idFlag.value) == "" {
 			return nil, "actors register", errnorm.Usage("invalid_request", "id is required")
@@ -489,7 +489,7 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 			return nil, "threads list", err
 		}
 		if len(fs.Args()) > 0 {
-			return nil, "threads list", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar threads list`")
+			return nil, "threads list", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx threads list`")
 		}
 		if limitFlag.set && (limitFlag.value < 1 || limitFlag.value > 1000) {
 			return nil, "threads list", errnorm.Usage("invalid_request", "limit must be between 1 and 1000")
@@ -761,7 +761,7 @@ func (a *App) resolveThreadContextSelection(ctx context.Context, cfg config.Reso
 		if len(threadIDs) == 0 {
 			return nil, errnorm.Usage(
 				"invalid_request",
-				commandName+" discovery returned no matching threads; run `oar threads list` and refine filters",
+				commandName+" discovery returned no matching threads; run `anx threads list` and refine filters",
 			)
 		}
 	}
@@ -777,7 +777,7 @@ func (a *App) resolveThreadContextSelection(ctx context.Context, cfg config.Reso
 	if len(threadIDs) != 1 {
 		return nil, errnorm.Usage(
 			"invalid_request",
-			fmt.Sprintf("%s requires exactly one thread; refine filters or pass one --thread-id. For operator coordination across topics, use `oar topics list` and `oar topics workspace`. For a multi-thread diagnostic backing projection, use `oar threads workspace` with discovery filters.", commandName),
+			fmt.Sprintf("%s requires exactly one thread; refine filters or pass one --thread-id. For operator coordination across topics, use `anx topics list` and `anx topics workspace`. For a multi-thread diagnostic backing projection, use `anx threads workspace` with discovery filters.", commandName),
 		)
 	}
 	return threadIDs, nil
@@ -785,18 +785,18 @@ func (a *App) resolveThreadContextSelection(ctx context.Context, cfg config.Reso
 
 func mixedThreadSelectionMessage(commandName string) string {
 	base := "--thread-id cannot be combined with discovery filters (--status/--priority/--stale/--tag/--cadence/--type). Choose one mode."
-	discoveryExample := "oar threads inspect --status active"
+	discoveryExample := "anx threads inspect --status active"
 	switch strings.TrimSpace(commandName) {
 	case "threads context":
-		return base + " For one thread, use `oar threads inspect --thread-id <thread-id>` or `oar threads workspace --thread-id <thread-id>` for backing-thread diagnostics. Prefer `oar topics workspace --topic-id <topic-id>` for primary coordination when you have a topic id. For discovery, remove `--thread-id` and use `" + discoveryExample + "`."
+		return base + " For one thread, use `anx threads inspect --thread-id <thread-id>` or `anx threads workspace --thread-id <thread-id>` for backing-thread diagnostics. Prefer `anx topics workspace --topic-id <topic-id>` for primary coordination when you have a topic id. For discovery, remove `--thread-id` and use `" + discoveryExample + "`."
 	case "threads recommendations":
-		return base + " For one thread, use `oar threads recommendations --thread-id <thread-id>`. For discovery, remove `--thread-id` and use `" + discoveryExample + "`."
+		return base + " For one thread, use `anx threads recommendations --thread-id <thread-id>`. For discovery, remove `--thread-id` and use `" + discoveryExample + "`."
 	case "threads workspace":
-		return base + " For one thread, use `oar threads workspace --thread-id <thread-id>`. For discovery, remove `--thread-id` and use `" + discoveryExample + "`."
+		return base + " For one thread, use `anx threads workspace --thread-id <thread-id>`. For discovery, remove `--thread-id` and use `" + discoveryExample + "`."
 	case "threads inspect":
-		return base + " For one thread, use `oar threads inspect --thread-id <thread-id>`. For discovery, remove `--thread-id` and use `" + discoveryExample + "`."
+		return base + " For one thread, use `anx threads inspect --thread-id <thread-id>`. For discovery, remove `--thread-id` and use `" + discoveryExample + "`."
 	default:
-		return base + " For one thread, use `oar " + strings.TrimSpace(commandName) + " --thread-id <thread-id>`. For discovery, remove `--thread-id` and use `" + discoveryExample + "`."
+		return base + " For one thread, use `anx " + strings.TrimSpace(commandName) + " --thread-id <thread-id>`. For discovery, remove `--thread-id` and use `" + discoveryExample + "`."
 	}
 }
 
@@ -1222,7 +1222,7 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 			return nil, "artifacts list", err
 		}
 		if len(fs.Args()) > 0 {
-			return nil, "artifacts list", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar artifacts list`")
+			return nil, "artifacts list", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx artifacts list`")
 		}
 		resolvedThreadID := strings.TrimSpace(threadIDFlag.value)
 		if resolvedThreadID != "" {
@@ -1315,7 +1315,7 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 			return nil, "artifacts trash", err
 		}
 		if len(positionals) > 0 {
-			return nil, "artifacts trash", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar artifacts trash`")
+			return nil, "artifacts trash", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx artifacts trash`")
 		}
 		body := map[string]any{}
 		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
@@ -1353,7 +1353,7 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 			return nil, "artifacts archive", err
 		}
 		if len(positionals) > 0 {
-			return nil, "artifacts archive", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar artifacts archive`")
+			return nil, "artifacts archive", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx artifacts archive`")
 		}
 		body := map[string]any{}
 		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
@@ -1391,7 +1391,7 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 			return nil, "artifacts unarchive", err
 		}
 		if len(positionals) > 0 {
-			return nil, "artifacts unarchive", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar artifacts unarchive`")
+			return nil, "artifacts unarchive", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx artifacts unarchive`")
 		}
 		body := map[string]any{}
 		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
@@ -1429,7 +1429,7 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 			return nil, "artifacts restore", err
 		}
 		if len(positionals) > 0 {
-			return nil, "artifacts restore", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar artifacts restore`")
+			return nil, "artifacts restore", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx artifacts restore`")
 		}
 		body := map[string]any{}
 		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
@@ -1465,7 +1465,7 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 			return nil, "artifacts purge", err
 		}
 		if len(positionals) > 0 {
-			return nil, "artifacts purge", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar artifacts purge`")
+			return nil, "artifacts purge", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx artifacts purge`")
 		}
 		body := map[string]any{}
 		if strings.TrimSpace(reasonFlag.value) != "" {
@@ -1507,7 +1507,7 @@ func (a *App) runBoardsCommand(ctx context.Context, args []string, cfg config.Re
 			return nil, "boards list", err
 		}
 		if len(fs.Args()) > 0 {
-			return nil, "boards list", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar boards list`")
+			return nil, "boards list", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx boards list`")
 		}
 		if limitFlag.set && (limitFlag.value < 1 || limitFlag.value > 1000) {
 			return nil, "boards list", errnorm.Usage("invalid_request", "limit must be between 1 and 1000")
@@ -1617,7 +1617,7 @@ func (a *App) runBoardsCommand(ctx context.Context, args []string, cfg config.Re
 			return nil, "boards archive", err
 		}
 		if len(positionals) > 0 {
-			return nil, "boards archive", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar boards archive`")
+			return nil, "boards archive", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx boards archive`")
 		}
 		body := map[string]any{}
 		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
@@ -1665,7 +1665,7 @@ func (a *App) runBoardsCommand(ctx context.Context, args []string, cfg config.Re
 			return nil, "boards unarchive", err
 		}
 		if len(positionals) > 0 {
-			return nil, "boards unarchive", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar boards unarchive`")
+			return nil, "boards unarchive", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx boards unarchive`")
 		}
 		body := map[string]any{}
 		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
@@ -1713,7 +1713,7 @@ func (a *App) runBoardsCommand(ctx context.Context, args []string, cfg config.Re
 			return nil, "boards trash", err
 		}
 		if len(positionals) > 0 {
-			return nil, "boards trash", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar boards trash`")
+			return nil, "boards trash", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx boards trash`")
 		}
 		body := map[string]any{}
 		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
@@ -1761,7 +1761,7 @@ func (a *App) runBoardsCommand(ctx context.Context, args []string, cfg config.Re
 			return nil, "boards restore", err
 		}
 		if len(positionals) > 0 {
-			return nil, "boards restore", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar boards restore`")
+			return nil, "boards restore", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx boards restore`")
 		}
 		body := map[string]any{}
 		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
@@ -1807,7 +1807,7 @@ func (a *App) runBoardsCommand(ctx context.Context, args []string, cfg config.Re
 			return nil, "boards purge", err
 		}
 		if len(positionals) > 0 {
-			return nil, "boards purge", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar boards purge`")
+			return nil, "boards purge", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx boards purge`")
 		}
 		body := map[string]any{}
 		if strings.TrimSpace(reasonFlag.value) != "" {
@@ -1945,7 +1945,7 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 			return nil, "docs list", err
 		}
 		if len(fs.Args()) > 0 {
-			return nil, "docs list", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar docs list`")
+			return nil, "docs list", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx docs list`")
 		}
 		if limitFlag.set && (limitFlag.value < 1 || limitFlag.value > 1000) {
 			return nil, "docs list", errnorm.Usage("invalid_request", "limit must be between 1 and 1000")
@@ -2088,7 +2088,7 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 			return nil, "docs revision get", err
 		}
 		if len(positionals) > 0 {
-			return nil, "docs revision get", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar docs revision get`")
+			return nil, "docs revision get", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx docs revision get`")
 		}
 
 		result, callErr := a.invokeDocsRevisionGetWithIDResolution(ctx, cfg, documentID, revisionID)
@@ -2114,7 +2114,7 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 			return nil, "docs trash", err
 		}
 		if len(positionals) > 0 {
-			return nil, "docs trash", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar docs trash`")
+			return nil, "docs trash", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx docs trash`")
 		}
 		body := map[string]any{}
 		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
@@ -2152,7 +2152,7 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 			return nil, "docs archive", err
 		}
 		if len(positionals) > 0 {
-			return nil, "docs archive", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar docs archive`")
+			return nil, "docs archive", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx docs archive`")
 		}
 		body := map[string]any{}
 		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
@@ -2190,7 +2190,7 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 			return nil, "docs unarchive", err
 		}
 		if len(positionals) > 0 {
-			return nil, "docs unarchive", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar docs unarchive`")
+			return nil, "docs unarchive", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx docs unarchive`")
 		}
 		body := map[string]any{}
 		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
@@ -2228,7 +2228,7 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 			return nil, "docs restore", err
 		}
 		if len(positionals) > 0 {
-			return nil, "docs restore", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar docs restore`")
+			return nil, "docs restore", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx docs restore`")
 		}
 		body := map[string]any{}
 		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
@@ -2264,7 +2264,7 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 			return nil, "docs purge", err
 		}
 		if len(positionals) > 0 {
-			return nil, "docs purge", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar docs purge`")
+			return nil, "docs purge", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx docs purge`")
 		}
 		body := map[string]any{}
 		if strings.TrimSpace(reasonFlag.value) != "" {
@@ -2357,7 +2357,7 @@ func (a *App) runEventsCommand(ctx context.Context, args []string, cfg config.Re
 			return nil, "events archive", err
 		}
 		if len(positionals) > 0 {
-			return nil, "events archive", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar events archive`")
+			return nil, "events archive", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx events archive`")
 		}
 		body := map[string]any{}
 		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
@@ -2395,7 +2395,7 @@ func (a *App) runEventsCommand(ctx context.Context, args []string, cfg config.Re
 			return nil, "events unarchive", err
 		}
 		if len(positionals) > 0 {
-			return nil, "events unarchive", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar events unarchive`")
+			return nil, "events unarchive", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx events unarchive`")
 		}
 		body := map[string]any{}
 		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
@@ -2433,7 +2433,7 @@ func (a *App) runEventsCommand(ctx context.Context, args []string, cfg config.Re
 			return nil, "events trash", err
 		}
 		if len(positionals) > 0 {
-			return nil, "events trash", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar events trash`")
+			return nil, "events trash", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx events trash`")
 		}
 		body := map[string]any{}
 		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
@@ -2471,7 +2471,7 @@ func (a *App) runEventsCommand(ctx context.Context, args []string, cfg config.Re
 			return nil, "events restore", err
 		}
 		if len(positionals) > 0 {
-			return nil, "events restore", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar events restore`")
+			return nil, "events restore", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx events restore`")
 		}
 		body := map[string]any{}
 		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
@@ -2797,7 +2797,7 @@ func (a *App) runEventsExplainCommand(args []string) (*commandResult, error) {
 		positionals = positionals[1:]
 	}
 	if len(positionals) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar events explain`")
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx events explain`")
 	}
 	if eventType == "" {
 		textLines := []string{
@@ -2840,10 +2840,10 @@ func (a *App) runEventsExplainCommand(args []string) (*commandResult, error) {
 				})
 			}
 		}
-		textLines = append(textLines, "For details: oar events explain <event-type>")
+		textLines = append(textLines, "For details: anx events explain <event-type>")
 		data := map[string]any{
 			"known_event_types": items,
-			"hint":              "oar events explain <event-type>",
+			"hint":              "anx events explain <event-type>",
 		}
 		return &commandResult{Text: strings.Join(textLines, "\n"), Data: data}, nil
 	}
@@ -2946,7 +2946,7 @@ func (a *App) runInboxList(ctx context.Context, args []string, cfg config.Resolv
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	if len(fs.Args()) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar inbox list`")
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx inbox list`")
 	}
 
 	threadIDs := normalizeIDFilters(threadIDFlags.values)
@@ -3087,7 +3087,7 @@ func (a *App) runInboxGet(ctx context.Context, args []string, cfg config.Resolve
 		positionals = positionals[1:]
 	}
 	if len(positionals) > 0 {
-		return nil, "inbox get", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar inbox get`; use `--id <id-or-alias>`")
+		return nil, "inbox get", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx inbox get`; use `--id <id-or-alias>`")
 	}
 	query := make([]queryParam, 0, 1)
 	if riskHorizonFlag.set {
@@ -3177,7 +3177,7 @@ func (a *App) runEventsStream(ctx context.Context, args []string, cfg config.Res
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	if len(fs.Args()) > 0 {
-		return nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `oar %s`", commandName))
+		return nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
 	}
 
 	query := make([]queryParam, 0, 4)
@@ -3213,7 +3213,7 @@ func (a *App) runInboxStream(ctx context.Context, args []string, cfg config.Reso
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	if len(fs.Args()) > 0 {
-		return nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `oar %s`", commandName))
+		return nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
 	}
 
 	query := make([]queryParam, 0, 2)
@@ -3257,14 +3257,14 @@ func (a *App) parseJSONBodyInputWithOptions(args []string, commandName string, o
 		return nil, false, errnorm.Usage("invalid_flags", err.Error())
 	}
 	if len(fs.Args()) > 0 {
-		return nil, false, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `oar %s`", commandName))
+		return nil, false, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
 	}
 	payload, err := a.readBodyInput(strings.TrimSpace(fromFileFlag.value))
 	if err != nil {
 		return nil, false, err
 	}
 	if len(payload) == 0 {
-		return nil, false, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body is required for `oar %s` (provide stdin or --from-file)", commandName))
+		return nil, false, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body is required for `anx %s` (provide stdin or --from-file)", commandName))
 	}
 	body, err := decodeJSONPayload(payload)
 	if err != nil {
@@ -3309,14 +3309,14 @@ func (a *App) parseIDAndBodyInputWithOptions(args []string, idFlag string, idLab
 		return "", nil, false, err
 	}
 	if len(positionals) > 0 {
-		return "", nil, false, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `oar %s`", commandName))
+		return "", nil, false, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
 	}
 	payload, err := a.readBodyInput(strings.TrimSpace(fromFileFlag.value))
 	if err != nil {
 		return "", nil, false, err
 	}
 	if len(payload) == 0 {
-		return "", nil, false, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body is required for `oar %s` (provide stdin or --from-file)", commandName))
+		return "", nil, false, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body is required for `anx %s` (provide stdin or --from-file)", commandName))
 	}
 	body, err := decodeJSONPayload(payload)
 	if err != nil {
@@ -3351,7 +3351,7 @@ func (a *App) parseBoardCardBoardScopedTarget(args []string, commandName string)
 		positionals = positionals[1:]
 	}
 	if len(positionals) > 0 {
-		return "", "", errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `oar %s`", commandName))
+		return "", "", errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
 	}
 	if err := validateID(boardID, "board id"); err != nil {
 		return "", "", err
@@ -3395,7 +3395,7 @@ func (a *App) parseBoardCardCreateInput(ctx context.Context, args []string, cfg 
 		positionals = positionals[1:]
 	}
 	if len(positionals) > 0 {
-		return "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `oar %s`", commandName))
+		return "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
 	}
 	if err := validateID(boardID, "board id"); err != nil {
 		return "", nil, err
@@ -3411,7 +3411,7 @@ func (a *App) parseBoardCardCreateInput(ctx context.Context, args []string, cfg 
 	}
 	if len(payload) > 0 {
 		if hasAnyBoardMutationFieldFlags(cardIDFlag, titleFlag, bodyFlag, actorIDFlag, requestKeyFlag, ifBoardUpdatedAtFlag, columnFlag, beforeCardIDFlag, afterCardIDFlag, assigneeFlag, priorityFlag, statusFlag, pinnedDocumentIDFlag) {
-			return "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("field flags cannot be combined with JSON body input for `oar %s`", commandName))
+			return "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("field flags cannot be combined with JSON body input for `anx %s`", commandName))
 		}
 		body, err := decodeJSONPayload(payload)
 		if err != nil {
@@ -3419,7 +3419,7 @@ func (a *App) parseBoardCardCreateInput(ctx context.Context, args []string, cfg 
 		}
 		bodyMap, _ := body.(map[string]any)
 		if bodyMap == nil {
-			return "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `oar %s` must be an object", commandName))
+			return "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object", commandName))
 		}
 		resolvedBoardID, err := a.resolveMaybeBoardID(ctx, cfg, boardID)
 		if err != nil {
@@ -3523,7 +3523,7 @@ func (a *App) parseBoardBatchCardCreateInput(ctx context.Context, args []string,
 		positionals = positionals[1:]
 	}
 	if len(positionals) > 0 {
-		return "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `oar %s`", commandName))
+		return "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
 	}
 	if err := validateID(boardID, "board id"); err != nil {
 		return "", nil, err
@@ -3533,7 +3533,7 @@ func (a *App) parseBoardBatchCardCreateInput(ctx context.Context, args []string,
 		return "", nil, err
 	}
 	if len(payload) == 0 {
-		return "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body is required for `oar %s` (provide stdin or --from-file)", commandName))
+		return "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body is required for `anx %s` (provide stdin or --from-file)", commandName))
 	}
 	body, err := decodeJSONPayload(payload)
 	if err != nil {
@@ -3541,7 +3541,7 @@ func (a *App) parseBoardBatchCardCreateInput(ctx context.Context, args []string,
 	}
 	bodyMap, ok := body.(map[string]any)
 	if !ok {
-		return "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `oar %s` must be an object", commandName))
+		return "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object", commandName))
 	}
 	if _, has := bodyMap["items"]; !has {
 		return "", nil, errnorm.Usage("invalid_request", "JSON body must include an items array")
@@ -3601,7 +3601,7 @@ func (a *App) parseBoardCardUpdateInput(ctx context.Context, args []string, cfg 
 		positionals = positionals[1:]
 	}
 	if len(positionals) > 0 {
-		return nil, nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `oar %s`", commandName))
+		return nil, nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
 	}
 	if err := validateID(cardID, "card id"); err != nil {
 		return nil, nil, err
@@ -3614,7 +3614,7 @@ func (a *App) parseBoardCardUpdateInput(ctx context.Context, args []string, cfg 
 	}
 	if len(payload) > 0 {
 		if hasAnyBoardMutationFieldFlags(titleFlag, bodyFlag, actorIDFlag, ifUpdatedAtFlag, assigneeFlag, priorityFlag, statusFlag, pinnedDocumentIDFlag, clearPinnedDocumentFlag) {
-			return nil, nil, errnorm.Usage("invalid_args", fmt.Sprintf("field flags cannot be combined with JSON body input for `oar %s`", commandName))
+			return nil, nil, errnorm.Usage("invalid_args", fmt.Sprintf("field flags cannot be combined with JSON body input for `anx %s`", commandName))
 		}
 		body, err := decodeJSONPayload(payload)
 		if err != nil {
@@ -3622,7 +3622,7 @@ func (a *App) parseBoardCardUpdateInput(ctx context.Context, args []string, cfg 
 		}
 		bodyMap, _ := body.(map[string]any)
 		if bodyMap == nil {
-			return nil, nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `oar %s` must be an object", commandName))
+			return nil, nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object", commandName))
 		}
 		pathParams, err := buildBoardCardCommandPathParams(cardID)
 		if err != nil {
@@ -3649,7 +3649,7 @@ func (a *App) parseBoardCardUpdateInput(ctx context.Context, args []string, cfg 
 	}
 	if clearPinnedDocumentFlag.set && clearPinnedDocumentFlag.value {
 		if strings.TrimSpace(pinnedDocumentIDFlag.value) != "" {
-			return nil, nil, errnorm.Usage("invalid_request", fmt.Sprintf("--pinned-document-id and --clear-pinned-document cannot be combined for `oar %s`", commandName))
+			return nil, nil, errnorm.Usage("invalid_request", fmt.Sprintf("--pinned-document-id and --clear-pinned-document cannot be combined for `anx %s`", commandName))
 		}
 		patch["pinned_document_id"] = nil
 	} else if pinnedDocumentID := strings.TrimSpace(pinnedDocumentIDFlag.value); pinnedDocumentID != "" {
@@ -3703,7 +3703,7 @@ func (a *App) parseBoardCardMoveInput(ctx context.Context, args []string, cfg co
 		positionals = positionals[1:]
 	}
 	if len(positionals) > 0 {
-		return "", "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `oar %s`", commandName))
+		return "", "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
 	}
 	if err := validatePlacementFlags(beforeCardIDFlag.value, afterCardIDFlag.value, commandName); err != nil {
 		return "", "", nil, err
@@ -3726,7 +3726,7 @@ func (a *App) parseBoardCardMoveInput(ctx context.Context, args []string, cfg co
 	}
 	if len(payload) > 0 {
 		if hasAnyBoardMutationFieldFlags(actorIDFlag, ifBoardUpdatedAtFlag, columnFlag, beforeCardIDFlag, afterCardIDFlag) {
-			return "", "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("field flags cannot be combined with JSON body input for `oar %s`", commandName))
+			return "", "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("field flags cannot be combined with JSON body input for `anx %s`", commandName))
 		}
 		body, err := decodeJSONPayload(payload)
 		if err != nil {
@@ -3734,7 +3734,7 @@ func (a *App) parseBoardCardMoveInput(ctx context.Context, args []string, cfg co
 		}
 		bodyMap, _ := body.(map[string]any)
 		if bodyMap == nil {
-			return "", "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `oar %s` must be an object", commandName))
+			return "", "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object", commandName))
 		}
 		if err := a.normalizeBoardMutationCardAnchorField(ctx, cfg, resolvedBoardID, bodyMap, "before_card_id"); err != nil {
 			return "", "", nil, err
@@ -3796,7 +3796,7 @@ func (a *App) parseBoardCardArchiveInput(ctx context.Context, args []string, cfg
 		positionals = positionals[1:]
 	}
 	if len(positionals) > 0 {
-		return nil, nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `oar %s`", commandName))
+		return nil, nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
 	}
 	if err := validateID(cardID, "card id"); err != nil {
 		return nil, nil, err
@@ -3809,7 +3809,7 @@ func (a *App) parseBoardCardArchiveInput(ctx context.Context, args []string, cfg
 	}
 	if len(payload) > 0 {
 		if hasAnyBoardMutationFieldFlags(actorIDFlag, ifBoardUpdatedAtFlag) {
-			return nil, nil, errnorm.Usage("invalid_args", fmt.Sprintf("field flags cannot be combined with JSON body input for `oar %s`", commandName))
+			return nil, nil, errnorm.Usage("invalid_args", fmt.Sprintf("field flags cannot be combined with JSON body input for `anx %s`", commandName))
 		}
 		body, err := decodeJSONPayload(payload)
 		if err != nil {
@@ -3817,7 +3817,7 @@ func (a *App) parseBoardCardArchiveInput(ctx context.Context, args []string, cfg
 		}
 		bodyMap, _ := body.(map[string]any)
 		if bodyMap == nil {
-			return nil, nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `oar %s` must be an object", commandName))
+			return nil, nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object", commandName))
 		}
 		if err := finalizeMutationActorID(bodyMap, cfg); err != nil {
 			return nil, nil, err
@@ -3911,7 +3911,7 @@ func (a *App) resolveMaybeBoardCardID(ctx context.Context, cfg config.Resolved, 
 
 func validatePlacementFlags(before string, after string, commandName string) error {
 	if strings.TrimSpace(before) != "" && strings.TrimSpace(after) != "" {
-		return errnorm.Usage("invalid_request", fmt.Sprintf("--before-card-id and --after-card-id cannot be combined for `oar %s`", commandName))
+		return errnorm.Usage("invalid_request", fmt.Sprintf("--before-card-id and --after-card-id cannot be combined for `anx %s`", commandName))
 	}
 	return nil
 }
@@ -4007,7 +4007,7 @@ func (a *App) parseDerivedRebuildBodyInput(args []string, cfg config.Resolved) (
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	if len(fs.Args()) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar derived rebuild`")
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx derived rebuild`")
 	}
 
 	payload, err := a.readBodyInput(strings.TrimSpace(fromFileFlag.value))
@@ -4025,7 +4025,7 @@ func (a *App) parseDerivedRebuildBodyInput(args []string, cfg config.Resolved) (
 		}
 		parsed, ok := decoded.(map[string]any)
 		if !ok {
-			return nil, errnorm.Usage("invalid_request", "JSON body for `oar derived rebuild` must be an object")
+			return nil, errnorm.Usage("invalid_request", "JSON body for `anx derived rebuild` must be an object")
 		}
 		body = parsed
 	}
@@ -4078,7 +4078,7 @@ func (a *App) parseAckBodyInput(ctx context.Context, args []string, cfg config.R
 	}
 	if len(payload) > 0 {
 		if len(positionals) > 0 {
-			return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar inbox ack`")
+			return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx inbox ack`")
 		}
 		decoded, err := decodeJSONPayload(payload)
 		if err != nil {
@@ -4086,7 +4086,7 @@ func (a *App) parseAckBodyInput(ctx context.Context, args []string, cfg config.R
 		}
 		bodyMap, ok := decoded.(map[string]any)
 		if !ok {
-			return nil, errnorm.Usage("invalid_request", "JSON body for `oar inbox ack` must be an object")
+			return nil, errnorm.Usage("invalid_request", "JSON body for `anx inbox ack` must be an object")
 		}
 		if strings.TrimSpace(actorIDFlag.value) != "" {
 			aid, err := resolveActorIDAlias(actorIDFlag.value, cfg)
@@ -4110,7 +4110,7 @@ func (a *App) parseAckBodyInput(ctx context.Context, args []string, cfg config.R
 		positionals = positionals[1:]
 	}
 	if len(positionals) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar inbox ack`")
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx inbox ack`")
 	}
 	if err := validateID(inboxItemID, "inbox item id"); err != nil {
 		return nil, err
@@ -4296,7 +4296,7 @@ func missingInboxItemIDError(rawID string) error {
 	return errnorm.Usage(
 		"invalid_request",
 		fmt.Sprintf(
-			"inbox item id %q is missing: no canonical id, alias, or unique prefix match was found. Run `oar inbox list` and retry with alias or canonical id.",
+			"inbox item id %q is missing: no canonical id, alias, or unique prefix match was found. Run `anx inbox list` and retry with alias or canonical id.",
 			strings.TrimSpace(rawID),
 		),
 	)
@@ -4600,7 +4600,7 @@ func ambiguousResourceIDError(rawID string, spec resourceIDLookupSpec, matches [
 
 func missingResourceIDError(rawID string, spec resourceIDLookupSpec) error {
 	message := fmt.Sprintf(
-		"%s %q is missing: no canonical %s id or unique prefix match was found. If this value was truncated, run `oar %s` and retry with a unique short_id or canonical id.",
+		"%s %q is missing: no canonical %s id or unique prefix match was found. If this value was truncated, run `anx %s` and retry with a unique short_id or canonical id.",
 		spec.idLabel,
 		rawID,
 		spec.resource,
@@ -5373,23 +5373,23 @@ func recommendationFollowUpHints(threadID string, sections ...[]any) map[string]
 
 	examples := make([]string, 0, 3)
 	for _, eventID := range eventIDs {
-		examples = append(examples, "oar events get --event-id "+eventID+" --json")
+		examples = append(examples, "anx events get --event-id "+eventID+" --json")
 		if len(examples) >= 3 {
 			break
 		}
 	}
 
 	hints := map[string]any{
-		"events_get_template":          "oar events get --event-id <event-id> --json",
+		"events_get_template":          "anx events get --event-id <event-id> --json",
 		"events_get_examples":          examples,
 		"recommendations_list_command": "",
 		"decisions_list_command":       "",
 		"context_refresh_command":      "",
 	}
 	if strings.TrimSpace(threadID) != "" {
-		hints["recommendations_list_command"] = "oar events list --thread-id " + threadID + " --type actor_statement --full-id --json"
-		hints["decisions_list_command"] = "oar events list --thread-id " + threadID + " --type decision_needed --type decision_made --full-id --json"
-		hints["context_refresh_command"] = "oar threads context --thread-id " + threadID + " --include-artifact-content --full-id --json"
+		hints["recommendations_list_command"] = "anx events list --thread-id " + threadID + " --type actor_statement --full-id --json"
+		hints["decisions_list_command"] = "anx events list --thread-id " + threadID + " --type decision_needed --type decision_made --full-id --json"
+		hints["context_refresh_command"] = "anx threads context --thread-id " + threadID + " --include-artifact-content --full-id --json"
 	}
 	return hints
 }
@@ -5616,7 +5616,7 @@ func (a *App) applyContentFileOverride(body any, contentFile string, commandName
 
 	payload, ok := body.(map[string]any)
 	if !ok {
-		return nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `oar %s` must be an object when --content-file is provided", commandName))
+		return nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object when --content-file is provided", commandName))
 	}
 	payload["content"] = string(content)
 	return payload, nil
@@ -5731,7 +5731,7 @@ func lineColumnFromOffset(payload []byte, offset int64) (int, int) {
 func validateEventsCreateInput(body any, commandName string) error {
 	payload, ok := body.(map[string]any)
 	if !ok {
-		return errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `oar %s` must be an object", commandName))
+		return errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object", commandName))
 	}
 
 	issues := validateDraftBody("events.create", payload)
@@ -5744,7 +5744,7 @@ func validateEventsCreateInput(body any, commandName string) error {
 func validateDocsCreateBody(body any, commandName string) error {
 	payload, ok := body.(map[string]any)
 	if !ok {
-		return errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `oar %s` must be an object", commandName))
+		return errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object", commandName))
 	}
 
 	issues := make([]string, 0, 8)
@@ -5782,7 +5782,7 @@ func validateDocsCreateBody(body any, commandName string) error {
 func validateDocsUpdateBody(body any, commandName string) error {
 	payload, ok := body.(map[string]any)
 	if !ok {
-		return errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `oar %s` must be an object", commandName))
+		return errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object", commandName))
 	}
 
 	if rev, ok := payload["revision"].(map[string]any); ok && len(rev) > 0 {
@@ -5931,7 +5931,7 @@ func appendDocsCommonValidationIssues(payload map[string]any, issues *[]string) 
 func ensureDocsUpdateActorIdentity(body any, cfg config.Resolved) (any, error) {
 	payload, ok := body.(map[string]any)
 	if !ok {
-		return nil, errnorm.Usage("invalid_request", "JSON body for `oar docs revisions create` must be an object")
+		return nil, errnorm.Usage("invalid_request", "JSON body for `anx docs revisions create` must be an object")
 	}
 
 	if actorID := strings.TrimSpace(anyString(payload["actor_id"])); actorID != "" {
@@ -5944,7 +5944,7 @@ func ensureDocsUpdateActorIdentity(body any, cfg config.Resolved) (any, error) {
 
 	return nil, errnorm.Usage(
 		"invalid_request",
-		"No active actor identity. Run: oar auth register --username <name> or oar auth whoami to inspect current profile.",
+		"No active actor identity. Run: anx auth register --username <name> or anx auth whoami to inspect current profile.",
 	)
 }
 

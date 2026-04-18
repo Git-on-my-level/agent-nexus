@@ -62,7 +62,7 @@
 </script>
 
 <svelte:head>
-  <title>Organizations — OAR</title>
+  <title>Organizations — ANX</title>
 </svelte:head>
 
 <div class="space-y-5">

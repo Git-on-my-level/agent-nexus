@@ -9,7 +9,7 @@ import { resolveWorkspaceEnv } from "$lib/compat/workspaceCompat";
 import { isSaasPackedHostDev } from "$lib/server/controlPlaneWorkspace.js";
 
 /** Shown in parse errors; keep in sync with web-ui README / runbook examples. */
-const OAR_WORKSPACES_JSON_EXAMPLE =
+const ANX_WORKSPACES_JSON_EXAMPLE =
   '[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"}]';
 
 /** `..."http://..." ]` instead of `..."http://..."} ]` — common .env / copy-paste mistake. */
@@ -36,11 +36,11 @@ function formatOarWorkspacesJsonError(trimmed, error) {
   const typoHint = /Expected ',' or '}'/.test(reason)
     ? hintOarWorkspacesBracketTypo(trimmed)
     : "";
-  return `OAR_WORKSPACES must be valid JSON. ${reason}.${context}${typoHint} Unset OAR_WORKSPACES (and OAR_PROJECTS) to fall back to OAR_CORE_BASE_URL, or fix the value. Example: ${OAR_WORKSPACES_JSON_EXAMPLE}`;
+  return `ANX_WORKSPACES must be valid JSON. ${reason}.${context}${typoHint} Unset ANX_WORKSPACES (and ANX_PROJECTS) to fall back to ANX_CORE_BASE_URL, or fix the value. Example: ${ANX_WORKSPACES_JSON_EXAMPLE}`;
 }
 
 /**
- * Fixes two copy/paste typos seen in OAR_WORKSPACES without changing valid JSON.
+ * Fixes two copy/paste typos seen in ANX_WORKSPACES without changing valid JSON.
  * Only applied after JSON.parse fails.
  */
 function repairCommonOarWorkspacesJsonTypos(trimmed) {
@@ -54,13 +54,13 @@ function repairCommonOarWorkspacesJsonTypos(trimmed) {
 
 function normalizeWorkspaceEntry(entry, index) {
   if (!entry || typeof entry !== "object") {
-    throw new Error(`OAR_WORKSPACES entry ${index + 1} must be an object.`);
+    throw new Error(`ANX_WORKSPACES entry ${index + 1} must be an object.`);
   }
 
   const slug = normalizeWorkspaceSlug(entry.slug);
   if (!slug) {
     throw new Error(
-      `OAR_WORKSPACES entry ${index + 1} is missing a valid slug.`,
+      `ANX_WORKSPACES entry ${index + 1} is missing a valid slug.`,
     );
   }
 
@@ -118,7 +118,7 @@ function fallbackSingleWorkspace(env) {
       slug: DEFAULT_WORKSPACE_SLUG,
       label: "Local",
       description: "",
-      coreBaseUrl: normalizeBaseUrl(env.OAR_CORE_BASE_URL),
+      coreBaseUrl: normalizeBaseUrl(env.ANX_CORE_BASE_URL),
     },
   ];
 }
@@ -149,7 +149,7 @@ export function createWorkspaceCatalog({
     workspaces[0];
 
   if (!defaultWorkspace) {
-    throw new Error("At least one OAR workspace must be configured.");
+    throw new Error("At least one ANX workspace must be configured.");
   }
 
   return {
@@ -166,9 +166,9 @@ export function createWorkspaceCatalog({
 
 export function loadWorkspaceCatalog(env = privateEnv) {
   const resolved = resolveWorkspaceEnv(env);
-  const configuredWorkspaces = parseWorkspaceEntries(resolved.OAR_WORKSPACES);
+  const configuredWorkspaces = parseWorkspaceEntries(resolved.ANX_WORKSPACES);
   const preconfiguredWorkspaces = parseWorkspaceEntries(
-    env.OAR_SAAS_DEV_PRECONFIGURED_WORKSPACES,
+    env.ANX_SAAS_DEV_PRECONFIGURED_WORKSPACES,
   );
   const saasPackedHost = isSaasPackedHostDev(env);
 
@@ -188,11 +188,11 @@ export function loadWorkspaceCatalog(env = privateEnv) {
     usesSyntheticDefaultWorkspace = true;
   }
   const devActorMode =
-    env.OAR_DEV_ACTOR_MODE === "true" || env.OAR_DEV_ACTOR_MODE === "1";
+    env.ANX_DEV_ACTOR_MODE === "true" || env.ANX_DEV_ACTOR_MODE === "1";
 
   return createWorkspaceCatalog({
     workspaces,
-    defaultWorkspaceSlug: resolved.OAR_DEFAULT_WORKSPACE,
+    defaultWorkspaceSlug: resolved.ANX_DEFAULT_WORKSPACE,
     devActorMode,
     usesSyntheticDefaultWorkspace,
     hostedDevAllowEmpty: saasPackedHost && workspaces.length === 0,

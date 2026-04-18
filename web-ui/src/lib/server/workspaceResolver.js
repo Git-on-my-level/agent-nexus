@@ -23,7 +23,7 @@ function createWorkspaceNotConfiguredError(rawSlug) {
     payload: {
       error: {
         code: "workspace_not_configured",
-        message: `Workspace '${requestedSlug}' is not configured in OAR_WORKSPACES and could not be resolved from the control plane.`,
+        message: `Workspace '${requestedSlug}' is not configured in ANX_WORKSPACES and could not be resolved from the control plane.`,
       },
     },
   };

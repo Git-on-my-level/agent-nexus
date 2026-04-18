@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from oar_agent_bridge.adapters.deterministic_ack import DeterministicAckAdapter
-from oar_agent_bridge.models import WakePacket
+from anx_agent_bridge.adapters.deterministic_ack import DeterministicAckAdapter
+from anx_agent_bridge.models import WakePacket
 
 
 def test_deterministic_ack_rotates_lines() -> None:
@@ -20,7 +20,7 @@ def test_deterministic_ack_rotates_lines() -> None:
         trigger_text="hi",
         current_summary="",
         session_key="sk",
-        oar_base_url="http://127.0.0.1:8000",
+        anx_base_url="http://127.0.0.1:8000",
         thread_context_url="",
         thread_workspace_url="",
         trigger_event_url="",

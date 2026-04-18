@@ -78,7 +78,7 @@ func TestNotificationsListReadAndDismissAreTargetScoped(t *testing.T) {
 				"trigger_event_id":   triggerEventID,
 				"trigger_created_at": triggerCreatedAt,
 				"trigger_text":       "@target.agent please check this",
-				"session_key":        "oar:ws_main:" + threadID + ":" + target.Username,
+				"session_key":        "anx:ws_main:" + threadID + ":" + target.Username,
 			},
 			"provenance": map[string]any{"sources": []string{"actor_statement:" + triggerEventID}},
 		},

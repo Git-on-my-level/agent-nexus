@@ -2,7 +2,7 @@ import { defineConfig } from "@playwright/test";
 
 const port = Number(process.env.PLAYWRIGHT_PORT ?? 4173);
 const basePathPort = Number(process.env.PLAYWRIGHT_BASE_PATH_PORT ?? 4174);
-const appBasePath = process.env.PLAYWRIGHT_APP_BASE_PATH ?? "/oar";
+const appBasePath = process.env.PLAYWRIGHT_APP_BASE_PATH ?? "/anx";
 const preview =
   process.env.PLAYWRIGHT_PREVIEW === "1" ||
   process.env.PLAYWRIGHT_PREVIEW === "true";
@@ -27,7 +27,7 @@ const webServer = preview
         command: `pnpm exec vite dev --host 127.0.0.1 --port ${basePathPort}`,
         env: {
           ...process.env,
-          OAR_UI_BASE_PATH: appBasePath,
+          ANX_UI_BASE_PATH: appBasePath,
         },
         port: basePathPort,
         timeout: 120000,

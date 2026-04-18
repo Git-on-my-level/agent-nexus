@@ -13,10 +13,10 @@ import (
 	"strings"
 	"time"
 
-	"organization-autorunner-cli/internal/config"
-	"organization-autorunner-cli/internal/errnorm"
-	"organization-autorunner-cli/internal/httpclient"
-	"organization-autorunner-cli/internal/profile"
+	"agent-nexus-cli/internal/config"
+	"agent-nexus-cli/internal/errnorm"
+	"agent-nexus-cli/internal/httpclient"
+	"agent-nexus-cli/internal/profile"
 )
 
 const minAccessTokenTTL = time.Minute
@@ -407,7 +407,7 @@ func (s *Service) Revoke(ctx context.Context) (WhoAmIResult, error) {
 		return WhoAmIResult{}, errnorm.Wrap(errnorm.KindLocal, "profile_read_failed", "failed to read profile", loadErr)
 	}
 	if !ok {
-		return WhoAmIResult{}, errnorm.Local("profile_not_found", "profile not found; run `oar auth register` first")
+		return WhoAmIResult{}, errnorm.Local("profile_not_found", "profile not found; run `anx auth register` first")
 	}
 	prof.Revoked = true
 	prof.AccessToken = ""
@@ -466,7 +466,7 @@ func (s *Service) RevokePrincipal(ctx context.Context, agentID string, opts Revo
 		return RevokePrincipalResult{}, err
 	}
 	if strings.TrimSpace(prof.AgentID) != "" && agentID == strings.TrimSpace(prof.AgentID) {
-		return RevokePrincipalResult{}, errnorm.Usage("invalid_request", "use `oar auth revoke` to revoke the current profile")
+		return RevokePrincipalResult{}, errnorm.Usage("invalid_request", "use `anx auth revoke` to revoke the current profile")
 	}
 	client, err := s.newClient(prof.AccessToken)
 	if err != nil {
@@ -500,7 +500,7 @@ func (s *Service) TokenStatus(ctx context.Context) (TokenStatusResult, error) {
 		return TokenStatusResult{}, errnorm.Wrap(errnorm.KindLocal, "profile_read_failed", "failed to read profile", err)
 	}
 	if !ok {
-		return TokenStatusResult{}, errnorm.Local("profile_not_found", "profile not found; run `oar auth register` first")
+		return TokenStatusResult{}, errnorm.Local("profile_not_found", "profile not found; run `anx auth register` first")
 	}
 
 	now := s.now()
@@ -734,7 +734,7 @@ func (s *Service) ensureAccessToken(ctx context.Context) (profile.Profile, error
 		return profile.Profile{}, errnorm.Wrap(errnorm.KindLocal, "profile_read_failed", "failed to read profile", err)
 	}
 	if !ok {
-		return profile.Profile{}, errnorm.Local("profile_not_found", "profile not found; run `oar auth register` first")
+		return profile.Profile{}, errnorm.Local("profile_not_found", "profile not found; run `anx auth register` first")
 	}
 	if prof.Revoked {
 		return profile.Profile{}, errnorm.Local("agent_revoked", "profile is revoked and cannot authenticate")
@@ -884,7 +884,7 @@ func (s *Service) newClient(accessToken string) (*httpclient.Client, error) {
 }
 
 func buildAssertionMessage(agentID string, keyID string, signedAt string) string {
-	return "oar-auth-token|" + strings.TrimSpace(agentID) + "|" + strings.TrimSpace(keyID) + "|" + strings.TrimSpace(signedAt)
+	return "anx-auth-token|" + strings.TrimSpace(agentID) + "|" + strings.TrimSpace(keyID) + "|" + strings.TrimSpace(signedAt)
 }
 
 func inferRootDirFromProfilePath(profilePath string) string {

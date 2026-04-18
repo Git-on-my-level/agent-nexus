@@ -107,7 +107,7 @@
 </script>
 
 <svelte:head>
-  <title>{organization?.display_name ?? "Organization"} — OAR</title>
+  <title>{organization?.display_name ?? "Organization"} — ANX</title>
 </svelte:head>
 
 <div class="space-y-5">

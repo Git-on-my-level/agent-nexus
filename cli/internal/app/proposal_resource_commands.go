@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"organization-autorunner-cli/internal/config"
-	"organization-autorunner-cli/internal/errnorm"
+	"agent-nexus-cli/internal/config"
+	"agent-nexus-cli/internal/errnorm"
 )
 
 func parseProposalIDArg(args []string, commandName string) (string, error) {
@@ -26,7 +26,7 @@ func parseProposalIDArg(args []string, commandName string) (string, error) {
 		return "", err
 	}
 	if len(positionals) > 0 {
-		return "", errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `oar %s`", commandName))
+		return "", errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
 	}
 	return proposalID, nil
 }
@@ -34,7 +34,7 @@ func parseProposalIDArg(args []string, commandName string) (string, error) {
 func mapBody(raw any, commandName string) (map[string]any, error) {
 	body, ok := raw.(map[string]any)
 	if !ok {
-		return nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `oar %s` must be an object", commandName))
+		return nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object", commandName))
 	}
 	return body, nil
 }
@@ -148,7 +148,7 @@ func (a *App) runDocsProposeUpdateCommand(ctx context.Context, args []string, cf
 	if err != nil {
 		return nil, err
 	}
-	applyCommand := "oar docs apply --proposal-id " + draft.DraftID
+	applyCommand := "anx docs apply --proposal-id " + draft.DraftID
 	return proposalPreviewResult("docs.revisions.create", "POST", resolveCommandPath("docs.revisions.create", map[string]string{"document_id": resolvedID}, nil), map[string]string{"document_id": resolvedID}, wireBody, draft.DraftID, draftPath, diffText, applyCommand), nil
 }
 

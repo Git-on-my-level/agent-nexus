@@ -1,28 +1,28 @@
-# OAR Runtime Help Reference
+# ANX Runtime Help Reference
 
-This reference is bundled with the CLI. Print the full document with `oar meta docs` or one topic with `oar meta doc <topic>`.
+This reference is bundled with the CLI. Print the full document with `anx meta docs` or one topic with `anx meta doc <topic>`.
 
 ## Topics
 
 - `onboarding` (manual): Offline quick-start mental model and first command flow.
-- `concepts` (manual): Quick guide to the core OAR primitives and when to use each.
-- `agent-guide` (manual): Prescriptive agent guide for choosing OAR primitives, operating safely, and automating the CLI well.
-- `agent-bridge` (manual): Install, configure, and operate the preferred `oar-agent-bridge` wake-routing runtime on a fresh machine.
+- `concepts` (manual): Quick guide to the core ANX primitives and when to use each.
+- `agent-guide` (manual): Prescriptive agent guide for choosing ANX primitives, operating safely, and automating the CLI well.
+- `agent-bridge` (manual): Install, configure, and operate the preferred `anx-agent-bridge` wake-routing runtime on a fresh machine.
 - `wake-routing` (manual): How `@handle` wake routing works, including self-registration, verification, and troubleshooting.
 - `draft` (manual): Local draft staging, listing, commit, and discard workflow.
 - `provenance` (manual): Deterministic provenance walk reference and examples.
 - `auth whoami` (manual): Validate the active profile, print resolved identity metadata, and point agents at wake-registration next steps.
 - `auth list` (manual): List local CLI profiles and the active profile.
 - `auth default` (manual): Persist the default CLI profile used when no explicit agent is selected.
-- `config use` (manual): Set the active CLI profile used when --agent and OAR_AGENT are omitted.
+- `config use` (manual): Set the active CLI profile used when --agent and ANX_AGENT are omitted.
 - `config show` (manual): Print effective CLI settings and per-field sources (tokens redacted).
-- `config unset` (manual): Clear the persisted default profile marker (~/.config/oar/default-profile).
+- `config unset` (manual): Clear the persisted default profile marker (~/.config/anx/default-profile).
 - `auth update-username` (manual): Rename the authenticated agent and sync the local profile.
 - `auth rotate` (manual): Rotate the active agent key and refresh stored credentials.
 - `auth revoke` (manual): Revoke the active agent and mark the local profile revoked. Use explicit human-lockout flags only for break-glass recovery.
 - `auth token-status` (manual): Inspect whether the local profile still has refreshable token material.
-- `bridge` (manual): CLI-managed bridge bootstrap helpers for installing, templating, and checking `oar-agent-bridge`.
-- `import` (manual): Prescriptive import guide for building low-duplication, discoverable OAR graphs from external material.
+- `bridge` (manual): CLI-managed bridge bootstrap helpers for installing, templating, and checking `anx-agent-bridge`.
+- `import` (manual): Prescriptive import guide for building low-duplication, discoverable ANX graphs from external material.
 - `auth` (group): Register, inspect, and manage auth state
 - `topics` (group): Manage durable work subjects
 - `cards` (group): Manage board-scoped cards
@@ -126,9 +126,9 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 - `docs content` (local-helper): Show the current document content together with authoritative head revision metadata.
 - `docs validate-update` (local-helper): Validate a `docs.revisions.create` payload locally from stdin or file without sending the mutation.
 - `docs apply` (local-helper): Apply a previously staged document update proposal.
-- `meta skill` (local-helper): Render a bundled editor-specific skill file from the canonical OAR agent guide.
-- `bridge install` (local-helper): Install `oar-agent-bridge` into a dedicated Python 3.11+ virtualenv and expose a PATH wrapper.
-- `bridge import-auth` (local-helper): Copy an existing `oar` profile and key into bridge auth state for one bridge config.
+- `meta skill` (local-helper): Render a bundled editor-specific skill file from the canonical ANX agent guide.
+- `bridge install` (local-helper): Install `anx-agent-bridge` into a dedicated Python 3.11+ virtualenv and expose a PATH wrapper.
+- `bridge import-auth` (local-helper): Copy an existing `anx` profile and key into bridge auth state for one bridge config.
 - `bridge init-config` (local-helper): Write a minimal agent bridge TOML config with the pending-until-check-in lifecycle baked in.
 - `bridge workspace-id` (local-helper): Discover durable workspace ids from an existing agent wake registration.
 - `bridge doctor` (local-helper): Validate bridge install, config presence, and registration readiness without starting the daemon.
@@ -150,42 +150,42 @@ Offline quick-start mental model and first command flow.
 ```text
 Onboarding: first steps (agents / automation)
 
-This CLI is for agent principals. For the full operating model, read `oar meta doc agent-guide`.
+This CLI is for agent principals. For the full operating model, read `anx meta doc agent-guide`.
 
-1. Point the CLI at the core API with `--base-url` or `OAR_BASE_URL`.
-2. Choose a profile name and pass it with `--agent` (or `OAR_AGENT`) for registration and first checks below.
-3. Run `oar doctor`, then `oar auth bootstrap status` to see whether first-principal bootstrap is still open on this workspace.
+1. Point the CLI at the core API with `--base-url` or `ANX_BASE_URL`.
+2. Choose a profile name and pass it with `--agent` (or `ANX_AGENT`) for registration and first checks below.
+3. Run `anx doctor`, then `anx auth bootstrap status` to see whether first-principal bootstrap is still open on this workspace.
 4. Register the agent profile:
-   - If bootstrap is available: `oar auth register --username <username> --bootstrap-token <token>` (token comes from workspace operators / deployment).
-   - If bootstrap is closed: obtain a one-time invite (`auth invites create --kind agent` from an already-authorized principal on that workspace), then `oar auth register --username <username> --invite-token <token>`.
-5. On a machine where `~/.config` persists, set the active profile once: `oar config use <agent>` (same as `oar auth default <agent>`). Later commands can omit `--base-url` / `--agent`; use `oar config show` to verify. For CI or ephemeral environments, keep using env vars or flags instead.
-6. Confirm with `oar auth whoami`, run a cheap read (`topics list`), then mutate deliberately.
-7. Use `oar meta skill cursor` to export a bundled Cursor skill from the shipped guide if desired.
-8. Read `oar meta doc wake-routing` if this agent should be wakeable via thread-message `@handle` mentions.
+   - If bootstrap is available: `anx auth register --username <username> --bootstrap-token <token>` (token comes from workspace operators / deployment).
+   - If bootstrap is closed: obtain a one-time invite (`auth invites create --kind agent` from an already-authorized principal on that workspace), then `anx auth register --username <username> --invite-token <token>`.
+5. On a machine where `~/.config` persists, set the active profile once: `anx config use <agent>` (same as `anx auth default <agent>`). Later commands can omit `--base-url` / `--agent`; use `anx config show` to verify. For CI or ephemeral environments, keep using env vars or flags instead.
+6. Confirm with `anx auth whoami`, run a cheap read (`topics list`), then mutate deliberately.
+7. Use `anx meta skill cursor` to export a bundled Cursor skill from the shipped guide if desired.
+8. Read `anx meta doc wake-routing` if this agent should be wakeable via thread-message `@handle` mentions.
 
 First commands to run
 
-  oar --base-url http://127.0.0.1:8000 --agent <agent> doctor
-  oar --base-url http://127.0.0.1:8000 --agent <agent> auth bootstrap status
-  oar --base-url http://127.0.0.1:8000 --agent <agent> auth register --username <username> --bootstrap-token <token>   # only when bootstrap is open
-  oar --base-url http://127.0.0.1:8000 --agent <new-agent> auth register --username <username> --invite-token <token>   # when bootstrap is closed
-  oar config use <agent>   # optional after register: shorter commands on this machine (same as: oar auth default <agent>)
-  oar --agent <agent> auth whoami
-  oar --agent <agent> topics list
-  oar --agent <agent> inbox stream --max-events 1
+  anx --base-url http://127.0.0.1:8000 --agent <agent> doctor
+  anx --base-url http://127.0.0.1:8000 --agent <agent> auth bootstrap status
+  anx --base-url http://127.0.0.1:8000 --agent <agent> auth register --username <username> --bootstrap-token <token>   # only when bootstrap is open
+  anx --base-url http://127.0.0.1:8000 --agent <new-agent> auth register --username <username> --invite-token <token>   # when bootstrap is closed
+  anx config use <agent>   # optional after register: shorter commands on this machine (same as: anx auth default <agent>)
+  anx --agent <agent> auth whoami
+  anx --agent <agent> topics list
+  anx --agent <agent> inbox stream --max-events 1
 
 Next step
 
-  oar meta doc agent-guide
-  oar meta doc wake-routing
+  anx meta doc agent-guide
+  anx meta doc wake-routing
 ```
 
 ## `concepts`
 
-Quick guide to the core OAR primitives and when to use each.
+Quick guide to the core ANX primitives and when to use each.
 
 ```text
-OAR concepts guide
+ANX concepts guide
 
 Use this command when you need to decide which primitive fits the use case before you start issuing writes.
 
@@ -204,73 +204,73 @@ topics
 - Use when: You need the durable work subject itself with ownership, summary, related refs, and provenance — including the primary operator coordination read.
 - Not for: Board-scoped card placement or low-level backing-thread-only diagnostics.
 - Examples: initiatives, incidents, cases, deliverables
-- Read next: oar topics list ; oar topics get ; oar topics workspace
+- Read next: anx topics list ; anx topics get ; anx topics workspace
 
 threads
 - Use when: You need read-only backing-thread diagnostics: timelines, raw thread records, or thread-scoped projection bundles for troubleshooting.
 - Not for: Primary operator triage when a topic exists — use topics workspace instead.
 - Examples: backing thread timeline, diagnostic workspace projection, compatibility inspection
-- Read next: oar threads list ; oar threads inspect ; oar threads workspace
+- Read next: anx threads list ; anx threads inspect ; anx threads workspace
 
 cards
 - Use when: You need board-scoped planning items with column, rank, assignee, and move/update operations.
 - Not for: The durable subject record or append-only event history.
 - Examples: board cards, tracked cards, workflow cards
-- Read next: oar cards list ; oar cards get ; oar cards move
+- Read next: anx cards list ; anx cards get ; anx cards move
 
 events
 - Use when: You need immutable facts, observations, decisions, or updates in an auditable sequence. Decision lifecycle events (`decision_needed`, `intervention_needed`, `decision_made`) must include `thread:<thread_id>` in refs; optional `topic:` refs are cross-links only, not a substitute for the thread anchor.
 - Not for: Replacing the current durable state of a work object.
 - Examples: decision_needed, decision_made, message_posted, exception_raised
-- Read next: oar events list ; oar events explain ; oar threads timeline
+- Read next: anx events list ; anx events explain ; anx threads timeline
 
 docs
 - Use when: You need long-lived narrative knowledge that should be revised, read, and referenced as a document.
 - Not for: Ephemeral chat-like updates or board membership.
 - Examples: plans, notes, decision records, runbooks
-- Read next: oar docs list ; oar docs get ; oar docs content
+- Read next: anx docs list ; anx docs get ; anx docs content
 
 boards
 - Use when: You need a coordination view across multiple work items with explicit workflow columns and ordering.
 - Not for: Being the source of truth for the work itself.
 - Examples: triage board, release board, initiative tracking board
-- Read next: oar boards list ; oar boards workspace ; oar boards cards list
+- Read next: anx boards list ; anx boards workspace ; anx boards cards list
 
 inbox
 - Use when: You need the derived queue of what currently needs attention from the active actor's perspective.
 - Not for: Durable automation contracts or historical truth.
 - Examples: pending decisions, exceptions, stalled work
-- Read next: oar inbox list ; oar inbox get ; oar inbox ack
+- Read next: anx inbox list ; anx inbox get ; anx inbox ack
 
 draft
 - Use when: You want to stage a mutation locally, inspect it, then apply it explicitly.
 - Not for: Read paths or append-only event authoring.
 - Examples: reviewable thread patches, reviewable doc updates
-- Read next: oar draft create ; oar draft list ; oar draft commit
+- Read next: anx draft create ; anx draft list ; anx draft commit
 
 Inbox categories:
 - `action_needed`: A human must decide, take direct action, or own the next step (includes prior decision and intervention queue signals).
 - `risk_exception`: Exceptions, stale cadence, or at-risk work items that need follow-up.
 - `attention`: Review or lighter operator focus (for example document attention).
 
-For the fuller operating model, read `oar meta doc agent-guide`.
+For the fuller operating model, read `anx meta doc agent-guide`.
 ```
 
 ## `agent-guide`
 
-Prescriptive agent guide for choosing OAR primitives, operating safely, and automating the CLI well.
+Prescriptive agent guide for choosing ANX primitives, operating safely, and automating the CLI well.
 
 ```text
 Agent guide
 
-Use this guide when you need to operate `oar` well, not just get it running. Favor stable CLI patterns over environment-specific setup.
+Use this guide when you need to operate `anx` well, not just get it running. Favor stable CLI patterns over environment-specific setup.
 
 Operating posture
 
-- Treat `oar` as the contract-aligned interface to an OAR core API.
+- Treat `anx` as the contract-aligned interface to an ANX core API.
 - Prefer read-before-write: inspect state, choose the right object, then mutate deliberately.
 - Prefer **default (non-JSON) output** for normal agent work: concise text for direct consumption, usually fewer tokens than JSON envelopes.
-- Use **`--json`** or **`OAR_JSON=true`** when the consumer is code, a shell script, CI, or anything that parses the stable JSON envelope (including rich `error.details`).
+- Use **`--json`** or **`ANX_JSON=true`** when the consumer is code, a shell script, CI, or anything that parses the stable JSON envelope (including rich `error.details`).
 - Prefer profiles and env vars over repeated flags.
 - Prefer discovery from the CLI itself over memorizing exact subcommands.
 
@@ -320,10 +320,10 @@ For interrupt-driven work, a common loop is: `inbox` -> inspect the related `top
 
 Configuration
 
-- On a durable workstation, set the active profile once with `oar config use <profile>` (equivalent to `oar auth default <profile>`). Later commands can omit repeated `--base-url` / `--agent`; inspect merged settings with `oar config show` (tokens redacted).
-- Override per command with `--base-url` or `OAR_BASE_URL` and `--agent` or `OAR_AGENT` when needed.
-- Prefer `OAR_BASE_URL` and `OAR_AGENT` in scripts, CI, or environments without a persistent `~/.config/oar`.
-- If available, run `oar doctor` when config or connectivity is unclear.
+- On a durable workstation, set the active profile once with `anx config use <profile>` (equivalent to `anx auth default <profile>`). Later commands can omit repeated `--base-url` / `--agent`; inspect merged settings with `anx config show` (tokens redacted).
+- Override per command with `--base-url` or `ANX_BASE_URL` and `--agent` or `ANX_AGENT` when needed.
+- Prefer `ANX_BASE_URL` and `ANX_AGENT` in scripts, CI, or environments without a persistent `~/.config/anx`.
+- If available, run `anx doctor` when config or connectivity is unclear.
 - If a request behaves like it hit the wrong service, confirm you are pointing at the core API, not another surface.
 
 Config precedence is typically: flags -> environment -> profile -> defaults.
@@ -333,12 +333,12 @@ Discovery first
 
 Do not overfit to examples in this guide. Ask the CLI what exists now:
 
-  oar help
-  oar help <group>
-  oar help <group> <command>
-  oar meta docs
-  oar meta doc <topic>
-  oar meta doc wake-routing
+  anx help
+  anx help <group>
+  anx help <group> <command>
+  anx meta docs
+  anx meta doc <topic>
+  anx meta doc wake-routing
 
 Use help output as the source of truth for exact flags, request shapes, enums, and newly added primitives.
 
@@ -355,7 +355,7 @@ Command habits
 
 Programmatic output (`--json`)
 
-- Use `--json` or `OAR_JSON=true` when you are parsing output in code or scripts (not for default agent readbacks).
+- Use `--json` or `ANX_JSON=true` when you are parsing output in code or scripts (not for default agent readbacks).
 - Parse the response envelope; do not assume the same shape for default text output.
 - Treat `error.code`, `error.message`, `hint`, and `recoverable` as the control surface for retries and repair.
 - Keep scripts idempotent where possible: read state, compare, then write only when needed.
@@ -366,11 +366,11 @@ Onboarding and recovery
 When starting in a new environment:
 
 1. Set base URL.
-2. Check onboarding state with `oar auth bootstrap status` before first registration.
-3. Register the first principal with `oar auth register --username <username> --bootstrap-token <token>` or later principals with `--invite-token <token>`.
+2. Check onboarding state with `anx auth bootstrap status` before first registration.
+3. Register the first principal with `anx auth register --username <username> --bootstrap-token <token>` or later principals with `--invite-token <token>`.
 4. Confirm identity.
 5. Run a cheap read command.
-6. If this agent should be tag-addressable from thread messages, read `oar meta doc agent-bridge` for the preferred runtime path or `oar meta doc wake-routing` for the generic document lifecycle.
+6. If this agent should be tag-addressable from thread messages, read `anx meta doc agent-bridge` for the preferred runtime path or `anx meta doc wake-routing` for the generic document lifecycle.
 
 When stuck:
 
@@ -383,13 +383,13 @@ Maintenance rule
 
 - Keep this guide focused on durable usage patterns.
 - Describe roles and decision rules, not exhaustive command inventories.
-- Prefer `oar help` and `oar meta docs` over embedding fragile schemas.
+- Prefer `anx help` and `anx meta docs` over embedding fragile schemas.
 - Mention examples of primitives and abstractions, but avoid implying the list is closed.
 ```
 
 ## `agent-bridge`
 
-Install, configure, and operate the preferred `oar-agent-bridge` wake-routing runtime on a fresh machine.
+Install, configure, and operate the preferred `anx-agent-bridge` wake-routing runtime on a fresh machine.
 
 ```text
 Agent bridge
@@ -399,34 +399,34 @@ Use this when you want the preferred per-agent bridge path for wake registration
 What changed
 
 - The main CLI now owns the per-agent bootstrap path for fresh machines:
-  - `oar bridge install`
-  - `oar bridge import-auth`
-  - `oar bridge init-config`
-  - `oar bridge start|stop|restart|status|logs`
-  - `oar bridge workspace-id`
-  - `oar bridge doctor`
+  - `anx bridge install`
+  - `anx bridge import-auth`
+  - `anx bridge init-config`
+  - `anx bridge start|stop|restart|status|logs`
+  - `anx bridge workspace-id`
+  - `anx bridge doctor`
 - The Python package still owns runtime behavior:
-  - `oar-agent-bridge auth register`
-  - `oar-agent-bridge bridge run` under the hood
-  - `oar-agent-bridge notifications list|read|dismiss` for bridge-local pull flows
-- The workspace wake-routing service is deployment-owned and runs inside `oar-core`, not through `oar bridge`.
+  - `anx-agent-bridge auth register`
+  - `anx-agent-bridge bridge run` under the hood
+  - `anx-agent-bridge notifications list|read|dismiss` for bridge-local pull flows
+- The workspace wake-routing service is deployment-owned and runs inside `anx-core`, not through `anx bridge`.
 - Registrations become taggable once the registration and workspace binding are valid. Fresh bridge check-in only controls whether delivery is immediate.
 
-Install on a fresh machine with only `oar`
+Install on a fresh machine with only `anx`
 
 1. Install the bridge runtime into a managed Python `3.11+` virtualenv:
 
-  oar bridge install
+  anx bridge install
 
   By default, this installs from `main` and writes the launcher into `~/.local/bin`. Override with `--ref` or `--bin-dir` if needed. The current bootstrap path also requires `git` on PATH.
 
 2. If you need bridge test dependencies on the same machine:
 
-  oar bridge install --with-dev
+  anx bridge install --with-dev
 
 3. Verify the wrapper works:
 
-  oar-agent-bridge --version
+  anx-agent-bridge --version
 
 Contributor path from a repo checkout
 
@@ -440,8 +440,8 @@ Config generation
 
 Generate minimal configs from the CLI:
 
-  oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --workspace-path /absolute/path/to/hermes/workspace
-  oar bridge init-config --kind zeroclaw --output ./zeroclaw.toml --workspace-id <workspace-id> --handle <handle>
+  anx bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --workspace-path /absolute/path/to/hermes/workspace
+  anx bridge init-config --kind zeroclaw --output ./zeroclaw.toml --workspace-id <workspace-id> --handle <handle>
 
 These templates intentionally default the agent lifecycle to:
 
@@ -454,7 +454,7 @@ That is the guardrail for live delivery: the bridge still needs to check in befo
 Workspace id source of truth
 
 - `<workspace-id>` must be the durable workspace id for the deployment, not a slug and not a UI path segment.
-- If the agent already has wake registration metadata, use `oar bridge workspace-id --handle <handle>` to read its enabled workspace bindings first.
+- If the agent already has wake registration metadata, use `anx bridge workspace-id --handle <handle>` to read its enabled workspace bindings first.
 - If the workspace deployment already documents the configured `workspace_id`, copy that exact value.
 - If the deployment is driven by control-plane workspace records, copy the durable `workspace_id` from that workspace record, not the slug.
 - The bundled example value `ws_main` is only a sample.
@@ -464,34 +464,34 @@ First-time agent-host path
 
 1. Install the runtime:
 
-  oar bridge install
+  anx bridge install
 
 2. Render the agent config:
 
-  oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --workspace-path /absolute/path/to/hermes/workspace
+  anx bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --workspace-path /absolute/path/to/hermes/workspace
 
   If you omit `--workspace-path`, the rendered Hermes config uses placeholder paths and must be edited before the bridge can run.
 
-3. If a matching `oar` profile already exists for the target principal, import it into the bridge config:
+3. If a matching `anx` profile already exists for the target principal, import it into the bridge config:
 
-  oar bridge import-auth --config ./agent.toml --from-profile <agent>
+  anx bridge import-auth --config ./agent.toml --from-profile <agent>
 
-  This also syncs the default local `[oar].base_url` in the bridge config to the imported profile when they differ.
+  This also syncs the default local `[anx].base_url` in the bridge config to the imported profile when they differ.
 
 4. Register the target bridge principal and write the initial pending registration when auth does not already exist:
 
-  oar-agent-bridge auth register --config ./agent.toml --invite-token <token> --apply-registration
+  anx-agent-bridge auth register --config ./agent.toml --invite-token <token> --apply-registration
 
 5. Start the managed bridge daemon from the main CLI:
 
-  oar bridge start --config ./agent.toml
+  anx bridge start --config ./agent.toml
 
 6. Confirm the process and readiness state before expecting immediate delivery:
 
-  oar bridge status --config ./agent.toml
-  oar bridge doctor --config ./agent.toml
+  anx bridge status --config ./agent.toml
+  anx bridge doctor --config ./agent.toml
 
-  Use `oar bridge logs --config ./agent.toml` when you need the recent daemon output, and `oar bridge restart --config ./agent.toml` if you change config or recover from a stale process.
+  Use `anx bridge logs --config ./agent.toml` when you need the recent daemon output, and `anx bridge restart --config ./agent.toml` if you change config or recover from a stale process.
 
   The doctor should report both adapter readiness and the bridge as online for immediate delivery. If it still says offline, stale, or adapter probe failed, tags will queue notifications until you fix that.
 
@@ -507,35 +507,35 @@ First-time agent-host path
 
 9. Pull or dismiss queued notifications directly when needed:
 
-  oar notifications list --status unread
-  oar notifications dismiss --wakeup-id <wakeup-id>
-  oar-agent-bridge notifications list --config ./agent.toml --status unread
+  anx notifications list --status unread
+  anx notifications dismiss --wakeup-id <wakeup-id>
+  anx-agent-bridge notifications list --config ./agent.toml --status unread
 
-10. If the bridge is online but tagged delivery still fails, hand off to the workspace operator to inspect the embedded wake-routing sidecar in `oar-core`.
+10. If the bridge is online but tagged delivery still fails, hand off to the workspace operator to inspect the embedded wake-routing sidecar in `anx-core`.
 
 Lifecycle note
 
-- `oar-agent-bridge registration apply` updates the agent principal registration, but the bridge runtime still owns live presence updates.
+- `anx-agent-bridge registration apply` updates the agent principal registration, but the bridge runtime still owns live presence updates.
 - The bridge runtime refreshes registration readiness on check-in.
 - If the bridge stops checking in, the registration stays taggable but delivery falls back to queued notifications until the bridge returns.
-- The preferred operational path is to manage the bridge daemon with `oar bridge start|stop|restart|status|logs`, not ad hoc shell backgrounding.
+- The preferred operational path is to manage the bridge daemon with `anx bridge start|stop|restart|status|logs`, not ad hoc shell backgrounding.
 
 Troubleshooting
 
-- `oar-agent-bridge: command not found`:
-  - run `oar bridge install` or add the managed wrapper directory to PATH
+- `anx-agent-bridge: command not found`:
+  - run `anx bridge install` or add the managed wrapper directory to PATH
 - bridge doctor says the bridge is offline:
-  - the bridge has not checked in yet or is no longer refreshing; start or restart `oar bridge start --config ./agent.toml` and verify the config points at the right workspace
+  - the bridge has not checked in yet or is no longer refreshing; start or restart `anx bridge start --config ./agent.toml` and verify the config points at the right workspace
 - wake request is durable but never claimed:
-  - the bridge is offline, the embedded wake-routing sidecar in `oar-core` is unhealthy, or `workspace_id` is wrong
+  - the bridge is offline, the embedded wake-routing sidecar in `anx-core` is unhealthy, or `workspace_id` is wrong
 - principal exists but wake still fails:
   - inspect the principal registration for actor mismatch, disabled status, stale check-in, or missing workspace binding
 
 Related docs
 
-  oar help bridge
-  oar meta doc wake-routing
-  oar bridge doctor --config ./agent.toml
+  anx help bridge
+  anx meta doc wake-routing
+  anx bridge doctor --config ./agent.toml
 ```
 
 ## `wake-routing`
@@ -549,7 +549,7 @@ Use this when you want humans or agents to wake other agents from thread message
 
 How it works
 
-- Wake routing is provided by a workspace-owned sidecar hosted inside `oar-core`, not by the per-agent CLI.
+- Wake routing is provided by a workspace-owned sidecar hosted inside `anx-core`, not by the per-agent CLI.
 - The durable wake registration now lives on the agent principal metadata, not in `docs`.
 - The bridge-owned readiness proof is the latest `agent_bridge_checked_in` event referenced by that principal registration.
 - A tagged message becomes durable wake work when the target agent is registered for the workspace. Bridge readiness only changes whether delivery is immediate or queued.
@@ -583,77 +583,77 @@ How humans discover it
 
 How agents discover it
 
-- Read this topic with `oar meta doc wake-routing`.
-- Read the preferred runtime path with `oar meta doc agent-bridge`.
-- Use `oar help bridge` to bootstrap the per-agent bridge runtime from the main CLI.
-- Use `oar bridge workspace-id --handle <handle>` when an existing registration is the easiest source of truth for the durable workspace id.
-- Use `oar bridge import-auth --config ./agent.toml --from-profile <agent>` when matching `oar` auth already exists.
-- Use `oar notifications list --status unread` to inspect queued notifications with the main CLI.
-- Use `oar notifications dismiss --wakeup-id <wakeup-id>` to dismiss a notification so it no longer wakes the bridge.
-- Use `oar auth whoami` to confirm your current username and actor id.
-- Use `oar auth principals list --handles-only` to inspect the exact handles that can be mentioned.
-- Use `oar auth principals list --taggable` if you want the filtered principal rows as well.
-- Use `oar auth principals list` for readable rows; add `--json` when you need the full wake-routing metadata in a parseable envelope (scripts, debugging).
+- Read this topic with `anx meta doc wake-routing`.
+- Read the preferred runtime path with `anx meta doc agent-bridge`.
+- Use `anx help bridge` to bootstrap the per-agent bridge runtime from the main CLI.
+- Use `anx bridge workspace-id --handle <handle>` when an existing registration is the easiest source of truth for the durable workspace id.
+- Use `anx bridge import-auth --config ./agent.toml --from-profile <agent>` when matching `anx` auth already exists.
+- Use `anx notifications list --status unread` to inspect queued notifications with the main CLI.
+- Use `anx notifications dismiss --wakeup-id <wakeup-id>` to dismiss a notification so it no longer wakes the bridge.
+- Use `anx auth whoami` to confirm your current username and actor id.
+- Use `anx auth principals list --handles-only` to inspect the exact handles that can be mentioned.
+- Use `anx auth principals list --taggable` if you want the filtered principal rows as well.
+- Use `anx auth principals list` for readable rows; add `--json` when you need the full wake-routing metadata in a parseable envelope (scripts, debugging).
 
-Preferred path when you are using `oar-agent-bridge`
+Preferred path when you are using `anx-agent-bridge`
 
 1. Install the runtime:
 
-  oar bridge install
+  anx bridge install
 
-2. Confirm the workspace deployment's `oar-core` config and note the durable workspace id it uses.
+2. Confirm the workspace deployment's `anx-core` config and note the durable workspace id it uses.
 
 3. Generate the agent config:
 
-  oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --workspace-path /absolute/path/to/hermes/workspace
+  anx bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --workspace-path /absolute/path/to/hermes/workspace
 
   If you omit `--workspace-path`, the generated Hermes config keeps placeholder paths and must be edited before the bridge can start.
 
-4. If matching `oar` auth already exists, import it into the bridge config:
+4. If matching `anx` auth already exists, import it into the bridge config:
 
-  oar bridge import-auth --config ./agent.toml --from-profile <agent>
+  anx bridge import-auth --config ./agent.toml --from-profile <agent>
 
-  This also syncs the default local `[oar].base_url` in the bridge config to the imported profile when they differ.
+  This also syncs the default local `[anx].base_url` in the bridge config to the imported profile when they differ.
 
 5. Register auth and write the initial pending registration when auth does not already exist:
 
-  oar-agent-bridge auth register --config ./agent.toml --invite-token <token> --apply-registration
+  anx-agent-bridge auth register --config ./agent.toml --invite-token <token> --apply-registration
 
   If auth already exists and you only need to rewrite the principal registration:
 
-  oar-agent-bridge registration apply --config <agent.toml>
+  anx-agent-bridge registration apply --config <agent.toml>
 
 6. Start the target bridge:
 
-  oar bridge start --config ./agent.toml
+  anx bridge start --config ./agent.toml
 
 7. Verify the bridge has checked in before expecting immediate delivery:
 
-  oar bridge status --config ./agent.toml
-  oar bridge doctor --config ./agent.toml
-  oar-agent-bridge registration status --config ./agent.toml
+  anx bridge status --config ./agent.toml
+  anx bridge doctor --config ./agent.toml
+  anx-agent-bridge registration status --config ./agent.toml
 
 8. Pull or dismiss queued notifications directly when needed:
 
-  oar notifications list --status unread
-  oar-agent-bridge notifications list --config ./agent.toml --status unread
-  oar notifications dismiss --wakeup-id <wakeup-id>
+  anx notifications list --status unread
+  anx-agent-bridge notifications list --config ./agent.toml --status unread
+  anx notifications dismiss --wakeup-id <wakeup-id>
 
-9. If the bridge is online but tagged delivery still does not work, ask the workspace operator to inspect the embedded wake-routing sidecar in `oar-core`.
+9. If the bridge is online but tagged delivery still does not work, ask the workspace operator to inspect the embedded wake-routing sidecar in `anx-core`.
 
-Generic OAR CLI lifecycle
+Generic ANX CLI lifecycle
 
 If you are writing registration state manually, update the agent principal registration only. Manual principal updates do not replace the live bridge-owned check-in event.
 
 1. Confirm the identity you are registering:
 
-  oar auth whoami
+  anx auth whoami
 
   Use the server-resolved username as `<handle>` and the server actor id as `<actor-id>`.
 
 2. Resolve the durable workspace id you want to enable:
 
-  - If an existing registration is available, start with `oar bridge workspace-id --handle <handle>` or the legacy alias `oar bridge workspace-id --document-id agentreg.<handle>`.
+  - If an existing registration is available, start with `anx bridge workspace-id --handle <handle>` or the legacy alias `anx bridge workspace-id --document-id agentreg.<handle>`.
   - If the workspace deployment already documents the configured `workspace_id`, copy that exact value.
   - If your deployment is driven by control-plane workspace records, copy the durable workspace id from that record, not the slug.
   - The bundled example value `ws_main` is only a sample.
@@ -683,14 +683,14 @@ If you are writing registration state manually, update the agent principal regis
 
 4. For first-time registration, patch the current authenticated agent:
 
-  curl -X PATCH "$OAR_BASE_URL/agents/me" \
+  curl -X PATCH "$ANX_BASE_URL/agents/me" \
     -H "Authorization: Bearer <access-token>" \
     -H "Content-Type: application/json" \
     --data @wake-registration.json
 
 5. If auth already exists, prefer the supported bridge-managed path instead of hand-patching:
 
-  oar-agent-bridge registration apply --config ./agent.toml
+  anx-agent-bridge registration apply --config ./agent.toml
 
 Registration schema notes
 
@@ -711,15 +711,15 @@ Verification flow
 
 1. Confirm your local and server identity:
 
-  oar auth whoami
+  anx auth whoami
 
 2. Confirm a principal exists for the target handle:
 
-  oar auth principals list --handles-only
+  anx auth principals list --handles-only
 
 3. Read the principal registration (`--json` when a script parses the full payload):
 
-  oar auth principals list --json
+  anx auth principals list --json
 
 4. Verify all of the following:
   - principal kind is `agent`
@@ -728,17 +728,17 @@ Verification flow
   - `workspace_bindings` contains the current workspace id with `enabled: true`
   - `status` is `active`
   - if you need online delivery right now, `bridge_checkin_event_id` is present on the registration
-  - if you need online delivery right now, `oar events get --event-id <bridge-checkin-event-id>` (add `--json` for the CLI JSON envelope) returns an `agent_bridge_checked_in` event
+  - if you need online delivery right now, `anx events get --event-id <bridge-checkin-event-id>` (add `--json` for the CLI JSON envelope) returns an `agent_bridge_checked_in` event
   - if you need online delivery right now, that event actor id matches the principal actor
   - if you need online delivery right now, that event `expires_at` is still in the future
 
-5. If you are using `oar-agent-bridge`, prefer:
+5. If you are using `anx-agent-bridge`, prefer:
 
-  oar bridge doctor --config ./agent.toml
+  anx bridge doctor --config ./agent.toml
 
 Concrete wake example
 
-1. Ensure the target registration is valid for the workspace, and ensure the bridge is running if you want immediate delivery. The workspace deployment must also be running `oar-core` with the embedded wake-routing sidecar enabled.
+1. Ensure the target registration is valid for the workspace, and ensure the bridge is running if you want immediate delivery. The workspace deployment must also be running `anx-core` with the embedded wake-routing sidecar enabled.
 2. Post a thread message containing `@<handle>`, for example:
 
   @<handle> summarize the latest onboarding blockers.
@@ -764,13 +764,13 @@ Common failure modes
 
 Operational note
 
-- This mechanism is discoverable from the CLI and UI, but actual wake dispatch is owned by the workspace deployment's `oar-core` process plus the per-agent bridge runtime.
+- This mechanism is discoverable from the CLI and UI, but actual wake dispatch is owned by the workspace deployment's `anx-core` process plus the per-agent bridge runtime.
 
 Next steps
 
-  oar help bridge
-  oar meta doc agent-bridge
-  oar bridge doctor --config ./agent.toml
+  anx help bridge
+  anx meta doc agent-bridge
+  anx bridge doctor --config ./agent.toml
 ```
 
 ## `draft`
@@ -780,7 +780,7 @@ Local draft staging, listing, commit, and discard workflow.
 ```text
 Draft staging
 
-Use `oar draft` when you want a local checkpoint before sending a write to core.
+Use `anx draft` when you want a local checkpoint before sending a write to core.
 
 Choose the right path:
 
@@ -796,10 +796,10 @@ Standard workflow
 4. Commit when ready, or discard if the request should not be sent.
 
 Usage:
-  oar draft create --command <command-id> [--from-file <path>]
-  oar draft list
-  oar draft commit <draft-id> [--keep]
-  oar draft discard <draft-id>
+  anx draft create --command <command-id> [--from-file <path>]
+  anx draft list
+  anx draft commit <draft-id> [--keep]
+  anx draft discard <draft-id>
 
 Heuristics
 
@@ -809,9 +809,9 @@ Heuristics
 - Re-read current state before committing older drafts if the target may have changed.
 
 Examples:
-  cat payload.json | oar draft create --command topics.create
-  oar draft list
-  oar draft commit draft-20260305T103000-a1b2c3d4e5f6
+  cat payload.json | anx draft create --command topics.create
+  anx draft list
+  anx draft commit draft-20260305T103000-a1b2c3d4e5f6
 ```
 
 ## `provenance`
@@ -821,7 +821,7 @@ Deterministic provenance walk reference and examples.
 ```text
 Provenance guide
 
-Use `oar provenance walk` when you need to answer questions like:
+Use `anx provenance walk` when you need to answer questions like:
 
 - Why does this object exist?
 - What evidence or earlier object led to it?
@@ -835,7 +835,7 @@ Mental model
 - Use event-chain expansion when you specifically need event-to-event lineage, not as the default for every investigation.
 
 Usage:
-  oar provenance walk --from <typed-ref> [--depth <n>] [--include-event-chain]
+  anx provenance walk --from <typed-ref> [--depth <n>] [--include-event-chain]
 
 Typed ref roots:
   event:<id>
@@ -852,10 +852,10 @@ Heuristics
 - Prefer shallow depths like 1-3 before broader traversals.
 
 Examples:
-  oar provenance walk --from event:event_123 --depth 2
-  oar provenance walk --from topic:topic_123 --depth 1
-  oar --json provenance walk --from event:event_123 --depth 2
-  oar provenance walk --from event:event_123 --depth 3 --include-event-chain
+  anx provenance walk --from event:event_123 --depth 2
+  anx provenance walk --from topic:topic_123 --depth 1
+  anx --json provenance walk --from event:event_123 --depth 2
+  anx provenance walk --from event:event_123 --depth 3 --include-event-chain
 ```
 
 ## `auth whoami`
@@ -868,18 +868,18 @@ Local Help: auth whoami
 Validate the active profile against the server, print resolved identity metadata, and point to wake-registration next steps.
 
 Usage:
-  oar auth whoami
+  anx auth whoami
 
 Examples:
-  oar auth whoami
-  oar --json auth whoami
+  anx auth whoami
+  anx --json auth whoami
 
 Next steps:
-  If this agent should be wakeable by `@handle`, read `oar meta doc wake-routing`.
+  If this agent should be wakeable by `@handle`, read `anx meta doc wake-routing`.
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar auth whoami ... ; oar --json auth whoami ... ; oar auth whoami ... --json (last two: JSON envelope on stdout)
+  Examples: anx auth whoami ... ; anx --json auth whoami ... ; anx auth whoami ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -893,15 +893,15 @@ Local Help: auth list
 List local CLI profiles and identify the active one.
 
 Usage:
-  oar auth list
+  anx auth list
 
 Examples:
-  oar auth list
-  oar --json auth list
+  anx auth list
+  anx --json auth list
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar auth list ... ; oar --json auth list ... ; oar auth list ... --json (last two: JSON envelope on stdout)
+  Examples: anx auth list ... ; anx --json auth list ... ; anx auth list ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -915,37 +915,37 @@ Local Help: auth default
 Persist the default profile used when no explicit agent is selected.
 
 Usage:
-  oar auth default <profile>
+  anx auth default <profile>
 
 Examples:
-  oar auth default agent-a
-  oar --json auth default agent-a
+  anx auth default agent-a
+  anx --json auth default agent-a
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar auth default ... ; oar --json auth default ... ; oar auth default ... --json (last two: JSON envelope on stdout)
+  Examples: anx auth default ... ; anx --json auth default ... ; anx auth default ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `config use`
 
-Set the active CLI profile used when --agent and OAR_AGENT are omitted.
+Set the active CLI profile used when --agent and ANX_AGENT are omitted.
 
 ```text
 Local Help: config use
 
-Persist the named profile as the active default used when --agent and OAR_AGENT are omitted.
+Persist the named profile as the active default used when --agent and ANX_AGENT are omitted.
 
 Usage:
-  oar config use <profile>
+  anx config use <profile>
 
 Examples:
-  oar config use agent-a
-  oar --json config use agent-a
+  anx config use agent-a
+  anx --json config use agent-a
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar config use ... ; oar --json config use ... ; oar config use ... --json (last two: JSON envelope on stdout)
+  Examples: anx config use ... ; anx --json config use ... ; anx config use ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -959,21 +959,21 @@ Local Help: config show
 Print effective CLI settings and the source of each field (access tokens are redacted).
 
 Usage:
-  oar config show
+  anx config show
 
 Examples:
-  oar config show
-  oar --json config show
+  anx config show
+  anx --json config show
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar config show ... ; oar --json config show ... ; oar config show ... --json (last two: JSON envelope on stdout)
+  Examples: anx config show ... ; anx --json config show ... ; anx config show ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `config unset`
 
-Clear the persisted default profile marker (~/.config/oar/default-profile).
+Clear the persisted default profile marker (~/.config/anx/default-profile).
 
 ```text
 Local Help: config unset
@@ -981,15 +981,15 @@ Local Help: config unset
 Remove the default profile marker file so the CLI falls back to single-profile auto-select or explicit flags/env.
 
 Usage:
-  oar config unset
+  anx config unset
 
 Examples:
-  oar config unset
-  oar --json config unset
+  anx config unset
+  anx --json config unset
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar config unset ... ; oar --json config unset ... ; oar config unset ... --json (last two: JSON envelope on stdout)
+  Examples: anx config unset ... ; anx --json config unset ... ; anx config unset ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1003,14 +1003,14 @@ Local Help: auth update-username
 Update the authenticated agent username and sync the local profile copy.
 
 Usage:
-  oar auth update-username --username <username>
+  anx auth update-username --username <username>
 
 Examples:
-  oar auth update-username --username renamed_agent
+  anx auth update-username --username renamed_agent
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar auth update-username ... ; oar --json auth update-username ... ; oar auth update-username ... --json (last two: JSON envelope on stdout)
+  Examples: anx auth update-username ... ; anx --json auth update-username ... ; anx auth update-username ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1024,15 +1024,15 @@ Local Help: auth rotate
 Rotate the active agent key and refresh stored credentials.
 
 Usage:
-  oar auth rotate
+  anx auth rotate
 
 Examples:
-  oar auth rotate
-  oar --json auth rotate
+  anx auth rotate
+  anx --json auth rotate
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar auth rotate ... ; oar --json auth rotate ... ; oar auth rotate ... --json (last two: JSON envelope on stdout)
+  Examples: anx auth rotate ... ; anx --json auth rotate ... ; anx auth rotate ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1046,15 +1046,15 @@ Local Help: auth revoke
 Revoke the active agent and mark the local profile revoked.
 
 Usage:
-  oar auth revoke
+  anx auth revoke
 
 Examples:
-  oar auth revoke
-  oar --json auth revoke
+  anx auth revoke
+  anx --json auth revoke
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar auth revoke ... ; oar --json auth revoke ... ; oar auth revoke ... --json (last two: JSON envelope on stdout)
+  Examples: anx auth revoke ... ; anx --json auth revoke ... ; anx auth revoke ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1068,26 +1068,26 @@ Local Help: auth token-status
 Inspect whether the local profile still has refreshable token material.
 
 Usage:
-  oar auth token-status
+  anx auth token-status
 
 Examples:
-  oar auth token-status
-  oar --json auth token-status
+  anx auth token-status
+  anx --json auth token-status
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar auth token-status ... ; oar --json auth token-status ... ; oar auth token-status ... --json (last two: JSON envelope on stdout)
+  Examples: anx auth token-status ... ; anx --json auth token-status ... ; anx auth token-status ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `bridge`
 
-CLI-managed bridge bootstrap helpers for installing, templating, and checking `oar-agent-bridge`.
+CLI-managed bridge bootstrap helpers for installing, templating, and checking `anx-agent-bridge`.
 
 ```text
 Bridge bootstrap
 
-Use `oar bridge` when you only have the main CLI installed and need to bootstrap, manage, or inspect the Python `oar-agent-bridge` runtime for one agent. This is the discoverable install/setup path for agent operators. The bridge package still owns the runtime behavior; the main CLI installs it and acts as the local process manager.
+Use `anx bridge` when you only have the main CLI installed and need to bootstrap, manage, or inspect the Python `anx-agent-bridge` runtime for one agent. This is the discoverable install/setup path for agent operators. The bridge package still owns the runtime behavior; the main CLI installs it and acts as the local process manager.
 
 Bootstrap prerequisites
 
@@ -1102,8 +1102,8 @@ Lifecycle constraint
 
 Subcommands
 
-  bridge install      Install or refresh the managed `oar-agent-bridge` virtualenv and wrapper
-  bridge import-auth  Copy an existing `oar` profile into bridge auth state
+  bridge install      Install or refresh the managed `anx-agent-bridge` virtualenv and wrapper
+  bridge import-auth  Copy an existing `anx` profile into bridge auth state
   bridge init-config  Render a minimal agent bridge TOML config
   bridge start        Start a managed bridge daemon for one config
   bridge stop         Stop a managed bridge daemon for one config
@@ -1115,30 +1115,30 @@ Subcommands
 
 Recommended order
 
-1. `oar bridge install`
-2. `oar bridge workspace-id --handle <handle>` if a registration already exists and you need the real durable workspace id
-3. `oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --workspace-path /absolute/path/to/hermes/workspace`
-4. `oar bridge import-auth --config ./agent.toml --from-profile <agent>` when matching `oar` auth already exists so bridge auth and the default bridge `[oar].base_url` stay aligned
-5. `oar-agent-bridge auth register ...` for the agent principal when auth does not already exist
-6. `oar bridge start --config ./agent.toml`
-7. `oar bridge status --config ./agent.toml` and `oar bridge doctor --config ./agent.toml` before expecting immediate online delivery
-8. `oar notifications list --status unread` or `oar-agent-bridge notifications list --config ./agent.toml --status unread` when you want to pull pending notifications directly
+1. `anx bridge install`
+2. `anx bridge workspace-id --handle <handle>` if a registration already exists and you need the real durable workspace id
+3. `anx bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --workspace-path /absolute/path/to/hermes/workspace`
+4. `anx bridge import-auth --config ./agent.toml --from-profile <agent>` when matching `anx` auth already exists so bridge auth and the default bridge `[anx].base_url` stay aligned
+5. `anx-agent-bridge auth register ...` for the agent principal when auth does not already exist
+6. `anx bridge start --config ./agent.toml`
+7. `anx bridge status --config ./agent.toml` and `anx bridge doctor --config ./agent.toml` before expecting immediate online delivery
+8. `anx notifications list --status unread` or `anx-agent-bridge notifications list --config ./agent.toml --status unread` when you want to pull pending notifications directly
 
 Workspace-owned wake routing
 
-- `oar bridge` only manages per-agent bridge daemons.
-- Tagged wake routing runs inside `oar-core` as an embedded workspace sidecar.
-- If tagged delivery still fails while the bridge is online, hand off to the workspace operator to inspect the embedded wake-routing sidecar in `oar-core`.
+- `anx bridge` only manages per-agent bridge daemons.
+- Tagged wake routing runs inside `anx-core` as an embedded workspace sidecar.
+- If tagged delivery still fails while the bridge is online, hand off to the workspace operator to inspect the embedded wake-routing sidecar in `anx-core`.
 ```
 
 ## `import`
 
-Prescriptive import guide for building low-duplication, discoverable OAR graphs from external material.
+Prescriptive import guide for building low-duplication, discoverable ANX graphs from external material.
 
 ```text
 Import guide
 
-Use `oar import` to turn external material into a clean OAR graph. The goal is not to dump files into the system. The goal is to create discoverable topics, docs, and artifacts with low duplication, low orphan rates, and clear provenance.
+Use `anx import` to turn external material into a clean ANX graph. The goal is not to dump files into the system. The goal is to create discoverable topics, docs, and artifacts with low duplication, low orphan rates, and clear provenance.
 
 Object model
 
@@ -1149,11 +1149,11 @@ Object model
 
 Read in this order
 
-1. `oar help import` — doctrine, quality bars, and the recommended loop.
-2. `oar help import scan` — inventory and text-cache generation.
-3. `oar help import plan` — classification, collector threads, hub docs, and review bundles.
-4. If you will execute writes: `oar help topics create`, `oar help artifacts create`, and `oar help docs create`.
-5. Optional graph/provenance reference: `oar help provenance`.
+1. `anx help import` — doctrine, quality bars, and the recommended loop.
+2. `anx help import scan` — inventory and text-cache generation.
+3. `anx help import plan` — classification, collector threads, hub docs, and review bundles.
+4. If you will execute writes: `anx help topics create`, `anx help artifacts create`, and `anx help docs create`.
+5. Optional graph/provenance reference: `anx help provenance`.
 
 Operating stance
 
@@ -1161,29 +1161,29 @@ Operating stance
 - Exact duplicates should be skipped before writes.
 - Ambiguous or noisy material should be skipped or deferred to review bundles.
 - Imported material should usually get a discoverable entry point: a collector thread, a hub doc, or both.
-- Codebases should not become one OAR object per source file.
+- Codebases should not become one ANX object per source file.
 - Binary attachments should be preserved conservatively; if reliable raw upload is not available, keep explicit pending work instead of pretending they were imported cleanly.
 - Prefer preview-first planning over eager execution.
 
 Recommended loop
 
-1. `oar import scan --input <dir-or-zip>`
-2. `oar import dedupe --inventory ./.oar-import/<source>/inventory.jsonl`
-3. `oar import plan --inventory ./.oar-import/<source>/inventory.jsonl`
+1. `anx import scan --input <dir-or-zip>`
+2. `anx import dedupe --inventory ./.anx-import/<source>/inventory.jsonl`
+3. `anx import plan --inventory ./.anx-import/<source>/inventory.jsonl`
 4. Review `plan-preview.md`, `skipped`, and `review_bundles`.
-5. `oar import apply --plan ./.oar-import/<source>/plan.json` for payload previews.
-6. `oar import apply --plan ./.oar-import/<source>/plan.json --execute` only after the plan looks clean.
+5. `anx import apply --plan ./.anx-import/<source>/plan.json` for payload previews.
+6. `anx import apply --plan ./.anx-import/<source>/plan.json --execute` only after the plan looks clean.
 
 Subcommands
 
   import scan      Build normalized inventory + text cache from a folder or zip
   import dedupe    Find exact duplicates and probable duplicate review clusters
-  import plan      Build a conservative OAR-native import plan
+  import plan      Build a conservative ANX-native import plan
   import apply     Write payload previews and optionally execute creates
 
 Output conventions
 
-- Default workdir is `./.oar-import/<source-name>`.
+- Default workdir is `./.anx-import/<source-name>`.
 - `scan` writes `inventory.jsonl` and `scan-summary.json`.
 - `dedupe` writes `dedupe.json`.
 - `plan` writes `plan.json` and `plan-preview.md`.
@@ -1238,14 +1238,14 @@ Commands:
 Primary operator coordination:
   topics workspace        Load the topic workspace (cards, docs, backing threads, inbox).
   topics list / topics get   Discover and resolve topic ids.
-  Tip: start with `oar topics workspace --topic-id <topic-id>` for triage; use `oar topics list` to find ids. Add `--full-id` for copy/paste ids.
+  Tip: start with `anx topics workspace --topic-id <topic-id>` for triage; use `anx topics list` to find ids. Add `--full-id` for copy/paste ids.
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar topics ... ; oar --json topics ... ; oar topics ... --json (last two: JSON envelope on stdout)
+  Examples: anx topics ... ; anx --json topics ... ; anx topics ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 
-Tip: `oar help <command path>` for full command-level generated details.
+Tip: `anx help <command path>` for full command-level generated details.
 ```
 
 ## `cards`
@@ -1269,10 +1269,10 @@ Commands:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar cards ... ; oar --json cards ... ; oar cards ... --json (last two: JSON envelope on stdout)
+  Examples: anx cards ... ; anx --json cards ... ; anx cards ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 
-Tip: `oar help <command path>` for full command-level generated details.
+Tip: `anx help <command path>` for full command-level generated details.
 ```
 
 ## `threads`
@@ -1294,14 +1294,14 @@ Read-only backing-thread diagnostics (tooling):
   threads workspace       Diagnostic workspace projection (context + inbox + related-thread review).
   threads inspect          Smaller diagnostic bundle (context + inbox).
   threads timeline         Backing thread timeline and expansions.
-  Tip: prefer `oar topics workspace` for normal operator coordination. Use `oar threads workspace` when you need the backing-thread projection or related-thread review; use `--status/--tag/--type initiative` to discover one thread. For a minimal `{thread}` read, use `oar threads get` (contract: `threads.inspect`). Add `--full-id` for copy/paste ids.
+  Tip: prefer `anx topics workspace` for normal operator coordination. Use `anx threads workspace` when you need the backing-thread projection or related-thread review; use `--status/--tag/--type initiative` to discover one thread. For a minimal `{thread}` read, use `anx threads get` (contract: `threads.inspect`). Add `--full-id` for copy/paste ids.
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar threads ... ; oar --json threads ... ; oar threads ... --json (last two: JSON envelope on stdout)
+  Examples: anx threads ... ; anx --json threads ... ; anx threads ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 
-Tip: `oar help <command path>` for full command-level generated details.
+Tip: `anx help <command path>` for full command-level generated details.
 ```
 
 ## `artifacts`
@@ -1326,10 +1326,10 @@ Local inspection helper:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar artifacts ... ; oar --json artifacts ... ; oar artifacts ... --json (last two: JSON envelope on stdout)
+  Examples: anx artifacts ... ; anx --json artifacts ... ; anx artifacts ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 
-Tip: `oar help <command path>` for full command-level generated details.
+Tip: `anx help <command path>` for full command-level generated details.
 ```
 
 ## `boards`
@@ -1351,7 +1351,7 @@ Commands:
   boards workspace         Get board workspace view
 
 Batch card creation:
-  boards cards create-batch   POST body via stdin or `--from-file`; profile supplies `actor_id` when omitted. See `oar help boards cards create-batch`.
+  boards cards create-batch   POST body via stdin or `--from-file`; profile supplies `actor_id` when omitted. See `anx help boards cards create-batch`.
 
 Read paths:
   boards get / boards workspace   Board metadata including `updated_at` for optimistic concurrency.
@@ -1359,10 +1359,10 @@ Read paths:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar boards ... ; oar --json boards ... ; oar boards ... --json (last two: JSON envelope on stdout)
+  Examples: anx boards ... ; anx --json boards ... ; anx boards ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 
-Tip: `oar help <command path>` for full command-level generated details.
+Tip: `anx help <command path>` for full command-level generated details.
 ```
 
 ## `docs`
@@ -1392,10 +1392,10 @@ Local inspection helpers:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar docs ... ; oar --json docs ... ; oar docs ... --json (last two: JSON envelope on stdout)
+  Examples: anx docs ... ; anx --json docs ... ; anx docs ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 
-Tip: `oar help <command path>` for full command-level generated details.
+Tip: `anx help <command path>` for full command-level generated details.
 ```
 
 ## `events`
@@ -1420,14 +1420,14 @@ Local inspection helpers:
   events explain           Explain known event-type conventions and local validation constraints.
   events validate          Validate an events.create payload from stdin/--from-file without sending a request.
   Tip: use `--mine` or `--actor-id <id>` to audit one actor; add `--full-id` for copy/paste IDs.
-  For details: `oar events explain <event-type>`
+  For details: `anx events explain <event-type>`
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar events ... ; oar --json events ... ; oar events ... --json (last two: JSON envelope on stdout)
+  Examples: anx events ... ; anx --json events ... ; anx events ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 
-Tip: `oar help <command path>` for full command-level generated details.
+Tip: `anx help <command path>` for full command-level generated details.
 ```
 
 ## `inbox`
@@ -1445,10 +1445,10 @@ Commands:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar inbox ... ; oar --json inbox ... ; oar inbox ... --json (last two: JSON envelope on stdout)
+  Examples: anx inbox ... ; anx --json inbox ... ; anx inbox ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 
-Tip: `oar help <command path>` for full command-level generated details.
+Tip: `anx help <command path>` for full command-level generated details.
 ```
 
 ## `receipts`
@@ -1463,10 +1463,10 @@ Commands:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar receipts ... ; oar --json receipts ... ; oar receipts ... --json (last two: JSON envelope on stdout)
+  Examples: anx receipts ... ; anx --json receipts ... ; anx receipts ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 
-Tip: `oar help <command path>` for full command-level generated details.
+Tip: `anx help <command path>` for full command-level generated details.
 ```
 
 ## `reviews`
@@ -1481,10 +1481,10 @@ Commands:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar reviews ... ; oar --json reviews ... ; oar reviews ... --json (last two: JSON envelope on stdout)
+  Examples: anx reviews ... ; anx --json reviews ... ; anx reviews ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 
-Tip: `oar help <command path>` for full command-level generated details.
+Tip: `anx help <command path>` for full command-level generated details.
 ```
 
 ## `derived`
@@ -1546,7 +1546,7 @@ Generated Help: auth invites list
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar auth invites list ... ; oar --json auth invites list ... ; oar auth invites list ... --json (last two: JSON envelope on stdout)
+  Examples: anx auth invites list ... ; anx --json auth invites list ... ; anx auth invites list ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1571,7 +1571,7 @@ Generated Help: auth invites create
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar auth invites create ... ; oar --json auth invites create ... ; oar auth invites create ... --json (last two: JSON envelope on stdout)
+  Examples: anx auth invites create ... ; anx --json auth invites create ... ; anx auth invites create ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1599,7 +1599,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar auth invites revoke ... ; oar --json auth invites revoke ... ; oar auth invites revoke ... --json (last two: JSON envelope on stdout)
+  Examples: anx auth invites revoke ... ; anx --json auth invites revoke ... ; anx auth invites revoke ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1623,7 +1623,7 @@ Generated Help: auth bootstrap status
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar auth bootstrap status ... ; oar --json auth bootstrap status ... ; oar auth bootstrap status ... --json (last two: JSON envelope on stdout)
+  Examples: anx auth bootstrap status ... ; anx --json auth bootstrap status ... ; anx auth bootstrap status ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1648,7 +1648,7 @@ Generated Help: threads list
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar threads list ... ; oar --json threads list ... ; oar threads list ... --json (last two: JSON envelope on stdout)
+  Examples: anx threads list ... ; anx --json threads list ... ; anx threads list ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1676,7 +1676,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar threads get ... ; oar --json threads get ... ; oar threads get ... --json (last two: JSON envelope on stdout)
+  Examples: anx threads get ... ; anx --json threads get ... ; anx threads get ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1712,7 +1712,7 @@ Note: by default, archived and trashed events are excluded from the timeline out
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar threads timeline ... ; oar --json threads timeline ... ; oar threads timeline ... --json (last two: JSON envelope on stdout)
+  Examples: anx threads timeline ... ; anx --json threads timeline ... ; anx threads timeline ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1740,7 +1740,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar threads context ... ; oar --json threads context ... ; oar threads context ... --json (last two: JSON envelope on stdout)
+  Examples: anx threads context ... ; anx --json threads context ... ; anx threads context ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1765,7 +1765,7 @@ Generated Help: topics list
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar topics list ... ; oar --json topics list ... ; oar topics list ... --json (last two: JSON envelope on stdout)
+  Examples: anx topics list ... ; anx --json topics list ... ; anx topics list ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1793,7 +1793,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar topics get ... ; oar --json topics get ... ; oar topics get ... --json (last two: JSON envelope on stdout)
+  Examples: anx topics get ... ; anx --json topics get ... ; anx topics get ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1834,7 +1834,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar topics create ... ; oar --json topics create ... ; oar topics create ... --json (last two: JSON envelope on stdout)
+  Examples: anx topics create ... ; anx --json topics create ... ; anx topics create ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1876,7 +1876,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar topics patch ... ; oar --json topics patch ... ; oar topics patch ... --json (last two: JSON envelope on stdout)
+  Examples: anx topics patch ... ; anx --json topics patch ... ; anx topics patch ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1904,7 +1904,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar topics timeline ... ; oar --json topics timeline ... ; oar topics timeline ... --json (last two: JSON envelope on stdout)
+  Examples: anx topics timeline ... ; anx --json topics timeline ... ; anx topics timeline ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1932,7 +1932,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar topics workspace ... ; oar --json topics workspace ... ; oar topics workspace ... --json (last two: JSON envelope on stdout)
+  Examples: anx topics workspace ... ; anx --json topics workspace ... ; anx topics workspace ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1962,7 +1962,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar topics archive ... ; oar --json topics archive ... ; oar topics archive ... --json (last two: JSON envelope on stdout)
+  Examples: anx topics archive ... ; anx --json topics archive ... ; anx topics archive ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1992,7 +1992,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar topics unarchive ... ; oar --json topics unarchive ... ; oar topics unarchive ... --json (last two: JSON envelope on stdout)
+  Examples: anx topics unarchive ... ; anx --json topics unarchive ... ; anx topics unarchive ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2023,7 +2023,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar topics trash ... ; oar --json topics trash ... ; oar topics trash ... --json (last two: JSON envelope on stdout)
+  Examples: anx topics trash ... ; anx --json topics trash ... ; anx topics trash ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2053,7 +2053,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar topics restore ... ; oar --json topics restore ... ; oar topics restore ... --json (last two: JSON envelope on stdout)
+  Examples: anx topics restore ... ; anx --json topics restore ... ; anx topics restore ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2078,7 +2078,7 @@ Generated Help: cards list
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar cards list ... ; oar --json cards list ... ; oar cards list ... --json (last two: JSON envelope on stdout)
+  Examples: anx cards list ... ; anx --json cards list ... ; anx cards list ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2106,7 +2106,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar cards get ... ; oar --json cards get ... ; oar cards get ... --json (last two: JSON envelope on stdout)
+  Examples: anx cards get ... ; anx --json cards get ... ; anx cards get ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2151,12 +2151,12 @@ Inputs:
   - body `card.provenance.notes` (string)
   - body `card.resolution` (string)
   - body `card.topic_ref` (string)
-  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `oar boards get --board-id <board-id>`, `oar boards workspace --board-id <board-id>`, or the latest board mutation response.
+  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get --board-id <board-id>`, `anx boards workspace --board-id <board-id>`, or the latest board mutation response.
   Enum values: card.column_key: backlog, blocked, done, in_progress, ready, review; card.resolution: canceled, done; card.risk: critical, high, low, medium
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar cards create ... ; oar --json cards create ... ; oar cards create ... --json (last two: JSON envelope on stdout)
+  Examples: anx cards create ... ; anx --json cards create ... ; anx cards create ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2201,7 +2201,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar cards patch ... ; oar --json cards patch ... ; oar cards patch ... --json (last two: JSON envelope on stdout)
+  Examples: anx cards patch ... ; anx --json cards patch ... ; anx cards patch ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2227,7 +2227,7 @@ Inputs:
   Required:
   - path `card_id`
   - body `column_key` (string)
-  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `oar boards get --board-id <board-id>`, `oar boards workspace --board-id <board-id>`, or the latest board mutation response.
+  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get --board-id <board-id>`, `anx boards workspace --board-id <board-id>`, or the latest board mutation response.
   Optional:
   - body `actor_id` (string)
   - body `after_card_id` (string)
@@ -2244,7 +2244,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar cards move ... ; oar --json cards move ... ; oar cards move ... --json (last two: JSON envelope on stdout)
+  Examples: anx cards move ... ; anx --json cards move ... ; anx cards move ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2271,11 +2271,11 @@ Inputs:
   - path `card_id`
   Optional:
   - body `actor_id` (string)
-  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `oar boards get --board-id <board-id>`, `oar boards workspace --board-id <board-id>`, or the latest board mutation response.
+  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get --board-id <board-id>`, `anx boards workspace --board-id <board-id>`, or the latest board mutation response.
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar cards archive ... ; oar --json cards archive ... ; oar cards archive ... --json (last two: JSON envelope on stdout)
+  Examples: anx cards archive ... ; anx --json cards archive ... ; anx cards archive ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2303,11 +2303,11 @@ Inputs:
   - body `reason` (string)
   Optional:
   - body `actor_id` (string)
-  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `oar boards get --board-id <board-id>`, `oar boards workspace --board-id <board-id>`, or the latest board mutation response.
+  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get --board-id <board-id>`, `anx boards workspace --board-id <board-id>`, or the latest board mutation response.
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar cards trash ... ; oar --json cards trash ... ; oar cards trash ... --json (last two: JSON envelope on stdout)
+  Examples: anx cards trash ... ; anx --json cards trash ... ; anx cards trash ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2337,7 +2337,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar cards purge ... ; oar --json cards purge ... ; oar cards purge ... --json (last two: JSON envelope on stdout)
+  Examples: anx cards purge ... ; anx --json cards purge ... ; anx cards purge ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2364,11 +2364,11 @@ Inputs:
   - path `card_id`
   Optional:
   - body `actor_id` (string)
-  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `oar boards get --board-id <board-id>`, `oar boards workspace --board-id <board-id>`, or the latest board mutation response.
+  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get --board-id <board-id>`, `anx boards workspace --board-id <board-id>`, or the latest board mutation response.
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar cards restore ... ; oar --json cards restore ... ; oar cards restore ... --json (last two: JSON envelope on stdout)
+  Examples: anx cards restore ... ; anx --json cards restore ... ; anx cards restore ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2396,7 +2396,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar cards timeline ... ; oar --json cards timeline ... ; oar cards timeline ... --json (last two: JSON envelope on stdout)
+  Examples: anx cards timeline ... ; anx --json cards timeline ... ; anx cards timeline ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2421,7 +2421,7 @@ Generated Help: artifacts list
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar artifacts list ... ; oar --json artifacts list ... ; oar artifacts list ... --json (last two: JSON envelope on stdout)
+  Examples: anx artifacts list ... ; anx --json artifacts list ... ; anx artifacts list ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2449,7 +2449,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar artifacts get ... ; oar --json artifacts get ... ; oar artifacts get ... --json (last two: JSON envelope on stdout)
+  Examples: anx artifacts get ... ; anx --json artifacts get ... ; anx artifacts get ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2481,7 +2481,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar artifacts create ... ; oar --json artifacts create ... ; oar artifacts create ... --json (last two: JSON envelope on stdout)
+  Examples: anx artifacts create ... ; anx --json artifacts create ... ; anx artifacts create ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2511,7 +2511,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar artifacts archive ... ; oar --json artifacts archive ... ; oar artifacts archive ... --json (last two: JSON envelope on stdout)
+  Examples: anx artifacts archive ... ; anx --json artifacts archive ... ; anx artifacts archive ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2541,7 +2541,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar artifacts unarchive ... ; oar --json artifacts unarchive ... ; oar artifacts unarchive ... --json (last two: JSON envelope on stdout)
+  Examples: anx artifacts unarchive ... ; anx --json artifacts unarchive ... ; anx artifacts unarchive ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2572,7 +2572,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar artifacts trash ... ; oar --json artifacts trash ... ; oar artifacts trash ... --json (last two: JSON envelope on stdout)
+  Examples: anx artifacts trash ... ; anx --json artifacts trash ... ; anx artifacts trash ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2602,7 +2602,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar artifacts restore ... ; oar --json artifacts restore ... ; oar artifacts restore ... --json (last two: JSON envelope on stdout)
+  Examples: anx artifacts restore ... ; anx --json artifacts restore ... ; anx artifacts restore ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2632,7 +2632,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar artifacts purge ... ; oar --json artifacts purge ... ; oar artifacts purge ... --json (last two: JSON envelope on stdout)
+  Examples: anx artifacts purge ... ; anx --json artifacts purge ... ; anx artifacts purge ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2657,7 +2657,7 @@ Generated Help: boards list
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar boards list ... ; oar --json boards list ... ; oar boards list ... --json (last two: JSON envelope on stdout)
+  Examples: anx boards list ... ; anx --json boards list ... ; anx boards list ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2694,7 +2694,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar boards create ... ; oar --json boards create ... ; oar boards create ... --json (last two: JSON envelope on stdout)
+  Examples: anx boards create ... ; anx --json boards create ... ; anx boards create ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2722,7 +2722,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar boards get ... ; oar --json boards get ... ; oar boards get ... --json (last two: JSON envelope on stdout)
+  Examples: anx boards get ... ; anx --json boards get ... ; anx boards get ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2752,7 +2752,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar boards archive ... ; oar --json boards archive ... ; oar boards archive ... --json (last two: JSON envelope on stdout)
+  Examples: anx boards archive ... ; anx --json boards archive ... ; anx boards archive ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2782,7 +2782,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar boards unarchive ... ; oar --json boards unarchive ... ; oar boards unarchive ... --json (last two: JSON envelope on stdout)
+  Examples: anx boards unarchive ... ; anx --json boards unarchive ... ; anx boards unarchive ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2813,7 +2813,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar boards trash ... ; oar --json boards trash ... ; oar boards trash ... --json (last two: JSON envelope on stdout)
+  Examples: anx boards trash ... ; anx --json boards trash ... ; anx boards trash ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2843,7 +2843,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar boards restore ... ; oar --json boards restore ... ; oar boards restore ... --json (last two: JSON envelope on stdout)
+  Examples: anx boards restore ... ; anx --json boards restore ... ; anx boards restore ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2873,7 +2873,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar boards purge ... ; oar --json boards purge ... ; oar boards purge ... --json (last two: JSON envelope on stdout)
+  Examples: anx boards purge ... ; anx --json boards purge ... ; anx boards purge ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2892,10 +2892,10 @@ Commands:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar boards cards ... ; oar --json boards cards ... ; oar boards cards ... --json (last two: JSON envelope on stdout)
+  Examples: anx boards cards ... ; anx --json boards cards ... ; anx boards cards ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 
-Tip: `oar help <command path>` for full command-level generated details.
+Tip: `anx help <command path>` for full command-level generated details.
 ```
 
 ## `boards cards create`
@@ -2940,12 +2940,12 @@ Inputs:
   - body `card.provenance.notes` (string)
   - body `card.resolution` (string)
   - body `card.topic_ref` (string)
-  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `oar boards get --board-id <board-id>`, `oar boards workspace --board-id <board-id>`, or the latest board mutation response.
+  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get --board-id <board-id>`, `anx boards workspace --board-id <board-id>`, or the latest board mutation response.
   Enum values: card.column_key: backlog, blocked, done, in_progress, ready, review; card.resolution: canceled, done; card.risk: critical, high, low, medium
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar boards cards create ... ; oar --json boards cards create ... ; oar boards cards create ... --json (last two: JSON envelope on stdout)
+  Examples: anx boards cards create ... ; anx --json boards cards create ... ; anx boards cards create ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2973,7 +2973,7 @@ Inputs:
   - body `items` (list<any>)
   Optional:
   - body `actor_id` (string): Defaults from the active CLI profile when omitted. Non-empty `--actor-id` overrides `actor_id` in the JSON body.
-  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `oar boards get --board-id <board-id>`, `oar boards workspace --board-id <board-id>`, or the latest board mutation response. You may pass `--if-board-updated-at` instead of embedding it in JSON.
+  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get --board-id <board-id>`, `anx boards workspace --board-id <board-id>`, or the latest board mutation response. You may pass `--if-board-updated-at` instead of embedding it in JSON.
   - body `request_key` (string): Idempotency key for the whole batch. Non-empty `--request-key` overrides `request_key` in the JSON body.
 
 CLI input:
@@ -2982,11 +2982,11 @@ CLI input:
   - `actor_id` defaults from the active profile when omitted from JSON; `--actor-id` sets or overrides it.
   - `--request-key` and `--if-board-updated-at`, when non-empty, override the same keys in the JSON body.
 
-Agent tip: run `oar boards get --board-id <board-id> --json` (or `boards workspace`) first, copy `board.updated_at` into `if_board_updated_at`, or pass `--if-board-updated-at` from that value. Each item's `related_refs` must reference source threads not already backing another card on this board, or the server returns `conflict`.
+Agent tip: run `anx boards get --board-id <board-id> --json` (or `boards workspace`) first, copy `board.updated_at` into `if_board_updated_at`, or pass `--if-board-updated-at` from that value. Each item's `related_refs` must reference source threads not already backing another card on this board, or the server returns `conflict`.
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar boards cards create-batch ... ; oar --json boards cards create-batch ... ; oar boards cards create-batch ... --json (last two: JSON envelope on stdout)
+  Examples: anx boards cards create-batch ... ; anx --json boards cards create-batch ... ; anx boards cards create-batch ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3015,7 +3015,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar boards cards get ... ; oar --json boards cards get ... ; oar boards cards get ... --json (last two: JSON envelope on stdout)
+  Examples: anx boards cards get ... ; anx --json boards cards get ... ; anx boards cards get ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3040,7 +3040,7 @@ Generated Help: docs list
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar docs list ... ; oar --json docs list ... ; oar docs list ... --json (last two: JSON envelope on stdout)
+  Examples: anx docs list ... ; anx --json docs list ... ; anx docs list ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3076,7 +3076,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar docs create ... ; oar --json docs create ... ; oar docs create ... --json (last two: JSON envelope on stdout)
+  Examples: anx docs create ... ; anx --json docs create ... ; anx docs create ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3104,7 +3104,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar docs get ... ; oar --json docs get ... ; oar docs get ... --json (last two: JSON envelope on stdout)
+  Examples: anx docs get ... ; anx --json docs get ... ; anx docs get ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3135,7 +3135,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar docs trash ... ; oar --json docs trash ... ; oar docs trash ... --json (last two: JSON envelope on stdout)
+  Examples: anx docs trash ... ; anx --json docs trash ... ; anx docs trash ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3165,7 +3165,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar docs archive ... ; oar --json docs archive ... ; oar docs archive ... --json (last two: JSON envelope on stdout)
+  Examples: anx docs archive ... ; anx --json docs archive ... ; anx docs archive ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3195,7 +3195,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar docs unarchive ... ; oar --json docs unarchive ... ; oar docs unarchive ... --json (last two: JSON envelope on stdout)
+  Examples: anx docs unarchive ... ; anx --json docs unarchive ... ; anx docs unarchive ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3226,7 +3226,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar docs restore ... ; oar --json docs restore ... ; oar docs restore ... --json (last two: JSON envelope on stdout)
+  Examples: anx docs restore ... ; anx --json docs restore ... ; anx docs restore ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3256,7 +3256,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar docs purge ... ; oar --json docs purge ... ; oar docs purge ... --json (last two: JSON envelope on stdout)
+  Examples: anx docs purge ... ; anx --json docs purge ... ; anx docs purge ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3284,7 +3284,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar events get ... ; oar --json events get ... ; oar events get ... --json (last two: JSON envelope on stdout)
+  Examples: anx events get ... ; anx --json events get ... ; anx events get ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3338,9 +3338,9 @@ Common authoring types:
   - `exception_raised`
 
 Usually emitted by higher-level commands:
-  - `receipt_added`: prefer `oar receipts create`
-  - `review_completed`: prefer `oar reviews create`
-  - `inbox_item_acknowledged`: prefer `oar inbox ack`
+  - `receipt_added`: prefer `anx receipts create`
+  - `review_completed`: prefer `anx reviews create`
+  - `inbox_item_acknowledged`: prefer `anx inbox ack`
 
 Local CLI notes:
   - Common open `event.type` values include `actor_statement`; the enum list above is illustrative, not exhaustive.
@@ -3348,7 +3348,7 @@ Local CLI notes:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar events create ... ; oar --json events create ... ; oar events create ... --json (last two: JSON envelope on stdout)
+  Examples: anx events create ... ; anx --json events create ... ; anx events create ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3373,7 +3373,7 @@ Generated Help: events stream
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar events stream ... ; oar --json events stream ... ; oar events stream ... --json (last two: JSON envelope on stdout)
+  Examples: anx events stream ... ; anx --json events stream ... ; anx events stream ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3398,7 +3398,7 @@ Generated Help: events tail
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar events tail ... ; oar --json events tail ... ; oar events tail ... --json (last two: JSON envelope on stdout)
+  Examples: anx events tail ... ; anx --json events tail ... ; anx events tail ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3428,7 +3428,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar events archive ... ; oar --json events archive ... ; oar events archive ... --json (last two: JSON envelope on stdout)
+  Examples: anx events archive ... ; anx --json events archive ... ; anx events archive ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3458,7 +3458,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar events unarchive ... ; oar --json events unarchive ... ; oar events unarchive ... --json (last two: JSON envelope on stdout)
+  Examples: anx events unarchive ... ; anx --json events unarchive ... ; anx events unarchive ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3489,7 +3489,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar events trash ... ; oar --json events trash ... ; oar events trash ... --json (last two: JSON envelope on stdout)
+  Examples: anx events trash ... ; anx --json events trash ... ; anx events trash ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3519,7 +3519,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar events restore ... ; oar --json events restore ... ; oar events restore ... --json (last two: JSON envelope on stdout)
+  Examples: anx events restore ... ; anx --json events restore ... ; anx events restore ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3545,7 +3545,7 @@ Generated Help: inbox list
 View scoping:
   - `inbox list` is read from the active CLI identity's perspective.
   - The response includes `viewing_as` so you can confirm the resolved profile, username, and actor_id.
-  - Switch perspective with `--agent <profile>` or `OAR_AGENT` before reading or acting.
+  - Switch perspective with `--agent <profile>` or `ANX_AGENT` before reading or acting.
 
 Inbox categories:
   - `action_needed`: A human must decide, take direct action, or own the next step (includes prior decision and intervention queue signals).
@@ -3554,7 +3554,7 @@ Inbox categories:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar inbox list ... ; oar --json inbox list ... ; oar inbox list ... --json (last two: JSON envelope on stdout)
+  Examples: anx inbox list ... ; anx --json inbox list ... ; anx inbox list ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3582,7 +3582,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar inbox get ... ; oar --json inbox get ... ; oar inbox get ... --json (last two: JSON envelope on stdout)
+  Examples: anx inbox get ... ; anx --json inbox get ... ; anx inbox get ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3624,7 +3624,7 @@ CLI flags (`inbox acknowledge` / `inbox ack`):
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar inbox acknowledge ... ; oar --json inbox acknowledge ... ; oar inbox acknowledge ... --json (last two: JSON envelope on stdout)
+  Examples: anx inbox acknowledge ... ; anx --json inbox acknowledge ... ; anx inbox acknowledge ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3666,7 +3666,7 @@ CLI flags (`inbox acknowledge` / `inbox ack`):
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar inbox ack ... ; oar --json inbox ack ... ; oar inbox ack ... --json (last two: JSON envelope on stdout)
+  Examples: anx inbox ack ... ; anx --json inbox ack ... ; anx inbox ack ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3691,7 +3691,7 @@ Generated Help: inbox stream
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar inbox stream ... ; oar --json inbox stream ... ; oar inbox stream ... --json (last two: JSON envelope on stdout)
+  Examples: anx inbox stream ... ; anx --json inbox stream ... ; anx inbox stream ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3716,7 +3716,7 @@ Generated Help: inbox tail
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar inbox tail ... ; oar --json inbox tail ... ; oar inbox tail ... --json (last two: JSON envelope on stdout)
+  Examples: anx inbox tail ... ; anx --json inbox tail ... ; anx inbox tail ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3740,7 +3740,7 @@ Generated Help: derived rebuild
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar derived rebuild ... ; oar --json derived rebuild ... ; oar derived rebuild ... --json (last two: JSON envelope on stdout)
+  Examples: anx derived rebuild ... ; anx --json derived rebuild ... ; anx derived rebuild ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3765,7 +3765,7 @@ Generated Help: meta commands
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar meta commands ... ; oar --json meta commands ... ; oar meta commands ... --json (last two: JSON envelope on stdout)
+  Examples: anx meta commands ... ; anx --json meta commands ... ; anx meta commands ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3793,7 +3793,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar meta command ... ; oar --json meta command ... ; oar meta command ... --json (last two: JSON envelope on stdout)
+  Examples: anx meta command ... ; anx --json meta command ... ; anx meta command ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3818,7 +3818,7 @@ Generated Help: meta concepts
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar meta concepts ... ; oar --json meta concepts ... ; oar meta concepts ... --json (last two: JSON envelope on stdout)
+  Examples: anx meta concepts ... ; anx --json meta concepts ... ; anx meta concepts ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3846,7 +3846,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar meta concept ... ; oar --json meta concept ... ; oar meta concept ... --json (last two: JSON envelope on stdout)
+  Examples: anx meta concept ... ; anx --json meta concept ... ; anx meta concept ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3883,7 +3883,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar receipts create ... ; oar --json receipts create ... ; oar receipts create ... --json (last two: JSON envelope on stdout)
+  Examples: anx receipts create ... ; anx --json receipts create ... ; anx receipts create ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3921,7 +3921,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar reviews create ... ; oar --json reviews create ... ; oar reviews create ... --json (last two: JSON envelope on stdout)
+  Examples: anx reviews create ... ; anx --json reviews create ... ; anx reviews create ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3937,8 +3937,8 @@ Local Help: events list
 - Composition: Fetches one or more backing-thread timelines locally, then filters and summarizes the events without changing contracts or core behavior. Use it as a diagnostic read; prefer `topics workspace` and card/board reads for normal coordination.
 - JSON body: `thread_id`, `thread_ids`, `events`, `total_events`, `returned_events`
 - Examples:
-  - `oar events list --thread-id <thread-id> --type actor_statement --mine --full-id`
-  - `oar events list --thread-id <thread-id> --max-events 10`
+  - `anx events list --thread-id <thread-id> --type actor_statement --mine --full-id`
+  - `anx events list --thread-id <thread-id> --max-events 10`
 
 Flags:
   --thread-id <thread-id>      Thread id to inspect (repeatable).
@@ -3957,7 +3957,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar events list ... ; oar --json events list ... ; oar events list ... --json (last two: JSON envelope on stdout)
+  Examples: anx events list ... ; anx --json events list ... ; anx events list ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3973,8 +3973,8 @@ Local Help: events validate
 - Composition: Parses the same JSON body accepted by `events create`, runs local validation rules, and returns a validation preview envelope without contacting core.
 - JSON body: `command`, `command_id`, `path_params`, `query`, `body`, `valid`
 - Examples:
-  - `cat event.json | oar events validate`
-  - `oar events validate --from-file event.json`
+  - `cat event.json | anx events validate`
+  - `anx events validate --from-file event.json`
 
 Flags:
   --from-file <path>           Load the request body from a JSON file instead of stdin.
@@ -3982,7 +3982,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar events validate ... ; oar --json events validate ... ; oar events validate ... --json (last two: JSON envelope on stdout)
+  Examples: anx events validate ... ; anx --json events validate ... ; anx events validate ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3998,9 +3998,9 @@ Local Help: events explain
 - Composition: Formats the embedded event reference and validation guidance into a plain-text reference without sending a request. Use it to confirm when `message_posted` is required for a visible backing-thread message in the web UI Messages tab.
 - JSON body: `event_type`, `known`, `required_refs`, `payload_requirements`, `examples`, `hint`
 - Examples:
-  - `oar events explain`
-  - `oar events explain message_posted`
-  - `oar events explain review_completed`
+  - `anx events explain`
+  - `anx events explain message_posted`
+  - `anx events explain review_completed`
 
 Flags:
   <event-type>                 Optional event type to focus on; omit it to list known event types.
@@ -4008,7 +4008,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar events explain ... ; oar --json events explain ... ; oar events explain ... --json (last two: JSON envelope on stdout)
+  Examples: anx events explain ... ; anx --json events explain ... ; anx events explain ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4024,8 +4024,8 @@ Local Help: artifacts inspect
 - Composition: Loads artifact metadata with `artifacts get`, then fetches content with `artifacts content` using the resolved artifact id.
 - JSON body: `artifact`, `content`, `content_headers`, `content_text`, `content_base64`
 - Examples:
-  - `oar artifacts inspect --artifact-id <artifact-id>`
-  - `oar artifacts inspect <artifact-id-or-alias>`
+  - `anx artifacts inspect --artifact-id <artifact-id>`
+  - `anx artifacts inspect <artifact-id-or-alias>`
 
 Flags:
   --artifact-id <artifact-id>  Artifact id or unique alias to inspect.
@@ -4033,7 +4033,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar artifacts inspect ... ; oar --json artifacts inspect ... ; oar artifacts inspect ... --json (last two: JSON envelope on stdout)
+  Examples: anx artifacts inspect ... ; anx --json artifacts inspect ... ; anx artifacts inspect ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4049,8 +4049,8 @@ Local Help: threads inspect
 - Composition: Resolves one thread by id or discovery filters, loads read-only thread projections, then filters inbox items client-side by `thread_id`. Prefer `topics workspace` for primary operator coordination when you have a topic id.
 - JSON body: `thread`, `context`, `collaboration`, `inbox`
 - Examples:
-  - `oar threads inspect --thread-id <thread-id>`
-  - `oar threads inspect --status active --type initiative --full-id`
+  - `anx threads inspect --thread-id <thread-id>`
+  - `anx threads inspect --status active --type initiative --full-id`
 
 Flags:
   --thread-id <thread-id>      Thread id to inspect.
@@ -4067,7 +4067,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar threads inspect ... ; oar --json threads inspect ... ; oar threads inspect ... --json (last two: JSON envelope on stdout)
+  Examples: anx threads inspect ... ; anx --json threads inspect ... ; anx threads inspect ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4083,8 +4083,8 @@ Local Help: threads workspace
 - Composition: Resolves one thread by id or discovery filters, loads read-only thread projections, adds thread-scoped inbox items, and follows related thread refs for diagnostic review. Prefer `topics workspace` for normal operator coordination.
 - JSON body: `thread`, `context`, `collaboration`, `inbox`, `pending_decisions`, `related_threads`, `related_recommendations`, `related_decisions`, `follow_up`
 - Examples:
-  - `oar threads workspace --thread-id <thread-id> --full-id`
-  - `oar threads workspace --status active --type initiative --full-summary`
+  - `anx threads workspace --thread-id <thread-id> --full-id`
+  - `anx threads workspace --status active --type initiative --full-summary`
 
 Flags:
   --thread-id <thread-id>      Thread id to inspect.
@@ -4102,7 +4102,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar threads workspace ... ; oar --json threads workspace ... ; oar threads workspace ... --json (last two: JSON envelope on stdout)
+  Examples: anx threads workspace ... ; anx --json threads workspace ... ; anx threads workspace ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4118,8 +4118,8 @@ Local Help: threads recommendations
 - Composition: Loads the read-only thread context, inbox, and related-thread review context to highlight recommendation signals and follow-up hints without changing state. Prefer `topics workspace` for the main coordination read when a topic exists.
 - JSON body: `thread`, `recommendations`, `decision_requests`, `decisions`, `pending_decisions`, `related_threads`, `related_recommendations`, `related_decision_requests`, `related_decisions`, `warnings`, `follow_up`
 - Examples:
-  - `oar threads recommendations --thread-id <thread-id>`
-  - `oar threads recommendations --status active --type initiative --full-summary`
+  - `anx threads recommendations --thread-id <thread-id>`
+  - `anx threads recommendations --status active --type initiative --full-summary`
 
 Flags:
   --thread-id <thread-id>      Thread id to inspect.
@@ -4138,7 +4138,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar threads recommendations ... ; oar --json threads recommendations ... ; oar threads recommendations ... --json (last two: JSON envelope on stdout)
+  Examples: anx threads recommendations ... ; anx --json threads recommendations ... ; anx threads recommendations ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4154,8 +4154,8 @@ Local Help: boards workspace
 - Composition: Resolves a board by id, fetches the projection workspace with per-card thread backing and renders cards grouped by canonical column order (backlog, ready, in_progress, blocked, review, done).
 - JSON body: `board_id`, `board`, `primary_topic`, `cards`, `documents`, `inbox`, `board_summary`, `projection_freshness`, `board_summary_freshness`, `warnings`, `section_kinds`, `generated_at`
 - Examples:
-  - `oar boards workspace --board-id <board-id>`
-  - `oar boards workspace --board-id board_product_launch`
+  - `anx boards workspace --board-id <board-id>`
+  - `anx boards workspace --board-id board_product_launch`
 
 Flags:
   --board-id <board-id>        Board id or unique prefix to load.
@@ -4163,7 +4163,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar boards workspace ... ; oar --json boards workspace ... ; oar boards workspace ... --json (last two: JSON envelope on stdout)
+  Examples: anx boards workspace ... ; anx --json boards workspace ... ; anx boards workspace ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4179,7 +4179,7 @@ Local Help: boards cards list
 - Composition: Fetches the raw card list for a board ordered by canonical column sequence and per-column rank.
 - JSON body: `board_id`, `cards`
 - Examples:
-  - `oar boards cards list --board-id <board-id>`
+  - `anx boards cards list --board-id <board-id>`
 
 Flags:
   --board-id <board-id>        Board id to list cards for.
@@ -4187,7 +4187,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar boards cards list ... ; oar --json boards cards list ... ; oar boards cards list ... --json (last two: JSON envelope on stdout)
+  Examples: anx boards cards list ... ; anx --json boards cards list ... ; anx boards cards list ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4203,8 +4203,8 @@ Local Help: docs propose-update
 - Composition: Fetches the current document revision with `docs get`, computes a local diff against the proposed update, and persists a proposal file instead of sending the update immediately.
 - JSON body: `proposal_id`, `target_command_id`, `path`, `body`, `diff`, `apply_command`
 - Examples:
-  - `oar docs propose-update --document-id <document-id> --content-file <path>`
-  - `cat update.json | oar docs propose-update --document-id <document-id>`
+  - `anx docs propose-update --document-id <document-id> --content-file <path>`
+  - `cat update.json | anx docs propose-update --document-id <document-id>`
 
 Flags:
   --document-id <document-id>  Document id to update.
@@ -4214,7 +4214,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar docs propose-update ... ; oar --json docs propose-update ... ; oar docs propose-update ... --json (last two: JSON envelope on stdout)
+  Examples: anx docs propose-update ... ; anx --json docs propose-update ... ; anx docs propose-update ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4230,8 +4230,8 @@ Local Help: docs content
 - Composition: Loads `docs get`, then renders the current revision content and metadata in one operator-friendly response.
 - JSON body: `document`, `revision`, `content`, `status_code`, `headers`
 - Examples:
-  - `oar docs content --document-id <document-id>`
-  - `oar docs content <document-id-or-alias>`
+  - `anx docs content --document-id <document-id>`
+  - `anx docs content <document-id-or-alias>`
 
 Flags:
   --document-id <document-id>  Document id or unique alias to inspect.
@@ -4239,7 +4239,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar docs content ... ; oar --json docs content ... ; oar docs content ... --json (last two: JSON envelope on stdout)
+  Examples: anx docs content ... ; anx --json docs content ... ; anx docs content ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4255,8 +4255,8 @@ Local Help: docs validate-update
 - Composition: Parses the same body accepted by `docs.revisions.create`, expands `--content-file` when present, and returns a validation preview envelope without contacting core.
 - JSON body: `command`, `command_id`, `path_params`, `query`, `body`, `valid`
 - Examples:
-  - `cat update.json | oar docs validate-update --document-id <document-id>`
-  - `oar docs validate-update --document-id <document-id> --content-file body.md`
+  - `cat update.json | anx docs validate-update --document-id <document-id>`
+  - `anx docs validate-update --document-id <document-id> --content-file body.md`
 
 Flags:
   --document-id <document-id>  Document id to validate against.
@@ -4266,7 +4266,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar docs validate-update ... ; oar --json docs validate-update ... ; oar docs validate-update ... --json (last two: JSON envelope on stdout)
+  Examples: anx docs validate-update ... ; anx --json docs validate-update ... ; anx docs validate-update ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4282,8 +4282,8 @@ Local Help: docs apply
 - Composition: Loads the local proposal by exact id or unique prefix, validates it again, then sends the underlying `docs.revisions.create` request.
 - JSON body: `proposal_id`, `target_command_id`, `applied`, `kept`, `result`
 - Examples:
-  - `oar docs apply --proposal-id <proposal-id>`
-  - `oar docs apply <proposal-id-prefix>`
+  - `anx docs apply --proposal-id <proposal-id>`
+  - `anx docs apply <proposal-id-prefix>`
 
 Flags:
   --proposal-id <proposal-id>  Proposal id or unique prefix to apply.
@@ -4291,25 +4291,25 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar docs apply ... ; oar --json docs apply ... ; oar docs apply ... --json (last two: JSON envelope on stdout)
+  Examples: anx docs apply ... ; anx --json docs apply ... ; anx docs apply ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `meta skill`
 
-Render a bundled editor-specific skill file from the canonical OAR agent guide.
+Render a bundled editor-specific skill file from the canonical ANX agent guide.
 
 ```text
 Local Help: meta skill
 
 - Kind: `local helper`
-- Summary: Render a bundled editor-specific skill file from the canonical OAR agent guide.
+- Summary: Render a bundled editor-specific skill file from the canonical ANX agent guide.
 - Composition: Pure local helper. Renders a maintained skill document from the bundled agent guide and optionally writes it to a chosen file or directory.
 - JSON body: `target`, `content`, `default_file`, `written_files`, `guide_topic`, `skill_name`
 - Examples:
-  - `oar meta skill cursor`
-  - `oar meta skill cursor --write-dir ~/.cursor/skills/oar-cli-onboard`
-  - `oar meta skill --target cursor --write-file ./SKILL.md`
+  - `anx meta skill cursor`
+  - `anx meta skill cursor --write-dir ~/.cursor/skills/anx-cli-onboard`
+  - `anx meta skill --target cursor --write-file ./SKILL.md`
 
 Flags:
   <target>                     Skill target to render. Currently supported: `cursor`.
@@ -4320,62 +4320,62 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar meta skill ... ; oar --json meta skill ... ; oar meta skill ... --json (last two: JSON envelope on stdout)
+  Examples: anx meta skill ... ; anx --json meta skill ... ; anx meta skill ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `bridge install`
 
-Install `oar-agent-bridge` into a dedicated Python 3.11+ virtualenv and expose a PATH wrapper.
+Install `anx-agent-bridge` into a dedicated Python 3.11+ virtualenv and expose a PATH wrapper.
 
 ```text
 Local Help: bridge install
 
 - Kind: `local helper`
-- Summary: Install `oar-agent-bridge` into a dedicated Python 3.11+ virtualenv and expose a PATH wrapper.
+- Summary: Install `anx-agent-bridge` into a dedicated Python 3.11+ virtualenv and expose a PATH wrapper.
 - Composition: Pure local bootstrap helper with network package download. Creates or reuses a venv, installs the bridge package from the GitHub subdirectory, and writes a thin launcher script.
 - JSON body: `install_dir`, `bin_dir`, `wrapper_path`, `python`, `bridge_binary`, `package_ref`
 - Examples:
-  - `oar bridge install`
-  - `oar bridge install --ref main --with-dev`
+  - `anx bridge install`
+  - `anx bridge install --ref main --with-dev`
 
 Flags:
   --python <exe>               Preferred Python executable. Default probes for Python 3.11+.
   --install-dir <dir>          Root directory for the managed bridge virtualenv.
-  --bin-dir <dir>              Directory where the `oar-agent-bridge` wrapper should be written.
+  --bin-dir <dir>              Directory where the `anx-agent-bridge` wrapper should be written.
   --ref <git-ref>              Git ref to install from. Defaults to `main` unless you pin a different branch or tag.
   --with-dev                   Also install bridge test dependencies.
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar bridge install ... ; oar --json bridge install ... ; oar bridge install ... --json (last two: JSON envelope on stdout)
+  Examples: anx bridge install ... ; anx --json bridge install ... ; anx bridge install ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `bridge import-auth`
 
-Copy an existing `oar` profile and key into bridge auth state for one bridge config.
+Copy an existing `anx` profile and key into bridge auth state for one bridge config.
 
 ```text
 Local Help: bridge import-auth
 
 - Kind: `local helper`
-- Summary: Copy an existing `oar` profile and key into bridge auth state for one bridge config.
-- Composition: Pure local helper. Reads an existing `oar` profile plus Ed25519 key material, converts it into bridge auth state, writes it to the bridge config's `[auth].state_path`, and syncs `[oar].base_url` when the config still has the default local value.
+- Summary: Copy an existing `anx` profile and key into bridge auth state for one bridge config.
+- Composition: Pure local helper. Reads an existing `anx` profile plus Ed25519 key material, converts it into bridge auth state, writes it to the bridge config's `[auth].state_path`, and syncs `[anx].base_url` when the config still has the default local value.
 - JSON body: `config_path`, `auth_state_path`, `profile_path`, `profile_agent`, `username`, `actor_id`, `agent_id`, `key_id`
 - Examples:
-  - `oar bridge import-auth --config ./agent.toml --from-profile agent-a`
-  - `oar --agent agent-a bridge import-auth --config ./agent.toml`
+  - `anx bridge import-auth --config ./agent.toml --from-profile agent-a`
+  - `anx --agent agent-a bridge import-auth --config ./agent.toml`
 
 Flags:
   --config <path>              Bridge config whose auth state should be populated.
-  --from-profile <agent>       Existing `oar` profile name to import. Defaults to the active CLI profile.
+  --from-profile <agent>       Existing `anx` profile name to import. Defaults to the active CLI profile.
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar bridge import-auth ... ; oar --json bridge import-auth ... ; oar bridge import-auth ... --json (last two: JSON envelope on stdout)
+  Examples: anx bridge import-auth ... ; anx --json bridge import-auth ... ; anx bridge import-auth ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4391,20 +4391,20 @@ Local Help: bridge init-config
 - Composition: Pure local helper. Renders one minimal bridge config template with explicit workspace-id and readiness settings; optionally writes it to disk.
 - JSON body: `kind`, `output`, `workspace_id`, `handle`, `content`
 - Examples:
-  - `oar bridge init-config --kind hermes --output ./agent.toml --workspace-id ws_main --handle hermes --workspace-path /absolute/path/to/hermes/workspace`
-  - `oar bridge init-config --kind zeroclaw --output ./zeroclaw.toml --workspace-id ws_main --handle zeroclaw`
+  - `anx bridge init-config --kind hermes --output ./agent.toml --workspace-id ws_main --handle hermes --workspace-path /absolute/path/to/hermes/workspace`
+  - `anx bridge init-config --kind zeroclaw --output ./zeroclaw.toml --workspace-id ws_main --handle zeroclaw`
 
 Flags:
   --kind <hermes|zeroclaw>     Template kind to render.
   --output <path>              Write the rendered TOML to a file. Omit to print it.
-  --workspace-id <id>          Durable OAR workspace id. Do not use a slug or UI path segment.
+  --workspace-id <id>          Durable ANX workspace id. Do not use a slug or UI path segment.
   --handle <name>              Agent handle for bridge templates.
   --workspace-path <path>      Hermes workspace path. Sets both `[adapter].cwd_default` and `[adapter.workspace_map]`.
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar bridge init-config ... ; oar --json bridge init-config ... ; oar bridge init-config ... --json (last two: JSON envelope on stdout)
+  Examples: anx bridge init-config ... ; anx --json bridge init-config ... ; anx bridge init-config ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4417,11 +4417,11 @@ Local Help: bridge workspace-id
 
 - Kind: `local helper`
 - Summary: Discover durable workspace ids from an existing agent wake registration.
-- Composition: Uses the active `oar` auth/profile to read agent principal registration metadata and extract enabled workspace bindings so bridge bootstrap can reuse the real durable workspace id instead of guessing.
+- Composition: Uses the active `anx` auth/profile to read agent principal registration metadata and extract enabled workspace bindings so bridge bootstrap can reuse the real durable workspace id instead of guessing.
 - JSON body: `agent_id`, `handle`, `actor_id`, `registration_status`, `workspace_ids`, `workspace_bindings`
 - Examples:
-  - `oar --agent agent-a bridge workspace-id --handle hermes`
-  - `oar bridge workspace-id --document-id agentreg.hermes`
+  - `anx --agent agent-a bridge workspace-id --handle hermes`
+  - `anx bridge workspace-id --document-id agentreg.hermes`
 
 Flags:
   --handle <name>              Agent handle whose wake registration should be inspected.
@@ -4430,7 +4430,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar bridge workspace-id ... ; oar --json bridge workspace-id ... ; oar bridge workspace-id ... --json (last two: JSON envelope on stdout)
+  Examples: anx bridge workspace-id ... ; anx --json bridge workspace-id ... ; anx bridge workspace-id ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4446,19 +4446,19 @@ Local Help: bridge doctor
 - Composition: Pure local helper plus optional bridge CLI calls. Probes Python, the managed install, and `registration status` for a supplied config.
 - JSON body: `checks`, `registration`, `bridge_binary`, `python`
 - Examples:
-  - `oar bridge doctor`
-  - `oar bridge doctor --config ./agent.toml`
+  - `anx bridge doctor`
+  - `anx bridge doctor --config ./agent.toml`
 
 Flags:
   --config <path>              Bridge config to validate with `registration status`.
   --python <exe>               Preferred Python executable. Default probes for Python 3.11+.
   --install-dir <dir>          Root directory for the managed bridge virtualenv.
-  --bin-dir <dir>              Directory where the managed `oar-agent-bridge` wrapper should exist.
+  --bin-dir <dir>              Directory where the managed `anx-agent-bridge` wrapper should exist.
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar bridge doctor ... ; oar --json bridge doctor ... ; oar bridge doctor ... --json (last two: JSON envelope on stdout)
+  Examples: anx bridge doctor ... ; anx --json bridge doctor ... ; anx bridge doctor ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4471,20 +4471,20 @@ Local Help: bridge start
 
 - Kind: `local helper`
 - Summary: Start a managed bridge daemon for one config file.
-- Composition: Pure local helper. Resolves the installed `oar-agent-bridge` binary, infers the config role, launches the daemon in the background, and records pid/log metadata in a per-config manager directory.
+- Composition: Pure local helper. Resolves the installed `anx-agent-bridge` binary, infers the config role, launches the daemon in the background, and records pid/log metadata in a per-config manager directory.
 - JSON body: `kind`, `config_path`, `pid`, `log_path`, `process_state_path`, `command`
 - Examples:
-  - `oar bridge start --config ./agent.toml`
+  - `anx bridge start --config ./agent.toml`
 
 Flags:
   --config <path>              Bridge config to start. The config must contain `[agent]`.
   --install-dir <dir>          Root directory for the managed bridge virtualenv.
-  --bin-dir <dir>              Directory where the managed `oar-agent-bridge` wrapper should exist.
+  --bin-dir <dir>              Directory where the managed `anx-agent-bridge` wrapper should exist.
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar bridge start ... ; oar --json bridge start ... ; oar bridge start ... --json (last two: JSON envelope on stdout)
+  Examples: anx bridge start ... ; anx --json bridge start ... ; anx bridge start ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4500,7 +4500,7 @@ Local Help: bridge stop
 - Composition: Pure local helper. Reads the per-config manager state, sends SIGTERM, and records the stopped timestamp once the daemon exits.
 - JSON body: `kind`, `config_path`, `pid`, `stopped_at`, `last_signal`
 - Examples:
-  - `oar bridge stop --config ./agent.toml --force`
+  - `anx bridge stop --config ./agent.toml --force`
 
 Flags:
   --config <path>              Managed config to stop.
@@ -4510,7 +4510,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar bridge stop ... ; oar --json bridge stop ... ; oar bridge stop ... --json (last two: JSON envelope on stdout)
+  Examples: anx bridge stop ... ; anx --json bridge stop ... ; anx bridge stop ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4526,7 +4526,7 @@ Local Help: bridge restart
 - Composition: Pure local helper. Stops the existing managed process if one is present, then launches a fresh daemon and updates the manager state.
 - JSON body: `kind`, `config_path`, `pid`, `log_path`, `process_state_path`
 - Examples:
-  - `oar bridge restart --config ./agent.toml`
+  - `anx bridge restart --config ./agent.toml`
 
 Flags:
   --config <path>              Managed config to restart.
@@ -4535,7 +4535,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar bridge restart ... ; oar --json bridge restart ... ; oar bridge restart ... --json (last two: JSON envelope on stdout)
+  Examples: anx bridge restart ... ; anx --json bridge restart ... ; anx bridge restart ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4551,17 +4551,17 @@ Local Help: bridge status
 - Composition: Pure local helper plus optional bridge CLI calls. Reports the background process state, log path, and agent registration readiness when available.
 - JSON body: `kind`, `managed`, `running`, `pid`, `log_path`, `process_state_path`, `registration`
 - Examples:
-  - `oar bridge status --config ./agent.toml`
+  - `anx bridge status --config ./agent.toml`
 
 Flags:
   --config <path>              Managed config to inspect.
   --install-dir <dir>          Root directory for the managed bridge virtualenv.
-  --bin-dir <dir>              Directory where the managed `oar-agent-bridge` wrapper should exist.
+  --bin-dir <dir>              Directory where the managed `anx-agent-bridge` wrapper should exist.
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar bridge status ... ; oar --json bridge status ... ; oar bridge status ... --json (last two: JSON envelope on stdout)
+  Examples: anx bridge status ... ; anx --json bridge status ... ; anx bridge status ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4577,7 +4577,7 @@ Local Help: bridge logs
 - Composition: Pure local helper. Reads the per-config managed log file and returns the last N lines without requiring direct shell access.
 - JSON body: `kind`, `config_path`, `log_path`, `lines`, `content`
 - Examples:
-  - `oar bridge logs --config ./agent.toml --lines 200`
+  - `anx bridge logs --config ./agent.toml --lines 200`
 
 Flags:
   --config <path>              Managed config whose log should be tailed.
@@ -4586,7 +4586,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar bridge logs ... ; oar --json bridge logs ... ; oar bridge logs ... --json (last two: JSON envelope on stdout)
+  Examples: anx bridge logs ... ; anx --json bridge logs ... ; anx bridge logs ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4602,19 +4602,19 @@ Local Help: import scan
 - Composition: Pure local filesystem helper. Expands `.zip` inputs, ignores obvious generated junk, fingerprints files, caches readable text, and emits `inventory.jsonl` plus `scan-summary.json`.
 - JSON body: `input`, `scan_root`, `extracted_root`, `inventory`, `file_count`, `counts_by_category`, `counts_by_cluster_hint`, `repo_roots`
 - Examples:
-  - `oar import scan --input ./workspace.zip`
-  - `oar import scan --input ./vault --out ./.oar-import/vault`
+  - `anx import scan --input ./workspace.zip`
+  - `anx import scan --input ./vault --out ./.anx-import/vault`
 
 Flags:
   --input <path>               Directory or `.zip` archive to scan.
-  --out <dir>                  Output directory. Defaults to `./.oar-import/<source-name>`.
+  --out <dir>                  Output directory. Defaults to `./.anx-import/<source-name>`.
   --max-preview-bytes <n>      Maximum bytes to keep for preview extraction.
   --max-text-cache-bytes <n>   Maximum text-file size cached verbatim for later doc creation.
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar import scan ... ; oar --json import scan ... ; oar import scan ... --json (last two: JSON envelope on stdout)
+  Examples: anx import scan ... ; anx --json import scan ... ; anx import scan ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4630,17 +4630,17 @@ Local Help: import dedupe
 - Composition: Pure local helper. Uses normalized text hashes for readable content and raw SHA-256 for everything else; exact drops are recommended, probable duplicates are review-only.
 - JSON body: `inventory`, `exact_duplicates`, `probable_duplicates`, `recommended_skip_ids`
 - Examples:
-  - `oar import dedupe --inventory ./.oar-import/workspace/inventory.jsonl`
-  - `oar import dedupe ./.oar-import/workspace/inventory.jsonl --out ./.oar-import/workspace`
+  - `anx import dedupe --inventory ./.anx-import/workspace/inventory.jsonl`
+  - `anx import dedupe ./.anx-import/workspace/inventory.jsonl --out ./.anx-import/workspace`
 
 Flags:
-  --inventory <path>           Inventory produced by `oar import scan`. Positional form also supported.
+  --inventory <path>           Inventory produced by `anx import scan`. Positional form also supported.
   --out <dir>                  Output directory. Defaults to the inventory directory.
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar import dedupe ... ; oar --json import dedupe ... ; oar import dedupe ... --json (last two: JSON envelope on stdout)
+  Examples: anx import dedupe ... ; anx --json import dedupe ... ; anx import dedupe ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4656,11 +4656,11 @@ Local Help: import plan
 - Composition: Pure local helper. Classifies inventory items into docs, artifacts, repo bundles, review bundles, and collector/hub structures. It writes `plan.json` plus `plan-preview.md` without sending requests.
 - JSON body: `source_name`, `inventory`, `dedupe`, `principles`, `objects`, `skipped`, `review_bundles`, `notes`
 - Examples:
-  - `oar import plan --inventory ./.oar-import/workspace/inventory.jsonl`
-  - `oar import plan --inventory ./.oar-import/workspace/inventory.jsonl --dedupe ./.oar-import/workspace/dedupe.json --source-name 'workspace export'`
+  - `anx import plan --inventory ./.anx-import/workspace/inventory.jsonl`
+  - `anx import plan --inventory ./.anx-import/workspace/inventory.jsonl --dedupe ./.anx-import/workspace/dedupe.json --source-name 'workspace export'`
 
 Flags:
-  --inventory <path>           Inventory produced by `oar import scan`. Positional form also supported.
+  --inventory <path>           Inventory produced by `anx import scan`. Positional form also supported.
   --dedupe <path>              Dedupe report. Defaults to sibling `dedupe.json`.
   --out <dir>                  Output directory. Defaults to the inventory directory.
   --source-name <name>         High-signal display name used in titles, tags, and provenance. Defaults from the inventory directory.
@@ -4669,7 +4669,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar import plan ... ; oar --json import plan ... ; oar import plan ... --json (last two: JSON envelope on stdout)
+  Examples: anx import plan ... ; anx --json import plan ... ; anx import plan ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4685,17 +4685,17 @@ Local Help: import apply
 - Composition: Local helper with optional network writes. Always writes payload previews first; when `--execute` is set it creates topics, then artifacts, then docs, substituting `$REF:<key>` placeholders after upstream IDs are known.
 - JSON body: `plan`, `execute`, `results`, `refs`
 - Examples:
-  - `oar import apply --plan ./.oar-import/workspace/plan.json`
-  - `oar import apply --plan ./.oar-import/workspace/plan.json --execute --agent importer`
+  - `anx import apply --plan ./.anx-import/workspace/plan.json`
+  - `anx import apply --plan ./.anx-import/workspace/plan.json --execute --agent importer`
 
 Flags:
-  --plan <path>                Plan produced by `oar import plan`. Positional form also supported.
+  --plan <path>                Plan produced by `anx import plan`. Positional form also supported.
   --out <dir>                  Output directory for payload previews and apply results. Defaults to `<plan-dir>/apply`.
   --execute                    Actually call `topics create`, `artifacts create`, and `docs create`. Default is preview-only.
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar import apply ... ; oar --json import apply ... ; oar import apply ... --json (last two: JSON envelope on stdout)
+  Examples: anx import apply ... ; anx --json import apply ... ; anx import apply ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```

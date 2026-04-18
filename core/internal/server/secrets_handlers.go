@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"organization-autorunner-core/internal/auth"
-	"organization-autorunner-core/internal/secrets"
+	"agent-nexus-core/internal/auth"
+	"agent-nexus-core/internal/secrets"
 )
 
 func handleListSecrets(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
@@ -38,7 +38,7 @@ func handleCreateSecret(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		return
 	}
 	if opts.secretsStore == nil || !opts.secretsStore.HasEncryptor() {
-		writeError(w, http.StatusServiceUnavailable, "secrets_not_configured", "secrets encryption is not configured (set OAR_SECRETS_KEY)")
+		writeError(w, http.StatusServiceUnavailable, "secrets_not_configured", "secrets encryption is not configured (set ANX_SECRETS_KEY)")
 		return
 	}
 
@@ -96,7 +96,7 @@ func handleUpdateSecret(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		return
 	}
 	if opts.secretsStore == nil || !opts.secretsStore.HasEncryptor() {
-		writeError(w, http.StatusServiceUnavailable, "secrets_not_configured", "secrets encryption is not configured (set OAR_SECRETS_KEY)")
+		writeError(w, http.StatusServiceUnavailable, "secrets_not_configured", "secrets encryption is not configured (set ANX_SECRETS_KEY)")
 		return
 	}
 
@@ -178,7 +178,7 @@ func handleRevealSecret(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		return
 	}
 	if opts.secretsStore == nil || !opts.secretsStore.HasEncryptor() {
-		writeError(w, http.StatusServiceUnavailable, "secrets_not_configured", "secrets encryption is not configured (set OAR_SECRETS_KEY)")
+		writeError(w, http.StatusServiceUnavailable, "secrets_not_configured", "secrets encryption is not configured (set ANX_SECRETS_KEY)")
 		return
 	}
 
@@ -211,7 +211,7 @@ func handleRevealSecretsBatch(w http.ResponseWriter, r *http.Request, opts handl
 		return
 	}
 	if opts.secretsStore == nil || !opts.secretsStore.HasEncryptor() {
-		writeError(w, http.StatusServiceUnavailable, "secrets_not_configured", "secrets encryption is not configured (set OAR_SECRETS_KEY)")
+		writeError(w, http.StatusServiceUnavailable, "secrets_not_configured", "secrets encryption is not configured (set ANX_SECRETS_KEY)")
 		return
 	}
 

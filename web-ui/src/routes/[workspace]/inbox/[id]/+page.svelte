@@ -33,7 +33,7 @@
   }
 
   function draftStorageKey() {
-    return `oar.ask.draft:${workspaceSlug}:${inboxItemID}`;
+    return `anx.ask.draft:${workspaceSlug}:${inboxItemID}`;
   }
 
   function coverageHintGloss(rawHint) {

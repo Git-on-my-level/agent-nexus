@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"organization-autorunner-cli/internal/config"
+	"agent-nexus-cli/internal/config"
 )
 
 func (a *App) runThreadsWorkspaceCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {

@@ -1,4 +1,4 @@
-import { createOarCoreClient } from "$lib/oarCoreClient";
+import { createOarCoreClient } from "$lib/anxCoreClient";
 import { topicRouteSegmentFromBackingThread } from "$lib/topicRouteUtils";
 import { WORKSPACE_HEADER } from "$lib/workspacePaths";
 

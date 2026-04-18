@@ -3,7 +3,7 @@ package primitives
 import (
 	"database/sql"
 
-	"organization-autorunner-core/internal/blob"
+	"agent-nexus-core/internal/blob"
 )
 
 func NewTestStore(db *sql.DB, artifactContentDir string) *Store {

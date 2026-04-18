@@ -30,7 +30,7 @@ type binarySet struct {
 var (
 	buildOnce sync.Once
 	binaries  binarySet
-	// coreBindMu serializes ephemeral port reservation + oar-core bind + readyz.
+	// coreBindMu serializes ephemeral port reservation + anx-core bind + readyz.
 	// Parallel tests otherwise risk reusing the same port between listener close
 	// and core Listen (TOCTOU), which can mis-route CLI calls or fail binds.
 	coreBindMu sync.Mutex
@@ -417,9 +417,9 @@ func newLiveCoreHarness(t *testing.T) *liveCoreHarness {
 	cliBin, coreBin := buildBinaries(t)
 	tempDir := t.TempDir()
 	workspace := filepath.Join(tempDir, "workspace")
-	// Empty workspace: copying `core/.oar-workspace` would bring a `state.sqlite` whose
+	// Empty workspace: copying `core/.anx-workspace` would bring a `state.sqlite` whose
 	// auth/bootstrap rows are keyed to a different operator token than our per-run
-	// OAR_BOOTSTRAP_TOKEN, causing `invalid_token` on register.
+	// ANX_BOOTSTRAP_TOKEN, causing `invalid_token` on register.
 	if mkErr := os.MkdirAll(workspace, 0o755); mkErr != nil {
 		t.Fatalf("create workspace %s: %v", workspace, mkErr)
 	}
@@ -443,20 +443,20 @@ func newLiveCoreHarness(t *testing.T) *liveCoreHarness {
 	cmd := exec.Command(coreBin,
 		"--listen-addr", fmt.Sprintf("127.0.0.1:%d", port),
 		"--workspace-root", workspace,
-		"--schema-path", filepath.Join(root, "contracts", "oar-schema.yaml"),
+		"--schema-path", filepath.Join(root, "contracts", "anx-schema.yaml"),
 	)
 	// Background projection maintenance contends with API SQLite transactions; on
 	// slow CI busy_timeout(20s) can expire and surface as 500s on mutating requests.
 	// These scenarios do not rely on derived topic projections, so use manual mode.
 	cmd.Env = append(os.Environ(),
-		"OAR_BOOTSTRAP_TOKEN="+bootstrapToken,
-		"OAR_PROJECTION_MODE=manual",
+		"ANX_BOOTSTRAP_TOKEN="+bootstrapToken,
+		"ANX_PROJECTION_MODE=manual",
 	)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	if err := cmd.Start(); err != nil {
 		_ = logFile.Close()
-		t.Fatalf("start oar-core: %v", err)
+		t.Fatalf("start anx-core: %v", err)
 	}
 
 	h := &liveCoreHarness{
@@ -582,13 +582,13 @@ func buildBinaries(t *testing.T) (string, string) {
 		}
 
 		cliPath := filepath.Join(tempDir, "oar")
-		corePath := filepath.Join(tempDir, "oar-core")
+		corePath := filepath.Join(tempDir, "anx-core")
 
 		if err := buildGoBinary(filepath.Join(root, "cli"), "./cmd/oar", cliPath); err != nil {
 			binaries.err = err
 			return
 		}
-		if err := buildGoBinary(filepath.Join(root, "core"), "./cmd/oar-core", corePath); err != nil {
+		if err := buildGoBinary(filepath.Join(root, "core"), "./cmd/anx-core", corePath); err != nil {
 			binaries.err = err
 			return
 		}
@@ -649,7 +649,7 @@ func waitForHealthy(t *testing.T, baseURL string, logPath string) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	raw, _ := os.ReadFile(logPath)
-	t.Fatalf("oar-core did not become healthy at %s\nlog:\n%s", healthURL, string(raw))
+	t.Fatalf("anx-core did not become healthy at %s\nlog:\n%s", healthURL, string(raw))
 }
 
 func mustParseJSON(t *testing.T, raw string) map[string]any {

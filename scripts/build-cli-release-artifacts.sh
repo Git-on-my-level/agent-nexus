@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Build release archives and checksums for the oar CLI.
+Build release archives and checksums for the anx CLI.
 
 Usage:
   ./scripts/build-cli-release-artifacts.sh [version] [output-dir]
@@ -53,7 +53,7 @@ for GOOS in linux darwin windows; do
   for GOARCH in amd64 arm64; do
     TARGET="oar_${VERSION}_${GOOS}_${GOARCH}"
     STAGE_DIR="${DIST_DIR}/${TARGET}"
-    BIN_NAME="oar"
+    BIN_NAME="anx"
     BIN_EXT=""
 
     if [[ "${GOOS}" == "windows" ]]; then
@@ -66,10 +66,9 @@ for GOOS in linux darwin windows; do
       cd "${CLI_DIR}"
       CGO_ENABLED=0 GOOS="${GOOS}" GOARCH="${GOARCH}" go build \
         -trimpath \
-        -ldflags="-s -w -X organization-autorunner-cli/internal/buildinfo.Current=${VERSION}" \
+        -ldflags="-s -w -X agent-nexus-cli/internal/buildinfo.Current=${VERSION}" \
         -o "${STAGE_DIR}/${BIN_NAME}${BIN_EXT}" \
-        ./cmd/oar
-    )
+        ./cmd/anx )
 
     if [[ "${GOOS}" == "windows" ]]; then
       (

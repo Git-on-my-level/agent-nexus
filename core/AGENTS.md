@@ -23,9 +23,9 @@ It owns the canonical organizational record, validates and records state transit
 - Real-world side effects outside the OAR workspace.
 
 ## Canonical References
-- System spec: `docs/oar-core-spec.md`
+- System spec: `docs/anx-core-spec.md`
 - HTTP contract: `docs/http-api.md`
-- Shared schema contract: `../contracts/oar-schema.yaml`
+- Shared schema contract: `../contracts/anx-schema.yaml`
 - Spec implementation matrix: `docs/spec-compliance.md`
 - Runtime and deployment guidance: `docs/runbook.md`
 

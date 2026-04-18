@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"organization-autorunner-cli/internal/profile"
+	"agent-nexus-cli/internal/profile"
 )
 
 func TestConfigUseSetsActiveProfile(t *testing.T) {
@@ -100,7 +100,7 @@ func TestConfigUnsetClearsDefaultMarker(t *testing.T) {
 	if cleared, _ := data["cleared"].(bool); !cleared {
 		t.Fatalf("expected cleared=true: %#v", payload)
 	}
-	defaultPath := filepath.Join(home, ".config", "oar", "default-profile")
+	defaultPath := filepath.Join(home, ".config", "anx", "default-profile")
 	if strings.TrimSpace(anyStr(data["default_file_path"])) != defaultPath {
 		t.Fatalf("unexpected default path in payload: %#v", payload)
 	}

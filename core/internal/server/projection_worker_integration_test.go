@@ -6,15 +6,15 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"organization-autorunner-core/internal/blob"
+	"agent-nexus-core/internal/blob"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"organization-autorunner-core/internal/actors"
-	"organization-autorunner-core/internal/primitives"
-	"organization-autorunner-core/internal/schema"
-	"organization-autorunner-core/internal/storage"
+	"agent-nexus-core/internal/actors"
+	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/schema"
+	"agent-nexus-core/internal/storage"
 )
 
 type manualProjectionHarness struct {
@@ -30,7 +30,7 @@ func newManualProjectionTestServer(t *testing.T) manualProjectionHarness {
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
-	contractPath := filepath.Join("..", "..", "..", "contracts", "oar-schema.yaml")
+	contractPath := filepath.Join("..", "..", "..", "contracts", "anx-schema.yaml")
 	contract, err := schema.Load(contractPath)
 	if err != nil {
 		_ = workspace.Close()
@@ -44,7 +44,7 @@ func newManualProjectionTestServer(t *testing.T) manualProjectionHarness {
 		Contract:         contract,
 		InboxRiskHorizon: defaultInboxRiskHorizon,
 		DirtyBatchSize:   20,
-		SystemActorID:    "oar-core",
+		SystemActorID:    "anx-core",
 	})
 	handler := NewHandler(
 		contract.Version,

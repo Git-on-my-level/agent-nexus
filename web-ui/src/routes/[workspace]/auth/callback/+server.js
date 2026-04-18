@@ -35,7 +35,7 @@ async function readJSONPayload(response) {
   }
 }
 
-/** Node may resolve `localhost` to ::1 while oar-core listens on 127.0.0.1 only. */
+/** Node may resolve `localhost` to ::1 while anx-core listens on 127.0.0.1 only. */
 function coreBaseUrlForServerFetch(url) {
   const trimmed = String(url ?? "").trim();
   if (!trimmed) {
@@ -142,7 +142,7 @@ export async function POST(event) {
     );
   }
 
-  const controlBaseURL = normalizeBaseUrl(privateEnv.OAR_CONTROL_BASE_URL);
+  const controlBaseURL = normalizeBaseUrl(privateEnv.ANX_CONTROL_BASE_URL);
   if (!controlBaseURL) {
     return errorResponse(
       503,
@@ -239,7 +239,7 @@ export async function POST(event) {
     return errorResponse(
       503,
       "workspace_core_unreachable",
-      `Could not reach workspace core for token exchange at ${authTokenURL} (${fetchErrorDetail(err)}). If you just created the workspace, wait until oar-core is listening on that port and try again.`,
+      `Could not reach workspace core for token exchange at ${authTokenURL} (${fetchErrorDetail(err)}). If you just created the workspace, wait until anx-core is listening on that port and try again.`,
     );
   }
   if (!tokenExchange.response.ok) {

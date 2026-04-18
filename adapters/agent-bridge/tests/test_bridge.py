@@ -4,11 +4,11 @@ import pytest
 from pathlib import Path
 from types import SimpleNamespace
 
-from oar_agent_bridge.bridge import AgentBridge
-from oar_agent_bridge.config import AdapterConfig, AgentConfig, LoadedConfig, OARConfig
-from oar_agent_bridge.models import WakePacket
-from oar_agent_bridge.oar_client import OARClientError, OARStreamDisconnected
-from oar_agent_bridge.util import generate_bridge_proof_keypair
+from anx_agent_bridge.bridge import AgentBridge
+from anx_agent_bridge.config import AdapterConfig, AgentConfig, LoadedConfig, ANXConfig
+from anx_agent_bridge.models import WakePacket
+from anx_agent_bridge.anx_client import ANXClientError, ANXStreamDisconnected
+from anx_agent_bridge.util import generate_bridge_proof_keypair
 
 
 class StubState:
@@ -86,12 +86,12 @@ class StubClient:
             "context_inline": {"current_summary": "summary"},
             "session_key": "thread:thread-1",
             "context_fetch": {
-                "cli": ["oar threads workspace --thread-id thread-1", "oar threads inspect --thread-id thread-1"],
+                "cli": ["anx threads workspace --thread-id thread-1", "anx threads inspect --thread-id thread-1"],
                 "api": {
-                    "thread": "http://oar.test/threads/thread-1",
-                    "context": "http://oar.test/threads/thread-1/context",
-                    "workspace": "http://oar.test/threads/thread-1/workspace",
-                    "trigger_event": "http://oar.test/events/evt-trigger",
+                    "thread": "http://anx.test/threads/thread-1",
+                    "context": "http://anx.test/threads/thread-1/context",
+                    "workspace": "http://anx.test/threads/thread-1/workspace",
+                    "trigger_event": "http://anx.test/events/evt-trigger",
                 },
             },
         }
@@ -136,16 +136,16 @@ class StubAuth:
 
 def build_bridge(events):
     config = LoadedConfig(
-        oar=OARConfig(base_url="http://oar.test", workspace_id="ws_main", workspace_name="Main"),
+        anx=ANXConfig(base_url="http://anx.test", workspace_id="ws_main", workspace_name="Main"),
         agent=AgentConfig(
             handle="hermes",
             driver_kind="custom",
             adapter_kind="hermes_acp",
-            state_dir=Path("/tmp/oar-agent-bridge-test"),
+            state_dir=Path("/tmp/anx-agent-bridge-test"),
             workspace_bindings=["ws_main"],
         ),
         adapter=AdapterConfig(raw={}),
-        auth_state_path=Path("/tmp/oar-agent-bridge-test-auth.json"),
+        auth_state_path=Path("/tmp/anx-agent-bridge-test-auth.json"),
     )
     state = StubState()
     client = StubClient(events)
@@ -188,7 +188,7 @@ def test_claim_wakeup_returns_false_on_conflict():
     bridge, _state, _client = build_bridge([])
 
     def raise_conflict(**_kwargs):
-        raise OARClientError(409, "conflict", "duplicate request key")
+        raise ANXClientError(409, "conflict", "duplicate request key")
 
     bridge.client.create_event = raise_conflict
 
@@ -203,13 +203,13 @@ def test_bridge_logs_transport_disconnect_without_traceback(monkeypatch, caplog)
     monkeypatch.setattr(bridge, "_start_checkin_loop", lambda: None)
 
     def raise_disconnect(**_kwargs):
-        raise OARStreamDisconnected("incomplete chunked read")
+        raise ANXStreamDisconnected("incomplete chunked read")
 
     def stop_sleep(_seconds):
         raise KeyboardInterrupt()
 
     bridge.client.stream_events = raise_disconnect
-    monkeypatch.setattr("oar_agent_bridge.bridge.time.sleep", stop_sleep)
+    monkeypatch.setattr("anx_agent_bridge.bridge.time.sleep", stop_sleep)
 
     with pytest.raises(KeyboardInterrupt):
         bridge.run_forever()
@@ -233,7 +233,7 @@ def test_bridge_retries_when_startup_notification_drain_fails(monkeypatch, caplo
         raise KeyboardInterrupt()
 
     monkeypatch.setattr(bridge, "_drain_notifications", flaky_drain)
-    monkeypatch.setattr("oar_agent_bridge.bridge.time.sleep", lambda _seconds: None)
+    monkeypatch.setattr("anx_agent_bridge.bridge.time.sleep", lambda _seconds: None)
 
     with pytest.raises(KeyboardInterrupt):
         bridge.run_forever()
@@ -320,7 +320,7 @@ def test_handle_notification_does_not_emit_failed_when_read_ack_fails(monkeypatc
         raise RuntimeError("read ack failed")
 
     client.mark_agent_notification_read = fail_mark_read
-    monkeypatch.setattr("oar_agent_bridge.bridge.time.sleep", lambda _seconds: None)
+    monkeypatch.setattr("anx_agent_bridge.bridge.time.sleep", lambda _seconds: None)
 
     bridge._handle_notification(
         {

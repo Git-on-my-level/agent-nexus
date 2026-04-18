@@ -28,7 +28,7 @@ Organization Autorunner is split into a small set of modules with different jobs
 5. Plan validation from component scope outward to repo-level gates.
 
 ## Source Of Truth
-- Contracts are authoritative: HTTP/API in `contracts/oar-openapi.yaml`, domain/schema in `contracts/oar-schema.yaml`.
+- Contracts are authoritative: HTTP/API in `contracts/anx-openapi.yaml`, domain/schema in `contracts/anx-schema.yaml`.
 - Generated artifacts are derived outputs. Regenerate with `make contract-gen`. Use `make contract-check` to validate the working tree after generation, and `make contract-check-committed` (or CI) to verify generated files match Git.
 - Runtime behavior in `core`, `cli`, `web-ui`, and adapter integrations must remain contract-compatible.
 

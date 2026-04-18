@@ -5,13 +5,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
-	"organization-autorunner-core/internal/blob"
+	"agent-nexus-core/internal/blob"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"organization-autorunner-core/internal/primitives"
-	"organization-autorunner-core/internal/schema"
+	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/schema"
 )
 
 func TestRefreshDerivedTopicProjectionBasicFlow(t *testing.T) {
@@ -33,7 +33,7 @@ func TestRefreshDerivedTopicProjectionBasicFlow(t *testing.T) {
 		"provenance":      map[string]any{"sources": []any{"inferred"}},
 	})
 
-	contract, err := schema.Load(filepath.Join("..", "..", "..", "contracts", "oar-schema.yaml"))
+	contract, err := schema.Load(filepath.Join("..", "..", "..", "contracts", "anx-schema.yaml"))
 	if err != nil {
 		t.Fatalf("load schema contract: %v", err)
 	}
@@ -127,7 +127,7 @@ func TestEnsureDerivedTopicProjectionRefreshesExpiredTimeSensitiveState(t *testi
 		"provenance":       map[string]any{"sources": []any{"inferred"}},
 	})
 
-	contract, err := schema.Load(filepath.Join("..", "..", "..", "contracts", "oar-schema.yaml"))
+	contract, err := schema.Load(filepath.Join("..", "..", "..", "contracts", "anx-schema.yaml"))
 	if err != nil {
 		t.Fatalf("load schema contract: %v", err)
 	}

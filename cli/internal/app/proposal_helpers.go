@@ -10,8 +10,8 @@ import (
 
 	"github.com/pmezard/go-difflib/difflib"
 
-	"organization-autorunner-cli/internal/config"
-	"organization-autorunner-cli/internal/errnorm"
+	"agent-nexus-cli/internal/config"
+	"agent-nexus-cli/internal/errnorm"
 )
 
 func (a *App) stageProposal(commandID string, pathParams map[string]string, body map[string]any, cfg config.Resolved, meta map[string]any) (persistedDraft, string, error) {

@@ -3,7 +3,7 @@ package app
 import (
 	"strings"
 
-	"organization-autorunner-cli/internal/config"
+	"agent-nexus-cli/internal/config"
 )
 
 type conceptsPrimitive struct {
@@ -25,56 +25,56 @@ var conceptsGuidePrimitives = []conceptsPrimitive{
 		UseWhen:     "You need the durable work subject itself with ownership, summary, related refs, and provenance — including the primary operator coordination read.",
 		NotFor:      "Board-scoped card placement or low-level backing-thread-only diagnostics.",
 		Examples:    []string{"initiatives", "incidents", "cases", "deliverables"},
-		RelatedRead: []string{"oar topics list", "oar topics get", "oar topics workspace"},
+		RelatedRead: []string{"anx topics list", "anx topics get", "anx topics workspace"},
 	},
 	{
 		Name:        "threads",
 		UseWhen:     "You need read-only backing-thread diagnostics: timelines, raw thread records, or thread-scoped projection bundles for troubleshooting.",
 		NotFor:      "Primary operator triage when a topic exists — use topics workspace instead.",
 		Examples:    []string{"backing thread timeline", "diagnostic workspace projection", "compatibility inspection"},
-		RelatedRead: []string{"oar threads list", "oar threads inspect", "oar threads workspace"},
+		RelatedRead: []string{"anx threads list", "anx threads inspect", "anx threads workspace"},
 	},
 	{
 		Name:        "cards",
 		UseWhen:     "You need board-scoped planning items with column, rank, assignee, and move/update operations.",
 		NotFor:      "The durable subject record or append-only event history.",
 		Examples:    []string{"board cards", "tracked cards", "workflow cards"},
-		RelatedRead: []string{"oar cards list", "oar cards get", "oar cards move"},
+		RelatedRead: []string{"anx cards list", "anx cards get", "anx cards move"},
 	},
 	{
 		Name:        "events",
 		UseWhen:     "You need immutable facts, observations, decisions, or updates in an auditable sequence. Decision lifecycle events (`decision_needed`, `intervention_needed`, `decision_made`) must include `thread:<thread_id>` in refs; optional `topic:` refs are cross-links only, not a substitute for the thread anchor.",
 		NotFor:      "Replacing the current durable state of a work object.",
 		Examples:    []string{"decision_needed", "decision_made", "message_posted", "exception_raised"},
-		RelatedRead: []string{"oar events list", "oar events explain", "oar threads timeline"},
+		RelatedRead: []string{"anx events list", "anx events explain", "anx threads timeline"},
 	},
 	{
 		Name:        "docs",
 		UseWhen:     "You need long-lived narrative knowledge that should be revised, read, and referenced as a document.",
 		NotFor:      "Ephemeral chat-like updates or board membership.",
 		Examples:    []string{"plans", "notes", "decision records", "runbooks"},
-		RelatedRead: []string{"oar docs list", "oar docs get", "oar docs content"},
+		RelatedRead: []string{"anx docs list", "anx docs get", "anx docs content"},
 	},
 	{
 		Name:        "boards",
 		UseWhen:     "You need a coordination view across multiple work items with explicit workflow columns and ordering.",
 		NotFor:      "Being the source of truth for the work itself.",
 		Examples:    []string{"triage board", "release board", "initiative tracking board"},
-		RelatedRead: []string{"oar boards list", "oar boards workspace", "oar boards cards list"},
+		RelatedRead: []string{"anx boards list", "anx boards workspace", "anx boards cards list"},
 	},
 	{
 		Name:        "inbox",
 		UseWhen:     "You need the derived queue of what currently needs attention from the active actor's perspective.",
 		NotFor:      "Durable automation contracts or historical truth.",
 		Examples:    []string{"pending decisions", "exceptions", "stalled work"},
-		RelatedRead: []string{"oar inbox list", "oar inbox get", "oar inbox ack"},
+		RelatedRead: []string{"anx inbox list", "anx inbox get", "anx inbox ack"},
 	},
 	{
 		Name:        "draft",
 		UseWhen:     "You want to stage a mutation locally, inspect it, then apply it explicitly.",
 		NotFor:      "Read paths or append-only event authoring.",
 		Examples:    []string{"reviewable thread patches", "reviewable doc updates"},
-		RelatedRead: []string{"oar draft create", "oar draft list", "oar draft commit"},
+		RelatedRead: []string{"anx draft create", "anx draft list", "anx draft commit"},
 	},
 }
 
@@ -115,11 +115,11 @@ func conceptsGuideData() map[string]any {
 	}
 	return map[string]any{
 		"guide_topic":       "concepts",
-		"summary":           "Quick guide to the core OAR primitives and when to use each.",
+		"summary":           "Quick guide to the core ANX primitives and when to use each.",
 		"primitives":        primitives,
 		"selection_rules":   conceptsSelectionRules(),
 		"inbox_categories":  inboxCategoryReferenceMap(),
-		"recommended_reads": []string{"oar help", "oar meta doc concepts", "oar meta doc agent-guide"},
+		"recommended_reads": []string{"anx help", "anx meta doc concepts", "anx meta doc agent-guide"},
 	}
 }
 
@@ -139,7 +139,7 @@ func conceptsSelectionRules() []string {
 
 func conceptsGuideText() string {
 	var b strings.Builder
-	b.WriteString("OAR concepts guide\n\n")
+	b.WriteString("ANX concepts guide\n\n")
 	b.WriteString("Use this command when you need to decide which primitive fits the use case before you start issuing writes.\n\n")
 	b.WriteString("Selection rules:\n")
 	for _, rule := range conceptsSelectionRules() {
@@ -176,7 +176,7 @@ func conceptsGuideText() string {
 		b.WriteString(entry.Description)
 		b.WriteString("\n")
 	}
-	b.WriteString("\nFor the fuller operating model, read `oar meta doc agent-guide`.\n")
+	b.WriteString("\nFor the fuller operating model, read `anx meta doc agent-guide`.\n")
 	return strings.TrimSpace(b.String())
 }
 

@@ -1,0 +1,4 @@
+SPDX-License-Identifier: BUSL-1.1
+Copyright (c) 2026 [LICENSOR ENTITY NAME]
+Use of this source code is governed by the Business Source License 1.1
+included in the LICENSE file at the root of this repository.

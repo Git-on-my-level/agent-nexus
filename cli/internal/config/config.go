@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"organization-autorunner-cli/internal/bridgeconfig"
-	"organization-autorunner-cli/internal/profile"
+	"agent-nexus-cli/internal/bridgeconfig"
+	"agent-nexus-cli/internal/profile"
 )
 
 const (
@@ -141,9 +141,9 @@ func Resolve(overrides Overrides, env Environment) (Resolved, error) {
 	}
 
 	explicitAgent := false
-	if envAgent := strings.TrimSpace(getenv("OAR_AGENT")); envAgent != "" {
+	if envAgent := strings.TrimSpace(getenv("ANX_AGENT")); envAgent != "" {
 		resolved.Agent = envAgent
-		resolved.Sources["agent"] = "env:OAR_AGENT"
+		resolved.Sources["agent"] = "env:ANX_AGENT"
 		explicitAgent = true
 	}
 	if overrides.Agent != nil && strings.TrimSpace(*overrides.Agent) != "" {
@@ -182,12 +182,12 @@ func Resolve(overrides Overrides, env Environment) (Resolved, error) {
 				resolved.Sources["agent"] = "profile:auto-single"
 			}
 			if len(agents) > 1 {
-				return Resolved{}, fmt.Errorf("multiple local profiles found (%s); select one using --agent, OAR_AGENT, or `oar auth default <profile>`", strings.Join(agents, ", "))
+				return Resolved{}, fmt.Errorf("multiple local profiles found (%s); select one using --agent, ANX_AGENT, or `anx auth default <profile>`", strings.Join(agents, ", "))
 			}
 		}
 	}
 
-	profilePath := strings.TrimSpace(getenv("OAR_PROFILE_PATH"))
+	profilePath := strings.TrimSpace(getenv("ANX_PROFILE_PATH"))
 	if profilePath == "" {
 		profilePath = DefaultProfilePath(homeDir, resolved.Agent)
 	}
@@ -235,7 +235,7 @@ func Resolve(overrides Overrides, env Environment) (Resolved, error) {
 		resolved.CoreInstanceID = strings.TrimSpace(profile.CoreInstanceID)
 	}
 
-	envBaseURL := strings.TrimSpace(getenv("OAR_BASE_URL"))
+	envBaseURL := strings.TrimSpace(getenv("ANX_BASE_URL"))
 	flagBaseURL := ""
 	if overrides.BaseURL != nil {
 		flagBaseURL = strings.TrimSpace(*overrides.BaseURL)
@@ -259,38 +259,38 @@ func Resolve(overrides Overrides, env Environment) (Resolved, error) {
 				}
 				labels = append(labels, label)
 			}
-			return Resolved{}, fmt.Errorf("multiple bridge configs found (%s); select a profile with `--agent` or `oar auth default <profile>`, or pass --base-url", strings.Join(labels, ", "))
+			return Resolved{}, fmt.Errorf("multiple bridge configs found (%s); select a profile with `--agent` or `anx auth default <profile>`, or pass --base-url", strings.Join(labels, ", "))
 		}
 	}
 	if envBaseURL != "" {
 		resolved.BaseURL = envBaseURL
-		resolved.Sources["base_url"] = "env:OAR_BASE_URL"
+		resolved.Sources["base_url"] = "env:ANX_BASE_URL"
 	}
-	if envNoColor := strings.TrimSpace(getenv("OAR_NO_COLOR")); envNoColor != "" {
+	if envNoColor := strings.TrimSpace(getenv("ANX_NO_COLOR")); envNoColor != "" {
 		value, err := strconv.ParseBool(envNoColor)
 		if err != nil {
-			return Resolved{}, fmt.Errorf("parse OAR_NO_COLOR: %w", err)
+			return Resolved{}, fmt.Errorf("parse ANX_NO_COLOR: %w", err)
 		}
 		resolved.NoColor = value
-		resolved.Sources["no_color"] = "env:OAR_NO_COLOR"
+		resolved.Sources["no_color"] = "env:ANX_NO_COLOR"
 	}
-	if envJSON := strings.TrimSpace(getenv("OAR_JSON")); envJSON != "" {
+	if envJSON := strings.TrimSpace(getenv("ANX_JSON")); envJSON != "" {
 		value, err := strconv.ParseBool(envJSON)
 		if err != nil {
-			return Resolved{}, fmt.Errorf("parse OAR_JSON: %w", err)
+			return Resolved{}, fmt.Errorf("parse ANX_JSON: %w", err)
 		}
 		resolved.JSON = value
-		resolved.Sources["json"] = "env:OAR_JSON"
+		resolved.Sources["json"] = "env:ANX_JSON"
 	}
-	if envTimeout := strings.TrimSpace(getenv("OAR_TIMEOUT")); envTimeout != "" {
+	if envTimeout := strings.TrimSpace(getenv("ANX_TIMEOUT")); envTimeout != "" {
 		dur, err := time.ParseDuration(envTimeout)
 		if err != nil {
-			return Resolved{}, fmt.Errorf("parse OAR_TIMEOUT: %w", err)
+			return Resolved{}, fmt.Errorf("parse ANX_TIMEOUT: %w", err)
 		}
 		resolved.Timeout = dur
-		resolved.Sources["timeout"] = "env:OAR_TIMEOUT"
+		resolved.Sources["timeout"] = "env:ANX_TIMEOUT"
 	}
-	if envToken := strings.TrimSpace(getenv("OAR_ACCESS_TOKEN")); envToken != "" {
+	if envToken := strings.TrimSpace(getenv("ANX_ACCESS_TOKEN")); envToken != "" {
 		resolved.AccessToken = envToken
 	}
 

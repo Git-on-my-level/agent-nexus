@@ -42,18 +42,18 @@ type operation struct {
 	OperationID string       `yaml:"operationId"`
 	Summary     string       `yaml:"summary"`
 	Description string       `yaml:"description"`
-	CommandID   string       `yaml:"x-oar-command-id"`
-	CLIPath     string       `yaml:"x-oar-cli-path"`
-	Why         string       `yaml:"x-oar-why"`
-	Examples    []oarExample `yaml:"x-oar-examples"`
-	InputMode   string       `yaml:"x-oar-input-mode"`
-	Streaming   any          `yaml:"x-oar-streaming"`
-	Output      string       `yaml:"x-oar-output-envelope"`
-	ErrorCodes  []string     `yaml:"x-oar-error-codes"`
-	Concepts    []string     `yaml:"x-oar-concepts"`
-	Stability   string       `yaml:"x-oar-stability"`
-	Surface     string       `yaml:"x-oar-surface"`
-	AgentNotes  string       `yaml:"x-oar-agent-notes"`
+	CommandID   string       `yaml:"x-anx-command-id"`
+	CLIPath     string       `yaml:"x-anx-cli-path"`
+	Why         string       `yaml:"x-anx-why"`
+	Examples    []oarExample `yaml:"x-anx-examples"`
+	InputMode   string       `yaml:"x-anx-input-mode"`
+	Streaming   any          `yaml:"x-anx-streaming"`
+	Output      string       `yaml:"x-anx-output-envelope"`
+	ErrorCodes  []string     `yaml:"x-anx-error-codes"`
+	Concepts    []string     `yaml:"x-anx-concepts"`
+	Stability   string       `yaml:"x-anx-stability"`
+	Surface     string       `yaml:"x-anx-surface"`
+	AgentNotes  string       `yaml:"x-anx-agent-notes"`
 	RequestBody *requestBody `yaml:"requestBody"`
 }
 
@@ -295,12 +295,12 @@ var pathParamPattern = regexp.MustCompile(`\{([^{}]+)\}`)
 
 func main() {
 	var (
-		openAPIPath       = flag.String("openapi", "../contracts/oar-openapi.yaml", "path to root OpenAPI contract")
-		schemaPath        = flag.String("schema", "../contracts/oar-schema.yaml", "path to root domain schema contract")
+		openAPIPath       = flag.String("openapi", "../contracts/anx-openapi.yaml", "path to root OpenAPI contract")
+		schemaPath        = flag.String("schema", "../contracts/anx-schema.yaml", "path to root domain schema contract")
 		outDir            = flag.String("out", "../contracts/gen", "output directory for generated artifacts")
-		sourceLabel       = flag.String("source-label", "contracts/oar-openapi.yaml", "display label for generated docs")
-		goModule          = flag.String("go-module", "organization-autorunner-contracts-go-client", "Go module path for generated Go client")
-		tsPackage         = flag.String("ts-package", "organization-autorunner-contracts-ts-client", "package name for generated TS client")
+		sourceLabel       = flag.String("source-label", "contracts/anx-openapi.yaml", "display label for generated docs")
+		goModule          = flag.String("go-module", "agent-nexus-contracts-go-client", "Go module path for generated Go client")
+		tsPackage         = flag.String("ts-package", "agent-nexus-contracts-ts-client", "package name for generated TS client")
 		emitEventRefRules = flag.Bool("emit-event-ref-rules", true, "whether to emit event reference rules metadata from the schema contract")
 	)
 	flag.Parse()
@@ -330,7 +330,7 @@ func main() {
 
 	commands := collectCommands(doc, schemaDoc)
 	if len(commands) == 0 {
-		exitf("no x-oar commands found in openapi document")
+		exitf("no x-anx commands found in openapi document")
 	}
 
 	config := generatorConfig{
@@ -343,10 +343,10 @@ func main() {
 		config.SourceLabel = filepath.Clean(*openAPIPath)
 	}
 	if config.GoModule == "" {
-		config.GoModule = "organization-autorunner-contracts-go-client"
+		config.GoModule = "agent-nexus-contracts-go-client"
 	}
 	if config.TSPackage == "" {
-		config.TSPackage = "organization-autorunner-contracts-ts-client"
+		config.TSPackage = "agent-nexus-contracts-ts-client"
 	}
 
 	if err := generateAll(*outDir, doc, commands, schemaDoc, config); err != nil {
@@ -423,7 +423,7 @@ func collectCommands(doc openAPIDocument, schemaDoc oarSchemaDocument) []command
 	seen := make(map[string]struct{}, len(commands))
 	for _, cmd := range commands {
 		if _, ok := seen[cmd.CommandID]; ok {
-			exitf("duplicate x-oar-command-id detected: %s", cmd.CommandID)
+			exitf("duplicate x-anx-command-id detected: %s", cmd.CommandID)
 		}
 		seen[cmd.CommandID] = struct{}{}
 	}
@@ -937,7 +937,7 @@ func generateAll(outDir string, doc openAPIDocument, commands []command, schemaD
 	if err := writeConceptsMarkdown(filepath.Join(outDir, "docs", "concepts.md"), doc, commands, config.SourceLabel); err != nil {
 		return err
 	}
-	if err := writeXOARAuthoringMarkdown(filepath.Join(outDir, "docs", "x-oar-authoring.md")); err != nil {
+	if err := writeXOARAuthoringMarkdown(filepath.Join(outDir, "docs", "x-anx-authoring.md")); err != nil {
 		return err
 	}
 	if err := writeGoClient(filepath.Join(outDir, "go"), commands, config.GoModule); err != nil {
@@ -959,7 +959,7 @@ func writeMeta(path string, doc openAPIDocument, commands []command) error {
 		OpenAPIVersion:  doc.OpenAPI,
 		ContractVersion: strings.TrimSpace(doc.Info.Version),
 		GeneratedBy:     "core/cmd/contract-gen",
-		ExtensionPrefix: "x-oar-",
+		ExtensionPrefix: "x-anx-",
 		CommandCount:    len(commands),
 		Commands:        commands,
 	}
@@ -1178,28 +1178,28 @@ func writeXOARAuthoringMarkdown(path string) error {
 		return err
 	}
 	content := strings.TrimSpace(`
-# x-oar Authoring Rules
+# x-anx Authoring Rules
 
-The OpenAPI contract uses `+"`x-oar-*`"+` extensions as the single source for CLI/help/meta/doc generation.
+The OpenAPI contract uses `+"`x-anx-*`"+` extensions as the single source for CLI/help/meta/doc generation.
 
 Required for every command operation:
 
-- `+"`x-oar-command-id`"+`: stable id (for example `+"`threads.list`"+`)
-- `+"`x-oar-cli-path`"+`: CLI path (for example `+"`threads list`"+`)
-- `+"`x-oar-why`"+`: non-empty purpose/decision boundary
-- `+"`x-oar-input-mode`"+`: one of `+"`none|json-body|raw-stream|file-and-body`"+`
-- `+"`x-oar-streaming`"+`: streaming metadata object
-- `+"`x-oar-output-envelope`"+`: output notes for CLI consumers
-- `+"`x-oar-error-codes`"+`: stable semantic error code list
-- `+"`x-oar-concepts`"+`: related concept tags
-- `+"`x-oar-stability`"+`: one of `+"`experimental|beta|stable`"+`
-- `+"`x-oar-surface`"+`: one of `+"`canonical|projection|diagnostic|utility`"+`
-- `+"`x-oar-agent-notes`"+`: idempotency/retry caveats
+- `+"`x-anx-command-id`"+`: stable id (for example `+"`threads.list`"+`)
+- `+"`x-anx-cli-path`"+`: CLI path (for example `+"`threads list`"+`)
+- `+"`x-anx-why`"+`: non-empty purpose/decision boundary
+- `+"`x-anx-input-mode`"+`: one of `+"`none|json-body|raw-stream|file-and-body`"+`
+- `+"`x-anx-streaming`"+`: streaming metadata object
+- `+"`x-anx-output-envelope`"+`: output notes for CLI consumers
+- `+"`x-anx-error-codes`"+`: stable semantic error code list
+- `+"`x-anx-concepts`"+`: related concept tags
+- `+"`x-anx-stability`"+`: one of `+"`experimental|beta|stable`"+`
+- `+"`x-anx-surface`"+`: one of `+"`canonical|projection|diagnostic|utility`"+`
+- `+"`x-anx-agent-notes`"+`: idempotency/retry caveats
 
 Recommended:
 
-- include at least one `+"`x-oar-examples`"+` command per operation
-- keep `+"`x-oar-command-id`"+` immutable once published
+- include at least one `+"`x-anx-examples`"+` command per operation
+- keep `+"`x-anx-command-id`"+` immutable once published
 - keep concept labels lower-case and dash-separated
 
 Surface classification:

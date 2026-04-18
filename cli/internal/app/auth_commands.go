@@ -7,10 +7,10 @@ import (
 	"strconv"
 	"strings"
 
-	"organization-autorunner-cli/internal/authcli"
-	"organization-autorunner-cli/internal/config"
-	"organization-autorunner-cli/internal/errnorm"
-	"organization-autorunner-cli/internal/profile"
+	"agent-nexus-cli/internal/authcli"
+	"agent-nexus-cli/internal/config"
+	"agent-nexus-cli/internal/errnorm"
+	"agent-nexus-cli/internal/profile"
 )
 
 func (a *App) runAuth(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
@@ -325,7 +325,7 @@ func (a *App) runAuthRevoke(ctx context.Context, service *authcli.Service, args 
 		return nil, errnorm.Wrap(errnorm.KindLocal, "profile_read_failed", "failed to read profile", err)
 	}
 	if !ok {
-		return nil, errnorm.Local("profile_not_found", "profile not found; run `oar auth register` first")
+		return nil, errnorm.Local("profile_not_found", "profile not found; run `anx auth register` first")
 	}
 	prof.Revoked = true
 	prof.AccessToken = ""
@@ -516,7 +516,7 @@ func (a *App) runAuthBootstrapStatus(ctx context.Context, service *authcli.Servi
 		"Bootstrap registration: " + status,
 		"",
 		"If bootstrap is available, you can register the first principal with:",
-		"  oar auth register --username <name> --bootstrap-token <token>",
+		"  anx auth register --username <name> --bootstrap-token <token>",
 	}, "\n")
 	data := map[string]any{"bootstrap_registration_available": result.BootstrapRegistrationAvailable}
 	return &commandResult{Text: text, Data: data}, nil
@@ -536,14 +536,14 @@ func (a *App) runAuthRegister(ctx context.Context, service *authcli.Service, arg
 		return nil, errnorm.Usage("invalid_auth_flags", err.Error())
 	}
 	if len(fs.Args()) > 0 {
-		return nil, errnorm.Usage("invalid_auth_args", "unexpected positional arguments for `oar auth register`")
+		return nil, errnorm.Usage("invalid_auth_args", "unexpected positional arguments for `anx auth register`")
 	}
 	username := strings.TrimSpace(usernameFlag.value)
 	if username == "" {
-		username = strings.TrimSpace(a.Getenv("OAR_USERNAME"))
+		username = strings.TrimSpace(a.Getenv("ANX_USERNAME"))
 	}
 	if username == "" {
-		return nil, errnorm.Usage("invalid_request", "username is required; use --username or OAR_USERNAME")
+		return nil, errnorm.Usage("invalid_request", "username is required; use --username or ANX_USERNAME")
 	}
 	bootstrapToken := strings.TrimSpace(bootstrapTokenFlag.value)
 	inviteToken := strings.TrimSpace(inviteTokenFlag.value)
@@ -557,9 +557,9 @@ func (a *App) runAuthRegister(ctx context.Context, service *authcli.Service, arg
 	}
 	cfg := service.Config()
 	agentName := strings.TrimSpace(registered.Profile.Agent)
-	activeProfileHint := "Active profile (optional, persistent home): oar config use " + agentName
-	activeProfileHint += " (same as: oar auth default " + agentName + ")."
-	activeProfileHint += " Later commands can omit repeated --base-url / --agent; use oar config show to inspect effective settings."
+	activeProfileHint := "Active profile (optional, persistent home): anx config use " + agentName
+	activeProfileHint += " (same as: anx auth default " + agentName + ")."
+	activeProfileHint += " Later commands can omit repeated --base-url / --agent; use anx config show to inspect effective settings."
 	text := strings.Join([]string{
 		"Registered agent profile successfully.",
 		"Agent: " + registered.Profile.Agent,
@@ -574,8 +574,8 @@ func (a *App) runAuthRegister(ctx context.Context, service *authcli.Service, arg
 		"registered":   registered.Agent,
 		"active_key":   registered.Key,
 		"profile_path": cfg.ProfilePath,
-		"hint_config_use": fmt.Sprintf("oar config use %s", agentName),
-		"hint_auth_default": fmt.Sprintf("oar auth default %s", agentName),
+		"hint_config_use": fmt.Sprintf("anx config use %s", agentName),
+		"hint_auth_default": fmt.Sprintf("anx auth default %s", agentName),
 	}
 	return &commandResult{Text: text, Data: data}, nil
 }
@@ -614,10 +614,10 @@ func (a *App) runAuthWhoAmI(ctx context.Context, service *authcli.Service) (*com
 func authWakeRoutingHint(username string) string {
 	handle := strings.TrimSpace(username)
 	if handle == "" {
-		return "Wake registration help: oar help bridge; oar meta doc agent-bridge; oar meta doc wake-routing"
+		return "Wake registration help: anx help bridge; anx meta doc agent-bridge; anx meta doc wake-routing"
 	}
 	return fmt.Sprintf(
-		"Wake registration help: oar help bridge; oar meta doc agent-bridge; oar meta doc wake-routing (principal: @%s)",
+		"Wake registration help: anx help bridge; anx meta doc agent-bridge; anx meta doc wake-routing (principal: @%s)",
 		handle,
 	)
 }
@@ -689,14 +689,14 @@ func (a *App) runAuthUpdateUsername(ctx context.Context, service *authcli.Servic
 		return nil, errnorm.Usage("invalid_auth_flags", err.Error())
 	}
 	if len(fs.Args()) > 0 {
-		return nil, errnorm.Usage("invalid_auth_args", "unexpected positional arguments for `oar auth update-username`")
+		return nil, errnorm.Usage("invalid_auth_args", "unexpected positional arguments for `anx auth update-username`")
 	}
 	username := strings.TrimSpace(usernameFlag.value)
 	if username == "" {
-		username = strings.TrimSpace(a.Getenv("OAR_USERNAME"))
+		username = strings.TrimSpace(a.Getenv("ANX_USERNAME"))
 	}
 	if username == "" {
-		return nil, errnorm.Usage("invalid_request", "username is required; use --username or OAR_USERNAME")
+		return nil, errnorm.Usage("invalid_request", "username is required; use --username or ANX_USERNAME")
 	}
 	result, err := service.UpdateUsername(ctx, username)
 	if err != nil {
@@ -742,7 +742,7 @@ func (a *App) runAuthTokenStatus(ctx context.Context, service *authcli.Service) 
 
 func (a *App) runAuthDefault(args []string) (*commandResult, error) {
 	if len(args) != 1 || strings.TrimSpace(args[0]) == "" {
-		return nil, errnorm.Usage("profile_required", "usage: oar auth default <profile>")
+		return nil, errnorm.Usage("profile_required", "usage: anx auth default <profile>")
 	}
 	agentName := strings.TrimSpace(args[0])
 	homeDir, err := a.UserHomeDir()
@@ -752,7 +752,7 @@ func (a *App) runAuthDefault(args []string) (*commandResult, error) {
 	profilePath, err := profile.SetActiveAgent(homeDir, agentName)
 	if err != nil {
 		if errors.Is(err, profile.ErrProfileNotFound) {
-			return nil, errnorm.Local("profile_not_found", "profile not found; run `oar auth list` to inspect available profiles")
+			return nil, errnorm.Local("profile_not_found", "profile not found; run `anx auth list` to inspect available profiles")
 		}
 		if errors.Is(err, profile.ErrPersistDefaultMarker) {
 			return nil, errnorm.Wrap(errnorm.KindLocal, "default_profile_persist_failed", "failed to persist default profile selection", err)
@@ -781,7 +781,7 @@ func (a *App) runAuthList(cfg config.Resolved) (*commandResult, error) {
 	}
 	if len(agents) == 0 {
 		return &commandResult{
-			Text: "No agent profiles found.\nRegister with: oar --base-url <url> --agent <name> auth register --username <username>",
+			Text: "No agent profiles found.\nRegister with: anx --base-url <url> --agent <name> auth register --username <username>",
 			Data: map[string]any{"profiles": []any{}, "count": 0},
 		}, nil
 	}

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"organization-autorunner-core/internal/primitives"
+	"agent-nexus-core/internal/primitives"
 )
 
 const sseWriteTimeout = 5 * time.Second

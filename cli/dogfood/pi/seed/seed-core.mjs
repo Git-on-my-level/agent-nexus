@@ -10,19 +10,19 @@ import {
 import { getScenarioSeedConfig } from "./scenario-seeds.mjs";
 
 const coreBaseUrl = normalizeBaseUrl(
-  process.env.OAR_CORE_BASE_URL ?? "http://127.0.0.1:8000",
+  process.env.ANX_CORE_BASE_URL ?? "http://127.0.0.1:8000",
 );
-const forceSeed = process.env.OAR_FORCE_SEED === "1";
-const skipIfPresent = process.env.OAR_SEED_SKIP_IF_PRESENT !== "0";
-const waitTimeoutMs = Number(process.env.OAR_CORE_WAIT_TIMEOUT_MS ?? 20000);
+const forceSeed = process.env.ANX_FORCE_SEED === "1";
+const skipIfPresent = process.env.ANX_SEED_SKIP_IF_PRESENT !== "0";
+const waitTimeoutMs = Number(process.env.ANX_CORE_WAIT_TIMEOUT_MS ?? 20000);
 const scenarioName = String(
-  process.env.OAR_PI_SCENARIO ?? "pilot-rescue",
+  process.env.ANX_PI_SCENARIO ?? "pilot-rescue",
 ).trim();
 
 if (!coreBaseUrl) {
   failWithPrefix(
     "cli pi seed failed",
-    "OAR_CORE_BASE_URL must be set or defaultable.",
+    "ANX_CORE_BASE_URL must be set or defaultable.",
   );
 }
 

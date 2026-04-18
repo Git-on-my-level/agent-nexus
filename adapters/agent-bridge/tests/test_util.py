@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-from oar_agent_bridge.util import atomic_write_json
+from anx_agent_bridge.util import atomic_write_json
 
 
 def test_atomic_write_json_uses_owner_only_permissions(tmp_path: Path):

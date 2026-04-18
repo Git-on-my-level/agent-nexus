@@ -13,11 +13,11 @@ import (
 	"strings"
 	"time"
 
-	"organization-autorunner-core/internal/actors"
-	"organization-autorunner-core/internal/auth"
-	"organization-autorunner-core/internal/primitives"
-	"organization-autorunner-core/internal/schema"
-	"organization-autorunner-core/internal/secrets"
+	"agent-nexus-core/internal/actors"
+	"agent-nexus-core/internal/auth"
+	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/schema"
+	"agent-nexus-core/internal/secrets"
 )
 
 type HealthCheckFunc func(ctx context.Context) error
@@ -2251,8 +2251,8 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				w.Header().Set("Vary", "Origin")
 			}
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-OAR-CLI-Version")
-			w.Header().Set("Access-Control-Expose-Headers", "X-OAR-Core-Version, X-OAR-API-Version, X-OAR-Schema-Version, X-OAR-Min-CLI-Version, X-OAR-Recommended-CLI-Version")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-ANX-CLI-Version")
+			w.Header().Set("Access-Control-Expose-Headers", "X-ANX-Core-Version, X-ANX-API-Version, X-ANX-Schema-Version, X-ANX-Min-CLI-Version, X-ANX-Recommended-CLI-Version")
 			w.Header().Set("Access-Control-Max-Age", "3600")
 			if r.Method == http.MethodOptions {
 				w.WriteHeader(http.StatusNoContent)
@@ -2262,7 +2262,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 
 		setVersionHeaders(w, opts, schemaVersion)
 		if shouldEnforceCLIVersion(r.URL.Path) {
-			if clientVersion := strings.TrimSpace(r.Header.Get("X-OAR-CLI-Version")); clientVersion != "" {
+			if clientVersion := strings.TrimSpace(r.Header.Get("X-ANX-CLI-Version")); clientVersion != "" {
 				outdated, compareErr := isCLIVersionOutdated(clientVersion, opts.minCLIVersion)
 				if compareErr == nil && outdated {
 					writeCLIOutdated(w, opts)
@@ -2395,14 +2395,14 @@ func writeJSON(w http.ResponseWriter, status int, payload map[string]any) {
 }
 
 func setVersionHeaders(w http.ResponseWriter, opts handlerOptions, schemaVersion string) {
-	w.Header().Set("X-OAR-Core-Version", strings.TrimSpace(opts.coreVersion))
-	w.Header().Set("X-OAR-API-Version", strings.TrimSpace(opts.apiVersion))
-	w.Header().Set("X-OAR-Schema-Version", strings.TrimSpace(schemaVersion))
+	w.Header().Set("X-ANX-Core-Version", strings.TrimSpace(opts.coreVersion))
+	w.Header().Set("X-ANX-API-Version", strings.TrimSpace(opts.apiVersion))
+	w.Header().Set("X-ANX-Schema-Version", strings.TrimSpace(schemaVersion))
 	if strings.TrimSpace(opts.minCLIVersion) != "" {
-		w.Header().Set("X-OAR-Min-CLI-Version", strings.TrimSpace(opts.minCLIVersion))
+		w.Header().Set("X-ANX-Min-CLI-Version", strings.TrimSpace(opts.minCLIVersion))
 	}
 	if strings.TrimSpace(opts.recommendedCLIVersion) != "" {
-		w.Header().Set("X-OAR-Recommended-CLI-Version", strings.TrimSpace(opts.recommendedCLIVersion))
+		w.Header().Set("X-ANX-Recommended-CLI-Version", strings.TrimSpace(opts.recommendedCLIVersion))
 	}
 }
 

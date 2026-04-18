@@ -16,13 +16,13 @@ import (
 	"strings"
 	"net/url"
 
-	"organization-autorunner-cli/internal/config"
-	"organization-autorunner-cli/internal/errnorm"
-	"organization-autorunner-cli/internal/httpclient"
-	"organization-autorunner-cli/internal/profile"
+	"agent-nexus-cli/internal/config"
+	"agent-nexus-cli/internal/errnorm"
+	"agent-nexus-cli/internal/httpclient"
+	"agent-nexus-cli/internal/profile"
 )
 
-const bridgeRepoURL = "https://github.com/Git-on-my-level/organization-autorunner.git"
+const bridgeRepoURL = "https://github.com/Git-on-my-level/agent-nexus.git"
 
 var (
 	bridgeLookPath    = exec.LookPath
@@ -48,38 +48,38 @@ func init() {
 	runtimeHelpManualDocTopics = append(runtimeHelpManualDocTopics, runtimeHelpDocTopic{
 		Path:    "bridge",
 		Kind:    "manual",
-		Summary: "CLI-managed bridge bootstrap helpers for installing, templating, and checking `oar-agent-bridge`.",
+		Summary: "CLI-managed bridge bootstrap helpers for installing, templating, and checking `anx-agent-bridge`.",
 	})
 	localHelperTopics = append(localHelperTopics,
 		localHelperTopic{
 			Path:        "bridge install",
-			Summary:     "Install `oar-agent-bridge` into a dedicated Python 3.11+ virtualenv and expose a PATH wrapper.",
+			Summary:     "Install `anx-agent-bridge` into a dedicated Python 3.11+ virtualenv and expose a PATH wrapper.",
 			JSONShape:   "`install_dir`, `bin_dir`, `wrapper_path`, `python`, `bridge_binary`, `package_ref`",
 			Composition: "Pure local bootstrap helper with network package download. Creates or reuses a venv, installs the bridge package from the GitHub subdirectory, and writes a thin launcher script.",
 			Examples: []string{
-				"oar bridge install",
-				"oar bridge install --ref main --with-dev",
+				"anx bridge install",
+				"anx bridge install --ref main --with-dev",
 			},
 			Flags: []localHelperFlag{
 				{Name: "--python <exe>", Description: "Preferred Python executable. Default probes for Python 3.11+."},
 				{Name: "--install-dir <dir>", Description: "Root directory for the managed bridge virtualenv."},
-				{Name: "--bin-dir <dir>", Description: "Directory where the `oar-agent-bridge` wrapper should be written."},
+				{Name: "--bin-dir <dir>", Description: "Directory where the `anx-agent-bridge` wrapper should be written."},
 				{Name: "--ref <git-ref>", Description: "Git ref to install from. Defaults to `main` unless you pin a different branch or tag."},
 				{Name: "--with-dev", Description: "Also install bridge test dependencies."},
 			},
 		},
 		localHelperTopic{
 			Path:        "bridge import-auth",
-			Summary:     "Copy an existing `oar` profile and key into bridge auth state for one bridge config.",
+			Summary:     "Copy an existing `anx` profile and key into bridge auth state for one bridge config.",
 			JSONShape:   "`config_path`, `auth_state_path`, `profile_path`, `profile_agent`, `username`, `actor_id`, `agent_id`, `key_id`",
-			Composition: "Pure local helper. Reads an existing `oar` profile plus Ed25519 key material, converts it into bridge auth state, writes it to the bridge config's `[auth].state_path`, and syncs `[oar].base_url` when the config still has the default local value.",
+			Composition: "Pure local helper. Reads an existing `anx` profile plus Ed25519 key material, converts it into bridge auth state, writes it to the bridge config's `[auth].state_path`, and syncs `[anx].base_url` when the config still has the default local value.",
 			Examples: []string{
-				"oar bridge import-auth --config ./agent.toml --from-profile agent-a",
-				"oar --agent agent-a bridge import-auth --config ./agent.toml",
+				"anx bridge import-auth --config ./agent.toml --from-profile agent-a",
+				"anx --agent agent-a bridge import-auth --config ./agent.toml",
 			},
 			Flags: []localHelperFlag{
 				{Name: "--config <path>", Description: "Bridge config whose auth state should be populated."},
-				{Name: "--from-profile <agent>", Description: "Existing `oar` profile name to import. Defaults to the active CLI profile."},
+				{Name: "--from-profile <agent>", Description: "Existing `anx` profile name to import. Defaults to the active CLI profile."},
 			},
 		},
 		localHelperTopic{
@@ -88,13 +88,13 @@ func init() {
 			JSONShape:   "`kind`, `output`, `workspace_id`, `handle`, `content`",
 			Composition: "Pure local helper. Renders one minimal bridge config template with explicit workspace-id and readiness settings; optionally writes it to disk.",
 			Examples: []string{
-				"oar bridge init-config --kind hermes --output ./agent.toml --workspace-id ws_main --handle hermes --workspace-path /absolute/path/to/hermes/workspace",
-				"oar bridge init-config --kind zeroclaw --output ./zeroclaw.toml --workspace-id ws_main --handle zeroclaw",
+				"anx bridge init-config --kind hermes --output ./agent.toml --workspace-id ws_main --handle hermes --workspace-path /absolute/path/to/hermes/workspace",
+				"anx bridge init-config --kind zeroclaw --output ./zeroclaw.toml --workspace-id ws_main --handle zeroclaw",
 			},
 			Flags: []localHelperFlag{
 				{Name: "--kind <hermes|zeroclaw>", Description: "Template kind to render."},
 				{Name: "--output <path>", Description: "Write the rendered TOML to a file. Omit to print it."},
-				{Name: "--workspace-id <id>", Description: "Durable OAR workspace id. Do not use a slug or UI path segment."},
+				{Name: "--workspace-id <id>", Description: "Durable ANX workspace id. Do not use a slug or UI path segment."},
 				{Name: "--handle <name>", Description: "Agent handle for bridge templates."},
 				{Name: "--workspace-path <path>", Description: "Hermes workspace path. Sets both `[adapter].cwd_default` and `[adapter.workspace_map]`."},
 			},
@@ -103,10 +103,10 @@ func init() {
 			Path:        "bridge workspace-id",
 			Summary:     "Discover durable workspace ids from an existing agent wake registration.",
 			JSONShape:   "`agent_id`, `handle`, `actor_id`, `registration_status`, `workspace_ids`, `workspace_bindings`",
-			Composition: "Uses the active `oar` auth/profile to read agent principal registration metadata and extract enabled workspace bindings so bridge bootstrap can reuse the real durable workspace id instead of guessing.",
+			Composition: "Uses the active `anx` auth/profile to read agent principal registration metadata and extract enabled workspace bindings so bridge bootstrap can reuse the real durable workspace id instead of guessing.",
 			Examples: []string{
-				"oar --agent agent-a bridge workspace-id --handle hermes",
-				"oar bridge workspace-id --document-id agentreg.hermes",
+				"anx --agent agent-a bridge workspace-id --handle hermes",
+				"anx bridge workspace-id --document-id agentreg.hermes",
 			},
 			Flags: []localHelperFlag{
 				{Name: "--handle <name>", Description: "Agent handle whose wake registration should be inspected."},
@@ -119,14 +119,14 @@ func init() {
 			JSONShape:   "`checks`, `registration`, `bridge_binary`, `python`",
 			Composition: "Pure local helper plus optional bridge CLI calls. Probes Python, the managed install, and `registration status` for a supplied config.",
 			Examples: []string{
-				"oar bridge doctor",
-				"oar bridge doctor --config ./agent.toml",
+				"anx bridge doctor",
+				"anx bridge doctor --config ./agent.toml",
 			},
 			Flags: []localHelperFlag{
 				{Name: "--config <path>", Description: "Bridge config to validate with `registration status`."},
 				{Name: "--python <exe>", Description: "Preferred Python executable. Default probes for Python 3.11+."},
 				{Name: "--install-dir <dir>", Description: "Root directory for the managed bridge virtualenv."},
-				{Name: "--bin-dir <dir>", Description: "Directory where the managed `oar-agent-bridge` wrapper should exist."},
+				{Name: "--bin-dir <dir>", Description: "Directory where the managed `anx-agent-bridge` wrapper should exist."},
 			},
 		},
 	)
@@ -176,7 +176,7 @@ func (a *App) runBridgeCommand(ctx context.Context, args []string, cfg config.Re
 func bridgeUsageText() string {
 	return strings.TrimSpace(`Bridge bootstrap
 
-Use `+"`oar bridge`"+` when you only have the main CLI installed and need to bootstrap, manage, or inspect the Python `+"`oar-agent-bridge`"+` runtime for one agent. This is the discoverable install/setup path for agent operators. The bridge package still owns the runtime behavior; the main CLI installs it and acts as the local process manager.
+Use `+"`anx bridge`"+` when you only have the main CLI installed and need to bootstrap, manage, or inspect the Python `+"`anx-agent-bridge`"+` runtime for one agent. This is the discoverable install/setup path for agent operators. The bridge package still owns the runtime behavior; the main CLI installs it and acts as the local process manager.
 
 Bootstrap prerequisites
 
@@ -191,8 +191,8 @@ Lifecycle constraint
 
 Subcommands
 
-  bridge install      Install or refresh the managed `+"`oar-agent-bridge`"+` virtualenv and wrapper
-  bridge import-auth  Copy an existing `+"`oar`"+` profile into bridge auth state
+  bridge install      Install or refresh the managed `+"`anx-agent-bridge`"+` virtualenv and wrapper
+  bridge import-auth  Copy an existing `+"`anx`"+` profile into bridge auth state
   bridge init-config  Render a minimal agent bridge TOML config
   bridge start        Start a managed bridge daemon for one config
   bridge stop         Stop a managed bridge daemon for one config
@@ -204,26 +204,26 @@ Subcommands
 
 Recommended order
 
-1. `+"`oar bridge install`"+`
-2. `+"`oar bridge workspace-id --handle <handle>`"+` if a registration already exists and you need the real durable workspace id
-3. `+"`oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --workspace-path /absolute/path/to/hermes/workspace`"+`
-4. `+"`oar bridge import-auth --config ./agent.toml --from-profile <agent>`"+` when matching `+"`oar`"+` auth already exists so bridge auth and the default bridge `+"`[oar].base_url`"+` stay aligned
-5. `+"`oar-agent-bridge auth register ...`"+` for the agent principal when auth does not already exist
-6. `+"`oar bridge start --config ./agent.toml`"+`
-7. `+"`oar bridge status --config ./agent.toml`"+` and `+"`oar bridge doctor --config ./agent.toml`"+` before expecting immediate online delivery
-8. `+"`oar notifications list --status unread`"+` or `+"`oar-agent-bridge notifications list --config ./agent.toml --status unread`"+` when you want to pull pending notifications directly
+1. `+"`anx bridge install`"+`
+2. `+"`anx bridge workspace-id --handle <handle>`"+` if a registration already exists and you need the real durable workspace id
+3. `+"`anx bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --workspace-path /absolute/path/to/hermes/workspace`"+`
+4. `+"`anx bridge import-auth --config ./agent.toml --from-profile <agent>`"+` when matching `+"`anx`"+` auth already exists so bridge auth and the default bridge `+"`[anx].base_url`"+` stay aligned
+5. `+"`anx-agent-bridge auth register ...`"+` for the agent principal when auth does not already exist
+6. `+"`anx bridge start --config ./agent.toml`"+`
+7. `+"`anx bridge status --config ./agent.toml`"+` and `+"`anx bridge doctor --config ./agent.toml`"+` before expecting immediate online delivery
+8. `+"`anx notifications list --status unread`"+` or `+"`anx-agent-bridge notifications list --config ./agent.toml --status unread`"+` when you want to pull pending notifications directly
 
 Workspace-owned wake routing
 
-- `+"`oar bridge`"+` only manages per-agent bridge daemons.
-- Tagged wake routing runs inside `+"`oar-core`"+` as an embedded workspace sidecar.
-- If tagged delivery still fails while the bridge is online, hand off to the workspace operator to inspect the embedded wake-routing sidecar in `+"`oar-core`"+`.
+- `+"`anx bridge`"+` only manages per-agent bridge daemons.
+- Tagged wake routing runs inside `+"`anx-core`"+` as an embedded workspace sidecar.
+- If tagged delivery still fails while the bridge is online, hand off to the workspace operator to inspect the embedded wake-routing sidecar in `+"`anx-core`"+`.
 `) + "\n"
 }
 
 func (a *App) runBridgeInstall(ctx context.Context, args []string) (*commandResult, error) {
 	if runtime.GOOS == "windows" {
-		return nil, errnorm.Usage("unsupported_platform", "`oar bridge install` currently supports macOS and Linux only")
+		return nil, errnorm.Usage("unsupported_platform", "`anx bridge install` currently supports macOS and Linux only")
 	}
 	fs := newSilentFlagSet("bridge install")
 	var pythonFlag trackedString
@@ -233,14 +233,14 @@ func (a *App) runBridgeInstall(ctx context.Context, args []string) (*commandResu
 	var withDev trackedBool
 	fs.Var(&pythonFlag, "python", "Preferred Python executable")
 	fs.Var(&installDirFlag, "install-dir", "Root directory for the managed bridge virtualenv")
-	fs.Var(&binDirFlag, "bin-dir", "Directory where the oar-agent-bridge wrapper should be written")
+	fs.Var(&binDirFlag, "bin-dir", "Directory where the anx-agent-bridge wrapper should be written")
 	fs.Var(&refFlag, "ref", "Git ref to install from")
 	fs.Var(&withDev, "with-dev", "Also install bridge development/test dependencies")
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	if len(fs.Args()) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar bridge install`")
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx bridge install`")
 	}
 
 	home, err := a.bridgeHome()
@@ -260,11 +260,11 @@ func (a *App) runBridgeInstall(ctx context.Context, args []string) (*commandResu
 		return nil, err
 	}
 	if _, err := bridgeLookPath("git"); err != nil {
-		return nil, errnorm.Local("git_required", "`oar bridge install` currently requires `git` on PATH because it installs the bridge package from the GitHub repo")
+		return nil, errnorm.Local("git_required", "`anx bridge install` currently requires `git` on PATH because it installs the bridge package from the GitHub repo")
 	}
 	venvDir := filepath.Join(installDir, ".venv")
 	venvPython := filepath.Join(venvDir, "bin", "python")
-	bridgeBinary := filepath.Join(venvDir, "bin", "oar-agent-bridge")
+	bridgeBinary := filepath.Join(venvDir, "bin", "anx-agent-bridge")
 	ref := strings.TrimSpace(refFlag.value)
 	if ref == "" {
 		ref = defaultBridgeInstallRef()
@@ -289,7 +289,7 @@ func (a *App) runBridgeInstall(ctx context.Context, args []string) (*commandResu
 	if err := bridgeMkdirAll(binDir, 0o755); err != nil {
 		return nil, errnorm.Wrap(errnorm.KindLocal, "bridge_bin_dir_failed", "failed to create bridge bin directory", err)
 	}
-	wrapperPath := filepath.Join(binDir, "oar-agent-bridge")
+	wrapperPath := filepath.Join(binDir, "anx-agent-bridge")
 	if err := bridgeWriteLauncher(wrapperPath, bridgeBinary); err != nil {
 		return nil, err
 	}
@@ -314,11 +314,11 @@ func (a *App) runBridgeInstall(ctx context.Context, args []string) (*commandResu
 		"Python: " + pythonRuntime.Command + " (" + pythonRuntime.Version + ")",
 		"Installed ref: " + ref,
 		"Version: " + strings.TrimSpace(versionOut),
-		"Next step: oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --workspace-path /absolute/path/to/hermes/workspace",
-		"Next step: oar bridge doctor --config ./agent.toml once the bridge has checked in",
+		"Next step: anx bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --workspace-path /absolute/path/to/hermes/workspace",
+		"Next step: anx bridge doctor --config ./agent.toml once the bridge has checked in",
 	}
 	if !bridgePathContains(a.Getenv, binDir) {
-		lines = append(lines, "PATH note: add "+binDir+" to PATH to run `oar-agent-bridge` directly.")
+		lines = append(lines, "PATH note: add "+binDir+" to PATH to run `anx-agent-bridge` directly.")
 	}
 	return &commandResult{Text: strings.Join(lines, "\n"), Data: data}, nil
 }
@@ -328,12 +328,12 @@ func (a *App) runBridgeImportAuth(args []string, cfg config.Resolved) (*commandR
 	var configFlag trackedString
 	var fromProfileFlag trackedString
 	fs.Var(&configFlag, "config", "Bridge config whose auth state should be populated")
-	fs.Var(&fromProfileFlag, "from-profile", "Existing oar profile name to import")
+	fs.Var(&fromProfileFlag, "from-profile", "Existing anx profile name to import")
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	if len(fs.Args()) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar bridge import-auth`")
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx bridge import-auth`")
 	}
 	configPath := strings.TrimSpace(configFlag.value)
 	if configPath == "" {
@@ -422,12 +422,12 @@ func (a *App) runBridgeImportAuth(args []string, cfg config.Resolved) (*commandR
 			if profileBaseURL != configBaseURL {
 				updated, err := bridgeUpdateConfigBaseURL(configDetails.ConfigPath, profileBaseURL)
 				if err != nil {
-					return nil, errnorm.Wrap(errnorm.KindLocal, "bridge_config_base_url_failed", "failed to update [oar].base_url in bridge config", err)
+					return nil, errnorm.Wrap(errnorm.KindLocal, "bridge_config_base_url_failed", "failed to update [anx].base_url in bridge config", err)
 				}
 				baseURLUpdated = updated
 			}
 		} else if profileBaseURL != configBaseURL {
-			baseURLWarning = fmt.Sprintf("WARNING: config [oar].base_url (%s) differs from imported profile base_url (%s); leaving config unchanged.", configBaseURL, profileBaseURL)
+			baseURLWarning = fmt.Sprintf("WARNING: config [anx].base_url (%s) differs from imported profile base_url (%s); leaving config unchanged.", configBaseURL, profileBaseURL)
 		}
 	}
 
@@ -477,8 +477,8 @@ func (a *App) runBridgeInitConfig(args []string, cfg config.Resolved) (*commandR
 	var workspacePathFlag trackedString
 	fs.Var(&kindFlag, "kind", "Template kind: hermes or zeroclaw")
 	fs.Var(&outputFlag, "output", "Write the rendered TOML to a file")
-	fs.Var(&baseURLFlag, "base-url", "OAR base URL")
-	fs.Var(&workspaceIDFlag, "workspace-id", "Durable OAR workspace id")
+	fs.Var(&baseURLFlag, "base-url", "ANX base URL")
+	fs.Var(&workspaceIDFlag, "workspace-id", "Durable ANX workspace id")
 	fs.Var(&workspaceNameFlag, "workspace-name", "Display name for the workspace")
 	fs.Var(&workspaceURLFlag, "workspace-url", "Workspace URL shown in listings")
 	fs.Var(&handleFlag, "handle", "Agent handle for bridge templates")
@@ -492,7 +492,7 @@ func (a *App) runBridgeInitConfig(args []string, cfg config.Resolved) (*commandR
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	if len(fs.Args()) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar bridge init-config`")
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx bridge init-config`")
 	}
 	kind := strings.TrimSpace(kindFlag.value)
 	if kind == "" {
@@ -577,7 +577,7 @@ func (a *App) runBridgeWorkspaceID(ctx context.Context, args []string, cfg confi
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	if len(fs.Args()) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar bridge workspace-id`")
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx bridge workspace-id`")
 	}
 
 	handle := strings.TrimSpace(handleFlag.value)
@@ -669,7 +669,7 @@ func (a *App) runBridgeWorkspaceID(ctx context.Context, args []string, cfg confi
 		lines = append(lines, "- "+workspaceID)
 	}
 	if handle != "" {
-		lines = append(lines, "Next step: oar bridge init-config --kind hermes --output ./agent.toml --workspace-id "+workspaceIDs[0]+" --handle "+handle+" --workspace-path /absolute/path/to/hermes/workspace")
+		lines = append(lines, "Next step: anx bridge init-config --kind hermes --output ./agent.toml --workspace-id "+workspaceIDs[0]+" --handle "+handle+" --workspace-path /absolute/path/to/hermes/workspace")
 	}
 	return &commandResult{
 		Text: strings.Join(lines, "\n"),
@@ -740,13 +740,13 @@ func (a *App) runBridgeDoctor(ctx context.Context, args []string) (*commandResul
 	var configFlag trackedString
 	fs.Var(&pythonFlag, "python", "Preferred Python executable")
 	fs.Var(&installDirFlag, "install-dir", "Root directory for the managed bridge virtualenv")
-	fs.Var(&binDirFlag, "bin-dir", "Directory where the oar-agent-bridge wrapper should exist")
+	fs.Var(&binDirFlag, "bin-dir", "Directory where the anx-agent-bridge wrapper should exist")
 	fs.Var(&configFlag, "config", "Bridge config to validate")
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	if len(fs.Args()) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar bridge doctor`")
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx bridge doctor`")
 	}
 	home, err := a.bridgeHome()
 	if err != nil {
@@ -783,11 +783,11 @@ func (a *App) runBridgeDoctor(ctx context.Context, args []string) (*commandResul
 		addCheck("managed_venv", true, "managed bridge venv present at "+filepath.Join(installDir, ".venv"))
 	}
 
-	bridgeBinary := filepath.Join(binDir, "oar-agent-bridge")
+	bridgeBinary := filepath.Join(binDir, "anx-agent-bridge")
 	if _, err := bridgeStat(bridgeBinary); err != nil {
-		lookup, lookupErr := bridgeLookPath("oar-agent-bridge")
+		lookup, lookupErr := bridgeLookPath("anx-agent-bridge")
 		if lookupErr != nil {
-			addCheck("bridge_binary", false, "oar-agent-bridge wrapper not found; run `oar bridge install`")
+			addCheck("bridge_binary", false, "anx-agent-bridge wrapper not found; run `anx bridge install`")
 		} else {
 			bridgeBinary = lookup
 			addCheck("bridge_binary", true, "resolved from PATH at "+lookup)
@@ -893,7 +893,7 @@ func renderBridgeConfigTemplate(params bridgeTemplateParams) (string, string, er
 		stateDir := firstNonEmptyString(params.StateDir, ".state/"+handle)
 		workspacePath := firstNonEmptyString(params.HermesCWD, "/absolute/path/to/your/hermes/workspace")
 		return strings.TrimSpace(fmt.Sprintf(`
-[oar]
+[anx]
 base_url = %q
 workspace_id = %q
 workspace_name = %q
@@ -928,7 +928,7 @@ auto_select_permission = true
 		authState := firstNonEmptyString(params.AuthStatePath, ".state/"+handle+"-auth.json")
 		stateDir := firstNonEmptyString(params.StateDir, ".state/"+handle)
 		return strings.TrimSpace(fmt.Sprintf(`
-[oar]
+[anx]
 base_url = %q
 workspace_id = %q
 workspace_name = %q
@@ -986,7 +986,7 @@ func (a *App) bridgeHome() (string, error) {
 }
 
 func bridgeDefaultInstallDir(home string) string {
-	return filepath.Join(home, ".local", "share", "oar", "agent-bridge")
+	return filepath.Join(home, ".local", "share", "anx", "agent-bridge")
 }
 
 func bridgeDefaultBinDir(home string) string {
@@ -1022,7 +1022,7 @@ func detectBridgePython(ctx context.Context, preferred string) (bridgePythonRunt
 			return runtimeInfo, nil
 		}
 	}
-	return bridgePythonRuntime{}, errnorm.Local("python_unsupported", "Python 3.11+ is required for `oar-agent-bridge`; pass --python <exe> if needed")
+	return bridgePythonRuntime{}, errnorm.Local("python_unsupported", "Python 3.11+ is required for `anx-agent-bridge`; pass --python <exe> if needed")
 }
 
 func probeBridgePython(ctx context.Context, candidate string) (bridgePythonRuntime, bool) {
@@ -1080,7 +1080,7 @@ func probeBridgeBinaryOutput(ctx context.Context, bridgeBinary string) (string, 
 	}
 	firstLine := strings.TrimSpace(strings.SplitN(helpOut, "\n", 2)[0])
 	if firstLine == "" {
-		firstLine = "oar-agent-bridge --help"
+		firstLine = "anx-agent-bridge --help"
 	}
 	return firstLine, nil
 }
@@ -1101,7 +1101,7 @@ func defaultBridgeCommandRun(ctx context.Context, name string, args ...string) (
 func bridgeWriteLauncher(path string, bridgeBinary string) error {
 	content := "#!/bin/sh\nexec " + shellSingleQuote(bridgeBinary) + ` "$@"` + "\n"
 	if err := bridgeWriteFile(path, []byte(content), 0o755); err != nil {
-		return errnorm.Wrap(errnorm.KindLocal, "bridge_wrapper_write_failed", "failed to write oar-agent-bridge launcher", err)
+		return errnorm.Wrap(errnorm.KindLocal, "bridge_wrapper_write_failed", "failed to write anx-agent-bridge launcher", err)
 	}
 	return nil
 }
@@ -1160,7 +1160,7 @@ func loadBridgeConfigDetails(configPath string) (bridgeConfigDetails, error) {
 		ConfigPath:    absPath,
 		AuthStatePath: authStatePath,
 		AgentHandle:   bridgeConfigStringValue(string(content), "agent", "handle"),
-		BaseURL:       bridgeConfigStringValue(string(content), "oar", "base_url"),
+		BaseURL:       bridgeConfigStringValue(string(content), "anx", "base_url"),
 	}, nil
 }
 
@@ -1254,7 +1254,7 @@ func bridgeUpdateConfigBaseURL(configPath string, newBaseURL string) (bool, erro
 	if err != nil {
 		return false, fmt.Errorf("read config for base_url update: %w", err)
 	}
-	updated, changed := bridgeReplaceConfigValue(string(content), "oar", "base_url", newBaseURL)
+	updated, changed := bridgeReplaceConfigValue(string(content), "anx", "base_url", newBaseURL)
 	if !changed {
 		return false, nil
 	}

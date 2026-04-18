@@ -993,7 +993,7 @@ export const commandRegistry = [
         "path": "/auth/passkey/dev/login",
         "operation_id": "passkeyDevLogin",
         "summary": "Issue session for passkey principal without WebAuthn (dev only)",
-        "why": "Local development bypass when OAR_ALLOW_PASSKEY_DEV_BYPASS=1 and the workspace carries the local-only .oar-dev-insecure-auth marker; optional username or display_name, or sole passkey principal.",
+        "why": "Local development bypass when ANX_ALLOW_PASSKEY_DEV_BYPASS=1 and the workspace carries the local-only .anx-dev-insecure-auth marker; optional username or display_name, or sole passkey principal.",
         "input_mode": "json-body",
         "streaming": {
             "mode": "none"
@@ -1037,7 +1037,7 @@ export const commandRegistry = [
         "path": "/auth/passkey/dev/register",
         "operation_id": "passkeyDevRegister",
         "summary": "Complete passkey registration without WebAuthn (dev only)",
-        "why": "Local development bypass for human onboarding when OAR_ALLOW_PASSKEY_DEV_BYPASS=1 and the workspace carries the local-only .oar-dev-insecure-auth marker; stores a synthetic credential. Optional existing_actor_id links a pre-seeded actor when OAR_DEV_REGISTER_LINKED_ACTORS=1.",
+        "why": "Local development bypass for human onboarding when ANX_ALLOW_PASSKEY_DEV_BYPASS=1 and the workspace carries the local-only .anx-dev-insecure-auth marker; stores a synthetic credential. Optional existing_actor_id links a pre-seeded actor when ANX_DEV_REGISTER_LINKED_ACTORS=1.",
         "input_mode": "json-body",
         "streaming": {
             "mode": "none"

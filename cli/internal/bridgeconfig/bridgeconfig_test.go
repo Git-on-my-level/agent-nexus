@@ -15,7 +15,7 @@ func TestDiscoverFindsNestedBridgeConfigs(t *testing.T) {
 		t.Fatalf("mkdir config dir: %v", err)
 	}
 	configPath := filepath.Join(configDir, "agent.toml")
-	if err := os.WriteFile(configPath, []byte("[oar]\nbase_url = \"https://core.example\"\n"), 0o600); err != nil {
+	if err := os.WriteFile(configPath, []byte("[anx]\nbase_url = \"https://core.example\"\n"), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 

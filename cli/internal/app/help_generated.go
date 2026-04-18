@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"organization-autorunner-cli/internal/registry"
+	"agent-nexus-cli/internal/registry"
 )
 
 type runtimeHelpTopic struct {
@@ -52,8 +52,8 @@ var localHelperTopics = []localHelperTopic{
 		JSONShape:   "`thread_id`, `thread_ids`, `events`, `total_events`, `returned_events`",
 		Composition: "Fetches one or more backing-thread timelines locally, then filters and summarizes the events without changing contracts or core behavior. Use it as a diagnostic read; prefer `topics workspace` and card/board reads for normal coordination.",
 		Examples: []string{
-			"oar events list --thread-id <thread-id> --type actor_statement --mine --full-id",
-			"oar events list --thread-id <thread-id> --max-events 10",
+			"anx events list --thread-id <thread-id> --type actor_statement --mine --full-id",
+			"anx events list --thread-id <thread-id> --max-events 10",
 		},
 		Flags: []localHelperFlag{
 			{Name: "--thread-id <thread-id>", Description: "Thread id to inspect (repeatable)."},
@@ -76,8 +76,8 @@ var localHelperTopics = []localHelperTopic{
 		JSONShape:   "`command`, `command_id`, `path_params`, `query`, `body`, `valid`",
 		Composition: "Parses the same JSON body accepted by `events create`, runs local validation rules, and returns a validation preview envelope without contacting core.",
 		Examples: []string{
-			`cat event.json | oar events validate`,
-			`oar events validate --from-file event.json`,
+			`cat event.json | anx events validate`,
+			`anx events validate --from-file event.json`,
 		},
 		Flags: []localHelperFlag{
 			{Name: "--from-file <path>", Description: "Load the request body from a JSON file instead of stdin."},
@@ -89,9 +89,9 @@ var localHelperTopics = []localHelperTopic{
 		JSONShape:   "`event_type`, `known`, `required_refs`, `payload_requirements`, `examples`, `hint`",
 		Composition: "Formats the embedded event reference and validation guidance into a plain-text reference without sending a request. Use it to confirm when `message_posted` is required for a visible backing-thread message in the web UI Messages tab.",
 		Examples: []string{
-			`oar events explain`,
-			`oar events explain message_posted`,
-			`oar events explain review_completed`,
+			`anx events explain`,
+			`anx events explain message_posted`,
+			`anx events explain review_completed`,
 		},
 		Flags: []localHelperFlag{
 			{Name: "<event-type>", Description: "Optional event type to focus on; omit it to list known event types."},
@@ -103,8 +103,8 @@ var localHelperTopics = []localHelperTopic{
 		JSONShape:   "`artifact`, `content`, `content_headers`, `content_text`, `content_base64`",
 		Composition: "Loads artifact metadata with `artifacts get`, then fetches content with `artifacts content` using the resolved artifact id.",
 		Examples: []string{
-			`oar artifacts inspect --artifact-id <artifact-id>`,
-			`oar artifacts inspect <artifact-id-or-alias>`,
+			`anx artifacts inspect --artifact-id <artifact-id>`,
+			`anx artifacts inspect <artifact-id-or-alias>`,
 		},
 		Flags: []localHelperFlag{
 			{Name: "--artifact-id <artifact-id>", Description: "Artifact id or unique alias to inspect."},
@@ -116,8 +116,8 @@ var localHelperTopics = []localHelperTopic{
 		JSONShape:   "`thread`, `context`, `collaboration`, `inbox`",
 		Composition: "Resolves one thread by id or discovery filters, loads read-only thread projections, then filters inbox items client-side by `thread_id`. Prefer `topics workspace` for primary operator coordination when you have a topic id.",
 		Examples: []string{
-			"oar threads inspect --thread-id <thread-id>",
-			"oar threads inspect --status active --type initiative --full-id",
+			"anx threads inspect --thread-id <thread-id>",
+			"anx threads inspect --status active --type initiative --full-id",
 		},
 		Flags: []localHelperFlag{
 			{Name: "--thread-id <thread-id>", Description: "Thread id to inspect."},
@@ -138,8 +138,8 @@ var localHelperTopics = []localHelperTopic{
 		JSONShape:   "`thread`, `context`, `collaboration`, `inbox`, `pending_decisions`, `related_threads`, `related_recommendations`, `related_decisions`, `follow_up`",
 		Composition: "Resolves one thread by id or discovery filters, loads read-only thread projections, adds thread-scoped inbox items, and follows related thread refs for diagnostic review. Prefer `topics workspace` for normal operator coordination.",
 		Examples: []string{
-			"oar threads workspace --thread-id <thread-id> --full-id",
-			"oar threads workspace --status active --type initiative --full-summary",
+			"anx threads workspace --thread-id <thread-id> --full-id",
+			"anx threads workspace --status active --type initiative --full-summary",
 		},
 		Flags: []localHelperFlag{
 			{Name: "--thread-id <thread-id>", Description: "Thread id to inspect."},
@@ -161,8 +161,8 @@ var localHelperTopics = []localHelperTopic{
 		JSONShape:   "`thread`, `recommendations`, `decision_requests`, `decisions`, `pending_decisions`, `related_threads`, `related_recommendations`, `related_decision_requests`, `related_decisions`, `warnings`, `follow_up`",
 		Composition: "Loads the read-only thread context, inbox, and related-thread review context to highlight recommendation signals and follow-up hints without changing state. Prefer `topics workspace` for the main coordination read when a topic exists.",
 		Examples: []string{
-			"oar threads recommendations --thread-id <thread-id>",
-			"oar threads recommendations --status active --type initiative --full-summary",
+			"anx threads recommendations --thread-id <thread-id>",
+			"anx threads recommendations --status active --type initiative --full-summary",
 		},
 		Flags: []localHelperFlag{
 			{Name: "--thread-id <thread-id>", Description: "Thread id to inspect."},
@@ -185,8 +185,8 @@ var localHelperTopics = []localHelperTopic{
 		JSONShape:   "`board_id`, `board`, `primary_topic`, `cards`, `documents`, `inbox`, `board_summary`, `projection_freshness`, `board_summary_freshness`, `warnings`, `section_kinds`, `generated_at`",
 		Composition: "Resolves a board by id, fetches the projection workspace with per-card thread backing and renders cards grouped by canonical column order (backlog, ready, in_progress, blocked, review, done).",
 		Examples: []string{
-			"oar boards workspace --board-id <board-id>",
-			"oar boards workspace --board-id board_product_launch",
+			"anx boards workspace --board-id <board-id>",
+			"anx boards workspace --board-id board_product_launch",
 		},
 		Flags: []localHelperFlag{
 			{Name: "--board-id <board-id>", Description: "Board id or unique prefix to load."},
@@ -198,7 +198,7 @@ var localHelperTopics = []localHelperTopic{
 		JSONShape:   "`board_id`, `cards`",
 		Composition: "Fetches the raw card list for a board ordered by canonical column sequence and per-column rank.",
 		Examples: []string{
-			"oar boards cards list --board-id <board-id>",
+			"anx boards cards list --board-id <board-id>",
 		},
 		Flags: []localHelperFlag{
 			{Name: "--board-id <board-id>", Description: "Board id to list cards for."},
@@ -210,8 +210,8 @@ var localHelperTopics = []localHelperTopic{
 		JSONShape:   "`proposal_id`, `target_command_id`, `path`, `body`, `diff`, `apply_command`",
 		Composition: "Fetches the current document revision with `docs get`, computes a local diff against the proposed update, and persists a proposal file instead of sending the update immediately.",
 		Examples: []string{
-			"oar docs propose-update --document-id <document-id> --content-file <path>",
-			"cat update.json | oar docs propose-update --document-id <document-id>",
+			"anx docs propose-update --document-id <document-id> --content-file <path>",
+			"cat update.json | anx docs propose-update --document-id <document-id>",
 		},
 		Flags: []localHelperFlag{
 			{Name: "--document-id <document-id>", Description: "Document id to update."},
@@ -225,8 +225,8 @@ var localHelperTopics = []localHelperTopic{
 		JSONShape:   "`document`, `revision`, `content`, `status_code`, `headers`",
 		Composition: "Loads `docs get`, then renders the current revision content and metadata in one operator-friendly response.",
 		Examples: []string{
-			`oar docs content --document-id <document-id>`,
-			`oar docs content <document-id-or-alias>`,
+			`anx docs content --document-id <document-id>`,
+			`anx docs content <document-id-or-alias>`,
 		},
 		Flags: []localHelperFlag{
 			{Name: "--document-id <document-id>", Description: "Document id or unique alias to inspect."},
@@ -238,8 +238,8 @@ var localHelperTopics = []localHelperTopic{
 		JSONShape:   "`command`, `command_id`, `path_params`, `query`, `body`, `valid`",
 		Composition: "Parses the same body accepted by `docs.revisions.create`, expands `--content-file` when present, and returns a validation preview envelope without contacting core.",
 		Examples: []string{
-			`cat update.json | oar docs validate-update --document-id <document-id>`,
-			`oar docs validate-update --document-id <document-id> --content-file body.md`,
+			`cat update.json | anx docs validate-update --document-id <document-id>`,
+			`anx docs validate-update --document-id <document-id> --content-file body.md`,
 		},
 		Flags: []localHelperFlag{
 			{Name: "--document-id <document-id>", Description: "Document id to validate against."},
@@ -253,8 +253,8 @@ var localHelperTopics = []localHelperTopic{
 		JSONShape:   "`proposal_id`, `target_command_id`, `applied`, `kept`, `result`",
 		Composition: "Loads the local proposal by exact id or unique prefix, validates it again, then sends the underlying `docs.revisions.create` request.",
 		Examples: []string{
-			"oar docs apply --proposal-id <proposal-id>",
-			"oar docs apply <proposal-id-prefix>",
+			"anx docs apply --proposal-id <proposal-id>",
+			"anx docs apply <proposal-id-prefix>",
 		},
 		Flags: []localHelperFlag{
 			{Name: "--proposal-id <proposal-id>", Description: "Proposal id or unique prefix to apply."},
@@ -274,16 +274,16 @@ func isHelpToken(value string) bool {
 
 func (a *App) rootUsageText() string {
 	var b strings.Builder
-	b.WriteString(strings.TrimSpace(`oar - Organization Autorunner CLI
+	b.WriteString(strings.TrimSpace(`anx - Organization Autorunner CLI
 
 Usage:
-  oar [global flags] <command>
+  anx [global flags] <command>
 
 Core Commands:
   version       Print CLI/runtime version details
   doctor        Validate local and network preconditions
   update        Replace the installed CLI binary with the recommended or requested release
-  concepts      Explain the core OAR primitives and when to use them
+  concepts      Explain the core ANX primitives and when to use them
   bridge        Install, manage, and inspect the Python wake-routing bridge runtime
   auth          Manage agent registration, profile auth, and token lifecycle
   config        Inspect effective CLI config and set the active profile (base URL, agent)
@@ -315,10 +315,10 @@ Core Commands:
 	b.WriteString(strings.TrimSpace(`
 
 Onboarding:
-  `+"`oar concepts`"+` for a quick primitive-selection guide.
-  `+"`oar help onboarding`"+` for the offline quick-start topic.
-  `+"`oar meta doc agent-guide`"+` for the prescriptive bundled agent guide.
-  `+"`oar meta skill cursor --write-dir ~/.cursor/skills/oar-cli-onboard`"+` to export a Cursor skill file.
+  `+"`anx concepts`"+` for a quick primitive-selection guide.
+  `+"`anx help onboarding`"+` for the offline quick-start topic.
+  `+"`anx meta doc agent-guide`"+` for the prescriptive bundled agent guide.
+  `+"`anx meta skill cursor --write-dir ~/.cursor/skills/anx-cli-onboard`"+` to export a Cursor skill file.
 
 Global Flags:
   --json
@@ -363,7 +363,7 @@ Use this group to set or inspect which local profile supplies base URL and auth 
 Core commands:
   config use <profile>   Persist the active profile (equivalent to auth default).
   config show            Print effective settings and per-field sources (tokens redacted).
-  config unset           Remove the default profile marker (~/.config/oar/default-profile).
+  config unset           Remove the default profile marker (~/.config/anx/default-profile).
 
 Related:
   auth list              List profiles and which is active.
@@ -539,7 +539,7 @@ func formatGeneratedGroupHelp(topic string, commands []registry.Command) string 
 	b.WriteString("\n")
 	b.WriteString(formatGlobalFlagUsage(topic))
 	b.WriteString("\n")
-	b.WriteString("\nTip: `oar help <command path>` for full command-level generated details.\n")
+	b.WriteString("\nTip: `anx help <command path>` for full command-level generated details.\n")
 	return strings.TrimSpace(b.String())
 }
 
@@ -549,21 +549,21 @@ func localGroupHelpSupplement(topic string) string {
 		return strings.TrimSpace(`Primary operator coordination:
   topics workspace        Load the topic workspace (cards, docs, backing threads, inbox).
   topics list / topics get   Discover and resolve topic ids.
-  Tip: start with ` + "`oar topics workspace --topic-id <topic-id>`" + ` for triage; use ` + "`oar topics list`" + ` to find ids. Add ` + "`--full-id`" + ` for copy/paste ids.`)
+  Tip: start with ` + "`anx topics workspace --topic-id <topic-id>`" + ` for triage; use ` + "`anx topics list`" + ` to find ids. Add ` + "`--full-id`" + ` for copy/paste ids.`)
 	case "threads":
 		return strings.TrimSpace(`Read-only backing-thread diagnostics (tooling):
   threads recommendations   Recommendation-focused review for one backing thread.
   threads workspace       Diagnostic workspace projection (context + inbox + related-thread review).
   threads inspect          Smaller diagnostic bundle (context + inbox).
   threads timeline         Backing thread timeline and expansions.
-  Tip: prefer ` + "`oar topics workspace`" + ` for normal operator coordination. Use ` + "`oar threads workspace`" + ` when you need the backing-thread projection or related-thread review; use ` + "`--status/--tag/--type initiative`" + ` to discover one thread. For a minimal ` + "`{thread}`" + ` read, use ` + "`oar threads get`" + ` (contract: ` + "`threads.inspect`" + `). Add ` + "`--full-id`" + ` for copy/paste ids.`)
+  Tip: prefer ` + "`anx topics workspace`" + ` for normal operator coordination. Use ` + "`anx threads workspace`" + ` when you need the backing-thread projection or related-thread review; use ` + "`--status/--tag/--type initiative`" + ` to discover one thread. For a minimal ` + "`{thread}`" + ` read, use ` + "`anx threads get`" + ` (contract: ` + "`threads.inspect`" + `). Add ` + "`--full-id`" + ` for copy/paste ids.`)
 	case "events":
 		return strings.TrimSpace(`Local inspection helpers:
   events list              List timeline events with thread/type/actor filters, id mode, and preview summaries.
   events explain           Explain known event-type conventions and local validation constraints.
   events validate          Validate an events.create payload from stdin/--from-file without sending a request.
   Tip: use ` + "`--mine`" + ` or ` + "`--actor-id <id>`" + ` to audit one actor; add ` + "`--full-id`" + ` for copy/paste IDs.
-  For details: ` + "`oar events explain <event-type>`")
+  For details: ` + "`anx events explain <event-type>`")
 	case "artifacts":
 		return strings.TrimSpace(`Local inspection helper:
   artifacts inspect        Fetch artifact metadata and content in one call.`)
@@ -578,12 +578,12 @@ func localGroupHelpSupplement(topic string) string {
 	case "meta":
 		return strings.TrimSpace(`Shipped reference docs:
   meta docs               Print the bundled Markdown runtime reference.
-  meta doc                Print one bundled Markdown topic, for example ` + "`oar meta doc agent-guide`" + `.
-  meta skill              Render a bundled editor-specific skill file, for example ` + "`oar meta skill cursor`" + `.
-  Tip: use ` + "`oar help meta`" + ` for the short runtime surface, ` + "`oar meta docs`" + ` for the full shipped reference, and ` + "`oar meta skill cursor --write-dir ~/.cursor/skills/oar-cli-onboard`" + ` to export a Cursor skill.`)
+  meta doc                Print one bundled Markdown topic, for example ` + "`anx meta doc agent-guide`" + `.
+  meta skill              Render a bundled editor-specific skill file, for example ` + "`anx meta skill cursor`" + `.
+  Tip: use ` + "`anx help meta`" + ` for the short runtime surface, ` + "`anx meta docs`" + ` for the full shipped reference, and ` + "`anx meta skill cursor --write-dir ~/.cursor/skills/anx-cli-onboard`" + ` to export a Cursor skill.`)
 	case "boards":
 		return strings.TrimSpace(`Batch card creation:
-  boards cards create-batch   POST body via stdin or ` + "`--from-file`" + `; profile supplies ` + "`actor_id`" + ` when omitted. See ` + "`oar help boards cards create-batch`" + `.
+  boards cards create-batch   POST body via stdin or ` + "`--from-file`" + `; profile supplies ` + "`actor_id`" + ` when omitted. See ` + "`anx help boards cards create-batch`" + `.
 
 Read paths:
   boards get / boards workspace   Board metadata including ` + "`updated_at`" + ` for optimistic concurrency.
@@ -598,7 +598,7 @@ Read paths:
   auth revoke             Revoke the active agent and mark the local profile revoked. Use explicit human-lockout flags only for break-glass recovery.
   auth principals revoke  Revoke another principal by id, with explicit human-lockout flags and a required reason for the break-glass path.
   auth token-status       Inspect whether the local profile still has refreshable token material.
-  Tip: use ` + "`oar auth bootstrap status`" + ` before first registration, ` + "`oar auth register --username <username> --bootstrap-token <token>`" + ` for the first principal, and ` + "`oar auth invites create --kind human|agent`" + ` before later registrations.`)
+  Tip: use ` + "`anx auth bootstrap status`" + ` before first registration, ` + "`anx auth register --username <username> --bootstrap-token <token>`" + ` for the first principal, and ` + "`anx auth invites create --kind human|agent`" + ` before later registrations.`)
 	default:
 		return ""
 	}
@@ -706,7 +706,7 @@ func formatGlobalFlagUsage(topic string) string {
 	}
 	return strings.TrimSpace(fmt.Sprintf(`Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar %s ... ; oar --json %s ... ; oar %s ... --json (last two: JSON envelope on stdout)
+  Examples: anx %s ... ; anx --json %s ... ; anx %s ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>`, path, path, path))
 }
 
@@ -773,19 +773,19 @@ func fieldHelpText(commandID string, name string) string {
 	name = strings.TrimSpace(name)
 	switch {
 	case name == "if_board_updated_at" && commandID == "boards.cards.batch_add":
-		return "Optimistic concurrency token. Copy `board.updated_at` from `oar boards get --board-id <board-id>`, `oar boards workspace --board-id <board-id>`, or the latest board mutation response. You may pass `--if-board-updated-at` instead of embedding it in JSON."
+		return "Optimistic concurrency token. Copy `board.updated_at` from `anx boards get --board-id <board-id>`, `anx boards workspace --board-id <board-id>`, or the latest board mutation response. You may pass `--if-board-updated-at` instead of embedding it in JSON."
 	case name == "if_board_updated_at":
-		return "Optimistic concurrency token. Copy `board.updated_at` from `oar boards get --board-id <board-id>`, `oar boards workspace --board-id <board-id>`, or the latest board mutation response."
+		return "Optimistic concurrency token. Copy `board.updated_at` from `anx boards get --board-id <board-id>`, `anx boards workspace --board-id <board-id>`, or the latest board mutation response."
 	case name == "actor_id" && commandID == "boards.cards.batch_add":
 		return "Defaults from the active CLI profile when omitted. Non-empty `--actor-id` overrides `actor_id` in the JSON body."
 	case name == "request_key" && commandID == "boards.cards.batch_add":
 		return "Idempotency key for the whole batch. Non-empty `--request-key` overrides `request_key` in the JSON body."
 	case name == "if_base_revision":
-		return "Optimistic concurrency token. Copy the current head revision id from `oar docs get --document-id <document-id>` before updating."
+		return "Optimistic concurrency token. Copy the current head revision id from `anx docs get --document-id <document-id>` before updating."
 	case strings.HasPrefix(name, "if_"):
 		return "Optimistic concurrency token. Read the latest value from the corresponding read command before mutating."
 	case commandID == "inbox.get" && name == "inbox_item_id":
-		return "Canonical inbox id, alias, or unique prefix from `oar inbox list`."
+		return "Canonical inbox id, alias, or unique prefix from `anx inbox list`."
 	default:
 		return ""
 	}
@@ -863,9 +863,9 @@ func formatCommandSpecificHelpBlock(cmd registry.Command) string {
   - ` + "`exception_raised`" + `
 
 Usually emitted by higher-level commands:
-  - ` + "`receipt_added`" + `: prefer ` + "`oar receipts create`" + `
-  - ` + "`review_completed`" + `: prefer ` + "`oar reviews create`" + `
-  - ` + "`inbox_item_acknowledged`" + `: prefer ` + "`oar inbox ack`" + `
+  - ` + "`receipt_added`" + `: prefer ` + "`anx receipts create`" + `
+  - ` + "`review_completed`" + `: prefer ` + "`anx reviews create`" + `
+  - ` + "`inbox_item_acknowledged`" + `: prefer ` + "`anx inbox ack`" + `
 
 Local CLI notes:
   - Common open ` + "`event.type`" + ` values include ` + "`actor_statement`" + `; the enum list above is illustrative, not exhaustive.
@@ -882,7 +882,7 @@ Note: by default, archived and trashed events are excluded from the timeline out
 		return strings.TrimSpace(`View scoping:
   - ` + "`inbox list`" + ` is read from the active CLI identity's perspective.
   - The response includes ` + "`viewing_as`" + ` so you can confirm the resolved profile, username, and actor_id.
-  - Switch perspective with ` + "`--agent <profile>`" + ` or ` + "`OAR_AGENT`" + ` before reading or acting.
+  - Switch perspective with ` + "`--agent <profile>`" + ` or ` + "`ANX_AGENT`" + ` before reading or acting.
 
 Inbox categories:
   - ` + "`action_needed`" + `: A human must decide, take direct action, or own the next step (includes prior decision and intervention queue signals).
@@ -903,7 +903,7 @@ Inbox categories:
   - ` + "`actor_id`" + ` defaults from the active profile when omitted from JSON; ` + "`--actor-id`" + ` sets or overrides it.
   - ` + "`--request-key`" + ` and ` + "`--if-board-updated-at`" + `, when non-empty, override the same keys in the JSON body.
 
-Agent tip: run ` + "`oar boards get --board-id <board-id> --json`" + ` (or ` + "`boards workspace`" + `) first, copy ` + "`board.updated_at`" + ` into ` + "`if_board_updated_at`" + `, or pass ` + "`--if-board-updated-at`" + ` from that value. Each item's ` + "`related_refs`" + ` must reference source threads not already backing another card on this board, or the server returns ` + "`conflict`" + `.`)
+Agent tip: run ` + "`anx boards get --board-id <board-id> --json`" + ` (or ` + "`boards workspace`" + `) first, copy ` + "`board.updated_at`" + ` into ` + "`if_board_updated_at`" + `, or pass ` + "`--if-board-updated-at`" + ` from that value. Each item's ` + "`related_refs`" + ` must reference source threads not already backing another card on this board, or the server returns ` + "`conflict`" + `.`)
 	default:
 		return ""
 	}
@@ -999,34 +999,34 @@ func runtimeGeneratedRegistryPaths() []string {
 func onboardingHelpText() string {
 	return strings.TrimSpace(`Onboarding: first steps (agents / automation)
 
-This CLI is for agent principals. For the full operating model, read ` + "`oar meta doc agent-guide`" + `.
+This CLI is for agent principals. For the full operating model, read ` + "`anx meta doc agent-guide`" + `.
 
-1. Point the CLI at the core API with ` + "`--base-url`" + ` or ` + "`OAR_BASE_URL`" + `.
-2. Choose a profile name and pass it with ` + "`--agent`" + ` (or ` + "`OAR_AGENT`" + `) for registration and first checks below.
-3. Run ` + "`oar doctor`" + `, then ` + "`oar auth bootstrap status`" + ` to see whether first-principal bootstrap is still open on this workspace.
+1. Point the CLI at the core API with ` + "`--base-url`" + ` or ` + "`ANX_BASE_URL`" + `.
+2. Choose a profile name and pass it with ` + "`--agent`" + ` (or ` + "`ANX_AGENT`" + `) for registration and first checks below.
+3. Run ` + "`anx doctor`" + `, then ` + "`anx auth bootstrap status`" + ` to see whether first-principal bootstrap is still open on this workspace.
 4. Register the agent profile:
-   - If bootstrap is available: ` + "`oar auth register --username <username> --bootstrap-token <token>`" + ` (token comes from workspace operators / deployment).
-   - If bootstrap is closed: obtain a one-time invite (` + "`auth invites create --kind agent`" + ` from an already-authorized principal on that workspace), then ` + "`oar auth register --username <username> --invite-token <token>`" + `.
-5. On a machine where ` + "`~/.config`" + ` persists, set the active profile once: ` + "`oar config use <agent>`" + ` (same as ` + "`oar auth default <agent>`" + `). Later commands can omit ` + "`--base-url`" + ` / ` + "`--agent`" + `; use ` + "`oar config show`" + ` to verify. For CI or ephemeral environments, keep using env vars or flags instead.
-6. Confirm with ` + "`oar auth whoami`" + `, run a cheap read (` + "`topics list`" + `), then mutate deliberately.
-7. Use ` + "`oar meta skill cursor`" + ` to export a bundled Cursor skill from the shipped guide if desired.
-8. Read ` + "`oar meta doc wake-routing`" + ` if this agent should be wakeable via thread-message ` + "`@handle`" + ` mentions.
+   - If bootstrap is available: ` + "`anx auth register --username <username> --bootstrap-token <token>`" + ` (token comes from workspace operators / deployment).
+   - If bootstrap is closed: obtain a one-time invite (` + "`auth invites create --kind agent`" + ` from an already-authorized principal on that workspace), then ` + "`anx auth register --username <username> --invite-token <token>`" + `.
+5. On a machine where ` + "`~/.config`" + ` persists, set the active profile once: ` + "`anx config use <agent>`" + ` (same as ` + "`anx auth default <agent>`" + `). Later commands can omit ` + "`--base-url`" + ` / ` + "`--agent`" + `; use ` + "`anx config show`" + ` to verify. For CI or ephemeral environments, keep using env vars or flags instead.
+6. Confirm with ` + "`anx auth whoami`" + `, run a cheap read (` + "`topics list`" + `), then mutate deliberately.
+7. Use ` + "`anx meta skill cursor`" + ` to export a bundled Cursor skill from the shipped guide if desired.
+8. Read ` + "`anx meta doc wake-routing`" + ` if this agent should be wakeable via thread-message ` + "`@handle`" + ` mentions.
 
 First commands to run
 
-  oar --base-url http://127.0.0.1:8000 --agent <agent> doctor
-  oar --base-url http://127.0.0.1:8000 --agent <agent> auth bootstrap status
-  oar --base-url http://127.0.0.1:8000 --agent <agent> auth register --username <username> --bootstrap-token <token>   # only when bootstrap is open
-  oar --base-url http://127.0.0.1:8000 --agent <new-agent> auth register --username <username> --invite-token <token>   # when bootstrap is closed
-  oar config use <agent>   # optional after register: shorter commands on this machine (same as: oar auth default <agent>)
-  oar --agent <agent> auth whoami
-  oar --agent <agent> topics list
-  oar --agent <agent> inbox stream --max-events 1
+  anx --base-url http://127.0.0.1:8000 --agent <agent> doctor
+  anx --base-url http://127.0.0.1:8000 --agent <agent> auth bootstrap status
+  anx --base-url http://127.0.0.1:8000 --agent <agent> auth register --username <username> --bootstrap-token <token>   # only when bootstrap is open
+  anx --base-url http://127.0.0.1:8000 --agent <new-agent> auth register --username <username> --invite-token <token>   # when bootstrap is closed
+  anx config use <agent>   # optional after register: shorter commands on this machine (same as: anx auth default <agent>)
+  anx --agent <agent> auth whoami
+  anx --agent <agent> topics list
+  anx --agent <agent> inbox stream --max-events 1
 
 Next step
 
-  oar meta doc agent-guide
-  oar meta doc wake-routing`)
+  anx meta doc agent-guide
+  anx meta doc wake-routing`)
 }
 
 func mapRuntimePathToRegistryPath(path string) string {
@@ -1103,15 +1103,15 @@ func generatedCommandByID(commandID string) (registry.Command, bool) {
 
 func runtimeCommandFromRegistryCommand(command string) string {
 	command = strings.TrimSpace(command)
-	command = strings.ReplaceAll(command, "oar packets receipts", "oar receipts")
-	command = strings.ReplaceAll(command, "oar packets reviews", "oar reviews")
-	command = strings.ReplaceAll(command, "oar auth agents register", "oar auth register")
-	command = strings.ReplaceAll(command, "oar events stream", "oar events tail")
-	command = strings.ReplaceAll(command, "oar inbox stream", "oar inbox tail")
-	command = strings.ReplaceAll(command, "oar meta commands get", "oar meta command")
-	command = strings.ReplaceAll(command, "oar meta commands list", "oar meta commands")
-	command = strings.ReplaceAll(command, "oar meta concepts get", "oar meta concept")
-	command = strings.ReplaceAll(command, "oar meta concepts list", "oar meta concepts")
+	command = strings.ReplaceAll(command, "anx packets receipts", "anx receipts")
+	command = strings.ReplaceAll(command, "anx packets reviews", "anx reviews")
+	command = strings.ReplaceAll(command, "anx auth agents register", "anx auth register")
+	command = strings.ReplaceAll(command, "anx events stream", "anx events tail")
+	command = strings.ReplaceAll(command, "anx inbox stream", "anx inbox tail")
+	command = strings.ReplaceAll(command, "anx meta commands get", "anx meta command")
+	command = strings.ReplaceAll(command, "anx meta commands list", "anx meta commands")
+	command = strings.ReplaceAll(command, "anx meta concepts get", "anx meta concept")
+	command = strings.ReplaceAll(command, "anx meta concepts list", "anx meta concepts")
 	return command
 }
 
@@ -1123,19 +1123,19 @@ func configLocalHelpText(topic string) (string, bool) {
 	}
 	topics := map[string]configTopic{
 		"config use": {
-			summary:  "Persist the named profile as the active default used when --agent and OAR_AGENT are omitted.",
-			usage:    "oar config use <profile>",
-			examples: []string{"oar config use agent-a", "oar --json config use agent-a"},
+			summary:  "Persist the named profile as the active default used when --agent and ANX_AGENT are omitted.",
+			usage:    "anx config use <profile>",
+			examples: []string{"anx config use agent-a", "anx --json config use agent-a"},
 		},
 		"config show": {
 			summary:  "Print effective CLI settings and the source of each field (access tokens are redacted).",
-			usage:    "oar config show",
-			examples: []string{"oar config show", "oar --json config show"},
+			usage:    "anx config show",
+			examples: []string{"anx config show", "anx --json config show"},
 		},
 		"config unset": {
 			summary:  "Remove the default profile marker file so the CLI falls back to single-profile auto-select or explicit flags/env.",
-			usage:    "oar config unset",
-			examples: []string{"oar config unset", "oar --json config unset"},
+			usage:    "anx config unset",
+			examples: []string{"anx config unset", "anx --json config unset"},
 		},
 	}
 	entry, ok := topics[strings.Join(strings.Fields(strings.TrimSpace(topic)), " ")]
@@ -1167,48 +1167,48 @@ func authLocalHelpText(topic string) (string, bool) {
 	topics := map[string]authTopic{
 		"auth whoami": {
 			summary:  "Validate the active profile against the server, print resolved identity metadata, and point to wake-registration next steps.",
-			usage:    "oar auth whoami",
-			examples: []string{"oar auth whoami", "oar --json auth whoami"},
+			usage:    "anx auth whoami",
+			examples: []string{"anx auth whoami", "anx --json auth whoami"},
 		},
 		"auth list": {
 			summary:  "List local CLI profiles and identify the active one.",
-			usage:    "oar auth list",
-			examples: []string{"oar auth list", "oar --json auth list"},
+			usage:    "anx auth list",
+			examples: []string{"anx auth list", "anx --json auth list"},
 		},
 		"auth default": {
 			summary:  "Persist the default profile used when no explicit agent is selected.",
-			usage:    "oar auth default <profile>",
-			examples: []string{"oar auth default agent-a", "oar --json auth default agent-a"},
+			usage:    "anx auth default <profile>",
+			examples: []string{"anx auth default agent-a", "anx --json auth default agent-a"},
 		},
 		"auth invites": {
 			summary:  "Manage invite tokens and invite-backed registration for later principals.",
-			usage:    "oar auth invites",
-			examples: []string{"oar auth invites create --kind human", "oar auth invites revoke --token <invite-token>"},
+			usage:    "anx auth invites",
+			examples: []string{"anx auth invites create --kind human", "anx auth invites revoke --token <invite-token>"},
 		},
 		"auth bootstrap": {
 			summary:  "Inspect whether bootstrap registration is still available for the first principal.",
-			usage:    "oar auth bootstrap status",
-			examples: []string{"oar auth bootstrap status", "oar --json auth bootstrap status"},
+			usage:    "anx auth bootstrap status",
+			examples: []string{"anx auth bootstrap status", "anx --json auth bootstrap status"},
 		},
 		"auth update-username": {
 			summary:  "Update the authenticated agent username and sync the local profile copy.",
-			usage:    "oar auth update-username --username <username>",
-			examples: []string{"oar auth update-username --username renamed_agent"},
+			usage:    "anx auth update-username --username <username>",
+			examples: []string{"anx auth update-username --username renamed_agent"},
 		},
 		"auth rotate": {
 			summary:  "Rotate the active agent key and refresh stored credentials.",
-			usage:    "oar auth rotate",
-			examples: []string{"oar auth rotate", "oar --json auth rotate"},
+			usage:    "anx auth rotate",
+			examples: []string{"anx auth rotate", "anx --json auth rotate"},
 		},
 		"auth revoke": {
 			summary:  "Revoke the active agent and mark the local profile revoked.",
-			usage:    "oar auth revoke",
-			examples: []string{"oar auth revoke", "oar --json auth revoke"},
+			usage:    "anx auth revoke",
+			examples: []string{"anx auth revoke", "anx --json auth revoke"},
 		},
 		"auth token-status": {
 			summary:  "Inspect whether the local profile still has refreshable token material.",
-			usage:    "oar auth token-status",
-			examples: []string{"oar auth token-status", "oar --json auth token-status"},
+			usage:    "anx auth token-status",
+			examples: []string{"anx auth token-status", "anx --json auth token-status"},
 		},
 	}
 	entry, ok := topics[strings.Join(strings.Fields(strings.TrimSpace(topic)), " ")]
@@ -1228,7 +1228,7 @@ func authLocalHelpText(topic string) (string, bool) {
 	}
 	if strings.Join(strings.Fields(strings.TrimSpace(topic)), " ") == "auth whoami" {
 		b.WriteString("\nNext steps:\n")
-		b.WriteString("  If this agent should be wakeable by `@handle`, read `oar meta doc wake-routing`.\n")
+		b.WriteString("  If this agent should be wakeable by `@handle`, read `anx meta doc wake-routing`.\n")
 	}
 	b.WriteString("\n")
 	b.WriteString(formatGlobalFlagUsage(topic))

@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"strings"
 
-	"organization-autorunner-core/internal/primitives"
+	"agent-nexus-core/internal/primitives"
 )
 
 var errIdempotencyKeyMismatch = errors.New("idempotency key reuse does not match the original request body")

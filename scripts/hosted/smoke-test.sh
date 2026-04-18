@@ -35,7 +35,7 @@ seed_workspace_with_artifact() {
   curl -fsS \
     -H 'content-type: application/json' \
     -X POST \
-    -d '{"actor_id":"oar-core","artifact":{"kind":"evidence","refs":["url:https://example.test/restore-drill"]},"content":"managed-hosting-smoke-artifact","content_type":"text"}' \
+    -d '{"actor_id":"anx-core","artifact":{"kind":"evidence","refs":["url:https://example.test/restore-drill"]},"content":"managed-hosting-smoke-artifact","content_type":"text"}' \
     "http://127.0.0.1:${listen_port}/artifacts" >/dev/null
   stop_background_process "$server_pid"
   trap - RETURN

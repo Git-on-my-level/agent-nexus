@@ -36,8 +36,8 @@ describe("workspaceResolver", () => {
     clearWorkspaceResolutionCache();
   });
 
-  it("resolves static OAR_WORKSPACES entries", async () => {
-    mockState.env.OAR_WORKSPACES =
+  it("resolves static ANX_WORKSPACES entries", async () => {
+    mockState.env.ANX_WORKSPACES =
       '[{"slug":"ops","label":"Ops","coreBaseUrl":"http://127.0.0.1:8001"}]';
 
     const resolved = await resolveWorkspaceBySlug({
@@ -53,7 +53,7 @@ describe("workspaceResolver", () => {
   });
 
   it("returns configured catalog with static default workspace", async () => {
-    mockState.env.OAR_WORKSPACES =
+    mockState.env.ANX_WORKSPACES =
       '[{"slug":"ops","label":"Ops","coreBaseUrl":"http://127.0.0.1:8001"}]';
 
     const catalog = await resolveWorkspaceCatalog(createEvent());
@@ -62,7 +62,7 @@ describe("workspaceResolver", () => {
   });
 
   it("returns workspace_not_configured for unknown workspace slug", async () => {
-    mockState.env.OAR_WORKSPACES =
+    mockState.env.ANX_WORKSPACES =
       '[{"slug":"ops","label":"Ops","coreBaseUrl":"http://127.0.0.1:8001"}]';
 
     const resolved = await resolveWorkspaceBySlug({
@@ -77,9 +77,9 @@ describe("workspaceResolver", () => {
   });
 
   it("resolves workspace from control plane when SaaS packed-host dev is enabled", async () => {
-    mockState.env.OAR_SAAS_PACKED_HOST_DEV = "1";
-    mockState.env.OAR_CONTROL_BASE_URL = "http://127.0.0.1:8100";
-    mockState.env.OAR_CONTROL_PLANE_DEV_ACCESS_TOKEN = "tok_dev";
+    mockState.env.ANX_SAAS_PACKED_HOST_DEV = "1";
+    mockState.env.ANX_CONTROL_BASE_URL = "http://127.0.0.1:8100";
+    mockState.env.ANX_CONTROL_PLANE_DEV_ACCESS_TOKEN = "tok_dev";
 
     const fetchMock = vi.fn(async () => ({
       ok: true,
@@ -118,9 +118,9 @@ describe("workspaceResolver", () => {
   });
 
   it("hydrates workspace catalog from control plane org list in SaaS packed-host mode", async () => {
-    mockState.env.OAR_SAAS_PACKED_HOST_DEV = "1";
-    mockState.env.OAR_CONTROL_BASE_URL = "http://127.0.0.1:8100";
-    mockState.env.OAR_CONTROL_PLANE_DEV_ACCESS_TOKEN = "tok_dev";
+    mockState.env.ANX_SAAS_PACKED_HOST_DEV = "1";
+    mockState.env.ANX_CONTROL_BASE_URL = "http://127.0.0.1:8100";
+    mockState.env.ANX_CONTROL_PLANE_DEV_ACCESS_TOKEN = "tok_dev";
 
     const fetchMock = vi.fn(async (url) => {
       const u = String(url);
@@ -182,7 +182,7 @@ describe("workspaceResolver", () => {
   });
 
   it("resolves proxy target from static workspace catalog", async () => {
-    mockState.env.OAR_WORKSPACES =
+    mockState.env.ANX_WORKSPACES =
       '[{"slug":"ops","label":"Ops","coreBaseUrl":"http://127.0.0.1:8001"}]';
 
     const resolved = await resolveProxyWorkspaceTarget({

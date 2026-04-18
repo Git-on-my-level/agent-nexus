@@ -73,7 +73,7 @@
 </script>
 
 <svelte:head>
-  <title>New organization — OAR</title>
+  <title>New organization — ANX</title>
 </svelte:head>
 
 <div class="mx-auto max-w-lg py-6">

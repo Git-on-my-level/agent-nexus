@@ -4,16 +4,16 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 BIN_DIR="${BIN_DIR:-$ROOT_DIR/.bin}"
-BIN_PATH="${OAR_CORE_BIN:-$BIN_DIR/oar-core}"
+BIN_PATH="${ANX_CORE_BIN:-$BIN_DIR/anx-core}"
 
 if [[ ! -x "$BIN_PATH" ]]; then
   echo >&2 "Binary not found at $BIN_PATH — run ./scripts/build-prod first"
   exit 1
 fi
 
-WORKSPACE_ROOT="${WORKSPACE_ROOT:-${OAR_WORKSPACE_ROOT:-$ROOT_DIR/.oar-workspace}}"
-SCHEMA_PATH="${SCHEMA_PATH:-${OAR_SCHEMA_PATH:-$ROOT_DIR/../contracts/oar-schema.yaml}}"
-LISTEN_ADDR="${LISTEN_ADDR:-${OAR_LISTEN_ADDR:-0.0.0.0:${PORT:-8000}}}"
+WORKSPACE_ROOT="${WORKSPACE_ROOT:-${ANX_WORKSPACE_ROOT:-$ROOT_DIR/.anx-workspace}}"
+SCHEMA_PATH="${SCHEMA_PATH:-${ANX_SCHEMA_PATH:-$ROOT_DIR/../contracts/anx-schema.yaml}}"
+LISTEN_ADDR="${LISTEN_ADDR:-${ANX_LISTEN_ADDR:-0.0.0.0:${PORT:-8000}}}"
 
 exec "$BIN_PATH" \
   --listen-addr "$LISTEN_ADDR" \

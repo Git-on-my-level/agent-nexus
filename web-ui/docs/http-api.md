@@ -1,8 +1,8 @@
 # OAR HTTP API Contract (v0)
 
-This document defines the **concrete HTTP/JSON surface** used for integration between **oar-core** and clients (including **oar-ui** and agents).
+This document defines the **concrete HTTP/JSON surface** used for integration between **anx-core** and clients (including **oar-ui** and agents).
 
-The schema of objects is defined by `/contracts/oar-schema.yaml`.
+The schema of objects is defined by `/contracts/anx-schema.yaml`.
 
 ## Conventions
 
@@ -68,7 +68,7 @@ Each endpoint is classified with an `x-oar-surface` extension indicating its rol
   - Body: `{ "actor_id": "...", "patch": { <fields...> }, "if_updated_at"?: "..." }`
   - Response: `{ "card": <card> }`
 
-- Board-scoped card lifecycle (create, patch, move, remove) is exposed under `POST|PATCH /boards/{board_id}/cards` and related paths; see `/contracts/oar-openapi.yaml`.
+- Board-scoped card lifecycle (create, patch, move, remove) is exposed under `POST|PATCH /boards/{board_id}/cards` and related paths; see `/contracts/anx-openapi.yaml`.
 
 ### Threads (read-only backing inspection)
 

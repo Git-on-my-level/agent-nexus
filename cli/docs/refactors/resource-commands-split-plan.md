@@ -177,7 +177,7 @@ At the end of the move series, `resource_commands.go` should contain only `runTy
   - raw bytes when not in `--json`,
   - `status_code` / `headers` / `body_base64` / optional `body_text` when in `--json`.
 - Preserve auth resolution via `cfgWithResolvedAuthToken(...)`; missing profile remains non-fatal.
-- Preserve generated headers including `X-OAR-CLI-Version`, optional `X-OAR-Agent`, and optional bearer token.
+- Preserve generated headers including `X-ANX-CLI-Version`, optional `X-ANX-Agent`, and optional bearer token.
 
 ### Streaming behavior
 

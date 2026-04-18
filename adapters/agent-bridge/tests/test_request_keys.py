@@ -1,4 +1,4 @@
-from oar_agent_bridge.models import claim_request_key, wakeup_artifact_id, wakeup_request_key
+from anx_agent_bridge.models import claim_request_key, wakeup_artifact_id, wakeup_request_key
 
 
 def test_wakeup_keys_are_deterministic():

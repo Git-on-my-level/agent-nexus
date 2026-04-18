@@ -10,7 +10,7 @@ Use this when you want humans or agents to wake other agents from thread message
 
 How it works
 
-- Wake routing is provided by a workspace-owned sidecar hosted inside <<tick>>oar-core<<tick>>, not by the per-agent CLI.
+- Wake routing is provided by a workspace-owned sidecar hosted inside <<tick>>anx-core<<tick>>, not by the per-agent CLI.
 - The durable wake registration now lives on the agent principal metadata, not in <<tick>>docs<<tick>>.
 - The bridge-owned readiness proof is the latest <<tick>>agent_bridge_checked_in<<tick>> event referenced by that principal registration.
 - A tagged message becomes durable wake work when the target agent is registered for the workspace. Bridge readiness only changes whether delivery is immediate or queued.
@@ -44,77 +44,77 @@ How humans discover it
 
 How agents discover it
 
-- Read this topic with <<tick>>oar meta doc wake-routing<<tick>>.
-- Read the preferred runtime path with <<tick>>oar meta doc agent-bridge<<tick>>.
-- Use <<tick>>oar help bridge<<tick>> to bootstrap the per-agent bridge runtime from the main CLI.
-- Use <<tick>>oar bridge workspace-id --handle <handle><<tick>> when an existing registration is the easiest source of truth for the durable workspace id.
-- Use <<tick>>oar bridge import-auth --config ./agent.toml --from-profile <agent><<tick>> when matching <<tick>>oar<<tick>> auth already exists.
-- Use <<tick>>oar notifications list --status unread<<tick>> to inspect queued notifications with the main CLI.
-- Use <<tick>>oar notifications dismiss --wakeup-id <wakeup-id><<tick>> to dismiss a notification so it no longer wakes the bridge.
-- Use <<tick>>oar auth whoami<<tick>> to confirm your current username and actor id.
-- Use <<tick>>oar auth principals list --handles-only<<tick>> to inspect the exact handles that can be mentioned.
-- Use <<tick>>oar auth principals list --taggable<<tick>> if you want the filtered principal rows as well.
-- Use <<tick>>oar auth principals list<<tick>> for readable rows; add <<tick>>--json<<tick>> when you need the full wake-routing metadata in a parseable envelope (scripts, debugging).
+- Read this topic with <<tick>>anx meta doc wake-routing<<tick>>.
+- Read the preferred runtime path with <<tick>>anx meta doc agent-bridge<<tick>>.
+- Use <<tick>>anx help bridge<<tick>> to bootstrap the per-agent bridge runtime from the main CLI.
+- Use <<tick>>anx bridge workspace-id --handle <handle><<tick>> when an existing registration is the easiest source of truth for the durable workspace id.
+- Use <<tick>>anx bridge import-auth --config ./agent.toml --from-profile <agent><<tick>> when matching <<tick>>anx<<tick>> auth already exists.
+- Use <<tick>>anx notifications list --status unread<<tick>> to inspect queued notifications with the main CLI.
+- Use <<tick>>anx notifications dismiss --wakeup-id <wakeup-id><<tick>> to dismiss a notification so it no longer wakes the bridge.
+- Use <<tick>>anx auth whoami<<tick>> to confirm your current username and actor id.
+- Use <<tick>>anx auth principals list --handles-only<<tick>> to inspect the exact handles that can be mentioned.
+- Use <<tick>>anx auth principals list --taggable<<tick>> if you want the filtered principal rows as well.
+- Use <<tick>>anx auth principals list<<tick>> for readable rows; add <<tick>>--json<<tick>> when you need the full wake-routing metadata in a parseable envelope (scripts, debugging).
 
-Preferred path when you are using <<tick>>oar-agent-bridge<<tick>>
+Preferred path when you are using <<tick>>anx-agent-bridge<<tick>>
 
 1. Install the runtime:
 
-  oar bridge install
+  anx bridge install
 
-2. Confirm the workspace deployment's <<tick>>oar-core<<tick>> config and note the durable workspace id it uses.
+2. Confirm the workspace deployment's <<tick>>anx-core<<tick>> config and note the durable workspace id it uses.
 
 3. Generate the agent config:
 
-  oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --workspace-path /absolute/path/to/hermes/workspace
+  anx bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --workspace-path /absolute/path/to/hermes/workspace
 
   If you omit <<tick>>--workspace-path<<tick>>, the generated Hermes config keeps placeholder paths and must be edited before the bridge can start.
 
-4. If matching <<tick>>oar<<tick>> auth already exists, import it into the bridge config:
+4. If matching <<tick>>anx<<tick>> auth already exists, import it into the bridge config:
 
-  oar bridge import-auth --config ./agent.toml --from-profile <agent>
+  anx bridge import-auth --config ./agent.toml --from-profile <agent>
 
-  This also syncs the default local <<tick>>[oar].base_url<<tick>> in the bridge config to the imported profile when they differ.
+  This also syncs the default local <<tick>>[anx].base_url<<tick>> in the bridge config to the imported profile when they differ.
 
 5. Register auth and write the initial pending registration when auth does not already exist:
 
-  oar-agent-bridge auth register --config ./agent.toml --invite-token <token> --apply-registration
+  anx-agent-bridge auth register --config ./agent.toml --invite-token <token> --apply-registration
 
   If auth already exists and you only need to rewrite the principal registration:
 
-  oar-agent-bridge registration apply --config <agent.toml>
+  anx-agent-bridge registration apply --config <agent.toml>
 
 6. Start the target bridge:
 
-  oar bridge start --config ./agent.toml
+  anx bridge start --config ./agent.toml
 
 7. Verify the bridge has checked in before expecting immediate delivery:
 
-  oar bridge status --config ./agent.toml
-  oar bridge doctor --config ./agent.toml
-  oar-agent-bridge registration status --config ./agent.toml
+  anx bridge status --config ./agent.toml
+  anx bridge doctor --config ./agent.toml
+  anx-agent-bridge registration status --config ./agent.toml
 
 8. Pull or dismiss queued notifications directly when needed:
 
-  oar notifications list --status unread
-  oar-agent-bridge notifications list --config ./agent.toml --status unread
-  oar notifications dismiss --wakeup-id <wakeup-id>
+  anx notifications list --status unread
+  anx-agent-bridge notifications list --config ./agent.toml --status unread
+  anx notifications dismiss --wakeup-id <wakeup-id>
 
-9. If the bridge is online but tagged delivery still does not work, ask the workspace operator to inspect the embedded wake-routing sidecar in <<tick>>oar-core<<tick>>.
+9. If the bridge is online but tagged delivery still does not work, ask the workspace operator to inspect the embedded wake-routing sidecar in <<tick>>anx-core<<tick>>.
 
-Generic OAR CLI lifecycle
+Generic ANX CLI lifecycle
 
 If you are writing registration state manually, update the agent principal registration only. Manual principal updates do not replace the live bridge-owned check-in event.
 
 1. Confirm the identity you are registering:
 
-  oar auth whoami
+  anx auth whoami
 
   Use the server-resolved username as <<tick>><handle><<tick>> and the server actor id as <<tick>><actor-id><<tick>>.
 
 2. Resolve the durable workspace id you want to enable:
 
-  - If an existing registration is available, start with <<tick>>oar bridge workspace-id --handle <handle><<tick>> or the legacy alias <<tick>>oar bridge workspace-id --document-id agentreg.<handle><<tick>>.
+  - If an existing registration is available, start with <<tick>>anx bridge workspace-id --handle <handle><<tick>> or the legacy alias <<tick>>anx bridge workspace-id --document-id agentreg.<handle><<tick>>.
   - If the workspace deployment already documents the configured <<tick>>workspace_id<<tick>>, copy that exact value.
   - If your deployment is driven by control-plane workspace records, copy the durable workspace id from that record, not the slug.
   - The bundled example value <<tick>>ws_main<<tick>> is only a sample.
@@ -144,14 +144,14 @@ If you are writing registration state manually, update the agent principal regis
 
 4. For first-time registration, patch the current authenticated agent:
 
-  curl -X PATCH "$OAR_BASE_URL/agents/me" \
+  curl -X PATCH "$ANX_BASE_URL/agents/me" \
     -H "Authorization: Bearer <access-token>" \
     -H "Content-Type: application/json" \
     --data @wake-registration.json
 
 5. If auth already exists, prefer the supported bridge-managed path instead of hand-patching:
 
-  oar-agent-bridge registration apply --config ./agent.toml
+  anx-agent-bridge registration apply --config ./agent.toml
 
 Registration schema notes
 
@@ -172,15 +172,15 @@ Verification flow
 
 1. Confirm your local and server identity:
 
-  oar auth whoami
+  anx auth whoami
 
 2. Confirm a principal exists for the target handle:
 
-  oar auth principals list --handles-only
+  anx auth principals list --handles-only
 
 3. Read the principal registration (<<tick>>--json<<tick>> when a script parses the full payload):
 
-  oar auth principals list --json
+  anx auth principals list --json
 
 4. Verify all of the following:
   - principal kind is <<tick>>agent<<tick>>
@@ -189,17 +189,17 @@ Verification flow
   - <<tick>>workspace_bindings<<tick>> contains the current workspace id with <<tick>>enabled: true<<tick>>
   - <<tick>>status<<tick>> is <<tick>>active<<tick>>
   - if you need online delivery right now, <<tick>>bridge_checkin_event_id<<tick>> is present on the registration
-  - if you need online delivery right now, <<tick>>oar events get --event-id <bridge-checkin-event-id><<tick>> (add <<tick>>--json<<tick>> for the CLI JSON envelope) returns an <<tick>>agent_bridge_checked_in<<tick>> event
+  - if you need online delivery right now, <<tick>>anx events get --event-id <bridge-checkin-event-id><<tick>> (add <<tick>>--json<<tick>> for the CLI JSON envelope) returns an <<tick>>agent_bridge_checked_in<<tick>> event
   - if you need online delivery right now, that event actor id matches the principal actor
   - if you need online delivery right now, that event <<tick>>expires_at<<tick>> is still in the future
 
-5. If you are using <<tick>>oar-agent-bridge<<tick>>, prefer:
+5. If you are using <<tick>>anx-agent-bridge<<tick>>, prefer:
 
-  oar bridge doctor --config ./agent.toml
+  anx bridge doctor --config ./agent.toml
 
 Concrete wake example
 
-1. Ensure the target registration is valid for the workspace, and ensure the bridge is running if you want immediate delivery. The workspace deployment must also be running <<tick>>oar-core<<tick>> with the embedded wake-routing sidecar enabled.
+1. Ensure the target registration is valid for the workspace, and ensure the bridge is running if you want immediate delivery. The workspace deployment must also be running <<tick>>anx-core<<tick>> with the embedded wake-routing sidecar enabled.
 2. Post a thread message containing <<tick>>@<handle><<tick>>, for example:
 
   @<handle> summarize the latest onboarding blockers.
@@ -225,12 +225,12 @@ Common failure modes
 
 Operational note
 
-- This mechanism is discoverable from the CLI and UI, but actual wake dispatch is owned by the workspace deployment's <<tick>>oar-core<<tick>> process plus the per-agent bridge runtime.
+- This mechanism is discoverable from the CLI and UI, but actual wake dispatch is owned by the workspace deployment's <<tick>>anx-core<<tick>> process plus the per-agent bridge runtime.
 
 Next steps
 
-  oar help bridge
-  oar meta doc agent-bridge
-  oar bridge doctor --config ./agent.toml`)
+  anx help bridge
+  anx meta doc agent-bridge
+  anx bridge doctor --config ./agent.toml`)
 	return strings.ReplaceAll(guide, tickToken, "`")
 }

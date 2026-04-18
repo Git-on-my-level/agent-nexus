@@ -15,15 +15,15 @@ Two maintenance modes:
 
 ## Background mode
 
-Default: `OAR_PROJECTION_MODE=background`
+Default: `ANX_PROJECTION_MODE=background`
 
 Configuration:
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `OAR_PROJECTION_MAINTENANCE_INTERVAL` | Loop tick | `5s` |
-| `OAR_PROJECTION_STALE_SCAN_INTERVAL` | Full stale scan | `30s` |
-| `OAR_PROJECTION_MAINTENANCE_BATCH_SIZE` | Projections per tick | `50` |
+| `ANX_PROJECTION_MAINTENANCE_INTERVAL` | Loop tick | `5s` |
+| `ANX_PROJECTION_STALE_SCAN_INTERVAL` | Full stale scan | `30s` |
+| `ANX_PROJECTION_MAINTENANCE_BATCH_SIZE` | Projections per tick | `50` |
 
 Behavior:
 - Writes queue dirty projection records
@@ -63,7 +63,7 @@ Warning signs:
 
 ## Manual mode
 
-Enable with `OAR_PROJECTION_MODE=manual`.
+Enable with `ANX_PROJECTION_MODE=manual`.
 
 Behavior:
 - Writes still queue dirty projection records
@@ -86,8 +86,8 @@ curl -X POST http://127.0.0.1:8001/derived/rebuild \
 Or using hosted helper:
 
 ```bash
-OAR_CORE_BASE_URL=http://127.0.0.1:18001 \
-OAR_AUTH_TOKEN=$ACCESS_TOKEN \
+ANX_CORE_BASE_URL=http://127.0.0.1:18001 \
+ANX_AUTH_TOKEN=$ACCESS_TOKEN \
 scripts/hosted/rebuild-derived.sh --actor-id operator_ws_example
 ```
 
@@ -100,10 +100,10 @@ Switching modes at runtime requires restart:
 
 ```bash
 # Update env file
-sed -i 's/OAR_PROJECTION_MODE=background/OAR_PROJECTION_MODE=manual/' /etc/oar/workspaces/ws_example.env
+sed -i 's/ANX_PROJECTION_MODE=background/ANX_PROJECTION_MODE=manual/' /etc/anx/workspaces/ws_example.env
 
 # Restart workspace core
-sudo systemctl restart oar-core@ws_example
+sudo systemctl restart anx-core@ws_example
 ```
 
 ## Diagnostic endpoints
@@ -176,18 +176,18 @@ If manual verification is needed after restore:
 
 ```bash
 ./scripts/hosted/verify-restore.sh \
-  --instance-root /srv/oar/workspace-restore-drill \
-  --core-bin ./core/.bin/oar-core \
-  --schema-path ./contracts/oar-schema.yaml
+  --instance-root /srv/anx/workspace-restore-drill \
+  --core-bin ./core/.bin/anx-core \
+  --schema-path ./contracts/anx-schema.yaml
 ```
 
 ## Performance tuning
 
 High-write workloads may benefit from:
 
-- Lower `OAR_PROJECTION_MAINTENANCE_INTERVAL` (more frequent ticks)
-- Higher `OAR_PROJECTION_MAINTENANCE_BATCH_SIZE` (more work per tick)
-- Lower `OAR_PROJECTION_STALE_SCAN_INTERVAL` (more aggressive stale detection)
+- Lower `ANX_PROJECTION_MAINTENANCE_INTERVAL` (more frequent ticks)
+- Higher `ANX_PROJECTION_MAINTENANCE_BATCH_SIZE` (more work per tick)
+- Lower `ANX_PROJECTION_STALE_SCAN_INTERVAL` (more aggressive stale detection)
 
 Trade-offs:
 - Lower intervals = more CPU, faster catch-up

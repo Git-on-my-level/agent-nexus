@@ -20,8 +20,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"organization-autorunner-core/internal/blob"
-	"organization-autorunner-core/internal/schedule"
+	"agent-nexus-core/internal/blob"
+	"agent-nexus-core/internal/schedule"
 )
 
 var ErrNotFound = errors.New("not found")

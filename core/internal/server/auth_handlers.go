@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"organization-autorunner-core/internal/auth"
+	"agent-nexus-core/internal/auth"
 )
 
 type principalContextKey struct{}

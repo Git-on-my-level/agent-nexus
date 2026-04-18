@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"organization-autorunner-cli/internal/profile"
+	"agent-nexus-cli/internal/profile"
 )
 
 func TestDraftCreateAggregatesEventValidationErrors(t *testing.T) {
@@ -160,7 +160,7 @@ func TestDraftCreateHelpWithCommandShowsTargetSchema(t *testing.T) {
 	if !strings.Contains(output, "Communication: direct communication or important non-structured information") {
 		t.Fatalf("expected communication group hint in draft create help output=%s", output)
 	}
-	if !strings.Contains(output, "`receipt_added`: prefer `oar receipts create`") {
+	if !strings.Contains(output, "`receipt_added`: prefer `anx receipts create`") {
 		t.Fatalf("expected higher-level packet lifecycle hint in draft create help output=%s", output)
 	}
 }

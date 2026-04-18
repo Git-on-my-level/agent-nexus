@@ -14,14 +14,14 @@ The scenario intentionally mixes:
 - a final product recommendation
 
 What makes this run successful:
-1. Each role uses the real `oar` CLI against the seeded workspace.
+1. Each role uses the real `anx` CLI against the seeded workspace.
 2. Each role inspects different threads, artifacts, cards, or inbox signals.
 3. Each role publishes a role-specific `actor_statement` event with grounded evidence.
 4. The final product role updates the seeded rescue brief and publishes the final launch recommendation.
 5. Every role writes `result.md` documenting friction and concrete CLI improvements.
 
 Constraints:
-- Use only the `oar` binary for OAR interactions.
+- Use only the `anx` binary for OAR interactions.
 - Do not use `curl` or edit repository source files.
 - Keep notes and helper files inside the current working directory.
 - Prefer the exact commands in `COMMANDS.md` and the resolved IDs in `TARGETS.md` over rediscovery.
@@ -29,7 +29,7 @@ Constraints:
 
 Live environment:
 - Base URL: `http://127.0.0.1:8000`
-- `oar` is available on `PATH`
+- `anx` is available on `PATH`
 - Current directory is writable
 
 Important collaboration rule:

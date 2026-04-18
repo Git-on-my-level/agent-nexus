@@ -337,7 +337,7 @@ func buildCollectorThread(clusterName string, members []InventoryRecord, sourceN
 				"key_artifacts": []string{},
 				"provenance": map[string]any{
 					"sources": []string{"import_plan:" + slugify(sourceName)},
-					"notes":   "Collector thread created by oar import.",
+					"notes":   "Collector thread created by anx import.",
 				},
 			},
 		},

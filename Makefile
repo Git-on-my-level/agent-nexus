@@ -4,15 +4,15 @@ CORE_DIR := core
 CLI_DIR := cli
 WEB_UI_DIR := web-ui
 BRIDGE_DIR := adapters/agent-bridge
-HTTP_RECORD_DIR := tools/oar-http-record
+HTTP_RECORD_DIR := tools/anx-http-record
 
 CORE_HOST ?= 127.0.0.1
 CORE_PORT ?= 8000
 WEB_UI_PORT ?= 5173
 CORE_BASE_URL ?= http://$(CORE_HOST):$(CORE_PORT)
 ACTIONLINT_BIN := $(CURDIR)/.bin/actionlint
-# Local SQLite + artifacts for oar-core (same default as core/Makefile).
-CORE_WORKSPACE_ROOT ?= $(CURDIR)/$(CORE_DIR)/.oar-workspace
+# Local SQLite + artifacts for anx-core (same default as core/Makefile).
+CORE_WORKSPACE_ROOT ?= $(CURDIR)/$(CORE_DIR)/.anx-workspace
 # When 1 (default), `make serve` removes CORE_WORKSPACE_ROOT before starting core if SEED_CORE=1,
 # so each dev session starts from an empty workspace and mock seed does not stack on old data.
 RESET_DEV_WORKSPACE ?= 1
@@ -85,7 +85,7 @@ cli-check: ## Run CLI checks
 CLI_VERSION ?= $(shell ./scripts/read-version.sh)
 
 cli-build: ## Build CLI binary
-	cd $(CLI_DIR) && go build -ldflags='-X organization-autorunner-cli/internal/buildinfo.Current=$(CLI_VERSION)' -o oar ./cmd/oar
+	cd $(CLI_DIR) && go build -ldflags='-X agent-nexus-cli/internal/buildinfo.Current=$(CLI_VERSION)' -o anx ./cmd/anx
 
 cli-integration-test: ## Run CLI real-binary integration tests (non-default)
 	cd $(CLI_DIR) && go test -tags=integration ./integration/...
@@ -94,13 +94,13 @@ http-record-test: ## Run tests for the local HTTP recording proxy
 	cd $(HTTP_RECORD_DIR) && go test ./...
 
 http-record-run: ## Run the local HTTP recording proxy (set ARGS='...')
-	./scripts/oar-http-record $(ARGS)
+	./scripts/anx-http-record $(ARGS)
 
 http-record-compile: ## Compile a JSONL recording to replay JSON (set ARGS='...')
-	./scripts/oar-http-compile $(ARGS)
+	./scripts/anx-http-compile $(ARGS)
 
 http-record-replay: ## Replay a compiled seed JSON against a core (set ARGS='...')
-	./scripts/oar-http-replay $(ARGS)
+	./scripts/anx-http-replay $(ARGS)
 
 bridge-setup: ## Set up the bridge-local Python 3.11 virtualenv and deps
 	$(MAKE) -C $(BRIDGE_DIR) setup

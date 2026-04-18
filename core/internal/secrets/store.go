@@ -42,7 +42,7 @@ type CreateSecretInput struct {
 
 func (s *Store) Create(ctx context.Context, input CreateSecretInput) (SecretMetadata, error) {
 	if s.encryptor == nil {
-		return SecretMetadata{}, fmt.Errorf("secrets encryption is not configured (set OAR_SECRETS_KEY)")
+		return SecretMetadata{}, fmt.Errorf("secrets encryption is not configured (set ANX_SECRETS_KEY)")
 	}
 
 	name := strings.TrimSpace(input.Name)
@@ -145,7 +145,7 @@ func (s *Store) GetByID(ctx context.Context, id string) (SecretMetadata, error) 
 
 func (s *Store) Reveal(ctx context.Context, id string) (string, string, error) {
 	if s.encryptor == nil {
-		return "", "", fmt.Errorf("secrets encryption is not configured (set OAR_SECRETS_KEY)")
+		return "", "", fmt.Errorf("secrets encryption is not configured (set ANX_SECRETS_KEY)")
 	}
 
 	var name string
@@ -171,7 +171,7 @@ func (s *Store) Reveal(ctx context.Context, id string) (string, string, error) {
 
 func (s *Store) RevealBatchByNames(ctx context.Context, names []string) ([]struct{ Name, Value string }, error) {
 	if s.encryptor == nil {
-		return nil, fmt.Errorf("secrets encryption is not configured (set OAR_SECRETS_KEY)")
+		return nil, fmt.Errorf("secrets encryption is not configured (set ANX_SECRETS_KEY)")
 	}
 	if len(names) == 0 {
 		return nil, fmt.Errorf("at least one secret name is required")
@@ -228,7 +228,7 @@ func (s *Store) RevealBatchByNames(ctx context.Context, names []string) ([]struc
 
 func (s *Store) Update(ctx context.Context, id string, value string, description *string, actorID string) (SecretMetadata, error) {
 	if s.encryptor == nil {
-		return SecretMetadata{}, fmt.Errorf("secrets encryption is not configured (set OAR_SECRETS_KEY)")
+		return SecretMetadata{}, fmt.Errorf("secrets encryption is not configured (set ANX_SECRETS_KEY)")
 	}
 	if strings.TrimSpace(value) == "" {
 		return SecretMetadata{}, fmt.Errorf("secret value is required")

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"organization-autorunner-core/internal/blob"
+	"agent-nexus-core/internal/blob"
 )
 
 const blobUsageTotalsRowID = 1

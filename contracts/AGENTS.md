@@ -17,15 +17,15 @@ It defines the durable language that `core`, `cli`, and `web-ui` use to interope
 - Keep contract evolution explicit so downstream modules can update from one authoritative place.
 
 ## Invariants
-- Canonical sources are `oar-openapi.yaml` and `oar-schema.yaml`.
+- Canonical sources are `anx-openapi.yaml` and `anx-schema.yaml`.
 - Generated artifacts are derived outputs and must remain reproducible.
 - Shared behavior changes should be described here before they are implemented in runtime modules.
 - Contract changes must preserve or intentionally document compatibility impact across `core`, `cli`, and `web-ui`.
 
 ## Canonical References
 - Overview: `README.md`
-- OpenAPI contract: `oar-openapi.yaml`
-- Shared schema: `oar-schema.yaml`
+- OpenAPI contract: `anx-openapi.yaml`
+- Shared schema: `anx-schema.yaml`
 - Generated artifacts: `gen/`
 
 ## Change Routing

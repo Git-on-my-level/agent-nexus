@@ -5,7 +5,7 @@ one isolated workspace deployment per instance, provisioned by operators. It is
 not a self-service control plane, and it does not introduce shared row-level
 multitenancy.
 
-Run N independent `oar-core` instances on a single Mac host, each with its own
+Run N independent `anx-core` instances on a single Mac host, each with its own
 workspace, port, and process supervision via `launchd`. A reverse proxy
 (Caddy, nginx, etc.) fronts them with TLS and routing.
 
@@ -23,7 +23,7 @@ workspace, port, and process supervision via `launchd`. A reverse proxy
 ## Prerequisites
 
 - macOS host with a Go toolchain (for building from source)
-- The `organization-autorunner` repo cloned on the host (or a pre-built binary
+- The `agent-nexus` repo cloned on the host (or a pre-built binary
   transferred to it)
 - A reverse proxy for TLS termination and routing
 
@@ -36,7 +36,7 @@ workspace, port, and process supervision via `launchd`. A reverse proxy
                     └──┬──────────┬───┘
            :8001 ◄─────┘          └─────► :8002
       ┌────────────┐            ┌────────────┐
-      │  oar-core   │            │  oar-core   │
+      │  anx-core   │            │  anx-core   │
       │  instance-a │            │  instance-b │
       │  workspace/ │            │  workspace/ │
       │   state.db  │            │   state.db  │
@@ -58,15 +58,14 @@ Instances share a single binary and schema assets, but not state.
 From the repo root:
 
 ```bash
-./scripts/install-oar-core.sh --prefix ~/.oar
-```
+./scripts/install-anx-core.sh --prefix ~/.anx ```
 
 This builds the binary and copies it along with schema assets to:
 
 ```
-~/.oar/
-├── bin/oar-core
-├── share/oar-schema.yaml
+~/.anx/
+├── bin/anx-core
+├── share/anx-schema.yaml
 ├── share/meta/commands.json
 ├── logs/
 └── workspaces/
@@ -76,17 +75,17 @@ This builds the binary and copies it along with schema assets to:
 
 ```bash
 # Instance A on port 8001
-./scripts/install-oar-core.sh --skip-build \
+./scripts/install-anx-core.sh --skip-build \
   --instance team-alpha --port 8001 --load
 
 # Instance B on port 8002
-./scripts/install-oar-core.sh --skip-build \
+./scripts/install-anx-core.sh --skip-build \
   --instance team-beta --port 8002 --load
 ```
 
 Each `--instance` call:
-1. Creates the workspace directory at `~/.oar/workspaces/<name>/`
-2. Generates a launchd plist at `~/Library/LaunchAgents/com.oar.core.<name>.plist`
+1. Creates the workspace directory at `~/.anx/workspaces/<name>/`
+2. Generates a launchd plist at `~/Library/LaunchAgents/com.anx.core.<name>.plist`
 3. With `--load`, bootstraps the service immediately
 
 ### 3. Verify
@@ -104,42 +103,42 @@ curl -fsS http://127.0.0.1:8001/meta/handshake | jq .core_instance_id
 ### Add an instance
 
 ```bash
-./scripts/install-oar-core.sh --skip-build \
+./scripts/install-anx-core.sh --skip-build \
   --instance new-team --port 8003 --load
 ```
 
 ### Stop an instance
 
 ```bash
-launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.oar.core.team-alpha.plist
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.anx.core.team-alpha.plist
 ```
 
 ### Start a stopped instance
 
 ```bash
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.oar.core.team-alpha.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.anx.core.team-alpha.plist
 ```
 
 ### Remove an instance
 
 ```bash
-./scripts/install-oar-core.sh --unload team-alpha
+./scripts/install-anx-core.sh --unload team-alpha
 ```
 
 This stops the process and removes the plist. Workspace data is preserved at
-`~/.oar/workspaces/team-alpha/` — delete it manually if no longer needed.
+`~/.anx/workspaces/team-alpha/` — delete it manually if no longer needed.
 
 ### List running instances
 
 ```bash
-launchctl list | grep com.oar.core
+launchctl list | grep com.anx.core
 ```
 
 ### View logs
 
 ```bash
-tail -f ~/.oar/logs/oar-core-team-alpha.err.log
-tail -f ~/.oar/logs/oar-core-team-alpha.out.log
+tail -f ~/.anx/logs/anx-core-team-alpha.err.log
+tail -f ~/.anx/logs/anx-core-team-alpha.out.log
 ```
 
 ## Upgrading the Binary
@@ -148,11 +147,9 @@ Build once, restart all instances:
 
 ```bash
 # Rebuild
-./scripts/install-oar-core.sh --prefix ~/.oar
-
-# Restart all instances (launchd restarts automatically on process exit)
-for plist in ~/Library/LaunchAgents/com.oar.core.*.plist; do
-  instance=$(basename "$plist" .plist | sed 's/com\.oar\.core\.//')
+./scripts/install-anx-core.sh --prefix ~/.anx # Restart all instances (launchd restarts automatically on process exit)
+for plist in ~/Library/LaunchAgents/com.anx.core.*.plist; do
+  instance=$(basename "$plist" .plist | sed 's/com\.anx\.core\.//')
   echo "Restarting $instance…"
   launchctl bootout gui/$(id -u) "$plist" 2>/dev/null || true
   launchctl bootstrap gui/$(id -u) "$plist"
@@ -171,7 +168,7 @@ TLS, routing, and public-facing concerns.
 | TLS termination | Proxy terminates TLS; core listens plain HTTP |
 | Forwarded headers | Proxy must set `X-Forwarded-Proto` and `X-Forwarded-Host` |
 | SSE streaming | Do not buffer SSE responses (core sets `X-Accel-Buffering: no`) |
-| WebAuthn | Set `OAR_WEBAUTHN_RPID` / `OAR_WEBAUTHN_ORIGIN` if proxy hostname differs from core listen address |
+| WebAuthn | Set `ANX_WEBAUTHN_RPID` / `ANX_WEBAUTHN_ORIGIN` if proxy hostname differs from core listen address |
 | Health checks | Use `GET /readyz` for upstream readiness checks; reserve `GET /ops/health` for operator diagnostics |
 
 ### Routing strategies
@@ -179,26 +176,26 @@ TLS, routing, and public-facing concerns.
 **Subdomain-based** (recommended for isolated tenants):
 
 ```
-team-alpha.oar.example.com  →  127.0.0.1:8001
-team-beta.oar.example.com   →  127.0.0.1:8002
+team-alpha.anx.example.com  →  127.0.0.1:8001
+team-beta.anx.example.com   →  127.0.0.1:8002
 ```
 
-Each instance gets its own `OAR_WEBAUTHN_RPID` matching the subdomain.
+Each instance gets its own `ANX_WEBAUTHN_RPID` matching the subdomain.
 
 **Path-prefix based** (simpler DNS, but requires client path awareness):
 
 ```
-oar.example.com/team-alpha/  →  127.0.0.1:8001
-oar.example.com/team-beta/   →  127.0.0.1:8002
+anx.example.com/team-alpha/  →  127.0.0.1:8001
+anx.example.com/team-beta/   →  127.0.0.1:8002
 ```
 
 Requires a strip-prefix rewrite at the proxy since core routes don't have a
-path prefix. All instances share one `OAR_WEBAUTHN_RPID`.
+path prefix. All instances share one `ANX_WEBAUTHN_RPID`.
 
 ### Caddy example (subdomain routing)
 
 ```caddyfile
-team-alpha.oar.example.com {
+team-alpha.anx.example.com {
     reverse_proxy 127.0.0.1:8001 {
         flush_interval -1
         header_up X-Forwarded-Proto {scheme}
@@ -208,7 +205,7 @@ team-alpha.oar.example.com {
     }
 }
 
-team-beta.oar.example.com {
+team-beta.anx.example.com {
     reverse_proxy 127.0.0.1:8002 {
         flush_interval -1
         header_up X-Forwarded-Proto {scheme}
@@ -231,8 +228,8 @@ to the launchd plist after generation:
 ```bash
 # Edit the generated plist to add WebAuthn vars:
 # In the <dict> under EnvironmentVariables, add:
-#   OAR_WEBAUTHN_RPID     → team-alpha.oar.example.com
-#   OAR_WEBAUTHN_ORIGIN   → https://team-alpha.oar.example.com
+#   ANX_WEBAUTHN_RPID     → team-alpha.anx.example.com
+#   ANX_WEBAUTHN_ORIGIN   → https://team-alpha.anx.example.com
 ```
 
 Alternatively, core can derive these from `X-Forwarded-Host` at request time
@@ -248,20 +245,20 @@ generated plist's `EnvironmentVariables` dict. Example additions:
 ```xml
 <key>EnvironmentVariables</key>
 <dict>
-    <key>OAR_WEBAUTHN_RPID</key>
-    <string>team-alpha.oar.example.com</string>
-    <key>OAR_WEBAUTHN_ORIGIN</key>
-    <string>https://team-alpha.oar.example.com</string>
-    <key>OAR_CORS_ALLOWED_ORIGINS</key>
-    <string>https://team-alpha.oar.example.com</string>
+    <key>ANX_WEBAUTHN_RPID</key>
+    <string>team-alpha.anx.example.com</string>
+    <key>ANX_WEBAUTHN_ORIGIN</key>
+    <string>https://team-alpha.anx.example.com</string>
+    <key>ANX_CORS_ALLOWED_ORIGINS</key>
+    <string>https://team-alpha.anx.example.com</string>
 </dict>
 ```
 
 After editing a plist, reload the instance:
 
 ```bash
-launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.oar.core.team-alpha.plist
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.oar.core.team-alpha.plist
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.anx.core.team-alpha.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.anx.core.team-alpha.plist
 ```
 
 ## Data Isolation
@@ -269,7 +266,7 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.oar.core.team-alpha.
 Each instance has a fully independent workspace:
 
 ```
-~/.oar/workspaces/team-alpha/
+~/.anx/workspaces/team-alpha/
 ├── state.sqlite       # events, topics, threads, artifacts metadata, actors
 ├── artifacts/content/  # artifact bytes
 ├── logs/
@@ -294,8 +291,8 @@ Provision one deployment root:
 ```bash
 ./scripts/hosted/provision-workspace.sh \
   --instance team-alpha \
-  --instance-root ~/.oar/team-alpha \
-  --public-origin https://team-alpha.oar.example.com \
+  --instance-root ~/.anx/team-alpha \
+  --public-origin https://team-alpha.anx.example.com \
   --listen-port 8001 \
   --generate-bootstrap-token
 ```
@@ -304,7 +301,7 @@ Back it up (default: secret-free):
 
 ```bash
 ./scripts/hosted/backup-workspace.sh \
-  --instance-root ~/.oar/team-alpha \
+  --instance-root ~/.anx/team-alpha \
   --output-dir /backups/team-alpha-$(date -u +%Y%m%dT%H%M%SZ)
 ```
 
@@ -317,7 +314,7 @@ Restore it:
 ```bash
 ./scripts/hosted/restore-workspace.sh \
   --backup-dir /backups/team-alpha-20260319T020000Z \
-  --target-instance-root ~/.oar/team-alpha-restore-drill
+  --target-instance-root ~/.anx/team-alpha-restore-drill
 ```
 
 Verify the restored workspace before cutover:
@@ -326,9 +323,9 @@ Verify the restored workspace before cutover:
 ./core/scripts/build-prod
 
 ./scripts/hosted/verify-restore.sh \
-  --instance-root ~/.oar/team-alpha-restore-drill \
-  --core-bin ./core/.bin/oar-core \
-  --schema-path ./contracts/oar-schema.yaml
+  --instance-root ~/.anx/team-alpha-restore-drill \
+  --core-bin ./core/.bin/anx-core \
+  --schema-path ./contracts/anx-schema.yaml
 ```
 
 This recovery model remains intentionally script-driven for hosted v1. A
@@ -343,12 +340,12 @@ current pack. For the end-to-end operator flow, see
 Check the error log:
 
 ```bash
-cat ~/.oar/logs/oar-core-team-alpha.err.log
+cat ~/.anx/logs/anx-core-team-alpha.err.log
 ```
 
 Common issues:
 - Port conflict: another instance or process is using the same port
-- Missing schema: `oar-schema.yaml` not found at the installed path
+- Missing schema: `anx-schema.yaml` not found at the installed path
 - Permission denied on workspace directory
 
 ### Port conflict detection
@@ -362,7 +359,7 @@ lsof -i :8001
 Check exit code and throttling:
 
 ```bash
-launchctl print gui/$(id -u)/com.oar.core.team-alpha
+launchctl print gui/$(id -u)/com.anx.core.team-alpha
 ```
 
 The plist sets `ThrottleInterval` to 5 seconds to prevent rapid restart loops.
@@ -371,10 +368,10 @@ If the process crashes immediately, check the error log for the root cause.
 ### Reset an instance workspace
 
 ```bash
-launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.oar.core.team-alpha.plist
-rm -rf ~/.oar/workspaces/team-alpha
-mkdir -p ~/.oar/workspaces/team-alpha
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.oar.core.team-alpha.plist
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.anx.core.team-alpha.plist
+rm -rf ~/.anx/workspaces/team-alpha
+mkdir -p ~/.anx/workspaces/team-alpha
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.anx.core.team-alpha.plist
 ```
 
 Core will re-initialize the workspace on next startup.

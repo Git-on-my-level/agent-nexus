@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"organization-autorunner-core/internal/primitives"
-	"organization-autorunner-core/internal/schedule"
+	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/schedule"
 )
 
 const customCadenceWindow = 7 * 24 * time.Hour
@@ -35,7 +35,7 @@ func emitStaleThreadExceptions(ctx context.Context, opts handlerOptions, now tim
 
 	actor := strings.TrimSpace(actorID)
 	if actor == "" {
-		actor = "oar-core"
+		actor = "anx-core"
 	}
 	emittedThreadIDs := make([]string, 0)
 	for _, thread := range threads {

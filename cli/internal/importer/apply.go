@@ -163,17 +163,17 @@ func writeDriverScript(path string, objects []PlanObject, previewDir string) err
 	lines := []string{
 		"#!/usr/bin/env bash",
 		"set -euo pipefail",
-		"# Preview commands. If payloads still contain $REF: placeholders, rerun `oar import apply --execute`.",
+		"# Preview commands. If payloads still contain $REF: placeholders, rerun `anx import apply --execute`.",
 	}
 	for _, obj := range objects {
 		payloadPath := filepath.Join(previewDir, obj.Kind, obj.Key+".json")
 		switch obj.Kind {
 		case "thread":
-			lines = append(lines, fmt.Sprintf("oar --json topics create --from-file %s", shellQuote(payloadPath)))
+			lines = append(lines, fmt.Sprintf("anx --json topics create --from-file %s", shellQuote(payloadPath)))
 		case "artifact":
-			lines = append(lines, fmt.Sprintf("oar --json artifacts create --from-file %s", shellQuote(payloadPath)))
+			lines = append(lines, fmt.Sprintf("anx --json artifacts create --from-file %s", shellQuote(payloadPath)))
 		case "doc":
-			lines = append(lines, fmt.Sprintf("oar --json docs create --from-file %s", shellQuote(payloadPath)))
+			lines = append(lines, fmt.Sprintf("anx --json docs create --from-file %s", shellQuote(payloadPath)))
 		}
 	}
 	if err := writeText(path, strings.Join(lines, "\n")+"\n"); err != nil {

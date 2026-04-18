@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"testing"
 
-	"organization-autorunner-core/internal/actors"
+	"agent-nexus-core/internal/actors"
 )
 
 func TestActorListPaginationLimitParameter(t *testing.T) {

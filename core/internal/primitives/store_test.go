@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"organization-autorunner-core/internal/blob"
+	"agent-nexus-core/internal/blob"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"organization-autorunner-core/internal/primitives"
-	"organization-autorunner-core/internal/storage"
+	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/storage"
 )
 
 func TestStoreAppendAndGetEventUnknownTypeAccepted(t *testing.T) {

@@ -26,7 +26,7 @@ The hosted ops bundle lives under `scripts/hosted/`:
 - `backup-workspace.sh`: create a portable backup bundle with a manifest,
   SQLite backup, backend-aware blob copy/reference metadata, and checksums
 - `restore-workspace.sh`: restore a bundle into an empty target by default
-- `verify-restore.sh`: start `oar-core` against the restored workspace on a
+- `verify-restore.sh`: start `anx-core` against the restored workspace on a
   loopback port, verify `/readyz`, and validate live blob reads through the
   restored backend config
 - `smoke-test.sh`: local end-to-end provision → backup → restore → verify path
@@ -37,14 +37,14 @@ Minimum operator dependencies:
 - `curl`
 - `sqlite3`
 - `sha256sum` or `shasum`
-- a built `oar-core` binary for `verify-restore.sh`
+- a built `anx-core` binary for `verify-restore.sh`
 
 ## Deployment root layout
 
 Provisioning creates one isolated deployment root:
 
 ```text
-/srv/oar/team-alpha/
+/srv/anx/team-alpha/
 ├── workspace/
 │   ├── artifacts/content/
 │   ├── logs/
@@ -56,7 +56,7 @@ Provisioning creates one isolated deployment root:
 └── backups/
 ```
 
-`workspace/` is the durable state passed to `oar-core`. `config/` and
+`workspace/` is the durable state passed to `anx-core`. `config/` and
 `metadata/` are the operator-facing configuration and recovery hints that the
 backup/restore flow carries forward.
 
@@ -67,8 +67,8 @@ backup/restore flow carries forward.
 ```bash
 ./scripts/hosted/provision-workspace.sh \
   --instance team-alpha \
-  --instance-root /srv/oar/team-alpha \
-  --public-origin https://team-alpha.oar.example.com \
+  --instance-root /srv/anx/team-alpha \
+  --public-origin https://team-alpha.anx.example.com \
   --listen-port 8001 \
   --web-ui-port 3001 \
   --generate-bootstrap-token
@@ -76,8 +76,8 @@ backup/restore flow carries forward.
 
 This validates the instance name, host port, and public origin, then writes:
 
-- `/srv/oar/team-alpha/config/env.production`
-- `/srv/oar/team-alpha/metadata/instance.env`
+- `/srv/anx/team-alpha/config/env.production`
+- `/srv/anx/team-alpha/metadata/instance.env`
 - the empty workspace directory structure required by core
 
 If you do not pass `--generate-bootstrap-token` or `--bootstrap-token`, the
@@ -89,15 +89,15 @@ disabled until you replace it.
 Docker Compose example from the repo root:
 
 ```bash
-docker compose --env-file /srv/oar/team-alpha/config/env.production up -d
+docker compose --env-file /srv/anx/team-alpha/config/env.production up -d
 ```
 
 The generated env file sets:
 
-- `HOST_OAR_WORKSPACE_ROOT` for a bind-mounted workspace
-- `OAR_CORE_INSTANCE_ID`
-- `OAR_BOOTSTRAP_TOKEN`
-- `OAR_BLOB_BACKEND` plus either the effective local blob root or the active
+- `HOST_ANX_WORKSPACE_ROOT` for a bind-mounted workspace
+- `ANX_CORE_INSTANCE_ID`
+- `ANX_BOOTSTRAP_TOKEN`
+- `ANX_BLOB_BACKEND` plus either the effective local blob root or the active
   S3 bucket/prefix settings
 - WebAuthn origin/RP values for the workspace domain
 
@@ -153,7 +153,7 @@ token configured for that deployment.
 For a deterministic operator flow, bootstrap an agent principal first:
 
 ```bash
-export OAR_BOOTSTRAP_TOKEN="$(grep '^OAR_BOOTSTRAP_TOKEN=' /srv/oar/team-alpha/config/env.production | cut -d= -f2-)"
+export ANX_BOOTSTRAP_TOKEN="$(grep '^ANX_BOOTSTRAP_TOKEN=' /srv/anx/team-alpha/config/env.production | cut -d= -f2-)"
 
 curl -fsS \
   -H 'content-type: application/json' \
@@ -161,7 +161,7 @@ curl -fsS \
   -d '{
     "username": "team-alpha.bootstrap",
     "public_key": "<base64-ed25519-public-key>",
-    "bootstrap_token": "'"${OAR_BOOTSTRAP_TOKEN}"'"
+    "bootstrap_token": "'"${ANX_BOOTSTRAP_TOKEN}"'"
   }' \
   http://127.0.0.1:8001/auth/agents/register
 ```
@@ -201,8 +201,8 @@ Create one backup bundle per deployment:
 
 ```bash
 ./scripts/hosted/backup-workspace.sh \
-  --instance-root /srv/oar/team-alpha \
-  --output-dir /var/backups/oar/team-alpha-$(date -u +%Y%m%dT%H%M%SZ)
+  --instance-root /srv/anx/team-alpha \
+  --output-dir /var/backups/anx/team-alpha-$(date -u +%Y%m%dT%H%M%SZ)
 ```
 
 The backup bundle contains:
@@ -225,7 +225,7 @@ The manifest records whether config was included via `CONFIG_INCLUDED` and
 secrets. It also records the active blob backend, effective blob location,
 bundle mode (`copy` vs `reference`), and S3 storage parameters when relevant.
 
-For `OAR_BLOB_BACKEND=s3`, the default backup path is intentionally a remote
+For `ANX_BLOB_BACKEND=s3`, the default backup path is intentionally a remote
 reference, not a second independent object snapshot. The manifest tells the
 operator exactly which bucket/prefix the restored workspace will read from.
 If inline S3 credentials are not included in the bundle, restore verification
@@ -237,8 +237,8 @@ If you need a self-contained bundle that includes deployment secrets:
 
 ```bash
 ./scripts/hosted/backup-workspace.sh \
-  --instance-root /srv/oar/team-alpha \
-  --output-dir /var/backups/oar/team-alpha-with-secrets-$(date -u +%Y%m%dT%H%M%SZ) \
+  --instance-root /srv/anx/team-alpha \
+  --output-dir /var/backups/anx/team-alpha-with-secrets-$(date -u +%Y%m%dT%H%M%SZ) \
   --include-config-secrets
 ```
 
@@ -255,8 +255,8 @@ Restore into a new target root by default:
 
 ```bash
 ./scripts/hosted/restore-workspace.sh \
-  --backup-dir /var/backups/oar/team-alpha-20260319T020000Z \
-  --target-instance-root /srv/oar/team-alpha-restore-drill
+  --backup-dir /var/backups/anx/team-alpha-20260319T020000Z \
+  --target-instance-root /srv/anx/team-alpha-restore-drill
 ```
 
 The restore script refuses non-empty targets unless you pass `--force`. Even
@@ -269,9 +269,9 @@ Verify the restored workspace before directing real traffic at it:
 ./core/scripts/build-prod
 
 ./scripts/hosted/verify-restore.sh \
-  --instance-root /srv/oar/team-alpha-restore-drill \
-  --core-bin ./core/.bin/oar-core \
-  --schema-path ./contracts/oar-schema.yaml
+  --instance-root /srv/anx/team-alpha-restore-drill \
+  --core-bin ./core/.bin/anx-core \
+  --schema-path ./contracts/anx-schema.yaml
 ```
 
 Verification checks:

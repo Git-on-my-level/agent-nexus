@@ -7,9 +7,9 @@ import (
 	"sort"
 	"strings"
 
-	"organization-autorunner-cli/internal/config"
-	"organization-autorunner-cli/internal/errnorm"
-	"organization-autorunner-cli/internal/profile"
+	"agent-nexus-cli/internal/config"
+	"agent-nexus-cli/internal/errnorm"
+	"agent-nexus-cli/internal/profile"
 )
 
 func (a *App) runConfig(_ context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
@@ -34,7 +34,7 @@ func (a *App) runConfig(_ context.Context, args []string, cfg config.Resolved) (
 
 func (a *App) runConfigUse(args []string) (*commandResult, error) {
 	if len(args) != 1 || strings.TrimSpace(args[0]) == "" {
-		return nil, errnorm.Usage("profile_required", "usage: oar config use <profile>")
+		return nil, errnorm.Usage("profile_required", "usage: anx config use <profile>")
 	}
 	agentName := strings.TrimSpace(args[0])
 	homeDir, err := a.UserHomeDir()
@@ -44,7 +44,7 @@ func (a *App) runConfigUse(args []string) (*commandResult, error) {
 	profilePath, err := profile.SetActiveAgent(homeDir, agentName)
 	if err != nil {
 		if errors.Is(err, profile.ErrProfileNotFound) {
-			return nil, errnorm.Local("profile_not_found", "profile not found; run `oar auth list` to inspect available profiles")
+			return nil, errnorm.Local("profile_not_found", "profile not found; run `anx auth list` to inspect available profiles")
 		}
 		if errors.Is(err, profile.ErrPersistDefaultMarker) {
 			return nil, errnorm.Wrap(errnorm.KindLocal, "default_profile_persist_failed", "failed to persist default profile selection", err)
@@ -64,7 +64,7 @@ func (a *App) runConfigUse(args []string) (*commandResult, error) {
 
 func (a *App) runConfigUnset(args []string) (*commandResult, error) {
 	if len(args) != 0 {
-		return nil, errnorm.Usage("unexpected_args", "usage: oar config unset")
+		return nil, errnorm.Usage("unexpected_args", "usage: anx config unset")
 	}
 	homeDir, err := a.UserHomeDir()
 	if err != nil {

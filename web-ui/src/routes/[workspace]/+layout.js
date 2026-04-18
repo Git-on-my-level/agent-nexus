@@ -1,7 +1,7 @@
 import {
   createOarCoreClient,
   verifyCoreSchemaVersion,
-} from "$lib/oarCoreClient";
+} from "$lib/anxCoreClient";
 import { WORKSPACE_HEADER } from "$lib/workspacePaths";
 
 const schemaCheckPromises = new Map();

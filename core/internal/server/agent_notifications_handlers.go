@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"organization-autorunner-core/internal/auth"
-	"organization-autorunner-core/internal/primitives"
-	"organization-autorunner-core/internal/router"
+	"agent-nexus-core/internal/auth"
+	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/router"
 )
 
 const (

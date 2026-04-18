@@ -42,7 +42,7 @@ func TestScanDedupePlanApplyPreviewFlow(t *testing.T) {
 		t.Fatalf("write png: %v", err)
 	}
 
-	outDir := filepath.Join(root, ".oar-import", "workspace")
+	outDir := filepath.Join(root, ".anx-import", "workspace")
 	summary, err := Scan(ScanOptions{InputPath: root, OutDir: outDir})
 	if err != nil {
 		t.Fatalf("scan: %v", err)
@@ -311,7 +311,7 @@ func TestScanPreservesDistinctRepoRootPaths(t *testing.T) {
 		}
 	}
 
-	outDir := filepath.Join(root, ".oar-import", "workspace")
+	outDir := filepath.Join(root, ".anx-import", "workspace")
 	summary, err := Scan(ScanOptions{InputPath: root, OutDir: outDir})
 	if err != nil {
 		t.Fatalf("scan: %v", err)
@@ -349,7 +349,7 @@ func TestScanIgnoresNestedOutputDirectory(t *testing.T) {
 		t.Fatalf("write source note: %v", err)
 	}
 
-	outDir := filepath.Join(root, ".oar-import", "workspace")
+	outDir := filepath.Join(root, ".anx-import", "workspace")
 	if err := os.MkdirAll(filepath.Join(outDir, "stale"), 0o755); err != nil {
 		t.Fatalf("mkdir stale output: %v", err)
 	}
@@ -369,7 +369,7 @@ func TestScanIgnoresNestedOutputDirectory(t *testing.T) {
 		t.Fatalf("load inventory: %v", err)
 	}
 	for _, item := range inventory {
-		if strings.Contains(item.RelPath, ".oar-import/") || strings.HasPrefix(item.RelPath, ".oar-import") {
+		if strings.Contains(item.RelPath, ".anx-import/") || strings.HasPrefix(item.RelPath, ".anx-import") {
 			t.Fatalf("expected nested output dir to be excluded from scanned relpaths, got %#v", item)
 		}
 	}

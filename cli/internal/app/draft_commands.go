@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	contractsclient "organization-autorunner-contracts-go-client/client"
+	contractsclient "agent-nexus-contracts-go-client/client"
 
-	"organization-autorunner-cli/internal/config"
-	"organization-autorunner-cli/internal/errnorm"
-	"organization-autorunner-cli/internal/profile"
+	"agent-nexus-cli/internal/config"
+	"agent-nexus-cli/internal/errnorm"
+	"agent-nexus-cli/internal/profile"
 )
 
 const draftVersion = 1
@@ -85,7 +85,7 @@ func (a *App) runDraftCreate(args []string, cfg config.Resolved) (*commandResult
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	if len(fs.Args()) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar draft create`")
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx draft create`")
 	}
 
 	commandID, err := resolveDraftCommandID(commandFlag.value)
@@ -100,7 +100,7 @@ func (a *App) runDraftCreate(args []string, cfg config.Resolved) (*commandResult
 		return nil, err
 	}
 	if len(bodyRaw) == 0 {
-		return nil, errnorm.Usage("invalid_request", "JSON body is required for `oar draft create` (provide stdin or --from-file)")
+		return nil, errnorm.Usage("invalid_request", "JSON body is required for `anx draft create` (provide stdin or --from-file)")
 	}
 	parsedBodyAny, err := decodeJSONPayload(bodyRaw)
 	if err != nil {
@@ -184,7 +184,7 @@ func (a *App) runDraftList(args []string, _ config.Resolved) (*commandResult, er
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	if len(fs.Args()) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar draft list`")
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx draft list`")
 	}
 
 	draftsDir, err := a.draftsDir()
@@ -281,7 +281,7 @@ func (a *App) runDraftCommit(ctx context.Context, args []string, cfg config.Reso
 		return nil, err
 	}
 	if len(positionals) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar draft commit`")
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx draft commit`")
 	}
 
 	draftPath, draft, err := a.loadDraftByInput(draftID)
@@ -350,7 +350,7 @@ func (a *App) runDraftDiscard(args []string, _ config.Resolved) (*commandResult,
 		return nil, err
 	}
 	if len(positionals) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar draft discard`")
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx draft discard`")
 	}
 
 	draftsDir, err := a.draftsDir()
@@ -497,7 +497,7 @@ func validateDraftCreateCommand(commandID string) error {
 	return errnorm.Usage(
 		"invalid_request",
 		fmt.Sprintf(
-			"`oar draft create` cannot stage %s because it requires path parameters (%s); use the typed proposal command instead",
+			"`anx draft create` cannot stage %s because it requires path parameters (%s); use the typed proposal command instead",
 			commandID,
 			strings.Join(spec.PathParams, ", "),
 		),
@@ -1273,7 +1273,7 @@ func draftUsageText() string {
 	return strings.TrimSpace(`
 Draft staging
 
-Use `+"`oar draft`"+` when you want a local checkpoint before sending a write to core.
+Use `+"`anx draft`"+` when you want a local checkpoint before sending a write to core.
 
 Choose the right path:
 
@@ -1289,10 +1289,10 @@ Standard workflow
 4. Commit when ready, or discard if the request should not be sent.
 
 Usage:
-  oar draft create --command <command-id> [--from-file <path>]
-  oar draft list
-  oar draft commit <draft-id> [--keep]
-  oar draft discard <draft-id>
+  anx draft create --command <command-id> [--from-file <path>]
+  anx draft list
+  anx draft commit <draft-id> [--keep]
+  anx draft discard <draft-id>
 
 Heuristics
 
@@ -1302,9 +1302,9 @@ Heuristics
 - Re-read current state before committing older drafts if the target may have changed.
 
 Examples:
-  cat payload.json | oar draft create --command topics.create
-  oar draft list
-  oar draft commit draft-20260305T103000-a1b2c3d4e5f6
+  cat payload.json | anx draft create --command topics.create
+  anx draft list
+  anx draft commit draft-20260305T103000-a1b2c3d4e5f6
 `) + "\n"
 }
 
@@ -1314,7 +1314,7 @@ func draftCreateHelpText(args []string) string {
 Draft create stages a write request locally for later commit.
 
 Usage:
-  oar draft create --command <command-id> [--from-file <path>] [--draft-id <id>]
+  anx draft create --command <command-id> [--from-file <path>] [--draft-id <id>]
 
 Flags:
   --command <id|path>   Command ID or CLI path (for example, events.create)
@@ -1322,8 +1322,8 @@ Flags:
   --draft-id <id>       Optional deterministic draft ID
 
 Examples:
-  cat payload.json | oar draft create --command events.create
-  oar draft create --command topics.create --from-file topic.json
+  cat payload.json | anx draft create --command events.create
+  anx draft create --command topics.create --from-file topic.json
 `))
 
 	commandValue := draftCreateHelpCommandValue(args)

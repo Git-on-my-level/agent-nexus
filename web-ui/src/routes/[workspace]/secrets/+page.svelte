@@ -116,7 +116,7 @@
 </script>
 
 <svelte:head>
-  <title>Secrets{workspaceSlug ? ` - ${workspaceSlug}` : ""} · OAR</title>
+  <title>Secrets{workspaceSlug ? ` - ${workspaceSlug}` : ""} · ANX</title>
 </svelte:head>
 
 <div class="mx-auto max-w-3xl px-4 py-6">

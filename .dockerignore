@@ -1,6 +1,6 @@
 .git
 .github
-**/.oar-workspace
+**/.anx-workspace
 **/node_modules
 **/.svelte-kit
 **/build

@@ -53,7 +53,7 @@ export function resolveUiBuildConfig(options = {}) {
   const adapter = String(env.ADAPTER ?? "node").trim() || "node";
 
   return {
-    basePath: normalizeBasePath(env.OAR_UI_BASE_PATH),
+    basePath: normalizeBasePath(env.ANX_UI_BASE_PATH),
     useNodeAdapter: adapter === "node",
   };
 }

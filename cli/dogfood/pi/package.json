@@ -1,5 +1,5 @@
 {
-  "name": "@organization-autorunner/pi-dogfood",
+  "name": "@agent-nexus/pi-dogfood",
   "private": true,
   "type": "module",
   "scripts": {

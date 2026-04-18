@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strings"
 
-	"organization-autorunner-core/internal/auth"
+	"agent-nexus-core/internal/auth"
 
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"

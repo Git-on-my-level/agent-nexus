@@ -315,7 +315,7 @@ export async function refreshWorkspaceAuthSession({
 
       if (!accessToken) {
         throw createRequestError(502, {
-          message: "oar-core returned an empty access token.",
+          message: "anx-core returned an empty access token.",
         });
       }
 

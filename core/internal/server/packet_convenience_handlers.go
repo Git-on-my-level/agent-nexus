@@ -9,8 +9,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"organization-autorunner-core/internal/primitives"
-	"organization-autorunner-core/internal/schema"
+	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/schema"
 )
 
 func handleCreateReceipt(w http.ResponseWriter, r *http.Request, opts handlerOptions) {

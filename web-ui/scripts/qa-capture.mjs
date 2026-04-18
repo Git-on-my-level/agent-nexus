@@ -511,7 +511,7 @@ async function authenticateDevPersona(page, opts) {
   const identitiesRes = await page.request.get(
     `${opts.baseUrl}/auth/dev/identities`,
     {
-      headers: { "x-oar-workspace-slug": opts.workspace },
+      headers: { "x-anx-workspace-slug": opts.workspace },
     },
   );
 
@@ -527,7 +527,7 @@ async function authenticateDevPersona(page, opts) {
         {
           headers: {
             "content-type": "application/json",
-            "x-oar-workspace-slug": opts.workspace,
+            "x-anx-workspace-slug": opts.workspace,
           },
           data: { persona_id: opts.persona },
         },

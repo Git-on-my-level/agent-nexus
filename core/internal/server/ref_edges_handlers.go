@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"organization-autorunner-core/internal/primitives"
+	"agent-nexus-core/internal/primitives"
 )
 
 func handleListRefEdges(w http.ResponseWriter, r *http.Request, opts handlerOptions) {

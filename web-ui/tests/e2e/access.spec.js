@@ -46,7 +46,7 @@ test("reads the cookie-backed session from the same-origin endpoint", async ({
   const session = await page.evaluate(async () => {
     const response = await fetch("/auth/session", {
       headers: {
-        "x-oar-workspace-slug": "local",
+        "x-anx-workspace-slug": "local",
       },
     });
     return response.json();

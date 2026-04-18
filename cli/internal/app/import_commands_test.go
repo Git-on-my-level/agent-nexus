@@ -16,7 +16,7 @@ func TestRunImportIsConfigLenient(t *testing.T) {
 	if !strings.Contains(raw, "Import guide") {
 		t.Fatalf("expected import bootstrap help, got %q", raw)
 	}
-	if !strings.Contains(raw, "oar help import") {
+	if !strings.Contains(raw, "anx help import") {
 		t.Fatalf("expected import read order guidance, got %q", raw)
 	}
 	if !strings.Contains(raw, "threads") || !strings.Contains(raw, "docs") || !strings.Contains(raw, "artifacts") {
@@ -32,7 +32,7 @@ func TestHelpTopicImport(t *testing.T) {
 	if !strings.Contains(raw, "Recommended loop") {
 		t.Fatalf("expected import help text, got %q", raw)
 	}
-	if !strings.Contains(raw, "oar import scan") {
+	if !strings.Contains(raw, "anx import scan") {
 		t.Fatalf("expected scan guidance, got %q", raw)
 	}
 	if !strings.Contains(raw, "Prefer preview-first planning over eager execution.") {
@@ -90,7 +90,7 @@ func TestImportApplyPreviewIsConfigLenient(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
-	profilesDir := filepath.Join(home, ".config", "oar", "profiles")
+	profilesDir := filepath.Join(home, ".config", "anx", "profiles")
 	if err := os.MkdirAll(profilesDir, 0o700); err != nil {
 		t.Fatalf("mkdir profiles dir: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestImportApplyExecuteRequiresResolvedConfig(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
-	profilesDir := filepath.Join(home, ".config", "oar", "profiles")
+	profilesDir := filepath.Join(home, ".config", "anx", "profiles")
 	if err := os.MkdirAll(profilesDir, 0o700); err != nil {
 		t.Fatalf("mkdir profiles dir: %v", err)
 	}

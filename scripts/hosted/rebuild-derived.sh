@@ -11,21 +11,21 @@ usage() {
 Usage: scripts/hosted/rebuild-derived.sh [options]
 
 Trigger an explicit derived-projection rebuild for a workspace core. This is
-primarily useful when OAR_PROJECTION_MODE=manual and operators want a stable
+primarily useful when ANX_PROJECTION_MODE=manual and operators want a stable
 helper instead of hand-written curl commands.
 
 Options:
-  --core-base-url URL   Workspace core base URL (default: $OAR_CORE_BASE_URL or http://127.0.0.1:8000)
+  --core-base-url URL   Workspace core base URL (default: $ANX_CORE_BASE_URL or http://127.0.0.1:8000)
   --actor-id ID         Actor id recorded on the rebuild-triggered events
-  --auth-token TOKEN    Bearer token for the workspace core (default: $OAR_AUTH_TOKEN)
+  --auth-token TOKEN    Bearer token for the workspace core (default: $ANX_AUTH_TOKEN)
   --no-ops-health       Skip the follow-up GET /ops/health call
   -h, --help            Show help
 EOF
 }
 
-CORE_BASE_URL="${OAR_CORE_BASE_URL:-http://127.0.0.1:8000}"
+CORE_BASE_URL="${ANX_CORE_BASE_URL:-http://127.0.0.1:8000}"
 ACTOR_ID=""
-AUTH_TOKEN="${OAR_AUTH_TOKEN:-}"
+AUTH_TOKEN="${ANX_AUTH_TOKEN:-}"
 SHOW_OPS_HEALTH=1
 
 while [[ $# -gt 0 ]]; do
@@ -46,7 +46,7 @@ require_command curl
 [[ -n "$CORE_BASE_URL" ]] || die "--core-base-url is required"
 [[ -n "$ACTOR_ID" ]] || die "--actor-id is required"
 [[ "$ACTOR_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]*$ ]] || die "--actor-id must match ^[A-Za-z0-9][A-Za-z0-9._:-]*$"
-[[ -n "$AUTH_TOKEN" ]] || die "--auth-token is required (or set OAR_AUTH_TOKEN)"
+[[ -n "$AUTH_TOKEN" ]] || die "--auth-token is required (or set ANX_AUTH_TOKEN)"
 
 CORE_BASE_URL="${CORE_BASE_URL%/}"
 

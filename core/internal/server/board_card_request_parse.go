@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"organization-autorunner-core/internal/primitives"
+	"agent-nexus-core/internal/primitives"
 )
 
 // addBoardCardMerged is the normalized board card create request after merging the

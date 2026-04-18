@@ -62,7 +62,7 @@ jobs:
               - 'web-ui/**'
             auth_e2e_smoke:
               - 'contracts/**'
-              - 'core/cmd/oar-core/**'
+              - 'core/cmd/anx-core/**'
               - 'core/internal/auth/**'
               - 'core/internal/server/**'
               - 'scripts/e2e-smoke'
@@ -191,8 +191,7 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-        run: CGO_ENABLED=0 go build -trimpath ./cmd/oar
-        working-directory: cli
+        run: CGO_ENABLED=0 go build -trimpath ./cmd/anx working-directory: cli
 
   platform-constraints:
     runs-on: ubuntu-latest

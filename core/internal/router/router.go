@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"organization-autorunner-core/internal/auth"
-	"organization-autorunner-core/internal/primitives"
+	"agent-nexus-core/internal/auth"
+	"agent-nexus-core/internal/primitives"
 )
 
 const (
@@ -69,7 +69,7 @@ func NewService(cfg Config, deps Dependencies, state *StateStore) *Service {
 		cfg.WorkspaceName = "Main"
 	}
 	if strings.TrimSpace(cfg.ActorID) == "" {
-		cfg.ActorID = "oar-core"
+		cfg.ActorID = "anx-core"
 	}
 	return &Service{
 		cfg:   cfg,
@@ -330,11 +330,11 @@ func (s *Service) routeMention(ctx context.Context, handle string, event map[str
 		topicID := strings.TrimSpace(strings.TrimPrefix(sr, "topic:"))
 		if topicID != "" {
 			topicWorkspaceURL = fmt.Sprintf("%s/topics/%s/workspace", baseURL, topicID)
-			cliTopicWorkspace = fmt.Sprintf("oar topics workspace --topic-id %s --json", topicID)
+			cliTopicWorkspace = fmt.Sprintf("anx topics workspace --topic-id %s --json", topicID)
 		}
 	}
 	wakeupID := WakeupArtifactID(s.cfg.WorkspaceID, threadID, eventID, registration.ActorID)
-	sessionKey := fmt.Sprintf("oar:%s:%s:%s", s.cfg.WorkspaceID, threadID, handle)
+	sessionKey := fmt.Sprintf("anx:%s:%s:%s", s.cfg.WorkspaceID, threadID, handle)
 	packet := WakePacket{
 		WakeupID:             wakeupID,
 		Handle:               handle,
@@ -356,8 +356,8 @@ func (s *Service) routeMention(ctx context.Context, handle string, event map[str
 		ThreadWorkspaceURL:   fmt.Sprintf("%s/threads/%s/workspace", baseURL, threadID),
 		TopicWorkspaceURL:    topicWorkspaceURL,
 		TriggerEventURL:      fmt.Sprintf("%s/events/%s", baseURL, eventID),
-		CLIThreadInspect:     fmt.Sprintf("oar threads inspect --thread-id %s --json", threadID),
-		CLIThreadWorkspace:   fmt.Sprintf("oar threads workspace --thread-id %s --include-related-event-content --json", threadID),
+		CLIThreadInspect:     fmt.Sprintf("anx threads inspect --thread-id %s --json", threadID),
+		CLIThreadWorkspace:   fmt.Sprintf("anx threads workspace --thread-id %s --include-related-event-content --json", threadID),
 		CLITopicWorkspace:    cliTopicWorkspace,
 		Version:              WakePacketVersion,
 	}

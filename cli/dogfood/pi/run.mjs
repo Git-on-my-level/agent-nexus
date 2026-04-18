@@ -234,7 +234,7 @@ export function parseArgs(argv) {
     reportDir: path.join(repoRoot, "cli", ".tmp", "pi-dogfood"),
     apiKey: "",
     apiKeyFile: "",
-    oarBin: "",
+    anxBin: "",
     coreBin: "",
     maxSeconds: 900,
     agentCount: 4,
@@ -275,8 +275,8 @@ export function parseArgs(argv) {
       case "--api-key-file":
         options.apiKeyFile = argv[++idx] ?? "";
         break;
-      case "--oar-bin":
-        options.oarBin = argv[++idx] ?? "";
+      case "--anx-bin":
+        options.anxBin = argv[++idx] ?? "";
         break;
       case "--core-bin":
         options.coreBin = argv[++idx] ?? "";
@@ -464,16 +464,16 @@ function hydrateContinuationHomes({ previousRunDir, runDir, agents }) {
 function commandGuide(baseUrl, defaultUsername, { profileReady = false } = {}) {
   const authLines = profileReady
     ? [
-        "- Show auth subcommands: `oar auth`",
-        "- Verify the pre-registered default profile: `oar auth whoami`",
-        "- List local profiles if needed: `oar auth list`",
-        "- List taggable teammate handles directly: `oar auth principals list --taggable --handles-only`",
-        "- Inspect linked principals when debugging Access or `@handle` behavior: `oar auth principals list --json`",
+        "- Show auth subcommands: `anx auth`",
+        "- Verify the pre-registered default profile: `anx auth whoami`",
+        "- List local profiles if needed: `anx auth list`",
+        "- List taggable teammate handles directly: `anx auth principals list --taggable --handles-only`",
+        "- Inspect linked principals when debugging Access or `@handle` behavior: `anx auth principals list --json`",
       ]
     : [
-        "- Show auth subcommands: `oar auth`",
-        `- Register default profile: \`oar auth register --username ${defaultUsername}\``,
-        "- Verify current profile: `oar auth whoami`",
+        "- Show auth subcommands: `anx auth`",
+        `- Register default profile: \`anx auth register --username ${defaultUsername}\``,
+        "- Verify current profile: `anx auth whoami`",
       ];
   return `# OAR Command Guide
 
@@ -486,41 +486,41 @@ Auth:
 ${authLines.join("\n")}
 
 Read workflow state:
-- List threads: \`oar threads list\`
-- Fast coordination read in one command: \`oar threads inspect --thread-id <thread-id>\`
-- Canonical thread coordination read: \`oar threads workspace --thread-id <thread-id>\`
-- Hydrated one-command coordination read: \`oar threads workspace --thread-id <thread-id> --include-related-event-content --include-artifact-content --verbose\`
-- Focus recommendation review: \`oar threads recommendations --thread-id <thread-id>\`
-- Full related recommendation content in one command: \`oar threads recommendations --thread-id <thread-id> --include-related-event-content --verbose\`
-- Cross-thread aggregate context (optional): \`oar threads context --status active --type initiative --full-id\`
-- Minimal backing thread record (optional): \`oar threads get --thread-id <thread-id>\` (same contract read as \`threads.inspect\`)
-- List recent thread events: \`oar events list --thread-id <thread-id> --max-events 10 --full-id\`
-- List recent thread messages only: \`oar events list --thread-id <thread-id> --type message_posted --max-events 10 --full-id\`
-- Explain how visible thread messages should be authored: \`oar events explain message_posted\`
-- List inbox items: \`oar inbox list\`
-- List artifacts: \`oar artifacts list --thread-id <thread-id>\`
-- Read artifact metadata: \`oar artifacts get --artifact-id <artifact-id>\`
-- Read artifact content: \`oar artifacts content --artifact-id <artifact-id>\`
-- List boards: \`oar boards list\`
-- Read one board workspace: \`oar boards workspace --board-id <board-id>\`
-- List cards: \`oar cards list\`
-- Read one card: \`oar cards get --card-id <card-id>\`
-- Read a seeded scenario document: \`oar docs get --document-id <document-id>\`
-- Stage a document revision update: \`oar docs propose-update --document-id <document-id> --from-file doc-update-template.json\`
-- Apply a staged document update: \`oar docs apply --proposal-id <proposal-id>\`
-- Update a document immediately (no proposal): \`oar docs update --document-id <document-id> --from-file doc-update-template.json\`
+- List threads: \`anx threads list\`
+- Fast coordination read in one command: \`anx threads inspect --thread-id <thread-id>\`
+- Canonical thread coordination read: \`anx threads workspace --thread-id <thread-id>\`
+- Hydrated one-command coordination read: \`anx threads workspace --thread-id <thread-id> --include-related-event-content --include-artifact-content --verbose\`
+- Focus recommendation review: \`anx threads recommendations --thread-id <thread-id>\`
+- Full related recommendation content in one command: \`anx threads recommendations --thread-id <thread-id> --include-related-event-content --verbose\`
+- Cross-thread aggregate context (optional): \`anx threads context --status active --type initiative --full-id\`
+- Minimal backing thread record (optional): \`anx threads get --thread-id <thread-id>\` (same contract read as \`threads.inspect\`)
+- List recent thread events: \`anx events list --thread-id <thread-id> --max-events 10 --full-id\`
+- List recent thread messages only: \`anx events list --thread-id <thread-id> --type message_posted --max-events 10 --full-id\`
+- Explain how visible thread messages should be authored: \`anx events explain message_posted\`
+- List inbox items: \`anx inbox list\`
+- List artifacts: \`anx artifacts list --thread-id <thread-id>\`
+- Read artifact metadata: \`anx artifacts get --artifact-id <artifact-id>\`
+- Read artifact content: \`anx artifacts content --artifact-id <artifact-id>\`
+- List boards: \`anx boards list\`
+- Read one board workspace: \`anx boards workspace --board-id <board-id>\`
+- List cards: \`anx cards list\`
+- Read one card: \`anx cards get --card-id <card-id>\`
+- Read a seeded scenario document: \`anx docs get --document-id <document-id>\`
+- Stage a document revision update: \`anx docs propose-update --document-id <document-id> --from-file doc-update-template.json\`
+- Apply a staged document update: \`anx docs apply --proposal-id <proposal-id>\`
+- Update a document immediately (no proposal): \`anx docs update --document-id <document-id> --from-file doc-update-template.json\`
 
 Write workflow state:
-- Topics are the primary mutable coordination resource; \`oar threads patch\`, \`oar threads apply\`, and other thread mutation commands are not supported.
-- Create a visible thread message: \`oar events create --from-file message-template.json\`
-- Reply to a message thread item: \`oar events create --from-file reply-template.json\`
-- Update a topic in one step: \`oar topics patch --topic-id <topic-id> --from-file topic-patch.json\`
-- Create a shared board from stdin: \`cat board-template.json | oar boards create --json\`
-- Create a new card on a board from stdin: \`cat card-template.json | oar cards create --json\`
-- For card-level changes, use \`oar cards patch --card-id <card-id> --from-file card-patch.json\` (see \`oar help cards patch\`).
-- Validate an event before sending it: \`oar events validate --from-file event-template.json\`
-- Dry-run an event create without sending it: \`oar events create --from-file event-template.json --dry-run\`
-- Edit \`event-template.json\` in place, then create the event: \`oar events create --from-file event-template.json\`
+- Topics are the primary mutable coordination resource; \`anx threads patch\`, \`anx threads apply\`, and other thread mutation commands are not supported.
+- Create a visible thread message: \`anx events create --from-file message-template.json\`
+- Reply to a message thread item: \`anx events create --from-file reply-template.json\`
+- Update a topic in one step: \`anx topics patch --topic-id <topic-id> --from-file topic-patch.json\`
+- Create a shared board from stdin: \`cat board-template.json | anx boards create --json\`
+- Create a new card on a board from stdin: \`cat card-template.json | anx cards create --json\`
+- For card-level changes, use \`anx cards patch --card-id <card-id> --from-file card-patch.json\` (see \`anx help cards patch\`).
+- Validate an event before sending it: \`anx events validate --from-file event-template.json\`
+- Dry-run an event create without sending it: \`anx events create --from-file event-template.json --dry-run\`
+- Edit \`event-template.json\` in place, then create the event: \`anx events create --from-file event-template.json\`
 
 Working event types for this scenario:
 - \`message_posted\` for visible messages and replies
@@ -575,11 +575,11 @@ async function apiJSONWithToken(baseUrl, apiPath, { method = "GET", accessToken 
 }
 
 function workspaceID() {
-  return String(process.env.OAR_WORKSPACE_ID ?? "ws_main").trim() || "ws_main";
+  return String(process.env.ANX_WORKSPACE_ID ?? "ws_main").trim() || "ws_main";
 }
 
 function agentProfilePath(homeDir, agentId) {
-  return path.join(homeDir, ".config", "oar", "profiles", `${agentId}.json`);
+  return path.join(homeDir, ".config", "anx", "profiles", `${agentId}.json`);
 }
 
 function loadAgentProfile(homeDir, agentId) {
@@ -587,10 +587,10 @@ function loadAgentProfile(homeDir, agentId) {
   return JSON.parse(fs.readFileSync(profilePath, "utf8"));
 }
 
-async function ensureAgentWakeRegistration(baseUrl, oarBin, agent) {
-  runOarJSON({
+async function ensureAgentWakeRegistration(baseUrl, anxBin, agent) {
+  runAnxJSON({
     cwd: agent.workspaceDir,
-    oarBin,
+    anxBin,
     baseUrl,
     homeDir: agent.homeDir,
     agentId: agent.agentId,
@@ -622,9 +622,9 @@ async function ensureAgentWakeRegistration(baseUrl, oarBin, agent) {
   });
 }
 
-async function ensureAgentWakeRegistrations(baseUrl, oarBin, agents) {
+async function ensureAgentWakeRegistrations(baseUrl, anxBin, agents) {
   for (const agent of agents) {
-    await ensureAgentWakeRegistration(baseUrl, oarBin, agent);
+    await ensureAgentWakeRegistration(baseUrl, anxBin, agent);
   }
 }
 
@@ -1098,17 +1098,17 @@ function targetsGuide(role, targets) {
   ];
   if (targets.topic?.id) {
     lines.push(
-      `Topic workspace (primary read for this role): oar topics workspace --topic-id ${targets.topic.id}`,
-      `Topic record: oar topics get --topic-id ${targets.topic.id}`,
+      `Topic workspace (primary read for this role): anx topics workspace --topic-id ${targets.topic.id}`,
+      `Topic record: anx topics get --topic-id ${targets.topic.id}`,
     );
   }
   lines.push(
-    `Canonical read shared goal thread: oar threads workspace --thread-id ${targets.mainThread.id}`,
-    `Hydrated read shared goal thread: oar threads workspace --thread-id ${targets.mainThread.id} --include-related-event-content --include-artifact-content --verbose`,
-    `Canonical read your primary thread: oar threads workspace --thread-id ${targets.primaryThread.id}`,
-    `Recommendation review shared goal thread: oar threads recommendations --thread-id ${targets.mainThread.id}`,
-    `Optional minimal thread record shared goal thread: oar threads get --thread-id ${targets.mainThread.id}`,
-    `Optional minimal thread record your primary thread: oar threads get --thread-id ${targets.primaryThread.id}`,
+    `Canonical read shared goal thread: anx threads workspace --thread-id ${targets.mainThread.id}`,
+    `Hydrated read shared goal thread: anx threads workspace --thread-id ${targets.mainThread.id} --include-related-event-content --include-artifact-content --verbose`,
+    `Canonical read your primary thread: anx threads workspace --thread-id ${targets.primaryThread.id}`,
+    `Recommendation review shared goal thread: anx threads recommendations --thread-id ${targets.mainThread.id}`,
+    `Optional minimal thread record shared goal thread: anx threads get --thread-id ${targets.mainThread.id}`,
+    `Optional minimal thread record your primary thread: anx threads get --thread-id ${targets.primaryThread.id}`,
   );
 
   if (targets.relatedThreads.length > 0) {
@@ -1122,8 +1122,8 @@ function targetsGuide(role, targets) {
     lines.push("", "Artifacts to inspect:");
     for (const artifact of targets.artifacts) {
       lines.push(`- ${artifact.id} :: ${valueFrom(artifact, "summary", "title")}`);
-      lines.push(`  metadata: oar artifacts get --artifact-id ${artifact.id}`);
-      lines.push(`  content: oar artifacts content --artifact-id ${artifact.id}`);
+      lines.push(`  metadata: anx artifacts get --artifact-id ${artifact.id}`);
+      lines.push(`  content: anx artifacts content --artifact-id ${artifact.id}`);
     }
   }
 
@@ -1131,7 +1131,7 @@ function targetsGuide(role, targets) {
     lines.push("", "Cards in scope:");
     for (const card of targets.cards) {
       lines.push(`- ${card.id} :: ${valueFrom(card, "title", "summary")}`);
-      lines.push(`  detail: oar cards get --card-id ${card.id}`);
+      lines.push(`  detail: anx cards get --card-id ${card.id}`);
     }
   }
 
@@ -1139,8 +1139,8 @@ function targetsGuide(role, targets) {
     lines.push("", "Documents in scope:");
     for (const document of targets.roleDocuments) {
       lines.push(`- ${document.id}`);
-      lines.push(`  read: oar docs get --document-id ${document.id}`);
-      lines.push(`  content: oar docs content --document-id ${document.id}`);
+      lines.push(`  read: anx docs get --document-id ${document.id}`);
+      lines.push(`  content: anx docs content --document-id ${document.id}`);
     }
   }
 
@@ -1155,16 +1155,16 @@ function targetsGuide(role, targets) {
   lines.push(
     "Message coordination checklist:",
     `- kickoff messages live on the main thread ${targets.mainThread.id}`,
-    `- list current visible messages with: oar events list --thread-id ${targets.mainThread.id} --type message_posted --max-events 10 --full-id`,
+    `- list current visible messages with: anx events list --thread-id ${targets.mainThread.id} --type message_posted --max-events 10 --full-id`,
     "- reply by adding `event:<message_event_id>` to `reply-template.json` refs before creating it",
   );
   if (role.requireDocsUpdate) {
     lines.push(
       `Primary document to update: ${targets.primaryDocument?.id ?? ""}`,
-      `Read it first: oar docs get --document-id ${targets.primaryDocument?.id ?? ""}`,
-      `Stage it: oar docs propose-update --document-id ${targets.primaryDocument?.id ?? ""} --from-file doc-update-template.json`,
-      `Then apply it: oar docs apply --proposal-id <proposal-id>`,
-      `Or write immediately: oar docs update --document-id ${targets.primaryDocument?.id ?? ""} --from-file doc-update-template.json`,
+      `Read it first: anx docs get --document-id ${targets.primaryDocument?.id ?? ""}`,
+      `Stage it: anx docs propose-update --document-id ${targets.primaryDocument?.id ?? ""} --from-file doc-update-template.json`,
+      `Then apply it: anx docs apply --proposal-id <proposal-id>`,
+      `Or write immediately: anx docs update --document-id ${targets.primaryDocument?.id ?? ""} --from-file doc-update-template.json`,
     );
   }
   lines.push(
@@ -1212,47 +1212,47 @@ function buildGoBinary(runDir, providedPath, moduleDir, packageDir, outputName) 
   return outPath;
 }
 
-function buildOarBinary(runDir, providedPath) {
-  return buildGoBinary(runDir, providedPath, "cli", "./cmd/oar", "oar");
+function buildAnxBinary(runDir, providedPath) {
+  return buildGoBinary(runDir, providedPath, "cli", "./cmd/anx", "anx");
 }
 
 function buildCoreBinary(runDir, providedPath) {
-  return buildGoBinary(runDir, providedPath, "core", "./cmd/oar-core", "oar-core");
+  return buildGoBinary(runDir, providedPath, "core", "./cmd/anx-core", "anx-core");
 }
 
 function agentHomeDir(runDir, agentId) {
   return path.join(runDir, `home-${agentId}`);
 }
 
-function oarProcessEnv({ homeDir, oarBin, baseUrl }) {
+function anxProcessEnv({ homeDir, anxBin, baseUrl }) {
   return {
     ...process.env,
     HOME: homeDir,
     XDG_CONFIG_HOME: path.join(homeDir, ".config"),
-    PATH: `${path.dirname(oarBin)}${path.delimiter}${process.env.PATH ?? ""}`,
-    OAR_BASE_URL: baseUrl,
+    PATH: `${path.dirname(anxBin)}${path.delimiter}${process.env.PATH ?? ""}`,
+    ANX_BASE_URL: baseUrl,
   };
 }
 
-function runOarJSON({ cwd, oarBin, baseUrl, homeDir, agentId, args }) {
+function runAnxJSON({ cwd, anxBin, baseUrl, homeDir, agentId, args }) {
   const result = spawnSync(
-    oarBin,
+    anxBin,
     ["--json", "--base-url", baseUrl, "--agent", agentId, ...args],
     {
       cwd,
-      env: oarProcessEnv({ homeDir, oarBin, baseUrl }),
+      env: anxProcessEnv({ homeDir, anxBin, baseUrl }),
       encoding: "utf8",
     },
   );
   if (result.error) {
     const detail = result.error instanceof Error ? result.error.message : String(result.error);
-    throw new Error(`oar ${args.join(" ")} failed for ${agentId}: ${detail}`);
+    throw new Error(`anx ${args.join(" ")} failed for ${agentId}: ${detail}`);
   }
   if (result.status !== 0) {
     const stderr = String(result.stderr ?? "").trim();
     const stdout = String(result.stdout ?? "").trim();
     throw new Error(
-      `oar ${args.join(" ")} failed for ${agentId}: ${stderr || stdout || `exit ${result.status}`}`,
+      `anx ${args.join(" ")} failed for ${agentId}: ${stderr || stdout || `exit ${result.status}`}`,
     );
   }
 
@@ -1261,20 +1261,20 @@ function runOarJSON({ cwd, oarBin, baseUrl, homeDir, agentId, args }) {
     payload = JSON.parse(String(result.stdout ?? ""));
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    throw new Error(`failed to parse oar JSON output for ${agentId}: ${detail}`);
+    throw new Error(`failed to parse anx JSON output for ${agentId}: ${detail}`);
   }
 
   if (!payload?.ok) {
     const errorMessage =
       payload?.error?.message ??
       payload?.error?.code ??
-      "oar command returned ok=false";
-    throw new Error(`oar ${args.join(" ")} failed for ${agentId}: ${errorMessage}`);
+      "anx command returned ok=false";
+    throw new Error(`anx ${args.join(" ")} failed for ${agentId}: ${errorMessage}`);
   }
   return payload;
 }
 
-function prepareAgentProfiles({ oarBin, baseUrl, bootstrapToken, agents }) {
+function prepareAgentProfiles({ anxBin, baseUrl, bootstrapToken, agents }) {
   if (!bootstrapToken) {
     return false;
   }
@@ -1288,9 +1288,9 @@ function prepareAgentProfiles({ oarBin, baseUrl, bootstrapToken, agents }) {
   }
 
   const [issuer, ...invitees] = agents;
-  runOarJSON({
+  runAnxJSON({
     cwd: issuer.workspaceDir,
-    oarBin,
+    anxBin,
     baseUrl,
     homeDir: issuer.homeDir,
     agentId: issuer.agentId,
@@ -1303,9 +1303,9 @@ function prepareAgentProfiles({ oarBin, baseUrl, bootstrapToken, agents }) {
   });
 
   for (const invitee of invitees) {
-    const invitePayload = runOarJSON({
+    const invitePayload = runAnxJSON({
       cwd: issuer.workspaceDir,
-      oarBin,
+      anxBin,
       baseUrl,
       homeDir: issuer.homeDir,
       agentId: issuer.agentId,
@@ -1315,9 +1315,9 @@ function prepareAgentProfiles({ oarBin, baseUrl, bootstrapToken, agents }) {
     if (!inviteToken) {
       throw new Error(`invite creation returned no token for ${invitee.agentId}`);
     }
-    runOarJSON({
+    runAnxJSON({
       cwd: invitee.workspaceDir,
-      oarBin,
+      anxBin,
       baseUrl,
       homeDir: invitee.homeDir,
       agentId: invitee.agentId,
@@ -1389,9 +1389,9 @@ async function seedCore(baseUrl, scenario) {
     stdio: "inherit",
     env: {
       ...process.env,
-      OAR_CORE_BASE_URL: baseUrl,
-      OAR_FORCE_SEED: "1",
-      OAR_PI_SCENARIO: scenario,
+      ANX_CORE_BASE_URL: baseUrl,
+      ANX_FORCE_SEED: "1",
+      ANX_PI_SCENARIO: scenario,
     },
   });
   if (result.status !== 0) {
@@ -1404,7 +1404,7 @@ async function startManagedCore(runDir, coreBin, requestedBaseUrl, scenario, con
     await waitForCore(requestedBaseUrl, 20000);
     return {
       baseUrl: requestedBaseUrl,
-      bootstrapToken: String(process.env.OAR_BOOTSTRAP_TOKEN ?? "").trim(),
+      bootstrapToken: String(process.env.ANX_BOOTSTRAP_TOKEN ?? "").trim(),
       stop: async () => {},
       managed: false,
       workspaceDir: "",
@@ -1416,7 +1416,7 @@ async function startManagedCore(runDir, coreBin, requestedBaseUrl, scenario, con
     ? path.resolve(continuation.metadata.core_workspace_dir)
     : path.join(runDir, "core-workspace");
   const logPath = path.join(runDir, "core.log");
-  const schemaPath = path.join(repoRoot, "contracts", "oar-schema.yaml");
+  const schemaPath = path.join(repoRoot, "contracts", "anx-schema.yaml");
   const host = "127.0.0.1";
   const port = await findFreePort();
   const baseUrl = `http://${host}:${port}`;
@@ -1437,8 +1437,8 @@ async function startManagedCore(runDir, coreBin, requestedBaseUrl, scenario, con
     cwd: path.join(repoRoot, "core"),
     env: {
       ...process.env,
-      OAR_DEV_REGISTER_LINKED_ACTORS: "1",
-      ...(bootstrapToken ? { OAR_BOOTSTRAP_TOKEN: bootstrapToken } : {}),
+      ANX_DEV_REGISTER_LINKED_ACTORS: "1",
+      ...(bootstrapToken ? { ANX_BOOTSTRAP_TOKEN: bootstrapToken } : {}),
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -1584,7 +1584,7 @@ export function validateAgentOutputs({ eventsPath, resultPath }) {
 async function runPiAgent({
   runDir,
   piHomeDir,
-  oarBin,
+  anxBin,
   coreBaseUrl,
   provider,
   model,
@@ -1609,11 +1609,11 @@ async function runPiAgent({
   const resultPath = agentResultPath(workspaceDir);
   ensureDir(workspaceDir);
   const authSetupLine = profileReady
-    ? `- The temp workspace already has a local auth profile for username \`${agentUsername}\`. Verify it with \`oar auth whoami\`.`
-    : `- Register with username \`${agentUsername}\` if no local profile exists. Start with \`oar auth whoami\` to inspect the current state.`;
+    ? `- The temp workspace already has a local auth profile for username \`${agentUsername}\`. Verify it with \`anx auth whoami\`.`
+    : `- Register with username \`${agentUsername}\` if no local profile exists. Start with \`anx auth whoami\` to inspect the current state.`;
   const authPromptLine = profileReady
-    ? `A local auth profile for username ${agentUsername} is already registered; verify it with \`oar auth whoami\` instead of creating a new registration.`
-    : `Use \`oar auth whoami\` to inspect auth state first. If no profile exists, register with username ${agentUsername} using the command guidance in COMMANDS.md.`;
+    ? `A local auth profile for username ${agentUsername} is already registered; verify it with \`anx auth whoami\` instead of creating a new registration.`
+    : `Use \`anx auth whoami\` to inspect auth state first. If no profile exists, register with username ${agentUsername} using the command guidance in COMMANDS.md.`;
   const continuationFiles = [];
   if (chapterMarkdown) {
     continuationFiles.push("- Chapter brief: ./CHAPTER.md");
@@ -1630,11 +1630,11 @@ async function runPiAgent({
 
   const agentsContent = `# Pi Dogfood Run
 
-You are evaluating the OAR CLI, not editing the repository.
+You are evaluating the ANX CLI, not editing the repository.
 
 Rules:
-- Use the \`oar\` binary on PATH for all OAR interactions.
-- Do not use \`curl\` for OAR API calls.
+- Use the \`anx\` binary on PATH for all ANX interactions.
+- Do not use \`curl\` for ANX API calls.
 - Do not edit repository source files.
 - Keep notes and artifacts inside the current working directory.
 - This scenario lane is fixed to \`--provider zai --model glm-5\`. Do not change provider/model when validating the scenario.
@@ -1642,7 +1642,7 @@ Rules:
 ${authSetupLine}
 - Before finishing, write \`result.md\` containing:
   - summary
-  - oar commands attempted
+  - anx commands attempted
   - friction
   - concrete suggestions
 
@@ -1711,8 +1711,8 @@ ${continuationFiles.join("\n")}
     ? `Read CHAPTER.md and CHAPTER_STATE.md first. Continue the existing scenario state from ${chapterID}. Do not recreate the board, docs, cards, or identities that already exist unless the chapter explicitly tells you to do so. Prefer adding new messages, new replies, card moves or updates, and new document revisions over creating duplicate resources.`
     : "";
   const prompt = role.requireDocsUpdate
-    ? `Read SCENARIO.md, COMMANDS.md, TARGETS.md, and ROLE_CONTEXT.md. ${continuationPrompt} Execute your role with the real oar CLI. Use message-template.json for a kickoff message on the main thread, use reply-template.json for at least one reply to another kid's message, and use message_posted rather than actor_statement for those conversational updates.${primaryThreadHasOwnTemplates ? " Also use primary-thread-message-template.json for at least one role-thread update when the chapter asks for richer thread activity." : ""} If you are the boss kid, create the shared board early from board-template.json only if it does not already exist, add at most one coordination card from card-template.json if you do not already own one, and make the board visible to the others. ${existingRoleCard ? `If your role card ${existingRoleCard.id} already exists, update it with card-patch-template.json via \`oar cards patch --card-id ${existingRoleCard.id} --from-file card-patch-template.json\` instead of creating a duplicate.` : "If you need a new card, keep it tied to its intended role thread instead of attaching everything to the shared main thread."} Update doc-update-template.json in place, stage the document update with \`oar docs propose-update\`, inspect the diff, apply it with \`oar docs apply\`, then post your final actor_statement from event-template.json. Use \`oar events list --thread-id ${targets.mainThread.id} --type message_posted --max-events 10 --full-id\` to find reply targets. Write result.md and then give a short final summary.`
-    : `Read SCENARIO.md, COMMANDS.md, TARGETS.md, and ROLE_CONTEXT.md. ${continuationPrompt} Execute your role with the real oar CLI. Use message-template.json for a kickoff message on the main thread, use reply-template.json for at least one reply to another kid's message, and create or inspect board work when the scenario asks for it.${primaryThreadHasOwnTemplates ? " Also use primary-thread-message-template.json for at least one role-thread update when the chapter asks for richer thread activity." : ""} ${existingRoleCard ? `Your role card ${existingRoleCard.id} already exists, so update it with card-patch-template.json via \`oar cards patch --card-id ${existingRoleCard.id} --from-file card-patch-template.json\` instead of creating a duplicate.` : "Create one role-specific task card from card-template.json after the board exists, and keep that card tied to your primary role thread rather than the shared main thread."} Use \`oar events list --thread-id ${targets.mainThread.id} --type message_posted --max-events 10 --full-id\` to find reply targets. After the conversational work is done, edit event-template.json in place, create the final actor_statement from that file, write result.md, and then give a short final summary.`;
+    ? `Read SCENARIO.md, COMMANDS.md, TARGETS.md, and ROLE_CONTEXT.md. ${continuationPrompt} Execute your role with the real anx CLI. Use message-template.json for a kickoff message on the main thread, use reply-template.json for at least one reply to another kid's message, and use message_posted rather than actor_statement for those conversational updates.${primaryThreadHasOwnTemplates ? " Also use primary-thread-message-template.json for at least one role-thread update when the chapter asks for richer thread activity." : ""} If you are the boss kid, create the shared board early from board-template.json only if it does not already exist, add at most one coordination card from card-template.json if you do not already own one, and make the board visible to the others. ${existingRoleCard ? `If your role card ${existingRoleCard.id} already exists, update it with card-patch-template.json via \`anx cards patch --card-id ${existingRoleCard.id} --from-file card-patch-template.json\` instead of creating a duplicate.` : "If you need a new card, keep it tied to its intended role thread instead of attaching everything to the shared main thread."} Update doc-update-template.json in place, stage the document update with \`anx docs propose-update\`, inspect the diff, apply it with \`anx docs apply\`, then post your final actor_statement from event-template.json. Use \`anx events list --thread-id ${targets.mainThread.id} --type message_posted --max-events 10 --full-id\` to find reply targets. Write result.md and then give a short final summary.`
+    : `Read SCENARIO.md, COMMANDS.md, TARGETS.md, and ROLE_CONTEXT.md. ${continuationPrompt} Execute your role with the real anx CLI. Use message-template.json for a kickoff message on the main thread, use reply-template.json for at least one reply to another kid's message, and create or inspect board work when the scenario asks for it.${primaryThreadHasOwnTemplates ? " Also use primary-thread-message-template.json for at least one role-thread update when the chapter asks for richer thread activity." : ""} ${existingRoleCard ? `Your role card ${existingRoleCard.id} already exists, so update it with card-patch-template.json via \`anx cards patch --card-id ${existingRoleCard.id} --from-file card-patch-template.json\` instead of creating a duplicate.` : "Create one role-specific task card from card-template.json after the board exists, and keep that card tied to your primary role thread rather than the shared main thread."} Use \`anx events list --thread-id ${targets.mainThread.id} --type message_posted --max-events 10 --full-id\` to find reply targets. After the conversational work is done, edit event-template.json in place, create the final actor_statement from that file, write result.md, and then give a short final summary.`;
 
   const piArgs = [
     "--print",
@@ -1732,7 +1732,7 @@ ${continuationFiles.join("\n")}
     "--no-prompt-templates",
     "--no-themes",
     "--append-system-prompt",
-    `Use oar on PATH for OAR interactions. Do not use curl. Work only inside the current directory. ${authPromptLine}`,
+    `Use anx on PATH for OAR interactions. Do not use curl. Work only inside the current directory. ${authPromptLine}`,
     "@SCENARIO.md",
     prompt,
   ];
@@ -1740,7 +1740,7 @@ ${continuationFiles.join("\n")}
   const eventStream = fs.createWriteStream(eventsPath, { flags: "a" });
   ensureDir(homeDir);
   const env = {
-    ...oarProcessEnv({ homeDir, oarBin, baseUrl: coreBaseUrl }),
+    ...anxProcessEnv({ homeDir, anxBin, baseUrl: coreBaseUrl }),
     PI_CODING_AGENT_DIR: path.join(piHomeDir, agentId),
   };
   ensureDir(env.PI_CODING_AGENT_DIR);
@@ -1823,7 +1823,7 @@ async function main() {
   const piHomeDir = path.join(runDir, "pi-home");
   ensureDir(piHomeDir);
 
-  const oarBin = buildOarBinary(runDir, options.oarBin);
+  const anxBin = buildAnxBinary(runDir, options.anxBin);
   const coreBin = buildCoreBinary(runDir, options.coreBin);
   const core = await startManagedCore(runDir, coreBin, options.baseUrl, options.scenario, previousRun);
   const scenarioContent = loadScenarioContent(options.scenario, options.chapter, core.baseUrl);
@@ -1879,13 +1879,13 @@ async function main() {
           agents: pendingAgents,
         })
       : prepareAgentProfiles({
-          oarBin,
+          anxBin,
           baseUrl: core.baseUrl,
           bootstrapToken: core.bootstrapToken,
           agents: pendingAgents,
         });
 
-    await ensureAgentWakeRegistrations(core.baseUrl, oarBin, pendingAgents);
+    await ensureAgentWakeRegistrations(core.baseUrl, anxBin, pendingAgents);
 
     const agentPlans = pendingAgents.map((agent) => {
       return {
@@ -1903,7 +1903,7 @@ async function main() {
           return runPiAgent({
             runDir,
             piHomeDir,
-            oarBin,
+            anxBin,
             coreBaseUrl: core.baseUrl,
             provider: options.provider,
             model: options.model,
@@ -1969,7 +1969,7 @@ async function main() {
     agent_count: options.agentCount,
     targets: sharedTargets,
     agents: agentRuns,
-    oar_bin: oarBin,
+    anx_bin: anxBin,
     core_bin: coreBin,
     scenario_state_path: finalChapterState ? path.join(runDir, "scenario-state.json") : "",
   };

@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "oar-agent-bridge"
+name = "anx-agent-bridge"
 version = "0.1.0"
-description = "Bridge adapters for durable OAR wake requests"
+description = "Bridge adapters for durable ANX wake requests"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{name = "OpenAI", email = "support@openai.com"}]
@@ -18,7 +18,7 @@ dependencies = [
 dev = ["pytest>=8,<9"]
 
 [project.scripts]
-oar-agent-bridge = "oar_agent_bridge.cli:main"
+anx-agent-bridge = "anx_agent_bridge.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["oar_agent_bridge*"]
+include = ["anx_agent_bridge*"]

@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"organization-autorunner-core/internal/auth"
+	"agent-nexus-core/internal/auth"
 )
 
 func handleMetaHandshake(w http.ResponseWriter, _ *http.Request, opts handlerOptions, schemaVersion string) {

@@ -10,12 +10,12 @@ import (
 	"sort"
 	"strings"
 
-	contractsclient "organization-autorunner-contracts-go-client/client"
+	contractsclient "agent-nexus-contracts-go-client/client"
 
-	"organization-autorunner-cli/internal/authcli"
-	"organization-autorunner-cli/internal/config"
-	"organization-autorunner-cli/internal/errnorm"
-	"organization-autorunner-cli/internal/httpclient"
+	"agent-nexus-cli/internal/authcli"
+	"agent-nexus-cli/internal/config"
+	"agent-nexus-cli/internal/errnorm"
+	"agent-nexus-cli/internal/httpclient"
 )
 
 func (a *App) invokeArtifactContent(ctx context.Context, cfg config.Resolved, commandName string, pathParams map[string]string) (*commandResult, error) {
@@ -180,7 +180,7 @@ func validationResult(commandName string, commandID string, pathParams map[strin
 	if body != nil {
 		data["body"] = body
 	}
-	text := fmt.Sprintf("Validation passed for `oar %s` (%s %s).", commandName, method, path)
+	text := fmt.Sprintf("Validation passed for `anx %s` (%s %s).", commandName, method, path)
 	return &commandResult{Text: text, Data: data}
 }
 
@@ -272,10 +272,10 @@ func (a *App) cfgWithResolvedAuthToken(ctx context.Context, cfg config.Resolved)
 func generatedHeaders(cfg config.Resolved) map[string]string {
 	headers := map[string]string{
 		"Accept":            "application/json",
-		"X-OAR-CLI-Version": httpclient.CLIVersion,
+		"X-ANX-CLI-Version": httpclient.CLIVersion,
 	}
 	if strings.TrimSpace(cfg.Agent) != "" {
-		headers["X-OAR-Agent"] = strings.TrimSpace(cfg.Agent)
+		headers["X-ANX-Agent"] = strings.TrimSpace(cfg.Agent)
 	}
 	if strings.TrimSpace(cfg.AccessToken) != "" {
 		headers["Authorization"] = "Bearer " + strings.TrimSpace(cfg.AccessToken)

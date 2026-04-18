@@ -409,10 +409,10 @@ describe("hooks proxy retry", () => {
   });
 
   it("adds configured CSP sources to document navigation responses", async () => {
-    envState.OAR_UI_CSP_SCRIPT_SRC_EXTRA =
+    envState.ANX_UI_CSP_SCRIPT_SRC_EXTRA =
       "https://static.cloudflareinsights.com 'sha256-examplehash='";
-    envState.OAR_UI_CSP_CONNECT_SRC_EXTRA = "https://cloudflareinsights.com";
-    envState.OAR_UI_CSP_MANIFEST_SRC_EXTRA =
+    envState.ANX_UI_CSP_CONNECT_SRC_EXTRA = "https://cloudflareinsights.com";
+    envState.ANX_UI_CSP_MANIFEST_SRC_EXTRA =
       "https://scalingforever.cloudflareaccess.com";
 
     const response = await handle({
@@ -446,6 +446,6 @@ describe("hooks proxy retry", () => {
     expect(csp).toContain(
       "manifest-src 'self' https://scalingforever.cloudflareaccess.com",
     );
-    expect(response.headers.get("X-OAR-UI-Version")).toBe(CURRENT_VERSION);
+    expect(response.headers.get("X-ANX-UI-Version")).toBe(CURRENT_VERSION);
   });
 });

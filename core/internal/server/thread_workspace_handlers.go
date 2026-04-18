@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"organization-autorunner-core/internal/primitives"
+	"agent-nexus-core/internal/primitives"
 )
 
 type threadContextOptions struct {
@@ -396,22 +396,22 @@ func buildThreadWorkspaceFollowUpHints(thread map[string]any, threadID string, s
 
 	examples := make([]string, 0, 3)
 	for _, eventID := range eventIDs {
-		examples = append(examples, "oar events get --event-id "+eventID+" --json")
+		examples = append(examples, "anx events get --event-id "+eventID+" --json")
 		if len(examples) >= 3 {
 			break
 		}
 	}
 
 	hints := map[string]any{
-		"events_get_template":       "oar events get --event-id <event-id> --json",
+		"events_get_template":       "anx events get --event-id <event-id> --json",
 		"events_get_examples":       examples,
 		"workspace_refresh_command": "",
 	}
 	tid := strings.TrimSpace(threadID)
 	if topicID := topicIDFromThreadWorkspaceRefs(thread); topicID != "" {
-		hints["workspace_refresh_command"] = "oar topics workspace --topic-id " + topicID + " --include-artifact-content --full-id --json"
+		hints["workspace_refresh_command"] = "anx topics workspace --topic-id " + topicID + " --include-artifact-content --full-id --json"
 	} else if tid != "" {
-		hints["workspace_refresh_command"] = "oar threads workspace --thread-id " + tid + " --include-artifact-content --full-id --json"
+		hints["workspace_refresh_command"] = "anx threads workspace --thread-id " + tid + " --include-artifact-content --full-id --json"
 	}
 	return hints
 }

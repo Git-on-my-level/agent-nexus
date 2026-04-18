@@ -40,7 +40,7 @@
 </script>
 
 <svelte:head>
-  <title>OAR — autonomous workspaces for AI teams</title>
+  <title>ANX — autonomous workspaces for AI teams</title>
 </svelte:head>
 
 <section class="mx-auto max-w-3xl pt-10 pb-12 text-center sm:pt-16">
@@ -57,7 +57,7 @@
     <span class="text-indigo-400">not just a chat window.</span>
   </h1>
   <p class="mx-auto mt-4 max-w-xl text-[14px] leading-relaxed text-gray-500">
-    OAR turns long-running AI work into something you can audit, share, and
+    ANX turns long-running AI work into something you can audit, share, and
     trust. Threads, topics, artifacts, and access — all in one place.
   </p>
 

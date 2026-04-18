@@ -2,8 +2,8 @@
 
 HOST ?= 127.0.0.1
 PORT ?= 8000
-WORKSPACE_ROOT ?= $(CURDIR)/.oar-workspace
-SCHEMA_PATH ?= $(CURDIR)/../contracts/oar-schema.yaml
+WORKSPACE_ROOT ?= $(CURDIR)/.anx-workspace
+SCHEMA_PATH ?= $(CURDIR)/../contracts/anx-schema.yaml
 
 # For offline/air-gapped environments (e.g., agent sandboxes), set GOTOOLCHAIN=local
 # to prevent Go from auto-downloading a toolchain version. Example:
@@ -11,7 +11,7 @@ SCHEMA_PATH ?= $(CURDIR)/../contracts/oar-schema.yaml
 
 help:
 	@echo "Common targets:"
-	@echo "  make serve      - run oar-core locally (development mode)"
+	@echo "  make serve      - run anx-core locally (development mode)"
 	@echo "  make fmt        - format Go files in-place"
 	@echo "  make fmt-check  - verify Go files are gofmt-clean"
 	@echo "  make check      - run formatting + cheap checks locally"

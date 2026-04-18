@@ -1,5 +1,5 @@
 {
-  "name": "organization-autorunner",
+  "name": "agent-nexus",
   "private": true,
   "packageManager": "pnpm@10.17.1",
   "scripts": {

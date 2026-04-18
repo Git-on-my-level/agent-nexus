@@ -6,15 +6,15 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"organization-autorunner-core/internal/blob"
+	"agent-nexus-core/internal/blob"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"organization-autorunner-core/internal/actors"
-	"organization-autorunner-core/internal/primitives"
-	"organization-autorunner-core/internal/schema"
-	"organization-autorunner-core/internal/storage"
+	"agent-nexus-core/internal/actors"
+	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/schema"
+	"agent-nexus-core/internal/storage"
 )
 
 type boardLifecycleFailureStore struct {
@@ -47,7 +47,7 @@ func (s *boardLifecycleFailureStore) PutDerivedTopicProjection(ctx context.Conte
 func newPrimitivesTestServerWithStore(t *testing.T, workspace *storage.Workspace, primitiveStore PrimitiveStore) primitivesTestHarness {
 	t.Helper()
 
-	contractPath := filepath.Join("..", "..", "..", "contracts", "oar-schema.yaml")
+	contractPath := filepath.Join("..", "..", "..", "contracts", "anx-schema.yaml")
 	contract, err := schema.Load(contractPath)
 	if err != nil {
 		t.Fatalf("load schema contract: %v", err)
@@ -59,7 +59,7 @@ func newPrimitivesTestServerWithStore(t *testing.T, workspace *storage.Workspace
 		Contract:         contract,
 		InboxRiskHorizon: defaultInboxRiskHorizon,
 		DirtyBatchSize:   100,
-		SystemActorID:    "oar-core",
+		SystemActorID:    "anx-core",
 	})
 	handler := NewHandler(
 		contract.Version,

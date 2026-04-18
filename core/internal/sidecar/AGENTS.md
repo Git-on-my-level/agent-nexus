@@ -4,11 +4,11 @@
 Guide for work inside `core/internal/sidecar/`.
 
 Read this after [core/AGENTS.md](../../AGENTS.md). This package hosts
-privileged in-process sidecars inside `oar-core`.
+privileged in-process sidecars inside `anx-core`.
 
 ## Package Purpose
 `sidecar` owns the generic lifecycle shell for internal services that should run
-inside the `oar-core` process while keeping their implementation package-local.
+inside the `anx-core` process while keeping their implementation package-local.
 
 Use it when a service needs:
 - process-local lifecycle management
@@ -30,4 +30,4 @@ Do not use it as a dumping ground for unrelated background work.
 
 ## Validation
 - `go test ./internal/sidecar/...`
-- `go test ./cmd/oar-core/...`
+- `go test ./cmd/anx-core/...`

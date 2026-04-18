@@ -36,7 +36,7 @@ func TestWriteEnvelopeJSONGolden(t *testing.T) {
 					Code:        "invalid_request",
 					Message:     "path is required",
 					Recoverable: true,
-					Hint:        "Run `oar help` for supported flags and usage.",
+					Hint:        "Run `anx help` for supported flags and usage.",
 					Details:     map[string]any{"flag": "--path"},
 				},
 			},

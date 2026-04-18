@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"organization-autorunner-core/internal/auth"
-	"organization-autorunner-core/internal/primitives"
-	"organization-autorunner-core/internal/router"
+	"agent-nexus-core/internal/auth"
+	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/router"
 )
 
 func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOptions, pathInboxItemID string) {
@@ -370,7 +370,7 @@ func sendAskResponseWakeBestEffort(
 
 	wakeupID := router.WakeupArtifactID(workspaceID, threadID, triggerEventID, askingAgentID)
 	wakeRefs := append(router.WakeArtifactRefs(threadID, triggerEventID, subjectRef), "artifact:"+wakeupID)
-	sessionKey := fmt.Sprintf("oar:%s:%s:%s", workspaceID, threadID, targetHandle)
+	sessionKey := fmt.Sprintf("anx:%s:%s:%s", workspaceID, threadID, targetHandle)
 
 	wakePayload := router.BuildWakeRequestPayload(
 		wakeupID,

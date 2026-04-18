@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"organization-autorunner-core/internal/blob"
-	"organization-autorunner-core/internal/primitives"
-	"organization-autorunner-core/internal/schema"
+	"agent-nexus-core/internal/blob"
+	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/schema"
 )
 
 func TestTopicWorkspaceResolvesBoardsCardsAndDocsViaRefEdges(t *testing.T) {
@@ -92,7 +92,7 @@ func TestTopicWorkspaceResolvesBoardsCardsAndDocsViaRefEdges(t *testing.T) {
 		t.Fatal("expected card id")
 	}
 
-	contract, err := schema.Load(filepath.Join("..", "..", "..", "contracts", "oar-schema.yaml"))
+	contract, err := schema.Load(filepath.Join("..", "..", "..", "contracts", "anx-schema.yaml"))
 	if err != nil {
 		t.Fatalf("load schema contract: %v", err)
 	}

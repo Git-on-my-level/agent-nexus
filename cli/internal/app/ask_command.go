@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"organization-autorunner-cli/internal/config"
-	"organization-autorunner-cli/internal/errnorm"
+	"agent-nexus-cli/internal/config"
+	"agent-nexus-cli/internal/errnorm"
 )
 
 const agentAskRequestedEventType = "agent_ask_requested"
@@ -17,8 +17,8 @@ func askUsageText() string {
 Capture a human-needed question as an ask event so it appears in Inbox as an ASK item.
 
 Usage:
-  oar ask "<question>" --thread-id <thread-id> [flags]
-  oar ask --question "<question>" --thread-id <thread-id> [flags]
+  anx ask "<question>" --thread-id <thread-id> [flags]
+  anx ask --question "<question>" --thread-id <thread-id> [flags]
 
 Flags:
   --question <text>           Question text (alternative to positional question).
@@ -33,9 +33,9 @@ Flags:
   --actor-id <id|me>          Event author actor_id; defaults from active profile.
 
 Examples:
-  oar ask "Should we approve Friday launch?" --thread-id thread_launch
-  oar ask --question "Can we deprecate this endpoint?" --thread-id thread_api --subject-ref topic:api
-  oar ask "Need billing policy decision" --thread-id thread_billing --ref topic:billing --coverage-hint "thin - 1 artifact, 0 decisions"
+  anx ask "Should we approve Friday launch?" --thread-id thread_launch
+  anx ask --question "Can we deprecate this endpoint?" --thread-id thread_api --subject-ref topic:api
+  anx ask "Need billing policy decision" --thread-id thread_billing --ref topic:billing --coverage-hint "thin - 1 artifact, 0 decisions"
 `)
 }
 

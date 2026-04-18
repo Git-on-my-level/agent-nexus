@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"organization-autorunner-cli/internal/config"
-	"organization-autorunner-cli/internal/errnorm"
+	"agent-nexus-cli/internal/config"
+	"agent-nexus-cli/internal/errnorm"
 )
 
 func (a *App) runNotificationsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
@@ -38,7 +38,7 @@ func (a *App) runNotificationsList(ctx context.Context, args []string, cfg confi
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	if len(fs.Args()) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar notifications list`")
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx notifications list`")
 	}
 
 	order := strings.ToLower(strings.TrimSpace(orderFlag.value))
@@ -77,7 +77,7 @@ func (a *App) runNotificationMutation(ctx context.Context, args []string, cfg co
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	if len(fs.Args()) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar "+commandName+"`")
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx "+commandName+"`")
 	}
 	wakeupID := strings.TrimSpace(wakeupIDFlag.value)
 	if wakeupID == "" {

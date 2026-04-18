@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"organization-autorunner-core/internal/primitives"
-	"organization-autorunner-core/internal/schedule"
+	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/schedule"
 )
 
 func TestThreadsCreatePatchListAndTimeline(t *testing.T) {
@@ -1088,7 +1088,7 @@ func TestThreadWorkspaceBundlesCanonicalAndDerivedSections(t *testing.T) {
 	if payload.ContextSource != "threads.workspace" || payload.InboxSource != "threads.workspace" {
 		t.Fatalf("expected workspace sources, got context_source=%q inbox_source=%q", payload.ContextSource, payload.InboxSource)
 	}
-	if got := asString(payload.FollowUp["workspace_refresh_command"]); !strings.Contains(got, "oar threads workspace --thread-id "+rootThreadID) {
+	if got := asString(payload.FollowUp["workspace_refresh_command"]); !strings.Contains(got, "anx threads workspace --thread-id "+rootThreadID) {
 		t.Fatalf("expected workspace follow-up hint, got %#v", payload.FollowUp)
 	}
 }

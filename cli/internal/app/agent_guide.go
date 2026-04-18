@@ -7,9 +7,9 @@ import (
 	"strings"
 )
 
-const agentGuideSkillName = "oar-cli-onboard"
+const agentGuideSkillName = "anx-cli-onboard"
 
-const agentGuideSkillDescription = "Use the `oar` CLI effectively: configure base URL/auth/profile, discover the available command surface, choose the right primitive or higher-level abstraction, and choose text (default, LLM-friendly) or `--json` (programmatic) output as appropriate. Apply when running `oar`, interpreting its help/errors, or automating OAR workflows."
+const agentGuideSkillDescription = "Use the `anx` CLI effectively: configure base URL/auth/profile, discover the available command surface, choose the right primitive or higher-level abstraction, and choose text (default, LLM-friendly) or `--json` (programmatic) output as appropriate. Apply when running `anx`, interpreting its help/errors, or automating ANX workflows."
 
 type guideSection struct {
 	Title string
@@ -17,7 +17,7 @@ type guideSection struct {
 }
 
 func agentGuideIntro() string {
-	return "Use this guide when you need to operate `oar` well, not just get it running. Favor stable CLI patterns over environment-specific setup."
+	return "Use this guide when you need to operate `anx` well, not just get it running. Favor stable CLI patterns over environment-specific setup."
 }
 
 func agentGuideSections() []guideSection {
@@ -25,10 +25,10 @@ func agentGuideSections() []guideSection {
 		{
 			Title: "Operating posture",
 			Lines: []string{
-				"- Treat `oar` as the contract-aligned interface to an OAR core API.",
+				"- Treat `anx` as the contract-aligned interface to an ANX core API.",
 				"- Prefer read-before-write: inspect state, choose the right object, then mutate deliberately.",
 				"- Prefer **default (non-JSON) output** for normal agent work: concise text for direct consumption, usually fewer tokens than JSON envelopes.",
-				"- Use **`--json`** or **`OAR_JSON=true`** when the consumer is code, a shell script, CI, or anything that parses the stable JSON envelope (including rich `error.details`).",
+				"- Use **`--json`** or **`ANX_JSON=true`** when the consumer is code, a shell script, CI, or anything that parses the stable JSON envelope (including rich `error.details`).",
 				"- Prefer profiles and env vars over repeated flags.",
 				"- Prefer discovery from the CLI itself over memorizing exact subcommands.",
 			},
@@ -82,10 +82,10 @@ func agentGuideSections() []guideSection {
 		{
 			Title: "Configuration",
 			Lines: []string{
-				"- On a durable workstation, set the active profile once with `oar config use <profile>` (equivalent to `oar auth default <profile>`). Later commands can omit repeated `--base-url` / `--agent`; inspect merged settings with `oar config show` (tokens redacted).",
-				"- Override per command with `--base-url` or `OAR_BASE_URL` and `--agent` or `OAR_AGENT` when needed.",
-				"- Prefer `OAR_BASE_URL` and `OAR_AGENT` in scripts, CI, or environments without a persistent `~/.config/oar`.",
-				"- If available, run `oar doctor` when config or connectivity is unclear.",
+				"- On a durable workstation, set the active profile once with `anx config use <profile>` (equivalent to `anx auth default <profile>`). Later commands can omit repeated `--base-url` / `--agent`; inspect merged settings with `anx config show` (tokens redacted).",
+				"- Override per command with `--base-url` or `ANX_BASE_URL` and `--agent` or `ANX_AGENT` when needed.",
+				"- Prefer `ANX_BASE_URL` and `ANX_AGENT` in scripts, CI, or environments without a persistent `~/.config/anx`.",
+				"- If available, run `anx doctor` when config or connectivity is unclear.",
 				"- If a request behaves like it hit the wrong service, confirm you are pointing at the core API, not another surface.",
 				"",
 				"Config precedence is typically: flags -> environment -> profile -> defaults.",
@@ -96,12 +96,12 @@ func agentGuideSections() []guideSection {
 			Lines: []string{
 				"Do not overfit to examples in this guide. Ask the CLI what exists now:",
 				"",
-				"  oar help",
-				"  oar help <group>",
-				"  oar help <group> <command>",
-				"  oar meta docs",
-				"  oar meta doc <topic>",
-				"  oar meta doc wake-routing",
+				"  anx help",
+				"  anx help <group>",
+				"  anx help <group> <command>",
+				"  anx meta docs",
+				"  anx meta doc <topic>",
+				"  anx meta doc wake-routing",
 				"",
 				"Use help output as the source of truth for exact flags, request shapes, enums, and newly added primitives.",
 			},
@@ -120,7 +120,7 @@ func agentGuideSections() []guideSection {
 		{
 			Title: "Programmatic output (`--json`)",
 			Lines: []string{
-				"- Use `--json` or `OAR_JSON=true` when you are parsing output in code or scripts (not for default agent readbacks).",
+				"- Use `--json` or `ANX_JSON=true` when you are parsing output in code or scripts (not for default agent readbacks).",
 				"- Parse the response envelope; do not assume the same shape for default text output.",
 				"- Treat `error.code`, `error.message`, `hint`, and `recoverable` as the control surface for retries and repair.",
 				"- Keep scripts idempotent where possible: read state, compare, then write only when needed.",
@@ -132,11 +132,11 @@ func agentGuideSections() []guideSection {
 				"When starting in a new environment:",
 				"",
 				"1. Set base URL.",
-				"2. Check onboarding state with `oar auth bootstrap status` before first registration.",
-				"3. Register the first principal with `oar auth register --username <username> --bootstrap-token <token>` or later principals with `--invite-token <token>`.",
+				"2. Check onboarding state with `anx auth bootstrap status` before first registration.",
+				"3. Register the first principal with `anx auth register --username <username> --bootstrap-token <token>` or later principals with `--invite-token <token>`.",
 				"4. Confirm identity.",
 				"5. Run a cheap read command.",
-				"6. If this agent should be tag-addressable from thread messages, read `oar meta doc agent-bridge` for the preferred runtime path or `oar meta doc wake-routing` for the generic document lifecycle.",
+				"6. If this agent should be tag-addressable from thread messages, read `anx meta doc agent-bridge` for the preferred runtime path or `anx meta doc wake-routing` for the generic document lifecycle.",
 				"",
 				"When stuck:",
 				"",
@@ -150,7 +150,7 @@ func agentGuideSections() []guideSection {
 			Lines: []string{
 				"- Keep this guide focused on durable usage patterns.",
 				"- Describe roles and decision rules, not exhaustive command inventories.",
-				"- Prefer `oar help` and `oar meta docs` over embedding fragile schemas.",
+				"- Prefer `anx help` and `anx meta docs` over embedding fragile schemas.",
 				"- Mention examples of primitives and abstractions, but avoid implying the list is closed.",
 			},
 		},
@@ -192,13 +192,13 @@ func agentGuideText() string {
 func init() {
 	localHelperTopics = append(localHelperTopics, localHelperTopic{
 		Path:        "meta skill",
-		Summary:     "Render a bundled editor-specific skill file from the canonical OAR agent guide.",
+		Summary:     "Render a bundled editor-specific skill file from the canonical ANX agent guide.",
 		JSONShape:   "`target`, `content`, `default_file`, `written_files`, `guide_topic`, `skill_name`",
 		Composition: "Pure local helper. Renders a maintained skill document from the bundled agent guide and optionally writes it to a chosen file or directory.",
 		Examples: []string{
-			"oar meta skill cursor",
-			"oar meta skill cursor --write-dir ~/.cursor/skills/oar-cli-onboard",
-			"oar meta skill --target cursor --write-file ./SKILL.md",
+			"anx meta skill cursor",
+			"anx meta skill cursor --write-dir ~/.cursor/skills/anx-cli-onboard",
+			"anx meta skill --target cursor --write-file ./SKILL.md",
 		},
 		Flags: []localHelperFlag{
 			{Name: "<target>", Description: "Skill target to render. Currently supported: `cursor`."},
@@ -220,7 +220,7 @@ func renderCursorSkillMarkdown() string {
 	b.WriteString(agentGuideSkillDescription)
 	b.WriteString("\n")
 	b.WriteString("---\n\n")
-	b.WriteString(renderGuide("# OAR CLI guide for agents", "##"))
+	b.WriteString(renderGuide("# ANX CLI guide for agents", "##"))
 	return b.String()
 }
 

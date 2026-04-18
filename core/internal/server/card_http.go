@@ -4,7 +4,7 @@ import (
 	"errors"
 	"strings"
 
-	"organization-autorunner-core/internal/schema"
+	"agent-nexus-core/internal/schema"
 )
 
 func canonicalCardView(card map[string]any) map[string]any {

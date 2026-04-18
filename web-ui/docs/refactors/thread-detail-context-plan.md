@@ -6,6 +6,6 @@ This document described a frontend refactor for monolithic thread detail loads (
 
 For authoritative behavior, see:
 
-- `web-ui/docs/oar-ui-spec.md`
+- `web-ui/docs/anx-ui-spec.md`
 - `web-ui/docs/http-api.md`
-- `/contracts/oar-openapi.yaml` (`threads.context`, `threads.workspace`, `topics/*`, `boards/*`, `cards/*`)
+- `/contracts/anx-openapi.yaml` (`threads.context`, `threads.workspace`, `topics/*`, `boards/*`, `cards/*`)

@@ -82,18 +82,18 @@ async function openThreadDetailFromNav(page, threadTitle) {
 
 test.describe.configure({ mode: "serial" });
 
-test("golden path integration runs against a real oar-core", async ({
+test("golden path integration runs against a real anx-core", async ({
   page,
   request,
 }) => {
   test.setTimeout(180000);
 
   const coreBaseUrl = normalizeBaseUrl(
-    process.env.OAR_CORE_BASE_URL ?? process.env.PUBLIC_OAR_CORE_BASE_URL,
+    process.env.ANX_CORE_BASE_URL ?? process.env.PUBLIC_ANX_CORE_BASE_URL,
   );
   test.skip(
     !coreBaseUrl,
-    "Set OAR_CORE_BASE_URL or PUBLIC_OAR_CORE_BASE_URL for core integration tests.",
+    "Set ANX_CORE_BASE_URL or PUBLIC_ANX_CORE_BASE_URL for core integration tests.",
   );
 
   const runSuffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

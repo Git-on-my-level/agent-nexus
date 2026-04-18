@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Flags same-origin core client paths that would NOT be proxied to oar-core
+ * Flags same-origin core client paths that would NOT be proxied to anx-core
  * (would hit SvelteKit and often return HTML 404), excluding known exceptions.
  *
  * Run: node scripts/audit-core-proxy-paths.mjs
@@ -81,7 +81,7 @@ console.log(
   "These paths are NOT matched by isProxyableCommand ∪ isDirectCoreProxyPath",
 );
 console.log(
-  "(browser fetch to the UI origin would not be forwarded to oar-core):\n",
+  "(browser fetch to the UI origin would not be forwarded to anx-core):\n",
 );
 for (const row of unproxied) {
   const extra = row.note ? `  (${row.note})` : "";

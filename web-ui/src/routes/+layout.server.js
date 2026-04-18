@@ -10,7 +10,7 @@ export async function load(event) {
     ...toPublicWorkspaceCatalog(await resolveWorkspaceCatalog(event)),
     hostedMode: isHostedWebUiShell(privateEnv),
     hostedAccountPath:
-      String(publicEnv.PUBLIC_OAR_HOSTED_ACCOUNT_PATH ?? "").trim() ||
+      String(publicEnv.PUBLIC_ANX_HOSTED_ACCOUNT_PATH ?? "").trim() ||
       "/hosted/onboarding",
   };
 }

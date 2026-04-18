@@ -76,6 +76,6 @@ export async function waitForCore(
   }
 
   throw new Error(
-    `Timed out waiting for oar-core at ${baseUrl} after ${timeoutMs}ms.`,
+    `Timed out waiting for anx-core at ${baseUrl} after ${timeoutMs}ms.`,
   );
 }

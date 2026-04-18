@@ -3,14 +3,14 @@ package primitives_test
 import (
 	"context"
 	"errors"
-	"organization-autorunner-core/internal/blob"
+	"agent-nexus-core/internal/blob"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
-	"organization-autorunner-core/internal/primitives"
-	"organization-autorunner-core/internal/storage"
+	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/storage"
 )
 
 func TestBoardStoreCreateUpdateAndListSummaries(t *testing.T) {

@@ -2191,7 +2191,7 @@ func (s *Store) PurgeArchivedBoardCard(ctx context.Context, boardID, identifier 
 		return ErrNotFound
 	}
 
-	boardRow, err = touchBoardRow(ctx, tx, boardRow, "oar-core")
+	boardRow, err = touchBoardRow(ctx, tx, boardRow, "anx-core")
 	if err != nil {
 		return err
 	}
@@ -2875,7 +2875,7 @@ func rebalanceBoardColumnRanks(ctx context.Context, tx *sql.Tx, boardID, columnK
 			`UPDATE cards SET rank = ?, updated_at = ?, updated_by = ? WHERE id = ?`,
 			rankStr,
 			now,
-			"oar-core",
+			"anx-core",
 			row.CardID,
 		); err != nil {
 			return fmt.Errorf("rebalance board card rank: %w", err)

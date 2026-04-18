@@ -102,12 +102,12 @@ wait_for_ready() {
   return 1
 }
 
-echo "starting oar-core on ${BASE_URL}"
-OAR_BOOTSTRAP_TOKEN="${BOOTSTRAP_TOKEN}" \
-go run ./cmd/oar-core \
+echo "starting anx-core on ${BASE_URL}"
+ANX_BOOTSTRAP_TOKEN="${BOOTSTRAP_TOKEN}" \
+go run ./cmd/anx-core \
   --listen-addr "$LISTEN_ADDR" \
   --workspace-root "$WORKSPACE_ROOT" \
-  --schema-path "$ROOT_DIR/../contracts/oar-schema.yaml" \
+  --schema-path "$ROOT_DIR/../contracts/anx-schema.yaml" \
   >"$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 

@@ -7,20 +7,27 @@ node_modules/
 
 _src_core/
 # Local dev-only encryption key for `make serve` (workspace secrets)
+core/.anx-dev-secrets-key
+core/.anx-dev-saas-ed25519
+# Legacy paths (pre OAR→ANX rename); safe to delete locally
 core/.oar-dev-secrets-key
 core/.oar-dev-saas-ed25519
-# Local control-plane workspace for `make serve-control-plane` / dev-control-plane
+core/.oar-workspace/
 core/.oar-control-plane/
+# Local control-plane workspace for `make serve-control-plane` / dev-control-plane
+core/.anx-control-plane/
 # Regenerated when `make serve` seeds dev identities (contains invite tokens)
 cli/dogfood-resources/*.generated.json
 # Ad-hoc local `go build` outputs under cli/
-cli/oar-dogfood
-cli/oar-dogfood-bin
+cli/anx-dogfood
+cli/anx-dogfood-bin
 _src_ui/
 _ui_working_tree.patch
 
 .secrets/
-.oar-import/
+.anx-import/
+!cli/internal/app/.anx-import/
+!cli/internal/app/.anx-import/**
 .desloppify/
 .superset/
 

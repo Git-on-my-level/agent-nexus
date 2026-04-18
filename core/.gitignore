@@ -2,18 +2,18 @@
 .DS_Store
 
 # Runtime workspace
-.oar-workspace/
+.anx-workspace/
 # Ephemeral workspace roots from seed/verify scripts (unique path per run; same artifacts as above)
-.oar-workspace-seed-verify-*/
+.anx-workspace-seed-verify-*/
 
 # Go build/test artifacts
 bin/
 *.test
 *.out
 coverage.out
-oar-core
-!cmd/oar-core/
-!cmd/oar-core/*.go
+anx-core
+!cmd/anx-core/
+!cmd/anx-core/*.go
 
 # Optional local env
 .env

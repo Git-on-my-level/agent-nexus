@@ -3,15 +3,15 @@
 ## Scope
 Guide for work inside `web-ui/`.
 
-Read this after the root [AGENTS.md](../AGENTS.md). Keep this file focused on durable operator-facing purpose, UI boundaries, and the invariants that protect safe interaction with `oar-core`.
+Read this after the root [AGENTS.md](../AGENTS.md). Keep this file focused on durable operator-facing purpose, UI boundaries, and the invariants that protect safe interaction with `anx-core`.
 
 ## Module Purpose
 `web-ui` is the operator control surface for Organization Autorunner.
 
-It gives operators fast, glanceable visibility into the shared workspace maintained by `oar-core` and provides explicit paths for operator intervention such as decisions, reviews, resource edits (topics, docs, boards, cards), acknowledgments, and message posting. It is a client of `oar-core`, not an agent runtime or orchestration layer.
+It gives operators fast, glanceable visibility into the shared workspace maintained by `anx-core` and provides explicit paths for operator intervention such as decisions, reviews, resource edits (topics, docs, boards, cards), acknowledgments, and message posting. It is a client of `anx-core`, not an agent runtime or orchestration layer.
 
 ## UI Responsibilities
-- Treat `oar-core` as the single source of truth for all durable state.
+- Treat `anx-core` as the single source of truth for all durable state.
 - Optimize for operator usability: clear status, triage context, provenance visibility, and at-a-glance understanding of what needs attention.
 - Provide the main operator workflow surfaces for inbox triage, topic and backing-thread inspection, boards and cards, artifacts, documents, and review flows.
 - Handle forward-compatible data safely: unknown event types, artifact kinds, refs, and fields must remain visible rather than breaking the UI.
@@ -20,7 +20,7 @@ It gives operators fast, glanceable visibility into the shared workspace maintai
 - Gate writes safely through actor-aware and workspace-aware flows while preserving core contract semantics.
 
 ## High-Value Invariants
-- Persistent writes go through `oar-core`; the UI must not invent its own source of truth.
+- Persistent writes go through `anx-core`; the UI must not invent its own source of truth.
 - Unknown or newer data must degrade gracefully and remain inspectable.
 - Resource patches use merge/patch semantics and must not overwrite fields the UI does not understand.
 - Restricted transitions and provenance-sensitive fields must remain clearly evidence-backed versus inferred.
@@ -32,9 +32,9 @@ It gives operators fast, glanceable visibility into the shared workspace maintai
 - Real-world side effects outside the OAR workspace.
 
 ## Canonical References
-- Product and UX spec: `docs/oar-ui-spec.md`
+- Product and UX spec: `docs/anx-ui-spec.md`
 - HTTP contract: `docs/http-api.md`
-- Shared schema: `../contracts/oar-schema.yaml`
+- Shared schema: `../contracts/anx-schema.yaml`
 - Spec compliance matrix: `docs/spec-compliance.md`
 - Runbook: `docs/runbook.md`
 - Visual style guidance: `docs/style-guide.md`

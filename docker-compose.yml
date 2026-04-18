@@ -5,18 +5,18 @@ services:
       dockerfile: core/Dockerfile
     restart: unless-stopped
     ports:
-      - "${OAR_CORE_PORT:-8000}:8000"
+      - "${ANX_CORE_PORT:-8000}:8000"
     volumes:
-      - "${HOST_OAR_WORKSPACE_ROOT:-oar-workspace}:/var/lib/oar/workspace"
+      - "${HOST_ANX_WORKSPACE_ROOT:-anx-workspace}:/var/lib/anx/workspace"
     environment:
-      OAR_LISTEN_ADDR: "0.0.0.0:8000"
-      OAR_CORS_ALLOWED_ORIGINS: "${OAR_CORS_ALLOWED_ORIGINS:-}"
-      OAR_WEBAUTHN_RPID: "${OAR_WEBAUTHN_RPID:-}"
-      OAR_WEBAUTHN_ORIGIN: "${OAR_WEBAUTHN_ORIGIN:-}"
-      OAR_WEBAUTHN_RP_DISPLAY_NAME: "${OAR_WEBAUTHN_RP_DISPLAY_NAME:-OAR}"
-      OAR_CORE_INSTANCE_ID: "${OAR_CORE_INSTANCE_ID:-core-local}"
-      OAR_BOOTSTRAP_TOKEN: "${OAR_BOOTSTRAP_TOKEN:-}"
-      OAR_SHUTDOWN_TIMEOUT: "${OAR_SHUTDOWN_TIMEOUT:-15s}"
+      ANX_LISTEN_ADDR: "0.0.0.0:8000"
+      ANX_CORS_ALLOWED_ORIGINS: "${ANX_CORS_ALLOWED_ORIGINS:-}"
+      ANX_WEBAUTHN_RPID: "${ANX_WEBAUTHN_RPID:-}"
+      ANX_WEBAUTHN_ORIGIN: "${ANX_WEBAUTHN_ORIGIN:-}"
+      ANX_WEBAUTHN_RP_DISPLAY_NAME: "${ANX_WEBAUTHN_RP_DISPLAY_NAME:-ANX}"
+      ANX_CORE_INSTANCE_ID: "${ANX_CORE_INSTANCE_ID:-core-local}"
+      ANX_BOOTSTRAP_TOKEN: "${ANX_BOOTSTRAP_TOKEN:-}"
+      ANX_SHUTDOWN_TIMEOUT: "${ANX_SHUTDOWN_TIMEOUT:-15s}"
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://127.0.0.1:8000/health"]
       interval: 15s
@@ -30,11 +30,11 @@ services:
       dockerfile: web-ui/Dockerfile
     restart: unless-stopped
     ports:
-      - "${OAR_WEB_UI_PORT:-3000}:3000"
+      - "${ANX_WEB_UI_PORT:-3000}:3000"
     environment:
       PORT: "3000"
-      ORIGIN: "${OAR_WEB_UI_ORIGIN:-http://localhost:3000}"
-      OAR_CORE_BASE_URL: "http://core:8000"
+      ORIGIN: "${ANX_WEB_UI_ORIGIN:-http://localhost:3000}"
+      ANX_CORE_BASE_URL: "http://core:8000"
     depends_on:
       core:
         condition: service_healthy
@@ -46,4 +46,4 @@ services:
       retries: 3
 
 volumes:
-  oar-workspace:
+  anx-workspace:

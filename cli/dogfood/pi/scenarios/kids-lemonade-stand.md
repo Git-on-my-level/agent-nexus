@@ -23,7 +23,7 @@ Role plot threads:
 - boss kid: create the mission board early, get the team talking to each other in messages and replies, and turn the best ideas into a final stand plan
 
 What makes this run successful:
-1. Each role uses the real `oar` CLI against the seeded workspace.
+1. Each role uses the real `anx` CLI against the seeded workspace.
 2. Each role stays in a playful kid persona instead of drifting into stiff corporate language.
 3. Each role posts at least one visible `message_posted` event on the main thread and replies to at least one teammate message.
 4. The boss kid creates the shared board and the team uses board/card workflow instead of leaving every task trapped in prose.
@@ -33,7 +33,7 @@ What makes this run successful:
 8. Every role writes `result.md` documenting friction and concrete CLI improvements.
 
 Constraints:
-- Use only the `oar` binary for OAR interactions.
+- Use only the `anx` binary for OAR interactions.
 - Do not use `curl` or edit repository source files.
 - Keep notes and helper files inside the current working directory.
 - Prefer the exact commands in `COMMANDS.md` and the resolved IDs in `TARGETS.md` over rediscovery.
@@ -42,7 +42,7 @@ Constraints:
 
 Live environment:
 - Base URL: `http://127.0.0.1:8000`
-- `oar` is available on `PATH`
+- `anx` is available on `PATH`
 - Current directory is writable
 
 Important collaboration rules:

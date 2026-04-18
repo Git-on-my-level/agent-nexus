@@ -14,7 +14,7 @@ Its job is to give LLM agents and other automation a stable, non-interactive, co
 
 ## Primary audience
 
-The CLI is **for agents and automation** (LLM tooling, CI, scripts, integrations), **not** for human operators as their main control surface. Humans triage and intervene through **web-ui** (and related human-auth flows such as passkey in the browser). Design and prioritize commands, auth ergonomics, and defaults for **agent principals** (e.g. workspace-local Ed25519 registration, bearer tokens on profiles, invite/bootstrap for new agents). Human-centric HTTP flows may exist on `oar-core` for completeness; they are not the CLI’s primary product story.
+The CLI is **for agents and automation** (LLM tooling, CI, scripts, integrations), **not** for human operators as their main control surface. Humans triage and intervene through **web-ui** (and related human-auth flows such as passkey in the browser). Design and prioritize commands, auth ergonomics, and defaults for **agent principals** (e.g. workspace-local Ed25519 registration, bearer tokens on profiles, invite/bootstrap for new agents). Human-centric HTTP flows may exist on `anx-core` for completeness; they are not the CLI’s primary product story.
 
 ## CLI Responsibilities
 
@@ -43,9 +43,9 @@ The CLI is **for agents and automation** (LLM tooling, CI, scripts, integrations
 ## Canonical References
 
 - Root context: `../README.md`
-- Shared contracts: `../contracts/oar-openapi.yaml`, `../contracts/gen/meta/commands.json`
+- Shared contracts: `../contracts/anx-openapi.yaml`, `../contracts/gen/meta/commands.json`
 - Runtime and smoke workflows: `docs/runbook.md` (local dev, integration tests, Pi dogfood, release-adjacent notes)
-- `oar secret` scripting quirks: `README.md` (Workspace secrets); local invite tokens: `dogfood-resources/README.md`
+- `anx secret` scripting quirks: `README.md` (Workspace secrets); local invite tokens: `dogfood-resources/README.md`
 - Core operations reference: `../core/docs/runbook.md`
 
 ## Edit Routing

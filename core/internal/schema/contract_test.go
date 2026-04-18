@@ -126,7 +126,7 @@ func TestLoadMissingVersion(t *testing.T) {
 func loadContract(t *testing.T) *Contract {
 	t.Helper()
 
-	path := filepath.Join("..", "..", "..", "contracts", "oar-schema.yaml")
+	path := filepath.Join("..", "..", "..", "contracts", "anx-schema.yaml")
 	contract, err := Load(path)
 	if err != nil {
 		t.Fatalf("Load returned error: %v", err)

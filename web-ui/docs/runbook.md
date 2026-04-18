@@ -1,13 +1,13 @@
-# oar-ui Runbook
+# anx-ui Runbook
 
 This runbook covers local integration and production-like serving for the
-workspace-aware `oar-ui`.
+workspace-aware `anx-ui`.
 
 ## Configuration
 
 ### Workspace catalog
 
-Canonical runtime config is `OAR_WORKSPACES`.
+Canonical runtime config is `ANX_WORKSPACES`.
 
 - Accepts a JSON array or object.
 - Each entry needs a workspace slug and a core base URL.
@@ -21,27 +21,27 @@ Canonical runtime config is `OAR_WORKSPACES`.
 Example:
 
 ```bash
-export OAR_WORKSPACES='[
-  {"slug":"dtrinity","label":"DTrinity","coreBaseUrl":"http://127.0.0.1:8000","publicOrigin":"https://oar.tailnet.ts.net/oar/dtrinity"},
-  {"slug":"scalingforever","label":"Scaling Forever","coreBaseUrl":"http://127.0.0.1:8001","publicOrigin":"https://oar.tailnet.ts.net/oar/scalingforever"}
+export ANX_WORKSPACES='[
+  {"slug":"dtrinity","label":"DTrinity","coreBaseUrl":"http://127.0.0.1:8000","publicOrigin":"https://anx.tailnet.ts.net/anx/dtrinity"},
+  {"slug":"scalingforever","label":"Scaling Forever","coreBaseUrl":"http://127.0.0.1:8001","publicOrigin":"https://anx.tailnet.ts.net/anx/scalingforever"}
 ]'
-export OAR_DEFAULT_WORKSPACE=dtrinity
+export ANX_DEFAULT_WORKSPACE=dtrinity
 ```
 
 Legacy aliases (deprecated):
 
-- `OAR_PROJECTS` is accepted if `OAR_WORKSPACES` is not set.
-- `OAR_DEFAULT_PROJECT` is accepted if `OAR_DEFAULT_WORKSPACE` is not set.
+- `ANX_PROJECTS` is accepted if `ANX_WORKSPACES` is not set.
+- `ANX_DEFAULT_PROJECT` is accepted if `ANX_DEFAULT_WORKSPACE` is not set.
 
 Route model:
 
 - `/:workspace/...` is the canonical UI shape.
-- `/` redirects to `/${OAR_DEFAULT_WORKSPACE}`.
+- `/` redirects to `/${ANX_DEFAULT_WORKSPACE}`.
 - Root page routes such as `/threads` and `/inbox` redirect to the default
   workspace to ease local use and old bookmarks.
-- Optional mount prefix: set `OAR_UI_BASE_PATH=/oar`
-  - External routes become `/oar/:workspace/...`
-  - `OAR_UI_BASE_PATH` is applied by SvelteKit at dev/build startup, so use the
+- Optional mount prefix: set `ANX_UI_BASE_PATH=/anx`
+  - External routes become `/anx/:workspace/...`
+  - `ANX_UI_BASE_PATH` is applied by SvelteKit at dev/build startup, so use the
     intended value when running `./scripts/dev` or `./scripts/build`
 
 Build-time config files:
@@ -55,15 +55,15 @@ Build-time config files:
 
 Single-core fallback:
 
-- If `OAR_WORKSPACES` is unset, `OAR_CORE_BASE_URL` still creates one default
+- If `ANX_WORKSPACES` is unset, `ANX_CORE_BASE_URL` still creates one default
   `local` workspace for dev/integration use.
-- If neither `OAR_WORKSPACES` nor `OAR_CORE_BASE_URL` resolves a `coreBaseUrl`
+- If neither `ANX_WORKSPACES` nor `ANX_CORE_BASE_URL` resolves a `coreBaseUrl`
   for the workspace, **catalog-backed API paths** return **503** (`core_not_configured`)
   instead of being served locally. Run a real core (for example `make serve` /
-  `./scripts/e2e-smoke`) or set `OAR_WORKSPACES` / `OAR_CORE_BASE_URL` per
+  `./scripts/e2e-smoke`) or set `ANX_WORKSPACES` / `ANX_CORE_BASE_URL` per
   **Local integration** below.
 
-### Required oar-core endpoints
+### Required anx-core endpoints
 
 The UI expects these HTTP endpoints (see `docs/http-api.md` for the full
 contract):
@@ -127,8 +127,8 @@ cd ../core
 
 ```bash
 cd ../web-ui
-OAR_WORKSPACES='[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"}]' \
-OAR_DEFAULT_WORKSPACE=local \
+ANX_WORKSPACES='[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"}]' \
+ANX_DEFAULT_WORKSPACE=local \
 ./scripts/dev
 ```
 
@@ -136,28 +136,28 @@ With an external mount prefix:
 
 ```bash
 cd ../web-ui
-OAR_WORKSPACES='[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"}]' \
-OAR_DEFAULT_WORKSPACE=local \
-OAR_UI_BASE_PATH=/oar \
+ANX_WORKSPACES='[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"}]' \
+ANX_DEFAULT_WORKSPACE=local \
+ANX_UI_BASE_PATH=/anx \
 ./scripts/dev
 ```
 
 Two cores:
 
 ```bash
-export OAR_WORKSPACES='[
+export ANX_WORKSPACES='[
   {"slug":"dtrinity","label":"DTrinity","coreBaseUrl":"http://127.0.0.1:8000"},
   {"slug":"scalingforever","label":"Scaling Forever","coreBaseUrl":"http://127.0.0.1:8001"}
 ]'
-export OAR_DEFAULT_WORKSPACE=dtrinity
+export ANX_DEFAULT_WORKSPACE=dtrinity
 ./scripts/dev
 ```
 
 Integration validation:
 
 ```bash
-OAR_WORKSPACES='[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"}]' \
-OAR_DEFAULT_WORKSPACE=local \
+ANX_WORKSPACES='[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"}]' \
+ANX_DEFAULT_WORKSPACE=local \
 ./scripts/e2e-with-core
 ```
 
@@ -165,15 +165,15 @@ Representative **dev fixture** data (boards/cards/docs/events) can be pushed
 into a live core with:
 
 ```bash
-OAR_CORE_BASE_URL=http://127.0.0.1:8000 \
+ANX_CORE_BASE_URL=http://127.0.0.1:8000 \
 node ./scripts/seed-core-from-mock.mjs
 ```
 
-Select an alternate dev seed scenario with `OAR_DEV_SEED_SCENARIO`, for example:
+Select an alternate dev seed scenario with `ANX_DEV_SEED_SCENARIO`, for example:
 
 ```bash
-OAR_CORE_BASE_URL=http://127.0.0.1:8000 \
-OAR_DEV_SEED_SCENARIO=kids-lemonade-stand \
+ANX_CORE_BASE_URL=http://127.0.0.1:8000 \
+ANX_DEV_SEED_SCENARIO=kids-lemonade-stand \
 node ./scripts/seed-core-from-mock.mjs
 ```
 
@@ -182,8 +182,8 @@ chapters in sequence by default, so the workspace includes the board, cards,
 message history, and document revision history from the full scenario.
 
 With **`make serve`** (or matching env), the seed also writes **`web-ui/.dev/local-identities.json`**
-(gitignored) when `OAR_DEV_SEED_IDENTITIES=1`, core has `OAR_BOOTSTRAP_TOKEN`, and
-`OAR_DEV_REGISTER_LINKED_ACTORS=1` on oar-core. The sidebar **Fixture persona**
+(gitignored) when `ANX_DEV_SEED_IDENTITIES=1`, core has `ANX_BOOTSTRAP_TOKEN`, and
+`ANX_DEV_REGISTER_LINKED_ACTORS=1` on anx-core. The sidebar **Fixture persona**
 control then switches cookie-backed sessions among seeded principals.
 
 Primary board UI entry points:
@@ -207,8 +207,7 @@ Example build config file:
 
 ```bash
 cat > .env.build <<'EOF'
-OAR_UI_BASE_PATH=/oar
-ADAPTER=node
+ANX_UI_BASE_PATH=/anx ADAPTER=node
 EOF
 ```
 
@@ -220,11 +219,11 @@ deployments require the Node adapter for server-side proxy and hook support.
 Serve the built UI:
 
 ```bash
-OAR_WORKSPACES='[
+ANX_WORKSPACES='[
   {"slug":"dtrinity","label":"DTrinity","coreBaseUrl":"http://127.0.0.1:8000"},
   {"slug":"scalingforever","label":"Scaling Forever","coreBaseUrl":"http://127.0.0.1:8001"}
 ]' \
-OAR_DEFAULT_WORKSPACE=dtrinity \
+ANX_DEFAULT_WORKSPACE=dtrinity \
 ./scripts/serve
 ```
 
@@ -247,29 +246,29 @@ Recommended production shape: one UI process, many core processes, path-prefix
 entrypoint at the edge.
 
 Example Caddy config for external URLs like
-`https://m2-internal.scalingforever.com/oar/dtrinity/...`:
+`https://m2-internal.scalingforever.com/anx/dtrinity/...`:
 
 ```caddy
 m2-internal.scalingforever.com {
-  redir /oar /oar/ 301
+  redir /anx /anx/ 301
 
-  route /oar/* {
+  route /anx/* {
     reverse_proxy 127.0.0.1:4173
   }
 }
 ```
 
-Configure the UI with `OAR_UI_BASE_PATH=/oar` when building or running the dev
-server. The reverse proxy must preserve `/oar` so SvelteKit can route and
+Configure the UI with `ANX_UI_BASE_PATH=/anx` when building or running the dev
+server. The reverse proxy must preserve `/anx` so SvelteKit can route and
 generate links under the configured base path. The UI server then proxies API
-traffic to the matching `oar-core` from `OAR_WORKSPACES`. Core instances do not
+traffic to the matching `anx-core` from `ANX_WORKSPACES`. Core instances do not
 need to be internet-exposed.
 
 Use `route`, not `handle`, for base-path proxy blocks. In Caddy, `handle`
 blocks imported from separate snippet files can be auto-grouped as mutually
 exclusive handlers, which can produce silent `200 OK` empty-body `NOP`
 responses when another imported `handle` or `handle_path` block wins first.
-Keep the `/oar/*` proxy block in the main Caddyfile, or verify with
+Keep the `/anx/*` proxy block in the main Caddyfile, or verify with
 `caddy adapt --config Caddyfile | jq` that the generated route does not include
 a `group` field.
 
@@ -310,7 +309,7 @@ Key allowances:
   styling. This is a common trade-off for utility-first CSS frameworks.
 - `data:` and `https:` in `img-src` support user-provided images and icons.
 - `connect-src 'self'` permits same-origin API calls to the UI server, which
-  then proxies to `oar-core` instances.
+  then proxies to `anx-core` instances.
 
 ### Reverse proxy considerations
 
@@ -346,12 +345,12 @@ resources will be blocked unless you explicitly allow them.
 
 Supported runtime overrides:
 
-- `OAR_UI_CSP_SCRIPT_SRC_EXTRA`
-- `OAR_UI_CSP_STYLE_SRC_EXTRA`
-- `OAR_UI_CSP_IMG_SRC_EXTRA`
-- `OAR_UI_CSP_FONT_SRC_EXTRA`
-- `OAR_UI_CSP_CONNECT_SRC_EXTRA`
-- `OAR_UI_CSP_MANIFEST_SRC_EXTRA`
+- `ANX_UI_CSP_SCRIPT_SRC_EXTRA`
+- `ANX_UI_CSP_STYLE_SRC_EXTRA`
+- `ANX_UI_CSP_IMG_SRC_EXTRA`
+- `ANX_UI_CSP_FONT_SRC_EXTRA`
+- `ANX_UI_CSP_CONNECT_SRC_EXTRA`
+- `ANX_UI_CSP_MANIFEST_SRC_EXTRA`
 
 Each variable accepts a whitespace- or comma-separated list of additional CSP
 sources appended to that directive.
@@ -359,9 +358,9 @@ sources appended to that directive.
 Example for a Cloudflare Access + Web Analytics deployment:
 
 ```bash
-OAR_UI_CSP_SCRIPT_SRC_EXTRA="https://static.cloudflareinsights.com 'sha256-<inline-script-hash-from-browser-console>'" \
-OAR_UI_CSP_CONNECT_SRC_EXTRA="https://cloudflareinsights.com" \
-OAR_UI_CSP_MANIFEST_SRC_EXTRA="https://scalingforever.cloudflareaccess.com" \
+ANX_UI_CSP_SCRIPT_SRC_EXTRA="https://static.cloudflareinsights.com 'sha256-<inline-script-hash-from-browser-console>'" \
+ANX_UI_CSP_CONNECT_SRC_EXTRA="https://cloudflareinsights.com" \
+ANX_UI_CSP_MANIFEST_SRC_EXTRA="https://scalingforever.cloudflareaccess.com" \
 ./scripts/serve
 ```
 
@@ -390,10 +389,10 @@ WebAuthn is host/origin sensitive, not path sensitive.
 
 - Sharing one hostname across many workspaces is fine for browser passkey
   ceremonies.
-- That does not create shared auth state across independent cores. `oar-ui`
-  stores auth per workspace and each `oar-core` still validates its own tokens.
-- If core is configured with explicit `OAR_WEBAUTHN_ORIGIN` or
-  `OAR_WEBAUTHN_RPID`, the browser must open the UI on that exact hostname.
+- That does not create shared auth state across independent cores. `anx-ui`
+  stores auth per workspace and each `anx-core` still validates its own tokens.
+- If core is configured with explicit `ANX_WEBAUTHN_ORIGIN` or
+  `ANX_WEBAUTHN_RPID`, the browser must open the UI on that exact hostname.
 - Alternate hostnames such as `localhost`, `127.0.0.1`, Tailscale names, or raw
   IPs may fail if they do not match the configured RP ID/origin.
 
@@ -412,7 +411,7 @@ Actions:
 1. Confirm the target core is running.
 2. Verify the exact upstream URL:
    `curl -fsS http://127.0.0.1:8000/meta/handshake`
-3. Verify the matching workspace entry in `OAR_WORKSPACES`.
+3. Verify the matching workspace entry in `ANX_WORKSPACES`.
 
 ### Wrong workspace mapping
 
@@ -424,7 +423,7 @@ Symptoms:
 Actions:
 
 1. Confirm the UI URL includes a valid workspace slug.
-2. Confirm `OAR_WORKSPACES` contains that slug.
+2. Confirm `ANX_WORKSPACES` contains that slug.
 3. Keep core base URLs as bare origins, not path-prefixed URLs.
 
 ### WebAuthn failures on one hostname but not another

@@ -10,20 +10,20 @@ import (
 	"os/exec"
 	"strings"
 
-	"organization-autorunner-cli/internal/config"
-	"organization-autorunner-cli/internal/errnorm"
-	"organization-autorunner-cli/internal/httpclient"
+	"agent-nexus-cli/internal/config"
+	"agent-nexus-cli/internal/errnorm"
+	"agent-nexus-cli/internal/httpclient"
 )
 
 var secretSubcommandSpec = subcommandSpec{
 	command: "secret",
 	valid:   []string{"list", "create", "get", "delete", "exec"},
 	examples: []string{
-		"oar secret list",
-		"oar secret create OPENAI_API_KEY",
-		"oar secret get OPENAI_API_KEY --reveal",
-		"oar secret delete OPENAI_API_KEY",
-		"oar secret exec --secret OPENAI_API_KEY -- ./my-agent.sh",
+		"anx secret list",
+		"anx secret create OPENAI_API_KEY",
+		"anx secret get OPENAI_API_KEY --reveal",
+		"anx secret delete OPENAI_API_KEY",
+		"anx secret exec --secret OPENAI_API_KEY -- ./my-agent.sh",
 	},
 	aliases: map[string]string{
 		"ls": "list",
@@ -93,7 +93,7 @@ func (a *App) runSecretCreate(ctx context.Context, args []string, cfg config.Res
 	}
 	positionals := fs.Args()
 	if len(positionals) == 0 {
-		return nil, "secret create", errnorm.Usage("invalid_args", "secret name is required: oar secret create <NAME>")
+		return nil, "secret create", errnorm.Usage("invalid_args", "secret name is required: anx secret create <NAME>")
 	}
 	name := strings.TrimSpace(positionals[0])
 	if name == "" {
@@ -171,7 +171,7 @@ func (a *App) runSecretGet(ctx context.Context, args []string, cfg config.Resolv
 	}
 	positionals := fs.Args()
 	if len(positionals) == 0 {
-		return nil, "secret get", errnorm.Usage("invalid_args", "secret name or ID is required: oar secret get <NAME_OR_ID>")
+		return nil, "secret get", errnorm.Usage("invalid_args", "secret name or ID is required: anx secret get <NAME_OR_ID>")
 	}
 	nameOrID := strings.TrimSpace(positionals[0])
 	if len(positionals) > 1 {
@@ -240,7 +240,7 @@ func (a *App) runSecretGet(ctx context.Context, args []string, cfg config.Resolv
 
 func (a *App) runSecretDelete(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
 	if len(args) == 0 {
-		return nil, "secret delete", errnorm.Usage("invalid_args", "secret name or ID is required: oar secret delete <NAME_OR_ID>")
+		return nil, "secret delete", errnorm.Usage("invalid_args", "secret name or ID is required: anx secret delete <NAME_OR_ID>")
 	}
 	nameOrID := strings.TrimSpace(args[0])
 	if len(args) > 1 {
@@ -304,7 +304,7 @@ func (a *App) runSecretExec(ctx context.Context, args []string, cfg config.Resol
 	}
 
 	if !foundSeparator {
-		return nil, "secret exec", errnorm.Usage("invalid_args", "usage: oar secret exec --secret NAME [--secret NAME2] -- <command> [args...]")
+		return nil, "secret exec", errnorm.Usage("invalid_args", "usage: anx secret exec --secret NAME [--secret NAME2] -- <command> [args...]")
 	}
 	if len(secretNames) == 0 {
 		return nil, "secret exec", errnorm.Usage("invalid_args", "at least one --secret NAME is required")

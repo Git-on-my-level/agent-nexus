@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"organization-autorunner-cli/internal/errnorm"
+	"agent-nexus-cli/internal/errnorm"
 )
 
 func TestRenderErrorTextModeIncludesHintLine(t *testing.T) {

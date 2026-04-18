@@ -3,7 +3,7 @@
 Manual OAR CLI dogfood runs using a real Pi agent with bash and filesystem tools.
 
 Goals:
-- exercise the real `oar` binary against a managed seeded `oar-core`
+- exercise the real `anx` binary against a managed seeded `anx-core`
 - keep deterministic regression coverage separate in Go integration tests
 - capture Pi JSON event logs and a final written findings artifact
 
@@ -14,7 +14,7 @@ This package is the only supported dogfood lane for CLI agent ergonomics.
 Install the Pi dogfood package:
 
 ```bash
-pnpm install --filter @organization-autorunner/pi-dogfood...
+pnpm install --filter @agent-nexus/pi-dogfood...
 ```
 
 ## Run
@@ -86,30 +86,30 @@ The runner exits non-zero if any agent process fails, if Pi reports a runtime/pr
 These run directories are disposable. Delete old `cli/.tmp/pi-dogfood/<run-id>/` folders manually when you no longer need the logs or agent artifacts.
 
 The runner also:
-- builds temporary `oar` and `oar-core` binaries
-- starts a managed `oar-core` on a random local port
-- starts that managed core with an ephemeral `OAR_BOOTSTRAP_TOKEN` so seed and principal registration flows run through standard authenticated paths
-- starts managed-core runs with an ephemeral `OAR_BOOTSTRAP_TOKEN`, pre-registers the first temp agent profile with that token, then mints invite tokens for the remaining temp agent profiles before Pi starts
+- builds temporary `anx` and `anx-core` binaries
+- starts a managed `anx-core` on a random local port
+- starts that managed core with an ephemeral `ANX_BOOTSTRAP_TOKEN` so seed and principal registration flows run through standard authenticated paths
+- starts managed-core runs with an ephemeral `ANX_BOOTSTRAP_TOKEN`, pre-registers the first temp agent profile with that token, then mints invite tokens for the remaining temp agent profiles before Pi starts
 - links scenario temp principals to the seeded scenario actors when the CLI/core path supports `--existing-actor-id`, so Access and actor-aware UI reads line up with the scenario cast
 - seeds the core from CLI-owned scenario data under `cli/dogfood/pi/seed/`
 - for continuation chapters, reuses the prior managed core workspace and copies prior agent home directories so auth state and the seeded actors continue cleanly
-- points Pi at that isolated core via `OAR_BASE_URL`
+- points Pi at that isolated core via `ANX_BASE_URL`
 
 Constraints enforced by the run workspace:
-- use `oar` on `PATH` for OAR interactions
+- use `anx` on `PATH` for OAR interactions
 - do not edit repo source files
 - work inside the temporary run directory
 - in team mode, each agent gets its own profile/home/workspace but shares the same managed core
 
 Scenario command-shape guidance:
-- default to `oar topics workspace --topic-id <topic-id>` for the main operator coordination read
-- use `oar threads workspace --thread-id <thread-id>` for backing-thread diagnostic review when you do not have a topic id or need the thread-scoped projection
-- use `oar threads workspace --thread-id <thread-id> --include-related-event-content --include-artifact-content --verbose` when you want the richest one-command backing-thread diagnostic bundle
-- use `oar threads recommendations --thread-id <thread-id>` for recommendation/decision review
+- default to `anx topics workspace --topic-id <topic-id>` for the main operator coordination read
+- use `anx threads workspace --thread-id <thread-id>` for backing-thread diagnostic review when you do not have a topic id or need the thread-scoped projection
+- use `anx threads workspace --thread-id <thread-id> --include-related-event-content --include-artifact-content --verbose` when you want the richest one-command backing-thread diagnostic bundle
+- use `anx threads recommendations --thread-id <thread-id>` for recommendation/decision review
 - add `--include-related-event-content --verbose` when you need full related-thread recommendation content in one command
-- use `oar cards get --card-id <card-id>` when a card listed in workspace needs full detail
-- document proposals are a two-step flow: `oar docs propose-update ...` then `oar docs apply --proposal-id <proposal-id>`
-- use `oar docs update ...` only when you want to write the new revision immediately without staging a proposal
-- use `oar events validate --from-file <path>` when you want a local payload check before `oar events create`
-- use `oar events create --from-file <path> --dry-run` when you want the exact create request preview without sending it
+- use `anx cards get --card-id <card-id>` when a card listed in workspace needs full detail
+- document proposals are a two-step flow: `anx docs propose-update ...` then `anx docs apply --proposal-id <proposal-id>`
+- use `anx docs update ...` only when you want to write the new revision immediately without staging a proposal
+- use `anx events validate --from-file <path>` when you want a local payload check before `anx events create`
+- use `anx events create --from-file <path> --dry-run` when you want the exact create request preview without sending it
 - use `message_posted` for visible thread chat and replies, then use `actor_statement` for the higher-signal role summary

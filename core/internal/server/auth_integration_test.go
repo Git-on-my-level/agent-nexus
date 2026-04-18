@@ -21,12 +21,12 @@ import (
 	"testing"
 	"time"
 
-	"organization-autorunner-core/internal/actors"
-	"organization-autorunner-core/internal/auth"
-	"organization-autorunner-core/internal/blob"
-	"organization-autorunner-core/internal/primitives"
-	"organization-autorunner-core/internal/schema"
-	"organization-autorunner-core/internal/storage"
+	"agent-nexus-core/internal/actors"
+	"agent-nexus-core/internal/auth"
+	"agent-nexus-core/internal/blob"
+	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/schema"
+	"agent-nexus-core/internal/storage"
 
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
@@ -79,7 +79,7 @@ func newAuthIntegrationEnv(t *testing.T, options authIntegrationOptions) authInt
 	authStore := auth.NewStore(workspace.DB(), authOptions...)
 	passkeySessionStore := auth.NewPasskeySessionStore(auth.DefaultPasskeySessionTTL)
 
-	contractPath := filepath.Join("..", "..", "..", "contracts", "oar-schema.yaml")
+	contractPath := filepath.Join("..", "..", "..", "contracts", "anx-schema.yaml")
 	contract, err := schema.Load(contractPath)
 	if err != nil {
 		passkeySessionStore.Close()
@@ -1371,7 +1371,7 @@ func TestWorkspaceHumanGrantTokenExchangeAndValidation(t *testing.T) {
 	t.Parallel()
 
 	const workspaceID = "ws_external_grant"
-	fixture := newWorkspaceHumanGrantTestFixture(t, workspaceID, "oar-core")
+	fixture := newWorkspaceHumanGrantTestFixture(t, workspaceID, "anx-core")
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{
 		workspaceID:                 workspaceID,
 		workspaceHumanGrantVerifier: fixture.verifier,
@@ -1523,7 +1523,7 @@ func TestWorkspaceHumanGrantMissingExpRejected(t *testing.T) {
 	t.Parallel()
 
 	const workspaceID = "ws_external_grant_missing_exp"
-	fixture := newWorkspaceHumanGrantTestFixture(t, workspaceID, "oar-core")
+	fixture := newWorkspaceHumanGrantTestFixture(t, workspaceID, "anx-core")
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{
 		workspaceID:                 workspaceID,
 		workspaceHumanGrantVerifier: fixture.verifier,
@@ -1547,7 +1547,7 @@ func TestWorkspaceHumanGrantUnknownKidRefreshFailureReturnsUnavailable(t *testin
 	t.Parallel()
 
 	const workspaceID = "ws_external_grant_unknown_kid_unavailable"
-	fixture := newWorkspaceHumanGrantTestFixture(t, workspaceID, "oar-core")
+	fixture := newWorkspaceHumanGrantTestFixture(t, workspaceID, "anx-core")
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{
 		workspaceID:                 workspaceID,
 		workspaceHumanGrantVerifier: fixture.verifier,
@@ -1587,7 +1587,7 @@ func TestWorkspaceHumanGrantReplayBlockedAfterPostConsumptionFailure(t *testing.
 	t.Parallel()
 
 	const workspaceID = "ws_external_grant_replay_after_failure"
-	fixture := newWorkspaceHumanGrantTestFixture(t, workspaceID, "oar-core")
+	fixture := newWorkspaceHumanGrantTestFixture(t, workspaceID, "anx-core")
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{
 		workspaceID:                 workspaceID,
 		workspaceHumanGrantVerifier: fixture.verifier,

@@ -7,22 +7,22 @@ import (
 	"sort"
 	"strings"
 
-	"organization-autorunner-cli/internal/config"
-	"organization-autorunner-cli/internal/errnorm"
-	"organization-autorunner-cli/internal/importer"
+	"agent-nexus-cli/internal/config"
+	"agent-nexus-cli/internal/errnorm"
+	"agent-nexus-cli/internal/importer"
 )
 
 var importSubcommandSpec = subcommandSpec{
 	command:  "import",
 	valid:    []string{"scan", "dedupe", "plan", "apply"},
-	examples: []string{"oar import", "oar import scan --input ./workspace.zip", "oar import plan --inventory ./.oar-import/workspace/inventory.jsonl"},
+	examples: []string{"anx import", "anx import scan --input ./workspace.zip", "anx import plan --inventory ./.anx-import/workspace/inventory.jsonl"},
 }
 
 func init() {
 	runtimeHelpManualDocTopics = append(runtimeHelpManualDocTopics, runtimeHelpDocTopic{
 		Path:    "import",
 		Kind:    "manual",
-		Summary: "Prescriptive import guide for building low-duplication, discoverable OAR graphs from external material.",
+		Summary: "Prescriptive import guide for building low-duplication, discoverable ANX graphs from external material.",
 	})
 	localHelperTopics = append(localHelperTopics,
 		localHelperTopic{
@@ -31,12 +31,12 @@ func init() {
 			JSONShape:   "`input`, `scan_root`, `extracted_root`, `inventory`, `file_count`, `counts_by_category`, `counts_by_cluster_hint`, `repo_roots`",
 			Composition: "Pure local filesystem helper. Expands `.zip` inputs, ignores obvious generated junk, fingerprints files, caches readable text, and emits `inventory.jsonl` plus `scan-summary.json`.",
 			Examples: []string{
-				"oar import scan --input ./workspace.zip",
-				"oar import scan --input ./vault --out ./.oar-import/vault",
+				"anx import scan --input ./workspace.zip",
+				"anx import scan --input ./vault --out ./.anx-import/vault",
 			},
 			Flags: []localHelperFlag{
 				{Name: "--input <path>", Description: "Directory or `.zip` archive to scan."},
-				{Name: "--out <dir>", Description: "Output directory. Defaults to `./.oar-import/<source-name>`."},
+				{Name: "--out <dir>", Description: "Output directory. Defaults to `./.anx-import/<source-name>`."},
 				{Name: "--max-preview-bytes <n>", Description: "Maximum bytes to keep for preview extraction."},
 				{Name: "--max-text-cache-bytes <n>", Description: "Maximum text-file size cached verbatim for later doc creation."},
 			},
@@ -47,11 +47,11 @@ func init() {
 			JSONShape:   "`inventory`, `exact_duplicates`, `probable_duplicates`, `recommended_skip_ids`",
 			Composition: "Pure local helper. Uses normalized text hashes for readable content and raw SHA-256 for everything else; exact drops are recommended, probable duplicates are review-only.",
 			Examples: []string{
-				"oar import dedupe --inventory ./.oar-import/workspace/inventory.jsonl",
-				"oar import dedupe ./.oar-import/workspace/inventory.jsonl --out ./.oar-import/workspace",
+				"anx import dedupe --inventory ./.anx-import/workspace/inventory.jsonl",
+				"anx import dedupe ./.anx-import/workspace/inventory.jsonl --out ./.anx-import/workspace",
 			},
 			Flags: []localHelperFlag{
-				{Name: "--inventory <path>", Description: "Inventory produced by `oar import scan`. Positional form also supported."},
+				{Name: "--inventory <path>", Description: "Inventory produced by `anx import scan`. Positional form also supported."},
 				{Name: "--out <dir>", Description: "Output directory. Defaults to the inventory directory."},
 			},
 		},
@@ -61,11 +61,11 @@ func init() {
 			JSONShape:   "`source_name`, `inventory`, `dedupe`, `principles`, `objects`, `skipped`, `review_bundles`, `notes`",
 			Composition: "Pure local helper. Classifies inventory items into docs, artifacts, repo bundles, review bundles, and collector/hub structures. It writes `plan.json` plus `plan-preview.md` without sending requests.",
 			Examples: []string{
-				"oar import plan --inventory ./.oar-import/workspace/inventory.jsonl",
-				"oar import plan --inventory ./.oar-import/workspace/inventory.jsonl --dedupe ./.oar-import/workspace/dedupe.json --source-name 'workspace export'",
+				"anx import plan --inventory ./.anx-import/workspace/inventory.jsonl",
+				"anx import plan --inventory ./.anx-import/workspace/inventory.jsonl --dedupe ./.anx-import/workspace/dedupe.json --source-name 'workspace export'",
 			},
 			Flags: []localHelperFlag{
-				{Name: "--inventory <path>", Description: "Inventory produced by `oar import scan`. Positional form also supported."},
+				{Name: "--inventory <path>", Description: "Inventory produced by `anx import scan`. Positional form also supported."},
 				{Name: "--dedupe <path>", Description: "Dedupe report. Defaults to sibling `dedupe.json`."},
 				{Name: "--out <dir>", Description: "Output directory. Defaults to the inventory directory."},
 				{Name: "--source-name <name>", Description: "High-signal display name used in titles, tags, and provenance. Defaults from the inventory directory."},
@@ -78,11 +78,11 @@ func init() {
 			JSONShape:   "`plan`, `execute`, `results`, `refs`",
 			Composition: "Local helper with optional network writes. Always writes payload previews first; when `--execute` is set it creates topics, then artifacts, then docs, substituting `$REF:<key>` placeholders after upstream IDs are known.",
 			Examples: []string{
-				"oar import apply --plan ./.oar-import/workspace/plan.json",
-				"oar import apply --plan ./.oar-import/workspace/plan.json --execute --agent importer",
+				"anx import apply --plan ./.anx-import/workspace/plan.json",
+				"anx import apply --plan ./.anx-import/workspace/plan.json --execute --agent importer",
 			},
 			Flags: []localHelperFlag{
-				{Name: "--plan <path>", Description: "Plan produced by `oar import plan`. Positional form also supported."},
+				{Name: "--plan <path>", Description: "Plan produced by `anx import plan`. Positional form also supported."},
 				{Name: "--out <dir>", Description: "Output directory for payload previews and apply results. Defaults to `<plan-dir>/apply`."},
 				{Name: "--execute", Description: "Actually call `topics create`, `artifacts create`, and `docs create`. Default is preview-only."},
 			},
@@ -117,7 +117,7 @@ func (a *App) runImportCommand(ctx context.Context, args []string, cfg config.Re
 func importUsageText() string {
 	return strings.TrimSpace(`Import guide
 
-Use `+"`oar import`"+` to turn external material into a clean OAR graph. The goal is not to dump files into the system. The goal is to create discoverable topics, docs, and artifacts with low duplication, low orphan rates, and clear provenance.
+Use `+"`anx import`"+` to turn external material into a clean ANX graph. The goal is not to dump files into the system. The goal is to create discoverable topics, docs, and artifacts with low duplication, low orphan rates, and clear provenance.
 
 Object model
 
@@ -128,11 +128,11 @@ Object model
 
 Read in this order
 
-1. `+"`oar help import`"+` — doctrine, quality bars, and the recommended loop.
-2. `+"`oar help import scan`"+` — inventory and text-cache generation.
-3. `+"`oar help import plan`"+` — classification, collector threads, hub docs, and review bundles.
-4. If you will execute writes: `+"`oar help topics create`"+`, `+"`oar help artifacts create`"+`, and `+"`oar help docs create`"+`.
-5. Optional graph/provenance reference: `+"`oar help provenance`"+`.
+1. `+"`anx help import`"+` — doctrine, quality bars, and the recommended loop.
+2. `+"`anx help import scan`"+` — inventory and text-cache generation.
+3. `+"`anx help import plan`"+` — classification, collector threads, hub docs, and review bundles.
+4. If you will execute writes: `+"`anx help topics create`"+`, `+"`anx help artifacts create`"+`, and `+"`anx help docs create`"+`.
+5. Optional graph/provenance reference: `+"`anx help provenance`"+`.
 
 Operating stance
 
@@ -140,29 +140,29 @@ Operating stance
 - Exact duplicates should be skipped before writes.
 - Ambiguous or noisy material should be skipped or deferred to review bundles.
 - Imported material should usually get a discoverable entry point: a collector thread, a hub doc, or both.
-- Codebases should not become one OAR object per source file.
+- Codebases should not become one ANX object per source file.
 - Binary attachments should be preserved conservatively; if reliable raw upload is not available, keep explicit pending work instead of pretending they were imported cleanly.
 - Prefer preview-first planning over eager execution.
 
 Recommended loop
 
-1. `+"`oar import scan --input <dir-or-zip>`"+`
-2. `+"`oar import dedupe --inventory ./.oar-import/<source>/inventory.jsonl`"+`
-3. `+"`oar import plan --inventory ./.oar-import/<source>/inventory.jsonl`"+`
+1. `+"`anx import scan --input <dir-or-zip>`"+`
+2. `+"`anx import dedupe --inventory ./.anx-import/<source>/inventory.jsonl`"+`
+3. `+"`anx import plan --inventory ./.anx-import/<source>/inventory.jsonl`"+`
 4. Review `+"`plan-preview.md`"+`, `+"`skipped`"+`, and `+"`review_bundles`"+`.
-5. `+"`oar import apply --plan ./.oar-import/<source>/plan.json`"+` for payload previews.
-6. `+"`oar import apply --plan ./.oar-import/<source>/plan.json --execute`"+` only after the plan looks clean.
+5. `+"`anx import apply --plan ./.anx-import/<source>/plan.json`"+` for payload previews.
+6. `+"`anx import apply --plan ./.anx-import/<source>/plan.json --execute`"+` only after the plan looks clean.
 
 Subcommands
 
   import scan      Build normalized inventory + text cache from a folder or zip
   import dedupe    Find exact duplicates and probable duplicate review clusters
-  import plan      Build a conservative OAR-native import plan
+  import plan      Build a conservative ANX-native import plan
   import apply     Write payload previews and optionally execute creates
 
 Output conventions
 
-- Default workdir is `+"`./.oar-import/<source-name>`"+`.
+- Default workdir is `+"`./.anx-import/<source-name>`"+`.
 - `+"`scan`"+` writes `+"`inventory.jsonl`"+` and `+"`scan-summary.json`"+`.
 - `+"`dedupe`"+` writes `+"`dedupe.json`"+`.
 - `+"`plan`"+` writes `+"`plan.json`"+` and `+"`plan-preview.md`"+`.
@@ -172,14 +172,14 @@ Output conventions
 
 func importBootstrapData() map[string]any {
 	return map[string]any{
-		"summary": "Bootstrap an agent-led import with dedupe-first planning and graph-aware OAR write conventions.",
+		"summary": "Bootstrap an agent-led import with dedupe-first planning and graph-aware ANX write conventions.",
 		"read_in_order": []map[string]any{
-			{"command": "oar help import", "why": "Read doctrine, quality bars, and the recommended loop."},
-			{"command": "oar help import scan", "why": "Understand inventory, cluster hints, and text-cache generation."},
-			{"command": "oar help import plan", "why": "Understand conservative classification, collector threads, hub docs, and review bundles."},
-			{"command": "oar help topics create", "why": "Confirm topic payload shape before executing writes."},
-			{"command": "oar help artifacts create", "why": "Confirm artifact payload shape before executing writes."},
-			{"command": "oar help docs create", "why": "Confirm document payload shape before executing writes."},
+			{"command": "anx help import", "why": "Read doctrine, quality bars, and the recommended loop."},
+			{"command": "anx help import scan", "why": "Understand inventory, cluster hints, and text-cache generation."},
+			{"command": "anx help import plan", "why": "Understand conservative classification, collector threads, hub docs, and review bundles."},
+			{"command": "anx help topics create", "why": "Confirm topic payload shape before executing writes."},
+			{"command": "anx help artifacts create", "why": "Confirm artifact payload shape before executing writes."},
+			{"command": "anx help docs create", "why": "Confirm document payload shape before executing writes."},
 		},
 		"principles": map[string]any{
 			"precision_over_recall":             true,
@@ -190,12 +190,12 @@ func importBootstrapData() map[string]any {
 			"preview_first":                     true,
 		},
 		"recommended_loop": []map[string]any{
-			{"step": 1, "command": "oar import scan --input <dir-or-zip>"},
-			{"step": 2, "command": "oar import dedupe --inventory ./.oar-import/<source>/inventory.jsonl"},
-			{"step": 3, "command": "oar import plan --inventory ./.oar-import/<source>/inventory.jsonl"},
+			{"step": 1, "command": "anx import scan --input <dir-or-zip>"},
+			{"step": 2, "command": "anx import dedupe --inventory ./.anx-import/<source>/inventory.jsonl"},
+			{"step": 3, "command": "anx import plan --inventory ./.anx-import/<source>/inventory.jsonl"},
 			{"step": 4, "command": "Review plan-preview.md, skipped, and review_bundles"},
-			{"step": 5, "command": "oar import apply --plan ./.oar-import/<source>/plan.json"},
-			{"step": 6, "command": "oar import apply --plan ./.oar-import/<source>/plan.json --execute"},
+			{"step": 5, "command": "anx import apply --plan ./.anx-import/<source>/plan.json"},
+			{"step": 6, "command": "anx import apply --plan ./.anx-import/<source>/plan.json --execute"},
 		},
 		"subcommands": []string{"scan", "dedupe", "plan", "apply"},
 	}
@@ -221,7 +221,7 @@ func (a *App) runImportScan(args []string) (*commandResult, error) {
 		positionals = positionals[1:]
 	}
 	if len(positionals) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar import scan`")
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx import scan`")
 	}
 	if inputPath == "" {
 		return nil, errnorm.Usage("invalid_request", "--input is required")
@@ -252,8 +252,8 @@ func (a *App) runImportScan(args []string) (*commandResult, error) {
 		"counts_by_category":     summary.CountsByCategory,
 		"counts_by_cluster_hint": summary.CountsByClusterHint,
 		"next": []string{
-			fmt.Sprintf("oar import dedupe --inventory %s", summary.Inventory),
-			fmt.Sprintf("oar import plan --inventory %s", summary.Inventory),
+			fmt.Sprintf("anx import dedupe --inventory %s", summary.Inventory),
+			fmt.Sprintf("anx import plan --inventory %s", summary.Inventory),
 		},
 	}
 	return &commandResult{Text: text, Data: data}, nil
@@ -275,7 +275,7 @@ func (a *App) runImportDedupe(args []string) (*commandResult, error) {
 		positionals = positionals[1:]
 	}
 	if len(positionals) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar import dedupe`")
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx import dedupe`")
 	}
 	if inventoryPath == "" {
 		return nil, errnorm.Usage("invalid_request", "--inventory is required")
@@ -295,7 +295,7 @@ func (a *App) runImportDedupe(args []string) (*commandResult, error) {
 		"probable_duplicates":       report.ProbableDuplicates,
 		"recommended_skip_ids":      report.RecommendedSkipIDs,
 		"dedupe_report":             filepath.Join(outDir, "dedupe.json"),
-		"next":                      []string{fmt.Sprintf("oar import plan --inventory %s --dedupe %s", report.Inventory, filepath.Join(outDir, "dedupe.json"))},
+		"next":                      []string{fmt.Sprintf("anx import plan --inventory %s --dedupe %s", report.Inventory, filepath.Join(outDir, "dedupe.json"))},
 		"exact_duplicate_groups":    len(report.ExactDuplicates),
 		"probable_duplicate_groups": len(report.ProbableDuplicates),
 	}
@@ -324,7 +324,7 @@ func (a *App) runImportPlan(args []string) (*commandResult, error) {
 		positionals = positionals[1:]
 	}
 	if len(positionals) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar import plan`")
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx import plan`")
 	}
 	if inventoryPath == "" {
 		return nil, errnorm.Usage("invalid_request", "--inventory is required")
@@ -359,8 +359,8 @@ func (a *App) runImportPlan(args []string) (*commandResult, error) {
 		"skipped_count":        len(plan.Skipped),
 		"review_bundle_count":  len(plan.ReviewBundles),
 		"next": []string{
-			fmt.Sprintf("oar import apply --plan %s", filepath.Join(outDir, "plan.json")),
-			fmt.Sprintf("oar import apply --plan %s --execute", filepath.Join(outDir, "plan.json")),
+			fmt.Sprintf("anx import apply --plan %s", filepath.Join(outDir, "plan.json")),
+			fmt.Sprintf("anx import apply --plan %s --execute", filepath.Join(outDir, "plan.json")),
 		},
 	}
 	return &commandResult{Text: text, Data: data}, nil
@@ -384,7 +384,7 @@ func (a *App) runImportApply(ctx context.Context, args []string, cfg config.Reso
 		positionals = positionals[1:]
 	}
 	if len(positionals) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar import apply`")
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx import apply`")
 	}
 	if planPath == "" {
 		return nil, errnorm.Usage("invalid_request", "--plan is required")
@@ -444,7 +444,7 @@ func defaultImportWorkdir(inputPath string) string {
 	if base == "" {
 		base = "import"
 	}
-	return filepath.Join(".oar-import", slugifyImport(base))
+	return filepath.Join(".anx-import", slugifyImport(base))
 }
 
 func slugifyImport(value string) string {
@@ -514,8 +514,8 @@ func formatImportScanText(summary importer.ScanSummary) string {
 		lines = append(lines, "By category: "+formatCountMap(summary.CountsByCategory))
 	}
 	lines = append(lines, "", "Next:")
-	lines = append(lines, "  oar import dedupe --inventory "+summary.Inventory)
-	lines = append(lines, "  oar import plan --inventory "+summary.Inventory)
+	lines = append(lines, "  anx import dedupe --inventory "+summary.Inventory)
+	lines = append(lines, "  anx import plan --inventory "+summary.Inventory)
 	return strings.Join(lines, "\n")
 }
 
@@ -530,7 +530,7 @@ func formatImportDedupeText(report importer.DedupeReport, outDir string) string 
 		"Report: " + filepath.Join(outDir, "dedupe.json"),
 		"",
 		"Next:",
-		"  oar import plan --inventory " + report.Inventory + " --dedupe " + filepath.Join(outDir, "dedupe.json"),
+		"  anx import plan --inventory " + report.Inventory + " --dedupe " + filepath.Join(outDir, "dedupe.json"),
 	}
 	return strings.Join(lines, "\n")
 }
@@ -549,8 +549,8 @@ func formatImportPlanText(plan importer.ImportPlan, outDir string) string {
 		"Preview: " + filepath.Join(outDir, "plan-preview.md"),
 		"",
 		"Next:",
-		"  oar import apply --plan " + filepath.Join(outDir, "plan.json"),
-		"  oar import apply --plan " + filepath.Join(outDir, "plan.json") + " --execute",
+		"  anx import apply --plan " + filepath.Join(outDir, "plan.json"),
+		"  anx import apply --plan " + filepath.Join(outDir, "plan.json") + " --execute",
 	}
 	return strings.Join(lines, "\n")
 }

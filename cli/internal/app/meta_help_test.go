@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"organization-autorunner-cli/internal/registry"
+	"agent-nexus-cli/internal/registry"
 )
 
 func TestRunMetaCommandsJSON(t *testing.T) {
@@ -126,10 +126,10 @@ func TestRunGeneratedHelpTopic(t *testing.T) {
 	if !strings.Contains(output, "Read-only backing-thread diagnostics") {
 		t.Fatalf("expected backing-thread diagnostic guidance in threads group help output=%s", output)
 	}
-	if !strings.Contains(output, "oar topics workspace") {
+	if !strings.Contains(output, "anx topics workspace") {
 		t.Fatalf("expected topics workspace preference hint in threads group help output=%s", output)
 	}
-	if !strings.Contains(output, "oar threads workspace") {
+	if !strings.Contains(output, "anx threads workspace") {
 		t.Fatalf("expected threads workspace diagnostic hint in threads group help output=%s", output)
 	}
 	if !strings.Contains(output, "threads recommendations") {
@@ -147,7 +147,7 @@ func TestRunGeneratedHelpTopic(t *testing.T) {
 	if !strings.Contains(output, "Global flags can appear before or after the command path.") {
 		t.Fatalf("expected global flag placement guidance output=%s", output)
 	}
-	if !strings.Contains(output, "oar --json threads ...") {
+	if !strings.Contains(output, "anx --json threads ...") {
 		t.Fatalf("expected global --json example in generated group help output=%s", output)
 	}
 }
@@ -294,7 +294,7 @@ func TestConceptsCommandAndHelpTopic(t *testing.T) {
 	t.Parallel()
 
 	commandOutput := runHelpCommand(t, "concepts")
-	if !strings.Contains(commandOutput, "OAR concepts guide") {
+	if !strings.Contains(commandOutput, "ANX concepts guide") {
 		t.Fatalf("expected concepts guide heading output=%s", commandOutput)
 	}
 	if !strings.Contains(commandOutput, "threads") || !strings.Contains(commandOutput, "docs") || !strings.Contains(commandOutput, "boards") {
@@ -302,7 +302,7 @@ func TestConceptsCommandAndHelpTopic(t *testing.T) {
 	}
 
 	helpOutput := runHelpCommand(t, "help", "concepts")
-	if !strings.Contains(helpOutput, "OAR concepts guide") {
+	if !strings.Contains(helpOutput, "ANX concepts guide") {
 		t.Fatalf("expected help concepts to reuse concepts guide output=%s", helpOutput)
 	}
 }
@@ -347,7 +347,7 @@ func TestRunEventsHelpMentionsLocalExplainAcrossEntryPoints(t *testing.T) {
 		if !strings.Contains(output, "events list") {
 			t.Fatalf("expected local events list helper output=%s", output)
 		}
-		if !strings.Contains(output, "oar events explain <event-type>") {
+		if !strings.Contains(output, "anx events explain <event-type>") {
 			t.Fatalf("expected events explain usage hint output=%s", output)
 		}
 	}
@@ -603,7 +603,7 @@ func TestRunProvenanceHelpTopic(t *testing.T) {
 		t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
 	output := stdout.String()
-	if !strings.Contains(output, "oar provenance walk") || !strings.Contains(output, "--from <typed-ref>") {
+	if !strings.Contains(output, "anx provenance walk") || !strings.Contains(output, "--from <typed-ref>") {
 		t.Fatalf("expected provenance help text, got: %s", output)
 	}
 	if !strings.Contains(output, "Why does this object exist?") {
@@ -627,7 +627,7 @@ func TestRunDraftHelpTopic(t *testing.T) {
 	if strings.Contains(output, "threads propose-patch") {
 		t.Fatalf("unexpected legacy thread proposal guidance output=%s", output)
 	}
-	if !strings.Contains(output, "oar draft list") || !strings.Contains(output, "oar draft commit") {
+	if !strings.Contains(output, "anx draft list") || !strings.Contains(output, "anx draft commit") {
 		t.Fatalf("expected draft workflow guidance output=%s", output)
 	}
 }
@@ -675,13 +675,13 @@ func TestRunRootHelpMentionsOnboardingTopic(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
-	if !strings.Contains(stdout.String(), "`oar help onboarding`") {
+	if !strings.Contains(stdout.String(), "`anx help onboarding`") {
 		t.Fatalf("expected onboarding hint output=%s", stdout.String())
 	}
-	if !strings.Contains(stdout.String(), "`oar meta doc agent-guide`") {
+	if !strings.Contains(stdout.String(), "`anx meta doc agent-guide`") {
 		t.Fatalf("expected agent-guide hint output=%s", stdout.String())
 	}
-	if !strings.Contains(stdout.String(), "`oar meta skill cursor --write-dir ~/.cursor/skills/oar-cli-onboard`") {
+	if !strings.Contains(stdout.String(), "`anx meta skill cursor --write-dir ~/.cursor/skills/anx-cli-onboard`") {
 		t.Fatalf("expected skill export hint output=%s", stdout.String())
 	}
 }
@@ -709,25 +709,25 @@ func TestRunOnboardingHelpTopic(t *testing.T) {
 	if !strings.Contains(output, "Onboarding: first steps") {
 		t.Fatalf("expected onboarding header output=%s", output)
 	}
-	if !strings.Contains(output, "`oar meta doc agent-guide`") {
+	if !strings.Contains(output, "`anx meta doc agent-guide`") {
 		t.Fatalf("expected agent-guide pointer output=%s", output)
 	}
-	if !strings.Contains(output, "`oar meta doc wake-routing`") {
+	if !strings.Contains(output, "`anx meta doc wake-routing`") {
 		t.Fatalf("expected wake-routing pointer output=%s", output)
 	}
 	if !strings.Contains(output, "First commands to run") {
 		t.Fatalf("expected first-commands section output=%s", output)
 	}
-	if !strings.Contains(output, "oar meta skill cursor") {
+	if !strings.Contains(output, "anx meta skill cursor") {
 		t.Fatalf("expected skill export hint output=%s", output)
 	}
 	if !strings.Contains(output, "1. Point the CLI at the core API") {
 		t.Fatalf("expected base-url step output=%s", output)
 	}
-	if !strings.Contains(output, "`oar config use <agent>`") {
+	if !strings.Contains(output, "`anx config use <agent>`") {
 		t.Fatalf("expected active profile step output=%s", output)
 	}
-	if !strings.Contains(output, "Next step") || !strings.Contains(output, "oar meta doc agent-guide") || !strings.Contains(output, "oar meta doc wake-routing") {
+	if !strings.Contains(output, "Next step") || !strings.Contains(output, "anx meta doc agent-guide") || !strings.Contains(output, "anx meta doc wake-routing") {
 		t.Fatalf("expected follow-up guidance output=%s", output)
 	}
 }
@@ -736,10 +736,10 @@ func TestRunMetaSkillCursorRendersBundledSkill(t *testing.T) {
 	t.Parallel()
 
 	output := runHelpCommand(t, "meta", "skill", "cursor")
-	if !strings.Contains(output, "name: oar-cli-onboard") {
+	if !strings.Contains(output, "name: anx-cli-onboard") {
 		t.Fatalf("expected skill frontmatter output=%s", output)
 	}
-	if !strings.Contains(output, "# OAR CLI guide for agents") {
+	if !strings.Contains(output, "# ANX CLI guide for agents") {
 		t.Fatalf("expected skill title output=%s", output)
 	}
 	if !strings.Contains(output, "## Core model") {
@@ -755,14 +755,14 @@ func TestRunMetaSkillCursorWritesSkillFile(t *testing.T) {
 
 	writeDir := t.TempDir()
 	output := runHelpCommand(t, "meta", "skill", "cursor", "--write-dir", writeDir)
-	if !strings.Contains(output, "name: oar-cli-onboard") {
+	if !strings.Contains(output, "name: anx-cli-onboard") {
 		t.Fatalf("expected rendered skill output=%s", output)
 	}
 	content, err := os.ReadFile(filepath.Join(writeDir, "SKILL.md"))
 	if err != nil {
 		t.Fatalf("read written skill: %v", err)
 	}
-	if !strings.Contains(string(content), "# OAR CLI guide for agents") {
+	if !strings.Contains(string(content), "# ANX CLI guide for agents") {
 		t.Fatalf("expected written skill title content=%s", string(content))
 	}
 	if !strings.Contains(string(content), "## Maintenance rule") {
@@ -817,7 +817,7 @@ func TestGeneratedCommandHelpIncludesBodySchemaAndEnums(t *testing.T) {
 	if !strings.Contains(output, "- `intervention_needed`") {
 		t.Fatalf("expected intervention_needed listing output=%s", output)
 	}
-	if !strings.Contains(output, "`receipt_added`: prefer `oar receipts create`") {
+	if !strings.Contains(output, "`receipt_added`: prefer `anx receipts create`") {
 		t.Fatalf("expected higher-level command hint output=%s", output)
 	}
 	if !strings.Contains(output, "`actor_statement`") {
@@ -826,7 +826,7 @@ func TestGeneratedCommandHelpIncludesBodySchemaAndEnums(t *testing.T) {
 	if !strings.Contains(output, "`--dry-run`") {
 		t.Fatalf("expected dry-run discoverability note output=%s", output)
 	}
-	if !strings.Contains(output, "oar --json events create ...") {
+	if !strings.Contains(output, "anx --json events create ...") {
 		t.Fatalf("expected global --json example in generated command help output=%s", output)
 	}
 }

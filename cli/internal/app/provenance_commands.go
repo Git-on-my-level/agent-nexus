@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strings"
 
-	"organization-autorunner-cli/internal/config"
-	"organization-autorunner-cli/internal/errnorm"
+	"agent-nexus-cli/internal/config"
+	"agent-nexus-cli/internal/errnorm"
 )
 
 type provenanceResolverSpec struct {
@@ -116,7 +116,7 @@ func (a *App) runProvenanceWalk(ctx context.Context, args []string, cfg config.R
 		positionals = positionals[1:]
 	}
 	if len(positionals) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar provenance walk`")
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx provenance walk`")
 	}
 	if strings.TrimSpace(startRef) == "" {
 		return nil, errnorm.Usage("invalid_request", "--from is required (for example: --from event:event_123)")
@@ -603,7 +603,7 @@ func looksLikeTypedRef(raw string) bool {
 func provenanceUsageText() string {
 	return strings.TrimSpace(`Provenance guide
 
-Use ` + "`oar provenance walk`" + ` when you need to answer questions like:
+Use ` + "`anx provenance walk`" + ` when you need to answer questions like:
 
 - Why does this object exist?
 - What evidence or earlier object led to it?
@@ -617,7 +617,7 @@ Mental model
 - Use event-chain expansion when you specifically need event-to-event lineage, not as the default for every investigation.
 
 Usage:
-  oar provenance walk --from <typed-ref> [--depth <n>] [--include-event-chain]
+  anx provenance walk --from <typed-ref> [--depth <n>] [--include-event-chain]
 
 Typed ref roots:
   event:<id>
@@ -634,8 +634,8 @@ Heuristics
 - Prefer shallow depths like 1-3 before broader traversals.
 
 Examples:
-  oar provenance walk --from event:event_123 --depth 2
-  oar provenance walk --from topic:topic_123 --depth 1
-  oar --json provenance walk --from event:event_123 --depth 2
-  oar provenance walk --from event:event_123 --depth 3 --include-event-chain`)
+  anx provenance walk --from event:event_123 --depth 2
+  anx provenance walk --from topic:topic_123 --depth 1
+  anx --json provenance walk --from event:event_123 --depth 2
+  anx provenance walk --from event:event_123 --depth 3 --include-event-chain`)
 }

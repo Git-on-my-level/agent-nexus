@@ -344,16 +344,16 @@ emit_blob_env_lines() {
   local s3_force_path_style="${10:-false}"
 
   cat <<EOF
-OAR_BLOB_BACKEND=${backend}
-OAR_BLOB_ROOT=${blob_root}
-OAR_BLOB_S3_BUCKET=${s3_bucket}
-OAR_BLOB_S3_PREFIX=${s3_prefix}
-OAR_BLOB_S3_REGION=${s3_region}
-OAR_BLOB_S3_ENDPOINT=${s3_endpoint}
-OAR_BLOB_S3_ACCESS_KEY_ID=${s3_access_key_id}
-OAR_BLOB_S3_SECRET_ACCESS_KEY=${s3_secret_access_key}
-OAR_BLOB_S3_SESSION_TOKEN=${s3_session_token}
-OAR_BLOB_S3_FORCE_PATH_STYLE=${s3_force_path_style}
+ANX_BLOB_BACKEND=${backend}
+ANX_BLOB_ROOT=${blob_root}
+ANX_BLOB_S3_BUCKET=${s3_bucket}
+ANX_BLOB_S3_PREFIX=${s3_prefix}
+ANX_BLOB_S3_REGION=${s3_region}
+ANX_BLOB_S3_ENDPOINT=${s3_endpoint}
+ANX_BLOB_S3_ACCESS_KEY_ID=${s3_access_key_id}
+ANX_BLOB_S3_SECRET_ACCESS_KEY=${s3_secret_access_key}
+ANX_BLOB_S3_SESSION_TOKEN=${s3_session_token}
+ANX_BLOB_S3_FORCE_PATH_STYLE=${s3_force_path_style}
 EOF
 }
 
@@ -399,11 +399,11 @@ emit_workspace_quota_env_lines() {
   local max_upload_bytes="$5"
 
   cat <<EOF
-OAR_WORKSPACE_MAX_BLOB_BYTES=${max_blob_bytes}
-OAR_WORKSPACE_MAX_ARTIFACTS=${max_artifacts}
-OAR_WORKSPACE_MAX_DOCUMENTS=${max_documents}
-OAR_WORKSPACE_MAX_DOCUMENT_REVISIONS=${max_document_revisions}
-OAR_WORKSPACE_MAX_UPLOAD_BYTES=${max_upload_bytes}
+ANX_WORKSPACE_MAX_BLOB_BYTES=${max_blob_bytes}
+ANX_WORKSPACE_MAX_ARTIFACTS=${max_artifacts}
+ANX_WORKSPACE_MAX_DOCUMENTS=${max_documents}
+ANX_WORKSPACE_MAX_DOCUMENT_REVISIONS=${max_document_revisions}
+ANX_WORKSPACE_MAX_UPLOAD_BYTES=${max_upload_bytes}
 EOF
 }
 
@@ -629,10 +629,10 @@ wait_for_http_ok() {
 }
 
 build_core_binary() {
-  local bin_path="${1:-${REPO_ROOT}/core/.bin/oar-core}"
+  local bin_path="${1:-${REPO_ROOT}/core/.bin/anx-core}"
   local bin_dir
   bin_dir="$(dirname "$bin_path")"
-  BIN_DIR="$bin_dir" OAR_CORE_BIN="$bin_path" "${REPO_ROOT}/core/scripts/build-prod" >&2
+  BIN_DIR="$bin_dir" ANX_CORE_BIN="$bin_path" "${REPO_ROOT}/core/scripts/build-prod" >&2
   printf '%s\n' "$bin_path"
 }
 
@@ -666,13 +666,13 @@ start_core_server() {
   fi
 
   (
-    export OAR_ALLOW_LOOPBACK_VERIFICATION_READS="$allow_loopback_verification_reads"
+    export ANX_ALLOW_LOOPBACK_VERIFICATION_READS="$allow_loopback_verification_reads"
     case "$bootstrap_token_mode" in
       unset)
-        unset OAR_BOOTSTRAP_TOKEN
+        unset ANX_BOOTSTRAP_TOKEN
         ;;
       set)
-        export OAR_BOOTSTRAP_TOKEN="$bootstrap_token"
+        export ANX_BOOTSTRAP_TOKEN="$bootstrap_token"
         ;;
       *)
         die "unsupported bootstrap token mode for start_core_server: $bootstrap_token_mode"
@@ -693,33 +693,33 @@ stop_background_process() {
 }
 
 resolve_core_bin() {
-  if [[ -n "${OAR_CORE_BIN:-}" && -x "${OAR_CORE_BIN}" ]]; then
-    printf '%s\n' "${OAR_CORE_BIN}"
+  if [[ -n "${ANX_CORE_BIN:-}" && -x "${ANX_CORE_BIN}" ]]; then
+    printf '%s\n' "${ANX_CORE_BIN}"
     return 0
   fi
-  if [[ -x "${REPO_ROOT}/core/.bin/oar-core" ]]; then
-    printf '%s\n' "${REPO_ROOT}/core/.bin/oar-core"
+  if [[ -x "${REPO_ROOT}/core/.bin/anx-core" ]]; then
+    printf '%s\n' "${REPO_ROOT}/core/.bin/anx-core"
     return 0
   fi
-  if [[ -x "${HOME}/.oar/bin/oar-core" ]]; then
-    printf '%s\n' "${HOME}/.oar/bin/oar-core"
+  if [[ -x "${HOME}/.anx/bin/anx-core" ]]; then
+    printf '%s\n' "${HOME}/.anx/bin/anx-core"
     return 0
   fi
-  die "oar-core binary not found; build it with ./core/scripts/build-prod or set OAR_CORE_BIN"
+  die "anx-core binary not found; build it with ./core/scripts/build-prod or set ANX_CORE_BIN"
 }
 
 resolve_schema_path() {
-  if [[ -n "${OAR_SCHEMA_PATH:-}" && -f "${OAR_SCHEMA_PATH}" ]]; then
-    printf '%s\n' "${OAR_SCHEMA_PATH}"
+  if [[ -n "${ANX_SCHEMA_PATH:-}" && -f "${ANX_SCHEMA_PATH}" ]]; then
+    printf '%s\n' "${ANX_SCHEMA_PATH}"
     return 0
   fi
-  if [[ -f "${REPO_ROOT}/contracts/oar-schema.yaml" ]]; then
-    printf '%s\n' "${REPO_ROOT}/contracts/oar-schema.yaml"
+  if [[ -f "${REPO_ROOT}/contracts/anx-schema.yaml" ]]; then
+    printf '%s\n' "${REPO_ROOT}/contracts/anx-schema.yaml"
     return 0
   fi
-  if [[ -f "${HOME}/.oar/share/oar-schema.yaml" ]]; then
-    printf '%s\n' "${HOME}/.oar/share/oar-schema.yaml"
+  if [[ -f "${HOME}/.anx/share/anx-schema.yaml" ]]; then
+    printf '%s\n' "${HOME}/.anx/share/anx-schema.yaml"
     return 0
   fi
-  die "oar schema not found; set OAR_SCHEMA_PATH"
+  die "anx schema not found; set ANX_SCHEMA_PATH"
 }

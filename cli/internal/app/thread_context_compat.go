@@ -6,9 +6,9 @@ import (
 	"net/url"
 	"strings"
 
-	"organization-autorunner-cli/internal/config"
-	"organization-autorunner-cli/internal/errnorm"
-	"organization-autorunner-cli/internal/httpclient"
+	"agent-nexus-cli/internal/config"
+	"agent-nexus-cli/internal/errnorm"
+	"agent-nexus-cli/internal/httpclient"
 )
 
 func (a *App) runThreadsContextCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {

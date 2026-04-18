@@ -11,18 +11,18 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"organization-autorunner-core/internal/blob"
+	"agent-nexus-core/internal/blob"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"organization-autorunner-core/internal/actors"
-	"organization-autorunner-core/internal/auth"
-	"organization-autorunner-core/internal/primitives"
-	"organization-autorunner-core/internal/schema"
-	"organization-autorunner-core/internal/storage"
+	"agent-nexus-core/internal/actors"
+	"agent-nexus-core/internal/auth"
+	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/schema"
+	"agent-nexus-core/internal/storage"
 )
 
 func TestPrimitivesCRUDRoundTrip(t *testing.T) {
@@ -1379,7 +1379,7 @@ func newPrimitivesTestServer(t *testing.T) primitivesTestHarness {
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
-	contractPath := filepath.Join("..", "..", "..", "contracts", "oar-schema.yaml")
+	contractPath := filepath.Join("..", "..", "..", "contracts", "anx-schema.yaml")
 	contract, err := schema.Load(contractPath)
 	if err != nil {
 		_ = workspace.Close()
@@ -1393,7 +1393,7 @@ func newPrimitivesTestServer(t *testing.T) primitivesTestHarness {
 		Contract:         contract,
 		InboxRiskHorizon: defaultInboxRiskHorizon,
 		DirtyBatchSize:   100,
-		SystemActorID:    "oar-core",
+		SystemActorID:    "anx-core",
 	})
 	handler := NewHandler(
 		contract.Version,
@@ -1421,7 +1421,7 @@ func newPrimitivesTestServerWithHumanPrincipal(t *testing.T) primitivesTestHarne
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
-	contractPath := filepath.Join("..", "..", "..", "contracts", "oar-schema.yaml")
+	contractPath := filepath.Join("..", "..", "..", "contracts", "anx-schema.yaml")
 	contract, err := schema.Load(contractPath)
 	if err != nil {
 		_ = workspace.Close()
@@ -1437,7 +1437,7 @@ func newPrimitivesTestServerWithHumanPrincipal(t *testing.T) primitivesTestHarne
 		Contract:         contract,
 		InboxRiskHorizon: defaultInboxRiskHorizon,
 		DirtyBatchSize:   100,
-		SystemActorID:    "oar-core",
+		SystemActorID:    "anx-core",
 	})
 	humanToken := "human-primitives-purge-token-test-ok-32"
 	seedHumanPrincipalForLockoutTest(t, context.Background(), workspace.DB(), "human-purge-principal-agent", "human-purge-principal-actor", "human.purge.primitives.test", humanToken)

@@ -10,13 +10,13 @@ usage() {
   cat <<'EOF'
 Usage: scripts/hosted/verify-restore.sh --instance-root DIR [options]
 
-Starts oar-core against the restored workspace on a loopback port, verifies
+Starts anx-core against the restored workspace on a loopback port, verifies
 /readyz, and checks restored metadata counts against the source manifest.
 
 Options:
   --manifest PATH        Manifest to compare against
   --receipt PATH         Restore receipt to compare against
-  --core-bin PATH        oar-core binary to use
+  --core-bin PATH        anx-core binary to use
   --schema-path PATH     Schema path to use
   --listen-port PORT     Explicit loopback verification port
   --timeout SECONDS      Readiness wait timeout (default: 20)
@@ -77,7 +77,7 @@ if [[ -z "$LISTEN_PORT" ]]; then
 fi
 validate_port "$LISTEN_PORT"
 
-unset OAR_BOOTSTRAP_TOKEN
+unset ANX_BOOTSTRAP_TOKEN
 load_dotenv_file "$ENV_FILE"
 EXPECTED_ARTIFACT_COUNT="$(manifest_get "$MANIFEST_PATH" ARTIFACT_COUNT)"
 EXPECTED_AGENT_COUNT="$(manifest_get "$MANIFEST_PATH" AGENT_COUNT)"
@@ -108,17 +108,17 @@ VERIFY_DOCUMENT_REVISION_ID="$(manifest_get "$MANIFEST_PATH" VERIFY_DOCUMENT_REV
 SOURCE_INSTANCE_ROOT="$(manifest_get "$MANIFEST_PATH" SOURCE_INSTANCE_ROOT || true)"
 SOURCE_WORKSPACE_ROOT="$(manifest_get "$MANIFEST_PATH" SOURCE_WORKSPACE_ROOT || true)"
 SOURCE_PUBLIC_ORIGIN="$(manifest_get "$MANIFEST_PATH" PUBLIC_ORIGIN || true)"
-TARGET_CORE_INSTANCE_ID="$(dotenv_get "$ENV_FILE" OAR_CORE_INSTANCE_ID || true)"
-TARGET_WORKSPACE_ROOT="$(dotenv_get "$ENV_FILE" HOST_OAR_WORKSPACE_ROOT || true)"
-TARGET_WEB_UI_ORIGIN="$(dotenv_get "$ENV_FILE" OAR_WEB_UI_ORIGIN || true)"
-TARGET_WEBAUTHN_ORIGIN="$(dotenv_get "$ENV_FILE" OAR_WEBAUTHN_ORIGIN || true)"
-TARGET_BLOB_BACKEND="$(dotenv_get "$ENV_FILE" OAR_BLOB_BACKEND || true)"
-TARGET_BLOB_ROOT="$(dotenv_get "$ENV_FILE" OAR_BLOB_ROOT || true)"
-TARGET_BLOB_S3_BUCKET="$(dotenv_get "$ENV_FILE" OAR_BLOB_S3_BUCKET || true)"
-TARGET_BLOB_S3_PREFIX="$(dotenv_get "$ENV_FILE" OAR_BLOB_S3_PREFIX || true)"
-TARGET_BLOB_S3_REGION="$(dotenv_get "$ENV_FILE" OAR_BLOB_S3_REGION || true)"
-TARGET_BLOB_S3_ENDPOINT="$(dotenv_get "$ENV_FILE" OAR_BLOB_S3_ENDPOINT || true)"
-TARGET_BLOB_S3_FORCE_PATH_STYLE="$(normalize_bool_value "$(dotenv_get "$ENV_FILE" OAR_BLOB_S3_FORCE_PATH_STYLE || true)")"
+TARGET_CORE_INSTANCE_ID="$(dotenv_get "$ENV_FILE" ANX_CORE_INSTANCE_ID || true)"
+TARGET_WORKSPACE_ROOT="$(dotenv_get "$ENV_FILE" HOST_ANX_WORKSPACE_ROOT || true)"
+TARGET_WEB_UI_ORIGIN="$(dotenv_get "$ENV_FILE" ANX_WEB_UI_ORIGIN || true)"
+TARGET_WEBAUTHN_ORIGIN="$(dotenv_get "$ENV_FILE" ANX_WEBAUTHN_ORIGIN || true)"
+TARGET_BLOB_BACKEND="$(dotenv_get "$ENV_FILE" ANX_BLOB_BACKEND || true)"
+TARGET_BLOB_ROOT="$(dotenv_get "$ENV_FILE" ANX_BLOB_ROOT || true)"
+TARGET_BLOB_S3_BUCKET="$(dotenv_get "$ENV_FILE" ANX_BLOB_S3_BUCKET || true)"
+TARGET_BLOB_S3_PREFIX="$(dotenv_get "$ENV_FILE" ANX_BLOB_S3_PREFIX || true)"
+TARGET_BLOB_S3_REGION="$(dotenv_get "$ENV_FILE" ANX_BLOB_S3_REGION || true)"
+TARGET_BLOB_S3_ENDPOINT="$(dotenv_get "$ENV_FILE" ANX_BLOB_S3_ENDPOINT || true)"
+TARGET_BLOB_S3_FORCE_PATH_STYLE="$(normalize_bool_value "$(dotenv_get "$ENV_FILE" ANX_BLOB_S3_FORCE_PATH_STYLE || true)")"
 [[ -n "$TARGET_BLOB_BACKEND" ]] || TARGET_BLOB_BACKEND="filesystem"
 validate_blob_backend "$TARGET_BLOB_BACKEND"
 TARGET_BLOB_STORAGE_MODE="$(blob_storage_mode "$TARGET_BLOB_BACKEND")"
@@ -233,7 +233,7 @@ start_core_server \
   "$SERVER_LOG_FILE" \
   "${TARGET_CORE_INSTANCE_ID:-${EXPECTED_CORE_INSTANCE_ID:-restore-verify}}" \
   set \
-  "${OAR_BOOTSTRAP_TOKEN-}" \
+  "${ANX_BOOTSTRAP_TOKEN-}" \
   false \
   false \
   true
@@ -252,7 +252,7 @@ if [[ "$TARGET_BLOB_STORAGE_MODE" == "local" ]]; then
   ACTUAL_BLOB_FILE_COUNT="$(count_files "$TARGET_EFFECTIVE_LOCAL_BLOB_ROOT")"
 fi
 ACTUAL_BOOTSTRAP_STATE="disabled"
-if [[ -n "${OAR_BOOTSTRAP_TOKEN:-}" && "${OAR_BOOTSTRAP_TOKEN}" != "$HOSTED_BOOTSTRAP_PLACEHOLDER" ]]; then
+if [[ -n "${ANX_BOOTSTRAP_TOKEN:-}" && "${ANX_BOOTSTRAP_TOKEN}" != "$HOSTED_BOOTSTRAP_PLACEHOLDER" ]]; then
   ACTUAL_BOOTSTRAP_STATE="available"
   BOOTSTRAP_CONSUMED_AT="$(sqlite_scalar "${WORKSPACE_ROOT}/state.sqlite" "SELECT COALESCE(consumed_at, '') FROM auth_bootstrap_state WHERE id = 1;")"
   if [[ -n "$BOOTSTRAP_CONSUMED_AT" ]]; then

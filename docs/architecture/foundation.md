@@ -98,8 +98,8 @@ This split preserves operational simplicity in hosted v1 while fixing a clear fo
 
 This foundation document defines product-level and architecture-level decisions. Implementation specs for individual modules (core, CLI, web-ui) describe how those decisions are realized in code:
 
-- **Core spec** (`core/docs/oar-core-spec.md`): defines how canonical state, evidence, and primitives are implemented and enforced.
-- **UI spec** (`web-ui/docs/oar-ui-spec.md`): defines how the operator interface exposes the foundation decisions.
+- **Core spec** (`core/docs/anx-core-spec.md`): defines how canonical state, evidence, and primitives are implemented and enforced.
+- **UI spec** (`web-ui/docs/anx-ui-spec.md`): defines how the operator interface exposes the foundation decisions.
 - **Contract specs** (`contracts/`): define the schema and API boundaries that all modules must honor.
 
 When this document conflicts with module specs, **this document wins**. Module specs should be updated to align with the foundation.

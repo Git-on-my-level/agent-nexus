@@ -6,10 +6,10 @@ COPY core/go.mod core/go.sum ./
 RUN go mod download
 
 COPY core/ ./
-COPY contracts/oar-schema.yaml /src/contracts/oar-schema.yaml
+COPY contracts/anx-schema.yaml /src/contracts/anx-schema.yaml
 COPY contracts/gen/meta/commands.json /src/contracts/gen/meta/commands.json
 
-RUN CGO_ENABLED=1 go build -trimpath -ldflags='-s -w' -o /out/oar-core ./cmd/oar-core
+RUN CGO_ENABLED=1 go build -trimpath -ldflags='-s -w' -o /out/anx-core ./cmd/anx-core
 
 FROM debian:bookworm-slim
 
@@ -17,29 +17,29 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates curl \
   && rm -rf /var/lib/apt/lists/*
 
-RUN groupadd --system oar \
-  && useradd --system --gid oar --create-home --home-dir /app --shell /usr/sbin/nologin oar
+RUN groupadd --system anx \
+  && useradd --system --gid anx --create-home --home-dir /app --shell /usr/sbin/nologin anx
 
 WORKDIR /app
 
-COPY --from=builder /out/oar-core /usr/local/bin/oar-core
-COPY --from=builder /src/contracts/oar-schema.yaml /app/contracts/oar-schema.yaml
+COPY --from=builder /out/anx-core /usr/local/bin/anx-core
+COPY --from=builder /src/contracts/anx-schema.yaml /app/contracts/anx-schema.yaml
 COPY --from=builder /src/contracts/gen/meta/commands.json /app/contracts/gen/meta/commands.json
 
-RUN mkdir -p /var/lib/oar/workspace && chown -R oar:oar /var/lib/oar
+RUN mkdir -p /var/lib/anx/workspace && chown -R anx:anx /var/lib/anx
 
-ENV OAR_WORKSPACE_ROOT=/var/lib/oar/workspace
-ENV OAR_SCHEMA_PATH=/app/contracts/oar-schema.yaml
-ENV OAR_META_COMMANDS_PATH=/app/contracts/gen/meta/commands.json
-ENV OAR_LISTEN_ADDR=0.0.0.0:8000
+ENV ANX_WORKSPACE_ROOT=/var/lib/anx/workspace
+ENV ANX_SCHEMA_PATH=/app/contracts/anx-schema.yaml
+ENV ANX_META_COMMANDS_PATH=/app/contracts/gen/meta/commands.json
+ENV ANX_LISTEN_ADDR=0.0.0.0:8000
 
-VOLUME ["/var/lib/oar/workspace"]
+VOLUME ["/var/lib/anx/workspace"]
 
 EXPOSE 8000
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=5s --retries=3 \
   CMD ["curl", "-sf", "http://127.0.0.1:8000/readyz"]
 
-USER oar
+USER anx
 
-ENTRYPOINT ["/usr/local/bin/oar-core"]
+ENTRYPOINT ["/usr/local/bin/anx-core"]

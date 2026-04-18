@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"organization-autorunner-core/internal/actors"
-	"organization-autorunner-core/internal/blob"
-	"organization-autorunner-core/internal/primitives"
-	"organization-autorunner-core/internal/schema"
-	"organization-autorunner-core/internal/storage"
+	"agent-nexus-core/internal/actors"
+	"agent-nexus-core/internal/blob"
+	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/schema"
+	"agent-nexus-core/internal/storage"
 )
 
 type projectionMaintenanceTestHarness struct {
@@ -38,7 +38,7 @@ func newProjectionMaintenanceTestServerWithMode(t *testing.T, mode string) proje
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
-	contractPath := filepath.Join("..", "..", "..", "contracts", "oar-schema.yaml")
+	contractPath := filepath.Join("..", "..", "..", "contracts", "anx-schema.yaml")
 	contract, err := schema.Load(contractPath)
 	if err != nil {
 		_ = workspace.Close()
@@ -53,7 +53,7 @@ func newProjectionMaintenanceTestServerWithMode(t *testing.T, mode string) proje
 		Mode:              mode,
 		StaleScanInterval: time.Second,
 		DirtyBatchSize:    20,
-		SystemActorID:     "oar-core",
+		SystemActorID:     "anx-core",
 	})
 	handler := NewHandler(
 		contract.Version,
@@ -394,7 +394,7 @@ func TestProjectionMaintainerKeepsProjectionPendingForConcurrentWrites(t *testin
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
-	contractPath := filepath.Join("..", "..", "..", "contracts", "oar-schema.yaml")
+	contractPath := filepath.Join("..", "..", "..", "contracts", "anx-schema.yaml")
 	contract, err := schema.Load(contractPath)
 	if err != nil {
 		_ = workspace.Close()
@@ -413,7 +413,7 @@ func TestProjectionMaintainerKeepsProjectionPendingForConcurrentWrites(t *testin
 		Contract:          contract,
 		StaleScanInterval: time.Hour,
 		DirtyBatchSize:    20,
-		SystemActorID:     "oar-core",
+		SystemActorID:     "anx-core",
 	})
 	handler := NewHandler(
 		contract.Version,
@@ -565,7 +565,7 @@ func TestProjectionMaintainerNotifyWakesRunLoopPromptly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
-	contractPath := filepath.Join("..", "..", "..", "contracts", "oar-schema.yaml")
+	contractPath := filepath.Join("..", "..", "..", "contracts", "anx-schema.yaml")
 	contract, err := schema.Load(contractPath)
 	if err != nil {
 		_ = workspace.Close()
@@ -580,7 +580,7 @@ func TestProjectionMaintainerNotifyWakesRunLoopPromptly(t *testing.T) {
 		PollInterval:      time.Minute,
 		StaleScanInterval: time.Hour,
 		DirtyBatchSize:    20,
-		SystemActorID:     "oar-core",
+		SystemActorID:     "anx-core",
 	})
 	handler := NewHandler(
 		contract.Version,
@@ -654,7 +654,7 @@ func TestOpsHealthEndpointReportsProjectionMaintenanceErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
-	contractPath := filepath.Join("..", "..", "..", "contracts", "oar-schema.yaml")
+	contractPath := filepath.Join("..", "..", "..", "contracts", "anx-schema.yaml")
 	contract, err := schema.Load(contractPath)
 	if err != nil {
 		_ = workspace.Close()
@@ -672,7 +672,7 @@ func TestOpsHealthEndpointReportsProjectionMaintenanceErrors(t *testing.T) {
 		Contract:          contract,
 		StaleScanInterval: time.Second,
 		DirtyBatchSize:    20,
-		SystemActorID:     "oar-core",
+		SystemActorID:     "anx-core",
 	})
 	handler := NewHandler(
 		contract.Version,
@@ -731,7 +731,7 @@ func TestOpsHealthEndpointKeepsDiagnosticsWhenReadinessFails(t *testing.T) {
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
-	contractPath := filepath.Join("..", "..", "..", "contracts", "oar-schema.yaml")
+	contractPath := filepath.Join("..", "..", "..", "contracts", "anx-schema.yaml")
 	contract, err := schema.Load(contractPath)
 	if err != nil {
 		_ = workspace.Close()
@@ -745,7 +745,7 @@ func TestOpsHealthEndpointKeepsDiagnosticsWhenReadinessFails(t *testing.T) {
 		Contract:          contract,
 		StaleScanInterval: time.Second,
 		DirtyBatchSize:    20,
-		SystemActorID:     "oar-core",
+		SystemActorID:     "anx-core",
 	})
 	handler := NewHandler(
 		contract.Version,

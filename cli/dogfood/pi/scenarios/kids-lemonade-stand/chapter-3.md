@@ -14,7 +14,7 @@ Chapter 3 goals:
 3. Leave visible proof in messages, replies, board updates, and docs that the team handed work to each other.
 
 Required chapter behavior for every role:
-- before your first main-thread message, run `oar auth principals list --taggable --handles-only` or `oar auth principals list --taggable` and use the real handles you discover
+- before your first main-thread message, run `anx auth principals list --taggable --handles-only` or `anx auth principals list --taggable` and use the real handles you discover
 - post at least one new `message_posted` on the main thread that tags a teammate with `@handle`
 - use at least two tagged mentions total during the chapter
 - after a tagged teammate answers, post at least one reply using an `event:<message_id>` ref so the handoff is visible

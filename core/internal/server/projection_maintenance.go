@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"organization-autorunner-core/internal/primitives"
-	"organization-autorunner-core/internal/schema"
+	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/schema"
 )
 
 const (
@@ -108,7 +108,7 @@ func NewProjectionMaintainer(config ProjectionMaintainerConfig) *ProjectionMaint
 		pollInterval:      pollInterval,
 		staleScanInterval: staleScanInterval,
 		dirtyBatchSize:    dirtyBatchSize,
-		systemActorID:     firstNonEmptyString(strings.TrimSpace(config.SystemActorID), "oar-core"),
+		systemActorID:     firstNonEmptyString(strings.TrimSpace(config.SystemActorID), "anx-core"),
 		notifyCh:          make(chan struct{}, 1),
 	}
 }

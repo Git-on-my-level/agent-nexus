@@ -10,10 +10,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"organization-autorunner-core/internal/blob"
-	"organization-autorunner-core/internal/primitives"
-	"organization-autorunner-core/internal/server"
-	"organization-autorunner-core/internal/storage"
+	"agent-nexus-core/internal/blob"
+	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/server"
+	"agent-nexus-core/internal/storage"
 
 	_ "modernc.org/sqlite"
 )

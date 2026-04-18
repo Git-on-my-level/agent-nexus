@@ -51,7 +51,7 @@ function createSessionEvent({
   return {
     recorder,
     event: {
-      url: new URL("https://oar.example.com/auth/session"),
+      url: new URL("https://anx.example.com/auth/session"),
       cookies: recorder.cookies,
     },
   };
@@ -67,7 +67,7 @@ describe("server auth session helpers", () => {
   it("writes HttpOnly and Secure refresh-token cookies on HTTPS", () => {
     const recorder = createCookieRecorder();
     const event = {
-      url: new URL("https://oar.example.com/auth/session"),
+      url: new URL("https://anx.example.com/auth/session"),
       cookies: recorder.cookies,
     };
 
@@ -90,7 +90,7 @@ describe("server auth session helpers", () => {
   it("writes HttpOnly and Secure access-token cookies on HTTPS", () => {
     const recorder = createCookieRecorder();
     const event = {
-      url: new URL("https://oar.example.com/auth/session"),
+      url: new URL("https://anx.example.com/auth/session"),
       cookies: recorder.cookies,
     };
 
@@ -149,7 +149,7 @@ describe("server auth session helpers", () => {
   it("sanitizes auth verify responses before returning them to the browser", async () => {
     const recorder = createCookieRecorder();
     const event = {
-      url: new URL("https://oar.example.com/auth/passkey/login/verify"),
+      url: new URL("https://anx.example.com/auth/passkey/login/verify"),
       cookies: recorder.cookies,
     };
     const upstreamResponse = new Response(

@@ -71,7 +71,7 @@
 </script>
 
 <svelte:head>
-  <title>Usage — OAR</title>
+  <title>Usage — ANX</title>
 </svelte:head>
 
 <div class="space-y-5">

@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"organization-autorunner-core/internal/auth"
-	"organization-autorunner-core/internal/storage"
+	"agent-nexus-core/internal/auth"
+	"agent-nexus-core/internal/storage"
 )
 
 type rejectingWorkspaceGrantVerifier struct{}

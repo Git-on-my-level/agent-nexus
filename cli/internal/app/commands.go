@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"organization-autorunner-cli/internal/authcli"
-	"organization-autorunner-cli/internal/config"
-	"organization-autorunner-cli/internal/errnorm"
-	"organization-autorunner-cli/internal/httpclient"
-	"organization-autorunner-cli/internal/registry"
+	"agent-nexus-cli/internal/authcli"
+	"agent-nexus-cli/internal/config"
+	"agent-nexus-cli/internal/errnorm"
+	"agent-nexus-cli/internal/httpclient"
+	"agent-nexus-cli/internal/registry"
 )
 
 func (a *App) runCommand(ctx context.Context, args []string, cfg config.Resolved) (string, *commandResult, error) {
@@ -74,7 +74,7 @@ func (a *App) runCommand(ctx context.Context, args []string, cfg config.Resolved
 		return name, result, err
 	case "concepts":
 		if len(args) > 1 {
-			return "concepts", nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar concepts`")
+			return "concepts", nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx concepts`")
 		}
 		text := conceptsGuideText()
 		return "concepts", &commandResult{Text: text, Data: conceptsGuideData()}, nil
@@ -264,7 +264,7 @@ func apiCallUsageText() string {
 Perform an arbitrary HTTP request against the configured core base URL.
 
 Usage:
-  oar api call [--method <method>] [--path <path>] [<method> <path>] [--from-file <file>] [--header key:value] [--raw]
+  anx api call [--method <method>] [--path <path>] [<method> <path>] [--from-file <file>] [--header key:value] [--raw]
 
 Flags:
   --method <method>     HTTP method (default GET).
@@ -274,8 +274,8 @@ Flags:
   --raw                 Write raw response body to stdout (not with --json).
 
 Examples:
-  oar api call --method GET --path /readyz
-  oar api call POST /events --from-file body.json`)
+  anx api call --method GET --path /readyz
+  anx api call POST /events --from-file body.json`)
 }
 
 func (a *App) runAPICall(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
@@ -313,7 +313,7 @@ func (a *App) runAPICall(ctx context.Context, args []string, cfg config.Resolved
 		positionals = positionals[1:]
 	}
 	if len(positionals) > 0 {
-		return nil, errnorm.Usage("invalid_api_args", "unexpected positional arguments for `oar api call`")
+		return nil, errnorm.Usage("invalid_api_args", "unexpected positional arguments for `anx api call`")
 	}
 	if method == "" {
 		method = http.MethodGet

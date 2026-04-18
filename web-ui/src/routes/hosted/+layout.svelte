@@ -123,7 +123,7 @@
           >
             O
           </span>
-          OAR
+          ANX
         </a>
 
         {#if session.phase === "authed"}
@@ -365,7 +365,7 @@
           class="inline-flex h-4 w-4 items-center justify-center rounded bg-indigo-500/15 text-[9px] font-bold uppercase text-indigo-400"
           aria-hidden="true">O</span
         >
-        <span>OAR hosted · &copy; {new Date().getFullYear()}</span>
+        <span>ANX hosted · &copy; {new Date().getFullYear()}</span>
       </div>
       <nav
         class="flex flex-wrap items-center gap-x-4 gap-y-1"

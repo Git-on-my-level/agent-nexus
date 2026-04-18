@@ -1,4 +1,4 @@
-[oar]
+[anx]
 base_url = "http://127.0.0.1:8000"
 workspace_id = "ws_main"
 workspace_name = "Main"

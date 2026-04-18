@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"organization-autorunner-core/internal/auth"
+	"agent-nexus-core/internal/auth"
 )
 
 func handleBootstrapStatus(w http.ResponseWriter, r *http.Request, opts handlerOptions) {

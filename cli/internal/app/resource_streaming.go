@@ -12,13 +12,13 @@ import (
 	"strings"
 	"time"
 
-	contractsclient "organization-autorunner-contracts-go-client/client"
+	contractsclient "agent-nexus-contracts-go-client/client"
 
-	"organization-autorunner-cli/internal/config"
-	"organization-autorunner-cli/internal/errnorm"
-	"organization-autorunner-cli/internal/httpclient"
-	"organization-autorunner-cli/internal/output"
-	"organization-autorunner-cli/internal/streaming"
+	"agent-nexus-cli/internal/config"
+	"agent-nexus-cli/internal/errnorm"
+	"agent-nexus-cli/internal/httpclient"
+	"agent-nexus-cli/internal/output"
+	"agent-nexus-cli/internal/streaming"
 )
 
 func (a *App) runTailStream(ctx context.Context, cfg config.Resolved, commandName string, commandID string, query []queryParam, lastEventID string, follow bool, reconnect bool, maxEvents int) (*commandResult, error) {

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"organization-autorunner-core/internal/authaudit"
+	"agent-nexus-core/internal/authaudit"
 
 	"github.com/google/uuid"
 )

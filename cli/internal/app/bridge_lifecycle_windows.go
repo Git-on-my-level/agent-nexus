@@ -6,7 +6,7 @@ import (
 	"context"
 	"time"
 
-	"organization-autorunner-cli/internal/errnorm"
+	"agent-nexus-cli/internal/errnorm"
 )
 
 func (a *App) runBridgeStart(ctx context.Context, args []string) (*commandResult, error) {

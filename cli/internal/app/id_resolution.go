@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"organization-autorunner-cli/internal/config"
+	"agent-nexus-cli/internal/config"
 )
 
 var typedRefLookupByPrefix = map[string]resourceIDLookupSpec{

@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"organization-autorunner-core/internal/primitives"
-	"organization-autorunner-core/internal/schema"
+	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/schema"
 )
 
 // subjectRefPrefixesPreferred orders typed refs when choosing an inbox subject anchor
@@ -508,7 +508,7 @@ func handleRebuildDerived(w http.ResponseWriter, r *http.Request, opts handlerOp
 			PrimitiveStore:   opts.primitiveStore,
 			Contract:         opts.contract,
 			InboxRiskHorizon: opts.inboxRiskHorizon,
-			SystemActorID:    "oar-core",
+			SystemActorID:    "anx-core",
 		})
 	}
 	if err := maintainer.RunFullRebuild(r.Context(), time.Now().UTC(), actorID); err != nil {

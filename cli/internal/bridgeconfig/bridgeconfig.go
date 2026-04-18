@@ -18,7 +18,7 @@ type Config struct {
 }
 
 func RootDir(homeDir string) string {
-	return filepath.Join(homeDir, ".config", "oar-bridge")
+	return filepath.Join(homeDir, ".config", "anx-bridge")
 }
 
 func Discover(homeDir string) ([]Config, error) {
@@ -34,7 +34,7 @@ func Discover(homeDir string) ([]Config, error) {
 		if err != nil {
 			return nil, fmt.Errorf("read bridge config %s: %w", path, err)
 		}
-		baseURL := configStringValue(string(content), "oar", "base_url")
+		baseURL := configStringValue(string(content), "anx", "base_url")
 		if strings.TrimSpace(baseURL) == "" {
 			continue
 		}

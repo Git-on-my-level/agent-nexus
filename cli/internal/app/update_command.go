@@ -18,13 +18,13 @@ import (
 	"strings"
 	"time"
 
-	"organization-autorunner-cli/internal/config"
-	"organization-autorunner-cli/internal/errnorm"
-	"organization-autorunner-cli/internal/httpclient"
+	"agent-nexus-cli/internal/config"
+	"agent-nexus-cli/internal/errnorm"
+	"agent-nexus-cli/internal/httpclient"
 )
 
 var (
-	updateReleaseBaseURL = "https://github.com/Git-on-my-level/organization-autorunner/releases"
+	updateReleaseBaseURL = "https://github.com/Git-on-my-level/agent-nexus/releases"
 	updateExecutablePath = os.Executable
 	updateMkdirTemp      = os.MkdirTemp
 	updateRemoveAll      = os.RemoveAll
@@ -59,7 +59,7 @@ func (a *App) runUpdate(ctx context.Context, args []string, cfg config.Resolved)
 		return nil, errnorm.Usage("invalid_update_flags", err.Error())
 	}
 	if len(fs.Args()) > 0 {
-		return nil, errnorm.Usage("invalid_update_args", "unexpected positional arguments for `oar update`")
+		return nil, errnorm.Usage("invalid_update_args", "unexpected positional arguments for `anx update`")
 	}
 
 	plan, err := buildUpdatePlan(ctx, cfg, strings.TrimSpace(versionFlag.value))
@@ -146,7 +146,7 @@ func renderUpdatePlan(plan updatePlan, updated bool) *commandResult {
 	}
 	switch {
 	case updated:
-		lines = append(lines, "Status: updated in place; re-run `oar version` to confirm the active binary.")
+		lines = append(lines, "Status: updated in place; re-run `anx version` to confirm the active binary.")
 	case plan.AlreadyCurrent:
 		lines = append(lines, "Status: already at or above the selected target version.")
 	default:
@@ -339,7 +339,7 @@ func replaceExecutable(installPath string, binaryBytes []byte, mode os.FileMode)
 		mode = 0o755
 	}
 
-	tmpDir, err := updateMkdirTemp(filepath.Dir(installPath), ".oar-update-")
+	tmpDir, err := updateMkdirTemp(filepath.Dir(installPath), ".anx-update-")
 	if err != nil {
 		return errnorm.Wrap(errnorm.KindLocal, "update_write_failed", "failed to allocate a temporary install directory", err)
 	}
@@ -432,10 +432,10 @@ func pathBase(raw string) string {
 }
 
 func updateUsageText() string {
-	return strings.TrimSpace(`Update the installed oar CLI binary in place.
+	return strings.TrimSpace(`Update the installed anx CLI binary in place.
 
 Usage:
-  oar update [--check] [--version <tag>]
+  anx update [--check] [--version <tag>]
 
 Options:
   --check          report the selected target version without changing the binary
@@ -446,7 +446,7 @@ Behavior:
   - downloads the matching release archive for the current OS/arch and replaces the current binary
 
 Examples:
-  oar update --check
-  oar update
-  oar update --version v1.2.3`)
+  anx update --check
+  anx update
+  anx update --version v1.2.3`)
 }

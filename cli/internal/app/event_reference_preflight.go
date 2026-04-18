@@ -5,8 +5,8 @@ import (
 	"strings"
 	"sync"
 
-	"organization-autorunner-cli/internal/errnorm"
-	"organization-autorunner-cli/internal/registry"
+	"agent-nexus-cli/internal/errnorm"
+	"agent-nexus-cli/internal/registry"
 )
 
 var (

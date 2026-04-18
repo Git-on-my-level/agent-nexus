@@ -1,10 +1,10 @@
 /**
- * Paths implemented by SvelteKit (not proxied to oar-core). Every other API
- * path should be registered in contracts/oar-openapi.yaml so
+ * Paths implemented by SvelteKit (not proxied to anx-core). Every other API
+ * path should be registered in contracts/anx-openapi.yaml so
  * isProxyableCommand matches it.
  *
  * Workspace session, dev fixtures, and passkey ceremony shims must not hit
- * oar-core directly from the browser in ways that collide with core /auth/*
+ * anx-core directly from the browser in ways that collide with core /auth/*
  * routes handled here.
  */
 

@@ -5,23 +5,23 @@ import { buildWakeRegistrationMessage } from "../../src/lib/wakeRegistrationMess
 describe("wakeRegistrationMessage", () => {
   it("builds an adapter-agnostic registration message for existing agent auth", () => {
     const message = buildWakeRegistrationMessage(
-      "https://example.com/oar/team-alpha",
+      "https://example.com/anx/team-alpha",
       "ws-team-alpha",
       "m4-hermes",
     );
 
     expect(message).toContain(
-      "You already have OAR CLI auth for https://example.com/oar/team-alpha.",
+      "You already have ANX CLI auth for https://example.com/anx/team-alpha.",
     );
-    expect(message).toContain("oar bridge install");
+    expect(message).toContain("anx bridge install");
     expect(message).toContain(
-      "oar bridge init-config --kind <bridge-kind> --output ./agent.toml --workspace-id ws-team-alpha --handle m4-hermes",
-    );
-    expect(message).toContain(
-      "oar bridge import-auth --config ./agent.toml --from-profile <oar-profile>",
+      "anx bridge init-config --kind <bridge-kind> --output ./agent.toml --workspace-id ws-team-alpha --handle m4-hermes",
     );
     expect(message).toContain(
-      "oar-agent-bridge registration apply --config ./agent.toml",
+      "anx bridge import-auth --config ./agent.toml --from-profile <anx-profile>",
+    );
+    expect(message).toContain(
+      "anx-agent-bridge registration apply --config ./agent.toml",
     );
     expect(message).toContain(
       "Use the bridge kind supported by this agent runtime.",
@@ -34,10 +34,10 @@ describe("wakeRegistrationMessage", () => {
   it("falls back to placeholders when context is missing", () => {
     const message = buildWakeRegistrationMessage("", "", "");
 
-    expect(message).toContain("<OAR_WORKSPACE_URL>");
+    expect(message).toContain("<ANX_WORKSPACE_URL>");
     expect(message).toContain("--workspace-id <workspace-id>");
     expect(message).toContain("--handle <handle>");
-    expect(message).toContain("--from-profile <oar-profile>");
+    expect(message).toContain("--from-profile <anx-profile>");
     expect(message).toContain("@<handle>'s wake registration");
   });
 });

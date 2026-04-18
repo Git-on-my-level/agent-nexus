@@ -16,7 +16,7 @@ export function buildRegistrationMessage(
 ) {
   const normalizedToken = String(token ?? "").trim();
   const normalizedBaseUrl =
-    String(baseUrl ?? "").trim() || "<OAR_WORKSPACE_URL>";
+    String(baseUrl ?? "").trim() || "<ANX_WORKSPACE_URL>";
   const normalizedAgentName = String(agentName ?? "").trim();
   const normalizedUsername = String(username ?? "").trim();
 
@@ -29,14 +29,14 @@ export function buildRegistrationMessage(
   }
 
   const lines = [
-    "Register with this OAR workspace using the invite token below.",
+    "Register with this ANX workspace using the invite token below.",
     "",
   ];
 
   if (missingLabels.length > 0) {
     lines.push(
       `If you want to set your own ${joinWithAnd(missingLabels)}, replace the placeholder values before running the command.`,
-      `If you leave the placeholders in place, OAR chooses ${joinWithAnd(missingLabels.map((label) => `the ${label}`))} during registration.`,
+      `If you leave the placeholders in place, ANX chooses ${joinWithAnd(missingLabels.map((label) => `the ${label}`))} during registration.`,
       "",
       "Run the following command:",
     );
@@ -46,7 +46,7 @@ export function buildRegistrationMessage(
 
   lines.push(
     "",
-    `  oar --base-url ${normalizedBaseUrl} --agent ${normalizedAgentName || "<agent-name>"} auth register --username ${normalizedUsername || "<username>"} --invite-token ${normalizedToken}`,
+    `  anx --base-url ${normalizedBaseUrl} --agent ${normalizedAgentName || "<agent-name>"} auth register --username ${normalizedUsername || "<username>"} --invite-token ${normalizedToken}`,
     "",
     "This invite token is single-use.",
   );

@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd plist template for anx-core instances.
+
+  Placeholders (replaced by install-anx-core.sh):
+    __INSTANCE__        instance name (e.g. "team-alpha")
+    __BIN_PATH__        absolute path to anx-core binary
+    __PORT__            listen port
+    __WORKSPACE_ROOT__  absolute path to workspace directory
+    __SCHEMA_PATH__     absolute path to anx-schema.yaml
+    __META_CMD_PATH__   absolute path to commands.json (may be empty)
+    __LOG_DIR__         absolute path to log directory
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.anx.core.__INSTANCE__</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>__BIN_PATH__</string>
+        <string>--listen-addr</string>
+        <string>127.0.0.1:__PORT__</string>
+        <string>--schema-path</string>
+        <string>__SCHEMA_PATH__</string>
+        <string>--workspace-root</string>
+        <string>__WORKSPACE_ROOT__</string>
+        <string>--core-instance-id</string>
+        <string>__INSTANCE__</string>
+        <string>--meta-commands-path</string>
+        <string>__META_CMD_PATH__</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <key>ThrottleInterval</key>
+    <integer>5</integer>
+
+    <key>StandardOutPath</key>
+    <string>__LOG_DIR__/anx-core-__INSTANCE__.out.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>__LOG_DIR__/anx-core-__INSTANCE__.err.log</string>
+
+    <key>SoftResourceLimits</key>
+    <dict>
+        <key>NumberOfFiles</key>
+        <integer>4096</integer>
+    </dict>
+
+    <key>HardResourceLimits</key>
+    <dict>
+        <key>NumberOfFiles</key>
+        <integer>8192</integer>
+    </dict>
+</dict>
+</plist>

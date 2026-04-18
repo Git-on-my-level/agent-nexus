@@ -80,7 +80,7 @@ EOF
 }
 
 echo "Building core binary..."
-CORE_BIN="$(build_core_binary "$TMP_DIR/oar-core")"
+CORE_BIN="$(build_core_binary "$TMP_DIR/anx-core")"
 SCHEMA_PATH="$(resolve_schema_path)"
 
 echo "Generating Ed25519 key pairs for test agents..."

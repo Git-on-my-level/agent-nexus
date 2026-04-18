@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const envState = vi.hoisted(() => ({
-  OAR_CONTROL_BASE_URL: "https://control.example.test",
+  ANX_CONTROL_BASE_URL: "https://control.example.test",
 }));
 
 const workspaceResolverMocks = vi.hoisted(() => ({

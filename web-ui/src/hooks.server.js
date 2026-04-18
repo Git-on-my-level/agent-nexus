@@ -135,7 +135,7 @@ async function proxyToCore(event, coreBaseUrl, workspaceSlug) {
       JSON.stringify({
         error: {
           code: "core_unreachable",
-          message: `Unable to reach oar-core at ${coreBaseUrl}. Start backend with ../core/scripts/dev and retry.`,
+          message: `Unable to reach anx-core at ${coreBaseUrl}. Start backend with ../core/scripts/dev and retry.`,
           reason,
         },
       }),
@@ -143,7 +143,7 @@ async function proxyToCore(event, coreBaseUrl, workspaceSlug) {
         status: 503,
         headers: {
           "content-type": "application/json",
-          "X-OAR-UI-Version": CURRENT_VERSION,
+          "X-ANX-UI-Version": CURRENT_VERSION,
         },
       },
     );
@@ -202,27 +202,27 @@ function buildCSPDirectives(env = privateEnv) {
     "default-src": ["'self'"],
     "script-src": mergeCSPDirectiveSources(
       scriptSrc,
-      env.OAR_UI_CSP_SCRIPT_SRC_EXTRA,
+      env.ANX_UI_CSP_SCRIPT_SRC_EXTRA,
     ),
     "style-src": mergeCSPDirectiveSources(
       ["'self'", "'unsafe-inline'", GOOGLE_FONTS_STYLE],
-      env.OAR_UI_CSP_STYLE_SRC_EXTRA,
+      env.ANX_UI_CSP_STYLE_SRC_EXTRA,
     ),
     "img-src": mergeCSPDirectiveSources(
       ["'self'", "data:", "https:"],
-      env.OAR_UI_CSP_IMG_SRC_EXTRA,
+      env.ANX_UI_CSP_IMG_SRC_EXTRA,
     ),
     "font-src": mergeCSPDirectiveSources(
       ["'self'", "data:", GOOGLE_FONTS_FONT],
-      env.OAR_UI_CSP_FONT_SRC_EXTRA,
+      env.ANX_UI_CSP_FONT_SRC_EXTRA,
     ),
     "connect-src": mergeCSPDirectiveSources(
       ["'self'", GOOGLE_FONTS_STYLE, GOOGLE_FONTS_FONT],
-      env.OAR_UI_CSP_CONNECT_SRC_EXTRA,
+      env.ANX_UI_CSP_CONNECT_SRC_EXTRA,
     ),
     "manifest-src": mergeCSPDirectiveSources(
       ["'self'"],
-      env.OAR_UI_CSP_MANIFEST_SRC_EXTRA,
+      env.ANX_UI_CSP_MANIFEST_SRC_EXTRA,
     ),
     "frame-ancestors": ["'none'"],
     "base-uri": ["'self'"],
@@ -257,7 +257,7 @@ export async function handle({ event, resolve }) {
         status: target.status,
         headers: {
           "content-type": "application/json",
-          "X-OAR-UI-Version": CURRENT_VERSION,
+          "X-ANX-UI-Version": CURRENT_VERSION,
         },
       });
     }
@@ -268,7 +268,7 @@ export async function handle({ event, resolve }) {
         target.coreBaseUrl,
         target.workspace.slug,
       );
-      response.headers.set("X-OAR-UI-Version", CURRENT_VERSION);
+      response.headers.set("X-ANX-UI-Version", CURRENT_VERSION);
       return response;
     }
 
@@ -277,21 +277,21 @@ export async function handle({ event, resolve }) {
         error: {
           code: "core_not_configured",
           message:
-            "Workspace is configured but coreBaseUrl is missing. Set OAR_CORE_BASE_URL or add coreBaseUrl to OAR_WORKSPACES for this workspace.",
+            "Workspace is configured but coreBaseUrl is missing. Set ANX_CORE_BASE_URL or add coreBaseUrl to ANX_WORKSPACES for this workspace.",
         },
       }),
       {
         status: 503,
         headers: {
           "content-type": "application/json",
-          "X-OAR-UI-Version": CURRENT_VERSION,
+          "X-ANX-UI-Version": CURRENT_VERSION,
         },
       },
     );
   }
 
   const response = await resolve(event);
-  response.headers.set("X-OAR-UI-Version", CURRENT_VERSION);
+  response.headers.set("X-ANX-UI-Version", CURRENT_VERSION);
 
   if (documentNavigation) {
     response.headers.set("Content-Security-Policy", buildCSPHeader());

@@ -203,7 +203,7 @@ require_cmd go
 require_cmd node
 require_cmd pnpm
 
-CORE_PORT="$(resolve_port "${REQUESTED_CORE_PORT}" "oar-core")"
+CORE_PORT="$(resolve_port "${REQUESTED_CORE_PORT}" "anx-core")"
 UI_PORT="$(resolve_port "${REQUESTED_UI_PORT}" "web-ui")"
 CORE_BASE_URL="http://${CORE_HOST}:${CORE_PORT}"
 UI_BASE_URL="http://${UI_HOST}:${UI_PORT}"
@@ -211,18 +211,17 @@ UI_BASE_URL="http://${UI_HOST}:${UI_PORT}"
 # Build CLI binary once for deterministic smoke steps.
 (
   cd "$ROOT_DIR/cli"
-  go build -o "$CLI_BIN" ./cmd/oar
-)
+  go build -o "$CLI_BIN" ./cmd/anx )
 
 EXPECTED_VERSION="$("${ROOT_DIR}/scripts/read-version.sh")"
 
 # Start core.
 (
   cd "$ROOT_DIR/core"
-  OAR_BOOTSTRAP_TOKEN="$BOOTSTRAP_TOKEN" go run ./cmd/oar-core \
+  ANX_BOOTSTRAP_TOKEN="$BOOTSTRAP_TOKEN" go run ./cmd/anx-core \
     --listen-addr "${CORE_HOST}:${CORE_PORT}" \
     --workspace-root "$TMP_DIR/workspace" \
-    --schema-path "$ROOT_DIR/contracts/oar-schema.yaml" \
+    --schema-path "$ROOT_DIR/contracts/anx-schema.yaml" \
     >"$CORE_LOG" 2>&1
 ) &
 CORE_PID=$!
@@ -236,13 +235,13 @@ fi
 # Start web-ui against core and verify startup handshake route.
 (
   cd "$ROOT_DIR"
-  OAR_WORKSPACES="[{\"slug\":\"${UI_WORKSPACE_SLUG}\",\"label\":\"${UI_WORKSPACE_SLUG}\",\"coreBaseUrl\":\"${CORE_BASE_URL}\"}]" \
-  OAR_DEFAULT_WORKSPACE="$UI_WORKSPACE_SLUG" \
+  ANX_WORKSPACES="[{\"slug\":\"${UI_WORKSPACE_SLUG}\",\"label\":\"${UI_WORKSPACE_SLUG}\",\"coreBaseUrl\":\"${CORE_BASE_URL}\"}]" \
+  ANX_DEFAULT_WORKSPACE="$UI_WORKSPACE_SLUG" \
   pnpm -C web-ui exec vite dev --host "$UI_HOST" --port "$UI_PORT" >"$UI_LOG" 2>&1
 ) &
 UI_PID=$!
 
-if ! wait_for_url "$UI_BASE_URL/meta/handshake" 180 0.2 -H "x-oar-workspace-slug: ${UI_WORKSPACE_SLUG}"; then
+if ! wait_for_url "$UI_BASE_URL/meta/handshake" 180 0.2 -H "x-anx-workspace-slug: ${UI_WORKSPACE_SLUG}"; then
   echo "web-ui did not become ready on /meta/handshake" >&2
   cat "$UI_LOG" >&2 || true
   exit 1
@@ -294,7 +293,7 @@ run_cli_json "$TMP_DIR/register.json" auth register --username "$USERNAME" --boo
 run_cli_json "$TMP_DIR/whoami.json" auth whoami
 
 # Explicit refresh token grant (API fallback) to exercise token lifecycle endpoint.
-PROFILE_PATH="$HOME_DIR/.config/oar/profiles/${AGENT_NAME}.json"
+PROFILE_PATH="$HOME_DIR/.config/anx/profiles/${AGENT_NAME}.json"
 REFRESH_TOKEN="$(node -e 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(String(p.refresh_token||""));' "$PROFILE_PATH")"
 if [[ -z "$REFRESH_TOKEN" ]]; then
   echo "missing refresh token in profile: $PROFILE_PATH" >&2
@@ -507,7 +506,7 @@ assert_contains "$TMP_DIR/board-workspace.json" "\"board_id\"[[:space:]]*:[[:spa
 assert_contains "$TMP_DIR/board-workspace.json" '"topic:topic-smoke-board-b"'
 assert_contains "$TMP_DIR/board-workspace.json" "\"column_key\"[[:space:]]*:[[:space:]]*\"review\""
 
-curl -fsS -H "x-oar-workspace-slug: ${UI_WORKSPACE_SLUG}" -H "Authorization: Bearer $ACCESS_TOKEN" "$UI_BASE_URL/boards/${BOARD_ID}/workspace" >"$TMP_DIR/ui-board-workspace.json"
+curl -fsS -H "x-anx-workspace-slug: ${UI_WORKSPACE_SLUG}" -H "Authorization: Bearer $ACCESS_TOKEN" "$UI_BASE_URL/boards/${BOARD_ID}/workspace" >"$TMP_DIR/ui-board-workspace.json"
 assert_contains "$TMP_DIR/ui-board-workspace.json" "\"board_id\"[[:space:]]*:[[:space:]]*\"$BOARD_ID\""
 
 # Refresh board concurrency token (cards.move may not echo `board` in the CLI envelope).
@@ -587,7 +586,7 @@ printf '{"event":{"type":"message_posted","thread_id":"%s","summary":"smoke stre
   | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" events create >"$TMP_DIR/event-create.json"
 
 # Basic UI compatibility check after typed flow.
-curl -fsS -H "x-oar-workspace-slug: ${UI_WORKSPACE_SLUG}" "$UI_BASE_URL/meta/handshake" >"$TMP_DIR/ui-handshake.json"
+curl -fsS -H "x-anx-workspace-slug: ${UI_WORKSPACE_SLUG}" "$UI_BASE_URL/meta/handshake" >"$TMP_DIR/ui-handshake.json"
 assert_contains "$TMP_DIR/ui-handshake.json" '"schema_version"'
 
 cat >"$TMP_DIR/summary.txt" <<SUMMARY

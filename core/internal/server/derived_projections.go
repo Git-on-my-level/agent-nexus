@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"organization-autorunner-core/internal/primitives"
+	"agent-nexus-core/internal/primitives"
 )
 
 const derivedProjectionMaxAge = time.Minute

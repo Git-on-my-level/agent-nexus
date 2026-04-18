@@ -48,7 +48,7 @@ type RegisterPasskeyAgentInput struct {
 	UserHandle  []byte
 	Credential  *webauthn.Credential
 	// ExistingActorID, when set, links the new passkey agent to a pre-seeded actor row
-	// when the explicit local passkey bypass capability and OAR_DEV_REGISTER_LINKED_ACTORS
+	// when the explicit local passkey bypass capability and ANX_DEV_REGISTER_LINKED_ACTORS
 	// are both enabled for this core instance.
 	ExistingActorID string
 }

@@ -128,16 +128,16 @@ seed_workspace_fixture() {
 
   instance_root="$(dirname "$workspace_root")"
   env_file="${instance_root}/config/env.production"
-  saved_blob_backend="${OAR_BLOB_BACKEND-__unset__}"
-  saved_blob_root="${OAR_BLOB_ROOT-__unset__}"
-  saved_blob_bucket="${OAR_BLOB_S3_BUCKET-__unset__}"
-  saved_blob_prefix="${OAR_BLOB_S3_PREFIX-__unset__}"
-  saved_blob_region="${OAR_BLOB_S3_REGION-__unset__}"
-  saved_blob_endpoint="${OAR_BLOB_S3_ENDPOINT-__unset__}"
-  saved_blob_access_key_id="${OAR_BLOB_S3_ACCESS_KEY_ID-__unset__}"
-  saved_blob_secret_access_key="${OAR_BLOB_S3_SECRET_ACCESS_KEY-__unset__}"
-  saved_blob_session_token="${OAR_BLOB_S3_SESSION_TOKEN-__unset__}"
-  saved_blob_force_path_style="${OAR_BLOB_S3_FORCE_PATH_STYLE-__unset__}"
+  saved_blob_backend="${ANX_BLOB_BACKEND-__unset__}"
+  saved_blob_root="${ANX_BLOB_ROOT-__unset__}"
+  saved_blob_bucket="${ANX_BLOB_S3_BUCKET-__unset__}"
+  saved_blob_prefix="${ANX_BLOB_S3_PREFIX-__unset__}"
+  saved_blob_region="${ANX_BLOB_S3_REGION-__unset__}"
+  saved_blob_endpoint="${ANX_BLOB_S3_ENDPOINT-__unset__}"
+  saved_blob_access_key_id="${ANX_BLOB_S3_ACCESS_KEY_ID-__unset__}"
+  saved_blob_secret_access_key="${ANX_BLOB_S3_SECRET_ACCESS_KEY-__unset__}"
+  saved_blob_session_token="${ANX_BLOB_S3_SESSION_TOKEN-__unset__}"
+  saved_blob_force_path_style="${ANX_BLOB_S3_FORCE_PATH_STYLE-__unset__}"
   load_dotenv_file "$env_file"
   start_core_server \
     server_pid \
@@ -159,40 +159,40 @@ seed_workspace_fixture() {
   curl -fsS \
     -H 'content-type: application/json' \
     -X POST \
-    -d '{"actor_id":"oar-core","thread":{"id":"thread-hosted-ops","title":"Hosted ops restore drill","type":"incident","status":"active","priority":"p2","tags":["hosted","ops"],"cadence":"daily","current_summary":"Seed data for hosted restore verification","next_actions":["validate backup restore"],"key_artifacts":[],"provenance":{"sources":["actor_statement:hosted-ops-test"]}}}' \
+    -d '{"actor_id":"anx-core","thread":{"id":"thread-hosted-ops","title":"Hosted ops restore drill","type":"incident","status":"active","priority":"p2","tags":["hosted","ops"],"cadence":"daily","current_summary":"Seed data for hosted restore verification","next_actions":["validate backup restore"],"key_artifacts":[],"provenance":{"sources":["actor_statement:hosted-ops-test"]}}}' \
     "http://127.0.0.1:${listen_port}/threads" >/dev/null
 
   curl -fsS \
     -H 'content-type: application/json' \
     -X POST \
-    -d '{"actor_id":"oar-core","artifact":{"kind":"evidence","thread_id":"thread-hosted-ops","refs":["thread:thread-hosted-ops","url:https://example.test/ops-bundle"]},"content":"ops-bundle-blob","content_type":"text"}' \
+    -d '{"actor_id":"anx-core","artifact":{"kind":"evidence","thread_id":"thread-hosted-ops","refs":["thread:thread-hosted-ops","url:https://example.test/ops-bundle"]},"content":"ops-bundle-blob","content_type":"text"}' \
     "http://127.0.0.1:${listen_port}/artifacts" >/dev/null
 
   curl -fsS \
     -H 'content-type: application/json' \
     -X POST \
-    -d '{"actor_id":"oar-core","document":{"document_id":"ops-runbook","thread_id":"thread-hosted-ops","title":"Hosted Ops Runbook"},"refs":["thread:thread-hosted-ops"],"content":"restore drill document body","content_type":"text"}' \
+    -d '{"actor_id":"anx-core","document":{"document_id":"ops-runbook","thread_id":"thread-hosted-ops","title":"Hosted Ops Runbook"},"refs":["thread:thread-hosted-ops"],"content":"restore drill document body","content_type":"text"}' \
     "http://127.0.0.1:${listen_port}/docs" >/dev/null
 
   stop_background_process "$server_pid"
   trap - RETURN
   for env_name in \
-    OAR_BLOB_BACKEND OAR_BLOB_ROOT OAR_BLOB_S3_BUCKET OAR_BLOB_S3_PREFIX OAR_BLOB_S3_REGION \
-    OAR_BLOB_S3_ENDPOINT OAR_BLOB_S3_ACCESS_KEY_ID OAR_BLOB_S3_SECRET_ACCESS_KEY \
-    OAR_BLOB_S3_SESSION_TOKEN OAR_BLOB_S3_FORCE_PATH_STYLE
+    ANX_BLOB_BACKEND ANX_BLOB_ROOT ANX_BLOB_S3_BUCKET ANX_BLOB_S3_PREFIX ANX_BLOB_S3_REGION \
+    ANX_BLOB_S3_ENDPOINT ANX_BLOB_S3_ACCESS_KEY_ID ANX_BLOB_S3_SECRET_ACCESS_KEY \
+    ANX_BLOB_S3_SESSION_TOKEN ANX_BLOB_S3_FORCE_PATH_STYLE
   do
     unset "$env_name"
   done
-  [[ "$saved_blob_backend" == "__unset__" ]] || export OAR_BLOB_BACKEND="$saved_blob_backend"
-  [[ "$saved_blob_root" == "__unset__" ]] || export OAR_BLOB_ROOT="$saved_blob_root"
-  [[ "$saved_blob_bucket" == "__unset__" ]] || export OAR_BLOB_S3_BUCKET="$saved_blob_bucket"
-  [[ "$saved_blob_prefix" == "__unset__" ]] || export OAR_BLOB_S3_PREFIX="$saved_blob_prefix"
-  [[ "$saved_blob_region" == "__unset__" ]] || export OAR_BLOB_S3_REGION="$saved_blob_region"
-  [[ "$saved_blob_endpoint" == "__unset__" ]] || export OAR_BLOB_S3_ENDPOINT="$saved_blob_endpoint"
-  [[ "$saved_blob_access_key_id" == "__unset__" ]] || export OAR_BLOB_S3_ACCESS_KEY_ID="$saved_blob_access_key_id"
-  [[ "$saved_blob_secret_access_key" == "__unset__" ]] || export OAR_BLOB_S3_SECRET_ACCESS_KEY="$saved_blob_secret_access_key"
-  [[ "$saved_blob_session_token" == "__unset__" ]] || export OAR_BLOB_S3_SESSION_TOKEN="$saved_blob_session_token"
-  [[ "$saved_blob_force_path_style" == "__unset__" ]] || export OAR_BLOB_S3_FORCE_PATH_STYLE="$saved_blob_force_path_style"
+  [[ "$saved_blob_backend" == "__unset__" ]] || export ANX_BLOB_BACKEND="$saved_blob_backend"
+  [[ "$saved_blob_root" == "__unset__" ]] || export ANX_BLOB_ROOT="$saved_blob_root"
+  [[ "$saved_blob_bucket" == "__unset__" ]] || export ANX_BLOB_S3_BUCKET="$saved_blob_bucket"
+  [[ "$saved_blob_prefix" == "__unset__" ]] || export ANX_BLOB_S3_PREFIX="$saved_blob_prefix"
+  [[ "$saved_blob_region" == "__unset__" ]] || export ANX_BLOB_S3_REGION="$saved_blob_region"
+  [[ "$saved_blob_endpoint" == "__unset__" ]] || export ANX_BLOB_S3_ENDPOINT="$saved_blob_endpoint"
+  [[ "$saved_blob_access_key_id" == "__unset__" ]] || export ANX_BLOB_S3_ACCESS_KEY_ID="$saved_blob_access_key_id"
+  [[ "$saved_blob_secret_access_key" == "__unset__" ]] || export ANX_BLOB_S3_SECRET_ACCESS_KEY="$saved_blob_secret_access_key"
+  [[ "$saved_blob_session_token" == "__unset__" ]] || export ANX_BLOB_S3_SESSION_TOKEN="$saved_blob_session_token"
+  [[ "$saved_blob_force_path_style" == "__unset__" ]] || export ANX_BLOB_S3_FORCE_PATH_STYLE="$saved_blob_force_path_style"
 }
 
 restore_bundle() {
@@ -216,8 +216,8 @@ instance_local_blob_root() {
   local workspace_root="${instance_root}/workspace"
   local env_file="${instance_root}/config/env.production"
   local blob_backend blob_root
-  blob_backend="$(dotenv_get "$env_file" OAR_BLOB_BACKEND || true)"
-  blob_root="$(dotenv_get "$env_file" OAR_BLOB_ROOT || true)"
+  blob_backend="$(dotenv_get "$env_file" ANX_BLOB_BACKEND || true)"
+  blob_root="$(dotenv_get "$env_file" ANX_BLOB_ROOT || true)"
   [[ -n "$blob_backend" ]] || blob_backend="filesystem"
   blob_effective_local_root "$workspace_root" "$blob_backend" "$blob_root"
 }
@@ -278,8 +278,8 @@ assert_file_contains "$INVALID_ALLOWED_ORIGINS_ERR" "must equal or be a suffix o
 
 seed_workspace_fixture "${INSTANCE_ROOT}/workspace" "$CORE_BIN" "$SCHEMA_PATH" "$SEED_PORT" "${TMP_ROOT}/seed.log"
 
-SOURCE_BOOTSTRAP_TOKEN="$(dotenv_get "${INSTANCE_ROOT}/config/env.production" OAR_BOOTSTRAP_TOKEN || true)"
-SOURCE_ALLOWED_ORIGINS="$(dotenv_get "${INSTANCE_ROOT}/config/env.production" OAR_WEBAUTHN_ALLOWED_ORIGINS || true)"
+SOURCE_BOOTSTRAP_TOKEN="$(dotenv_get "${INSTANCE_ROOT}/config/env.production" ANX_BOOTSTRAP_TOKEN || true)"
+SOURCE_ALLOWED_ORIGINS="$(dotenv_get "${INSTANCE_ROOT}/config/env.production" ANX_WEBAUTHN_ALLOWED_ORIGINS || true)"
 [[ -n "$SOURCE_BOOTSTRAP_TOKEN" ]] || die "expected source bootstrap token to be configured"
 assert_not_equals "$HOSTED_BOOTSTRAP_PLACEHOLDER" "$SOURCE_BOOTSTRAP_TOKEN" "source bootstrap token"
 assert_equals "https://team-alpha.example.test,https://nested.team-alpha.example.test" "$SOURCE_ALLOWED_ORIGINS" "source allowed origins"
@@ -386,12 +386,12 @@ RESTORE_ROOT="$(cd "$RESTORE_ROOT" && pwd -P)"
   --core-bin "$CORE_BIN" \
   --schema-path "$SCHEMA_PATH"
 
-assert_equals "${RESTORE_ROOT}/workspace" "$(dotenv_get "${RESTORE_ROOT}/config/env.production" HOST_OAR_WORKSPACE_ROOT)" "restored workspace root"
-assert_equals "$RESTORE_PUBLIC_ORIGIN" "$(dotenv_get "${RESTORE_ROOT}/config/env.production" OAR_WEB_UI_ORIGIN)" "restored env public origin"
-assert_equals "$RESTORE_PUBLIC_ORIGIN" "$(dotenv_get "${RESTORE_ROOT}/config/env.production" OAR_WEBAUTHN_ORIGIN)" "restored webauthn origin"
-assert_equals "$RESTORE_CORE_INSTANCE_ID" "$(dotenv_get "${RESTORE_ROOT}/config/env.production" OAR_CORE_INSTANCE_ID)" "restored core instance id"
-assert_equals "$HOSTED_BOOTSTRAP_PLACEHOLDER" "$(dotenv_get "${RESTORE_ROOT}/config/env.production" OAR_BOOTSTRAP_TOKEN)" "restored bootstrap token default"
-assert_equals "filesystem" "$(dotenv_get "${RESTORE_ROOT}/config/env.production" OAR_BLOB_BACKEND)" "restored blob backend"
+assert_equals "${RESTORE_ROOT}/workspace" "$(dotenv_get "${RESTORE_ROOT}/config/env.production" HOST_ANX_WORKSPACE_ROOT)" "restored workspace root"
+assert_equals "$RESTORE_PUBLIC_ORIGIN" "$(dotenv_get "${RESTORE_ROOT}/config/env.production" ANX_WEB_UI_ORIGIN)" "restored env public origin"
+assert_equals "$RESTORE_PUBLIC_ORIGIN" "$(dotenv_get "${RESTORE_ROOT}/config/env.production" ANX_WEBAUTHN_ORIGIN)" "restored webauthn origin"
+assert_equals "$RESTORE_CORE_INSTANCE_ID" "$(dotenv_get "${RESTORE_ROOT}/config/env.production" ANX_CORE_INSTANCE_ID)" "restored core instance id"
+assert_equals "$HOSTED_BOOTSTRAP_PLACEHOLDER" "$(dotenv_get "${RESTORE_ROOT}/config/env.production" ANX_BOOTSTRAP_TOKEN)" "restored bootstrap token default"
+assert_equals "filesystem" "$(dotenv_get "${RESTORE_ROOT}/config/env.production" ANX_BLOB_BACKEND)" "restored blob backend"
 assert_equals "$RESTORE_INSTANCE_NAME" "$(dotenv_get "${RESTORE_ROOT}/metadata/instance.env" INSTANCE_NAME)" "restored instance name"
 assert_equals "$RESTORE_ROOT" "$(dotenv_get "${RESTORE_ROOT}/metadata/instance.env" INSTANCE_ROOT)" "restored metadata instance root"
 assert_equals "${RESTORE_ROOT}/workspace" "$(dotenv_get "${RESTORE_ROOT}/metadata/instance.env" WORKSPACE_ROOT)" "restored metadata workspace root"
@@ -404,7 +404,7 @@ assert_equals "placeholder" "$(dotenv_get "${RESTORE_ROOT}/metadata/restore-rece
 assert_equals "disabled" "$(dotenv_get "${RESTORE_ROOT}/metadata/restore-receipt.env" EXPECTED_ACTIVE_BOOTSTRAP_STATE)" "restore receipt expected bootstrap state"
 assert_equals "$(manifest_get "${BACKUP_DIR}/manifest.env" PUBLIC_ORIGIN)" "$(dotenv_get "${RESTORE_ROOT}/metadata/restore-source-manifest.env" PUBLIC_ORIGIN)" "source manifest preserved"
 
-assert_not_equals "$SOURCE_BOOTSTRAP_TOKEN" "$(dotenv_get "${RESTORE_ROOT}/config/env.production" OAR_BOOTSTRAP_TOKEN)" "restored bootstrap token"
+assert_not_equals "$SOURCE_BOOTSTRAP_TOKEN" "$(dotenv_get "${RESTORE_ROOT}/config/env.production" ANX_BOOTSTRAP_TOKEN)" "restored bootstrap token"
 if [[ -n "$(paths_containing_text "$SOURCE_BOOTSTRAP_TOKEN" "$RESTORE_ROOT")" ]]; then
   die "source bootstrap token should not be copied into restored target"
 fi
@@ -459,10 +459,10 @@ RESTORE_WITH_SECRETS_ROOT="$(cd "$RESTORE_WITH_SECRETS_ROOT" && pwd -P)"
   --core-bin "$CORE_BIN" \
   --schema-path "$SCHEMA_PATH"
 
-assert_equals "${RESTORE_WITH_SECRETS_ROOT}/workspace" "$(dotenv_get "${RESTORE_WITH_SECRETS_ROOT}/config/env.production" HOST_OAR_WORKSPACE_ROOT)" "restore with secrets workspace root"
-assert_equals "team-gamma-core" "$(dotenv_get "${RESTORE_WITH_SECRETS_ROOT}/config/env.production" OAR_CORE_INSTANCE_ID)" "restore with secrets instance id"
-assert_equals "$HOSTED_BOOTSTRAP_PLACEHOLDER" "$(dotenv_get "${RESTORE_WITH_SECRETS_ROOT}/config/env.production" OAR_BOOTSTRAP_TOKEN)" "restore with secrets bootstrap token default"
-assert_equals "filesystem" "$(dotenv_get "${RESTORE_WITH_SECRETS_ROOT}/config/env.production" OAR_BLOB_BACKEND)" "restore with secrets blob backend"
+assert_equals "${RESTORE_WITH_SECRETS_ROOT}/workspace" "$(dotenv_get "${RESTORE_WITH_SECRETS_ROOT}/config/env.production" HOST_ANX_WORKSPACE_ROOT)" "restore with secrets workspace root"
+assert_equals "team-gamma-core" "$(dotenv_get "${RESTORE_WITH_SECRETS_ROOT}/config/env.production" ANX_CORE_INSTANCE_ID)" "restore with secrets instance id"
+assert_equals "$HOSTED_BOOTSTRAP_PLACEHOLDER" "$(dotenv_get "${RESTORE_WITH_SECRETS_ROOT}/config/env.production" ANX_BOOTSTRAP_TOKEN)" "restore with secrets bootstrap token default"
+assert_equals "filesystem" "$(dotenv_get "${RESTORE_WITH_SECRETS_ROOT}/config/env.production" ANX_BLOB_BACKEND)" "restore with secrets blob backend"
 
 "${SCRIPT_DIR}/provision-workspace.sh" \
   --instance team-object \
@@ -504,8 +504,8 @@ OBJECT_RESTORE_ROOT="$(cd "$OBJECT_RESTORE_ROOT" && pwd -P)"
   --core-bin "$CORE_BIN" \
   --schema-path "$SCHEMA_PATH"
 
-assert_equals "object" "$(dotenv_get "${OBJECT_RESTORE_ROOT}/config/env.production" OAR_BLOB_BACKEND)" "object restore env blob backend"
-assert_equals "${OBJECT_RESTORE_ROOT}/blob-store" "$(dotenv_get "${OBJECT_RESTORE_ROOT}/config/env.production" OAR_BLOB_ROOT)" "object restore env blob root"
+assert_equals "object" "$(dotenv_get "${OBJECT_RESTORE_ROOT}/config/env.production" ANX_BLOB_BACKEND)" "object restore env blob backend"
+assert_equals "${OBJECT_RESTORE_ROOT}/blob-store" "$(dotenv_get "${OBJECT_RESTORE_ROOT}/config/env.production" ANX_BLOB_ROOT)" "object restore env blob root"
 assert_equals "object" "$(dotenv_get "${OBJECT_RESTORE_ROOT}/metadata/instance.env" BLOB_BACKEND)" "object restore metadata blob backend"
 assert_equals "${OBJECT_RESTORE_ROOT}/blob-store" "$(dotenv_get "${OBJECT_RESTORE_ROOT}/metadata/instance.env" BLOB_ROOT)" "object restore metadata blob root"
 assert_equals "copied-local-blob-store" "$(dotenv_get "${OBJECT_RESTORE_ROOT}/metadata/restore-receipt.env" TARGET_BLOB_RESTORE_ACTION)" "object restore receipt blob action"
@@ -562,12 +562,12 @@ assert_equals "true" "$(manifest_get "${S3_BACKUP_DIR}/manifest.env" BLOB_S3_FOR
   --core-instance-id "team-s3-restore-core"
 S3_RESTORE_ROOT="$(cd "$S3_RESTORE_ROOT" && pwd -P)"
 
-assert_equals "s3" "$(dotenv_get "${S3_RESTORE_ROOT}/config/env.production" OAR_BLOB_BACKEND)" "s3 restore env blob backend"
-assert_equals "oar-test-blobs" "$(dotenv_get "${S3_RESTORE_ROOT}/config/env.production" OAR_BLOB_S3_BUCKET)" "s3 restore env bucket"
-assert_equals "workspaces/team-s3/" "$(dotenv_get "${S3_RESTORE_ROOT}/config/env.production" OAR_BLOB_S3_PREFIX)" "s3 restore env prefix"
-assert_equals "auto" "$(dotenv_get "${S3_RESTORE_ROOT}/config/env.production" OAR_BLOB_S3_REGION)" "s3 restore env region"
-assert_equals "https://r2.example.test" "$(dotenv_get "${S3_RESTORE_ROOT}/config/env.production" OAR_BLOB_S3_ENDPOINT)" "s3 restore env endpoint"
-assert_equals "true" "$(dotenv_get "${S3_RESTORE_ROOT}/config/env.production" OAR_BLOB_S3_FORCE_PATH_STYLE)" "s3 restore env force path style"
+assert_equals "s3" "$(dotenv_get "${S3_RESTORE_ROOT}/config/env.production" ANX_BLOB_BACKEND)" "s3 restore env blob backend"
+assert_equals "oar-test-blobs" "$(dotenv_get "${S3_RESTORE_ROOT}/config/env.production" ANX_BLOB_S3_BUCKET)" "s3 restore env bucket"
+assert_equals "workspaces/team-s3/" "$(dotenv_get "${S3_RESTORE_ROOT}/config/env.production" ANX_BLOB_S3_PREFIX)" "s3 restore env prefix"
+assert_equals "auto" "$(dotenv_get "${S3_RESTORE_ROOT}/config/env.production" ANX_BLOB_S3_REGION)" "s3 restore env region"
+assert_equals "https://r2.example.test" "$(dotenv_get "${S3_RESTORE_ROOT}/config/env.production" ANX_BLOB_S3_ENDPOINT)" "s3 restore env endpoint"
+assert_equals "true" "$(dotenv_get "${S3_RESTORE_ROOT}/config/env.production" ANX_BLOB_S3_FORCE_PATH_STYLE)" "s3 restore env force path style"
 assert_equals "s3" "$(dotenv_get "${S3_RESTORE_ROOT}/metadata/instance.env" BLOB_BACKEND)" "s3 restore metadata blob backend"
 assert_equals "reference-remote-blob-store" "$(dotenv_get "${S3_RESTORE_ROOT}/metadata/restore-receipt.env" TARGET_BLOB_RESTORE_ACTION)" "s3 restore receipt blob action"
 assert_equals "s3://oar-test-blobs/workspaces/team-s3/" "$(dotenv_get "${S3_RESTORE_ROOT}/metadata/restore-receipt.env" TARGET_BLOB_EFFECTIVE_LOCATION)" "s3 restore receipt blob location"

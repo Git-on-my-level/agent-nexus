@@ -4,11 +4,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-CORE_BASE_URL="${OAR_CORE_BASE_URL:-http://127.0.0.1:8000}"
-WORKSPACE_SLUG="${OAR_E2E_WORKSPACE:-${OAR_E2E_PROJECT:-${OAR_DEFAULT_WORKSPACE:-${OAR_DEFAULT_PROJECT:-local}}}}"
-HEALTHCHECK_TIMEOUT_SECONDS="${OAR_CORE_HEALTHCHECK_TIMEOUT_SECONDS:-5}"
+CORE_BASE_URL="${ANX_CORE_BASE_URL:-http://127.0.0.1:8000}"
+WORKSPACE_SLUG="${ANX_E2E_WORKSPACE:-${ANX_E2E_PROJECT:-${ANX_DEFAULT_WORKSPACE:-${ANX_DEFAULT_PROJECT:-local}}}}"
+HEALTHCHECK_TIMEOUT_SECONDS="${ANX_CORE_HEALTHCHECK_TIMEOUT_SECONDS:-5}"
 
-WORKSPACE_CATALOG="${OAR_WORKSPACES:-${OAR_PROJECTS:-}}"
+WORKSPACE_CATALOG="${ANX_WORKSPACES:-${ANX_PROJECTS:-}}"
 
 if [[ -n "${WORKSPACE_CATALOG:-}" ]]; then
   if ! CORE_BASE_URL="$(
@@ -45,26 +45,26 @@ sys.exit(1)
 PY
   )"; then
     cat >&2 <<EOF
-ERROR: Could not resolve workspace '${WORKSPACE_SLUG}' from OAR_WORKSPACES/OAR_PROJECTS.
-Set OAR_WORKSPACES to include that slug, or omit the workspace catalog and set OAR_CORE_BASE_URL.
+ERROR: Could not resolve workspace '${WORKSPACE_SLUG}' from ANX_WORKSPACES/ANX_PROJECTS.
+Set ANX_WORKSPACES to include that slug, or omit the workspace catalog and set ANX_CORE_BASE_URL.
 EOF
     exit 1
   fi
 else
   CORE_BASE_URL="${CORE_BASE_URL%/}"
-  export OAR_WORKSPACES="[{\"slug\":\"${WORKSPACE_SLUG}\",\"label\":\"${WORKSPACE_SLUG}\",\"coreBaseUrl\":\"${CORE_BASE_URL}\"}]"
+  export ANX_WORKSPACES="[{\"slug\":\"${WORKSPACE_SLUG}\",\"label\":\"${WORKSPACE_SLUG}\",\"coreBaseUrl\":\"${CORE_BASE_URL}\"}]"
 fi
 
 CORE_BASE_URL="${CORE_BASE_URL%/}"
 VERSION_URL="${CORE_BASE_URL}/version"
 HANDSHAKE_URL="${CORE_BASE_URL}/meta/handshake"
-export OAR_DEFAULT_WORKSPACE="${WORKSPACE_SLUG}"
-export OAR_DEFAULT_PROJECT="${WORKSPACE_SLUG}"
-if [[ -n "${OAR_WORKSPACES:-}" ]]; then
-  export OAR_PROJECTS="${OAR_PROJECTS:-${OAR_WORKSPACES}}"
+export ANX_DEFAULT_WORKSPACE="${WORKSPACE_SLUG}"
+export ANX_DEFAULT_PROJECT="${WORKSPACE_SLUG}"
+if [[ -n "${ANX_WORKSPACES:-}" ]]; then
+  export ANX_PROJECTS="${ANX_PROJECTS:-${ANX_WORKSPACES}}"
 fi
 
-echo "Checking oar-core availability at ${HANDSHAKE_URL} ..."
+echo "Checking anx-core availability at ${HANDSHAKE_URL} ..."
 if ! version_payload="$(
   curl \
     --silent \
@@ -83,7 +83,7 @@ if ! version_payload="$(
       "${VERSION_URL}"
   )"; then
   cat >&2 <<EOF
-ERROR: Unable to reach oar-core at ${CORE_BASE_URL}.
+ERROR: Unable to reach anx-core at ${CORE_BASE_URL}.
 Start backend first, then rerun this command.
 
 Backend terminal:
@@ -92,8 +92,8 @@ Backend terminal:
 
 UI terminal:
   cd ../web-ui
-  OAR_WORKSPACES='[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"}]' \
-  OAR_DEFAULT_WORKSPACE=local \
+  ANX_WORKSPACES='[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"}]' \
+  ANX_DEFAULT_WORKSPACE=local \
   ./scripts/e2e-with-core
 EOF
   exit 1
@@ -109,12 +109,12 @@ EOF
   exit 1
 fi
 
-echo "oar-core /version response: ${version_payload}"
+echo "anx-core /version response: ${version_payload}"
 
 cd "${REPO_ROOT}"
 pnpm install --frozen-lockfile
 pnpm exec playwright install chromium
 
-export OAR_CORE_BASE_URL="${CORE_BASE_URL}"
+export ANX_CORE_BASE_URL="${CORE_BASE_URL}"
 
 exec pnpm exec playwright test --config playwright.integration.config.js "$@"

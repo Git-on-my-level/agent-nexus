@@ -39,7 +39,7 @@ type Profile struct {
 }
 
 func RootDir(homeDir string) string {
-	return filepath.Join(homeDir, ".config", "oar")
+	return filepath.Join(homeDir, ".config", "anx")
 }
 
 func ProfilesDir(homeDir string) string {
@@ -123,7 +123,7 @@ func LoadDefaultAgent(homeDir string) (string, bool, error) {
 // ErrProfileNotFound means no profile JSON exists for the requested agent name.
 var ErrProfileNotFound = errors.New("profile not found")
 
-// ErrPersistDefaultMarker wraps failures writing ~/.config/oar/default-profile.
+// ErrPersistDefaultMarker wraps failures writing ~/.config/anx/default-profile.
 var ErrPersistDefaultMarker = errors.New("persist default profile marker")
 
 // SetActiveAgent writes the default profile marker after verifying the profile file exists.

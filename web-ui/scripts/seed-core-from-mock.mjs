@@ -15,23 +15,23 @@ import {
 import { getDevSeedScenarioConfig } from "./dev-seed-scenarios.mjs";
 
 const coreBaseUrl = normalizeBaseUrl(
-  process.env.OAR_CORE_BASE_URL ?? "http://127.0.0.1:8000",
+  process.env.ANX_CORE_BASE_URL ?? "http://127.0.0.1:8000",
 );
-const forceSeed = process.env.OAR_FORCE_SEED === "1";
-const skipIfPresent = process.env.OAR_SEED_SKIP_IF_PRESENT !== "0";
-const waitTimeoutMs = Number(process.env.OAR_CORE_WAIT_TIMEOUT_MS ?? 20000);
+const forceSeed = process.env.ANX_FORCE_SEED === "1";
+const skipIfPresent = process.env.ANX_SEED_SKIP_IF_PRESENT !== "0";
+const waitTimeoutMs = Number(process.env.ANX_CORE_WAIT_TIMEOUT_MS ?? 20000);
 const scenarioName = String(
-  process.env.OAR_DEV_SEED_SCENARIO ?? "default",
+  process.env.ANX_DEV_SEED_SCENARIO ?? "default",
 ).trim();
 const workspaceID =
-  String(process.env.OAR_WORKSPACE_ID ?? "ws_main").trim() || "ws_main";
+  String(process.env.ANX_WORKSPACE_ID ?? "ws_main").trim() || "ws_main";
 const repoRoot = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
   "..",
 );
 const cliDogfoodResourcesDir =
-  String(process.env.OAR_CLI_DOGFOOD_RESOURCES_DIR ?? "").trim() ||
+  String(process.env.ANX_CLI_DOGFOOD_RESOURCES_DIR ?? "").trim() ||
   path.join(repoRoot, "cli", "dogfood-resources");
 const devIdentityBundlePath = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -43,7 +43,7 @@ const devIdentityBundlePath = path.join(
 if (!coreBaseUrl) {
   failWithPrefix(
     "seed-core-from-mock failed",
-    "OAR_CORE_BASE_URL must be set or defaultable.",
+    "ANX_CORE_BASE_URL must be set or defaultable.",
   );
 }
 
@@ -112,7 +112,7 @@ async function main() {
     await seedArtifacts();
     // Register seeded agent principals before posting mention-heavy events so
     // @handle routing resolves against durable auth principals during seeding.
-    if (process.env.OAR_DEV_SEED_IDENTITIES === "1") {
+    if (process.env.ANX_DEV_SEED_IDENTITIES === "1") {
       await seedDevFixtureIdentities();
     }
     const eventStats = await seedEvents();
@@ -121,7 +121,7 @@ async function main() {
     console.log(
       `Seed complete. Events posted=${eventStats.posted}, events skipped=${eventStats.skipped}.`,
     );
-  } else if (process.env.OAR_DEV_SEED_IDENTITIES === "1") {
+  } else if (process.env.ANX_DEV_SEED_IDENTITIES === "1") {
     await seedDevFixtureIdentities();
   }
 }
@@ -161,7 +161,7 @@ async function detectSeededState() {
   const needsCardCheck = expectedSeedCards().length > 0;
   const needsEventCheck = expectedSeedEventIDs().length > 0;
   const needsIdentityCheck =
-    process.env.OAR_DEV_SEED_IDENTITIES === "1" && seedPersonas.length > 0;
+    process.env.ANX_DEV_SEED_IDENTITIES === "1" && seedPersonas.length > 0;
 
   if (
     !needsDocumentRevisionCheck &&
@@ -1288,10 +1288,10 @@ async function requestAuthJson(
 }
 
 async function seedDevFixtureIdentities() {
-  const bootstrapToken = String(process.env.OAR_BOOTSTRAP_TOKEN ?? "").trim();
+  const bootstrapToken = String(process.env.ANX_BOOTSTRAP_TOKEN ?? "").trim();
   if (!bootstrapToken) {
     console.warn(
-      "OAR_DEV_SEED_IDENTITIES=1 but OAR_BOOTSTRAP_TOKEN is empty; skipping dev identity bundle.",
+      "ANX_DEV_SEED_IDENTITIES=1 but ANX_BOOTSTRAP_TOKEN is empty; skipping dev identity bundle.",
     );
     return;
   }
@@ -1457,7 +1457,7 @@ async function seedDevFixtureIdentities() {
       "",
       "```bash",
       "cd adapters/agent-bridge",
-      "oar-agent-bridge auth register --config examples/deterministic.toml --invite-token <token> --apply-registration",
+      "anx-agent-bridge auth register --config examples/deterministic.toml --invite-token <token> --apply-registration",
       "```",
       "",
       "Align `agent.handle` in `examples/deterministic.toml` with a seeded persona id",

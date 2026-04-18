@@ -1,0 +1,5524 @@
+openapi: 3.1.0
+info:
+  title: Organization Autorunner HTTP API
+  version: 0.3.0
+  description: |
+    Canonical workspace HTTP contract for Organization Autorunner.
+
+    Topics and cards are the primary durable resources. Threads remain backing
+    infrastructure surfaced through read-only inspection and workspace views.
+servers:
+  - url: http://127.0.0.1:8000
+x-anx-extension-vocabulary:
+  x-anx-command-id: Stable command identifier.
+  x-anx-cli-path: CLI path segments.
+  x-anx-why: Why the command exists.
+  x-anx-input-mode: none | json-body | raw-stream | file-and-body
+  x-anx-streaming: Streaming characteristics for the operation.
+  x-anx-output-envelope: Output shape and stability notes.
+  x-anx-error-codes: Stable semantic error codes.
+  x-anx-concepts: Concept tags for generated docs and help.
+  x-anx-stability: experimental | beta | stable
+  x-anx-surface: canonical | projection | diagnostic | utility
+  x-anx-agent-notes: Idempotency, retries, and protocol caveats.
+paths:
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Liveness check
+      tags: [meta]
+      x-anx-surface: utility
+      x-anx-command-id: meta.health
+      x-anx-cli-path: meta health
+      x-anx-why: Probe whether the core process is alive.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ ok: true }`."
+      x-anx-error-codes: []
+      x-anx-concepts: [health]
+      x-anx-stability: stable
+      responses:
+        '200':
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /readyz:
+    get:
+      operationId: readinessCheck
+      summary: Readiness check
+      tags: [meta]
+      x-anx-surface: utility
+      x-anx-command-id: meta.readyz
+      x-anx-cli-path: meta readyz
+      x-anx-why: Verify storage and projection subsystems are ready for traffic.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ ok: true }` when the workspace is ready."
+      x-anx-error-codes: [storage_unavailable]
+      x-anx-concepts: [health, readiness]
+      x-anx-stability: stable
+      responses:
+        '200':
+          description: Service is ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /version:
+    get:
+      operationId: getVersion
+      summary: Get contract version
+      tags: [meta]
+      x-anx-surface: utility
+      x-anx-command-id: meta.version
+      x-anx-cli-path: meta version
+      x-anx-why: Check compatibility between clients and core before writes.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ schema_version, command_registry_digest }`."
+      x-anx-error-codes: []
+      x-anx-concepts: [compatibility]
+      x-anx-stability: stable
+      responses:
+        '200':
+          description: Version payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionResponse'
+
+  /topics:
+    get:
+      operationId: listTopics
+      summary: List topics
+      tags: [topics]
+      x-anx-surface: canonical
+      x-anx-command-id: topics.list
+      x-anx-cli-path: topics list
+      x-anx-why: Scan the durable topic inventory.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ topics }`."
+      x-anx-error-codes: [auth_required, invalid_token]
+      x-anx-concepts: [topics]
+      x-anx-stability: beta
+      parameters:
+        - name: type
+          in: query
+          required: false
+          schema: { type: string }
+          description: Filter by topic type enum.
+        - name: status
+          in: query
+          required: false
+          schema: { type: string }
+          description: Filter by topic status enum.
+        - name: q
+          in: query
+          required: false
+          schema: { type: string }
+          description: Search topics by id or title substring.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+          description: Page size; omit to return the full matching set.
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string }
+          description: Opaque pagination cursor from a previous list response.
+        - name: include_archived
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+        - name: archived_only
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+        - name: include_trashed
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+        - name: trashed_only
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Topic list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicsResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+    post:
+      operationId: createTopic
+      summary: Create topic
+      tags: [topics]
+      x-anx-surface: canonical
+      x-anx-command-id: topics.create
+      x-anx-cli-path: topics create
+      x-anx-why: Create a first-class durable topic before attaching cards, docs, or packets.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ topic }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token]
+      x-anx-concepts: [topics, write]
+      x-anx-stability: beta
+      x-anx-agent-notes: "Replay-safe when the same request key and body are reused."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTopicRequest'
+      responses:
+        '201':
+          description: Topic created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /topics/{topic_id}:
+    get:
+      operationId: getTopic
+      summary: Get topic
+      tags: [topics]
+      x-anx-surface: canonical
+      x-anx-command-id: topics.get
+      x-anx-cli-path: topics get
+      x-anx-why: Resolve one topic and its canonical durable fields.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ topic }`."
+      x-anx-error-codes: [auth_required, invalid_token, not_found]
+      x-anx-concepts: [topics]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/TopicID'
+      responses:
+        '200':
+          description: Topic payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+    patch:
+      operationId: patchTopic
+      summary: Patch topic
+      tags: [topics]
+      x-anx-surface: canonical
+      x-anx-command-id: topics.patch
+      x-anx-cli-path: topics patch
+      x-anx-why: Update topic state with provenance and optimistic concurrency.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ topic }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-concepts: [topics, write, concurrency]
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchTopicRequest'
+      parameters:
+        - $ref: '#/components/parameters/TopicID'
+      responses:
+        '200':
+          description: Topic patched
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /topics/{topic_id}/timeline:
+    get:
+      operationId: getTopicTimeline
+      summary: Get topic timeline
+      tags: [topics]
+      x-anx-surface: projection
+      x-anx-command-id: topics.timeline
+      x-anx-cli-path: topics timeline
+      x-anx-why: Load chronological evidence and related resources for one topic.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ topic, events, artifacts, cards, documents, threads }`."
+      x-anx-error-codes: [auth_required, invalid_token, not_found]
+      x-anx-concepts: [topics, timeline]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/TopicID'
+      responses:
+        '200':
+          description: Topic timeline payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicTimelineResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /topics/{topic_id}/workspace:
+    get:
+      operationId: getTopicWorkspace
+      summary: Get topic workspace (primary operator coordination read)
+      tags: [topics]
+      x-anx-surface: projection
+      x-anx-command-id: topics.workspace
+      x-anx-cli-path: topics workspace
+      x-anx-why: Primary operator coordination read — load the topic workspace composed from linked cards, docs, backing threads, and inbox items. Prefer this over thread workspace for triage and planning.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ topic, cards, boards, documents, threads, inbox, projection_freshness, generated_at }`."
+      x-anx-error-codes: [auth_required, invalid_token, not_found]
+      x-anx-concepts: [topics, workspace]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/TopicID'
+      responses:
+        '200':
+          description: Topic workspace payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicWorkspaceResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /topics/{topic_id}/archive:
+    post:
+      operationId: archiveTopic
+      summary: Archive topic
+      tags: [topics]
+      x-anx-surface: canonical
+      x-anx-command-id: topics.archive
+      x-anx-cli-path: topics archive
+      x-anx-why: Soft-archive a topic (orthogonal to business status; clears default list visibility).
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ topic }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-concepts: [topics, write]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/TopicID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicLifecycleMutationRequest'
+      responses:
+        '200':
+          description: Topic archived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /topics/{topic_id}/unarchive:
+    post:
+      operationId: unarchiveTopic
+      summary: Unarchive topic
+      tags: [topics]
+      x-anx-surface: canonical
+      x-anx-command-id: topics.unarchive
+      x-anx-cli-path: topics unarchive
+      x-anx-why: Clear archived_at on a topic (restore default list visibility).
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ topic }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-concepts: [topics, write]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/TopicID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicLifecycleMutationRequest'
+      responses:
+        '200':
+          description: Topic unarchived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /topics/{topic_id}/trash:
+    post:
+      operationId: trashTopic
+      summary: Move topic to trash
+      tags: [topics]
+      x-anx-surface: canonical
+      x-anx-command-id: topics.trash
+      x-anx-cli-path: topics trash
+      x-anx-why: Move topic to trash with an explicit operator reason.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ topic }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-concepts: [topics, write]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/TopicID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicTrashRequest'
+      responses:
+        '200':
+          description: Topic moved to trash
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /topics/{topic_id}/restore:
+    post:
+      operationId: restoreTopic
+      summary: Restore topic from trash
+      tags: [topics]
+      x-anx-surface: canonical
+      x-anx-command-id: topics.restore
+      x-anx-cli-path: topics restore
+      x-anx-why: Clear trash lifecycle fields on a topic after an explicit restore action.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ topic }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-concepts: [topics, write]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/TopicID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicLifecycleMutationRequest'
+      responses:
+        '200':
+          description: Topic restored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /ref-edges:
+    get:
+      operationId: listRefEdges
+      summary: List ref edges (forward or reverse indexed lookup)
+      tags: [refs]
+      x-anx-surface: diagnostic
+      x-anx-command-id: ref_edges.list
+      x-anx-cli-path: ref-edges list
+      x-anx-why: Query the write-through ref index by source or target typed ref (mutually exclusive); reverse lookup uses target_ref.
+      x-anx-input-mode: query
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ ref_edges }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token]
+      x-anx-concepts: [refs, inspection]
+      x-anx-stability: beta
+      parameters:
+        - name: source_ref
+          in: query
+          required: false
+          description: Typed ref for forward lookup (e.g. "board:abc123"). Mutually exclusive with target_ref.
+          schema: { type: string }
+        - name: target_ref
+          in: query
+          required: false
+          description: Typed ref for reverse lookup (e.g. "thread:def456"). Mutually exclusive with source_ref.
+          schema: { type: string }
+        - name: relation
+          in: query
+          required: false
+          description: When set, filter results to this relation type.
+          schema: { type: string }
+      responses:
+        '200':
+          description: Ref edge rows
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefEdgesResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /threads:
+    get:
+      operationId: listThreads
+      summary: List backing threads
+      tags: [threads]
+      x-anx-surface: diagnostic
+      x-anx-command-id: threads.list
+      x-anx-cli-path: threads list
+      x-anx-why: Inspect backing infrastructure threads without making them the primary planning noun.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ threads }`."
+      x-anx-error-codes: [auth_required, invalid_token]
+      x-anx-concepts: [threads, inspection]
+      x-anx-stability: beta
+      responses:
+        '200':
+          description: Thread list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadsResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /threads/{thread_id}:
+    get:
+      operationId: getThread
+      summary: Inspect backing thread
+      tags: [threads]
+      x-anx-surface: diagnostic
+      x-anx-command-id: threads.inspect
+      x-anx-cli-path: threads inspect
+      x-anx-why: Resolve one backing thread for low-level inspection and diagnostics.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ thread }`."
+      x-anx-error-codes: [auth_required, invalid_token, not_found]
+      x-anx-concepts: [threads, inspection]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/ThreadID'
+      responses:
+        '200':
+          description: Thread payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /threads/{thread_id}/timeline:
+    get:
+      operationId: getThreadTimeline
+      summary: Get backing thread timeline
+      tags: [threads]
+      x-anx-surface: projection
+      x-anx-command-id: threads.timeline
+      x-anx-cli-path: threads timeline
+      x-anx-why: Retrieve event history plus typed-ref expansions for one backing thread.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ thread, events, artifacts, topics, cards, documents }`."
+      x-anx-error-codes: [auth_required, invalid_token, not_found]
+      x-anx-concepts: [threads, timeline]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/ThreadID'
+      responses:
+        '200':
+          description: Thread timeline payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadTimelineResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /threads/{thread_id}/context:
+    get:
+      operationId: getThreadContext
+      summary: Get backing thread coordination context
+      tags: [threads]
+      x-anx-surface: projection
+      x-anx-command-id: threads.context
+      x-anx-cli-path: threads context
+      x-anx-why: Load a compact coordination bundle (thread, recent events, key artifacts, cards, documents) for inspection and triage.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ thread, recent_events, key_artifacts, open_cards, documents }` plus forward-compatible fields."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found]
+      x-anx-concepts: [threads, inspection]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/ThreadID'
+        - name: max_events
+          in: query
+          required: false
+          description: Cap on recent timeline events included (non-negative integer).
+          schema:
+            type: integer
+            minimum: 0
+        - name: include_artifact_content
+          in: query
+          required: false
+          description: When true, include short text previews for key artifacts where content is available.
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Thread context bundle
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadContextResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /threads/{thread_id}/workspace:
+    get:
+      operationId: getThreadWorkspace
+      summary: Get backing thread workspace projection (diagnostic)
+      tags: [threads]
+      x-anx-surface: projection
+      x-anx-command-id: threads.workspace
+      x-anx-cli-path: threads workspace
+      x-anx-why: Read-only diagnostic projection that bundles context, inbox, and related-thread signals for one backing thread. Prefer topics.workspace for normal operator coordination when a topic exists.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ thread, related_topics, cards, documents, board_memberships, inbox, projection_freshness }`."
+      x-anx-error-codes: [auth_required, invalid_token, not_found]
+      x-anx-concepts: [threads, workspace]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/ThreadID'
+      responses:
+        '200':
+          description: Thread workspace payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadWorkspaceResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /docs:
+    get:
+      operationId: listDocuments
+      summary: List documents
+      tags: [docs]
+      x-anx-surface: canonical
+      x-anx-command-id: docs.list
+      x-anx-cli-path: docs list
+      x-anx-why: Scan canonical document lineages.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ documents }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token]
+      x-anx-concepts: [docs]
+      x-anx-stability: beta
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema: { type: string }
+          description: Search documents by id or title substring.
+        - name: thread_id
+          in: query
+          required: false
+          schema: { type: string }
+          description: Restrict results to documents bound to this thread id.
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string }
+          description: Opaque pagination cursor from a previous list response.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+          description: Page size; omit to return the full matching set.
+        - name: include_trashed
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: Include trashed documents (ignored when state is set).
+        - name: trashed_only
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: Return only trashed documents (ignored when state is set).
+        - name: include_archived
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: Include archived documents (ignored when state is set).
+        - name: archived_only
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: Return only archived documents (ignored when state is set).
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [active, archived, trashed]
+          description: Filter by canonical document lifecycle state (document.state). When set, overrides include_trashed, trashed_only, include_archived, and archived_only for SQL filtering.
+        - name: label
+          in: query
+          required: false
+          schema:
+            type: array
+            items: { type: string }
+          style: form
+          explode: true
+          description: Match documents having any of these labels (OR semantics); repeat the parameter for multiple values.
+      responses:
+        '200':
+          description: Document list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentsResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+    post:
+      operationId: createDocument
+      summary: Create document
+      tags: [docs]
+      x-anx-surface: canonical
+      x-anx-command-id: docs.create
+      x-anx-cli-path: docs create
+      x-anx-why: Create a canonical document lineage anchored to a typed subject ref.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ document, revision }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token]
+      x-anx-concepts: [docs, write]
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDocumentRequest'
+      responses:
+        '201':
+          description: Document created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentWithRevisionResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /docs/{document_id}:
+    get:
+      operationId: getDocument
+      summary: Get document
+      tags: [docs]
+      x-anx-surface: canonical
+      x-anx-command-id: docs.get
+      x-anx-cli-path: docs get
+      x-anx-why: Resolve a document lineage and its current head revision.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ document, revision }`."
+      x-anx-error-codes: [auth_required, invalid_token, not_found]
+      x-anx-concepts: [docs]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/DocumentID'
+      responses:
+        '200':
+          description: Document payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentWithRevisionResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /docs/{document_id}/archive:
+    post:
+      operationId: archiveDocument
+      summary: Archive document
+      tags: [docs]
+      x-anx-surface: canonical
+      x-anx-command-id: docs.archive
+      x-anx-cli-path: docs archive
+      x-anx-why: Soft-archive a document lineage (orthogonal to head revision content).
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ document, revision }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-concepts: [docs, write]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/DocumentID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentLifecycleMutationRequest'
+      responses:
+        '200':
+          description: Document archived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentWithRevisionResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /docs/{document_id}/unarchive:
+    post:
+      operationId: unarchiveDocument
+      summary: Unarchive document
+      tags: [docs]
+      x-anx-surface: canonical
+      x-anx-command-id: docs.unarchive
+      x-anx-cli-path: docs unarchive
+      x-anx-why: Clear archived_at on a document so it returns to default visibility.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ document, revision }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-concepts: [docs, write]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/DocumentID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentLifecycleMutationRequest'
+      responses:
+        '200':
+          description: Document unarchived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentWithRevisionResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /docs/{document_id}/trash:
+    post:
+      operationId: trashDocument
+      summary: Move document to trash
+      tags: [docs]
+      x-anx-surface: canonical
+      x-anx-command-id: docs.trash
+      x-anx-cli-path: docs trash
+      x-anx-why: Move a document lineage to trash with an explicit operator reason.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ document, revision }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-concepts: [docs, write]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/DocumentID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicTrashRequest'
+      responses:
+        '200':
+          description: Document moved to trash
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentWithRevisionResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /docs/{document_id}/restore:
+    post:
+      operationId: restoreDocument
+      summary: Restore document from trash
+      tags: [docs]
+      x-anx-surface: canonical
+      x-anx-command-id: docs.restore
+      x-anx-cli-path: docs restore
+      x-anx-why: Clear trash state on a document after an explicit restore action.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ document, revision }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-concepts: [docs, write]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/DocumentID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentRestoreFromTrashRequest'
+      responses:
+        '200':
+          description: Document restored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentWithRevisionResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /docs/{document_id}/purge:
+    post:
+      operationId: purgeDocument
+      summary: Permanently delete trashed document
+      tags: [docs]
+      x-anx-surface: canonical
+      x-anx-command-id: docs.purge
+      x-anx-cli-path: docs purge
+      x-anx-why: Permanently delete a trashed document (human-gated).
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ purged, document_id }`."
+      x-anx-error-codes: [auth_required, human_only, invalid_token, not_found, conflict]
+      x-anx-concepts: [docs, write]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/DocumentID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurgeDocumentRequest'
+      responses:
+        '200':
+          description: Document permanently deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurgeDocumentResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /docs/{document_id}/revisions:
+    get:
+      operationId: listDocumentRevisions
+      summary: List document revisions
+      tags: [docs]
+      x-anx-surface: canonical
+      x-anx-command-id: docs.revisions.list
+      x-anx-cli-path: docs revisions list
+      x-anx-why: Enumerate immutable revisions for one document lineage.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ document_id, revisions }`."
+      x-anx-error-codes: [auth_required, invalid_token, not_found]
+      x-anx-concepts: [docs, revisions]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/DocumentID'
+      responses:
+        '200':
+          description: Document revisions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentRevisionsResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+    post:
+      operationId: createDocumentRevision
+      summary: Create document revision
+      tags: [docs]
+      x-anx-surface: canonical
+      x-anx-command-id: docs.revisions.create
+      x-anx-cli-path: docs revisions create
+      x-anx-why: Append a new immutable revision and advance the document head.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ document, revision }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-concepts: [docs, revisions, write]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/DocumentID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDocumentRevisionRequest'
+      responses:
+        '201':
+          description: Revision created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentWithRevisionResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /docs/{document_id}/revisions/{revision_id}:
+    get:
+      operationId: getDocumentRevision
+      summary: Get document revision
+      tags: [docs]
+      x-anx-surface: canonical
+      x-anx-command-id: docs.revisions.get
+      x-anx-cli-path: docs revisions get
+      x-anx-why: Resolve one immutable document revision.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ document_id, revision }`."
+      x-anx-error-codes: [auth_required, invalid_token, not_found]
+      x-anx-concepts: [docs, revisions]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/DocumentID'
+        - $ref: '#/components/parameters/RevisionID'
+      responses:
+        '200':
+          description: Revision payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentRevisionResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /boards:
+    get:
+      operationId: listBoards
+      summary: List boards
+      tags: [boards]
+      x-anx-surface: canonical
+      x-anx-command-id: boards.list
+      x-anx-cli-path: boards list
+      x-anx-why: Scan durable coordination boards and lightweight summaries.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ boards, summaries }`."
+      x-anx-error-codes: [auth_required, invalid_token]
+      x-anx-concepts: [boards]
+      x-anx-stability: beta
+      responses:
+        '200':
+          description: Board list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardsResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+    post:
+      operationId: createBoard
+      summary: Create board
+      tags: [boards]
+      x-anx-surface: canonical
+      x-anx-command-id: boards.create
+      x-anx-cli-path: boards create
+      x-anx-why: Create a durable board over topics and cards.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ board }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token]
+      x-anx-concepts: [boards, write]
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBoardRequest'
+      responses:
+        '201':
+          description: Board created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /boards/{board_id}:
+    get:
+      operationId: getBoard
+      summary: Get board
+      tags: [boards]
+      x-anx-surface: canonical
+      x-anx-command-id: boards.get
+      x-anx-cli-path: boards get
+      x-anx-why: Resolve canonical board state and summary.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ board, summary }`."
+      x-anx-error-codes: [auth_required, invalid_token, not_found]
+      x-anx-concepts: [boards]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/BoardID'
+      responses:
+        '200':
+          description: Board payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+    patch:
+      operationId: patchBoard
+      summary: Patch board
+      tags: [boards]
+      x-anx-surface: canonical
+      x-anx-command-id: boards.patch
+      x-anx-cli-path: boards patch
+      x-anx-why: Update board metadata with optimistic concurrency.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ board }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-concepts: [boards, write, concurrency]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/BoardID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchBoardRequest'
+      responses:
+        '200':
+          description: Board patched
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /boards/{board_id}/workspace:
+    get:
+      operationId: getBoardWorkspace
+      summary: Get board workspace view
+      tags: [boards]
+      x-anx-surface: projection
+      x-anx-command-id: boards.workspace
+      x-anx-cli-path: boards workspace
+      x-anx-why: Load the operator-facing board workspace with cards, docs, and inbox sections.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ board_id, board, primary_topic, cards, documents, inbox, board_summary, projection_freshness, board_summary_freshness, warnings, section_kinds, generated_at }`."
+      x-anx-error-codes: [auth_required, invalid_token, not_found]
+      x-anx-concepts: [boards, workspace]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/BoardID'
+      responses:
+        '200':
+          description: Board workspace payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardWorkspaceResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /boards/{board_id}/archive:
+    post:
+      operationId: archiveBoard
+      summary: Archive board
+      tags: [boards]
+      x-anx-surface: canonical
+      x-anx-command-id: boards.archive
+      x-anx-cli-path: boards archive
+      x-anx-why: Soft-archive a board (orthogonal to business status; clears default list visibility).
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ board }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-concepts: [boards, write]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/BoardID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BoardLifecycleMutationRequest'
+      responses:
+        '200':
+          description: Board archived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardOnlyResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /boards/{board_id}/unarchive:
+    post:
+      operationId: unarchiveBoard
+      summary: Unarchive board
+      tags: [boards]
+      x-anx-surface: canonical
+      x-anx-command-id: boards.unarchive
+      x-anx-cli-path: boards unarchive
+      x-anx-why: Clear archived_at on a board (restore default list visibility).
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ board }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-concepts: [boards, write]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/BoardID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BoardLifecycleMutationRequest'
+      responses:
+        '200':
+          description: Board unarchived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardOnlyResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /boards/{board_id}/trash:
+    post:
+      operationId: trashBoard
+      summary: Move board to trash
+      tags: [boards]
+      x-anx-surface: canonical
+      x-anx-command-id: boards.trash
+      x-anx-cli-path: boards trash
+      x-anx-why: Move board to trash with an explicit operator reason.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ board }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-concepts: [boards, write]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/BoardID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicTrashRequest'
+      responses:
+        '200':
+          description: Board moved to trash
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardOnlyResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /boards/{board_id}/restore:
+    post:
+      operationId: restoreBoard
+      summary: Restore board from trash
+      tags: [boards]
+      x-anx-surface: canonical
+      x-anx-command-id: boards.restore
+      x-anx-cli-path: boards restore
+      x-anx-why: Clear trash lifecycle fields on a board after an explicit restore action.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ board }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-concepts: [boards, write]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/BoardID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BoardLifecycleMutationRequest'
+      responses:
+        '200':
+          description: Board restored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardOnlyResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /boards/{board_id}/purge:
+    post:
+      operationId: purgeBoard
+      summary: Permanently delete trashed board
+      tags: [boards]
+      x-anx-surface: canonical
+      x-anx-command-id: boards.purge
+      x-anx-cli-path: boards purge
+      x-anx-why: Permanently delete a trashed board (human-gated).
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ purged, board_id }`."
+      x-anx-error-codes: [auth_required, human_only, invalid_token, not_found, conflict]
+      x-anx-concepts: [boards, write]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/BoardID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurgeBoardRequest'
+      responses:
+        '200':
+          description: Board permanently deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurgeBoardResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /boards/{board_id}/cards:
+    get:
+      operationId: listBoardCards
+      summary: List board cards
+      tags: [boards, cards]
+      x-anx-surface: canonical
+      x-anx-command-id: boards.cards.list
+      x-anx-cli-path: boards cards list
+      x-anx-why: List cards on one board in canonical order.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ board_id, cards }`."
+      x-anx-error-codes: [auth_required, invalid_token, not_found]
+      x-anx-concepts: [boards, cards]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/BoardID'
+      responses:
+        '200':
+          description: Board cards
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardCardsResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+    post:
+      operationId: createBoardCard
+      summary: Create card on board
+      tags: [boards, cards]
+      x-anx-surface: canonical
+      x-anx-command-id: boards.cards.create
+      x-anx-cli-path: boards cards create
+      x-anx-why: Create a first-class card and attach it to a board.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ card }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-concepts: [boards, cards, write]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/BoardID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCardRequest'
+      responses:
+        '201':
+          description: Card created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /boards/{board_id}/cards/batch:
+    post:
+      operationId: batchCreateBoardCards
+      summary: Batch create cards on board
+      tags: [boards, cards]
+      x-anx-surface: canonical
+      x-anx-command-id: boards.cards.batch_add
+      x-anx-cli-path: boards cards create-batch
+      x-anx-why: Create multiple cards in one transaction using a single board concurrency token.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ board, cards }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-concepts: [boards, cards, write]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/BoardID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchCreateBoardCardsRequest'
+      responses:
+        '201':
+          description: Cards created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchCreateBoardCardsResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /boards/{board_id}/cards/{card_id}:
+    get:
+      operationId: getBoardCard
+      summary: Get board-scoped card
+      tags: [boards, cards]
+      x-anx-surface: canonical
+      x-anx-command-id: boards.cards.get
+      x-anx-cli-path: boards cards get
+      x-anx-why: Resolve a card through its board membership context.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ card }`."
+      x-anx-error-codes: [auth_required, invalid_token, not_found]
+      x-anx-concepts: [boards, cards]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/BoardID'
+        - $ref: '#/components/parameters/CardID'
+      responses:
+        '200':
+          description: Card payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /cards:
+    get:
+      operationId: listCards
+      summary: List cards
+      tags: [cards]
+      x-anx-surface: canonical
+      x-anx-command-id: cards.list
+      x-anx-cli-path: cards list
+      x-anx-why: Scan first-class card resources across boards.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ cards }`."
+      x-anx-error-codes: [auth_required, invalid_token]
+      x-anx-concepts: [cards]
+      x-anx-stability: beta
+      parameters:
+        - name: include_archived
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: When true, include archived cards alongside active cards.
+        - name: include_trashed
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: When true, include trashed cards alongside active cards.
+        - name: archived_only
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: When true, return only archived cards (distinct from trashed cards).
+        - name: trashed_only
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: When true, return only trashed cards.
+      responses:
+        '200':
+          description: Card list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardsResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+    post:
+      operationId: createCard
+      summary: Create card (global path)
+      tags: [cards]
+      x-anx-surface: canonical
+      x-anx-command-id: cards.create
+      x-anx-cli-path: cards create
+      x-anx-why: >
+        Create a card with the same body as POST /boards/{board_id}/cards, but supply board_id or board_ref
+        here instead of a path segment. Interoperable with board-scoped create.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ board, card }` (same as board-scoped create)."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-concepts: [cards, boards, write]
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCardRequest'
+      responses:
+        '201':
+          description: Card created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardCardMutationResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /cards/{card_id}:
+    get:
+      operationId: getCard
+      summary: Get card
+      tags: [cards]
+      x-anx-surface: canonical
+      x-anx-command-id: cards.get
+      x-anx-cli-path: cards get
+      x-anx-why: Resolve one first-class card by id.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ card }`."
+      x-anx-error-codes: [auth_required, invalid_token, not_found]
+      x-anx-concepts: [cards]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/CardID'
+      responses:
+        '200':
+          description: Card payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+    patch:
+      operationId: patchCard
+      summary: Patch card
+      tags: [cards]
+      x-anx-surface: canonical
+      x-anx-command-id: cards.patch
+      x-anx-cli-path: cards patch
+      x-anx-why: Update card fields, including resolution and resolution refs.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ card }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-concepts: [cards, write, concurrency]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/CardID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchCardRequest'
+      responses:
+        '200':
+          description: Card patched
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /cards/{card_id}/timeline:
+    get:
+      operationId: getCardTimeline
+      summary: Get card timeline
+      tags: [cards]
+      x-anx-surface: projection
+      x-anx-command-id: cards.timeline
+      x-anx-cli-path: cards timeline
+      x-anx-why: Load chronological evidence and related resources for one card.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ card, events, artifacts, cards, documents, threads }`."
+      x-anx-error-codes: [auth_required, invalid_token, not_found]
+      x-anx-concepts: [cards, timeline]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/CardID'
+      responses:
+        '200':
+          description: Card timeline payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardTimelineResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /cards/{card_id}/archive:
+    post:
+      operationId: archiveCard
+      summary: Archive card
+      tags: [cards]
+      x-anx-surface: canonical
+      x-anx-command-id: cards.archive
+      x-anx-cli-path: cards archive
+      x-anx-why: Soft-delete a first-class card by setting archived_at (board concurrency via if_board_updated_at).
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ board, card }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, already_trashed]
+      x-anx-concepts: [cards, write]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/CardID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArchiveCardRequest'
+      responses:
+        '200':
+          description: Card archived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardCardMutationResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /cards/{card_id}/trash:
+    post:
+      operationId: trashCard
+      summary: Move card to trash
+      tags: [cards]
+      x-anx-surface: canonical
+      x-anx-command-id: cards.trash
+      x-anx-cli-path: cards trash
+      x-anx-why: Move a card to trash with an explicit operator reason while keeping archive lifecycle distinct.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ board, card }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-concepts: [cards, write]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/CardID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CardTrashRequest'
+      responses:
+        '200':
+          description: Card moved to trash
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardCardMutationResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /cards/{card_id}/move:
+    post:
+      operationId: moveCard
+      summary: Move card
+      tags: [cards]
+      x-anx-surface: canonical
+      x-anx-command-id: cards.move
+      x-anx-cli-path: cards move
+      x-anx-why: Reposition a card within a board column using the card's first-class identity.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ card }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-concepts: [cards, boards, write]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/CardID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoveCardRequest'
+      responses:
+        '200':
+          description: Card moved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /cards/{card_id}/restore:
+    post:
+      operationId: restoreArchivedCard
+      summary: Restore archived or trashed card
+      tags: [cards]
+      x-anx-surface: canonical
+      x-anx-command-id: cards.restore
+      x-anx-cli-path: cards restore
+      x-anx-why: Clear archive or trash lifecycle fields on a card so it reappears on boards.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ board, card }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-concepts: [cards, write]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/CardID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RestoreArchivedCardRequest'
+      responses:
+        '200':
+          description: Card restored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardCardMutationResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /cards/{card_id}/purge:
+    post:
+      operationId: purgeArchivedCard
+      summary: Permanently delete archived or trashed card
+      tags: [cards]
+      x-anx-surface: canonical
+      x-anx-command-id: cards.purge
+      x-anx-cli-path: cards purge
+      x-anx-why: Permanently delete an archived or trashed card (human-gated).
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ purged, card_id }`."
+      x-anx-error-codes: [auth_required, human_only, invalid_token, not_found, conflict]
+      x-anx-concepts: [cards, write]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/CardID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurgeCardRequest'
+      responses:
+        '200':
+          description: Card permanently deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurgeCardResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /packets/receipts:
+    post:
+      operationId: createReceiptPacket
+      summary: Create receipt packet
+      tags: [packets]
+      x-anx-surface: canonical
+      x-anx-command-id: packets.receipts.create
+      x-anx-cli-path: packets receipts create
+      x-anx-why: Record structured delivery evidence anchored by `subject_ref`.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ artifact, packet_kind, packet }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token]
+      x-anx-concepts: [packets, evidence]
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReceiptRequest'
+      responses:
+        '201':
+          description: Receipt packet created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PacketArtifactResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /packets/reviews:
+    post:
+      operationId: createReviewPacket
+      summary: Create review packet
+      tags: [packets]
+      x-anx-surface: canonical
+      x-anx-command-id: packets.reviews.create
+      x-anx-cli-path: packets reviews create
+      x-anx-why: Record a structured review over a receipt anchored to the same card as subject_ref.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ artifact, packet_kind, packet }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token]
+      x-anx-concepts: [packets, evidence]
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReviewRequest'
+      responses:
+        '201':
+          description: Review packet created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PacketArtifactResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /events:
+    get:
+      operationId: listEvents
+      summary: List events
+      tags: [events]
+      x-anx-surface: canonical
+      x-anx-command-id: events.list
+      x-anx-cli-path: events list
+      x-anx-why: Inspect append-only event history across the workspace.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ events }`."
+      x-anx-error-codes: [auth_required, invalid_token]
+      x-anx-concepts: [events]
+      x-anx-stability: beta
+      responses:
+        '200':
+          description: Event list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventsResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+    post:
+      operationId: createEvent
+      summary: Create event
+      tags: [events]
+      x-anx-surface: canonical
+      x-anx-command-id: events.create
+      x-anx-cli-path: events create
+      x-anx-why: Append an event that links first-class resources and evidence through typed refs.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ event }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token]
+      x-anx-concepts: [events, write]
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEventRequest'
+      responses:
+        '201':
+          description: Event created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /events/stream:
+    get:
+      operationId: streamEvents
+      summary: Stream events (SSE)
+      tags: [events]
+      x-anx-surface: canonical
+      x-anx-command-id: events.stream
+      x-anx-cli-path: events stream
+      x-anx-why: Long-lived SSE feed of workspace events with optional thread/type filters and Last-Event-ID resume.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: sse }
+      x-anx-output-envelope: "Each SSE message is `event: …` with JSON data `{ \"event\": <event> }` (see core/docs/http-api.md)."
+      x-anx-error-codes: [auth_required, invalid_token]
+      x-anx-concepts: [events]
+      x-anx-stability: beta
+      parameters:
+        - name: thread_id
+          in: query
+          required: false
+          description: Limit stream to events for this backing thread.
+          schema: { type: string }
+        - name: type
+          in: query
+          required: false
+          description: Event type filter (repeatable; comma-separated values allowed per parameter).
+          schema: { type: string }
+        - name: types
+          in: query
+          required: false
+          description: Comma-separated event type filters (alias of repeated `type`).
+          schema: { type: string }
+        - name: last_event_id
+          in: query
+          required: false
+          description: Resume after this event id (alternative to `Last-Event-ID` header).
+          schema: { type: string }
+        - name: Last-Event-ID
+          in: header
+          required: false
+          description: SSE standard resume header (alternative to `last_event_id` query).
+          schema: { type: string }
+      responses:
+        '200':
+          description: Server-sent events stream (`text/event-stream`).
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /events/{event_id}/archive:
+    post:
+      operationId: archiveEvent
+      summary: Archive event
+      tags: [events]
+      x-anx-surface: canonical
+      x-anx-command-id: events.archive
+      x-anx-cli-path: events archive
+      x-anx-why: Set archived_at on an append-only event record for filtered views.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ event }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-concepts: [events, write]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/EventID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicLifecycleMutationRequest'
+      responses:
+        '200':
+          description: Event archived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /events/{event_id}/unarchive:
+    post:
+      operationId: unarchiveEvent
+      summary: Unarchive event
+      tags: [events]
+      x-anx-surface: canonical
+      x-anx-command-id: events.unarchive
+      x-anx-cli-path: events unarchive
+      x-anx-why: Clear archived_at on an event.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ event }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-concepts: [events, write]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/EventID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicLifecycleMutationRequest'
+      responses:
+        '200':
+          description: Event unarchived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /events/{event_id}/trash:
+    post:
+      operationId: trashEvent
+      summary: Move event to trash
+      tags: [events]
+      x-anx-surface: canonical
+      x-anx-command-id: events.trash
+      x-anx-cli-path: events trash
+      x-anx-why: Move event to trash with an explicit operator reason.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ event }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found]
+      x-anx-concepts: [events, write]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/EventID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicTrashRequest'
+      responses:
+        '200':
+          description: Event moved to trash
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /events/{event_id}/restore:
+    post:
+      operationId: restoreEvent
+      summary: Restore event from trash
+      tags: [events]
+      x-anx-surface: canonical
+      x-anx-command-id: events.restore
+      x-anx-cli-path: events restore
+      x-anx-why: Clear trash state on an event after an explicit restore action.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ event }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-concepts: [events, write]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/EventID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicLifecycleMutationRequest'
+      responses:
+        '200':
+          description: Event restored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /artifacts:
+    get:
+      operationId: listArtifacts
+      summary: List artifacts
+      tags: [artifacts]
+      x-anx-surface: canonical
+      x-anx-command-id: artifacts.list
+      x-anx-cli-path: artifacts list
+      x-anx-why: Search and filter immutable artifacts across the workspace.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ artifacts }`."
+      x-anx-error-codes: [auth_required, invalid_token]
+      x-anx-concepts: [artifacts]
+      x-anx-stability: beta
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema: { type: string }
+        - name: kind
+          in: query
+          required: false
+          schema: { type: string }
+        - name: thread_id
+          in: query
+          required: false
+          schema: { type: string }
+        - name: thread
+          in: query
+          required: false
+          description: Alias for thread_id (core accepts either).
+          schema: { type: string }
+        - name: created_before
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+        - name: created_after
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1 }
+        - name: include_trashed
+          in: query
+          required: false
+          schema: { type: boolean }
+        - name: trashed_only
+          in: query
+          required: false
+          schema: { type: boolean }
+        - name: include_archived
+          in: query
+          required: false
+          schema: { type: boolean }
+        - name: archived_only
+          in: query
+          required: false
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: Artifact list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactsListResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+    post:
+      operationId: createArtifact
+      summary: Create artifact
+      tags: [artifacts]
+      x-anx-surface: canonical
+      x-anx-command-id: artifacts.create
+      x-anx-cli-path: artifacts create
+      x-anx-why: Store content-addressed artifact metadata and payload (bytes, text, or structured packet JSON).
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ artifact }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, conflict]
+      x-anx-concepts: [artifacts, write]
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateArtifactRequest'
+      responses:
+        '201':
+          description: Artifact created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /artifacts/{artifact_id}:
+    get:
+      operationId: getArtifact
+      summary: Get artifact metadata
+      tags: [artifacts]
+      x-anx-surface: canonical
+      x-anx-command-id: artifacts.get
+      x-anx-cli-path: artifacts get
+      x-anx-why: Resolve immutable artifact metadata referenced from timelines and packets.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ artifact }`."
+      x-anx-error-codes: [auth_required, invalid_token, not_found]
+      x-anx-concepts: [artifacts]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/ArtifactID'
+      responses:
+        '200':
+          description: Artifact payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /artifacts/{artifact_id}/trash:
+    post:
+      operationId: trashArtifact
+      summary: Move artifact to trash
+      tags: [artifacts]
+      x-anx-surface: canonical
+      x-anx-command-id: artifacts.trash
+      x-anx-cli-path: artifacts trash
+      x-anx-why: Move artifact metadata to trash with an explicit operator reason.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ artifact }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found]
+      x-anx-concepts: [artifacts, write]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/ArtifactID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicTrashRequest'
+      responses:
+        '200':
+          description: Artifact moved to trash
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /artifacts/{artifact_id}/restore:
+    post:
+      operationId: restoreArtifact
+      summary: Restore artifact from trash
+      tags: [artifacts]
+      x-anx-surface: canonical
+      x-anx-command-id: artifacts.restore
+      x-anx-cli-path: artifacts restore
+      x-anx-why: Clear trash lifecycle fields on an artifact after an explicit restore action.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ artifact }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-concepts: [artifacts, write]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/ArtifactID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicLifecycleMutationRequest'
+      responses:
+        '200':
+          description: Artifact restored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /artifacts/{artifact_id}/archive:
+    post:
+      operationId: archiveArtifact
+      summary: Archive artifact
+      tags: [artifacts]
+      x-anx-surface: canonical
+      x-anx-command-id: artifacts.archive
+      x-anx-cli-path: artifacts archive
+      x-anx-why: Set archived_at on artifact metadata (orthogonal to trash lifecycle).
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ artifact }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-concepts: [artifacts, write]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/ArtifactID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicLifecycleMutationRequest'
+      responses:
+        '200':
+          description: Artifact archived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /artifacts/{artifact_id}/unarchive:
+    post:
+      operationId: unarchiveArtifact
+      summary: Unarchive artifact
+      tags: [artifacts]
+      x-anx-surface: canonical
+      x-anx-command-id: artifacts.unarchive
+      x-anx-cli-path: artifacts unarchive
+      x-anx-why: Clear archived_at on artifact metadata.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ artifact }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-concepts: [artifacts, write]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/ArtifactID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicLifecycleMutationRequest'
+      responses:
+        '200':
+          description: Artifact unarchived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /artifacts/{artifact_id}/purge:
+    post:
+      operationId: purgeArtifact
+      summary: Permanently delete trashed artifact
+      tags: [artifacts]
+      x-anx-surface: canonical
+      x-anx-command-id: artifacts.purge
+      x-anx-cli-path: artifacts purge
+      x-anx-why: Permanently delete a trashed artifact (human-gated).
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ purged, artifact_id }`."
+      x-anx-error-codes: [auth_required, human_only, invalid_token, not_found, conflict]
+      x-anx-concepts: [artifacts, write]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/ArtifactID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurgeDocumentRequest'
+      responses:
+        '200':
+          description: Artifact permanently deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurgeArtifactResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /inbox:
+    get:
+      operationId: listInboxItems
+      summary: List inbox items
+      tags: [inbox]
+      x-anx-surface: projection
+      x-anx-command-id: inbox.list
+      x-anx-cli-path: inbox list
+      x-anx-why: Load the derived operator inbox generated from refs and canonical events.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ items }`."
+      x-anx-error-codes: [auth_required, invalid_token]
+      x-anx-concepts: [inbox]
+      x-anx-stability: beta
+      responses:
+        '200':
+          description: Inbox items
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InboxResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /inbox/{inbox_id}/acknowledge:
+    post:
+      operationId: acknowledgeInboxItem
+      summary: Acknowledge inbox item
+      tags: [inbox]
+      x-anx-surface: projection
+      x-anx-command-id: inbox.acknowledge
+      x-anx-cli-path: inbox acknowledge
+      x-anx-why: Suppress or clear a derived inbox item via a durable acknowledgment event.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ event }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found]
+      x-anx-concepts: [inbox, write]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/InboxID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcknowledgeInboxItemRequest'
+      responses:
+        '201':
+          description: Acknowledgment event appended
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcknowledgeInboxItemResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /livez:
+    get:
+      operationId: livenessCheck
+      summary: Liveness check (process)
+      tags: [meta]
+      x-anx-surface: utility
+      x-anx-command-id: meta.livez
+      x-anx-cli-path: meta livez
+      x-anx-why: Lightweight liveness probe independent of storage readiness.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ ok: true }`."
+      x-anx-error-codes: []
+      x-anx-concepts: [health]
+      x-anx-stability: stable
+      responses:
+        '200':
+          description: Process is live
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /meta/handshake:
+    get:
+      operationId: getMetaHandshake
+      summary: Compatibility handshake
+      tags: [meta]
+      x-anx-surface: utility
+      x-anx-command-id: meta.handshake
+      x-anx-cli-path: meta handshake
+      x-anx-why: Surface schema version, command registry digest, CLI gates, and instance metadata.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ core_version, api_version, schema_version, command_registry_digest, ... }`."
+      x-anx-error-codes: [meta_unavailable]
+      x-anx-concepts: [compatibility]
+      x-anx-stability: stable
+      responses:
+        '200':
+          description: Handshake payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandshakeResponse'
+        '503':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /meta/commands:
+    get:
+      operationId: listMetaCommands
+      summary: List command registry metadata
+      tags: [meta]
+      x-anx-surface: utility
+      x-anx-command-id: meta.commands.list
+      x-anx-cli-path: meta commands list
+      x-anx-why: Expose embedded OAR command metadata for discovery and codegen parity.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns generated command registry JSON."
+      x-anx-error-codes: [meta_unavailable]
+      x-anx-concepts: [compatibility]
+      x-anx-stability: stable
+      responses:
+        '200':
+          description: Command metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '503':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /meta/commands/{command_id}:
+    get:
+      operationId: getMetaCommandById
+      summary: Get one command metadata entry
+      tags: [meta]
+      x-anx-surface: utility
+      x-anx-command-id: meta.commands.get
+      x-anx-cli-path: meta commands get
+      x-anx-why: Resolve command metadata by stable command id.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ command }`."
+      x-anx-error-codes: [meta_unavailable, not_found]
+      x-anx-concepts: [compatibility]
+      x-anx-stability: stable
+      parameters:
+        - name: command_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Command metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /meta/concepts:
+    get:
+      operationId: listMetaConcepts
+      summary: List concept index
+      tags: [meta]
+      x-anx-surface: utility
+      x-anx-command-id: meta.concepts.list
+      x-anx-cli-path: meta concepts list
+      x-anx-why: Group command metadata by concept tags.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ concepts: [...] }`."
+      x-anx-error-codes: [meta_unavailable]
+      x-anx-concepts: [compatibility]
+      x-anx-stability: stable
+      responses:
+        '200':
+          description: Concept index
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '503':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /meta/concepts/{concept_name}:
+    get:
+      operationId: getMetaConceptByName
+      summary: Get commands grouped by concept
+      tags: [meta]
+      x-anx-surface: utility
+      x-anx-command-id: meta.concepts.get
+      x-anx-cli-path: meta concepts get
+      x-anx-why: Expand one concept into related commands.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ concept: {...} }`."
+      x-anx-error-codes: [meta_unavailable, not_found]
+      x-anx-concepts: [compatibility]
+      x-anx-stability: stable
+      parameters:
+        - name: concept_name
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Concept detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /ops/health:
+    get:
+      operationId: getOpsHealth
+      summary: Workspace ops health
+      tags: [ops]
+      x-anx-surface: utility
+      x-anx-command-id: ops.health
+      x-anx-cli-path: ops health
+      x-anx-why: Operational readiness for projections, jobs, and operators.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns structured health JSON."
+      x-anx-error-codes: [auth_required, invalid_token]
+      x-anx-concepts: [health, ops]
+      x-anx-stability: beta
+      responses:
+        '200':
+          description: Ops health
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /ops/usage-summary:
+    get:
+      operationId: getOpsUsageSummary
+      summary: Workspace usage summary
+      tags: [ops]
+      x-anx-surface: utility
+      x-anx-command-id: ops.usage.summary
+      x-anx-cli-path: ops usage summary
+      x-anx-why: Operator-facing storage and count telemetry for the workspace.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns usage envelope JSON."
+      x-anx-error-codes: [auth_required, invalid_token]
+      x-anx-concepts: [ops, quotas]
+      x-anx-stability: beta
+      responses:
+        '200':
+          description: Usage summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /v1/usage/summary:
+    get:
+      operationId: getUsageSummaryV1
+      summary: Versioned workspace usage summary
+      tags: [ops]
+      x-anx-surface: utility
+      x-anx-command-id: usage.summary.v1
+      x-anx-cli-path: usage summary --api v1
+      x-anx-why: Versioned usage envelope for external quota and billing aggregation.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns v1 usage summary JSON."
+      x-anx-error-codes: [auth_required, invalid_token]
+      x-anx-concepts: [ops, quotas]
+      x-anx-stability: beta
+      responses:
+        '200':
+          description: Usage summary v1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /ops/blob-usage/rebuild:
+    post:
+      operationId: rebuildBlobUsage
+      summary: Rebuild blob usage accounting
+      tags: [ops]
+      x-anx-surface: utility
+      x-anx-command-id: ops.blob.usage.rebuild
+      x-anx-cli-path: ops blob usage rebuild
+      x-anx-why: Repair path for derived blob accounting after storage events.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ ok: true }` or error."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token]
+      x-anx-concepts: [ops, maintenance]
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Rebuild accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /actors:
+    get:
+      operationId: listActors
+      summary: List actors
+      tags: [auth]
+      x-anx-surface: utility
+      x-anx-command-id: actors.list
+      x-anx-cli-path: actors list
+      x-anx-why: Enumerate durable actor records for operator UI and dev fixtures.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ actors, next_cursor? }`."
+      x-anx-error-codes: [auth_required, invalid_token]
+      x-anx-concepts: [actors, auth]
+      x-anx-stability: beta
+      responses:
+        '200':
+          description: Actor list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+    post:
+      operationId: createActor
+      summary: Create actor (dev fixture)
+      tags: [auth]
+      x-anx-surface: utility
+      x-anx-command-id: actors.create
+      x-anx-cli-path: actors create
+      x-anx-why: Legacy dev actor registration when dev_actor_mode is enabled.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ actor }`."
+      x-anx-error-codes: [auth_required, invalid_request, dev_actor_mode_disabled]
+      x-anx-concepts: [actors, auth]
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Actor created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/agents/register:
+    post:
+      operationId: registerAgent
+      summary: Register workspace agent principal
+      tags: [auth]
+      x-anx-surface: utility
+      x-anx-command-id: auth.agents.register
+      x-anx-cli-path: auth agents register
+      x-anx-why: Bootstrap or invite-gated agent registration with key material.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ agent, tokens, ... }` per core auth handlers."
+      x-anx-error-codes: [invalid_request, invalid_token, auth_required]
+      x-anx-concepts: [auth, agents]
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Registration result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/bootstrap/status:
+    get:
+      operationId: getAuthBootstrapStatus
+      summary: Bootstrap registration availability
+      tags: [auth]
+      x-anx-surface: utility
+      x-anx-command-id: auth.bootstrap.status
+      x-anx-cli-path: auth bootstrap status
+      x-anx-why: Report whether first-principal bootstrap registration is still available.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ bootstrap_registration_available, dev_passkey_bypass_available? }`, where the dev bypass field reflects the effective local-only passkey bypass capability."
+      x-anx-error-codes: []
+      x-anx-concepts: [auth]
+      x-anx-stability: beta
+      responses:
+        '200':
+          description: Bootstrap status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+
+  /auth/invites:
+    get:
+      operationId: listAuthInvites
+      summary: List invite tokens
+      tags: [auth]
+      x-anx-surface: utility
+      x-anx-command-id: auth.invites.list
+      x-anx-cli-path: auth invites list
+      x-anx-why: Operator listing of outstanding invites.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ invites }`."
+      x-anx-error-codes: [auth_required, invalid_token]
+      x-anx-concepts: [auth]
+      x-anx-stability: beta
+      responses:
+        '200':
+          description: Invites
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+    post:
+      operationId: createAuthInvite
+      summary: Create invite token
+      tags: [auth]
+      x-anx-surface: utility
+      x-anx-command-id: auth.invites.create
+      x-anx-cli-path: auth invites create
+      x-anx-why: Issue a one-time invite for human or agent principals.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ invite, token }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token]
+      x-anx-concepts: [auth]
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Invite created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/invites/{invite_id}/revoke:
+    post:
+      operationId: revokeAuthInvite
+      summary: Revoke invite
+      tags: [auth]
+      x-anx-surface: utility
+      x-anx-command-id: auth.invites.revoke
+      x-anx-cli-path: auth invites revoke
+      x-anx-why: Invalidate an outstanding invite by id.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ invite }`."
+      x-anx-error-codes: [auth_required, invalid_request, not_found, invalid_token]
+      x-anx-concepts: [auth]
+      x-anx-stability: beta
+      parameters:
+        - name: invite_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Invite revoked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/token:
+    post:
+      operationId: issueAuthToken
+      summary: Issue or refresh auth tokens
+      tags: [auth]
+      x-anx-surface: utility
+      x-anx-command-id: auth.token
+      x-anx-cli-path: auth token
+      x-anx-why: Assertion or refresh-token exchange for bearer access.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ tokens }` envelope."
+      x-anx-error-codes: [invalid_request, invalid_token]
+      x-anx-concepts: [auth]
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Token bundle
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/passkey/register/options:
+    post:
+      operationId: passkeyRegisterOptions
+      summary: Begin passkey registration
+      tags: [auth]
+      x-anx-surface: utility
+      x-anx-command-id: auth.passkey.register.options
+      x-anx-cli-path: auth passkey register options
+      x-anx-why: WebAuthn registration challenge for workspace agents.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ session_id, options }`."
+      x-anx-error-codes: [invalid_request]
+      x-anx-concepts: [auth, passkeys]
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Registration options
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/passkey/register/verify:
+    post:
+      operationId: passkeyRegisterVerify
+      summary: Complete passkey registration
+      tags: [auth]
+      x-anx-surface: utility
+      x-anx-command-id: auth.passkey.register.verify
+      x-anx-cli-path: auth passkey register verify
+      x-anx-why: Verify WebAuthn attestation and issue tokens.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ agent, tokens }`."
+      x-anx-error-codes: [invalid_request, invalid_token]
+      x-anx-concepts: [auth, passkeys]
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Registration completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/passkey/login/options:
+    post:
+      operationId: passkeyLoginOptions
+      summary: Begin passkey login
+      tags: [auth]
+      x-anx-surface: utility
+      x-anx-command-id: auth.passkey.login.options
+      x-anx-cli-path: auth passkey login options
+      x-anx-why: WebAuthn assertion challenge for returning principals.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ session_id, options }`."
+      x-anx-error-codes: [invalid_request]
+      x-anx-concepts: [auth, passkeys]
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Login options
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/passkey/login/verify:
+    post:
+      operationId: passkeyLoginVerify
+      summary: Complete passkey login
+      tags: [auth]
+      x-anx-surface: utility
+      x-anx-command-id: auth.passkey.login.verify
+      x-anx-cli-path: auth passkey login verify
+      x-anx-why: Verify WebAuthn assertion and issue tokens.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ agent, tokens }`."
+      x-anx-error-codes: [invalid_request, invalid_token]
+      x-anx-concepts: [auth, passkeys]
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Login completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/passkey/dev/register:
+    post:
+      operationId: passkeyDevRegister
+      summary: Complete passkey registration without WebAuthn (dev only)
+      tags: [auth]
+      x-anx-surface: utility
+      x-anx-command-id: auth.passkey.dev.register
+      x-anx-cli-path: auth passkey dev register
+      x-anx-why: Local development bypass for human onboarding when ANX_ALLOW_PASSKEY_DEV_BYPASS=1 and the workspace carries the local-only .anx-dev-insecure-auth marker; stores a synthetic credential. Optional existing_actor_id links a pre-seeded actor when ANX_DEV_REGISTER_LINKED_ACTORS=1.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ agent, tokens }`."
+      x-anx-error-codes: [invalid_request, invalid_token, dev_passkey_bypass_disabled]
+      x-anx-concepts: [auth, passkeys]
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '201':
+          description: Registration completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/passkey/dev/login:
+    post:
+      operationId: passkeyDevLogin
+      summary: Issue session for passkey principal without WebAuthn (dev only)
+      tags: [auth]
+      x-anx-surface: utility
+      x-anx-command-id: auth.passkey.dev.login
+      x-anx-cli-path: auth passkey dev login
+      x-anx-why: Local development bypass when ANX_ALLOW_PASSKEY_DEV_BYPASS=1 and the workspace carries the local-only .anx-dev-insecure-auth marker; optional username or display_name, or sole passkey principal.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ agent, tokens }`."
+      x-anx-error-codes: [invalid_request, not_found, dev_passkey_bypass_disabled]
+      x-anx-concepts: [auth, passkeys]
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Login completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/principals:
+    get:
+      operationId: listAuthPrincipals
+      summary: List principals
+      tags: [auth]
+      x-anx-surface: utility
+      x-anx-command-id: auth.principals.list
+      x-anx-cli-path: auth principals list
+      x-anx-why: Operator visibility into registered principals for the workspace.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns principal list JSON."
+      x-anx-error-codes: [auth_required, invalid_token]
+      x-anx-concepts: [auth]
+      x-anx-stability: beta
+      responses:
+        '200':
+          description: Principals
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/principals/{principal_id}/revoke:
+    post:
+      operationId: revokeAuthPrincipal
+      summary: Revoke principal by agent id
+      tags: [auth]
+      x-anx-surface: utility
+      x-anx-command-id: auth.principals.revoke
+      x-anx-cli-path: auth principals revoke
+      x-anx-why: Administrative revocation of a principal linkage.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns result JSON."
+      x-anx-error-codes: [auth_required, invalid_request, not_found, invalid_token, conflict]
+      x-anx-concepts: [auth]
+      x-anx-stability: beta
+      parameters:
+        - name: principal_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Revocation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/audit:
+    get:
+      operationId: listAuthAudit
+      summary: List auth audit entries
+      tags: [auth]
+      x-anx-surface: utility
+      x-anx-command-id: auth.audit.list
+      x-anx-cli-path: auth audit list
+      x-anx-why: Operator audit trail for auth-sensitive actions.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns audit list JSON."
+      x-anx-error-codes: [auth_required, invalid_token]
+      x-anx-concepts: [auth, audit]
+      x-anx-stability: beta
+      responses:
+        '200':
+          description: Audit entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /agents/me:
+    get:
+      operationId: getCurrentAgent
+      summary: Get current authenticated agent
+      tags: [auth]
+      x-anx-surface: utility
+      x-anx-command-id: agents.me.get
+      x-anx-cli-path: agents me
+      x-anx-why: Resolve bearer principal to agent profile and keys.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ agent, keys }`."
+      x-anx-error-codes: [auth_required, invalid_token]
+      x-anx-concepts: [auth, agents]
+      x-anx-stability: beta
+      responses:
+        '200':
+          description: Agent profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+    patch:
+      operationId: patchCurrentAgent
+      summary: Update current agent profile
+      tags: [auth]
+      x-anx-surface: utility
+      x-anx-command-id: agents.me.patch
+      x-anx-cli-path: agents me patch
+      x-anx-why: Rename or adjust profile fields for the authenticated agent.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ agent }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token]
+      x-anx-concepts: [auth, agents]
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Updated agent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /agents/me/keys/rotate:
+    post:
+      operationId: rotateAgentKeys
+      summary: Rotate agent signing keys
+      tags: [auth]
+      x-anx-surface: utility
+      x-anx-command-id: agents.me.keys.rotate
+      x-anx-cli-path: agents me keys rotate
+      x-anx-why: Add a new Ed25519 key for assertions.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ key }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token]
+      x-anx-concepts: [auth, agents]
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Key rotated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /agents/me/revoke:
+    post:
+      operationId: revokeCurrentAgent
+      summary: Revoke current agent credentials
+      tags: [auth]
+      x-anx-surface: utility
+      x-anx-command-id: agents.me.revoke
+      x-anx-cli-path: agents me revoke
+      x-anx-why: Self-revocation or admin-style revocation flow for the active principal.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ ok: true }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, conflict]
+      x-anx-concepts: [auth, agents]
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Revoked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /derived/rebuild:
+    post:
+      operationId: rebuildDerivedProjections
+      summary: Rebuild derived projections
+      tags: [derived]
+      x-anx-surface: utility
+      x-anx-command-id: derived.rebuild
+      x-anx-cli-path: derived rebuild
+      x-anx-why: Deterministic operator repair for inbox/thread projections.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ ok: true }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token]
+      x-anx-concepts: [projections, maintenance]
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Rebuild started or completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /events/{event_id}:
+    get:
+      operationId: getEventById
+      summary: Get event by id
+      tags: [events]
+      x-anx-surface: canonical
+      x-anx-command-id: events.get
+      x-anx-cli-path: events get
+      x-anx-why: Fetch one append-only event record by stable id.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ event }`."
+      x-anx-error-codes: [auth_required, invalid_token, not_found]
+      x-anx-concepts: [events]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/EventID'
+      responses:
+        '200':
+          description: Event
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /artifacts/{artifact_id}/content:
+    get:
+      operationId: getArtifactContent
+      summary: Download artifact bytes
+      tags: [artifacts]
+      x-anx-surface: canonical
+      x-anx-command-id: artifacts.content
+      x-anx-cli-path: artifacts content
+      x-anx-why: Return raw artifact payload with varying content types.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Raw bytes or JSON/text depending on artifact."
+      x-anx-error-codes: [auth_required, invalid_token, not_found]
+      x-anx-concepts: [artifacts]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/ArtifactID'
+      responses:
+        '200':
+          description: Artifact payload
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+            text/plain:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /inbox/{inbox_id}:
+    get:
+      operationId: getInboxItem
+      summary: Get one inbox item
+      tags: [inbox]
+      x-anx-surface: projection
+      x-anx-command-id: inbox.get
+      x-anx-cli-path: inbox get
+      x-anx-why: Side-effect free read of one materialized inbox row.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ item, generated_at, projection_freshness }`."
+      x-anx-error-codes: [auth_required, invalid_token, not_found]
+      x-anx-concepts: [inbox]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/InboxID'
+      responses:
+        '200':
+          description: Inbox item
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /inbox/stream:
+    get:
+      operationId: streamInboxItems
+      summary: Stream inbox items (SSE)
+      tags: [inbox]
+      x-anx-surface: projection
+      x-anx-command-id: inbox.stream
+      x-anx-cli-path: inbox stream
+      x-anx-why: Server-sent events feed of inbox projection updates.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: sse }
+      x-anx-output-envelope: "SSE `inbox_item` events with JSON payloads."
+      x-anx-error-codes: [auth_required, invalid_token]
+      x-anx-concepts: [inbox]
+      x-anx-stability: beta
+      parameters:
+        - name: risk_horizon_days
+          in: query
+          required: false
+          schema: { type: integer }
+        - name: last_event_id
+          in: query
+          required: false
+          schema: { type: string }
+        - name: Last-Event-ID
+          in: header
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: Inbox SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /agent-notifications:
+    get:
+      operationId: listAgentNotifications
+      summary: List agent wake notifications
+      tags: [agents, notifications]
+      x-anx-surface: projection
+      x-anx-command-id: agent.notifications.list
+      x-anx-cli-path: agent notifications list
+      x-anx-why: Derived read of notifications for the authenticated agent.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ items, generated_at }`."
+      x-anx-error-codes: [auth_required, invalid_token]
+      x-anx-concepts: [agents, notifications]
+      x-anx-stability: beta
+      responses:
+        '200':
+          description: Notifications
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /agent-notifications/read:
+    post:
+      operationId: markAgentNotificationRead
+      summary: Mark agent notification read
+      tags: [agents, notifications]
+      x-anx-surface: projection
+      x-anx-command-id: agent.notifications.read
+      x-anx-cli-path: agent notifications read
+      x-anx-why: Record read state for a wake notification.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ event, notification }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found]
+      x-anx-concepts: [agents, notifications, write]
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /agent-notifications/dismiss:
+    post:
+      operationId: dismissAgentNotification
+      summary: Dismiss agent notification
+      tags: [agents, notifications]
+      x-anx-surface: projection
+      x-anx-command-id: agent.notifications.dismiss
+      x-anx-cli-path: agent notifications dismiss
+      x-anx-why: Dismiss a wake notification for the authenticated agent.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ event, notification }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found]
+      x-anx-concepts: [agents, notifications, write]
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Dismissed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /secrets:
+    get:
+      operationId: listSecrets
+      summary: List secrets
+      tags: [secrets]
+      x-anx-surface: canonical
+      x-anx-command-id: secrets.list
+      x-anx-cli-path: secret list
+      x-anx-why: List workspace secret metadata without exposing values.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ secrets }`."
+      x-anx-error-codes: [auth_required, invalid_token]
+      x-anx-concepts: [secrets]
+      x-anx-stability: beta
+      responses:
+        '200':
+          description: Secret metadata list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecretsResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+    post:
+      operationId: createSecret
+      summary: Create secret
+      tags: [secrets]
+      x-anx-surface: canonical
+      x-anx-command-id: secrets.create
+      x-anx-cli-path: secret create
+      x-anx-why: Store an encrypted workspace credential with metadata.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ secret }` (metadata only, value is not echoed)."
+      x-anx-error-codes: [auth_required, invalid_token, human_only, invalid_request, resource_exists, secrets_not_configured]
+      x-anx-concepts: [secrets, write]
+      x-anx-stability: beta
+      x-anx-agent-notes: "Only human principals may create secrets."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSecretRequest'
+      responses:
+        '201':
+          description: Secret created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecretResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /secrets/{secret_id}:
+    put:
+      operationId: updateSecret
+      summary: Update secret value
+      tags: [secrets]
+      x-anx-surface: canonical
+      x-anx-command-id: secrets.update
+      x-anx-cli-path: secret update
+      x-anx-why: Replace an encrypted secret value.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ secret }` (metadata only)."
+      x-anx-error-codes: [auth_required, invalid_token, human_only, not_found, invalid_request, secrets_not_configured]
+      x-anx-concepts: [secrets, write]
+      x-anx-stability: beta
+      x-anx-agent-notes: "Only human principals may update secrets."
+      parameters:
+        - $ref: '#/components/parameters/SecretID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSecretRequest'
+      responses:
+        '200':
+          description: Secret updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecretResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/ErrorResponse'
+    delete:
+      operationId: deleteSecret
+      summary: Delete secret
+      tags: [secrets]
+      x-anx-surface: canonical
+      x-anx-command-id: secrets.delete
+      x-anx-cli-path: secret delete
+      x-anx-why: Permanently remove a secret and its encrypted value.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ deleted: true, secret_id }`."
+      x-anx-error-codes: [auth_required, invalid_token, human_only, not_found, secrets_not_configured]
+      x-anx-concepts: [secrets, write]
+      x-anx-stability: beta
+      x-anx-agent-notes: "Only human principals may delete secrets."
+      parameters:
+        - $ref: '#/components/parameters/SecretID'
+      responses:
+        '200':
+          description: Secret deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteSecretResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /secrets/{secret_id}/reveal:
+    post:
+      operationId: revealSecret
+      summary: Reveal secret value
+      tags: [secrets]
+      x-anx-surface: canonical
+      x-anx-command-id: secrets.reveal
+      x-anx-cli-path: secret get --reveal
+      x-anx-why: Decrypt and return a secret value. Logged in audit.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ name, value }`."
+      x-anx-error-codes: [auth_required, invalid_token, not_found, secrets_not_configured]
+      x-anx-concepts: [secrets]
+      x-anx-stability: beta
+      x-anx-agent-notes: "Every reveal is logged in auth audit. POST (not GET) to prevent caching."
+      parameters:
+        - $ref: '#/components/parameters/SecretID'
+      responses:
+        '200':
+          description: Decrypted secret value
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevealSecretResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /secrets/reveal-batch:
+    post:
+      operationId: revealSecretsBatch
+      summary: Reveal multiple secrets by name
+      tags: [secrets]
+      x-anx-surface: canonical
+      x-anx-command-id: secrets.reveal-batch
+      x-anx-cli-path: secret exec
+      x-anx-why: Batch-fetch secrets for env injection. Each reveal is audited.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ secrets: [{ name, value }] }`."
+      x-anx-error-codes: [auth_required, invalid_token, not_found, invalid_request, secrets_not_configured]
+      x-anx-concepts: [secrets]
+      x-anx-stability: beta
+      x-anx-agent-notes: "Each resolved secret generates an audit event. Missing names return not_found."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RevealSecretsBatchRequest'
+      responses:
+        '200':
+          description: Batch of decrypted secret values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevealSecretsBatchResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/ErrorResponse'
+
+components:
+  responses:
+    ErrorResponse:
+      description: Error payload
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  parameters:
+    TopicID:
+      in: path
+      name: topic_id
+      required: true
+      schema: { type: string }
+    ThreadID:
+      in: path
+      name: thread_id
+      required: true
+      schema: { type: string }
+    DocumentID:
+      in: path
+      name: document_id
+      required: true
+      schema: { type: string }
+    RevisionID:
+      in: path
+      name: revision_id
+      required: true
+      schema: { type: string }
+    BoardID:
+      in: path
+      name: board_id
+      required: true
+      schema: { type: string }
+    CardID:
+      in: path
+      name: card_id
+      required: true
+      schema: { type: string }
+    ArtifactID:
+      in: path
+      name: artifact_id
+      required: true
+      schema: { type: string }
+    EventID:
+      in: path
+      name: event_id
+      required: true
+      schema: { type: string }
+    InboxID:
+      in: path
+      name: inbox_id
+      required: true
+      schema: { type: string }
+    SecretID:
+      in: path
+      name: secret_id
+      required: true
+      schema: { type: string }
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details: { type: object, additionalProperties: true }
+      required: [code, message]
+
+    HealthResponse:
+      type: object
+      properties:
+        ok: { type: boolean }
+      required: [ok]
+
+    VersionResponse:
+      type: object
+      properties:
+        schema_version: { type: string }
+        command_registry_digest: { type: string }
+      required: [schema_version, command_registry_digest]
+
+    JsonObject:
+      type: object
+      additionalProperties: true
+      description: >
+        Untyped JSON object for auth and meta envelopes; prefer tightening to
+        named schemas when shapes stabilize.
+
+    JsonValue:
+      description: Any JSON value (object, array, string, number, boolean, or null).
+      oneOf:
+        - type: object
+          additionalProperties: true
+        - type: array
+          items: {}
+        - type: string
+        - type: number
+        - type: boolean
+        - type: "null"
+
+    HandshakeResponse:
+      type: object
+      additionalProperties: true
+      description: >
+        Compatibility handshake from GET /meta/handshake; fields include
+        core_version, api_version, schema_version, command_registry_digest,
+        min_cli_version, recommended_cli_version, cli_download_url,
+        core_instance_id, dev_actor_mode, human_auth_mode, and optional
+        workspace_service_identity_id.
+
+    TypedRef:
+      type: string
+      description: Typed ref string such as `topic:roadmap` or `artifact:art_123`.
+
+    Provenance:
+      type: object
+      properties:
+        sources:
+          type: array
+          items: { type: string }
+        notes: { type: string }
+        by_field:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
+      required: [sources]
+
+    ProjectionFreshness:
+      type: object
+      properties:
+        state:
+          type: string
+          enum: [current, pending, missing, error]
+        generated_at:
+          type: string
+          format: date-time
+        detail:
+          type: string
+      required: [state]
+
+    Event:
+      type: object
+      properties:
+        id: { type: string }
+        ts: { type: string, format: date-time }
+        type: { type: string }
+        actor_id: { type: string }
+        thread_ref: { $ref: '#/components/schemas/TypedRef' }
+        refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        summary: { type: string }
+        payload:
+          type: object
+          additionalProperties: true
+        provenance: { $ref: '#/components/schemas/Provenance' }
+      required: [id, ts, type, actor_id, refs, summary, provenance]
+
+    Artifact:
+      type: object
+      properties:
+        id: { type: string }
+        kind: { type: string }
+        content_type: { type: string }
+        content_hash: { type: string }
+        refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        summary: { type: string }
+        created_at: { type: string, format: date-time }
+        created_by: { type: string }
+      required: [id, kind, content_type, content_hash, refs, created_at, created_by]
+
+    Thread:
+      type: object
+      properties:
+        id: { type: string }
+        topic_ref: { $ref: '#/components/schemas/TypedRef' }
+        title: { type: string }
+        status:
+          type: string
+          enum: [active, archived]
+        priority:
+          type: string
+          enum: [p0, p1, p2, p3]
+        tags:
+          type: array
+          items: { type: string }
+        latest_event_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        created_by: { type: string }
+        updated_at: { type: string, format: date-time }
+        updated_by: { type: string }
+        provenance: { $ref: '#/components/schemas/Provenance' }
+      required: [id, title, status, priority, tags, created_at, created_by, updated_at, updated_by, provenance]
+
+    Topic:
+      type: object
+      properties:
+        id: { type: string }
+        type:
+          type: string
+          enum: [case, process, relationship, initiative, objective, decision, incident, risk, request, note, other]
+        status:
+          type: string
+          enum: [proposed, active, paused, blocked, resolved, closed, archived]
+        title: { type: string }
+        summary: { type: string }
+        thread_id:
+          type: string
+          description: Backing thread id for topic timeline and events.
+        owner_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        document_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        board_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        related_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        created_at: { type: string, format: date-time }
+        created_by: { type: string }
+        updated_at: { type: string, format: date-time }
+        updated_by: { type: string }
+        provenance: { $ref: '#/components/schemas/Provenance' }
+      required:
+        [id, type, status, title, summary, owner_refs, document_refs, board_refs, related_refs,
+         created_at, created_by, updated_at, updated_by, provenance]
+
+    Document:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+        subject_ref: { $ref: '#/components/schemas/TypedRef' }
+        head_revision_ref: { $ref: '#/components/schemas/TypedRef' }
+        state:
+          type: string
+          enum: [active, archived, trashed]
+          description: Canonical document lifecycle state.
+        refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        created_at: { type: string, format: date-time }
+        created_by: { type: string }
+        updated_at: { type: string, format: date-time }
+        updated_by: { type: string }
+        provenance: { $ref: '#/components/schemas/Provenance' }
+      required:
+        [id, title, subject_ref, head_revision_ref, state, refs, created_at, created_by, updated_at, updated_by, provenance]
+
+    DocumentRevision:
+      type: object
+      properties:
+        revision_id: { type: string }
+        document_ref: { $ref: '#/components/schemas/TypedRef' }
+        prev_revision_ref: { $ref: '#/components/schemas/TypedRef' }
+        artifact_ref: { $ref: '#/components/schemas/TypedRef' }
+        revision_number: { type: integer }
+        summary: { type: string }
+        created_at: { type: string, format: date-time }
+        created_by: { type: string }
+      required: [revision_id, document_ref, artifact_ref, revision_number, created_at, created_by]
+
+    Board:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+        thread_id:
+          type: string
+          description: Backing thread id for board timeline and events.
+        status:
+          type: string
+          enum: [active, paused, closed]
+        primary_topic_ref: { $ref: '#/components/schemas/TypedRef' }
+        document_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        card_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        pinned_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        created_at: { type: string, format: date-time }
+        created_by: { type: string }
+        updated_at: { type: string, format: date-time }
+        updated_by: { type: string }
+        provenance: { $ref: '#/components/schemas/Provenance' }
+      required:
+        [id, title, status, document_refs, card_refs, pinned_refs, created_at, created_by, updated_at, updated_by, provenance]
+
+    Card:
+      type: object
+      properties:
+        id: { type: string }
+        board_ref: { $ref: '#/components/schemas/TypedRef' }
+        topic_ref: { $ref: '#/components/schemas/TypedRef' }
+        thread_id:
+          type: string
+          description: Backing thread id for card timeline and packet lifecycle (always set for persisted cards).
+        document_ref: { $ref: '#/components/schemas/TypedRef' }
+        title: { type: string }
+        summary: { type: string }
+        column_key:
+          type: string
+          enum: [backlog, ready, in_progress, blocked, review, done]
+        rank: { type: string }
+        assignee_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        due_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Optional due instant for the work item.
+        definition_of_done:
+          type: array
+          items: { type: string }
+          description: Acceptance lines for completing the card.
+        risk:
+          type: string
+          enum: [low, medium, high, critical]
+        resolution:
+          type: string
+          nullable: true
+          enum: [done, canceled]
+          description: Null while the card is active; terminal `done` or `canceled` when resolved.
+        resolution_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        related_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        created_at: { type: string, format: date-time }
+        created_by: { type: string }
+        updated_at: { type: string, format: date-time }
+        updated_by: { type: string }
+        provenance: { $ref: '#/components/schemas/Provenance' }
+        archived_at: { type: string, format: date-time }
+        archived_by: { type: string }
+        trashed_at: { type: string, format: date-time }
+        trashed_by: { type: string }
+        trash_reason: { type: string }
+      required:
+        [id, board_ref, thread_id, title, summary, column_key, rank, assignee_refs, risk, resolution_refs,
+         related_refs, created_at, created_by, updated_at, updated_by, provenance]
+
+    BoardSummary:
+      type: object
+      properties:
+        card_count: { type: integer }
+        cards_by_column:
+          type: object
+          additionalProperties: { type: integer }
+        unresolved_card_count: { type: integer }
+        resolved_card_count: { type: integer }
+        document_count: { type: integer }
+        latest_activity_at: { type: string, format: date-time }
+        has_document_refs: { type: boolean }
+        document_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+      required: [card_count, cards_by_column, unresolved_card_count, resolved_card_count, document_count]
+
+    BoardCardSummary:
+      type: object
+      properties:
+        related_topic_count: { type: integer }
+        document_count: { type: integer }
+        inbox_count: { type: integer }
+        latest_activity_at: { type: string, format: date-time }
+        stale: { type: boolean }
+      required: [related_topic_count, document_count, inbox_count, stale]
+
+    BoardWorkspaceCard:
+      type: object
+      properties:
+        card: { $ref: '#/components/schemas/Card' }
+        summary: { $ref: '#/components/schemas/BoardCardSummary' }
+        projection_freshness: { $ref: '#/components/schemas/ProjectionFreshness' }
+      required: [card, summary, projection_freshness]
+
+    BoardMembership:
+      type: object
+      properties:
+        board_ref: { $ref: '#/components/schemas/TypedRef' }
+        board_title: { type: string }
+        column_key:
+          type: string
+          enum: [backlog, ready, in_progress, blocked, review, done]
+      required: [board_ref, board_title, column_key]
+
+    InboxItem:
+      type: object
+      properties:
+        id: { type: string }
+        category:
+          type: string
+          enum: [action_needed, risk_exception, attention]
+        thread_id:
+          type: string
+          description: Backing thread id for the inbox item and decision actions.
+        subject_ref: { $ref: '#/components/schemas/TypedRef' }
+        source_event_ref: { $ref: '#/components/schemas/TypedRef' }
+        title: { type: string }
+        related_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+      required: [id, category, subject_ref, title, related_refs]
+
+    TopicWriteInput:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [case, process, relationship, initiative, objective, decision, incident, risk, request, note, other]
+        status:
+          type: string
+          enum: [proposed, active, paused, blocked, resolved, closed, archived]
+        title: { type: string }
+        summary: { type: string }
+        owner_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        document_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        board_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        related_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        provenance: { $ref: '#/components/schemas/Provenance' }
+      required: [type, status, title, summary, owner_refs, document_refs, board_refs, related_refs, provenance]
+
+    TopicPatchInput:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [case, process, relationship, initiative, objective, decision, incident, risk, request, note, other]
+        status:
+          type: string
+          enum: [proposed, active, paused, blocked, resolved, closed, archived]
+        title: { type: string }
+        summary: { type: string }
+        owner_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        document_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        board_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        related_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        provenance: { $ref: '#/components/schemas/Provenance' }
+
+    DocumentCreateInput:
+      type: object
+      properties:
+        title: { type: string }
+        subject_ref: { $ref: '#/components/schemas/TypedRef' }
+        body_markdown: { type: string }
+        summary: { type: string }
+        refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        provenance: { $ref: '#/components/schemas/Provenance' }
+      required: [title, subject_ref, body_markdown, refs, provenance]
+
+    DocumentRevisionCreateInput:
+      type: object
+      properties:
+        body_markdown: { type: string }
+        summary: { type: string }
+        refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        provenance: { $ref: '#/components/schemas/Provenance' }
+      required: [body_markdown, refs, provenance]
+
+    BoardCreateInput:
+      type: object
+      properties:
+        title: { type: string }
+        status:
+          type: string
+          enum: [active, paused, closed]
+        primary_topic_ref: { $ref: '#/components/schemas/TypedRef' }
+        document_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        pinned_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        provenance: { $ref: '#/components/schemas/Provenance' }
+      required: [title, status, document_refs, pinned_refs, provenance]
+
+    BoardPatchInput:
+      type: object
+      properties:
+        title: { type: string }
+        status:
+          type: string
+          enum: [active, paused, closed]
+        primary_topic_ref: { $ref: '#/components/schemas/TypedRef' }
+        document_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        pinned_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        provenance: { $ref: '#/components/schemas/Provenance' }
+
+    CardCreateInput:
+      type: object
+      properties:
+        id: { type: string }
+        topic_ref: { $ref: '#/components/schemas/TypedRef' }
+        document_ref: { $ref: '#/components/schemas/TypedRef' }
+        title: { type: string }
+        summary: { type: string }
+        column_key:
+          type: string
+          enum: [backlog, ready, in_progress, blocked, review, done]
+        before_card_id:
+          type: string
+          description: Optional neighbor card id for initial ordering within column_key.
+        after_card_id:
+          type: string
+          description: Optional neighbor card id for initial ordering; mutually exclusive with before_card_id.
+        assignee_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        risk:
+          type: string
+          enum: [low, medium, high, critical]
+        resolution:
+          type: string
+          nullable: true
+          enum: [done, canceled]
+        resolution_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        related_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        due_at:
+          type: string
+          format: date-time
+          nullable: true
+        definition_of_done:
+          type: array
+          items: { type: string }
+        provenance: { $ref: '#/components/schemas/Provenance' }
+      required:
+        [title, summary, column_key, assignee_refs, risk, resolution_refs, related_refs, provenance]
+
+    CardPatchInput:
+      type: object
+      properties:
+        topic_ref: { $ref: '#/components/schemas/TypedRef' }
+        document_ref: { $ref: '#/components/schemas/TypedRef' }
+        title: { type: string }
+        summary: { type: string }
+        assignee_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        risk:
+          type: string
+          enum: [low, medium, high, critical]
+        resolution:
+          type: string
+          nullable: true
+          enum: [done, canceled]
+        resolution_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        related_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        due_at:
+          type: string
+          format: date-time
+          nullable: true
+        definition_of_done:
+          type: array
+          items: { type: string }
+        provenance: { $ref: '#/components/schemas/Provenance' }
+
+    MoveCardInput:
+      type: object
+      properties:
+        column_key:
+          type: string
+          enum: [backlog, ready, in_progress, blocked, review, done]
+        before_card_id:
+          type: string
+          description: Insert immediately before this card id in column_key; mutually exclusive with after_card_id.
+        after_card_id:
+          type: string
+          description: Insert immediately after this card id in column_key; mutually exclusive with before_card_id.
+        resolution:
+          type: string
+          enum: [done, canceled]
+        resolution_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        if_board_updated_at:
+          type: string
+          format: date-time
+          description: Parent board optimistic concurrency token; required for moves that update column/rank (matches core).
+      required: [column_key, if_board_updated_at]
+
+    ReceiptPacket:
+      type: object
+      properties:
+        receipt_id: { type: string }
+        subject_ref:
+          allOf:
+            - $ref: '#/components/schemas/TypedRef'
+          description: MUST be card:<card_id>.
+        outputs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        verification_evidence:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        changes_summary: { type: string }
+        known_gaps:
+          type: array
+          items: { type: string }
+      required:
+        [receipt_id, subject_ref, outputs, verification_evidence, changes_summary, known_gaps]
+
+    ReviewPacket:
+      type: object
+      properties:
+        review_id: { type: string }
+        subject_ref:
+          allOf:
+            - $ref: '#/components/schemas/TypedRef'
+          description: MUST be card:<card_id>.
+        receipt_ref: { $ref: '#/components/schemas/TypedRef' }
+        outcome:
+          type: string
+          enum: [accept, revise, escalate]
+        notes: { type: string }
+        evidence_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+      required: [review_id, subject_ref, receipt_ref, outcome, notes, evidence_refs]
+
+    EventCreateInput:
+      type: object
+      properties:
+        type: { type: string }
+        actor_id: { type: string }
+        thread_ref: { $ref: '#/components/schemas/TypedRef' }
+        refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        summary: { type: string }
+        payload:
+          type: object
+          additionalProperties: true
+        provenance: { $ref: '#/components/schemas/Provenance' }
+      required: [type, actor_id, refs, summary, provenance]
+
+    CreateTopicRequest:
+      type: object
+      properties:
+        topic: { $ref: '#/components/schemas/TopicWriteInput' }
+      required: [topic]
+
+    PatchTopicRequest:
+      type: object
+      properties:
+        patch: { $ref: '#/components/schemas/TopicPatchInput' }
+        if_updated_at:
+          type: string
+          format: date-time
+      required: [patch]
+
+    CreateDocumentRequest:
+      type: object
+      properties:
+        document: { $ref: '#/components/schemas/DocumentCreateInput' }
+      required: [document]
+
+    CreateDocumentRevisionRequest:
+      type: object
+      properties:
+        revision: { $ref: '#/components/schemas/DocumentRevisionCreateInput' }
+        if_document_updated_at:
+          type: string
+          format: date-time
+        if_base_revision:
+          type: string
+          description: >
+            Optional base revision id for optimistic concurrency (must match the document head
+            when appending from the current tip). When omitted with the nested `revision` envelope,
+            the server defaults to the document head revision.
+      required: [revision]
+
+    CreateBoardRequest:
+      type: object
+      properties:
+        board: { $ref: '#/components/schemas/BoardCreateInput' }
+      required: [board]
+
+    PatchBoardRequest:
+      type: object
+      properties:
+        patch: { $ref: '#/components/schemas/BoardPatchInput' }
+        if_updated_at:
+          type: string
+          format: date-time
+      required: [patch]
+
+    CreateCardRequest:
+      type: object
+      properties:
+        board_id:
+          type: string
+          description: >
+            Target board for POST /cards. Required unless board_ref is set. Ignored for
+            POST /boards/{board_id}/cards (path segment is authoritative).
+        board_ref:
+          allOf:
+            - $ref: '#/components/schemas/TypedRef'
+          description: Alternative to board_id; MUST be board:<board_id> for POST /cards.
+        card: { $ref: '#/components/schemas/CardCreateInput' }
+        if_board_updated_at:
+          type: string
+          format: date-time
+      required: [card]
+
+    BatchCreateBoardCardsRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+        request_key: { type: string }
+        if_board_updated_at:
+          type: string
+          format: date-time
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/BoardCardBatchItemInput'
+      required: [items]
+
+    BoardCardBatchItemInput:
+      type: object
+      description: >
+        One card to create; same field conventions as POST /boards/{board_id}/cards for a single
+        card (flat fields and optional nested `card`). Do not send actor_id, request_key,
+        if_board_updated_at, board_id, or board_ref on each item — use the batch envelope.
+      additionalProperties: true
+      properties:
+        card: { $ref: '#/components/schemas/CardCreateInput' }
+        card_id: { type: string }
+        id: { type: string }
+        title: { type: string }
+        summary: { type: string }
+        column_key:
+          type: string
+          enum: [backlog, ready, in_progress, blocked, review, done]
+        before_card_id: { type: string }
+        after_card_id: { type: string }
+        before_thread_id: { type: string }
+        after_thread_id: { type: string }
+        parent_thread: { type: string }
+        thread_id: { type: string }
+        assignee_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        risk:
+          type: string
+          enum: [low, medium, high, critical]
+        resolution:
+          type: string
+          nullable: true
+          enum: [done, canceled]
+        resolution_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        related_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        topic_ref: { $ref: '#/components/schemas/TypedRef' }
+        document_ref: { $ref: '#/components/schemas/TypedRef' }
+        due_at:
+          type: string
+          format: date-time
+          nullable: true
+        definition_of_done:
+          type: array
+          items: { type: string }
+        provenance: { $ref: '#/components/schemas/Provenance' }
+      required: [title]
+
+    BatchCreateBoardCardsResponse:
+      type: object
+      properties:
+        board: { $ref: '#/components/schemas/Board' }
+        cards:
+          type: array
+          items: { $ref: '#/components/schemas/Card' }
+      required: [board, cards]
+
+    PatchCardRequest:
+      type: object
+      properties:
+        patch: { $ref: '#/components/schemas/CardPatchInput' }
+        if_updated_at:
+          type: string
+          format: date-time
+      required: [patch]
+
+    MoveCardRequest:
+      description: >
+        Flat card move body aligned with refactor spec §8.1 (`column_key`, optional placement
+        hints, optional terminal resolution). Clients MAY also send a legacy nested
+        `move` object with the same fields; core flattens it when `column_key` is not set at the root.
+      allOf:
+        - $ref: '#/components/schemas/MoveCardInput'
+        - type: object
+          properties:
+            actor_id:
+              type: string
+              description: Optional actor performing the move (may also be supplied via auth headers).
+            move:
+              $ref: '#/components/schemas/MoveCardInput'
+              deprecated: true
+              description: Legacy envelope; prefer flat top-level fields. Ignored when `column_key` is set at the root.
+
+    CreateReceiptRequest:
+      type: object
+      description: >
+        Artifact envelope plus structured packet. Core requires both `artifact` and `packet`;
+        `artifact.kind` defaults to `receipt` when omitted.
+      properties:
+        actor_id: { type: string }
+        request_key: { type: string }
+        artifact:
+          type: object
+          additionalProperties: true
+          description: Artifact fields before persistence (kind, id, refs, summary, provenance, …).
+        packet: { $ref: '#/components/schemas/ReceiptPacket' }
+      required: [artifact, packet]
+
+    CreateReviewRequest:
+      type: object
+      description: >
+        Artifact envelope plus structured packet. Core requires both `artifact` and `packet`;
+        `artifact.kind` defaults to `review` when omitted.
+      properties:
+        actor_id: { type: string }
+        request_key: { type: string }
+        artifact:
+          type: object
+          additionalProperties: true
+          description: Artifact fields before persistence (kind, id, refs, summary, provenance, …).
+        packet: { $ref: '#/components/schemas/ReviewPacket' }
+      required: [artifact, packet]
+
+    CreateEventRequest:
+      type: object
+      properties:
+        event: { $ref: '#/components/schemas/EventCreateInput' }
+      required: [event]
+
+    AcknowledgeInboxItemRequest:
+      type: object
+      description: >
+        Acknowledges a derived inbox item. `subject_ref` is resolved to the backing thread for
+        correlation. Supported prefixes: `thread:<thread_id>`, `topic:<topic_id>` (topic row must
+        exist), `card:<card_id>`, `board:<board_id>`. Do not pass a thread id with the `topic:` prefix.
+      properties:
+        actor_id: { type: string }
+        subject_ref: { $ref: '#/components/schemas/TypedRef' }
+        inbox_item_id:
+          type: string
+          description: Must match path inbox_id when both are provided.
+        note: { type: string }
+        refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+      required: [subject_ref]
+
+    TopicLifecycleMutationRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+
+    TopicTrashRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+        reason: { type: string }
+      required: [reason]
+
+    BoardLifecycleMutationRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+
+    BoardOnlyResponse:
+      type: object
+      properties:
+        board: { $ref: '#/components/schemas/Board' }
+      required: [board]
+
+    PurgeBoardRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+
+    PurgeBoardResponse:
+      type: object
+      properties:
+        purged: { type: boolean }
+        board_id: { type: string }
+      required: [purged, board_id]
+
+    DocumentLifecycleMutationRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+
+    DocumentRestoreFromTrashRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+        reason: { type: string }
+
+    PurgeDocumentRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+
+    PurgeDocumentResponse:
+      type: object
+      properties:
+        purged: { type: boolean }
+        document_id: { type: string }
+      required: [purged, document_id]
+
+    PurgeArtifactResponse:
+      type: object
+      properties:
+        purged: { type: boolean }
+        artifact_id: { type: string }
+      required: [purged, artifact_id]
+
+    RefEdge:
+      type: object
+      properties:
+        source_ref: { type: string, description: "Typed ref for the edge source (e.g. board:abc123)" }
+        target_ref: { type: string, description: "Typed ref for the edge target (e.g. card:def456)" }
+        relation: { type: string, description: "Edge relation type" }
+        discovered_at: { type: string, format: date-time, description: "When this edge was first recorded" }
+        metadata:
+          type: object
+          additionalProperties: true
+      required: [source_ref, target_ref, relation, discovered_at]
+
+    RefEdgesResponse:
+      type: object
+      properties:
+        ref_edges:
+          type: array
+          items: { $ref: '#/components/schemas/RefEdge' }
+      required: [ref_edges]
+
+    TopicResponse:
+      type: object
+      properties:
+        topic: { $ref: '#/components/schemas/Topic' }
+      required: [topic]
+
+    TopicsResponse:
+      type: object
+      properties:
+        topics:
+          type: array
+          items: { $ref: '#/components/schemas/Topic' }
+        next_cursor:
+          type: string
+          description: Present when further pages exist after a bounded `limit` query.
+      required: [topics]
+
+    TopicTimelineResponse:
+      type: object
+      properties:
+        topic: { $ref: '#/components/schemas/Topic' }
+        events:
+          type: array
+          items: { $ref: '#/components/schemas/Event' }
+        artifacts:
+          type: array
+          items: { $ref: '#/components/schemas/Artifact' }
+        cards:
+          type: array
+          items: { $ref: '#/components/schemas/Card' }
+        documents:
+          type: array
+          items: { $ref: '#/components/schemas/Document' }
+        threads:
+          type: array
+          items: { $ref: '#/components/schemas/Thread' }
+      required: [topic, events, artifacts, cards, documents, threads]
+
+    CardTimelineResponse:
+      type: object
+      properties:
+        card: { $ref: '#/components/schemas/Card' }
+        events:
+          type: array
+          items: { $ref: '#/components/schemas/Event' }
+        artifacts:
+          type: array
+          items: { $ref: '#/components/schemas/Artifact' }
+        cards:
+          type: array
+          items: { $ref: '#/components/schemas/Card' }
+        documents:
+          type: array
+          items: { $ref: '#/components/schemas/Document' }
+        threads:
+          type: array
+          items: { $ref: '#/components/schemas/Thread' }
+      required: [card, events, artifacts, cards, documents, threads]
+
+    TopicWorkspaceResponse:
+      type: object
+      properties:
+        topic: { $ref: '#/components/schemas/Topic' }
+        cards:
+          type: array
+          items: { $ref: '#/components/schemas/Card' }
+        boards:
+          type: array
+          items: { $ref: '#/components/schemas/Board' }
+        documents:
+          type: array
+          items: { $ref: '#/components/schemas/Document' }
+        threads:
+          type: array
+          items: { $ref: '#/components/schemas/Thread' }
+        inbox:
+          type: array
+          items: { $ref: '#/components/schemas/InboxItem' }
+        projection_freshness: { $ref: '#/components/schemas/ProjectionFreshness' }
+        generated_at: { type: string, format: date-time }
+      required: [topic, cards, boards, documents, threads, inbox, projection_freshness, generated_at]
+
+    ThreadResponse:
+      type: object
+      properties:
+        thread: { $ref: '#/components/schemas/Thread' }
+      required: [thread]
+
+    ThreadsResponse:
+      type: object
+      properties:
+        threads:
+          type: array
+          items: { $ref: '#/components/schemas/Thread' }
+      required: [threads]
+
+    ThreadTimelineResponse:
+      type: object
+      properties:
+        thread: { $ref: '#/components/schemas/Thread' }
+        events:
+          type: array
+          items: { $ref: '#/components/schemas/Event' }
+        artifacts:
+          type: array
+          items: { $ref: '#/components/schemas/Artifact' }
+        topics:
+          type: array
+          items: { $ref: '#/components/schemas/Topic' }
+        cards:
+          type: array
+          items: { $ref: '#/components/schemas/Card' }
+        documents:
+          type: array
+          items: { $ref: '#/components/schemas/Document' }
+      required: [thread, events, artifacts, topics, cards, documents]
+
+    ThreadWorkspaceResponse:
+      type: object
+      properties:
+        thread: { $ref: '#/components/schemas/Thread' }
+        related_topics:
+          type: array
+          items: { $ref: '#/components/schemas/Topic' }
+        cards:
+          type: array
+          items: { $ref: '#/components/schemas/Card' }
+        documents:
+          type: array
+          items: { $ref: '#/components/schemas/Document' }
+        board_memberships:
+          type: array
+          items: { $ref: '#/components/schemas/BoardMembership' }
+        inbox:
+          type: array
+          items: { $ref: '#/components/schemas/InboxItem' }
+        projection_freshness: { $ref: '#/components/schemas/ProjectionFreshness' }
+      required: [thread, related_topics, cards, documents, board_memberships, inbox, projection_freshness]
+
+    DocumentsResponse:
+      type: object
+      properties:
+        documents:
+          type: array
+          items: { $ref: '#/components/schemas/Document' }
+      required: [documents]
+
+    DocumentWithRevisionResponse:
+      type: object
+      properties:
+        document: { $ref: '#/components/schemas/Document' }
+        revision: { $ref: '#/components/schemas/DocumentRevision' }
+      required: [document, revision]
+
+    DocumentRevisionsResponse:
+      type: object
+      properties:
+        document_id: { type: string }
+        revisions:
+          type: array
+          items: { $ref: '#/components/schemas/DocumentRevision' }
+      required: [document_id, revisions]
+
+    DocumentRevisionResponse:
+      type: object
+      properties:
+        document_id: { type: string }
+        revision: { $ref: '#/components/schemas/DocumentRevision' }
+      required: [document_id, revision]
+
+    BoardsResponse:
+      type: object
+      properties:
+        boards:
+          type: array
+          items: { $ref: '#/components/schemas/Board' }
+        summaries:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/BoardSummary'
+      required: [boards, summaries]
+
+    BoardResponse:
+      type: object
+      properties:
+        board: { $ref: '#/components/schemas/Board' }
+        summary: { $ref: '#/components/schemas/BoardSummary' }
+      required: [board, summary]
+
+    BoardCardsResponse:
+      type: object
+      properties:
+        board_id: { type: string }
+        cards:
+          type: array
+          items: { $ref: '#/components/schemas/Card' }
+      required: [board_id, cards]
+
+    BoardWorkspaceResponse:
+      type: object
+      properties:
+        board: { $ref: '#/components/schemas/Board' }
+        primary_topic: { $ref: '#/components/schemas/Topic' }
+        cards:
+          type: array
+          items: { $ref: '#/components/schemas/BoardWorkspaceCard' }
+        documents:
+          type: array
+          items: { $ref: '#/components/schemas/Document' }
+        inbox:
+          type: array
+          items: { $ref: '#/components/schemas/InboxItem' }
+        board_summary: { $ref: '#/components/schemas/BoardSummary' }
+        projection_freshness: { $ref: '#/components/schemas/ProjectionFreshness' }
+        section_kinds:
+          type: array
+          items: { type: string }
+        generated_at: { type: string, format: date-time }
+      required:
+        [board, cards, documents, inbox, board_summary, projection_freshness, section_kinds, generated_at]
+
+    CardResponse:
+      type: object
+      properties:
+        card: { $ref: '#/components/schemas/Card' }
+      required: [card]
+
+    CardsResponse:
+      type: object
+      properties:
+        cards:
+          type: array
+          items: { $ref: '#/components/schemas/Card' }
+      required: [cards]
+
+    BoardCardMutationResponse:
+      type: object
+      properties:
+        board: { $ref: '#/components/schemas/Board' }
+        card: { $ref: '#/components/schemas/Card' }
+      required: [board, card]
+
+    RestoreArchivedCardRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+        if_board_updated_at:
+          type: string
+          format: date-time
+
+    CardTrashRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+        reason: { type: string }
+        if_board_updated_at:
+          type: string
+          format: date-time
+      required: [reason]
+
+    PurgeCardRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+
+    PurgeCardResponse:
+      type: object
+      properties:
+        purged: { type: boolean }
+        card_id: { type: string }
+      required: [purged, card_id]
+
+    PacketPayload:
+      oneOf:
+        - $ref: '#/components/schemas/ReceiptPacket'
+        - $ref: '#/components/schemas/ReviewPacket'
+
+    PacketArtifactResponse:
+      type: object
+      properties:
+        artifact: { $ref: '#/components/schemas/Artifact' }
+        packet_kind: { type: string }
+        packet: { $ref: '#/components/schemas/PacketPayload' }
+      required: [artifact, packet_kind, packet]
+
+    EventResponse:
+      type: object
+      properties:
+        event: { $ref: '#/components/schemas/Event' }
+      required: [event]
+
+    EventsResponse:
+      type: object
+      properties:
+        events:
+          type: array
+          items: { $ref: '#/components/schemas/Event' }
+      required: [events]
+
+    ArtifactResponse:
+      type: object
+      properties:
+        artifact: { $ref: '#/components/schemas/Artifact' }
+      required: [artifact]
+
+    InboxResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/InboxItem' }
+      required: [items]
+
+    AcknowledgeInboxItemResponse:
+      type: object
+      properties:
+        event: { $ref: '#/components/schemas/Event' }
+      required: [event]
+
+    ArtifactsListResponse:
+      type: object
+      properties:
+        artifacts:
+          type: array
+          items: { $ref: '#/components/schemas/Artifact' }
+      required: [artifacts]
+
+    CreateArtifactRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+        artifact:
+          type: object
+          additionalProperties: true
+          description: Artifact fields before persistence (e.g. kind, refs, summary).
+        content: {}
+        content_type: { type: string }
+      required: [artifact, content_type]
+
+    ThreadContextArtifactEntry:
+      type: object
+      description: Key artifact row; may include ref, artifact, and optional content_preview.
+      additionalProperties: true
+
+    ThreadContextResponse:
+      type: object
+      properties:
+        thread: { $ref: '#/components/schemas/Thread' }
+        recent_events:
+          type: array
+          items: { $ref: '#/components/schemas/Event' }
+        key_artifacts:
+          type: array
+          items: { $ref: '#/components/schemas/ThreadContextArtifactEntry' }
+        open_cards:
+          type: array
+          items: { type: object, additionalProperties: true }
+        documents:
+          type: array
+          items: { type: object, additionalProperties: true }
+      additionalProperties: true
+      required: [thread, recent_events, key_artifacts, open_cards, documents]
+
+    ArchiveCardRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+        if_board_updated_at:
+          type: string
+          format: date-time
+
+    SecretMetadata:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        created_by: { type: string }
+        updated_by: { type: string }
+      required: [id, name, created_at, updated_at, created_by, updated_by]
+
+    CreateSecretRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Unique secret name (e.g. OPENAI_API_KEY).
+        value:
+          type: string
+          description: Secret plaintext value to encrypt.
+        description:
+          type: string
+          description: Optional note about this secret's purpose.
+      required: [name, value]
+
+    UpdateSecretRequest:
+      type: object
+      properties:
+        value:
+          type: string
+          description: New secret plaintext value.
+        description:
+          type: string
+          description: Updated description (omit to keep current).
+      required: [value]
+
+    SecretResponse:
+      type: object
+      properties:
+        secret: { $ref: '#/components/schemas/SecretMetadata' }
+      required: [secret]
+
+    SecretsResponse:
+      type: object
+      properties:
+        secrets:
+          type: array
+          items: { $ref: '#/components/schemas/SecretMetadata' }
+      required: [secrets]
+
+    DeleteSecretResponse:
+      type: object
+      properties:
+        deleted: { type: boolean }
+        secret_id: { type: string }
+      required: [deleted, secret_id]
+
+    RevealSecretResponse:
+      type: object
+      properties:
+        name: { type: string }
+        value: { type: string }
+      required: [name, value]
+
+    RevealSecretsBatchRequest:
+      type: object
+      properties:
+        names:
+          type: array
+          items: { type: string }
+          description: List of secret names to reveal.
+      required: [names]
+
+    RevealSecretsBatchResponse:
+      type: object
+      properties:
+        secrets:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              value: { type: string }
+            required: [name, value]
+      required: [secrets]

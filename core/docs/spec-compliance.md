@@ -1,10 +1,10 @@
-# oar-core Spec Compliance (v0.2.2)
+# anx-core Spec Compliance (v0.2.2)
 
 Last updated: 2026-04-04
 
 This checklist maps key requirements from:
-- `docs/oar-core-spec.md`
-- `../contracts/oar-schema.yaml`
+- `docs/anx-core-spec.md`
+- `../contracts/anx-schema.yaml`
 
 For each item, it points to implementation code, validating tests, and any known gap.
 
@@ -18,9 +18,9 @@ For each item, it points to implementation code, validating tests, and any known
 | Requirement | Source | Implementation | Tests | Status / Gap |
 |---|---|---|---|---|
 | Workspace init creates SQLite + blob layout and is idempotent | Spec §2.1 | `internal/storage/workspace.go`, `internal/storage/migrations.go` | `internal/storage/workspace_test.go` | Implemented |
-| Blob backend seam supports filesystem, object-style, and S3-compatible backends, with backend-reported usage accounting | Spec §2.1, §3.3 | `internal/blob/*.go`, `internal/primitives/quota.go`, `cmd/oar-core/main.go` | `internal/blob/filesystem_test.go`, `internal/blob/object_test.go`, `internal/blob/s3_test.go`, `cmd/oar-core/blob_backend_test.go`, `internal/primitives/store_test.go` | Implemented |
-| Health/version endpoints expose local readiness + schema version | Spec §7, §11 | `internal/server/handler.go`, `cmd/oar-core/main.go` | `internal/server/handler_test.go`, `internal/storage/workspace_test.go` | Implemented |
-| Compatibility handshake + version headers + generated metadata discovery endpoints (`/meta/handshake`, `/meta/commands*`, `/meta/concepts*`) | CLI spec draft §2.1–§2.4 | `internal/server/handler.go`, `internal/server/meta_handlers.go`, `cmd/oar-core/main.go` | `internal/server/meta_stream_integration_test.go` | Implemented |
+| Blob backend seam supports filesystem, object-style, and S3-compatible backends, with backend-reported usage accounting | Spec §2.1, §3.3 | `internal/blob/*.go`, `internal/primitives/quota.go`, `cmd/anx-core/main.go` | `internal/blob/filesystem_test.go`, `internal/blob/object_test.go`, `internal/blob/s3_test.go`, `cmd/anx-core/blob_backend_test.go`, `internal/primitives/store_test.go` | Implemented |
+| Health/version endpoints expose local readiness + schema version | Spec §7, §11 | `internal/server/handler.go`, `cmd/anx-core/main.go` | `internal/server/handler_test.go`, `internal/storage/workspace_test.go` | Implemented |
+| Compatibility handshake + version headers + generated metadata discovery endpoints (`/meta/handshake`, `/meta/commands*`, `/meta/concepts*`) | CLI spec draft §2.1–§2.4 | `internal/server/handler.go`, `internal/server/meta_handlers.go`, `cmd/anx-core/main.go` | `internal/server/meta_stream_integration_test.go` | Implemented |
 | SSE streaming endpoints (`/events/stream`, `/inbox/stream`) with `Last-Event-ID` resume | CLI spec draft §1.1, §2.4 | `internal/server/handler.go`, `internal/server/stream_handlers.go` | `internal/server/meta_stream_integration_test.go` | Implemented |
 | CLI compatibility rejection path returns stable `cli_outdated` payload with upgrade hints | CLI spec draft §0, §1.1 | `internal/server/handler.go` | `internal/server/meta_stream_integration_test.go` | Implemented |
 | Schema contract loader exposes version, enums, typed-ref prefixes, provenance, packet + reference conventions | Spec §2.2, schema root | `internal/schema/schema.go`, `internal/schema/version.go` | `internal/schema/contract_test.go`, `internal/schema/version_test.go` | Implemented |
@@ -29,7 +29,7 @@ For each item, it points to implementation code, validating tests, and any known
 | Provenance shape enforced (`sources`, optional `notes`, optional `by_field`) | Spec §8.1; schema `provenance.fields` | `internal/schema/validator.go`, topic/card/event handlers | `internal/schema/validator_test.go` | Implemented |
 | Actor registry exists; mutating endpoints reject unknown `actor_id` for unauthenticated callers | Spec §6 | `internal/actors/store.go`, `internal/server/primitives_handlers.go` (`requireRegisteredActorID`) | `internal/server/actor_integration_test.go`, broader integration tests in `internal/server/*_integration_test.go` | Implemented |
 | Agent auth lifecycle (register, assertion login, refresh rotation, key rotation, self-revoke) | Spec draft auth ticket scope | `internal/auth/store.go`, `internal/server/auth_handlers.go`, `internal/storage/migrations.go` | `internal/server/auth_integration_test.go` | Implemented |
-| Auth-first identity model: production runtime requires authenticated writes; passkey → `principal_kind=human`, public-key → `principal_kind=agent` | Spec draft auth ticket scope | `cmd/oar-core/main.go`, `internal/server/handler.go`, `internal/server/meta_handlers.go` (`handshakePayload`), `internal/auth/store.go` (`RegisterAgent`, `RegisterPasskeyAgent`) | `internal/server/handler_test.go`, `internal/server/auth_integration_test.go` | Implemented |
+| Auth-first identity model: production runtime requires authenticated writes; passkey → `principal_kind=human`, public-key → `principal_kind=agent` | Spec draft auth ticket scope | `cmd/anx-core/main.go`, `internal/server/handler.go`, `internal/server/meta_handlers.go` (`handshakePayload`), `internal/auth/store.go` (`RegisterAgent`, `RegisterPasskeyAgent`) | `internal/server/handler_test.go`, `internal/server/auth_integration_test.go` | Implemented |
 | Authenticated principal maps to actor identity and can omit `actor_id` on writes; mismatches are rejected | Spec draft auth ticket scope | `internal/server/auth_handlers.go` (`resolveWriteActorID`), write handlers in `internal/server/*.go` | `internal/server/auth_integration_test.go` | Implemented |
 | Events are append-only; unknown event types accepted and stored | Spec §3.1, §11 | `internal/primitives/store.go` (`AppendEvent`), `internal/server/primitives_handlers.go` | `internal/server/primitives_integration_test.go`, `internal/server/event_reference_conventions_integration_test.go` | Implemented |
 | Topic/card patch/merge preserves unknown fields; list fields replace wholesale when present | Spec §2.3 | `internal/primitives/store.go` (`PatchTopic`, `PatchCard`) | `internal/server/topics_workspace_integration_test.go`, `internal/server/boards_integration_test.go` | Implemented |

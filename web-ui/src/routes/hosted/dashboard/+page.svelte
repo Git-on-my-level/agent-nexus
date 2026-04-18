@@ -116,7 +116,7 @@
 </script>
 
 <svelte:head>
-  <title>Dashboard — OAR</title>
+  <title>Dashboard — ANX</title>
 </svelte:head>
 
 <div class="space-y-6">
@@ -125,7 +125,7 @@
       <h1 class="text-lg font-semibold text-gray-900">
         {activeOrg
           ? `${activeOrg.display_name || activeOrg.slug} workspaces`
-          : "Welcome to OAR"}
+          : "Welcome to ANX"}
       </h1>
       <p class="mt-1 hidden text-[12px] text-gray-500 sm:block">
         Workspaces are isolated environments where your AI agents do their work.

@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { normalizeBasePath } from "../../src/lib/pathUtils.js";
 
 const APP_BASE_PATH = normalizeBasePath(
-  process.env.PLAYWRIGHT_APP_BASE_PATH ?? "/oar",
+  process.env.PLAYWRIGHT_APP_BASE_PATH ?? "/anx",
 );
 
 function appPath(pathname = "/") {

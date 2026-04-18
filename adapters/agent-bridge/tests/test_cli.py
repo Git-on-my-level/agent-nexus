@@ -2,10 +2,10 @@ import argparse
 
 import pytest
 
-from oar_agent_bridge import __version__
-from oar_agent_bridge import cli as cli_module
-from oar_agent_bridge.cli import build_parser
-from oar_agent_bridge.registry import RegistrationStatusResult
+from anx_agent_bridge import __version__
+from anx_agent_bridge import cli as cli_module
+from anx_agent_bridge.cli import build_parser
+from anx_agent_bridge.registry import RegistrationStatusResult
 
 
 def test_version_flag_prints_package_version(capsys):
@@ -16,7 +16,7 @@ def test_version_flag_prints_package_version(capsys):
 
     assert excinfo.value.code == 0
     captured = capsys.readouterr()
-    assert f"oar-agent-bridge {__version__}" in captured.out
+    assert f"anx-agent-bridge {__version__}" in captured.out
 
 
 def test_registration_status_subcommand_is_available():

@@ -16,7 +16,7 @@ var ErrAlreadyExists = errors.New("actor already exists")
 var ErrActorNotFound = errors.New("actor not found")
 var ErrInvalidCursor = errors.New("invalid cursor")
 
-const SystemActorID = "oar-core"
+const SystemActorID = "anx-core"
 
 type Actor struct {
 	ID          string   `json:"id"`

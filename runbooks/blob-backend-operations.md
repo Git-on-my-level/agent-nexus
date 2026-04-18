@@ -28,7 +28,7 @@ Limitations:
 
 ### S3-compatible backend
 
-Enable with `OAR_BLOB_BACKEND=s3`.
+Enable with `ANX_BLOB_BACKEND=s3`.
 
 Supports:
 - AWS S3
@@ -39,19 +39,19 @@ Supports:
 Configuration:
 
 ```bash
-OAR_BLOB_BACKEND=s3
-OAR_BLOB_S3_BUCKET=oar-workspace-blobs
-OAR_BLOB_S3_PREFIX=workspaces/ws_example/
-OAR_BLOB_S3_REGION=auto
-OAR_BLOB_S3_ENDPOINT=https://<account>.r2.cloudflarestorage.com
-OAR_BLOB_S3_ACCESS_KEY_ID=<key-id>
-OAR_BLOB_S3_SECRET_ACCESS_KEY=<secret>
-OAR_BLOB_S3_FORCE_PATH_STYLE=true
+ANX_BLOB_BACKEND=s3
+ANX_BLOB_S3_BUCKET=anx-workspace-blobs
+ANX_BLOB_S3_PREFIX=workspaces/ws_example/
+ANX_BLOB_S3_REGION=auto
+ANX_BLOB_S3_ENDPOINT=https://<account>.r2.cloudflarestorage.com
+ANX_BLOB_S3_ACCESS_KEY_ID=<key-id>
+ANX_BLOB_S3_SECRET_ACCESS_KEY=<secret>
+ANX_BLOB_S3_FORCE_PATH_STYLE=true
 ```
 
-For R2, set `OAR_BLOB_S3_REGION=auto` and use the R2 endpoint URL.
+For R2, set `ANX_BLOB_S3_REGION=auto` and use the R2 endpoint URL.
 
-For MinIO or other path-style providers, set `OAR_BLOB_S3_FORCE_PATH_STYLE=true`.
+For MinIO or other path-style providers, set `ANX_BLOB_S3_FORCE_PATH_STYLE=true`.
 
 Advantages:
 - Off-host durability
@@ -112,12 +112,12 @@ Migrating from filesystem to S3:
 2. Sync blob content to target bucket/prefix:
 
    ```bash
-   aws s3 sync /var/lib/oar/workspaces/ws_example/artifacts/content/ \
-     s3://oar-workspace-blobs/workspaces/ws_example/ \
+   aws s3 sync /var/lib/anx/workspaces/ws_example/artifacts/content/ \
+     s3://anx-workspace-blobs/workspaces/ws_example/ \
      --endpoint-url https://<account>.r2.cloudflarestorage.com
    ```
 
-3. Update workspace env: `OAR_BLOB_BACKEND=s3` plus S3 settings
+3. Update workspace env: `ANX_BLOB_BACKEND=s3` plus S3 settings
 4. Start the workspace core
 5. Verify blob reads work
 6. Rebuild blob usage ledger
@@ -129,12 +129,12 @@ Migrating from S3 to filesystem:
 2. Sync blob content to local:
 
    ```bash
-   aws s3 sync s3://oar-workspace-blobs/workspaces/ws_example/ \
-     /var/lib/oar/workspaces/ws_example/artifacts/content/ \
+   aws s3 sync s3://anx-workspace-blobs/workspaces/ws_example/ \
+     /var/lib/anx/workspaces/ws_example/artifacts/content/ \
      --endpoint-url https://<account>.r2.cloudflarestorage.com
    ```
 
-3. Update workspace env: `OAR_BLOB_BACKEND=filesystem`
+3. Update workspace env: `ANX_BLOB_BACKEND=filesystem`
 4. Start the workspace core
 5. Rebuild blob usage ledger
 
@@ -186,7 +186,7 @@ Common causes:
 Test connectivity directly:
 
 ```bash
-aws s3 ls s3://oar-workspace-blobs/workspaces/ws_example/ \
+aws s3 ls s3://anx-workspace-blobs/workspaces/ws_example/ \
   --endpoint-url https://<account>.r2.cloudflarestorage.com
 ```
 

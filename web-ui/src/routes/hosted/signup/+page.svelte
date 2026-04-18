@@ -149,7 +149,7 @@
 </script>
 
 <svelte:head>
-  <title>Create your account — OAR</title>
+  <title>Create your account — ANX</title>
 </svelte:head>
 
 <div class="mx-auto max-w-md py-8">
@@ -232,7 +232,7 @@
       </button>
 
       <p class="text-[11px] text-gray-500">
-        By continuing you agree to the OAR terms of service.
+        By continuing you agree to the ANX terms of service.
       </p>
     </form>
   </div>

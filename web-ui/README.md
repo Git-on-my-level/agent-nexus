@@ -1,16 +1,16 @@
-# oar-ui
+# anx-ui
 
 This package contains the SvelteKit web UI for Organization Autorunner.
 
 - `docs/`: operator runbooks and spec/compliance notes
-- `/contracts/oar-schema.yaml`: shared schema contract (`0.2.3`)
+- `/contracts/anx-schema.yaml`: shared schema contract (`0.2.3`)
 - `/contracts/gen/ts/client.ts`: generated TS API client consumed by `web-ui`
 
 ## Runtime model
 
-`oar-ui` now assumes workspace-aware proxying through the UI server.
+`anx-ui` now assumes workspace-aware proxying through the UI server.
 
-- Canonical config: `OAR_WORKSPACES`
+- Canonical config: `ANX_WORKSPACES`
   - JSON array or object mapping `workspace slug -> core base URL`
   - Optional per-workspace `publicOrigin`/`public_origin` keeps copied links and
     registration snippets pinned to the externally reachable workspace URL when
@@ -19,32 +19,32 @@ This package contains the SvelteKit web UI for Organization Autorunner.
   - Example:
 
     ```bash
-    export OAR_WORKSPACES='[
-      {"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000","publicOrigin":"https://oar.tailnet.ts.net/oar/local"},
-      {"slug":"ops","label":"Ops","coreBaseUrl":"http://127.0.0.1:8001","publicOrigin":"https://oar.tailnet.ts.net/oar/ops"}
+    export ANX_WORKSPACES='[
+      {"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000","publicOrigin":"https://anx.tailnet.ts.net/anx/local"},
+      {"slug":"ops","label":"Ops","coreBaseUrl":"http://127.0.0.1:8001","publicOrigin":"https://anx.tailnet.ts.net/anx/ops"}
     ]'
-    export OAR_DEFAULT_WORKSPACE=local
+    export ANX_DEFAULT_WORKSPACE=local
     ```
 
-  - Legacy aliases (deprecated): `OAR_PROJECTS` and `OAR_DEFAULT_PROJECT` still work if the new names are absent.
+  - Legacy aliases (deprecated): `ANX_PROJECTS` and `ANX_DEFAULT_PROJECT` still work if the new names are absent.
 
 - UI routes are workspace-prefixed: `/:workspace/...`
   - Examples: `/local`, `/local/inbox`, `/ops/threads/thread-123`
   - `/` redirects to the default workspace.
   - Legacy root page routes (`/threads`, `/inbox`, etc.) redirect to the default
     workspace for convenience.
-- Optional external mount prefix: `OAR_UI_BASE_PATH=/oar`
-  - External routes become `/oar/:workspace/...`
+- Optional external mount prefix: `ANX_UI_BASE_PATH=/anx`
+  - External routes become `/anx/:workspace/...`
   - Build/dev the UI with the same base path you plan to serve
   - Put build-time values in `web-ui/.env.build` or override them via shell env
   - Reverse proxies should preserve the prefix instead of stripping it
 
 - The SvelteKit server resolves proxied API traffic from the active workspace
-  context and forwards requests to the matching `oar-core`.
+  context and forwards requests to the matching `anx-core`.
 
 - Single-core fallback still works for local/dev:
-  - `OAR_CORE_BASE_URL=http://127.0.0.1:8000`
-  - This synthesizes one default `local` workspace when `OAR_WORKSPACES` is unset.
+  - `ANX_CORE_BASE_URL=http://127.0.0.1:8000`
+  - This synthesizes one default `local` workspace when `ANX_WORKSPACES` is unset.
 
 See `docs/runbook.md` for deployment examples, auth/session behavior, and
 WebAuthn constraints.
@@ -70,18 +70,18 @@ On workspace route startup the UI calls `GET /meta/handshake` (falling back to
 ## Quick smoke check
 
 ```bash
-env | rg '^(OAR_WORKSPACES|OAR_DEFAULT_WORKSPACE|OAR_CORE_BASE_URL)='
+env | rg '^(ANX_WORKSPACES|ANX_DEFAULT_WORKSPACE|ANX_CORE_BASE_URL)='
 curl -fsS http://127.0.0.1:8000/meta/handshake
-curl -fsS -H 'x-oar-workspace-slug: local' http://127.0.0.1:5173/meta/handshake
+curl -fsS -H 'x-anx-workspace-slug: local' http://127.0.0.1:5173/meta/handshake
 ```
 
-The first `curl` checks `oar-core` directly. The second checks the UI proxy path
+The first `curl` checks `anx-core` directly. The second checks the UI proxy path
 for one workspace.
 
-## Integration E2E with real oar-core
+## Integration E2E with real anx-core
 
 The repo includes `./scripts/e2e-with-core` for a headless golden-path run
-against a real `oar-core`.
+against a real `anx-core`.
 
 Default local run:
 
@@ -96,7 +96,7 @@ Terminal B (ui):
 
 ```bash
 cd ../web-ui
-OAR_WORKSPACES='[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"}]' \
-OAR_DEFAULT_WORKSPACE=local \
+ANX_WORKSPACES='[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"}]' \
+ANX_DEFAULT_WORKSPACE=local \
 ./scripts/e2e-with-core
 ```

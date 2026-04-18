@@ -3,13 +3,13 @@
 ## Scope
 Guide for work inside `core/internal/router/`.
 
-Read this after [core/AGENTS.md](../../AGENTS.md). This package owns the workspace-scoped wake-routing runtime hosted inside `oar-core` as a sidecar.
+Read this after [core/AGENTS.md](../../AGENTS.md). This package owns the workspace-scoped wake-routing runtime hosted inside `anx-core` as a sidecar.
 
 ## Package Purpose
-`oar-router` converts durable `message_posted` events into durable wake requests for bridge-managed agents.
+`anx-router` converts durable `message_posted` events into durable wake requests for bridge-managed agents.
 
 It should stay:
-- lightweight to host inside `oar-core`
+- lightweight to host inside `anx-core`
 - bounded to explicit internal dependencies and documented OAR primitives
 - explicit about workspace scope rather than host scope
 - easy for future agents to extend without re-reading the whole repo
@@ -28,6 +28,6 @@ It should stay:
 - If you add new operator-facing behavior, update `core/README.md` and `core/docs/runbook.md` in the same change.
 
 ## Validation
-- `go test ./internal/router/... ./cmd/oar-core/...`
+- `go test ./internal/router/... ./cmd/anx-core/...`
 - `./scripts/build-prod`
 - Relevant repo-level checks when the change crosses module boundaries.

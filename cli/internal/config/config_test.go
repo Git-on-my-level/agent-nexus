@@ -25,12 +25,12 @@ func TestResolvePrecedence(t *testing.T) {
 		"access_token": "profile-token"
 	}`)
 	envMap := map[string]string{
-		"OAR_BASE_URL":     "http://from-env:8000",
-		"OAR_AGENT":        "env-agent",
-		"OAR_NO_COLOR":     "false",
-		"OAR_JSON":         "false",
-		"OAR_TIMEOUT":      "33s",
-		"OAR_ACCESS_TOKEN": "env-token",
+		"ANX_BASE_URL":     "http://from-env:8000",
+		"ANX_AGENT":        "env-agent",
+		"ANX_NO_COLOR":     "false",
+		"ANX_JSON":         "false",
+		"ANX_TIMEOUT":      "33s",
+		"ANX_ACCESS_TOKEN": "env-token",
 	}
 
 	resolved, err := Resolve(Overrides{
@@ -47,7 +47,7 @@ func TestResolvePrecedence(t *testing.T) {
 			return "/home/tester", nil
 		},
 		ReadFile: func(path string) ([]byte, error) {
-			expected := filepath.Join("/home/tester", ".config", "oar", "profiles", "flag-agent.json")
+			expected := filepath.Join("/home/tester", ".config", "anx", "profiles", "flag-agent.json")
 			if path != expected {
 				t.Fatalf("unexpected profile path: got %s want %s", path, expected)
 			}
@@ -113,7 +113,7 @@ func TestResolveDefaultsWithoutProfile(t *testing.T) {
 	if resolved.Timeout != DefaultTimeout {
 		t.Fatalf("unexpected default timeout: %s", resolved.Timeout)
 	}
-	if resolved.ProfilePath != filepath.Join("/home/tester", ".config", "oar", "profiles", "default.json") {
+	if resolved.ProfilePath != filepath.Join("/home/tester", ".config", "anx", "profiles", "default.json") {
 		t.Fatalf("unexpected default profile path: %s", resolved.ProfilePath)
 	}
 }
@@ -122,7 +122,7 @@ func TestResolveAutoSelectSingleProfileAgent(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
-	profilesDir := filepath.Join(home, ".config", "oar", "profiles")
+	profilesDir := filepath.Join(home, ".config", "anx", "profiles")
 	if err := os.MkdirAll(profilesDir, 0o700); err != nil {
 		t.Fatalf("mkdir profiles dir: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestResolveFailsWithMultipleProfilesWithoutAgentSelection(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
-	profilesDir := filepath.Join(home, ".config", "oar", "profiles")
+	profilesDir := filepath.Join(home, ".config", "anx", "profiles")
 	if err := os.MkdirAll(profilesDir, 0o700); err != nil {
 		t.Fatalf("mkdir profiles dir: %v", err)
 	}
@@ -178,7 +178,7 @@ func TestResolveUsesDefaultProfileSelection(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
-	profilesDir := filepath.Join(home, ".config", "oar", "profiles")
+	profilesDir := filepath.Join(home, ".config", "anx", "profiles")
 	if err := os.MkdirAll(profilesDir, 0o700); err != nil {
 		t.Fatalf("mkdir profiles dir: %v", err)
 	}
@@ -188,7 +188,7 @@ func TestResolveUsesDefaultProfileSelection(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(profilesDir, "beta.json"), []byte(`{"base_url":"http://beta:8000"}`), 0o600); err != nil {
 		t.Fatalf("write beta profile: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(home, ".config", "oar", "default-profile"), []byte("beta\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(home, ".config", "anx", "default-profile"), []byte("beta\n"), 0o600); err != nil {
 		t.Fatalf("write default profile: %v", err)
 	}
 
@@ -215,11 +215,11 @@ func TestResolveUsesSingleBridgeConfigBaseURLFallback(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
-	bridgeDir := filepath.Join(home, ".config", "oar-bridge", "workspace-a")
+	bridgeDir := filepath.Join(home, ".config", "anx-bridge", "workspace-a")
 	if err := os.MkdirAll(bridgeDir, 0o700); err != nil {
 		t.Fatalf("mkdir bridge dir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(bridgeDir, "agent.toml"), []byte("[oar]\nbase_url = \"https://bridge.example\"\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(bridgeDir, "agent.toml"), []byte("[anx]\nbase_url = \"https://bridge.example\"\n"), 0o600); err != nil {
 		t.Fatalf("write bridge config: %v", err)
 	}
 
@@ -244,11 +244,11 @@ func TestResolveFailsWithMultipleBridgeConfigsWithoutExplicitBaseURL(t *testing.
 
 	home := t.TempDir()
 	for _, workspace := range []string{"workspace-a", "workspace-b"} {
-		bridgeDir := filepath.Join(home, ".config", "oar-bridge", workspace)
+		bridgeDir := filepath.Join(home, ".config", "anx-bridge", workspace)
 		if err := os.MkdirAll(bridgeDir, 0o700); err != nil {
 			t.Fatalf("mkdir bridge dir: %v", err)
 		}
-		if err := os.WriteFile(filepath.Join(bridgeDir, "agent.toml"), []byte("[oar]\nbase_url = \"https://"+workspace+".example\"\n"), 0o600); err != nil {
+		if err := os.WriteFile(filepath.Join(bridgeDir, "agent.toml"), []byte("[anx]\nbase_url = \"https://"+workspace+".example\"\n"), 0o600); err != nil {
 			t.Fatalf("write bridge config: %v", err)
 		}
 	}
@@ -271,11 +271,11 @@ func TestResolveExplicitBaseURLOverridesBridgeAmbiguity(t *testing.T) {
 
 	home := t.TempDir()
 	for _, workspace := range []string{"workspace-a", "workspace-b"} {
-		bridgeDir := filepath.Join(home, ".config", "oar-bridge", workspace)
+		bridgeDir := filepath.Join(home, ".config", "anx-bridge", workspace)
 		if err := os.MkdirAll(bridgeDir, 0o700); err != nil {
 			t.Fatalf("mkdir bridge dir: %v", err)
 		}
-		if err := os.WriteFile(filepath.Join(bridgeDir, "agent.toml"), []byte("[oar]\nbase_url = \"https://"+workspace+".example\"\n"), 0o600); err != nil {
+		if err := os.WriteFile(filepath.Join(bridgeDir, "agent.toml"), []byte("[anx]\nbase_url = \"https://"+workspace+".example\"\n"), 0o600); err != nil {
 			t.Fatalf("write bridge config: %v", err)
 		}
 	}
@@ -298,7 +298,7 @@ func TestResolveIgnoresStaleDefaultProfileSelection(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
-	profilesDir := filepath.Join(home, ".config", "oar", "profiles")
+	profilesDir := filepath.Join(home, ".config", "anx", "profiles")
 	if err := os.MkdirAll(profilesDir, 0o700); err != nil {
 		t.Fatalf("mkdir profiles dir: %v", err)
 	}
@@ -308,7 +308,7 @@ func TestResolveIgnoresStaleDefaultProfileSelection(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(profilesDir, "beta.json"), []byte(`{"base_url":"http://beta:8000"}`), 0o600); err != nil {
 		t.Fatalf("write beta profile: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(home, ".config", "oar", "default-profile"), []byte("missing\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(home, ".config", "anx", "default-profile"), []byte("missing\n"), 0o600); err != nil {
 		t.Fatalf("write default profile: %v", err)
 	}
 

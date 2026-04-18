@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"organization-autorunner-cli/internal/config"
-	"organization-autorunner-cli/internal/errnorm"
+	"agent-nexus-cli/internal/config"
+	"agent-nexus-cli/internal/errnorm"
 )
 
 var topicsSubcommandSpec = subcommandSpec{
@@ -15,7 +15,7 @@ var topicsSubcommandSpec = subcommandSpec{
 		"list", "get", "create", "patch", "timeline", "workspace",
 		"archive", "unarchive", "trash", "restore",
 	},
-	examples: []string{"oar topics list", "oar topics create --from-file topic.json", "oar topics workspace --topic-id <topic-id>", "oar topics archive --topic-id <topic-id>"},
+	examples: []string{"anx topics list", "anx topics create --from-file topic.json", "anx topics workspace --topic-id <topic-id>", "anx topics archive --topic-id <topic-id>"},
 	aliases: map[string]string{
 		"ls":     "list",
 		"show":   "get",
@@ -26,7 +26,7 @@ var topicsSubcommandSpec = subcommandSpec{
 var cardsSubcommandSpec = subcommandSpec{
 	command:  "cards",
 	valid:    []string{"list", "get", "create", "patch", "move", "archive", "trash", "purge", "restore", "timeline"},
-	examples: []string{"oar cards list", "oar cards create --from-file card.json", "oar cards get --card-id <card-id>", "oar cards timeline --card-id <card-id>", "oar cards move --card-id <card-id> --from-file move.json", "oar cards archive --card-id <card-id>", "oar cards trash --card-id <card-id> --from-file trash.json"},
+	examples: []string{"anx cards list", "anx cards create --from-file card.json", "anx cards get --card-id <card-id>", "anx cards timeline --card-id <card-id>", "anx cards move --card-id <card-id> --from-file move.json", "anx cards archive --card-id <card-id>", "anx cards trash --card-id <card-id> --from-file trash.json"},
 	aliases: map[string]string{
 		"ls":     "list",
 		"show":   "get",
@@ -148,7 +148,7 @@ func (a *App) runCardsCommand(ctx context.Context, args []string, cfg config.Res
 		}
 		bodyMap, ok := body.(map[string]any)
 		if !ok {
-			return nil, "cards create", errnorm.Usage("invalid_request", "JSON body for `oar cards create` must be an object")
+			return nil, "cards create", errnorm.Usage("invalid_request", "JSON body for `anx cards create` must be an object")
 		}
 		ensureEmptyListDefaults(bodyMap, "card", []string{"assignee_refs", "resolution_refs", "related_refs"})
 		if err := finalizeOptionalMutationBodyActorID(bodyMap, cfg); err != nil {
@@ -184,7 +184,7 @@ func (a *App) runCardsCommand(ctx context.Context, args []string, cfg config.Res
 		}
 		body, ok := bodyAny.(map[string]any)
 		if !ok {
-			return nil, "cards move", errnorm.Usage("invalid_request", "JSON body for `oar cards move` must be an object")
+			return nil, "cards move", errnorm.Usage("invalid_request", "JSON body for `anx cards move` must be an object")
 		}
 		if err := finalizeOptionalMutationBodyActorID(body, cfg); err != nil {
 			return nil, "cards move", err
@@ -208,7 +208,7 @@ func (a *App) runCardsCommand(ctx context.Context, args []string, cfg config.Res
 		}
 		body, ok := bodyAny.(map[string]any)
 		if !ok {
-			return nil, "cards trash", errnorm.Usage("invalid_request", "JSON body for `oar cards trash` must be an object")
+			return nil, "cards trash", errnorm.Usage("invalid_request", "JSON body for `anx cards trash` must be an object")
 		}
 		if err := finalizeOptionalMutationBodyActorID(body, cfg); err != nil {
 			return nil, "cards trash", err
@@ -515,7 +515,7 @@ func (a *App) parseTopicIDAndBodyInput(args []string, commandName string) (strin
 	}
 	bodyMap, ok := body.(map[string]any)
 	if !ok {
-		return "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `oar %s` must be an object", commandName))
+		return "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object", commandName))
 	}
 	return id, bodyMap, nil
 }
@@ -538,7 +538,7 @@ func (a *App) parseTopicIDAndOptionalJSONBody(args []string, commandName string)
 		return "", nil, err
 	}
 	if len(positionals) > 0 {
-		return "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `oar %s`", commandName))
+		return "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
 	}
 	payload, err := a.readBodyInput(strings.TrimSpace(fromFile.value))
 	if err != nil {
@@ -553,7 +553,7 @@ func (a *App) parseTopicIDAndOptionalJSONBody(args []string, commandName string)
 	}
 	bodyMap, ok := decoded.(map[string]any)
 	if !ok {
-		return "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `oar %s` must be an object", commandName))
+		return "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object", commandName))
 	}
 	return id, bodyMap, nil
 }
@@ -576,7 +576,7 @@ func (a *App) parseCardIDAndOptionalJSONBody(args []string, commandName string) 
 		return "", nil, err
 	}
 	if len(positionals) > 0 {
-		return "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `oar %s`", commandName))
+		return "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
 	}
 	payload, err := a.readBodyInput(strings.TrimSpace(fromFile.value))
 	if err != nil {
@@ -591,7 +591,7 @@ func (a *App) parseCardIDAndOptionalJSONBody(args []string, commandName string) 
 	}
 	bodyMap, ok := decoded.(map[string]any)
 	if !ok {
-		return "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `oar %s` must be an object", commandName))
+		return "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object", commandName))
 	}
 	return id, bodyMap, nil
 }
@@ -599,7 +599,7 @@ func (a *App) parseCardIDAndOptionalJSONBody(args []string, commandName string) 
 var refEdgesSubcommandSpec = subcommandSpec{
 	command:  "ref-edges",
 	valid:    []string{"list"},
-	examples: []string{`oar ref-edges list --target-ref card:<card-id>`},
+	examples: []string{`anx ref-edges list --target-ref card:<card-id>`},
 }
 
 func (a *App) runRefEdgesCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
@@ -622,7 +622,7 @@ func (a *App) runRefEdgesCommand(ctx context.Context, args []string, cfg config.
 		return nil, "ref-edges list", errnorm.Usage("invalid_flags", err.Error())
 	}
 	if len(fs.Args()) > 0 {
-		return nil, "ref-edges list", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar ref-edges list`")
+		return nil, "ref-edges list", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx ref-edges list`")
 	}
 	sourceRefValue := strings.TrimSpace(sourceRef.value)
 	targetRefValue := strings.TrimSpace(targetRef.value)

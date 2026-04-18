@@ -1,0 +1,13 @@
+{
+  "created_at": "2026-04-18T12:42:37Z",
+  "input": "/var/folders/kb/_t49s35n2zzff8_7f3jjfktr0000gn/T/TestImportScanJSON4094799800/001/input",
+  "scan_root": "/var/folders/kb/_t49s35n2zzff8_7f3jjfktr0000gn/T/TestImportScanJSON4094799800/001/input",
+  "file_count": 1,
+  "counts_by_category": {
+    "markdown": 1
+  },
+  "counts_by_cluster_hint": {
+    "root": 1
+  },
+  "inventory": "/Users/dazheng/workspace/oar-hosted-saas/agent-nexus/cli/internal/app/.anx-import/input/inventory.jsonl"
+}

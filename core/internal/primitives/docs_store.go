@@ -14,7 +14,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"organization-autorunner-core/internal/blob"
+	"agent-nexus-core/internal/blob"
 )
 
 type documentRow struct {

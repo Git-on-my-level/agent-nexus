@@ -1,8 +1,8 @@
 # OAR HTTP API Contract (v0.3.0)
 
-This document defines the **concrete HTTP/JSON surface** used for integration between **oar-core** and clients (including **oar-ui** and agents).
+This document defines the **concrete HTTP/JSON surface** used for integration between **anx-core** and clients (including **oar-ui** and agents).
 
-The schema of objects is defined by `../contracts/oar-schema.yaml`.
+The schema of objects is defined by `../contracts/anx-schema.yaml`.
 
 ## Conventions
 
@@ -61,14 +61,14 @@ Projection endpoints return a `section_kinds` field to distinguish canonical vs 
 
 **Do not treat this file as a per-path API list.** Machine-verifiable workspace HTTP is defined only in:
 
-- [`contracts/oar-openapi.yaml`](../../contracts/oar-openapi.yaml) — paths, methods, request/response schemas, and `x-oar-surface` / `x-oar-command-id`.
+- [`contracts/anx-openapi.yaml`](../../contracts/anx-openapi.yaml) — paths, methods, request/response schemas, and `x-oar-surface` / `x-oar-command-id`.
 - Generated references: [`contracts/gen/meta/commands.json`](../../contracts/gen/meta/commands.json) (structured metadata) and [`contracts/gen/docs/commands.md`](../../contracts/gen/docs/commands.md) (human-oriented command index).
 
 Drift from the live router is gated in CI: `core` runs `TestExactRegisterRoutesCoveredByOpenAPOrExceptions`, which requires every `registerRoute(..., exactRouteAccess(...))` entry in `handler.go` to map to **OpenAPI-derived** commands or to an explicit row in [`contracts/non-openapi-endpoints.yaml`](../../contracts/non-openapi-endpoints.yaml).
 
 ### Narrative notes (not exhaustive)
 
-- **CLI version gate**: Clients may send `X-OAR-CLI-Version`. When below minimum compatibility, core responds with `426` and `cli_outdated` except on a small set of public/meta/auth bootstrap routes; see `x-oar-*` and handler logic — exact allowlist is in OpenAPI and code, not duplicated here.
+- **CLI version gate**: Clients may send `X-ANX-CLI-Version`. When below minimum compatibility, core responds with `426` and `cli_outdated` except on a small set of public/meta/auth bootstrap routes; see `x-oar-*` and handler logic — exact allowlist is in OpenAPI and code, not duplicated here.
 - **Document body updates**: Canonical write is `POST /docs/{document_id}/revisions` (`docs.revisions.create`). There is no `PATCH /docs/{document_id}` on workspace core.
 - **Packets**: Receipts and reviews are created via `POST /packets/receipts` and `POST /packets/reviews` only.
 - **Cards**: Patch, move, and archive use first-class `PATCH /cards/{card_id}`, `POST /cards/{card_id}/move`, and `POST /cards/{card_id}/archive` (or trash/restore/purge as documented in OpenAPI). Board-scoped duplicate paths have been removed. **Batch card create** is `POST /boards/{board_id}/cards/batch` (`boards.cards.batch_add`): one `if_board_updated_at`, many `items`, single transaction.

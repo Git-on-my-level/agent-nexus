@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"organization-autorunner-cli/internal/config"
-	"organization-autorunner-cli/internal/errnorm"
-	"organization-autorunner-cli/internal/output"
+	"agent-nexus-cli/internal/config"
+	"agent-nexus-cli/internal/errnorm"
+	"agent-nexus-cli/internal/output"
 )
 
 type App struct {
@@ -209,7 +209,7 @@ func (a *App) renderError(identity machineCommandIdentity, jsonMode bool, err er
 }
 
 func parseGlobalFlags(args []string) (config.Overrides, []string, bool, error) {
-	fs := newSilentFlagSet("oar")
+	fs := newSilentFlagSet("anx")
 	var (
 		jsonFlag    trackedBool
 		baseURLFlag trackedString

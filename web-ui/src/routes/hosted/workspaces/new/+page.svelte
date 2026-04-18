@@ -13,7 +13,7 @@
   let slugTouched = $state(false);
   let serviceId = $state("dev-local-1");
   let servicePublicKey = $state(
-    String(publicEnv?.PUBLIC_OAR_SAAS_DEV_SERVICE_PUBLIC_KEY ?? "").trim(),
+    String(publicEnv?.PUBLIC_ANX_SAAS_DEV_SERVICE_PUBLIC_KEY ?? "").trim(),
   );
   let advancedOpen = $state(false);
   let busy = $state(false);
@@ -107,7 +107,7 @@
 </script>
 
 <svelte:head>
-  <title>New workspace — OAR</title>
+  <title>New workspace — ANX</title>
 </svelte:head>
 
 <div class="mx-auto max-w-lg py-6">

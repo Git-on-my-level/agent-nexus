@@ -1,0 +1,24 @@
+[Unit]
+Description=OAR workspace core (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=anx Group=anx EnvironmentFile=/etc/anx/workspaces/%i.env
+WorkingDirectory=/opt/anx ExecStart=/usr/bin/env bash -lc '/opt/anx/bin/anx-core \
+  --listen-addr "${ANX_LISTEN_ADDR}" \
+  --workspace-root "${ANX_WORKSPACE_ROOT}" \
+  --schema-path "${ANX_SCHEMA_PATH}" \
+  --meta-commands-path "${ANX_META_COMMANDS_PATH}" \
+  --core-instance-id "${ANX_CORE_INSTANCE_ID}"'
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=${ANX_WORKSPACE_ROOT}
+
+[Install]
+WantedBy=multi-user.target
