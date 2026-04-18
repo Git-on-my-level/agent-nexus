@@ -5,7 +5,6 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
 
-  import "$lib/styles/hosted.css";
   import Button from "$lib/components/Button.svelte";
   import Avatar from "$lib/hosted/Avatar.svelte";
   import {
