@@ -5,7 +5,11 @@
 
   import CompactFilterBar from "$lib/components/CompactFilterBar.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
+  import Button from "$lib/components/Button.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
+  import StateEmpty from "$lib/components/state/StateEmpty.svelte";
+  import StateError from "$lib/components/state/StateError.svelte";
+  import SkeletonInboxRow from "$lib/components/state/SkeletonInboxRow.svelte";
   import { coreClient } from "$lib/coreClient";
   import { formatAbsoluteDateTime } from "$lib/formatDate";
   import { workspacePath } from "$lib/workspacePaths";
@@ -27,12 +31,15 @@
     summarizeInboxUrgency,
   } from "$lib/inboxUtils";
   import { inboxTopicRouteSegment } from "$lib/topicRouteUtils";
+  import InboxFirstRunTour from "$lib/components/onboarding/InboxFirstRunTour.svelte";
+  import { dismissTour, shouldShowTour } from "$lib/tourState";
 
   /** Delay before inbox mutations hit core; allows Undo before the request runs. */
   const PENDING_INBOX_ACTION_MS = 5000;
 
   let loading = $state(false);
   let error = $state("");
+  let retrying = $state(false);
   let items = $state([]);
   let ackInFlightById = $state({});
   let pendingAckById = $state({});
@@ -41,10 +48,12 @@
   let decisionFormsById = $state({});
   let decisionFormErrorsById = $state({});
   let postedDecisionByInboxItem = $state({});
+  let failedAckById = $state({});
   let urgencyFilter = $state("all");
   let categoryFilter = $state("all");
   let filtersOpen = $state(false);
   let workspaceSlug = $derived($page.params.workspace);
+  let tourVisible = $state(false);
 
   function cancelPendingInboxTimers() {
     for (const pending of Object.values(pendingAckById)) {
@@ -210,9 +219,56 @@
     void loadInbox();
   });
 
-  async function loadInbox() {
+  $effect(() => {
+    if (!loading && totalItems === 0 && !error && workspaceSlug) {
+      tourVisible = shouldShowTour({ workspaceSlug, totalItems });
+    }
+  });
+
+  function handleTourDismiss() {
+    dismissTour(workspaceSlug);
+    tourVisible = false;
+  }
+
+  async function handleTourTagSubmit(text) {
+    try {
+      const response = await coreClient.createTopic({
+        topic: { title: text },
+      });
+      dismissTour(workspaceSlug);
+      tourVisible = false;
+
+      const topic = response?.topic;
+      if (topic?.id) {
+        const now = new Date().toISOString();
+        items = [
+          {
+            id: `tour-tag-${topic.id}`,
+            kind: "tag",
+            category: "attention",
+            title: text,
+            subject_ref: `topic:${topic.id}`,
+            thread_id: topic.thread_id ?? "",
+            related_refs: topic.thread_id
+              ? [`topic:${topic.id}`, `thread:${topic.thread_id}`]
+              : [`topic:${topic.id}`],
+            source_event_time: now,
+            urgency_level: "normal",
+            urgency_label: "Normal",
+          },
+        ];
+      } else {
+        await loadInbox();
+      }
+    } catch (tagError) {
+      error = tagError instanceof Error ? tagError.message : String(tagError);
+    }
+  }
+
+  async function loadInbox(isRetry = false) {
     loading = true;
     error = "";
+    retrying = isRetry;
 
     try {
       const response = await coreClient.listInboxItems({ view: "items" });
@@ -221,9 +277,9 @@
       const reason =
         loadError instanceof Error ? loadError.message : String(loadError);
       error = `Failed to load inbox: ${reason}`;
-      items = [];
     } finally {
       loading = false;
+      retrying = false;
     }
   }
 
@@ -375,7 +431,10 @@
       } catch (ackError) {
         const reason =
           ackError instanceof Error ? ackError.message : String(ackError);
-        error = `Failed to acknowledge item: ${reason}`;
+        failedAckById = {
+          ...failedAckById,
+          [item.id]: { item, reason },
+        };
         items = [...items, item];
       } finally {
         ackInFlightById = { ...ackInFlightById, [item.id]: false };
@@ -395,6 +454,36 @@
     );
 
     items = [...items, pending.item];
+  }
+
+  function dismissFailedAck(itemId) {
+    failedAckById = Object.fromEntries(
+      Object.entries(failedAckById).filter(([k]) => k !== itemId),
+    );
+  }
+
+  async function retryFailedAck(itemId) {
+    const failed = failedAckById[itemId];
+    if (!failed) return;
+
+    ackInFlightById = { ...ackInFlightById, [itemId]: true };
+    try {
+      const subjectRef = getInboxSubjectRef(failed.item);
+      await coreClient.ackInboxItem({
+        inbox_item_id: itemId,
+        subject_ref: subjectRef,
+      });
+      failedAckById = Object.fromEntries(
+        Object.entries(failedAckById).filter(([k]) => k !== itemId),
+      );
+    } catch {
+      failedAckById = {
+        ...failedAckById,
+        [itemId]: { ...failed, reason: "Retry failed. Try again or dismiss." },
+      };
+    } finally {
+      ackInFlightById = { ...ackInFlightById, [itemId]: false };
+    }
   }
 
   function undoPendingDecision(itemId) {
@@ -513,29 +602,28 @@
   }
 
   function urgencyDot(level) {
-    if (level === "immediate") return "bg-red-500/100";
-    if (level === "high") return "bg-amber-400";
-    return "bg-gray-300";
+    if (level === "immediate") return "bg-danger";
+    if (level === "high") return "bg-warn-text";
+    return "bg-line-strong";
   }
 
   function urgencyBorderClass(level) {
-    if (level === "immediate") return "border-l-red-400";
-    if (level === "high") return "border-l-amber-300";
+    if (level === "immediate") return "border-l-danger-text";
+    if (level === "high") return "border-l-warn-text";
     return "border-l-transparent";
   }
 
   function urgencyCardClass(level) {
     const active = urgencyFilter === level;
-    if (active)
-      return "ring-1 ring-[var(--ui-accent)] border-[var(--ui-accent)]";
-    return "border-[var(--ui-border)] hover:border-[var(--ui-text-subtle)]";
+    if (active) return "ring-1 ring-[var(--accent)] border-[var(--accent)]";
+    return "border-[var(--line)] hover:border-[var(--fg-subtle)]";
   }
 
   function categoryBadgeClass(category) {
-    if (category === "action_needed") return "text-indigo-400";
-    if (category === "risk_exception") return "text-amber-400";
+    if (category === "action_needed") return "text-accent-text";
+    if (category === "risk_exception") return "text-warn-text";
     if (category === "attention") return "text-sky-400";
-    return "text-[var(--ui-text-muted)]";
+    return "text-[var(--fg-muted)]";
   }
 
   function inboxItemKind(item) {
@@ -571,16 +659,16 @@
 </script>
 
 <div
-  class="flex items-center justify-between pb-4 mb-4 border-b border-[var(--ui-border)]"
+  class="flex items-center justify-between pb-4 mb-4 border-b border-[var(--line)]"
 >
   <div>
-    <h1 class="text-lg font-semibold text-[var(--ui-text)]">Inbox</h1>
+    <h1 class="text-subtitle font-semibold text-[var(--fg)]">Inbox</h1>
   </div>
   <div class="flex items-center gap-2">
     <button
-      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12px] font-medium transition-colors {hasActiveFilters
-        ? 'border-[var(--ui-accent)]/40 bg-[var(--ui-accent)]/10 text-[var(--ui-accent)] hover:bg-[var(--ui-accent)]/15'
-        : 'border-[var(--ui-border)] bg-[var(--ui-bg-soft)] text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]'}"
+      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-micro font-medium transition-colors {hasActiveFilters
+        ? 'border-[var(--accent)]/40 bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/15'
+        : 'border-[var(--line)] bg-[var(--bg-soft)] text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]'}"
       onclick={() => (filtersOpen = !filtersOpen)}
       type="button"
       data-testid="inbox-filters-toggle"
@@ -601,10 +689,10 @@
       {hasActiveFilters ? "Filtered" : "Filter"}
     </button>
     <span
-      class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[13px] font-semibold tabular-nums {totalItems >
+      class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-meta font-semibold tabular-nums {totalItems >
       0
-        ? 'bg-[var(--ui-accent)]/10 text-[var(--ui-accent)]'
-        : 'bg-[var(--ui-panel)] text-[var(--ui-text-muted)]'}"
+        ? 'bg-[var(--accent)]/10 text-[var(--accent)]'
+        : 'bg-[var(--panel)] text-[var(--fg-muted)]'}"
       data-testid="inbox-triage-header"
     >
       {totalItems} open
@@ -618,10 +706,10 @@
       <div
         class="flex flex-wrap items-end gap-3 sm:flex-nowrap sm:items-end sm:gap-4"
       >
-        <label class="min-w-[11rem] flex-1 text-[12px] sm:min-w-[13rem]">
-          <span class="font-medium text-[var(--ui-text-muted)]">Category</span>
+        <label class="min-w-[11rem] flex-1 text-micro sm:min-w-[13rem]">
+          <span class="font-medium text-[var(--fg-muted)]">Category</span>
           <select
-            class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
+            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
             value={categoryFilter}
             onchange={(e) => {
               categoryFilter = e.currentTarget.value;
@@ -635,10 +723,10 @@
             {/each}
           </select>
         </label>
-        <label class="min-w-[11rem] flex-1 text-[12px] sm:min-w-[13rem]">
-          <span class="font-medium text-[var(--ui-text-muted)]">Urgency</span>
+        <label class="min-w-[11rem] flex-1 text-micro sm:min-w-[13rem]">
+          <span class="font-medium text-[var(--fg-muted)]">Urgency</span>
           <select
-            class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
+            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
             value={urgencyFilter}
             onchange={(e) => {
               urgencyFilter = e.currentTarget.value;
@@ -653,13 +741,14 @@
           </select>
         </label>
         {#if hasActiveFilters}
-          <button
-            class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)] sm:ml-auto"
+          <Button
+            variant="secondary"
+            size="compact"
             onclick={resetFilters}
-            type="button"
+            class="sm:ml-auto"
           >
             Clear filters
-          </button>
+          </Button>
         {/if}
       </div>
     {/snippet}
@@ -667,63 +756,63 @@
 {/if}
 
 {#if error}
-  <div
-    class="mb-4 rounded-md bg-red-500/10 px-3 py-2.5 text-[13px] text-red-400"
-    role="alert"
-  >
-    {error}
-  </div>
+  <StateError
+    message={error}
+    onretry={() => void loadInbox(true)}
+    {retrying}
+    class="mb-4"
+  />
 {/if}
 
 <div class="flex gap-1.5 mb-4" data-testid="urgency-summary-strip">
   <button
-    class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12px] font-medium transition-colors {urgencyCardClass(
+    class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-micro font-medium transition-colors {urgencyCardClass(
       'immediate',
     )} {urgencySummary.immediate > 0
-      ? 'bg-red-500/5'
-      : 'bg-[var(--ui-bg-soft)]'}"
+      ? 'bg-danger-soft'
+      : 'bg-[var(--bg-soft)]'}"
     onclick={() => setUrgencyFromCard("immediate")}
     type="button"
     data-testid="urgency-summary-immediate"
   >
-    <span class="inline-block h-1.5 w-1.5 rounded-full bg-red-500 shrink-0"
+    <span class="inline-block h-1.5 w-1.5 rounded-full bg-danger shrink-0"
     ></span>
-    <span class="text-red-400">Immediate</span>
+    <span class="text-danger-text">Immediate</span>
     <span
       class="tabular-nums {urgencySummary.immediate > 0
-        ? 'text-red-400'
-        : 'text-[var(--ui-text-subtle)]'}">{urgencySummary.immediate}</span
+        ? 'text-danger-text'
+        : 'text-[var(--fg-subtle)]'}">{urgencySummary.immediate}</span
     >
   </button>
   <button
-    class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12px] font-medium transition-colors {urgencyCardClass(
+    class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-micro font-medium transition-colors {urgencyCardClass(
       'high',
-    )} {urgencySummary.high > 0 ? 'bg-amber-500/5' : 'bg-[var(--ui-bg-soft)]'}"
+    )} {urgencySummary.high > 0 ? 'bg-warn/5' : 'bg-[var(--bg-soft)]'}"
     onclick={() => setUrgencyFromCard("high")}
     type="button"
     data-testid="urgency-summary-high"
   >
-    <span class="inline-block h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0"
+    <span class="inline-block h-1.5 w-1.5 rounded-full bg-warn-text shrink-0"
     ></span>
-    <span class="text-amber-400">High</span>
+    <span class="text-warn-text">High</span>
     <span
       class="tabular-nums {urgencySummary.high > 0
-        ? 'text-amber-400'
-        : 'text-[var(--ui-text-subtle)]'}">{urgencySummary.high}</span
+        ? 'text-warn-text'
+        : 'text-[var(--fg-subtle)]'}">{urgencySummary.high}</span
     >
   </button>
   <button
-    class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12px] font-medium transition-colors bg-[var(--ui-bg-soft)] {urgencyCardClass(
+    class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-micro font-medium transition-colors bg-[var(--bg-soft)] {urgencyCardClass(
       'normal',
     )}"
     onclick={() => setUrgencyFromCard("normal")}
     type="button"
     data-testid="urgency-summary-normal"
   >
-    <span class="inline-block h-1.5 w-1.5 rounded-full bg-gray-500 shrink-0"
+    <span class="inline-block h-1.5 w-1.5 rounded-full bg-fg-muted shrink-0"
     ></span>
-    <span class="text-[var(--ui-text-muted)]">Normal</span>
-    <span class="tabular-nums text-[var(--ui-text-subtle)]"
+    <span class="text-[var(--fg-muted)]">Normal</span>
+    <span class="tabular-nums text-[var(--fg-subtle)]"
       >{urgencySummary.normal}</span
     >
   </button>
@@ -733,15 +822,15 @@
   <div class="mb-4 space-y-1.5" data-testid="inbox-pending-actions">
     {#each Object.values(pendingAckById) as pending}
       <div
-        class="flex items-center justify-between gap-3 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-[12px] text-[var(--ui-text-muted)]"
+        class="flex items-center justify-between gap-3 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-micro text-[var(--fg-muted)]"
       >
         <span class="truncate"
-          >Acknowledged: <span class="font-medium text-[var(--ui-text)]"
+          >Acknowledged: <span class="font-medium text-[var(--fg)]"
             >{pending.item.title ?? pending.item.summary ?? "item"}</span
           ></span
         >
         <button
-          class="cursor-pointer shrink-0 font-medium text-indigo-400 hover:text-indigo-300"
+          class="cursor-pointer shrink-0 font-medium text-accent-text hover:text-accent-text"
           onclick={() => undoAcknowledge(pending.item.id)}
           type="button"
           aria-label="Undo acknowledge for {pending.item.title ??
@@ -754,15 +843,15 @@
     {/each}
     {#each Object.values(pendingDecisionById) as pending}
       <div
-        class="flex items-center justify-between gap-3 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-[12px] text-[var(--ui-text-muted)]"
+        class="flex items-center justify-between gap-3 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-micro text-[var(--fg-muted)]"
       >
         <span class="truncate"
-          >Decision pending: <span class="font-medium text-[var(--ui-text)]"
+          >Decision pending: <span class="font-medium text-[var(--fg)]"
             >{pending.item.title ?? pending.item.summary ?? "item"}</span
           ></span
         >
         <button
-          class="cursor-pointer shrink-0 font-medium text-indigo-400 hover:text-indigo-300"
+          class="cursor-pointer shrink-0 font-medium text-accent-text hover:text-accent-text"
           onclick={() => undoPendingDecision(pending.item.id)}
           type="button"
           aria-label="Undo pending decision for {pending.item.title ??
@@ -776,60 +865,63 @@
   </div>
 {/if}
 
-{#if loading}
-  <div
-    class="mt-12 flex items-center justify-center gap-2 text-[13px] text-[var(--ui-text-muted)]"
-  >
-    <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-      <circle
-        class="opacity-25"
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        stroke-width="4"
-      ></circle>
-      <path
-        class="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-      ></path>
-    </svg>
-    Loading inbox...
-  </div>
-{:else if totalItems === 0}
-  <div class="mt-8 text-center py-12" data-testid="inbox-empty-state">
-    <div
-      class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[var(--ui-panel)] mb-3"
-    >
-      <svg
-        class="h-6 w-6 text-[var(--ui-text-subtle)]"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-        stroke-width="1.5"
+{#if Object.keys(failedAckById).length > 0}
+  <div class="mb-4 space-y-1.5" data-testid="inbox-failed-ack-toast">
+    {#each Object.entries(failedAckById) as [itemId, failed]}
+      <div
+        class="flex items-center justify-between gap-3 rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-micro"
+        role="alert"
       >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-        />
-      </svg>
-    </div>
-    <h2 class="text-[14px] font-semibold text-[var(--ui-text)]">
-      Inbox is clear
-    </h2>
-    <p class="mt-1 text-[13px] text-[var(--ui-text-muted)]">
-      Nothing needs attention right now.
-    </p>
+        <span class="truncate text-danger-text"
+          >Ack failed: <span class="font-medium text-danger-text"
+            >{failed.item.title ?? failed.item.summary ?? "item"}</span
+          >
+          — {failed.reason}</span
+        >
+        <div class="flex shrink-0 gap-2">
+          <button
+            class="cursor-pointer font-medium text-accent-text hover:text-accent-text"
+            onclick={() => void retryFailedAck(itemId)}
+            disabled={Boolean(ackInFlightById[itemId])}
+            type="button"
+          >
+            {ackInFlightById[itemId] ? "Retrying…" : "Retry"}
+          </button>
+          <button
+            class="cursor-pointer font-medium text-[var(--fg-muted)] hover:text-[var(--fg)]"
+            onclick={() => dismissFailedAck(itemId)}
+            type="button"
+          >
+            Dismiss
+          </button>
+        </div>
+      </div>
+    {/each}
   </div>
-{:else if !hasFilteredItems}
+{/if}
+
+{#if loading && items.length === 0}
+  <SkeletonInboxRow count={5} />
+{:else if totalItems === 0 && !error}
+  {#if tourVisible}
+    <InboxFirstRunTour
+      {workspaceSlug}
+      ondismiss={handleTourDismiss}
+      onsubmit={handleTourTagSubmit}
+    />
+  {:else}
+    <StateEmpty
+      title="Inbox is clear"
+      helper="Nothing needs attention right now."
+    />
+  {/if}
+{:else if !hasFilteredItems && totalItems > 0}
   <div class="mt-8 text-center py-12" data-testid="inbox-filter-empty-state">
     <div
-      class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[var(--ui-panel)] mb-3"
+      class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[var(--panel)] mb-3"
     >
       <svg
-        class="h-6 w-6 text-[var(--ui-text-subtle)]"
+        class="h-6 w-6 text-[var(--fg-subtle)]"
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
@@ -842,34 +934,35 @@
         />
       </svg>
     </div>
-    <h2 class="text-[14px] font-semibold text-[var(--ui-text)]">
+    <h2 class="text-body font-semibold text-[var(--fg)]">
       No items match this view
     </h2>
-    <p class="mt-1 text-[13px] text-[var(--ui-text-muted)]">
+    <p class="mt-1 text-meta text-[var(--fg-muted)]">
       Try switching back to <span class="font-semibold">All</span> to see the full
       queue.
     </p>
-    <button
-      class="cursor-pointer mt-4 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-1.5 text-[13px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]"
+    <Button
+      variant="secondary"
+      size="compact"
       onclick={resetFilters}
-      type="button"
+      class="mt-4"
     >
       Clear filters
-    </button>
+    </Button>
   </div>
-{:else}
+{:else if hasFilteredItems}
   <div class="space-y-4">
     {#each visibleGroups as group}
       <section data-testid={`inbox-group-${group.category}`}>
         <div class="mb-1.5 flex items-center gap-1.5">
           <h2
-            class="text-[11px] font-semibold uppercase tracking-wider {categoryBadgeClass(
+            class="text-micro font-semibold uppercase tracking-wider {categoryBadgeClass(
               group.category,
             )}"
           >
             {getInboxCategoryLabel(group.category)}
           </h2>
-          <span class="text-[11px] text-[var(--ui-text-subtle)] tabular-nums"
+          <span class="text-micro text-[var(--fg-subtle)] tabular-nums"
             >{group.items.length}</span
           >
         </div>
@@ -877,19 +970,19 @@
         <div class="space-y-1.5">
           {#each group.items as item}
             <article
-              class="rounded-md border border-[var(--ui-border)] border-l-[3px] bg-[var(--ui-bg-soft)] px-3 py-2.5 transition-colors hover:bg-[var(--ui-panel)] {urgencyBorderClass(
+              class="rounded-md border border-[var(--line)] border-l-[3px] bg-[var(--bg-soft)] px-3 py-2.5 transition-colors hover:bg-[var(--panel)] {urgencyBorderClass(
                 item.urgency_level,
               )}"
               data-testid={`inbox-card-${item.id}`}
             >
-              <div class="flex items-center justify-between gap-2 text-[11px]">
+              <div class="flex items-center justify-between gap-2 text-micro">
                 <div class="flex min-w-0 items-center gap-1.5">
                   <span
-                    class="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold tracking-wide {inboxItemKind(
+                    class="inline-flex items-center rounded px-1.5 py-0.5 text-micro font-semibold tracking-wide {inboxItemKind(
                       item,
                     ) === 'ask'
-                      ? 'bg-[#ff5c1f]/15 text-[#ff5c1f]'
-                      : 'bg-[var(--ui-border)] text-[var(--ui-text-muted)]'}"
+                      ? 'bg-accent-soft text-accent-text'
+                      : 'bg-[var(--line)] text-[var(--fg-muted)]'}"
                   >
                     {inboxKindPillLabel(item)}
                   </span>
@@ -898,12 +991,12 @@
                       item.urgency_level,
                     )}"
                   ></span>
-                  <span class="font-medium text-[var(--ui-text-muted)]"
+                  <span class="font-medium text-[var(--fg-muted)]"
                     >{item.urgency_label}</span
                   >
                   {#if item.age_label}
                     <span
-                      class="text-[var(--ui-text-muted)]"
+                      class="text-[var(--fg-muted)]"
                       title={item.has_source_event_time
                         ? formatAbsoluteDateTime(item.source_event_time)
                         : undefined}>&middot; {item.age_label}</span
@@ -914,13 +1007,13 @@
 
               <div class="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                 <h3
-                  class="text-[13px] font-semibold text-[var(--ui-text)] leading-snug"
+                  class="text-meta font-semibold text-[var(--fg)] leading-snug"
                 >
                   {item.title}
                 </h3>
                 {#if getInboxSubjectLabel(item)}
                   <a
-                    class="shrink-0 rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] hover:text-[var(--ui-text)]"
+                    class="shrink-0 rounded bg-[var(--line)] px-1.5 py-0.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
                     href={inboxItemHref(item)}
                   >
                     {getInboxSubjectLabel(item)}
@@ -929,11 +1022,11 @@
               </div>
               {#if isAskItem(item)}
                 <div
-                  class="mt-1 text-[12px] text-[var(--ui-text-muted)]"
+                  class="mt-1 text-micro text-[var(--fg-muted)]"
                   data-testid={`inbox-ask-meta-${item.id}`}
                 >
                   Asked by
-                  <span class="font-mono text-[13px] text-[var(--ui-text)]">
+                  <span class="font-mono text-meta text-[var(--fg)]">
                     {askActorLabel(item)}
                   </span>
                   {#if item.age_label}
@@ -944,12 +1037,12 @@
 
               {#if getInboxSubjectRef(item) || (item.related_refs ?? []).length > 0}
                 <div
-                  class="mt-1.5 flex flex-wrap items-center gap-1 text-[11px]"
+                  class="mt-1.5 flex flex-wrap items-center gap-1 text-micro"
                 >
                   {#if getInboxSubjectRef(item)}
                     {@const subjectId = getInboxSubjectId(item)}
                     <span
-                      class="inline-flex items-center gap-1 rounded bg-[var(--ui-panel)] px-1.5 py-0.5 font-medium text-[var(--ui-text-muted)]"
+                      class="inline-flex items-center gap-1 rounded bg-[var(--panel)] px-1.5 py-0.5 font-medium text-[var(--fg-muted)]"
                       title={getInboxSubjectRef(item)}
                     >
                       <span>
@@ -976,57 +1069,56 @@
 
               <div class="mt-2 flex flex-wrap items-center gap-1.5">
                 {#if isAskItem(item)}
-                  <a
-                    class="cursor-pointer rounded bg-[#ff5c1f] px-2.5 py-1 text-[12px] font-medium text-white transition-colors hover:bg-[#ff5c1f]/90"
+                  <Button
+                    variant="primary"
+                    size="compact"
                     href={askItemHref(item)}
                   >
                     Answer
-                  </a>
-                  <button
-                    class="cursor-pointer rounded border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] disabled:opacity-50"
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="compact"
                     disabled={Boolean(ackInFlightById[item.id])}
                     onclick={() => acknowledgeItem(item)}
-                    type="button"
                   >
                     {ackInFlightById[item.id] ? "Deferring..." : "Defer"}
-                  </button>
-                  <button
-                    class="cursor-pointer rounded border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] disabled:opacity-50"
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="compact"
                     disabled={Boolean(ackInFlightById[item.id])}
                     onclick={() => acknowledgeItem(item)}
-                    type="button"
                   >
                     Not for me
-                  </button>
+                  </Button>
                 {:else}
-                  <button
-                    class="cursor-pointer rounded border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] disabled:opacity-50"
+                  <Button
+                    variant="secondary"
+                    size="compact"
                     disabled={Boolean(ackInFlightById[item.id])}
                     onclick={() => acknowledgeItem(item)}
-                    type="button"
                   >
                     {ackInFlightById[item.id]
                       ? "Acknowledging..."
                       : "Acknowledge"}
-                  </button>
-                  <button
-                    class="cursor-pointer rounded px-2.5 py-1 text-[12px] font-medium transition-colors {getDecisionForm(
-                      item.id,
-                    ).open
-                      ? 'border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]'
-                      : 'bg-indigo-600 text-white hover:bg-indigo-500'}"
+                  </Button>
+                  <Button
+                    variant={getDecisionForm(item.id).open
+                      ? "secondary"
+                      : "primary"}
+                    size="compact"
                     onclick={() =>
                       toggleDecisionForm(item, !getDecisionForm(item.id).open)}
-                    type="button"
                   >
                     {getDecisionForm(item.id).open ? "Cancel" : "Decide"}
-                  </button>
+                  </Button>
                 {/if}
               </div>
 
               {#if postedDecisionByInboxItem[item.id]}
                 <div
-                  class="mt-2 flex items-center gap-2 rounded-md bg-emerald-500/10 px-3 py-2 text-[12px] text-emerald-400"
+                  class="mt-2 flex items-center gap-2 rounded-md bg-ok-soft px-3 py-2 text-micro text-ok-text"
                 >
                   <svg
                     class="h-3.5 w-3.5 shrink-0"
@@ -1044,7 +1136,7 @@
                   <span>
                     Decision recorded &mdash;
                     <a
-                      class="font-medium underline hover:text-emerald-300"
+                      class="font-medium underline hover:text-ok-text"
                       href={`${inboxItemHref(item)}#event-${postedDecisionByInboxItem[item.id].id}`}
                     >
                       view in timeline
@@ -1061,11 +1153,11 @@
                   {#if getInboxSubjectRef(item)}
                     {@const subjectRef = getInboxSubjectRef(item)}
                     <div
-                      class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] p-3 min-w-0"
+                      class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-3 min-w-0"
                     >
                       {#if subjectContextLoading[subjectRef]}
                         <div
-                          class="flex items-center gap-2 text-[12px] text-[var(--ui-text-muted)] py-4 justify-center"
+                          class="flex items-center gap-2 text-micro text-[var(--fg-muted)] py-4 justify-center"
                         >
                           <svg
                             class="h-3.5 w-3.5 animate-spin"
@@ -1089,7 +1181,7 @@
                           Loading subject context…
                         </div>
                       {:else if subjectContextErrors[subjectRef]}
-                        <div class="text-[12px] text-red-400 py-2">
+                        <div class="text-micro text-danger-text py-2">
                           Failed to load subject: {subjectContextErrors[
                             subjectRef
                           ]}
@@ -1100,7 +1192,7 @@
                         {@const related = ctx.related}
                         <div class="flex items-center gap-2 mb-2">
                           <h4
-                            class="text-[13px] font-semibold text-[var(--ui-text)] truncate min-w-0"
+                            class="text-meta font-semibold text-[var(--fg)] truncate min-w-0"
                           >
                             {subject?.title ??
                               subject?.summary ??
@@ -1109,21 +1201,21 @@
                               getInboxSubjectLabel(item)}
                           </h4>
                           <span
-                            class="shrink-0 rounded-md border border-[var(--ui-border)] px-1.5 py-0.5 text-[11px] font-medium capitalize {subject?.status ===
+                            class="shrink-0 rounded-md border border-[var(--line)] px-1.5 py-0.5 text-micro font-medium capitalize {subject?.status ===
                             'active'
-                              ? 'text-emerald-400'
+                              ? 'text-ok-text'
                               : subject?.status === 'blocked' ||
                                   subject?.status === 'paused'
-                                ? 'text-amber-400'
+                                ? 'text-warn-text'
                                 : subject?.status === 'archived'
-                                  ? 'text-[var(--ui-text-muted)]'
-                                  : 'text-[var(--ui-text-muted)]'}"
+                                  ? 'text-[var(--fg-muted)]'
+                                  : 'text-[var(--fg-muted)]'}"
                           >
                             {subject?.status ?? "unknown"}
                           </span>
                           {#if subject?.type}
                             <span
-                              class="shrink-0 text-[11px] font-medium text-[var(--ui-text-muted)] uppercase"
+                              class="shrink-0 text-micro font-medium text-[var(--fg-muted)] uppercase"
                               >{subject.type}</span
                             >
                           {/if}
@@ -1131,12 +1223,12 @@
 
                         {#if subject?.summary || subject?.current_summary}
                           <div
-                            class="mb-2 text-[12px] text-[var(--ui-text)] leading-relaxed"
+                            class="mb-2 text-micro text-[var(--fg)] leading-relaxed"
                           >
                             <MarkdownRenderer
                               source={subject.summary ??
                                 subject.current_summary}
-                              class="text-[12px]"
+                              class="text-micro"
                             />
                           </div>
                         {/if}
@@ -1144,28 +1236,28 @@
                         <div class="flex flex-wrap gap-1.5">
                           {#if subject?.board_ref}
                             <span
-                              class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] text-[var(--ui-text-muted)]"
+                              class="rounded bg-[var(--line)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
                             >
                               Board: {subject.board_ref}
                             </span>
                           {/if}
                           {#if subject?.topic_ref}
                             <span
-                              class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] text-[var(--ui-text-muted)]"
+                              class="rounded bg-[var(--line)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
                             >
                               Topic: {subject.topic_ref}
                             </span>
                           {/if}
                           {#if subject?.document_ref}
                             <span
-                              class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] text-[var(--ui-text-muted)]"
+                              class="rounded bg-[var(--line)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
                             >
                               Doc: {subject.document_ref}
                             </span>
                           {/if}
                           {#if related?.board_summary}
                             <span
-                              class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] text-[var(--ui-text-muted)]"
+                              class="rounded bg-[var(--line)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
                             >
                               {related.board_summary.card_count ?? 0} cards
                             </span>
@@ -1173,11 +1265,9 @@
                         </div>
 
                         {#if Array.isArray(subject?.related_refs) && subject.related_refs.length > 0}
-                          <div
-                            class="border-t border-[var(--ui-border)] pt-2 mt-2"
-                          >
+                          <div class="border-t border-[var(--line)] pt-2 mt-2">
                             <p
-                              class="text-[11px] font-medium text-[var(--ui-text-muted)] uppercase tracking-wide mb-1.5"
+                              class="text-micro font-medium text-[var(--fg-muted)] uppercase tracking-wide mb-1.5"
                             >
                               Related refs
                             </p>
@@ -1194,11 +1284,9 @@
                           </div>
                         {/if}
 
-                        <div
-                          class="border-t border-[var(--ui-border)] pt-2 mt-2"
-                        >
+                        <div class="border-t border-[var(--line)] pt-2 mt-2">
                           <a
-                            class="inline-flex items-center gap-1 text-[12px] font-medium text-indigo-400 hover:text-indigo-300 transition-colors"
+                            class="inline-flex items-center gap-1 text-micro font-medium text-accent-text hover:text-accent-text transition-colors"
                             href={inboxItemHref(item)}
                           >
                             View subject &rarr;
@@ -1209,7 +1297,7 @@
                   {/if}
 
                   <form
-                    class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-3 {inboxActionThreadId(
+                    class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] p-3 {inboxActionThreadId(
                       item,
                     )
                       ? ''
@@ -1221,13 +1309,13 @@
                     }}
                   >
                     <label
-                      class="block text-[12px] font-medium text-[var(--ui-text-muted)]"
+                      class="block text-micro font-medium text-[var(--fg-muted)]"
                       for={`decision-summary-${item.id}`}
                     >
                       Your decision
                     </label>
                     <input
-                      class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-[13px] transition-colors"
+                      class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta transition-colors"
                       id={`decision-summary-${item.id}`}
                       oninput={(event) =>
                         updateDecisionField(
@@ -1239,21 +1327,20 @@
                       value={getDecisionForm(item.id).summary}
                     />
                     {#if getDecisionFormError(item.id)}
-                      <p class="mt-1 text-[11px] text-red-400">
+                      <p class="mt-1 text-micro text-danger-text">
                         {getDecisionFormError(item.id)}
                       </p>
                     {/if}
                     <label
-                      class="mt-2 block text-[12px] font-medium text-[var(--ui-text-muted)]"
+                      class="mt-2 block text-micro font-medium text-[var(--fg-muted)]"
                       for={`decision-notes-${item.id}`}
                     >
-                      Rationale <span
-                        class="font-normal text-[var(--ui-text-muted)]"
+                      Rationale <span class="font-normal text-[var(--fg-muted)]"
                         >optional</span
                       >
                     </label>
                     <textarea
-                      class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-[13px] transition-colors"
+                      class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta transition-colors"
                       id={`decision-notes-${item.id}`}
                       oninput={(event) =>
                         updateDecisionField(
@@ -1265,15 +1352,15 @@
                       rows="2">{getDecisionForm(item.id).notes}</textarea
                     >
                     <div class="mt-2 flex justify-end">
-                      <button
-                        class="cursor-pointer rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
-                        disabled={Boolean(decisionInFlightById[item.id])}
+                      <Button
                         type="submit"
+                        variant="primary"
+                        disabled={Boolean(decisionInFlightById[item.id])}
                       >
                         {decisionInFlightById[item.id]
                           ? "Recording..."
                           : "Submit decision"}
-                      </button>
+                      </Button>
                     </div>
                   </form>
                 </div>

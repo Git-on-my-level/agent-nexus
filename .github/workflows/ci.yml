@@ -149,7 +149,8 @@ jobs:
         working-directory: cli
         run: go test -tags=integration ./integration/...
 
-  web-ui-checks:
+  # Cheap deterministic checks (lint, unit tests, bundle audit). Runs on every web-ui-related change.
+  web-ui-static-check:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: changes
@@ -166,6 +167,38 @@ jobs:
 
       - name: Build web-ui
         run: pnpm -C web-ui run build
+
+  # Browser-based visual QA against committed baselines (after static checks).
+  web-ui-visual-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs:
+      - changes
+      - web-ui-static-check
+    if: needs.changes.outputs.web_ui == 'true' || needs.changes.outputs.contracts == 'true' || needs.changes.outputs.node_shared == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup Node And pnpm
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Install Playwright Chromium
+        run: pnpm -C web-ui exec playwright install chromium
+
+      - name: Run visual QA diff
+        run: pnpm -C web-ui run qa:diff
+
+      - name: Upload visual QA artifacts
+        if: failure()
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: web-ui-visual-artifacts
+          path: |
+            web-ui/.qa-current/**
+            web-ui/.qa-diff/**
+          if-no-files-found: ignore
+          include-hidden-files: true
 
   cross-platform-build:
     runs-on: ubuntu-latest
@@ -188,10 +221,11 @@ jobs:
           cache-dependency-path: cli/go.sum
 
       - name: Cross-compile CLI (${{ matrix.goos }}/${{ matrix.goarch }})
+        working-directory: cli
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-        run: CGO_ENABLED=0 go build -trimpath ./cmd/anx working-directory: cli
+        run: CGO_ENABLED=0 go build -trimpath ./cmd/anx
 
   platform-constraints:
     runs-on: ubuntu-latest

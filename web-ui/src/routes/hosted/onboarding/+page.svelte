@@ -1,3 +1,4 @@
+<!-- State coverage: redirect-only page — no data fetch, no state variants needed. -->
 <script>
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
@@ -11,4 +12,4 @@
   <title>Redirecting…</title>
 </svelte:head>
 
-<p class="text-[12px] text-gray-500">Redirecting to your dashboard…</p>
+<p class="text-micro text-fg-subtle">Redirecting to your dashboard…</p>

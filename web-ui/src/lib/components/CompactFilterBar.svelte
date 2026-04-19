@@ -7,7 +7,7 @@
 </script>
 
 <div
-  class="mb-4 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-3"
+  class="mb-4 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] p-3"
   data-testid={testId}
   data-ui="compact-filter-bar"
 >

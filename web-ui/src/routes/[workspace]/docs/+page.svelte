@@ -15,6 +15,9 @@
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import TrashButton from "$lib/components/TrashButton.svelte";
   import CompactFilterBar from "$lib/components/CompactFilterBar.svelte";
+  import Skeleton from "$lib/components/state/Skeleton.svelte";
+  import StateEmpty from "$lib/components/state/StateEmpty.svelte";
+  import StateError from "$lib/components/state/StateError.svelte";
   import { parseDelimitedValues } from "$lib/boardUtils";
 
   const DOC_STATE_LABELS = {
@@ -31,6 +34,7 @@
   let documents = $state([]);
   let loading = $state(false);
   let error = $state("");
+  let retrying = $state(false);
   let filtersOpen = $state(false);
   let docFiltersDraft = $state({ ...defaultDocListFilters });
   let docFiltersApplied = $state({ ...defaultDocListFilters });
@@ -112,9 +116,10 @@
     }
   });
 
-  async function loadDocuments() {
+  async function loadDocuments(isRetry = false) {
     loading = true;
     error = "";
+    retrying = isRetry;
     try {
       const f = docFiltersApplied;
       const filters = {};
@@ -127,9 +132,9 @@
       documents = filterTopLevelDocuments(data.documents);
     } catch (e) {
       error = `Failed to load documents: ${e instanceof Error ? e.message : String(e)}`;
-      documents = [];
     } finally {
       loading = false;
+      retrying = false;
     }
   }
 
@@ -201,10 +206,10 @@
   }
 
   function docStateColor(state) {
-    if (state === "active") return "text-emerald-400 bg-emerald-500/10";
-    if (state === "archived") return "text-amber-400 bg-amber-500/10";
+    if (state === "active") return "text-ok-text bg-ok-soft";
+    if (state === "archived") return "text-warn-text bg-warn-soft";
     if (state === "trashed") return "text-slate-300 bg-slate-500/10";
-    return "text-[var(--ui-text-muted)] bg-[var(--ui-border)]";
+    return "text-[var(--fg-muted)] bg-[var(--line)]";
   }
 
   function applyDocFilters() {
@@ -281,12 +286,12 @@
 
 <div class="flex items-center justify-between mb-4">
   <div>
-    <h1 class="text-lg font-semibold text-[var(--ui-text)]">Docs</h1>
+    <h1 class="text-subtitle font-semibold text-[var(--fg)]">Docs</h1>
     {#if scopedThreadId}
-      <p class="mt-1 text-[12px] text-[var(--ui-text-muted)]">
+      <p class="mt-1 text-micro text-[var(--fg-muted)]">
         Scoped to backing thread
         <a
-          class="text-indigo-400 transition-colors hover:text-indigo-300"
+          class="text-accent-text transition-colors hover:text-accent-text"
           href={workspaceHref(`/threads/${encodeURIComponent(scopedThreadId)}`)}
         >
           {scopedThreadId}
@@ -296,9 +301,9 @@
   </div>
   <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-1.5">
     <button
-      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12px] font-medium transition-colors {hasActiveFilters
-        ? 'border-[var(--ui-accent)]/40 bg-[var(--ui-accent)]/10 text-[var(--ui-accent)] hover:bg-[var(--ui-accent)]/15'
-        : 'border-[var(--ui-border)] bg-[var(--ui-bg-soft)] text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]'}"
+      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-micro font-medium transition-colors {hasActiveFilters
+        ? 'border-[var(--accent)]/40 bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/15'
+        : 'border-[var(--line)] bg-[var(--bg-soft)] text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]'}"
       onclick={() => {
         if (!filtersOpen) {
           docFiltersDraft = { ...docFiltersApplied };
@@ -324,9 +329,9 @@
       {hasActiveFilters ? "Filtered" : "Filters"}
     </button>
     <button
-      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium transition-colors {groupByLabel
-        ? 'bg-[var(--ui-accent-strong)] text-white'
-        : 'bg-[var(--ui-panel)] text-[var(--ui-text-muted)] hover:bg-[var(--ui-border)]'}"
+      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-micro font-medium transition-colors {groupByLabel
+        ? 'bg-[var(--accent-hover)] text-white'
+        : 'bg-[var(--panel)] text-[var(--fg-muted)] hover:bg-[var(--line)]'}"
       onclick={toggleGrouping}
       type="button"
       title="Group by label"
@@ -348,7 +353,7 @@
       </svg>
     </button>
     <button
-      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text)] transition-colors hover:bg-[var(--ui-border)] disabled:cursor-not-allowed disabled:opacity-50"
+      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-[var(--panel)] px-3 py-1.5 text-micro font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line)] disabled:cursor-not-allowed disabled:opacity-50"
       disabled={Boolean(scopedThreadId)}
       onclick={toggleCreate}
       type="button"
@@ -380,23 +385,23 @@
   <CompactFilterBar testId="docs-filter-panel">
     {#snippet children()}
       <div class="grid gap-3">
-        <label class="text-[12px]">
-          <span class="font-medium text-[var(--ui-text-muted)]"
+        <label class="text-micro">
+          <span class="font-medium text-[var(--fg-muted)]"
             >Labels (comma-separated, any match)</span
           >
           <input
             bind:value={docFiltersDraft.labels}
-            class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
+            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
             placeholder="ops, runbook"
             type="text"
           />
         </label>
         <label
-          class="inline-flex cursor-pointer items-center gap-1.5 text-[12px] text-[var(--ui-text-muted)]"
+          class="inline-flex cursor-pointer items-center gap-1.5 text-micro text-[var(--fg-muted)]"
         >
           <input
             bind:checked={docFiltersDraft.showArchived}
-            class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--ui-border)] bg-[var(--ui-bg)] text-[var(--ui-accent-strong)] focus:ring-2 focus:ring-[var(--ui-accent)] focus:ring-offset-0"
+            class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--line)] bg-[var(--bg)] text-[var(--accent-hover)] focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-0"
             type="checkbox"
           />
           Show archived
@@ -404,14 +409,14 @@
       </div>
       <div class="mt-3 flex flex-wrap gap-1.5">
         <button
-          class="cursor-pointer rounded-md bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text)] hover:bg-[var(--ui-border)]"
+          class="cursor-pointer rounded-md bg-[var(--panel)] px-3 py-1.5 text-micro font-medium text-[var(--fg)] hover:bg-[var(--line)]"
           onclick={applyDocFilters}
           type="button"
         >
           Apply
         </button>
         <button
-          class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]"
+          class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-micro font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]"
           onclick={resetDocFilters}
           type="button"
         >
@@ -424,17 +429,17 @@
 
 {#if scopedThreadId}
   <div
-    class="mb-4 flex items-center justify-between rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2"
+    class="mb-4 flex items-center justify-between rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2"
   >
-    <p class="text-[12px] text-[var(--ui-text-muted)]">
+    <p class="text-micro text-[var(--fg-muted)]">
       Showing only documents on this backing thread timeline.
     </p>
-    <p class="text-[12px] text-[var(--ui-text-muted)]">
+    <p class="text-micro text-[var(--fg-muted)]">
       Create from the unscoped docs view. New document lineages always get their
       own backing thread.
     </p>
     <a
-      class="text-[12px] font-medium text-indigo-400 transition-colors hover:text-indigo-300"
+      class="text-micro font-medium text-accent-text transition-colors hover:text-accent-text"
       href={workspaceHref("/docs")}
     >
       Clear scope
@@ -444,59 +449,59 @@
 
 {#if createOpen}
   <form
-    class="mb-4 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-4"
+    class="mb-4 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] p-4"
     onsubmit={(e) => {
       e.preventDefault();
       void handleCreate();
     }}
   >
-    <h2 class="mb-3 text-[13px] font-semibold text-[var(--ui-text)]">
+    <h2 class="mb-3 text-meta font-semibold text-[var(--fg)]">
       New doc lineage
     </h2>
-    <p class="mb-3 text-[12px] text-[var(--ui-text-muted)]">
+    <p class="mb-3 text-micro text-[var(--fg-muted)]">
       Create the lineage metadata and its first head revision together.
     </p>
     <div class="grid gap-3 sm:grid-cols-2">
       <label class="sm:col-span-2">
-        <span class="text-[12px] font-medium text-[var(--ui-text-muted)]"
-          >Title <span class="text-red-400">*</span></span
+        <span class="text-micro font-medium text-[var(--fg-muted)]"
+          >Title <span class="text-danger-text">*</span></span
         >
         <input
           bind:value={draft.title}
-          class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-3 py-1.5 text-[13px] text-[var(--ui-text)] placeholder:text-[var(--ui-text-subtle)]"
+          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-meta text-[var(--fg)] placeholder:text-[var(--fg-subtle)]"
           placeholder="Document title"
           type="text"
         />
       </label>
       <label>
-        <span class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+        <span class="text-micro font-medium text-[var(--fg-muted)]"
           >ID (optional)</span
         >
         <input
           bind:value={draft.id}
-          class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-3 py-1.5 text-[13px] text-[var(--ui-text)] placeholder:text-[var(--ui-text-subtle)]"
+          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-meta text-[var(--fg)] placeholder:text-[var(--fg-subtle)]"
           placeholder="auto-generated if empty"
           type="text"
         />
       </label>
       <label>
-        <span class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+        <span class="text-micro font-medium text-[var(--fg-muted)]"
           >Labels (comma-separated)</span
         >
         <input
           bind:value={draft.labels}
-          class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-3 py-1.5 text-[13px] text-[var(--ui-text)] placeholder:text-[var(--ui-text-subtle)]"
+          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-meta text-[var(--fg)] placeholder:text-[var(--fg-subtle)]"
           placeholder="e.g. ops, runbook"
           type="text"
         />
       </label>
       <label class="sm:col-span-2">
-        <span class="text-[12px] font-medium text-[var(--ui-text-muted)]"
-          >Head content (Markdown) <span class="text-red-400">*</span></span
+        <span class="text-micro font-medium text-[var(--fg-muted)]"
+          >Head content (Markdown) <span class="text-danger-text">*</span></span
         >
         <textarea
           bind:value={draft.content}
-          class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-3 py-2 text-[13px] text-[var(--ui-text)] placeholder:text-[var(--ui-text-subtle)] font-mono leading-relaxed resize-y"
+          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-2 text-meta text-[var(--fg)] placeholder:text-[var(--fg-subtle)] font-mono leading-relaxed resize-y"
           placeholder="# Document title&#10;&#10;Write your content here..."
           rows="10"
         ></textarea>
@@ -505,7 +510,7 @@
 
     {#if createError}
       <div
-        class="mt-3 rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
+        class="mt-3 rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
         role="alert"
       >
         {createError}
@@ -513,14 +518,14 @@
     {/if}
     <div class="mt-3 flex items-center gap-2">
       <button
-        class="cursor-pointer rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+        class="cursor-pointer rounded-md bg-accent px-3 py-1.5 text-micro font-medium text-white hover:bg-accent-hover disabled:opacity-50"
         disabled={creating}
         type="submit"
       >
         {creating ? "Creating…" : "Create doc"}
       </button>
       <button
-        class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]"
+        class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-micro font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]"
         onclick={toggleCreate}
         type="button"
       >
@@ -530,69 +535,48 @@
   </form>
 {/if}
 
-{#if loading}
-  <div
-    class="mt-12 flex items-center justify-center gap-2 text-[13px] text-[var(--ui-text-muted)]"
-  >
-    <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-      <circle
-        class="opacity-25"
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        stroke-width="4"
-      ></circle>
-      <path
-        class="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-      ></path>
-    </svg>
-    Loading documents...
-  </div>
+{#if loading && documents.length === 0}
+  <Skeleton rows={6} />
 {:else if error}
-  <div class="mb-4 rounded-md bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
-    {error}
-  </div>
+  <StateError
+    message={error}
+    onretry={() => void loadDocuments(true)}
+    {retrying}
+    class="mb-4"
+  />
 {:else if documents.length === 0}
-  <div class="mt-8 text-center">
-    <p class="text-[13px] font-medium text-[var(--ui-text-muted)]">
-      No docs yet
-    </p>
-    <p class="mt-1 text-[13px] text-[var(--ui-text-muted)]">
-      No doc lineages yet. Create one to start a head revision and revision
-      history.
-    </p>
-  </div>
+  <StateEmpty
+    title="No docs yet"
+    helper="Create a document lineage to start a head revision and revision history."
+  />
 {/if}
 
 {#snippet docRow(doc, showBorderTop)}
   <div
-    class="flex items-start justify-between gap-3 px-4 py-3 transition-colors hover:bg-[var(--ui-border-subtle)] {showBorderTop
-      ? 'border-t border-[var(--ui-border)]'
+    class="flex items-start justify-between gap-3 px-4 py-3 transition-colors hover:bg-[var(--line-subtle)] {showBorderTop
+      ? 'border-t border-[var(--line)]'
       : ''}"
   >
     <a class="min-w-0 flex-1" href={workspaceHref(`/docs/${doc.id}`)}>
       <div class="flex flex-wrap items-center gap-2">
         {#if doc.state}
           <span
-            class="inline-flex rounded px-1.5 py-0.5 text-[11px] font-semibold {docStateColor(
+            class="inline-flex rounded px-1.5 py-0.5 text-micro font-semibold {docStateColor(
               doc.state,
             )}">{DOC_STATE_LABELS[doc.state] ?? doc.state}</span
           >
         {/if}
         {#each (doc.labels ?? []).slice(0, 3) as label}
           <span
-            class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[10px] text-[var(--ui-text-muted)]"
+            class="rounded bg-[var(--line)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
             >{label}</span
           >
         {/each}
       </div>
-      <p class="mt-1 truncate text-[13px] font-medium text-[var(--ui-text)]">
+      <p class="mt-1 truncate text-meta font-medium text-[var(--fg)]">
         {doc.title || doc.id}
       </p>
-      <p class="text-[11px] text-[var(--ui-text-muted)]">
+      <p class="text-micro text-[var(--fg-muted)]">
         Head v{doc.head_revision_number} · Updated {formatTimestamp(
           doc.updated_at,
         ) || "—"} by {actorName(doc.updated_by)}
@@ -603,7 +587,7 @@
       role="presentation"
       onclick={(e) => e.stopPropagation()}
     >
-      <span class="mr-1 shrink-0 text-[11px] text-[var(--ui-text-muted)]">
+      <span class="mr-1 shrink-0 text-micro text-[var(--fg-muted)]">
         {doc.head_revision_number} revision{doc.head_revision_number === 1
           ? ""
           : "s"}
@@ -642,15 +626,15 @@
             ? "Ungrouped"
             : label.charAt(0).toUpperCase() + label.slice(1)}
         <div
-          class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] overflow-hidden"
+          class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] overflow-hidden"
         >
           <button
-            class="cursor-pointer flex w-full items-center gap-2 px-4 py-2 text-left transition-colors hover:bg-[var(--ui-border-subtle)]"
+            class="cursor-pointer flex w-full items-center gap-2 px-4 py-2 text-left transition-colors hover:bg-[var(--line-subtle)]"
             onclick={() => toggleGroup(label)}
             type="button"
           >
             <svg
-              class="h-3 w-3 text-[var(--ui-text-muted)] transition-transform {collapsed
+              class="h-3 w-3 text-[var(--fg-muted)] transition-transform {collapsed
                 ? ''
                 : 'rotate-90'}"
               fill="none"
@@ -664,11 +648,11 @@
                 d="M9 5l7 7-7 7"
               />
             </svg>
-            <span class="text-[12px] font-medium text-[var(--ui-text)]"
+            <span class="text-micro font-medium text-[var(--fg)]"
               >{displayLabel}</span
             >
             <span
-              class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[10px] text-[var(--ui-text-muted)]"
+              class="rounded bg-[var(--line)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
               >{docs.length}</span
             >
           </button>
@@ -682,7 +666,7 @@
     </div>
   {:else}
     <div
-      class="space-y-px rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] overflow-hidden"
+      class="space-y-px rounded-md border border-[var(--line)] bg-[var(--bg-soft)] overflow-hidden"
     >
       {#each documents as doc, i}
         {@render docRow(doc, i > 0)}

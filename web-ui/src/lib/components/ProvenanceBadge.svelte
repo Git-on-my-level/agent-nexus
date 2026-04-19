@@ -22,21 +22,21 @@
     presentation.unknown
       ? "bg-slate-400"
       : presentation.inferred
-        ? "bg-amber-400"
-        : "bg-emerald-400",
+        ? "bg-warn-text"
+        : "bg-ok-text",
   );
 </script>
 
 {#if hasDetails}
   <details class="group inline-block">
     <summary
-      class="inline-flex cursor-pointer list-none items-center gap-1.5 text-[11px] text-[var(--ui-text-muted)] select-none hover:text-[var(--ui-text)]"
+      class="inline-flex cursor-pointer list-none items-center gap-1.5 text-micro text-[var(--fg-muted)] select-none hover:text-[var(--fg)]"
     >
       <span class={`h-1.5 w-1.5 rounded-full ${dotClass}`}></span>
       {label}
     </summary>
     <div
-      class="mt-1 rounded border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-[11px] text-[var(--ui-text-muted)]"
+      class="mt-1 rounded border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-micro text-[var(--fg-muted)]"
     >
       {#if sources.length > 0}
         <p>Based on: {sources.join(", ")}</p>
@@ -46,12 +46,11 @@
       {/if}
       {#if provenance?.by_field}
         <details class="mt-1">
-          <summary
-            class="cursor-pointer text-[11px] text-[var(--ui-text-muted)]"
+          <summary class="cursor-pointer text-micro text-[var(--fg-muted)]"
             >Field details</summary
           >
           <pre
-            class="mt-1 overflow-auto rounded bg-[var(--ui-panel-muted)] p-2 text-[11px]">{JSON.stringify(
+            class="mt-1 overflow-auto rounded bg-[var(--bg-soft)] p-2 text-micro">{JSON.stringify(
               provenance.by_field,
               null,
               2,
@@ -62,7 +61,7 @@
   </details>
 {:else}
   <span
-    class="inline-flex items-center gap-1.5 text-[11px] text-[var(--ui-text-muted)]"
+    class="inline-flex items-center gap-1.5 text-micro text-[var(--fg-muted)]"
   >
     <span class={`h-1.5 w-1.5 rounded-full ${dotClass}`}></span>
     {label}

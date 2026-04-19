@@ -60,11 +60,11 @@
   });
 </script>
 
-<div class="hosted-page hosted-page--narrow">
-  <h1 class="hosted-title">Returning from checkout</h1>
+<div class="mx-auto max-w-[26rem] px-5 pt-6 pb-12 leading-normal text-fg">
+  <h1 class="text-[1.35rem] font-semibold mb-2">Returning from checkout</h1>
   {#if status === "working"}
-    <p class="hosted-muted">Redirecting…</p>
+    <p class="text-fg-muted">Redirecting…</p>
   {:else}
-    <p class="hosted-muted">Redirecting…</p>
+    <p class="text-fg-muted">Redirecting…</p>
   {/if}
 </div>

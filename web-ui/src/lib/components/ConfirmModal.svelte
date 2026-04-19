@@ -1,4 +1,8 @@
 <script>
+  import { tick } from "svelte";
+
+  import Button from "$lib/components/Button.svelte";
+
   let {
     open = false,
     title = "Confirm",
@@ -12,9 +16,15 @@
     oncancel = () => {},
   } = $props();
 
-  let confirmBtnEl = $state(null);
+  let confirmActionWrapEl = $state(null);
   let typedInputEl = $state(null);
   let typedValue = $state("");
+  let confirmVariant = $derived(
+    variant === "warning" ? "secondary" : "destructive",
+  );
+  let confirmClass = $derived(
+    variant === "warning" ? "border-warn bg-warn text-white hover:bg-warn" : "",
+  );
 
   let needsTyped = $derived(typedConfirmation.length > 0);
   let typedMatch = $derived(
@@ -25,11 +35,13 @@
   $effect(() => {
     if (!open) return;
     typedValue = "";
-    if (needsTyped) {
-      setTimeout(() => typedInputEl?.focus(), 0);
-    } else {
-      confirmBtnEl?.focus();
-    }
+    void tick().then(() => {
+      if (needsTyped) {
+        typedInputEl?.focus();
+      } else {
+        confirmActionWrapEl?.querySelector("button, a[role='button']")?.focus();
+      }
+    });
     function onKeydown(e) {
       if (e.key === "Escape" && !busy) {
         e.preventDefault();
@@ -87,25 +99,26 @@
         </label>
       {/if}
       <div class="confirm-actions">
-        <button
-          class="confirm-btn confirm-btn--cancel"
+        <Button
+          variant="secondary"
+          size="compact"
           disabled={busy}
           onclick={oncancel}
-          type="button"
         >
           {cancelLabel}
-        </button>
-        <button
-          class="confirm-btn {variant === 'danger'
-            ? 'confirm-btn--danger'
-            : 'confirm-btn--warning'}"
-          bind:this={confirmBtnEl}
-          disabled={confirmDisabled}
-          onclick={onconfirm}
-          type="button"
-        >
-          {busy ? "Working…" : confirmLabel}
-        </button>
+        </Button>
+        <span bind:this={confirmActionWrapEl} class="contents">
+          <Button
+            variant={confirmVariant}
+            size="compact"
+            class={confirmClass}
+            disabled={confirmDisabled}
+            {busy}
+            onclick={onconfirm}
+          >
+            {busy ? "Working…" : confirmLabel}
+          </Button>
+        </span>
       </div>
     </div>
   </div>
@@ -132,25 +145,25 @@
     position: relative;
     width: 380px;
     max-width: calc(100vw - 2rem);
-    background: var(--ui-panel);
-    border: 1px solid var(--ui-border);
-    border-radius: var(--ui-radius-lg);
-    box-shadow: var(--ui-shadow-elevated);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-modal);
     padding: 20px 24px 16px;
   }
 
   .confirm-title {
     margin: 0;
-    font-size: 14px;
+    font-size: 17px;
     font-weight: 600;
-    color: var(--ui-text);
+    color: var(--fg);
     line-height: 1.3;
   }
 
   .confirm-message {
     margin: 8px 0 0;
     font-size: 13px;
-    color: var(--ui-text-muted);
+    color: var(--fg-muted);
     line-height: 1.5;
   }
 
@@ -162,30 +175,30 @@
   .confirm-typed-label {
     display: block;
     font-size: 12px;
-    color: var(--ui-text-muted);
+    color: var(--fg-muted);
     margin-bottom: 6px;
   }
 
   .confirm-typed-phrase {
     font-weight: 600;
-    color: var(--ui-text);
+    color: var(--fg);
   }
 
   .confirm-typed-input {
     width: 100%;
     padding: 6px 10px;
     font-size: 13px;
-    font-family: var(--ui-font-sans);
-    color: var(--ui-text);
-    background: var(--ui-bg);
-    border: 1px solid var(--ui-border);
-    border-radius: var(--ui-radius-md);
+    font-family: var(--font-sans);
+    color: var(--fg);
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
     outline: none;
     transition: border-color 80ms ease;
   }
 
   .confirm-typed-input:focus {
-    border-color: var(--ui-accent);
+    border-color: var(--accent);
   }
 
   .confirm-actions {
@@ -193,49 +206,5 @@
     justify-content: flex-end;
     gap: 8px;
     margin-top: 20px;
-  }
-
-  .confirm-btn {
-    padding: 6px 14px;
-    font-size: 12px;
-    font-weight: 500;
-    font-family: var(--ui-font-sans);
-    border-radius: var(--ui-radius-md);
-    cursor: pointer;
-    border: none;
-    transition: background 80ms ease;
-  }
-
-  .confirm-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .confirm-btn--cancel {
-    background: var(--ui-bg-soft);
-    color: var(--ui-text-muted);
-    border: 1px solid var(--ui-border);
-  }
-
-  .confirm-btn--cancel:hover:not(:disabled) {
-    background: var(--ui-border);
-  }
-
-  .confirm-btn--danger {
-    background: #dc2626;
-    color: #fff;
-  }
-
-  .confirm-btn--danger:hover:not(:disabled) {
-    background: #ef4444;
-  }
-
-  .confirm-btn--warning {
-    background: #d97706;
-    color: #fff;
-  }
-
-  .confirm-btn--warning:hover:not(:disabled) {
-    background: #f59e0b;
   }
 </style>

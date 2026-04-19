@@ -3,8 +3,16 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
 
+  import Button from "$lib/components/Button.svelte";
+  import StateError from "$lib/components/state/StateError.svelte";
+  import StateEmpty from "$lib/components/state/StateEmpty.svelte";
+  import Skeleton from "$lib/components/state/Skeleton.svelte";
   import Avatar from "$lib/hosted/Avatar.svelte";
-  import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
+  import {
+    classifiedCpFetch,
+    errorUserMessage,
+    isAuthError,
+  } from "$lib/hosted/fetchState.js";
   import {
     hostedSession,
     loadHostedSession,
@@ -20,54 +28,74 @@
   let usage = $state(null);
   let workspaces = $state(/** @type {any[]} */ ([]));
   let phase = $state("loading");
-  let message = $state("");
-
-  async function readError(res) {
-    try {
-      const j = await res.json();
-      return j?.error?.message || j?.error?.code || res.statusText;
-    } catch {
-      return res.statusText;
-    }
-  }
+  let orgError = $state("");
+  let usageError = $state("");
+  let wsError = $state("");
+  let retrying = $state(false);
 
   async function loadAll() {
     phase = "loading";
-    message = "";
+    orgError = "";
+    usageError = "";
+    wsError = "";
+    retrying = false;
     organization = null;
     usage = null;
     workspaces = [];
 
-    const orgRes = await hostedCpFetch(
-      `organizations/${encodeURIComponent(orgId)}`,
-    );
-    if (orgRes.status === 401) {
-      await goto("/hosted/start");
-      return;
-    }
-    if (!orgRes.ok) {
-      message = await readError(orgRes);
+    try {
+      const orgRes = await classifiedCpFetch(
+        `organizations/${encodeURIComponent(orgId)}`,
+      );
+      const orgBody = await orgRes.json();
+      organization = orgBody?.organization ?? null;
+    } catch (e) {
+      if (isAuthError(e)) {
+        await goto("/hosted/start");
+        return;
+      }
+      orgError = errorUserMessage(e);
       phase = "ready";
       return;
     }
-    const orgBody = await orgRes.json();
-    organization = orgBody?.organization ?? null;
 
     const [usageRes, wsRes] = await Promise.all([
-      hostedCpFetch(`organizations/${encodeURIComponent(orgId)}/usage-summary`),
-      hostedCpFetch(
+      classifiedCpFetch(
+        `organizations/${encodeURIComponent(orgId)}/usage-summary`,
+      ).catch((e) => e),
+      classifiedCpFetch(
         `workspaces?organization_id=${encodeURIComponent(orgId)}&limit=20`,
-      ),
+      ).catch((e) => e),
     ]);
-    if (usageRes.ok) {
-      const u = await usageRes.json();
-      usage = u.summary ?? null;
+
+    if (usageRes instanceof Response) {
+      try {
+        const u = await usageRes.json();
+        usage = u.summary ?? null;
+      } catch {
+        /* ignore parse errors */
+      }
+    } else {
+      usageError = errorUserMessage(usageRes);
     }
-    if (wsRes.ok) {
-      const w = await wsRes.json();
-      workspaces = w.workspaces ?? [];
+
+    if (wsRes instanceof Response) {
+      try {
+        const w = await wsRes.json();
+        workspaces = w.workspaces ?? [];
+      } catch {
+        /* ignore parse errors */
+      }
+    } else {
+      wsError = errorUserMessage(wsRes);
     }
+
     phase = "ready";
+  }
+
+  async function retry() {
+    retrying = true;
+    await loadAll();
   }
 
   $effect(() => {
@@ -82,9 +110,9 @@
   function planBadgeClasses(planTier) {
     const t = String(planTier ?? "starter").toLowerCase();
     if (t === "enterprise") return "text-fuchsia-400 bg-fuchsia-500/10";
-    if (t === "scale") return "text-indigo-400 bg-indigo-500/10";
-    if (t === "team") return "text-emerald-400 bg-emerald-500/10";
-    return "text-gray-500 bg-gray-200";
+    if (t === "scale") return "text-accent-text bg-accent-soft";
+    if (t === "team") return "text-ok-text bg-ok-soft";
+    return "text-fg-subtle bg-panel-hover";
   }
 
   function planLabel(planTier) {
@@ -100,9 +128,9 @@
   }
 
   function barColor(p) {
-    if (p >= 90) return "bg-red-500";
-    if (p >= 75) return "bg-amber-500";
-    return "bg-indigo-500";
+    if (p >= 90) return "bg-danger";
+    if (p >= 75) return "bg-warn";
+    return "bg-accent";
   }
 </script>
 
@@ -121,15 +149,13 @@
         />
       {/if}
       <div class="min-w-0">
-        <p class="text-[11px] text-gray-500">
+        <p class="text-micro text-fg-subtle">
           <a
-            class="text-gray-500 underline-offset-2 transition-colors hover:text-gray-800 hover:underline"
+            class="text-fg-subtle underline-offset-2 transition-colors hover:text-fg hover:underline"
             href="/hosted/organizations">Organizations</a
           >
         </p>
-        <h1
-          class="mt-1 flex items-center gap-2 text-lg font-semibold text-gray-900"
-        >
+        <h1 class="mt-1 flex items-center gap-2 text-display text-fg">
           <span class="truncate"
             >{organization?.display_name ||
               organization?.slug ||
@@ -137,7 +163,7 @@
           >
           {#if organization}
             <span
-              class="rounded px-1.5 py-0.5 text-[11px] font-medium {planBadgeClasses(
+              class="rounded px-1.5 py-0.5 text-micro {planBadgeClasses(
                 organization.plan_tier,
               )}"
             >
@@ -148,119 +174,132 @@
       </div>
     </div>
     <div class="flex flex-wrap items-center gap-2">
-      <a
+      <Button
+        variant="secondary"
         href={`/hosted/organizations/${encodeURIComponent(orgId)}/billing`}
-        class="rounded-md border border-gray-200 bg-gray-100 px-3 py-1.5 text-[12px] font-medium text-gray-600 transition-colors hover:bg-gray-200"
-        >Manage billing</a
+        >Manage billing</Button
       >
-      <a
-        href="/hosted/workspaces/new"
-        class="rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500"
-        >+ New workspace</a
+      <Button variant="primary" href="/hosted/workspaces/new"
+        >+ New workspace</Button
       >
     </div>
   </div>
 
-  {#if message}
-    <div
-      role="alert"
-      class="rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
-    >
-      {message}
-    </div>
+  {#if orgError}
+    <StateError message={orgError} onretry={retry} {retrying} />
   {/if}
 
   {#if phase === "loading"}
-    <div
-      class="rounded-md border border-gray-200 bg-gray-100 px-4 py-6 text-[13px] text-gray-500"
-    >
-      Loading…
-    </div>
-  {:else if usage}
-    {@const plan = usage.plan ?? {}}
-    {@const u = usage.usage ?? {}}
-    <section class="grid gap-3 sm:grid-cols-3">
-      {#each [{ label: "Workspaces", used: u.workspace_count, total: plan.workspace_limit }, { label: "Artifacts", used: u.artifact_count, total: plan.artifact_capacity }, { label: "Storage", used: u.storage_gb, total: plan.included_storage_gb, suffix: " GB" }] as metric}
-        {@const p = pct(metric.used, metric.total)}
-        <div class="rounded-md border border-gray-200 bg-gray-100 px-4 py-3">
-          <div
-            class="flex items-center justify-between text-[11px] font-medium uppercase tracking-wide text-gray-500"
-          >
-            <span>{metric.label}</span>
-            <span>{p}%</span>
+    <div class="space-y-3">
+      <div class="grid gap-3 sm:grid-cols-3">
+        {#each [0, 1, 2] as i (i)}
+          <div class="rounded-md border border-line bg-bg-soft px-4 py-3">
+            <Skeleton rows={3} />
           </div>
-          <div class="mt-2 text-[18px] font-semibold text-gray-900">
-            {Number(metric.used ?? 0)}<span
-              class="text-[12px] font-normal text-gray-500"
-              >{metric.suffix ?? ""} / {metric.total ?? "—"}{metric.suffix ??
-                ""}</span
-            >
-          </div>
-          <div class="mt-2 h-1 overflow-hidden rounded-full bg-gray-200">
-            <div
-              class="h-full {barColor(p)} transition-all"
-              style="width: {p}%"
-            ></div>
-          </div>
-        </div>
-      {/each}
-    </section>
-
-    <section class="rounded-md border border-gray-200 bg-gray-100">
-      <div
-        class="flex items-center justify-between border-b border-gray-200 px-4 py-2.5"
-      >
-        <h2 class="text-[13px] font-medium text-gray-900">Workspaces</h2>
-        <a
-          href="/hosted/dashboard"
-          class="text-[11px] font-medium text-gray-500 transition-colors hover:text-gray-800"
-          >View all →</a
-        >
+        {/each}
       </div>
-      {#if workspaces.length === 0}
-        <div class="px-4 py-6 text-center">
-          <p class="text-[12px] text-gray-500">
-            No workspaces in this organization yet.
-          </p>
+      <div class="rounded-md border border-line bg-bg-soft px-4 py-4">
+        <Skeleton rows={4} />
+      </div>
+    </div>
+  {:else if usage || wsError || usageError}
+    {#if usageError}
+      <StateError
+        message={"Usage data failed to load: " + usageError}
+        onretry={retry}
+        {retrying}
+      />
+    {/if}
+    {#if usage}
+      {@const plan = usage.plan ?? {}}
+      {@const u = usage.usage ?? {}}
+      <section class="grid gap-3 sm:grid-cols-3">
+        {#each [{ label: "Workspaces", used: u.workspace_count, total: plan.workspace_limit }, { label: "Artifacts", used: u.artifact_count, total: plan.artifact_capacity }, { label: "Storage", used: u.storage_gb, total: plan.included_storage_gb, suffix: " GB" }] as metric}
+          {@const p = pct(metric.used, metric.total)}
+          <div class="rounded-md border border-line bg-bg-soft px-4 py-3">
+            <div
+              class="flex items-center justify-between text-micro uppercase tracking-wide text-fg-subtle"
+            >
+              <span>{metric.label}</span>
+              <span class="tabular-nums">{p}%</span>
+            </div>
+            <div class="mt-2 text-subtitle tabular-nums text-fg">
+              {Number(metric.used ?? 0)}<span class="text-meta text-fg-subtle"
+                >{metric.suffix ?? ""} / {metric.total ?? "—"}{metric.suffix ??
+                  ""}</span
+              >
+            </div>
+            <div class="mt-2 h-1 overflow-hidden rounded-full bg-panel-hover">
+              <div
+                class="h-full {barColor(p)} transition-all"
+                style="width: {p}%"
+              ></div>
+            </div>
+          </div>
+        {/each}
+      </section>
+
+      <section class="rounded-md border border-line bg-bg-soft">
+        <div
+          class="flex items-center justify-between border-b border-line px-4 py-2.5"
+        >
+          <h2 class="text-subtitle text-fg">Workspaces</h2>
           <a
-            href="/hosted/workspaces/new"
-            class="mt-3 inline-flex rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500"
-            >Create your first workspace</a
+            href="/hosted/dashboard"
+            class="text-micro text-fg-subtle transition-colors hover:text-fg"
+            >View all →</a
           >
         </div>
-      {:else}
-        <ul class="divide-y divide-gray-200">
-          {#each workspaces as ws (ws.id)}
-            <li class="flex items-center justify-between gap-3 px-4 py-2.5">
-              <div class="flex min-w-0 items-center gap-2.5">
-                <Avatar
-                  label={ws.display_name || ws.slug}
-                  seed={ws.id || ws.slug}
-                  size="sm"
-                />
-                <div class="min-w-0">
-                  <div class="truncate text-[13px] font-medium text-gray-900">
-                    {ws.display_name || ws.slug}
-                  </div>
-                  <div class="truncate text-[11px] text-gray-500">
-                    {ws.slug}
+        {#if wsError}
+          <div class="px-4 py-3">
+            <StateError
+              message={"Workspaces failed to load: " + wsError}
+              onretry={retry}
+              {retrying}
+            />
+          </div>
+        {:else if workspaces.length === 0}
+          <StateEmpty
+            title="No workspaces yet"
+            helper="Create your first workspace in this organization."
+            actionLabel="Create workspace"
+            actionHref="/hosted/workspaces/new"
+            class="border-0 bg-transparent"
+          />
+        {:else}
+          <ul class="divide-y divide-line">
+            {#each workspaces as ws (ws.id)}
+              <li class="flex items-center justify-between gap-3 px-4 py-2.5">
+                <div class="flex min-w-0 items-center gap-2.5">
+                  <Avatar
+                    label={ws.display_name || ws.slug}
+                    seed={ws.id || ws.slug}
+                    size="sm"
+                  />
+                  <div class="min-w-0">
+                    <div class="truncate text-subtitle text-fg">
+                      {ws.display_name || ws.slug}
+                    </div>
+                    <div class="truncate font-mono text-mono text-fg-subtle">
+                      {ws.slug}
+                    </div>
                   </div>
                 </div>
-              </div>
-              <span
-                class="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium {ws.status ===
-                'ready'
-                  ? 'text-emerald-400 bg-emerald-500/10'
-                  : ws.status === 'provisioning'
-                    ? 'text-amber-400 bg-amber-500/10'
-                    : 'text-gray-500 bg-gray-200'}"
-              >
-                {ws.status || "unknown"}
-              </span>
-            </li>
-          {/each}
-        </ul>
-      {/if}
-    </section>
+                <span
+                  class="shrink-0 rounded px-1.5 py-0.5 text-micro {ws.status ===
+                  'ready'
+                    ? 'text-ok-text bg-ok-soft'
+                    : ws.status === 'provisioning'
+                      ? 'text-warn-text bg-warn-soft'
+                      : 'text-fg-subtle bg-panel-hover'}"
+                >
+                  {ws.status || "unknown"}
+                </span>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      </section>
+    {/if}
   {/if}
 </div>

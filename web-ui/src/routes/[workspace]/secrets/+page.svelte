@@ -5,6 +5,7 @@
     authenticatedAgent,
     isHumanWorkspacePrincipal,
   } from "$lib/authSession";
+  import Button from "$lib/components/Button.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
@@ -121,28 +122,27 @@
 
 <div class="mx-auto max-w-3xl px-4 py-6">
   <div class="mb-4 flex items-center justify-between">
-    <h1 class="text-[15px] font-semibold text-[var(--ui-text)]">Secrets</h1>
+    <h1 class="text-body font-semibold text-[var(--fg)]">Secrets</h1>
     {#if isHuman}
-      <button
-        class="cursor-pointer rounded-md bg-[var(--ui-accent-strong)] px-3 py-1.5 text-[12px] font-medium text-white hover:bg-[var(--ui-accent)] disabled:opacity-50"
+      <Button
+        variant="primary"
         onclick={() => {
           showCreateForm = !showCreateForm;
         }}
-        type="button"
       >
         {showCreateForm ? "Cancel" : "New secret"}
-      </button>
+      </Button>
     {/if}
   </div>
 
-  <p class="mb-4 text-[12px] text-[var(--ui-text-muted)]">
+  <p class="mb-4 text-micro text-[var(--fg-muted)]">
     Workspace credentials for agent use. Values are encrypted at rest. Reveals
     are logged in audit.
   </p>
 
   {#if pageError}
     <div
-      class="mb-3 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
+      class="mb-3 rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-micro text-danger-text"
     >
       {pageError}
     </div>
@@ -150,18 +150,16 @@
 
   {#if showCreateForm}
     <div
-      class="mb-4 rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] p-4"
+      class="mb-4 rounded-md border border-[var(--line)] bg-[var(--panel)] p-4"
     >
-      <h2 class="mb-3 text-[13px] font-medium text-[var(--ui-text)]">
-        Create secret
-      </h2>
+      <h2 class="mb-3 text-meta font-medium text-[var(--fg)]">Create secret</h2>
       {#if createError}
-        <div class="mb-2 text-[12px] text-red-400">{createError}</div>
+        <div class="mb-2 text-micro text-danger-text">{createError}</div>
       {/if}
       <div class="space-y-3">
         <div>
           <label
-            class="mb-1 block text-[11px] font-medium text-[var(--ui-text-muted)]"
+            class="mb-1 block text-micro font-medium text-[var(--fg-muted)]"
             for="secret-name">Name</label
           >
           <input
@@ -169,12 +167,12 @@
             type="text"
             placeholder="OPENAI_API_KEY"
             bind:value={newName}
-            class="w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-3 py-1.5 text-[13px] text-[var(--ui-text)] placeholder:text-[var(--ui-text-subtle)] focus:border-[var(--ui-accent)] focus:outline-none"
+            class="w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-meta text-[var(--fg)] placeholder:text-[var(--fg-subtle)] focus:border-[var(--accent)] focus:outline-none"
           />
         </div>
         <div>
           <label
-            class="mb-1 block text-[11px] font-medium text-[var(--ui-text-muted)]"
+            class="mb-1 block text-micro font-medium text-[var(--fg-muted)]"
             for="secret-value">Value</label
           >
           <input
@@ -182,12 +180,12 @@
             type="password"
             placeholder="sk-..."
             bind:value={newValue}
-            class="w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-3 py-1.5 font-mono text-[13px] text-[var(--ui-text)] placeholder:text-[var(--ui-text-subtle)] focus:border-[var(--ui-accent)] focus:outline-none"
+            class="w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 font-mono text-meta text-[var(--fg)] placeholder:text-[var(--fg-subtle)] focus:border-[var(--accent)] focus:outline-none"
           />
         </div>
         <div>
           <label
-            class="mb-1 block text-[11px] font-medium text-[var(--ui-text-muted)]"
+            class="mb-1 block text-micro font-medium text-[var(--fg-muted)]"
             for="secret-desc">Description (optional)</label
           >
           <input
@@ -195,86 +193,77 @@
             type="text"
             placeholder="API key for the summarizer agent"
             bind:value={newDescription}
-            class="w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-3 py-1.5 text-[13px] text-[var(--ui-text)] placeholder:text-[var(--ui-text-subtle)] focus:border-[var(--ui-accent)] focus:outline-none"
+            class="w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-meta text-[var(--fg)] placeholder:text-[var(--fg-subtle)] focus:border-[var(--accent)] focus:outline-none"
           />
         </div>
         <div class="flex justify-end gap-2">
-          <button
-            class="cursor-pointer rounded-md px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]"
+          <Button
+            variant="ghost"
             onclick={() => {
               showCreateForm = false;
-            }}
-            type="button"
+            }}>Cancel</Button
           >
-            Cancel
-          </button>
-          <button
-            class="cursor-pointer rounded-md bg-[var(--ui-accent-strong)] px-3 py-1.5 text-[12px] font-medium text-white hover:bg-[var(--ui-accent)] disabled:opacity-50"
+          <Button
+            variant="primary"
             disabled={creating || !newName.trim() || !newValue}
             onclick={handleCreate}
-            type="button"
           >
             {creating ? "Creating..." : "Create"}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
   {/if}
 
   {#if loading}
-    <div class="py-8 text-center text-[13px] text-[var(--ui-text-muted)]">
+    <div class="py-8 text-center text-meta text-[var(--fg-muted)]">
       Loading secrets...
     </div>
   {:else if secrets.length === 0}
     <div
-      class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] px-4 py-8 text-center"
+      class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-4 py-8 text-center"
     >
-      <p class="text-[13px] text-[var(--ui-text-muted)]">
-        No secrets configured.
-      </p>
+      <p class="text-meta text-[var(--fg-muted)]">No secrets configured.</p>
       {#if isHuman}
-        <p class="mt-1 text-[12px] text-[var(--ui-text-subtle)]">
+        <p class="mt-1 text-micro text-[var(--fg-subtle)]">
           Create a secret to store API keys and credentials for agent use.
         </p>
       {/if}
     </div>
   {:else}
     <div
-      class="overflow-hidden rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)]"
+      class="overflow-hidden rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
     >
       {#each secrets as secret, i}
         {@const revealed = revealedSecrets[secret.id]}
-        <div
-          class="px-4 py-3 {i > 0 ? 'border-t border-[var(--ui-border)]' : ''}"
-        >
+        <div class="px-4 py-3 {i > 0 ? 'border-t border-[var(--line)]' : ''}">
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2">
-                <span
-                  class="font-mono text-[13px] font-medium text-[var(--ui-text)]"
+                <span class="font-mono text-meta font-medium text-[var(--fg)]"
                   >{secret.name}</span
                 >
               </div>
               {#if secret.description}
-                <p class="mt-0.5 text-[12px] text-[var(--ui-text-muted)]">
+                <p class="mt-0.5 text-micro text-[var(--fg-muted)]">
                   {secret.description}
                 </p>
               {/if}
-              <p class="mt-1 text-[11px] text-[var(--ui-text-subtle)]">
+              <p class="mt-1 text-micro text-[var(--fg-subtle)]">
                 Updated {formatTimestamp(secret.updated_at)}
               </p>
             </div>
             <div class="flex shrink-0 items-center gap-1.5">
               {#if revealed}
                 <div
-                  class="flex items-center gap-1.5 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-2 py-1"
+                  class="flex items-center gap-1.5 rounded-md border border-[var(--line)] bg-[var(--bg)] px-2 py-1"
                 >
                   <code
-                    class="max-w-[200px] truncate font-mono text-[11px] text-[var(--ui-text)]"
+                    class="max-w-[200px] truncate font-mono text-micro text-[var(--fg)]"
                     >{revealed}</code
                   >
                   <button
-                    class="cursor-pointer text-[11px] text-[var(--ui-accent)] hover:text-[var(--ui-accent-strong)]"
+                    class="cursor-pointer text-micro text-[var(--accent)] hover:text-[var(--accent-hover)]"
                     onclick={() => copyToClipboard(revealed)}
                     type="button"
                     title="Copy"
@@ -282,7 +271,7 @@
                     Copy
                   </button>
                   <button
-                    class="cursor-pointer text-[11px] text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]"
+                    class="cursor-pointer text-micro text-[var(--fg-muted)] hover:text-[var(--fg)]"
                     onclick={() => hideReveal(secret.id)}
                     type="button"
                   >
@@ -291,7 +280,7 @@
                 </div>
               {:else}
                 <button
-                  class="cursor-pointer rounded px-2 py-1 text-[11px] font-medium text-[var(--ui-accent)] hover:bg-[var(--ui-accent)]/10 disabled:opacity-50"
+                  class="cursor-pointer rounded px-2 py-1 text-micro font-medium text-[var(--accent)] hover:bg-[var(--accent)]/10 disabled:opacity-50"
                   disabled={revealingId === secret.id}
                   onclick={() => handleReveal(secret.id)}
                   type="button"
@@ -300,8 +289,8 @@
                 </button>
               {/if}
               {#if isHuman}
-                <button
-                  class="cursor-pointer rounded px-2 py-1 text-[11px] font-medium text-red-400 hover:bg-red-400/10 disabled:opacity-50"
+                <Button
+                  variant="destructive"
                   disabled={deleting === secret.id}
                   onclick={() => {
                     deleteConfirm = {
@@ -310,10 +299,9 @@
                       name: secret.name,
                     };
                   }}
-                  type="button"
                 >
                   {deleting === secret.id ? "Deleting..." : "Delete"}
-                </button>
+                </Button>
               {/if}
             </div>
           </div>

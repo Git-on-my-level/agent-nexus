@@ -1,4 +1,6 @@
 <script>
+  import Button from "$lib/components/Button.svelte";
+
   let { value = "", label = "Copy", size = "sm" } = $props();
 
   let copied = $state(false);
@@ -15,12 +17,12 @@
     }
   }
 
-  let padding = $derived(size === "md" ? "px-2 py-1" : "px-1.5 py-0.5");
+  let btnSize = $derived(size === "md" ? "default" : "compact");
 </script>
 
-<button
-  type="button"
-  class="cursor-pointer inline-flex items-center gap-1 rounded {padding} text-[11px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border)] hover:text-[var(--ui-text)]"
+<Button
+  variant="ghost"
+  size={btnSize}
   onclick={onCopy}
   title={copied ? "Copied" : label}
   aria-label={label}
@@ -49,9 +51,9 @@
       <path
         stroke-linecap="round"
         stroke-linejoin="round"
-        d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-2M8 5a2 2 0 002 2h4a2 2 0 002-2M8 5a2 2 0 012-2h4a2 2 0 012 2m0 0h2a2 2 0 012 2v3"
+        d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-2M8 5a2 2 0 012-2h4a2 2 0 012 2M8 5a2 2 0 002 2h4a2 2 0 002-2M8 5a2 2 0 012-2h4a2 2 0 012 2m0 0h2a2 2 0 012 2v3"
       />
     </svg>
     Copy
   {/if}
-</button>
+</Button>

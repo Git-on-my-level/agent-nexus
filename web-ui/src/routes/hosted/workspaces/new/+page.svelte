@@ -4,6 +4,7 @@
   import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
 
+  import Button from "$lib/components/Button.svelte";
   import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
   import { hostedSession, loadHostedSession } from "$lib/hosted/session.js";
 
@@ -108,27 +109,27 @@
 </svelte:head>
 
 <div class="mx-auto max-w-lg py-6">
-  <p class="text-[12px] text-gray-500">
-    <a class="text-indigo-400 hover:text-indigo-300" href="/hosted/dashboard"
+  <p class="text-micro text-fg-subtle">
+    <a class="text-accent-text hover:text-accent-text" href="/hosted/dashboard"
       >← Dashboard</a
     >
   </p>
-  <h1 class="mt-2 text-lg font-semibold text-gray-900">Create a workspace</h1>
-  <p class="mt-1 text-[12px] text-gray-500">
+  <h1 class="mt-2 text-display text-fg">Create a workspace</h1>
+  <p class="mt-1 text-meta text-fg-subtle">
     Workspaces are isolated environments inside
-    <span class="font-medium text-gray-800"
+    <span class="text-fg"
       >{activeOrg?.display_name || activeOrg?.slug || "your organization"}</span
     >. Each one runs its own agent and stores its own threads.
   </p>
 
   <form
-    class="mt-5 space-y-3 rounded-md border border-gray-200 bg-gray-100 px-5 py-5"
+    class="mt-5 space-y-3 rounded-md border border-line bg-bg-soft px-5 py-5"
     onsubmit={(e) => {
       e.preventDefault();
       submit();
     }}
   >
-    <label class="block text-[12px] font-medium text-gray-600">
+    <label class="block text-micro text-fg-muted">
       Workspace name
       <input
         type="text"
@@ -136,11 +137,11 @@
         disabled={busy}
         required
         placeholder="Q3 launch"
-        class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] text-gray-900 placeholder:text-[var(--ui-text-subtle)]"
+        class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-1.5 text-body text-fg placeholder:text-[var(--fg-subtle)]"
       />
     </label>
 
-    <label class="block text-[12px] font-medium text-gray-600">
+    <label class="block text-micro text-fg-muted">
       Slug
       <input
         type="text"
@@ -150,24 +151,26 @@
         required
         placeholder="q3-launch"
         pattern="[a-z0-9-]+"
-        class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] text-gray-900 placeholder:text-[var(--ui-text-subtle)]"
+        class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-1.5 font-mono text-mono text-fg placeholder:text-[var(--fg-subtle)]"
       />
-      <span class="mt-1 block text-[11px] text-gray-500">
+      <span class="mt-1 block text-micro text-fg-subtle">
         Lowercase letters, numbers, and hyphens. Used in workspace URLs.
       </span>
     </label>
 
     {#if canBringOwnServiceIdentity}
-      <div class="border-t border-gray-200 pt-3">
+      <div class="border-t border-line pt-3">
         <button
           type="button"
-          class="flex items-center gap-1.5 text-[11px] font-medium text-gray-500 hover:text-gray-800"
+          class="flex items-center gap-1.5 text-micro text-fg-subtle hover:text-fg"
           onclick={() => (advancedOpen = !advancedOpen)}
           aria-expanded={advancedOpen}
         >
           <svg
             viewBox="0 0 12 12"
-            class="h-3 w-3 transition-transform {advancedOpen ? 'rotate-90' : ''}"
+            class="h-3 w-3 transition-transform {advancedOpen
+              ? 'rotate-90'
+              : ''}"
             fill="none"
             stroke="currentColor"
             stroke-width="1.6"
@@ -180,28 +183,28 @@
 
         {#if advancedOpen}
           <div
-            class="mt-3 space-y-3 rounded-md border border-gray-200 bg-gray-50 px-3 py-3"
+            class="mt-3 space-y-3 rounded-md border border-line bg-bg px-3 py-3"
           >
-            <p class="text-[11px] text-gray-500">
+            <p class="text-micro text-fg-subtle">
               Platform provisioning is the default. Set both fields only for
               bring-your-own service identity.
             </p>
-            <label class="block text-[12px] font-medium text-gray-600">
+            <label class="block text-micro text-fg-muted">
               Service identity id
               <input
                 type="text"
                 bind:value={serviceId}
                 disabled={busy}
-                class="mt-1 w-full rounded-md border border-gray-200 bg-gray-100 px-3 py-1.5 text-[13px] text-gray-900"
+                class="mt-1 w-full rounded-md border border-line bg-bg-soft px-3 py-1.5 text-body text-fg"
               />
             </label>
-            <label class="block text-[12px] font-medium text-gray-600">
+            <label class="block text-micro text-fg-muted">
               Service identity public key (base64)
               <textarea
                 bind:value={servicePublicKey}
                 disabled={busy}
                 rows="3"
-                class="mt-1 w-full rounded-md border border-gray-200 bg-gray-100 px-3 py-1.5 font-mono text-[11px] text-gray-900"
+                class="mt-1 w-full rounded-md border border-line bg-bg-soft px-3 py-1.5 font-mono text-mono text-fg"
               ></textarea>
             </label>
           </div>
@@ -212,24 +215,17 @@
     {#if message}
       <p
         role="alert"
-        class="rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
+        class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
       >
         {message}
       </p>
     {/if}
 
     <div class="flex items-center justify-end gap-2 pt-2">
-      <a
-        class="rounded-md px-3 py-1.5 text-[12px] font-medium text-gray-500 hover:bg-gray-200 hover:text-gray-800"
-        href="/hosted/dashboard">Cancel</a
-      >
-      <button
-        type="submit"
-        disabled={busy || !activeOrg}
-        class="rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-60"
-      >
+      <Button variant="ghost" href="/hosted/dashboard">Cancel</Button>
+      <Button type="submit" variant="primary" disabled={busy || !activeOrg}>
         {busy ? "Creating…" : "Create workspace"}
-      </button>
+      </Button>
     </div>
   </form>
 </div>

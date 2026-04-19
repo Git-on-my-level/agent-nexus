@@ -18,9 +18,9 @@
   // Curated palette — semi-transparent so tiles read as part of the panel.
   // All foregrounds clear WCAG 2 AA on the dark base palette.
   const PALETTE = [
-    { bg: "bg-indigo-500/15", fg: "text-indigo-300" },
-    { bg: "bg-emerald-500/15", fg: "text-emerald-300" },
-    { bg: "bg-amber-500/15", fg: "text-amber-300" },
+    { bg: "bg-accent-soft", fg: "text-accent-text" },
+    { bg: "bg-ok-soft", fg: "text-ok-text" },
+    { bg: "bg-warn-soft", fg: "text-warn-text" },
     { bg: "bg-sky-500/15", fg: "text-sky-300" },
     { bg: "bg-rose-500/15", fg: "text-rose-300" },
     { bg: "bg-violet-500/15", fg: "text-violet-300" },
@@ -53,10 +53,10 @@
     size === "xs"
       ? "h-5 w-5 rounded text-[9px]"
       : size === "sm"
-        ? "h-6 w-6 rounded text-[10px]"
+        ? "h-6 w-6 rounded text-micro"
         : size === "lg"
-          ? "h-9 w-9 rounded-md text-[13px]"
-          : "h-7 w-7 rounded-md text-[11px]",
+          ? "h-9 w-9 rounded-md text-meta"
+          : "h-7 w-7 rounded-md text-micro",
   );
 </script>
 

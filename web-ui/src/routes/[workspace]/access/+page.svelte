@@ -3,6 +3,7 @@
 
   import { authenticatedAgent } from "$lib/authSession";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
+  import Button from "$lib/components/Button.svelte";
   import CopyButton from "$lib/components/CopyButton.svelte";
   import { coreClient } from "$lib/coreClient";
   import { formatAbsoluteDateTime, formatTimestamp } from "$lib/formatDate";
@@ -391,14 +392,14 @@
 
   function principalBadge(principal) {
     if (principal?.revoked) {
-      return { label: "Revoked", class: "bg-red-500/10 text-red-400" };
+      return { label: "Revoked", class: "bg-danger-soft text-danger-text" };
     }
     return null;
   }
 
   function inviteBadge(invite) {
     if (invite?.revoked_at) {
-      return { label: "Revoked", class: "bg-red-500/10 text-red-400" };
+      return { label: "Revoked", class: "bg-danger-soft text-danger-text" };
     }
     if (invite?.consumed_at) {
       return { label: "Consumed", class: "bg-blue-500/10 text-blue-400" };
@@ -528,20 +529,20 @@
   <div class="space-y-4">
     <div class="flex items-baseline justify-between gap-4">
       <div>
-        <h1 class="text-lg font-semibold text-[var(--ui-text)]">Access</h1>
-        <p class="mt-0.5 text-[13px] text-[var(--ui-text-muted)]">
+        <h1 class="text-subtitle font-semibold text-[var(--fg)]">Access</h1>
+        <p class="mt-0.5 text-meta text-[var(--fg-muted)]">
           Manage workspace access and invitations
         </p>
       </div>
     </div>
 
     <div
-      class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-4 py-10 text-center text-[13px] text-[var(--ui-text-muted)]"
+      class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-4 py-10 text-center text-meta text-[var(--fg-muted)]"
     >
       <p>Sign in with a passkey to manage workspace access.</p>
       <p class="mt-2">
         <a
-          class="text-indigo-400 hover:text-indigo-300"
+          class="text-accent-text hover:text-accent-text"
           href={workspaceHref("/login")}
         >
           Go to sign in
@@ -553,23 +554,19 @@
   <div class="space-y-6">
     <div class="flex items-baseline justify-between gap-4">
       <div>
-        <h1 class="text-lg font-semibold text-[var(--ui-text)]">Access</h1>
-        <p class="mt-0.5 text-[13px] text-[var(--ui-text-muted)]">
+        <h1 class="text-subtitle font-semibold text-[var(--fg)]">Access</h1>
+        <p class="mt-0.5 text-meta text-[var(--fg-muted)]">
           Manage workspace access, principals, and invitations
         </p>
       </div>
-      <button
-        class="cursor-pointer rounded-md border border-[var(--ui-border)] px-2.5 py-1.5 text-[13px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)]"
-        onclick={loadAccessData}
-        type="button"
-      >
+      <Button variant="secondary" size="compact" onclick={loadAccessData}>
         Refresh
-      </button>
+      </Button>
     </div>
 
     {#if loading}
       <div
-        class="flex items-center gap-2 py-6 text-[13px] text-[var(--ui-text-muted)]"
+        class="flex items-center gap-2 py-6 text-meta text-[var(--fg-muted)]"
       >
         <svg class="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
           <circle
@@ -591,48 +588,46 @@
     {/if}
 
     {#if createdToken && !tokenDismissed}
-      <div
-        class="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-4 py-3"
-      >
+      <div class="rounded-md border border-ok/30 bg-ok-soft px-4 py-3">
         <div class="flex items-start gap-3">
           <div class="flex-1">
-            <p class="text-[13px] font-medium text-emerald-400">
+            <p class="text-meta font-medium text-ok-text">
               Invite created successfully
             </p>
-            <p class="mt-1 text-[11px] text-[var(--ui-text-muted)]">
+            <p class="mt-1 text-micro text-[var(--fg-muted)]">
               This one-time token will not be shown again. Copy it now.
             </p>
             <div
-              class="mt-2 flex items-center gap-2 rounded bg-gray-50 px-2 py-1.5 font-mono text-[11px] text-[var(--ui-text)]"
+              class="mt-2 flex items-center gap-2 rounded bg-bg px-2 py-1.5 font-mono text-micro text-[var(--fg)]"
             >
               <span class="flex-1 break-all">{createdToken}</span>
               {#if createdInviteKind === "agent" || createdInviteKind === "any"}
-                <button
-                  class="shrink-0 cursor-pointer rounded px-2 py-1.5 text-[10px] font-medium text-emerald-400 hover:bg-emerald-400/10"
+                <Button
+                  variant="ghost"
+                  size="compact"
                   onclick={copyTokenToClipboard}
-                  type="button"
                 >
                   {tokenCopied ? "Copied" : "Copy token"}
-                </button>
+                </Button>
               {:else}
-                <button
-                  class="shrink-0 cursor-pointer rounded px-2 py-1.5 text-[10px] font-medium text-emerald-400 hover:bg-emerald-400/10"
+                <Button
+                  variant="ghost"
+                  size="compact"
                   onclick={copyTokenToClipboard}
-                  type="button"
                 >
                   {tokenCopied ? "Copied" : "Copy"}
-                </button>
+                </Button>
               {/if}
             </div>
             {#if createdInviteKind === "agent" || createdInviteKind === "any"}
-              <button
-                class="mt-2 cursor-pointer rounded border border-emerald-500/30 px-3 py-1.5 text-[11px] font-medium text-emerald-400 hover:bg-emerald-400/10"
+              <Button
+                variant="ghost"
+                size="compact"
                 onclick={copyRegistrationMessage}
-                type="button"
               >
                 {messageCopied ? "Copied" : "Copy registration message"}
-              </button>
-              <p class="mt-1.5 text-[11px] text-[var(--ui-text-muted)]">
+              </Button>
+              <p class="mt-1.5 text-micro text-[var(--fg-muted)]">
                 Copies a ready-to-paste command with instructions for your agent
                 to register.
               </p>
@@ -640,7 +635,7 @@
           </div>
           <button
             aria-label="Dismiss token banner"
-            class="shrink-0 cursor-pointer text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]"
+            class="shrink-0 cursor-pointer text-[var(--fg-muted)] hover:text-[var(--fg)]"
             onclick={dismissToken}
             type="button"
           >
@@ -664,7 +659,7 @@
 
     {#if pageError}
       <div
-        class="rounded-md bg-red-500/10 px-3 py-2 text-[13px] text-red-400"
+        class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
         role="alert"
       >
         {pageError}
@@ -672,22 +667,22 @@
     {/if}
 
     <section>
-      <h2 class="mb-2 text-[13px] font-semibold text-[var(--ui-text)]">
+      <h2 class="mb-2 text-meta font-semibold text-[var(--fg)]">
         Create invite
       </h2>
       <div
-        class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-4 py-3"
+        class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-4 py-3"
       >
         {#if inviteError}
           <p
-            class="mb-3 rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
+            class="mb-3 rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
           >
             {inviteError}
           </p>
         {/if}
         {#if revokeError}
           <p
-            class="mb-3 rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
+            class="mb-3 rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
           >
             {revokeError}
           </p>
@@ -701,14 +696,14 @@
           <div class="flex flex-wrap items-end gap-3">
             <div class="flex-1 min-w-[200px]">
               <label
-                class="mb-1 block text-[11px] font-medium text-[var(--ui-text-muted)]"
+                class="mb-1 block text-micro font-medium text-[var(--fg-muted)]"
                 for="invite-kind"
               >
                 Kind
               </label>
               <select
                 bind:value={newInviteKind}
-                class="w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-2 py-1.5 text-[13px] text-[var(--ui-text)]"
+                class="w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-2 py-1.5 text-meta text-[var(--fg)]"
                 id="invite-kind"
               >
                 <option value="agent">Agent</option>
@@ -719,14 +714,14 @@
             {#if newInviteKind === "agent" || newInviteKind === "any"}
               <div class="flex-[2] min-w-[240px]">
                 <label
-                  class="mb-1 block text-[11px] font-medium text-[var(--ui-text-muted)]"
+                  class="mb-1 block text-micro font-medium text-[var(--fg-muted)]"
                   for="invite-agent-name"
                 >
                   Agent name (optional)
                 </label>
                 <input
                   bind:value={newInviteAgentName}
-                  class="w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-2 py-1.5 text-[13px] text-[var(--ui-text)]"
+                  class="w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-2 py-1.5 text-meta text-[var(--fg)]"
                   id="invite-agent-name"
                   placeholder="e.g. hermes-prod"
                   type="text"
@@ -734,27 +729,28 @@
               </div>
               <div class="flex-[2] min-w-[240px]">
                 <label
-                  class="mb-1 block text-[11px] font-medium text-[var(--ui-text-muted)]"
+                  class="mb-1 block text-micro font-medium text-[var(--fg-muted)]"
                   for="invite-username"
                 >
                   Username (optional)
                 </label>
                 <input
                   bind:value={newInviteUsername}
-                  class="w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-2 py-1.5 text-[13px] text-[var(--ui-text)]"
+                  class="w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-2 py-1.5 text-meta text-[var(--fg)]"
                   id="invite-username"
                   placeholder="e.g. hermes.prod"
                   type="text"
                 />
               </div>
             {/if}
-            <button
-              class="cursor-pointer rounded-md bg-indigo-600 px-3 py-1.5 text-[13px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+            <Button
+              variant="primary"
+              size="compact"
               disabled={creatingInvite}
               type="submit"
             >
               {creatingInvite ? "Creating..." : "Create invite"}
-            </button>
+            </Button>
           </div>
         </form>
       </div>
@@ -762,17 +758,17 @@
 
     <section>
       <div class="mb-2 flex items-baseline justify-between gap-2">
-        <h2 class="text-[13px] font-semibold text-[var(--ui-text)]">
+        <h2 class="text-meta font-semibold text-[var(--fg)]">
           Invites
           {#if invitesState.status === SECTION_READY && pendingInvites.length > 0}
-            <span class="ml-1 font-normal text-[var(--ui-text-muted)]"
+            <span class="ml-1 font-normal text-[var(--fg-muted)]"
               >{pendingInvites.length} pending</span
             >
           {/if}
         </h2>
         {#if resolvedInvites.length > 0}
           <button
-            class="cursor-pointer text-[11px] font-medium text-[var(--ui-accent)] hover:text-indigo-300"
+            class="cursor-pointer text-micro font-medium text-[var(--accent)] hover:text-accent-text"
             onclick={() => (showResolvedInvites = !showResolvedInvites)}
             type="button"
           >
@@ -783,13 +779,15 @@
         {/if}
       </div>
       {#if invitesState.status === SECTION_ERROR}
-        <p class="rounded-md bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
+        <p
+          class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
+        >
           {invitesState.error}
         </p>
       {:else if invitesState.status === SECTION_READY}
         {#if visibleInvites.length === 0}
           <p
-            class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-4 text-[13px] text-[var(--ui-text-muted)]"
+            class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-4 text-meta text-[var(--fg-muted)]"
           >
             {invites.length === 0
               ? "No invites yet. Create one above to onboard new principals."
@@ -797,20 +795,20 @@
           </p>
         {:else}
           <div
-            class="space-y-px rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] overflow-hidden"
+            class="space-y-px rounded-md border border-[var(--line)] bg-[var(--bg-soft)] overflow-hidden"
           >
             {#each visibleInvites as invite, i}
               {@const badge = inviteBadge(invite)}
               <div
                 class="flex items-center gap-3 px-3 py-2 {i > 0
-                  ? 'border-t border-[var(--ui-border)]'
+                  ? 'border-t border-[var(--line)]'
                   : ''} {invite.revoked_at || invite.consumed_at
                   ? 'opacity-60'
                   : ''}"
               >
                 {#if badge}
                   <span
-                    class="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium {badge.class}"
+                    class="shrink-0 rounded px-1.5 py-0.5 text-micro font-medium {badge.class}"
                   >
                     {badge.label}
                   </span>
@@ -818,7 +816,7 @@
                 <div class="min-w-0 flex-1">
                   <div class="flex items-center gap-1.5">
                     <p
-                      class="truncate font-mono text-[12px] text-[var(--ui-text)]"
+                      class="truncate font-mono text-micro text-[var(--fg)]"
                       title={invite.id}
                     >
                       {invite.id.length > 14
@@ -827,26 +825,26 @@
                     </p>
                     <CopyButton value={invite.id} label="Copy invite ID" />
                   </div>
-                  <p class="text-[11px] text-[var(--ui-text-muted)]">
+                  <p class="text-micro text-[var(--fg-muted)]">
                     {invite.kind}
                   </p>
                 </div>
                 <span
-                  class="hidden text-[11px] text-[var(--ui-text-muted)] sm:inline"
+                  class="hidden text-micro text-[var(--fg-muted)] sm:inline"
                 >
                   {formatTimestamp(invite.created_at)}
                 </span>
                 {#if !invite.revoked_at && !invite.consumed_at}
-                  <button
-                    class="shrink-0 cursor-pointer rounded px-2 py-1 text-[11px] font-medium text-red-400 hover:bg-red-400/10 disabled:opacity-50"
+                  <Button
+                    variant="destructive"
+                    size="compact"
                     disabled={revokingInviteId === invite.id}
                     onclick={() => {
                       revokeInviteConfirm = { open: true, id: invite.id };
                     }}
-                    type="button"
                   >
                     {revokingInviteId === invite.id ? "Revoking..." : "Revoke"}
-                  </button>
+                  </Button>
                 {/if}
               </div>
             {/each}
@@ -856,58 +854,60 @@
     </section>
 
     <section>
-      <h2 class="mb-1 text-[13px] font-semibold text-[var(--ui-text)]">
+      <h2 class="mb-1 text-meta font-semibold text-[var(--fg)]">
         Principals
         {#if principalsState.status === SECTION_READY && principals.length > 0}
-          <span class="ml-1 font-normal text-[var(--ui-text-muted)]"
+          <span class="ml-1 font-normal text-[var(--fg-muted)]"
             >{principals.length}</span
           >
         {/if}
       </h2>
-      <p class="mb-2 text-[11px] text-[var(--ui-text-muted)]">
+      <p class="mb-2 text-micro text-[var(--fg-muted)]">
         Registered agents can be tagged from thread messages with
-        <code class="rounded bg-[var(--ui-border)] px-1 py-px text-[10px]"
+        <code class="rounded bg-[var(--line)] px-1 py-px text-micro"
           >@handle</code
         >.
         <span
-          class="rounded bg-emerald-500/10 px-1 py-px text-[10px] font-medium text-emerald-400"
+          class="rounded bg-ok-soft px-1 py-px text-micro font-medium text-ok-text"
           >Online</span
         >
         agents have a fresh bridge check-in, while
         <span
-          class="rounded bg-amber-500/10 px-1 py-px text-[10px] font-medium text-amber-400"
+          class="rounded bg-warn-soft px-1 py-px text-micro font-medium text-warn-text"
           >Offline</span
         >
         agents stay taggable and will receive wakes when they come back.
       </p>
       {#if principalsState.status === SECTION_ERROR}
-        <p class="rounded-md bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
+        <p
+          class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
+        >
           {principalsState.error}
         </p>
       {:else if principalsState.status === SECTION_READY}
         {#if principals.length === 0}
           <p
-            class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-4 text-[13px] text-[var(--ui-text-muted)]"
+            class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-4 text-meta text-[var(--fg-muted)]"
           >
             No principals found.
           </p>
         {:else}
           <div
-            class="space-y-px rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] overflow-hidden"
+            class="space-y-px rounded-md border border-[var(--line)] bg-[var(--bg-soft)] overflow-hidden"
           >
             {#each principals as principal, i}
               {@const badge = principalBadge(principal)}
               {@const isCurrent = isCurrentPrincipal(principal)}
               <div
-                class="group relative px-3 py-2 transition-colors hover:bg-[var(--ui-border-subtle)] {i >
+                class="group relative px-3 py-2 transition-colors hover:bg-[var(--line-subtle)] {i >
                 0
-                  ? 'border-t border-[var(--ui-border)]'
+                  ? 'border-t border-[var(--line)]'
                   : ''} {principal.revoked ? 'opacity-50' : ''}"
               >
                 <div class="flex items-center gap-2.5 sm:gap-3">
                   {#if badge}
                     <span
-                      class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium {badge.class}"
+                      class="shrink-0 rounded px-1.5 py-0.5 text-micro font-medium {badge.class}"
                     >
                       {badge.label}
                     </span>
@@ -915,19 +915,19 @@
                   <div class="min-w-0 flex-1">
                     <div class="flex items-center gap-1.5">
                       <span
-                        class="truncate text-[13px] font-medium text-[var(--ui-text)]"
+                        class="truncate text-meta font-medium text-[var(--fg)]"
                       >
                         {principal.username ||
                           truncateId(principal.agent_id, 24)}
                       </span>
                       <span
-                        class="hidden shrink-0 text-[11px] text-[var(--ui-text-muted)] sm:inline"
+                        class="hidden shrink-0 text-micro text-[var(--fg-muted)] sm:inline"
                       >
                         {principalLabel(principal)}
                       </span>
                       {#if principal.wakeRouting?.applicable && principal.wakeRouting.state !== "revoked"}
                         <button
-                          class="relative shrink-0 cursor-pointer rounded px-1.5 py-0.5 text-[10px] font-medium {principal
+                          class="relative shrink-0 cursor-pointer rounded px-1.5 py-0.5 text-micro font-medium {principal
                             .wakeRouting
                             .badgeClass} hover:brightness-125 focus:outline-none"
                           onclick={() => toggleWakePopover(principal.agent_id)}
@@ -938,32 +938,32 @@
                         </button>
                         {#if wakePopoverTarget === principal.agent_id}
                           <div
-                            class="absolute left-12 top-full z-30 mt-1 w-72 rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] px-3 py-2 sm:left-24"
-                            style="box-shadow: var(--ui-shadow-elevated)"
+                            class="absolute left-12 top-full z-30 mt-1 w-72 rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-2 sm:left-24"
+                            style="box-shadow: var(--shadow-modal)"
                             role="tooltip"
                           >
                             <div class="flex items-start justify-between gap-2">
                               <div>
                                 <p
-                                  class="text-[11px] font-medium {principal
+                                  class="text-micro font-medium {principal
                                     .wakeRouting.badgeClass}"
                                 >
                                   {principal.wakeRouting.badgeLabel}
                                 </p>
                                 <p
-                                  class="mt-0.5 text-[11px] text-[var(--ui-text-muted)]"
+                                  class="mt-0.5 text-micro text-[var(--fg-muted)]"
                                 >
                                   {principal.wakeRouting.summary}
                                 </p>
                                 {#if principal.wakeRouting.state === "unregistered"}
                                   <p
-                                    class="mt-2 text-[11px] text-[var(--ui-text-muted)]"
+                                    class="mt-2 text-micro text-[var(--fg-muted)]"
                                   >
                                     Copy a sendable CLI setup snippet for this
                                     agent's existing ANX profile.
                                   </p>
                                   <button
-                                    class="mt-2 cursor-pointer rounded border border-[var(--ui-border)] px-2 py-1 text-[11px] font-medium text-[var(--ui-text)] hover:bg-[var(--ui-border-subtle)]"
+                                    class="mt-2 cursor-pointer rounded border border-[var(--line)] px-2 py-1 text-micro font-medium text-[var(--fg)] hover:bg-[var(--line-subtle)]"
                                     onclick={() =>
                                       copyWakeRegistrationMessage(principal)}
                                     type="button"
@@ -976,7 +976,7 @@
                                 {/if}
                               </div>
                               <button
-                                class="shrink-0 cursor-pointer text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]"
+                                class="shrink-0 cursor-pointer text-[var(--fg-muted)] hover:text-[var(--fg)]"
                                 onclick={() => (wakePopoverTarget = null)}
                                 type="button"
                                 aria-label="Close"
@@ -1001,7 +1001,7 @@
                       {/if}
                     </div>
                     <div
-                      class="mt-0.5 flex min-w-0 items-center gap-1.5 text-[10px] text-[var(--ui-text-muted)]"
+                      class="mt-0.5 flex min-w-0 items-center gap-1.5 text-micro text-[var(--fg-muted)]"
                     >
                       <span
                         class="min-w-0 flex-1 truncate font-mono"
@@ -1018,7 +1018,7 @@
                     </div>
                   </div>
                   <div
-                    class="hidden shrink-0 text-right text-[11px] leading-4 text-[var(--ui-text-muted)] sm:block"
+                    class="hidden shrink-0 text-right text-micro leading-4 text-[var(--fg-muted)] sm:block"
                   >
                     <p title={formatAbsoluteDateTime(principal.created_at)}>
                       Joined {formatTimestamp(principal.created_at) || "\u2014"}
@@ -1030,18 +1030,18 @@
                   </div>
                   {#if !principal.revoked && !isCurrent}
                     {@const lastHuman = isLastActiveHumanPrincipal(principal)}
-                    <button
-                      class="shrink-0 cursor-pointer rounded px-2 py-1 text-[11px] font-medium text-red-400 hover:bg-red-400/10 disabled:opacity-50"
+                    <Button
+                      variant="destructive"
+                      size="compact"
                       disabled={principalRevokeConfirming ||
                         principalRevokeForcing}
                       onclick={() => startPrincipalRevoke(principal)}
-                      type="button"
                     >
                       {lastHuman ? "Break glass" : "Revoke"}
-                    </button>
+                    </Button>
                   {:else if !principal.revoked}
                     <span
-                      class="shrink-0 rounded bg-[var(--ui-border-subtle)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--ui-text-muted)]"
+                      class="shrink-0 rounded bg-[var(--line-subtle)] px-1.5 py-0.5 text-micro font-medium text-[var(--fg-muted)]"
                     >
                       You
                     </span>
@@ -1052,14 +1052,14 @@
           </div>
           {#if principalsHasMore}
             <div class="mt-2 flex justify-center">
-              <button
-                class="cursor-pointer rounded-md border border-[var(--ui-border)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)] disabled:opacity-50"
+              <Button
+                variant="secondary"
+                size="compact"
                 disabled={loadingMorePrincipals}
                 onclick={loadMorePrincipals}
-                type="button"
               >
                 {loadingMorePrincipals ? "Loading..." : "Load more"}
-              </button>
+              </Button>
             </div>
           {/if}
         {/if}
@@ -1068,21 +1068,21 @@
 
     {#if principalRevokeTarget}
       <div
-        class="rounded-md border border-red-500/30 bg-red-500/10 px-4 py-3"
+        class="rounded-md border border-danger/30 bg-danger-soft px-4 py-3"
         role="alert"
       >
         <div class="flex items-start gap-3">
           <div class="flex-1">
             {#if principalRevokeRequiresHumanLockout}
-              <p class="text-[13px] font-medium text-red-400">
+              <p class="text-meta font-medium text-danger-text">
                 Warning: this is the last active human principal
               </p>
-              <p class="mt-1 text-[11px] text-[var(--ui-text-muted)]">
+              <p class="mt-1 text-micro text-[var(--fg-muted)]">
                 Revoking it will lock every human principal out of this
                 workspace. Type the agent ID and provide a reason before the
                 break-glass path becomes available.
               </p>
-              <p class="mt-1 text-[11px] text-[var(--ui-text-muted)]">
+              <p class="mt-1 text-micro text-[var(--fg-muted)]">
                 Principal: <strong
                   >{principalRevokeTarget.username ||
                     principalRevokeTarget.agent_id}</strong
@@ -1091,14 +1091,14 @@
               <div class="mt-3 grid gap-3 sm:grid-cols-2">
                 <div>
                   <label
-                    class="mb-1 block text-[11px] font-medium text-[var(--ui-text-muted)]"
+                    class="mb-1 block text-micro font-medium text-[var(--fg-muted)]"
                     for="principal-lockout-confirmation"
                   >
                     Type agent ID to confirm
                   </label>
                   <input
                     bind:value={principalRevokeTypedConfirmation}
-                    class="w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-2 py-1.5 font-mono text-[12px] text-[var(--ui-text)]"
+                    class="w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-2 py-1.5 font-mono text-micro text-[var(--fg)]"
                     id="principal-lockout-confirmation"
                     placeholder={principalRevokeTarget.agent_id}
                     type="text"
@@ -1106,14 +1106,14 @@
                 </div>
                 <div>
                   <label
-                    class="mb-1 block text-[11px] font-medium text-[var(--ui-text-muted)]"
+                    class="mb-1 block text-micro font-medium text-[var(--fg-muted)]"
                     for="principal-lockout-reason"
                   >
                     Human lockout reason
                   </label>
                   <input
                     bind:value={principalRevokeHumanLockoutReason}
-                    class="w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-2 py-1.5 text-[12px] text-[var(--ui-text)]"
+                    class="w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-2 py-1.5 text-micro text-[var(--fg)]"
                     id="principal-lockout-reason"
                     placeholder="Explain the recovery path"
                     type="text"
@@ -1121,10 +1121,10 @@
                 </div>
               </div>
             {:else}
-              <p class="text-[13px] font-medium text-red-400">
+              <p class="text-meta font-medium text-danger-text">
                 Confirm revoke principal?
               </p>
-              <p class="mt-1 text-[11px] text-[var(--ui-text-muted)]">
+              <p class="mt-1 text-micro text-[var(--fg-muted)]">
                 This will revoke access for <strong
                   >{principalRevokeTarget.username ||
                     principalRevokeTarget.agent_id}</strong
@@ -1133,46 +1133,48 @@
             {/if}
             {#if principalRevokeError}
               <p
-                class="mt-2 rounded bg-red-500/20 px-2 py-1 text-[11px] text-red-400"
+                class="mt-2 rounded bg-danger-soft px-2 py-1 text-micro text-danger-text"
               >
                 {principalRevokeError}
               </p>
             {/if}
             <div class="mt-3 flex items-center gap-2">
               {#if principalRevokeRequiresHumanLockout}
-                <button
-                  class="cursor-pointer rounded bg-red-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-red-500 disabled:opacity-50"
+                <Button
+                  variant="destructive"
+                  size="compact"
+                  class="bg-danger text-white hover:bg-danger"
                   disabled={principalRevokeForcing ||
                     !principalRevokeBreakGlassReady()}
                   onclick={forcePrincipalRevoke}
-                  type="button"
                 >
                   {principalRevokeForcing
                     ? "Revoking..."
                     : "Allow human lockout and revoke"}
-                </button>
+                </Button>
               {:else}
-                <button
-                  class="cursor-pointer rounded bg-red-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-red-500 disabled:opacity-50"
+                <Button
+                  variant="destructive"
+                  size="compact"
+                  class="bg-danger text-white hover:bg-danger"
                   disabled={principalRevokeConfirming}
                   onclick={confirmPrincipalRevoke}
-                  type="button"
                 >
                   {principalRevokeConfirming ? "Revoking..." : "Confirm revoke"}
-                </button>
+                </Button>
               {/if}
-              <button
-                class="cursor-pointer rounded border border-[var(--ui-border)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]"
+              <Button
+                variant="secondary"
+                size="compact"
                 onclick={cancelPrincipalRevoke}
-                type="button"
               >
                 Cancel
-              </button>
+              </Button>
             </div>
           </div>
           <button
             aria-label="Dismiss confirmation"
-            class="shrink-0 cursor-pointer text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]"
+            class="shrink-0 cursor-pointer text-[var(--fg-muted)] hover:text-[var(--fg)]"
             onclick={cancelPrincipalRevoke}
             type="button"
           >
@@ -1195,41 +1197,41 @@
     {/if}
 
     <section>
-      <h2 class="mb-2 text-[13px] font-semibold text-[var(--ui-text)]">
+      <h2 class="mb-2 text-meta font-semibold text-[var(--fg)]">
         Recent auth events
       </h2>
       {#if auditState.status === SECTION_ERROR}
-        <p class="rounded-md bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
+        <p
+          class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
+        >
           {auditState.error}
         </p>
       {:else if auditState.status === SECTION_READY}
         {#if auditEvents.length === 0}
           <p
-            class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-4 text-[13px] text-[var(--ui-text-muted)]"
+            class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-4 text-meta text-[var(--fg-muted)]"
           >
             No audit events yet.
           </p>
         {:else}
           <div
-            class="space-y-px rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] overflow-hidden"
+            class="space-y-px rounded-md border border-[var(--line)] bg-[var(--bg-soft)] overflow-hidden"
           >
             {#each auditEvents as event, i}
               <div
                 class="flex items-center gap-3 px-3 py-2.5 {i > 0
-                  ? 'border-t border-[var(--ui-border)]'
+                  ? 'border-t border-[var(--line)]'
                   : ''}"
               >
                 <div class="min-w-0 flex-1">
-                  <p
-                    class="truncate text-[13px] font-medium text-[var(--ui-text)]"
-                  >
+                  <p class="truncate text-meta font-medium text-[var(--fg)]">
                     {auditEventDescription(event)}
                   </p>
-                  <p class="text-[11px] text-[var(--ui-text-muted)]">
+                  <p class="text-micro text-[var(--fg-muted)]">
                     {auditEventSecondary(event)}
                   </p>
                 </div>
-                <span class="text-[11px] text-[var(--ui-text-muted)]">
+                <span class="text-micro text-[var(--fg-muted)]">
                   {formatTimestamp(event.occurred_at)}
                 </span>
               </div>
@@ -1237,14 +1239,14 @@
           </div>
           {#if auditHasMore}
             <div class="mt-2 flex justify-center">
-              <button
-                class="cursor-pointer rounded-md border border-[var(--ui-border)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)] disabled:opacity-50"
+              <Button
+                variant="secondary"
+                size="compact"
                 disabled={loadingMoreAudit}
                 onclick={loadMoreAudit}
-                type="button"
               >
                 {loadingMoreAudit ? "Loading..." : "Load more"}
-              </button>
+              </Button>
             </div>
           {/if}
         {/if}

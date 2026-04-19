@@ -1,9 +1,14 @@
 <script>
+  import { untrack } from "svelte";
+
   import { browser } from "$app/environment";
   import { page } from "$app/stores";
 
   import { goto } from "$app/navigation";
-  import { untrack } from "svelte";
+
+  import Button from "$lib/components/Button.svelte";
+  import Skeleton from "$lib/components/state/Skeleton.svelte";
+  import StateError from "$lib/components/state/StateError.svelte";
 
   import {
     billingPollScheduleDelays,
@@ -30,6 +35,7 @@
   let activationTimedOut = $state(false);
   let pollStop = $state(() => {});
   let upgradeBusy = $state("");
+  let roleRetryBusy = $state(false);
 
   const PLAN_CARDS = [
     {
@@ -201,6 +207,12 @@
     await maybeRunActivationPoll(got.summary);
   }
 
+  async function retryLoad() {
+    roleRetryBusy = true;
+    await load();
+    roleRetryBusy = false;
+  }
+
   /** @param {any} initialSummary */
   async function maybeRunActivationPoll(initialSummary) {
     if (!browser) return;
@@ -348,53 +360,54 @@
 
 <div class="space-y-5">
   <div>
-    <p class="text-[11px] text-gray-500">
+    <p class="text-micro text-fg-subtle">
       <a
-        class="text-gray-500 underline-offset-2 transition-colors hover:text-gray-800 hover:underline"
+        class="text-fg-subtle underline-offset-2 transition-colors hover:text-fg hover:underline"
         href={`/hosted/organizations/${encodeURIComponent(orgId)}`}
         >← Overview</a
       >
     </p>
-    <h1 class="mt-1 text-lg font-semibold text-gray-900">Billing</h1>
+    <h1 class="mt-1 text-display text-fg">Billing</h1>
   </div>
 
   {#if message}
     <p
       role="alert"
-      class="rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
+      class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
     >
       {message}
     </p>
   {/if}
 
   {#if role === "loading"}
-    <div
-      class="rounded-md border border-gray-200 bg-gray-100 px-4 py-6 text-[13px] text-gray-500"
-    >
-      Loading…
+    <div class="space-y-3">
+      <div class="rounded-md border border-line bg-bg-soft px-4 py-3">
+        <Skeleton rows={2} />
+      </div>
+      <div class="rounded-md border border-line bg-bg-soft px-4 py-4">
+        <Skeleton rows={5} />
+      </div>
     </div>
   {:else if role === "member"}
-    <section class="rounded-md border border-gray-200 bg-gray-100 px-5 py-5">
-      <h2 class="text-[14px] font-semibold text-gray-900">
-        Who manages billing
-      </h2>
-      <p class="mt-1 text-[12px] text-gray-500">
+    <section class="rounded-md border border-line bg-bg-soft px-5 py-5">
+      <h2 class="text-subtitle text-fg">Who manages billing</h2>
+      <p class="mt-1 text-meta text-fg-subtle">
         Billing is managed by your organization's owner or admin. Reach out to
         someone below to change plans, payment methods, or invoices.
       </p>
       {#if managers.length === 0}
-        <p class="mt-3 text-[12px] text-gray-500">No active managers listed.</p>
+        <p class="mt-3 text-meta text-fg-subtle">No active managers listed.</p>
       {:else}
         <ul
-          class="mt-3 divide-y divide-gray-200 rounded-md border border-gray-200 bg-gray-50"
+          class="mt-3 divide-y divide-line rounded-md border border-line bg-bg"
         >
           {#each managers as m (m.id)}
             <li class="flex items-center justify-between gap-3 px-3 py-2">
-              <span class="text-[13px] font-medium text-gray-900"
+              <span class="text-body font-medium text-fg"
                 >{managerDisplayName(m)}</span
               >
               {#if String(m.account_email ?? "").trim()}
-                <span class="text-[11px] text-gray-500">{m.account_email}</span>
+                <span class="text-micro text-fg-subtle">{m.account_email}</span>
               {/if}
             </li>
           {/each}
@@ -404,16 +417,16 @@
   {:else if role === "manager" && summary}
     {#if activatingBanner}
       <div
-        class="flex items-start gap-3 rounded-md bg-indigo-500/10 px-3 py-2 text-[12px] text-indigo-300"
+        class="flex items-start gap-3 rounded-md bg-accent-soft px-3 py-2 text-micro text-accent-text"
         role="status"
       >
         <span
-          class="mt-0.5 inline-block h-2 w-2 animate-pulse rounded-full bg-indigo-400"
+          class="mt-0.5 inline-block h-2 w-2 animate-pulse rounded-full bg-accent-text"
           aria-hidden="true"
         ></span>
         <div>
           <strong class="font-medium">Activating your subscription…</strong>
-          <span class="text-gray-500">
+          <span class="text-fg-subtle">
             We're confirming your plan with Stripe. This usually takes a few
             seconds.
           </span>
@@ -422,19 +435,17 @@
     {/if}
     {#if activationTimedOut}
       <div
-        class="flex items-center justify-between gap-3 rounded-md bg-amber-500/10 px-3 py-2 text-[12px] text-amber-400"
+        class="flex items-center justify-between gap-3 rounded-md bg-warn-soft px-3 py-2 text-micro text-warn-text"
         role="status"
       >
         <div>
           <strong class="font-medium">Still processing.</strong>
-          <span class="text-gray-500">
+          <span class="text-fg-subtle">
             Refresh in a minute or contact support if billing doesn't update.
           </span>
         </div>
-        <button
-          type="button"
-          class="rounded-md border border-gray-200 bg-gray-100 px-2.5 py-1 text-[12px] font-medium text-gray-600 hover:bg-gray-200"
-          onclick={() => refreshAfterTimeout()}>Refresh</button
+        <Button variant="secondary" onclick={() => refreshAfterTimeout()}
+          >Refresh</Button
         >
       </div>
     {/if}
@@ -448,7 +459,7 @@
 
     {#if cfg.configured === false || (cfg.missing_configuration?.length ?? 0) > 0}
       <section
-        class="rounded-md bg-amber-500/10 px-3 py-2 text-[12px] text-amber-400"
+        class="rounded-md bg-warn-soft px-3 py-2 text-micro text-warn-text"
       >
         <strong class="font-medium">Billing not yet configured.</strong>
         Stripe is incomplete in this environment. Upgrades will not work until an
@@ -456,89 +467,84 @@
       </section>
     {/if}
 
-    <section class="rounded-md border border-gray-200 bg-gray-100 px-4 py-3">
+    <section class="rounded-md border border-line bg-bg-soft px-4 py-3">
       <div class="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <div
-            class="text-[11px] font-medium uppercase tracking-wide text-gray-500"
-          >
+          <div class="text-micro uppercase tracking-wide text-fg-subtle">
             Current plan
           </div>
           <div class="mt-0.5 flex items-center gap-2">
-            <span class="text-[16px] font-semibold text-gray-900"
+            <span class="text-subtitle tabular-nums text-fg"
               >{plan.display_name ?? "Starter"}</span
             >
             <span
-              class="rounded bg-indigo-500/10 px-1.5 py-0.5 text-[11px] font-medium text-indigo-400"
+              class="rounded bg-accent-soft px-1.5 py-0.5 text-micro text-accent-text"
               >{subscriptionStatusLabel(ba)}</span
             >
           </div>
           {#if ba.current_period_end}
-            <p class="mt-1 text-[11px] text-gray-500">
+            <p class="mt-1 text-micro text-fg-subtle">
               Renews
               {ba.cancel_at_period_end ? "(canceling)" : ""}
-              <span class="text-gray-800">{ba.current_period_end}</span>
+              <span class="text-fg">{ba.current_period_end}</span>
             </p>
           {/if}
         </div>
         {#if managed}
-          <button
-            type="button"
-            onclick={() => openPortal()}
-            class="rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[12px] font-medium text-gray-800 hover:bg-gray-200"
-            >Manage in Stripe</button
+          <Button variant="secondary" onclick={() => openPortal()}
+            >Manage in Stripe</Button
           >
         {/if}
       </div>
     </section>
 
     <section>
-      <h2 class="text-[14px] font-semibold text-gray-900">Plans</h2>
-      <p class="mt-1 text-[12px] text-gray-500">
+      <h2 class="text-subtitle text-fg">Plans</h2>
+      <p class="mt-1 text-meta text-fg-subtle">
         Switch any time — you'll only pay the prorated difference.
       </p>
       <div class="mt-3 grid gap-3 lg:grid-cols-4">
         {#each PLAN_CARDS as planCard (planCard.id)}
           {@const isCurrent = planCard.id === currentTier}
           <article
-            class="flex flex-col rounded-md border bg-gray-100 px-4 py-4 {isCurrent
-              ? 'border-indigo-500 ring-1 ring-indigo-500/30'
+            class="flex flex-col rounded-md border bg-bg-soft px-4 py-4 {isCurrent
+              ? 'border-accent ring-1 ring-accent/30'
               : planCard.highlight
-                ? 'border-indigo-400/40'
-                : 'border-gray-200'}"
+                ? 'border-accent-text/40'
+                : 'border-line'}"
           >
             <div class="flex items-center justify-between">
-              <h3 class="text-[14px] font-semibold text-gray-900">
+              <h3 class="text-subtitle text-fg">
                 {planCard.name}
               </h3>
               {#if isCurrent}
                 <span
-                  class="rounded bg-indigo-500/10 px-1.5 py-0.5 text-[11px] font-medium text-indigo-400"
+                  class="rounded bg-accent-soft px-1.5 py-0.5 text-micro text-accent-text"
                   >Current</span
                 >
               {:else if planCard.highlight}
                 <span
-                  class="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[11px] font-medium text-emerald-400"
+                  class="rounded bg-ok-soft px-1.5 py-0.5 text-micro text-ok-text"
                   >Popular</span
                 >
               {/if}
             </div>
-            <p class="mt-1 text-[12px] text-gray-500">{planCard.tagline}</p>
+            <p class="mt-1 text-meta text-fg-subtle">{planCard.tagline}</p>
             <div class="mt-3 flex items-baseline gap-1">
-              <span class="text-[20px] font-semibold text-gray-900"
+              <span class="text-title tabular-nums text-fg"
                 >{planCard.price}</span
               >
               {#if planCard.priceSuffix}
-                <span class="text-[11px] text-gray-500"
+                <span class="text-micro text-fg-subtle"
                   >{planCard.priceSuffix}</span
                 >
               {/if}
             </div>
-            <ul class="mt-3 space-y-1.5 text-[12px] text-gray-600">
+            <ul class="mt-3 space-y-1.5 text-meta text-fg-muted">
               {#each planCard.features as feat}
                 <li class="flex items-start gap-1.5">
                   <span
-                    class="mt-1.5 inline-block h-1 w-1 shrink-0 rounded-full bg-gray-500"
+                    class="mt-1.5 inline-block h-1 w-1 shrink-0 rounded-full bg-fg-muted"
                     aria-hidden="true"
                   ></span>
                   <span>{feat}</span>
@@ -548,36 +554,35 @@
             <div class="mt-4">
               {#if isCurrent}
                 <span
-                  class="block w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-center text-[12px] text-gray-500"
+                  class="block w-full rounded-md border border-line bg-bg px-3 py-1.5 text-center text-micro text-fg-subtle"
                   >Current plan</span
                 >
               {:else if planCard.id === "enterprise"}
                 <a
                   href="mailto:sales@oar.app?subject=Enterprise%20plan%20inquiry"
-                  class="block w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-center text-[12px] font-medium text-gray-800 hover:bg-gray-200"
+                  class="block w-full rounded-md border border-line bg-bg px-3 py-1.5 text-center text-micro text-fg hover:bg-panel-hover"
                   >Talk to sales</a
                 >
               {:else if planCard.ctaUpgrade && managed}
-                <button
-                  type="button"
-                  onclick={() => openPortal()}
-                  class="block w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[12px] font-medium text-gray-800 transition-colors hover:bg-gray-200"
-                  >Switch plan</button
+                <Button
+                  variant="secondary"
+                  class="block w-full"
+                  onclick={() => openPortal()}>Switch plan</Button
                 >
               {:else if planCard.ctaUpgrade}
-                <button
-                  type="button"
+                <Button
+                  variant="primary"
+                  class="block w-full"
                   onclick={() => checkoutPlan(planCard.id)}
                   disabled={!!upgradeBusy}
-                  class="block w-full rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-60"
                 >
                   {upgradeBusy === planCard.id
                     ? "Opening Stripe…"
                     : planCard.ctaLabel}
-                </button>
+                </Button>
               {:else}
                 <span
-                  class="block w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-center text-[12px] text-gray-500"
+                  class="block w-full rounded-md border border-line bg-bg px-3 py-1.5 text-center text-micro text-fg-subtle"
                   >{planCard.ctaLabel}</span
                 >
               {/if}
@@ -587,6 +592,10 @@
       </div>
     </section>
   {:else if role === "error"}
-    <p class="text-[12px] text-gray-500">Could not load billing.</p>
+    <StateError
+      message={message || "Could not load billing."}
+      onretry={retryLoad}
+      retrying={roleRetryBusy}
+    />
   {/if}
 </div>

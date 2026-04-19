@@ -5,7 +5,7 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
 
-  import "$lib/styles/hosted.css";
+  import Button from "$lib/components/Button.svelte";
   import Avatar from "$lib/hosted/Avatar.svelte";
   import {
     hostedSession,
@@ -31,7 +31,7 @@
   let orgPickerOpen = $state(false);
 
   const path = $derived($page.url.pathname);
-  /** Full product name on the public landing page only; app chrome stays “ANX”. */
+  /** Full product name on the public landing page only; app chrome stays "ANX". */
   const isLandingMarketing = $derived(path === "/hosted/start");
   const isPublic = $derived(
     PUBLIC_PREFIXES.some((p) => path === p || path.startsWith(p + "/")),
@@ -106,9 +106,9 @@
   }
 </script>
 
-<div class="min-h-screen bg-[var(--ui-bg)] text-[var(--ui-text)]">
+<div class="min-h-screen bg-[var(--bg)] text-[var(--fg)]">
   <header
-    class="sticky top-0 z-30 border-b border-gray-200 bg-[var(--ui-bg)]/95 backdrop-blur supports-[backdrop-filter]:bg-[var(--ui-bg)]/80"
+    class="sticky top-0 z-30 border-b border-line bg-[var(--bg)]/95 backdrop-blur supports-[backdrop-filter]:bg-[var(--bg)]/80"
   >
     <div
       class="mx-auto flex h-12 max-w-6xl items-center justify-between gap-4 px-4"
@@ -118,10 +118,10 @@
           href={isPublic && session.phase !== "authed"
             ? "/hosted/start"
             : "/hosted/dashboard"}
-          class="flex items-center gap-2 text-[13px] font-semibold text-gray-900 whitespace-nowrap"
+          class="flex items-center gap-2 text-meta font-semibold text-fg whitespace-nowrap"
         >
           <span
-            class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded bg-indigo-500/15 text-[10px] font-bold uppercase text-indigo-400"
+            class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded bg-accent-soft text-micro font-bold uppercase text-accent-text"
           >
             O
           </span>
@@ -134,11 +134,11 @@
               <a
                 href={item.href}
                 data-sveltekit-preload-data="tap"
-                class="rounded-md px-2.5 py-1.5 text-[12px] font-medium transition-colors {isActive(
+                class="rounded-md px-2.5 py-2 text-micro transition-colors {isActive(
                   item.href,
                 )
-                  ? 'bg-gray-200 text-gray-900'
-                  : 'text-gray-500 hover:bg-gray-200 hover:text-gray-800'}"
+                  ? 'bg-panel-hover text-fg'
+                  : 'text-fg-subtle hover:bg-panel-hover hover:text-fg'}"
               >
                 {item.label}
               </a>
@@ -156,7 +156,7 @@
                 aria-haspopup="listbox"
                 aria-expanded={orgPickerOpen}
                 onclick={() => (orgPickerOpen = !orgPickerOpen)}
-                class="flex max-w-[16rem] items-center gap-2 rounded-md border border-gray-200 bg-gray-100 px-2 py-1 text-[12px] font-medium text-gray-800 transition-colors hover:bg-gray-200"
+                class="flex max-w-[16rem] items-center gap-2 rounded-md border border-line bg-bg-soft px-2 py-1.5 text-micro text-fg transition-colors hover:bg-panel-hover"
               >
                 {#if activeOrg}
                   <Avatar
@@ -171,7 +171,7 @@
                     "Choose organization"}
                 </span>
                 <svg
-                  class="h-3 w-3 shrink-0 text-gray-500"
+                  class="h-3 w-3 shrink-0 text-fg-subtle"
                   viewBox="0 0 12 12"
                   fill="none"
                   stroke="currentColor"
@@ -184,10 +184,10 @@
               {#if orgPickerOpen}
                 <div
                   role="listbox"
-                  class="absolute right-0 top-full z-40 mt-1 w-64 overflow-hidden rounded-md border border-gray-200 bg-gray-100 shadow-lg"
+                  class="absolute right-0 top-full z-40 mt-1 w-64 overflow-hidden rounded-md border border-line bg-bg-soft shadow-lg"
                 >
                   <div
-                    class="border-b border-gray-200 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-gray-500"
+                    class="border-b border-line px-3 py-2 text-micro uppercase tracking-wide text-fg-subtle"
                   >
                     Switch organization
                   </div>
@@ -199,7 +199,7 @@
                           role="option"
                           aria-selected={org.id === activeOrg?.id}
                           onclick={() => pickOrg(org.id)}
-                          class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[12px] text-gray-800 transition-colors hover:bg-gray-200"
+                          class="flex w-full items-center gap-2 px-2.5 py-2 text-left text-micro text-fg transition-colors hover:bg-panel-hover"
                         >
                           <Avatar
                             label={org.display_name || org.slug}
@@ -207,22 +207,19 @@
                             size="sm"
                           />
                           <span class="min-w-0 flex-1">
-                            <span
-                              class="block truncate text-[12px] text-gray-900"
-                            >
+                            <span class="block truncate text-micro text-fg">
                               {org.display_name || org.slug}
                             </span>
                             {#if org.display_name && org.slug && org.display_name !== org.slug}
                               <span
-                                class="block truncate text-[11px] text-gray-500"
+                                class="block truncate text-micro text-fg-subtle"
                               >
                                 {org.slug}
                               </span>
                             {/if}
                           </span>
                           {#if org.id === activeOrg?.id}
-                            <span
-                              class="shrink-0 text-[11px] font-medium text-indigo-400"
+                            <span class="shrink-0 text-micro text-accent-text"
                               >Active</span
                             >
                           {/if}
@@ -230,15 +227,15 @@
                       </li>
                     {/each}
                   </ul>
-                  <div class="border-t border-gray-200 px-1 py-1">
+                  <div class="border-t border-line px-1 py-1">
                     <a
                       href="/hosted/organizations/new"
-                      class="block rounded px-2 py-1.5 text-[12px] font-medium text-indigo-400 transition-colors hover:bg-gray-200"
+                      class="block rounded px-2 py-2 text-micro text-accent-text transition-colors hover:bg-panel-hover"
                       >+ New organization</a
                     >
                     <a
                       href="/hosted/organizations"
-                      class="block rounded px-2 py-1.5 text-[12px] text-gray-500 transition-colors hover:bg-gray-200"
+                      class="block rounded px-2 py-2 text-micro text-fg-subtle transition-colors hover:bg-panel-hover"
                       >Manage organizations</a
                     >
                   </div>
@@ -252,8 +249,11 @@
               type="button"
               aria-haspopup="menu"
               aria-expanded={menuOpen}
+              aria-label={account?.email ??
+                account?.display_name ??
+                "Account menu"}
               onclick={() => (menuOpen = !menuOpen)}
-              class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-gray-200 text-[11px] font-semibold text-gray-900 transition-colors hover:bg-gray-300"
+              class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-panel-hover text-micro text-fg transition-colors hover:bg-line-strong"
               title={account?.email ?? account?.display_name ?? "Account"}
             >
               {initialsFor(account)}
@@ -261,10 +261,10 @@
             {#if menuOpen}
               <div
                 role="menu"
-                class="absolute right-0 top-full z-40 mt-1 w-60 overflow-hidden rounded-md border border-gray-200 bg-gray-100 shadow-lg"
+                class="absolute right-0 top-full z-40 mt-1 w-60 overflow-hidden rounded-md border border-line bg-bg-soft shadow-lg"
               >
                 <div
-                  class="flex items-center gap-2 border-b border-gray-200 px-3 py-2"
+                  class="flex items-center gap-2 border-b border-line px-3 py-2"
                 >
                   <Avatar
                     label={account?.display_name || account?.email || ""}
@@ -272,15 +272,15 @@
                     size="md"
                   />
                   <div class="min-w-0">
-                    <div class="truncate text-[12px] font-medium text-gray-900">
+                    <div class="truncate text-micro text-fg">
                       {account?.display_name || account?.email || "Signed in"}
                     </div>
                     {#if account?.email && account?.display_name}
-                      <div class="truncate text-[11px] text-gray-500">
+                      <div class="truncate text-micro text-fg-subtle">
                         {account.email}
                       </div>
                     {:else if !account?.email && !account?.display_name}
-                      <div class="truncate text-[11px] text-gray-500">
+                      <div class="truncate text-micro text-fg-subtle">
                         Account details unavailable
                       </div>
                     {/if}
@@ -291,7 +291,7 @@
                     <a
                       role="menuitem"
                       href="/hosted/dashboard"
-                      class="block px-3 py-1.5 text-[12px] text-gray-800 transition-colors hover:bg-gray-200"
+                      class="block px-3 py-2 text-micro text-fg transition-colors hover:bg-panel-hover"
                       >Dashboard</a
                     >
                   </li>
@@ -299,17 +299,17 @@
                     <a
                       role="menuitem"
                       href="/hosted/organizations"
-                      class="block px-3 py-1.5 text-[12px] text-gray-800 transition-colors hover:bg-gray-200"
+                      class="block px-3 py-2 text-micro text-fg transition-colors hover:bg-panel-hover"
                       >Organizations</a
                     >
                   </li>
                 </ul>
-                <div class="border-t border-gray-200 py-1">
+                <div class="border-t border-line py-1">
                   <button
                     role="menuitem"
                     type="button"
                     onclick={handleSignOut}
-                    class="block w-full px-3 py-1.5 text-left text-[12px] text-gray-800 transition-colors hover:bg-gray-200"
+                    class="block w-full px-3 py-2 text-left text-micro text-fg transition-colors hover:bg-panel-hover"
                   >
                     Sign out
                   </button>
@@ -318,17 +318,9 @@
             {/if}
           </div>
         {:else if isPublic && path !== "/hosted/signin"}
-          <a
-            href="/hosted/signin"
-            class="rounded-md px-2.5 py-1.5 text-[12px] font-medium text-gray-500 transition-colors hover:bg-gray-200 hover:text-gray-800"
-            >Sign in</a
-          >
+          <Button variant="ghost" href="/hosted/signin">Sign in</Button>
           {#if path !== "/hosted/signup"}
-            <a
-              href="/hosted/signup"
-              class="rounded-md bg-indigo-600 px-2.5 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500"
-              >Get started</a
-            >
+            <Button variant="primary" href="/hosted/signup">Get started</Button>
           {/if}
         {/if}
       </div>
@@ -336,17 +328,17 @@
 
     {#if session.phase === "authed"}
       <nav
-        class="flex items-center gap-1 overflow-x-auto border-t border-gray-200 px-4 py-1 md:hidden"
+        class="flex items-center gap-1 overflow-x-auto border-t border-line px-4 py-1 md:hidden"
         aria-label="Primary mobile"
       >
         {#each primaryNav as item (item.href)}
           <a
             href={item.href}
-            class="shrink-0 rounded-md px-2.5 py-1.5 text-[12px] font-medium transition-colors {isActive(
+            class="shrink-0 rounded-md px-3 py-2 text-micro transition-colors {isActive(
               item.href,
             )
-              ? 'bg-gray-200 text-gray-900'
-              : 'text-gray-500 hover:bg-gray-200 hover:text-gray-800'}"
+              ? 'bg-panel-hover text-fg'
+              : 'text-fg-subtle hover:bg-panel-hover hover:text-fg'}"
             >{item.label}</a
           >
         {/each}
@@ -359,50 +351,53 @@
   </main>
 
   <footer
-    class="mx-auto mt-8 w-full max-w-6xl border-t border-gray-200 px-4 pb-6 pt-4 text-[11px] text-gray-500"
+    class="mx-auto mt-8 w-full max-w-6xl border-t border-line px-4 pb-6 pt-4 text-micro text-fg-subtle"
   >
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div class="flex items-center gap-2">
         <span
-          class="inline-flex h-4 w-4 items-center justify-center rounded bg-indigo-500/15 text-[9px] font-bold uppercase text-indigo-400"
+          class="inline-flex h-4 w-4 items-center justify-center rounded bg-accent-soft text-[9px] font-bold uppercase text-accent-text"
           aria-hidden="true">O</span
         >
-        <span>{isLandingMarketing ? "Agent Nexus" : "ANX"} · &copy; {new Date().getFullYear()}</span>
+        <span
+          >{isLandingMarketing ? "Agent Nexus" : "ANX"} · &copy; {new Date().getFullYear()}</span
+        >
       </div>
       <nav
         class="flex flex-wrap items-center gap-x-4 gap-y-1"
         aria-label="Footer"
       >
         <a
-          class="transition-colors hover:text-gray-800"
+          class="transition-colors hover:text-fg inline-block py-1"
           href="https://github.com/run-llama/oar"
           rel="noreferrer"
           target="_blank">Docs</a
         >
         <a
-          class="transition-colors hover:text-gray-800"
+          class="transition-colors hover:text-fg inline-block py-1"
           href="https://github.com/run-llama/oar"
           rel="noreferrer"
           target="_blank">GitHub</a
         >
         <a
-          class="transition-colors hover:text-gray-800"
+          class="transition-colors hover:text-fg inline-block py-1"
           href="https://status.runoar.com"
           rel="noreferrer"
           target="_blank"
         >
           <span
-            class="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 align-middle"
+            class="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-ok-text align-middle"
             aria-hidden="true"
           ></span>
           Status
         </a>
         <a
-          class="transition-colors hover:text-gray-800"
+          class="transition-colors hover:text-fg inline-block py-1"
           href="mailto:support@runoar.com">Support</a
         >
-        <a class="transition-colors hover:text-gray-800" href="/hosted/dev"
-          >Developer notes</a
+        <a
+          class="transition-colors hover:text-fg inline-block py-1"
+          href="/hosted/dev">Developer notes</a
         >
       </nav>
     </div>

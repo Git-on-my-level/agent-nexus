@@ -65,9 +65,9 @@
 
 <div class="space-y-2">
   <div>
-    <p class="text-[12px] font-medium text-[var(--ui-text-muted)]">{label}</p>
+    <p class="text-micro font-medium text-[var(--fg-muted)]">{label}</p>
     {#if helperText}
-      <p class="mt-0.5 text-[11px] text-[var(--ui-text-muted)]">
+      <p class="mt-0.5 text-micro text-[var(--fg-muted)]">
         {helperText}
       </p>
     {/if}
@@ -77,12 +77,12 @@
     <div class="flex flex-wrap gap-2">
       {#each selectedItems as item}
         <span
-          class="inline-flex items-center gap-2 rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] px-2.5 py-1 text-[11px] text-[var(--ui-text)]"
+          class="inline-flex items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1 text-micro text-[var(--fg)]"
         >
           <span>{item.title || item.id}</span>
           <button
             aria-label={`Remove ${item.title || item.id}`}
-            class="text-[var(--ui-text-muted)] transition-colors hover:text-[var(--ui-text)]"
+            class="text-[var(--fg-muted)] transition-colors hover:text-[var(--fg)]"
             onclick={() => removeValue(item.id)}
             type="button"
           >
@@ -98,34 +98,34 @@
     <input
       aria-label={`${label} search`}
       bind:value={query}
-      class="w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-2 text-[13px] text-[var(--ui-text)] placeholder:text-[var(--ui-text-subtle)]"
+      class="w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)] placeholder:text-[var(--fg-subtle)]"
       {placeholder}
       type="text"
     />
   </label>
 
   <div
-    class="max-h-48 overflow-y-auto rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]"
+    class="max-h-48 overflow-y-auto rounded-md border border-[var(--line)] bg-[var(--panel)]"
   >
     {#if filteredItems.length === 0}
-      <div class="px-3 py-3 text-[12px] text-[var(--ui-text-muted)]">
+      <div class="px-3 py-3 text-micro text-[var(--fg-muted)]">
         {emptyText}
       </div>
     {:else}
       {#each filteredItems as item, index}
         <button
-          class="flex w-full items-start justify-between gap-3 px-3 py-2 text-left transition-colors hover:bg-[var(--ui-border-subtle)] {index >
+          class="flex w-full items-start justify-between gap-3 px-3 py-2 text-left transition-colors hover:bg-[var(--line-subtle)] {index >
           0
-            ? 'border-t border-[var(--ui-border)]'
+            ? 'border-t border-[var(--line)]'
             : ''}"
           onclick={() => addValue(item.id)}
           type="button"
         >
           <div class="min-w-0">
-            <p class="truncate text-[12px] font-medium text-[var(--ui-text)]">
+            <p class="truncate text-micro font-medium text-[var(--fg)]">
               {item.title || item.id}
             </p>
-            <p class="mt-0.5 truncate text-[11px] text-[var(--ui-text-muted)]">
+            <p class="mt-0.5 truncate text-micro text-[var(--fg-muted)]">
               {item.id}
               {#if item.subtitle}
                 · {item.subtitle}
@@ -133,7 +133,7 @@
             </p>
           </div>
           <span
-            class="rounded bg-indigo-500/10 px-1.5 py-0.5 text-[11px] text-indigo-300"
+            class="rounded bg-accent-soft px-1.5 py-0.5 text-micro text-accent-text"
           >
             Add
           </span>
@@ -142,31 +142,27 @@
     {/if}
   </div>
 
-  <details
-    class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]"
-  >
+  <details class="rounded-md border border-[var(--line)] bg-[var(--panel)]">
     <summary
-      class="cursor-pointer px-3 py-2 text-[11px] text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]"
+      class="cursor-pointer px-3 py-2 text-micro text-[var(--fg-muted)] hover:text-[var(--fg)]"
     >
       {advancedLabel}
     </summary>
     <div
-      class="space-y-2 border-t border-[var(--ui-border)] px-3 py-3 md:flex md:items-end md:gap-2 md:space-y-0"
+      class="space-y-2 border-t border-[var(--line)] px-3 py-3 md:flex md:items-end md:gap-2 md:space-y-0"
     >
-      <label
-        class="block flex-1 text-[12px] font-medium text-[var(--ui-text-muted)]"
-      >
+      <label class="block flex-1 text-micro font-medium text-[var(--fg-muted)]">
         {manualLabel}
         <input
           aria-label={manualLabel}
           bind:value={manualEntry}
-          class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-2 text-[13px] text-[var(--ui-text)] placeholder:text-[var(--ui-text-subtle)]"
+          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)] placeholder:text-[var(--fg-subtle)]"
           placeholder={manualPlaceholder}
           type="text"
         />
       </label>
       <button
-        class="rounded-md bg-indigo-600 px-3 py-2 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500"
+        class="rounded-md bg-accent px-3 py-2 text-micro font-medium text-white transition-colors hover:bg-accent-hover"
         onclick={() => addValue(manualEntry)}
         type="button"
       >

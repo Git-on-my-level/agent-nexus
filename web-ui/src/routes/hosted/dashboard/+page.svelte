@@ -3,14 +3,25 @@
 
   import { browser } from "$app/environment";
 
+  import Button from "$lib/components/Button.svelte";
+  import SkeletonCard from "$lib/components/state/SkeletonCard.svelte";
+  import StateEmpty from "$lib/components/state/StateEmpty.svelte";
+  import StateError from "$lib/components/state/StateError.svelte";
   import Avatar from "$lib/hosted/Avatar.svelte";
   import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
+  import {
+    classifiedCpFetch,
+    errorUserMessage,
+    isAuthError,
+  } from "$lib/hosted/fetchState.js";
   import { normalizeHostedLaunchFinishURL } from "$lib/hosted/launchFlow.js";
   import { hostedSession, loadHostedSession } from "$lib/hosted/session.js";
 
   /** @type {any[]} */
   let workspaces = $state([]);
   let loadingWorkspaces = $state(true);
+  let wsError = $state("");
+  let wsRetrying = $state(false);
   let message = $state("");
   let launchingWorkspaceId = $state("");
 
@@ -20,36 +31,35 @@
     orgs.find((o) => String(o.id) === session.activeOrgId) ?? null,
   );
 
-  async function readError(res) {
-    try {
-      const j = await res.json();
-      return j?.error?.message || j?.error?.code || res.statusText;
-    } catch {
-      return res.statusText;
-    }
-  }
-
   async function loadWorkspaces(orgId) {
     if (!orgId) {
       workspaces = [];
       loadingWorkspaces = false;
+      wsError = "";
       return;
     }
     loadingWorkspaces = true;
+    wsError = "";
+    wsRetrying = false;
     try {
-      const res = await hostedCpFetch(
+      const res = await classifiedCpFetch(
         `workspaces?organization_id=${encodeURIComponent(orgId)}&limit=100`,
       );
-      if (!res.ok) {
-        message = await readError(res);
-        workspaces = [];
-        return;
-      }
       const body = await res.json();
       workspaces = body.workspaces ?? [];
+    } catch (e) {
+      if (isAuthError(e)) throw e;
+      wsError = errorUserMessage(e);
+      workspaces = [];
     } finally {
       loadingWorkspaces = false;
     }
+  }
+
+  async function retryWorkspaces() {
+    if (!activeOrg?.id) return;
+    wsRetrying = true;
+    await loadWorkspaces(activeOrg.id);
   }
 
   onMount(async () => {
@@ -59,7 +69,6 @@
     }
   });
 
-  // React to active-org switches.
   $effect(() => {
     if (!browser) return;
     if (session.phase !== "authed") return;
@@ -83,7 +92,12 @@
         },
       );
       if (!res.ok) {
-        message = await readError(res);
+        try {
+          const j = await res.json();
+          message = j?.error?.message || j?.error?.code || res.statusText;
+        } catch {
+          message = res.statusText;
+        }
         return;
       }
       const body = await res.json();
@@ -103,15 +117,15 @@
   function statusClasses(status) {
     const s = String(status ?? "").toLowerCase();
     if (s === "ready" || s === "active") {
-      return "text-emerald-400 bg-emerald-500/10";
+      return "text-ok-text bg-ok-soft";
     }
     if (s === "provisioning" || s === "pending") {
-      return "text-amber-400 bg-amber-500/10";
+      return "text-warn-text bg-warn-soft";
     }
     if (s === "failed" || s === "error") {
-      return "text-red-400 bg-red-500/10";
+      return "text-danger-text bg-danger-soft";
     }
-    return "text-gray-500 bg-gray-200";
+    return "text-fg-subtle bg-panel-hover";
   }
 </script>
 
@@ -122,88 +136,61 @@
 <div class="space-y-6">
   <div class="flex flex-wrap items-end justify-between gap-3">
     <div>
-      <h1 class="text-lg font-semibold text-gray-900">
+      <h1 class="text-display text-fg">
         {activeOrg
           ? `${activeOrg.display_name || activeOrg.slug} workspaces`
           : "Welcome to ANX"}
       </h1>
-      <p class="mt-1 hidden text-[12px] text-gray-500 sm:block">
+      <p class="mt-1 hidden text-meta text-fg-subtle sm:block">
         Workspaces are isolated environments where your AI agents do their work.
         Each one has its own threads, topics, and artifacts.
       </p>
     </div>
     {#if activeOrg}
-      <a
-        href="/hosted/workspaces/new"
-        class="rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500"
-      >
+      <Button variant="primary" href="/hosted/workspaces/new">
         + New workspace
-      </a>
+      </Button>
     {/if}
   </div>
 
   {#if message}
     <p
       role="alert"
-      class="rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
+      class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
     >
       {message}
     </p>
   {/if}
 
   {#if session.phase === "loading" || session.phase === "idle"}
-    <div
-      class="rounded-md border border-gray-200 bg-gray-100 px-4 py-6 text-[13px] text-gray-500"
-    >
-      Loading…
-    </div>
+    <SkeletonCard />
   {:else if orgs.length === 0}
-    <div
-      class="rounded-md border border-gray-200 bg-gray-100 px-6 py-8 text-center"
-    >
-      <h2 class="text-[14px] font-semibold text-gray-900">
-        Create your first organization
-      </h2>
-      <p class="mx-auto mt-1.5 max-w-md text-[12px] text-gray-500">
-        Organizations group workspaces, members, and billing. Most teams need
-        just one.
-      </p>
-      <a
-        href="/hosted/organizations/new"
-        class="mt-4 inline-flex rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500"
-      >
-        Create organization
-      </a>
-    </div>
-  {:else if loadingWorkspaces}
-    <div
-      class="rounded-md border border-gray-200 bg-gray-100 px-4 py-6 text-[13px] text-gray-500"
-    >
-      Loading workspaces…
-    </div>
+    <StateEmpty
+      title="Create your first organization"
+      helper="Organizations group workspaces, members, and billing. Most teams need just one."
+      actionLabel="Create organization"
+      actionHref="/hosted/organizations/new"
+    />
+  {:else if loadingWorkspaces && !wsError}
+    <SkeletonCard />
+  {:else if wsError}
+    <StateError
+      message={wsError}
+      onretry={retryWorkspaces}
+      retrying={wsRetrying}
+    />
   {:else if workspaces.length === 0}
-    <div
-      class="rounded-md border border-gray-200 bg-gray-100 px-6 py-8 text-center"
-    >
-      <h2 class="text-[14px] font-semibold text-gray-900">
-        Spin up your first workspace
-      </h2>
-      <p class="mx-auto mt-1.5 max-w-md text-[12px] text-gray-500">
-        Workspaces hold the threads, topics, and artifacts your AI agent
-        produces. Create one to get started.
-      </p>
-      <a
-        href="/hosted/workspaces/new"
-        class="mt-4 inline-flex rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500"
-      >
-        Create workspace
-      </a>
-    </div>
+    <StateEmpty
+      title="Spin up your first workspace"
+      helper="Workspaces hold the threads, topics, and artifacts your AI agent produces. Create one to get started."
+      actionLabel="Create workspace"
+      actionHref="/hosted/workspaces/new"
+    />
   {:else}
     <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {#each workspaces as ws (ws.id)}
         <article
-          class="flex flex-col rounded-md border border-gray-200 bg-gray-100 px-4 py-3"
+          class="flex flex-col rounded-md border border-line bg-bg-soft px-4 py-3"
         >
           <div class="flex items-start justify-between gap-2">
             <div class="flex min-w-0 items-start gap-2.5">
@@ -213,16 +200,16 @@
                 size="md"
               />
               <div class="min-w-0">
-                <h2 class="truncate text-[13px] font-semibold text-gray-900">
+                <h2 class="truncate text-subtitle text-fg">
                   {ws.display_name || ws.slug}
                 </h2>
-                <p class="mt-0.5 truncate text-[11px] text-gray-500">
+                <p class="mt-0.5 truncate font-mono text-mono text-fg-subtle">
                   {ws.slug}
                 </p>
               </div>
             </div>
             <span
-              class="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium {statusClasses(
+              class="shrink-0 rounded px-1.5 py-0.5 text-micro {statusClasses(
                 ws.status,
               )}"
             >
@@ -232,17 +219,17 @@
 
           <div class="mt-4 flex items-center gap-2">
             {#if String(ws.status ?? "").toLowerCase() === "ready" && ws.slug}
-              <button
+              <Button
                 type="button"
-                class="rounded-md bg-gray-200 px-2.5 py-1.5 text-[12px] font-medium text-gray-900 transition-colors hover:bg-gray-300 disabled:opacity-60"
+                variant="ghost"
                 onclick={() => openWorkspaceLaunch(ws)}
                 disabled={launchingWorkspaceId === ws.id}
               >
                 {launchingWorkspaceId === ws.id ? "Opening…" : "Open"}
-              </button>
+              </Button>
             {:else}
               <span
-                class="rounded-md border border-gray-200 px-2.5 py-1.5 text-[11px] text-gray-500"
+                class="rounded-md border border-line px-2.5 py-1.5 text-micro text-fg-subtle"
               >
                 {String(ws.status ?? "").toLowerCase() === "provisioning"
                   ? "Setting up…"

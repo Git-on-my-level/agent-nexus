@@ -4,44 +4,49 @@
 
   import { goto } from "$app/navigation";
 
-  import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
+  import Button from "$lib/components/Button.svelte";
+  import Skeleton from "$lib/components/state/Skeleton.svelte";
+  import StateError from "$lib/components/state/StateError.svelte";
+  import {
+    classifiedCpFetch,
+    errorUserMessage,
+    isAuthError,
+  } from "$lib/hosted/fetchState.js";
   import { setActiveOrg } from "$lib/hosted/session.js";
 
   const orgId = $derived(String($page.params.orgId ?? ""));
 
   let phase = $state("loading");
-  let message = $state("");
+  let loadError = $state("");
+  let retrying = $state(false);
   /** @type {any} */
   let summary = $state(null);
 
-  async function readError(res) {
+  async function load() {
+    phase = "loading";
+    loadError = "";
+    retrying = false;
     try {
-      const j = await res.json();
-      return j?.error?.message || j?.error?.code || res.statusText;
-    } catch {
-      return res.statusText;
+      const res = await classifiedCpFetch(
+        `organizations/${encodeURIComponent(orgId)}/usage-summary`,
+      );
+      const body = await res.json();
+      summary = body.summary ?? null;
+      phase = "ready";
+    } catch (e) {
+      if (isAuthError(e)) {
+        await goto("/hosted/start");
+        return;
+      }
+      loadError = errorUserMessage(e);
+      summary = null;
+      phase = "ready";
     }
   }
 
-  async function load() {
-    phase = "loading";
-    message = "";
-    const res = await hostedCpFetch(
-      `organizations/${encodeURIComponent(orgId)}/usage-summary`,
-    );
-    if (res.status === 401) {
-      await goto("/hosted/start");
-      return;
-    }
-    if (!res.ok) {
-      message = await readError(res);
-      summary = null;
-      phase = "ready";
-      return;
-    }
-    const body = await res.json();
-    summary = body.summary ?? null;
-    phase = "ready";
+  async function retry() {
+    retrying = true;
+    await load();
   }
 
   $effect(() => {
@@ -58,9 +63,9 @@
   }
 
   function barColor(p) {
-    if (p >= 90) return "bg-red-500";
-    if (p >= 75) return "bg-amber-500";
-    return "bg-indigo-500";
+    if (p >= 90) return "bg-danger";
+    if (p >= 75) return "bg-warn";
+    return "bg-accent";
   }
 
   function headroomNote(p) {
@@ -76,52 +81,55 @@
 
 <div class="space-y-5">
   <div>
-    <p class="text-[11px] text-gray-500">
+    <p class="text-micro text-fg-subtle">
       <a
-        class="text-gray-500 underline-offset-2 transition-colors hover:text-gray-800 hover:underline"
+        class="text-fg-subtle underline-offset-2 transition-colors hover:text-fg hover:underline"
         href={`/hosted/organizations/${encodeURIComponent(orgId)}`}
         >← Overview</a
       >
     </p>
-    <h1 class="mt-1 text-lg font-semibold text-gray-900">Usage</h1>
+    <h1 class="mt-1 text-display text-fg">Usage</h1>
   </div>
 
-  {#if message}
-    <p
-      role="alert"
-      class="rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
-    >
-      {message}
-    </p>
+  {#if loadError}
+    <StateError message={loadError} onretry={retry} {retrying} />
   {/if}
 
   {#if phase === "loading"}
-    <div
-      class="rounded-md border border-gray-200 bg-gray-100 px-4 py-6 text-[13px] text-gray-500"
-    >
-      Loading…
+    <div class="space-y-3">
+      <div class="rounded-md border border-line bg-bg-soft px-4 py-3">
+        <Skeleton rows={2} />
+      </div>
+      <div class="grid gap-3 sm:grid-cols-3">
+        {#each [0, 1, 2] as i (i)}
+          <div class="rounded-md border border-line bg-bg-soft px-4 py-3">
+            <Skeleton rows={4} />
+          </div>
+        {/each}
+      </div>
+      <div class="rounded-md border border-line bg-bg-soft px-4 py-4">
+        <Skeleton rows={3} />
+      </div>
     </div>
   {:else if summary}
     {@const plan = summary.plan ?? {}}
     {@const usage = summary.usage ?? {}}
     {@const quota = summary.quota ?? {}}
 
-    <section class="rounded-md border border-gray-200 bg-gray-100 px-4 py-3">
+    <section class="rounded-md border border-line bg-bg-soft px-4 py-3">
       <div class="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <div
-            class="text-[11px] font-medium uppercase tracking-wide text-gray-500"
-          >
+          <div class="text-micro uppercase tracking-wide text-fg-subtle">
             Plan
           </div>
-          <div class="mt-0.5 text-[16px] font-semibold text-gray-900">
+          <div class="mt-0.5 text-subtitle tabular-nums text-fg">
             {plan.display_name ?? "—"}
           </div>
         </div>
-        <a
+        <Button
+          variant="secondary"
           href={`/hosted/organizations/${encodeURIComponent(orgId)}/billing`}
-          class="rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[12px] font-medium text-gray-800 hover:bg-gray-200"
-          >Change plan</a
+          >Change plan</Button
         >
       </div>
     </section>
@@ -129,106 +137,104 @@
     <section class="grid gap-3 sm:grid-cols-3">
       {#each [{ label: "Workspaces", used: usage.workspace_count, total: plan.workspace_limit, remaining: quota.workspaces_remaining }, { label: "Artifacts", used: usage.artifact_count, total: plan.artifact_capacity, remaining: quota.artifacts_remaining }, { label: "Storage", used: usage.storage_gb, total: plan.included_storage_gb, remaining: quota.storage_gb_remaining, suffix: " GB" }] as metric}
         {@const p = pct(metric.used, metric.total)}
-        <div class="rounded-md border border-gray-200 bg-gray-100 px-4 py-3">
+        <div class="rounded-md border border-line bg-bg-soft px-4 py-3">
           <div
-            class="flex items-center justify-between text-[11px] font-medium uppercase tracking-wide text-gray-500"
+            class="flex items-center justify-between text-micro uppercase tracking-wide text-fg-subtle"
           >
             <span>{metric.label}</span>
-            <span>{p}%</span>
+            <span class="tabular-nums">{p}%</span>
           </div>
-          <div class="mt-2 text-[18px] font-semibold text-gray-900">
-            {Number(metric.used ?? 0)}<span
-              class="text-[12px] font-normal text-gray-500"
+          <div class="mt-2 text-subtitle tabular-nums text-fg">
+            {Number(metric.used ?? 0)}<span class="text-meta text-fg-subtle"
               >{metric.suffix ?? ""} / {metric.total ?? "—"}{metric.suffix ??
                 ""}</span
             >
           </div>
-          <div class="mt-2 h-1 overflow-hidden rounded-full bg-gray-200">
+          <div class="mt-2 h-1 overflow-hidden rounded-full bg-panel-hover">
             <div
               class="h-full {barColor(p)} transition-all"
               style="width: {p}%"
             ></div>
           </div>
-          <p class="mt-2 text-[11px] text-gray-500">
+          <p class="mt-2 text-micro text-fg-subtle">
             {Number(metric.remaining ?? 0)}{metric.suffix ?? ""} remaining
             {#if headroomNote(p)}
-              · <span class="text-amber-400">{headroomNote(p)}</span>
+              · <span class="text-warn-text">{headroomNote(p)}</span>
             {/if}
           </p>
         </div>
       {/each}
     </section>
 
-    <section class="rounded-md border border-gray-200 bg-gray-100 px-4 py-3">
+    <section class="rounded-md border border-line bg-bg-soft px-4 py-3">
       <div class="flex items-center justify-between">
-        <h2 class="text-[13px] font-medium text-gray-900">This month</h2>
+        <h2 class="text-subtitle text-fg">This month</h2>
       </div>
       <div class="mt-3 grid gap-3 sm:grid-cols-3">
         <div>
-          <div class="text-[11px] uppercase tracking-wide text-gray-500">
+          <div class="text-micro uppercase tracking-wide text-fg-subtle">
             Launches
           </div>
-          <div class="mt-1 text-[16px] font-semibold text-gray-900">
+          <div class="mt-1 text-subtitle tabular-nums text-fg">
             {usage.monthly_launch_count ?? 0}
           </div>
         </div>
         <div>
-          <div class="text-[11px] uppercase tracking-wide text-gray-500">
+          <div class="text-micro uppercase tracking-wide text-fg-subtle">
             Artifacts / workspace cap
           </div>
-          <div class="mt-1 text-[16px] font-semibold text-gray-900">
+          <div class="mt-1 text-subtitle tabular-nums text-fg">
             {plan.max_artifacts_per_workspace ?? "—"}
           </div>
         </div>
       </div>
     </section>
 
-    <section
-      class="overflow-hidden rounded-md border border-gray-200 bg-gray-100"
-    >
+    <section class="overflow-hidden rounded-md border border-line bg-bg-soft">
       <div
-        class="flex items-center justify-between border-b border-gray-200 px-4 py-2.5"
+        class="flex items-center justify-between border-b border-line px-4 py-2.5"
       >
-        <h2 class="text-[13px] font-medium text-gray-900">
-          Workspace breakdown
-        </h2>
+        <h2 class="text-subtitle text-fg">Workspace breakdown</h2>
       </div>
       {#if !summary.workspaces || summary.workspaces.length === 0}
-        <p class="px-4 py-4 text-[12px] text-gray-500">
+        <p class="px-4 py-4 text-meta text-fg-subtle">
           No workspaces in this organization yet.
         </p>
       {:else}
         <div class="overflow-x-auto">
-          <table class="min-w-full text-[12px]">
+          <table class="min-w-full text-meta">
             <thead>
               <tr
-                class="border-b border-gray-200 text-left text-[11px] uppercase tracking-wide text-gray-500"
+                class="border-b border-line text-left text-micro uppercase tracking-wide text-fg-subtle"
               >
-                <th class="px-4 py-2 font-medium">Workspace</th>
-                <th class="px-4 py-2 font-medium">Artifacts</th>
-                <th class="px-4 py-2 font-medium">Storage</th>
-                <th class="px-4 py-2 font-medium">Launches (mo)</th>
-                <th class="px-4 py-2 font-medium">Last active</th>
+                <th class="px-4 py-2">Workspace</th>
+                <th class="px-4 py-2">Artifacts</th>
+                <th class="px-4 py-2">Storage</th>
+                <th class="px-4 py-2">Launches (mo)</th>
+                <th class="px-4 py-2">Last active</th>
               </tr>
             </thead>
             <tbody>
               {#each summary.workspaces as w (w.id)}
-                <tr class="border-b border-gray-200 last:border-b-0">
+                <tr class="border-b border-line last:border-b-0">
                   <td class="px-4 py-2">
-                    <div class="font-medium text-gray-900">
+                    <div class="text-fg">
                       {w.display_name || w.slug}
                     </div>
-                    <div class="text-[11px] text-gray-500">{w.slug}</div>
+                    <div class="font-mono text-micro text-fg-subtle">
+                      {w.slug}
+                    </div>
                   </td>
-                  <td class="px-4 py-2 text-gray-800"
+                  <td class="px-4 py-2 tabular-nums text-fg"
                     >{w.artifact_count ?? 0}</td
                   >
-                  <td class="px-4 py-2 text-gray-800">{w.storage_gb ?? 0} GB</td
+                  <td class="px-4 py-2 tabular-nums text-fg"
+                    >{w.storage_gb ?? 0} GB</td
                   >
-                  <td class="px-4 py-2 text-gray-800"
+                  <td class="px-4 py-2 tabular-nums text-fg"
                     >{w.monthly_launch_count ?? 0}</td
                   >
-                  <td class="px-4 py-2 text-gray-500"
+                  <td class="px-4 py-2 text-fg-subtle"
                     >{w.last_active_at ?? "—"}</td
                   >
                 </tr>

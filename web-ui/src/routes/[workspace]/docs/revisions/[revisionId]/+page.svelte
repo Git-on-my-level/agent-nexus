@@ -87,17 +87,15 @@
 </script>
 
 <div
-  class="mx-auto max-w-2xl rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] p-4"
+  class="mx-auto max-w-2xl rounded-md border border-[var(--line)] bg-[var(--panel)] p-4"
 >
   {#if loading}
-    <p class="text-[13px] text-[var(--ui-text-muted)]">
-      Resolving document revision…
-    </p>
+    <p class="text-meta text-[var(--fg-muted)]">Resolving document revision…</p>
   {:else if error}
     <div class="space-y-3">
-      <p class="text-[13px] text-red-400">{error}</p>
+      <p class="text-meta text-danger-text">{error}</p>
       <a
-        class="inline-flex rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text)] transition-colors hover:bg-[var(--ui-border-subtle)]"
+        class="inline-flex rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-micro font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line-subtle)]"
         href={workspaceHref("/docs")}
       >
         Back to Docs

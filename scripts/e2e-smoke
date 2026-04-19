@@ -274,7 +274,7 @@ fi
 UI_VERSION_HEADER="$(
   awk -F': *' '
     BEGIN { IGNORECASE = 1 }
-    tolower($1) == "x-oar-ui-version" {
+    tolower($1) == "x-anx-ui-version" || tolower($1) == "x-oar-ui-version" {
       value = $2
       sub(/\r$/, "", value)
       print value

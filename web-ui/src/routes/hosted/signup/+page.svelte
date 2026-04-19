@@ -4,6 +4,7 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
 
+  import Button from "$lib/components/Button.svelte";
   import { createPasskeyCredential } from "$lib/passkeyBrowser";
   import {
     hostedCpFetch,
@@ -101,7 +102,7 @@
       await loadHostedSession();
       const continuationHandled = await continueLaunchFlowIfPresent();
       if (!continuationHandled) {
-        await goto("/hosted/dashboard");
+        await goto("/hosted/onboarding/organization");
       }
     } catch (e) {
       message = e instanceof Error ? e.message : "Passkey registration failed.";
@@ -153,9 +154,9 @@
 </svelte:head>
 
 <div class="mx-auto max-w-md py-8">
-  <div class="rounded-md border border-gray-200 bg-gray-100 px-6 py-6">
-    <h1 class="text-lg font-semibold text-gray-900">Create your account</h1>
-    <p class="mt-1.5 text-[12px] leading-relaxed text-gray-500">
+  <div class="rounded-md border border-line bg-bg-soft px-6 py-6">
+    <h1 class="text-display text-fg">Create your account</h1>
+    <p class="mt-1.5 text-meta text-fg-subtle">
       Sign up with a passkey — Face ID, Touch ID, Windows Hello, or a security
       key. No password to remember, no email round-trip.
     </p>
@@ -167,7 +168,7 @@
         submit();
       }}
     >
-      <label class="block text-[12px] font-medium text-gray-600">
+      <label class="block text-micro text-fg-muted">
         Work email
         <input
           type="email"
@@ -176,11 +177,11 @@
           disabled={busy}
           required
           placeholder="you@company.com"
-          class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] text-gray-900 placeholder:text-[var(--ui-text-subtle)]"
+          class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-1.5 text-body text-fg placeholder:text-[var(--fg-subtle)]"
         />
       </label>
 
-      <label class="block text-[12px] font-medium text-gray-600">
+      <label class="block text-micro text-fg-muted">
         Your name
         <input
           type="text"
@@ -189,25 +190,25 @@
           disabled={busy}
           required
           placeholder="Jane Doe"
-          class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] text-gray-900 placeholder:text-[var(--ui-text-subtle)]"
+          class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-1.5 text-body text-fg placeholder:text-[var(--fg-subtle)]"
         />
       </label>
 
       {#if showInviteField}
-        <label class="block text-[12px] font-medium text-gray-600">
+        <label class="block text-micro text-fg-muted">
           Invite token
           <input
             type="text"
             bind:value={inviteToken}
             disabled={busy}
             placeholder="From your invite email"
-            class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] text-gray-900 placeholder:text-[var(--ui-text-subtle)]"
+            class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-1.5 text-body text-fg placeholder:text-[var(--fg-subtle)]"
           />
         </label>
       {:else}
         <button
           type="button"
-          class="text-[11px] font-medium text-indigo-400 hover:text-indigo-300"
+          class="text-micro text-accent-text hover:text-accent-text"
           onclick={() => (showInviteField = true)}
         >
           + I have an invite token
@@ -217,30 +218,32 @@
       {#if message}
         <p
           role="alert"
-          class="rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
+          class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
         >
           {message}
         </p>
       {/if}
 
-      <button
+      <Button
         type="submit"
+        variant="primary"
+        {busy}
         disabled={busy}
-        class="w-full rounded-md bg-indigo-600 px-3 py-2 text-[13px] font-medium text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+        class="w-full"
       >
         {busy ? "Setting up your passkey…" : "Continue with passkey"}
-      </button>
+      </Button>
 
-      <p class="text-[11px] text-gray-500">
+      <p class="text-micro text-fg-subtle">
         By continuing you agree to the ANX terms of service.
       </p>
     </form>
   </div>
 
-  <p class="mt-4 text-center text-[12px] text-gray-500">
+  <p class="mt-4 text-center text-meta text-fg-subtle">
     Already have an account?
     <a
-      class="text-indigo-400 underline underline-offset-2 hover:text-indigo-300"
+      class="text-accent-text underline underline-offset-2 hover:text-accent-text"
       href={`/hosted/signin${continuationQuery}`}>Sign in</a
     >
   </p>

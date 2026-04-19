@@ -24,10 +24,14 @@
   import ArchiveButton from "$lib/components/ArchiveButton.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import TrashButton from "$lib/components/TrashButton.svelte";
+  import Skeleton from "$lib/components/state/Skeleton.svelte";
+  import StateEmpty from "$lib/components/state/StateEmpty.svelte";
+  import StateError from "$lib/components/state/StateError.svelte";
 
   let artifacts = $state([]);
   let loading = $state(false);
   let error = $state("");
+  let retrying = $state(false);
   let confirmModal = $state({ open: false, action: "", entityId: "" });
   let trashBusyId = $state("");
   let archiveBusyId = $state("");
@@ -59,9 +63,10 @@
     void loadArtifactsFromState(parsed);
   });
 
-  async function loadArtifactsFromState(state) {
+  async function loadArtifactsFromState(state, isRetry = false) {
     loading = true;
     error = "";
+    retrying = isRetry;
     try {
       const query = { ...buildArtifactListQuery(state) };
       if (showArchived) {
@@ -70,9 +75,9 @@
       artifacts = (await coreClient.listArtifacts(query)).artifacts ?? [];
     } catch (e) {
       error = `Failed to load artifacts: ${e instanceof Error ? e.message : String(e)}`;
-      artifacts = [];
     } finally {
       loading = false;
+      retrying = false;
     }
   }
 
@@ -181,20 +186,20 @@
 </script>
 
 <div class="flex items-center justify-between mb-4">
-  <h1 class="text-lg font-semibold text-[var(--ui-text)]">Artifacts</h1>
+  <h1 class="text-subtitle font-semibold text-[var(--fg)]">Artifacts</h1>
   <div class="flex items-center gap-3">
     <label
-      class="inline-flex cursor-pointer items-center gap-1.5 text-[12px] text-[var(--ui-text-muted)]"
+      class="inline-flex cursor-pointer items-center gap-1.5 text-micro text-[var(--fg-muted)]"
     >
       <input
         bind:checked={showArchived}
-        class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--ui-border)] bg-[var(--ui-bg)] text-[var(--ui-accent-strong)] focus:ring-2 focus:ring-[var(--ui-accent)] focus:ring-offset-0"
+        class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--line)] bg-[var(--bg)] text-[var(--accent-hover)] focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-0"
         type="checkbox"
       />
       Show archived
     </label>
     <button
-      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)]"
+      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)]"
       onclick={() => (filtersOpen = !filtersOpen)}
       type="button"
     >
@@ -227,11 +232,11 @@
         }}
       >
         <div class="grid gap-3 sm:grid-cols-2">
-          <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
+          <label class="text-micro font-medium text-[var(--fg-muted)]">
             Kind
             <select
               bind:value={filters.kind}
-              class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
+              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
             >
               <option value="">All</option>
               {#each Object.entries(KIND_LABELS) as [value, label]}
@@ -239,29 +244,29 @@
               {/each}
             </select>
           </label>
-          <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
+          <label class="text-micro font-medium text-[var(--fg-muted)]">
             Topic ID
             <input
               bind:value={filters.thread_id}
-              class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
+              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
               placeholder="thread-onboarding"
             />
           </label>
-          <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
+          <label class="text-micro font-medium text-[var(--fg-muted)]">
             Created after
             <input
               value={dateInputs.created_after}
-              class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
+              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
               type="datetime-local"
               oninput={(event) =>
                 updateDateFilter("created_after", event.currentTarget.value)}
             />
           </label>
-          <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
+          <label class="text-micro font-medium text-[var(--fg-muted)]">
             Created before
             <input
               value={dateInputs.created_before}
-              class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
+              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
               type="datetime-local"
               oninput={(event) =>
                 updateDateFilter("created_before", event.currentTarget.value)}
@@ -270,11 +275,11 @@
         </div>
         <div class="mt-3 flex gap-1.5">
           <button
-            class="cursor-pointer rounded-md bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text)] hover:bg-[var(--ui-border)]"
+            class="cursor-pointer rounded-md bg-[var(--panel)] px-3 py-1.5 text-micro font-medium text-[var(--fg)] hover:bg-[var(--line)]"
             type="submit">Apply</button
           >
           <button
-            class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]"
+            class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-micro font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]"
             onclick={clearFilters}
             type="button">Clear filters</button
           >
@@ -284,51 +289,30 @@
   </CompactFilterBar>
 {/if}
 
-{#if loading}
-  <div
-    class="mt-12 flex items-center justify-center gap-2 text-[13px] text-[var(--ui-text-muted)]"
-  >
-    <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-      <circle
-        class="opacity-25"
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        stroke-width="4"
-      ></circle>
-      <path
-        class="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-      ></path>
-    </svg>
-    Loading artifacts...
-  </div>
+{#if loading && artifacts.length === 0}
+  <Skeleton rows={6} />
 {:else if error}
-  <div class="mb-4 rounded-md bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
-    {error}
-  </div>
+  <StateError
+    message={error}
+    onretry={() => void loadArtifactsFromState(filters, true)}
+    {retrying}
+    class="mb-4"
+  />
 {:else if artifacts.length === 0}
-  <div class="mt-8 text-center">
-    <p class="text-[13px] font-medium text-[var(--ui-text-muted)]">
-      No matching artifacts
-    </p>
-    <p class="mt-1 text-[13px] text-[var(--ui-text-muted)]">
-      Try adjusting filters or clearing the current view.
-    </p>
-  </div>
+  <StateEmpty
+    title="No matching artifacts"
+    helper="Try adjusting filters or clearing the current view."
+  />
 {/if}
 
 {#if !loading && artifacts.length > 0}
   <div
-    class="space-y-px rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] overflow-hidden"
+    class="space-y-px rounded-md border border-[var(--line)] bg-[var(--bg-soft)] overflow-hidden"
   >
     {#each artifacts as artifact, i}
       <div
-        class="px-4 py-2 transition-colors hover:bg-[var(--ui-border-subtle)] {i >
-        0
-          ? 'border-t border-[var(--ui-border)]'
+        class="px-4 py-2 transition-colors hover:bg-[var(--line-subtle)] {i > 0
+          ? 'border-t border-[var(--line)]'
           : ''}"
       >
         <div class="flex items-start justify-between gap-3">
@@ -337,17 +321,17 @@
             href={workspaceHref(`/artifacts/${artifact.id}`)}
           >
             <div class="flex flex-wrap items-center gap-2">
-              <p class="truncate text-[13px] font-medium text-[var(--ui-text)]">
+              <p class="truncate text-meta font-medium text-[var(--fg)]">
                 {rowHeading(artifact)}
               </p>
               {#if isArtifactArchived(artifact)}
                 <span
-                  class="rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-medium text-amber-400"
+                  class="rounded bg-warn-soft px-1.5 py-0.5 text-micro font-medium text-warn-text"
                   >Archived</span
                 >
               {/if}
             </div>
-            <p class="text-[11px] text-[var(--ui-text-muted)]">
+            <p class="text-micro text-[var(--fg-muted)]">
               <span class="font-medium">{kindLabel(artifact.kind)}</span>
               · Created {formatTimestamp(artifact.created_at) || "—"} by {actorName(
                 artifact.created_by,
@@ -355,7 +339,7 @@
             </p>
           </a>
           <div class="flex shrink-0 items-center gap-1">
-            <span class="mr-1 text-[11px] text-[var(--ui-text-muted)]">
+            <span class="mr-1 text-micro text-[var(--fg-muted)]">
               {(artifact.refs ?? []).length} ref{(artifact.refs ?? [])
                 .length === 1
                 ? ""
@@ -393,7 +377,7 @@
 
         {#if refPreview(artifact).length > 0 || artifact.thread_id}
           <a
-            class="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px]"
+            class="mt-1.5 flex flex-wrap items-center gap-1.5 text-micro"
             href={workspaceHref(`/artifacts/${artifact.id}`)}
           >
             {#if artifact.thread_id}
@@ -416,7 +400,7 @@
               />
             {/each}
             {#if (artifact.refs ?? []).length > 3}
-              <span class="text-[11px] text-[var(--ui-text-muted)]"
+              <span class="text-micro text-[var(--fg-muted)]"
                 >+{artifact.refs.length - 3} more</span
               >
             {/if}

@@ -87,23 +87,23 @@
   <!-- Settings navigation -->
   <section>
     <p
-      class="mb-2 text-[11px] font-medium uppercase tracking-wide text-[var(--ui-text-muted)]"
+      class="mb-2 text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)]"
     >
       Settings
     </p>
     <div
-      class="overflow-hidden rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]"
+      class="overflow-hidden rounded-md border border-[var(--line)] bg-[var(--panel)]"
     >
       {#each settingsNavItems as item, i}
         <a
-          class="flex items-center gap-3 px-4 py-3 text-[13px] font-medium text-[var(--ui-text)] transition-colors hover:bg-[var(--ui-border-subtle)] {i >
+          class="flex items-center gap-3 px-4 py-3 text-meta font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line-subtle)] {i >
           0
-            ? 'border-t border-[var(--ui-border)]'
+            ? 'border-t border-[var(--line)]'
             : ''}"
           href={workspaceHref(item.href)}
         >
           <svg
-            class="h-4 w-4 shrink-0 text-[var(--ui-text-muted)]"
+            class="h-4 w-4 shrink-0 text-[var(--fg-muted)]"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -118,12 +118,10 @@
           </svg>
           <span class="flex-1">{item.label}</span>
           {#if item.hint}
-            <span class="text-[11px] text-[var(--ui-text-muted)]"
-              >{item.hint}</span
-            >
+            <span class="text-micro text-[var(--fg-muted)]">{item.hint}</span>
           {/if}
           <svg
-            class="h-4 w-4 shrink-0 text-[var(--ui-text-muted)]"
+            class="h-4 w-4 shrink-0 text-[var(--fg-muted)]"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -144,19 +142,19 @@
   {#if hostedMode}
     <section>
       <p
-        class="mb-2 text-[11px] font-medium uppercase tracking-wide text-[var(--ui-text-muted)]"
+        class="mb-2 text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)]"
       >
         Account
       </p>
       <div
-        class="overflow-hidden rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]"
+        class="overflow-hidden rounded-md border border-[var(--line)] bg-[var(--panel)]"
       >
         <a
-          class="flex items-center gap-3 px-4 py-3 text-[13px] font-medium text-[var(--ui-text)] transition-colors hover:bg-[var(--ui-border-subtle)]"
+          class="flex items-center gap-3 px-4 py-3 text-meta font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line-subtle)]"
           href={hostedAccountPath}
         >
           <svg
-            class="h-4 w-4 shrink-0 text-[var(--ui-text-muted)]"
+            class="h-4 w-4 shrink-0 text-[var(--fg-muted)]"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -170,11 +168,11 @@
             />
           </svg>
           <span class="flex-1">Account</span>
-          <span class="text-[11px] text-[var(--ui-text-muted)]"
+          <span class="text-micro text-[var(--fg-muted)]"
             >Organizations, billing, all workspaces</span
           >
           <svg
-            class="h-4 w-4 shrink-0 text-[var(--ui-text-muted)]"
+            class="h-4 w-4 shrink-0 text-[var(--fg-muted)]"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -196,27 +194,27 @@
   {#if hasMultipleWorkspaces}
     <section>
       <p
-        class="mb-2 text-[11px] font-medium uppercase tracking-wide text-[var(--ui-text-muted)]"
+        class="mb-2 text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)]"
       >
         Workspace
       </p>
       <div
-        class="overflow-hidden rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]"
+        class="overflow-hidden rounded-md border border-[var(--line)] bg-[var(--panel)]"
       >
         {#each workspaces as ws, i}
           {@const isCurrent = ws.slug === workspaceSlug}
           <button
-            class="flex w-full items-center gap-3 px-4 py-3 text-left text-[13px] transition-colors hover:bg-[var(--ui-border-subtle)] {i >
+            class="flex w-full items-center gap-3 px-4 py-3 text-left text-meta transition-colors hover:bg-[var(--line-subtle)] {i >
             0
-              ? 'border-t border-[var(--ui-border)]'
+              ? 'border-t border-[var(--line)]'
               : ''} {isCurrent
-              ? 'font-medium text-[var(--ui-text)]'
-              : 'text-[var(--ui-text-muted)]'}"
+              ? 'font-medium text-[var(--fg)]'
+              : 'text-[var(--fg-muted)]'}"
             onclick={() => switchWorkspace(ws.slug)}
             type="button"
           >
             <span
-              class="inline-grid h-6 w-6 shrink-0 place-items-center rounded bg-[var(--ui-accent-strong)] text-[0.5625rem] font-bold text-white"
+              class="inline-grid h-6 w-6 shrink-0 place-items-center rounded bg-[var(--accent-hover)] text-[0.5625rem] font-bold text-white"
               aria-hidden="true"
             >
               {workspaceInitials(ws.label)}
@@ -224,7 +222,7 @@
             <span class="flex-1 truncate">{ws.label}</span>
             {#if isCurrent}
               <svg
-                class="h-3.5 w-3.5 shrink-0 text-[var(--ui-accent)]"
+                class="h-3.5 w-3.5 shrink-0 text-[var(--accent)]"
                 fill="currentColor"
                 viewBox="0 0 20 20"
                 aria-hidden="true"
@@ -245,15 +243,15 @@
   <!-- Identity -->
   <section>
     <p
-      class="mb-2 text-[11px] font-medium uppercase tracking-wide text-[var(--ui-text-muted)]"
+      class="mb-2 text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)]"
     >
       Identity
     </p>
     <div
-      class="overflow-hidden rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]"
+      class="overflow-hidden rounded-md border border-[var(--line)] bg-[var(--panel)]"
     >
       <div
-        class="flex items-center gap-3 border-b border-[var(--ui-border)] px-4 py-3"
+        class="flex items-center gap-3 border-b border-[var(--line)] px-4 py-3"
       >
         <span
           class="inline-grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#4a5060] text-[0.625rem] font-bold text-white"
@@ -262,16 +260,16 @@
           {initials}
         </span>
         <div class="min-w-0 flex-1">
-          <p class="truncate text-[13px] font-medium text-[var(--ui-text)]">
+          <p class="truncate text-meta font-medium text-[var(--fg)]">
             {selectedActorName}
           </p>
-          <p class="text-[11px] text-[var(--ui-text-muted)]">
+          <p class="text-micro text-[var(--fg-muted)]">
             {$authenticatedAgent ? "Authenticated principal" : "Dev actor mode"}
           </p>
         </div>
       </div>
       <button
-        class="flex w-full items-center gap-2 px-4 py-3 text-left text-[13px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] hover:text-[var(--ui-text)]"
+        class="flex w-full items-center gap-2 px-4 py-3 text-left text-meta font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
         onclick={switchIdentity}
         type="button"
       >
