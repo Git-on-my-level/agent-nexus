@@ -198,6 +198,7 @@ jobs:
             web-ui/.qa-current/**
             web-ui/.qa-diff/**
           if-no-files-found: ignore
+          include-hidden-files: true
 
   cross-platform-build:
     runs-on: ubuntu-latest
