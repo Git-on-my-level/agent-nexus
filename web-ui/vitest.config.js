@@ -3,6 +3,11 @@ import { fileURLToPath } from "node:url";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { defineConfig } from "vitest/config";
 
+const isCi =
+  Boolean(process.env.CI) ||
+  Boolean(process.env.GITHUB_ACTIONS) ||
+  Boolean(process.env.GITHUB_WORKFLOW);
+
 export default defineConfig({
   plugins: [svelte()],
   resolve: {
@@ -29,5 +34,19 @@ export default defineConfig({
   test: {
     include: ["tests/unit/**/*.test.js", "src/**/__tests__/**/*.test.js"],
     environment: "node",
+    ...(isCi
+      ? {
+          pool: "forks",
+          poolOptions: {
+            forks: {
+              singleFork: true,
+            },
+          },
+          fileParallelism: false,
+          sequence: {
+            shuffle: false,
+          },
+        }
+      : {}),
   },
 });

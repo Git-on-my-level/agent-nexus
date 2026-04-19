@@ -22,7 +22,7 @@ DEV_SEED_SCENARIO ?= default
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup check serve lint test format contract-gen contract-check contract-check-committed workflow-check version-sync version-check e2e-smoke hosted-smoke hosted-ops-test hosted-ops-smoke cli-check cli-build cli-integration-test http-record-test http-record-run http-record-compile http-record-replay bridge-setup bridge-doctor bridge-test release-check release-patch platform-constraints core-% bridge-% web-ui-%
+.PHONY: help setup check serve lint test format contract-gen contract-check contract-check-committed workflow-check version-sync version-check e2e-smoke hosted-smoke hosted-ops-test hosted-ops-smoke cli-check cli-build cli-integration-test http-record-test http-record-run http-record-compile http-record-replay bridge-setup bridge-doctor bridge-test release-check release-patch platform-constraints core-% bridge-% web-ui-% web-ui-static-ci
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z0-9_.-]+:.*##/ {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -32,6 +32,11 @@ setup: ## Install repo tooling plus dependencies for web-ui, core, and cli
 	pnpm install
 	cd $(CORE_DIR) && go mod download
 	cd $(CLI_DIR) && go mod download
+
+web-ui-static-ci: ## Same steps as CI job web-ui-static-check (frozen lockfile + lint/unit + build)
+	pnpm install --frozen-lockfile
+	$(MAKE) -C $(WEB_UI_DIR) check
+	pnpm -C $(WEB_UI_DIR) run build
 
 check: ## Run repo, core, cli, and web-ui checks
 	$(MAKE) contract-check
