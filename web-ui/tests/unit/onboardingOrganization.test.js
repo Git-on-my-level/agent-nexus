@@ -20,7 +20,10 @@ vi.mock("$app/environment", () => ({
 vi.mock("$app/stores", () => ({
   page: {
     subscribe: (fn) => {
-      fn({ url: new URL("http://localhost/hosted/onboarding/organization"), params: {} });
+      fn({
+        url: new URL("http://localhost/hosted/onboarding/organization"),
+        params: {},
+      });
       return () => {};
     },
   },
@@ -44,7 +47,11 @@ vi.mock("$lib/hosted/session.js", () => {
     loadHostedSession: vi.fn(async () => {
       store.set({
         phase: "authed",
-        account: { id: "u1", email: "jane@example.com", display_name: "Jane Doe" },
+        account: {
+          id: "u1",
+          email: "jane@example.com",
+          display_name: "Jane Doe",
+        },
         organizations: [],
         activeOrgId: "",
         error: "",
@@ -76,7 +83,11 @@ describe("Onboarding organization page — route guard", () => {
   it("redirects to /hosted/dashboard when user has organizations", async () => {
     hostedSession.set({
       phase: "authed",
-      account: { id: "u1", email: "jane@example.com", display_name: "Jane Doe" },
+      account: {
+        id: "u1",
+        email: "jane@example.com",
+        display_name: "Jane Doe",
+      },
       organizations: [{ id: "org1", slug: "acme", display_name: "Acme" }],
       activeOrgId: "org1",
       error: "",
@@ -110,7 +121,11 @@ describe("Onboarding organization page — default name derivation", () => {
   it("prefills from display_name first word", async () => {
     hostedSession.set({
       phase: "authed",
-      account: { id: "u1", email: "john@example.com", display_name: "John Smith" },
+      account: {
+        id: "u1",
+        email: "john@example.com",
+        display_name: "John Smith",
+      },
       organizations: [],
       activeOrgId: "",
       error: "",
@@ -146,7 +161,11 @@ describe("Onboarding organization page — default name derivation", () => {
 
 describe("Onboarding organization page — form submission", () => {
   it("POSTs to organizations endpoint and navigates to onboarding/workspace", async () => {
-    const mockOrg = { id: "new-org", slug: "janes-org", display_name: "Jane's org" };
+    const mockOrg = {
+      id: "new-org",
+      slug: "janes-org",
+      display_name: "Jane's org",
+    };
     hostedCpFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ organization: mockOrg }),
@@ -160,7 +179,9 @@ describe("Onboarding organization page — form submission", () => {
     });
 
     const form = container.querySelector("form");
-    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    form.dispatchEvent(
+      new Event("submit", { bubbles: true, cancelable: true }),
+    );
 
     await waitFor(() => {
       expect(hostedCpFetch).toHaveBeenCalledWith(
@@ -199,7 +220,9 @@ describe("Onboarding organization page — form submission", () => {
     });
 
     const form = container.querySelector("form");
-    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    form.dispatchEvent(
+      new Event("submit", { bubbles: true, cancelable: true }),
+    );
 
     await waitFor(() => {
       const alert = container.querySelector("[role='alert']");
@@ -236,7 +259,9 @@ describe("Onboarding organization page — form submission", () => {
     input.dispatchEvent(new Event("input", { bubbles: true }));
 
     const form = container.querySelector("form");
-    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    form.dispatchEvent(
+      new Event("submit", { bubbles: true, cancelable: true }),
+    );
 
     await waitFor(() => {
       const alert = container.querySelector("[role='alert']");
@@ -261,7 +286,9 @@ describe("Onboarding organization page — inline guide copy", () => {
     const guideTitle = guidePanel.querySelector(".text-subtitle");
     expect(guideTitle.textContent).toBe("Orgs vs workspaces");
 
-    const labels = guidePanel.querySelectorAll(".text-micro.uppercase.tracking-wider");
+    const labels = guidePanel.querySelectorAll(
+      ".text-micro.uppercase.tracking-wider",
+    );
     expect(labels.length).toBe(2);
     expect(labels[0].textContent.trim()).toBe("Organization");
     expect(labels[1].textContent.trim()).toBe("Workspace");

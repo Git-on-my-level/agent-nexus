@@ -248,9 +248,7 @@
   </header>
 
   {#if loading}
-    <div
-      class="rounded border border-[var(--line)] bg-[var(--bg-soft)] p-4"
-    >
+    <div class="rounded border border-[var(--line)] bg-[var(--bg-soft)] p-4">
       <Skeleton rows={4} />
     </div>
   {:else if loadError && !askItem}
@@ -263,7 +261,8 @@
       class="mt-4 rounded-md border border-warn/30 bg-warn-soft px-3 py-2.5 text-micro text-warn-text"
       role="status"
     >
-      Context didn't load. Sending anyway may fail if the inbox item is unreachable.
+      Context didn't load. Sending anyway may fail if the inbox item is
+      unreachable.
       <button
         class="cursor-pointer ml-2 font-medium underline"
         onclick={() => void loadAskItem()}
@@ -295,9 +294,7 @@
     </form>
   {:else if askItem}
     <section class="space-y-4">
-      <div
-        class="rounded border border-[var(--line)] bg-[var(--bg-soft)] p-4"
-      >
+      <div class="rounded border border-[var(--line)] bg-[var(--bg-soft)] p-4">
         <h2 class="text-subtitle font-semibold text-fg">
           Context the agent saw
         </h2>
@@ -389,7 +386,9 @@
 
         <div class="mt-4 flex items-center justify-between gap-3">
           <p class="text-meta text-fg-muted">Cmd+Enter submits</p>
-          <Button type="submit" variant="primary" disabled={submitting}>{submitting ? "Sending…" : "Send answer"}</Button>
+          <Button type="submit" variant="primary" disabled={submitting}
+            >{submitting ? "Sending…" : "Send answer"}</Button
+          >
         </div>
       </form>
     </section>

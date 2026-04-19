@@ -626,9 +626,7 @@
         >
           Content hash
         </p>
-        <p
-          class="mt-1 break-all font-mono text-micro text-[var(--fg-muted)]"
-        >
+        <p class="mt-1 break-all font-mono text-micro text-[var(--fg-muted)]">
           {artifact.content_hash}
         </p>
       </div>
@@ -642,9 +640,7 @@
     <div
       class="mt-3 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] p-3"
     >
-      <h2 class="text-meta font-medium text-[var(--fg)]">
-        Linked references
-      </h2>
+      <h2 class="text-meta font-medium text-[var(--fg)]">Linked references</h2>
       <div class="mt-1.5 flex flex-wrap gap-1.5 text-micro">
         {#each nonThreadRefs as refValue}
           <RefLink
@@ -683,24 +679,19 @@
         <h2 class="text-meta font-medium text-[var(--fg)]">Receipt</h2>
       </div>
       <div class="px-4 py-3 text-meta">
-        <div
-          class="flex flex-wrap gap-3 text-micro text-[var(--fg-muted)]"
-        >
+        <div class="flex flex-wrap gap-3 text-micro text-[var(--fg-muted)]">
           <span class="flex items-center gap-1"
             >Subject: {#if String(receiptPacket.subject_ref ?? "").trim()}<RefLink
                 humanize
                 labelHints={artifactRefHints}
                 refValue={String(receiptPacket.subject_ref).trim()}
                 showRaw
-              />{:else}<span class="text-[var(--fg-muted)]">—</span
-              >{/if}</span
+              />{:else}<span class="text-[var(--fg-muted)]">—</span>{/if}</span
           >
         </div>
         {#if (receiptPacket.outputs ?? []).length > 0}
           <div class="mt-3">
-            <p class="text-micro font-medium text-[var(--fg-muted)]">
-              Outputs
-            </p>
+            <p class="text-micro font-medium text-[var(--fg-muted)]">Outputs</p>
             <div class="mt-1 flex flex-wrap gap-1.5 text-micro">
               {#each receiptPacket.outputs as r}<RefLink
                   humanize
@@ -760,9 +751,7 @@
       </div>
 
       <div class="border-t border-[var(--line)] px-4 py-3">
-        <h3 class="text-meta font-medium text-[var(--fg)]">
-          Submit Review
-        </h3>
+        <h3 class="text-meta font-medium text-[var(--fg)]">Submit Review</h3>
         {#if reviewErrors.length > 0}
           <ul
             class="mt-2 list-inside list-disc rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
@@ -869,13 +858,9 @@
 
       {#if threadTimeline.length > 0 || timelineLoading}
         <div class="border-t border-[var(--line)] px-4 py-3">
-          <h3 class="text-meta font-medium text-[var(--fg)]">
-            Topic Timeline
-          </h3>
+          <h3 class="text-meta font-medium text-[var(--fg)]">Topic Timeline</h3>
           {#if timelineLoading}
-            <div class="mt-2 text-micro text-[var(--fg-muted)]">
-              Loading...
-            </div>
+            <div class="mt-2 text-micro text-[var(--fg-muted)]">Loading...</div>
           {:else if timelineError}
             <p class="mt-2 text-micro text-danger-text">{timelineError}</p>
           {:else}
@@ -917,7 +902,8 @@
               ? 'bg-ok-soft text-ok-text'
               : reviewPacket.outcome === 'revise'
                 ? 'bg-warn-soft text-warn-text'
-                : 'bg-danger-soft text-danger-text'}">{reviewPacket.outcome}</span
+                : 'bg-danger-soft text-danger-text'}"
+            >{reviewPacket.outcome}</span
           >
           <span class="text-micro text-[var(--fg-muted)]"
             >Receipt: <RefLink
@@ -973,9 +959,7 @@
       <div
         class="flex items-center justify-between border-b border-[var(--line)] px-4 py-2.5"
       >
-        <h2 class="text-meta font-medium text-[var(--fg)]">
-          Text Content
-        </h2>
+        <h2 class="text-meta font-medium text-[var(--fg)]">Text Content</h2>
         <span class="text-micro text-[var(--fg-muted)]"
           >{artifactContentType}</span
         >

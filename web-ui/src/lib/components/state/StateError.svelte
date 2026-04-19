@@ -9,10 +9,7 @@
   } = $props();
 </script>
 
-<div
-  role="alert"
-  class="rounded-md bg-danger-soft px-4 py-3 {className}"
->
+<div role="alert" class="rounded-md bg-danger-soft px-4 py-3 {className}">
   <p class="text-body text-danger-text">{message}</p>
   {#if onretry}
     <Button

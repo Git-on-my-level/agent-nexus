@@ -7,8 +7,11 @@
   import Button from "$lib/components/Button.svelte";
   import Skeleton from "$lib/components/state/Skeleton.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
-  import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
-  import { classifiedCpFetch, errorUserMessage, isAuthError } from "$lib/hosted/fetchState.js";
+  import {
+    classifiedCpFetch,
+    errorUserMessage,
+    isAuthError,
+  } from "$lib/hosted/fetchState.js";
   import { setActiveOrg } from "$lib/hosted/session.js";
 
   const orgId = $derived(String($page.params.orgId ?? ""));
@@ -89,7 +92,7 @@
   </div>
 
   {#if loadError}
-    <StateError message={loadError} onretry={retry} retrying={retrying} />
+    <StateError message={loadError} onretry={retry} {retrying} />
   {/if}
 
   {#if phase === "loading"}
@@ -98,7 +101,7 @@
         <Skeleton rows={2} />
       </div>
       <div class="grid gap-3 sm:grid-cols-3">
-        {#each [0, 1, 2] as _}
+        {#each [0, 1, 2] as i (i)}
           <div class="rounded-md border border-line bg-bg-soft px-4 py-3">
             <Skeleton rows={4} />
           </div>
@@ -116,16 +119,18 @@
     <section class="rounded-md border border-line bg-bg-soft px-4 py-3">
       <div class="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <div
-            class="text-micro uppercase tracking-wide text-fg-subtle"
-          >
+          <div class="text-micro uppercase tracking-wide text-fg-subtle">
             Plan
           </div>
           <div class="mt-0.5 text-subtitle tabular-nums text-fg">
             {plan.display_name ?? "—"}
           </div>
         </div>
-        <Button variant="secondary" href={`/hosted/organizations/${encodeURIComponent(orgId)}/billing`}>Change plan</Button>
+        <Button
+          variant="secondary"
+          href={`/hosted/organizations/${encodeURIComponent(orgId)}/billing`}
+          >Change plan</Button
+        >
       </div>
     </section>
 
@@ -140,8 +145,7 @@
             <span class="tabular-nums">{p}%</span>
           </div>
           <div class="mt-2 text-subtitle tabular-nums text-fg">
-            {Number(metric.used ?? 0)}<span
-              class="text-meta text-fg-subtle"
+            {Number(metric.used ?? 0)}<span class="text-meta text-fg-subtle"
               >{metric.suffix ?? ""} / {metric.total ?? "—"}{metric.suffix ??
                 ""}</span
             >
@@ -186,15 +190,11 @@
       </div>
     </section>
 
-    <section
-      class="overflow-hidden rounded-md border border-line bg-bg-soft"
-    >
+    <section class="overflow-hidden rounded-md border border-line bg-bg-soft">
       <div
         class="flex items-center justify-between border-b border-line px-4 py-2.5"
       >
-        <h2 class="text-subtitle text-fg">
-          Workspace breakdown
-        </h2>
+        <h2 class="text-subtitle text-fg">Workspace breakdown</h2>
       </div>
       {#if !summary.workspaces || summary.workspaces.length === 0}
         <p class="px-4 py-4 text-meta text-fg-subtle">
@@ -221,12 +221,15 @@
                     <div class="text-fg">
                       {w.display_name || w.slug}
                     </div>
-                    <div class="font-mono text-micro text-fg-subtle">{w.slug}</div>
+                    <div class="font-mono text-micro text-fg-subtle">
+                      {w.slug}
+                    </div>
                   </td>
                   <td class="px-4 py-2 tabular-nums text-fg"
                     >{w.artifact_count ?? 0}</td
                   >
-                  <td class="px-4 py-2 tabular-nums text-fg">{w.storage_gb ?? 0} GB</td
+                  <td class="px-4 py-2 tabular-nums text-fg"
+                    >{w.storage_gb ?? 0} GB</td
                   >
                   <td class="px-4 py-2 tabular-nums text-fg"
                     >{w.monthly_launch_count ?? 0}</td

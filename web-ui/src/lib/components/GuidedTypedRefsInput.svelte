@@ -166,11 +166,7 @@
       placeholder={addInputPlaceholder}
       type="text"
     />
-    <Button
-      variant="secondary"
-      size="compact"
-      onclick={addCandidate}
-    >
+    <Button variant="secondary" size="compact" onclick={addCandidate}>
       {addButtonLabel}
     </Button>
   </div>
@@ -214,8 +210,7 @@
 
   <div id="guided-refs-advanced">
     {#if showAdvanced}
-      <label
-        class="mt-2 block text-micro font-medium text-[var(--fg-muted)]"
+      <label class="mt-2 block text-micro font-medium text-[var(--fg-muted)]"
         >{advancedLabel}
         <textarea
           aria-label={textareaAriaLabel}

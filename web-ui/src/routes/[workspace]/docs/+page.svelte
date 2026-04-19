@@ -541,7 +541,7 @@
   <StateError
     message={error}
     onretry={() => void loadDocuments(true)}
-    retrying={retrying}
+    {retrying}
     class="mb-4"
   />
 {:else if documents.length === 0}

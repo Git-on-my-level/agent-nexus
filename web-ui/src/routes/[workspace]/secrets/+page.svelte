@@ -152,9 +152,7 @@
     <div
       class="mb-4 rounded-md border border-[var(--line)] bg-[var(--panel)] p-4"
     >
-      <h2 class="mb-3 text-meta font-medium text-[var(--fg)]">
-        Create secret
-      </h2>
+      <h2 class="mb-3 text-meta font-medium text-[var(--fg)]">Create secret</h2>
       {#if createError}
         <div class="mb-2 text-micro text-danger-text">{createError}</div>
       {/if}
@@ -199,7 +197,12 @@
           />
         </div>
         <div class="flex justify-end gap-2">
-          <Button variant="ghost" onclick={() => { showCreateForm = false; }}>Cancel</Button>
+          <Button
+            variant="ghost"
+            onclick={() => {
+              showCreateForm = false;
+            }}>Cancel</Button
+          >
           <Button
             variant="primary"
             disabled={creating || !newName.trim() || !newValue}
@@ -220,9 +223,7 @@
     <div
       class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-4 py-8 text-center"
     >
-      <p class="text-meta text-[var(--fg-muted)]">
-        No secrets configured.
-      </p>
+      <p class="text-meta text-[var(--fg-muted)]">No secrets configured.</p>
       {#if isHuman}
         <p class="mt-1 text-micro text-[var(--fg-subtle)]">
           Create a secret to store API keys and credentials for agent use.
@@ -235,14 +236,11 @@
     >
       {#each secrets as secret, i}
         {@const revealed = revealedSecrets[secret.id]}
-        <div
-          class="px-4 py-3 {i > 0 ? 'border-t border-[var(--line)]' : ''}"
-        >
+        <div class="px-4 py-3 {i > 0 ? 'border-t border-[var(--line)]' : ''}">
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2">
-                <span
-                  class="font-mono text-meta font-medium text-[var(--fg)]"
+                <span class="font-mono text-meta font-medium text-[var(--fg)]"
                   >{secret.name}</span
                 >
               </div>
@@ -291,7 +289,17 @@
                 </button>
               {/if}
               {#if isHuman}
-                <Button variant="destructive" disabled={deleting === secret.id} onclick={() => { deleteConfirm = { open: true, id: secret.id, name: secret.name }; }}>
+                <Button
+                  variant="destructive"
+                  disabled={deleting === secret.id}
+                  onclick={() => {
+                    deleteConfirm = {
+                      open: true,
+                      id: secret.id,
+                      name: secret.name,
+                    };
+                  }}
+                >
                   {deleting === secret.id ? "Deleting..." : "Delete"}
                 </Button>
               {/if}

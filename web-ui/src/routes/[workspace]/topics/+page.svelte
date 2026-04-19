@@ -492,8 +492,11 @@
 {#if error}
   <StateError
     message={error}
-    onretry={() => void (listSurface === "topics" ? loadTopicsFromState(filters, true) : loadBackingThreads(true))}
-    retrying={retrying}
+    onretry={() =>
+      void (listSurface === "topics"
+        ? loadTopicsFromState(filters, true)
+        : loadBackingThreads(true))}
+    {retrying}
     class="mb-4"
   />
 {/if}
@@ -642,8 +645,7 @@
       </label>
       {#if topicDraft.cadencePreset === "custom"}
         <label class="text-micro">
-          <span class="font-medium text-[var(--fg-muted)]"
-            >Cron expression</span
+          <span class="font-medium text-[var(--fg-muted)]">Cron expression</span
           >
           <input
             bind:value={topicDraft.cadenceCron}
@@ -694,8 +696,12 @@
     <Skeleton rows={8} />
   {:else if topics.length === 0 && !error}
     <StateEmpty
-      title={hasActiveFilters ? "No topics match the current filters" : "No topics yet"}
-      helper={hasActiveFilters ? "Try adjusting or clearing the current filters." : "Create a topic to start tracking a thread."}
+      title={hasActiveFilters
+        ? "No topics match the current filters"
+        : "No topics yet"}
+      helper={hasActiveFilters
+        ? "Try adjusting or clearing the current filters."
+        : "Create a topic to start tracking a thread."}
       actionLabel={hasActiveFilters ? "Clear filters" : ""}
       onclick={hasActiveFilters ? resetFilters : undefined}
     />
@@ -722,9 +728,7 @@
             ></span>
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-center gap-2">
-                <p
-                  class="truncate text-meta font-medium text-[var(--fg)]"
-                >
+                <p class="truncate text-meta font-medium text-[var(--fg)]">
                   {topic.title}
                 </p>
                 {#if isTopicArchived(topic)}

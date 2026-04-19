@@ -465,8 +465,7 @@
         <div class="min-w-0 flex-1">
           <h1 class="text-subtitle font-semibold text-[var(--fg)]">
             {document.title || ""}{#if !document.title}<span
-                class="font-mono text-[var(--fg-muted)]"
-                >{document.id}</span
+                class="font-mono text-[var(--fg-muted)]">{document.id}</span
               >{/if}
           </h1>
           <div class="mt-1 flex flex-wrap items-center gap-1.5 text-micro">
@@ -634,9 +633,7 @@
               >
             </button>
             {#if !metadataExpanded}
-              <p
-                class="mt-1 ml-5 truncate text-micro text-[var(--fg-muted)]"
-              >
+              <p class="mt-1 ml-5 truncate text-micro text-[var(--fg-muted)]">
                 Title: {editDraft.title || "—"} · Labels: {editDraft.labels ||
                   "none"}
               </p>
@@ -644,8 +641,7 @@
             {#if metadataExpanded}
               <div class="mt-2 ml-5 grid gap-3 sm:grid-cols-2">
                 <label class="sm:col-span-2">
-                  <span
-                    class="text-micro font-medium text-[var(--fg-muted)]"
+                  <span class="text-micro font-medium text-[var(--fg-muted)]"
                     >Title</span
                   >
                   <input
@@ -655,8 +651,7 @@
                   />
                 </label>
                 <label>
-                  <span
-                    class="text-micro font-medium text-[var(--fg-muted)]"
+                  <span class="text-micro font-medium text-[var(--fg-muted)]"
                     >Labels (comma-separated)</span
                   >
                   <input

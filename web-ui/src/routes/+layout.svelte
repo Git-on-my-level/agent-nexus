@@ -736,7 +736,9 @@
                 </span>
                 <span class="workspace-switcher-label">
                   <span class="workspace-switcher-name"
-                    >{activeWorkspace?.label || activeWorkspaceSlug || "Workspace"}</span
+                    >{activeWorkspace?.label ||
+                      activeWorkspaceSlug ||
+                      "Workspace"}</span
                   >
                   <span class="workspace-switcher-sub"
                     >{workspaceSwitcherSub}</span
@@ -771,7 +773,8 @@
                       class:workspace-switcher-option--active={isCurrent}
                       role="option"
                       aria-selected={isCurrent}
-                      onclick={() => !loadFailed && pickWorkspace(workspace.slug)}
+                      onclick={() =>
+                        !loadFailed && pickWorkspace(workspace.slug)}
                       disabled={loadFailed}
                       type="button"
                     >
@@ -782,9 +785,16 @@
                         {workspaceInitials(workspace.label)}
                       </span>
                       <span class="workspace-switcher-option-label">
-                        <span>{workspace.label || workspace.slug || "(unknown)"}</span>
+                        <span
+                          >{workspace.label ||
+                            workspace.slug ||
+                            "(unknown)"}</span
+                        >
                         {#if loadFailed}
-                          <span class="workspace-switcher-option-desc text-[var(--fg-subtle)]">(failed to load)</span>
+                          <span
+                            class="workspace-switcher-option-desc text-[var(--fg-subtle)]"
+                            >(failed to load)</span
+                          >
                         {:else if workspace.description}
                           <span class="workspace-switcher-option-desc"
                             >{workspace.description}</span

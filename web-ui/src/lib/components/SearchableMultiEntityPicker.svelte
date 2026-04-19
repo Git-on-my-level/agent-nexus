@@ -142,9 +142,7 @@
     {/if}
   </div>
 
-  <details
-    class="rounded-md border border-[var(--line)] bg-[var(--panel)]"
-  >
+  <details class="rounded-md border border-[var(--line)] bg-[var(--panel)]">
     <summary
       class="cursor-pointer px-3 py-2 text-micro text-[var(--fg-muted)] hover:text-[var(--fg)]"
     >
@@ -153,9 +151,7 @@
     <div
       class="space-y-2 border-t border-[var(--line)] px-3 py-3 md:flex md:items-end md:gap-2 md:space-y-0"
     >
-      <label
-        class="block flex-1 text-micro font-medium text-[var(--fg-muted)]"
-      >
+      <label class="block flex-1 text-micro font-medium text-[var(--fg-muted)]">
         {manualLabel}
         <input
           aria-label={manualLabel}

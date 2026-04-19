@@ -1,11 +1,7 @@
 <script>
   import Button from "$lib/components/Button.svelte";
 
-  let {
-    workspaceSlug = "",
-    ondismiss,
-    onsubmit,
-  } = $props();
+  let { ondismiss, onsubmit } = $props();
 
   let tagText = $state("");
   let submitting = $state(false);
@@ -66,7 +62,8 @@
         TAG
       </span>
       <p class="mt-2 text-micro leading-relaxed text-[var(--fg-subtle)]">
-        You want the agent to notice something, but it's not urgent. You drop a tag; it picks it up when it's ready.
+        You want the agent to notice something, but it's not urgent. You drop a
+        tag; it picks it up when it's ready.
       </p>
     </div>
 
@@ -80,7 +77,8 @@
         WAKE
       </span>
       <p class="mt-2 text-micro leading-relaxed text-[var(--fg-subtle)]">
-        A scheduled check-in. The agent wakes up on a cadence to re-evaluate a topic.
+        A scheduled check-in. The agent wakes up on a cadence to re-evaluate a
+        topic.
       </p>
     </div>
   </div>

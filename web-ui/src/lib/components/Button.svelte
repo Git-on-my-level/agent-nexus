@@ -6,11 +6,11 @@
     type = "button",
     href = undefined,
     busy = false,
+    onclick = undefined,
     class: className = "",
     children,
     leading,
     trailing,
-    ...rest
   } = $props();
 
   let effectiveDisabled = $derived(disabled || busy);
@@ -23,7 +23,9 @@
         : "h-8 px-4 text-micro",
   );
 
-  let weightClass = $derived(variant === "primary" ? "font-medium" : "font-normal");
+  let weightClass = $derived(
+    variant === "primary" ? "font-medium" : "font-normal",
+  );
 
   let variantClass = $derived(
     variant === "primary"
@@ -53,7 +55,7 @@
     class={classes}
     aria-busy={busy || undefined}
     role="button"
-    {...rest}
+    {onclick}
   >
     {#if busy}
       <svg
@@ -89,7 +91,7 @@
     disabled={effectiveDisabled}
     class={classes}
     aria-busy={busy || undefined}
-    {...rest}
+    {onclick}
   >
     {#if busy}
       <svg

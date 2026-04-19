@@ -168,7 +168,9 @@
         >
           <svg
             viewBox="0 0 12 12"
-            class="h-3 w-3 transition-transform {advancedOpen ? 'rotate-90' : ''}"
+            class="h-3 w-3 transition-transform {advancedOpen
+              ? 'rotate-90'
+              : ''}"
             fill="none"
             stroke="currentColor"
             stroke-width="1.6"
@@ -221,11 +223,7 @@
 
     <div class="flex items-center justify-end gap-2 pt-2">
       <Button variant="ghost" href="/hosted/dashboard">Cancel</Button>
-      <Button
-        type="submit"
-        variant="primary"
-        disabled={busy || !activeOrg}
-      >
+      <Button type="submit" variant="primary" disabled={busy || !activeOrg}>
         {busy ? "Creating…" : "Create workspace"}
       </Button>
     </div>

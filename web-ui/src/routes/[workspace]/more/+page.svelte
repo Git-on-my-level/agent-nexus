@@ -118,9 +118,7 @@
           </svg>
           <span class="flex-1">{item.label}</span>
           {#if item.hint}
-            <span class="text-micro text-[var(--fg-muted)]"
-              >{item.hint}</span
-            >
+            <span class="text-micro text-[var(--fg-muted)]">{item.hint}</span>
           {/if}
           <svg
             class="h-4 w-4 shrink-0 text-[var(--fg-muted)]"

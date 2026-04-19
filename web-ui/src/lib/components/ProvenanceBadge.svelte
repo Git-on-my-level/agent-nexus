@@ -46,8 +46,7 @@
       {/if}
       {#if provenance?.by_field}
         <details class="mt-1">
-          <summary
-            class="cursor-pointer text-micro text-[var(--fg-muted)]"
+          <summary class="cursor-pointer text-micro text-[var(--fg-muted)]"
             >Field details</summary
           >
           <pre

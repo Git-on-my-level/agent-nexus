@@ -295,7 +295,7 @@
   <StateError
     message={error}
     onretry={() => void loadArtifactsFromState(filters, true)}
-    retrying={retrying}
+    {retrying}
     class="mb-4"
   />
 {:else if artifacts.length === 0}
@@ -311,8 +311,7 @@
   >
     {#each artifacts as artifact, i}
       <div
-        class="px-4 py-2 transition-colors hover:bg-[var(--line-subtle)] {i >
-        0
+        class="px-4 py-2 transition-colors hover:bg-[var(--line-subtle)] {i > 0
           ? 'border-t border-[var(--line)]'
           : ''}"
       >

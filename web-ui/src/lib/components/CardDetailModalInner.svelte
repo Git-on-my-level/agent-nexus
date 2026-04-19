@@ -500,9 +500,7 @@
       <div class="flex items-start justify-between gap-3">
         <div class="min-w-0 flex-1">
           <div class="flex flex-wrap items-center gap-2">
-            <h2
-              class="truncate text-subtitle font-semibold text-[var(--fg)]"
-            >
+            <h2 class="truncate text-subtitle font-semibold text-[var(--fg)]">
               {headerTitle}
             </h2>
             <span
@@ -533,9 +531,7 @@
           </div>
           {#if assigneeNames.length > 0}
             <div class="mt-2 flex flex-wrap items-center gap-1">
-              <span class="text-micro text-[var(--fg-muted)]"
-                >Assigned</span
-              >
+              <span class="text-micro text-[var(--fg-muted)]">Assigned</span>
               {#each assigneeNames as name}
                 <span
                   class="max-w-[10rem] truncate rounded-md bg-[var(--line)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
@@ -635,9 +631,7 @@
                 </p>
               {/if}
               <div class="grid gap-3 md:grid-cols-2">
-                <label
-                  class="text-micro font-medium text-[var(--fg-muted)]"
-                >
+                <label class="text-micro font-medium text-[var(--fg-muted)]">
                   Card title
                   <input
                     bind:value={editTitle}
@@ -686,9 +680,7 @@
                   manualPlaceholder="actor-ops-ai"
                   placeholder="Search actors by name, ID, or tags"
                 />
-                <label
-                  class="text-micro font-medium text-[var(--fg-muted)]"
-                >
+                <label class="text-micro font-medium text-[var(--fg-muted)]">
                   Risk
                   <select
                     bind:value={editRisk}
@@ -700,9 +692,7 @@
                     <option value="critical">Critical</option>
                   </select>
                 </label>
-                <label
-                  class="text-micro font-medium text-[var(--fg-muted)]"
-                >
+                <label class="text-micro font-medium text-[var(--fg-muted)]">
                   Resolution
                   <select
                     bind:value={editResolution}
@@ -713,9 +703,7 @@
                     <option value="canceled">Canceled</option>
                   </select>
                 </label>
-                <label
-                  class="text-micro font-medium text-[var(--fg-muted)]"
-                >
+                <label class="text-micro font-medium text-[var(--fg-muted)]">
                   Due date
                   <input
                     bind:value={editDueAt}
@@ -734,9 +722,7 @@
                   ></textarea>
                 </label>
                 <div class="md:col-span-2">
-                  <p
-                    class="text-micro font-medium text-[var(--fg-muted)]"
-                  >
+                  <p class="text-micro font-medium text-[var(--fg-muted)]">
                     Related refs
                   </p>
                   <GuidedTypedRefsInput
@@ -751,9 +737,7 @@
                   />
                 </div>
                 <div class="md:col-span-2">
-                  <p
-                    class="text-micro font-medium text-[var(--fg-muted)]"
-                  >
+                  <p class="text-micro font-medium text-[var(--fg-muted)]">
                     Resolution evidence
                   </p>
                   <GuidedTypedRefsInput
@@ -1001,19 +985,11 @@
             >
               {savingCard ? "Saving…" : "Save card details"}
             </Button>
-            <Button
-              variant="secondary"
-              size="compact"
-              onclick={cancelEdit}
-            >
+            <Button variant="secondary" size="compact" onclick={cancelEdit}>
               Cancel
             </Button>
           {:else}
-            <Button
-              variant="secondary"
-              size="compact"
-              onclick={beginEdit}
-            >
+            <Button variant="secondary" size="compact" onclick={beginEdit}>
               Edit card
             </Button>
           {/if}

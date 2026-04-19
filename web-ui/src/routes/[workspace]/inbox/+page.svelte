@@ -32,10 +32,7 @@
   } from "$lib/inboxUtils";
   import { inboxTopicRouteSegment } from "$lib/topicRouteUtils";
   import InboxFirstRunTour from "$lib/components/onboarding/InboxFirstRunTour.svelte";
-  import {
-    dismissTour,
-    shouldShowTour,
-  } from "$lib/tourState";
+  import { dismissTour, shouldShowTour } from "$lib/tourState";
 
   /** Delay before inbox mutations hit core; allows Undo before the request runs. */
   const PENDING_INBOX_ACTION_MS = 5000;
@@ -264,8 +261,7 @@
         await loadInbox();
       }
     } catch (tagError) {
-      error =
-        tagError instanceof Error ? tagError.message : String(tagError);
+      error = tagError instanceof Error ? tagError.message : String(tagError);
     }
   }
 
@@ -618,8 +614,7 @@
 
   function urgencyCardClass(level) {
     const active = urgencyFilter === level;
-    if (active)
-      return "ring-1 ring-[var(--accent)] border-[var(--accent)]";
+    if (active) return "ring-1 ring-[var(--accent)] border-[var(--accent)]";
     return "border-[var(--line)] hover:border-[var(--fg-subtle)]";
   }
 
@@ -763,7 +758,7 @@
   <StateError
     message={error}
     onretry={() => void loadInbox(true)}
-    retrying={retrying}
+    {retrying}
     class="mb-4"
   />
 {/if}
@@ -813,8 +808,7 @@
     type="button"
     data-testid="urgency-summary-normal"
   >
-    <span class="inline-block h-1.5 w-1.5 rounded-full bg-bg0 shrink-0"
-    ></span>
+    <span class="inline-block h-1.5 w-1.5 rounded-full bg-bg0 shrink-0"></span>
     <span class="text-[var(--fg-muted)]">Normal</span>
     <span class="tabular-nums text-[var(--fg-subtle)]"
       >{urgencySummary.normal}</span
@@ -879,7 +873,8 @@
         <span class="truncate text-danger-text"
           >Ack failed: <span class="font-medium text-danger-text"
             >{failed.item.title ?? failed.item.summary ?? "item"}</span
-          > — {failed.reason}</span
+          >
+          — {failed.reason}</span
         >
         <div class="flex shrink-0 gap-2">
           <button
@@ -1107,7 +1102,9 @@
                       : "Acknowledge"}
                   </Button>
                   <Button
-                    variant={getDecisionForm(item.id).open ? "secondary" : "primary"}
+                    variant={getDecisionForm(item.id).open
+                      ? "secondary"
+                      : "primary"}
                     size="compact"
                     onclick={() =>
                       toggleDecisionForm(item, !getDecisionForm(item.id).open)}
@@ -1266,9 +1263,7 @@
                         </div>
 
                         {#if Array.isArray(subject?.related_refs) && subject.related_refs.length > 0}
-                          <div
-                            class="border-t border-[var(--line)] pt-2 mt-2"
-                          >
+                          <div class="border-t border-[var(--line)] pt-2 mt-2">
                             <p
                               class="text-micro font-medium text-[var(--fg-muted)] uppercase tracking-wide mb-1.5"
                             >
@@ -1287,9 +1282,7 @@
                           </div>
                         {/if}
 
-                        <div
-                          class="border-t border-[var(--line)] pt-2 mt-2"
-                        >
+                        <div class="border-t border-[var(--line)] pt-2 mt-2">
                           <a
                             class="inline-flex items-center gap-1 text-micro font-medium text-accent-text hover:text-accent-text transition-colors"
                             href={inboxItemHref(item)}
@@ -1340,8 +1333,7 @@
                       class="mt-2 block text-micro font-medium text-[var(--fg-muted)]"
                       for={`decision-notes-${item.id}`}
                     >
-                      Rationale <span
-                        class="font-normal text-[var(--fg-muted)]"
+                      Rationale <span class="font-normal text-[var(--fg-muted)]"
                         >optional</span
                       >
                     </label>

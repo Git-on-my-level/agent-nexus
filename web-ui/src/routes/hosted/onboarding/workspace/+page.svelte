@@ -3,14 +3,10 @@
 
   import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
-  import { page } from "$app/stores";
 
   import Button from "$lib/components/Button.svelte";
   import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
-  import {
-    hostedSession,
-    loadHostedSession,
-  } from "$lib/hosted/session.js";
+  import { hostedSession, loadHostedSession } from "$lib/hosted/session.js";
 
   let workspaceName = $state("Main");
   let busy = $state(false);
@@ -63,7 +59,7 @@
       return;
     }
 
-    if (activeOrgId && await hasWorkspaces(activeOrgId)) {
+    if (activeOrgId && (await hasWorkspaces(activeOrgId))) {
       void goto("/hosted/dashboard", { replaceState: true });
       return;
     }
@@ -139,8 +135,7 @@
       }
       await goto(`/${slug}/inbox`, { replaceState: true });
     } catch (e) {
-      message =
-        e instanceof Error ? e.message : "Failed to create workspace.";
+      message = e instanceof Error ? e.message : "Failed to create workspace.";
     } finally {
       busy = false;
     }

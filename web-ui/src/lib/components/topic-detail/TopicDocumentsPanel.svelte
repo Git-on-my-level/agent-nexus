@@ -51,9 +51,7 @@
   }
 </script>
 
-<section
-  class="mt-4 rounded-md border border-[var(--line)] bg-[var(--panel)]"
->
+<section class="mt-4 rounded-md border border-[var(--line)] bg-[var(--panel)]">
   <div
     class="flex items-center justify-between border-b border-[var(--line-subtle)] px-4 py-2.5"
   >
@@ -72,9 +70,7 @@
   </div>
 
   {#if documentsLoading}
-    <p class="px-4 py-3 text-meta text-[var(--fg-muted)]">
-      Loading docs...
-    </p>
+    <p class="px-4 py-3 text-meta text-[var(--fg-muted)]">Loading docs...</p>
   {:else if documentsError}
     <p class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
       {documentsError}
@@ -120,9 +116,7 @@
                   </span>
                 {/each}
               </div>
-              <p
-                class="mt-1 truncate text-meta font-medium text-[var(--fg)]"
-              >
+              <p class="mt-1 truncate text-meta font-medium text-[var(--fg)]">
                 {doc.title || doc.id}
               </p>
               <p class="mt-1 text-micro text-[var(--fg-muted)]">
@@ -131,9 +125,7 @@
                 )}
               </p>
             </div>
-            <div
-              class="shrink-0 text-right text-micro text-[var(--fg-muted)]"
-            >
+            <div class="shrink-0 text-right text-micro text-[var(--fg-muted)]">
               <div>
                 Head revision {doc.head_revision?.revision_number ??
                   doc.head_revision_number ??

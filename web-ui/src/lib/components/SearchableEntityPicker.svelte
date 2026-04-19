@@ -239,9 +239,7 @@
     {/if}
   </div>
 
-  <details
-    class="rounded-md border border-[var(--line)] bg-[var(--panel)]"
-  >
+  <details class="rounded-md border border-[var(--line)] bg-[var(--panel)]">
     <summary
       class="cursor-pointer px-3 py-2 text-micro text-[var(--fg-muted)] hover:text-[var(--fg)]"
     >

@@ -10,6 +10,8 @@
     hosts invoices, payment methods, and plan changes here.
   </p>
   <p class="text-[0.88rem] text-fg-muted mb-4">
-    <Button variant="secondary" href="/hosted/organizations">Back to organizations</Button>
+    <Button variant="secondary" href="/hosted/organizations"
+      >Back to organizations</Button
+    >
   </p>
 </div>

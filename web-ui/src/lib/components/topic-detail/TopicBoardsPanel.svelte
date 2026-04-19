@@ -15,8 +15,7 @@
   function statusTone(status) {
     if (status === "active") return "text-ok-text bg-ok-soft";
     if (status === "paused") return "text-warn-text bg-warn-soft";
-    if (status === "closed")
-      return "text-[var(--fg-muted)] bg-[var(--line)]";
+    if (status === "closed") return "text-[var(--fg-muted)] bg-[var(--line)]";
     return "text-[var(--fg-muted)] bg-[var(--line)]";
   }
 
@@ -43,16 +42,12 @@
   }
 </script>
 
-<section
-  class="mt-4 rounded-md border border-[var(--line)] bg-[var(--panel)]"
->
+<section class="mt-4 rounded-md border border-[var(--line)] bg-[var(--panel)]">
   <div
     class="flex items-center justify-between border-b border-[var(--line-subtle)] px-4 py-2.5"
   >
     <div>
-      <h2 class="text-micro font-medium text-[var(--fg-muted)]">
-        Boards
-      </h2>
+      <h2 class="text-micro font-medium text-[var(--fg-muted)]">Boards</h2>
       <p class="mt-0.5 text-micro text-[var(--fg-muted)]">
         Boards owned by or tracking this topic.
       </p>
@@ -84,9 +79,7 @@
               href={workspacePath(workspaceSlug, `/boards/${board.id}`)}
             >
               <div class="flex min-w-0 items-center gap-2">
-                <span
-                  class="truncate text-meta font-medium text-[var(--fg)]"
-                >
+                <span class="truncate text-meta font-medium text-[var(--fg)]">
                   {board.title || board.id}
                 </span>
                 {#if board.status}
@@ -162,9 +155,7 @@
                       </span>
                     {/if}
                   </a>
-                  <span
-                    class="shrink-0 text-micro text-[var(--fg-muted)]"
-                  >
+                  <span class="shrink-0 text-micro text-[var(--fg-muted)]">
                     Card
                   </span>
                 </div>

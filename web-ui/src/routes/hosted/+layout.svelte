@@ -207,9 +207,7 @@
                             size="sm"
                           />
                           <span class="min-w-0 flex-1">
-                            <span
-                              class="block truncate text-micro text-fg"
-                            >
+                            <span class="block truncate text-micro text-fg">
                               {org.display_name || org.slug}
                             </span>
                             {#if org.display_name && org.slug && org.display_name !== org.slug}
@@ -221,8 +219,7 @@
                             {/if}
                           </span>
                           {#if org.id === activeOrg?.id}
-                            <span
-                              class="shrink-0 text-micro text-accent-text"
+                            <span class="shrink-0 text-micro text-accent-text"
                               >Active</span
                             >
                           {/if}
@@ -252,7 +249,9 @@
               type="button"
               aria-haspopup="menu"
               aria-expanded={menuOpen}
-              aria-label={account?.email ?? account?.display_name ?? "Account menu"}
+              aria-label={account?.email ??
+                account?.display_name ??
+                "Account menu"}
               onclick={() => (menuOpen = !menuOpen)}
               class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-panel-hover text-micro text-fg transition-colors hover:bg-line-strong"
               title={account?.email ?? account?.display_name ?? "Account"}
@@ -360,7 +359,9 @@
           class="inline-flex h-4 w-4 items-center justify-center rounded bg-accent-soft text-[9px] font-bold uppercase text-accent-text"
           aria-hidden="true">O</span
         >
-        <span>{isLandingMarketing ? "Agent Nexus" : "ANX"} · &copy; {new Date().getFullYear()}</span>
+        <span
+          >{isLandingMarketing ? "Agent Nexus" : "ANX"} · &copy; {new Date().getFullYear()}</span
+        >
       </div>
       <nav
         class="flex flex-wrap items-center gap-x-4 gap-y-1"
@@ -394,8 +395,9 @@
           class="transition-colors hover:text-fg inline-block py-1"
           href="mailto:support@runoar.com">Support</a
         >
-        <a class="transition-colors hover:text-fg inline-block py-1" href="/hosted/dev"
-          >Developer notes</a
+        <a
+          class="transition-colors hover:text-fg inline-block py-1"
+          href="/hosted/dev">Developer notes</a
         >
       </nav>
     </div>

@@ -135,30 +135,22 @@
 </script>
 
 {#if conflictWarning}
-  <p
-    class="mt-3 rounded-md bg-warn-soft px-3 py-2 text-micro text-warn-text"
-  >
+  <p class="mt-3 rounded-md bg-warn-soft px-3 py-2 text-micro text-warn-text">
     {conflictWarning}
   </p>
 {/if}
 {#if editNotice}
-  <p
-    class="mt-3 rounded-md bg-ok-soft px-3 py-2 text-micro text-ok-text"
-  >
+  <p class="mt-3 rounded-md bg-ok-soft px-3 py-2 text-micro text-ok-text">
     {editNotice}
   </p>
 {/if}
 
 {#if topic}
-  <div
-    class="mt-4 rounded-md border border-[var(--line)] bg-[var(--panel)]"
-  >
+  <div class="mt-4 rounded-md border border-[var(--line)] bg-[var(--panel)]">
     <div
       class="flex items-center justify-between border-b border-[var(--line-subtle)] px-4 py-2.5"
     >
-      <h2 class="text-micro font-medium text-[var(--fg-muted)]">
-        Details
-      </h2>
+      <h2 class="text-micro font-medium text-[var(--fg-muted)]">Details</h2>
       <button
         class="cursor-pointer rounded px-2 py-1 text-micro font-medium text-accent-text hover:bg-[var(--bg-soft)] hover:text-accent-text"
         onclick={editOpen ? cancelEdit : beginEdit}
@@ -210,9 +202,7 @@
     {#if (topic.next_actions ?? []).length > 0}
       <div class="border-t border-[var(--line-subtle)] px-4 py-3">
         <p class="text-micro text-[var(--fg-muted)]">Next actions</p>
-        <ul
-          class="mt-1 list-inside list-disc text-meta text-[var(--fg)]"
-        >
+        <ul class="mt-1 list-inside list-disc text-meta text-[var(--fg)]">
           {#each topic.next_actions ?? [] as action}<li>
               {action}
             </li>{/each}
@@ -329,8 +319,7 @@
             />{#if describeCron(editDraft.cadenceCron)}<span
                 class="mt-1 block text-micro text-[var(--fg-muted)]"
                 >{describeCron(editDraft.cadenceCron)}</span
-              >{/if}<span
-              class="mt-0.5 block text-micro text-[var(--fg-muted)]"
+              >{/if}<span class="mt-0.5 block text-micro text-[var(--fg-muted)]"
               >Five cron fields, server timezone.</span
             ></label
           >

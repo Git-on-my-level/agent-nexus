@@ -83,9 +83,7 @@
       >← Dashboard</a
     >
   </p>
-  <h1 class="mt-2 text-display text-fg">
-    Create an organization
-  </h1>
+  <h1 class="mt-2 text-display text-fg">Create an organization</h1>
   <p class="mt-1 text-meta text-fg-subtle">
     Organizations group workspaces, members, and billing. You can rename the
     organization later, but the slug is permanent.
@@ -146,11 +144,7 @@
 
     <div class="flex items-center justify-end gap-2 pt-2">
       <Button variant="ghost" href="/hosted/dashboard">Cancel</Button>
-      <Button
-        type="submit"
-        variant="primary"
-        disabled={busy}
-      >
+      <Button type="submit" variant="primary" disabled={busy}>
         {busy ? "Creating…" : "Create organization"}
       </Button>
     </div>

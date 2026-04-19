@@ -286,7 +286,9 @@
           Loading...
         </div>
       {:else if inboxState.status === "error"}
-        <p class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
+        <p
+          class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
+        >
           {inboxState.error}
         </p>
       {:else if inboxState.items.length === 0}
@@ -334,9 +336,7 @@
               href={inboxItemTarget(item)}
             >
               <div class="min-w-0 flex-1">
-                <p
-                  class="truncate text-meta font-medium text-[var(--fg)]"
-                >
+                <p class="truncate text-meta font-medium text-[var(--fg)]">
                   {item.title}
                 </p>
                 {#if getInboxSubjectLabel(item)}
@@ -360,9 +360,7 @@
 
     <section class="min-w-0">
       <div class="flex items-center justify-between gap-2 mb-2">
-        <h2 class="text-meta font-semibold text-[var(--fg)]">
-          Topic health
-        </h2>
+        <h2 class="text-meta font-semibold text-[var(--fg)]">Topic health</h2>
         <a
           class="text-micro font-medium text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors"
           href={workspaceHref("/topics")}>View all</a
@@ -390,7 +388,9 @@
           Loading...
         </div>
       {:else if topicsState.status === "error"}
-        <p class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
+        <p
+          class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
+        >
           {topicsState.error}
         </p>
       {:else if topicsState.items.length === 0}
@@ -405,9 +405,7 @@
             class="min-w-0 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-2 text-center transition-colors hover:bg-[var(--line-subtle)]"
             href={topicsQueryHref([["open", "1"]])}
           >
-            <p class="text-micro font-medium text-[var(--fg-muted)]">
-              Open
-            </p>
+            <p class="text-micro font-medium text-[var(--fg-muted)]">Open</p>
             <p class="text-subtitle font-semibold text-[var(--fg)]">
               {topicHealth.openCount}
             </p>
@@ -444,7 +442,8 @@
               High priority
             </p>
             <p
-              class="text-subtitle font-semibold {topicHealth.highPriorityCount > 0
+              class="text-subtitle font-semibold {topicHealth.highPriorityCount >
+              0
                 ? 'text-danger-text'
                 : 'text-[var(--fg)]'}"
             >
@@ -455,9 +454,7 @@
             class="min-w-0 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-2 text-center transition-colors hover:bg-[var(--line-subtle)]"
             href={workspaceHref("/topics")}
           >
-            <p class="text-micro font-medium text-[var(--fg-muted)]">
-              Total
-            </p>
+            <p class="text-micro font-medium text-[var(--fg-muted)]">Total</p>
             <p class="text-subtitle font-semibold text-[var(--fg)]">
               {topicHealth.totalCount}
             </p>
@@ -476,9 +473,7 @@
               href={workspaceHref(`/topics/${topic.id}`)}
             >
               <div class="min-w-0 flex-1">
-                <p
-                  class="truncate text-meta font-medium text-[var(--fg)]"
-                >
+                <p class="truncate text-meta font-medium text-[var(--fg)]">
                   {topic.title}
                 </p>
                 <p class="text-micro text-[var(--fg-muted)]">
@@ -499,9 +494,7 @@
   <div class="grid gap-5 xl:grid-cols-2 min-w-0">
     <section class="min-w-0">
       <div class="flex items-center justify-between gap-2 mb-2">
-        <h2 class="text-meta font-semibold text-[var(--fg)]">
-          Active boards
-        </h2>
+        <h2 class="text-meta font-semibold text-[var(--fg)]">Active boards</h2>
         <a
           class="text-micro font-medium text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors"
           href={workspaceHref("/boards")}>View all</a
@@ -530,7 +523,9 @@
           Loading...
         </div>
       {:else if boardsState.status === "error"}
-        <p class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
+        <p
+          class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
+        >
           {boardsState.error}
         </p>
       {:else if recentBoards.length === 0}
@@ -559,9 +554,7 @@
                 {BOARD_STATUS_LABELS[board.status] ?? board.status}
               </span>
               <div class="min-w-0 flex-1">
-                <p
-                  class="truncate text-meta font-medium text-[var(--fg)]"
-                >
+                <p class="truncate text-meta font-medium text-[var(--fg)]">
                   {board.title || board.id}
                 </p>
                 <p class="text-micro text-[var(--fg-muted)]">
@@ -581,9 +574,7 @@
 
     <section class="min-w-0">
       <div class="flex items-center justify-between gap-2 mb-2">
-        <h2 class="text-meta font-semibold text-[var(--fg)]">
-          Recent Docs
-        </h2>
+        <h2 class="text-meta font-semibold text-[var(--fg)]">Recent Docs</h2>
         <a
           class="text-micro font-medium text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors"
           href={workspaceHref("/docs")}>View all</a
@@ -612,13 +603,13 @@
           Loading...
         </div>
       {:else if docsState.status === "error"}
-        <p class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
+        <p
+          class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
+        >
           {docsState.error}
         </p>
       {:else if recentDocs.length === 0}
-        <p class="text-meta text-[var(--fg-muted)] py-3">
-          No documents yet.
-        </p>
+        <p class="text-meta text-[var(--fg-muted)] py-3">No documents yet.</p>
       {:else}
         <div
           class="space-y-px rounded-md border border-[var(--line)] bg-[var(--bg-soft)] overflow-hidden"
@@ -639,9 +630,7 @@
                 {DOC_STATUS_LABELS[doc.status] ?? doc.status}
               </span>
               <div class="min-w-0 flex-1">
-                <p
-                  class="truncate text-meta font-medium text-[var(--fg)]"
-                >
+                <p class="truncate text-meta font-medium text-[var(--fg)]">
                   {doc.title || doc.id}
                 </p>
                 <p class="text-micro text-[var(--fg-muted)]">

@@ -525,7 +525,9 @@
     Loading board...
   </div>
 {:else if error}
-  <div class="mb-4 rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
+  <div
+    class="mb-4 rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
+  >
     {error}
   </div>
 {:else if workspace}
@@ -720,9 +722,7 @@
   {#if mutationNotice || conflictWarning || mutationError}
     <div class="mb-3 space-y-2">
       {#if mutationNotice}
-        <div
-          class="rounded-md bg-ok-soft px-3 py-2 text-micro text-ok-text"
-        >
+        <div class="rounded-md bg-ok-soft px-3 py-2 text-micro text-ok-text">
           {mutationNotice}
         </div>
       {/if}
@@ -1151,9 +1151,7 @@
         {/each}
       </div>
 
-      <div
-        class="rounded-md border border-[var(--line)] bg-[var(--panel)]"
-      >
+      <div class="rounded-md border border-[var(--line)] bg-[var(--panel)]">
         <button
           class="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--line-subtle)]"
           onclick={() => {
@@ -1170,8 +1168,7 @@
             stroke="currentColor"
             stroke-width="2"><path d="M9 5l7 7-7 7" /></svg
           >
-          <span class="text-micro font-medium text-[var(--fg-muted)]"
-            >Done</span
+          <span class="text-micro font-medium text-[var(--fg-muted)]">Done</span
           >
           <span
             class="rounded bg-[var(--line)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
@@ -1194,13 +1191,9 @@
   </section>
 
   <div class="grid gap-3 lg:grid-cols-3">
-    <section
-      class="rounded-md border border-[var(--line)] bg-[var(--panel)]"
-    >
+    <section class="rounded-md border border-[var(--line)] bg-[var(--panel)]">
       <div class="border-b border-[var(--line)] px-4 py-2.5">
-        <h2 class="text-meta font-medium text-[var(--fg)]">
-          Workspace docs
-        </h2>
+        <h2 class="text-meta font-medium text-[var(--fg)]">Workspace docs</h2>
       </div>
       <div class="px-4 py-3">
         {#if (workspace.documents?.items ?? []).length === 0}
@@ -1235,13 +1228,9 @@
       </div>
     </section>
 
-    <section
-      class="rounded-md border border-[var(--line)] bg-[var(--panel)]"
-    >
+    <section class="rounded-md border border-[var(--line)] bg-[var(--panel)]">
       <div class="border-b border-[var(--line)] px-4 py-2.5">
-        <h2 class="text-meta font-medium text-[var(--fg)]">
-          Review inbox
-        </h2>
+        <h2 class="text-meta font-medium text-[var(--fg)]">Review inbox</h2>
         <p class="mt-1 text-micro text-[var(--fg-muted)]">
           Derived risk and decision signals for resources tied to this board
           (backing threads).

@@ -471,10 +471,7 @@
               </Button>
             {/if}
             {#if $devActorMode}
-              <Button
-                variant="secondary"
-                href={workspacePath(workspaceSlug)}
-              >
+              <Button variant="secondary" href={workspacePath(workspaceSlug)}>
                 Back to actor mode
               </Button>
             {/if}

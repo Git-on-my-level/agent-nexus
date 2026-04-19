@@ -1,4 +1,6 @@
 <script>
+  import { untrack } from "svelte";
+
   import { browser } from "$app/environment";
   import { page } from "$app/stores";
 
@@ -18,7 +20,6 @@
     writeBillingSnapshot,
   } from "$lib/hosted/billingActivation.js";
   import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
-  import { errorUserMessage } from "$lib/hosted/fetchState.js";
   import { setActiveOrg } from "$lib/hosted/session.js";
 
   const orgId = $derived(String($page.params.orgId ?? ""));
@@ -389,9 +390,7 @@
     </div>
   {:else if role === "member"}
     <section class="rounded-md border border-line bg-bg-soft px-5 py-5">
-      <h2 class="text-subtitle text-fg">
-        Who manages billing
-      </h2>
+      <h2 class="text-subtitle text-fg">Who manages billing</h2>
       <p class="mt-1 text-meta text-fg-subtle">
         Billing is managed by your organization's owner or admin. Reach out to
         someone below to change plans, payment methods, or invoices.
@@ -445,7 +444,9 @@
             Refresh in a minute or contact support if billing doesn't update.
           </span>
         </div>
-        <Button variant="secondary" onclick={() => refreshAfterTimeout()}>Refresh</Button>
+        <Button variant="secondary" onclick={() => refreshAfterTimeout()}
+          >Refresh</Button
+        >
       </div>
     {/if}
 
@@ -469,9 +470,7 @@
     <section class="rounded-md border border-line bg-bg-soft px-4 py-3">
       <div class="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <div
-            class="text-micro uppercase tracking-wide text-fg-subtle"
-          >
+          <div class="text-micro uppercase tracking-wide text-fg-subtle">
             Current plan
           </div>
           <div class="mt-0.5 flex items-center gap-2">
@@ -492,7 +491,9 @@
           {/if}
         </div>
         {#if managed}
-          <Button variant="secondary" onclick={() => openPortal()}>Manage in Stripe</Button>
+          <Button variant="secondary" onclick={() => openPortal()}
+            >Manage in Stripe</Button
+          >
         {/if}
       </div>
     </section>
@@ -563,7 +564,11 @@
                   >Talk to sales</a
                 >
               {:else if planCard.ctaUpgrade && managed}
-                <Button variant="secondary" class="block w-full" onclick={() => openPortal()}>Switch plan</Button>
+                <Button
+                  variant="secondary"
+                  class="block w-full"
+                  onclick={() => openPortal()}>Switch plan</Button
+                >
               {:else if planCard.ctaUpgrade}
                 <Button
                   variant="primary"
@@ -587,6 +592,10 @@
       </div>
     </section>
   {:else if role === "error"}
-    <StateError message={message || "Could not load billing."} onretry={retryLoad} retrying={roleRetryBusy} />
+    <StateError
+      message={message || "Could not load billing."}
+      onretry={retryLoad}
+      retrying={roleRetryBusy}
+    />
   {/if}
 </div>

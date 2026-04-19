@@ -389,12 +389,16 @@
     </p>
   {:else}
     {#if lifecycleError}
-      <p class="mb-2 rounded bg-danger-soft px-3 py-2 text-meta text-danger-text">
+      <p
+        class="mb-2 rounded bg-danger-soft px-3 py-2 text-meta text-danger-text"
+      >
         {lifecycleError}
       </p>
     {/if}
     {#if timelineError}
-      <p class="mb-2 rounded bg-danger-soft px-3 py-2 text-meta text-danger-text">
+      <p
+        class="mb-2 rounded bg-danger-soft px-3 py-2 text-meta text-danger-text"
+      >
         {timelineError}
       </p>
     {/if}
@@ -423,7 +427,9 @@
   }}
 >
   {#if postMessageError}
-    <p class="mb-2 rounded bg-danger-soft px-3 py-1.5 text-micro text-danger-text">
+    <p
+      class="mb-2 rounded bg-danger-soft px-3 py-1.5 text-micro text-danger-text"
+    >
       {postMessageError}
     </p>
   {/if}
@@ -483,8 +489,7 @@
                 void insertMention(row.handle);
               }}
             >
-              <span class="font-medium text-[var(--accent)]"
-                >@{row.handle}</span
+              <span class="font-medium text-[var(--accent)]">@{row.handle}</span
               >
               <span class="truncate text-[var(--fg-muted)]"
                 >{row.displayLabel}</span
@@ -507,8 +512,8 @@
     <p
       class="text-micro leading-snug text-[var(--fg-muted)] sm:min-w-0 sm:flex-1"
     >
-      Mention <code class="text-[var(--fg)]">@handle</code> to wake a
-      registered agent in this workspace. See
+      Mention <code class="text-[var(--fg)]">@handle</code> to wake a registered
+      agent in this workspace. See
       <a
         class="text-accent-text hover:text-accent-text"
         href={workspacePath(workspaceSlug, "/access")}>Access</a
@@ -519,9 +524,7 @@
       class="flex shrink-0 flex-wrap items-center justify-end gap-2 sm:justify-end"
     >
       {#if replyToEventId}
-        <span
-          class="max-w-[14rem] truncate text-micro text-[var(--fg-muted)]"
-        >
+        <span class="max-w-[14rem] truncate text-micro text-[var(--fg-muted)]">
           Replying to: {replyTargetMessage?.messageText
             ? replyTargetMessage.messageText.slice(0, 80)
             : "message"}

@@ -20,7 +20,10 @@ vi.mock("$app/environment", () => ({
 vi.mock("$app/stores", () => ({
   page: {
     subscribe: (fn) => {
-      fn({ url: new URL("http://localhost/hosted/onboarding/workspace"), params: {} });
+      fn({
+        url: new URL("http://localhost/hosted/onboarding/workspace"),
+        params: {},
+      });
       return () => {};
     },
   },
@@ -44,7 +47,11 @@ vi.mock("$lib/hosted/session.js", () => {
     loadHostedSession: vi.fn(async () => {
       store.set({
         phase: "authed",
-        account: { id: "u1", email: "jane@example.com", display_name: "Jane Doe" },
+        account: {
+          id: "u1",
+          email: "jane@example.com",
+          display_name: "Jane Doe",
+        },
         organizations: [{ id: "org1", slug: "acme", display_name: "Acme" }],
         activeOrgId: "org1",
         error: "",
@@ -169,7 +176,9 @@ describe("Onboarding workspace page — form submission", () => {
     });
 
     const form = container.querySelector("form");
-    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    form.dispatchEvent(
+      new Event("submit", { bubbles: true, cancelable: true }),
+    );
 
     await waitFor(() => {
       expect(hostedCpFetch).toHaveBeenCalledWith(
@@ -217,7 +226,9 @@ describe("Onboarding workspace page — form submission", () => {
     });
 
     const form = container.querySelector("form");
-    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    form.dispatchEvent(
+      new Event("submit", { bubbles: true, cancelable: true }),
+    );
 
     await waitFor(() => {
       const alert = container.querySelector("[role='alert']");
@@ -248,7 +259,9 @@ describe("Onboarding workspace page — form submission", () => {
     input.dispatchEvent(new Event("input", { bubbles: true }));
 
     const form = container.querySelector("form");
-    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    form.dispatchEvent(
+      new Event("submit", { bubbles: true, cancelable: true }),
+    );
 
     await waitFor(() => {
       const alert = container.querySelector("[role='alert']");
@@ -300,7 +313,11 @@ describe("Onboarding workspace page — keyboard shortcut", () => {
 
     const form = container.querySelector("form");
     form.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }),
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        metaKey: true,
+        bubbles: true,
+      }),
     );
 
     await waitFor(() => {

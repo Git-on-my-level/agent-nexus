@@ -9,7 +9,9 @@
 
   onMount(async () => {
     if (!browser) return;
-    const continuation = String($page.url.searchParams.get("next") ?? $page.url.search ?? "").trim();
+    const continuation = String(
+      $page.url.searchParams.get("next") ?? $page.url.search ?? "",
+    ).trim();
     try {
       const res = await hostedCpFetch("account/me");
       if (res.ok) {

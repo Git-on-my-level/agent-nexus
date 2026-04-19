@@ -9,7 +9,11 @@
   import StateError from "$lib/components/state/StateError.svelte";
   import Avatar from "$lib/hosted/Avatar.svelte";
   import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
-  import { classifiedCpFetch, errorUserMessage, isAuthError } from "$lib/hosted/fetchState.js";
+  import {
+    classifiedCpFetch,
+    errorUserMessage,
+    isAuthError,
+  } from "$lib/hosted/fetchState.js";
   import { normalizeHostedLaunchFinishURL } from "$lib/hosted/launchFlow.js";
   import { hostedSession, loadHostedSession } from "$lib/hosted/session.js";
 
@@ -170,7 +174,11 @@
   {:else if loadingWorkspaces && !wsError}
     <SkeletonCard />
   {:else if wsError}
-    <StateError message={wsError} onretry={retryWorkspaces} retrying={wsRetrying} />
+    <StateError
+      message={wsError}
+      onretry={retryWorkspaces}
+      retrying={wsRetrying}
+    />
   {:else if workspaces.length === 0}
     <StateEmpty
       title="Spin up your first workspace"

@@ -8,8 +8,11 @@
   import StateError from "$lib/components/state/StateError.svelte";
   import Skeleton from "$lib/components/state/Skeleton.svelte";
   import Avatar from "$lib/hosted/Avatar.svelte";
-  import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
-  import { classifiedCpFetch, errorUserMessage, isAuthError } from "$lib/hosted/fetchState.js";
+  import {
+    classifiedCpFetch,
+    errorUserMessage,
+    isAuthError,
+  } from "$lib/hosted/fetchState.js";
   import { setActiveOrg } from "$lib/hosted/session.js";
 
   let phase = $state("loading");
@@ -81,7 +84,9 @@
         Pick an organization to manage its workspaces, members, and billing.
       </p>
     </div>
-    <Button variant="primary" href="/hosted/organizations/new">+ New organization</Button>
+    <Button variant="primary" href="/hosted/organizations/new"
+      >+ New organization</Button
+    >
   </div>
 
   {#if message}
@@ -98,7 +103,7 @@
       <Skeleton rows={4} />
     </div>
   {:else if loadError}
-    <StateError message={loadError} onretry={retry} retrying={retrying} />
+    <StateError message={loadError} onretry={retry} {retrying} />
   {:else if organizations.length === 0}
     <StateEmpty
       title="No organizations yet"
@@ -143,9 +148,8 @@
               </div>
             </div>
           </div>
-          <span
-            class="shrink-0 text-micro text-fg-subtle"
-            aria-hidden="true">Open →</span
+          <span class="shrink-0 text-micro text-fg-subtle" aria-hidden="true"
+            >Open →</span
           >
         </button>
       {/each}

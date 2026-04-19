@@ -7,10 +7,12 @@
   import StateError from "$lib/components/state/StateError.svelte";
   import StateEmpty from "$lib/components/state/StateEmpty.svelte";
   import Skeleton from "$lib/components/state/Skeleton.svelte";
-  import SkeletonCard from "$lib/components/state/SkeletonCard.svelte";
   import Avatar from "$lib/hosted/Avatar.svelte";
-  import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
-  import { classifiedCpFetch, errorUserMessage, isAuthError } from "$lib/hosted/fetchState.js";
+  import {
+    classifiedCpFetch,
+    errorUserMessage,
+    isAuthError,
+  } from "$lib/hosted/fetchState.js";
   import {
     hostedSession,
     loadHostedSession,
@@ -58,7 +60,9 @@
     }
 
     const [usageRes, wsRes] = await Promise.all([
-      classifiedCpFetch(`organizations/${encodeURIComponent(orgId)}/usage-summary`).catch((e) => e),
+      classifiedCpFetch(
+        `organizations/${encodeURIComponent(orgId)}/usage-summary`,
+      ).catch((e) => e),
       classifiedCpFetch(
         `workspaces?organization_id=${encodeURIComponent(orgId)}&limit=20`,
       ).catch((e) => e),
@@ -68,7 +72,9 @@
       try {
         const u = await usageRes.json();
         usage = u.summary ?? null;
-      } catch { /* ignore parse errors */ }
+      } catch {
+        /* ignore parse errors */
+      }
     } else {
       usageError = errorUserMessage(usageRes);
     }
@@ -77,7 +83,9 @@
       try {
         const w = await wsRes.json();
         workspaces = w.workspaces ?? [];
-      } catch { /* ignore parse errors */ }
+      } catch {
+        /* ignore parse errors */
+      }
     } else {
       wsError = errorUserMessage(wsRes);
     }
@@ -147,9 +155,7 @@
             href="/hosted/organizations">Organizations</a
           >
         </p>
-        <h1
-          class="mt-1 flex items-center gap-2 text-display text-fg"
-        >
+        <h1 class="mt-1 flex items-center gap-2 text-display text-fg">
           <span class="truncate"
             >{organization?.display_name ||
               organization?.slug ||
@@ -168,19 +174,25 @@
       </div>
     </div>
     <div class="flex flex-wrap items-center gap-2">
-      <Button variant="secondary" href={`/hosted/organizations/${encodeURIComponent(orgId)}/billing`}>Manage billing</Button>
-      <Button variant="primary" href="/hosted/workspaces/new">+ New workspace</Button>
+      <Button
+        variant="secondary"
+        href={`/hosted/organizations/${encodeURIComponent(orgId)}/billing`}
+        >Manage billing</Button
+      >
+      <Button variant="primary" href="/hosted/workspaces/new"
+        >+ New workspace</Button
+      >
     </div>
   </div>
 
   {#if orgError}
-    <StateError message={orgError} onretry={retry} retrying={retrying} />
+    <StateError message={orgError} onretry={retry} {retrying} />
   {/if}
 
   {#if phase === "loading"}
     <div class="space-y-3">
       <div class="grid gap-3 sm:grid-cols-3">
-        {#each [0, 1, 2] as _}
+        {#each [0, 1, 2] as i (i)}
           <div class="rounded-md border border-line bg-bg-soft px-4 py-3">
             <Skeleton rows={3} />
           </div>
@@ -192,95 +204,102 @@
     </div>
   {:else if usage || wsError || usageError}
     {#if usageError}
-      <StateError message={"Usage data failed to load: " + usageError} onretry={retry} retrying={retrying} />
+      <StateError
+        message={"Usage data failed to load: " + usageError}
+        onretry={retry}
+        {retrying}
+      />
     {/if}
     {#if usage}
-    {@const plan = usage.plan ?? {}}
-    {@const u = usage.usage ?? {}}
-    <section class="grid gap-3 sm:grid-cols-3">
-      {#each [{ label: "Workspaces", used: u.workspace_count, total: plan.workspace_limit }, { label: "Artifacts", used: u.artifact_count, total: plan.artifact_capacity }, { label: "Storage", used: u.storage_gb, total: plan.included_storage_gb, suffix: " GB" }] as metric}
-        {@const p = pct(metric.used, metric.total)}
-        <div class="rounded-md border border-line bg-bg-soft px-4 py-3">
-          <div
-            class="flex items-center justify-between text-micro uppercase tracking-wide text-fg-subtle"
-          >
-            <span>{metric.label}</span>
-            <span class="tabular-nums">{p}%</span>
-          </div>
-          <div class="mt-2 text-subtitle tabular-nums text-fg">
-            {Number(metric.used ?? 0)}<span
-              class="text-meta text-fg-subtle"
-              >{metric.suffix ?? ""} / {metric.total ?? "—"}{metric.suffix ??
-                ""}</span
-            >
-          </div>
-          <div class="mt-2 h-1 overflow-hidden rounded-full bg-panel-hover">
+      {@const plan = usage.plan ?? {}}
+      {@const u = usage.usage ?? {}}
+      <section class="grid gap-3 sm:grid-cols-3">
+        {#each [{ label: "Workspaces", used: u.workspace_count, total: plan.workspace_limit }, { label: "Artifacts", used: u.artifact_count, total: plan.artifact_capacity }, { label: "Storage", used: u.storage_gb, total: plan.included_storage_gb, suffix: " GB" }] as metric}
+          {@const p = pct(metric.used, metric.total)}
+          <div class="rounded-md border border-line bg-bg-soft px-4 py-3">
             <div
-              class="h-full {barColor(p)} transition-all"
-              style="width: {p}%"
-            ></div>
+              class="flex items-center justify-between text-micro uppercase tracking-wide text-fg-subtle"
+            >
+              <span>{metric.label}</span>
+              <span class="tabular-nums">{p}%</span>
+            </div>
+            <div class="mt-2 text-subtitle tabular-nums text-fg">
+              {Number(metric.used ?? 0)}<span class="text-meta text-fg-subtle"
+                >{metric.suffix ?? ""} / {metric.total ?? "—"}{metric.suffix ??
+                  ""}</span
+              >
+            </div>
+            <div class="mt-2 h-1 overflow-hidden rounded-full bg-panel-hover">
+              <div
+                class="h-full {barColor(p)} transition-all"
+                style="width: {p}%"
+              ></div>
+            </div>
           </div>
-        </div>
-      {/each}
-    </section>
+        {/each}
+      </section>
 
-    <section class="rounded-md border border-line bg-bg-soft">
-      <div
-        class="flex items-center justify-between border-b border-line px-4 py-2.5"
-      >
-        <h2 class="text-subtitle text-fg">Workspaces</h2>
-        <a
-          href="/hosted/dashboard"
-          class="text-micro text-fg-subtle transition-colors hover:text-fg"
-          >View all →</a
+      <section class="rounded-md border border-line bg-bg-soft">
+        <div
+          class="flex items-center justify-between border-b border-line px-4 py-2.5"
         >
-      </div>
-      {#if wsError}
-        <div class="px-4 py-3">
-          <StateError message={"Workspaces failed to load: " + wsError} onretry={retry} retrying={retrying} />
+          <h2 class="text-subtitle text-fg">Workspaces</h2>
+          <a
+            href="/hosted/dashboard"
+            class="text-micro text-fg-subtle transition-colors hover:text-fg"
+            >View all →</a
+          >
         </div>
-      {:else if workspaces.length === 0}
-        <StateEmpty
-          title="No workspaces yet"
-          helper="Create your first workspace in this organization."
-          actionLabel="Create workspace"
-          actionHref="/hosted/workspaces/new"
-          class="border-0 bg-transparent"
-        />
-      {:else}
-        <ul class="divide-y divide-line">
-          {#each workspaces as ws (ws.id)}
-            <li class="flex items-center justify-between gap-3 px-4 py-2.5">
-              <div class="flex min-w-0 items-center gap-2.5">
-                <Avatar
-                  label={ws.display_name || ws.slug}
-                  seed={ws.id || ws.slug}
-                  size="sm"
-                />
-                <div class="min-w-0">
-                  <div class="truncate text-subtitle text-fg">
-                    {ws.display_name || ws.slug}
-                  </div>
-                  <div class="truncate font-mono text-mono text-fg-subtle">
-                    {ws.slug}
+        {#if wsError}
+          <div class="px-4 py-3">
+            <StateError
+              message={"Workspaces failed to load: " + wsError}
+              onretry={retry}
+              {retrying}
+            />
+          </div>
+        {:else if workspaces.length === 0}
+          <StateEmpty
+            title="No workspaces yet"
+            helper="Create your first workspace in this organization."
+            actionLabel="Create workspace"
+            actionHref="/hosted/workspaces/new"
+            class="border-0 bg-transparent"
+          />
+        {:else}
+          <ul class="divide-y divide-line">
+            {#each workspaces as ws (ws.id)}
+              <li class="flex items-center justify-between gap-3 px-4 py-2.5">
+                <div class="flex min-w-0 items-center gap-2.5">
+                  <Avatar
+                    label={ws.display_name || ws.slug}
+                    seed={ws.id || ws.slug}
+                    size="sm"
+                  />
+                  <div class="min-w-0">
+                    <div class="truncate text-subtitle text-fg">
+                      {ws.display_name || ws.slug}
+                    </div>
+                    <div class="truncate font-mono text-mono text-fg-subtle">
+                      {ws.slug}
+                    </div>
                   </div>
                 </div>
-              </div>
-              <span
-                class="shrink-0 rounded px-1.5 py-0.5 text-micro {ws.status ===
-                'ready'
-                  ? 'text-ok-text bg-ok-soft'
-                  : ws.status === 'provisioning'
-                    ? 'text-warn-text bg-warn-soft'
-                    : 'text-fg-subtle bg-panel-hover'}"
-              >
-                {ws.status || "unknown"}
-              </span>
-            </li>
-          {/each}
-        </ul>
-      {/if}
-    </section>
+                <span
+                  class="shrink-0 rounded px-1.5 py-0.5 text-micro {ws.status ===
+                  'ready'
+                    ? 'text-ok-text bg-ok-soft'
+                    : ws.status === 'provisioning'
+                      ? 'text-warn-text bg-warn-soft'
+                      : 'text-fg-subtle bg-panel-hover'}"
+                >
+                  {ws.status || "unknown"}
+                </span>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      </section>
     {/if}
   {/if}
 </div>

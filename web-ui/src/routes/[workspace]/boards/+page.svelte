@@ -409,7 +409,7 @@
   <StateError
     message={error}
     onretry={() => void loadBoards(true)}
-    retrying={retrying}
+    {retrying}
     class="mb-4"
   />
 {/if}
@@ -419,9 +419,7 @@
     class="mb-5 rounded-md border border-[var(--line)] bg-[var(--panel)]"
   >
     <div class="border-b border-[var(--line)] px-4 py-2.5">
-      <h2 class="text-meta font-medium text-[var(--fg)]">
-        Create board
-      </h2>
+      <h2 class="text-meta font-medium text-[var(--fg)]">Create board</h2>
     </div>
 
     <div class="space-y-3 px-4 py-3">
@@ -503,9 +501,7 @@
       </div>
 
       <div>
-        <p class="text-micro font-medium text-[var(--fg-muted)]">
-          Pinned refs
-        </p>
+        <p class="text-micro font-medium text-[var(--fg-muted)]">Pinned refs</p>
         <GuidedTypedRefsInput
           bind:value={createPinnedRefs}
           addInputLabel="Add board pinned ref"

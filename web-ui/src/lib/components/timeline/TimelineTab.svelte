@@ -233,8 +233,7 @@
 
           {#if !event.isKnownType}
             <details class="mt-1.5">
-              <summary
-                class="cursor-pointer text-micro text-[var(--fg-muted)]"
+              <summary class="cursor-pointer text-micro text-[var(--fg-muted)]"
                 >Details</summary
               >
               <pre

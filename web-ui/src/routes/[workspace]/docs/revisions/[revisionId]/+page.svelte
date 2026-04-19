@@ -90,9 +90,7 @@
   class="mx-auto max-w-2xl rounded-md border border-[var(--line)] bg-[var(--panel)] p-4"
 >
   {#if loading}
-    <p class="text-meta text-[var(--fg-muted)]">
-      Resolving document revision…
-    </p>
+    <p class="text-meta text-[var(--fg-muted)]">Resolving document revision…</p>
   {:else if error}
     <div class="space-y-3">
       <p class="text-meta text-danger-text">{error}</p>

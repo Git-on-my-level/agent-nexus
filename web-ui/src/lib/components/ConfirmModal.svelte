@@ -17,6 +17,12 @@
   let confirmBtnEl = $state(null);
   let typedInputEl = $state(null);
   let typedValue = $state("");
+  let confirmVariant = $derived(
+    variant === "warning" ? "secondary" : "destructive",
+  );
+  let confirmClass = $derived(
+    variant === "warning" ? "border-warn bg-warn text-white hover:bg-warn" : "",
+  );
 
   let needsTyped = $derived(typedConfirmation.length > 0);
   let typedMatch = $derived(
@@ -98,11 +104,12 @@
           {cancelLabel}
         </Button>
         <Button
-          variant="destructive"
+          variant={confirmVariant}
           size="compact"
+          class={confirmClass}
           bind:this={confirmBtnEl}
           disabled={confirmDisabled}
-          busy={busy}
+          {busy}
           onclick={onconfirm}
         >
           {busy ? "Working…" : confirmLabel}
@@ -194,49 +201,5 @@
     justify-content: flex-end;
     gap: 8px;
     margin-top: 20px;
-  }
-
-  .confirm-btn {
-    padding: 6px 14px;
-    font-size: 12px;
-    font-weight: 500;
-    font-family: var(--font-sans);
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    border: none;
-    transition: background 80ms ease;
-  }
-
-  .confirm-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .confirm-btn--cancel {
-    background: var(--bg-soft);
-    color: var(--fg-muted);
-    border: 1px solid var(--line);
-  }
-
-  .confirm-btn--cancel:hover:not(:disabled) {
-    background: var(--line);
-  }
-
-  .confirm-btn--danger {
-    background: #dc2626;
-    color: #fff;
-  }
-
-  .confirm-btn--danger:hover:not(:disabled) {
-    background: #ef4444;
-  }
-
-  .confirm-btn--warning {
-    background: #d97706;
-    color: #fff;
-  }
-
-  .confirm-btn--warning:hover:not(:disabled) {
-    background: #f59e0b;
   }
 </style>

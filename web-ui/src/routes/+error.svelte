@@ -21,9 +21,7 @@
         />
       </svg>
     </div>
-    <h1 class="text-lg font-semibold text-[var(--fg)]">
-      Something went wrong
-    </h1>
+    <h1 class="text-lg font-semibold text-[var(--fg)]">Something went wrong</h1>
     <p class="mt-2 text-[13px] text-[var(--fg-muted)]">
       {$page.error?.message ?? "An unexpected error occurred."}
     </p>

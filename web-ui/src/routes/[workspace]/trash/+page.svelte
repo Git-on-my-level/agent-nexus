@@ -433,8 +433,7 @@
     >
       {tab.label}
       {#if tab.count > 0}
-        <span class="ml-1 text-micro text-[var(--fg-muted)]"
-          >({tab.count})</span
+        <span class="ml-1 text-micro text-[var(--fg-muted)]">({tab.count})</span
         >
       {/if}
     </button>
@@ -442,7 +441,9 @@
 </div>
 
 {#if error}
-  <div class="mb-4 rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
+  <div
+    class="mb-4 rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
+  >
     {error}
   </div>
 {/if}
@@ -481,9 +482,7 @@
     class="space-y-px rounded-md border border-[var(--line)] bg-[var(--bg-soft)] overflow-hidden"
   >
     {#each artifacts as artifact, i}
-      <div
-        class="px-4 py-3 {i > 0 ? 'border-t border-[var(--line)]' : ''}"
-      >
+      <div class="px-4 py-3 {i > 0 ? 'border-t border-[var(--line)]' : ''}">
         <div
           class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between"
         >
@@ -562,9 +561,7 @@
     class="space-y-px rounded-md border border-[var(--line)] bg-[var(--bg-soft)] overflow-hidden"
   >
     {#each documents as doc, i}
-      <div
-        class="px-4 py-3 {i > 0 ? 'border-t border-[var(--line)]' : ''}"
-      >
+      <div class="px-4 py-3 {i > 0 ? 'border-t border-[var(--line)]' : ''}">
         <div
           class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between"
         >
@@ -637,9 +634,7 @@
     class="space-y-px rounded-md border border-[var(--line)] bg-[var(--bg-soft)] overflow-hidden"
   >
     {#each threads as thread, i}
-      <div
-        class="px-4 py-3 {i > 0 ? 'border-t border-[var(--line)]' : ''}"
-      >
+      <div class="px-4 py-3 {i > 0 ? 'border-t border-[var(--line)]' : ''}">
         <div
           class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between"
         >
@@ -713,9 +708,7 @@
     class="space-y-px rounded-md border border-[var(--line)] bg-[var(--bg-soft)] overflow-hidden"
   >
     {#each boards as board, i}
-      <div
-        class="px-4 py-3 {i > 0 ? 'border-t border-[var(--line)]' : ''}"
-      >
+      <div class="px-4 py-3 {i > 0 ? 'border-t border-[var(--line)]' : ''}">
         <div
           class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between"
         >
@@ -787,9 +780,7 @@
     class="space-y-px rounded-md border border-[var(--line)] bg-[var(--bg-soft)] overflow-hidden"
   >
     {#each cards as card, i}
-      <div
-        class="px-4 py-3 {i > 0 ? 'border-t border-[var(--line)]' : ''}"
-      >
+      <div class="px-4 py-3 {i > 0 ? 'border-t border-[var(--line)]' : ''}">
         <div
           class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between"
         >
@@ -876,25 +867,25 @@
               class="flex shrink-0 flex-col items-stretch gap-2 lg:items-end"
             >
               <div class="flex flex-wrap justify-end gap-1.5">
-                 <Button
-                   variant="secondary"
-                   size="compact"
-                   disabled={busyItemId === itemBusyKey("cards", card.id)}
-                   onclick={() => restoreEntity("cards", card.id)}
-                 >
-                   Restore
-                 </Button>
+                <Button
+                  variant="secondary"
+                  size="compact"
+                  disabled={busyItemId === itemBusyKey("cards", card.id)}
+                  onclick={() => restoreEntity("cards", card.id)}
+                >
+                  Restore
+                </Button>
                 {#if isHumanPrincipal}
-                   <Button
-                     variant="destructive"
-                     size="compact"
-                     disabled={Boolean(busyItemId)}
-                     onclick={() => {
-                       purgeModal = { open: true, type: "cards", id: card.id };
-                     }}
-                   >
-                     Permanently delete
-                   </Button>
+                  <Button
+                    variant="destructive"
+                    size="compact"
+                    disabled={Boolean(busyItemId)}
+                    onclick={() => {
+                      purgeModal = { open: true, type: "cards", id: card.id };
+                    }}
+                  >
+                    Permanently delete
+                  </Button>
                 {/if}
               </div>
             </div>

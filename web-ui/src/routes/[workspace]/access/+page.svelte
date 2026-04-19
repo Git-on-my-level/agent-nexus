@@ -588,9 +588,7 @@
     {/if}
 
     {#if createdToken && !tokenDismissed}
-      <div
-        class="rounded-md border border-ok/30 bg-ok-soft px-4 py-3"
-      >
+      <div class="rounded-md border border-ok/30 bg-ok-soft px-4 py-3">
         <div class="flex items-start gap-3">
           <div class="flex-1">
             <p class="text-meta font-medium text-ok-text">
@@ -604,17 +602,29 @@
             >
               <span class="flex-1 break-all">{createdToken}</span>
               {#if createdInviteKind === "agent" || createdInviteKind === "any"}
-                <Button variant="ghost" size="compact" onclick={copyTokenToClipboard}>
+                <Button
+                  variant="ghost"
+                  size="compact"
+                  onclick={copyTokenToClipboard}
+                >
                   {tokenCopied ? "Copied" : "Copy token"}
                 </Button>
               {:else}
-                <Button variant="ghost" size="compact" onclick={copyTokenToClipboard}>
+                <Button
+                  variant="ghost"
+                  size="compact"
+                  onclick={copyTokenToClipboard}
+                >
                   {tokenCopied ? "Copied" : "Copy"}
                 </Button>
               {/if}
             </div>
             {#if createdInviteKind === "agent" || createdInviteKind === "any"}
-              <Button variant="ghost" size="compact" onclick={copyRegistrationMessage}>
+              <Button
+                variant="ghost"
+                size="compact"
+                onclick={copyRegistrationMessage}
+              >
                 {messageCopied ? "Copied" : "Copy registration message"}
               </Button>
               <p class="mt-1.5 text-micro text-[var(--fg-muted)]">
@@ -733,7 +743,12 @@
                 />
               </div>
             {/if}
-            <Button variant="primary" size="compact" disabled={creatingInvite} type="submit">
+            <Button
+              variant="primary"
+              size="compact"
+              disabled={creatingInvite}
+              type="submit"
+            >
               {creatingInvite ? "Creating..." : "Create invite"}
             </Button>
           </div>
@@ -764,7 +779,9 @@
         {/if}
       </div>
       {#if invitesState.status === SECTION_ERROR}
-        <p class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
+        <p
+          class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
+        >
           {invitesState.error}
         </p>
       {:else if invitesState.status === SECTION_READY}
@@ -818,7 +835,14 @@
                   {formatTimestamp(invite.created_at)}
                 </span>
                 {#if !invite.revoked_at && !invite.consumed_at}
-                  <Button variant="destructive" size="compact" disabled={revokingInviteId === invite.id} onclick={() => { revokeInviteConfirm = { open: true, id: invite.id }; }}>
+                  <Button
+                    variant="destructive"
+                    size="compact"
+                    disabled={revokingInviteId === invite.id}
+                    onclick={() => {
+                      revokeInviteConfirm = { open: true, id: invite.id };
+                    }}
+                  >
                     {revokingInviteId === invite.id ? "Revoking..." : "Revoke"}
                   </Button>
                 {/if}
@@ -855,7 +879,9 @@
         agents stay taggable and will receive wakes when they come back.
       </p>
       {#if principalsState.status === SECTION_ERROR}
-        <p class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
+        <p
+          class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
+        >
           {principalsState.error}
         </p>
       {:else if principalsState.status === SECTION_READY}
@@ -1004,7 +1030,13 @@
                   </div>
                   {#if !principal.revoked && !isCurrent}
                     {@const lastHuman = isLastActiveHumanPrincipal(principal)}
-                    <Button variant="destructive" size="compact" disabled={principalRevokeConfirming || principalRevokeForcing} onclick={() => startPrincipalRevoke(principal)}>
+                    <Button
+                      variant="destructive"
+                      size="compact"
+                      disabled={principalRevokeConfirming ||
+                        principalRevokeForcing}
+                      onclick={() => startPrincipalRevoke(principal)}
+                    >
                       {lastHuman ? "Break glass" : "Revoke"}
                     </Button>
                   {:else if !principal.revoked}
@@ -1020,9 +1052,14 @@
           </div>
           {#if principalsHasMore}
             <div class="mt-2 flex justify-center">
-                <Button variant="secondary" size="compact" disabled={loadingMorePrincipals} onclick={loadMorePrincipals}>
-                  {loadingMorePrincipals ? "Loading..." : "Load more"}
-                </Button>
+              <Button
+                variant="secondary"
+                size="compact"
+                disabled={loadingMorePrincipals}
+                onclick={loadMorePrincipals}
+              >
+                {loadingMorePrincipals ? "Loading..." : "Load more"}
+              </Button>
             </div>
           {/if}
         {/if}
@@ -1103,17 +1140,34 @@
             {/if}
             <div class="mt-3 flex items-center gap-2">
               {#if principalRevokeRequiresHumanLockout}
-                <Button variant="destructive" size="compact" class="bg-danger text-white hover:bg-danger" disabled={principalRevokeForcing || !principalRevokeBreakGlassReady()} onclick={forcePrincipalRevoke}>
+                <Button
+                  variant="destructive"
+                  size="compact"
+                  class="bg-danger text-white hover:bg-danger"
+                  disabled={principalRevokeForcing ||
+                    !principalRevokeBreakGlassReady()}
+                  onclick={forcePrincipalRevoke}
+                >
                   {principalRevokeForcing
                     ? "Revoking..."
                     : "Allow human lockout and revoke"}
                 </Button>
               {:else}
-                <Button variant="destructive" size="compact" class="bg-danger text-white hover:bg-danger" disabled={principalRevokeConfirming} onclick={confirmPrincipalRevoke}>
+                <Button
+                  variant="destructive"
+                  size="compact"
+                  class="bg-danger text-white hover:bg-danger"
+                  disabled={principalRevokeConfirming}
+                  onclick={confirmPrincipalRevoke}
+                >
                   {principalRevokeConfirming ? "Revoking..." : "Confirm revoke"}
                 </Button>
               {/if}
-              <Button variant="secondary" size="compact" onclick={cancelPrincipalRevoke}>
+              <Button
+                variant="secondary"
+                size="compact"
+                onclick={cancelPrincipalRevoke}
+              >
                 Cancel
               </Button>
             </div>
@@ -1147,7 +1201,9 @@
         Recent auth events
       </h2>
       {#if auditState.status === SECTION_ERROR}
-        <p class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
+        <p
+          class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
+        >
           {auditState.error}
         </p>
       {:else if auditState.status === SECTION_READY}
@@ -1168,9 +1224,7 @@
                   : ''}"
               >
                 <div class="min-w-0 flex-1">
-                  <p
-                    class="truncate text-meta font-medium text-[var(--fg)]"
-                  >
+                  <p class="truncate text-meta font-medium text-[var(--fg)]">
                     {auditEventDescription(event)}
                   </p>
                   <p class="text-micro text-[var(--fg-muted)]">
@@ -1185,9 +1239,14 @@
           </div>
           {#if auditHasMore}
             <div class="mt-2 flex justify-center">
-                <Button variant="secondary" size="compact" disabled={loadingMoreAudit} onclick={loadMoreAudit}>
-                  {loadingMoreAudit ? "Loading..." : "Load more"}
-                </Button>
+              <Button
+                variant="secondary"
+                size="compact"
+                disabled={loadingMoreAudit}
+                onclick={loadMoreAudit}
+              >
+                {loadingMoreAudit ? "Loading..." : "Load more"}
+              </Button>
             </div>
           {/if}
         {/if}

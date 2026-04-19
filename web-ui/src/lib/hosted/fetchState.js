@@ -13,7 +13,11 @@ export async function classifiedCpFetch(path, init) {
   try {
     res = await hostedCpFetch(path, init);
   } catch {
-    throw new FetchError("network", 0, "You're offline or the server is unreachable.");
+    throw new FetchError(
+      "network",
+      0,
+      "You're offline or the server is unreachable.",
+    );
   }
   if (!res.ok) {
     let detail;
@@ -23,7 +27,8 @@ export async function classifiedCpFetch(path, init) {
     } catch {
       detail = res.statusText;
     }
-    const kind = res.status >= 500 ? "server" : res.status === 401 ? "auth" : "client";
+    const kind =
+      res.status >= 500 ? "server" : res.status === 401 ? "auth" : "client";
     throw new FetchError(kind, res.status, detail);
   }
   return res;

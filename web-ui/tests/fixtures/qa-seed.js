@@ -122,7 +122,8 @@ export const QA_HOSTED_BILLING_SUMMARY = {
       workspace_name: workspace.display_name,
       artifact_count: [164, 102, 118][index] ?? 0,
       storage_gb: [3.2, 1.5, 2.7][index] ?? 0,
-      last_active_at: [hoursAgo(2), hoursAgo(8), hoursAgo(1)][index] ?? hoursAgo(1),
+      last_active_at:
+        [hoursAgo(2), hoursAgo(8), hoursAgo(1)][index] ?? hoursAgo(1),
     })),
   },
   configuration: {
@@ -395,7 +396,10 @@ export const QA_INBOX_POPULATED = [
     subject_ref: "thread:thread-launch-war-room",
     subject_title: "Launch war room",
     thread_id: "thread-launch-war-room",
-    related_refs: ["thread:thread-launch-war-room", "document:doc-launch-checklist"],
+    related_refs: [
+      "thread:thread-launch-war-room",
+      "document:doc-launch-checklist",
+    ],
     asking_agent_id: "agent-release-orchestrator",
     source_event_time: hoursAgo(10),
   },
@@ -407,7 +411,10 @@ export const QA_INBOX_POPULATED = [
     subject_ref: "document:doc-billing-runbook",
     subject_title: "Billing runbook",
     thread_id: "thread-billing-rollout",
-    related_refs: ["thread:thread-billing-rollout", "document:doc-billing-runbook"],
+    related_refs: [
+      "thread:thread-billing-rollout",
+      "document:doc-billing-runbook",
+    ],
     source_event_time: hoursAgo(3),
   },
   {
@@ -429,7 +436,10 @@ export const QA_INBOX_POPULATED = [
     subject_ref: "topic:topic-billing-rollout",
     subject_title: "Billing rollout dry run",
     thread_id: "thread-billing-rollout",
-    related_refs: ["topic:topic-billing-rollout", "document:doc-billing-runbook"],
+    related_refs: [
+      "topic:topic-billing-rollout",
+      "document:doc-billing-runbook",
+    ],
     asking_agent_id: "agent-billing-watch",
     source_event_time: hoursAgo(1),
   },
@@ -443,7 +453,10 @@ export const QA_ASK_ITEM = {
   query_text:
     "Can we hold the mobile auth callback rollback until the next monitoring sweep, or should I ship the rollback immediately?",
   subject_ref: "thread:thread-launch-war-room",
-  related_refs: ["thread:thread-launch-war-room", "document:doc-launch-checklist"],
+  related_refs: [
+    "thread:thread-launch-war-room",
+    "document:doc-launch-checklist",
+  ],
   thread_id: "thread-launch-war-room",
   asking_agent_id: "agent-release-orchestrator",
   coverage_hint: "partial",

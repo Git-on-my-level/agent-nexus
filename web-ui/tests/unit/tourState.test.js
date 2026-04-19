@@ -22,7 +22,6 @@ function mockLocalStorage() {
 
 describe("tourState", () => {
   let tourState;
-  let ls;
 
   afterEach(() => {
     vi.resetModules();
@@ -30,7 +29,6 @@ describe("tourState", () => {
   });
 
   async function importWithLocalStorage(localStorageMock) {
-    ls = localStorageMock;
     vi.stubGlobal("localStorage", localStorageMock);
     tourState = await import("../../src/lib/tourState.js");
     return tourState;
@@ -38,27 +36,24 @@ describe("tourState", () => {
 
   it("shouldShowTour returns true for fresh workspace with zero items", async () => {
     const { shouldShowTour } = await importWithLocalStorage(mockLocalStorage());
-    expect(
-      shouldShowTour({ workspaceSlug: "acme", totalItems: 0 }),
-    ).toBe(true);
+    expect(shouldShowTour({ workspaceSlug: "acme", totalItems: 0 })).toBe(true);
   });
 
   it("shouldShowTour returns false when workspace has items", async () => {
     const { shouldShowTour } = await importWithLocalStorage(mockLocalStorage());
-    expect(
-      shouldShowTour({ workspaceSlug: "acme", totalItems: 5 }),
-    ).toBe(false);
+    expect(shouldShowTour({ workspaceSlug: "acme", totalItems: 5 })).toBe(
+      false,
+    );
   });
 
   it("shouldShowTour returns false after manual dismiss", async () => {
     const lsMock = mockLocalStorage();
-    const { shouldShowTour, dismissTour } = await importWithLocalStorage(
-      lsMock,
-    );
+    const { shouldShowTour, dismissTour } =
+      await importWithLocalStorage(lsMock);
     dismissTour("acme");
-    expect(
-      shouldShowTour({ workspaceSlug: "acme", totalItems: 0 }),
-    ).toBe(false);
+    expect(shouldShowTour({ workspaceSlug: "acme", totalItems: 0 })).toBe(
+      false,
+    );
   });
 
   it("shouldShowTour returns false after firstSeen exceeds 7 days", async () => {
@@ -68,9 +63,9 @@ describe("tourState", () => {
     const oldTimestamp = Date.now() - SEVEN_DAYS_MS - 1000;
     lsMock._store[`anx.tour.inbox.v1.acme.firstSeen`] = String(oldTimestamp);
 
-    expect(
-      shouldShowTour({ workspaceSlug: "acme", totalItems: 0 }),
-    ).toBe(false);
+    expect(shouldShowTour({ workspaceSlug: "acme", totalItems: 0 })).toBe(
+      false,
+    );
   });
 
   it("shouldShowTour returns false when workspaceSlug is empty", async () => {
@@ -80,9 +75,8 @@ describe("tourState", () => {
 
   it("dismissTour sets localStorage key to dismissed", async () => {
     const lsMock = mockLocalStorage();
-    const { dismissTour, isTourDismissed } = await importWithLocalStorage(
-      lsMock,
-    );
+    const { dismissTour, isTourDismissed } =
+      await importWithLocalStorage(lsMock);
     dismissTour("acme");
     expect(isTourDismissed("acme")).toBe(true);
     expect(lsMock._store["anx.tour.inbox.v1.acme"]).toBe("dismissed");
@@ -98,9 +92,7 @@ describe("tourState", () => {
 
     const before = Number(stamped);
     shouldShowTour({ workspaceSlug: "acme", totalItems: 0 });
-    const after = Number(
-      lsMock._store["anx.tour.inbox.v1.acme.firstSeen"],
-    );
+    const after = Number(lsMock._store["anx.tour.inbox.v1.acme.firstSeen"]);
     expect(after).toBe(before);
   });
 });
