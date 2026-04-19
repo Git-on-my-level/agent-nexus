@@ -189,6 +189,16 @@ jobs:
       - name: Run visual QA diff
         run: pnpm -C web-ui run qa:diff
 
+      - name: Upload visual QA artifacts
+        if: failure()
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: web-ui-visual-artifacts
+          path: |
+            web-ui/.qa-current/**
+            web-ui/.qa-diff/**
+          if-no-files-found: ignore
+
   cross-platform-build:
     runs-on: ubuntu-latest
     timeout-minutes: 10
