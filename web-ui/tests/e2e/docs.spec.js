@@ -110,8 +110,8 @@ test("create document flow — POST /docs and navigate to new document", async (
     });
   });
 
-  await page.goto("/docs");
-  await expect(page).toHaveURL(/\/local\/docs$/);
+  await page.goto("/o/local/w/local/docs");
+  await expect(page).toHaveURL(/\/o\/local\/w\/local\/docs$/);
   // Wait for network idle so the page is fully hydrated and client-side
   // effects have completed before interacting with buttons.
   await page.waitForLoadState("networkidle");
@@ -147,7 +147,7 @@ test("create document flow — POST /docs and navigate to new document", async (
       thread_id: "thread-docs",
     },
   });
-  await expect(page).toHaveURL(/\/local\/docs\/new-test-doc$/);
+  await expect(page).toHaveURL(/\/o\/local\/w\/local\/docs\/new-test-doc$/);
   await expect(
     page.locator("section").getByRole("heading", { name: "New Test Document" }),
   ).toBeVisible();
@@ -294,8 +294,8 @@ test("update document flow — PATCH /docs/:id creates a new revision", async ({
     await route.continue();
   });
 
-  await page.goto("/docs/updatable-doc");
-  await expect(page).toHaveURL(/\/local\/docs\/updatable-doc$/);
+  await page.goto("/o/local/w/local/docs/updatable-doc");
+  await expect(page).toHaveURL(/\/o\/local\/w\/local\/docs\/updatable-doc$/);
   await expect(
     page
       .locator("section")
@@ -400,7 +400,7 @@ test("structured/binary content type — New revision button is hidden, CLI hint
     await route.continue();
   });
 
-  await page.goto("/docs/structured-doc");
+  await page.goto("/o/local/w/local/docs/structured-doc");
   await expect(
     page
       .locator("section")
@@ -500,7 +500,7 @@ test("update document conflict — 409 response shows error", async ({
     await route.continue();
   });
 
-  await page.goto("/docs/conflict-doc");
+  await page.goto("/o/local/w/local/docs/conflict-doc");
   await expect(
     page.locator("section").getByRole("heading", { name: "Conflict Document" }),
   ).toBeVisible();
@@ -712,8 +712,8 @@ test("documents list redirects through the default workspace and loads revision 
     },
   );
 
-  await page.goto("/docs");
-  await expect(page).toHaveURL(/\/local\/docs$/);
+  await page.goto("/o/local/w/local/docs");
+  await expect(page).toHaveURL(/\/o\/local\/w\/local\/docs$/);
   await expect(
     page.getByRole("heading", { name: "Docs", exact: true }),
   ).toBeVisible();
@@ -745,7 +745,7 @@ test("documents list redirects through the default workspace and loads revision 
     .locator('nav[aria-label="Breadcrumb"]')
     .getByRole("link", { name: "Docs", exact: true })
     .click();
-  await expect(page).toHaveURL(/\/local\/docs$/);
+  await expect(page).toHaveURL(/\/o\/local\/w\/local\/docs$/);
   await page.getByRole("link", { name: /Incident Response Playbook/ }).click();
   await expect(
     page.getByRole("heading", {

@@ -13,13 +13,17 @@ import {
   getWorkspaceResolutionCacheSize,
   resolveWorkspaceCatalog,
   resolveProxyWorkspaceTarget,
-  resolveWorkspaceBySlug,
+  resolveWorkspaceInRoute,
 } from "../../src/lib/server/workspaceResolver.js";
 
 function createEvent() {
   return {
     params: {},
-    request: new Request("https://oar.example.test/api/threads"),
+    request: new Request("https://oar.example.test/api/threads", {
+      headers: {
+        "x-anx-organization-slug": "local",
+      },
+    }),
   };
 }
 
@@ -38,9 +42,10 @@ describe("workspaceResolver", () => {
 
   it("resolves static ANX_WORKSPACES entries", async () => {
     mockState.env.ANX_WORKSPACES =
-      '[{"slug":"ops","label":"Ops","coreBaseUrl":"http://127.0.0.1:8001"}]';
+      '[{"organizationSlug":"local","slug":"ops","label":"Ops","coreBaseUrl":"http://127.0.0.1:8001"}]';
 
-    const resolved = await resolveWorkspaceBySlug({
+    const resolved = await resolveWorkspaceInRoute({
+      organizationSlug: "local",
       workspaceSlug: "ops",
     });
 
@@ -54,18 +59,22 @@ describe("workspaceResolver", () => {
 
   it("returns configured catalog with static default workspace", async () => {
     mockState.env.ANX_WORKSPACES =
-      '[{"slug":"ops","label":"Ops","coreBaseUrl":"http://127.0.0.1:8001"}]';
+      '[{"organizationSlug":"local","slug":"ops","label":"Ops","coreBaseUrl":"http://127.0.0.1:8001"}]';
 
     const catalog = await resolveWorkspaceCatalog(createEvent());
-    expect(catalog.defaultWorkspace).toMatchObject({ slug: "ops" });
-    expect(catalog.workspaceBySlug.has("ops")).toBe(true);
+    expect(catalog.defaultWorkspace).toMatchObject({
+      slug: "ops",
+      organizationSlug: "local",
+    });
+    expect(catalog.workspaceByComposite.has("local:ops")).toBe(true);
   });
 
   it("returns workspace_not_configured for unknown workspace slug", async () => {
     mockState.env.ANX_WORKSPACES =
-      '[{"slug":"ops","label":"Ops","coreBaseUrl":"http://127.0.0.1:8001"}]';
+      '[{"organizationSlug":"local","slug":"ops","label":"Ops","coreBaseUrl":"http://127.0.0.1:8001"}]';
 
-    const resolved = await resolveWorkspaceBySlug({
+    const resolved = await resolveWorkspaceInRoute({
+      organizationSlug: "local",
       workspaceSlug: "missing",
     });
 
@@ -76,30 +85,67 @@ describe("workspaceResolver", () => {
     });
   });
 
+  it("returns workspace_route_incomplete when org or workspace is empty", async () => {
+    mockState.env.ANX_WORKSPACES =
+      '[{"organizationSlug":"local","slug":"ops","label":"Ops","coreBaseUrl":"http://127.0.0.1:8001"}]';
+
+    const missingOrg = await resolveWorkspaceInRoute({
+      organizationSlug: "",
+      workspaceSlug: "ops",
+    });
+    expect(missingOrg.error?.payload?.error?.code).toBe(
+      "workspace_route_incomplete",
+    );
+
+    const missingWs = await resolveWorkspaceInRoute({
+      organizationSlug: "local",
+      workspaceSlug: "",
+    });
+    expect(missingWs.error?.payload?.error?.code).toBe(
+      "workspace_route_incomplete",
+    );
+  });
+
   it("resolves workspace from control plane when SaaS packed-host dev is enabled", async () => {
     mockState.env.ANX_SAAS_PACKED_HOST_DEV = "1";
     mockState.env.ANX_CONTROL_BASE_URL = "http://127.0.0.1:8100";
     mockState.env.ANX_CONTROL_PLANE_DEV_ACCESS_TOKEN = "tok_dev";
 
-    const fetchMock = vi.fn(async () => ({
-      ok: true,
-      async json() {
+    const fetchMock = vi.fn(async (url) => {
+      const u = String(url);
+      if (u.includes("/organizations")) {
         return {
-          workspaces: [
-            {
-              id: "ws_test",
-              organization_id: "org_test",
-              slug: "alpha",
-              display_name: "Alpha",
-              core_origin: "http://127.0.0.1:18001",
-              public_origin: "",
-            },
-          ],
+          ok: true,
+          async json() {
+            return {
+              organizations: [{ id: "org_test", slug: "local" }],
+              next_cursor: "",
+            };
+          },
         };
-      },
-    }));
+      }
+      return {
+        ok: true,
+        async json() {
+          return {
+            workspaces: [
+              {
+                id: "ws_test",
+                organization_id: "org_test",
+                organization_slug: "local",
+                slug: "alpha",
+                display_name: "Alpha",
+                core_origin: "http://127.0.0.1:18001",
+                public_origin: "",
+              },
+            ],
+          };
+        },
+      };
+    });
 
-    const resolved = await resolveWorkspaceBySlug({
+    const resolved = await resolveWorkspaceInRoute({
+      organizationSlug: "local",
       workspaceSlug: "alpha",
       event: {
         fetch: fetchMock,
@@ -114,6 +160,7 @@ describe("workspaceResolver", () => {
       coreBaseUrl: "http://127.0.0.1:18001",
       id: "ws_test",
       organizationId: "org_test",
+      organizationSlug: "local",
     });
   });
 
@@ -124,6 +171,17 @@ describe("workspaceResolver", () => {
 
     const fetchMock = vi.fn(async (url) => {
       const u = String(url);
+      if (u.includes("/organizations")) {
+        return {
+          ok: true,
+          async json() {
+            return {
+              organizations: [{ id: "org_test", slug: "acme" }],
+              next_cursor: "",
+            };
+          },
+        };
+      }
       if (u.includes("organization_id=org_test")) {
         return {
           ok: true,
@@ -133,6 +191,7 @@ describe("workspaceResolver", () => {
                 {
                   id: "ws_a",
                   organization_id: "org_test",
+                  organization_slug: "acme",
                   slug: "alpha",
                   display_name: "Alpha",
                   core_origin: "http://127.0.0.1:18001",
@@ -141,6 +200,7 @@ describe("workspaceResolver", () => {
                 {
                   id: "ws_b",
                   organization_id: "org_test",
+                  organization_slug: "acme",
                   slug: "beta",
                   display_name: "Beta",
                   core_origin: "http://127.0.0.1:18002",
@@ -159,6 +219,7 @@ describe("workspaceResolver", () => {
               {
                 id: "ws_a",
                 organization_id: "org_test",
+                organization_slug: "acme",
                 slug: "alpha",
                 display_name: "Alpha",
                 core_origin: "http://127.0.0.1:18001",
@@ -171,19 +232,19 @@ describe("workspaceResolver", () => {
     });
 
     const catalog = await resolveWorkspaceCatalog({
-      params: { workspace: "alpha" },
+      params: { organization: "acme", workspace: "alpha" },
       fetch: fetchMock,
       cookies: { get: () => undefined },
     });
 
     expect(catalog.workspaces).toHaveLength(2);
-    expect(catalog.workspaceBySlug.has("beta")).toBe(true);
+    expect(catalog.workspaceByComposite.has("acme:beta")).toBe(true);
     expect(catalog.defaultWorkspace.slug).toBe("alpha");
   });
 
   it("resolves proxy target from static workspace catalog", async () => {
     mockState.env.ANX_WORKSPACES =
-      '[{"slug":"ops","label":"Ops","coreBaseUrl":"http://127.0.0.1:8001"}]';
+      '[{"organizationSlug":"local","slug":"ops","label":"Ops","coreBaseUrl":"http://127.0.0.1:8001"}]';
 
     const resolved = await resolveProxyWorkspaceTarget({
       event: createEvent(),

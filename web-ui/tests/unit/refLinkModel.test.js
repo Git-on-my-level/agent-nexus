@@ -6,29 +6,29 @@ describe("RefLink model", () => {
   it("resolves known typed refs into deterministic targets", () => {
     expect(resolveRefLink("artifact:artifact-1")).toMatchObject({
       kind: "artifact",
-      href: "/artifacts/artifact-1",
-      isLink: true,
+      href: "",
+      isLink: false,
       isExternal: false,
     });
 
     expect(resolveRefLink("thread:thread-1")).toMatchObject({
       kind: "thread",
-      href: "/threads/thread-1",
-      isLink: true,
+      href: "",
+      isLink: false,
     });
 
     expect(resolveRefLink("topic:topic-1")).toMatchObject({
       kind: "topic",
-      href: "/topics/topic-1",
-      isLink: true,
+      href: "",
+      isLink: false,
     });
 
     expect(
       resolveRefLink("event:evt-9", { threadId: "thread-1" }),
     ).toMatchObject({
       kind: "event",
-      href: "/threads/thread-1#event-evt-9",
-      isLink: true,
+      href: "",
+      isLink: false,
     });
 
     expect(resolveRefLink("url:https://example.com/a")).toMatchObject({
@@ -40,22 +40,22 @@ describe("RefLink model", () => {
 
     expect(resolveRefLink("inbox:item-2")).toMatchObject({
       kind: "inbox",
-      href: "/inbox#inbox-item-2",
-      isLink: true,
+      href: "",
+      isLink: false,
     });
 
     expect(resolveRefLink("document:doc-1")).toMatchObject({
       kind: "document",
-      href: "/docs/doc-1",
-      isLink: true,
+      href: "",
+      isLink: false,
       isExternal: false,
       primaryLabel: "Document doc-1",
     });
 
     expect(resolveRefLink("document_revision:rev-1")).toMatchObject({
       kind: "document_revision",
-      href: "/docs/revisions/rev-1",
-      isLink: true,
+      href: "",
+      isLink: false,
       isExternal: false,
       primaryLabel: "Document revision rev-1",
     });
@@ -63,17 +63,43 @@ describe("RefLink model", () => {
 
   it("scopes internal refs to the active workspace when provided", () => {
     expect(
-      resolveRefLink("document_revision:rev-1", { workspaceSlug: "local" }),
+      resolveRefLink("document_revision:rev-1", {
+        organizationSlug: "acme",
+        workspaceSlug: "proj",
+      }),
     ).toMatchObject({
-      href: "/local/docs/revisions/rev-1",
+      href: "/o/acme/w/proj/docs/revisions/rev-1",
       isLink: true,
     });
 
     expect(
-      resolveRefLink("thread:thread-1", { workspaceSlug: "local" }),
+      resolveRefLink("thread:thread-1", {
+        organizationSlug: "acme",
+        workspaceSlug: "proj",
+      }),
     ).toMatchObject({
-      href: "/local/threads/thread-1",
+      href: "/o/acme/w/proj/threads/thread-1",
       isLink: true,
+    });
+  });
+
+  it("returns isLink:false when organizationSlug is provided but workspaceSlug is missing", () => {
+    expect(
+      resolveRefLink("thread:thread-1", { organizationSlug: "acme" }),
+    ).toMatchObject({
+      kind: "thread",
+      href: "",
+      isLink: false,
+    });
+  });
+
+  it("returns isLink:false when workspaceSlug is provided but organizationSlug is missing", () => {
+    expect(
+      resolveRefLink("thread:thread-1", { workspaceSlug: "proj" }),
+    ).toMatchObject({
+      kind: "thread",
+      href: "",
+      isLink: false,
     });
   });
 
@@ -107,6 +133,8 @@ describe("RefLink model", () => {
       label: "Receipt draft",
       primaryLabel: "Receipt draft",
       secondaryLabel: "artifact:artifact-1",
+      href: "",
+      isLink: false,
     });
 
     const eventRef = resolveRefLink("event:evt-9", {
@@ -118,8 +146,8 @@ describe("RefLink model", () => {
       kind: "event",
       label: "Event",
       secondaryLabel: "event:evt-9",
-      href: "/threads/thread-1#event-evt-9",
-      isLink: true,
+      href: "",
+      isLink: false,
     });
 
     const topicRef = resolveRefLink("topic:topic-1", {
@@ -131,8 +159,8 @@ describe("RefLink model", () => {
       label: "Topic topic-1",
       primaryLabel: "Topic topic-1",
       secondaryLabel: "topic:topic-1",
-      href: "/topics/topic-1",
-      isLink: true,
+      href: "",
+      isLink: false,
     });
 
     const threadRef = resolveRefLink("thread:thread-1", {
@@ -144,8 +172,8 @@ describe("RefLink model", () => {
       label: "Thread thread-1",
       primaryLabel: "Thread thread-1",
       secondaryLabel: "thread:thread-1",
-      href: "/threads/thread-1",
-      isLink: true,
+      href: "",
+      isLink: false,
     });
 
     const documentRef = resolveRefLink("document:doc-1", {
@@ -159,8 +187,8 @@ describe("RefLink model", () => {
       label: "Product Constitution",
       primaryLabel: "Product Constitution",
       secondaryLabel: "document:doc-1",
-      href: "/docs/doc-1",
-      isLink: true,
+      href: "",
+      isLink: false,
     });
   });
 

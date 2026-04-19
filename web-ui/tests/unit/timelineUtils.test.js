@@ -45,18 +45,18 @@ describe("timeline utils", () => {
     expect(view.changedFields).toEqual(["Status", "Summary"]);
     expect(view.resolvedRefs[0]).toMatchObject({
       kind: "event",
-      href: "/threads/thread-1#event-evt-z",
-      isLink: true,
+      href: "",
+      isLink: false,
     });
     expect(view.resolvedRefs[1]).toMatchObject({
       kind: "thread",
-      href: "/threads/thread-1",
-      isLink: true,
+      href: "",
+      isLink: false,
     });
     expect(view.resolvedRefs[2]).toMatchObject({
       kind: "document",
-      href: "/docs/doc-1",
-      isLink: true,
+      href: "",
+      isLink: false,
       primaryLabel: "Document doc-1",
     });
   });

@@ -109,6 +109,15 @@ test("golden path integration runs against a real anx-core", async ({
   let receiptId = "";
   let reviewId = "";
 
+  await page.context().addCookies([
+    {
+      name: "anx_last_workspace",
+      value: "local:local",
+      domain: "127.0.0.1",
+      path: "/",
+    },
+  ]);
+
   await page.goto("/");
 
   await expect

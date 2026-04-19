@@ -309,15 +309,15 @@ describe("inbox typed-ref rendering targets", () => {
 
   it("resolves thread/event/url refs used by inbox cards", () => {
     expect(resolveRefLink("thread:thread-onboarding")).toMatchObject({
-      href: "/threads/thread-onboarding",
-      isLink: true,
+      href: "",
+      isLink: false,
     });
 
     expect(
       resolveRefLink("event:evt-1001", { threadId: "thread-onboarding" }),
     ).toMatchObject({
-      href: "/threads/thread-onboarding#event-evt-1001",
-      isLink: true,
+      href: "",
+      isLink: false,
     });
 
     expect(resolveRefLink("url:https://example.com/reference")).toMatchObject({

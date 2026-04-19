@@ -241,6 +241,7 @@ export async function handle({ event, resolve }) {
   const pathname = stripBasePath(event.url.pathname);
   const method = event.request.method;
   const documentNavigation = isDocumentNavigationRequest(event.request);
+
   const proxyableRequest =
     (isProxyableCommand(method, pathname) ||
       isDirectCoreProxyPath(method, pathname)) &&

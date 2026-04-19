@@ -17,6 +17,7 @@
  *
  * Options:
  *   --base-url <url>      Web-UI base URL              (default: http://127.0.0.1:5173)
+ *   --organization <slug> Organization slug            (default: local)
  *   --workspace <slug>    Workspace slug                (default: local)
  *   --persona <id>        Dev persona to auth as        (default: jordan)
  *   --viewport <WxH>      Viewport size                 (default: 1440x900)
@@ -52,6 +53,7 @@ function parseArgs(argv) {
   const args = argv.slice(2);
   const opts = {
     baseUrl: "http://127.0.0.1:5173",
+    organization: "local",
     workspace: "local",
     persona: "jordan",
     viewport: "1440x900",
@@ -71,6 +73,9 @@ function parseArgs(argv) {
     switch (arg) {
       case "--base-url":
         opts.baseUrl = args[++i];
+        break;
+      case "--organization":
+        opts.organization = args[++i];
         break;
       case "--workspace":
         opts.workspace = args[++i];
@@ -130,13 +135,15 @@ function parseArgs(argv) {
 }
 
 function printUsage() {
-  console.log(`
+  console.log(
+    `
 QA Capture — Headless screenshot + accessibility tool for OAR web-ui
 
 Usage: node scripts/qa-capture.mjs [options]
 
 Options:
   --base-url <url>      Web-UI base URL              (default: http://127.0.0.1:5173)
+  --organization <slug> Organization slug            (default: local)
   --workspace <slug>    Workspace slug                (default: local)
   --persona <id>        Dev persona to auth as        (default: jordan)
   --viewport <WxH>      Viewport size                 (default: 1440x900)
@@ -159,27 +166,41 @@ Examples:
   node scripts/qa-capture.mjs --routes inbox,topics --viewport 768x1024
   node scripts/qa-capture.mjs --compare .qa-captures/2026-04-09_04-00-54_1440x900
   node scripts/qa-capture.mjs --json --no-axe --no-detail
-`.trim());
+`.trim(),
+  );
 }
 
 // ── Known routes ────────────────────────────────────────────────────────────
 
-function getDefaultRoutes() {
+function workspaceShellPrefix(opts) {
+  return `/o/${opts.organization}/w/${opts.workspace}`;
+}
+
+function getDefaultRoutes(opts) {
+  const shell = workspaceShellPrefix(opts);
   return [
-    { name: "home", path: "/", description: "Workspace dashboard" },
-    { name: "inbox", path: "/inbox", description: "Inbox triage view" },
-    { name: "topics", path: "/topics", description: "Topic list" },
-    { name: "threads", path: "/threads", description: "Thread list" },
-    { name: "boards", path: "/boards", description: "Board list" },
-    { name: "docs", path: "/docs", description: "Documents list" },
-    { name: "artifacts", path: "/artifacts", description: "Artifacts list" },
-    { name: "trash", path: "/trash", description: "Trash" },
-    { name: "access", path: "/access", description: "Access / principals" },
+    { name: "home", path: "/", description: "Workspace dashboard / chooser" },
+    { name: "inbox", path: `${shell}/inbox`, description: "Inbox triage view" },
+    { name: "topics", path: `${shell}/topics`, description: "Topic list" },
+    { name: "threads", path: `${shell}/threads`, description: "Thread list" },
+    { name: "boards", path: `${shell}/boards`, description: "Board list" },
+    { name: "docs", path: `${shell}/docs`, description: "Documents list" },
+    {
+      name: "artifacts",
+      path: `${shell}/artifacts`,
+      description: "Artifacts list",
+    },
+    { name: "trash", path: `${shell}/trash`, description: "Trash" },
+    {
+      name: "access",
+      path: `${shell}/access`,
+      description: "Access / principals",
+    },
   ];
 }
 
 function resolveRoutes(opts) {
-  const defaults = getDefaultRoutes();
+  const defaults = getDefaultRoutes(opts);
   if (!opts.routes) return defaults;
   return defaults.filter((r) => opts.routes.includes(r.name));
 }
@@ -189,29 +210,29 @@ function resolveRoutes(opts) {
 async function discoverDetailPages(page, opts) {
   const details = [];
   const seenHrefs = new Set();
-  const ws = opts.workspace;
+  const shell = workspaceShellPrefix(opts);
 
   const collections = [
     {
-      listPath: `/${ws}/topics`,
-      detailPrefix: `/${ws}/topics/`,
+      listPath: `${shell}/topics`,
+      detailPrefix: `${shell}/topics/`,
       name: "topic-detail",
     },
     {
-      listPath: `/${ws}/boards`,
-      detailPrefix: `/${ws}/boards/`,
+      listPath: `${shell}/boards`,
+      detailPrefix: `${shell}/boards/`,
       name: "board-detail",
       linkSelector: "a[href]",
     },
     {
-      listPath: `/${ws}/docs`,
-      detailPrefix: `/${ws}/docs/`,
+      listPath: `${shell}/docs`,
+      detailPrefix: `${shell}/docs/`,
       name: "doc-detail",
       excludePattern: /\/revisions\//,
     },
     {
-      listPath: `/${ws}/artifacts`,
-      detailPrefix: `/${ws}/artifacts/`,
+      listPath: `${shell}/artifacts`,
+      detailPrefix: `${shell}/artifacts/`,
       name: "artifact-detail",
     },
   ];
@@ -244,7 +265,10 @@ async function discoverDetailPages(page, opts) {
         if (seenHrefs.has(href)) continue;
         seenHrefs.add(href);
 
-        const id = href.replace(collection.detailPrefix, "").split("/")[0].split("?")[0];
+        const id = href
+          .replace(collection.detailPrefix, "")
+          .split("/")[0]
+          .split("?")[0];
         details.push({
           name: `${collection.name}--${id}`,
           path: href,
@@ -297,7 +321,8 @@ function createPageCollector(page) {
     flush() {
       const snapshot = {
         consoleErrors: consoleMessages.filter((m) => m.type === "error").length,
-        consoleWarnings: consoleMessages.filter((m) => m.type === "warning").length,
+        consoleWarnings: consoleMessages.filter((m) => m.type === "warning")
+          .length,
         console: [...consoleMessages],
         pageErrors: [...pageErrors],
         networkErrors: [...networkErrors],
@@ -331,16 +356,24 @@ async function runAxeAudit(page) {
       incomplete: results.incomplete.length,
     };
   } catch (err) {
-    return { error: err.message, violations: [], violationCount: 0, passes: 0, incomplete: 0 };
+    return {
+      error: err.message,
+      violations: [],
+      violationCount: 0,
+      passes: 0,
+      incomplete: 0,
+    };
   }
 }
 
 // ── Screenshot capture ──────────────────────────────────────────────────────
 
 async function captureScreenshot(page, route, opts, runDir, collector) {
-  const routePath = route.absolute
-    ? route.path
-    : `/${opts.workspace}${route.path}`;
+  const shell = workspaceShellPrefix(opts);
+  const routePath =
+    route.absolute || route.path === "/" || route.path.startsWith("/o/")
+      ? route.path
+      : `${shell}${route.path.startsWith("/") ? route.path : `/${route.path}`}`;
   const url = `${opts.baseUrl}${routePath}`;
   const filename = `${route.name}.png`;
   const filepath = path.join(runDir, filename);
@@ -390,7 +423,10 @@ async function captureScreenshot(page, route, opts, runDir, collector) {
     });
 
     const buf = await readFile(filepath);
-    result.fileHash = createHash("sha256").update(buf).digest("hex").slice(0, 16);
+    result.fileHash = createHash("sha256")
+      .update(buf)
+      .digest("hex")
+      .slice(0, 16);
     result.fileSizeBytes = buf.length;
 
     if (opts.axe) {
@@ -419,7 +455,9 @@ async function loadBaselineManifest(compareDir) {
     const raw = await readFile(manifestPath, "utf-8");
     return JSON.parse(raw);
   } catch (err) {
-    console.error(`Cannot read baseline manifest at ${manifestPath}: ${err.message}`);
+    console.error(
+      `Cannot read baseline manifest at ${manifestPath}: ${err.message}`,
+    );
     return null;
   }
 }
@@ -467,7 +505,8 @@ function compareCaptures(currentResults, baseline) {
             ? {
                 from: prev.fileSizeBytes,
                 to: current.fileSizeBytes,
-                deltaBytes: (current.fileSizeBytes ?? 0) - (prev.fileSizeBytes ?? 0),
+                deltaBytes:
+                  (current.fileSizeBytes ?? 0) - (prev.fileSizeBytes ?? 0),
               }
             : null,
         hashChanged: current.fileHash !== prev.fileHash,
@@ -509,7 +548,8 @@ async function authenticateDevPersona(page, opts) {
     { actorId, workspace: opts.workspace },
   );
 
-  await page.goto(`${opts.baseUrl}/${opts.workspace}/inbox`, {
+  const inboxUrl = `${opts.baseUrl}${workspaceShellPrefix(opts)}/inbox`;
+  await page.goto(inboxUrl, {
     waitUntil: "load",
     timeout: 20000,
   });
@@ -518,7 +558,10 @@ async function authenticateDevPersona(page, opts) {
   const identitiesRes = await page.request.get(
     `${opts.baseUrl}/auth/dev/identities`,
     {
-      headers: { "x-anx-workspace-slug": opts.workspace },
+      headers: {
+        "x-anx-workspace-slug": opts.workspace,
+        "x-anx-organization-slug": opts.organization,
+      },
     },
   );
 
@@ -535,6 +578,7 @@ async function authenticateDevPersona(page, opts) {
           headers: {
             "content-type": "application/json",
             "x-anx-workspace-slug": opts.workspace,
+            "x-anx-organization-slug": opts.organization,
           },
           data: { persona_id: opts.persona },
         },
@@ -544,7 +588,7 @@ async function authenticateDevPersona(page, opts) {
   }
 
   if (personaAuthOk) {
-    await page.goto(`${opts.baseUrl}/${opts.workspace}/inbox`, {
+    await page.goto(inboxUrl, {
       waitUntil: "load",
       timeout: 20000,
     });
@@ -582,9 +626,13 @@ function formatSummary(manifest) {
   lines.push(`Routes captured: ${s.ok}/${s.total} ok`);
   if (s.errors > 0) lines.push(`Errors: ${s.errors}`);
   if (s.totalConsoleErrors > 0)
-    lines.push(`Console errors:  ${s.totalConsoleErrors} across ${s.routesWithConsoleErrors} routes`);
+    lines.push(
+      `Console errors:  ${s.totalConsoleErrors} across ${s.routesWithConsoleErrors} routes`,
+    );
   if (s.totalA11yViolations > 0)
-    lines.push(`A11y violations: ${s.totalA11yViolations} across ${s.routesWithA11yViolations} routes`);
+    lines.push(
+      `A11y violations: ${s.totalA11yViolations} across ${s.routesWithA11yViolations} routes`,
+    );
 
   if (s.errors > 0) {
     lines.push(`\nFailed routes:`);
@@ -602,7 +650,9 @@ function formatSummary(manifest) {
     lines.push(`\nRoutes with console errors:`);
     for (const cap of consoleErrorRoutes) {
       lines.push(`  ! ${cap.route}: ${cap.diagnostics.consoleErrors} errors`);
-      for (const msg of cap.diagnostics.console.filter((m) => m.type === "error").slice(0, 3)) {
+      for (const msg of cap.diagnostics.console
+        .filter((m) => m.type === "error")
+        .slice(0, 3)) {
         lines.push(`      ${msg.text.slice(0, 120)}`);
       }
     }
@@ -614,9 +664,13 @@ function formatSummary(manifest) {
   if (a11yRoutes.length > 0) {
     lines.push(`\nAccessibility violations:`);
     for (const cap of a11yRoutes) {
-      lines.push(`  ${cap.route}: ${cap.accessibility.violationCount} violations`);
+      lines.push(
+        `  ${cap.route}: ${cap.accessibility.violationCount} violations`,
+      );
       for (const v of cap.accessibility.violations.slice(0, 5)) {
-        lines.push(`    [${v.impact}] ${v.id}: ${v.description} (${v.nodes} nodes)`);
+        lines.push(
+          `    [${v.impact}] ${v.id}: ${v.description} (${v.nodes} nodes)`,
+        );
       }
     }
   }
@@ -624,14 +678,19 @@ function formatSummary(manifest) {
   if (manifest.comparison) {
     const cmp = manifest.comparison;
     lines.push(`\nComparison vs ${cmp.baselineRun}:`);
-    if (cmp.routesChanged.length === 0 && cmp.routesAdded.length === 0 && cmp.routesRemoved.length === 0) {
+    if (
+      cmp.routesChanged.length === 0 &&
+      cmp.routesAdded.length === 0 &&
+      cmp.routesRemoved.length === 0
+    ) {
       lines.push(`  No changes detected.`);
     } else {
       if (cmp.routesChanged.length > 0) {
         lines.push(`  Changed (${cmp.routesChanged.length}):`);
         for (const c of cmp.routesChanged) {
           const parts = [];
-          if (c.statusChange) parts.push(`status: ${c.statusChange.from} → ${c.statusChange.to}`);
+          if (c.statusChange)
+            parts.push(`status: ${c.statusChange.from} → ${c.statusChange.to}`);
           if (c.sizeChange) {
             const sign = c.sizeChange.deltaBytes >= 0 ? "+" : "";
             parts.push(`size: ${sign}${c.sizeChange.deltaBytes}B`);
@@ -697,7 +756,9 @@ async function main() {
   if (!opts.json) process.stdout.write("Checking server... ");
   const serverOk = await waitForServer(opts.baseUrl, 8000);
   if (!serverOk) {
-    console.error(`\nServer not reachable at ${opts.baseUrl}. Is \`make serve\` running?`);
+    console.error(
+      `\nServer not reachable at ${opts.baseUrl}. Is \`make serve\` running?`,
+    );
     process.exit(1);
   }
   if (!opts.json) console.log("ok");
@@ -720,7 +781,11 @@ async function main() {
     if (!opts.json) process.stdout.write("Authenticating... ");
     const authResult = await authenticateDevPersona(page, opts);
     if (!opts.json) {
-      console.log(authResult.personaAuthOk ? `ok (${authResult.actorId})` : `dev_actor_mode (${authResult.actorId})`);
+      console.log(
+        authResult.personaAuthOk
+          ? `ok (${authResult.actorId})`
+          : `dev_actor_mode (${authResult.actorId})`,
+      );
     }
 
     const listRoutes = resolveRoutes(opts);
@@ -739,7 +804,13 @@ async function main() {
     const results = [];
     for (const route of allRoutes) {
       if (!opts.json) process.stdout.write(`  ${route.name.padEnd(40)} `);
-      const result = await captureScreenshot(page, route, opts, runDir, collector);
+      const result = await captureScreenshot(
+        page,
+        route,
+        opts,
+        runDir,
+        collector,
+      );
       results.push(result);
 
       if (!opts.json) {
@@ -769,10 +840,12 @@ async function main() {
     }
 
     const totalConsoleErrors = results.reduce(
-      (sum, r) => sum + (r.diagnostics?.consoleErrors ?? 0), 0,
+      (sum, r) => sum + (r.diagnostics?.consoleErrors ?? 0),
+      0,
     );
     const totalA11yViolations = results.reduce(
-      (sum, r) => sum + (r.accessibility?.violationCount ?? 0), 0,
+      (sum, r) => sum + (r.accessibility?.violationCount ?? 0),
+      0,
     );
 
     const manifest = {
@@ -792,11 +865,16 @@ async function main() {
         ok: results.filter((r) => r.status === "ok").length,
         errors: results.filter((r) => r.status !== "ok").length,
         totalConsoleErrors,
-        routesWithConsoleErrors: results.filter((r) => (r.diagnostics?.consoleErrors ?? 0) > 0).length,
+        routesWithConsoleErrors: results.filter(
+          (r) => (r.diagnostics?.consoleErrors ?? 0) > 0,
+        ).length,
         totalA11yViolations,
-        routesWithA11yViolations: results.filter((r) => (r.accessibility?.violationCount ?? 0) > 0).length,
+        routesWithA11yViolations: results.filter(
+          (r) => (r.accessibility?.violationCount ?? 0) > 0,
+        ).length,
         avgLoadTimeMs: Math.round(
-          results.reduce((sum, r) => sum + (r.loadTimeMs ?? 0), 0) / (results.length || 1),
+          results.reduce((sum, r) => sum + (r.loadTimeMs ?? 0), 0) /
+            (results.length || 1),
         ),
       },
       comparison,
@@ -808,7 +886,14 @@ async function main() {
 
     // Write a lightweight "latest" symlink-equivalent for agents to find easily
     const latestPath = path.join(opts.outDir, "latest.json");
-    await writeFile(latestPath, JSON.stringify({ run: runLabel, dir: runDir, manifest: manifest.manifestPath }, null, 2));
+    await writeFile(
+      latestPath,
+      JSON.stringify(
+        { run: runLabel, dir: runDir, manifest: manifest.manifestPath },
+        null,
+        2,
+      ),
+    );
 
     if (opts.json) {
       console.log(JSON.stringify(manifest, null, 2));

@@ -1,5 +1,5 @@
-import { redirectToDefaultWorkspace } from "$lib/server/workspaceRedirect";
+import { redirectToRecentWorkspaceOrChooser } from "$lib/server/workspaceRedirect";
 
 export async function load(event) {
-  await redirectToDefaultWorkspace(event);
+  await redirectToRecentWorkspaceOrChooser(event);
 }

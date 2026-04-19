@@ -1,10 +1,15 @@
 import { env as privateEnv } from "$env/dynamic/private";
-import { getWorkspaceHeader } from "../compat/workspaceCompat.js";
+import {
+  getOrganizationHeader,
+  getWorkspaceHeader,
+  readOrganizationSlugHeader,
+} from "../compat/workspaceCompat.js";
 import { normalizeBaseUrl } from "../config.js";
 import {
-  DEFAULT_WORKSPACE_SLUG,
   WORKSPACE_HEADER,
+  normalizeOrganizationSlug,
   normalizeWorkspaceSlug,
+  workspaceCompositeKey,
 } from "../workspacePaths.js";
 import {
   fetchWorkspaceEntryFromControlPlane,
@@ -16,37 +21,57 @@ import {
   loadWorkspaceCatalog,
 } from "./workspaceCatalog.js";
 
-function createWorkspaceNotConfiguredError(rawSlug) {
-  const requestedSlug = String(rawSlug ?? "").trim();
+function createWorkspaceNotConfiguredError(rawOrg, rawWs) {
+  const org = String(rawOrg ?? "").trim();
+  const ws = String(rawWs ?? "").trim();
+  const label = org && ws ? `'${org}/${ws}'` : ws ? `'${ws}'` : `'${org}'`;
   return {
     status: 404,
     payload: {
       error: {
         code: "workspace_not_configured",
-        message: `Workspace '${requestedSlug}' is not configured in ANX_WORKSPACES and could not be resolved from the control plane.`,
+        message: `Workspace ${label} is not configured in ANX_WORKSPACES and could not be resolved from the control plane.`,
       },
     },
   };
 }
 
-function mergeWorkspaceEntriesBySlug(primary, secondary) {
+function createWorkspaceRouteIncompleteError() {
+  return {
+    status: 404,
+    payload: {
+      error: {
+        code: "workspace_route_incomplete",
+        message:
+          "Organization and workspace segments are required in the URL path.",
+      },
+    },
+  };
+}
+
+function mergeWorkspaceEntriesByComposite(primary, secondary) {
   const map = new Map();
   for (const w of primary) {
-    const s = normalizeWorkspaceSlug(w?.slug);
-    if (s) {
-      map.set(s, { ...w, slug: s });
+    const k = workspaceCompositeKey(w.organizationSlug, w.slug);
+    if (k) {
+      map.set(k, { ...w, organizationSlug: w.organizationSlug, slug: w.slug });
     }
   }
   for (const w of secondary) {
-    const s = normalizeWorkspaceSlug(w?.slug);
-    if (!s) {
+    const k = workspaceCompositeKey(w.organizationSlug, w.slug);
+    if (!k) {
       continue;
     }
-    const existing = map.get(s);
+    const existing = map.get(k);
     if (existing) {
-      map.set(s, { ...existing, ...w, slug: s });
+      map.set(k, {
+        ...existing,
+        ...w,
+        organizationSlug: w.organizationSlug ?? existing.organizationSlug,
+        slug: w.slug,
+      });
     } else {
-      map.set(s, w);
+      map.set(k, w);
     }
   }
   return Array.from(map.values());
@@ -58,8 +83,9 @@ export async function resolveWorkspaceCatalog(event) {
     return base;
   }
 
+  const orgRaw = String(event?.params?.organization ?? "").trim();
   const slug = String(event?.params?.workspace ?? "").trim();
-  if (!slug) {
+  if (!orgRaw || !slug) {
     return base;
   }
 
@@ -69,7 +95,11 @@ export async function resolveWorkspaceCatalog(event) {
       ? (name) => event.cookies.get(name)
       : undefined;
 
-  const resolved = await resolveWorkspaceBySlug({ event, workspaceSlug: slug });
+  const resolved = await resolveWorkspaceInRoute({
+    event,
+    organizationSlug: orgRaw,
+    workspaceSlug: slug,
+  });
   if (resolved.error || !resolved.workspace) {
     return base;
   }
@@ -78,6 +108,7 @@ export async function resolveWorkspaceCatalog(event) {
   if (!organizationId) {
     const cp = await fetchWorkspaceEntryFromControlPlane({
       env: privateEnv,
+      organizationSlug: resolved.workspace.organizationSlug,
       workspaceSlug: resolved.workspace.slug,
       fetchFn,
       getCookie,
@@ -98,37 +129,58 @@ export async function resolveWorkspaceCatalog(event) {
     return base;
   }
 
-  const merged = mergeWorkspaceEntriesBySlug(base.workspaces, fromOrg);
+  const merged = mergeWorkspaceEntriesByComposite(base.workspaces, fromOrg);
   return createWorkspaceCatalog({
     workspaces: merged,
     defaultWorkspaceSlug: resolved.workspace.slug,
+    defaultOrganizationSlug: resolved.workspace.organizationSlug,
     devActorMode: base.devActorMode,
     usesSyntheticDefaultWorkspace: base.usesSyntheticDefaultWorkspace,
     hostedDevAllowEmpty: false,
   });
 }
 
-export async function resolveWorkspaceBySlug({ workspaceSlug, event }) {
+export async function resolveWorkspaceInRoute({
+  organizationSlug,
+  workspaceSlug,
+  event,
+}) {
   const catalog = loadWorkspaceCatalog();
+  const rawOrg = String(organizationSlug ?? "").trim();
   const rawSlug = String(workspaceSlug ?? "").trim();
-  const normalizedSlug =
-    rawSlug === "" ? DEFAULT_WORKSPACE_SLUG : normalizeWorkspaceSlug(rawSlug);
 
-  if (!normalizedSlug) {
+  if (rawOrg === "" || rawSlug === "") {
     return {
       catalog,
+      organizationSlug: rawOrg,
       workspaceSlug: rawSlug,
       workspace: null,
       coreBaseUrl: "",
-      error: createWorkspaceNotConfiguredError(rawSlug),
+      error: createWorkspaceRouteIncompleteError(),
     };
   }
 
-  let workspace = catalog.workspaceBySlug.get(normalizedSlug);
+  const normalizedOrg = normalizeOrganizationSlug(rawOrg);
+  const normalizedSlug = normalizeWorkspaceSlug(rawSlug);
+
+  if (!normalizedOrg || !normalizedSlug) {
+    return {
+      catalog,
+      organizationSlug: rawOrg,
+      workspaceSlug: rawSlug,
+      workspace: null,
+      coreBaseUrl: "",
+      error: createWorkspaceNotConfiguredError(rawOrg, rawSlug),
+    };
+  }
+
+  const compositeKey = workspaceCompositeKey(normalizedOrg, normalizedSlug);
+  let workspace = catalog.workspaceByComposite.get(compositeKey);
   if (!workspace) {
     const fetchFn = event?.fetch ?? fetch;
     const cpWorkspace = await fetchWorkspaceEntryFromControlPlane({
       env: privateEnv,
+      organizationSlug: normalizedOrg,
       workspaceSlug: normalizedSlug,
       fetchFn,
       getCookie:
@@ -137,23 +189,35 @@ export async function resolveWorkspaceBySlug({ workspaceSlug, event }) {
           : undefined,
     });
     if (cpWorkspace) {
-      workspace = cpWorkspace;
+      workspace = {
+        organizationSlug: cpWorkspace.organizationSlug || normalizedOrg,
+        slug: cpWorkspace.slug,
+        label: cpWorkspace.label,
+        description: cpWorkspace.description,
+        coreBaseUrl: cpWorkspace.coreBaseUrl,
+        publicOrigin: cpWorkspace.publicOrigin,
+        id: cpWorkspace.id,
+        workspaceId: cpWorkspace.workspaceId,
+        organizationId: cpWorkspace.organizationId,
+      };
     }
   }
 
   if (!workspace) {
     return {
       catalog,
+      organizationSlug: normalizedOrg,
       workspaceSlug: normalizedSlug,
       workspace: null,
       coreBaseUrl: "",
-      error: createWorkspaceNotConfiguredError(rawSlug),
+      error: createWorkspaceNotConfiguredError(rawOrg, rawSlug),
     };
   }
 
   return {
     catalog,
-    workspaceSlug: normalizedSlug,
+    organizationSlug: workspace.organizationSlug,
+    workspaceSlug: workspace.slug,
     workspace,
     coreBaseUrl: workspace.coreBaseUrl,
     error: null,
@@ -161,10 +225,15 @@ export async function resolveWorkspaceBySlug({ workspaceSlug, event }) {
 }
 
 export async function resolveWorkspaceFromEvent(event) {
-  const rawSlug =
-    getWorkspaceHeader(event.request.headers) || event.params?.workspace || "";
-  return resolveWorkspaceBySlug({
+  const paramOrg = String(event.params?.organization ?? "").trim();
+  const paramWs = String(event.params?.workspace ?? "").trim();
+  const headerOrg = readOrganizationSlugHeader(event.request.headers);
+  const headerWs = getWorkspaceHeader(event.request.headers);
+  const rawOrg = paramOrg || headerOrg;
+  const rawSlug = paramWs || String(headerWs ?? "").trim();
+  return resolveWorkspaceInRoute({
     event,
+    organizationSlug: rawOrg,
     workspaceSlug: rawSlug,
   });
 }
@@ -183,8 +252,25 @@ export async function resolveProxyWorkspaceTarget({ workspaceSlug, event }) {
     };
   }
 
-  const resolved = await resolveWorkspaceBySlug({
+  const orgSlug = event?.request
+    ? getOrganizationHeader(event.request.headers)
+    : "";
+  const trimmedOrg = String(orgSlug ?? "").trim();
+  if (!trimmedOrg) {
+    return {
+      status: 400,
+      payload: {
+        error: {
+          code: "organization_header_required",
+          message: "Missing x-anx-organization-slug header on proxied request.",
+        },
+      },
+    };
+  }
+
+  const resolved = await resolveWorkspaceInRoute({
     event,
+    organizationSlug: trimmedOrg,
     workspaceSlug: slug,
   });
   if (resolved.error) {

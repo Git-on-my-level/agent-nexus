@@ -1,8 +1,9 @@
 import { env as privateEnv } from "$env/dynamic/private";
 
 import {
-  DEFAULT_WORKSPACE_SLUG,
+  normalizeOrganizationSlug,
   normalizeWorkspaceSlug,
+  workspaceCompositeKey,
 } from "$lib/workspacePaths";
 import { normalizeBaseUrl } from "$lib/config";
 import { resolveWorkspaceEnv } from "$lib/compat/workspaceCompat";
@@ -10,7 +11,7 @@ import { isSaasPackedHostDev } from "$lib/server/controlPlaneWorkspace.js";
 
 /** Shown in parse errors; keep in sync with web-ui README / runbook examples. */
 const ANX_WORKSPACES_JSON_EXAMPLE =
-  '[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"}]';
+  '[{"organizationSlug":"local","slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"}]';
 
 /** `..."http://..." ]` instead of `..."http://..."} ]` — common .env / copy-paste mistake. */
 function hintOarWorkspacesBracketTypo(trimmed) {
@@ -36,7 +37,7 @@ function formatOarWorkspacesJsonError(trimmed, error) {
   const typoHint = /Expected ',' or '}'/.test(reason)
     ? hintOarWorkspacesBracketTypo(trimmed)
     : "";
-  return `ANX_WORKSPACES must be valid JSON. ${reason}.${context}${typoHint} Unset ANX_WORKSPACES (and ANX_PROJECTS) to fall back to ANX_CORE_BASE_URL, or fix the value. Example: ${ANX_WORKSPACES_JSON_EXAMPLE}`;
+  return `ANX_WORKSPACES must be valid JSON. ${reason}.${context}${typoHint} Unset ANX_WORKSPACES (and ANX_PROJECTS) to fall back to an empty catalog, or fix the value. Example: ${ANX_WORKSPACES_JSON_EXAMPLE}`;
 }
 
 /**
@@ -45,14 +46,12 @@ function formatOarWorkspacesJsonError(trimmed, error) {
  */
 function repairCommonOarWorkspacesJsonTypos(trimmed) {
   let s = trimmed;
-  // `"...url"]}` → `"...url"}]`
   const afterSwap = s.replace(/("http[s]?:\/\/[^"]+")\s*\]\s*\}\s*$/, "$1}]");
   if (afterSwap !== s) return afterSwap;
-  // `"...url"]` at end → `"...url"}]`
   return s.replace(/("http[s]?:\/\/[^"]+")\s*\]\s*$/, "$1}]");
 }
 
-function normalizeWorkspaceEntry(entry, index) {
+function normalizeWorkspaceEntry(entry, index, defaultOrganizationSlugHint) {
   if (!entry || typeof entry !== "object") {
     throw new Error(`ANX_WORKSPACES entry ${index + 1} must be an object.`);
   }
@@ -64,7 +63,20 @@ function normalizeWorkspaceEntry(entry, index) {
     );
   }
 
+  const organizationSlug = normalizeOrganizationSlug(
+    entry.organizationSlug ??
+      entry.organization_slug ??
+      defaultOrganizationSlugHint ??
+      "",
+  );
+  if (!organizationSlug) {
+    throw new Error(
+      `ANX_WORKSPACES entry ${index + 1} is missing organizationSlug (set it on each entry, or set ANX_DEFAULT_ORGANIZATION for object-form entries).`,
+    );
+  }
+
   return {
+    organizationSlug,
     slug,
     label: String(entry.label ?? slug).trim() || slug,
     description: String(entry.description ?? "").trim(),
@@ -73,7 +85,7 @@ function normalizeWorkspaceEntry(entry, index) {
   };
 }
 
-function parseWorkspaceEntries(rawValue) {
+function parseWorkspaceEntries(rawValue, defaultOrganizationSlugHint = "") {
   const trimmed = String(rawValue ?? "").trim();
   if (!trimmed) {
     return [];
@@ -95,6 +107,8 @@ function parseWorkspaceEntries(rawValue) {
     }
   }
 
+  const defaultOrg = normalizeOrganizationSlug(defaultOrganizationSlugHint);
+
   const entries = Array.isArray(parsed)
     ? parsed
     : Object.entries(parsed ?? {}).map(([slug, value]) =>
@@ -109,23 +123,13 @@ function parseWorkspaceEntries(rawValue) {
             },
       );
 
-  return entries.map(normalizeWorkspaceEntry);
-}
-
-function fallbackSingleWorkspace(env) {
-  return [
-    {
-      slug: DEFAULT_WORKSPACE_SLUG,
-      label: "Local",
-      description: "",
-      coreBaseUrl: normalizeBaseUrl(env.ANX_CORE_BASE_URL),
-    },
-  ];
+  return entries.map((e, i) => normalizeWorkspaceEntry(e, i, defaultOrg));
 }
 
 export function createWorkspaceCatalog({
   workspaces,
   defaultWorkspaceSlug = "",
+  defaultOrganizationSlug = "",
   devActorMode = false,
   usesSyntheticDefaultWorkspace = false,
   hostedDevAllowEmpty = false,
@@ -134,29 +138,64 @@ export function createWorkspaceCatalog({
     return {
       defaultWorkspace: null,
       workspaces: [],
-      workspaceBySlug: new Map(),
+      workspaceByComposite: new Map(),
       devActorMode,
       usesSyntheticDefaultWorkspace: false,
       hostedDevEmpty: true,
     };
   }
 
-  const defaultCandidate = normalizeWorkspaceSlug(
-    defaultWorkspaceSlug || workspaces[0]?.slug || DEFAULT_WORKSPACE_SLUG,
+  if (workspaces.length === 0) {
+    return {
+      defaultWorkspace: null,
+      workspaces: [],
+      workspaceByComposite: new Map(),
+      devActorMode,
+      usesSyntheticDefaultWorkspace: false,
+      hostedDevEmpty: false,
+    };
+  }
+
+  const defaultCandidate = normalizeWorkspaceSlug(defaultWorkspaceSlug);
+  const defaultOrgCandidate = normalizeOrganizationSlug(
+    defaultOrganizationSlug,
   );
+
   const defaultWorkspace =
-    workspaces.find((workspace) => workspace.slug === defaultCandidate) ??
+    defaultCandidate && defaultOrgCandidate
+      ? workspaces.find(
+          (workspace) =>
+            workspace.slug === defaultCandidate &&
+            workspace.organizationSlug === defaultOrgCandidate,
+        )
+      : null;
+
+  const resolvedDefault =
+    defaultWorkspace ??
+    (defaultCandidate
+      ? workspaces.find((workspace) => workspace.slug === defaultCandidate)
+      : null) ??
     workspaces[0];
 
-  if (!defaultWorkspace) {
-    throw new Error("At least one ANX workspace must be configured.");
+  if (!resolvedDefault) {
+    return {
+      defaultWorkspace: null,
+      workspaces: [],
+      workspaceByComposite: new Map(),
+      devActorMode,
+      usesSyntheticDefaultWorkspace: false,
+      hostedDevEmpty: false,
+    };
   }
 
   return {
-    defaultWorkspace,
+    defaultWorkspace: resolvedDefault,
     workspaces,
-    workspaceBySlug: new Map(
-      workspaces.map((workspace) => [workspace.slug, workspace]),
+    workspaceByComposite: new Map(
+      workspaces.map((workspace) => [
+        workspaceCompositeKey(workspace.organizationSlug, workspace.slug),
+        workspace,
+      ]),
     ),
     devActorMode,
     usesSyntheticDefaultWorkspace,
@@ -166,9 +205,14 @@ export function createWorkspaceCatalog({
 
 export function loadWorkspaceCatalog(env = privateEnv) {
   const resolved = resolveWorkspaceEnv(env);
-  const configuredWorkspaces = parseWorkspaceEntries(resolved.ANX_WORKSPACES);
+  const defaultOrgHint = String(resolved.ANX_DEFAULT_ORGANIZATION ?? "").trim();
+  const configuredWorkspaces = parseWorkspaceEntries(
+    resolved.ANX_WORKSPACES,
+    defaultOrgHint,
+  );
   const preconfiguredWorkspaces = parseWorkspaceEntries(
     env.ANX_SAAS_DEV_PRECONFIGURED_WORKSPACES,
+    defaultOrgHint,
   );
   const saasPackedHost = isSaasPackedHostDev(env);
 
@@ -184,8 +228,8 @@ export function loadWorkspaceCatalog(env = privateEnv) {
     workspaces = [];
     usesSyntheticDefaultWorkspace = false;
   } else {
-    workspaces = fallbackSingleWorkspace(env);
-    usesSyntheticDefaultWorkspace = true;
+    workspaces = [];
+    usesSyntheticDefaultWorkspace = false;
   }
   const devActorMode =
     env.ANX_DEV_ACTOR_MODE === "true" || env.ANX_DEV_ACTOR_MODE === "1";
@@ -193,17 +237,25 @@ export function loadWorkspaceCatalog(env = privateEnv) {
   return createWorkspaceCatalog({
     workspaces,
     defaultWorkspaceSlug: resolved.ANX_DEFAULT_WORKSPACE,
+    defaultOrganizationSlug: resolved.ANX_DEFAULT_ORGANIZATION,
     devActorMode,
     usesSyntheticDefaultWorkspace,
     hostedDevAllowEmpty: saasPackedHost && workspaces.length === 0,
   });
 }
 
-export function getWorkspaceBySlug(workspaceSlug, env = privateEnv) {
+export function getWorkspaceBySlug(
+  workspaceSlug,
+  env = privateEnv,
+  organizationSlug = "",
+) {
   const catalog = loadWorkspaceCatalog(env);
-  return (
-    catalog.workspaceBySlug.get(normalizeWorkspaceSlug(workspaceSlug)) ?? null
-  );
+  const org = normalizeOrganizationSlug(organizationSlug);
+  if (!org) {
+    return null;
+  }
+  const key = workspaceCompositeKey(org, workspaceSlug);
+  return catalog.workspaceByComposite.get(key) ?? null;
 }
 
 export function toPublicWorkspaceCatalog(catalog) {
@@ -215,8 +267,12 @@ export function toPublicWorkspaceCatalog(catalog) {
     };
   }
   return {
-    defaultWorkspace: catalog.defaultWorkspace.slug,
+    defaultWorkspace: {
+      organizationSlug: catalog.defaultWorkspace.organizationSlug,
+      slug: catalog.defaultWorkspace.slug,
+    },
     workspaces: catalog.workspaces.map((workspace) => ({
+      organizationSlug: workspace.organizationSlug,
       slug: workspace.slug,
       label: workspace.label,
       description: workspace.description,

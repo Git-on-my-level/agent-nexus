@@ -5,7 +5,7 @@ const envState = vi.hoisted(() => ({
 }));
 
 const workspaceResolverMocks = vi.hoisted(() => ({
-  resolveWorkspaceBySlug: vi.fn(),
+  resolveWorkspaceInRoute: vi.fn(),
 }));
 
 const authSessionMocks = vi.hoisted(() => ({
@@ -18,9 +18,13 @@ vi.mock("$env/dynamic/private", () => ({
   env: envState,
 }));
 
-vi.mock("$lib/server/workspaceResolver.js", () => ({
-  resolveWorkspaceBySlug: workspaceResolverMocks.resolveWorkspaceBySlug,
-}));
+vi.mock("$lib/server/workspaceResolver.js", async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    resolveWorkspaceInRoute: workspaceResolverMocks.resolveWorkspaceInRoute,
+  };
+});
 
 vi.mock("$lib/server/authSession.js", () => ({
   clearRetryableWorkspaceAuthFailureCount:
@@ -29,23 +33,27 @@ vi.mock("$lib/server/authSession.js", () => ({
   writeWorkspaceRefreshToken: authSessionMocks.writeWorkspaceRefreshToken,
 }));
 
-import { POST } from "../../src/routes/[workspace]/auth/callback/+server.js";
+import { POST } from "../../src/routes/o/[organization]/w/[workspace]/auth/callback/+server.js";
 
 function createEvent(formFields, options = {}) {
   const { headers: headerOverrides = {}, ...rest } = options;
   return {
     params: {
+      organization: "local",
       workspace: "acme",
     },
-    request: new Request("https://ui.example.test/acme/auth/callback", {
-      method: "POST",
-      body: new URLSearchParams(formFields),
-      headers: {
-        accept: "application/json",
-        ...headerOverrides,
+    request: new Request(
+      "https://ui.example.test/o/local/w/acme/auth/callback",
+      {
+        method: "POST",
+        body: new URLSearchParams(formFields),
+        headers: {
+          accept: "application/json",
+          ...headerOverrides,
+        },
+        ...rest,
       },
-      ...rest,
-    }),
+    ),
     cookies: {
       set: vi.fn(),
       delete: vi.fn(),
@@ -57,7 +65,8 @@ function createEvent(formFields, options = {}) {
 describe("workspace auth callback route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    workspaceResolverMocks.resolveWorkspaceBySlug.mockResolvedValue({
+    workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
+      organizationSlug: "local",
       workspaceSlug: "acme",
       workspace: {
         slug: "acme",
@@ -112,7 +121,7 @@ describe("workspace auth callback route", () => {
 
     await expect(POST(event)).rejects.toMatchObject({
       status: 303,
-      location: "/acme/threads?view=mine",
+      location: "/o/local/w/acme/threads?view=mine",
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(2);

@@ -18,6 +18,7 @@
       humanize,
       labelHints,
       workspaceSlug: $page.params.workspace,
+      organizationSlug: $page.params.organization,
     }),
   );
 </script>

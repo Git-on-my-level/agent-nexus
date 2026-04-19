@@ -42,17 +42,20 @@ describe("actor session / gate logic", () => {
 
   it("persists and restores selected actor id", () => {
     const storage = createMemoryStorage();
-    const storageKey = actorStorageKey();
+    const workspaceSlug = "local";
+    const storageKey = actorStorageKey(workspaceSlug);
 
-    expect(loadStoredActorId(storage)).toBe("");
-    expect(saveSelectedActorId("actor-123", storage)).toBe("actor-123");
-    expect(loadStoredActorId(storage)).toBe("actor-123");
+    expect(loadStoredActorId(storage, workspaceSlug)).toBe("");
+    expect(saveSelectedActorId("actor-123", storage, workspaceSlug)).toBe(
+      "actor-123",
+    );
+    expect(loadStoredActorId(storage, workspaceSlug)).toBe("actor-123");
 
-    expect(chooseActor("actor-789", storage)).toBe("actor-789");
+    expect(chooseActor("actor-789", storage, workspaceSlug)).toBe("actor-789");
     expect(storage.getItem(storageKey)).toBe("actor-789");
     expect(storage.getItem(ACTOR_STORAGE_KEY)).toBe(null);
 
-    expect(initializeActorSession(storage)).toBe("actor-789");
+    expect(initializeActorSession(storage, workspaceSlug)).toBe("actor-789");
   });
 
   it("builds actor create payload for POST /actors", () => {

@@ -21,9 +21,9 @@ describe("artifact ref rendering", () => {
         value: "artifact-receipt-seed",
         kind: "artifact",
         label: "artifact:artifact-receipt-seed",
-        href: "/artifacts/artifact-receipt-seed",
+        href: "",
         isExternal: false,
-        isLink: true,
+        isLink: false,
       },
       {
         raw: "thread:thread-onboarding",
@@ -31,9 +31,9 @@ describe("artifact ref rendering", () => {
         value: "thread-onboarding",
         kind: "thread",
         label: "thread:thread-onboarding",
-        href: "/threads/thread-onboarding",
+        href: "",
         isExternal: false,
-        isLink: true,
+        isLink: false,
       },
       {
         raw: "url:https://example.com/logs/incident-42",

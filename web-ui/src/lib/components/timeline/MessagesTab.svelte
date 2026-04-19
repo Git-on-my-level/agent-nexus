@@ -1,5 +1,6 @@
 <script>
   import { browser } from "$app/environment";
+  import { page } from "$app/stores";
   import { onMount, tick, untrack } from "svelte";
   import { get } from "svelte/store";
 
@@ -45,6 +46,7 @@
   let timelineLoading = $derived($timelineStore.timelineLoading);
   let timelineError = $derived($timelineStore.timelineError);
   let workspaceSlug = $derived($timelineWorkspaceSlug);
+  let organizationSlug = $derived($page.params.organization);
 
   let actorName = $derived((id) =>
     lookupActorDisplayName(id, $actorRegistry, $principalRegistry),
@@ -516,7 +518,8 @@
       agent in this workspace. See
       <a
         class="text-accent-text hover:text-accent-text"
-        href={workspacePath(workspaceSlug, "/access")}>Access</a
+        href={workspacePath(organizationSlug, workspaceSlug, "/access")}
+        >Access</a
       >
       for agent presence and registration status.
     </p>

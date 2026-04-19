@@ -239,7 +239,7 @@ test("mocked core smoke flow: inbox -> threads -> thread detail -> post message 
     });
   });
 
-  await page.goto("/inbox");
+  await page.goto("/o/local/w/local/inbox");
   await expect(
     page.getByRole("heading", { name: "Inbox", exact: true }),
   ).toBeVisible();

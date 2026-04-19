@@ -273,7 +273,7 @@ test("card detail modal Messages and Timeline tabs render without request storms
     },
   );
 
-  await page.goto(`/local/boards/${boardId}`);
+  await page.goto(`/o/local/w/local/boards/${boardId}`);
   await page.waitForLoadState("networkidle");
 
   await expect(
@@ -302,14 +302,14 @@ test("card detail modal Messages and Timeline tabs render without request storms
 
   await expect(
     dialog.getByRole("link", { name: "topic-modal-card" }),
-  ).toHaveAttribute("href", "/local/topics/topic-modal-card");
+  ).toHaveAttribute("href", "/o/local/w/local/topics/topic-modal-card");
   await expect(dialog.getByRole("link", { name: /card-one/ })).toHaveAttribute(
     "href",
-    `/local/boards/${boardId}?card=card-one`,
+    `/o/local/w/local/boards/${boardId}?card=card-one`,
   );
   await expect(
     dialog.getByRole("link", { name: /artifact-modal-card/ }),
-  ).toHaveAttribute("href", "/local/artifacts/artifact-modal-card");
+  ).toHaveAttribute("href", "/o/local/w/local/artifacts/artifact-modal-card");
 
   const tabCount = await dialog
     .locator('[aria-label="Card sections"] [role="tab"]')

@@ -8,6 +8,7 @@
 
   let ownedBoards = $derived($topicDetailStore.ownedBoards);
   let boardMemberships = $derived($topicDetailStore.boardMemberships);
+  let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
 
   let hasAny = $derived(ownedBoards.length > 0 || boardMemberships.length > 0);
@@ -31,6 +32,7 @@
     }
 
     return workspacePath(
+      organizationSlug,
       workspaceSlug,
       `/docs/${encodeURIComponent(normalized)}`,
     );
@@ -54,7 +56,7 @@
     </div>
     <a
       class="text-micro font-medium text-accent-text transition-colors hover:text-accent-text"
-      href={workspacePath(workspaceSlug, "/boards")}
+      href={workspacePath(organizationSlug, workspaceSlug, "/boards")}
     >
       All boards
     </a>
@@ -76,7 +78,11 @@
           {#each ownedBoards as board}
             <a
               class="flex items-center justify-between gap-3 px-4 py-2.5 transition-colors hover:bg-[var(--bg-soft)]"
-              href={workspacePath(workspaceSlug, `/boards/${board.id}`)}
+              href={workspacePath(
+                organizationSlug,
+                workspaceSlug,
+                `/boards/${board.id}`,
+              )}
             >
               <div class="flex min-w-0 items-center gap-2">
                 <span class="truncate text-meta font-medium text-[var(--fg)]">
@@ -122,10 +128,14 @@
             )}
             {@const cardMembership = membership?.card}
             {@const boardCardHref = cardMembership
-              ? `${workspacePath(workspaceSlug, `/boards/${boardId}`)}?card=${encodeURIComponent(
+              ? `${workspacePath(organizationSlug, workspaceSlug, `/boards/${boardId}`)}?card=${encodeURIComponent(
                   boardCardStableId(cardMembership),
                 )}`
-              : workspacePath(workspaceSlug, `/boards/${boardId}`)}
+              : workspacePath(
+                  organizationSlug,
+                  workspaceSlug,
+                  `/boards/${boardId}`,
+                )}
             {#if boardId}
               <div class="px-4 py-2.5">
                 <div class="flex items-center justify-between gap-3">

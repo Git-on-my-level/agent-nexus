@@ -85,7 +85,7 @@ test("inbox triage shows urgency summary and acknowledging removes an item", asy
     });
   });
 
-  await page.goto("/inbox");
+  await page.goto("/o/local/w/local/inbox");
   await expect.poll(() => inboxRequestCount).toBeGreaterThan(0);
 
   await expect(
@@ -164,7 +164,7 @@ test("inbox urgency filters reduce visible cards", async ({ page }) => {
     });
   });
 
-  await page.goto("/inbox");
+  await page.goto("/o/local/w/local/inbox");
   await expect.poll(() => inboxRequestCount).toBeGreaterThan(0);
   await expect(page.getByTestId("inbox-card-inbox-001")).toBeVisible();
   await expect(page.getByTestId("inbox-card-inbox-002")).toBeVisible();
@@ -254,7 +254,7 @@ test("recording a decision marks only the selected inbox item", async ({
     });
   });
 
-  await page.goto("/inbox");
+  await page.goto("/o/local/w/local/inbox");
   await expect.poll(() => inboxRequestCount).toBeGreaterThan(0);
 
   const decidedCard = page.getByTestId(`inbox-card-${decidedItemId}`);
@@ -361,7 +361,7 @@ test("undo returns a queued inbox decision before it is sent to core", async ({
     });
   });
 
-  await page.goto("/inbox");
+  await page.goto("/o/local/w/local/inbox");
   await expect.poll(() => inboxRequestCount).toBeGreaterThan(0);
 
   const decidedCard = page.getByTestId(`inbox-card-${decidedItemId}`);
@@ -506,7 +506,7 @@ test("inbox thread context shows subject link for decisions", async ({
     });
   });
 
-  await page.goto("/inbox");
+  await page.goto("/o/local/w/local/inbox");
   await expect.poll(() => inboxRequestCount).toBeGreaterThan(0);
   await expect.poll(() => principalRequestCount).toBe(2);
 

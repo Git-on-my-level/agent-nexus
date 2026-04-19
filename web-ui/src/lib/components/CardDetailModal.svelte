@@ -6,6 +6,7 @@
     cardItem = null,
     boardId = "",
     board = null,
+    organizationSlug = "",
     workspaceSlug = "",
     primaryTopic = null,
     actorName = (id) => id,
@@ -21,6 +22,7 @@
     {cardItem}
     {boardId}
     {board}
+    {organizationSlug}
     {workspaceSlug}
     {primaryTopic}
     {actorName}

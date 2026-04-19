@@ -29,25 +29,38 @@ test("preserves a configured mount prefix in redirects and generated links", asy
     window.localStorage.setItem("oar_ui_actor_id:local", "actor-ops-ai");
   });
 
+  await page.context().addCookies([
+    {
+      name: "anx_last_workspace",
+      value: "local:local",
+      domain: "127.0.0.1",
+      path: "/",
+    },
+  ]);
+
   await page.goto(appPath("/"));
 
-  await expect(page).toHaveURL(new RegExp(`${APP_BASE_PATH}/local/?$`));
+  await expect(page).toHaveURL(
+    new RegExp(`${APP_BASE_PATH}/o/local/w/local/?$`),
+  );
   await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
 
   await expect(
-    page.locator(`a[href="${appPath("/local/inbox")}"]`).first(),
+    page.locator(`a[href="${appPath("/o/local/w/local/inbox")}"]`).first(),
   ).toBeVisible();
   await expect(
-    page.locator(`a[href="${appPath("/local/topics")}"]`).first(),
+    page.locator(`a[href="${appPath("/o/local/w/local/topics")}"]`).first(),
   ).toBeVisible();
   await expect(
-    page.locator(`a[href="${appPath("/local/artifacts")}"]`).first(),
+    page.locator(`a[href="${appPath("/o/local/w/local/artifacts")}"]`).first(),
   ).toBeVisible();
 
   await page
-    .locator(`a[href="${appPath("/local/topics")}"]`)
+    .locator(`a[href="${appPath("/o/local/w/local/topics")}"]`)
     .first()
     .click();
-  await expect(page).toHaveURL(new RegExp(`${APP_BASE_PATH}/local/topics/?$`));
+  await expect(page).toHaveURL(
+    new RegExp(`${APP_BASE_PATH}/o/local/w/local/topics/?$`),
+  );
   await expect(page.getByRole("heading", { name: "Topics" })).toBeVisible();
 });

@@ -4,10 +4,7 @@ import {
   getCurrentWorkspaceSlug,
   currentWorkspaceSlug,
 } from "./workspaceContext.js";
-import {
-  DEFAULT_WORKSPACE_SLUG,
-  buildWorkspaceStorageKey,
-} from "./workspacePaths.js";
+import { buildWorkspaceStorageKey } from "./workspacePaths.js";
 import { buildLegacyProjectStorageKey } from "./compat/workspaceCompat.js";
 
 export const ACTOR_STORAGE_KEY = "oar_ui_actor_id";
@@ -51,8 +48,12 @@ currentWorkspaceSlug.subscribe((workspaceSlug) => {
 });
 
 function migrateProjectActorStorageKey(storage, workspaceSlug) {
-  const oldKey = buildLegacyProjectStorageKey(ACTOR_STORAGE_KEY, workspaceSlug);
-  const newKey = buildWorkspaceStorageKey(ACTOR_STORAGE_KEY, workspaceSlug);
+  const slug = String(workspaceSlug ?? "").trim();
+  if (!slug) {
+    return;
+  }
+  const oldKey = buildLegacyProjectStorageKey(ACTOR_STORAGE_KEY, slug);
+  const newKey = buildWorkspaceStorageKey(ACTOR_STORAGE_KEY, slug);
 
   if (oldKey === newKey) return;
 
@@ -63,7 +64,11 @@ function migrateProjectActorStorageKey(storage, workspaceSlug) {
 }
 
 export function actorStorageKey(workspaceSlug = getCurrentWorkspaceSlug()) {
-  return buildWorkspaceStorageKey(ACTOR_STORAGE_KEY, workspaceSlug);
+  const slug = String(workspaceSlug ?? "").trim();
+  if (!slug) {
+    return ACTOR_STORAGE_KEY;
+  }
+  return buildWorkspaceStorageKey(ACTOR_STORAGE_KEY, slug);
 }
 
 export function loadStoredActorId(
@@ -78,10 +83,7 @@ export function loadStoredActorId(
   }
 
   const normalizedWorkspaceSlug = String(workspaceSlug ?? "").trim();
-  if (
-    !normalizedWorkspaceSlug ||
-    normalizedWorkspaceSlug === DEFAULT_WORKSPACE_SLUG
-  ) {
+  if (!normalizedWorkspaceSlug) {
     return storage.getItem(ACTOR_STORAGE_KEY) ?? "";
   }
 

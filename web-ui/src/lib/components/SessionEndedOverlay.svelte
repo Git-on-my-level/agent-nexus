@@ -6,7 +6,9 @@
   let { open = false, cpOrigin = "", workspaceUrl = "" } = $props();
 
   let signInHref = $derived.by(() => {
-    const base = String(cpOrigin ?? "").trim().replace(/\/+$/, "");
+    const base = String(cpOrigin ?? "")
+      .trim()
+      .replace(/\/+$/, "");
     const target = String(workspaceUrl ?? "").trim();
     if (!base || !target) {
       return `${base}/login`;
@@ -27,7 +29,9 @@
       reduceMotion = false;
       return;
     }
-    reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
   });
 
   $effect(() => {
@@ -95,8 +99,8 @@
           Your session ended
         </h2>
         <p class="session-ended-body">
-          You've been signed out. Click below to sign in again and return to this
-          workspace.
+          You've been signed out. Click below to sign in again and return to
+          this workspace.
         </p>
         <div class="session-ended-cta">
           <span bind:this={primaryWrapEl} class="session-ended-focus-wrap">

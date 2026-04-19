@@ -2,14 +2,14 @@ import { json } from "@sveltejs/kit";
 
 import { buildProxyRequestInit } from "./coreProxy.js";
 import { resolveWorkspaceFromEvent } from "./workspaceResolver.js";
-import {
-  DEFAULT_WORKSPACE_SLUG,
-  WORKSPACE_HEADER,
-  normalizeWorkspaceSlug,
-} from "../workspacePaths.js";
+import { WORKSPACE_HEADER, normalizeWorkspaceSlug } from "../workspacePaths.js";
 
 function getWorkspaceSlug(value) {
-  return normalizeWorkspaceSlug(value) || DEFAULT_WORKSPACE_SLUG;
+  const slug = normalizeWorkspaceSlug(value);
+  if (!slug) {
+    throw new Error("workspace slug is required for auth session");
+  }
+  return slug;
 }
 
 const REFRESH_REPLAY_WINDOW_MS = 60_000;

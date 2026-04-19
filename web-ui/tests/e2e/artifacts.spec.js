@@ -100,7 +100,7 @@ test("artifact filters are URL-backed and survive refresh", async ({
     });
   });
 
-  await page.goto("/artifacts");
+  await page.goto("/o/local/w/local/artifacts");
   await expect.poll(() => artifactRequestCount).toBeGreaterThan(0);
 
   await expect(page.getByText("Prepare onboarding plan")).toBeVisible();
@@ -113,7 +113,7 @@ test("artifact filters are URL-backed and survive refresh", async ({
   await page.getByRole("button", { name: "Apply" }).click();
 
   await expect(page).toHaveURL(
-    /\/local\/artifacts\?kind=receipt&thread_id=thread-onboarding$/,
+    /\/o\/local\/w\/local\/artifacts\?kind=receipt&thread_id=thread-onboarding$/,
   );
   await expect(page.getByText("Collected onboarding evidence")).toBeVisible();
   await expect(page.getByText("Prepare onboarding plan")).toHaveCount(0);
@@ -122,7 +122,7 @@ test("artifact filters are URL-backed and survive refresh", async ({
   await page.reload();
 
   await expect(page).toHaveURL(
-    /\/local\/artifacts\?kind=receipt&thread_id=thread-onboarding$/,
+    /\/o\/local\/w\/local\/artifacts\?kind=receipt&thread_id=thread-onboarding$/,
   );
   await expect(page.getByLabel("Kind")).toHaveValue("receipt");
   await expect(page.getByLabel("Thread ID")).toHaveValue("thread-onboarding");

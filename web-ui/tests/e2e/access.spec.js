@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test("renders the access page without auth seeding", async ({ page }) => {
-  await page.goto("/local/access");
+  await page.goto("/o/local/w/local/access");
 
   await expect(
     page.getByRole("heading", { name: "Select Actor Identity" }),
@@ -41,7 +41,7 @@ test("reads the cookie-backed session from the same-origin endpoint", async ({
     });
   });
 
-  await page.goto("/local/access");
+  await page.goto("/o/local/w/local/access");
 
   const session = await page.evaluate(async () => {
     const response = await fetch("/auth/session", {
@@ -145,7 +145,7 @@ test("does not repeat the username in principal rows", async ({ page }) => {
     });
   });
 
-  await page.goto("/local/access");
+  await page.goto("/o/local/w/local/access");
 
   await expect(page.getByText("m4-hermes", { exact: true })).toBeVisible();
   await expect(

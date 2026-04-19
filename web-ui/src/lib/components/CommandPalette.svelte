@@ -9,7 +9,11 @@
   import { kindLabel } from "$lib/artifactKinds";
   import { workspacePath } from "$lib/workspacePaths";
 
-  let { open = $bindable(false), workspaceSlug = "" } = $props();
+  let {
+    open = $bindable(false),
+    organizationSlug = "",
+    workspaceSlug = "",
+  } = $props();
 
   let query = $state("");
   let results = $state({ topics: [], docs: [], boards: [], artifacts: [] });
@@ -111,7 +115,7 @@
   }
 
   function navigate(entry) {
-    if (!workspaceSlug || entry.type === "header") return;
+    if (!organizationSlug || !workspaceSlug || entry.type === "header") return;
     const paths = {
       topic: `/topics/${entry.item.id}`,
       doc: `/docs/${entry.item.id}`,
@@ -121,7 +125,7 @@
     const target = paths[entry.type];
     if (target) {
       close();
-      goto(workspacePath(workspaceSlug, target));
+      goto(workspacePath(organizationSlug, workspaceSlug, target));
     }
   }
 

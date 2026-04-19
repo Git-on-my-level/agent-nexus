@@ -140,7 +140,7 @@
           <li>
             Set <code
               class="rounded-md bg-[var(--line)] px-1.5 py-0.5 text-[11px] font-medium"
-              >ANX_WORKSPACES='[&#123;"slug":"local","coreBaseUrl":"http://127.0.0.1:8000"&#125;]'</code
+              >ANX_WORKSPACES='[&#123;"organizationSlug":"local","slug":"local","coreBaseUrl":"http://127.0.0.1:8000"&#125;]'</code
             >
             or the compatibility alias
             <code

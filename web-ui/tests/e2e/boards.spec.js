@@ -669,7 +669,7 @@ test("board UI supports create/edit and card mutation flows", async ({
     });
   });
 
-  await page.goto("/local/boards");
+  await page.goto("/o/local/w/local/boards");
   await page.waitForLoadState("networkidle");
 
   await expect(page.getByRole("heading", { name: "Boards" })).toBeVisible();
@@ -687,7 +687,7 @@ test("board UI supports create/edit and card mutation flows", async ({
   await page.getByRole("button", { name: /Launch Runbook/ }).click();
   await page.getByRole("button", { name: "Create board", exact: true }).click();
 
-  await expect(page).toHaveURL(/\/local\/boards\/board-created$/);
+  await expect(page).toHaveURL(/\/o\/local\/w\/local\/boards\/board-created$/);
   await expect(
     page.getByRole("heading", { name: "Launch Control" }),
   ).toBeVisible();
@@ -1000,7 +1000,7 @@ test("board detail shows pending freshness and hides derived card counts until r
     });
   });
 
-  await page.goto("/local/boards/board-pending");
+  await page.goto("/o/local/w/local/boards/board-pending");
 
   await expect(
     page.getByRole("heading", { name: "Pending Board" }),
@@ -1144,7 +1144,7 @@ test("board edit conflict reloads latest state and allows retry", async ({
     });
   });
 
-  await page.goto("/local/boards/board-conflict");
+  await page.goto("/o/local/w/local/boards/board-conflict");
 
   await expect(
     page.getByRole("heading", { name: "Conflict Board" }),

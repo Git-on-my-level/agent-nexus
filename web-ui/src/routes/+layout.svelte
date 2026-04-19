@@ -39,6 +39,7 @@
     settingsNavItems,
   } from "$lib/navigation";
   import {
+    setCurrentOrganizationSlug,
     setCurrentWorkspaceSlug,
     setDevActorMode,
     setDevActorModeReady,
@@ -87,6 +88,9 @@
 
   let activeWorkspace = $derived($page.data.workspace ?? null);
   let activeWorkspaceSlug = $derived(activeWorkspace?.slug ?? "");
+  let activeOrganizationSlug = $derived(
+    activeWorkspace?.organizationSlug ?? $page.params?.organization ?? "",
+  );
   let hasMultipleWorkspaces = $derived((data.workspaces ?? []).length > 1);
   let workspaceSwitcherSub = $derived.by(() => {
     const d = String(activeWorkspace?.description ?? "").trim();
@@ -95,8 +99,12 @@
     return "ANX Control Surface";
   });
   let currentAppPath = $derived(
-    activeWorkspaceSlug
-      ? stripWorkspacePath($page.url.pathname, activeWorkspaceSlug)
+    activeWorkspaceSlug && activeOrganizationSlug
+      ? stripWorkspacePath(
+          $page.url.pathname,
+          activeOrganizationSlug,
+          activeWorkspaceSlug,
+        )
       : stripBasePath($page.url.pathname),
   );
   let qaMode = $derived($page.url.searchParams.get("qa") === "1");
@@ -181,11 +189,11 @@
 
   let hostedCpOrigin = $derived(String(data.hostedCpOrigin ?? "").trim());
   let sessionEndedWorkspaceUrl = $derived.by(() => {
-    if (!browser || !activeWorkspaceSlug) {
+    if (!browser || !activeWorkspaceSlug || !activeOrganizationSlug) {
       return "";
     }
     try {
-      return `${window.location.origin}${workspacePath(activeWorkspaceSlug, "/")}`;
+      return `${window.location.origin}${workspacePath(activeOrganizationSlug, activeWorkspaceSlug, "/")}`;
     } catch {
       return "";
     }
@@ -206,7 +214,11 @@
     if (!browser || !shouldRedirectToLogin) {
       return;
     }
-    const loginPath = workspacePath(activeWorkspaceSlug, "/login");
+    const loginPath = workspacePath(
+      activeOrganizationSlug,
+      activeWorkspaceSlug,
+      "/login",
+    );
     const returnTo = sanitizeHostedReturnPath(
       `${currentAppPath || "/"}${$page.url.search || ""}`,
     );
@@ -228,6 +240,9 @@
     }
 
     setCurrentWorkspaceSlug(workspaceSlug);
+    setCurrentOrganizationSlug(
+      activeOrganizationSlug || $page.params?.organization || "",
+    );
     if (hydratedWorkspaceSlug === workspaceSlug) {
       return;
     }
@@ -542,7 +557,7 @@
   }
 
   function workspaceHref(pathname = "/") {
-    return workspacePath(activeWorkspaceSlug, pathname);
+    return workspacePath(activeOrganizationSlug, activeWorkspaceSlug, pathname);
   }
 
   async function switchWorkspace(nextWorkspaceSlug) {
@@ -550,7 +565,11 @@
       return;
     }
 
-    const destination = `${workspacePath(nextWorkspaceSlug, currentAppPath)}${$page.url.search}${$page.url.hash}`;
+    const entry = (data.workspaces ?? []).find(
+      (w) => w.slug === nextWorkspaceSlug,
+    );
+    const nextOrg = entry?.organizationSlug ?? activeOrganizationSlug;
+    const destination = `${workspacePath(nextOrg, nextWorkspaceSlug, currentAppPath)}${$page.url.search}${$page.url.hash}`;
     await goto(destination);
   }
 
@@ -780,7 +799,9 @@
                   aria-label="Switch workspace"
                 >
                   {#each data.workspaces ?? [] as workspace}
-                    {@const isCurrent = workspace.slug === activeWorkspaceSlug}
+                    {@const isCurrent =
+                      workspace.slug === activeWorkspaceSlug &&
+                      workspace.organizationSlug === activeOrganizationSlug}
                     {@const loadFailed = workspace._loadFailed}
                     <button
                       class="workspace-switcher-option"
@@ -1071,6 +1092,7 @@
   {#if activeWorkspaceSlug}
     <CommandPalette
       bind:open={commandPaletteOpen}
+      organizationSlug={activeOrganizationSlug}
       workspaceSlug={activeWorkspaceSlug}
     />
   {/if}

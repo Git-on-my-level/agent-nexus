@@ -51,9 +51,13 @@ vi.mock("$lib/compat/workspaceCompat", () => ({
   getWorkspaceHeader: vi.fn(() => "ops"),
 }));
 
-vi.mock("$lib/workspacePaths", () => ({
-  stripBasePath: vi.fn((pathname) => pathname),
-}));
+vi.mock("$lib/workspacePaths", async (importOriginal) => {
+  const mod = await importOriginal();
+  return {
+    ...mod,
+    stripBasePath: vi.fn((pathname) => pathname),
+  };
+});
 
 vi.mock("$lib/server/authSession", () => ({
   clearWorkspaceAuthSession: authSessionMocks.clearWorkspaceAuthSession,
@@ -417,8 +421,8 @@ describe("hooks proxy retry", () => {
 
     const response = await handle({
       event: {
-        url: new URL("https://oar.example.test/dtrinity"),
-        request: new Request("https://oar.example.test/dtrinity", {
+        url: new URL("https://oar.example.test/threads"),
+        request: new Request("https://oar.example.test/threads", {
           method: "GET",
           headers: {
             accept: "text/html",

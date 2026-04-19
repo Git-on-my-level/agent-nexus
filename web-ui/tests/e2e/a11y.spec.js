@@ -60,15 +60,15 @@ test.describe("workspace route accessibility (requires anx-core)", () => {
   });
 
   const workspaceRoutes = [
-    { path: "/local/inbox", heading: "Inbox" },
-    { path: "/local/topics", heading: "Topics" },
-    { path: "/local/boards", heading: "Boards" },
-    { path: "/local/docs", heading: "Docs" },
-    { path: "/local/artifacts", heading: "Artifacts" },
-    { path: "/local/trash", heading: "Trash" },
-    { path: "/local/access", heading: "Select Actor Identity" },
-    { path: "/local/more", heading: "More" },
-    { path: "/local", heading: "Dashboard" },
+    { path: "/o/local/w/local/inbox", heading: "Inbox" },
+    { path: "/o/local/w/local/topics", heading: "Topics" },
+    { path: "/o/local/w/local/boards", heading: "Boards" },
+    { path: "/o/local/w/local/docs", heading: "Docs" },
+    { path: "/o/local/w/local/artifacts", heading: "Artifacts" },
+    { path: "/o/local/w/local/trash", heading: "Trash" },
+    { path: "/o/local/w/local/access", heading: "Select Actor Identity" },
+    { path: "/o/local/w/local/more", heading: "More" },
+    { path: "/o/local/w/local", heading: "Dashboard" },
   ];
 
   for (const route of workspaceRoutes) {

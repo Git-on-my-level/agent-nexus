@@ -1,11 +1,9 @@
-import {
-  DEFAULT_WORKSPACE_SLUG,
-  normalizeWorkspaceSlug,
-} from "$lib/workspacePaths";
+import { normalizeWorkspaceSlug } from "$lib/workspacePaths";
 
 const LEGACY_PROJECTS_ENV = "ANX_PROJECTS";
 const LEGACY_DEFAULT_PROJECT_ENV = "ANX_DEFAULT_PROJECT";
 const LEGACY_PROJECT_HEADER = "x-oar-project-slug";
+const ORGANIZATION_HEADER = "x-anx-organization-slug";
 
 export function resolveWorkspaceEnv(env) {
   const workspacesRaw = env.ANX_WORKSPACES ?? env[LEGACY_PROJECTS_ENV];
@@ -15,6 +13,7 @@ export function resolveWorkspaceEnv(env) {
   return {
     ANX_WORKSPACES: workspacesRaw,
     ANX_DEFAULT_WORKSPACE: defaultWorkspaceRaw,
+    ANX_DEFAULT_ORGANIZATION: env.ANX_DEFAULT_ORGANIZATION,
   };
 }
 
@@ -32,8 +31,19 @@ export function getWorkspaceHeader(headers) {
   return null;
 }
 
+export function readOrganizationSlugHeader(headers) {
+  return String(headers.get(ORGANIZATION_HEADER) ?? "").trim();
+}
+
+export function getOrganizationHeader(headers) {
+  return readOrganizationSlugHeader(headers);
+}
+
 export function buildLegacyProjectStorageKey(baseKey, workspaceSlug) {
-  const slug = normalizeWorkspaceSlug(workspaceSlug) || DEFAULT_WORKSPACE_SLUG;
+  const slug = normalizeWorkspaceSlug(workspaceSlug);
+  if (!slug) {
+    throw new Error("workspace slug is required for storage key");
+  }
   return `${baseKey}:${slug}`;
 }
 
@@ -41,4 +51,5 @@ export const LEGACY_CONSTANTS = {
   PROJECTS_ENV: LEGACY_PROJECTS_ENV,
   DEFAULT_PROJECT_ENV: LEGACY_DEFAULT_PROJECT_ENV,
   PROJECT_HEADER: LEGACY_PROJECT_HEADER,
+  ORGANIZATION_HEADER,
 };

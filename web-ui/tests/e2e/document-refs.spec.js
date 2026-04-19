@@ -330,7 +330,7 @@ test("document typed refs navigate from overview chips, timeline refs, and recei
     },
   );
 
-  await page.goto("/threads/thread-onboarding");
+  await page.goto("/o/local/w/local/threads/thread-onboarding");
   await expect(
     page.getByRole("heading", { name: "Customer Onboarding Workflow" }),
   ).toBeVisible();
@@ -338,7 +338,9 @@ test("document typed refs navigate from overview chips, timeline refs, and recei
   await page
     .getByRole("link", { name: "Document product-constitution" })
     .click();
-  await expect(page).toHaveURL(/\/local\/docs\/product-constitution$/);
+  await expect(page).toHaveURL(
+    /\/o\/local\/w\/local\/docs\/product-constitution$/,
+  );
   await expect(
     page.getByRole("heading", {
       name: "Product Constitution",
@@ -351,14 +353,14 @@ test("document typed refs navigate from overview chips, timeline refs, and recei
     }),
   ).toBeVisible();
 
-  await page.goto("/threads/thread-onboarding");
+  await page.goto("/o/local/w/local/threads/thread-onboarding");
   await page.getByRole("button", { name: "Timeline" }).click();
   await expect(
     page.getByText("Document refs linked for review.", { exact: true }),
   ).toBeVisible();
   await page.getByRole("link", { name: "Document revision rev-pc-2" }).click();
   await expect(page).toHaveURL(
-    /\/local\/docs\/product-constitution\?revision=rev-pc-2$/,
+    /\/o\/local\/w\/local\/docs\/product-constitution\?revision=rev-pc-2$/,
   );
   await expect(
     page.getByText("Viewing revision 2", { exact: false }),
@@ -369,7 +371,7 @@ test("document typed refs navigate from overview chips, timeline refs, and recei
     }),
   ).toBeVisible();
 
-  await page.goto(`/artifacts/${receiptId}`);
+  await page.goto(`/o/local/w/local/artifacts/${receiptId}`);
   await expect(
     page.getByRole("heading", { name: "Review constitution refs" }),
   ).toBeVisible();
@@ -379,7 +381,9 @@ test("document typed refs navigate from overview chips, timeline refs, and recei
     .filter({ hasText: "Document product-constitution" })
     .first()
     .click();
-  await expect(page).toHaveURL(/\/local\/docs\/product-constitution$/);
+  await expect(page).toHaveURL(
+    /\/o\/local\/w\/local\/docs\/product-constitution$/,
+  );
   await expect(
     page.getByRole("heading", {
       name: "Product Constitution",

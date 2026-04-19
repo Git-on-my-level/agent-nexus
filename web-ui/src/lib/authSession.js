@@ -79,8 +79,7 @@ function applySessionEndedByCp(status, payload, workspaceSlug) {
     return false;
   }
   sessionEndedByCp.set(true);
-  const slug =
-    String(workspaceSlug ?? "").trim() || getCurrentWorkspaceSlug();
+  const slug = String(workspaceSlug ?? "").trim() || getCurrentWorkspaceSlug();
   clearAuthSession(slug);
   return true;
 }

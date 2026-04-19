@@ -58,6 +58,7 @@
     cardItem,
     boardId,
     board,
+    organizationSlug = "",
     workspaceSlug,
     /** @type {{ id?: string, title?: string } | null | undefined} */
     primaryTopic = null,
@@ -118,13 +119,13 @@
   });
 
   let topicHref = $derived.by(() => {
-    if (!workspaceSlug || !cardInspectNav) return "";
+    if (!organizationSlug || !workspaceSlug || !cardInspectNav) return "";
     const path =
       cardInspectNav.kind === "topic"
         ? `/topics/${encodeURIComponent(cardInspectNav.segment)}`
         : `/threads/${encodeURIComponent(cardInspectNav.segment)}`;
     try {
-      return workspacePath(workspaceSlug, path);
+      return workspacePath(organizationSlug, workspaceSlug, path);
     } catch {
       return "";
     }

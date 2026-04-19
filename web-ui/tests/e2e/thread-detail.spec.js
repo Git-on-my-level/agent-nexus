@@ -377,7 +377,7 @@ test("thread detail separates messages from timeline and nests replies", async (
     });
   });
 
-  await page.goto("/threads/thread-onboarding");
+  await page.goto("/o/local/w/local/threads/thread-onboarding");
   await expect.poll(() => principalRequestCount >= 2).toBe(true);
   // Topic detail awaits listTopicTimeline before starting SSE; release the first
   // timeline response so onMount can finish (thread workspace used to seed
@@ -391,21 +391,24 @@ test("thread detail separates messages from timeline and nests replies", async (
   ).toBeVisible();
   await expect(
     page.getByRole("link", { name: /Q2 Launch Board/ }),
-  ).toHaveAttribute("href", /\/boards\/board-q2-launch$/);
+  ).toHaveAttribute("href", /\/o\/local\/w\/local\/boards\/board-q2-launch$/);
   await expect(
     page.getByRole("link", {
       name: "Pinned doc: doc-onboarding-runbook",
     }),
-  ).toHaveAttribute("href", /\/docs\/doc-onboarding-runbook$/);
+  ).toHaveAttribute(
+    "href",
+    /\/o\/local\/w\/local\/docs\/doc-onboarding-runbook$/,
+  );
   const docLink = page.getByRole("link", { name: /Onboarding Runbook/ });
   await expect(docLink).toBeVisible();
   await expect(docLink).toHaveAttribute(
     "href",
-    /\/docs\/doc-onboarding-runbook\?revision=rev-onboarding-runbook-2$/,
+    /\/o\/local\/w\/local\/docs\/doc-onboarding-runbook\?revision=rev-onboarding-runbook-2$/,
   );
   await page.getByRole("tab", { name: "Messages" }).click();
   await expect(page).toHaveURL(
-    /\/local\/topics\/thread-onboarding\?tab=messages$/,
+    /\/o\/local\/w\/local\/topics\/thread-onboarding\?tab=messages$/,
   );
   await expect(
     page.getByText("Latest workspace message", { exact: true }),
@@ -426,7 +429,7 @@ test("thread detail separates messages from timeline and nests replies", async (
   ).toBeVisible();
   await expect(
     page.locator('[role="tabpanel"]').getByRole("link", { name: "Access" }),
-  ).toHaveAttribute("href", /\/local\/access$/);
+  ).toHaveAttribute("href", /\/o\/local\/w\/local\/access$/);
   await expect(
     page.getByText("Earlier timeline-only message", { exact: true }),
   ).toBeVisible();
@@ -469,7 +472,7 @@ test("thread detail separates messages from timeline and nests replies", async (
 
   await page.getByRole("tab", { name: "Timeline" }).click();
   await expect(page).toHaveURL(
-    /\/local\/topics\/thread-onboarding\?tab=timeline$/,
+    /\/o\/local\/w\/local\/topics\/thread-onboarding\?tab=timeline$/,
   );
   await expect(page.locator("#message-text")).toHaveCount(0);
   await expect(
@@ -481,7 +484,7 @@ test("thread detail separates messages from timeline and nests replies", async (
   await page.reload();
 
   await expect(page).toHaveURL(
-    /\/local\/topics\/thread-onboarding\?tab=timeline$/,
+    /\/o\/local\/w\/local\/topics\/thread-onboarding\?tab=timeline$/,
   );
   await expect(page.locator("#message-text")).toHaveCount(0);
   await expect(
@@ -664,7 +667,7 @@ test("thread detail handles snapshot update conflict and retries after reload", 
     });
   });
 
-  await page.goto("/threads/thread-onboarding");
+  await page.goto("/o/local/w/local/threads/thread-onboarding");
 
   await expect(
     page.getByRole("heading", { name: "Customer Onboarding Workflow" }),
@@ -861,7 +864,7 @@ test("thread detail updates workspace panels from another actor via event stream
     });
   });
 
-  await page.goto("/threads/thread-onboarding");
+  await page.goto("/o/local/w/local/threads/thread-onboarding");
 
   await expect(
     page.getByText("Initial thread summary.", { exact: true }),

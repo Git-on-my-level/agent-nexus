@@ -2,8 +2,12 @@ import { browser } from "$app/environment";
 import { getAuthenticatedActorId } from "$lib/authSession";
 import { getSelectedActorId } from "$lib/actorSession";
 import { createOarCoreClient } from "$lib/anxCoreClient";
-import { getCurrentWorkspaceSlug } from "$lib/workspaceContext";
-import { WORKSPACE_HEADER } from "$lib/workspacePaths";
+import { buildCoreRequestContextHeaders } from "$lib/coreClientRequestHeaders";
+import {
+  getCurrentOrganizationSlug,
+  getCurrentWorkspaceSlug,
+} from "$lib/workspaceContext";
+import { APP_BASE_PATH } from "$lib/workspacePaths";
 
 let browserClient;
 
@@ -19,9 +23,13 @@ function resolveBrowserClient() {
     browserClient = createOarCoreClient({
       actorIdProvider: () => getAuthenticatedActorId() || getSelectedActorId(),
       lockActorIdProvider: () => Boolean(getAuthenticatedActorId()),
-      requestContextHeadersProvider: () => ({
-        [WORKSPACE_HEADER]: getCurrentWorkspaceSlug(),
-      }),
+      requestContextHeadersProvider: () =>
+        buildCoreRequestContextHeaders({
+          storeOrg: getCurrentOrganizationSlug(),
+          storeWorkspace: getCurrentWorkspaceSlug(),
+          pathname: globalThis.location?.pathname ?? "/",
+          basePath: APP_BASE_PATH,
+        }),
       fetchFn,
     });
   }

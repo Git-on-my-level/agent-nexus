@@ -1,12 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const workspaceResolverMocks = vi.hoisted(() => ({
-  resolveWorkspaceBySlug: vi.fn(),
+  resolveWorkspaceInRoute: vi.fn(),
 }));
 
-vi.mock("$lib/server/workspaceResolver", () => ({
-  resolveWorkspaceBySlug: workspaceResolverMocks.resolveWorkspaceBySlug,
-}));
+vi.mock("$lib/server/workspaceResolver", async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    resolveWorkspaceInRoute: workspaceResolverMocks.resolveWorkspaceInRoute,
+  };
+});
 
 vi.mock("$env/dynamic/private", () => ({
   env: {
@@ -18,13 +22,17 @@ vi.mock("$app/paths", () => ({
   base: "",
 }));
 
-import { POST } from "../../src/routes/[workspace]/auth/callback/+server.js";
+import { POST } from "../../src/routes/o/[organization]/w/[workspace]/auth/callback/+server.js";
 
+const ORG_SLUG = "local";
 const WORKSPACE_SLUG = "alpha";
 const WORKSPACE_ID = "ws-callback-1";
 const CORE_BASE = "http://127.0.0.1:9000";
 
-function createPostEvent(formFields, url = "http://localhost/alpha/auth/callback") {
+function createPostEvent(
+  formFields,
+  url = "http://localhost/o/local/w/alpha/auth/callback",
+) {
   const form = new FormData();
   for (const [key, value] of Object.entries(formFields)) {
     form.set(key, value);
@@ -36,7 +44,7 @@ function createPostEvent(formFields, url = "http://localhost/alpha/auth/callback
       body: form,
       headers: { accept: "application/json" },
     }),
-    params: { workspace: WORKSPACE_SLUG },
+    params: { organization: ORG_SLUG, workspace: WORKSPACE_SLUG },
     url: new URL(url),
     cookies: {
       get: vi.fn(() => ""),
@@ -52,7 +60,8 @@ function createPostEvent(formFields, url = "http://localhost/alpha/auth/callback
 }
 
 function mockResolvedWorkspace() {
-  workspaceResolverMocks.resolveWorkspaceBySlug.mockResolvedValue({
+  workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
+    organizationSlug: ORG_SLUG,
     workspaceSlug: WORKSPACE_SLUG,
     workspace: {
       slug: WORKSPACE_SLUG,
@@ -60,6 +69,7 @@ function mockResolvedWorkspace() {
       workspaceId: WORKSPACE_ID,
       id: WORKSPACE_ID,
     },
+    error: null,
   });
 }
 
@@ -77,7 +87,7 @@ describe("auth callback POST (+server)", () => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
-    workspaceResolverMocks.resolveWorkspaceBySlug.mockReset();
+    workspaceResolverMocks.resolveWorkspaceInRoute.mockReset();
   });
 
   it("redirects on happy path, sets workspace cookies, uses sanitized return_path", async () => {
@@ -128,17 +138,17 @@ describe("auth callback POST (+server)", () => {
 
     expect(thrown).toMatchObject({
       status: 303,
-      location: "/alpha/threads",
+      location: "/o/local/w/alpha/threads",
     });
-    expect(event.cookieCalls.some((c) => c.name === "oar_ui_session_alpha")).toBe(
-      true,
-    );
+    expect(
+      event.cookieCalls.some((c) => c.name === "oar_ui_session_alpha"),
+    ).toBe(true);
     expect(
       event.cookieCalls.find((c) => c.name === "oar_ui_session_alpha")?.value,
     ).toBe("rt-happy");
-    expect(event.cookieCalls.some((c) => c.name === "oar_ui_access_alpha")).toBe(
-      true,
-    );
+    expect(
+      event.cookieCalls.some((c) => c.name === "oar_ui_access_alpha"),
+    ).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     const tokenCall = fetchMock.mock.calls.find((c) =>
       String(c[0]).includes("/auth/token"),
@@ -158,7 +168,10 @@ describe("auth callback POST (+server)", () => {
         if (u.includes("/session-exchange")) {
           return new Response(
             JSON.stringify({
-              error: { code: "state_mismatch", message: "State does not match." },
+              error: {
+                code: "state_mismatch",
+                message: "State does not match.",
+              },
             }),
             {
               status: 400,

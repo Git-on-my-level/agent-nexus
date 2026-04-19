@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const workspaceResolverMocks = vi.hoisted(() => ({
-  resolveWorkspaceBySlug: vi.fn(),
+  resolveWorkspaceInRoute: vi.fn(),
 }));
 
 const authSessionMocks = vi.hoisted(() => ({
@@ -16,23 +16,28 @@ vi.mock("$env/dynamic/private", () => ({
   env: dynamicPrivateEnv,
 }));
 
-vi.mock("$lib/server/workspaceResolver", () => ({
-  resolveWorkspaceBySlug: workspaceResolverMocks.resolveWorkspaceBySlug,
-}));
+vi.mock("$lib/server/workspaceResolver", async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    resolveWorkspaceInRoute: workspaceResolverMocks.resolveWorkspaceInRoute,
+  };
+});
 
 vi.mock("$lib/server/authSession", () => ({
   loadWorkspaceAuthenticatedAgent:
     authSessionMocks.loadWorkspaceAuthenticatedAgent,
 }));
 
-import { load } from "../../src/routes/[workspace]/login/+page.server.js";
+import { load } from "../../src/routes/o/[organization]/w/[workspace]/login/+page.server.js";
 
 function createEvent(overrides = {}) {
   return {
     params: {
+      organization: "local",
       workspace: "acme",
     },
-    url: new URL("https://ui.example.test/acme/login"),
+    url: new URL("https://ui.example.test/o/local/w/acme/login"),
     cookies: {
       get: vi.fn(() => ""),
     },
@@ -60,7 +65,8 @@ afterEach(() => {
 
 describe("workspace login route", () => {
   it("redirects to hosted sign-in for external grant mode when unauthenticated", async () => {
-    workspaceResolverMocks.resolveWorkspaceBySlug.mockResolvedValue({
+    workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
+      organizationSlug: "local",
       workspaceSlug: "acme",
       workspace: {
         coreBaseUrl: "https://core.example.test",
@@ -72,7 +78,7 @@ describe("workspace login route", () => {
 
     const event = createEvent({
       url: new URL(
-        "https://ui.example.test/acme/login?return_to=%2Fthreads%2F123%3Ftab%3Dnotes",
+        "https://ui.example.test/o/local/w/acme/login?return_to=%2Fthreads%2F123%3Ftab%3Dnotes",
       ),
       fetch: vi.fn(
         async () =>
@@ -98,7 +104,8 @@ describe("workspace login route", () => {
   });
 
   it("keeps workspace-local login flow when auth mode is not external_grant", async () => {
-    workspaceResolverMocks.resolveWorkspaceBySlug.mockResolvedValue({
+    workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
+      organizationSlug: "local",
       workspaceSlug: "acme",
       workspace: {
         coreBaseUrl: "https://core.example.test",
@@ -113,7 +120,8 @@ describe("workspace login route", () => {
   });
 
   it("fails closed to hosted sign-in when hosted handshake lookup fails", async () => {
-    workspaceResolverMocks.resolveWorkspaceBySlug.mockResolvedValue({
+    workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
+      organizationSlug: "local",
       workspaceSlug: "acme",
       workspace: {
         coreBaseUrl: "https://core.example.test",
@@ -136,7 +144,8 @@ describe("workspace login route", () => {
   });
 
   it("fails closed to hosted sign-in when hosted handshake omits auth mode", async () => {
-    workspaceResolverMocks.resolveWorkspaceBySlug.mockResolvedValue({
+    workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
+      organizationSlug: "local",
       workspaceSlug: "acme",
       workspace: {
         coreBaseUrl: "https://core.example.test",
@@ -165,7 +174,8 @@ describe("workspace login route", () => {
   });
 
   it("keeps workspace-local flow for non-hosted contexts when handshake lookup fails", async () => {
-    workspaceResolverMocks.resolveWorkspaceBySlug.mockResolvedValue({
+    workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
+      organizationSlug: "local",
       workspaceSlug: "local",
       workspace: {
         coreBaseUrl: "https://core.example.test",
@@ -176,8 +186,10 @@ describe("workspace login route", () => {
 
     const event = createEvent({
       params: {
+        organization: "local",
         workspace: "local",
       },
+      url: new URL("https://ui.example.test/o/local/w/local/login"),
       fetch: vi.fn(async () => {
         throw new Error("network timeout");
       }),
@@ -187,7 +199,8 @@ describe("workspace login route", () => {
   });
 
   it("redirects authenticated users to workspace home", async () => {
-    workspaceResolverMocks.resolveWorkspaceBySlug.mockResolvedValue({
+    workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
+      organizationSlug: "local",
       workspaceSlug: "acme",
       workspace: {
         coreBaseUrl: "https://core.example.test",
@@ -202,13 +215,14 @@ describe("workspace login route", () => {
     const event = createEvent();
     await expect(load(event)).rejects.toMatchObject({
       status: 307,
-      location: "/acme",
+      location: "/o/local/w/acme",
     });
   });
 
   it("redirects to launch finish when control-plane session cookie can mint a launch session", async () => {
     dynamicPrivateEnv.ANX_CONTROL_BASE_URL = "https://cp.example.test";
-    workspaceResolverMocks.resolveWorkspaceBySlug.mockResolvedValue({
+    workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
+      organizationSlug: "local",
       workspaceSlug: "acme",
       workspace: {
         coreBaseUrl: "https://core.example.test",
@@ -263,7 +277,8 @@ describe("workspace login route", () => {
 
   it("falls through to hosted sign-in when launch-sessions returns 401", async () => {
     dynamicPrivateEnv.ANX_CONTROL_BASE_URL = "https://cp.example.test";
-    workspaceResolverMocks.resolveWorkspaceBySlug.mockResolvedValue({
+    workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
+      organizationSlug: "local",
       workspaceSlug: "acme",
       workspace: {
         coreBaseUrl: "https://core.example.test",
@@ -275,7 +290,7 @@ describe("workspace login route", () => {
 
     const event = createEvent({
       url: new URL(
-        "https://ui.example.test/acme/login?return_to=%2Fthreads%2F1",
+        "https://ui.example.test/o/local/w/acme/login?return_to=%2Fthreads%2F1",
       ),
       fetch: vi.fn(async (url) => {
         const u = String(url);

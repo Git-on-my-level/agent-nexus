@@ -1,5 +1,5 @@
 import { parseRef, renderRef } from "./typedRefs.js";
-import { appPath, workspacePath } from "./workspacePaths.js";
+import { workspacePath } from "./workspacePaths.js";
 
 function asPathSegment(value) {
   return encodeURIComponent(String(value));
@@ -76,46 +76,79 @@ function resolveRefLabels(raw, prefix, value, options = {}) {
   };
 }
 
-function toWorkspaceHref(workspaceSlug, pathname) {
-  return workspaceSlug
-    ? workspacePath(workspaceSlug, pathname)
-    : appPath(pathname);
+function toWorkspaceHref(organizationSlug, workspaceSlug, pathname) {
+  const org = String(organizationSlug ?? "").trim();
+  const ws = String(workspaceSlug ?? "").trim();
+  if (!org || !ws) {
+    return "";
+  }
+  return workspacePath(org, ws, pathname);
 }
 
-function buildInternalHref(workspaceSlug, pathname) {
-  return toWorkspaceHref(workspaceSlug, pathname);
+function buildInternalHref(workspaceSlug, pathname, organizationSlug) {
+  return toWorkspaceHref(organizationSlug, workspaceSlug, pathname);
 }
 
 const LINK_RESOLVERS = {
-  artifact: ({ workspaceSlug, value }) =>
-    buildInternalHref(workspaceSlug, `/artifacts/${asPathSegment(value)}`),
-  thread: ({ workspaceSlug, value }) =>
-    buildInternalHref(workspaceSlug, `/threads/${asPathSegment(value)}`),
-  topic: ({ workspaceSlug, value }) =>
-    buildInternalHref(workspaceSlug, `/topics/${asPathSegment(value)}`),
-  card: ({ workspaceSlug, boardId, value }) =>
+  artifact: ({ workspaceSlug, organizationSlug, value }) =>
+    buildInternalHref(
+      workspaceSlug,
+      `/artifacts/${asPathSegment(value)}`,
+      organizationSlug,
+    ),
+  thread: ({ workspaceSlug, organizationSlug, value }) =>
+    buildInternalHref(
+      workspaceSlug,
+      `/threads/${asPathSegment(value)}`,
+      organizationSlug,
+    ),
+  topic: ({ workspaceSlug, organizationSlug, value }) =>
+    buildInternalHref(
+      workspaceSlug,
+      `/topics/${asPathSegment(value)}`,
+      organizationSlug,
+    ),
+  card: ({ workspaceSlug, organizationSlug, boardId, value }) =>
     boardId
       ? buildInternalHref(
           workspaceSlug,
           `/boards/${asPathSegment(boardId)}?card=${asPathSegment(value)}`,
+          organizationSlug,
         )
       : "",
-  event: ({ workspaceSlug, threadId, value }) =>
+  event: ({ workspaceSlug, organizationSlug, threadId, value }) =>
     threadId
       ? buildInternalHref(
           workspaceSlug,
           `/threads/${asPathSegment(threadId)}#event-${asPathSegment(value)}`,
+          organizationSlug,
         )
       : "",
   url: ({ value }) => value,
-  inbox: ({ workspaceSlug, value }) =>
-    buildInternalHref(workspaceSlug, `/inbox#inbox-${asPathSegment(value)}`),
-  document: ({ workspaceSlug, value }) =>
-    buildInternalHref(workspaceSlug, `/docs/${asPathSegment(value)}`),
-  document_revision: ({ workspaceSlug, value }) =>
-    buildInternalHref(workspaceSlug, `/docs/revisions/${asPathSegment(value)}`),
-  board: ({ workspaceSlug, value }) =>
-    buildInternalHref(workspaceSlug, `/boards/${asPathSegment(value)}`),
+  inbox: ({ workspaceSlug, organizationSlug, value }) =>
+    buildInternalHref(
+      workspaceSlug,
+      `/inbox#inbox-${asPathSegment(value)}`,
+      organizationSlug,
+    ),
+  document: ({ workspaceSlug, organizationSlug, value }) =>
+    buildInternalHref(
+      workspaceSlug,
+      `/docs/${asPathSegment(value)}`,
+      organizationSlug,
+    ),
+  document_revision: ({ workspaceSlug, organizationSlug, value }) =>
+    buildInternalHref(
+      workspaceSlug,
+      `/docs/revisions/${asPathSegment(value)}`,
+      organizationSlug,
+    ),
+  board: ({ workspaceSlug, organizationSlug, value }) =>
+    buildInternalHref(
+      workspaceSlug,
+      `/boards/${asPathSegment(value)}`,
+      organizationSlug,
+    ),
 };
 
 function createResolvedLink(raw, prefix, value, labels, { href, isExternal }) {
@@ -137,6 +170,7 @@ export function resolveRefLink(refValue, options = {}) {
   const prefix = parsed.prefix;
   const value = parsed.value;
   const workspaceSlug = options.workspaceSlug;
+  const organizationSlug = String(options.organizationSlug ?? "").trim();
   const boardId = options.boardId;
   const threadId = options.threadId;
 
@@ -159,6 +193,7 @@ export function resolveRefLink(refValue, options = {}) {
     return createResolvedLink(raw, prefix, value, labels, {
       href: linkResolver({
         workspaceSlug,
+        organizationSlug,
         threadId,
         boardId,
         value,

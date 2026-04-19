@@ -381,7 +381,7 @@ test("trash page restores archived topics, boards, cards, documents, and artifac
     });
   });
 
-  await page.goto("/local/trash");
+  await page.goto("/o/local/w/local/trash");
 
   await expect(page.getByRole("heading", { name: "Trash" })).toBeVisible();
   await expect(
@@ -524,7 +524,7 @@ test("trash page purges a card after confirmation (human principal)", async ({
     });
   });
 
-  await page.goto("/local/trash");
+  await page.goto("/o/local/w/local/trash");
   await expect(page.getByRole("heading", { name: "Trash" })).toBeVisible();
   await page.getByRole("tab", { name: /Cards/ }).click();
   await expect(

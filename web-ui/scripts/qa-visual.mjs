@@ -109,7 +109,7 @@ const QA_SCENES = [
   },
   {
     name: "workspace-inbox-empty",
-    path: "/local/inbox",
+    path: "/o/local/w/local/inbox",
     workspaceMode: "inbox-empty",
     waitFor: async (page) => {
       await page.waitForSelector("text=Inbox is clear");
@@ -117,7 +117,7 @@ const QA_SCENES = [
   },
   {
     name: "workspace-inbox-populated",
-    path: "/local/inbox",
+    path: "/o/local/w/local/inbox",
     workspaceMode: "inbox-populated",
     waitFor: async (page) => {
       await page.waitForSelector('[data-testid="inbox-card-inbox-ask-auth"]');
@@ -125,7 +125,7 @@ const QA_SCENES = [
   },
   {
     name: "workspace-inbox-loading",
-    path: "/local/inbox",
+    path: "/o/local/w/local/inbox",
     workspaceMode: "inbox-loading",
     waitFor: async (page) => {
       await page.waitForSelector(".animate-pulse");
@@ -133,7 +133,7 @@ const QA_SCENES = [
   },
   {
     name: "workspace-inbox-error",
-    path: "/local/inbox",
+    path: "/o/local/w/local/inbox",
     workspaceMode: "inbox-error",
     waitFor: async (page) => {
       await page.waitForSelector('[role="alert"]');
@@ -141,7 +141,7 @@ const QA_SCENES = [
   },
   {
     name: "workspace-inbox-fresh",
-    path: "/local/inbox",
+    path: "/o/local/w/local/inbox",
     workspaceMode: "inbox-fresh",
     waitFor: async (page) => {
       await page.waitForSelector('[data-testid="inbox-first-run-tour"]');
@@ -149,7 +149,7 @@ const QA_SCENES = [
   },
   {
     name: "workspace-capture-ui",
-    path: "/local/inbox/inbox-ask-auth",
+    path: "/o/local/w/local/inbox/inbox-ask-auth",
     workspaceMode: "capture-ui",
     waitFor: async (page) => {
       await page.waitForSelector("text=Context the agent saw");
@@ -157,7 +157,7 @@ const QA_SCENES = [
   },
   {
     name: "workspace-capture-degraded",
-    path: "/local/inbox/inbox-ask-auth",
+    path: "/o/local/w/local/inbox/inbox-ask-auth",
     workspaceMode: "capture-degraded",
     waitFor: async (page) => {
       await page.waitForSelector("text=Context didn't load.");
@@ -165,7 +165,7 @@ const QA_SCENES = [
   },
   {
     name: "workspace-topics",
-    path: "/local/topics",
+    path: "/o/local/w/local/topics",
     workspaceMode: "workspace-default",
     waitFor: async (page) => {
       await page.waitForSelector('h1:has-text("Topics")');
@@ -173,7 +173,7 @@ const QA_SCENES = [
   },
   {
     name: "workspace-boards",
-    path: "/local/boards",
+    path: "/o/local/w/local/boards",
     workspaceMode: "workspace-default",
     waitFor: async (page) => {
       await page.waitForSelector('h1:has-text("Boards")');
@@ -181,7 +181,7 @@ const QA_SCENES = [
   },
   {
     name: "workspace-artifacts",
-    path: "/local/artifacts",
+    path: "/o/local/w/local/artifacts",
     workspaceMode: "workspace-default",
     waitFor: async (page) => {
       await page.waitForSelector('h1:has-text("Artifacts")');
@@ -189,7 +189,7 @@ const QA_SCENES = [
   },
   {
     name: "workspace-docs",
-    path: "/local/docs",
+    path: "/o/local/w/local/docs",
     workspaceMode: "workspace-default",
     waitFor: async (page) => {
       await page.waitForSelector('h1:has-text("Docs")');
@@ -197,7 +197,7 @@ const QA_SCENES = [
   },
   {
     name: "workspace-settings",
-    path: "/local/more",
+    path: "/o/local/w/local/more",
     workspaceMode: "workspace-default",
     waitFor: async (page) => {
       await page.waitForSelector("text=Settings");
@@ -205,7 +205,7 @@ const QA_SCENES = [
   },
   {
     name: "command-palette-open",
-    path: "/local/inbox",
+    path: "/o/local/w/local/inbox",
     workspaceMode: "inbox-populated",
     waitFor: async (page) => {
       await page.waitForSelector('[data-testid="inbox-card-inbox-ask-auth"]');
@@ -216,7 +216,7 @@ const QA_SCENES = [
   },
   {
     name: "confirm-modal-open",
-    path: "/local/topics",
+    path: "/o/local/w/local/topics",
     workspaceMode: "workspace-default",
     waitFor: async (page) => {
       await page.waitForSelector('h1:has-text("Topics")');

@@ -135,7 +135,7 @@ test("topics list filters and create flow use GET/POST /topics", async ({
     await route.continue();
   });
 
-  await page.goto("/topics");
+  await page.goto("/o/local/w/local/topics");
 
   await expect(page.getByRole("heading", { name: "Topics" })).toBeVisible();
   await expect(

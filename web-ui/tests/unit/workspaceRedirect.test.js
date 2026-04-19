@@ -2,39 +2,47 @@ import { describe, expect, it, vi } from "vitest";
 
 const workspaceResolverMocks = vi.hoisted(() => ({
   resolveWorkspaceCatalog: vi.fn(),
+  resolveWorkspaceInRoute: vi.fn(),
 }));
 
 vi.mock("../../src/lib/server/workspaceResolver.js", () => ({
   resolveWorkspaceCatalog: workspaceResolverMocks.resolveWorkspaceCatalog,
+  resolveWorkspaceInRoute: workspaceResolverMocks.resolveWorkspaceInRoute,
 }));
 
-import { redirectToDefaultWorkspace } from "../../src/lib/server/workspaceRedirect.js";
+import { redirectToRecentWorkspaceOrChooser } from "../../src/lib/server/workspaceRedirect.js";
 
-describe("redirectToDefaultWorkspace", () => {
-  it("redirects unprefixed routes through the resolved default workspace", async () => {
+describe("redirectToRecentWorkspaceOrChooser", () => {
+  it("redirects through a last-workspace cookie when it resolves", async () => {
     const event = {
       cookies: {
-        get() {
-          return null;
+        get(name) {
+          return name === "anx_last_workspace" ? "local:alpha" : null;
         },
       },
     };
 
-    workspaceResolverMocks.resolveWorkspaceCatalog.mockResolvedValue({
-      defaultWorkspace: {
+    workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
+      error: null,
+      workspace: {
+        organizationSlug: "local",
         slug: "alpha",
       },
     });
 
     await expect(
-      redirectToDefaultWorkspace(event, "/threads/thread-onboarding"),
+      redirectToRecentWorkspaceOrChooser(event, "/threads/thread-onboarding"),
     ).rejects.toMatchObject({
       status: 307,
-      location: "/alpha/threads/thread-onboarding",
+      location: "/o/local/w/alpha/threads/thread-onboarding",
     });
 
-    expect(workspaceResolverMocks.resolveWorkspaceCatalog).toHaveBeenCalledWith(
-      event,
+    expect(workspaceResolverMocks.resolveWorkspaceInRoute).toHaveBeenCalledWith(
+      {
+        event,
+        organizationSlug: "local",
+        workspaceSlug: "alpha",
+      },
     );
   });
 });

@@ -16,13 +16,14 @@
   let documents = $derived($topicDetailStore.documents);
   let documentsLoading = $derived($topicDetailStore.documentsLoading);
   let documentsError = $derived($topicDetailStore.documentsError);
+  let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
   let actorName = $derived((id) =>
     lookupActorDisplayName(id, $actorRegistry, $principalRegistry),
   );
 
   function workspaceHref(pathname = "/") {
-    return workspacePath(workspaceSlug, pathname);
+    return workspacePath(organizationSlug, workspaceSlug, pathname);
   }
 
   function docsListHref() {

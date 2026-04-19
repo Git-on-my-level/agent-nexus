@@ -12,7 +12,7 @@ describe("workspaceCatalog", () => {
   it("should parse ANX_WORKSPACES and ANX_DEFAULT_WORKSPACE env vars", () => {
     const env = {
       ANX_WORKSPACES:
-        '[{"slug":"ws1","label":"Workspace 1","coreBaseUrl":"http://localhost:8000"}]',
+        '[{"organizationSlug":"local","slug":"ws1","label":"Workspace 1","coreBaseUrl":"http://localhost:8000"}]',
     };
     const catalog = loadWorkspaceCatalog(env);
     expect(catalog.workspaces).toHaveLength(1);
@@ -23,8 +23,9 @@ describe("workspaceCatalog", () => {
   it("should parse ANX_DEFAULT_WORKSPACE", () => {
     const env = {
       ANX_WORKSPACES:
-        '[{"slug":"ws1","label":"Workspace 1","coreBaseUrl":"http://localhost:8000"},{"slug":"ws2","label":"Workspace 2","coreBaseUrl":"http://localhost:8001"}]',
+        '[{"organizationSlug":"local","slug":"ws1","label":"Workspace 1","coreBaseUrl":"http://localhost:8000"},{"organizationSlug":"local","slug":"ws2","label":"Workspace 2","coreBaseUrl":"http://localhost:8001"}]',
       ANX_DEFAULT_WORKSPACE: "ws2",
+      ANX_DEFAULT_ORGANIZATION: "local",
     };
     const catalog = loadWorkspaceCatalog(env);
     expect(catalog.defaultWorkspace.slug).toBe("ws2");
@@ -33,7 +34,7 @@ describe("workspaceCatalog", () => {
   it("should preserve public origin metadata from ANX_WORKSPACES entries", () => {
     const env = {
       ANX_WORKSPACES:
-        '[{"slug":"ws1","label":"Workspace 1","coreBaseUrl":"http://localhost:8000","publicOrigin":"https://ws1.tailnet.ts.net/anx/ws1"},{"slug":"ws2","label":"Workspace 2","coreBaseUrl":"http://localhost:8001","public_origin":"https://ws2.tailnet.ts.net/anx/ws2"}]',
+        '[{"organizationSlug":"acme","slug":"ws1","label":"Workspace 1","coreBaseUrl":"http://localhost:8000","publicOrigin":"https://ws1.tailnet.ts.net/anx/ws1"},{"organizationSlug":"acme","slug":"ws2","label":"Workspace 2","coreBaseUrl":"http://localhost:8001","public_origin":"https://ws2.tailnet.ts.net/anx/ws2"}]',
     };
     const catalog = loadWorkspaceCatalog(env);
 
@@ -48,7 +49,7 @@ describe("workspaceCatalog", () => {
   it("should parse legacy ANX_PROJECTS env var", () => {
     const env = {
       ANX_PROJECTS:
-        '[{"slug":"legacy1","label":"Legacy 1","coreBaseUrl":"http://localhost:8000"}]',
+        '[{"organizationSlug":"local","slug":"legacy1","label":"Legacy 1","coreBaseUrl":"http://localhost:8000"}]',
     };
     const catalog = loadWorkspaceCatalog(env);
     expect(catalog.workspaces).toHaveLength(1);
@@ -60,6 +61,7 @@ describe("workspaceCatalog", () => {
       ANX_WORKSPACES:
         '{"ws1":"http://localhost:8000","ws2":"http://localhost:8001"}',
       ANX_DEFAULT_WORKSPACE: "ws2",
+      ANX_DEFAULT_ORGANIZATION: "local",
     };
     const catalog = loadWorkspaceCatalog(env);
     expect(catalog.workspaces).toHaveLength(2);
@@ -71,8 +73,9 @@ describe("workspaceCatalog", () => {
   it("should parse legacy ANX_DEFAULT_PROJECT env var", () => {
     const env = {
       ANX_WORKSPACES:
-        '[{"slug":"ws1","label":"Workspace 1","coreBaseUrl":"http://localhost:8000"}]',
+        '[{"organizationSlug":"local","slug":"ws1","label":"Workspace 1","coreBaseUrl":"http://localhost:8000"}]',
       ANX_DEFAULT_PROJECT: "ws1",
+      ANX_DEFAULT_ORGANIZATION: "local",
     };
     const catalog = loadWorkspaceCatalog(env);
     expect(catalog.defaultWorkspace.slug).toBe("ws1");
@@ -87,13 +90,13 @@ describe("workspaceCatalog", () => {
     expect(catalog.devActorMode).toBe(true);
   });
 
-  it("should fallback to single workspace when ANX_WORKSPACES is empty", () => {
+  it("should return an empty catalog when ANX_WORKSPACES is empty", () => {
     const env = {
       ANX_CORE_BASE_URL: "http://localhost:3000",
     };
     const catalog = loadWorkspaceCatalog(env);
-    expect(catalog.workspaces).toHaveLength(1);
-    expect(catalog.defaultWorkspace.slug).toBe("local");
+    expect(catalog.workspaces).toHaveLength(0);
+    expect(catalog.defaultWorkspace).toBeNull();
   });
 
   it("should allow an empty catalog for SaaS packed-host dev", () => {
@@ -110,7 +113,7 @@ describe("workspaceCatalog", () => {
     const env = {
       ANX_SAAS_PACKED_HOST_DEV: "1",
       ANX_SAAS_DEV_PRECONFIGURED_WORKSPACES:
-        '[{"slug":"demo","label":"Demo","coreBaseUrl":"http://127.0.0.1:9000"}]',
+        '[{"organizationSlug":"local","slug":"demo","label":"Demo","coreBaseUrl":"http://127.0.0.1:9000"}]',
     };
     const catalog = loadWorkspaceCatalog(env);
     expect(catalog.defaultWorkspace.slug).toBe("demo");
@@ -122,16 +125,16 @@ describe("workspaceCatalog", () => {
       ANX_WORKSPACES:
         '[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000",}]',
     };
-    expect(() => loadWorkspaceCatalog(env)).toThrow(/Example:.*"slug":"local"/);
     expect(() => loadWorkspaceCatalog(env)).toThrow(
-      /fall back to ANX_CORE_BASE_URL/,
+      /Example:.*"organizationSlug":"local"/,
     );
+    expect(() => loadWorkspaceCatalog(env)).toThrow(/empty catalog/);
   });
 
   it("should auto-repair missing } before ] after coreBaseUrl (common typo)", () => {
     const env = {
       ANX_WORKSPACES:
-        '[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"]',
+        '[{"organizationSlug":"local","slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"]',
     };
     const catalog = loadWorkspaceCatalog(env);
     expect(catalog.workspaces).toHaveLength(1);
@@ -142,7 +145,7 @@ describe("workspaceCatalog", () => {
   it("should auto-repair swapped ]} after coreBaseUrl (common typo)", () => {
     const env = {
       ANX_WORKSPACES:
-        '[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"]}',
+        '[{"organizationSlug":"local","slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"]}',
     };
     const catalog = loadWorkspaceCatalog(env);
     expect(catalog.workspaces).toHaveLength(1);
@@ -153,9 +156,21 @@ describe("workspaceCatalog", () => {
 describe("toPublicWorkspaceCatalog", () => {
   it("should expose devActorMode in public catalog", () => {
     const catalog = {
-      defaultWorkspace: { slug: "test", label: "Test", description: "" },
-      workspaces: [{ slug: "test", label: "Test", description: "" }],
-      workspaceBySlug: new Map(),
+      defaultWorkspace: {
+        organizationSlug: "local",
+        slug: "test",
+        label: "Test",
+        description: "",
+      },
+      workspaces: [
+        {
+          organizationSlug: "local",
+          slug: "test",
+          label: "Test",
+          description: "",
+        },
+      ],
+      workspaceByComposite: new Map(),
       devActorMode: true,
     };
     const publicCatalog = toPublicWorkspaceCatalog(catalog);
@@ -164,9 +179,21 @@ describe("toPublicWorkspaceCatalog", () => {
 
   it("should default devActorMode to false when not set", () => {
     const catalog = {
-      defaultWorkspace: { slug: "test", label: "Test", description: "" },
-      workspaces: [{ slug: "test", label: "Test", description: "" }],
-      workspaceBySlug: new Map(),
+      defaultWorkspace: {
+        organizationSlug: "local",
+        slug: "test",
+        label: "Test",
+        description: "",
+      },
+      workspaces: [
+        {
+          organizationSlug: "local",
+          slug: "test",
+          label: "Test",
+          description: "",
+        },
+      ],
+      workspaceByComposite: new Map(),
     };
     const publicCatalog = toPublicWorkspaceCatalog(catalog);
     expect(publicCatalog.devActorMode).toBe(false);
@@ -176,7 +203,7 @@ describe("toPublicWorkspaceCatalog", () => {
     const catalog = {
       defaultWorkspace: null,
       workspaces: [],
-      workspaceBySlug: new Map(),
+      workspaceByComposite: new Map(),
       devActorMode: false,
     };
     const publicCatalog = toPublicWorkspaceCatalog(catalog);

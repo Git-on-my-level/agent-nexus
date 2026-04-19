@@ -30,6 +30,7 @@
 
   let topic = $derived($topicDetailStore.topic);
   let staleness = $derived(topicDetailStore.getStaleness(topic));
+  let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
   let actorName = $derived((id) =>
     lookupActorDisplayName(id, $actorRegistry, $principalRegistry),
@@ -83,7 +84,7 @@
     lifecycleBusy = true;
     try {
       await coreClient.trashTopic(threadId, {});
-      await goto(workspacePath(workspaceSlug, "/topics"));
+      await goto(workspacePath(organizationSlug, workspaceSlug, "/topics"));
     } finally {
       lifecycleBusy = false;
     }
@@ -113,8 +114,11 @@
 >
   <a
     class="hover:text-[var(--fg)]"
-    href={workspacePath(workspaceSlug, detailAsTopic ? "/topics" : "/threads")}
-    >{detailAsTopic ? "Topics" : "Topic (thread view)"}</a
+    href={workspacePath(
+      organizationSlug,
+      workspaceSlug,
+      detailAsTopic ? "/topics" : "/threads",
+    )}>{detailAsTopic ? "Topics" : "Topic (thread view)"}</a
   >
   <span class="text-[var(--fg-subtle)]">/</span>
   <span class="truncate text-[var(--fg)]" aria-current="page"

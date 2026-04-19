@@ -1,9 +1,11 @@
 import { expect, test } from "@playwright/test";
 
+const WS_HOME = "/o/local/w/local";
+
 test("blocks shell with actor gate when no actor is selected", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto(WS_HOME);
 
   await expect(
     page.getByRole("heading", { name: "Select Actor Identity" }),
@@ -16,7 +18,7 @@ test("registers actor, unlocks shell, and performs a write", async ({
 }) => {
   const threadTitle = `E2E Thread ${Date.now()}`;
 
-  await page.goto("/");
+  await page.goto(WS_HOME);
 
   await page.getByLabel("Display name").fill("E2E User");
   await page.getByRole("button", { name: "Create and continue" }).click();
@@ -34,7 +36,7 @@ test("registers actor, unlocks shell, and performs a write", async ({
 
   await page.getByRole("link", { name: "Topics", exact: true }).click();
 
-  await expect(page).toHaveURL(/\/topics$/);
+  await expect(page).toHaveURL(/\/o\/local\/w\/local\/topics$/);
   await expect(page.getByRole("heading", { name: "Topics" })).toBeVisible();
 
   await page.getByRole("button", { name: "New topic" }).click();
@@ -45,12 +47,14 @@ test("registers actor, unlocks shell, and performs a write", async ({
   await expect(page.getByRole("link", { name: threadTitle })).toBeVisible();
 });
 
-test("renders a dashboard on / and routes into inbox", async ({ page }) => {
+test("renders a dashboard on workspace root and routes into inbox", async ({
+  page,
+}) => {
   await page.addInitScript(() => {
     window.localStorage.setItem("oar_ui_actor_id", "actor-ops-ai");
   });
 
-  await page.goto("/");
+  await page.goto(WS_HOME);
 
   await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
@@ -62,7 +66,7 @@ test("renders a dashboard on / and routes into inbox", async ({ page }) => {
   ).toBeVisible();
 
   await page.getByRole("link", { name: "Inbox", exact: true }).click();
-  await expect(page).toHaveURL(/\/inbox$/);
+  await expect(page).toHaveURL(/\/o\/local\/w\/local\/inbox$/);
   await expect(
     page.getByRole("heading", { name: "Inbox", exact: true }),
   ).toBeVisible();
@@ -88,7 +92,7 @@ test("shows partial-failure messaging when one dashboard source is unavailable",
     });
   });
 
-  await page.goto("/");
+  await page.goto(WS_HOME);
 
   await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
   await expect(
@@ -108,7 +112,7 @@ test("opens mobile drawer navigation and navigates between routes", async ({
     window.localStorage.setItem("oar_ui_actor_id", "actor-ops-ai");
   });
 
-  await page.goto("/inbox");
+  await page.goto(`${WS_HOME}/inbox`);
 
   const drawer = page.getByRole("dialog", { name: "Navigation menu" });
   await expect(drawer).toHaveCount(0);
@@ -124,6 +128,6 @@ test("opens mobile drawer navigation and navigates between routes", async ({
     .getByRole("link", { name: "Artifacts", exact: true })
     .click({ force: true });
 
-  await expect(page).toHaveURL(/\/artifacts$/);
+  await expect(page).toHaveURL(/\/o\/local\/w\/local\/artifacts$/);
   await expect(page.getByRole("heading", { name: "Artifacts" })).toBeVisible();
 });

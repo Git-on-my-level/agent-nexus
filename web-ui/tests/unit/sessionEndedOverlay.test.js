@@ -22,12 +22,8 @@ describe("SessionEndedOverlay", () => {
       cpOrigin: "https://cp.example",
       workspaceUrl: "https://ws.example/acme",
     });
-    expect(
-      getByRole("heading", { name: /your session ended/i }),
-    ).toBeTruthy();
-    expect(
-      getByText(/you've been signed out/i, { exact: false }),
-    ).toBeTruthy();
+    expect(getByRole("heading", { name: /your session ended/i })).toBeTruthy();
+    expect(getByText(/you've been signed out/i, { exact: false })).toBeTruthy();
     const link = getByRole("button", { name: /sign in again/i });
     expect(link.getAttribute("href")).toContain("https://cp.example");
     expect(link.getAttribute("href")).toContain("login");
@@ -43,13 +39,9 @@ describe("SessionEndedOverlay", () => {
       cpOrigin: "https://cp.example",
       workspaceUrl: "https://ws.example/ws",
     });
-    expect(
-      getByRole("heading", { name: /your session ended/i }),
-    ).toBeTruthy();
+    expect(getByRole("heading", { name: /your session ended/i })).toBeTruthy();
     fireEvent.keyDown(document, { key: "Escape", bubbles: true });
-    expect(
-      getByRole("heading", { name: /your session ended/i }),
-    ).toBeTruthy();
+    expect(getByRole("heading", { name: /your session ended/i })).toBeTruthy();
   });
 
   it("does not close on backdrop click", async () => {
@@ -61,8 +53,6 @@ describe("SessionEndedOverlay", () => {
     const backdrop = container.querySelector(".session-ended-backdrop");
     expect(backdrop).toBeTruthy();
     fireEvent.click(backdrop, { bubbles: true });
-    expect(
-      getByRole("heading", { name: /your session ended/i }),
-    ).toBeTruthy();
+    expect(getByRole("heading", { name: /your session ended/i })).toBeTruthy();
   });
 });

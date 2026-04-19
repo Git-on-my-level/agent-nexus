@@ -104,7 +104,7 @@ test("thread work tab points operators to card-scoped receipts", async ({
     });
   });
 
-  await page.goto("/threads/thread-onboarding");
+  await page.goto("/o/local/w/local/threads/thread-onboarding");
   await page.getByRole("button", { name: "Work" }).click();
   await expect(
     page.getByText("Create receipts and reviews from card detail pages.", {

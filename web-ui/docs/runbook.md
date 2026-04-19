@@ -10,7 +10,8 @@ workspace-aware `anx-ui`.
 Canonical runtime config is `ANX_WORKSPACES`.
 
 - Accepts a JSON array or object.
-- Each entry needs a workspace slug and a core base URL.
+- Each entry needs `organizationSlug`, a workspace `slug`, and a core base URL
+  (or set `ANX_DEFAULT_ORGANIZATION` when using object-form `slug -> url` maps).
 - Optional fields: `label`, `description`, `publicOrigin`/`public_origin`.
 - Set `publicOrigin` to the externally reachable workspace URL when the UI is
   reverse-proxied, mounted under a base path, or otherwise sees loopback
@@ -22,10 +23,11 @@ Example:
 
 ```bash
 export ANX_WORKSPACES='[
-  {"slug":"dtrinity","label":"DTrinity","coreBaseUrl":"http://127.0.0.1:8000","publicOrigin":"https://anx.tailnet.ts.net/anx/dtrinity"},
-  {"slug":"scalingforever","label":"Scaling Forever","coreBaseUrl":"http://127.0.0.1:8001","publicOrigin":"https://anx.tailnet.ts.net/anx/scalingforever"}
+  {"organizationSlug":"local","slug":"dtrinity","label":"DTrinity","coreBaseUrl":"http://127.0.0.1:8000","publicOrigin":"https://anx.tailnet.ts.net/anx/o/local/w/dtrinity"},
+  {"organizationSlug":"local","slug":"scalingforever","label":"Scaling Forever","coreBaseUrl":"http://127.0.0.1:8001","publicOrigin":"https://anx.tailnet.ts.net/anx/o/local/w/scalingforever"}
 ]'
 export ANX_DEFAULT_WORKSPACE=dtrinity
+export ANX_DEFAULT_ORGANIZATION=local
 ```
 
 Legacy aliases (deprecated):
@@ -35,12 +37,11 @@ Legacy aliases (deprecated):
 
 Route model:
 
-- `/:workspace/...` is the canonical UI shape.
-- `/` redirects to `/${ANX_DEFAULT_WORKSPACE}`.
-- Root page routes such as `/threads` and `/inbox` redirect to the default
-  workspace to ease local use and old bookmarks.
+- `/o/:organization/w/:workspace/...` is the canonical UI shape.
+- `/` redirects to the last-used workspace when a cookie is set; otherwise to the
+  workspace chooser. There is no silent default workspace.
 - Optional mount prefix: set `ANX_UI_BASE_PATH=/anx`
-  - External routes become `/anx/:workspace/...`
+  - External routes become `/anx/o/:organization/w/:workspace/...`
   - `ANX_UI_BASE_PATH` is applied by SvelteKit at dev/build startup, so use the
     intended value when running `./scripts/dev` or `./scripts/build`
 
@@ -53,11 +54,11 @@ Build-time config files:
 - `.env.build` is gitignored by default; use `git add -f web-ui/.env.build` if
   you intentionally want to commit operator-specific build config
 
-Single-core fallback:
+Workspace catalog:
 
-- If `ANX_WORKSPACES` is unset, `ANX_CORE_BASE_URL` still creates one default
-  `local` workspace for dev/integration use.
-- If neither `ANX_WORKSPACES` nor `ANX_CORE_BASE_URL` resolves a `coreBaseUrl`
+- If `ANX_WORKSPACES` is unset, the static catalog is empty until you configure
+  entries (no synthetic default from `ANX_CORE_BASE_URL` alone).
+- If neither `ANX_WORKSPACES` nor per-workspace config resolves a `coreBaseUrl`
   for the workspace, **catalog-backed API paths** return **503** (`core_not_configured`)
   instead of being served locally. Run a real core (for example `make serve` /
   `./scripts/e2e-smoke`) or set `ANX_WORKSPACES` / `ANX_CORE_BASE_URL` per
