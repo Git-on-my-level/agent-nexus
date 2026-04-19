@@ -538,7 +538,7 @@
         </button>
       {/if}
       <button
-        class="cursor-pointer rounded bg-accent px-3 py-1 text-micro font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+        class="cursor-pointer rounded bg-accent-solid px-3 py-1 text-micro font-medium text-white hover:bg-accent disabled:opacity-50"
         disabled={!canPost}
         type="submit"
       >

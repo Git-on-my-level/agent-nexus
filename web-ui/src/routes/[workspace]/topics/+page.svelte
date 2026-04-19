@@ -681,7 +681,7 @@
     </div>
     <div class="mt-3 flex justify-end">
       <button
-        class="cursor-pointer rounded-md bg-accent px-4 py-2 text-micro font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+        class="cursor-pointer rounded-md bg-accent-solid px-4 py-2 text-micro font-medium text-white hover:bg-accent disabled:opacity-50"
         disabled={creatingTopic}
         type="submit"
       >

@@ -336,7 +336,7 @@
         {tabLabel}
         {#if activeTab === tabId}
           <span
-            class="pointer-events-none absolute inset-x-0 -bottom-px h-0.5 bg-accent"
+            class="pointer-events-none absolute inset-x-0 -bottom-px h-0.5 bg-accent-solid"
           ></span>
         {/if}
       </button>

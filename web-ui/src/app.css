@@ -28,11 +28,11 @@
   --fg-muted: #a1a7b4;
   --fg-subtle: #7b8494;
 
-  --accent: #ff5c1f;
-  --accent-hover: #ff7037;
-  --accent-solid: #cc440f;
-  --accent-text: #ff8954;
-  --accent-soft: rgba(255, 92, 31, 0.12);
+  --accent: #22d3ee;
+  --accent-hover: #67e8f9;
+  --accent-solid: #155e75;
+  --accent-text: #5eead4;
+  --accent-soft: rgba(34, 211, 238, 0.12);
 
   --danger: #ef4444;
   --danger-text: #f87171;

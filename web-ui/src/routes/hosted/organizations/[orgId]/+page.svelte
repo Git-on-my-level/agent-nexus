@@ -130,7 +130,7 @@
   function barColor(p) {
     if (p >= 90) return "bg-danger";
     if (p >= 75) return "bg-warn";
-    return "bg-accent";
+    return "bg-accent-solid";
   }
 </script>
 

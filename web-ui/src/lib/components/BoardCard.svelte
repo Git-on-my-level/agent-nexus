@@ -85,11 +85,11 @@
       case "paused":
         return "bg-warn-text";
       case "stale":
-        return "bg-orange-400";
+        return "bg-accent-text";
       case "very-stale":
         return "bg-danger-text";
       default:
-        return "bg-blue-400";
+        return "bg-accent-solid";
     }
   }
 
@@ -102,7 +102,7 @@
       case "paused":
         return "text-warn-text";
       case "stale":
-        return "text-orange-400";
+        return "text-accent-text";
       case "very-stale":
         return "text-danger-text";
       default:

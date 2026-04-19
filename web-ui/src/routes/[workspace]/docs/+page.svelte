@@ -330,7 +330,7 @@
     </button>
     <button
       class="cursor-pointer inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-micro font-medium transition-colors {groupByLabel
-        ? 'bg-[var(--accent-hover)] text-white'
+        ? 'bg-[var(--accent-solid)] text-white'
         : 'bg-[var(--panel)] text-[var(--fg-muted)] hover:bg-[var(--line)]'}"
       onclick={toggleGrouping}
       type="button"
@@ -518,7 +518,7 @@
     {/if}
     <div class="mt-3 flex items-center gap-2">
       <button
-        class="cursor-pointer rounded-md bg-accent px-3 py-1.5 text-micro font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+        class="cursor-pointer rounded-md bg-accent-solid px-3 py-1.5 text-micro font-medium text-white hover:bg-accent disabled:opacity-50"
         disabled={creating}
         type="submit"
       >

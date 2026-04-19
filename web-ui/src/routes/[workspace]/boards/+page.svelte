@@ -315,7 +315,7 @@
       {hasActiveFilters ? "Filtered" : "Filters"}
     </button>
     <button
-      class="rounded-md bg-accent px-3 py-1.5 text-micro font-medium text-white transition-colors hover:bg-accent-hover"
+      class="rounded-md bg-accent-solid px-3 py-1.5 text-micro font-medium text-white transition-colors hover:bg-accent"
       onclick={() => {
         createError = "";
         showCreateForm = !showCreateForm;
@@ -515,7 +515,7 @@
 
       <div class="flex flex-wrap gap-2">
         <button
-          class="rounded-md bg-accent px-3 py-1.5 text-micro font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+          class="rounded-md bg-accent-solid px-3 py-1.5 text-micro font-medium text-white transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
           disabled={creating}
           onclick={submitCreateBoard}
           type="button"

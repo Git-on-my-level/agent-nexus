@@ -837,7 +837,7 @@
             </div>
             <div class="flex justify-end">
               <button
-                class="cursor-pointer rounded-md bg-accent px-3 py-1.5 text-micro font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+                class="cursor-pointer rounded-md bg-accent-solid px-3 py-1.5 text-micro font-medium text-white hover:bg-accent disabled:opacity-50"
                 disabled={submittingReview}
                 type="submit"
                 >{submittingReview ? "Submitting..." : "Submit review"}</button

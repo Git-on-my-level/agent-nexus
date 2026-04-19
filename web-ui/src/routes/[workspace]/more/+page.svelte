@@ -214,7 +214,7 @@
             type="button"
           >
             <span
-              class="inline-grid h-6 w-6 shrink-0 place-items-center rounded bg-[var(--accent-hover)] text-[0.5625rem] font-bold text-white"
+              class="inline-grid h-6 w-6 shrink-0 place-items-center rounded bg-[var(--accent-solid)] text-[0.5625rem] font-bold text-white"
               aria-hidden="true"
             >
               {workspaceInitials(ws.label)}

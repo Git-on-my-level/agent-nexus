@@ -162,7 +162,7 @@
         />
       </label>
       <button
-        class="rounded-md bg-accent px-3 py-2 text-micro font-medium text-white transition-colors hover:bg-accent-hover"
+        class="rounded-md bg-accent-solid px-3 py-2 text-micro font-medium text-white transition-colors hover:bg-accent"
         onclick={() => addValue(manualEntry)}
         type="button"
       >
