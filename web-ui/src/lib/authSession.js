@@ -10,6 +10,8 @@ import { WORKSPACE_HEADER, appPath } from "./workspacePaths.js";
 
 export const authSessionReady = writable(false);
 export const authenticatedAgent = writable(null);
+/** True when CP marked the account inactive (refresh/session returns 401 session_ended_by_cp). */
+export const sessionEndedByCp = writable(false);
 
 const browser = typeof window !== "undefined";
 const AUTH_SESSION_RETRYABLE_ERROR_CODE = "auth_session_retryable";
@@ -72,6 +74,17 @@ function createErrorFromResponse(status, details) {
   return error;
 }
 
+function applySessionEndedByCp(status, payload, workspaceSlug) {
+  if (status !== 401 || payload?.error?.code !== "session_ended_by_cp") {
+    return false;
+  }
+  sessionEndedByCp.set(true);
+  const slug =
+    String(workspaceSlug ?? "").trim() || getCurrentWorkspaceSlug();
+  clearAuthSession(slug);
+  return true;
+}
+
 function shouldPreserveAuthenticatedAgentOnInitFailure(error) {
   if (!error || typeof error !== "object") {
     return true;
@@ -100,7 +113,7 @@ function wait(ms) {
 
 async function requestJSON(
   pathname,
-  { fetchFn, method = "GET", body, baseUrl, headers } = {},
+  { fetchFn, method = "GET", body, baseUrl, headers, workspaceSlug } = {},
 ) {
   const response = await resolveFetch(fetchFn)(buildUrl(pathname, baseUrl), {
     method,
@@ -122,6 +135,7 @@ async function requestJSON(
     }
   }
   if (!response.ok) {
+    applySessionEndedByCp(response.status, payload, workspaceSlug);
     throw createErrorFromResponse(response.status, payload);
   }
 
@@ -224,6 +238,7 @@ export async function initializeAuthSession({
       const result = await requestJSON("/auth/session", {
         fetchFn,
         baseUrl,
+        workspaceSlug,
         headers: {
           [WORKSPACE_HEADER]: workspaceSlug,
         },
@@ -269,6 +284,7 @@ export async function logoutAuthSession({
       await requestJSON("/auth/session", {
         fetchFn,
         baseUrl,
+        workspaceSlug,
         method: "DELETE",
         headers: {
           [WORKSPACE_HEADER]: workspaceSlug,

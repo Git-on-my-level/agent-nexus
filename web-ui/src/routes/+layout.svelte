@@ -24,7 +24,9 @@
     initializeAuthSession,
     isHumanWorkspacePrincipal,
     logoutAuthSession,
+    sessionEndedByCp,
   } from "$lib/authSession";
+  import SessionEndedOverlay from "$lib/components/SessionEndedOverlay.svelte";
   import { listAllPrincipals } from "$lib/authPrincipals";
   import CommandPalette from "$lib/components/CommandPalette.svelte";
   import { sanitizeHostedReturnPath } from "$lib/hosted/launchFlow.js";
@@ -175,6 +177,18 @@
     const workspaceLabel = activeWorkspace?.label;
     const parts = [section, workspaceLabel, "ANX"].filter(Boolean);
     return parts.join(" · ");
+  });
+
+  let hostedCpOrigin = $derived(String(data.hostedCpOrigin ?? "").trim());
+  let sessionEndedWorkspaceUrl = $derived.by(() => {
+    if (!browser || !activeWorkspaceSlug) {
+      return "";
+    }
+    try {
+      return `${window.location.origin}${workspacePath(activeWorkspaceSlug, "/")}`;
+    } catch {
+      return "";
+    }
   });
 
   $effect(() => {
@@ -1058,6 +1072,14 @@
     <CommandPalette
       bind:open={commandPaletteOpen}
       workspaceSlug={activeWorkspaceSlug}
+    />
+  {/if}
+
+  {#if $sessionEndedByCp}
+    <SessionEndedOverlay
+      open={true}
+      cpOrigin={hostedCpOrigin}
+      workspaceUrl={sessionEndedWorkspaceUrl}
     />
   {/if}
 </div>

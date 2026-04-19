@@ -44,6 +44,7 @@ type authIntegrationOptions struct {
 	webAuthnConfig              WebAuthnConfig
 	workspaceID                 string
 	workspaceHumanGrantVerifier auth.WorkspaceHumanGrantIdentityVerifier
+	accountStatusChecker        auth.AccountStatusChecker
 }
 
 type authIntegrationEnv struct {
@@ -69,12 +70,15 @@ func newAuthIntegrationEnv(t *testing.T, options authIntegrationOptions) authInt
 		t.Fatalf("ensure system actor: %v", err)
 	}
 
-	authOptions := make([]auth.Option, 0, 1)
+	authOptions := make([]auth.Option, 0, 2)
 	if strings.TrimSpace(options.bootstrapToken) != "" {
 		authOptions = append(authOptions, auth.WithBootstrapToken(options.bootstrapToken))
 	}
 	if options.allowDevRegisterLinkedActor {
 		authOptions = append(authOptions, auth.WithAllowDevRegisterLinkedActor(true))
+	}
+	if options.accountStatusChecker != nil {
+		authOptions = append(authOptions, auth.WithAccountStatusChecker(options.accountStatusChecker))
 	}
 	authStore := auth.NewStore(workspace.DB(), authOptions...)
 	passkeySessionStore := auth.NewPasskeySessionStore(auth.DefaultPasskeySessionTTL)

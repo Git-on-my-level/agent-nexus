@@ -9,11 +9,13 @@ import {
   isAuthenticated,
   isHumanWorkspacePrincipal,
   logoutAuthSession,
+  sessionEndedByCp,
 } from "../../src/lib/authSession.js";
 import { WORKSPACE_HEADER } from "../../src/lib/workspacePaths.js";
 
 afterEach(() => {
   vi.useRealTimers();
+  sessionEndedByCp.set(false);
   clearAuthSession("local");
   clearAuthSession("alpha");
 });
@@ -180,6 +182,34 @@ describe("authSession", () => {
       agent_id: "agent-8",
       actor_id: "actor-8",
     });
+  });
+
+  it("sets sessionEndedByCp and clears the agent when session returns session_ended_by_cp", async () => {
+    completeAuthSession(
+      { agent_id: "agent-cp", actor_id: "actor-cp", username: "user" },
+      "alpha",
+    );
+
+    const agent = await initializeAuthSession({
+      workspaceSlug: "alpha",
+      fetchFn: async () =>
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "session_ended_by_cp",
+              message: "Account inactive",
+            },
+          }),
+          {
+            status: 401,
+            headers: { "content-type": "application/json" },
+          },
+        ),
+    });
+
+    expect(agent).toBeNull();
+    expect(get(authenticatedAgent)).toBeNull();
+    expect(get(sessionEndedByCp)).toBe(true);
   });
 
   it("clears the current agent when session rehydration fails with a non-retryable response", async () => {

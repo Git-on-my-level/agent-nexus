@@ -31,7 +31,8 @@ vi.mock("$lib/server/authSession.js", () => ({
 
 import { POST } from "../../src/routes/[workspace]/auth/callback/+server.js";
 
-function createEvent(formFields) {
+function createEvent(formFields, options = {}) {
+  const { headers: headerOverrides = {}, ...rest } = options;
   return {
     params: {
       workspace: "acme",
@@ -39,6 +40,11 @@ function createEvent(formFields) {
     request: new Request("https://ui.example.test/acme/auth/callback", {
       method: "POST",
       body: new URLSearchParams(formFields),
+      headers: {
+        accept: "application/json",
+        ...headerOverrides,
+      },
+      ...rest,
     }),
     cookies: {
       set: vi.fn(),
@@ -54,6 +60,8 @@ describe("workspace auth callback route", () => {
     workspaceResolverMocks.resolveWorkspaceBySlug.mockResolvedValue({
       workspaceSlug: "acme",
       workspace: {
+        slug: "acme",
+        label: "Acme",
         coreBaseUrl: "https://core.example.test",
         workspaceId: "ws_123",
       },
@@ -173,6 +181,42 @@ describe("workspace auth callback route", () => {
     await expect(response.json()).resolves.toMatchObject({
       error: {
         code: "exchange_invalid",
+        message: "exchange token has already been used",
+        workspace_name: "Acme",
+      },
+    });
+  });
+
+  it("normalizes control-plane state mismatch to state_mismatch", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "exchange_invalid",
+            message: "exchange token state is invalid",
+          },
+        }),
+        {
+          status: 401,
+          headers: {
+            "content-type": "application/json",
+          },
+        },
+      ),
+    );
+
+    const event = createEvent({
+      exchange_token: "ex_123",
+      state: "state_123",
+      workspace_id: "ws_123",
+    });
+
+    const response = await POST(event);
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toMatchObject({
+      error: {
+        code: "state_mismatch",
+        message: "exchange token state is invalid",
       },
     });
   });

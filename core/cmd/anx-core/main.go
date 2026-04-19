@@ -278,11 +278,51 @@ func main() {
 		fmt.Fprintf(os.Stderr, "failed to seed system actor: %v\n", err)
 		os.Exit(1)
 	}
-	authStore := auth.NewStore(
-		workspace.DB(),
+
+	var accountStatusChecker auth.AccountStatusChecker
+	if cpBaseURL := strings.TrimSpace(envString("ANX_CONTROL_PLANE_URL", "")); cpBaseURL != "" {
+		serviceIdentityID := strings.TrimSpace(os.Getenv("ANX_WORKSPACE_SERVICE_ID"))
+		serviceIdentityPrivateKeyB64 := strings.TrimSpace(os.Getenv("ANX_WORKSPACE_SERVICE_PRIVATE_KEY"))
+		if serviceIdentityID == "" || serviceIdentityPrivateKeyB64 == "" {
+			fmt.Fprintln(os.Stderr, "ANX_CONTROL_PLANE_URL is set but ANX_WORKSPACE_SERVICE_ID and ANX_WORKSPACE_SERVICE_PRIVATE_KEY are required for account status checks")
+			os.Exit(1)
+		}
+		raw, err := base64.StdEncoding.DecodeString(serviceIdentityPrivateKeyB64)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "account status checker: invalid ANX_WORKSPACE_SERVICE_PRIVATE_KEY: %v\n", err)
+			os.Exit(1)
+		}
+		if len(raw) != ed25519.PrivateKeySize {
+			fmt.Fprintf(os.Stderr, "account status checker: invalid ANX_WORKSPACE_SERVICE_PRIVATE_KEY length %d (expected %d)\n", len(raw), ed25519.PrivateKeySize)
+			os.Exit(1)
+		}
+		cpAssertionAudience := envString("ANX_HEARTBEAT_AUDIENCE", heartbeat.DefaultAudience)
+		signer := auth.NewEd25519WorkspaceServiceAssertionSigner(
+			serviceIdentityID,
+			ed25519.PrivateKey(raw),
+			cpAssertionAudience,
+			workspaceID,
+		)
+		checker, err := auth.NewHTTPAccountStatusChecker(auth.HTTPAccountStatusCheckerConfig{
+			BaseURL:     cpBaseURL,
+			WorkspaceID: workspaceID,
+			Signer:      signer,
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "account status checker: %v\n", err)
+			os.Exit(1)
+		}
+		accountStatusChecker = checker
+	}
+
+	authStoreOpts := []auth.Option{
 		auth.WithBootstrapToken(bootstrapToken),
 		auth.WithAllowDevRegisterLinkedActor(devRegisterLinkedActors),
-	)
+	}
+	if accountStatusChecker != nil {
+		authStoreOpts = append(authStoreOpts, auth.WithAccountStatusChecker(accountStatusChecker))
+	}
+	authStore := auth.NewStore(workspace.DB(), authStoreOpts...)
 	passkeySessionStore := auth.NewPasskeySessionStore(auth.DefaultPasskeySessionTTL)
 	defer passkeySessionStore.Close()
 	primitiveStore := primitives.NewStore(workspace.DB(), blobBackendImpl, effectiveBlobRoot, primitives.WithWorkspaceQuota(workspaceQuota))

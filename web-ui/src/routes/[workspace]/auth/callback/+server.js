@@ -1,7 +1,12 @@
 import { env as privateEnv } from "$env/dynamic/private";
-import { json, redirect } from "@sveltejs/kit";
+import { error, json, redirect } from "@sveltejs/kit";
 
 import { normalizeBaseUrl } from "$lib/config.js";
+import {
+  CALLBACK_CODES_UNKNOWN_COPY,
+  CALLBACK_CODES_WITH_TABLE_COPY,
+  CALLBACK_COPY,
+} from "$lib/hosted/callbackErrorCopy.js";
 import { sanitizeHostedReturnPath } from "$lib/hosted/launchFlow.js";
 import {
   clearRetryableWorkspaceAuthFailureCount,
@@ -11,16 +16,78 @@ import {
 import { resolveWorkspaceBySlug } from "$lib/server/workspaceResolver.js";
 import { workspacePath } from "$lib/workspacePaths.js";
 
-function errorResponse(status, code, message) {
-  return json(
-    {
-      error: {
-        code,
-        message,
-      },
-    },
-    { status },
-  );
+function wantsJson(request) {
+  return request.headers.get("accept")?.includes("application/json") ?? false;
+}
+
+/**
+ * Maps CP session-exchange errors to canonical BFF codes (`state_mismatch` vs `exchange_invalid`).
+ * @param {number} httpStatus
+ * @param {string} cpCode
+ * @param {string} cpMessage
+ */
+function canonicalizeSessionExchangeError(httpStatus, cpCode, cpMessage) {
+  const msg = String(cpMessage ?? "");
+  if (cpCode === "state_mismatch") {
+    return "state_mismatch";
+  }
+  if (cpCode === "exchange_expired") {
+    return "exchange_expired";
+  }
+  if (cpCode === "exchange_invalid") {
+    if (httpStatus === 401 || msg.toLowerCase().includes("state is invalid")) {
+      return "state_mismatch";
+    }
+    return "exchange_invalid";
+  }
+  return cpCode;
+}
+
+function userFacingBody(code, technicalMessage) {
+  if (code === "state_mismatch") {
+    return CALLBACK_COPY.UNKNOWN.body;
+  }
+  if (CALLBACK_CODES_WITH_TABLE_COPY.has(code)) {
+    return /** @type {{ body: string }} */ (CALLBACK_COPY[code]).body;
+  }
+  if (CALLBACK_CODES_UNKNOWN_COPY.has(code)) {
+    return CALLBACK_COPY.UNKNOWN.body;
+  }
+  return technicalMessage;
+}
+
+/**
+ * @param {import('@sveltejs/kit').RequestEvent} event
+ * @param {number} status
+ * @param {string} canonicalCode
+ * @param {string} technicalMessage
+ * @param {{ workspace_name?: string | null }} [options]
+ */
+function respondWithCallbackError(
+  event,
+  status,
+  canonicalCode,
+  technicalMessage,
+  options = {},
+) {
+  const workspaceName = options.workspace_name;
+  const errorObj = {
+    code: canonicalCode,
+    message: technicalMessage,
+  };
+  if (workspaceName != null && String(workspaceName).trim() !== "") {
+    errorObj.workspace_name = String(workspaceName).trim();
+  }
+
+  if (wantsJson(event.request)) {
+    return json({ error: errorObj }, { status });
+  }
+
+  throw error(status, {
+    message: userFacingBody(canonicalCode, technicalMessage),
+    code: canonicalCode,
+    workspace_name: workspaceName != null ? String(workspaceName).trim() : null,
+  });
 }
 
 async function readJSONPayload(response) {
@@ -111,23 +178,46 @@ async function postJSONWithNetworkRetries(url, body, options) {
   throw lastErr;
 }
 
+function workspaceDisplayName(resolved) {
+  const w = resolved?.workspace;
+  if (!w) {
+    return null;
+  }
+  const label = String(w.label ?? "").trim();
+  if (label) {
+    return label;
+  }
+  const slug = String(w.slug ?? "").trim();
+  return slug || null;
+}
+
 export async function POST(event) {
   const resolved = await resolveWorkspaceBySlug({
     event,
     workspaceSlug: event.params.workspace,
   });
+  const workspaceNameEarly = workspaceDisplayName(resolved);
+
   if (resolved.error || !resolved.workspace) {
-    return json(
-      resolved.error?.payload ?? {
-        error: {
-          code: "workspace_not_found",
-          message: "Workspace not found.",
+    if (wantsJson(event.request)) {
+      return json(
+        resolved.error?.payload ?? {
+          error: {
+            code: "workspace_not_found",
+            message: "Workspace not found.",
+          },
         },
-      },
-      {
-        status: resolved.error?.status ?? 404,
-      },
-    );
+        {
+          status: resolved.error?.status ?? 404,
+        },
+      );
+    }
+    throw error(resolved.error?.status ?? 404, {
+      message:
+        resolved.error?.payload?.error?.message ?? "Workspace not found.",
+      code: "workspace_not_found",
+      workspace_name: workspaceNameEarly,
+    });
   }
 
   const workspaceSlug = resolved.workspaceSlug;
@@ -135,19 +225,23 @@ export async function POST(event) {
     normalizeBaseUrl(resolved.workspace.coreBaseUrl),
   );
   if (!coreBaseURL) {
-    return errorResponse(
+    return respondWithCallbackError(
+      event,
       503,
       "workspace_unavailable",
       "Workspace core endpoint is unavailable.",
+      { workspace_name: workspaceNameEarly },
     );
   }
 
   const controlBaseURL = normalizeBaseUrl(privateEnv.ANX_CONTROL_BASE_URL);
   if (!controlBaseURL) {
-    return errorResponse(
+    return respondWithCallbackError(
+      event,
       503,
       "control_plane_unavailable",
       "Control plane URL is not configured.",
+      { workspace_name: workspaceNameEarly },
     );
   }
 
@@ -157,10 +251,12 @@ export async function POST(event) {
   const formWorkspaceID = String(form.get("workspace_id") ?? "").trim();
   const returnPath = sanitizeHostedReturnPath(form.get("return_path") ?? "/");
   if (!exchangeToken || !state) {
-    return errorResponse(
+    return respondWithCallbackError(
+      event,
       400,
       "invalid_request",
       "exchange_token and state are required.",
+      { workspace_name: workspaceNameEarly },
     );
   }
 
@@ -172,20 +268,26 @@ export async function POST(event) {
     resolvedWorkspaceID &&
     formWorkspaceID !== resolvedWorkspaceID
   ) {
-    return errorResponse(
+    return respondWithCallbackError(
+      event,
       400,
       "invalid_request",
       "workspace_id does not match the callback workspace.",
+      { workspace_name: workspaceNameEarly },
     );
   }
   const workspaceID = formWorkspaceID || resolvedWorkspaceID;
   if (!workspaceID) {
-    return errorResponse(
+    return respondWithCallbackError(
+      event,
       400,
       "invalid_request",
       "workspace_id is required for session exchange.",
+      { workspace_name: workspaceNameEarly },
     );
   }
+
+  const workspaceName = workspaceNameEarly;
 
   const sessionExchangeURL = new URL(
     `/workspaces/${encodeURIComponent(workspaceID)}/session-exchange`,
@@ -198,29 +300,44 @@ export async function POST(event) {
       state,
     });
   } catch (err) {
-    return errorResponse(
+    return respondWithCallbackError(
+      event,
       503,
       "session_exchange_unreachable",
       `Could not reach control plane for session exchange (${fetchErrorDetail(err)}).`,
+      { workspace_name: workspaceName },
     );
   }
   if (!exchanged.response.ok) {
-    return errorResponse(
+    const cpCode = String(
+      exchanged.payload?.error?.code ?? "session_exchange_failed",
+    );
+    const cpMessage = String(
+      exchanged.payload?.error?.message ??
+        "Failed to exchange launch session with control plane.",
+    );
+    const canonical = canonicalizeSessionExchangeError(
       exchanged.response.status || 502,
-      String(exchanged.payload?.error?.code ?? "session_exchange_failed"),
-      String(
-        exchanged.payload?.error?.message ??
-          "Failed to exchange launch session with control plane.",
-      ),
+      cpCode,
+      cpMessage,
+    );
+    return respondWithCallbackError(
+      event,
+      exchanged.response.status || 502,
+      canonical,
+      cpMessage,
+      { workspace_name: workspaceName },
     );
   }
 
   const assertion = String(exchanged.payload?.grant?.bearer_token ?? "").trim();
   if (!assertion) {
-    return errorResponse(
+    return respondWithCallbackError(
+      event,
       502,
       "invalid_control_plane_response",
       "Control plane response did not include a workspace grant token.",
+      { workspace_name: workspaceName },
     );
   }
 
@@ -236,22 +353,28 @@ export async function POST(event) {
       { attempts: 10, delayMs: 500 },
     );
   } catch (err) {
-    return errorResponse(
+    return respondWithCallbackError(
+      event,
       503,
       "workspace_core_unreachable",
       `Could not reach workspace core for token exchange at ${authTokenURL} (${fetchErrorDetail(err)}). If you just created the workspace, wait until anx-core is listening on that port and try again.`,
+      { workspace_name: workspaceName },
     );
   }
   if (!tokenExchange.response.ok) {
-    return errorResponse(
+    const coreCode = String(
+      tokenExchange.payload?.error?.code ?? "workspace_token_exchange_failed",
+    );
+    const coreMessage = String(
+      tokenExchange.payload?.error?.message ??
+        "Workspace auth token exchange failed.",
+    );
+    return respondWithCallbackError(
+      event,
       tokenExchange.response.status || 502,
-      String(
-        tokenExchange.payload?.error?.code ?? "workspace_token_exchange_failed",
-      ),
-      String(
-        tokenExchange.payload?.error?.message ??
-          "Workspace auth token exchange failed.",
-      ),
+      coreCode,
+      coreMessage,
+      { workspace_name: workspaceName },
     );
   }
 
@@ -259,10 +382,12 @@ export async function POST(event) {
   const refreshToken = String(tokens.refresh_token ?? "").trim();
   const accessToken = String(tokens.access_token ?? "").trim();
   if (!refreshToken || !accessToken) {
-    return errorResponse(
+    return respondWithCallbackError(
+      event,
       502,
       "invalid_workspace_response",
       "Workspace token exchange response was missing required tokens.",
+      { workspace_name: workspaceName },
     );
   }
 

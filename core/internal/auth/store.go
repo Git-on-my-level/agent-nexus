@@ -25,6 +25,8 @@ var ErrAgentRevoked = errors.New("agent_revoked")
 var ErrKeyMismatch = errors.New("key_mismatch")
 var ErrAgentNotFound = errors.New("agent_not_found")
 var ErrLastActivePrincipal = errors.New("last_active_principal")
+var ErrAccountDisabled = errors.New("account_disabled")
+var ErrCPUnreachable = errors.New("control_plane_unreachable")
 
 const (
 	bootstrapTokenPlaceholder = "REPLACE_WITH_SECURE_BOOTSTRAP_TOKEN"
@@ -117,6 +119,7 @@ type Store struct {
 	maxAssertionSkew            time.Duration
 	bootstrapTokenHash          string
 	allowDevRegisterLinkedActor bool
+	accountStatusChecker        AccountStatusChecker
 }
 
 func NewStore(db *sql.DB, options ...Option) *Store {
@@ -172,6 +175,14 @@ func WithBootstrapToken(token string) Option {
 func WithAllowDevRegisterLinkedActor(allow bool) Option {
 	return func(store *Store) {
 		store.allowDevRegisterLinkedActor = allow
+	}
+}
+
+// WithAccountStatusChecker enables control-plane account status checks during
+// refresh for hosted human principals. Pass nil for OSS/local mode.
+func WithAccountStatusChecker(checker AccountStatusChecker) Option {
+	return func(store *Store) {
+		store.accountStatusChecker = checker
 	}
 }
 
@@ -571,21 +582,27 @@ func (s *Store) IssueTokenFromRefresh(ctx context.Context, refreshToken string) 
 	}
 
 	var (
-		sessionID    string
-		agentID      string
-		expiresAtRaw string
-		revokedAt    sql.NullString
-		replacedBy   sql.NullString
-		agentRevoked sql.NullString
+		sessionID        string
+		agentID          string
+		expiresAtRaw     string
+		revokedAt        sql.NullString
+		replacedBy       sql.NullString
+		agentRevoked     sql.NullString
+		authMethodRaw    sql.NullString
+		principalKindRaw sql.NullString
+		externalSubRaw   sql.NullString
 	)
 	err = tx.QueryRowContext(
 		ctx,
-		`SELECT r.id, r.agent_id, r.expires_at, r.revoked_at, r.replaced_by_session_id, a.revoked_at
+		`SELECT r.id, r.agent_id, r.expires_at, r.revoked_at, r.replaced_by_session_id, a.revoked_at,
+			json_extract(a.metadata_json, '$.auth_method'),
+			json_extract(a.metadata_json, '$.principal_kind'),
+			json_extract(a.metadata_json, '$.external_subject')
 		 FROM auth_refresh_sessions r
 		 JOIN agents a ON a.id = r.agent_id
 		 WHERE r.token_hash = ?`,
 		hashToken(refreshToken),
-	).Scan(&sessionID, &agentID, &expiresAtRaw, &revokedAt, &replacedBy, &agentRevoked)
+	).Scan(&sessionID, &agentID, &expiresAtRaw, &revokedAt, &replacedBy, &agentRevoked, &authMethodRaw, &principalKindRaw, &externalSubRaw)
 	if err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -622,6 +639,36 @@ func (s *Store) IssueTokenFromRefresh(ctx context.Context, refreshToken string) 
 			log.Printf("tx rollback failed: %v", rbErr)
 		}
 		return TokenBundle{}, ErrAgentRevoked
+	}
+
+	if s.accountStatusChecker != nil {
+		authMethod := ""
+		if authMethodRaw.Valid {
+			authMethod = authMethodRaw.String
+		}
+		principalKind := ""
+		if principalKindRaw.Valid {
+			principalKind = principalKindRaw.String
+		}
+		externalSubject := ""
+		if externalSubRaw.Valid {
+			externalSubject = externalSubRaw.String
+		}
+		if shouldCheckHostedHumanAccountStatus(principalKind, authMethod) && strings.TrimSpace(externalSubject) != "" {
+			if _, err := s.accountStatusChecker.CheckActive(ctx, externalSubject); err != nil {
+				if rbErr := tx.Rollback(); rbErr != nil {
+					log.Printf("tx rollback failed: %v", rbErr)
+				}
+				switch {
+				case errors.Is(err, ErrAccountInactive):
+					return TokenBundle{}, ErrAccountDisabled
+				case errors.Is(err, ErrCPUnreachable):
+					return TokenBundle{}, ErrCPUnreachable
+				default:
+					return TokenBundle{}, err
+				}
+			}
+		}
 	}
 
 	now := time.Now().UTC()

@@ -166,6 +166,10 @@ func handleIssueAuthToken(w http.ResponseWriter, r *http.Request, opts handlerOp
 		switch {
 		case errors.Is(err, auth.ErrInvalidToken):
 			writeError(w, http.StatusUnauthorized, "invalid_token", "token is invalid, expired, or revoked")
+		case errors.Is(err, auth.ErrAccountDisabled):
+			writeError(w, http.StatusUnauthorized, "session_ended_by_cp", "Your control-plane session has ended.")
+		case errors.Is(err, auth.ErrCPUnreachable):
+			writeError(w, http.StatusServiceUnavailable, "cp_unreachable", "The workspace could not reach the control plane. Try again shortly.")
 		case errors.Is(err, auth.ErrAgentRevoked):
 			writeError(w, http.StatusForbidden, "agent_revoked", "agent has been revoked")
 		case errors.Is(err, auth.ErrKeyMismatch):
