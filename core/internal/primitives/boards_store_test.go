@@ -1,9 +1,9 @@
 package primitives_test
 
 import (
+	"agent-nexus-core/internal/blob"
 	"context"
 	"errors"
-	"agent-nexus-core/internal/blob"
 	"reflect"
 	"strings"
 	"testing"

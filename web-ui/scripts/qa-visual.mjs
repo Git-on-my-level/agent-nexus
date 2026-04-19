@@ -88,7 +88,7 @@ const QA_SCENES = [
     path: "/hosted/organizations/org_qa_primary/billing",
     hostedMode: "authed-dashboard",
     waitFor: async (page) => {
-      await page.waitForSelector('h1:has-text("Billing")');
+      await page.waitForSelector("text=Manage in Stripe");
     },
   },
   {

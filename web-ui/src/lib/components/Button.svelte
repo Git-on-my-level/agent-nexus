@@ -7,6 +7,8 @@
     href = undefined,
     busy = false,
     onclick = undefined,
+    title = undefined,
+    "aria-label": ariaLabel = undefined,
     class: className = "",
     children,
     leading,
@@ -52,7 +54,9 @@
 {#if href}
   <a
     {href}
+    {title}
     class={classes}
+    aria-label={ariaLabel}
     aria-busy={busy || undefined}
     role="button"
     {onclick}
@@ -88,8 +92,10 @@
 {:else}
   <button
     {type}
+    {title}
     disabled={effectiveDisabled}
     class={classes}
+    aria-label={ariaLabel}
     aria-busy={busy || undefined}
     {onclick}
   >

@@ -584,7 +584,7 @@ func buildBinaries(t *testing.T) (string, string) {
 		cliPath := filepath.Join(tempDir, "oar")
 		corePath := filepath.Join(tempDir, "anx-core")
 
-		if err := buildGoBinary(filepath.Join(root, "cli"), "./cmd/oar", cliPath); err != nil {
+		if err := buildGoBinary(filepath.Join(root, "cli"), "./cmd/anx", cliPath); err != nil {
 			binaries.err = err
 			return
 		}
