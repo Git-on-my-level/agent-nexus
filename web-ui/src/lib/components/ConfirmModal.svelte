@@ -14,7 +14,7 @@
     oncancel = () => {},
   } = $props();
 
-  let confirmBtnEl = $state(null);
+  let confirmActionWrapEl = $state(null);
   let typedInputEl = $state(null);
   let typedValue = $state("");
   let confirmVariant = $derived(
@@ -36,7 +36,9 @@
     if (needsTyped) {
       setTimeout(() => typedInputEl?.focus(), 0);
     } else {
-      confirmBtnEl?.focus();
+      setTimeout(() => {
+        confirmActionWrapEl?.querySelector("button, a[role='button']")?.focus();
+      }, 0);
     }
     function onKeydown(e) {
       if (e.key === "Escape" && !busy) {
@@ -103,17 +105,18 @@
         >
           {cancelLabel}
         </Button>
-        <Button
-          variant={confirmVariant}
-          size="compact"
-          class={confirmClass}
-          bind:this={confirmBtnEl}
-          disabled={confirmDisabled}
-          {busy}
-          onclick={onconfirm}
-        >
-          {busy ? "Working…" : confirmLabel}
-        </Button>
+        <span bind:this={confirmActionWrapEl} class="contents">
+          <Button
+            variant={confirmVariant}
+            size="compact"
+            class={confirmClass}
+            disabled={confirmDisabled}
+            {busy}
+            onclick={onconfirm}
+          >
+            {busy ? "Working…" : confirmLabel}
+          </Button>
+        </span>
       </div>
     </div>
   </div>

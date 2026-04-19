@@ -17,7 +17,7 @@
     }
   }
 
-  let btnSize = $derived(size === "md" ? "compact" : "compact");
+  let btnSize = $derived(size === "md" ? "default" : "compact");
 </script>
 
 <Button

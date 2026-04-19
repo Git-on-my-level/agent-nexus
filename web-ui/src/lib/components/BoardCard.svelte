@@ -81,7 +81,7 @@
       case "done":
         return "bg-ok-text";
       case "canceled":
-        return "bg-bg0";
+        return "bg-fg-muted";
       case "paused":
         return "bg-warn-text";
       case "stale":
