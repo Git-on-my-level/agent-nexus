@@ -28,6 +28,12 @@ module.exports = {
       "ok-text": "var(--ok-text)",
       "ok-soft": "var(--ok-soft)",
       info: "var(--info)",
+      orange: {
+        400: "#fb923c",
+      },
+      blue: {
+        400: "#60a5fa",
+      },
       transparent: "transparent",
       current: "currentColor",
       white: "#fff",

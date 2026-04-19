@@ -435,6 +435,7 @@
           ...failedAckById,
           [item.id]: { item, reason },
         };
+        items = [...items, item];
       } finally {
         ackInFlightById = { ...ackInFlightById, [item.id]: false };
       }
@@ -808,7 +809,8 @@
     type="button"
     data-testid="urgency-summary-normal"
   >
-    <span class="inline-block h-1.5 w-1.5 rounded-full bg-bg0 shrink-0"></span>
+    <span class="inline-block h-1.5 w-1.5 rounded-full bg-fg-muted shrink-0"
+    ></span>
     <span class="text-[var(--fg-muted)]">Normal</span>
     <span class="tabular-nums text-[var(--fg-subtle)]"
       >{urgencySummary.normal}</span

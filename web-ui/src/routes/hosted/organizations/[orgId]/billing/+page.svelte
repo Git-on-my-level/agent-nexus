@@ -544,7 +544,7 @@
               {#each planCard.features as feat}
                 <li class="flex items-start gap-1.5">
                   <span
-                    class="mt-1.5 inline-block h-1 w-1 shrink-0 rounded-full bg-bg0"
+                    class="mt-1.5 inline-block h-1 w-1 shrink-0 rounded-full bg-fg-muted"
                     aria-hidden="true"
                   ></span>
                   <span>{feat}</span>

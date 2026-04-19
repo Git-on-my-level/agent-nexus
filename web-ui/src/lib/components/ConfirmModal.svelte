@@ -1,4 +1,6 @@
 <script>
+  import { tick } from "svelte";
+
   import Button from "$lib/components/Button.svelte";
 
   let {
@@ -33,13 +35,13 @@
   $effect(() => {
     if (!open) return;
     typedValue = "";
-    if (needsTyped) {
-      setTimeout(() => typedInputEl?.focus(), 0);
-    } else {
-      setTimeout(() => {
+    void tick().then(() => {
+      if (needsTyped) {
+        typedInputEl?.focus();
+      } else {
         confirmActionWrapEl?.querySelector("button, a[role='button']")?.focus();
-      }, 0);
-    }
+      }
+    });
     function onKeydown(e) {
       if (e.key === "Escape" && !busy) {
         e.preventDefault();
