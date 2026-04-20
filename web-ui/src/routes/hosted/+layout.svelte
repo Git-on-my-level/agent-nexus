@@ -22,9 +22,7 @@
     "/hosted/start",
     "/hosted/signup",
     "/hosted/signin",
-    "/hosted/dev",
     "/hosted/billing/return",
-    "/hosted/billing/mock-portal",
   ];
 
   let menuOpen = $state(false);
@@ -394,10 +392,6 @@
         <a
           class="transition-colors hover:text-fg inline-block py-1"
           href="mailto:support@runoar.com">Support</a
-        >
-        <a
-          class="transition-colors hover:text-fg inline-block py-1"
-          href="/hosted/dev">Developer notes</a
         >
       </nav>
     </div>
