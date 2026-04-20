@@ -178,7 +178,7 @@ func WithAllowDevRegisterLinkedActor(allow bool) Option {
 	}
 }
 
-// WithAccountStatusChecker enables control-plane account status checks during
+// WithAccountStatusChecker enables HTTP account status checks during
 // refresh for hosted human principals. Pass nil for OSS/local mode.
 func WithAccountStatusChecker(checker AccountStatusChecker) Option {
 	return func(store *Store) {

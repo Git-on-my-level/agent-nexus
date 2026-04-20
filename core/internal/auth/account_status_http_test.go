@@ -158,7 +158,7 @@ func TestIssueTokenFromRefresh_AccountStatusCacheFreshSkipsSecondCPCall(t *testi
 	n := hits
 	hitsMu.Unlock()
 	if n != 1 {
-		t.Fatalf("expected exactly 1 control plane call, got %d", n)
+		t.Fatalf("expected exactly 1 account status HTTP call, got %d", n)
 	}
 }
 
@@ -344,5 +344,53 @@ func TestIssueTokenFromRefresh_CPUnreachableFailClosedColdCache(t *testing.T) {
 	_, err = store.IssueTokenFromRefresh(ctx, refresh)
 	if !errors.Is(err, ErrCPUnreachable) {
 		t.Fatalf("expected ErrCPUnreachable, got %v", err)
+	}
+}
+
+func TestHTTPAccountStatusChecker_CustomEndpointPath(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	var sawPath string
+	var pathMu sync.Mutex
+	client := &http.Client{Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		pathMu.Lock()
+		sawPath = r.URL.Path
+		pathMu.Unlock()
+		return jsonHTTPResponse(http.StatusOK, `{"active":true}`), nil
+	})}
+
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("key: %v", err)
+	}
+	_ = pub
+
+	signer := NewEd25519WorkspaceServiceAssertionSigner("svc-id", priv, defaultAccountStatusAudience, "ws_custom")
+	checker, err := NewHTTPAccountStatusChecker(HTTPAccountStatusCheckerConfig{
+		BaseURL:      "http://cp.test",
+		EndpointPath: "custom/status",
+		WorkspaceID:  "ws_custom",
+		HTTPClient:   client,
+		Signer:       signer,
+		Now:          func() time.Time { return time.Date(2026, 4, 19, 12, 0, 0, 0, time.UTC) },
+		Logf:         func(string, ...any) {},
+	})
+	if err != nil {
+		t.Fatalf("checker: %v", err)
+	}
+
+	active, err := checker.CheckActive(ctx, "acct_custom_path")
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if !active {
+		t.Fatalf("expected active=true")
+	}
+	pathMu.Lock()
+	p := sawPath
+	pathMu.Unlock()
+	if p != "/custom/status" {
+		t.Fatalf("request path = %q, want /custom/status", p)
 	}
 }

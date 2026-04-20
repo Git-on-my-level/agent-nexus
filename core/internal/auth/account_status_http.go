@@ -19,21 +19,32 @@ import (
 )
 
 // Account status cache: fresh TTL 5m; fail-open allowed when last successful check
-// was active and age < 10m (2× fresh TTL); beyond that, CP failures fail closed.
+// was active and age < 10m (2× fresh TTL); beyond that, remote failures fail closed.
 const (
-	accountStatusCacheFreshTTL   = 5 * time.Minute
-	accountStatusCacheMaxStale   = 2 * accountStatusCacheFreshTTL
-	accountStatusHTTPTimeout     = 3 * time.Second
-	accountStatusAssertionTTL    = 60 * time.Second
-	accountStatusPurpose         = "account_status_check"
+	accountStatusCacheFreshTTL = 5 * time.Minute
+	accountStatusCacheMaxStale = 2 * accountStatusCacheFreshTTL
+	accountStatusHTTPTimeout   = 3 * time.Second
+	accountStatusAssertionTTL  = 60 * time.Second
+	accountStatusPurpose       = "account_status_check"
+
+	// defaultAccountStatusAudience is the default JWT aud claim when the signer is
+	// constructed without an explicit audience. Deployments normally override this
+	// via ANX_ACCOUNT_STATUS_AUDIENCE or by passing a non-empty audience to
+	// NewEd25519WorkspaceServiceAssertionSigner.
 	defaultAccountStatusAudience = "anx-control-plane"
+
+	// DefaultAccountStatusAudience matches the default used by
+	// NewEd25519WorkspaceServiceAssertionSigner when audience is empty.
+	DefaultAccountStatusAudience = defaultAccountStatusAudience
+
+	defaultAccountStatusEndpointPath = "v1/internal/accounts/status"
 )
 
-// ErrAccountInactive is returned by AccountStatusChecker when the control plane
-// reports the account is not active.
+// ErrAccountInactive is returned by AccountStatusChecker when the account status
+// endpoint reports the account is not active.
 var ErrAccountInactive = errors.New("auth: account inactive on control plane")
 
-// AccountStatusChecker is implemented by the hosted control plane HTTP client.
+// AccountStatusChecker is implemented by the optional HTTP account-status client.
 // OSS/local mode passes a nil checker.
 type AccountStatusChecker interface {
 	CheckActive(ctx context.Context, accountID string) (active bool, err error)
@@ -44,7 +55,7 @@ type accountStatusCacheEntry struct {
 	checkedAt time.Time
 }
 
-// WorkspaceServiceAssertionSigner signs short-lived workspace→CP JWT assertions.
+// WorkspaceServiceAssertionSigner signs short-lived workspace service JWT assertions.
 type WorkspaceServiceAssertionSigner interface {
 	Sign(ctx context.Context) (jwt string, err error)
 }
@@ -105,17 +116,18 @@ func (s *ed25519WorkspaceServiceSigner) Sign(ctx context.Context) (string, error
 	return signed, nil
 }
 
-// HTTPAccountStatusCheckerConfig configures the control plane account status client.
+// HTTPAccountStatusCheckerConfig configures the HTTP account status client.
 type HTTPAccountStatusCheckerConfig struct {
-	BaseURL     string
-	WorkspaceID string
-	HTTPClient  *http.Client
-	Signer      WorkspaceServiceAssertionSigner
-	Now         func() time.Time
-	Logf        func(format string, args ...any)
+	BaseURL      string
+	EndpointPath string
+	WorkspaceID  string
+	HTTPClient   *http.Client
+	Signer       WorkspaceServiceAssertionSigner
+	Now          func() time.Time
+	Logf         func(format string, args ...any)
 }
 
-// HTTPAccountStatusChecker calls POST /v1/internal/accounts/status on the control plane.
+// HTTPAccountStatusChecker calls POST {BaseURL}/{EndpointPath} (see config).
 type HTTPAccountStatusChecker struct {
 	baseURL     string
 	workspaceID string
@@ -127,14 +139,14 @@ type HTTPAccountStatusChecker struct {
 	cache sync.Map // accountID -> accountStatusCacheEntry
 }
 
-// NewHTTPAccountStatusChecker constructs a cached CP account status checker.
+// NewHTTPAccountStatusChecker constructs a cached HTTP account status checker.
 func NewHTTPAccountStatusChecker(cfg HTTPAccountStatusCheckerConfig) (*HTTPAccountStatusChecker, error) {
 	base := strings.TrimSpace(cfg.BaseURL)
 	if base == "" {
-		return nil, fmt.Errorf("control plane base URL is required")
+		return nil, fmt.Errorf("account status base URL is required")
 	}
 	if _, err := url.Parse(base); err != nil {
-		return nil, fmt.Errorf("parse control plane base URL: %w", err)
+		return nil, fmt.Errorf("parse account status base URL: %w", err)
 	}
 	ws := strings.TrimSpace(cfg.WorkspaceID)
 	if ws == "" {
@@ -155,7 +167,11 @@ func NewHTTPAccountStatusChecker(cfg HTTPAccountStatusCheckerConfig) (*HTTPAccou
 	if logf == nil {
 		logf = log.Printf
 	}
-	u, err := url.JoinPath(strings.TrimRight(base, "/"), "v1", "internal", "accounts", "status")
+	endpointPath := strings.TrimSpace(cfg.EndpointPath)
+	if endpointPath == "" {
+		endpointPath = defaultAccountStatusEndpointPath
+	}
+	u, err := joinBaseURLPath(base, endpointPath)
 	if err != nil {
 		return nil, fmt.Errorf("build account status URL: %w", err)
 	}
@@ -167,6 +183,25 @@ func NewHTTPAccountStatusChecker(cfg HTTPAccountStatusCheckerConfig) (*HTTPAccou
 		now:         now,
 		logf:        logf,
 	}, nil
+}
+
+func joinBaseURLPath(base, relPath string) (string, error) {
+	base = strings.TrimRight(strings.TrimSpace(base), "/")
+	relPath = strings.Trim(relPath, "/")
+	if relPath == "" {
+		return url.JoinPath(base)
+	}
+	segments := strings.Split(relPath, "/")
+	rest := make([]string, 0, len(segments))
+	for _, seg := range segments {
+		if seg != "" {
+			rest = append(rest, seg)
+		}
+	}
+	if len(rest) == 0 {
+		return url.JoinPath(base)
+	}
+	return url.JoinPath(base, rest...)
 }
 
 // CheckActive implements AccountStatusChecker.
@@ -199,7 +234,7 @@ func (c *HTTPAccountStatusChecker) CheckActive(ctx context.Context, accountID st
 		prevEntry = raw.(accountStatusCacheEntry)
 	}
 
-	active, err := c.fetchActiveFromCP(ctx, accountID)
+	active, err := c.fetchActiveRemote(ctx, accountID)
 	if err == nil {
 		if !active {
 			c.cache.Store(accountID, accountStatusCacheEntry{active: false, checkedAt: now})
@@ -238,7 +273,7 @@ func (c *HTTPAccountStatusChecker) logSessionExchange(accountID, outcome string)
 	c.logf("event=session_exchange account_id=%s workspace_id=%s outcome=%s", accountID, c.workspaceID, outcome)
 }
 
-func (c *HTTPAccountStatusChecker) fetchActiveFromCP(ctx context.Context, accountID string) (bool, error) {
+func (c *HTTPAccountStatusChecker) fetchActiveRemote(ctx context.Context, accountID string) (bool, error) {
 	token, err := c.signer.Sign(ctx)
 	if err != nil {
 		return false, err

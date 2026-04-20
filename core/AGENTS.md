@@ -22,7 +22,8 @@ It owns the canonical organizational record, validates and records state transit
 - Human-facing operator UX beyond the API contract.
 - Real-world side effects outside the OAR workspace.
 - Control-plane-specific integration types, clients, or endpoint constants.
-  Allowed carve-out: a generic env-driven heartbeat publisher contract.
+  Allowed carve-outs: generic env-driven contracts for the heartbeat publisher
+  and for the optional HTTP account status checker (see below).
 
 ## Canonical References
 - System spec: `docs/anx-core-spec.md`
@@ -46,6 +47,13 @@ It owns the canonical organizational record, validates and records state transit
 - `ANX_HEARTBEAT_AUDIENCE`: optional JWT audience, default `anx-control-plane`.
 - `ANX_WORKSPACE_SERVICE_ID`: required identity issuer/subject when publisher is enabled.
 - `ANX_WORKSPACE_SERVICE_PRIVATE_KEY`: required base64 Ed25519 private key when publisher is enabled.
+
+## Generic Account Status Checker Contract
+- `ANX_ACCOUNT_STATUS_URL`: when set, enables optional HTTP account status checks during hosted human refresh flows (base URL only; path is configurable separately).
+- `ANX_ACCOUNT_STATUS_PATH`: optional path suffix joined to the base URL, default `v1/internal/accounts/status`.
+- `ANX_ACCOUNT_STATUS_AUDIENCE`: optional JWT audience for the workspace service assertion, default `anx-control-plane` (same default as the signer when audience is omitted in code).
+- `ANX_CONTROL_PLANE_URL`: **deprecated** alias for `ANX_ACCOUNT_STATUS_URL`; if `ANX_ACCOUNT_STATUS_URL` is unset, this value is used and a deprecation log line is emitted.
+- `ANX_WORKSPACE_SERVICE_ID` / `ANX_WORKSPACE_SERVICE_PRIVATE_KEY`: required when account status checks are enabled (same identity material as the heartbeat publisher).
 
 ## Edit Routing
 - Contract or schema changes start in [../contracts/AGENTS.md](../contracts/AGENTS.md).

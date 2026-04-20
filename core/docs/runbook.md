@@ -55,6 +55,21 @@ variables.
 | Write route burst | n/a | `ANX_WRITE_ROUTE_RATE_BURST` | `200` |
 | Graceful shutdown timeout | n/a | `ANX_SHUTDOWN_TIMEOUT` | `15s` |
 
+### Optional: heartbeat publisher and account status (env contract)
+
+For deployments that report usage/health to a remote listener or enforce account
+status on refresh, `anx-core` supports two independent, generic env contracts.
+See `AGENTS.md` in this module for the canonical list. Summary:
+
+- **Heartbeat**: `ANX_HEARTBEAT_PUBLISHER_URL` plus `ANX_WORKSPACE_SERVICE_ID` and
+  `ANX_WORKSPACE_SERVICE_PRIVATE_KEY`; optional `ANX_HEARTBEAT_INTERVAL`,
+  `ANX_HEARTBEAT_AUDIENCE`.
+- **Account status HTTP checker**: `ANX_ACCOUNT_STATUS_URL` (base URL) plus the
+  same service identity env vars; optional `ANX_ACCOUNT_STATUS_PATH` (default
+  `v1/internal/accounts/status`), `ANX_ACCOUNT_STATUS_AUDIENCE` (default
+  `anx-control-plane`). `ANX_CONTROL_PLANE_URL` is a deprecated alias for
+  `ANX_ACCOUNT_STATUS_URL` and logs a deprecation warning when used alone.
+
 Filesystem blobs remain the default for self-hosted deployments.
 
 Set `ANX_BLOB_BACKEND=s3` only when you explicitly want S3-compatible object
