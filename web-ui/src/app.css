@@ -835,6 +835,18 @@
     line-height: 1.2;
   }
 
+  .shell-actor-handle {
+    margin: 0.25rem 0 0;
+    font-size: 0.6875rem;
+    font-weight: 400;
+    font-family: var(--font-mono);
+    color: var(--fg-subtle);
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .shell-actor-copy span {
     color: var(--fg-muted);
     font-size: 0.6875rem;

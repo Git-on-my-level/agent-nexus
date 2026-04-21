@@ -7,6 +7,27 @@ import {
 } from "../../src/lib/anxCoreClient.js";
 
 describe("anxCoreClient error messaging", () => {
+  it("sends empty actor_id for writes when session locks identity and provider is empty", async () => {
+    const seenBodies = [];
+    const client = createOarCoreClient({
+      baseUrl: "http://core.test",
+      actorIdProvider: () => "",
+      lockActorIdProvider: () => true,
+      fetchFn: async (url, init) => {
+        seenBodies.push(init?.body ?? "");
+        return new Response(JSON.stringify({ topic: { id: "t-1" } }), {
+          status: 201,
+          headers: { "content-type": "application/json" },
+        });
+      },
+    });
+
+    await client.createTopic({ topic: { title: "x" } });
+
+    expect(seenBodies.length).toBe(1);
+    expect(JSON.parse(seenBodies[0])).toMatchObject({ actor_id: "" });
+  });
+
   it("forwards actor list query parameters", async () => {
     const seenUrls = [];
     const client = createOarCoreClient({

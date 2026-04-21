@@ -1,5 +1,7 @@
 import { dev } from "$app/environment";
 import { env as privateEnv } from "$env/dynamic/private";
+import { AuthErrorCode } from "$lib/authErrorCodes.js";
+import { resolveAuthCapabilities } from "$lib/server/authCapabilities.js";
 import { isProxyableCommand } from "$lib/coreRouteCatalog";
 import { getWorkspaceHeader } from "$lib/compat/workspaceCompat";
 import { CURRENT_VERSION } from "$lib/generated/version";
@@ -283,6 +285,11 @@ function buildCSPHeader() {
 }
 
 export async function handle({ event, resolve }) {
+  if (!event.locals) {
+    event.locals = {};
+  }
+  event.locals.anxAuthCapabilities = resolveAuthCapabilities(privateEnv, event);
+
   const pathname = stripBasePath(event.url.pathname);
   const method = event.request.method;
   const documentNavigation = isDocumentNavigationRequest(event.request);
@@ -337,13 +344,52 @@ export async function handle({ event, resolve }) {
   }
 
   const dataFetch = isSvelteKitDataFetch(pathname);
+  const loopInterest = documentNavigation || dataFetch;
+  let loopCount = 0;
+  if (loopInterest) {
+    const loopKey = `${method} ${event.url.pathname}`;
+    loopCount = trackRequestForLoopDetection(loopKey);
+  }
+
+  if (loopInterest && loopCount > 0) {
+    logServerEvent(
+      "ssr.request.loop_short_circuit",
+      {
+        method,
+        path: event.url.pathname,
+        count: loopCount,
+        window_ms: LOOP_WINDOW_MS,
+        env: dev ? "dev" : "prod",
+        code: AuthErrorCode.REQUEST_LOOP_DETECTED,
+      },
+      { level: "warn" },
+    );
+    return new Response(
+      JSON.stringify({
+        error: {
+          code: AuthErrorCode.REQUEST_LOOP_DETECTED,
+          message:
+            "Too many repeated requests to this URL in a short window (possible client navigation loop).",
+        },
+      }),
+      {
+        status: 503,
+        headers: {
+          "content-type": "application/json",
+          "cache-control": "no-store",
+          "X-ANX-UI-Version": CURRENT_VERSION,
+        },
+      },
+    );
+  }
+
   // Log document navigations and SvelteKit data fetches (`__data.json`).
   // The data-fetch case is critical: when the client navigates between
   // routes, only the data fetch hits the server — and a runaway client-side
   // `goto()` loop manifests as repeated `__data.json` requests rather than
   // full document navigations. Logging both makes loops visible in the dev
   // terminal even when no full-page reload happens.
-  const shouldLog = dev && (documentNavigation || dataFetch);
+  const shouldLog = dev && loopInterest;
   const requestStart = shouldLog ? Date.now() : 0;
   const response = await resolve(event);
   response.headers.set("X-ANX-UI-Version", CURRENT_VERSION);
@@ -369,22 +415,6 @@ export async function handle({ event, resolve }) {
     logServerEvent("ssr.request", fields, {
       level: status >= 400 ? "warn" : "info",
     });
-
-    const loopKey = `${method} ${event.url.pathname}`;
-    const loopCount = trackRequestForLoopDetection(loopKey);
-    if (loopCount > 0) {
-      logServerEvent(
-        "ssr.request.loop_detected",
-        {
-          method,
-          path: event.url.pathname,
-          count: loopCount,
-          window_ms: LOOP_WINDOW_MS,
-          hint: "Possible runaway client-side goto()/load() loop. Check shouldRedirectToLogin in +layout.svelte and any $effect that calls goto().",
-        },
-        { level: "warn" },
-      );
-    }
   }
 
   return response;

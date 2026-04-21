@@ -2,6 +2,7 @@
   import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
+  import { get } from "svelte/store";
 
   import {
     actorRegistry,
@@ -11,8 +12,10 @@
     selectedActorId,
   } from "$lib/actorSession";
   import { authenticatedAgent, logoutAuthSession } from "$lib/authSession";
+  import { hostedSession, loadHostedSession } from "$lib/hosted/session.js";
   import { settingsNavItems } from "$lib/navigation";
   import { workspacePath } from "$lib/workspacePaths";
+  import { computeWorkspaceShellIdentity } from "$lib/workspaceShellIdentity.js";
 
   const navIconPathByType = {
     artifacts:
@@ -48,16 +51,30 @@
     return resolvedName || "Unknown identity";
   });
 
-  let initials = $derived(
-    selectedActorName
-      ? selectedActorName
-          .split(/\s+/)
-          .map((w) => w[0])
-          .join("")
-          .slice(0, 2)
-          .toUpperCase()
-      : "?",
+  let hostedSessionSnap = $state(get(hostedSession));
+  $effect(() => {
+    const unsub = hostedSession.subscribe((value) => {
+      hostedSessionSnap = value;
+    });
+    return () => unsub();
+  });
+
+  $effect(() => {
+    if (!browser || !hostedMode) {
+      return;
+    }
+    void loadHostedSession();
+  });
+
+  let shellIdentity = $derived(
+    computeWorkspaceShellIdentity({
+      hostedMode,
+      hostedAccount: hostedSessionSnap.account,
+      selectedActorName,
+      authenticatedAgent: $authenticatedAgent,
+    }),
   );
+  let initials = $derived(shellIdentity.initials);
 
   function workspaceInitials(label) {
     return (label || "?")
@@ -264,8 +281,16 @@
         </span>
         <div class="min-w-0 flex-1">
           <p class="truncate text-meta font-medium text-[var(--fg)]">
-            {selectedActorName}
+            {shellIdentity.primaryLabel}
           </p>
+          {#if shellIdentity.secondaryLabel}
+            <p
+              class="truncate font-mono text-[0.6875rem] text-[var(--fg-subtle)]"
+              title={shellIdentity.secondaryLabel}
+            >
+              {shellIdentity.secondaryLabel}
+            </p>
+          {/if}
           <p class="text-micro text-[var(--fg-muted)]">
             {$authenticatedAgent ? "Authenticated principal" : "Dev actor mode"}
           </p>

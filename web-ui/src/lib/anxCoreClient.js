@@ -380,6 +380,10 @@ export function createOarCoreClient(options = {}) {
       const result = await invokeFn();
       return parseJsonBody(result.body, commandId);
     } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg.startsWith("No actor selected.")) {
+        throw error;
+      }
       throw normalizeRequestError(error, {
         target,
         commandId,
@@ -440,6 +444,11 @@ export function createOarCoreClient(options = {}) {
       typeof actorIdProvider === "function" ? actorIdProvider() : undefined;
 
     if (!actorId) {
+      // Authenticated sessions lock identity to the principal; core
+      // resolveWriteActorID uses JWT principal.ActorID when body actor_id is empty.
+      if (shouldLockActorId()) {
+        return "";
+      }
       throw new Error(
         "No actor selected. Choose an actor before writing data.",
       );

@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { createFormPostEvent } from "../helpers/svelteKitRequestEvent.js";
+
 const workspaceResolverMocks = vi.hoisted(() => ({
   resolveWorkspaceInRoute: vi.fn(),
 }));
@@ -28,36 +30,6 @@ const ORG_SLUG = "local";
 const WORKSPACE_SLUG = "alpha";
 const WORKSPACE_ID = "ws-callback-1";
 const CORE_BASE = "http://127.0.0.1:9000";
-
-function createPostEvent(
-  formFields,
-  url = "http://localhost/o/local/w/alpha/auth/callback",
-) {
-  const form = new FormData();
-  for (const [key, value] of Object.entries(formFields)) {
-    form.set(key, value);
-  }
-  const cookieCalls = [];
-  const event = {
-    request: new Request(url, {
-      method: "POST",
-      body: form,
-      headers: { accept: "application/json" },
-    }),
-    params: { organization: ORG_SLUG, workspace: WORKSPACE_SLUG },
-    url: new URL(url),
-    cookies: {
-      get: vi.fn(() => ""),
-      set: vi.fn((name, value, options) => {
-        cookieCalls.push({ name, value, options });
-      }),
-      delete: vi.fn(),
-    },
-    cookieCalls,
-    getClientAddress: () => "127.0.0.1",
-  };
-  return event;
-}
 
 function mockResolvedWorkspace() {
   workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
@@ -122,7 +94,7 @@ describe("auth callback POST (+server)", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const event = createPostEvent({
+    const event = createFormPostEvent({
       exchange_token: "ex-tok",
       state: "state-val",
       workspace_id: WORKSPACE_ID,
@@ -183,7 +155,7 @@ describe("auth callback POST (+server)", () => {
       }),
     );
 
-    const event = createPostEvent({
+    const event = createFormPostEvent({
       exchange_token: "ex",
       state: "bad",
       workspace_id: WORKSPACE_ID,
@@ -218,7 +190,7 @@ describe("auth callback POST (+server)", () => {
       }),
     );
 
-    const event = createPostEvent({
+    const event = createFormPostEvent({
       exchange_token: "ex",
       state: "st",
       workspace_id: WORKSPACE_ID,
@@ -256,7 +228,7 @@ describe("auth callback POST (+server)", () => {
       }),
     );
 
-    const event = createPostEvent({
+    const event = createFormPostEvent({
       exchange_token: "ex",
       state: "st",
       workspace_id: WORKSPACE_ID,
@@ -306,7 +278,7 @@ describe("auth callback POST (+server)", () => {
       }),
     );
 
-    const event = createPostEvent({
+    const event = createFormPostEvent({
       exchange_token: "ex",
       state: "st",
       workspace_id: WORKSPACE_ID,

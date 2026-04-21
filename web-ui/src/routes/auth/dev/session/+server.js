@@ -85,7 +85,11 @@ export async function POST(event) {
     });
     if (existingAgent?.actor_id === persona.actor_id) {
       return json(
-        { ok: true, agent: existingAgent },
+        {
+          ok: true,
+          agent: existingAgent,
+          dev_session_result: "reused",
+        },
         { headers: { "cache-control": "no-store" } },
       );
     }
@@ -114,7 +118,11 @@ export async function POST(event) {
       });
       if (agent) {
         return json(
-          { ok: true, agent },
+          {
+            ok: true,
+            agent,
+            dev_session_result: "refreshed",
+          },
           { headers: { "cache-control": "no-store" } },
         );
       }
@@ -150,7 +158,11 @@ export async function POST(event) {
         loginResult.accessToken,
       );
       return json(
-        { ok: true, agent: loginResult.agent ?? null },
+        {
+          ok: true,
+          agent: loginResult.agent ?? null,
+          dev_session_result: "reissued",
+        },
         { headers: { "cache-control": "no-store" } },
       );
     }

@@ -11,13 +11,7 @@ export function isSaasPackedHostDev(env) {
   return v === "1" || v === "true";
 }
 
-/** True when the SvelteKit shell should show hosted-only UI (CP-backed SaaS). */
-export function isHostedWebUiShell(env) {
-  return (
-    isSaasPackedHostDev(env) &&
-    Boolean(normalizeBaseUrl(env?.ANX_CONTROL_BASE_URL ?? ""))
-  );
-}
+export { isHostedWebUiShell } from "./authCapabilities.js";
 
 /**
  * Map a workspace row from the control-plane API into the shape consumed by
@@ -182,6 +176,41 @@ export async function fetchWorkspaceEntryFromControlPlane({
   }
 
   return null;
+}
+
+/**
+ * Loads a single workspace by id from the control plane (GET /workspaces/{id}).
+ * Used when the launch callback hits root `/auth/callback` and we only have
+ * `workspace_id` in the form — we need org/workspace slugs for the resolver.
+ */
+export async function fetchWorkspaceByIdFromControlPlane({
+  env,
+  workspaceId,
+  fetchFn = fetch,
+  getCookie,
+}) {
+  if (!isSaasPackedHostDev(env)) {
+    return null;
+  }
+  const base = normalizeBaseUrl(env.ANX_CONTROL_BASE_URL);
+  const token = controlPlaneDevAccessToken(env, getCookie);
+  const wsId = String(workspaceId ?? "").trim();
+  if (!base || !token || !wsId) {
+    return null;
+  }
+  try {
+    const url = `${base}/workspaces/${encodeURIComponent(wsId)}`;
+    const res = await fetchFn(url, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      return null;
+    }
+    const body = await res.json();
+    return mapWorkspaceRowFromControlPlane(body.workspace);
+  } catch {
+    return null;
+  }
 }
 
 /**

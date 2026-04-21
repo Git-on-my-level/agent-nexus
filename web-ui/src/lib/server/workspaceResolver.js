@@ -11,10 +11,10 @@ import {
   normalizeWorkspaceSlug,
   workspaceCompositeKey,
 } from "../workspacePaths.js";
+import { resolveAuthCapabilities } from "./authCapabilities.js";
 import {
   fetchWorkspaceEntryFromControlPlane,
   fetchWorkspaceListFromControlPlane,
-  isHostedWebUiShell,
 } from "./controlPlaneWorkspace.js";
 import { logServerEvent } from "./devLog.js";
 import {
@@ -99,7 +99,7 @@ function mergeWorkspaceEntriesByComposite(primary, secondary) {
 
 export async function resolveWorkspaceCatalog(event) {
   const base = loadWorkspaceCatalog();
-  if (!isHostedWebUiShell(privateEnv)) {
+  if (resolveAuthCapabilities(privateEnv).mode !== "packed-host-dev") {
     return base;
   }
 

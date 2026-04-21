@@ -38,6 +38,7 @@ It gives operators fast, glanceable visibility into the shared workspace maintai
 - Real-world side effects outside the OAR workspace.
 
 ## Canonical References
+- Workspace auth (modes, cookies, errors, limitations): `docs/auth.md` (includes refresh-token **replay window** limitation — do not paper over with retries)
 - Product and UX spec: `docs/anx-ui-spec.md`
 - HTTP contract: `docs/http-api.md`
 - Shared schema: `../contracts/anx-schema.yaml`

@@ -1,8 +1,10 @@
 import { json } from "@sveltejs/kit";
 
+import { AuthErrorCode } from "$lib/authErrorCodes.js";
 import {
   clearWorkspaceAuthSession,
   isRetryableWorkspaceAuthSessionError,
+  isTerminalCpSessionFailure,
   loadWorkspaceAuthenticatedAgent,
   resolveWorkspaceSlugFromEvent,
 } from "$lib/server/authSession";
@@ -51,19 +53,64 @@ export async function GET(event) {
         },
       );
     }
+    if (isTerminalCpSessionFailure(error)) {
+      clearWorkspaceAuthSession(event, resolved.workspaceSlug);
+      return json(
+        {
+          authenticated: false,
+          agent: null,
+          error: {
+            code: AuthErrorCode.SESSION_ENDED_BY_CP,
+            message:
+              error?.details?.error?.message ??
+              "Session ended by control plane.",
+          },
+        },
+        {
+          headers: {
+            "cache-control": "no-store",
+          },
+          status: 401,
+        },
+      );
+    }
     if (error?.status === 401 || error?.status === 403) {
       clearWorkspaceAuthSession(event, resolved.workspaceSlug);
+      const upstreamCode = String(error?.details?.error?.code ?? "").trim();
+      return json(
+        {
+          authenticated: false,
+          agent: null,
+          error: {
+            code: upstreamCode || AuthErrorCode.AUTH_REQUIRED,
+            message:
+              error?.details?.error?.message ??
+              error?.message ??
+              "Authentication required.",
+          },
+        },
+        {
+          headers: {
+            "cache-control": "no-store",
+          },
+          status: error.status,
+        },
+      );
     }
     return json(
       {
         authenticated: false,
         agent: null,
+        error: {
+          code: AuthErrorCode.CORE_UNREACHABLE,
+          message: error?.message ?? "Workspace session request failed.",
+        },
       },
       {
         headers: {
           "cache-control": "no-store",
         },
-        status: error?.status === 401 || error?.status === 403 ? 200 : 503,
+        status: 503,
       },
     );
   }

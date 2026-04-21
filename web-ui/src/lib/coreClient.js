@@ -1,5 +1,8 @@
 import { browser } from "$app/environment";
-import { getAuthenticatedActorId } from "$lib/authSession";
+import {
+  getAuthenticatedActorId,
+  getAuthenticatedAgent,
+} from "$lib/authSession";
 import { getSelectedActorId } from "$lib/actorSession";
 import { createOarCoreClient } from "$lib/anxCoreClient";
 import { buildCoreRequestContextHeaders } from "$lib/coreClientRequestHeaders";
@@ -11,6 +14,24 @@ import { APP_BASE_PATH } from "$lib/workspacePaths";
 
 let browserClient;
 
+/**
+ * Options passed to {@link createOarCoreClient} for the browser shell (tests
+ * can assert actor/lock wiring without instantiating the full proxy).
+ */
+export function getBrowserCoreClientOptions() {
+  return {
+    actorIdProvider: () => getAuthenticatedActorId() || getSelectedActorId(),
+    lockActorIdProvider: () => Boolean(getAuthenticatedAgent()?.agent_id),
+    requestContextHeadersProvider: () =>
+      buildCoreRequestContextHeaders({
+        storeOrg: getCurrentOrganizationSlug(),
+        storeWorkspace: getCurrentWorkspaceSlug(),
+        pathname: globalThis.location?.pathname ?? "/",
+        basePath: APP_BASE_PATH,
+      }),
+  };
+}
+
 function resolveBrowserClient() {
   if (!browser) {
     throw new Error(
@@ -21,15 +42,7 @@ function resolveBrowserClient() {
   if (!browserClient) {
     const fetchFn = globalThis.fetch.bind(globalThis);
     browserClient = createOarCoreClient({
-      actorIdProvider: () => getAuthenticatedActorId() || getSelectedActorId(),
-      lockActorIdProvider: () => Boolean(getAuthenticatedActorId()),
-      requestContextHeadersProvider: () =>
-        buildCoreRequestContextHeaders({
-          storeOrg: getCurrentOrganizationSlug(),
-          storeWorkspace: getCurrentWorkspaceSlug(),
-          pathname: globalThis.location?.pathname ?? "/",
-          basePath: APP_BASE_PATH,
-        }),
+      ...getBrowserCoreClientOptions(),
       fetchFn,
     });
   }

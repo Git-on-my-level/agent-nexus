@@ -1,20 +1,43 @@
+/**
+ * Client workspace auth state machine (per workspace slug):
+ *
+ * - **authSessionReady** / internal `ready`: `/auth/session` hydration finished
+ *   (success or handled failure).
+ * - **authenticatedAgent**: current agent row or null.
+ * - **sessionEndedByCp**: terminal CP revocation; set when `/auth/session`
+ *   returns **401** with `error.code === session_ended_by_cp` (see
+ *   {@link AuthErrorCode.SESSION_ENDED_BY_CP}).
+ *
+ * **Single-flight:** concurrent {@link initializeAuthSession} calls share one
+ * in-flight promise. The shell should pass `authDriver: "layout"` so devtools
+ * can spot a second driver (e.g. login page) fighting the layout.
+ *
+ * @see `$lib/server/authSession.js` for refresh dedup and cookie naming.
+ */
+
 import { get, writable } from "svelte/store";
 
+import { AuthErrorCode } from "./authErrorCodes.js";
 import { clearSelectedActor } from "./actorSession.js";
+import { buildCoreRequestContextHeaders } from "./coreClientRequestHeaders.js";
 import { normalizeBaseUrl } from "./config.js";
 import {
+  getCurrentOrganizationSlug,
   getCurrentWorkspaceSlug,
   currentWorkspaceSlug,
 } from "./workspaceContext.js";
-import { WORKSPACE_HEADER, appPath } from "./workspacePaths.js";
+import { APP_BASE_PATH, WORKSPACE_HEADER, appPath } from "./workspacePaths.js";
 
 export const authSessionReady = writable(false);
 export const authenticatedAgent = writable(null);
-/** True when CP marked the account inactive (refresh/session returns 401 session_ended_by_cp). */
+/** True when CP ended the session ({@link AuthErrorCode.SESSION_ENDED_BY_CP}). */
 export const sessionEndedByCp = writable(false);
 
+/** @type {Map<string, string>} */
+const authDriverByWorkspace = new Map();
+
 const browser = typeof window !== "undefined";
-const AUTH_SESSION_RETRYABLE_ERROR_CODE = "auth_session_retryable";
+const AUTH_SESSION_RETRYABLE_ERROR_CODE = AuthErrorCode.AUTH_SESSION_RETRYABLE;
 const AUTH_SESSION_INIT_MAX_ATTEMPTS = 2;
 const AUTH_SESSION_INIT_RETRY_DELAY_MS = 150;
 
@@ -82,7 +105,7 @@ function createErrorFromResponse(status, details) {
 }
 
 function applySessionEndedByCp(status, payload, workspaceSlug) {
-  if (status !== 401 || payload?.error?.code !== "session_ended_by_cp") {
+  if (status !== 401 || payload?.error?.code !== AuthErrorCode.SESSION_ENDED_BY_CP) {
     return false;
   }
   sessionEndedByCp.set(true);
@@ -121,13 +144,22 @@ async function requestJSON(
   pathname,
   { fetchFn, method = "GET", body, baseUrl, headers, workspaceSlug } = {},
 ) {
+  const mergedHeaders = {
+    ...(browser
+      ? buildCoreRequestContextHeaders({
+          storeOrg: getCurrentOrganizationSlug(),
+          storeWorkspace: getCurrentWorkspaceSlug(),
+          pathname: globalThis.location?.pathname ?? "/",
+          basePath: APP_BASE_PATH,
+        })
+      : {}),
+    accept: "application/json",
+    ...(body ? { "content-type": "application/json" } : {}),
+    ...(headers ?? {}),
+  };
   const response = await resolveFetch(fetchFn)(buildUrl(pathname, baseUrl), {
     method,
-    headers: {
-      accept: "application/json",
-      ...(body ? { "content-type": "application/json" } : {}),
-      ...(headers ?? {}),
-    },
+    headers: mergedHeaders,
     body: body ? JSON.stringify(body) : undefined,
   });
 
@@ -224,7 +256,20 @@ export async function initializeAuthSession({
   fetchFn,
   baseUrl = "",
   workspaceSlug = getCurrentWorkspaceSlug(),
+  /** @type {"layout" | "login" | string | undefined} */
+  authDriver,
 } = {}) {
+  const slug = String(workspaceSlug ?? "").trim();
+  if (authDriver) {
+    const prev = authDriverByWorkspace.get(slug);
+    if (prev && prev !== authDriver && import.meta.env.DEV) {
+      console.warn(
+        `[auth] initializeAuthSession: conflicting authDriver for workspace "${slug}" (${prev} vs ${authDriver})`,
+      );
+    }
+    authDriverByWorkspace.set(slug, authDriver);
+  }
+
   const state = ensureAuthState(workspaceSlug);
 
   // Single-flight: if a previous call is still pending for this workspace,

@@ -34,7 +34,9 @@
   import { listAllPrincipals } from "$lib/authPrincipals";
   import CommandPalette from "$lib/components/CommandPalette.svelte";
   import { sanitizeHostedReturnPath } from "$lib/hosted/launchFlow.js";
+  import { hostedSession, loadHostedSession } from "$lib/hosted/session.js";
   import { coreClient } from "$lib/coreClient";
+  import { computeWorkspaceShellIdentity } from "$lib/workspaceShellIdentity.js";
   import { DEV_FIXTURE_PERSONAS } from "$lib/devWorkspaceFixtures.js";
   import {
     getShellContentConfig,
@@ -114,7 +116,13 @@
   let qaMode = $derived($page.url.searchParams.get("qa") === "1");
   let identityReady = $derived($actorSessionReady && $authSessionReady);
   let principalActorId = $derived($authenticatedAgent?.actor_id ?? "");
-  let activeActorId = $derived(principalActorId || $selectedActorId);
+  // Prefer actor_id; fall back to agent_id for display when core row is inconsistent
+  // or /agents/me omitted actor_id — buildActorNameMap still maps agent_id -> username.
+  let activeActorId = $derived(
+    principalActorId ||
+      $selectedActorId ||
+      ($authenticatedAgent?.agent_id ?? ""),
+  );
   let onLoginRoute = $derived(currentAppPath === "/login");
   // anx-core human-only routes (e.g. /secrets) need a passkey or dev-bypass session
   // even when dev actor mode allows unauthenticated browsing elsewhere.
@@ -137,12 +145,15 @@
       !$authenticatedAgent &&
       onLoginRoute,
   );
+  // Hosted shells must never allow anonymous workspace browsing: dev_actor_mode
+  // on core would otherwise skip login redirect while writes still require an agent.
   let shouldRedirectToLogin = $derived(
     activeWorkspaceSlug &&
       identityReady &&
       $devActorModeReady &&
       !onLoginRoute &&
-      ((!$devActorMode && !$authenticatedAgent) ||
+      ((Boolean(data.hostedMode) && !$authenticatedAgent) ||
+        (!$devActorMode && !$authenticatedAgent) ||
         ($devActorMode && requiresHumanSession && !hasHumanAuthSession)),
   );
   /**
@@ -171,16 +182,32 @@
     }
     return resolvedName || "Unknown identity";
   });
-  let initials = $derived(
-    selectedActorName
-      ? selectedActorName
-          .split(/\s+/)
-          .map((word) => word[0])
-          .join("")
-          .slice(0, 2)
-          .toUpperCase()
-      : "?",
+
+  /** Mirrors {@link hostedSession} for runes-friendly reactivity. */
+  let hostedSessionSnap = $state(get(hostedSession));
+  $effect(() => {
+    const unsub = hostedSession.subscribe((value) => {
+      hostedSessionSnap = value;
+    });
+    return () => unsub();
+  });
+
+  $effect(() => {
+    if (!browser || !data.hostedMode) {
+      return;
+    }
+    void loadHostedSession();
+  });
+
+  let shellIdentity = $derived(
+    computeWorkspaceShellIdentity({
+      hostedMode: Boolean(data.hostedMode),
+      hostedAccount: hostedSessionSnap.account,
+      selectedActorName,
+      authenticatedAgent: $authenticatedAgent,
+    }),
   );
+  let initials = $derived(shellIdentity.initials);
   let shellContentConfig = $derived(getShellContentConfig(currentAppPath));
   let moreBottomNavActive = $derived(isMoreHubActivePath(currentAppPath));
   const shellNavForTitle = [...navigationItems, ...settingsNavItems];
@@ -235,34 +262,44 @@
     const agent = get(authenticatedAgent);
     const requiresHumanSession = appPath === "/secrets";
     const hasHumanAuthSession = isHumanWorkspacePrincipal(agent);
+    const hostedMode = Boolean(p.data?.hostedMode);
 
     return (
-      (!devMode && !agent) ||
+      ((hostedMode || !devMode) && !agent) ||
       (devMode && requiresHumanSession && !hasHumanAuthSession)
     );
   }
 
   let loginRedirectGeneration = 0;
 
-  // Dev-mode runaway-fetch detector. Throws loudly the moment a reactive
-  // effect or polling loop starts spamming the same endpoint, instead of
-  // letting the browser silently exhaust its connection pool. Disabled in
-  // production builds. See src/lib/dev/fetchLoopGuard.js.
-  if (browser && dev) {
-    installFetchLoopGuard();
+  // Runaway-fetch detector: dev throws on trip; prod warns (leaves a trace
+  // without breaking the tab). See src/lib/dev/fetchLoopGuard.js.
+  if (browser) {
+    installFetchLoopGuard(
+      dev
+        ? {}
+        : {
+            onTrip: (message, info) => {
+              console.warn(message, info);
+            },
+          },
+    );
   }
 
-  // Dev-mode redirect ping-pong guard. Catches the specific class of bug
-  // where the client believes the user is unauthenticated and redirects to
-  // /login, but +page.server.js for /login sees a valid workspace cookie
-  // and redirects back. Without this, that loop hammers the server with
-  // hundreds of __data.json requests per second. The guard breaks the loop
-  // by suppressing the goto() once we've redirected to the same destination
-  // too many times in a short window, so the user lands on whichever route
-  // they last reached and the dev console gets a single, actionable error.
-  // Active in dev only — production builds rely on the structural fix in
-  // hydrateWorkspace() / initializeAuthSession() and never need the guard.
-  const loginRedirectGuard = browser && dev ? createRedirectLoopGuard() : null;
+  // Redirect ping-pong guard: suppresses repeated goto() to the same
+  // destination. Dev uses console.error on trip; prod warns. See
+  // src/lib/dev/redirectLoopGuard.js and hooks.server.js (SSR loop short-circuit).
+  const loginRedirectGuard = browser
+    ? createRedirectLoopGuard(
+        dev
+          ? {}
+          : {
+              onTrip: (message, info) => {
+                console.warn(message, info);
+              },
+            },
+      )
+    : null;
 
   $effect(() => {
     if (!browser) {
@@ -305,6 +342,7 @@
       await initializeAuthSession({
         fetchFn: globalThis.fetch.bind(globalThis),
         workspaceSlug: ws,
+        authDriver: "layout",
       });
       if (generation !== loginRedirectGeneration) {
         return;
@@ -457,6 +495,7 @@
     let agent = await initializeAuthSession({
       fetchFn: globalThis.fetch.bind(globalThis),
       workspaceSlug,
+      authDriver: "layout",
     });
     replacePrincipalRegistry(agent ? [agent] : [], workspaceSlug);
     try {
@@ -488,6 +527,7 @@
                   const sessionAgent = await initializeAuthSession({
                     fetchFn: globalThis.fetch.bind(globalThis),
                     workspaceSlug,
+                    authDriver: "layout",
                   });
                   if (sessionAgent) {
                     agent = sessionAgent;
@@ -505,7 +545,10 @@
         }
       }
 
-      if (devActorModeEnabled || agent?.actor_id) {
+      // Always load the actor registry when a session exists so display names resolve.
+      // Hosted/prod often has dev_actor_mode false; skipping here left principals
+      // without registry entries and showed "Unknown actor" for signed-in users.
+      if (devActorModeEnabled || agent) {
         await refreshActors(workspaceSlug);
       } else {
         actorError = "";
@@ -1087,7 +1130,12 @@
                   >{initials}</span
                 >
                 <div class="shell-actor-copy">
-                  <p>{selectedActorName}</p>
+                  <p>{shellIdentity.primaryLabel}</p>
+                  {#if shellIdentity.secondaryLabel}
+                    <p class="shell-actor-handle" title={shellIdentity.secondaryLabel}>
+                      {shellIdentity.secondaryLabel}
+                    </p>
+                  {/if}
                 </div>
               </div>
             </div>

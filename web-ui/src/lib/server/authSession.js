@@ -1,5 +1,6 @@
 import { json } from "@sveltejs/kit";
 
+import { AuthErrorCode } from "$lib/authErrorCodes.js";
 import { buildProxyRequestInit } from "./coreProxy.js";
 import { resolveWorkspaceFromEvent } from "./workspaceResolver.js";
 import { WORKSPACE_HEADER, normalizeWorkspaceSlug } from "../workspacePaths.js";
@@ -12,6 +13,12 @@ function getWorkspaceSlug(value) {
   return slug;
 }
 
+/**
+ * In-memory dedup window for identical refresh_token reuse (see
+ * `refreshWorkspaceAuthSession`). **Known limitation:** scoped to this Node
+ * process only — Vite HMR or a dev-server restart clears it. Do not "fix"
+ * transient 401s by adding blind retries; see `web-ui/AGENTS.md` (auth).
+ */
 const REFRESH_REPLAY_WINDOW_MS = 60_000;
 const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
 const REFRESH_TOKEN_COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
@@ -155,6 +162,25 @@ export function readWorkspaceAccessToken(event, workspaceSlug) {
   return event.cookies.get(getAuthAccessCookieName(workspaceSlug)) ?? "";
 }
 
+function assertCookieSlugMatchesRouteWorkspace(event, workspaceSlug) {
+  const routeWs = event?.params?.workspace;
+  if (!routeWs || typeof routeWs !== "string") {
+    return;
+  }
+  const fromRoute = normalizeWorkspaceSlug(routeWs);
+  const fromArg = normalizeWorkspaceSlug(workspaceSlug);
+  if (!fromRoute || !fromArg || fromRoute === fromArg) {
+    return;
+  }
+  const msg = `[auth] cookie write for workspace slug "${fromArg}" but route param workspace is "${fromRoute}"`;
+  if (process.env.VITEST || process.env.NODE_ENV === "test") {
+    throw new Error(msg);
+  }
+  if (import.meta.env.DEV) {
+    console.warn(msg);
+  }
+}
+
 export function writeWorkspaceAccessToken(event, workspaceSlug, accessToken) {
   const normalized = String(accessToken ?? "").trim();
   if (!normalized) {
@@ -162,6 +188,7 @@ export function writeWorkspaceAccessToken(event, workspaceSlug, accessToken) {
     return;
   }
 
+  assertCookieSlugMatchesRouteWorkspace(event, workspaceSlug);
   event.cookies.set(
     getAuthAccessCookieName(workspaceSlug),
     normalized,
@@ -196,6 +223,15 @@ export function clearWorkspaceAuthSession(event, workspaceSlug) {
   clearRetryableWorkspaceAuthFailureCount(event, workspaceSlug);
 }
 
+/** CP ended the account/session (inactive, revoked). Maps to SessionEndedOverlay. */
+export function isTerminalCpSessionFailure(error) {
+  const code = error?.details?.error?.code;
+  return (
+    code === AuthErrorCode.SESSION_ENDED_BY_CP ||
+    code === AuthErrorCode.CP_ACCOUNT_INACTIVE
+  );
+}
+
 export function readWorkspaceRefreshToken(event, workspaceSlug) {
   return event.cookies.get(getAuthSessionCookieName(workspaceSlug)) ?? "";
 }
@@ -207,6 +243,7 @@ export function writeWorkspaceRefreshToken(event, workspaceSlug, refreshToken) {
     return;
   }
 
+  assertCookieSlugMatchesRouteWorkspace(event, workspaceSlug);
   event.cookies.set(
     getAuthSessionCookieName(workspaceSlug),
     normalized,
@@ -393,6 +430,9 @@ export async function loadWorkspaceAuthenticatedAgent({
       clearRetryableWorkspaceAuthFailureCount(event, workspaceSlug);
       return agent;
     } catch (error) {
+      if (isTerminalCpSessionFailure(error)) {
+        throw error;
+      }
       if (error?.status !== 401) {
         throw error;
       }
@@ -421,6 +461,9 @@ export async function loadWorkspaceAuthenticatedAgent({
     clearRetryableWorkspaceAuthFailureCount(event, workspaceSlug);
     return agent;
   } catch (error) {
+    if (isTerminalCpSessionFailure(error)) {
+      throw error;
+    }
     if (
       isRetryableWorkspaceRefreshFailure(error, {
         hadAccessToken: Boolean(accessToken),

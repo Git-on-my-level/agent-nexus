@@ -113,20 +113,25 @@ describe("hooks.server loop detection (dev mode)", () => {
     expect(dataLog).toMatch(/__data\.json/);
   });
 
-  it("flags loop_detected when the same path fires above the threshold within the window", async () => {
+  it("short-circuits with 503 when the same path fires above the threshold within the window", async () => {
     const event = makeDataFetch("/o/my-org/w/my-ws/login");
     const resolve = vi.fn(async () => new Response("{}", { status: 200 }));
 
-    for (let i = 0; i < 9; i += 1) {
-      await handle({ event, resolve });
+    const responses = [];
+    for (let i = 0; i < 8; i += 1) {
+      responses.push(await handle({ event, resolve }));
     }
+
+    expect(resolve).toHaveBeenCalledTimes(7);
+    expect(responses[responses.length - 1]?.status).toBe(503);
+    const body = await responses[responses.length - 1].json();
+    expect(body?.error?.code).toBe("request_loop_detected");
 
     const loopLog = consoleWarn.mock.calls
       .map((args) => String(args[0]))
-      .find((line) => line.includes("ssr.request.loop_detected"));
+      .find((line) => line.includes("ssr.request.loop_short_circuit"));
     expect(loopLog).toBeDefined();
     expect(loopLog).toMatch(/path="\/o\/my-org\/w\/my-ws\/login\/__data.json"/);
-    expect(loopLog).toMatch(/Possible runaway client-side goto\(\)/);
   });
 
   it("does not flag loop_detected for a normal navigation rate", async () => {
