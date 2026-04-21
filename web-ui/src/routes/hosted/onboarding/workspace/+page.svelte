@@ -202,7 +202,7 @@
 </script>
 
 <svelte:head>
-  <title>Name your first workspace — ANX</title>
+  <title>New workspace · Agent Nexus</title>
 </svelte:head>
 
 {#if ready}
@@ -215,9 +215,8 @@
 
     <div class="mt-5 rounded-md border border-line bg-panel p-4">
       <p class="text-body text-fg">
-        Most teams start with one workspace per product or codebase. Keeping
-        workspaces focused is how the agent stays useful — one workspace, one
-        coherent body of work.
+        One workspace per project or codebase works best. You can add more
+        later.
       </p>
     </div>
 

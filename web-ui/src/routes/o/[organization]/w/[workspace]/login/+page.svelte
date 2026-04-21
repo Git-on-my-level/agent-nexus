@@ -13,6 +13,7 @@
     getPasskeyAssertion,
   } from "$lib/passkeyBrowser";
   import Button from "$lib/components/Button.svelte";
+  import Skeleton from "$lib/components/state/Skeleton.svelte";
   import { workspacePath } from "$lib/workspacePaths";
   import { devActorMode } from "$lib/workspaceContext";
 
@@ -210,15 +211,17 @@
     <div
       class="mx-auto flex max-w-xl items-center justify-center rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-4 py-6 text-meta"
     >
-      Redirecting to the workspace...
+      Opening workspace…
     </div>
   </main>
 {:else if loadingWorkspaceStatus}
   <main class="min-h-screen bg-[var(--bg)] px-4 py-6 text-[var(--fg)]">
     <div
-      class="mx-auto flex max-w-xl items-center justify-center rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-4 py-6 text-meta"
+      class="mx-auto max-w-5xl rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-4 py-6"
+      aria-busy="true"
+      aria-label="Loading sign-in"
     >
-      Checking workspace status...
+      <Skeleton rows={5} />
     </div>
   </main>
 {:else}
@@ -245,8 +248,8 @@
               Dev sign-in is the default in local mode. Expand the section below
               if you need WebAuthn passkey authentication.
             {:else}
-              Use your existing passkey to authenticate. All writes are locked
-              to your principal actor.
+              Use your existing passkey to authenticate. You'll be signed in as
+              yourself; only you can edit on your behalf.
             {/if}
           </p>
         </div>
@@ -260,11 +263,20 @@
                 Local development
               </p>
               <p class="text-micro text-[var(--fg-muted)]">
-                Sign in as a human principal without creating a browser passkey.
-                After a fresh <span class="font-mono">make serve</span> seed, leave
-                the fields empty (one passkey principal). With several, set principal
-                username (Access) or exact display name.
+                Leave both fields blank to sign in as the seeded user.
               </p>
+              <details class="mt-1">
+                <summary
+                  class="cursor-pointer text-micro text-[var(--fg-muted)] hover:text-[var(--fg)]"
+                >
+                  Local sign-in help
+                </summary>
+                <p class="mt-2 text-micro text-[var(--fg-muted)]">
+                  After a fresh <span class="font-mono">make serve</span> seed, empty
+                  fields work when there is one passkey user. With several principals,
+                  set principal username (Access) or exact display name.
+                </p>
+              </details>
               <div>
                 <label
                   class="block text-micro font-medium text-[var(--fg-muted)]"
@@ -276,7 +288,7 @@
                   bind:value={devLoginUsername}
                   class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 font-mono text-meta text-[var(--fg)]"
                   id="dev-login-username"
-                  placeholder="e.g. passkey.ops.lead.a1b2"
+                  placeholder="you@team"
                   type="text"
                 />
               </div>
@@ -301,7 +313,7 @@
                 disabled={loadingDevLogin}
                 onclick={handleDevLogin}
               >
-                {loadingDevLogin ? "Signing in..." : "Sign in (dev)"}
+                {loadingDevLogin ? "Signing in…" : "Sign in"}
               </Button>
               {#if devLoginError}
                 <div
@@ -326,7 +338,7 @@
                   onclick={handleLogin}
                 >
                   {loadingLogin
-                    ? "Waiting for passkey..."
+                    ? "Confirming passkey…"
                     : "Sign in with existing passkey"}
                 </Button>
 
@@ -337,11 +349,6 @@
                     {loginError}
                   </div>
                 {/if}
-
-                <p class="text-micro text-[var(--fg-muted)]">
-                  This uses discoverable WebAuthn login. No username step is
-                  required.
-                </p>
               </div>
             </details>
           {:else}
@@ -352,7 +359,7 @@
               onclick={handleLogin}
             >
               {loadingLogin
-                ? "Waiting for passkey..."
+                ? "Confirming passkey…"
                 : "Sign in with existing passkey"}
             </Button>
 
@@ -363,11 +370,6 @@
                 {loginError}
               </div>
             {/if}
-
-            <p class="text-micro text-[var(--fg-muted)]">
-              This uses discoverable WebAuthn login. No username step is
-              required.
-            </p>
           {/if}
         </div>
       </section>
@@ -448,7 +450,7 @@
               disabled={loadingRegistration || !registrationToken.trim()}
             >
               {loadingRegistration
-                ? "Waiting for passkey..."
+                ? "Creating account…"
                 : "Create passkey and join"}
             </Button>
             {#if devPasskeyBypassAvailable}
@@ -460,9 +462,7 @@
                   handleDevRegistration();
                 }}
               >
-                {loadingRegistration
-                  ? "Working..."
-                  : "Join without passkey (dev)"}
+                {loadingRegistration ? "Signing in…" : "Join without passkey"}
               </Button>
             {/if}
             {#if $devActorMode}

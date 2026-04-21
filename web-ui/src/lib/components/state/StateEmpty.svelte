@@ -2,7 +2,7 @@
   import Button from "$lib/components/Button.svelte";
 
   let {
-    title = "Nothing here yet",
+    title,
     helper = "",
     actionLabel = "",
     actionHref = "",
@@ -14,7 +14,9 @@
 <div
   class="rounded-md border border-line bg-bg-soft px-6 py-8 text-center {className}"
 >
-  <h2 class="text-subtitle text-fg">{title}</h2>
+  {#if title}
+    <h2 class="text-subtitle text-fg">{title}</h2>
+  {/if}
   {#if helper}
     <p class="mx-auto mt-1.5 max-w-md text-meta text-fg-subtle">{helper}</p>
   {/if}

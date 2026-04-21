@@ -136,7 +136,7 @@
 </script>
 
 <svelte:head>
-  <title>{organization?.display_name ?? "Organization"} — ANX</title>
+  <title>{organization?.display_name ?? "Organization"} · Agent Nexus</title>
 </svelte:head>
 
 <div class="space-y-5">
@@ -206,7 +206,8 @@
   {:else if usage || wsError || usageError}
     {#if usageError}
       <StateError
-        message={"Usage data failed to load: " + usageError}
+        title="Usage didn't load"
+        message={usageError}
         onretry={retry}
         {retrying}
       />
@@ -254,7 +255,8 @@
         {#if wsError}
           <div class="px-4 py-3">
             <StateError
-              message={"Workspaces failed to load: " + wsError}
+              title="Workspaces didn't load"
+              message={wsError}
               onretry={retry}
               {retrying}
             />
@@ -262,7 +264,7 @@
         {:else if workspaces.length === 0}
           <StateEmpty
             title="No workspaces yet"
-            helper="Create your first workspace in this organization."
+            helper="Create one to start working."
             actionLabel="Create workspace"
             actionHref="/hosted/workspaces/new"
             class="border-0 bg-transparent"
@@ -294,7 +296,7 @@
                       ? 'text-warn-text bg-warn-soft'
                       : 'text-fg-subtle bg-panel-hover'}"
                 >
-                  {ws.status || "unknown"}
+                  {ws.status ? ws.status : "—"}
                 </span>
               </li>
             {/each}

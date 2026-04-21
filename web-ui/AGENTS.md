@@ -3,6 +3,12 @@
 ## Scope
 Guide for work inside `web-ui/`.
 
+## User-facing copy
+- Do not put internal codenames or engineer jargon in UI strings users see.
+- Avoid long em-dash explainers; prefer short, direct sentences.
+- Avoid generic progress labels like `Working...`; name the action (`Signing in…`, `Confirming passkey…`).
+- Prefer a single ellipsis style (`…` or `...`) and use it consistently in loading states.
+
 Read this after the root [AGENTS.md](../AGENTS.md). Keep this file focused on durable operator-facing purpose, UI boundaries, and the invariants that protect safe interaction with `anx-core`.
 
 ## Module Purpose

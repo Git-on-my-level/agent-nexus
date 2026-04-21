@@ -164,39 +164,23 @@
 </script>
 
 <svelte:head>
-  <title>Name your organization — ANX</title>
+  <title>Name your organization · Agent Nexus</title>
 </svelte:head>
 
 {#if ready}
   <div class="mx-auto max-w-[520px] py-8">
     <h1 class="text-display text-fg">Name your organization</h1>
     <p class="mt-1.5 text-body text-fg-muted">
-      This is the billing and team boundary — everything you create belongs to
-      one org.
+      Your organization owns billing, members, and audit history.
     </p>
 
     <div class="mt-5 rounded-md border border-line bg-panel p-4">
-      <p class="text-subtitle text-fg">Orgs vs workspaces</p>
-      <div class="mt-3 space-y-2">
-        <div>
-          <p class="text-micro uppercase tracking-wider text-fg-muted">
-            Organization
-          </p>
-          <p class="text-body text-fg">
-            Your team's billing, members, and audit log. Usually one per
-            company.
-          </p>
-        </div>
-        <div>
-          <p class="text-micro uppercase tracking-wider text-fg-muted">
-            Workspace
-          </p>
-          <p class="text-body text-fg">
-            A project inside the org. You can have many. We'll set up your first
-            one next.
-          </p>
-        </div>
-      </div>
+      <p class="text-subtitle text-fg">How this is organized</p>
+      <p class="mt-3 text-body text-fg">
+        At the team or company level, the organization covers billing and
+        membership. Workspaces are projects inside it; you'll add your first
+        workspace next.
+      </p>
     </div>
 
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->

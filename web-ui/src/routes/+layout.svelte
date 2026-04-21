@@ -97,7 +97,7 @@
     const d = String(activeWorkspace?.description ?? "").trim();
     if (d) return d;
     if (data.hostedMode) return "Workspace";
-    return "ANX Control Surface";
+    return "Agent Nexus";
   });
   let currentAppPath = $derived(
     activeWorkspaceSlug && activeOrganizationSlug
@@ -142,11 +142,15 @@
       ((!$devActorMode && !$authenticatedAgent) ||
         ($devActorMode && requiresHumanSession && !hasHumanAuthSession)),
   );
-  let awaitingIdentityMode = $derived(
-    activeWorkspaceSlug &&
-      identityReady &&
-      !$authenticatedAgent &&
-      !$devActorModeReady,
+  /**
+   * Block the main workspace shell until hydrateWorkspace finishes (handshake +
+   * dev actor mode probe). Without this, an authenticated session skips
+   * awaitingIdentityMode (agent present) and the dashboard mounts while
+   * devActorModeReady is still false, spamming parallel core requests and
+   * exhausting browser connection limits.
+   */
+  let workspaceBootstrapPending = $derived(
+    activeWorkspaceSlug && identityReady && !$devActorModeReady,
   );
   let selectedActorName = $derived.by(() => {
     const resolvedName = lookupActorDisplayName(
@@ -184,7 +188,7 @@
     );
     const section = navItem?.label;
     const workspaceLabel = activeWorkspace?.label;
-    const parts = [section, workspaceLabel, "ANX"].filter(Boolean);
+    const parts = [section, workspaceLabel, "Agent Nexus"].filter(Boolean);
     return parts.join(" · ");
   });
 
@@ -692,7 +696,7 @@
 <div class="shell-root">
   {#if !activeWorkspaceSlug}
     {@render children()}
-  {:else if !identityReady || awaitingIdentityMode}
+  {:else if !identityReady || workspaceBootstrapPending}
     <main class="shell-loading" aria-live="polite">
       <div class="shell-loading-card">
         <svg
@@ -715,7 +719,7 @@
             d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
           ></path>
         </svg>
-        <p>Loading Organization Autorunner UI...</p>
+        <p>Loading workspace…</p>
       </div>
     </main>
   {:else if renderLoginOnly}
@@ -735,7 +739,7 @@
 
         <div class="actor-gate-list" aria-live="polite">
           {#if loadingActors}
-            <p class="actor-gate-empty">Loading identities...</p>
+            <p class="actor-gate-empty">Loading sign-in options…</p>
           {:else if $actorRegistry.length === 0}
             <p class="actor-gate-empty">
               No identities yet. Create one to get started.

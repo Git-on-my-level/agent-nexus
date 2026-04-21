@@ -686,7 +686,7 @@
         disabled={creatingTopic}
         type="submit"
       >
-        {creatingTopic ? "Creating..." : "Create topic"}
+        {creatingTopic ? "Creating…" : "Create topic"}
       </button>
     </div>
   </form>

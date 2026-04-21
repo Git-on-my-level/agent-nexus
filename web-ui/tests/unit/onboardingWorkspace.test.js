@@ -287,8 +287,10 @@ describe("Onboarding workspace page — inline guide copy", () => {
 
     const fullGuideText = guidePanel.textContent.replace(/\s+/g, " ").trim();
 
-    expect(fullGuideText).toContain("one workspace per product or codebase");
-    expect(fullGuideText).toContain("one workspace, one coherent body of work");
+    expect(fullGuideText).toContain(
+      "One workspace per project or codebase works best.",
+    );
+    expect(fullGuideText).toContain("You can add more later.");
   });
 });
 

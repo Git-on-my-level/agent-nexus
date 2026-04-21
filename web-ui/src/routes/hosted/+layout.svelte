@@ -169,9 +169,7 @@
                   />
                 {/if}
                 <span class="min-w-0 truncate text-left">
-                  {activeOrg?.display_name ??
-                    activeOrg?.slug ??
-                    "Choose organization"}
+                  {activeOrg?.display_name ?? activeOrg?.slug ?? "—"}
                 </span>
                 <svg
                   class="h-3 w-3 shrink-0 text-fg-subtle"
@@ -281,10 +279,6 @@
                     {#if account?.email && account?.display_name}
                       <div class="truncate text-micro text-fg-subtle">
                         {account.email}
-                      </div>
-                    {:else if !account?.email && !account?.display_name}
-                      <div class="truncate text-micro text-fg-subtle">
-                        Account details unavailable
                       </div>
                     {/if}
                   </div>

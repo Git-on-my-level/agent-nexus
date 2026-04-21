@@ -272,7 +272,7 @@ describe("Onboarding organization page — form submission", () => {
 });
 
 describe("Onboarding organization page — inline guide copy", () => {
-  it("renders Orgs vs workspaces guide exactly", async () => {
+  it("renders the organization vs workspace guide", async () => {
     const { container } = render(OnboardingOrgPage);
 
     await waitFor(() => {
@@ -284,25 +284,12 @@ describe("Onboarding organization page — inline guide copy", () => {
     expect(guidePanel).toBeTruthy();
 
     const guideTitle = guidePanel.querySelector(".text-subtitle");
-    expect(guideTitle.textContent).toBe("Orgs vs workspaces");
-
-    const labels = guidePanel.querySelectorAll(
-      ".text-micro.uppercase.tracking-wider",
-    );
-    expect(labels.length).toBe(2);
-    expect(labels[0].textContent.trim()).toBe("Organization");
-    expect(labels[1].textContent.trim()).toBe("Workspace");
+    expect(guideTitle.textContent).toBe("How this is organized");
 
     const fullGuideText = guidePanel.textContent.replace(/\s+/g, " ").trim();
 
-    expect(fullGuideText).toContain("Orgs vs workspaces");
-    expect(fullGuideText).toContain("Organization");
-    expect(fullGuideText).toContain(
-      "Your team's billing, members, and audit log. Usually one per company.",
-    );
-    expect(fullGuideText).toContain("Workspace");
-    expect(fullGuideText).toContain(
-      "A project inside the org. You can have many. We'll set up your first one next.",
-    );
+    expect(fullGuideText).toContain("How this is organized");
+    expect(fullGuideText).toContain("billing and membership");
+    expect(fullGuideText).toContain("Workspaces are projects inside it");
   });
 });

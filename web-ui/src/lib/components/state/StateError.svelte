@@ -2,7 +2,8 @@
   import Button from "$lib/components/Button.svelte";
 
   let {
-    message = "Something went wrong.",
+    title = "",
+    message = "This didn't load.",
     onretry,
     retrying = false,
     class: className = "",
@@ -10,7 +11,10 @@
 </script>
 
 <div role="alert" class="rounded-md bg-danger-soft px-4 py-3 {className}">
-  <p class="text-body text-danger-text">{message}</p>
+  {#if title}
+    <p class="text-subtitle font-medium text-danger-text">{title}</p>
+  {/if}
+  <p class="text-body text-danger-text {title ? 'mt-1' : ''}">{message}</p>
   {#if onretry}
     <Button
       variant="secondary"
