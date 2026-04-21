@@ -164,6 +164,64 @@ describe("workspaceResolver", () => {
     });
   });
 
+  it("returns workspace_not_ready (503) when CP knows the workspace but core_origin is empty", async () => {
+    mockState.env.ANX_SAAS_PACKED_HOST_DEV = "1";
+    mockState.env.ANX_CONTROL_BASE_URL = "http://127.0.0.1:8100";
+    mockState.env.ANX_CONTROL_PLANE_DEV_ACCESS_TOKEN = "tok_dev";
+
+    const fetchMock = vi.fn(async (url) => {
+      const u = String(url);
+      if (u.includes("/organizations")) {
+        return {
+          ok: true,
+          async json() {
+            return {
+              organizations: [{ id: "org_test", slug: "local" }],
+              next_cursor: "",
+            };
+          },
+        };
+      }
+      return {
+        ok: true,
+        async json() {
+          return {
+            workspaces: [
+              {
+                id: "ws_test",
+                organization_id: "org_test",
+                organization_slug: "local",
+                slug: "alpha",
+                display_name: "Alpha",
+                core_origin: "",
+                public_origin: "",
+                status: "suspended",
+                desired_state: "ready",
+              },
+            ],
+          };
+        },
+      };
+    });
+
+    const resolved = await resolveWorkspaceInRoute({
+      organizationSlug: "local",
+      workspaceSlug: "alpha",
+      event: {
+        fetch: fetchMock,
+        cookies: { get: () => undefined },
+      },
+    });
+
+    expect(resolved.workspace).toBeNull();
+    expect(resolved.error).toMatchObject({
+      status: 503,
+      payload: { error: { code: "workspace_not_ready" } },
+    });
+    expect(resolved.error.payload.error.message).toMatch(/suspended/);
+    expect(resolved.error.payload.error.message).toMatch(/retry/i);
+  });
+
   it("hydrates workspace catalog from control plane org list in SaaS packed-host mode", async () => {
     mockState.env.ANX_SAAS_PACKED_HOST_DEV = "1";
     mockState.env.ANX_CONTROL_BASE_URL = "http://127.0.0.1:8100";

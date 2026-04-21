@@ -19,6 +19,16 @@ export function isHostedWebUiShell(env) {
   );
 }
 
+/**
+ * Map a workspace row from the control-plane API into the shape consumed by
+ * the web-ui resolver. Returns null only when the row is missing essential
+ * identifiers (slug). When `core_origin` is not yet populated (e.g. the
+ * workspace is still provisioning, suspended, or its core process has not yet
+ * registered an origin), we still return the entry with an empty
+ * `coreBaseUrl` and a `status` hint so callers can distinguish
+ * "workspace doesn't exist" from "workspace exists but isn't ready" and show
+ * an accurate error to the user.
+ */
 function mapWorkspaceRowFromControlPlane(match) {
   if (!match || typeof match !== "object") {
     return null;
@@ -28,13 +38,12 @@ function mapWorkspaceRowFromControlPlane(match) {
     return null;
   }
   const coreBaseUrl = normalizeBaseUrl(match.core_origin ?? "");
-  if (!coreBaseUrl) {
-    return null;
-  }
   const organizationId = String(match.organization_id ?? "").trim();
   const organizationSlug = normalizeOrganizationSlug(
     match.organization_slug ?? match.organizationSlug ?? "",
   );
+  const status = String(match.status ?? "").trim();
+  const desiredState = String(match.desired_state ?? "").trim();
   return {
     organizationSlug,
     slug: normalized,
@@ -45,6 +54,8 @@ function mapWorkspaceRowFromControlPlane(match) {
     id: String(match.id ?? "").trim(),
     workspaceId: String(match.id ?? "").trim(),
     organizationId,
+    status,
+    desiredState,
   };
 }
 
@@ -213,7 +224,7 @@ export async function fetchWorkspaceListFromControlPlane({
       const batch = body.workspaces ?? [];
       for (const row of batch) {
         const mapped = mapWorkspaceRowFromControlPlane(row);
-        if (mapped) {
+        if (mapped && mapped.coreBaseUrl) {
           out.push(mapped);
         }
       }

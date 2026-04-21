@@ -21,6 +21,7 @@
     shouldShowActorGate,
   } from "$lib/actorSession";
   import { installFetchLoopGuard } from "$lib/dev/fetchLoopGuard.js";
+  import { createRedirectLoopGuard } from "$lib/dev/redirectLoopGuard.js";
   import {
     authenticatedAgent,
     authSessionReady,
@@ -251,6 +252,18 @@
     installFetchLoopGuard();
   }
 
+  // Dev-mode redirect ping-pong guard. Catches the specific class of bug
+  // where the client believes the user is unauthenticated and redirects to
+  // /login, but +page.server.js for /login sees a valid workspace cookie
+  // and redirects back. Without this, that loop hammers the server with
+  // hundreds of __data.json requests per second. The guard breaks the loop
+  // by suppressing the goto() once we've redirected to the same destination
+  // too many times in a short window, so the user lands on whichever route
+  // they last reached and the dev console gets a single, actionable error.
+  // Active in dev only — production builds rely on the structural fix in
+  // hydrateWorkspace() / initializeAuthSession() and never need the guard.
+  const loginRedirectGuard = browser && dev ? createRedirectLoopGuard() : null;
+
   $effect(() => {
     if (!browser) {
       return;
@@ -297,6 +310,16 @@
         return;
       }
       if (!needsLoginRedirectNow()) {
+        return;
+      }
+      if (
+        loginRedirectGuard &&
+        !loginRedirectGuard.shouldNavigate(destination)
+      ) {
+        // Guard tripped: a ping-pong between client (no agent) and server
+        // (has agent) is in progress. Stop firing goto() and let the next
+        // hydrateWorkspace cycle (or a manual reload) resolve the auth state
+        // mismatch. The guard already logged a single, actionable error.
         return;
       }
       await goto(destination);

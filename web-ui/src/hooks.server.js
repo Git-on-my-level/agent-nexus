@@ -13,6 +13,7 @@ import {
   shouldClearWorkspaceAuthSessionAfterRetryableFailure,
 } from "$lib/server/authSession";
 import { buildProxyRequestInit } from "$lib/server/coreProxy";
+import { logServerError, logServerEvent } from "$lib/server/devLog";
 import { resolveProxyTarget } from "$lib/server/proxyWorkspaceTarget";
 import { isDirectCoreProxyPath } from "$lib/server/directCoreProxyPaths";
 
@@ -29,6 +30,50 @@ function isDocumentNavigationRequest(request) {
 
   const accept = request.headers.get("accept") ?? "";
   return accept.includes("text/html");
+}
+
+function isSvelteKitDataFetch(pathname) {
+  return pathname.endsWith("/__data.json");
+}
+
+// Sliding-window per-URL request counter. In dev we want to surface tight
+// fetch loops (e.g. a client-side $effect repeatedly calling goto() against a
+// route that triggers a server load). When the same method+path fires more
+// than `LOOP_THRESHOLD` times within `LOOP_WINDOW_MS`, we flag it once so
+// the loop is impossible to miss in the dev terminal.
+const LOOP_WINDOW_MS = 2000;
+const LOOP_THRESHOLD = 8;
+const LOOP_FLAG_COOLDOWN_MS = 5000;
+/** @type {Map<string, {timestamps: number[], lastFlaggedAt: number}>} */
+const loopTracker = new Map();
+
+function trackRequestForLoopDetection(key) {
+  const now = Date.now();
+  let entry = loopTracker.get(key);
+  if (!entry) {
+    entry = { timestamps: [], lastFlaggedAt: 0 };
+    loopTracker.set(key, entry);
+  }
+  entry.timestamps.push(now);
+  while (
+    entry.timestamps.length > 0 &&
+    now - entry.timestamps[0] > LOOP_WINDOW_MS
+  ) {
+    entry.timestamps.shift();
+  }
+  if (
+    entry.timestamps.length >= LOOP_THRESHOLD &&
+    now - entry.lastFlaggedAt > LOOP_FLAG_COOLDOWN_MS
+  ) {
+    entry.lastFlaggedAt = now;
+    return entry.timestamps.length;
+  }
+  return 0;
+}
+
+// Exposed for tests so we can reset state between cases.
+export function __resetLoopTrackerForTests() {
+  loopTracker.clear();
 }
 
 function shouldBypassProxy(pathname, method) {
@@ -291,6 +336,15 @@ export async function handle({ event, resolve }) {
     );
   }
 
+  const dataFetch = isSvelteKitDataFetch(pathname);
+  // Log document navigations and SvelteKit data fetches (`__data.json`).
+  // The data-fetch case is critical: when the client navigates between
+  // routes, only the data fetch hits the server — and a runaway client-side
+  // `goto()` loop manifests as repeated `__data.json` requests rather than
+  // full document navigations. Logging both makes loops visible in the dev
+  // terminal even when no full-page reload happens.
+  const shouldLog = dev && (documentNavigation || dataFetch);
+  const requestStart = shouldLog ? Date.now() : 0;
   const response = await resolve(event);
   response.headers.set("X-ANX-UI-Version", CURRENT_VERSION);
 
@@ -301,5 +355,65 @@ export async function handle({ event, resolve }) {
     response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   }
 
+  if (shouldLog) {
+    const status = response.status;
+    const kind = documentNavigation ? "ssr" : "data";
+    const fields = {
+      kind,
+      method,
+      url: event.url.pathname + event.url.search,
+      route: event.route?.id ?? "(unknown)",
+      status,
+      duration_ms: Date.now() - requestStart,
+    };
+    logServerEvent("ssr.request", fields, {
+      level: status >= 400 ? "warn" : "info",
+    });
+
+    const loopKey = `${method} ${event.url.pathname}`;
+    const loopCount = trackRequestForLoopDetection(loopKey);
+    if (loopCount > 0) {
+      logServerEvent(
+        "ssr.request.loop_detected",
+        {
+          method,
+          path: event.url.pathname,
+          count: loopCount,
+          window_ms: LOOP_WINDOW_MS,
+          hint: "Possible runaway client-side goto()/load() loop. Check shouldRedirectToLogin in +layout.svelte and any $effect that calls goto().",
+        },
+        { level: "warn" },
+      );
+    }
+  }
+
   return response;
+}
+
+/**
+ * SvelteKit `handleError` hook. Triggered when an exception bubbles out of a
+ * load(), action, server endpoint, or hook (anything that's NOT a
+ * `throw error(status, msg)` — those are handled via the normal error
+ * response and routed to +error.svelte).
+ *
+ * Without this hook, real exceptions vanish into a generic 500 page with
+ * minimal terminal output, which is the opaqueness the user complained
+ * about. Always log structured context AND attach a `code` so the error
+ * page can render something useful.
+ *
+ * @type {import("@sveltejs/kit").HandleServerError}
+ */
+export function handleError({ error, event, status, message }) {
+  logServerError("ssr.unhandled_error", error, {
+    route: event?.route?.id ?? "(unknown)",
+    method: event?.request?.method,
+    url: event?.url ? event.url.pathname + event.url.search : undefined,
+    status,
+    sveltekit_message: message,
+  });
+  return {
+    message:
+      message || (error instanceof Error ? error.message : String(error)),
+    code: "ssr_unhandled_error",
+  };
 }

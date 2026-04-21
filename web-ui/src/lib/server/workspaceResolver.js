@@ -16,21 +16,41 @@ import {
   fetchWorkspaceListFromControlPlane,
   isHostedWebUiShell,
 } from "./controlPlaneWorkspace.js";
+import { logServerEvent } from "./devLog.js";
 import {
   createWorkspaceCatalog,
   loadWorkspaceCatalog,
 } from "./workspaceCatalog.js";
 
-function createWorkspaceNotConfiguredError(rawOrg, rawWs) {
+function workspaceLabel(rawOrg, rawWs) {
   const org = String(rawOrg ?? "").trim();
   const ws = String(rawWs ?? "").trim();
-  const label = org && ws ? `'${org}/${ws}'` : ws ? `'${ws}'` : `'${org}'`;
+  return org && ws ? `'${org}/${ws}'` : ws ? `'${ws}'` : `'${org}'`;
+}
+
+function createWorkspaceNotConfiguredError(rawOrg, rawWs) {
   return {
     status: 404,
     payload: {
       error: {
         code: "workspace_not_configured",
-        message: `Workspace ${label} is not configured in ANX_WORKSPACES and could not be resolved from the control plane.`,
+        message: `Workspace ${workspaceLabel(rawOrg, rawWs)} is not configured in ANX_WORKSPACES and could not be resolved from the control plane.`,
+      },
+    },
+  };
+}
+
+function createWorkspaceProvisioningError(rawOrg, rawWs, status) {
+  const trimmedStatus = String(status ?? "").trim();
+  const detail = trimmedStatus
+    ? `Its current status is '${trimmedStatus}'.`
+    : "Its core service is still starting up.";
+  return {
+    status: 503,
+    payload: {
+      error: {
+        code: "workspace_not_ready",
+        message: `Workspace ${workspaceLabel(rawOrg, rawWs)} is not ready yet. ${detail} Please retry in a few seconds.`,
       },
     },
   };
@@ -176,8 +196,11 @@ export async function resolveWorkspaceInRoute({
 
   const compositeKey = workspaceCompositeKey(normalizedOrg, normalizedSlug);
   let workspace = catalog.workspaceByComposite.get(compositeKey);
+  let cpLookupAttempted = false;
+  let cpLookupHit = false;
   if (!workspace) {
     const fetchFn = event?.fetch ?? fetch;
+    cpLookupAttempted = true;
     const cpWorkspace = await fetchWorkspaceEntryFromControlPlane({
       env: privateEnv,
       organizationSlug: normalizedOrg,
@@ -189,6 +212,7 @@ export async function resolveWorkspaceInRoute({
           : undefined,
     });
     if (cpWorkspace) {
+      cpLookupHit = true;
       workspace = {
         organizationSlug: cpWorkspace.organizationSlug || normalizedOrg,
         slug: cpWorkspace.slug,
@@ -199,11 +223,22 @@ export async function resolveWorkspaceInRoute({
         id: cpWorkspace.id,
         workspaceId: cpWorkspace.workspaceId,
         organizationId: cpWorkspace.organizationId,
+        status: cpWorkspace.status,
+        desiredState: cpWorkspace.desiredState,
       };
     }
   }
 
   if (!workspace) {
+    logServerEvent(
+      "workspace.resolve.not_found",
+      {
+        org: normalizedOrg,
+        slug: normalizedSlug,
+        cp_lookup: cpLookupAttempted ? "miss" : "skipped",
+      },
+      { level: "warn" },
+    );
     return {
       catalog,
       organizationSlug: normalizedOrg,
@@ -212,6 +247,46 @@ export async function resolveWorkspaceInRoute({
       coreBaseUrl: "",
       error: createWorkspaceNotConfiguredError(rawOrg, rawSlug),
     };
+  }
+
+  // The workspace exists in the control plane but its core process hasn't
+  // registered an origin yet (still provisioning, suspended, or anx-core not
+  // running). Surface a 503 with a clear message instead of falling through
+  // and producing a misleading "not configured" 404 or, worse, a generic
+  // "Internal Error" when the empty base URL trips client-side fetches.
+  if (!String(workspace.coreBaseUrl ?? "").trim()) {
+    logServerEvent(
+      "workspace.resolve.not_ready",
+      {
+        org: normalizedOrg,
+        slug: normalizedSlug,
+        status: workspace.status,
+        desired_state: workspace.desiredState,
+        cp_lookup: cpLookupHit ? "hit" : cpLookupAttempted ? "miss" : "skipped",
+      },
+      { level: "warn" },
+    );
+    return {
+      catalog,
+      organizationSlug: normalizedOrg,
+      workspaceSlug: normalizedSlug,
+      workspace: null,
+      coreBaseUrl: "",
+      error: createWorkspaceProvisioningError(
+        rawOrg,
+        rawSlug,
+        workspace.status,
+      ),
+    };
+  }
+
+  if (cpLookupHit) {
+    logServerEvent("workspace.resolve.ok", {
+      org: normalizedOrg,
+      slug: normalizedSlug,
+      core_base_url: workspace.coreBaseUrl,
+      status: workspace.status,
+    });
   }
 
   return {
