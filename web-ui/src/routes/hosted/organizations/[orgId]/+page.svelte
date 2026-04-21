@@ -98,13 +98,46 @@
     await loadAll();
   }
 
+  let lastLoadedKey = $state("");
+
   $effect(() => {
     if (!browser || !orgId) return;
     setActiveOrg(orgId);
-    if (session.phase !== "authed") {
+
+    if (session.phase === "idle" || session.phase === "unauthed") {
+      lastLoadedKey = "";
       void loadHostedSession();
       return;
     }
+
+    // Hosted session failed (e.g. organizations list error). Do not leave local
+    // `phase === "loading"` forever — surface CP error and stop the skeleton.
+    if (session.phase === "error") {
+      orgError = session.error || "Could not load your session.";
+      usageError = "";
+      wsError = "";
+      phase = "ready";
+      organization = null;
+      usage = null;
+      workspaces = [];
+      return;
+    }
+
+    // Still hydrating hosted session — keep skeleton until authed or terminal state above.
+    if (session.phase === "loading") {
+      return;
+    }
+
+    if (session.phase !== "authed") {
+      return;
+    }
+
+    // Authed and we have an orgId. Load workspace data once per (orgId, account)
+    // pair; we don't want this effect to re-fire `loadAll` every time
+    // `setActiveOrg` mutates the store.
+    const key = `${session.account?.id ?? ""}::${orgId}`;
+    if (lastLoadedKey === key) return;
+    lastLoadedKey = key;
     void loadAll();
   });
 

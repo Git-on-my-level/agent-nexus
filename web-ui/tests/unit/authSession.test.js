@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   authenticatedAgent,
+  authSessionReady,
   clearAuthSession,
   completeAuthSession,
   initializeAuthSession,
@@ -270,6 +271,71 @@ describe("authSession", () => {
     expect(agent).toBeNull();
     expect(isAuthenticated("alpha")).toBe(false);
     expect(get(authenticatedAgent)).toBeNull();
+  });
+
+  it("dedupes concurrent initializeAuthSession calls (single-flight)", async () => {
+    let calls = 0;
+    let resolveFetch;
+    const fetchFn = async () => {
+      calls += 1;
+      await new Promise((resolve) => {
+        resolveFetch = resolve;
+      });
+      return new Response(
+        JSON.stringify({
+          authenticated: true,
+          agent: {
+            agent_id: "agent-sf",
+            actor_id: "actor-sf",
+            username: "passkey.sf",
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    };
+
+    const a = initializeAuthSession({ workspaceSlug: "alpha", fetchFn });
+    const b = initializeAuthSession({ workspaceSlug: "alpha", fetchFn });
+    const c = initializeAuthSession({ workspaceSlug: "alpha", fetchFn });
+
+    expect(calls).toBe(1);
+
+    resolveFetch();
+    const [agentA, agentB, agentC] = await Promise.all([a, b, c]);
+
+    expect(calls).toBe(1);
+    expect(agentA).toMatchObject({ agent_id: "agent-sf" });
+    expect(agentB).toBe(agentA);
+    expect(agentC).toBe(agentA);
+  });
+
+  it("does not flicker authSessionReady on a refresh after initial hydration", async () => {
+    completeAuthSession(
+      { agent_id: "agent-r", actor_id: "actor-r", username: "passkey.r" },
+      "alpha",
+    );
+
+    const observed = [];
+    const unsub = authSessionReady.subscribe((v) => observed.push(v));
+    observed.length = 0;
+
+    const fetchFn = async () =>
+      new Response(
+        JSON.stringify({
+          authenticated: true,
+          agent: { agent_id: "agent-r", actor_id: "actor-r" },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+
+    await initializeAuthSession({ workspaceSlug: "alpha", fetchFn });
+    unsub();
+
+    // The store should NOT have been pushed false→true on a refresh that
+    // returned the same agent. Any false in `observed` means a downstream
+    // `$derived(... && $authSessionReady)` would re-evaluate and could
+    // re-trigger an effect — that's the loop pattern we're killing.
+    expect(observed).not.toContain(false);
   });
 
   it("logs out through the same-origin session endpoint", async () => {

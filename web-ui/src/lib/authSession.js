@@ -25,6 +25,13 @@ function createEmptyAuthState() {
     ready: false,
     accessToken: "",
     authenticatedAgent: null,
+    /**
+     * Promise of the currently in-flight initializeAuthSession call for this
+     * workspace, or null when nothing is in flight. Used to dedupe concurrent
+     * callers so that a reactive effect cannot spawn N parallel `/auth/session`
+     * requests while one is already running.
+     */
+    initInflight: null,
   };
 }
 
@@ -206,6 +213,7 @@ export function clearAuthSession(
   state.accessToken = "";
   state.authenticatedAgent = null;
   state.ready = true;
+  state.initInflight = null;
   if (browser && clearActor) {
     clearSelectedActor(localStorage, workspaceSlug);
   }
@@ -218,15 +226,59 @@ export async function initializeAuthSession({
   workspaceSlug = getCurrentWorkspaceSlug(),
 } = {}) {
   const state = ensureAuthState(workspaceSlug);
+
+  // Single-flight: if a previous call is still pending for this workspace,
+  // return that same promise. Prevents reactive effects (e.g. those watching
+  // `authSessionReady`) from spawning a flood of parallel `/auth/session`
+  // requests when stores update mid-flight. Without this guard, a Svelte
+  // `$effect` that depends on `authSessionReady` and calls
+  // `initializeAuthSession` will recurse — `ready` flips, the effect re-runs,
+  // it issues another fetch, repeat — until the browser hits
+  // ERR_INSUFFICIENT_RESOURCES.
+  if (state.initInflight) {
+    return state.initInflight;
+  }
+
+  const promise = runInitializeAuthSession({
+    fetchFn,
+    baseUrl,
+    workspaceSlug,
+    state,
+  }).finally(() => {
+    if (state.initInflight === promise) {
+      state.initInflight = null;
+    }
+  });
+
+  state.initInflight = promise;
+  return promise;
+}
+
+async function runInitializeAuthSession({
+  fetchFn,
+  baseUrl,
+  workspaceSlug,
+  state,
+}) {
   const previousAgent = state.authenticatedAgent;
+  // Track whether this is the first time we're hydrating this workspace.
+  // On first init, flip `ready` to false so consumers can show a loading
+  // state. On subsequent refreshes, leave `ready` untouched — flipping it
+  // would invalidate every `$derived(... && $authSessionReady)` computation
+  // and re-fire any `$effect` that depends on them, which is what creates
+  // the loop. Refreshes update the agent only when the fetch resolves.
+  const isInitialHydration = !state.ready;
+
   if (!browser && typeof fetchFn !== "function") {
     state.ready = true;
     syncCurrentAuthStores(workspaceSlug);
     return null;
   }
 
-  state.ready = false;
-  syncCurrentAuthStores(workspaceSlug);
+  if (isInitialHydration) {
+    state.ready = false;
+    syncCurrentAuthStores(workspaceSlug);
+  }
 
   for (
     let attempt = 0;
@@ -242,10 +294,14 @@ export async function initializeAuthSession({
           [WORKSPACE_HEADER]: workspaceSlug,
         },
       });
-      state.authenticatedAgent = result.agent ?? null;
+      const nextAgent = result.agent ?? null;
+      const agentChanged = !sameAgent(previousAgent, nextAgent);
+      state.authenticatedAgent = nextAgent;
       state.ready = true;
-      syncCurrentAuthStores(workspaceSlug);
-      return result.agent ?? null;
+      if (isInitialHydration || agentChanged) {
+        syncCurrentAuthStores(workspaceSlug);
+      }
+      return nextAgent;
     } catch (error) {
       if (
         isRetryableAuthSessionFailure(error) &&
@@ -255,21 +311,30 @@ export async function initializeAuthSession({
         continue;
       }
 
-      if (shouldPreserveAuthenticatedAgentOnInitFailure(error)) {
-        state.authenticatedAgent = previousAgent;
-      } else {
-        state.authenticatedAgent = null;
-      }
+      const nextAgent = shouldPreserveAuthenticatedAgentOnInitFailure(error)
+        ? previousAgent
+        : null;
+      const agentChanged = !sameAgent(previousAgent, nextAgent);
+      state.authenticatedAgent = nextAgent;
       state.ready = true;
-      syncCurrentAuthStores(workspaceSlug);
+      if (isInitialHydration || agentChanged) {
+        syncCurrentAuthStores(workspaceSlug);
+      }
       return state.authenticatedAgent;
     }
   }
+}
 
-  state.authenticatedAgent = null;
-  state.ready = true;
-  syncCurrentAuthStores(workspaceSlug);
-  return null;
+function sameAgent(a, b) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return (
+    a.agent_id === b.agent_id &&
+    a.actor_id === b.actor_id &&
+    (a.username ?? "") === (b.username ?? "") &&
+    (a.auth_method ?? "") === (b.auth_method ?? "") &&
+    (a.principal_kind ?? "") === (b.principal_kind ?? "")
+  );
 }
 
 export async function logoutAuthSession({

@@ -65,11 +65,45 @@ async function readError(res) {
 }
 
 /**
+ * In-flight loadHostedSession promise (or null). Used to dedupe concurrent
+ * callers — particularly Svelte `$effect` blocks that watch `hostedSession.phase`
+ * and call `loadHostedSession()` whenever the phase isn't "authed". Without
+ * this guard, a transient error (or any non-authed terminal state) plus a
+ * reactive dependency on `phase` will recursively spawn /account/me and
+ * /organizations requests until the browser hits ERR_INSUFFICIENT_RESOURCES.
+ *
+ * @type {Promise<unknown> | null}
+ */
+let hostedSessionInflight = null;
+
+/**
  * Load (or refresh) the signed-in account + organizations.
  * Returns the resolved store snapshot for callers that need it inline.
+ *
+ * Concurrent calls share a single in-flight request.
  */
-export async function loadHostedSession() {
-  hostedSession.update((s) => ({ ...s, phase: "loading", error: "" }));
+export function loadHostedSession() {
+  if (hostedSessionInflight) {
+    return hostedSessionInflight;
+  }
+  const promise = runLoadHostedSession().finally(() => {
+    if (hostedSessionInflight === promise) {
+      hostedSessionInflight = null;
+    }
+  });
+  hostedSessionInflight = promise;
+  return promise;
+}
+
+async function runLoadHostedSession() {
+  // Only push an intermediate "loading" phase on the very first hydration —
+  // not on a refresh. Otherwise any caller that depends on `phase` will see
+  // a synchronous transition (e.g. authed → loading → authed) that re-fires
+  // its effect, which calls back into this function, ad infinitum.
+  const initial = get(hostedSession);
+  if (initial.phase === "idle") {
+    hostedSession.update((s) => ({ ...s, phase: "loading", error: "" }));
+  }
 
   let me = null;
   try {

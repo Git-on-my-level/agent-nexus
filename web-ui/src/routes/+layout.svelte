@@ -5,6 +5,7 @@
   import { get } from "svelte/store";
 
   import "../app.css";
+  import { dev } from "$app/environment";
   import {
     actorRegistry,
     actorSessionReady,
@@ -19,6 +20,7 @@
     selectedActorId,
     shouldShowActorGate,
   } from "$lib/actorSession";
+  import { installFetchLoopGuard } from "$lib/dev/fetchLoopGuard.js";
   import {
     authenticatedAgent,
     authSessionReady,
@@ -240,6 +242,14 @@
   }
 
   let loginRedirectGeneration = 0;
+
+  // Dev-mode runaway-fetch detector. Throws loudly the moment a reactive
+  // effect or polling loop starts spamming the same endpoint, instead of
+  // letting the browser silently exhaust its connection pool. Disabled in
+  // production builds. See src/lib/dev/fetchLoopGuard.js.
+  if (browser && dev) {
+    installFetchLoopGuard();
+  }
 
   $effect(() => {
     if (!browser) {
