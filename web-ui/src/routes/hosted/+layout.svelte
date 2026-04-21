@@ -27,6 +27,8 @@
 
   let menuOpen = $state(false);
   let orgPickerOpen = $state(false);
+  /** Avoid duplicate `goto` while an unauth redirect is in flight. */
+  let unauthRedirectInFlight = false;
 
   const path = $derived($page.url.pathname);
   /** Full product name on the public landing page only; app chrome stays "ANX". */
@@ -84,12 +86,15 @@
   $effect(() => {
     if (!browser) return;
     if (isPublic) return;
-    if (session.phase === "unauthed") {
-      void goto(
-        `/hosted/start?next=${encodeURIComponent(path + ($page.url.search ?? ""))}`,
-        { replaceState: true },
-      );
-    }
+    if (path === "/hosted/start" || path.startsWith("/hosted/start/")) return;
+    if (session.phase !== "unauthed") return;
+    if (unauthRedirectInFlight) return;
+
+    const target = `/hosted/start?next=${encodeURIComponent(path + ($page.url.search ?? ""))}`;
+    unauthRedirectInFlight = true;
+    void goto(target, { replaceState: true }).finally(() => {
+      unauthRedirectInFlight = false;
+    });
   });
 
   async function handleSignOut() {

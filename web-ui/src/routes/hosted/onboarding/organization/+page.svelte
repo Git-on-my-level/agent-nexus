@@ -3,6 +3,8 @@
 
   import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
+  import { page } from "$app/stores";
+  import { get } from "svelte/store";
 
   import Button from "$lib/components/Button.svelte";
   import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
@@ -48,12 +50,29 @@
     }
   }
 
+  function currentPathname() {
+    if (!browser) {
+      return "";
+    }
+    return get(page).url.pathname;
+  }
+
   function handleRedirect() {
+    const path = currentPathname();
     if (session.phase === "unauthed") {
+      if (path === "/hosted/start" || path.startsWith("/hosted/start/")) {
+        return;
+      }
       void goto("/hosted/start", { replaceState: true });
       return;
     }
     if (session.phase === "authed" && orgs.length > 0) {
+      if (
+        path === "/hosted/dashboard" ||
+        path.startsWith("/hosted/dashboard/")
+      ) {
+        return;
+      }
       void goto("/hosted/dashboard", { replaceState: true });
       return;
     }

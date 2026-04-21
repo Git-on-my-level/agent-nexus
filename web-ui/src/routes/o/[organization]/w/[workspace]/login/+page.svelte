@@ -1,13 +1,12 @@
 <script>
+  import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
   import { onMount } from "svelte";
+  import { get } from "svelte/store";
 
-  import {
-    authenticatedAgent,
-    completeAuthSession,
-    isAuthenticated,
-  } from "$lib/authSession";
+  import { authenticatedAgent, completeAuthSession } from "$lib/authSession";
+  import { normalizeAppPath } from "$lib/pathUtils.js";
   import { coreClient } from "$lib/coreClient";
   import {
     createPasskeyCredential,
@@ -16,6 +15,32 @@
   import Button from "$lib/components/Button.svelte";
   import { workspacePath } from "$lib/workspacePaths";
   import { devActorMode } from "$lib/workspaceContext";
+
+  function isAlreadyAtWorkspaceHome(pathname, org, ws) {
+    const dest = normalizeAppPath(workspacePath(org, ws));
+    const cur = normalizeAppPath(pathname);
+    return cur === dest;
+  }
+
+  /** Single client redirect when session exists; no-ops if already on workspace home. */
+  function redirectToWorkspaceIfNeeded() {
+    if (!browser) {
+      return;
+    }
+    const org = organizationSlug;
+    const ws = workspaceSlug;
+    if (!org || !ws) {
+      return;
+    }
+    if (!get(authenticatedAgent)?.agent_id) {
+      return;
+    }
+    const pathname = get(page).url.pathname;
+    if (isAlreadyAtWorkspaceHome(pathname, org, ws)) {
+      return;
+    }
+    void goto(workspacePath(org, ws));
+  }
 
   let registrationName = $state("");
   let registrationToken = $state("");
@@ -33,10 +58,7 @@
   let workspaceSlug = $derived($page.params.workspace);
 
   onMount(async () => {
-    if (isAuthenticated(workspaceSlug)) {
-      goto(workspacePath(organizationSlug, workspaceSlug));
-      return;
-    }
+    redirectToWorkspaceIfNeeded();
 
     const tokenParam = $page.url.searchParams.get("token");
     if (tokenParam) {
@@ -54,9 +76,10 @@
   });
 
   $effect(() => {
-    if ($authenticatedAgent) {
-      goto(workspacePath(organizationSlug, workspaceSlug));
+    if (!$authenticatedAgent?.agent_id) {
+      return;
     }
+    redirectToWorkspaceIfNeeded();
   });
 
   async function handleRegistration() {

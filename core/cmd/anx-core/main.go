@@ -85,6 +85,8 @@ func main() {
 		staleScanInterval           = envDuration("ANX_PROJECTION_STALE_SCAN_INTERVAL", 30*time.Second)
 		projectionBatchSize         = envInt("ANX_PROJECTION_MAINTENANCE_BATCH_SIZE", 50)
 		devRegisterLinkedActors     = envBool("ANX_DEV_REGISTER_LINKED_ACTORS", false)
+		enableDevActorMode          = envBool("ANX_ENABLE_DEV_ACTOR_MODE", false)
+		allowUnauthenticatedWrites  = envBool("ANX_ALLOW_UNAUTHENTICATED_WRITES", false)
 		allowLoopbackVerifyReads    = envBool("ANX_ALLOW_LOOPBACK_VERIFICATION_READS", false)
 		bootstrapToken              = envString("ANX_BOOTSTRAP_TOKEN", "")
 		webAuthnRPID                = envString("ANX_WEBAUTHN_RPID", "")
@@ -408,6 +410,8 @@ func main() {
 		}),
 		server.WithWorkspaceID(workspaceID),
 		server.WithSecretsStore(secretsStore),
+		server.WithEnableDevActorMode(enableDevActorMode),
+		server.WithAllowUnauthenticatedWrites(allowUnauthenticatedWrites),
 		server.WithAllowLoopbackVerificationReads(allowLoopbackVerifyReads),
 		server.WithCoreVersion(coreVersion),
 		server.WithAPIVersion(apiVersion),
@@ -530,6 +534,12 @@ func main() {
 		fmt.Printf("  projection mode: %s\n", projectionMode)
 		fmt.Printf("  sidecars: router=%t (workspace_id=%s, workspace_name=%s)\n", sidecarRouterEnabled, workspaceID, workspaceName)
 		fmt.Printf("  human auth mode: %s\n", humanAuthMode)
+		if enableDevActorMode {
+			fmt.Println("  WARNING: dev actor mode enabled (unauthenticated reads; legacy POST /actors)")
+		}
+		if allowUnauthenticatedWrites {
+			fmt.Println("  WARNING: unauthenticated writes enabled (actor_id in body; local dev only)")
+		}
 		if allowLoopbackVerifyReads {
 			fmt.Println("  WARNING: loopback verification reads enabled (read-only loopback bypass)")
 		}

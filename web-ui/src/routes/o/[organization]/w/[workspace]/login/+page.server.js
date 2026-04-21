@@ -111,9 +111,18 @@ export async function load(event) {
   }
 
   if (agent?.agent_id) {
+    const returnTo = sanitizeHostedReturnPath(
+      event.url.searchParams.get("return_to") ??
+        event.url.searchParams.get("return_path") ??
+        "/",
+    );
     throw redirect(
       307,
-      workspacePath(resolved.organizationSlug, resolved.workspaceSlug),
+      workspacePath(
+        resolved.organizationSlug,
+        resolved.workspaceSlug,
+        returnTo,
+      ),
     );
   }
 

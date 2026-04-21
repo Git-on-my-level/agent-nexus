@@ -103,6 +103,7 @@
     setActiveOrg(orgId);
     if (session.phase !== "authed") {
       void loadHostedSession();
+      return;
     }
     void loadAll();
   });

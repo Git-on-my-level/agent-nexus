@@ -3,6 +3,8 @@
 
   import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
+  import { page } from "$app/stores";
+  import { get } from "svelte/store";
 
   import Button from "$lib/components/Button.svelte";
   import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
@@ -13,6 +15,8 @@
   let message = $state("");
   let ready = $state(false);
   let inputEl = $state(null);
+  /** Prevents overlapping async `handleRedirect` runs from `$effect`. */
+  let redirectBusy = false;
 
   const session = $derived($hostedSession);
   const orgs = $derived(session.organizations);
@@ -47,24 +51,72 @@
     }
   }
 
+  function currentPathname() {
+    if (!browser) {
+      return "";
+    }
+    return get(page).url.pathname;
+  }
+
   async function handleRedirect() {
-    if (session.phase === "unauthed") {
-      void goto("/hosted/start", { replaceState: true });
+    if (redirectBusy) {
       return;
     }
-    if (session.phase !== "authed") return;
+    const path = currentPathname();
+
+    if (session.phase === "unauthed") {
+      if (path === "/hosted/start" || path.startsWith("/hosted/start/")) {
+        return;
+      }
+      redirectBusy = true;
+      try {
+        await goto("/hosted/start", { replaceState: true });
+      } finally {
+        redirectBusy = false;
+      }
+      return;
+    }
+    if (session.phase !== "authed") {
+      return;
+    }
 
     if (orgs.length === 0) {
-      void goto("/hosted/onboarding/organization", { replaceState: true });
+      if (
+        path === "/hosted/onboarding/organization" ||
+        path.startsWith("/hosted/onboarding/organization/")
+      ) {
+        return;
+      }
+      redirectBusy = true;
+      try {
+        await goto("/hosted/onboarding/organization", { replaceState: true });
+      } finally {
+        redirectBusy = false;
+      }
       return;
     }
 
-    if (activeOrgId && (await hasWorkspaces(activeOrgId))) {
-      void goto("/hosted/dashboard", { replaceState: true });
+    if (!activeOrgId) {
+      ready = true;
       return;
     }
 
-    ready = true;
+    redirectBusy = true;
+    try {
+      if (await hasWorkspaces(activeOrgId)) {
+        if (
+          path === "/hosted/dashboard" ||
+          path.startsWith("/hosted/dashboard/")
+        ) {
+          return;
+        }
+        await goto("/hosted/dashboard", { replaceState: true });
+      } else {
+        ready = true;
+      }
+    } finally {
+      redirectBusy = false;
+    }
   }
 
   onMount(async () => {

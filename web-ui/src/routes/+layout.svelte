@@ -2,6 +2,7 @@
   import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
+  import { get } from "svelte/store";
 
   import "../app.css";
   import {
@@ -199,6 +200,43 @@
     }
   });
 
+  /** Mirrors `shouldRedirectToLogin` using `get()` for use after async session refresh. */
+  function needsLoginRedirectNow() {
+    const p = get(page);
+    const workspace = p.data?.workspace ?? null;
+    const wsSlug = workspace?.slug ?? "";
+    const orgSlug = workspace?.organizationSlug ?? p.params?.organization ?? "";
+    if (!wsSlug) {
+      return false;
+    }
+    if (!(get(actorSessionReady) && get(authSessionReady))) {
+      return false;
+    }
+    if (!get(devActorModeReady)) {
+      return false;
+    }
+
+    const appPath =
+      wsSlug && orgSlug
+        ? stripWorkspacePath(p.url.pathname, orgSlug, wsSlug)
+        : stripBasePath(p.url.pathname);
+    if (appPath === "/login") {
+      return false;
+    }
+
+    const devMode = get(devActorMode);
+    const agent = get(authenticatedAgent);
+    const requiresHumanSession = appPath === "/secrets";
+    const hasHumanAuthSession = isHumanWorkspacePrincipal(agent);
+
+    return (
+      (!devMode && !agent) ||
+      (devMode && requiresHumanSession && !hasHumanAuthSession)
+    );
+  }
+
+  let loginRedirectGeneration = 0;
+
   $effect(() => {
     if (!browser) {
       return;
@@ -214,11 +252,16 @@
     if (!browser || !shouldRedirectToLogin) {
       return;
     }
-    const loginPath = workspacePath(
-      activeOrganizationSlug,
-      activeWorkspaceSlug,
-      "/login",
-    );
+    if (currentAppPath === "/login") {
+      return;
+    }
+    const org = activeOrganizationSlug;
+    const ws = activeWorkspaceSlug;
+    if (!org || !ws) {
+      return;
+    }
+
+    const loginPath = workspacePath(org, ws, "/login");
     const returnTo = sanitizeHostedReturnPath(
       `${currentAppPath || "/"}${$page.url.search || ""}`,
     );
@@ -226,7 +269,24 @@
     if (returnTo !== "/") {
       params.set("return_to", returnTo);
     }
-    goto(params.size > 0 ? `${loginPath}?${params.toString()}` : loginPath);
+    const destination =
+      params.size > 0 ? `${loginPath}?${params.toString()}` : loginPath;
+
+    const generation = ++loginRedirectGeneration;
+
+    void (async () => {
+      await initializeAuthSession({
+        fetchFn: globalThis.fetch.bind(globalThis),
+        workspaceSlug: ws,
+      });
+      if (generation !== loginRedirectGeneration) {
+        return;
+      }
+      if (!needsLoginRedirectNow()) {
+        return;
+      }
+      await goto(destination);
+    })();
   });
 
   $effect(() => {

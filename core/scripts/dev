@@ -9,6 +9,11 @@ PORT="${PORT:-8000}"
 WORKSPACE_ROOT="${WORKSPACE_ROOT:-$ROOT_DIR/.anx-workspace}"
 SCHEMA_PATH="${SCHEMA_PATH:-$ROOT_DIR/../contracts/anx-schema.yaml}"
 
+# Match integration-test dev stack: mock seed + legacy actor registration use
+# unauthenticated reads/writes against loopback. Production uses run-prod / explicit flags.
+export ANX_ENABLE_DEV_ACTOR_MODE="${ANX_ENABLE_DEV_ACTOR_MODE:-1}"
+export ANX_ALLOW_UNAUTHENTICATED_WRITES="${ANX_ALLOW_UNAUTHENTICATED_WRITES:-1}"
+
 exec go run ./cmd/anx-core \
   --host "$HOST" \
   --port "$PORT" \

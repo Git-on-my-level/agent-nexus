@@ -158,7 +158,12 @@ export async function loadHostedSession() {
 /** Set the active organization (persists to localStorage). */
 export function setActiveOrg(orgId) {
   const id = String(orgId ?? "").trim();
-  hostedSession.update((s) => ({ ...s, activeOrgId: id }));
+  hostedSession.update((s) => {
+    if (s.activeOrgId === id) {
+      return s;
+    }
+    return { ...s, activeOrgId: id };
+  });
   writeActiveOrgToStorage(id);
 }
 
