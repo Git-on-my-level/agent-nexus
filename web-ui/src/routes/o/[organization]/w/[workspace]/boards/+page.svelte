@@ -122,6 +122,29 @@
     createPinnedRefs = "";
   }
 
+  /** Each board needs its own backing thread; must not reuse a topic's primary timeline. */
+  function ensureNewBoardBackingThreadId() {
+    if (!createBackingThreadId.trim()) {
+      createBackingThreadId = crypto.randomUUID();
+    }
+  }
+
+  function openCreateBoardForm() {
+    createError = "";
+    resetCreateForm();
+    showCreateForm = true;
+    createBackingThreadId = crypto.randomUUID();
+  }
+
+  function toggleCreateBoardForm() {
+    createError = "";
+    const next = !showCreateForm;
+    showCreateForm = next;
+    if (next) {
+      ensureNewBoardBackingThreadId();
+    }
+  }
+
   async function loadBoards(isRetry = false) {
     loading = true;
     error = "";
@@ -151,11 +174,14 @@
     createError = "";
 
     const title = createTitle.trim();
-    const backingThreadId = createBackingThreadId.trim();
+    let backingThreadId = createBackingThreadId.trim();
+    if (!backingThreadId) {
+      backingThreadId = crypto.randomUUID();
+      createBackingThreadId = backingThreadId;
+    }
 
-    if (!title || !backingThreadId) {
-      createError =
-        "Title and board timeline ID (backing thread) are required.";
+    if (!title) {
+      createError = "Title is required.";
       return;
     }
 
@@ -311,10 +337,7 @@
     </button>
     <button
       class="rounded-md bg-accent-solid px-3 py-1.5 text-micro font-medium text-white transition-colors hover:bg-accent"
-      onclick={() => {
-        createError = "";
-        showCreateForm = !showCreateForm;
-      }}
+      onclick={toggleCreateBoardForm}
       type="button"
     >
       {showCreateForm ? "Hide create form" : "Create board"}
@@ -452,11 +475,11 @@
         <SearchableEntityPicker
           bind:value={createBackingThreadId}
           advancedLabel="Use a manual thread ID"
-          helperText="Pick a topic or enter this board's backing thread ID (append-only event timeline for the board)."
+          helperText="A new UUID is filled in by default. Do not pick a topic — each topic already owns its timeline. Search/manual is only for an unused thread ID."
           label="Board timeline"
           manualLabel="Thread ID"
           manualPlaceholder="thread-q2-initiative"
-          placeholder="Search topics by title, ID, or tags"
+          placeholder="Optional: search topics (advanced; often conflicts)"
           searchFn={searchThreadOptions}
         />
 
@@ -539,7 +562,7 @@
     title="No boards yet"
     helper="Create a board to give operators a trustworthy visual map of active work."
     actionLabel="Create board"
-    onclick={() => (showCreateForm = true)}
+    onclick={openCreateBoardForm}
   />
 {:else}
   <div
