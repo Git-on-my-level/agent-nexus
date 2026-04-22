@@ -3,6 +3,8 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -668,6 +670,11 @@ func requireRegisteredActorID(w http.ResponseWriter, r *http.Request, actorRegis
 
 	exists, err := actorRegistry.Exists(r.Context(), actorID)
 	if err != nil {
+		log.Printf("anx-core: actor registry Exists failed for %q: %v", actorID, err)
+		if actorExistsDebugErrors() {
+			writeError(w, http.StatusInternalServerError, "internal_error", fmt.Sprintf("failed to validate actor_id: %v", err))
+			return "", false
+		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to validate actor_id")
 		return "", false
 	}

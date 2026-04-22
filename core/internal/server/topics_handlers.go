@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -69,8 +71,13 @@ func handleListTopics(w http.ResponseWriter, r *http.Request, opts handlerOption
 		TrashedOnly:     strings.TrimSpace(query.Get("trashed_only")) == "true",
 	})
 	if err != nil {
+		log.Printf("anx-core: list topics failed: %v", err)
 		if errors.Is(err, primitives.ErrInvalidCursor) {
 			writeError(w, http.StatusBadRequest, "invalid_request", "cursor is invalid")
+			return
+		}
+		if topicListDebugErrors() {
+			writeError(w, http.StatusInternalServerError, "internal_error", fmt.Sprintf("failed to list topics: %v", err))
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list topics")
@@ -795,6 +802,15 @@ func uniqueTopicIDs(values []string) []string {
 		out = append(out, value)
 	}
 	return out
+}
+
+func topicListDebugErrors() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("ANX_DEBUG_TOPIC_LIST_ERRORS"))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }
 
 func dedupeAndSortResourceMaps(items []map[string]any) []map[string]any {

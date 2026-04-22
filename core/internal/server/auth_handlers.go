@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -475,6 +477,11 @@ func resolveWriteActorID(w http.ResponseWriter, r *http.Request, opts handlerOpt
 	if opts.actorRegistry != nil {
 		exists, err := opts.actorRegistry.Exists(r.Context(), requestedActorID)
 		if err != nil {
+			log.Printf("anx-core: actor registry Exists failed for %q: %v", requestedActorID, err)
+			if actorExistsDebugErrors() {
+				writeError(w, http.StatusInternalServerError, "internal_error", fmt.Sprintf("failed to validate actor_id: %v", err))
+				return "", false
+			}
 			writeError(w, http.StatusInternalServerError, "internal_error", "failed to validate actor_id")
 			return "", false
 		}
@@ -551,4 +558,13 @@ func onboardingRequiredMessage(err error) string {
 
 func isOnboardingTokenError(err error) bool {
 	return errors.Is(err, auth.ErrInvalidToken) || errors.Is(err, auth.ErrInviteKindMismatch)
+}
+
+func actorExistsDebugErrors() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("ANX_DEBUG_ACTOR_EXISTS_ERRORS"))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }

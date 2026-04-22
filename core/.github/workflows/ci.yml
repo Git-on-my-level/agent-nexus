@@ -21,3 +21,6 @@ jobs:
 
       - name: Run fast unit tests
         run: go test ./internal/actors ./internal/primitives ./internal/schema ./internal/storage -count=1
+
+      - name: Run server integration tests (HTTP + auth + primitives)
+        run: go test ./internal/server/... -count=1

@@ -2996,6 +2996,88 @@ func TestListTopicsSearchMatchesNumericSummaryInBodyJSON(t *testing.T) {
 	}
 }
 
+func TestListTopicsSearchSucceedsWhenAnotherRowHasMalformedBodyJSON(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	goodTitle := "HealthyTopicForBoardPicker"
+	createGood := postJSONExpectStatus(t, h.baseURL+"/topics", fmt.Sprintf(`{
+		"actor_id":"actor-1",
+		"topic":{
+			"type":"incident",
+			"status":"active",
+			"title":%q,
+			"summary":"ok",
+			"owner_refs":[],
+			"document_refs":[],
+			"board_refs":[],
+			"related_refs":[],
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, goodTitle), http.StatusCreated)
+	createGood.Body.Close()
+
+	createBad := postJSONExpectStatus(t, h.baseURL+"/topics", `{
+		"actor_id":"actor-1",
+		"topic":{
+			"type":"incident",
+			"status":"active",
+			"title":"WillCorruptBody",
+			"summary":"x",
+			"owner_refs":[],
+			"document_refs":[],
+			"board_refs":[],
+			"related_refs":[],
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated)
+	defer createBad.Body.Close()
+	var badCreated struct {
+		Topic map[string]any `json:"topic"`
+	}
+	if err := json.NewDecoder(createBad.Body).Decode(&badCreated); err != nil {
+		t.Fatalf("decode bad topic: %v", err)
+	}
+	badID := strings.TrimSpace(fmt.Sprint(badCreated.Topic["id"]))
+	if badID == "" {
+		t.Fatal("expected bad topic id")
+	}
+	if _, err := h.workspace.DB().ExecContext(context.Background(),
+		`UPDATE topics SET body_json = ? WHERE id = ?`,
+		"not-valid-json{", badID,
+	); err != nil {
+		t.Fatalf("corrupt body_json: %v", err)
+	}
+
+	listResp, err := http.Get(h.baseURL + "/topics?q=" + url.QueryEscape("Healthy"))
+	if err != nil {
+		t.Fatalf("GET /topics?q=Healthy: %v", err)
+	}
+	defer listResp.Body.Close()
+	if listResp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(listResp.Body)
+		t.Fatalf("expected 200, got %d body=%s", listResp.StatusCode, string(b))
+	}
+	var body struct {
+		Topics []map[string]any `json:"topics"`
+	}
+	if err := json.NewDecoder(listResp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	found := false
+	for _, tp := range body.Topics {
+		if strings.TrimSpace(fmt.Sprint(tp["title"])) == goodTitle {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected topic %q in results", goodTitle)
+	}
+}
+
 func TestTopicTrashLifecycle(t *testing.T) {
 	t.Parallel()
 

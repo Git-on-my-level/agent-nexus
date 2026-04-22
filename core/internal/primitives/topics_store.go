@@ -55,7 +55,8 @@ func (r topicRow) toMap() (map[string]any, error) {
 	body := map[string]any{}
 	if strings.TrimSpace(r.BodyJSON) != "" {
 		if err := json.Unmarshal([]byte(r.BodyJSON), &body); err != nil {
-			return nil, fmt.Errorf("decode topic body: %w", err)
+			// Degrade to empty body so list/search endpoints stay available if a row has corrupt JSON.
+			body = map[string]any{}
 		}
 	}
 	if body == nil {
@@ -65,7 +66,7 @@ func (r topicRow) toMap() (map[string]any, error) {
 	provenance := map[string]any{}
 	if strings.TrimSpace(r.ProvenanceJSON) != "" {
 		if err := json.Unmarshal([]byte(r.ProvenanceJSON), &provenance); err != nil {
-			return nil, fmt.Errorf("decode topic provenance: %w", err)
+			provenance = map[string]any{}
 		}
 	}
 	if provenance == nil {
@@ -875,9 +876,12 @@ func buildListTopicsQuery(filter TopicListFilter) (string, []any) {
 		args = append(args, status)
 	}
 	if q := strings.TrimSpace(filter.Query); q != "" {
-		// summary is stored in body_json, not a topics table column; CAST so numeric JSON matches LIKE
+		// summary is stored in body_json, not a topics table column; CAST so numeric JSON matches LIKE.
+		// Guard with json_valid: json_extract throws on malformed JSON and would fail the whole query.
 		pattern := "%" + strings.ToLower(q) + "%"
-		query += ` AND (LOWER(id) LIKE ? OR LOWER(COALESCE(title, '')) LIKE ? OR LOWER(COALESCE(CAST(json_extract(body_json, '$.summary') AS TEXT), '')) LIKE ?)`
+		query += ` AND (LOWER(id) LIKE ? OR LOWER(COALESCE(title, '')) LIKE ? OR LOWER(COALESCE(CAST(
+			CASE WHEN json_valid(body_json) THEN json_extract(body_json, '$.summary') END
+			AS TEXT), '')) LIKE ?)`
 		args = append(args, pattern, pattern, pattern)
 	}
 	query += ` ORDER BY updated_at DESC, id ASC`

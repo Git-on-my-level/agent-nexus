@@ -45,6 +45,9 @@ type authIntegrationOptions struct {
 	workspaceID                 string
 	workspaceHumanGrantVerifier auth.WorkspaceHumanGrantIdentityVerifier
 	accountStatusChecker        auth.AccountStatusChecker
+	// wrapActorRegistry, if set, replaces the default *actors.Store passed to WithActorRegistry
+	// (use for tests that inject failures from ActorRegistry.Exists).
+	wrapActorRegistry func(base *actors.Store) ActorRegistry
 }
 
 type authIntegrationEnv struct {
@@ -64,10 +67,14 @@ func newAuthIntegrationEnv(t *testing.T, options authIntegrationOptions) authInt
 		t.Fatalf("initialize workspace: %v", err)
 	}
 
-	registry := actors.NewStore(workspace.DB())
-	if _, err := registry.EnsureSystemActor(context.Background(), time.Now().UTC()); err != nil {
+	registryStore := actors.NewStore(workspace.DB())
+	if _, err := registryStore.EnsureSystemActor(context.Background(), time.Now().UTC()); err != nil {
 		_ = workspace.Close()
 		t.Fatalf("ensure system actor: %v", err)
+	}
+	var registry ActorRegistry = registryStore
+	if options.wrapActorRegistry != nil {
+		registry = options.wrapActorRegistry(registryStore)
 	}
 
 	authOptions := make([]auth.Option, 0, 2)
@@ -121,7 +128,7 @@ func newAuthIntegrationEnv(t *testing.T, options authIntegrationOptions) authInt
 
 	return authIntegrationEnv{
 		workspace:           workspace,
-		registry:            registry,
+		registry:            registryStore,
 		authStore:           authStore,
 		passkeySessionStore: passkeySessionStore,
 		server:              server,
