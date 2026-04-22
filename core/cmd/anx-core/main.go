@@ -628,7 +628,16 @@ func runHealthcheckCLI() int {
 		fmt.Fprintf(os.Stderr, "healthcheck: parse listen address %q: %v\n", addr, err)
 		return 1
 	}
-	url := "http://" + net.JoinHostPort(host, portStr) + "/livez"
+	// When the server binds 0.0.0.0 or ::, dialing that address from the client is
+	// unreliable inside containers; use loopback for the probe instead.
+	dialHost := host
+	switch host {
+	case "0.0.0.0", "":
+		dialHost = "127.0.0.1"
+	case "::":
+		dialHost = "::1"
+	}
+	url := "http://" + net.JoinHostPort(dialHost, portStr) + "/livez"
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)

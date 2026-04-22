@@ -7,7 +7,7 @@
     "Optional — quick attach: set ANX_SAAS_DEV_PRECONFIGURED_WORKSPACES to a JSON array (same shape as ANX_WORKSPACES) so a core URL exists without the control plane lookup.",
     "Optional — resolve /{slug} from the API: set ANX_CONTROL_PLANE_DEV_ACCESS_TOKEN, or place the token in controlplane/.anx-dev-cp-token, or sign in via /hosted/signup so the UI sets oar_cp_dev_access_token.",
     "One-click local login is enabled by default when using controlplane `make serve`; use /hosted/signin → Local dev shortcut. Set ANX_CONTROL_PLANE_DEV_QUICK_AUTH_ENABLED=0 to force passkey/OAuth.",
-    "To keep the control plane database between restarts: RESET_CONTROL_PLANE_WORKSPACE=0 when running make serve.",
+    "Control plane data persists across restarts by default. Wipe both stacks: `make reset` in controlplane/. One-run wipe: RESET_CONTROL_PLANE_WORKSPACE=1 with make serve / make serve-docker.",
   ];
 </script>
 

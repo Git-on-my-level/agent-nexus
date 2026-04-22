@@ -2868,6 +2868,62 @@ func TestListTopicsPaginationIncludesNextCursor(t *testing.T) {
 	}
 }
 
+func TestListTopicsSearchQueryMatchesTitleAndSummary(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	distinctTitle := "SearchableTopicAlpha"
+	distinctSummary := "UniqueSummaryBetaGamma"
+
+	createResp := postJSONExpectStatus(t, h.baseURL+"/topics", fmt.Sprintf(`{
+		"actor_id":"actor-1",
+		"topic":{
+			"type":"incident",
+			"status":"active",
+			"title":%q,
+			"summary":%q,
+			"owner_refs":[],
+			"document_refs":[],
+			"board_refs":[],
+			"related_refs":[],
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, distinctTitle, distinctSummary), http.StatusCreated)
+	createResp.Body.Close()
+
+	for _, q := range []string{"Alpha", "BetaGamma", strings.ToLower(distinctTitle[:8])} {
+		t.Run("q="+q, func(t *testing.T) {
+			listResp, err := http.Get(h.baseURL + "/topics?q=" + url.QueryEscape(q))
+			if err != nil {
+				t.Fatalf("GET /topics?q=%s: %v", q, err)
+			}
+			defer listResp.Body.Close()
+			if listResp.StatusCode != http.StatusOK {
+				b, _ := io.ReadAll(listResp.Body)
+				t.Fatalf("expected 200 for q=%q, got %d body=%s", q, listResp.StatusCode, string(b))
+			}
+			var body struct {
+				Topics []map[string]any `json:"topics"`
+			}
+			if err := json.NewDecoder(listResp.Body).Decode(&body); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			found := false
+			for _, tp := range body.Topics {
+				if strings.TrimSpace(fmt.Sprint(tp["title"])) == distinctTitle {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Fatalf("expected topic %q in results for q=%q, got %d topics", distinctTitle, q, len(body.Topics))
+			}
+		})
+	}
+}
+
 func TestTopicTrashLifecycle(t *testing.T) {
 	t.Parallel()
 

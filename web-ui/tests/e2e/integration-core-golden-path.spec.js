@@ -209,6 +209,29 @@ test("golden path integration runs against a real anx-core", async ({
   expect(threadId).toBeTruthy();
   expect(topicId).toBeTruthy();
 
+  const listTopicsSearchPromise = page.waitForResponse((response) => {
+    const url = response.request().url();
+    return (
+      response.request().method() === "GET" &&
+      url.includes("/topics") &&
+      url.includes("q=") &&
+      !url.match(/\/topics\/[^/?]+$/)
+    );
+  });
+
+  await page.getByRole("link", { name: "Boards", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Boards" })).toBeVisible();
+  await page.getByRole("button", { name: "Create board", exact: true }).click();
+  await page.getByLabel("Board timeline search").fill(threadTitle);
+  const listTopicsSearchResp = await listTopicsSearchPromise;
+  expect(
+    listTopicsSearchResp.ok(),
+    `GET topic search failed (${listTopicsSearchResp.status()})`,
+  ).toBeTruthy();
+
+  await page.getByRole("link", { name: "Topics", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Topics" })).toBeVisible();
+
   const boardBody = await postCoreJson(request, coreBaseUrl, "/boards", {
     actor_id: actorId,
     board: {

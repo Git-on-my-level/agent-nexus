@@ -33,6 +33,7 @@
   import { inboxTopicRouteSegment } from "$lib/topicRouteUtils";
   import InboxFirstRunTour from "$lib/components/onboarding/InboxFirstRunTour.svelte";
   import { dismissTour, shouldShowTour } from "$lib/tourState";
+  import { buildTopicCreatePayloadForUi } from "$lib/topicCreatePayload";
 
   /** Delay before inbox mutations hit core; allows Undo before the request runs. */
   const PENDING_INBOX_ACTION_MS = 5000;
@@ -233,9 +234,9 @@
 
   async function handleTourTagSubmit(text) {
     try {
-      const response = await coreClient.createTopic({
-        topic: { title: text },
-      });
+      const response = await coreClient.createTopic(
+        buildTopicCreatePayloadForUi({ title: text }),
+      );
       dismissTour(workspaceSlug);
       tourVisible = false;
 

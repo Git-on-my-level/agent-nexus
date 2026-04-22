@@ -47,6 +47,71 @@
       );
       const body = await res.json();
       workspaces = body.workspaces ?? [];
+      // #region agent log
+      for (const ws of workspaces) {
+        if (String(ws?.status ?? "").toLowerCase() !== "degraded") continue;
+        try {
+          const jr = await classifiedCpFetch(
+            `provisioning/jobs?workspace_id=${encodeURIComponent(String(ws.id))}&limit=20`,
+          );
+          const jb = await jr.json();
+          const jobs = jb.jobs ?? [];
+          const failed =
+            jobs.find((j) => j.status === "failed") ?? jobs[0] ?? null;
+          fetch("http://127.0.0.1:7905/ingest/4e450087-f30c-4f1a-9885-7a65799eee27", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Debug-Session-Id": "d6fec4",
+            },
+            body: JSON.stringify({
+              sessionId: "d6fec4",
+              location: "dashboard/+page.svelte:loadWorkspaces",
+              message: "degraded workspace provisioning jobs",
+              data: {
+                workspaceId: ws.id,
+                slug: ws.slug,
+                jobKind: failed?.kind ?? null,
+                jobStatus: failed?.status ?? null,
+                failureReason: failed?.failure_reason
+                  ? String(failed.failure_reason).slice(0, 500)
+                  : null,
+                progressMessage: failed?.progress_message
+                  ? String(failed.progress_message).slice(0, 200)
+                  : null,
+                stderrTail: failed?.stderr_tail
+                  ? String(failed.stderr_tail).slice(-800)
+                  : null,
+                jobCount: jobs.length,
+              },
+              timestamp: Date.now(),
+              hypothesisId: "H1",
+              runId: "pre-fix",
+            }),
+          }).catch(() => {});
+        } catch (e) {
+          fetch("http://127.0.0.1:7905/ingest/4e450087-f30c-4f1a-9885-7a65799eee27", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Debug-Session-Id": "d6fec4",
+            },
+            body: JSON.stringify({
+              sessionId: "d6fec4",
+              location: "dashboard/+page.svelte:loadWorkspaces",
+              message: "provisioning jobs fetch failed for degraded workspace",
+              data: {
+                workspaceId: ws.id,
+                err: String(e).slice(0, 300),
+              },
+              timestamp: Date.now(),
+              hypothesisId: "H5",
+              runId: "pre-fix",
+            }),
+          }).catch(() => {});
+        }
+      }
+      // #endregion
     } catch (e) {
       if (isAuthError(e)) throw e;
       wsError = errorUserMessage(e);

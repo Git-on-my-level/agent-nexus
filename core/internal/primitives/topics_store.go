@@ -861,8 +861,9 @@ func buildListTopicsQuery(filter TopicListFilter) (string, []any) {
 		args = append(args, status)
 	}
 	if q := strings.TrimSpace(filter.Query); q != "" {
+		// summary is stored in body_json, not a topics table column
 		pattern := "%" + strings.ToLower(q) + "%"
-		query += ` AND (LOWER(id) LIKE ? OR LOWER(COALESCE(title, '')) LIKE ? OR LOWER(COALESCE(summary, '')) LIKE ?)`
+		query += ` AND (LOWER(id) LIKE ? OR LOWER(COALESCE(title, '')) LIKE ? OR LOWER(COALESCE(json_extract(body_json, '$.summary'), '')) LIKE ?)`
 		args = append(args, pattern, pattern, pattern)
 	}
 	query += ` ORDER BY updated_at DESC, id ASC`

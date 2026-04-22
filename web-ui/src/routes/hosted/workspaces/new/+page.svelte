@@ -150,7 +150,7 @@
         disabled={busy}
         required
         placeholder="q3-launch"
-        pattern="[a-z0-9-]+"
+        pattern="[-a-z0-9]+"
         class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-1.5 font-mono text-mono text-fg placeholder:text-[var(--fg-subtle)]"
       />
       <span class="mt-1 block text-micro text-fg-subtle">

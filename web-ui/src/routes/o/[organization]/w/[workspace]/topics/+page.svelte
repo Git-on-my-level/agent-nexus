@@ -22,6 +22,7 @@
   } from "$lib/topicFilters";
   import { workspacePath } from "$lib/workspacePaths";
   import { describeCron } from "$lib/topicPatch";
+  import { buildTopicCreatePayloadFromDraft } from "$lib/topicCreatePayload";
   import ArchiveButton from "$lib/components/ArchiveButton.svelte";
   import CompactFilterBar from "$lib/components/CompactFilterBar.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
@@ -198,37 +199,6 @@
     };
   }
 
-  /** Map list UI status to canonical topic.status for POST /topics. */
-  function threadStatusToTopicStatus(status) {
-    switch (String(status ?? "").trim()) {
-      case "paused":
-        return "blocked";
-      case "closed":
-        return "resolved";
-      default:
-        return "active";
-    }
-  }
-
-  function buildCreateTopicPayloadFromDraft() {
-    const summary = topicDraft.summary.trim() || "No summary provided.";
-    return {
-      topic: {
-        type: "other",
-        status: threadStatusToTopicStatus(topicDraft.status),
-        title: topicDraft.title.trim(),
-        summary,
-        owner_refs: [],
-        document_refs: [],
-        board_refs: [],
-        related_refs: [],
-        provenance: {
-          sources: ["actor_statement:ui"],
-        },
-      },
-    };
-  }
-
   async function createTopic() {
     if (!topicDraft.title.trim()) {
       createError = "Topic title is required.";
@@ -247,7 +217,7 @@
     createError = "";
 
     try {
-      await coreClient.createTopic(buildCreateTopicPayloadFromDraft());
+      await coreClient.createTopic(buildTopicCreatePayloadFromDraft(topicDraft));
 
       createOpen = false;
       resetTopicDraft();

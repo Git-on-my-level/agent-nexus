@@ -124,7 +124,7 @@
           disabled={busy}
           required
           placeholder="acme-robotics"
-          pattern="[a-z0-9-]+"
+          pattern="[-a-z0-9]+"
           class="w-full bg-transparent px-2.5 py-1.5 font-mono text-mono text-fg placeholder:text-[var(--fg-subtle)]"
         />
       </div>
