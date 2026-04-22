@@ -348,7 +348,7 @@ func main() {
 		PollInterval:      projectionPollInterval,
 		StaleScanInterval: staleScanInterval,
 		DirtyBatchSize:    projectionBatchSize,
-		SystemActorID:     "anx-core",
+		SystemActorID:     actors.SystemActorID,
 	})
 	sidecarHost := sidecar.NewHost()
 	if sidecarRouterEnabled {
@@ -364,7 +364,7 @@ func main() {
 			StatePath:         sidecarRouterStatePath,
 			PrincipalCacheTTL: sidecarRouterCacheTTL,
 			PollInterval:      sidecarRouterPollInterval,
-			ActorID:           "anx-core",
+			ActorID:           actors.SystemActorID,
 		}, router.Dependencies{
 			ListPrincipals: func(ctx context.Context, limit int) ([]auth.AuthPrincipalSummary, error) {
 				filter := auth.AuthPrincipalListFilter{}

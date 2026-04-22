@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"agent-nexus-core/internal/actors"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/schema"
 )
@@ -508,7 +509,7 @@ func handleRebuildDerived(w http.ResponseWriter, r *http.Request, opts handlerOp
 			PrimitiveStore:   opts.primitiveStore,
 			Contract:         opts.contract,
 			InboxRiskHorizon: opts.inboxRiskHorizon,
-			SystemActorID:    "anx-core",
+			SystemActorID:    actors.SystemActorID,
 		})
 	}
 	if err := maintainer.RunFullRebuild(r.Context(), time.Now().UTC(), actorID); err != nil {

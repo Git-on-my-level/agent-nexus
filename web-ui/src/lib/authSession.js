@@ -105,7 +105,10 @@ function createErrorFromResponse(status, details) {
 }
 
 function applySessionEndedByCp(status, payload, workspaceSlug) {
-  if (status !== 401 || payload?.error?.code !== AuthErrorCode.SESSION_ENDED_BY_CP) {
+  if (
+    status !== 401 ||
+    payload?.error?.code !== AuthErrorCode.SESSION_ENDED_BY_CP
+  ) {
     return false;
   }
   sessionEndedByCp.set(true);

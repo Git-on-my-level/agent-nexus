@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("$lib/authSession.js", () => ({
   getAuthenticatedActorId: vi.fn(() => "actor-1"),
-  getAuthenticatedAgent: vi.fn(() => ({ agent_id: "ag-1", actor_id: "actor-1" })),
+  getAuthenticatedAgent: vi.fn(() => ({
+    agent_id: "ag-1",
+    actor_id: "actor-1",
+  })),
 }));
 
 vi.mock("$lib/actorSession.js", () => ({
@@ -33,6 +36,8 @@ describe("getBrowserCoreClientOptions", () => {
     const opts = getBrowserCoreClientOptions();
     expect(opts.actorIdProvider()).toBe("actor-1");
     expect(opts.lockActorIdProvider()).toBe(true);
-    expect(opts.requestContextHeadersProvider()).toMatchObject({ "x-test": "1" });
+    expect(opts.requestContextHeadersProvider()).toMatchObject({
+      "x-test": "1",
+    });
   });
 });

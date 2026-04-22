@@ -217,7 +217,9 @@
     createError = "";
 
     try {
-      await coreClient.createTopic(buildTopicCreatePayloadFromDraft(topicDraft));
+      await coreClient.createTopic(
+        buildTopicCreatePayloadFromDraft(topicDraft),
+      );
 
       createOpen = false;
       resetTopicDraft();

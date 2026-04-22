@@ -206,7 +206,11 @@ function workspaceDisplayName(resolved) {
  * @param {{ organizationSlug: string, workspaceSlug: string }} routeParams
  * @param {FormData} [formOverride] When set (e.g. root `/auth/callback`), avoids re-reading a consumed request body.
  */
-export async function runWorkspaceAuthCallbackPost(event, routeParams, formOverride) {
+export async function runWorkspaceAuthCallbackPost(
+  event,
+  routeParams,
+  formOverride,
+) {
   const resolved = await resolveWorkspaceInRoute({
     event,
     organizationSlug: routeParams.organizationSlug,

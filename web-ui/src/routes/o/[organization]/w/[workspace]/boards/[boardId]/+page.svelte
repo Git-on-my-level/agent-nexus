@@ -22,6 +22,7 @@
     searchTopics as searchTopicRecords,
     topicSearchResultToPickerOption,
   } from "$lib/searchHelpers";
+  import { toActorPickerOptions } from "$lib/systemActor.js";
   import { workspacePath } from "$lib/workspacePaths";
   import {
     enrichInboxItem,
@@ -95,14 +96,7 @@
   let enrichedInboxItems = $derived(
     (workspace?.inbox?.items ?? []).map((item) => enrichInboxItem(item)),
   );
-  let actorOptions = $derived(
-    $actorRegistry.map((actor) => ({
-      id: actor.id,
-      title: actor.display_name || actor.id,
-      subtitle: actor.id,
-      keywords: actor.tags ?? [],
-    })),
-  );
+  let actorOptions = $derived(toActorPickerOptions($actorRegistry));
 
   function workspaceHref(pathname = "/") {
     return workspacePath(organizationSlug, workspaceSlug, pathname);

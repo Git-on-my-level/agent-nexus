@@ -2318,6 +2318,10 @@ func handleRegisterActor(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		writeError(w, http.StatusBadRequest, "invalid_request", "actor.created_at must be an RFC3339 timestamp")
 		return
 	}
+	if actors.IsReservedServiceActorID(req.Actor.ID) {
+		writeError(w, http.StatusBadRequest, "invalid_request", "actor.id is reserved")
+		return
+	}
 
 	registered, err := opts.actorRegistry.Register(r.Context(), actors.Actor{
 		ID:          req.Actor.ID,

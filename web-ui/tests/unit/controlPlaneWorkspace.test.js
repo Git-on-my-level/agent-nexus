@@ -47,11 +47,15 @@ describe("fetchWorkspaceByIdFromControlPlane", () => {
   });
 
   it("maps 200 workspace payload", async () => {
-    const fetchFn = vi.fn(async () =>
-      new Response(JSON.stringify({ workspace: controlPlaneWorkspaceRows.minimal }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      }),
+    const fetchFn = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({ workspace: controlPlaneWorkspaceRows.minimal }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        ),
     );
     const out = await fetchWorkspaceByIdFromControlPlane({
       env: {
@@ -92,10 +96,14 @@ describe("fetchWorkspaceByIdFromControlPlane", () => {
   });
 
   it("uses cookie token when env token is unset", async () => {
-    const fetchFn = vi.fn(async () =>
-      new Response(JSON.stringify({ workspace: controlPlaneWorkspaceRows.minimal }), {
-        status: 200,
-      }),
+    const fetchFn = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({ workspace: controlPlaneWorkspaceRows.minimal }),
+          {
+            status: 200,
+          },
+        ),
     );
     await fetchWorkspaceByIdFromControlPlane({
       env: {

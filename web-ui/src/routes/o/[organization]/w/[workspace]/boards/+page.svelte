@@ -19,6 +19,7 @@
     topicSearchResultToPickerOption,
   } from "$lib/searchHelpers";
   import { workspacePath } from "$lib/workspacePaths";
+  import { toActorPickerOptions } from "$lib/systemActor.js";
   import {
     lookupActorDisplayName,
     actorRegistry,
@@ -81,14 +82,7 @@
   let actorName = $derived((id) =>
     lookupActorDisplayName(id, $actorRegistry, $principalRegistry),
   );
-  let actorOptions = $derived(
-    $actorRegistry.map((actor) => ({
-      id: actor.id,
-      title: actor.display_name || actor.id,
-      subtitle: actor.id,
-      keywords: actor.tags ?? [],
-    })),
-  );
+  let actorOptions = $derived(toActorPickerOptions($actorRegistry));
 
   function workspaceHref(pathname = "/") {
     return workspacePath(organizationSlug, workspaceSlug, pathname);

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"agent-nexus-core/internal/actors"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/schema"
 )
@@ -653,6 +654,10 @@ func requireRegisteredActorID(w http.ResponseWriter, r *http.Request, actorRegis
 	actorID = strings.TrimSpace(actorID)
 	if actorID == "" {
 		writeError(w, http.StatusBadRequest, "invalid_request", "actor_id is required")
+		return "", false
+	}
+	if actors.IsReservedServiceActorID(actorID) {
+		writeError(w, http.StatusBadRequest, "invalid_request", "actor_id is reserved for system use")
 		return "", false
 	}
 

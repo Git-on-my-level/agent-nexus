@@ -18,7 +18,7 @@ function wantsJson(request) {
  * same exchange logic as the nested route.
  */
 export async function POST(event) {
-  const caps = resolveAuthCapabilities(privateEnv, event);
+  const caps = resolveAuthCapabilities(privateEnv);
   const form = await event.request.formData();
   const workspaceId = String(form.get("workspace_id") ?? "").trim();
   let organizationSlug = "";

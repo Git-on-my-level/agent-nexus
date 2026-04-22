@@ -1393,7 +1393,7 @@ func newPrimitivesTestServer(t *testing.T) primitivesTestHarness {
 		Contract:         contract,
 		InboxRiskHorizon: defaultInboxRiskHorizon,
 		DirtyBatchSize:   100,
-		SystemActorID:    "anx-core",
+		SystemActorID:    actors.SystemActorID,
 	})
 	handler := NewHandler(
 		contract.Version,
@@ -1437,7 +1437,7 @@ func newPrimitivesTestServerWithHumanPrincipal(t *testing.T) primitivesTestHarne
 		Contract:         contract,
 		InboxRiskHorizon: defaultInboxRiskHorizon,
 		DirtyBatchSize:   100,
-		SystemActorID:    "anx-core",
+		SystemActorID:    actors.SystemActorID,
 	})
 	humanToken := "human-primitives-purge-token-test-ok-32"
 	seedHumanPrincipalForLockoutTest(t, context.Background(), workspace.DB(), "human-purge-principal-agent", "human-purge-principal-actor", "human.purge.primitives.test", humanToken)
@@ -2921,6 +2921,78 @@ func TestListTopicsSearchQueryMatchesTitleAndSummary(t *testing.T) {
 				t.Fatalf("expected topic %q in results for q=%q, got %d topics", distinctTitle, q, len(body.Topics))
 			}
 		})
+	}
+}
+
+func TestListTopicsSearchMatchesNumericSummaryInBodyJSON(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	title := "TopicNumericSummarySearch"
+	numericSummary := 92344
+
+	createResp := postJSONExpectStatus(t, h.baseURL+"/topics", fmt.Sprintf(`{
+		"actor_id":"actor-1",
+		"topic":{
+			"type":"incident",
+			"status":"active",
+			"title":%q,
+			"summary":"placeholder",
+			"owner_refs":[],
+			"document_refs":[],
+			"board_refs":[],
+			"related_refs":[],
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, title), http.StatusCreated)
+	defer createResp.Body.Close()
+	var created struct {
+		Topic map[string]any `json:"topic"`
+	}
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create topic: %v", err)
+	}
+	topicID := strings.TrimSpace(fmt.Sprint(created.Topic["id"]))
+	if topicID == "" {
+		t.Fatal("expected topic id")
+	}
+
+	if _, err := h.workspace.DB().ExecContext(context.Background(),
+		`UPDATE topics SET body_json = json_set(body_json, '$.summary', ?) WHERE id = ?`,
+		numericSummary, topicID,
+	); err != nil {
+		t.Fatalf("patch body_json summary to numeric: %v", err)
+	}
+
+	listResp, err := http.Get(h.baseURL + "/topics?q=" + url.QueryEscape("92344"))
+	if err != nil {
+		t.Fatalf("GET /topics?q=92344: %v", err)
+	}
+	defer listResp.Body.Close()
+	if listResp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(listResp.Body)
+		t.Fatalf("expected 200, got %d body=%s", listResp.StatusCode, string(b))
+	}
+	var body struct {
+		Topics []map[string]any `json:"topics"`
+	}
+	if err := json.NewDecoder(listResp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	found := false
+	for _, tp := range body.Topics {
+		if strings.TrimSpace(fmt.Sprint(tp["id"])) == topicID {
+			found = true
+			if strings.TrimSpace(fmt.Sprint(tp["summary"])) != "92344" {
+				t.Fatalf("expected coerced string summary, got %#v", tp["summary"])
+			}
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected topic %q in search results for numeric summary", topicID)
 	}
 }
 

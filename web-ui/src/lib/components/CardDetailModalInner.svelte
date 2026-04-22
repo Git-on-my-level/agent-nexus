@@ -36,6 +36,7 @@
     searchTopics as searchTopicRecords,
     topicSearchResultToPickerOption,
   } from "$lib/searchHelpers";
+  import { toActorPickerOptions } from "$lib/systemActor.js";
   import { getPriorityLabel } from "$lib/topicFilters";
   import { boardCardInspectNav } from "$lib/topicRouteUtils";
   import {
@@ -131,14 +132,7 @@
     }
   });
 
-  let actorOptions = $derived(
-    $actorRegistry.map((actor) => ({
-      id: actor.id,
-      title: actor.display_name || actor.id,
-      subtitle: actor.id,
-      keywords: actor.tags ?? [],
-    })),
-  );
+  let actorOptions = $derived(toActorPickerOptions($actorRegistry));
 
   let backingThreadId = $derived(String(board?.thread_id ?? "").trim());
 

@@ -23,7 +23,6 @@ function isSaasPackedHostDevFlag(env) {
  *   URL; workspace-id lookup from the BFF may be disabled unless extended later.
  *
  * @param {Record<string, unknown>} env
- * @param {import('@sveltejs/kit').RequestEvent | undefined} [_event] reserved for future URL/query sniffing (e.g. launch params)
  * @returns {{
  *   mode: AuthCapabilityMode,
  *   controlPlaneUrl: string,
@@ -31,7 +30,7 @@ function isSaasPackedHostDevFlag(env) {
  *   supportsCpWorkspaceIdLookup: boolean,
  * }}
  */
-export function resolveAuthCapabilities(env, _event) {
+export function resolveAuthCapabilities(env) {
   const controlPlaneUrl = normalizeBaseUrl(env?.ANX_CONTROL_BASE_URL ?? "");
   if (!controlPlaneUrl) {
     return {

@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"agent-nexus-core/internal/actors"
 	"agent-nexus-core/internal/auth"
 	"agent-nexus-core/internal/primitives"
 )
@@ -69,7 +70,7 @@ func NewService(cfg Config, deps Dependencies, state *StateStore) *Service {
 		cfg.WorkspaceName = "Main"
 	}
 	if strings.TrimSpace(cfg.ActorID) == "" {
-		cfg.ActorID = "anx-core"
+		cfg.ActorID = actors.SystemActorID
 	}
 	return &Service{
 		cfg:   cfg,

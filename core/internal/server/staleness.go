@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"agent-nexus-core/internal/actors"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/schedule"
 )
@@ -35,7 +36,7 @@ func emitStaleThreadExceptions(ctx context.Context, opts handlerOptions, now tim
 
 	actor := strings.TrimSpace(actorID)
 	if actor == "" {
-		actor = "anx-core"
+		actor = actors.SystemActorID
 	}
 	emittedThreadIDs := make([]string, 0)
 	for _, thread := range threads {

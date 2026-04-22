@@ -118,7 +118,7 @@ func TestStoreEnsureSystemActorIdempotent(t *testing.T) {
 	if seededFirst.ID != actors.SystemActorID {
 		t.Fatalf("unexpected system actor id: %#v", seededFirst.ID)
 	}
-	if seededFirst.DisplayName != "OAR Core" {
+	if seededFirst.DisplayName != "System" {
 		t.Fatalf("unexpected system actor display name: %#v", seededFirst.DisplayName)
 	}
 	if !reflect.DeepEqual(seededFirst.Tags, []string{"system"}) {
@@ -145,7 +145,7 @@ func TestStoreEnsureSystemActorIdempotent(t *testing.T) {
 	if systemActor.ID != actors.SystemActorID {
 		t.Fatalf("unexpected listed system actor id: %#v", systemActor.ID)
 	}
-	if systemActor.DisplayName != "OAR Core" {
+	if systemActor.DisplayName != "System" {
 		t.Fatalf("unexpected listed system actor display name: %#v", systemActor.DisplayName)
 	}
 	if !reflect.DeepEqual(systemActor.Tags, []string{"system"}) {
@@ -153,5 +153,37 @@ func TestStoreEnsureSystemActorIdempotent(t *testing.T) {
 	}
 	if systemActor.CreatedAt != firstTime.Format(time.RFC3339Nano) {
 		t.Fatalf("expected created_at to remain first-seed value, got %#v", systemActor.CreatedAt)
+	}
+}
+
+func TestStoreEnsureSystemActorMigratesLegacyRow(t *testing.T) {
+	t.Parallel()
+
+	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	store := actors.NewStore(workspace.DB())
+	legacyAt := time.Date(2026, time.March, 1, 12, 0, 0, 0, time.UTC)
+	if _, err := store.Register(context.Background(), actors.Actor{
+		ID:          "anx-core",
+		DisplayName: "OAR Core",
+		Tags:        []string{"system"},
+		CreatedAt:   legacyAt.Format(time.RFC3339Nano),
+	}); err != nil {
+		t.Fatalf("seed legacy system actor: %v", err)
+	}
+
+	migrated, err := store.EnsureSystemActor(context.Background(), time.Now().UTC())
+	if err != nil {
+		t.Fatalf("ensure after legacy row: %v", err)
+	}
+	if migrated.ID != actors.SystemActorID {
+		t.Fatalf("expected migrated id %q, got %q", actors.SystemActorID, migrated.ID)
+	}
+	if _, err := store.Get(context.Background(), "anx-core"); !errors.Is(err, actors.ErrActorNotFound) {
+		t.Fatalf("expected legacy id removed, err=%v", err)
 	}
 }

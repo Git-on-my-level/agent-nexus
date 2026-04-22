@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"agent-nexus-core/internal/actors"
 	"agent-nexus-core/internal/primitives"
 )
 
@@ -156,6 +157,11 @@ func mergeAddBoardCardRaw(raw map[string]any) (addBoardCardMerged, error) {
 		ar, err := extractStringSlice(rawAR)
 		if err != nil {
 			return m, errors.New("assignee_refs must be a list of strings")
+		}
+		for _, ref := range uniqueSortedStrings(ar) {
+			if actors.IsReservedServiceActorAssigneeRef(ref) {
+				return m, errors.New("assignee_refs must not include the reserved system actor")
+			}
 		}
 		if len(ar) > 0 {
 			m.Assignee = assigneeStorageStringFromRefs(uniqueSortedStrings(ar))

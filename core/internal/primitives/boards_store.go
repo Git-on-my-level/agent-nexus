@@ -14,11 +14,32 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"agent-nexus-core/internal/actors"
 )
 
 var ErrInvalidBoardRequest = errors.New("invalid board request")
 
 const boardSummaryRiskHorizon = 7 * 24 * time.Hour
+
+func rejectReservedBoardOwners(ids []string) error {
+	for _, id := range ids {
+		if actors.IsReservedServiceActorID(id) {
+			return invalidBoardRequest("board.owners must not include the reserved system actor")
+		}
+	}
+	return nil
+}
+
+func rejectReservedCardAssignee(assignee *string) error {
+	if assignee == nil {
+		return nil
+	}
+	if actors.IsReservedServiceActorID(strings.TrimSpace(*assignee)) {
+		return invalidBoardRequest("card assignee must not be the reserved system actor")
+	}
+	return nil
+}
 
 type BoardListFilter struct {
 	Status          string
@@ -198,6 +219,9 @@ func prepareBoardCardInsert(input AddBoardCardInput) (boardCardInsertPrep, error
 	riskValue := canonicalBoardCardRisk("")
 	if input.Risk != nil {
 		riskValue = canonicalBoardCardRisk(*input.Risk)
+	}
+	if err := rejectReservedCardAssignee(assignee); err != nil {
+		return boardCardInsertPrep{}, err
 	}
 
 	return boardCardInsertPrep{
@@ -504,6 +528,9 @@ func (s *Store) CreateBoard(ctx context.Context, actorID string, board map[strin
 	owners, err := normalizeOptionalStringList(board, "owners")
 	if err != nil {
 		return nil, invalidBoardRequestError(err)
+	}
+	if err := rejectReservedBoardOwners(owners); err != nil {
+		return nil, err
 	}
 	threadID := strings.TrimSpace(anyStringValue(board["thread_id"]))
 	if threadID == "" {
@@ -871,6 +898,9 @@ func (s *Store) UpdateBoard(ctx context.Context, actorID, boardID string, patch 
 			return nil, invalidBoardRequest("board.owners must be a list of strings")
 		}
 		nextOwners = uniqueNormalizedStrings(nextOwners)
+		if err := rejectReservedBoardOwners(nextOwners); err != nil {
+			return nil, err
+		}
 	}
 	nextColumnSchema, err := decodeBoardColumnSchema(currentRow.ColumnSchemaJSON)
 	if err != nil {
@@ -1455,6 +1485,12 @@ func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifie
 	nextAssignee := strings.TrimSpace(cardRow.Assignee.String)
 	if input.Assignee != nil {
 		nextAssignee = strings.TrimSpace(*input.Assignee)
+		if err := rejectReservedCardAssignee(&nextAssignee); err != nil {
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
+			return BoardCardMutationResult{}, err
+		}
 	}
 	nextPriority := strings.TrimSpace(cardRow.Priority.String)
 	if input.Priority != nil {
@@ -2191,7 +2227,7 @@ func (s *Store) PurgeArchivedBoardCard(ctx context.Context, boardID, identifier 
 		return ErrNotFound
 	}
 
-	boardRow, err = touchBoardRow(ctx, tx, boardRow, "anx-core")
+	boardRow, err = touchBoardRow(ctx, tx, boardRow, actors.SystemActorID)
 	if err != nil {
 		return err
 	}
@@ -2875,7 +2911,7 @@ func rebalanceBoardColumnRanks(ctx context.Context, tx *sql.Tx, boardID, columnK
 			`UPDATE cards SET rank = ?, updated_at = ?, updated_by = ? WHERE id = ?`,
 			rankStr,
 			now,
-			"anx-core",
+			actors.SystemActorID,
 			row.CardID,
 		); err != nil {
 			return fmt.Errorf("rebalance board card rank: %w", err)

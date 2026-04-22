@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"agent-nexus-core/internal/actors"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/schema"
 )
@@ -108,7 +109,7 @@ func NewProjectionMaintainer(config ProjectionMaintainerConfig) *ProjectionMaint
 		pollInterval:      pollInterval,
 		staleScanInterval: staleScanInterval,
 		dirtyBatchSize:    dirtyBatchSize,
-		systemActorID:     firstNonEmptyString(strings.TrimSpace(config.SystemActorID), "anx-core"),
+		systemActorID:     firstNonEmptyString(strings.TrimSpace(config.SystemActorID), actors.SystemActorID),
 		notifyCh:          make(chan struct{}, 1),
 	}
 }

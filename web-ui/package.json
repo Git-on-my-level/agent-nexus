@@ -12,7 +12,7 @@
     "preview": "vite preview",
     "qa:baseline": "node scripts/qa-capture.mjs --baseline",
     "qa:diff": "node scripts/qa-visual.mjs --diff",
-    "lint": "eslint . && node scripts/check-svelte5-runes.js && prettier --check \"src/**/*.{js,svelte,css}\" \"tests/**/*.js\" \"*.{json,js,cjs}\" \".github/workflows/*.yml\"",
+    "lint": "eslint . && node scripts/check-svelte5-runes.js && node scripts/check-topic-create-call-sites.mjs && prettier --check \"src/**/*.{js,svelte,css}\" \"tests/**/*.js\" \"*.{json,js,cjs}\" \".github/workflows/*.yml\"",
     "format": "prettier --write \"src/**/*.{js,svelte,css}\" \"tests/**/*.js\" \"*.{json,js,cjs}\" \".github/workflows/*.yml\"",
     "test:unit": "vitest run",
     "test:e2e": "playwright test",

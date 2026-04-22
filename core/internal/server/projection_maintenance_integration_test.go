@@ -53,7 +53,7 @@ func newProjectionMaintenanceTestServerWithMode(t *testing.T, mode string) proje
 		Mode:              mode,
 		StaleScanInterval: time.Second,
 		DirtyBatchSize:    20,
-		SystemActorID:     "anx-core",
+		SystemActorID:     actors.SystemActorID,
 	})
 	handler := NewHandler(
 		contract.Version,
@@ -413,7 +413,7 @@ func TestProjectionMaintainerKeepsProjectionPendingForConcurrentWrites(t *testin
 		Contract:          contract,
 		StaleScanInterval: time.Hour,
 		DirtyBatchSize:    20,
-		SystemActorID:     "anx-core",
+		SystemActorID:     actors.SystemActorID,
 	})
 	handler := NewHandler(
 		contract.Version,
@@ -580,7 +580,7 @@ func TestProjectionMaintainerNotifyWakesRunLoopPromptly(t *testing.T) {
 		PollInterval:      time.Minute,
 		StaleScanInterval: time.Hour,
 		DirtyBatchSize:    20,
-		SystemActorID:     "anx-core",
+		SystemActorID:     actors.SystemActorID,
 	})
 	handler := NewHandler(
 		contract.Version,
@@ -672,7 +672,7 @@ func TestOpsHealthEndpointReportsProjectionMaintenanceErrors(t *testing.T) {
 		Contract:          contract,
 		StaleScanInterval: time.Second,
 		DirtyBatchSize:    20,
-		SystemActorID:     "anx-core",
+		SystemActorID:     actors.SystemActorID,
 	})
 	handler := NewHandler(
 		contract.Version,
@@ -745,7 +745,7 @@ func TestOpsHealthEndpointKeepsDiagnosticsWhenReadinessFails(t *testing.T) {
 		Contract:          contract,
 		StaleScanInterval: time.Second,
 		DirtyBatchSize:    20,
-		SystemActorID:     "anx-core",
+		SystemActorID:     actors.SystemActorID,
 	})
 	handler := NewHandler(
 		contract.Version,

@@ -58,6 +58,19 @@ describe("actor session / gate logic", () => {
     expect(initializeActorSession(storage, workspaceSlug)).toBe("actor-789");
   });
 
+  it("does not persist reserved system actor ids as the selected operator", () => {
+    const storage = createMemoryStorage();
+    const workspaceSlug = "local";
+
+    saveSelectedActorId("actor-123", storage, workspaceSlug);
+    expect(chooseActor("system", storage, workspaceSlug)).toBe("");
+    expect(storage.getItem(actorStorageKey(workspaceSlug))).toBe(null);
+
+    saveSelectedActorId("actor-123", storage, workspaceSlug);
+    expect(chooseActor("anx-core", storage, workspaceSlug)).toBe("");
+    expect(storage.getItem(actorStorageKey(workspaceSlug))).toBe(null);
+  });
+
   it("builds actor create payload for POST /actors", () => {
     expect(
       buildActorCreatePayload({

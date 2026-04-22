@@ -6,6 +6,10 @@ import {
 } from "./workspaceContext.js";
 import { buildWorkspaceStorageKey } from "./workspacePaths.js";
 import { buildLegacyProjectStorageKey } from "./compat/workspaceCompat.js";
+import {
+  isReservedSystemActorId,
+  SYSTEM_ACTOR_DISPLAY_LABEL,
+} from "./systemActor.js";
 
 export const ACTOR_STORAGE_KEY = "oar_ui_actor_id";
 
@@ -79,6 +83,11 @@ export function loadStoredActorId(
 
   const scopedActorId = storage.getItem(actorStorageKey(workspaceSlug));
   if (scopedActorId) {
+    if (isReservedSystemActorId(scopedActorId)) {
+      storage.removeItem(actorStorageKey(workspaceSlug));
+      storage.removeItem(ACTOR_STORAGE_KEY);
+      return "";
+    }
     return scopedActorId;
   }
 
@@ -122,6 +131,9 @@ export function chooseActor(
   storage = localStorage,
   workspaceSlug = getCurrentWorkspaceSlug(),
 ) {
+  if (actorId && isReservedSystemActorId(actorId)) {
+    actorId = "";
+  }
   const state = ensureActorState(workspaceSlug);
   state.selectedActorId = saveSelectedActorId(actorId, storage, workspaceSlug);
   syncCurrentWorkspaceStores(workspaceSlug);
@@ -224,9 +236,13 @@ export function lookupActorDisplayName(
   if (!actorId) {
     return "Unknown actor";
   }
+  if (isReservedSystemActorId(actorId)) {
+    return SYSTEM_ACTOR_DISPLAY_LABEL;
+  }
 
   const map = buildActorNameMap(actors, principals);
-  return map.get(actorId) ?? actorId;
+  const key = String(actorId).trim();
+  return map.get(key) ?? map.get(actorId) ?? actorId;
 }
 
 export function getSelectedActorId(workspaceSlug = getCurrentWorkspaceSlug()) {

@@ -44,7 +44,7 @@ func newManualProjectionTestServer(t *testing.T) manualProjectionHarness {
 		Contract:         contract,
 		InboxRiskHorizon: defaultInboxRiskHorizon,
 		DirtyBatchSize:   20,
-		SystemActorID:    "anx-core",
+		SystemActorID:    actors.SystemActorID,
 	})
 	handler := NewHandler(
 		contract.Version,

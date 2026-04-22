@@ -50,7 +50,10 @@ export function createGetEvent(
   params = {},
 ) {
   return {
-    request: new Request(url, { method: "GET", headers: { accept: "application/json" } }),
+    request: new Request(url, {
+      method: "GET",
+      headers: { accept: "application/json" },
+    }),
     params: { ...params },
     url: new URL(url),
     cookies: {

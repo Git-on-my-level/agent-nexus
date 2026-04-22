@@ -59,7 +59,7 @@ func newPrimitivesTestServerWithStore(t *testing.T, workspace *storage.Workspace
 		Contract:         contract,
 		InboxRiskHorizon: defaultInboxRiskHorizon,
 		DirtyBatchSize:   100,
-		SystemActorID:    "anx-core",
+		SystemActorID:    actors.SystemActorID,
 	})
 	handler := NewHandler(
 		contract.Version,

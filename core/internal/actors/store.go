@@ -16,7 +16,13 @@ var ErrAlreadyExists = errors.New("actor already exists")
 var ErrActorNotFound = errors.New("actor not found")
 var ErrInvalidCursor = errors.New("invalid cursor")
 
-const SystemActorID = "anx-core"
+const (
+	// SystemActorID is the canonical actor id for automated core writes (projections,
+	// router sidecar, etc.). It is not valid as a client-selected identity.
+	SystemActorID = "system"
+
+	legacySystemActorID = "anx-core"
+)
 
 type Actor struct {
 	ID          string   `json:"id"`
@@ -106,11 +112,84 @@ func (s *Store) EnsureRegistered(ctx context.Context, actor Actor) (Actor, error
 	return actor, nil
 }
 
+// IsReservedServiceActorID reports whether id refers to the reserved system actor,
+// including legacy workspace rows or typed actor: refs.
+func IsReservedServiceActorID(raw string) bool {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return false
+	}
+	if strings.Contains(s, ":") {
+		prefix, id, _ := strings.Cut(s, ":")
+		prefix = strings.TrimSpace(prefix)
+		id = strings.TrimSpace(id)
+		switch strings.ToLower(prefix) {
+		case "actor", "human", "agent":
+			s = id
+		default:
+			return false
+		}
+	}
+	switch s {
+	case SystemActorID, legacySystemActorID:
+		return true
+	default:
+		return false
+	}
+}
+
+// IsReservedServiceActorAssigneeRef checks assignee_refs-style values (bare ids or typed refs).
+func IsReservedServiceActorAssigneeRef(raw string) bool {
+	return IsReservedServiceActorID(raw)
+}
+
+func (s *Store) migrateLegacySystemActorRow(ctx context.Context) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("actor store database is not initialized")
+	}
+	var legacyCount, canonCount int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM actors WHERE id = ?`, legacySystemActorID).Scan(&legacyCount); err != nil {
+		return fmt.Errorf("query legacy system actor: %w", err)
+	}
+	if legacyCount == 0 {
+		return nil
+	}
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM actors WHERE id = ?`, SystemActorID).Scan(&canonCount); err != nil {
+		return fmt.Errorf("query canonical system actor: %w", err)
+	}
+	if canonCount > 0 {
+		_, err := s.db.ExecContext(ctx, `DELETE FROM actors WHERE id = ?`, legacySystemActorID)
+		if err != nil {
+			return fmt.Errorf("delete duplicate legacy system actor: %w", err)
+		}
+		return nil
+	}
+	tagsJSON, err := json.Marshal([]string{"system"})
+	if err != nil {
+		return fmt.Errorf("marshal system actor tags: %w", err)
+	}
+	_, err = s.db.ExecContext(
+		ctx,
+		`UPDATE actors SET id = ?, display_name = ?, tags_json = ? WHERE id = ?`,
+		SystemActorID,
+		"System",
+		string(tagsJSON),
+		legacySystemActorID,
+	)
+	if err != nil {
+		return fmt.Errorf("migrate legacy system actor id: %w", err)
+	}
+	return nil
+}
+
 func (s *Store) EnsureSystemActor(ctx context.Context, now time.Time) (Actor, error) {
+	if err := s.migrateLegacySystemActorRow(ctx); err != nil {
+		return Actor{}, err
+	}
 	createdAt := now.UTC().Format(time.RFC3339Nano)
 	return s.EnsureRegistered(ctx, Actor{
 		ID:          SystemActorID,
-		DisplayName: "OAR Core",
+		DisplayName: "System",
 		Tags:        []string{"system"},
 		CreatedAt:   createdAt,
 	})

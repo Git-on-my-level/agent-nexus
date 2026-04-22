@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"agent-nexus-core/internal/actors"
 	"agent-nexus-core/internal/auth"
 )
 
@@ -460,6 +461,10 @@ func resolveWriteActorID(w http.ResponseWriter, r *http.Request, opts handlerOpt
 	}
 
 	if requestedActorID == "" {
+		if actors.IsReservedServiceActorID(principal.ActorID) {
+			writeError(w, http.StatusBadRequest, "invalid_request", "actor_id is reserved for system use")
+			return "", false
+		}
 		return principal.ActorID, true
 	}
 	if requestedActorID != principal.ActorID {
@@ -477,6 +482,11 @@ func resolveWriteActorID(w http.ResponseWriter, r *http.Request, opts handlerOpt
 			writeError(w, http.StatusBadRequest, "unknown_actor_id", "actor_id is not registered")
 			return "", false
 		}
+	}
+
+	if actors.IsReservedServiceActorID(requestedActorID) {
+		writeError(w, http.StatusBadRequest, "invalid_request", "actor_id is reserved for system use")
+		return "", false
 	}
 
 	return requestedActorID, true

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"agent-nexus-core/internal/actors"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/schema"
 )
@@ -2026,6 +2027,12 @@ func parseBoardCardPatchInput(w http.ResponseWriter, patch map[string]any) (prim
 			if err != nil {
 				writeError(w, http.StatusBadRequest, "invalid_request", "patch.assignee_refs must be a list of strings")
 				return primitives.UpdateBoardCardInput{}, nil, false
+			}
+			for _, ref := range uniqueSortedStrings(value) {
+				if actors.IsReservedServiceActorAssigneeRef(ref) {
+					writeError(w, http.StatusBadRequest, "invalid_request", "patch.assignee_refs must not include the reserved system actor")
+					return primitives.UpdateBoardCardInput{}, nil, false
+				}
 			}
 			if len(value) == 0 {
 				empty := ""

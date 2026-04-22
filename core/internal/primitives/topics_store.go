@@ -26,7 +26,6 @@ type topicRow struct {
 	Type           sql.NullString
 	Status         sql.NullString
 	Title          sql.NullString
-	Summary        sql.NullString
 	ThreadID       sql.NullString
 	BodyJSON       string
 	ProvenanceJSON string
@@ -41,6 +40,17 @@ type topicRow struct {
 	TrashReason    sql.NullString
 }
 
+// topicSummaryFromBodyValue normalizes topic.summary for API responses (string or legacy JSON scalars).
+func topicSummaryFromBodyValue(raw any) string {
+	if raw == nil {
+		return ""
+	}
+	if s, ok := raw.(string); ok {
+		return strings.TrimSpace(s)
+	}
+	return strings.TrimSpace(fmt.Sprint(raw))
+}
+
 func (r topicRow) toMap() (map[string]any, error) {
 	body := map[string]any{}
 	if strings.TrimSpace(r.BodyJSON) != "" {
@@ -48,12 +58,18 @@ func (r topicRow) toMap() (map[string]any, error) {
 			return nil, fmt.Errorf("decode topic body: %w", err)
 		}
 	}
+	if body == nil {
+		body = map[string]any{}
+	}
 
 	provenance := map[string]any{}
 	if strings.TrimSpace(r.ProvenanceJSON) != "" {
 		if err := json.Unmarshal([]byte(r.ProvenanceJSON), &provenance); err != nil {
 			return nil, fmt.Errorf("decode topic provenance: %w", err)
 		}
+	}
+	if provenance == nil {
+		provenance = map[string]any{}
 	}
 
 	body["id"] = r.ID
@@ -66,9 +82,7 @@ func (r topicRow) toMap() (map[string]any, error) {
 	if _, has := body["title"]; !has {
 		body["title"] = r.Title.String
 	}
-	if _, has := body["summary"]; !has {
-		body["summary"] = r.Summary.String
-	}
+	body["summary"] = topicSummaryFromBodyValue(body["summary"])
 	coerceLegacyTopicPersistedBody(body)
 	if r.ThreadID.Valid && strings.TrimSpace(r.ThreadID.String) != "" {
 		body["thread_id"] = strings.TrimSpace(r.ThreadID.String)
@@ -861,9 +875,9 @@ func buildListTopicsQuery(filter TopicListFilter) (string, []any) {
 		args = append(args, status)
 	}
 	if q := strings.TrimSpace(filter.Query); q != "" {
-		// summary is stored in body_json, not a topics table column
+		// summary is stored in body_json, not a topics table column; CAST so numeric JSON matches LIKE
 		pattern := "%" + strings.ToLower(q) + "%"
-		query += ` AND (LOWER(id) LIKE ? OR LOWER(COALESCE(title, '')) LIKE ? OR LOWER(COALESCE(json_extract(body_json, '$.summary'), '')) LIKE ?)`
+		query += ` AND (LOWER(id) LIKE ? OR LOWER(COALESCE(title, '')) LIKE ? OR LOWER(COALESCE(CAST(json_extract(body_json, '$.summary') AS TEXT), '')) LIKE ?)`
 		args = append(args, pattern, pattern, pattern)
 	}
 	query += ` ORDER BY updated_at DESC, id ASC`

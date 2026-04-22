@@ -20,6 +20,7 @@
     selectedActorId,
     shouldShowActorGate,
   } from "$lib/actorSession";
+  import { filterActorsForUserSelection } from "$lib/systemActor.js";
   import { installFetchLoopGuard } from "$lib/dev/fetchLoopGuard.js";
   import { createRedirectLoopGuard } from "$lib/dev/redirectLoopGuard.js";
   import {
@@ -821,7 +822,7 @@
               No identities yet. Create one to get started.
             </p>
           {:else}
-            {#each $actorRegistry as actor}
+            {#each filterActorsForUserSelection($actorRegistry) as actor}
               <button
                 class="actor-gate-item"
                 disabled={devPersonaBusy}
@@ -1132,7 +1133,10 @@
                 <div class="shell-actor-copy">
                   <p>{shellIdentity.primaryLabel}</p>
                   {#if shellIdentity.secondaryLabel}
-                    <p class="shell-actor-handle" title={shellIdentity.secondaryLabel}>
+                    <p
+                      class="shell-actor-handle"
+                      title={shellIdentity.secondaryLabel}
+                    >
                       {shellIdentity.secondaryLabel}
                     </p>
                   {/if}

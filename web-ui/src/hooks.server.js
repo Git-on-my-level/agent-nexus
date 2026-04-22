@@ -288,7 +288,7 @@ export async function handle({ event, resolve }) {
   if (!event.locals) {
     event.locals = {};
   }
-  event.locals.anxAuthCapabilities = resolveAuthCapabilities(privateEnv, event);
+  event.locals.anxAuthCapabilities = resolveAuthCapabilities(privateEnv);
 
   const pathname = stripBasePath(event.url.pathname);
   const method = event.request.method;
