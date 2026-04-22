@@ -6,7 +6,7 @@ The schema of objects is defined by `/contracts/anx-schema.yaml`.
 
 ## Conventions
 
-- All requests that mutate state MUST include `actor_id`.
+- Mutating requests SHOULD include `actor_id` in the JSON body when the caller is not already authenticated as a write principal; authenticated callers MAY omit it when the server resolves the actor from the session.
 - All timestamps are ISO-8601 strings.
 - Objects MUST preserve unknown fields (additive evolution).
   - `refs` values MUST be typed ref strings per `ref_format`.
@@ -51,7 +51,7 @@ Each endpoint is classified with an `x-oar-surface` extension indicating its rol
   - Response: `{ "topic": <topic> }`
 
 - `PATCH /topics/{topic_id}`
-  - Body: `{ "actor_id": "...", "patch": { <fields...> }, "if_updated_at"?: "..." }`
+  - Body: `{ "actor_id": "...", "patch": { <fields...> }, "if_updated_at": "..." }` (`if_updated_at` required; optimistic lock on the topic row)
   - Notes:
     - Patch/merge semantics apply; list-valued fields replace wholesale.
   - Response: `{ "topic": <topic> }`
@@ -65,7 +65,7 @@ Each endpoint is classified with an `x-oar-surface` extension indicating its rol
   - Response: `{ "card": <card> }`
 
 - `PATCH /cards/{card_id}`
-  - Body: `{ "actor_id": "...", "patch": { <fields...> }, "if_updated_at"?: "..." }`
+  - Body: `{ "actor_id": "...", "patch": { <fields...> }, "if_updated_at": "..." }` (`if_updated_at` required; optimistic lock on the **card** row, not the board)
   - Response: `{ "card": <card> }`
 
 - Board-scoped card lifecycle (create, patch, move, remove) is exposed under `POST|PATCH /boards/{board_id}/cards` and related paths; see `/contracts/anx-openapi.yaml`.
@@ -134,6 +134,10 @@ Threads are backing infrastructure for timelines and packet subjects. The worksp
   - Body: `{ "actor_id": "...", "subject_ref": "<typed ref>" }`
   - `subject_ref` must be one of `thread:`, `topic:` (existing topic row), `card:`, or `board:`; use `thread:` when the anchor is only a backing thread id.
   - Response: `{ "event": <event> }`
+
+- `POST /inbox/{inbox_id}/respond` (items with `kind: ask` only)
+  - Body: `{ "actor_id": "...", "answer": "...", "save_as_decision"?: <bool>, "notify_asking_agent"?: <bool> }`
+  - Response: `{ "event": <agent_ask_answered event>, "acknowledgment": <event>, ... }` per core (may include `notify` when wake delivery is used).
 
 - `POST /derived/rebuild`
   - Body: `{ "actor_id": "..." }`

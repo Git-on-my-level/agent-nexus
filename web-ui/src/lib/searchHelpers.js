@@ -28,6 +28,37 @@ export function topicSearchResultToPickerOption(topic) {
   };
 }
 
+/**
+ * Option shape for linking a board to a topic via typed ref (`topic:<id>`).
+ * Prefer this for board create; do not use the topic's thread_id as board.thread_id.
+ */
+export function topicSearchResultToBoardRefOption(topic) {
+  if (!topic || typeof topic !== "object") {
+    return { id: "", title: "", subtitle: "", keywords: [] };
+  }
+  const rawId = String(topic.id ?? "").trim();
+  if (!rawId) {
+    return {
+      id: "",
+      title: String(topic.title ?? "").trim() || "",
+      subtitle: "",
+      keywords: [topic.type, ...(topic.tags ?? [])],
+    };
+  }
+  const typedRef = rawId.includes(":") ? rawId : `topic:${rawId}`;
+  const timeline = backingThreadIdFromTopicRecord(topic);
+  const subtitleParts = [topic.status, topic.priority];
+  if (timeline) {
+    subtitleParts.push(`Timeline ${timeline}`);
+  }
+  return {
+    id: typedRef,
+    title: topic.title || typedRef,
+    subtitle: subtitleParts.filter(Boolean).join(" · "),
+    keywords: [topic.type, ...(topic.tags ?? [])],
+  };
+}
+
 export async function searchTopics(query, limit = 20) {
   const response = await coreClient.listTopics({
     q: query,

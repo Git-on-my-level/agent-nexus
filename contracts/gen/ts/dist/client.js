@@ -1953,11 +1953,13 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "canonical",
         "body_schema": {
-            "optional": [
+            "required": [
                 {
                     "name": "if_updated_at",
                     "type": "datetime"
-                },
+                }
+            ],
+            "optional": [
                 {
                     "name": "patch.document_refs",
                     "type": "list\u003cany\u003e"
@@ -2735,11 +2737,13 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "canonical",
         "body_schema": {
-            "optional": [
+            "required": [
                 {
                     "name": "if_updated_at",
                     "type": "datetime"
-                },
+                }
+            ],
+            "optional": [
                 {
                     "name": "patch.assignee_refs",
                     "type": "list\u003cany\u003e"
@@ -5571,11 +5575,13 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "canonical",
         "body_schema": {
-            "optional": [
+            "required": [
                 {
                     "name": "if_updated_at",
                     "type": "datetime"
-                },
+                }
+            ],
+            "optional": [
                 {
                     "name": "patch.board_refs",
                     "type": "list\u003cany\u003e"

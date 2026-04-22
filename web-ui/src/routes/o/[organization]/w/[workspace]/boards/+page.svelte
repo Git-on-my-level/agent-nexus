@@ -16,7 +16,7 @@
   import {
     searchDocuments as searchDocumentRecords,
     searchTopics as searchTopicRecords,
-    topicSearchResultToPickerOption,
+    topicSearchResultToBoardRefOption,
   } from "$lib/searchHelpers";
   import { workspacePath } from "$lib/workspacePaths";
   import { toActorPickerOptions } from "$lib/systemActor.js";
@@ -71,7 +71,9 @@
 
   let createTitle = $state("");
   let createStatus = $state("active");
-  let createBackingThreadId = $state("");
+  let createLinkedTopicRef = $state("");
+  let createCustomThreadId = $state("");
+  let createAdvancedThreadOpen = $state(false);
   let createBoardDocumentId = $state("");
   let createLabels = $state("");
   let createOwnerIds = $state([]);
@@ -102,9 +104,9 @@
     };
   }
 
-  async function searchThreadOptions(query) {
-    const threads = await searchTopicRecords(query);
-    return threads.map(topicSearchResultToPickerOption);
+  async function searchTopicLinkOptions(query) {
+    const topics = await searchTopicRecords(query);
+    return topics.map(topicSearchResultToBoardRefOption);
   }
 
   async function searchDocumentOptions(query) {
@@ -115,25 +117,19 @@
   function resetCreateForm() {
     createTitle = "";
     createStatus = "active";
-    createBackingThreadId = "";
+    createLinkedTopicRef = "";
+    createCustomThreadId = "";
+    createAdvancedThreadOpen = false;
     createBoardDocumentId = "";
     createLabels = "";
     createOwnerIds = [];
     createPinnedRefs = "";
   }
 
-  /** Each board needs its own backing thread; must not reuse a topic's primary timeline. */
-  function ensureNewBoardBackingThreadId() {
-    if (!createBackingThreadId.trim()) {
-      createBackingThreadId = crypto.randomUUID();
-    }
-  }
-
   function openCreateBoardForm() {
     createError = "";
     resetCreateForm();
     showCreateForm = true;
-    createBackingThreadId = crypto.randomUUID();
   }
 
   function toggleCreateBoardForm() {
@@ -141,7 +137,7 @@
     const next = !showCreateForm;
     showCreateForm = next;
     if (next) {
-      ensureNewBoardBackingThreadId();
+      resetCreateForm();
     }
   }
 
@@ -174,12 +170,6 @@
     createError = "";
 
     const title = createTitle.trim();
-    let backingThreadId = createBackingThreadId.trim();
-    if (!backingThreadId) {
-      backingThreadId = crypto.randomUUID();
-      createBackingThreadId = backingThreadId;
-    }
-
     if (!title) {
       createError = "Title is required.";
       return;
@@ -188,11 +178,15 @@
     const board = {
       title,
       status: createStatus,
-      thread_id: backingThreadId,
     };
+    const customThread = createCustomThreadId.trim();
+    if (customThread) {
+      board.thread_id = customThread;
+    }
     const labels = parseDelimitedValues(createLabels);
     const owners = [...createOwnerIds];
     const pinnedRefs = parseDelimitedValues(createPinnedRefs);
+    const linkedTopic = createLinkedTopicRef.trim();
 
     if (labels.length > 0) board.labels = labels;
     if (owners.length > 0) board.owners = owners;
@@ -200,6 +194,9 @@
       board.document_refs = [`document:${createBoardDocumentId.trim()}`];
     }
     if (pinnedRefs.length > 0) board.pinned_refs = pinnedRefs;
+    if (linkedTopic) {
+      board.refs = [linkedTopic];
+    }
 
     creating = true;
     try {
@@ -473,14 +470,14 @@
         </label>
 
         <SearchableEntityPicker
-          bind:value={createBackingThreadId}
-          advancedLabel="Use a manual thread ID"
-          helperText="A new UUID is filled in by default. Do not pick a topic — each topic already owns its timeline. Search/manual is only for an unused thread ID."
-          label="Board timeline"
-          manualLabel="Thread ID"
-          manualPlaceholder="thread-q2-initiative"
-          placeholder="Optional: search topics (advanced; often conflicts)"
-          searchFn={searchThreadOptions}
+          bind:value={createLinkedTopicRef}
+          advancedLabel="Enter a topic ref manually"
+          helperText="Adds a topic reference to the board. The board still gets its own event timeline (server default). This is not the topic’s thread_id."
+          label="Link topic"
+          manualLabel="Topic ref"
+          manualPlaceholder="topic:…"
+          placeholder="Search topics by title or id"
+          searchFn={searchTopicLinkOptions}
         />
 
         <SearchableEntityPicker
@@ -494,6 +491,32 @@
           searchFn={searchDocumentOptions}
         />
       </div>
+
+      <details
+        class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
+        bind:open={createAdvancedThreadOpen}
+      >
+        <summary
+          class="cursor-pointer px-3 py-2 text-micro font-medium text-[var(--fg-muted)] hover:text-[var(--fg)]"
+        >
+          Custom board timeline (optional)
+        </summary>
+        <div class="space-y-2 border-t border-[var(--line)] px-3 py-3">
+          <label class="block text-micro font-medium text-[var(--fg-muted)]">
+            Thread ID
+            <input
+              bind:value={createCustomThreadId}
+              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-2 font-mono text-meta text-[var(--fg)]"
+              placeholder="Only if you need a specific unused thread id"
+              type="text"
+            />
+          </label>
+          <p class="text-micro text-[var(--fg-muted)]">
+            Leave empty and the server uses the new board’s id as its backing
+            thread. Set this only for expert or migration cases.
+          </p>
+        </div>
+      </details>
 
       <div class="grid gap-3 md:grid-cols-2">
         <label class="text-micro font-medium text-[var(--fg-muted)]">

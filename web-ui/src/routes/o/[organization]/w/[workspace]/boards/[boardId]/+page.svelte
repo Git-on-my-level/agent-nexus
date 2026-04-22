@@ -351,10 +351,16 @@
     if (!workspace?.board) return;
 
     const cardId = boardCardStableId(cardItem.membership);
+    const ifUpdatedAt = String(cardItem.membership?.updated_at ?? "").trim();
+    if (!ifUpdatedAt) {
+      mutationError =
+        "Cannot save card details: missing card timestamp. Refresh the board and try again.";
+      return;
+    }
     await runBoardMutation(
       () =>
         coreClient.updateBoardCard(boardId, cardId, {
-          if_board_updated_at: workspace.board.updated_at,
+          if_updated_at: ifUpdatedAt,
           patch,
         }),
       "Card details updated.",

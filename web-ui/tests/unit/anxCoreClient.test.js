@@ -395,4 +395,39 @@ describe("anxCoreClient error messaging", () => {
       },
     ]);
   });
+
+  it("respondInboxAsk POSTs /inbox/{id}/respond with actor_id and snake_case fields", async () => {
+    const requests = [];
+    const client = createOarCoreClient({
+      baseUrl: "http://core.test",
+      actorIdProvider: () => "actor-1",
+      fetchFn: async (url, init) => {
+        requests.push({ url: String(url), init });
+        return new Response(
+          JSON.stringify({ event: { id: "e1" }, acknowledgment: { id: "e2" } }),
+          {
+            status: 201,
+            headers: { "content-type": "application/json" },
+          },
+        );
+      },
+    });
+
+    const out = await client.respondInboxAsk("ask-item-9", {
+      answer: "Ship it.",
+      save_as_decision: true,
+      notify_asking_agent: false,
+    });
+
+    expect(out.event?.id).toBe("e1");
+    expect(requests.length).toBe(1);
+    expect(requests[0].url).toBe("http://core.test/inbox/ask-item-9/respond");
+    expect(requests[0].init.method).toBe("POST");
+    expect(JSON.parse(requests[0].init.body)).toEqual({
+      actor_id: "actor-1",
+      answer: "Ship it.",
+      save_as_decision: true,
+      notify_asking_agent: false,
+    });
+  });
 });

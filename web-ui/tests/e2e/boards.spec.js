@@ -243,6 +243,16 @@ test("board UI supports create/edit and card mutation flows", async ({
 }) => {
   const threads = [
     {
+      id: "board-created",
+      type: "process",
+      title: "Launch Control timeline",
+      status: "active",
+      priority: "p1",
+      updated_at: "2026-03-05T00:00:00.000Z",
+      updated_by: actorId,
+      open_cards: [],
+    },
+    {
       id: "thread-primary",
       type: "process",
       title: "Primary Coordination Thread",
@@ -274,19 +284,21 @@ test("board UI supports create/edit and card mutation flows", async ({
       staleness: "stale",
     },
   ];
-  const topicSearchRecords = threads.map((th) => ({
-    id: th.id,
-    thread_id: th.id,
-    title: th.title,
-    type: th.type,
-    status: th.status,
-    summary: "",
-    owner_refs: [],
-    document_refs: [],
-    board_refs: [],
-    related_refs: [],
-    provenance: { sources: ["inferred"] },
-  }));
+  const topicSearchRecords = threads
+    .filter((th) => String(th.id).startsWith("thread-"))
+    .map((th) => ({
+      id: `topic-${String(th.id).replace(/^thread-/, "")}`,
+      thread_id: th.id,
+      title: th.title,
+      type: th.type,
+      status: th.status,
+      summary: "",
+      owner_refs: [],
+      document_refs: [],
+      board_refs: [],
+      related_refs: [],
+      provenance: { sources: ["inferred"] },
+    }));
   const documents = [
     {
       id: "doc-runbook",
@@ -418,9 +430,16 @@ test("board UI supports create/edit and card mutation flows", async ({
 
     const payload = JSON.parse(request.postData() ?? "{}");
     boardCreatePayloads.push(payload);
-    const threadId = String(payload.board.thread_id ?? "").trim();
+    const requestThreadId = String(payload.board.thread_id ?? "").trim();
+    const effectiveThreadId = requestThreadId || "board-created";
+    const payloadRefs = Array.isArray(payload.board.refs)
+      ? payload.board.refs.map((r) => String(r ?? "").trim()).filter(Boolean)
+      : [];
     const docRefs = Array.isArray(payload.board.document_refs)
       ? payload.board.document_refs.map((r) => String(r ?? "").trim())
+      : [];
+    const pinnedRefs = Array.isArray(payload.board.pinned_refs)
+      ? payload.board.pinned_refs.map((r) => String(r ?? "").trim())
       : [];
     board = {
       id: "board-created",
@@ -428,14 +447,13 @@ test("board UI supports create/edit and card mutation flows", async ({
       status: payload.board.status,
       labels: payload.board.labels ?? [],
       owners: payload.board.owners ?? [actorId],
-      thread_id: threadId,
+      thread_id: effectiveThreadId,
       refs: [
         ...new Set([
-          ...(threadId
-            ? [`thread:${threadId}`, mockTopicRefFromThreadId(threadId)]
-            : []),
+          `thread:${effectiveThreadId}`,
+          ...payloadRefs,
           ...docRefs,
-          ...(payload.board.pinned_refs ?? []),
+          ...pinnedRefs,
         ]),
       ].sort(),
       document_refs: docRefs,
@@ -679,7 +697,7 @@ test("board UI supports create/edit and card mutation flows", async ({
   ).toBeVisible();
   await page.getByLabel("Board title").fill("Launch Control");
   await page.getByLabel("Status").selectOption("paused");
-  await page.getByLabel("Board timeline search").fill("Primary Coordination");
+  await page.getByLabel("Link topic search").fill("Primary Coordination");
   await page
     .getByRole("button", { name: /Primary Coordination Thread/ })
     .click();
@@ -706,8 +724,8 @@ test("board UI supports create/edit and card mutation flows", async ({
       board: {
         title: "Launch Control",
         status: "paused",
-        thread_id: "thread-primary",
         document_refs: ["document:doc-runbook"],
+        refs: ["topic:topic-primary"],
       },
     },
   ]);
@@ -862,7 +880,7 @@ test("board UI supports create/edit and card mutation flows", async ({
   expect(updateCardPayloads).toEqual([
     {
       actor_id: actorId,
-      if_board_updated_at: "2026-03-05T05:00:00.000Z",
+      if_updated_at: "2026-03-05T02:00:00.000Z",
       patch: {
         title: "Execution Track",
         summary: "Execution Track",

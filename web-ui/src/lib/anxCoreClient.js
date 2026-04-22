@@ -728,7 +728,7 @@ export function createOarCoreClient(options = {}) {
       invokeJSON("artifacts.purge", () =>
         generated.artifactsPurge(
           { artifact_id: String(artifactId) },
-          { body: payload || {} },
+          { body: withActorId(payload) },
         ),
       ),
     getArtifactContent: async (artifactId) => {
@@ -810,7 +810,7 @@ export function createOarCoreClient(options = {}) {
       invokeJSON("docs.purge", () =>
         generated.docsPurge(
           { document_id: String(documentId) },
-          { body: payload || {} },
+          { body: withActorId(payload) },
         ),
       ),
 
@@ -899,6 +899,40 @@ export function createOarCoreClient(options = {}) {
       );
     },
 
+    /**
+     * POST /inbox/{id}/respond — ask-item answer (not yet in generated command registry).
+     * Uses the same transport as other writes (auth + workspace headers + actor_id for dev actor).
+     */
+    respondInboxAsk: async (inboxItemId, payload) => {
+      const id = String(inboxItemId ?? "").trim();
+      if (!id) {
+        throw new Error("respondInboxAsk requires inboxItemId.");
+      }
+      const answer = String(payload?.answer ?? "").trim();
+      if (!answer) {
+        throw new Error("respondInboxAsk requires a non-empty answer.");
+      }
+      const path = `/inbox/${encodeURIComponent(id)}/respond`;
+      const body = withActorId({
+        answer,
+        ...(typeof payload?.save_as_decision === "boolean"
+          ? { save_as_decision: payload.save_as_decision }
+          : {}),
+        ...(typeof payload?.notify_asking_agent === "boolean"
+          ? { notify_asking_agent: payload.notify_asking_agent }
+          : {}),
+      });
+      const response = await invokeDirectRaw(path, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+      return parseJsonBody(await response.text(), "inbox.respond");
+    },
+
     createBoard: (payload) =>
       invokeJSON("boards.create", () =>
         generated.boardsCreate({ body: withActorId(payload) }),
@@ -952,7 +986,7 @@ export function createOarCoreClient(options = {}) {
       invokeJSON("boards.purge", () =>
         generated.boardsPurge(
           { board_id: String(boardId) },
-          { body: payload || {} },
+          { body: withActorId(payload) },
         ),
       ),
 

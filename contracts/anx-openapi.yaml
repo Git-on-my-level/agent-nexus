@@ -4769,7 +4769,7 @@ components:
         if_updated_at:
           type: string
           format: date-time
-      required: [patch]
+      required: [patch, if_updated_at]
 
     CreateDocumentRequest:
       type: object
@@ -4805,7 +4805,7 @@ components:
         if_updated_at:
           type: string
           format: date-time
-      required: [patch]
+      required: [patch, if_updated_at]
 
     CreateCardRequest:
       type: object
@@ -4907,7 +4907,7 @@ components:
         if_updated_at:
           type: string
           format: date-time
-      required: [patch]
+      required: [patch, if_updated_at]
 
     MoveCardRequest:
       description: >

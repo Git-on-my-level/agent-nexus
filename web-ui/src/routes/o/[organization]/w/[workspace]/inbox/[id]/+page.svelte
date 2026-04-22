@@ -9,11 +9,7 @@
   import Skeleton from "$lib/components/state/Skeleton.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
   import { coreClient } from "$lib/coreClient";
-  import {
-    appPath,
-    WORKSPACE_HEADER,
-    workspacePath,
-  } from "$lib/workspacePaths";
+  import { workspacePath } from "$lib/workspacePaths";
 
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
@@ -157,31 +153,11 @@
     submitting = true;
 
     try {
-      const response = await fetch(
-        appPath(`/inbox/${encodeURIComponent(inboxItemID)}/respond`),
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            accept: "application/json",
-            [WORKSPACE_HEADER]: workspaceSlug,
-          },
-          body: JSON.stringify({
-            answer,
-            save_as_decision: saveAsDecision,
-            notify_asking_agent: notifyAskingAgent,
-          }),
-        },
-      );
-
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        const message =
-          body?.error?.message ||
-          `Failed to submit ask response (HTTP ${response.status}).`;
-        submitError = String(message);
-        return;
-      }
+      const body = await coreClient.respondInboxAsk(inboxItemID, {
+        answer,
+        save_as_decision: saveAsDecision,
+        notify_asking_agent: notifyAskingAgent,
+      });
 
       const queued = Boolean(body?.notify?.queued);
       if (queued) {
