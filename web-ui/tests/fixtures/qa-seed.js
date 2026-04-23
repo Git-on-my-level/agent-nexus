@@ -101,10 +101,10 @@ export const QA_HOSTED_BILLING_SUMMARY = {
     organization_id: "org_qa_primary",
     plan: {
       id: "team",
-      display_name: "Team",
+      display_name: "Pro",
       workspace_limit: 5,
-      max_artifacts_per_workspace: 1000,
-      artifact_capacity: 1000,
+      max_artifacts_per_workspace: 125000,
+      artifact_capacity: 125000,
       included_storage_gb: 25,
     },
     usage: {
@@ -115,7 +115,7 @@ export const QA_HOSTED_BILLING_SUMMARY = {
     },
     quota: {
       workspaces_remaining: 2,
-      artifacts_remaining: 616,
+      artifacts_remaining: 124616,
       storage_gb_remaining: 17.6,
     },
     workspaces: QA_HOSTED_WORKSPACES.map((workspace, index) => ({

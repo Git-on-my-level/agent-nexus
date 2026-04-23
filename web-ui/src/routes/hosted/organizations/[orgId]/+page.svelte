@@ -249,7 +249,7 @@
       {@const plan = usage.plan ?? {}}
       {@const u = usage.usage ?? {}}
       <section class="grid gap-3 sm:grid-cols-3">
-        {#each [{ label: "Workspaces", used: u.workspace_count, total: plan.workspace_limit }, { label: "Artifacts", used: u.artifact_count, total: plan.artifact_capacity }, { label: "Storage", used: u.storage_gb, total: plan.included_storage_gb, suffix: " GB" }] as metric}
+        {#each [{ label: "Workspaces", used: u.workspace_count, total: plan.workspace_limit }, { label: "Artifacts (org total)", used: u.artifact_count, total: plan.artifact_capacity }, { label: "Storage (org)", used: u.storage_gb, total: plan.included_storage_gb, suffix: " GB" }] as metric}
           {@const p = pct(metric.used, metric.total)}
           <div class="rounded-md border border-line bg-bg-soft px-4 py-3">
             <div

@@ -135,7 +135,7 @@
     </section>
 
     <section class="grid gap-3 sm:grid-cols-3">
-      {#each [{ label: "Workspaces", used: usage.workspace_count, total: plan.workspace_limit, remaining: quota.workspaces_remaining }, { label: "Artifacts", used: usage.artifact_count, total: plan.artifact_capacity, remaining: quota.artifacts_remaining }, { label: "Storage", used: usage.storage_gb, total: plan.included_storage_gb, remaining: quota.storage_gb_remaining, suffix: " GB" }] as metric}
+      {#each [{ label: "Workspaces", used: usage.workspace_count, total: plan.workspace_limit, remaining: quota.workspaces_remaining }, { label: "Artifacts (org total)", used: usage.artifact_count, total: plan.artifact_capacity, remaining: quota.artifacts_remaining }, { label: "Storage (org)", used: usage.storage_gb, total: plan.included_storage_gb, remaining: quota.storage_gb_remaining, suffix: " GB" }] as metric}
         {@const p = pct(metric.used, metric.total)}
         <div class="rounded-md border border-line bg-bg-soft px-4 py-3">
           <div
@@ -181,7 +181,7 @@
         </div>
         <div>
           <div class="text-micro uppercase tracking-wide text-fg-subtle">
-            Artifacts / workspace cap
+            Org pool cap (per workspace)
           </div>
           <div class="mt-1 text-subtitle tabular-nums text-fg">
             {plan.max_artifacts_per_workspace ?? "—"}

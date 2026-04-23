@@ -46,8 +46,8 @@
       tagline: "Free forever — perfect for evaluating.",
       features: [
         "1 workspace",
-        "Up to 50 artifacts",
-        "1 GB storage",
+        "1,000 artifacts total (org-wide pool)",
+        "1 GB storage (org)",
         "Community support",
       ],
       ctaLabel: "Free plan",
@@ -55,18 +55,18 @@
     },
     {
       id: "team",
-      name: "Team",
+      name: "Pro",
       price: "$29",
       priceSuffix: "/seat / mo",
-      tagline: "For teams shipping with AI agents.",
+      tagline: "For professionals and teams shipping with AI agents.",
       features: [
         "5 workspaces",
-        "1,000 artifacts / org",
-        "25 GB storage",
+        "125,000 artifacts total (org-wide pool)",
+        "25 GB storage (org)",
         "Email support",
       ],
       highlight: true,
-      ctaLabel: "Upgrade to Team",
+      ctaLabel: "Upgrade to Pro",
       ctaUpgrade: true,
     },
     {
@@ -76,9 +76,9 @@
       priceSuffix: "/seat / mo",
       tagline: "Higher limits and SSO-ready.",
       features: [
-        "20 workspaces",
-        "10,000 artifacts / org",
-        "250 GB storage",
+        "25 workspaces",
+        "2.5M artifacts total (org-wide pool)",
+        "250 GB storage (org)",
         "Priority support",
       ],
       ctaLabel: "Upgrade to Scale",
@@ -91,10 +91,10 @@
       priceSuffix: "",
       tagline: "Dedicated infra, SSO, and contracts.",
       features: [
-        "Unlimited workspaces",
-        "Custom limits",
-        "SSO + audit logs",
-        "Dedicated support",
+        "100 workspaces",
+        "100M artifacts total (org-wide pool)",
+        "1,000 GB storage (org)",
+        "SSO + audit logs · dedicated support",
       ],
       ctaLabel: "Talk to sales",
       ctaUpgrade: false,
@@ -109,6 +109,13 @@
       return res.statusText;
     }
   }
+
+  /** Stripe rows default to these; no subscription lifecycle to show next to plan name. */
+  const IDLE_STRIPE_SUBSCRIPTION_STATUSES = new Set([
+    "",
+    "free",
+    "not_started",
+  ]);
 
   /** @param {any} billingAccount */
   function subscriptionStatusLabel(billingAccount) {
@@ -129,6 +136,14 @@
       "": "—",
     };
     return (map[st] ?? st) || "—";
+  }
+
+  /** @param {any} billingAccount */
+  function showSubscriptionStatusBadge(billingAccount) {
+    const st = String(billingAccount?.stripe_subscription_status ?? "")
+      .trim()
+      .toLowerCase();
+    return !IDLE_STRIPE_SUBSCRIPTION_STATUSES.has(st);
   }
 
   function stripActivatingQuery() {
@@ -477,10 +492,12 @@
             <span class="text-subtitle tabular-nums text-fg"
               >{plan.display_name ?? "Starter"}</span
             >
-            <span
-              class="rounded bg-accent-soft px-1.5 py-0.5 text-micro text-accent-text"
-              >{subscriptionStatusLabel(ba)}</span
-            >
+            {#if showSubscriptionStatusBadge(ba)}
+              <span
+                class="rounded bg-accent-soft px-1.5 py-0.5 text-micro text-accent-text"
+                >{subscriptionStatusLabel(ba)}</span
+              >
+            {/if}
           </div>
           {#if ba.current_period_end}
             <p class="mt-1 text-micro text-fg-subtle">
@@ -503,14 +520,14 @@
       <p class="mt-1 text-meta text-fg-subtle">
         Switch any time — you'll only pay the prorated difference.
       </p>
-      <div class="mt-3 grid gap-3 lg:grid-cols-4">
+      <div class="mt-3 grid gap-3 lg:grid-cols-4 lg:items-stretch">
         {#each PLAN_CARDS as planCard (planCard.id)}
           {@const isCurrent = planCard.id === currentTier}
           <article
             class="flex flex-col rounded-md border bg-bg-soft px-4 py-4 {isCurrent
-              ? 'border-accent ring-1 ring-accent/30'
+              ? 'border-accent/55 ring-1 ring-accent/25'
               : planCard.highlight
-                ? 'border-accent-text/40'
+                ? 'border-line ring-1 ring-accent/15'
                 : 'border-line'}"
           >
             <div class="flex items-center justify-between">
@@ -524,7 +541,7 @@
                 >
               {:else if planCard.highlight}
                 <span
-                  class="rounded bg-ok-soft px-1.5 py-0.5 text-micro text-ok-text"
+                  class="rounded bg-accent-soft px-1.5 py-0.5 text-micro text-accent-text"
                   >Popular</span
                 >
               {/if}
@@ -551,28 +568,28 @@
                 </li>
               {/each}
             </ul>
-            <div class="mt-4">
+            <div class="mt-auto pt-4">
               {#if isCurrent}
-                <span
-                  class="block w-full rounded-md border border-line bg-bg px-3 py-1.5 text-center text-micro text-fg-subtle"
-                  >Current plan</span
+                <Button variant="secondary" class="w-full" disabled
+                  >Current plan</Button
                 >
               {:else if planCard.id === "enterprise"}
-                <a
+                <Button
+                  variant="secondary"
+                  class="w-full"
                   href="mailto:sales@oar.app?subject=Enterprise%20plan%20inquiry"
-                  class="block w-full rounded-md border border-line bg-bg px-3 py-1.5 text-center text-micro text-fg hover:bg-panel-hover"
-                  >Talk to sales</a
+                  >Talk to sales</Button
                 >
               {:else if planCard.ctaUpgrade && managed}
                 <Button
                   variant="secondary"
-                  class="block w-full"
+                  class="w-full"
                   onclick={() => openPortal()}>Switch plan</Button
                 >
               {:else if planCard.ctaUpgrade}
                 <Button
                   variant="primary"
-                  class="block w-full"
+                  class="w-full"
                   onclick={() => checkoutPlan(planCard.id)}
                   disabled={!!upgradeBusy}
                 >
@@ -581,9 +598,8 @@
                     : planCard.ctaLabel}
                 </Button>
               {:else}
-                <span
-                  class="block w-full rounded-md border border-line bg-bg px-3 py-1.5 text-center text-micro text-fg-subtle"
-                  >{planCard.ctaLabel}</span
+                <Button variant="secondary" class="w-full" disabled
+                  >{planCard.ctaLabel}</Button
                 >
               {/if}
             </div>
