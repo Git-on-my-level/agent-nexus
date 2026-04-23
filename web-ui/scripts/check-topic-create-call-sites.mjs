@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 /**
  * Guardrail: UI code should call coreClient.createTopic only with shared builders
- * from topicCreatePayload.js (buildTopicCreatePayloadForUi / buildTopicCreatePayloadFromDraft)
+ * from topicCreatePayload.js (buildTopicCreatePayloadFromDraft)
  * so POST /topics bodies stay aligned with core validation.
  *
  * Allowed:
- *   coreClient.createTopic(buildTopicCreatePayloadForUi(...))
  *   coreClient.createTopic(buildTopicCreatePayloadFromDraft(...))
  *   Multiline calls where the first argument expression starts with buildTopicCreatePayload
  *

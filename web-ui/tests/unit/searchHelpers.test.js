@@ -76,7 +76,9 @@ describe("searchHelpers", () => {
       });
       expect(opt.id).toBe("topic:5e63c3fc-271b-4785-8036-cf06e1ee03b0");
       expect(opt.title).toBe("Alpha");
-      expect(opt.subtitle).toContain("Timeline d002c2fa-8f5a-4bbe-9c92-4e333e1f75fe");
+      expect(opt.subtitle).toContain(
+        "Timeline d002c2fa-8f5a-4bbe-9c92-4e333e1f75fe",
+      );
     });
 
     it("preserves already-typed ref ids", () => {

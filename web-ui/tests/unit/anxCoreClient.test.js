@@ -5,7 +5,7 @@ import {
   createOarCoreClient,
   verifyCoreSchemaVersion,
 } from "../../src/lib/anxCoreClient.js";
-import { buildTopicCreatePayloadForUi } from "../../src/lib/topicCreatePayload.js";
+import { buildTopicCreatePayloadFromDraft } from "../../src/lib/topicCreatePayload.js";
 
 describe("anxCoreClient error messaging", () => {
   it("sends empty actor_id for writes when session locks identity and provider is empty", async () => {
@@ -23,7 +23,13 @@ describe("anxCoreClient error messaging", () => {
       },
     });
 
-    await client.createTopic(buildTopicCreatePayloadForUi({ title: "x" }));
+    await client.createTopic(
+      buildTopicCreatePayloadFromDraft({
+        title: "x",
+        summary: "",
+        status: "active",
+      }),
+    );
 
     expect(seenBodies.length).toBe(1);
     expect(JSON.parse(seenBodies[0])).toMatchObject({ actor_id: "" });

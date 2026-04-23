@@ -20,6 +20,7 @@
   import { workspacePath } from "$lib/workspacePaths";
   import { getPriorityLabel } from "$lib/topicFilters";
   import { BOARD_STATUS_LABELS } from "$lib/boardUtils";
+  import { replayWorkspaceTour } from "$lib/tourState";
 
   const emptySectionState = {
     status: "idle",
@@ -40,6 +41,12 @@
 
   let inboxSummary = $derived(buildInboxCategorySummary(inboxState.items));
   let topInboxItems = $derived(sortInboxItems(inboxState.items).slice(0, 3));
+
+  // Show the "Take the tour" affordance until the workspace has its first
+  // topic. We wait for topics to finish loading so the button doesn't flash.
+  let canReplayTour = $derived(
+    topicsState.status === "ready" && topicsState.items.length === 0,
+  );
 
   let topicHealth = $derived(buildTopicHealthSummary(topicsState.items));
   let recentTopics = $derived(
@@ -251,6 +258,32 @@
       </p>
     </div>
     <div class="flex shrink-0 flex-wrap items-center gap-2">
+      {#if canReplayTour}
+        <button
+          class="dashboard-tour-button"
+          onclick={() => replayWorkspaceTour()}
+          type="button"
+          title="Replay the 60-second workspace tour"
+        >
+          <svg
+            class="dashboard-tour-button__icon"
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="12" r="9" />
+            <path d="M9 9l6 3l-6 3z" fill="currentColor" stroke="none" />
+          </svg>
+          Take the tour
+        </button>
+      {/if}
       <button
         class="cursor-pointer rounded-md border border-[var(--line)] px-2.5 py-1.5 text-meta font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)]"
         onclick={loadDashboard}
@@ -655,3 +688,38 @@
     </section>
   </div>
 </div>
+
+<style>
+  .dashboard-tour-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.375rem 0.65rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--accent-text, var(--accent));
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+    border-radius: 0.375rem;
+    cursor: pointer;
+    transition:
+      background-color 140ms ease,
+      border-color 140ms ease,
+      transform 120ms ease;
+  }
+  .dashboard-tour-button:hover {
+    background: color-mix(in srgb, var(--accent) 20%, transparent);
+    border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  }
+  .dashboard-tour-button:active {
+    transform: translateY(1px);
+  }
+  .dashboard-tour-button:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--accent) 65%, transparent);
+    outline-offset: 2px;
+  }
+  .dashboard-tour-button__icon {
+    flex: none;
+  }
+</style>

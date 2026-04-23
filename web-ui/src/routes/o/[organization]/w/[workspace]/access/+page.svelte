@@ -1,4 +1,7 @@
 <script>
+  import { tick } from "svelte";
+  import { goto } from "$app/navigation";
+  import { get } from "svelte/store";
   import { page } from "$app/stores";
 
   import { authenticatedAgent } from "$lib/authSession";
@@ -10,6 +13,10 @@
   import { buildRegistrationMessage } from "$lib/inviteRegistrationMessage";
   import { buildWakeRegistrationMessage } from "$lib/wakeRegistrationMessage.js";
   import { enrichPrincipalsWithWakeRouting as loadPrincipalsWithWakeRouting } from "$lib/principalWakeRouting.js";
+  import {
+    isWorkspaceTourArrived,
+    markWorkspaceTourArrived,
+  } from "$lib/tourState";
   import { workspacePath } from "$lib/workspacePaths";
 
   let { data } = $props();
@@ -50,6 +57,9 @@
   let revokeInviteConfirm = $state({ open: false, id: "" });
   let revokeError = $state("");
   let showResolvedInvites = $state(false);
+  let agentInviteHighlight = $state(false);
+  let agentInviteParamHandled = $state(false);
+  let tourArrived = $state(false);
 
   let principalRevokeTarget = $state(null);
   let principalRevokeConfirming = $state(false);
@@ -78,12 +88,32 @@
   );
   let visibleInvites = $derived(showResolvedInvites ? invites : pendingInvites);
 
+  // Banner shows from tour arrival until the workspace owner creates their
+  // first invite (any state — pending, consumed, or revoked counts as the
+  // activation milestone). We hold off until invites finish loading so the
+  // banner doesn't flash for users who already have invites on disk.
+  let showTourBanner = $derived(
+    tourArrived &&
+      canManageAccess &&
+      invitesState.status === SECTION_READY &&
+      invites.length === 0 &&
+      !createdToken,
+  );
+
   let wakePopoverTarget = $state(null);
   let wakeRegistrationMessageCopiedFor = $state("");
 
   $effect(() => {
     if (!canManageAccess) return;
     loadAccessData();
+  });
+
+  // Hydrate the persisted tour-arrival flag once the workspace slug is known.
+  $effect(() => {
+    if (!workspaceSlug) return;
+    if (isWorkspaceTourArrived(workspaceSlug)) {
+      tourArrived = true;
+    }
   });
 
   async function loadAccessData() {
@@ -520,6 +550,59 @@
     if (!id || id.length <= maxLen) return id ?? "";
     return id.slice(0, maxLen) + "\u2026";
   }
+
+  $effect(() => {
+    if (loading) {
+      return;
+    }
+    if (agentInviteParamHandled) {
+      return;
+    }
+    if (get(page).url.searchParams.get("invite") !== "agent") {
+      return;
+    }
+    const fromTour = get(page).url.searchParams.get("from") === "tour";
+    if (!canManageAccess) {
+      agentInviteParamHandled = true;
+      const u = new URL(get(page).url);
+      u.searchParams.delete("invite");
+      u.searchParams.delete("from");
+      void goto(`${u.pathname}${u.search}${u.hash}`, {
+        replaceState: true,
+        noScroll: true,
+        keepFocus: true,
+      });
+      return;
+    }
+    agentInviteParamHandled = true;
+    newInviteKind = "agent";
+    if (fromTour && workspaceSlug) {
+      markWorkspaceTourArrived(workspaceSlug);
+      tourArrived = true;
+    }
+    void (async () => {
+      await tick();
+      document
+        .getElementById("access-create-invite")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      await tick();
+      document
+        .querySelector("#access-create-invite button[type='submit']")
+        ?.focus();
+      agentInviteHighlight = true;
+      setTimeout(() => {
+        agentInviteHighlight = false;
+      }, 1500);
+      const u = new URL(get(page).url);
+      u.searchParams.delete("invite");
+      u.searchParams.delete("from");
+      await goto(`${u.pathname}${u.search}${u.hash}`, {
+        replaceState: true,
+        noScroll: true,
+        keepFocus: true,
+      });
+    })();
+  });
 </script>
 
 <svelte:head>
@@ -599,11 +682,12 @@
               This one-time token will not be shown again. Copy it now.
             </p>
             <div
-              class="mt-2 flex items-center gap-2 rounded bg-bg px-2 py-1.5 font-mono text-micro text-[var(--fg)]"
+              class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded bg-bg px-2 py-1.5 font-mono text-micro text-[var(--fg)]"
             >
-              <span class="flex-1 break-all">{createdToken}</span>
+              <span class="min-w-0 shrink break-all">{createdToken}</span>
               {#if createdInviteKind === "agent" || createdInviteKind === "any"}
                 <Button
+                  class="shrink-0"
                   variant="ghost"
                   size="compact"
                   onclick={copyTokenToClipboard}
@@ -612,6 +696,7 @@
                 </Button>
               {:else}
                 <Button
+                  class="shrink-0"
                   variant="ghost"
                   size="compact"
                   onclick={copyTokenToClipboard}
@@ -667,7 +752,48 @@
       </div>
     {/if}
 
-    <section>
+    {#if showTourBanner}
+      <aside class="tour-arrival-banner" role="status" aria-live="polite">
+        <div class="tour-arrival-banner__icon" aria-hidden="true">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M5 3v4" />
+            <path d="M19 17v4" />
+            <path d="M3 5h4" />
+            <path d="M17 19h4" />
+            <path
+              d="M14 7l-2 5l-5 2l5 2l2 5l2 -5l5 -2l-5 -2z"
+              fill="currentColor"
+              fill-opacity="0.15"
+            />
+          </svg>
+        </div>
+        <div class="tour-arrival-banner__body">
+          <p class="tour-arrival-banner__title">
+            Last step: connect your first agent
+          </p>
+          <p class="tour-arrival-banner__text">
+            Generate a one-time invite token below, then drop it into your agent
+            who will install the anx CLI. From then on, the workspace runs
+            itself.
+          </p>
+        </div>
+      </aside>
+    {/if}
+
+    <section
+      id="access-create-invite"
+      class:access-invite-pulse={agentInviteHighlight}
+    >
       <h2 class="mb-2 text-meta font-semibold text-[var(--fg)]">
         Create invite
       </h2>
@@ -1005,17 +1131,15 @@
                       class="mt-0.5 flex min-w-0 items-center gap-1.5 text-micro text-[var(--fg-muted)]"
                     >
                       <span
-                        class="min-w-0 flex-1 truncate font-mono"
+                        class="min-w-0 shrink truncate font-mono"
                         title={principal.agent_id}
                       >
                         {principal.agent_id}
                       </span>
-                      <span class="shrink-0">
-                        <CopyButton
-                          value={principal.agent_id}
-                          label="Copy agent ID"
-                        />
-                      </span>
+                      <CopyButton
+                        value={principal.agent_id}
+                        label="Copy agent ID"
+                      />
                     </div>
                   </div>
                   <div
@@ -1271,3 +1395,98 @@
     revokeInviteConfirm = { open: false, id: "" };
   }}
 />
+
+<style>
+  :global(#access-create-invite.access-invite-pulse) {
+    animation: access-invite-pulse-anim 1.4s ease-out;
+  }
+  @keyframes access-invite-pulse-anim {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent);
+    }
+    35% {
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 50%, transparent);
+    }
+  }
+
+  .tour-arrival-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.85rem;
+    padding: 0.95rem 1rem;
+    border-radius: 0.75rem;
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+    background:
+      linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--accent) 12%, transparent),
+        color-mix(in srgb, var(--accent) 4%, transparent)
+      ),
+      var(--bg-soft, transparent);
+    box-shadow:
+      inset 0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent),
+      0 8px 24px -16px color-mix(in srgb, var(--accent) 60%, transparent);
+    animation: tour-arrival-in 360ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    position: relative;
+    overflow: hidden;
+  }
+  .tour-arrival-banner::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(
+      120% 80% at 0% 0%,
+      color-mix(in srgb, var(--accent) 18%, transparent),
+      transparent 60%
+    );
+    opacity: 0.6;
+  }
+  .tour-arrival-banner > * {
+    position: relative;
+  }
+  .tour-arrival-banner__icon {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 0.55rem;
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+    color: var(--accent-text, var(--accent));
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+  .tour-arrival-banner__body {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .tour-arrival-banner__title {
+    margin: 0 0 0.2rem 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--fg);
+    letter-spacing: -0.005em;
+  }
+  .tour-arrival-banner__text {
+    margin: 0;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: var(--fg-subtle, var(--fg-muted));
+  }
+  @keyframes tour-arrival-in {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .tour-arrival-banner {
+      animation: none;
+    }
+  }
+</style>

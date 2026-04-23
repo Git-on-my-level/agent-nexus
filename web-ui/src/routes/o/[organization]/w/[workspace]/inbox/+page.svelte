@@ -31,9 +31,7 @@
     summarizeInboxUrgency,
   } from "$lib/inboxUtils";
   import { inboxTopicRouteSegment } from "$lib/topicRouteUtils";
-  import InboxFirstRunTour from "$lib/components/onboarding/InboxFirstRunTour.svelte";
-  import { dismissTour, shouldShowTour } from "$lib/tourState";
-  import { buildTopicCreatePayloadForUi } from "$lib/topicCreatePayload";
+  import InboxKindNote from "$lib/components/onboarding/InboxKindNote.svelte";
 
   /** Delay before inbox mutations hit core; allows Undo before the request runs. */
   const PENDING_INBOX_ACTION_MS = 5000;
@@ -55,7 +53,6 @@
   let filtersOpen = $state(false);
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
-  let tourVisible = $state(false);
 
   function cancelPendingInboxTimers() {
     for (const pending of Object.values(pendingAckById)) {
@@ -221,51 +218,16 @@
     void loadInbox();
   });
 
-  $effect(() => {
-    if (!loading && totalItems === 0 && !error && workspaceSlug) {
-      tourVisible = shouldShowTour({ workspaceSlug, totalItems });
-    }
-  });
-
-  function handleTourDismiss() {
-    dismissTour(workspaceSlug);
-    tourVisible = false;
-  }
-
-  async function handleTourTagSubmit(text) {
-    try {
-      const response = await coreClient.createTopic(
-        buildTopicCreatePayloadForUi({ title: text }),
-      );
-      dismissTour(workspaceSlug);
-      tourVisible = false;
-
-      const topic = response?.topic;
-      if (topic?.id) {
-        const now = new Date().toISOString();
-        items = [
-          {
-            id: `tour-tag-${topic.id}`,
-            kind: "tag",
-            category: "attention",
-            title: text,
-            subject_ref: `topic:${topic.id}`,
-            thread_id: topic.thread_id ?? "",
-            related_refs: topic.thread_id
-              ? [`topic:${topic.id}`, `thread:${topic.thread_id}`]
-              : [`topic:${topic.id}`],
-            source_event_time: now,
-            urgency_level: "normal",
-            urgency_label: "Normal",
-          },
-        ];
-      } else {
-        await loadInbox();
+  let kindNoteItemIds = $derived.by(() => {
+    const first = new Map();
+    for (const item of filteredItems) {
+      const key = String(item?.kind ?? "unknown");
+      if (!first.has(key)) {
+        first.set(key, item.id);
       }
-    } catch (tagError) {
-      error = tagError instanceof Error ? tagError.message : String(tagError);
     }
-  }
+    return new Set(first.values());
+  });
 
   async function loadInbox(isRetry = false) {
     loading = true;
@@ -905,18 +867,10 @@
 {#if loading && items.length === 0}
   <SkeletonInboxRow count={5} />
 {:else if totalItems === 0 && !error}
-  {#if tourVisible}
-    <InboxFirstRunTour
-      {workspaceSlug}
-      ondismiss={handleTourDismiss}
-      onsubmit={handleTourTagSubmit}
-    />
-  {:else}
-    <StateEmpty
-      title="Inbox is clear"
-      helper="Nothing needs attention right now."
-    />
-  {/if}
+  <StateEmpty
+    title="Inbox is clear"
+    helper="Nothing needs attention right now."
+  />
 {:else if !hasFilteredItems && totalItems > 0}
   <div class="mt-8 text-center py-12" data-testid="inbox-filter-empty-state">
     <div
@@ -971,6 +925,9 @@
 
         <div class="space-y-1.5">
           {#each group.items as item}
+            {#if kindNoteItemIds.has(item.id)}
+              <InboxKindNote kind={item.kind} />
+            {/if}
             <article
               class="rounded-md border border-[var(--line)] border-l-[3px] bg-[var(--bg-soft)] px-3 py-2.5 transition-colors hover:bg-[var(--panel)] {urgencyBorderClass(
                 item.urgency_level,

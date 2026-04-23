@@ -95,4 +95,25 @@ describe("tourState", () => {
     const after = Number(lsMock._store["anx.tour.inbox.v1.acme.firstSeen"]);
     expect(after).toBe(before);
   });
+
+  it("workspace tour seen key and mark", async () => {
+    const lsMock = mockLocalStorage();
+    const { isWorkspaceTourSeen, markWorkspaceTourSeen, workspaceTourSeenKey } =
+      await importWithLocalStorage(lsMock);
+    expect(workspaceTourSeenKey("ws1")).toBe("workspaceTourSeen.ws1");
+    expect(isWorkspaceTourSeen("ws1")).toBe(false);
+    markWorkspaceTourSeen("ws1");
+    expect(isWorkspaceTourSeen("ws1")).toBe(true);
+    expect(lsMock._store["workspaceTourSeen.ws1"]).toBe("1");
+  });
+
+  it("inbox kind seen key and mark", async () => {
+    const lsMock = mockLocalStorage();
+    const { isInboxKindSeen, markInboxKindSeen, inboxKindSeenKey } =
+      await importWithLocalStorage(lsMock);
+    expect(inboxKindSeenKey("ask")).toBe("inboxKindSeen.ask");
+    expect(isInboxKindSeen("ask")).toBe(false);
+    markInboxKindSeen("ask");
+    expect(isInboxKindSeen("ask")).toBe(true);
+  });
 });

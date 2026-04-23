@@ -762,42 +762,42 @@
             <div class="px-4 pb-3 pt-1 space-y-2">
               {#if displayedRevision.content_hash}
                 <div>
-                  <div class="flex items-center justify-between gap-2">
-                    <p
-                      class="text-micro uppercase tracking-[0.12em] text-[var(--fg-muted)]"
+                  <p
+                    class="text-micro uppercase tracking-[0.12em] text-[var(--fg-muted)]"
+                  >
+                    Content hash
+                  </p>
+                  <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span
+                      class="min-w-0 shrink break-all font-mono text-micro text-[var(--fg-muted)]"
                     >
-                      Content hash
-                    </p>
+                      {displayedRevision.content_hash}
+                    </span>
                     <CopyButton
                       value={displayedRevision.content_hash}
                       label="Copy content hash"
                     />
                   </div>
-                  <p
-                    class="mt-1 break-all font-mono text-micro text-[var(--fg-muted)]"
-                  >
-                    {displayedRevision.content_hash}
-                  </p>
                 </div>
               {/if}
               {#if displayedRevision.revision_hash}
                 <div>
-                  <div class="flex items-center justify-between gap-2">
-                    <p
-                      class="text-micro uppercase tracking-[0.12em] text-[var(--fg-muted)]"
+                  <p
+                    class="text-micro uppercase tracking-[0.12em] text-[var(--fg-muted)]"
+                  >
+                    Revision hash
+                  </p>
+                  <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span
+                      class="min-w-0 shrink break-all font-mono text-micro text-[var(--fg-muted)]"
                     >
-                      Revision hash
-                    </p>
+                      {displayedRevision.revision_hash}
+                    </span>
                     <CopyButton
                       value={displayedRevision.revision_hash}
                       label="Copy revision hash"
                     />
                   </div>
-                  <p
-                    class="mt-1 break-all font-mono text-micro text-[var(--fg-muted)]"
-                  >
-                    {displayedRevision.revision_hash}
-                  </p>
                 </div>
               {/if}
             </div>
@@ -811,18 +811,19 @@
             class="cursor-pointer px-4 py-2.5 text-micro text-[var(--fg-muted)] hover:text-[var(--fg)]"
             >Raw metadata JSON</summary
           >
-          <div class="flex justify-end px-4 pt-1">
+          <div
+            class="flex items-start gap-2 px-4 pt-1 pb-3 text-micro text-[var(--fg-muted)]"
+          >
             <CopyButton
               value={JSON.stringify(document, null, 2)}
               label="Copy metadata JSON"
             />
+            <pre class="min-w-0 flex-1 overflow-auto">{JSON.stringify(
+                document,
+                null,
+                2,
+              )}</pre>
           </div>
-          <pre
-            class="overflow-auto px-4 pb-3 text-micro text-[var(--fg-muted)]">{JSON.stringify(
-              document,
-              null,
-              2,
-            )}</pre>
         </details>
       </div>
     </div>

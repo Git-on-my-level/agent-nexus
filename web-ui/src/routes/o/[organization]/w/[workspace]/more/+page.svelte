@@ -121,6 +121,7 @@
             ? 'border-t border-[var(--line)]'
             : ''}"
           href={workspaceHref(item.href)}
+          data-tour={item.href === "/access" ? "access" : undefined}
         >
           <svg
             class="h-4 w-4 shrink-0 text-[var(--fg-muted)]"

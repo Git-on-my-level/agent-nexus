@@ -53,6 +53,7 @@
     devActorMode,
     devActorModeReady,
   } from "$lib/workspaceContext";
+  import WorkspaceTour from "$lib/components/onboarding/WorkspaceTour.svelte";
   import { handleModEnterFormSubmit } from "$lib/formSubmitShortcut.js";
   import {
     appPath,
@@ -718,6 +719,26 @@
     return navIconPathByType[iconType] || navIconPathByType.inbox;
   }
 
+  /** @param {string} href */
+  function dataTourForNav(href) {
+    switch (String(href)) {
+      case "/":
+        return "home";
+      case "/inbox":
+        return "inbox";
+      case "/topics":
+        return "topics";
+      case "/boards":
+        return "boards";
+      case "/docs":
+        return "docs";
+      case "/access":
+        return "access";
+      default:
+        return undefined;
+    }
+  }
+
   function workspaceInitials(label) {
     return (label || "?")
       .split(/[\s-]+/)
@@ -1001,10 +1022,12 @@
           <nav class="shell-nav" aria-label="Primary">
             {#each navigationItems as item}
               {@const active = isActive(item.href)}
+              {@const tour = dataTourForNav(item.href)}
               <a
                 class={`shell-nav-link ${active ? "shell-nav-link--active" : ""}`}
                 href={workspaceHref(item.href)}
                 aria-label={item.label}
+                data-tour={tour}
               >
                 <svg
                   class="shell-nav-icon"
@@ -1066,10 +1089,12 @@
               <div class="shell-settings-links">
                 {#each settingsNavItems as item}
                   {@const active = isActive(item.href)}
+                  {@const tour = dataTourForNav(item.href)}
                   <a
                     class={`shell-settings-link ${active ? "shell-settings-link--active" : ""}`}
                     href={workspaceHref(item.href)}
                     aria-label={item.label}
+                    data-tour={tour}
                   >
                     <svg
                       class="shell-settings-icon"
@@ -1198,12 +1223,14 @@
     <nav class="shell-bottom-nav" aria-label="Primary navigation">
       {#each navigationItems as item}
         {@const active = isActive(item.href)}
+        {@const tour = dataTourForNav(item.href)}
         <a
           class="shell-bottom-nav-item {active
             ? 'shell-bottom-nav-item--active'
             : ''}"
           href={workspaceHref(item.href)}
           aria-current={active ? "page" : undefined}
+          data-tour={tour}
         >
           <svg
             fill="none"
@@ -1243,6 +1270,15 @@
       bind:open={commandPaletteOpen}
       organizationSlug={activeOrganizationSlug}
       workspaceSlug={activeWorkspaceSlug}
+    />
+  {/if}
+
+  {#if activeWorkspaceSlug && identityReady && !workspaceBootstrapPending && !renderLoginOnly && !gateVisible && $devActorModeReady}
+    <WorkspaceTour
+      organizationSlug={activeOrganizationSlug}
+      workspaceSlug={activeWorkspaceSlug}
+      devActorModeReady={$devActorModeReady}
+      userLabel={shellIdentity.primaryLabel}
     />
   {/if}
 

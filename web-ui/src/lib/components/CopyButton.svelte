@@ -21,6 +21,7 @@
 </script>
 
 <Button
+  class="shrink-0"
   variant="ghost"
   size={btnSize}
   onclick={onCopy}

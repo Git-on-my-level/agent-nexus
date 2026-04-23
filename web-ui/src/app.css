@@ -57,6 +57,9 @@
   --motion-fast: 120ms cubic-bezier(0.2, 0, 0, 1);
   --motion-base: 180ms cubic-bezier(0.2, 0, 0, 1);
   --motion-modal: 240ms cubic-bezier(0.2, 0, 0, 1);
+
+  /* Native form controls (select menus, scrollbars) follow dark chrome. */
+  color-scheme: dark;
 }
 
 :root[data-qa="1"] {
@@ -98,6 +101,22 @@
   textarea,
   button {
     font: inherit;
+  }
+
+  /*
+   * Native <select> dropdowns use OS/UI chrome unless color-scheme is dark on
+   * the control (meta alone is not always enough). Option colors apply where
+   * the engine paints them (e.g. Firefox); WebKit mainly follows color-scheme.
+   */
+  select {
+    color-scheme: dark;
+    accent-color: var(--accent);
+  }
+
+  option,
+  optgroup {
+    background-color: var(--panel);
+    color: var(--fg);
   }
 
   :focus-visible {

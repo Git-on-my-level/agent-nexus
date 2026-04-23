@@ -144,7 +144,7 @@ const QA_SCENES = [
     path: "/o/local/w/local/inbox",
     workspaceMode: "inbox-fresh",
     waitFor: async (page) => {
-      await page.waitForSelector('[data-testid="inbox-first-run-tour"]');
+      await page.waitForSelector("text=Inbox is clear");
     },
   },
   {
