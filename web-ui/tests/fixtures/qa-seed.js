@@ -2,6 +2,8 @@ const FIXED_NOW_ISO = "2026-03-12T14:00:00.000Z";
 
 export const QA_FIXED_NOW_ISO = FIXED_NOW_ISO;
 export const QA_FIXED_NOW_MS = Date.parse(FIXED_NOW_ISO);
+export const QA_HOME_HANDOFF_PARTIAL_MARK_ISO = hoursAgo(12);
+export const QA_HOME_HANDOFF_ZERO_MARK_ISO = QA_FIXED_NOW_ISO;
 
 function atOffsetMs(offsetMs) {
   return new Date(QA_FIXED_NOW_MS + offsetMs).toISOString();
@@ -186,6 +188,61 @@ export const QA_PRINCIPALS = [
     username: "zara@agents.internal",
     principal_kind: "agent",
     auth_method: "agent_key",
+  },
+];
+
+export const QA_INVITES = [
+  {
+    id: "oinv_qa_agent_launch",
+    kind: "agent",
+    created_at: hoursAgo(2),
+    created_by: "actor-jordan-human",
+  },
+  {
+    id: "oinv_qa_docs_consumed",
+    kind: "human",
+    created_at: daysAgo(2),
+    created_by: "actor-jordan-human",
+    consumed_at: hoursAgo(20),
+  },
+];
+
+export const QA_AUTH_AUDIT = [
+  {
+    event_id: "audit_invite_created_qa",
+    event_type: "invite_created",
+    ts: hoursAgo(2),
+    actor_username: QA_HOSTED_ACCOUNT.email,
+    actor_agent_id: QA_AUTH_AGENT.agent_id,
+    actor_actor_id: QA_AUTH_AGENT.actor_id,
+    invite_id: "oinv_qa_agent_launch",
+  },
+  {
+    event_id: "audit_invite_consumed_qa",
+    event_type: "invite_consumed",
+    ts: hoursAgo(20),
+    actor_username: QA_HOSTED_ACCOUNT.email,
+    actor_agent_id: QA_AUTH_AGENT.agent_id,
+    actor_actor_id: QA_AUTH_AGENT.actor_id,
+    subject_username: "iris.docs@agentnexus.dev",
+    subject_agent_id: "principal_iris_human",
+    subject_actor_id: "actor-iris-docs",
+    invite_id: "oinv_qa_docs_consumed",
+  },
+];
+
+export const QA_SECRETS = [
+  {
+    id: "secret-openai-prod",
+    name: "OPENAI_API_KEY",
+    description: "Primary model key for launch workflows",
+    updated_at: hoursAgo(6),
+  },
+  {
+    id: "secret-stripe-sandbox",
+    name: "STRIPE_SANDBOX_KEY",
+    description: "Sandbox billing verification for hosted smoke runs",
+    updated_at: hoursAgo(18),
   },
 ];
 
@@ -384,6 +441,109 @@ export const QA_ARTIFACTS = [
     created_by: "actor-iris-docs",
     thread_id: "thread-docs-refresh",
     refs: ["thread:thread-docs-refresh", "document:doc-onboarding-playbook"],
+  },
+];
+
+export const QA_EVENTS = [
+  {
+    id: "evt-home-future-safe",
+    ts: hoursAgo(30),
+    type: "future_signal_emitted",
+    actor_id: "actor-iris-docs",
+    thread_id: "thread-docs-refresh",
+    refs: ["topic:topic-docs-refresh", "document:doc-onboarding-playbook"],
+    summary: "Future-safe event type landed for onboarding review follow-up.",
+  },
+  {
+    id: "evt-home-message-launch",
+    ts: hoursAgo(9),
+    type: "message_posted",
+    actor_id: "actor-zara-ops",
+    thread_id: "thread-launch-war-room",
+    refs: [
+      "thread:thread-launch-war-room",
+      "document:doc-launch-checklist",
+    ],
+    summary: "Launch thread updated with the mobile auth rollback recommendation.",
+  },
+  {
+    id: "evt-home-receipt-billing",
+    ts: hoursAgo(8),
+    type: "receipt_added",
+    actor_id: "actor-jordan-human",
+    thread_id: "thread-billing-rollout",
+    refs: [
+      "thread:thread-billing-rollout",
+      "artifact:artifact-billing-receipt-001",
+    ],
+    summary: "Billing smoke receipt attached to the rollout thread.",
+  },
+  {
+    id: "evt-home-thread-update",
+    ts: hoursAgo(5),
+    type: "thread_updated",
+    actor_id: "actor-jordan-human",
+    thread_id: "thread-billing-rollout",
+    refs: [
+      "topic:topic-billing-rollout",
+      "document:doc-billing-runbook",
+    ],
+    summary: "Billing rollout summary updated after the latest portal smoke pass.",
+    payload: { changed_fields: ["current_summary", "next_actions"] },
+  },
+  {
+    id: "evt-home-review-launch",
+    ts: hoursAgo(3),
+    type: "review_completed",
+    actor_id: "actor-zara-ops",
+    thread_id: "thread-launch-war-room",
+    refs: [
+      "thread:thread-launch-war-room",
+      "artifact:artifact-release-review-001",
+    ],
+    summary: "Launch cutover review completed with one follow-up action.",
+  },
+  {
+    id: "evt-home-card-moved",
+    ts: hoursAgo(2),
+    type: "card_moved",
+    actor_id: "actor-zara-ops",
+    thread_id: "thread-launch-war-room",
+    refs: ["board:board-launch-control", "thread:thread-launch-war-room"],
+    summary: "Rollback validation card moved into review on Launch control.",
+  },
+  {
+    id: "evt-home-exception-billing",
+    ts: hoursAgo(1),
+    type: "exception_raised",
+    actor_id: "actor-jordan-human",
+    thread_id: "thread-billing-rollout",
+    refs: ["topic:topic-billing-rollout", "document:doc-billing-runbook"],
+    summary: "Legal sign-off gap raised as a billing rollout exception.",
+  },
+  {
+    id: "evt-home-decision-launch",
+    ts: hoursAgo(0.75),
+    type: "decision_made",
+    actor_id: "actor-zara-ops",
+    thread_id: "thread-launch-war-room",
+    refs: [
+      "thread:thread-launch-war-room",
+      "document:doc-launch-checklist",
+    ],
+    summary: "Rollback window approved pending the next monitoring sweep.",
+  },
+  {
+    id: "evt-home-ack-hidden",
+    ts: hoursAgo(0.33),
+    type: "inbox_item_acknowledged",
+    actor_id: "actor-jordan-human",
+    thread_id: "thread-launch-war-room",
+    refs: [
+      "thread:thread-launch-war-room",
+      "inbox:inbox-ask-auth",
+    ],
+    summary: "Operator acknowledged the auth rollback ask item.",
   },
 ];
 

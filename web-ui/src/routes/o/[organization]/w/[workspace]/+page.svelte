@@ -1,26 +1,29 @@
 <script>
+  import { browser } from "$app/environment";
   import { page } from "$app/stores";
-  import { onMount, onDestroy } from "svelte";
+  import { onDestroy, onMount } from "svelte";
 
+  import RefLink from "$lib/components/RefLink.svelte";
   import { coreClient } from "$lib/coreClient";
+  import { parseTimestampMs } from "$lib/dateUtils";
+  import { buildTimelineRefLabelHints, eventTypeDotClass, toTimelineView } from "$lib/timelineUtils";
   import { filterTopLevelDocuments } from "$lib/documentVisibility";
-  import {
-    buildInboxCategorySummary,
-    buildTopicHealthSummary,
-    selectRecentlyUpdatedTopics,
-  } from "$lib/dashboardSummary";
   import { formatTimestamp } from "$lib/formatDate";
+  import {
+    buildHomeChangeCards,
+    computeNextHomeHandoffMarker,
+    filterHomeTimelineEvents,
+    readHomeHandoffMarker,
+    selectHomeInboxPreview,
+    writeHomeHandoffMarker,
+  } from "$lib/homeHandoff";
   import {
     getInboxCategoryLabel,
     getInboxSubjectLabel,
-    getInboxSubjectRef,
     splitTypedRef,
-    sortInboxItems,
   } from "$lib/inboxUtils";
-  import { workspacePath } from "$lib/workspacePaths";
-  import { getPriorityLabel } from "$lib/topicFilters";
-  import { BOARD_STATUS_LABELS } from "$lib/boardUtils";
   import { replayWorkspaceTour } from "$lib/tourState";
+  import { workspacePath } from "$lib/workspacePaths";
 
   const emptySectionState = {
     status: "idle",
@@ -28,7 +31,19 @@
     items: [],
   };
 
-  const DOC_STATUS_LABELS = { draft: "Draft", active: "Active" };
+  const HOME_REF_PRIORITY = [
+    "topic",
+    "thread",
+    "board",
+    "document",
+    "artifact",
+    "card",
+    "inbox",
+    "url",
+    "event",
+  ];
+
+  const POLL_INTERVAL_MS = 30_000;
 
   let loading = $state(true);
   let refreshedAt = $state("");
@@ -36,44 +51,96 @@
   let topicsState = $state({ ...emptySectionState });
   let boardsState = $state({ ...emptySectionState });
   let docsState = $state({ ...emptySectionState });
+  let artifactsState = $state({ ...emptySectionState });
+  let eventsState = $state({ ...emptySectionState });
+  let handoffMarkerIso = $state("");
+  let handoffMarkerLoaded = $state(!browser);
+
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
 
-  let inboxSummary = $derived(buildInboxCategorySummary(inboxState.items));
-  let topInboxItems = $derived(sortInboxItems(inboxState.items).slice(0, 3));
-
-  // Show the "Take the tour" affordance until the workspace has its first
-  // topic. We wait for topics to finish loading so the button doesn't flash.
   let canReplayTour = $derived(
     topicsState.status === "ready" && topicsState.items.length === 0,
   );
 
-  let topicHealth = $derived(buildTopicHealthSummary(topicsState.items));
-  let recentTopics = $derived(
-    selectRecentlyUpdatedTopics(topicsState.items, 5),
+  let homeChangeCards = $derived(
+    buildHomeChangeCards({
+      inboxItems: inboxState.items,
+      topics: topicsState.items,
+      boards: boardsState.items,
+      documents: docsState.items,
+      artifacts: artifactsState.items,
+      markerIso: handoffMarkerIso,
+    }),
   );
 
-  let recentBoards = $derived(
-    boardsState.items
-      .filter((entry) => entry?.board?.status === "active")
-      .slice(0, 5),
+  let handoffTimelineEvents = $derived(
+    filterHomeTimelineEvents(eventsState.items, {
+      markerIso: handoffMarkerIso,
+      limit: 10,
+    }),
   );
 
-  let recentDocs = $derived(
-    [...docsState.items]
-      .sort((a, b) => {
-        const ta = Date.parse(a?.updated_at ?? "");
-        const tb = Date.parse(b?.updated_at ?? "");
-        if (Number.isFinite(tb) && Number.isFinite(ta)) return tb - ta;
-        if (Number.isFinite(tb)) return 1;
-        if (Number.isFinite(ta)) return -1;
-        return 0;
-      })
-      .slice(0, 5),
+  let timelineLabelHints = $derived(
+    buildHomeRefLabelHints({
+      topics: topicsState.items,
+      boards: boardsState.items,
+      documents: docsState.items,
+      artifacts: artifactsState.items,
+    }),
   );
 
-  const POLL_INTERVAL_MS = 30_000;
+  let handoffTimelineView = $derived(
+    toTimelineView(handoffTimelineEvents, {
+      labelHints: timelineLabelHints,
+    }),
+  );
+
+  let inboxPreviewItems = $derived(
+    selectHomeInboxPreview(inboxState.items, { limit: 3 }),
+  );
+
+  let handoffHasChanges = $derived(
+    homeChangeCards.some((card) => card.count > 0) ||
+      handoffTimelineView.length > 0,
+  );
+
+  let handoffIntro = $derived(
+    !handoffMarkerLoaded
+      ? "Loading handoff status…"
+      : handoffMarkerIso
+        ? `Since you marked this workspace read ${formatTimestamp(handoffMarkerIso) || handoffMarkerIso}.`
+        : "Showing all recent workspace changes until you mark this handoff read.",
+  );
+
+  let handoffUpdatedCopy = $derived(
+    refreshedAt
+      ? `Updated ${formatTimestamp(refreshedAt)}`
+      : loading
+        ? "Loading..."
+        : "",
+  );
+
+  let handoffDataErrors = $derived(
+    [
+      inboxState,
+      topicsState,
+      boardsState,
+      docsState,
+      artifactsState,
+      eventsState,
+    ]
+      .filter((state) => state.status === "error" && state.error)
+      .map((state) => state.error),
+  );
+
   let pollTimer;
+
+  $effect(() => {
+    if (!browser || !organizationSlug || !workspaceSlug) return;
+    handoffMarkerIso = readHomeHandoffMarker(organizationSlug, workspaceSlug);
+    handoffMarkerLoaded = true;
+  });
 
   onMount(async () => {
     await loadDashboard();
@@ -88,17 +155,25 @@
     const isInitial = !refreshedAt;
     if (isInitial) loading = true;
 
-    const [inboxResult, threadResult, boardsResult, docsResult] =
-      await Promise.allSettled([
-        coreClient.listInboxItems({ view: "items" }),
-        coreClient.listTopics({}),
-        coreClient.listBoards({}),
-        coreClient.listDocuments({}),
-      ]);
+    const [
+      inboxResult,
+      topicsResult,
+      boardsResult,
+      docsResult,
+      artifactsResult,
+      eventsResult,
+    ] = await Promise.allSettled([
+      coreClient.listInboxItems({ view: "items" }),
+      coreClient.listTopics({}),
+      coreClient.listBoards({}),
+      coreClient.listDocuments({}),
+      coreClient.listArtifacts({}),
+      coreClient.listEvents(),
+    ]);
 
     inboxState = toSectionState(inboxResult, "items", "Failed to load inbox");
     topicsState = toSectionState(
-      threadResult,
+      topicsResult,
       "topics",
       "Failed to load topics",
     );
@@ -111,6 +186,16 @@
       docsResult,
       "documents",
       "Failed to load documents",
+    );
+    artifactsState = toSectionState(
+      artifactsResult,
+      "artifacts",
+      "Failed to load artifacts",
+    );
+    eventsState = toSectionState(
+      eventsResult,
+      "events",
+      "Failed to load workspace events",
     );
 
     refreshedAt = new Date().toISOString();
@@ -142,120 +227,119 @@
     };
   }
 
-  function inboxItemTarget(item) {
-    const subjectRef = getInboxSubjectRef(item);
-    const { prefix, id } = splitTypedRef(subjectRef);
+  function toIdRecord(items = []) {
+    return Object.fromEntries(
+      items
+        .map((item) => [String(item?.id ?? "").trim(), item])
+        .filter(([id]) => id),
+    );
+  }
 
-    if (prefix === "topic") {
-      return workspacePath(organizationSlug, workspaceSlug, `/topics/${id}`);
+  function buildHomeRefLabelHints({
+    topics = [],
+    boards = [],
+    documents = [],
+    artifacts = [],
+  } = {}) {
+    const hints = buildTimelineRefLabelHints(
+      toIdRecord(artifacts),
+      toIdRecord(documents),
+      {},
+    );
+
+    for (const topic of topics) {
+      const topicId = String(topic?.id ?? "").trim();
+      const threadId = String(topic?.thread_id ?? "").trim();
+      const title = String(topic?.title ?? "").trim();
+      if (topicId && title) hints[`topic:${topicId}`] = title;
+      if (threadId && title) hints[`thread:${threadId}`] = title;
     }
-    if (prefix === "thread") {
-      return workspacePath(organizationSlug, workspaceSlug, `/threads/${id}`);
+
+    for (const board of boards) {
+      const boardId = String(board?.id ?? "").trim();
+      const title = String(board?.title ?? "").trim();
+      if (boardId && title) hints[`board:${boardId}`] = title;
     }
-    if (prefix === "board") {
-      return workspacePath(organizationSlug, workspaceSlug, `/boards/${id}`);
-    }
-    if (prefix === "document") {
-      return workspacePath(organizationSlug, workspaceSlug, `/docs/${id}`);
-    }
-    if (prefix === "card") {
-      const boardRef = (item?.related_refs ?? []).find(
-        (ref) => splitTypedRef(ref).prefix === "board",
-      );
-      const { id: boardId } = splitTypedRef(boardRef);
-      if (!boardId)
-        return workspacePath(organizationSlug, workspaceSlug, "/inbox");
-      const base = workspacePath(
-        organizationSlug,
-        workspaceSlug,
-        `/boards/${boardId}`,
-      );
-      return id ? `${base}?card=${encodeURIComponent(id)}` : base;
-    }
-    return workspacePath(organizationSlug, workspaceSlug, "/inbox");
+
+    return hints;
   }
 
   function workspaceHref(pathname = "/") {
     return workspacePath(organizationSlug, workspaceSlug, pathname);
   }
 
-  function inboxCategoryHref(category) {
-    const params = new URLSearchParams();
-    if (category) {
-      params.set("category", String(category));
+  function inboxPreviewHref(item) {
+    const id = String(item?.id ?? "").trim();
+    return id ? workspaceHref(`/inbox/${id}`) : workspaceHref("/inbox");
+  }
+
+  function homeEventPrimaryRef(event) {
+    const refs = Array.isArray(event?.refs) ? event.refs : [];
+
+    for (const prefix of HOME_REF_PRIORITY) {
+      const matched = refs.find((refValue) => splitTypedRef(refValue).prefix === prefix);
+      if (matched) return matched;
     }
-    const qs = params.toString();
-    const base = workspaceHref("/inbox");
-    return qs ? `${base}?${qs}` : base;
+
+    return "";
   }
 
-  function topicsQueryHref(queryPairs) {
-    const params = new URLSearchParams(queryPairs);
-    const qs = params.toString();
-    const base = workspaceHref("/topics");
-    return qs ? `${base}?${qs}` : base;
+  function countCardClass(count) {
+    return count > 0
+      ? "border-[var(--line)] bg-[var(--bg-soft)]"
+      : "border-[var(--line)] bg-[var(--panel)]";
   }
 
-  function priorityBadge(priority) {
-    const styles = {
-      p0: "text-danger-text",
-      p1: "text-warn-text",
-      p2: "text-blue-400",
-      p3: "text-fg-subtle",
-    };
-    return styles[priority] ?? "text-fg-subtle";
+  function countValueClass(count) {
+    return count > 0 ? "text-[var(--fg)]" : "text-[var(--fg-muted)]";
   }
 
-  function boardStatusColor(status) {
-    if (status === "active") return "text-ok-text bg-ok-soft";
-    if (status === "paused") return "text-warn-text bg-warn-soft";
-    if (status === "closed") return "text-slate-300 bg-slate-500/10";
-    return "text-[var(--fg-muted)] bg-[var(--line)]";
+  function resolveMarkAsRead() {
+    const nextMarker = computeNextHomeHandoffMarker({
+      markerIso: handoffMarkerIso,
+      inboxItems: inboxState.items,
+      topics: topicsState.items,
+      boards: boardsState.items,
+      documents: docsState.items,
+      artifacts: artifactsState.items,
+      events: eventsState.items,
+      now: Date.now(),
+    });
+
+    handoffMarkerIso = nextMarker;
+    writeHomeHandoffMarker(organizationSlug, workspaceSlug, nextMarker);
   }
 
-  function docStatusColor(status) {
-    if (status === "active") return "text-ok-text bg-ok-soft";
-    if (status === "draft") return "text-warn-text bg-warn-soft";
-    return "text-[var(--fg-muted)] bg-[var(--line)]";
+  function latestTimelineTimestamp() {
+    return handoffTimelineEvents.reduce((latest, event) => {
+      const parsed = parseTimestampMs(event?.ts);
+      return Number.isFinite(parsed) ? Math.max(latest, parsed) : latest;
+    }, Number.NEGATIVE_INFINITY);
   }
 
-  function inboxCategoryCountColor(category, count) {
-    if (count === 0) return "text-[var(--fg)]";
-    if (category === "action_needed") return "text-accent-text";
-    if (category === "risk_exception") return "text-warn-text";
-    if (category === "attention") return "text-sky-400";
-    return "text-[var(--fg)]";
+  function isMarkAsReadDisabled() {
+    return !handoffMarkerLoaded || loading || handoffDataErrors.length > 0;
   }
 
-  function inboxCategoryLabelColor(category, count) {
-    if (count === 0) return "text-[var(--fg-muted)]";
-    if (category === "action_needed") return "text-accent-text";
-    if (category === "risk_exception") return "text-warn-text";
-    if (category === "attention") return "text-sky-400";
-    return "text-[var(--fg-muted)]";
-  }
-
-  function inboxCategoryBadgeClass(category) {
-    if (category === "action_needed") return "text-accent-text bg-accent-soft";
-    if (category === "risk_exception") return "text-warn-text bg-warn-soft";
-    if (category === "attention") return "text-sky-400 bg-sky-500/10";
-    return "text-[var(--fg-muted)] bg-[var(--line)]";
+  function timestampToIso(timestampMs) {
+    return Number.isFinite(timestampMs) ? new Date(timestampMs).toISOString() : "";
   }
 </script>
 
-<div class="space-y-6 min-w-0 max-w-full">
+<div class="space-y-6 min-w-0 max-w-full" data-tour="home">
   <div
-    class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2 min-w-0"
+    class="flex flex-wrap items-start justify-between gap-x-4 gap-y-3 min-w-0"
   >
     <div class="min-w-0">
-      <h1 class="text-subtitle font-semibold text-[var(--fg)]">Dashboard</h1>
+      <h1 class="text-subtitle font-semibold text-[var(--fg)]">Home</h1>
       <p class="mt-0.5 text-meta text-[var(--fg-muted)]">
-        {#if refreshedAt}
-          Updated {formatTimestamp(refreshedAt)}
-        {:else if loading}
-          Loading...
-        {/if}
+        {handoffIntro}
       </p>
+      {#if handoffUpdatedCopy}
+        <p class="mt-1 text-micro text-[var(--fg-muted)]">
+          {handoffUpdatedCopy}
+        </p>
+      {/if}
     </div>
     <div class="flex shrink-0 flex-wrap items-center gap-2">
       {#if canReplayTour}
@@ -285,6 +369,20 @@
         </button>
       {/if}
       <button
+        class="cursor-pointer rounded-md border border-[var(--line)] px-2.5 py-1.5 text-meta font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] disabled:cursor-not-allowed disabled:opacity-60"
+        data-testid="home-mark-read"
+        onclick={resolveMarkAsRead}
+        disabled={isMarkAsReadDisabled()}
+        type="button"
+        title={
+          handoffMarkerIso
+            ? "Update the handoff marker to everything currently represented on Home"
+            : "Set your first handoff marker for this workspace"
+        }
+      >
+        Mark as read
+      </button>
+      <button
         class="cursor-pointer rounded-md border border-[var(--line)] px-2.5 py-1.5 text-meta font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)]"
         onclick={loadDashboard}
         type="button"
@@ -294,392 +392,171 @@
     </div>
   </div>
 
-  <div class="grid gap-5 xl:grid-cols-[1fr_1.5fr] min-w-0">
-    <section class="min-w-0">
-      <div class="flex items-center justify-between gap-2 mb-2">
-        <h2 class="text-meta font-semibold text-[var(--fg)]">Inbox</h2>
-        <a
-          class="text-micro font-medium text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors"
-          href={workspaceHref("/inbox")}>View all</a
-        >
+  <section
+    class="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-4 sm:p-5"
+    data-testid="home-change-counts"
+  >
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h2 class="text-meta font-semibold text-[var(--fg)]">What changed</h2>
+        <p class="mt-1 text-micro text-[var(--fg-muted)]">
+          {#if handoffMarkerIso}
+            Since you marked this workspace read
+          {:else}
+            Everything available in this workspace right now
+          {/if}
+        </p>
       </div>
-      {#if loading && inboxState.status === "idle"}
-        <div
-          class="flex items-center gap-2 py-6 text-meta text-[var(--fg-muted)]"
-        >
-          <svg class="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-            <circle
-              class="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              stroke-width="4"
-            ></circle>
-            <path
-              class="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-            ></path>
-          </svg>
-          Loading...
+      {#if Number.isFinite(latestTimelineTimestamp())}
+        <p class="text-micro text-[var(--fg-muted)]">
+          Latest event {formatTimestamp(timestampToIso(latestTimelineTimestamp()))}
+        </p>
+      {/if}
+    </div>
+
+    {#if loading && inboxState.status === "idle" && topicsState.status === "idle"}
+      <p class="mt-4 text-meta text-[var(--fg-muted)]">Loading handoff summary…</p>
+    {:else}
+      <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {#each homeChangeCards as card}
+          <div
+            class={`rounded-lg border px-3.5 py-3 ${countCardClass(card.count)}`}
+          >
+            <p class="text-micro font-medium text-[var(--fg-muted)]">
+              {card.label}
+            </p>
+            <p class={`mt-2 text-title font-semibold ${countValueClass(card.count)}`}>
+              {card.count}
+            </p>
+          </div>
+        {/each}
+      </div>
+
+      {#if handoffMarkerIso && !handoffHasChanges}
+        <p class="mt-4 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg-muted)]">
+          Nothing new since you marked this workspace read.
+        </p>
+      {/if}
+
+      {#if handoffDataErrors.length > 0}
+        <p class="mt-4 rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
+          {handoffDataErrors[0]}
+        </p>
+      {/if}
+    {/if}
+  </section>
+
+  <div class="grid gap-5 xl:grid-cols-[minmax(0,1.8fr)_minmax(18rem,1fr)] min-w-0">
+    <section
+      class="min-w-0 rounded-xl border border-[var(--line)] bg-[var(--panel)] p-4 sm:p-5"
+      data-testid="home-happenings"
+    >
+      <div class="flex items-center justify-between gap-3">
+        <div>
+          <h2 class="text-meta font-semibold text-[var(--fg)]">What’s happened</h2>
+          <p class="mt-1 text-micro text-[var(--fg-muted)]">
+            High-signal workspace activity since your last handoff mark
+          </p>
         </div>
-      {:else if inboxState.status === "error"}
-        <p
-          class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
+      </div>
+
+      {#if loading && eventsState.status === "idle"}
+        <p class="mt-4 text-meta text-[var(--fg-muted)]">Loading workspace activity…</p>
+      {:else if eventsState.status === "error"}
+        <p class="mt-4 rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
+          {eventsState.error}
+        </p>
+      {:else if handoffTimelineView.length === 0}
+        <p class="mt-4 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-3 text-meta text-[var(--fg-muted)]">
+          {#if handoffMarkerIso}
+            Nothing new has landed in the workspace timeline since your last handoff mark.
+          {:else}
+            No workspace events yet.
+          {/if}
+        </p>
+      {:else}
+        <div class="mt-4 space-y-3">
+          {#each handoffTimelineView as event (event.id)}
+            {@const primaryRef = homeEventPrimaryRef(event)}
+            <div class="rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] px-4 py-3">
+              <div class="flex items-start gap-3">
+                <span
+                  class={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${eventTypeDotClass(event.rawType)}`}
+                  title={event.typeLabel}
+                ></span>
+                <div class="min-w-0 flex-1">
+                  <p class="text-meta font-medium text-[var(--fg)]">
+                    {event.summary || event.typeLabel}
+                  </p>
+                  <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-micro text-[var(--fg-muted)]">
+                    <span>{event.typeLabel}</span>
+                    <span>•</span>
+                    <span>{formatTimestamp(event.ts) || "—"}</span>
+                    {#if primaryRef}
+                      <span>•</span>
+                      <RefLink
+                        refValue={primaryRef}
+                        humanize
+                        labelHints={timelineLabelHints}
+                      />
+                    {/if}
+                  </div>
+                </div>
+              </div>
+            </div>
+          {/each}
+        </div>
+      {/if}
+    </section>
+
+    <section
+      class="min-w-0 rounded-xl border border-[var(--line)] bg-[var(--panel)] p-4 sm:p-5"
+      data-testid="home-inbox-preview"
+    >
+      <div class="flex items-center justify-between gap-2">
+        <div>
+          <h2 class="text-meta font-semibold text-[var(--fg)]">Inbox preview</h2>
+          <p class="mt-1 text-micro text-[var(--fg-muted)]">
+            Top unresolved items right now
+          </p>
+        </div>
+        <a
+          class="text-micro font-medium text-[var(--fg-muted)] transition-colors hover:text-[var(--fg)]"
+          href={workspaceHref("/inbox")}
         >
+          View inbox
+        </a>
+      </div>
+
+      {#if loading && inboxState.status === "idle"}
+        <p class="mt-4 text-meta text-[var(--fg-muted)]">Loading inbox preview…</p>
+      {:else if inboxState.status === "error"}
+        <p class="mt-4 rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
           {inboxState.error}
         </p>
-      {:else if inboxState.items.length === 0}
-        <p class="text-meta text-[var(--fg-muted)] py-3">
-          Nothing needs attention right now.
+      {:else if inboxPreviewItems.length === 0}
+        <p class="mt-4 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-3 text-meta text-[var(--fg-muted)]">
+          Inbox is clear.
         </p>
       {:else}
-        <div
-          class="mb-3 grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(7.75rem,1fr))]"
-        >
-          {#each inboxSummary as summary}
+        <div class="mt-4 space-y-2">
+          {#each inboxPreviewItems as item}
             <a
-              class="min-w-0 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-2 text-center transition-colors hover:bg-[var(--line-subtle)]"
-              href={inboxCategoryHref(summary.category)}
+              class="block rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] px-3.5 py-3 transition-colors hover:bg-[var(--line-subtle)]"
+              href={inboxPreviewHref(item)}
             >
-              <p
-                class="text-micro font-medium leading-snug text-balance hyphens-manual {inboxCategoryLabelColor(
-                  summary.category,
-                  summary.count,
-                )}"
-              >
-                {summary.label}
-              </p>
-              <p
-                class="text-subtitle font-semibold {inboxCategoryCountColor(
-                  summary.category,
-                  summary.count,
-                )}"
-              >
-                {summary.count}
-              </p>
-            </a>
-          {/each}
-        </div>
-
-        <div
-          class="space-y-px rounded-md border border-[var(--line)] bg-[var(--bg-soft)] overflow-hidden"
-        >
-          {#each topInboxItems as item, i}
-            <a
-              class="flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--line-subtle)] {i >
-              0
-                ? 'border-t border-[var(--line)]'
-                : ''}"
-              href={inboxItemTarget(item)}
-            >
-              <div class="min-w-0 flex-1">
-                <p class="truncate text-meta font-medium text-[var(--fg)]">
-                  {item.title}
-                </p>
-                {#if getInboxSubjectLabel(item)}
-                  <p class="text-micro text-[var(--fg-muted)]">
-                    {getInboxSubjectLabel(item)}
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0 flex-1">
+                  <p class="truncate text-meta font-medium text-[var(--fg)]">
+                    {item.title}
                   </p>
-                {/if}
-              </div>
-              <span
-                class="shrink-0 rounded px-1.5 py-0.5 text-micro font-medium {inboxCategoryBadgeClass(
-                  item.category,
-                )}"
-              >
-                {getInboxCategoryLabel(item.category)}
-              </span>
-            </a>
-          {/each}
-        </div>
-      {/if}
-    </section>
-
-    <section class="min-w-0">
-      <div class="flex items-center justify-between gap-2 mb-2">
-        <h2 class="text-meta font-semibold text-[var(--fg)]">Topic health</h2>
-        <a
-          class="text-micro font-medium text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors"
-          href={workspaceHref("/topics")}>View all</a
-        >
-      </div>
-      {#if loading && topicsState.status === "idle"}
-        <div
-          class="flex items-center gap-2 py-6 text-meta text-[var(--fg-muted)]"
-        >
-          <svg class="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-            <circle
-              class="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              stroke-width="4"
-            ></circle>
-            <path
-              class="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-            ></path>
-          </svg>
-          Loading...
-        </div>
-      {:else if topicsState.status === "error"}
-        <p
-          class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
-        >
-          {topicsState.error}
-        </p>
-      {:else if topicsState.items.length === 0}
-        <p class="text-meta text-[var(--fg-muted)] py-3">
-          No topics yet. They'll appear here as work begins.
-        </p>
-      {:else}
-        <div
-          class="mb-3 grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(7rem,1fr))]"
-        >
-          <a
-            class="min-w-0 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-2 text-center transition-colors hover:bg-[var(--line-subtle)]"
-            href={topicsQueryHref([["open", "1"]])}
-          >
-            <p class="text-micro font-medium text-[var(--fg-muted)]">Open</p>
-            <p class="text-subtitle font-semibold text-[var(--fg)]">
-              {topicHealth.openCount}
-            </p>
-          </a>
-          <a
-            class="min-w-0 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-2 text-center transition-colors hover:bg-[var(--line-subtle)]"
-            href={topicsQueryHref([["stale", "true"]])}
-          >
-            <p
-              class="text-micro font-medium {topicHealth.staleCount > 0
-                ? 'text-warn-text'
-                : 'text-[var(--fg-muted)]'}"
-            >
-              Stale
-            </p>
-            <p
-              class="text-subtitle font-semibold {topicHealth.staleCount > 0
-                ? 'text-warn-text'
-                : 'text-[var(--fg)]'}"
-            >
-              {topicHealth.staleCount}
-            </p>
-          </a>
-          <a
-            class="min-w-0 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-2 text-center transition-colors hover:bg-[var(--line-subtle)]"
-            href={topicsQueryHref([["high_priority", "1"]])}
-          >
-            <p
-              class="text-micro font-medium leading-snug text-balance hyphens-manual {topicHealth.highPriorityCount >
-              0
-                ? 'text-danger-text'
-                : 'text-[var(--fg-muted)]'}"
-            >
-              High priority
-            </p>
-            <p
-              class="text-subtitle font-semibold {topicHealth.highPriorityCount >
-              0
-                ? 'text-danger-text'
-                : 'text-[var(--fg)]'}"
-            >
-              {topicHealth.highPriorityCount}
-            </p>
-          </a>
-          <a
-            class="min-w-0 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-2 text-center transition-colors hover:bg-[var(--line-subtle)]"
-            href={workspaceHref("/topics")}
-          >
-            <p class="text-micro font-medium text-[var(--fg-muted)]">Total</p>
-            <p class="text-subtitle font-semibold text-[var(--fg)]">
-              {topicHealth.totalCount}
-            </p>
-          </a>
-        </div>
-
-        <div
-          class="space-y-px rounded-md border border-[var(--line)] bg-[var(--bg-soft)] overflow-hidden"
-        >
-          {#each recentTopics as topic, i}
-            <a
-              class="flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--line-subtle)] {i >
-              0
-                ? 'border-t border-[var(--line)]'
-                : ''}"
-              href={workspaceHref(`/topics/${topic.id}`)}
-            >
-              <div class="min-w-0 flex-1">
-                <p class="truncate text-meta font-medium text-[var(--fg)]">
-                  {topic.title}
-                </p>
-                <p class="text-micro text-[var(--fg-muted)]">
-                  Updated {formatTimestamp(topic.updated_at)}
-                </p>
-              </div>
-              <span
-                class="text-micro font-medium {priorityBadge(topic.priority)}"
-                >{getPriorityLabel(topic.priority)}</span
-              >
-            </a>
-          {/each}
-        </div>
-      {/if}
-    </section>
-  </div>
-
-  <div class="grid gap-5 xl:grid-cols-2 min-w-0">
-    <section class="min-w-0">
-      <div class="flex items-center justify-between gap-2 mb-2">
-        <h2 class="text-meta font-semibold text-[var(--fg)]">Active boards</h2>
-        <a
-          class="text-micro font-medium text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors"
-          href={workspaceHref("/boards")}>View all</a
-        >
-      </div>
-
-      {#if loading && boardsState.status === "idle"}
-        <div
-          class="flex items-center gap-2 py-6 text-meta text-[var(--fg-muted)]"
-        >
-          <svg class="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-            <circle
-              class="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              stroke-width="4"
-            ></circle>
-            <path
-              class="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-            ></path>
-          </svg>
-          Loading...
-        </div>
-      {:else if boardsState.status === "error"}
-        <p
-          class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
-        >
-          {boardsState.error}
-        </p>
-      {:else if recentBoards.length === 0}
-        <p class="text-meta text-[var(--fg-muted)] py-3">
-          No active boards yet.
-        </p>
-      {:else}
-        <div
-          class="space-y-px rounded-md border border-[var(--line)] bg-[var(--bg-soft)] overflow-hidden"
-        >
-          {#each recentBoards as entry, i}
-            {@const board = entry.board}
-            {@const summary = entry.summary}
-            <a
-              class="flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--line-subtle)] {i >
-              0
-                ? 'border-t border-[var(--line)]'
-                : ''}"
-              href={workspaceHref(`/boards/${board.id}`)}
-            >
-              <span
-                class="shrink-0 inline-flex rounded px-1.5 py-0.5 text-micro font-semibold {boardStatusColor(
-                  board.status,
-                )}"
-              >
-                {BOARD_STATUS_LABELS[board.status] ?? board.status}
-              </span>
-              <div class="min-w-0 flex-1">
-                <p class="truncate text-meta font-medium text-[var(--fg)]">
-                  {board.title || board.id}
-                </p>
-                <p class="text-micro text-[var(--fg-muted)]">
-                  {#if summary?.card_count != null}
-                    {summary.card_count} card{summary.card_count === 1
-                      ? ""
-                      : "s"} ·
-                  {/if}
-                  Updated {formatTimestamp(board.updated_at) || "—"}
-                </p>
-              </div>
-            </a>
-          {/each}
-        </div>
-      {/if}
-    </section>
-
-    <section class="min-w-0">
-      <div class="flex items-center justify-between gap-2 mb-2">
-        <h2 class="text-meta font-semibold text-[var(--fg)]">Recent Docs</h2>
-        <a
-          class="text-micro font-medium text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors"
-          href={workspaceHref("/docs")}>View all</a
-        >
-      </div>
-
-      {#if loading && docsState.status === "idle"}
-        <div
-          class="flex items-center gap-2 py-6 text-meta text-[var(--fg-muted)]"
-        >
-          <svg class="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-            <circle
-              class="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              stroke-width="4"
-            ></circle>
-            <path
-              class="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-            ></path>
-          </svg>
-          Loading...
-        </div>
-      {:else if docsState.status === "error"}
-        <p
-          class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
-        >
-          {docsState.error}
-        </p>
-      {:else if recentDocs.length === 0}
-        <p class="text-meta text-[var(--fg-muted)] py-3">No documents yet.</p>
-      {:else}
-        <div
-          class="space-y-px rounded-md border border-[var(--line)] bg-[var(--bg-soft)] overflow-hidden"
-        >
-          {#each recentDocs as doc, i}
-            <a
-              class="flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--line-subtle)] {i >
-              0
-                ? 'border-t border-[var(--line)]'
-                : ''}"
-              href={workspaceHref(`/docs/${doc.id}`)}
-            >
-              <span
-                class="shrink-0 inline-flex rounded px-1.5 py-0.5 text-micro font-semibold {docStatusColor(
-                  doc.status,
-                )}"
-              >
-                {DOC_STATUS_LABELS[doc.status] ?? doc.status}
-              </span>
-              <div class="min-w-0 flex-1">
-                <p class="truncate text-meta font-medium text-[var(--fg)]">
-                  {doc.title || doc.id}
-                </p>
-                <p class="text-micro text-[var(--fg-muted)]">
-                  v{doc.head_revision_number} · Updated {formatTimestamp(
-                    doc.updated_at,
-                  ) || "—"}
-                  {#if (doc.labels ?? []).length > 0}
-                    · {doc.labels.slice(0, 2).join(", ")}
-                  {/if}
-                </p>
+                  <p class="mt-1 text-micro text-[var(--fg-muted)]">
+                    {getInboxSubjectLabel(item) || "Workspace item"} · {formatTimestamp(item.source_event_time) || "—"}
+                  </p>
+                </div>
+                <span class="shrink-0 rounded px-1.5 py-0.5 text-micro font-medium text-[var(--fg)] bg-[var(--line)]">
+                  {getInboxCategoryLabel(item.category)}
+                </span>
               </div>
             </a>
           {/each}

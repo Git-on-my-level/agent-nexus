@@ -15,15 +15,21 @@ import {
   QA_ACTORS,
   QA_ARTIFACTS,
   QA_ASK_ITEM,
+  QA_AUTH_AUDIT,
   QA_AUTH_AGENT,
   QA_DOCUMENTS,
+  QA_EVENTS,
   QA_FIXED_NOW_ISO,
+  QA_HOME_HANDOFF_PARTIAL_MARK_ISO,
+  QA_HOME_HANDOFF_ZERO_MARK_ISO,
   QA_HOSTED_ACCOUNT,
   QA_HOSTED_BILLING_SUMMARY,
+  QA_INVITES,
   QA_HOSTED_ORGS,
   QA_HOSTED_WORKSPACES,
   QA_INBOX_POPULATED,
   QA_PRINCIPALS,
+  QA_SECRETS,
   QA_TOPICS,
   QA_BOARDS,
   filterByQuery,
@@ -41,6 +47,8 @@ const DEFAULT_THRESHOLD_RATIO = 0.001;
 const QA_BASELINE_DIR = path.join(projectRoot, ".qa-baseline");
 const QA_CURRENT_DIR = path.join(projectRoot, ".qa-current");
 const QA_DIFF_DIR = path.join(projectRoot, ".qa-diff");
+const QA_HOME_HANDOFF_STORAGE_KEY =
+  "anx.home.handoff.lastRead.v1.local.local";
 
 const QA_SCENES = [
   {
@@ -92,6 +100,39 @@ const QA_SCENES = [
     },
   },
   {
+    name: "hosted-organization-detail",
+    path: "/hosted/organizations/org_qa_primary",
+    hostedMode: "authed-dashboard",
+    waitFor: async (page) => {
+      await page.waitForSelector("text=Manage billing");
+    },
+  },
+  {
+    name: "hosted-organization-usage",
+    path: "/hosted/organizations/org_qa_primary/usage",
+    hostedMode: "authed-dashboard",
+    waitFor: async (page) => {
+      await page.waitForSelector('h1:has-text("Usage")');
+    },
+  },
+  {
+    name: "hosted-billing-return",
+    path: "/hosted/billing/return?session_id=cs_mock_qa_1",
+    hostedMode: "authed-dashboard",
+    waitFor: async (page) => {
+      await page.waitForURL(/\/hosted\/organizations\/org_qa_primary\/billing\?activating=1$/);
+      await page.waitForSelector("text=Manage in Stripe");
+    },
+  },
+  {
+    name: "hosted-workspaces-new",
+    path: "/hosted/workspaces/new",
+    hostedMode: "authed-dashboard",
+    waitFor: async (page) => {
+      await page.waitForSelector("text=Create a workspace");
+    },
+  },
+  {
     name: "hosted-onboarding-organization",
     path: "/hosted/onboarding/organization",
     hostedMode: "onboarding-organization",
@@ -105,6 +146,39 @@ const QA_SCENES = [
     hostedMode: "onboarding-workspace",
     waitFor: async (page) => {
       await page.waitForSelector("text=Name your first workspace");
+    },
+  },
+  {
+    name: "workspace-home-handoff-first-run",
+    path: "/o/local/w/local",
+    workspaceMode: "workspace-default",
+    waitFor: async (page) => {
+      await page.waitForSelector('[data-testid="home-change-counts"]');
+      await page.waitForSelector("text=Showing all recent workspace changes until you mark this handoff read.");
+    },
+  },
+  {
+    name: "workspace-home-handoff-populated",
+    path: "/o/local/w/local",
+    workspaceMode: "workspace-default",
+    localStorage: {
+      [QA_HOME_HANDOFF_STORAGE_KEY]: QA_HOME_HANDOFF_PARTIAL_MARK_ISO,
+    },
+    waitFor: async (page) => {
+      await page.waitForSelector('[data-testid="home-change-counts"]');
+      await page.waitForSelector("text=Since you marked this workspace read");
+    },
+  },
+  {
+    name: "workspace-home-handoff-empty",
+    path: "/o/local/w/local",
+    workspaceMode: "workspace-default",
+    localStorage: {
+      [QA_HOME_HANDOFF_STORAGE_KEY]: QA_HOME_HANDOFF_ZERO_MARK_ISO,
+    },
+    waitFor: async (page) => {
+      await page.waitForSelector('[data-testid="home-change-counts"]');
+      await page.waitForSelector("text=Nothing new since you marked this workspace read.");
     },
   },
   {
@@ -201,6 +275,22 @@ const QA_SCENES = [
     workspaceMode: "workspace-default",
     waitFor: async (page) => {
       await page.waitForSelector("text=Settings");
+    },
+  },
+  {
+    name: "workspace-access",
+    path: "/o/local/w/local/access",
+    workspaceMode: "workspace-default",
+    waitFor: async (page) => {
+      await page.waitForSelector("text=Create invite");
+    },
+  },
+  {
+    name: "workspace-secrets",
+    path: "/o/local/w/local/secrets",
+    workspaceMode: "workspace-default",
+    waitFor: async (page) => {
+      await page.waitForSelector("text=OPENAI_API_KEY");
     },
   },
   {
@@ -467,6 +557,14 @@ async function startMockCoreServer(port = DEFAULT_CORE_PORT) {
 }
 
 async function startBuiltUiServer(port) {
+  const qaWorkspaceCatalog = JSON.stringify([
+    {
+      organizationSlug: "local",
+      slug: "local",
+      label: "Local QA Workspace",
+      coreBaseUrl: `http://127.0.0.1:${DEFAULT_CORE_PORT}`,
+    },
+  ]);
   const child = spawn(
     "node",
     ["build/index.js"],
@@ -479,6 +577,7 @@ async function startBuiltUiServer(port) {
         HOST: "127.0.0.1",
         PORT: String(port),
         ORIGIN: `http://127.0.0.1:${port}`,
+        ANX_WORKSPACES: qaWorkspaceCatalog,
         ANX_UI_CSP_SCRIPT_SRC_EXTRA: "'unsafe-inline'",
       },
     },
@@ -515,7 +614,7 @@ async function installQaEnvironment(page, scene) {
   const workspaceScenario = createWorkspaceScenario(scene.workspaceMode);
 
   await page.addInitScript(
-    ({ fixedNowIso, workspaceScenario }) => {
+    ({ fixedNowIso, workspaceScenario, sceneLocalStorage }) => {
       const fixedNowMs = Date.parse(fixedNowIso);
       const RealDate = Date;
 
@@ -549,6 +648,14 @@ async function installQaEnvironment(page, scene) {
         localStorage.setItem("anx.tour.inbox.v1.local", "dismissed");
       }
 
+      for (const [key, value] of Object.entries(sceneLocalStorage ?? {})) {
+        if (value == null) {
+          localStorage.removeItem(key);
+          continue;
+        }
+        localStorage.setItem(key, String(value));
+      }
+
       if (document.documentElement) {
         document.documentElement.dataset.qa = "1";
       }
@@ -556,6 +663,7 @@ async function installQaEnvironment(page, scene) {
     {
       fixedNowIso: QA_FIXED_NOW_ISO,
       workspaceScenario,
+      sceneLocalStorage: scene.localStorage ?? {},
     },
   );
 }
@@ -680,6 +788,37 @@ async function handleHostedApiRoute(route, request, url, pathname, scenario) {
     return;
   }
 
+  const organizationMatch = pathname.match(/^\/organizations\/([^/]+)$/);
+  if (organizationMatch && request.method() === "GET") {
+    const organization = scenario.organizations.find(
+      (item) => String(item.id) === organizationMatch[1],
+    );
+    if (!organization) {
+      await route.fulfill(jsonResponse(404, { error: { message: "not found" } }));
+      return;
+    }
+    await route.fulfill(jsonResponse(200, { organization }));
+    return;
+  }
+
+  const checkoutSessionMatch = pathname.match(/^\/billing\/checkout-session\/([^/]+)$/);
+  if (checkoutSessionMatch && request.method() === "GET") {
+    await route.fulfill(
+      jsonResponse(200, {
+        organization_id: QA_HOSTED_BILLING_SUMMARY.organization_id,
+      }),
+    );
+    return;
+  }
+
+  const mockCheckoutMatch = pathname.match(
+    /^\/organizations\/([^/]+)\/billing\/mock-checkout-complete$/,
+  );
+  if (mockCheckoutMatch && request.method() === "POST") {
+    await route.fulfill(jsonResponse(200, { ok: true }));
+    return;
+  }
+
   await route.fulfill(jsonResponse(404, { error: { message: "not found" } }));
 }
 
@@ -717,7 +856,46 @@ async function handleWorkspaceApiRoute(route, request, url, pathname, scenario) 
     await route.fulfill(
       jsonResponse(200, {
         principals: sliceByLimit(QA_PRINCIPALS, url.searchParams),
+        active_human_principal_count: 1,
         next_cursor: "",
+      }),
+    );
+    return;
+  }
+
+  if (pathname === "/auth/invites" && request.method() === "GET") {
+    await route.fulfill(
+      jsonResponse(200, {
+        invites: sliceByLimit(QA_INVITES, url.searchParams),
+      }),
+    );
+    return;
+  }
+
+  if (pathname === "/auth/audit" && request.method() === "GET") {
+    await route.fulfill(
+      jsonResponse(200, {
+        events: sliceByLimit(QA_AUTH_AUDIT, url.searchParams),
+        next_cursor: "",
+      }),
+    );
+    return;
+  }
+
+  if (pathname === "/secrets" && request.method() === "GET") {
+    await route.fulfill(
+      jsonResponse(200, {
+        secrets: sliceByLimit(QA_SECRETS, url.searchParams),
+      }),
+    );
+    return;
+  }
+
+  const revealSecretMatch = pathname.match(/^\/secrets\/([^/]+)\/reveal$/);
+  if (revealSecretMatch && request.method() === "POST") {
+    await route.fulfill(
+      jsonResponse(200, {
+        value: "sk-qa-visible-secret-value",
       }),
     );
     return;
@@ -814,6 +992,15 @@ async function handleWorkspaceApiRoute(route, request, url, pathname, scenario) 
     await route.fulfill(
       jsonResponse(200, {
         artifacts: sliceByLimit(items, url.searchParams),
+      }),
+    );
+    return;
+  }
+
+  if (pathname === "/events" && request.method() === "GET") {
+    await route.fulfill(
+      jsonResponse(200, {
+        events: sliceByLimit(QA_EVENTS, url.searchParams),
       }),
     );
     return;

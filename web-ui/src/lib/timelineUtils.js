@@ -31,7 +31,7 @@ const EVENT_TYPE_LABELS = {
   inbox_item_acknowledged: "Item acknowledged",
 };
 
-const KNOWN_EVENT_TYPES = new Set(Object.keys(EVENT_TYPE_LABELS));
+export const KNOWN_EVENT_TYPES = new Set(Object.keys(EVENT_TYPE_LABELS));
 
 const EVENT_TYPE_DOT_CLASSES = {
   message_posted: "bg-indigo-400",
