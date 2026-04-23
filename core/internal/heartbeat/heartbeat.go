@@ -35,6 +35,7 @@ type Snapshot struct {
 	HealthSummary                map[string]any `json:"health_summary"`
 	ProjectionMaintenanceSummary map[string]any `json:"projection_maintenance_summary"`
 	UsageSummary                 map[string]any `json:"usage_summary"`
+	ActiveStreamCount            int            `json:"active_stream_count"`
 	LastSuccessfulBackupAt       *string        `json:"last_successful_backup_at,omitempty"`
 }
 

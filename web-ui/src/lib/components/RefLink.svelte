@@ -32,7 +32,9 @@
   >
     <span>{resolved.primaryLabel}</span>
     {#if showRaw && resolved.secondaryLabel}
-      <span class="text-micro text-fg-subtle">{resolved.secondaryLabel}</span>
+      <span class="text-micro text-[var(--fg-muted)]"
+        >{resolved.secondaryLabel}</span
+      >
     {/if}
   </a>
 {:else}
@@ -41,7 +43,9 @@
   >
     <span>{resolved.primaryLabel}</span>
     {#if showRaw && resolved.secondaryLabel}
-      <span class="text-micro text-fg-subtle">{resolved.secondaryLabel}</span>
+      <span class="text-micro text-[var(--fg-muted)]"
+        >{resolved.secondaryLabel}</span
+      >
     {/if}
   </span>
 {/if}

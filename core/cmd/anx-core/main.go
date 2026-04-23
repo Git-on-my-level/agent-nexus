@@ -28,6 +28,7 @@ import (
 	"agent-nexus-core/internal/schema"
 	"agent-nexus-core/internal/secrets"
 	"agent-nexus-core/internal/server"
+	"agent-nexus-core/internal/server/stream"
 	"agent-nexus-core/internal/sidecar"
 	"agent-nexus-core/internal/storage"
 )
@@ -513,6 +514,7 @@ func main() {
 					HealthSummary:                healthSummary,
 					ProjectionMaintenanceSummary: projectionSummary,
 					UsageSummary:                 usageSummary,
+					ActiveStreamCount:            stream.Snapshot(),
 				}
 			},
 		}

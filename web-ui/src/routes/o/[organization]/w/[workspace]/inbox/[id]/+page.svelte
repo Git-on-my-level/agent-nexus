@@ -259,7 +259,7 @@
       >
       <textarea
         id="ask-response-input"
-        class="mt-2 min-h-[200px] w-full rounded border border-[var(--line)] bg-white px-4 py-3 text-body text-fg outline-none focus:ring-2 focus:ring-accent"
+        class="mt-2 min-h-[200px] w-full rounded border border-[var(--line)] bg-[var(--panel)] px-4 py-3 text-body text-[var(--fg)] outline-none placeholder:text-[var(--fg-muted)] focus:ring-2 focus:ring-[var(--accent)]"
         bind:value={answerDraft}
         onkeydown={handleTextareaKeydown}
         placeholder="Write the answer the next agent should rely on."
@@ -285,15 +285,17 @@
           >
         </div>
         <div
-          class="mt-3 rounded border border-[var(--line)] bg-white p-3 text-meta text-fg-muted"
+          class="mt-3 rounded border border-[var(--line)] bg-[var(--panel)] p-3 text-meta text-[var(--fg-muted)]"
         >
           <p>
-            <span class="font-semibold text-fg">coverage_hint</span>
-            <span class="font-mono text-mono text-fg">
+            <span class="font-semibold text-[var(--fg)]">coverage_hint</span>
+            <span class="font-mono text-mono text-[var(--fg)]">
               {askItem.coverage_hint || "n/a"}</span
             >
           </p>
-          <p class="mt-2">{coverageHintGloss(askItem.coverage_hint)}</p>
+          <p class="mt-2 text-[var(--fg-muted)]">
+            {coverageHintGloss(askItem.coverage_hint)}
+          </p>
         </div>
         {#if Array.isArray(askItem.related_refs) && askItem.related_refs.length > 0}
           <div class="mt-3 flex flex-wrap items-center gap-2 text-meta">
@@ -316,7 +318,7 @@
         >
         <textarea
           id="ask-response-input"
-          class="mt-2 min-h-[200px] w-full rounded border border-[var(--line)] bg-white px-4 py-3 text-body text-fg outline-none focus:ring-2 focus:ring-accent"
+          class="mt-2 min-h-[200px] w-full rounded border border-[var(--line)] bg-[var(--panel)] px-4 py-3 text-body text-[var(--fg)] outline-none placeholder:text-[var(--fg-muted)] focus:ring-2 focus:ring-[var(--accent)]"
           bind:value={answerDraft}
           onkeydown={handleTextareaKeydown}
           placeholder="Write the answer the next agent should rely on."
@@ -355,7 +357,7 @@
         {/if}
         {#if submitMessage}
           <div
-            class="mt-4 rounded border border-[var(--line)] bg-white px-3 py-2 text-meta text-fg"
+            class="mt-4 rounded border border-[var(--line)] bg-[var(--panel)] px-3 py-2 text-meta text-[var(--fg)]"
           >
             {submitMessage}
           </div>

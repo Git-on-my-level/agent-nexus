@@ -114,6 +114,39 @@
     return documents.map(toDocumentOption);
   }
 
+  function sumCardsByColumn(cols) {
+    if (!cols || typeof cols !== "object") return 0;
+    return Object.values(cols).reduce((acc, n) => acc + Number(n ?? 0), 0);
+  }
+
+  /** Normalize boards.list rows: API uses `{ board, summary }`; some mocks send a flat board + board_summary. */
+  function normalizeBoardListRow(row) {
+    if (!row || typeof row !== "object") {
+      return { board: {}, summary: {} };
+    }
+    if (row.board) {
+      return row;
+    }
+    const { board_summary, projection_freshness, ...boardRest } = row;
+    const cols = board_summary?.cards_by_column ?? {};
+    const cardTotal = sumCardsByColumn(cols);
+    const docCount = Array.isArray(boardRest.document_refs)
+      ? boardRest.document_refs.length
+      : 0;
+    return {
+      board: { ...boardRest, projection_freshness },
+      summary: {
+        card_count: cardTotal,
+        cards_by_column: cols,
+        unresolved_card_count: cardTotal,
+        resolved_card_count: 0,
+        document_count: docCount,
+        latest_activity_at: board_summary?.latest_activity_at ?? null,
+        has_document_refs: docCount > 0,
+      },
+    };
+  }
+
   function resetCreateForm() {
     createTitle = "";
     createStatus = "active";
@@ -157,7 +190,7 @@
       const q = f.q.trim();
       if (q) filters.q = q;
       const data = await coreClient.listBoards(filters);
-      boards = data.boards ?? [];
+      boards = (data.boards ?? []).map(normalizeBoardListRow);
     } catch (e) {
       error = `Failed to load boards: ${e instanceof Error ? e.message : String(e)}`;
     } finally {
@@ -595,7 +628,8 @@
       {@const board = item.board}
       {@const summary = item.summary}
       {@const counts = boardSummaryCounts(summary)}
-      {@const projectionFreshness = item.projection_freshness ?? null}
+      {@const projectionFreshness =
+        item.projection_freshness ?? board?.projection_freshness ?? null}
       {@const rowNav = boardRowInspectNav(board)}
       <div
         class="flex items-stretch {i > 0
@@ -639,7 +673,7 @@
                     {freshnessStatusLabel(projectionFreshness.status)}
                   </span>
                 {/if}
-                {#if summary?.has_document_ref}
+                {#if summary?.has_document_refs || summary?.has_document_ref}
                   <span
                     class="rounded bg-accent-soft px-1.5 py-0.5 text-micro text-accent-text"
                   >

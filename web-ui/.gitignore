@@ -16,5 +16,6 @@ pnpm-debug.log*
 .qa-captures/
 .qa-current/
 .qa-diff/
+.qa-baseline/
 # QA visual runner (`scripts/qa-visual.mjs`) screenshot output
 output/

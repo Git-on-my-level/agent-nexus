@@ -251,6 +251,7 @@ const QA_SCENES = [
     workspaceMode: "workspace-default",
     waitFor: async (page) => {
       await page.waitForSelector('h1:has-text("Boards")');
+      await page.waitForSelector("text=Launch control");
     },
   },
   {
@@ -400,6 +401,32 @@ function getLimit(searchParams, fallback = 200) {
 
 function sliceByLimit(items, searchParams) {
   return items.slice(0, getLimit(searchParams, items.length));
+}
+
+function qaBoardListRows(boards) {
+  return boards.map((b) => {
+    const { board_summary, projection_freshness, ...boardFields } = b;
+    const cols = board_summary?.cards_by_column ?? {};
+    const cardCount = Object.values(cols).reduce(
+      (acc, n) => acc + Number(n ?? 0),
+      0,
+    );
+    const docCount = Array.isArray(boardFields.document_refs)
+      ? boardFields.document_refs.length
+      : 0;
+    return {
+      board: { ...boardFields, projection_freshness },
+      summary: {
+        card_count: cardCount,
+        cards_by_column: cols,
+        unresolved_card_count: cardCount,
+        resolved_card_count: 0,
+        document_count: docCount,
+        latest_activity_at: board_summary?.latest_activity_at ?? null,
+        has_document_refs: docCount > 0,
+      },
+    };
+  });
 }
 
 function createWorkspaceScenario(mode) {
@@ -961,9 +988,10 @@ async function handleWorkspaceApiRoute(route, request, url, pathname, scenario) 
       "labels",
       "owners",
     ]);
+    const rows = qaBoardListRows(sliceByLimit(items, url.searchParams));
     await route.fulfill(
       jsonResponse(200, {
-        boards: sliceByLimit(items, url.searchParams),
+        boards: rows,
       }),
     );
     return;

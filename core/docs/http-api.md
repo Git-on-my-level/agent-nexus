@@ -72,7 +72,7 @@ Drift from the live router is gated in CI: `core` runs `TestExactRegisterRoutesC
 - **Document body updates**: Canonical write is `POST /docs/{document_id}/revisions` (`docs.revisions.create`). There is no `PATCH /docs/{document_id}` on workspace core.
 - **Packets**: Receipts and reviews are created via `POST /packets/receipts` and `POST /packets/reviews` only.
 - **Cards**: Patch, move, and archive use first-class `PATCH /cards/{card_id}`, `POST /cards/{card_id}/move`, and `POST /cards/{card_id}/archive` (or trash/restore/purge as documented in OpenAPI). Board-scoped duplicate paths have been removed. **Batch card create** is `POST /boards/{board_id}/cards/batch` (`boards.cards.batch_add`): one `if_board_updated_at`, many `items`, single transaction.
-- **SSE**: `GET /events/stream` and `GET /inbox/stream` use `text/event-stream`; see OpenAPI `x-oar-input-mode` / streaming metadata.
+- **SSE**: `GET /stream/events` and `GET /stream/inbox` use `text/event-stream`; see OpenAPI `x-oar-input-mode` / streaming metadata.
 
 ## Derived projections (materialized views)
 

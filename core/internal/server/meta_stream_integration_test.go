@@ -202,7 +202,7 @@ func TestEventsStreamResumesFromLastEventID(t *testing.T) {
 	firstEventID := appendEventForTest(t, h.baseURL, "actor-1", "thread-stream-1", "event one")
 	secondEventID := appendEventForTest(t, h.baseURL, "actor-1", "thread-stream-1", "event two")
 
-	resp := openSSEStream(t, h.baseURL+"/events/stream?thread_id=thread-stream-1", "")
+	resp := openSSEStream(t, h.baseURL+"/stream/events?thread_id=thread-stream-1", "")
 	reader, stop := startSSEReader(resp.Body)
 	defer stop()
 
@@ -212,7 +212,7 @@ func TestEventsStreamResumesFromLastEventID(t *testing.T) {
 		t.Fatalf("unexpected initial stream order: first=%q second=%q expected=(%q,%q)", first.ID, second.ID, firstEventID, secondEventID)
 	}
 
-	resumeResp := openSSEStream(t, h.baseURL+"/events/stream?thread_id=thread-stream-1", firstEventID)
+	resumeResp := openSSEStream(t, h.baseURL+"/stream/events?thread_id=thread-stream-1", firstEventID)
 	resumeReader, resumeStop := startSSEReader(resumeResp.Body)
 	defer resumeStop()
 
@@ -238,7 +238,7 @@ func TestEventsStreamSurvivesServerWriteTimeout(t *testing.T) {
 
 	postJSONExpectStatus(t, server.URL+"/actors", `{"actor":{"id":"actor-timeout","display_name":"Actor Timeout","created_at":"2026-03-05T10:00:00Z"}}`, http.StatusCreated).Body.Close()
 
-	resp := openSSEStream(t, server.URL+"/events/stream?thread_id=thread-timeout-1", "")
+	resp := openSSEStream(t, server.URL+"/stream/events?thread_id=thread-timeout-1", "")
 	reader, stop := startSSEReader(resp.Body)
 	defer stop()
 
@@ -290,7 +290,7 @@ func TestEventsStreamEmitsDocumentLifecycleEventsForThread(t *testing.T) {
 		t.Fatalf("expected initial event id in timeline, got %#v", timeline.Events)
 	}
 
-	resp := openSSEStream(t, h.baseURL+"/events/stream?thread_id="+threadID, lastExistingEventID)
+	resp := openSSEStream(t, h.baseURL+"/stream/events?thread_id="+threadID, lastExistingEventID)
 	reader, stop := startSSEReader(resp.Body)
 	defer stop()
 
@@ -402,7 +402,7 @@ func TestInboxStreamSuppressesDuplicateItems(t *testing.T) {
 		"due_at":"`+dueSoon+`"
 	}`, http.StatusCreated).Body.Close()
 
-	resp := openSSEStream(t, h.baseURL+"/inbox/stream", "")
+	resp := openSSEStream(t, h.baseURL+"/stream/inbox", "")
 	reader, stop := startSSEReader(resp.Body)
 	defer stop()
 

@@ -18,6 +18,7 @@ import (
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/schema"
 	"agent-nexus-core/internal/secrets"
+	"agent-nexus-core/internal/server/stream"
 )
 
 type HealthCheckFunc func(ctx context.Context) error
@@ -572,6 +573,28 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			handler(w, r)
 		})
 	}
+	registerStreamRoute := func(sub string, classify routeAccessClassifier, handler http.HandlerFunc) {
+		stream.Mount(mux, sub, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			requirement := classify(r)
+			if !enforceRouteAccess(w, r, opts, requirement) {
+				return
+			}
+			if bucket, scope := routeRateLimitForRequest(r, requirement); bucket != "" {
+				if ok, retryAfter := opts.rateLimiter.allow(bucket, scope, time.Now().UTC()); !ok {
+					writeRateLimitedError(w, bucket, retryAfter)
+					return
+				}
+			}
+			if limit := requestBodyLimitForRequest(r.URL.Path, r.Method, requirement, opts.requestBodyLimits); limit > 0 {
+				r.Body = http.MaxBytesReader(w, r.Body, limit)
+			}
+			handler(w, r)
+		}))
+	}
+
+	mux.HandleFunc(stream.Prefix, func(w http.ResponseWriter, _ *http.Request) {
+		writeError(w, http.StatusNotFound, "stream_not_found", "stream endpoint not found")
+	})
 
 	registerRoute("/health", exactRouteAccess(routeAccessAlwaysPublic, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -1870,12 +1893,21 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 	})
 
-	registerRoute("/events/stream", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
+	registerStreamRoute("events", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
 			return
 		}
 		handleEventsStream(w, r, opts)
+	})
+	registerRoute("/events/stream", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+			return
+		}
+		stream.Wrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			handleEventsStream(w, r, opts)
+		})).ServeHTTP(w, r)
 	})
 
 	registerRoute("/events/", func(r *http.Request) routeAccessRequirement {
@@ -2187,12 +2219,21 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleGetInboxItem(w, r, opts, inboxItemID)
 	})
 
-	registerRoute("/inbox/stream", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
+	registerStreamRoute("inbox", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
 			return
 		}
 		handleInboxStream(w, r, opts)
+	})
+	registerRoute("/inbox/stream", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+			return
+		}
+		stream.Wrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			handleInboxStream(w, r, opts)
+		})).ServeHTTP(w, r)
 	})
 
 	registerRoute("/agent-notifications", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {

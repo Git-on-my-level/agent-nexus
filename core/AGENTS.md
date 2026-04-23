@@ -60,6 +60,7 @@ It owns the canonical organizational record, validates and records state transit
 - API behavior changes should update the relevant HTTP handlers, backing domain/store logic, docs in `docs/`, and the tests that enforce the behavior.
 - Persistence or projection changes should preserve canonical-versus-derived boundaries and include migration or rebuild coverage where needed.
 - If a change affects client assumptions, update the contract docs first and then adjust CLI and UI consumers.
+- Long-lived / streaming endpoints (WebSocket, SSE, chunked) MUST be registered via `internal/server/stream.Mount`.
 
 ## Validation
 - `make -C core check`
