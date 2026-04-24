@@ -235,7 +235,8 @@ fi
 # Start web-ui against core and verify startup handshake route.
 (
   cd "$ROOT_DIR"
-  ANX_WORKSPACES="[{\"slug\":\"${UI_WORKSPACE_SLUG}\",\"label\":\"${UI_WORKSPACE_SLUG}\",\"coreBaseUrl\":\"${CORE_BASE_URL}\"}]" \
+  ANX_WORKSPACES="[{\"organizationSlug\":\"local\",\"slug\":\"${UI_WORKSPACE_SLUG}\",\"label\":\"${UI_WORKSPACE_SLUG}\",\"coreBaseUrl\":\"${CORE_BASE_URL}\"}]" \
+  ANX_DEFAULT_ORGANIZATION="${ANX_DEFAULT_ORGANIZATION:-local}" \
   ANX_DEFAULT_WORKSPACE="$UI_WORKSPACE_SLUG" \
   pnpm -C web-ui exec vite dev --host "$UI_HOST" --port "$UI_PORT" >"$UI_LOG" 2>&1
 ) &

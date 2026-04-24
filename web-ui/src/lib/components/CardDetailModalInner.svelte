@@ -951,7 +951,7 @@
           {/if}
         </div>
       {:else if cdmDetailPane === "messages"}
-        <div class="p-4" data-cdm-panel="messages">
+        <div class="px-4 pb-4 pt-3" data-cdm-panel="messages">
           {#if linkedThreadId}
             <MessagesTab
               threadId={linkedThreadId}
@@ -965,7 +965,7 @@
           {/if}
         </div>
       {:else if cdmDetailPane === "timeline"}
-        <div class="p-4" data-cdm-panel="timeline">
+        <div class="px-4 pb-4 pt-1" data-cdm-panel="timeline">
           {#if linkedThreadId}
             <TimelineTab threadId={linkedThreadId} />
           {:else}

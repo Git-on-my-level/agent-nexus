@@ -4,6 +4,7 @@ import {
   buildHomeChangeCards,
   computeNextHomeHandoffMarker,
   filterHomeTimelineEvents,
+  homeHandoffEventPillId,
 } from "../../src/lib/homeHandoff.js";
 
 describe("homeHandoff helpers", () => {
@@ -63,6 +64,39 @@ describe("homeHandoff helpers", () => {
       { id: "boards", label: "Board changes", count: 1 },
       { id: "docs-proof", label: "Docs / Proof changes", count: 2 },
     ]);
+  });
+
+  it("counts topic surfaces from message_posted when topic updated_at lags the chat", () => {
+    const cards = buildHomeChangeCards({
+      markerIso,
+      events: [
+        {
+          id: "msg-1",
+          type: "message_posted",
+          ts: "2026-03-12T14:00:00.000Z",
+          thread_id: "thread-a",
+        },
+        {
+          id: "msg-2",
+          type: "message_posted",
+          ts: "2026-03-12T15:00:00.000Z",
+          thread_id: "thread-a",
+        },
+      ],
+      topics: [
+        {
+          id: "topic-a",
+          thread_id: "thread-a",
+          updated_at: "2026-03-11T20:00:00.000Z",
+        },
+      ],
+      inboxItems: [],
+      boards: [],
+      documents: [],
+      artifacts: [],
+    });
+
+    expect(cards.find((c) => c.id === "topics")?.count).toBe(1);
   });
 
   it("uses the latest visible timestamp for mark-as-read instead of unconditional now", () => {
@@ -140,5 +174,30 @@ describe("homeHandoff helpers", () => {
     );
 
     expect(events.map((event) => event.id)).toEqual(["evt-unknown", "evt-msg"]);
+  });
+
+  it("classifies events into Home pill filters from refs in priority order", () => {
+    expect(
+      homeHandoffEventPillId({ refs: ["board:b1", "thread:t1"], type: "card_updated" }),
+    ).toBe("topics");
+    expect(
+      homeHandoffEventPillId({ refs: ["board:b1"], type: "card_updated" }),
+    ).toBe("boards");
+    expect(homeHandoffEventPillId({ refs: ["inbox:n1"], type: "decision_made" })).toBe(
+      "inbox",
+    );
+    expect(
+      homeHandoffEventPillId({ refs: ["document:d1"], type: "decision_made" }),
+    ).toBe("docs-proof");
+  });
+
+  it("classifies message_posted with thread as topics when refs are empty", () => {
+    expect(
+      homeHandoffEventPillId({
+        type: "message_posted",
+        thread_id: "thread-1",
+        ts: "2026-03-12T10:00:00.000Z",
+      }),
+    ).toBe("topics");
   });
 });

@@ -391,8 +391,9 @@
     </div>
   {/if}
 
+  <!-- Inset from tab bar matches internal list gap: gap-3 (Messages), gap-1 (Timeline). -->
   {#if activeTab === "messages"}
-    <div role="tabpanel" tabindex="0">
+    <div class="pt-3" role="tabpanel" tabindex="0">
       <MessagesTab
         threadId={String(topic.id)}
         postRouteScopeId={threadId}
@@ -404,7 +405,7 @@
   {/if}
 
   {#if activeTab === "timeline"}
-    <div role="tabpanel" tabindex="0">
+    <div class="pt-1" role="tabpanel" tabindex="0">
       <TimelineTab threadId={String(topic.id)} />
     </div>
   {/if}

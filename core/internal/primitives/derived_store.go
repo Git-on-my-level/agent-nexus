@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"sort"
@@ -93,8 +94,9 @@ func (s *Store) ReplaceDerivedInboxItems(ctx context.Context, threadID string, i
 		return fmt.Errorf("begin derived inbox transaction: %w", err)
 	}
 	defer func() {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
+		// After Commit, Rollback returns sql.ErrTxDone; that is normal (see database/sql Tx docs).
+		if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
+			log.Printf("tx rollback failed: %v", err)
 		}
 	}()
 
@@ -623,8 +625,8 @@ func (s *Store) MarkTopicProjectionsDirty(ctx context.Context, threadIDs []strin
 		return fmt.Errorf("begin projection refresh dirty transaction: %w", err)
 	}
 	defer func() {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
+		if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
+			log.Printf("tx rollback failed: %v", err)
 		}
 	}()
 
@@ -685,8 +687,8 @@ func (s *Store) RequeueTopicProjectionRefresh(ctx context.Context, threadID stri
 		return fmt.Errorf("begin projection refresh requeue transaction: %w", err)
 	}
 	defer func() {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
+		if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
+			log.Printf("tx rollback failed: %v", err)
 		}
 	}()
 
@@ -745,8 +747,8 @@ func (s *Store) MarkTopicProjectionRefreshStarted(ctx context.Context, threadID 
 		return 0, fmt.Errorf("begin projection refresh started transaction: %w", err)
 	}
 	defer func() {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
+		if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
+			log.Printf("tx rollback failed: %v", err)
 		}
 	}()
 

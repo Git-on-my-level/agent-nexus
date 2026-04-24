@@ -110,9 +110,9 @@
   }
 </script>
 
-<div>
+<div class="flex flex-col gap-1">
   {#if archivedCount > 0 || (timelineLoading && hasAnyTimelineEvents)}
-    <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+    <div class="flex flex-wrap items-center justify-between gap-3">
       <div class="flex flex-wrap items-center gap-3">
         {#if archivedCount > 0}
           <label
@@ -135,7 +135,9 @@
     </div>
   {/if}
   {#if timelineError && !hasAnyTimelineEvents}
-    <p class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
+    <p
+      class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
+    >
       {timelineError}
     </p>
   {:else if timelineLoading && !hasAnyTimelineEvents}
@@ -143,22 +145,23 @@
   {:else if !hasAnyTimelineEvents}
     <p class="text-meta text-[var(--fg-muted)]">No events yet.</p>
   {:else}
-    {#if timelineError}
-      <p
-        class="mb-2 rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
-      >
-        {timelineError}
-      </p>
-    {/if}
-    {#if lifecycleError}
-      <p
-        class="mb-2 rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
-      >
-        {lifecycleError}
-      </p>
-    {/if}
-    <div class="space-y-1">
-      {#each filteredTimeline as event (event.id)}
+    <div class="flex min-w-0 flex-col gap-1">
+      {#if timelineError}
+        <p
+          class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
+        >
+          {timelineError}
+        </p>
+      {/if}
+      {#if lifecycleError}
+        <p
+          class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
+        >
+          {lifecycleError}
+        </p>
+      {/if}
+      <div class="flex min-w-0 flex-col gap-1">
+        {#each filteredTimeline as event (event.id)}
         <div
           class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-4 py-2.5 {event.archived_at
             ? 'opacity-60'
@@ -246,6 +249,7 @@
           {/if}
         </div>
       {/each}
+      </div>
     </div>
   {/if}
 </div>

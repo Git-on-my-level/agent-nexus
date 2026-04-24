@@ -83,12 +83,27 @@ export async function searchActors(query, limit = 20) {
   return response.actors || [];
 }
 
+/**
+ * boards.list returns rows shaped as `{ board, summary }`. Callers that need a
+ * flat board record (search palette, pickers) must read the inner `board` map.
+ */
+export function boardRecordFromBoardsListRow(row) {
+  if (!row || typeof row !== "object") {
+    return row;
+  }
+  if (row.board && typeof row.board === "object") {
+    return row.board;
+  }
+  return row;
+}
+
 export async function searchBoards(query, limit = 20) {
   const response = await coreClient.listBoards({
     q: query,
     limit,
   });
-  return response.boards || [];
+  const rows = response.boards || [];
+  return rows.map(boardRecordFromBoardsListRow);
 }
 
 export async function searchArtifacts(query, limit = 20) {

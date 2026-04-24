@@ -33,8 +33,13 @@ This package contains the SvelteKit web UI for Organization Autorunner.
 
 - UI workspace routes use a reserved prefix: `/o/:organization/w/:workspace/...`
   - Examples: `/o/local/w/local`, `/o/local/w/local/inbox`, `/o/acme/w/ops/threads/thread-123`
-  - `/` redirects to the last-used workspace when a session cookie is set; otherwise
-    to the workspace chooser (`/hosted/start`). There is no silent default workspace.
+  - `/` redirects to the last-used workspace when `anx_last_workspace` is set and still
+    resolves. With no cookie: if `ANX_CONTROL_BASE_URL` is **unset** (self-host / local
+    provider) and the catalog has a **default workspace** (from `ANX_DEFAULT_WORKSPACE` /
+    `ANX_DEFAULT_ORGANIZATION` and `ANX_WORKSPACES`), `/` redirects there (typical
+    passkey login flow). Otherwise it redirects to the hosted chooser (`/hosted/start`).
+    If `ANX_WORKSPACES` is empty, there is no default workspace and `/` still uses
+    `/hosted/start`.
 - Optional external mount prefix: `ANX_UI_BASE_PATH=/anx`
   - External routes become `/anx/o/:organization/w/:workspace/...`
   - Build/dev the UI with the same base path you plan to serve

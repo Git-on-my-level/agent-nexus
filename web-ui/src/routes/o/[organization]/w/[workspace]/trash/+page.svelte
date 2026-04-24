@@ -23,6 +23,7 @@
   import { kindColor, kindLabel } from "$lib/artifactKinds";
   import { formatTimestamp } from "$lib/formatDate";
   import { getPriorityLabel } from "$lib/topicFilters";
+  import { boardRecordFromBoardsListRow } from "$lib/searchHelpers";
   import { readEnumSearchParam, withUpdatedSearchParams } from "$lib/urlState";
 
   const DOC_STATUS_LABELS = { draft: "Draft", active: "Active" };
@@ -165,7 +166,7 @@
           Boolean(topic?.trashed_at) ||
           String(topic?.status ?? "").trim() === "archived",
       );
-      boards = (boardResult.boards ?? []).map((item) => item.board);
+      boards = (boardResult.boards ?? []).map(boardRecordFromBoardsListRow);
       const cardById = new Map();
       for (const c of archivedCardResult.cards ?? []) {
         const id = String(c?.id ?? "").trim();

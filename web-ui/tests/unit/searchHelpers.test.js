@@ -5,6 +5,7 @@ import {
   searchDocuments,
   searchActors,
   searchBoards,
+  boardRecordFromBoardsListRow,
   searchArtifacts,
   backingThreadIdFromTopicRecord,
   topicSearchResultToPickerOption,
@@ -243,6 +244,35 @@ describe("searchHelpers", () => {
       const result = await searchBoards("test");
 
       expect(result).toEqual([]);
+    });
+
+    it("unwraps API list rows { board, summary } to flat board records", async () => {
+      const inner = {
+        id: "bd_abc",
+        title: "Summer Menu Launch",
+        status: "active",
+      };
+      coreClient.listBoards.mockResolvedValue({
+        boards: [{ board: inner, summary: { card_count: 3 } }],
+      });
+
+      const result = await searchBoards("summer", 5);
+
+      expect(result).toEqual([inner]);
+    });
+  });
+
+  describe("boardRecordFromBoardsListRow", () => {
+    it("returns inner board when present", () => {
+      const board = { id: "b1", title: "T" };
+      expect(boardRecordFromBoardsListRow({ board, summary: {} })).toEqual(
+        board,
+      );
+    });
+
+    it("returns row when already flat (tests / legacy)", () => {
+      const row = { id: "b1", title: "T" };
+      expect(boardRecordFromBoardsListRow(row)).toEqual(row);
     });
   });
 

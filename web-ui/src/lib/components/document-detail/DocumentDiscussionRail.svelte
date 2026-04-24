@@ -54,16 +54,73 @@
     }
   }
 
-  function persistWidth(next) {
-    const clamped = Math.min(WIDTH_MAX, Math.max(WIDTH_MIN, next));
-    railWidth = clamped;
+  function clampWidth(/** @type {number} */ next) {
+    return Math.min(WIDTH_MAX, Math.max(WIDTH_MIN, next));
+  }
+
+  function persistWidthToStorage(/** @type {number} */ w) {
     if (browser) {
-      localStorage.setItem(LS_WIDTH_KEY, String(clamped));
+      localStorage.setItem(LS_WIDTH_KEY, String(w));
     }
   }
 
-  function bumpWidth(delta) {
-    persistWidth(railWidth + delta);
+  /** @type {number} */
+  let resizeStartX = 0;
+  /** @type {number} */
+  let resizeStartWidth = 0;
+  let railResizing = $state(false);
+
+  function endRailResize(/** @type {PointerEvent | null} */ e) {
+    const wasResizing = railResizing;
+    if (e?.currentTarget && "hasPointerCapture" in e.currentTarget) {
+      try {
+        if (
+          (/** @type {HTMLElement} */ (e.currentTarget)).hasPointerCapture(
+            e.pointerId,
+          )
+        ) {
+          (/** @type {HTMLElement} */ (e.currentTarget)).releasePointerCapture(
+            e.pointerId,
+          );
+        }
+      } catch {
+        // ignore
+      }
+    }
+    if (wasResizing) {
+      persistWidthToStorage(railWidth);
+    }
+    railResizing = false;
+    if (browser) {
+      document.body.style.removeProperty("cursor");
+      document.body.style.removeProperty("user-select");
+    }
+  }
+
+  function onResizePointerDown(/** @type {PointerEvent} */ e) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    resizeStartX = e.clientX;
+    resizeStartWidth = railWidth;
+    railResizing = true;
+    (/** @type {HTMLElement} */ (e.currentTarget)).setPointerCapture(
+      e.pointerId,
+    );
+    if (browser) {
+      document.body.style.cursor = "ew-resize";
+      document.body.style.userSelect = "none";
+    }
+  }
+
+  function onResizePointerMove(/** @type {PointerEvent} */ e) {
+    if (!railResizing) return;
+    const dx = e.clientX - resizeStartX;
+    railWidth = clampWidth(resizeStartWidth - dx);
+  }
+
+  function onResizePointerUp(/** @type {PointerEvent} */ e) {
+    if (!railResizing) return;
+    endRailResize(e);
   }
 
   /**
@@ -140,7 +197,7 @@
 {#if threadId && docId}
   <aside
     class="w-full border-t border-[var(--line)] bg-[var(--panel)] lg:shrink-0 lg:border-t-0 lg:border-l {railOpen
-      ? ''
+      ? 'lg:w-[var(--doc-rail-w)]'
       : 'lg:w-14'}"
     style={railOpen ? `--doc-rail-w:${railWidth}px` : undefined}
   >
@@ -163,75 +220,95 @@
         </button>
         <button
           type="button"
-          class="hidden lg:inline-flex lg:h-9 lg:w-9 lg:cursor-pointer lg:items-center lg:justify-center lg:rounded-md lg:border lg:border-[var(--line)] lg:bg-[var(--panel)] lg:text-[var(--fg-muted)] lg:hover:bg-[var(--bg-soft)] lg:hover:text-[var(--fg)]"
+          class="hidden lg:inline-flex lg:h-8 lg:w-8 lg:cursor-pointer lg:items-center lg:justify-center lg:rounded-full lg:border lg:border-[var(--line)] lg:bg-[var(--panel)] lg:text-[var(--fg-muted)] lg:shadow-sm lg:transition-colors lg:hover:bg-[var(--bg-soft)] lg:hover:text-[var(--fg)]"
           aria-label="Show discussion"
           title="Show discussion"
           onclick={() => persistOpen(true)}
         >
           <svg
-            class="h-5 w-5"
+            class="h-4 w-4"
             fill="none"
             stroke="currentColor"
-            stroke-width="1.6"
+            stroke-width="2"
             viewBox="0 0 24 24"
             aria-hidden="true"
           >
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
-              d="M21 12a8.5 8.5 0 0 1-12.3 7.6L3 21l1.4-5.1A8.5 8.5 0 1 1 21 12z"
+              d="M15 19l-7-7 7-7"
             />
           </svg>
         </button>
       </div>
     {:else}
       <div
-        class="flex max-h-[min(70vh,44rem)] w-full flex-col lg:sticky lg:top-4 lg:max-h-[calc(100vh-5rem)] lg:w-[var(--doc-rail-w)]"
+        class="flex max-h-[min(70vh,44rem)] w-full min-w-0 flex-col lg:sticky lg:top-4 lg:max-h-[calc(100vh-5rem)] lg:flex-row"
       >
-        <div
-          class="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--line)] px-3 py-2"
-        >
-          <h2 class="text-meta font-medium text-[var(--fg)]">Discussion</h2>
-          <div class="flex items-center gap-1">
-            <button
-              type="button"
-              class="rounded px-1.5 py-0.5 text-micro text-[var(--fg-muted)] hover:bg-[var(--line-subtle)] disabled:opacity-40"
-              aria-label="Narrow panel"
-              disabled={railWidth <= WIDTH_MIN}
-              onclick={() => bumpWidth(-40)}
-            >
-              −
-            </button>
-            <button
-              type="button"
-              class="rounded px-1.5 py-0.5 text-micro text-[var(--fg-muted)] hover:bg-[var(--line-subtle)] disabled:opacity-40"
-              aria-label="Widen panel"
-              disabled={railWidth >= WIDTH_MAX}
-              onclick={() => bumpWidth(40)}
-            >
-              +
-            </button>
-            <button
-              type="button"
-              class="rounded px-2 py-1 text-micro text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]"
-              onclick={() => persistOpen(false)}
-              aria-label="Collapse discussion"
-            >
-              Hide
-            </button>
+        <!-- Draggable left edge (desktop); width remains railWidth for whole aside. -->
+        <div class="hidden shrink-0 lg:relative lg:block lg:w-3">
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Drag to resize discussion panel"
+            title="Drag to resize"
+            class="group absolute inset-y-0 -left-1 z-[1] flex w-3 cursor-ew-resize touch-none select-none items-stretch pl-0.5 {railResizing
+              ? 'ring-1 ring-[var(--line)]'
+              : ''}"
+            onpointerdown={onResizePointerDown}
+            onpointermove={onResizePointerMove}
+            onpointerup={onResizePointerUp}
+            onpointercancel={onResizePointerUp}
+            onlostpointercapture={() => endRailResize(null)}
+          >
+            <div
+              class="mx-auto h-full w-px bg-[var(--line)] transition-opacity group-hover:opacity-100 {railResizing
+                ? 'bg-accent-text opacity-100'
+                : 'opacity-60'}"
+            ></div>
           </div>
         </div>
-        <div class="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-          <MessagesTab
-            {threadId}
-            postRouteScopeId={docId}
-            workspaceId={String(workspaceId ?? "")}
-            onMessagePost={handleMessagePost}
-            subjectRefFilter={documentRef}
-            extraPostRefs={[documentRef]}
-            discussionEmptyMessage={DOC_DISCUSSION_EMPTY}
-            allowActivityInterleave={false}
-          />
+        <div class="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div
+            class="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--line)] px-2 py-2 pr-2.5"
+          >
+            <h2 class="min-w-0 text-meta font-medium text-[var(--fg)]">
+              Discussion
+            </h2>
+            <button
+              type="button"
+              class="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[var(--line)] bg-[var(--panel)] text-[var(--fg-muted)] shadow-sm transition-colors hover:bg-[var(--bg-soft)] hover:text-[var(--fg)]"
+              onclick={() => persistOpen(false)}
+              aria-label="Hide discussion"
+              title="Hide discussion"
+            >
+              <svg
+                class="h-4 w-4"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M9 5l7 7-7 7"
+                />
+              </svg>
+            </button>
+          </div>
+          <div class="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+            <MessagesTab
+              {threadId}
+              postRouteScopeId={docId}
+              workspaceId={String(workspaceId ?? "")}
+              onMessagePost={handleMessagePost}
+              subjectRefFilter={documentRef}
+              extraPostRefs={[documentRef]}
+              discussionEmptyMessage={DOC_DISCUSSION_EMPTY}
+            />
+          </div>
         </div>
       </div>
     {/if}

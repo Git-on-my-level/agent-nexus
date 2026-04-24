@@ -182,13 +182,20 @@ fi
 # ANX_WORKSPACES is unset. That breaks common dev cases:
 # - Shell / CI exports ANX_WORKSPACES without a `local` entry; the URL slug
 #   still defaults to /local/... → "not configured".
+# This default catalog also makes `/` resolve to /o/local/w/local (passkey auth)
+# instead of /hosted/start (OAuth) when ANX_CONTROL_BASE_URL is unset.
 # Override with SERVE_UI_ANX_WORKSPACES='[...]' for custom multi-core dev.
-SERVE_UI_ANX_WORKSPACES="${SERVE_UI_ANX_WORKSPACES:-[{\"slug\":\"local\",\"label\":\"Local\",\"coreBaseUrl\":\"${CORE_BASE_URL}\"}]}"
+# Each object-form entry must have organizationSlug (or set ANX_DEFAULT_ORGANIZATION);
+# see web-ui src/lib/server/workspaceCatalog.js and README.
+SERVE_UI_ANX_WORKSPACES="${SERVE_UI_ANX_WORKSPACES:-[{\"organizationSlug\":\"local\",\"slug\":\"local\",\"label\":\"Local\",\"coreBaseUrl\":\"${CORE_BASE_URL}\"}]}"
+# Backstop for object-form maps and legacy entries that omit per-row organizationSlug.
+SERVE_UI_ANX_DEFAULT_ORGANIZATION="${SERVE_UI_ANX_DEFAULT_ORGANIZATION:-local}"
 
 (
 	cd "${REPO_ROOT}/web-ui"
 	ANX_CORE_BASE_URL="${CORE_BASE_URL}" \
 		ANX_WORKSPACES="${SERVE_UI_ANX_WORKSPACES}" \
+		ANX_DEFAULT_ORGANIZATION="${SERVE_UI_ANX_DEFAULT_ORGANIZATION}" \
 		PORT="${WEB_UI_PORT}" \
 		./scripts/dev
 ) &

@@ -6,6 +6,7 @@ import {
   normalizeOrganizationSlug,
   normalizeWorkspaceSlug,
 } from "$lib/workspacePaths";
+import { getOutOfWorkspaceProvider } from "$lib/server/outOfWorkspace/index.js";
 import {
   resolveWorkspaceCatalog,
   resolveWorkspaceInRoute,
@@ -32,10 +33,11 @@ function parseLastWorkspaceCookie(raw) {
 
 /**
  * Root `/` and similar: send the user to their last-used workspace if it still
- * resolves; otherwise the hosted workspace chooser.
+ * resolves; otherwise the default self-host workspace (local provider) or the
+ * hosted chooser when using the control plane.
  */
 export async function redirectToRecentWorkspaceOrChooser(event, pathname = "") {
-  await resolveWorkspaceCatalog(event);
+  const catalog = await resolveWorkspaceCatalog(event);
   const fromCookie = parseLastWorkspaceCookie(
     event.cookies?.get?.(LAST_WORKSPACE_COOKIE),
   );
@@ -55,6 +57,22 @@ export async function redirectToRecentWorkspaceOrChooser(event, pathname = "") {
         ),
       );
     }
+  }
+
+  const provider = getOutOfWorkspaceProvider();
+  if (
+    provider.mode === "local" &&
+    catalog?.defaultWorkspace?.organizationSlug &&
+    catalog?.defaultWorkspace?.slug
+  ) {
+    throw redirect(
+      307,
+      workspacePath(
+        catalog.defaultWorkspace.organizationSlug,
+        catalog.defaultWorkspace.slug,
+        pathname,
+      ),
+    );
   }
 
   throw redirect(307, "/hosted/start");

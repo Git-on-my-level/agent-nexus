@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   eventRefsInclude,
   flattenMessageThreadView,
-  mergeThreadRootsWithNonMessageActivity,
   toMessageThreadView,
 } from "../../src/lib/messageThreadUtils.js";
 
@@ -179,48 +178,4 @@ describe("message thread utils", () => {
     ).toEqual(["root-1", "reply-1"]);
   });
 
-  it("merges thread roots with non-message events oldest-first with id tiebreak", () => {
-    const threads = toMessageThreadView(
-      [
-        {
-          id: "m-late",
-          ts: "2026-03-03T12:00:00.000Z",
-          type: "message_posted",
-          thread_id: "thread-1",
-          refs: ["thread:thread-1"],
-          summary: "Message: late",
-        },
-        {
-          id: "m-early",
-          ts: "2026-03-03T10:00:00.000Z",
-          type: "message_posted",
-          thread_id: "thread-1",
-          refs: ["thread:thread-1"],
-          summary: "Message: early",
-        },
-      ],
-      { threadId: "thread-1" },
-    );
-
-    const merged = mergeThreadRootsWithNonMessageActivity(threads, [
-      {
-        id: "act-mid",
-        ts: "2026-03-03T11:00:00.000Z",
-        type: "card_created",
-        summary: "Card created",
-      },
-      {
-        id: "act-same",
-        ts: "2026-03-03T10:00:00.000Z",
-        type: "thread_updated",
-        summary: "Updated",
-      },
-    ]);
-
-    expect(
-      merged.map((row) =>
-        row.kind === "thread" ? row.thread.id : row.event.id,
-      ),
-    ).toEqual(["act-same", "m-early", "act-mid", "m-late"]);
-  });
 });

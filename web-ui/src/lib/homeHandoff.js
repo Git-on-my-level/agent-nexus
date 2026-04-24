@@ -1,5 +1,9 @@
 import { parseTimestampMs } from "./dateUtils.js";
-import { readSourceEventTime, sortInboxItems } from "./inboxUtils.js";
+import {
+  readSourceEventTime,
+  sortInboxItems,
+  splitTypedRef,
+} from "./inboxUtils.js";
 import { KNOWN_EVENT_TYPES } from "./timelineUtils.js";
 
 const HOME_HANDOFF_STORAGE_VERSION = "v1";
@@ -59,6 +63,66 @@ function countDistinct(items = [], cutoffMs, timestampReader) {
   }
 
   return count;
+}
+
+function buildThreadToTopicIdMap(topics = []) {
+  const map = new Map();
+  for (const topic of topics) {
+    const threadId = String(topic?.thread_id ?? "").trim();
+    const topicId = String(topic?.id ?? "").trim();
+    if (threadId && topicId) {
+      map.set(threadId, topicId);
+    }
+  }
+  return map;
+}
+
+function primaryThreadIdFromEvent(event) {
+  const fromField = String(event?.thread_id ?? "").trim();
+  if (fromField) {
+    return fromField;
+  }
+  const refs = Array.isArray(event?.refs) ? event.refs : [];
+  for (const ref of refs) {
+    const { prefix, id } = splitTypedRef(ref);
+    if (prefix === "thread" && String(id ?? "").trim()) {
+      return String(id).trim();
+    }
+  }
+  return "";
+}
+
+/**
+ * Counts topic “surfaces” with activity since the handoff marker: topic rows
+ * whose updated_at is new, plus threads with message_posted events (topic
+ * updated_at can lag behind chat).
+ */
+function countTopicSurfacesForHandoff(topics = [], events = [], cutoffMs) {
+  const threadToTopic = buildThreadToTopicIdMap(topics);
+  const seen = new Set();
+
+  for (const topic of topics) {
+    const id = String(topic?.id ?? "").trim();
+    if (!id) continue;
+    if (!isNewerThanCutoff(topic?.updated_at, cutoffMs)) continue;
+    seen.add(id);
+  }
+
+  for (const event of events) {
+    if (String(event?.type ?? "") !== "message_posted") continue;
+    if (event?.trashed_at || event?.archived_at) continue;
+    if (!isNewerThanCutoff(event?.ts, cutoffMs)) continue;
+    const threadId = primaryThreadIdFromEvent(event);
+    if (!threadId) continue;
+    const topicId = threadToTopic.get(threadId);
+    if (topicId) {
+      seen.add(topicId);
+    } else {
+      seen.add(`thread:${threadId}`);
+    }
+  }
+
+  return seen.size;
 }
 
 function compareEventsNewestFirst(left, right) {
@@ -143,12 +207,77 @@ export function filterHomeTimelineEvents(
     .slice(0, limit);
 }
 
+/** Same priority as Home `homeEventPrimaryRef` for a stable “primary” ref. */
+const HOME_EVENT_REF_PRIORITY = [
+  "topic",
+  "thread",
+  "board",
+  "document",
+  "artifact",
+  "card",
+  "inbox",
+  "url",
+  "event",
+];
+
+function homeHandoffRefPrefixToPillId(prefix) {
+  if (prefix === "inbox") return "inbox";
+  if (prefix === "topic" || prefix === "thread") return "topics";
+  if (prefix === "board" || prefix === "card") return "boards";
+  if (
+    prefix === "document" ||
+    prefix === "artifact" ||
+    prefix === "document_revision"
+  ) {
+    return "docs-proof";
+  }
+  return null;
+}
+
+/**
+ * Maps a workspace event to a Home “pill” id (`inbox` | `topics` | `boards` |
+ * `docs-proof`) for filter chips. Ref-first, then `thread_id` / `type` fallback.
+ */
+export function homeHandoffEventPillId(event) {
+  const refs = Array.isArray(event?.refs) ? event.refs : [];
+  for (const want of HOME_EVENT_REF_PRIORITY) {
+    const matched = refs.find((r) => splitTypedRef(r).prefix === want);
+    if (!matched) continue;
+    const p = splitTypedRef(matched).prefix;
+    const pill = homeHandoffRefPrefixToPillId(p);
+    if (pill) return pill;
+  }
+
+  if (String(event?.type ?? "") === "message_posted" && primaryThreadIdFromEvent(event)) {
+    return "topics";
+  }
+
+  const t = String(event?.type ?? "");
+  if (t.startsWith("card_")) return "boards";
+  if (t === "message_posted" || t === "thread_created" || t === "thread_updated") {
+    return "topics";
+  }
+  if (t === "receipt_added" || t === "review_completed") {
+    return "docs-proof";
+  }
+  if (
+    t === "decision_needed" ||
+    t === "intervention_needed" ||
+    t === "exception_raised" ||
+    t === "decision_made"
+  ) {
+    return "topics";
+  }
+  return "topics";
+}
+
 export function buildHomeChangeCards({
   inboxItems = [],
   topics = [],
   boards = [],
   documents = [],
   artifacts = [],
+  events = [],
   markerIso = "",
 } = {}) {
   const cutoffMs = parseMarkerMs(markerIso);
@@ -164,7 +293,7 @@ export function buildHomeChangeCards({
     {
       id: "topics",
       label: "Topic changes",
-      count: countDistinct(topics, cutoffMs, (topic) => topic?.updated_at),
+      count: countTopicSurfacesForHandoff(topics, events, cutoffMs),
     },
     {
       id: "boards",

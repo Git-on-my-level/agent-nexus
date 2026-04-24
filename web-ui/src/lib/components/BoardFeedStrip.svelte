@@ -179,7 +179,7 @@
 
     {#if expanded}
       <div
-        class="border-t border-[var(--line)] px-3 py-3"
+        class="border-t border-[var(--line)] px-3 pt-3 pb-3"
         id="board-feed-messages-panel"
         role="region"
         aria-labelledby="board-feed-label"
@@ -191,7 +191,6 @@
             onMessagePost={handleMessagePost}
             workspaceId={String(workspaceId ?? "")}
             discussionEmptyMessage={DISCUSSION_EMPTY}
-            allowActivityInterleave={false}
           />
         </div>
       </div>
