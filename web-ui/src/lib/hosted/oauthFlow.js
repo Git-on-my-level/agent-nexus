@@ -8,6 +8,10 @@ import {
 const HOSTED_OAUTH_STORAGE_KEY = "oar_hosted_oauth_continuations_v1";
 const HOSTED_OAUTH_MAX_AGE_MS = 15 * 60 * 1000;
 
+export function normalizeHostedOAuthMode(rawMode) {
+  return String(rawMode ?? "signin").trim() === "signup" ? "signup" : "signin";
+}
+
 export function normalizeHostedOAuthProvider(rawProvider) {
   const provider = String(rawProvider ?? "")
     .trim()
@@ -49,10 +53,7 @@ export function buildHostedOAuthContinuation(urlLike, options = {}) {
       : new URL(String(urlLike ?? ""), "http://localhost");
   const launch = readHostedLaunchParams(url.searchParams);
   return {
-    mode:
-      String(options.mode ?? "signin").trim() === "signup"
-        ? "signup"
-        : "signin",
+    mode: normalizeHostedOAuthMode(options.mode),
     next: normalizeHostedNextPath(url.searchParams.get("next")),
     workspaceSlug: launch.workspaceSlug,
     workspaceId: launch.workspaceId,
@@ -114,10 +115,7 @@ export function storeHostedOAuthContinuation(state, continuation) {
   }
   const storage = pruneHostedOAuthStorage(readHostedOAuthStorage());
   storage[normalizedState] = {
-    mode:
-      String(continuation?.mode ?? "signin").trim() === "signup"
-        ? "signup"
-        : "signin",
+    mode: normalizeHostedOAuthMode(continuation?.mode),
     next: normalizeHostedNextPath(continuation?.next),
     workspaceSlug: String(continuation?.workspaceSlug ?? "").trim(),
     workspaceId: String(continuation?.workspaceId ?? "").trim(),
@@ -139,8 +137,7 @@ export function readHostedOAuthContinuation(state) {
     return null;
   }
   return {
-    mode:
-      String(value.mode ?? "signin").trim() === "signup" ? "signup" : "signin",
+    mode: normalizeHostedOAuthMode(value.mode),
     next: normalizeHostedNextPath(value.next),
     workspaceSlug: String(value.workspaceSlug ?? "").trim(),
     workspaceId: String(value.workspaceId ?? "").trim(),
@@ -164,7 +161,140 @@ export function resolveHostedPostAuthPath(continuation) {
   if (next) {
     return next;
   }
-  return String(continuation?.mode ?? "").trim() === "signup"
+  return normalizeHostedOAuthMode(continuation?.mode) === "signup"
     ? "/hosted/onboarding/organization"
     : "/hosted/dashboard";
+}
+
+export function buildHostedOAuthRecoveryPath(continuation) {
+  const mode = normalizeHostedOAuthMode(continuation?.mode);
+  const basePath = mode === "signup" ? "/hosted/signup" : "/hosted/signin";
+  const params = new URLSearchParams();
+
+  const next = normalizeHostedNextPath(continuation?.next);
+  const workspaceSlug = String(continuation?.workspaceSlug ?? "").trim();
+  const workspaceId = String(continuation?.workspaceId ?? "").trim();
+  const returnPath = sanitizeHostedReturnPath(continuation?.returnPath, "/");
+  const inviteToken = String(continuation?.inviteToken ?? "").trim();
+
+  if (next) {
+    params.set("next", next);
+  }
+  if (workspaceSlug) {
+    params.set("workspace", workspaceSlug);
+  }
+  if (workspaceId) {
+    params.set("workspace_id", workspaceId);
+  }
+  if (returnPath !== "/") {
+    params.set("return_path", returnPath);
+  }
+  if (mode === "signup" && inviteToken) {
+    params.set("invite", inviteToken);
+  }
+
+  return params.size > 0 ? `${basePath}?${params.toString()}` : basePath;
+}
+
+export async function readHostedOAuthError(response) {
+  try {
+    const payload = await response.json();
+    return (
+      payload?.error?.message ||
+      payload?.error?.code ||
+      response.statusText ||
+      "Request failed."
+    );
+  } catch {
+    return response.statusText || "Request failed.";
+  }
+}
+
+export function friendlyHostedOAuthProviderError(rawError, rawMode) {
+  const mode = normalizeHostedOAuthMode(rawMode);
+  const normalized = String(rawError ?? "")
+    .trim()
+    .toLowerCase();
+  if (
+    normalized === "access_denied" ||
+    normalized === "user_denied" ||
+    normalized === "cancelled_on_user_request"
+  ) {
+    return mode === "signup"
+      ? "Signup was canceled at the identity provider."
+      : "Sign-in was canceled at the identity provider.";
+  }
+  return mode === "signup"
+    ? "Signup could not be completed at the identity provider."
+    : "Sign-in could not be completed at the identity provider.";
+}
+
+export async function startHostedOAuthFlow({
+  cpFetch,
+  provider,
+  pageUrl,
+  mode,
+  inviteToken,
+}) {
+  const normalizedProvider = normalizeHostedOAuthProvider(provider);
+  if (!normalizedProvider) {
+    throw new Error("Unsupported OAuth provider.");
+  }
+
+  const start = await cpFetch(`account/oauth/${normalizedProvider}/start`, {
+    method: "POST",
+    body: "{}",
+  });
+  if (!start.ok) {
+    throw new Error(await readHostedOAuthError(start));
+  }
+
+  const startBody = await start.json();
+  const oauthSession = startBody?.oauth_session;
+  const authorizationURL = String(oauthSession?.authorization_url ?? "").trim();
+  const state = String(oauthSession?.state ?? "").trim();
+  if (!authorizationURL || !state) {
+    throw new Error("Unexpected response from control plane.");
+  }
+
+  storeHostedOAuthContinuation(
+    state,
+    buildHostedOAuthContinuation(pageUrl, {
+      mode,
+      inviteToken,
+    }),
+  );
+
+  return {
+    authorizationURL,
+    state,
+    provider: normalizedProvider,
+  };
+}
+
+export async function createHostedLaunchSession({
+  cpFetch,
+  workspaceId,
+  returnPath,
+}) {
+  const normalizedWorkspaceId = String(workspaceId ?? "").trim();
+  if (!normalizedWorkspaceId) {
+    throw new Error("Workspace continuation is missing a workspace id.");
+  }
+
+  const response = await cpFetch(
+    `workspaces/${encodeURIComponent(normalizedWorkspaceId)}/launch-sessions`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        return_path: sanitizeHostedReturnPath(returnPath, "/"),
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(await readHostedOAuthError(response));
+  }
+
+  return response.json();
 }

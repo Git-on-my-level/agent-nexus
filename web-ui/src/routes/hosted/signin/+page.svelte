@@ -6,146 +6,37 @@
 
   import Button from "$lib/components/Button.svelte";
   import {
-    buildHostedOAuthContinuation,
-    resolveHostedPostAuthPath,
-    storeHostedOAuthContinuation,
+    createHostedLaunchSession,
+    startHostedOAuthFlow,
   } from "$lib/hosted/oauthFlow.js";
   import {
     normalizeHostedLaunchFinishURL,
     readHostedLaunchParams,
   } from "$lib/hosted/launchFlow.js";
-  import { getPasskeyAssertion } from "$lib/passkeyBrowser";
-  import {
-    hostedCpFetch,
-    persistHostedCpAccessToken,
-  } from "$lib/hosted/cpFetch.js";
-  import { loadHostedSession } from "$lib/hosted/session.js";
+  import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
 
-  let email = $state("");
-  let passkeyBusy = $state(false);
   let oauthBusyProvider = $state("");
-  let quickAuthBusy = $state(false);
-  let quickAuthOptions = $state(null);
   let message = $state("");
-  let showDevShortcut = $state(false);
-  let showPasskeyFallback = $state(false);
   const continuationQuery = $derived($page.url.search ?? "");
-  const quickAuthLabel = $derived.by(() => {
-    if (!quickAuthOptions?.enabled) return "";
-    const emailHint = String(quickAuthOptions.default_email ?? "").trim();
-    if (emailHint) return `Sign in as ${emailHint}`;
-    return "Use local dev account";
-  });
 
   onMount(async () => {
-    const launchFlow = await continueLaunchFlowIfPresent();
-    if (launchFlow.kind === "redirect") return;
-    try {
-      const res = await hostedCpFetch("account/dev/session/options");
-      if (!res.ok) return;
-      const body = await res.json();
-      const options = body?.dev_quick_auth;
-      if (options?.enabled) quickAuthOptions = options;
-    } catch {
-      // Optional helper.
-    }
+    await continueLaunchFlowIfPresent();
   });
 
-  async function readError(res) {
-    try {
-      const j = await res.json();
-      return j?.error?.message || j?.error?.code || res.statusText;
-    } catch {
-      return res.statusText;
-    }
-  }
-
-  async function submit() {
-    message = "";
-    if (!email.trim()) {
-      message = "Enter the email you signed up with.";
-      return;
-    }
-    passkeyBusy = true;
-    try {
-      const start = await hostedCpFetch("account/sessions/start", {
-        method: "POST",
-        body: JSON.stringify({ email: email.trim() }),
-      });
-      if (!start.ok) {
-        message = await readError(start);
-        return;
-      }
-      const startBody = await start.json();
-      const sessionId = String(startBody.session_id ?? "").trim();
-      const options = startBody.public_key_options;
-      if (!sessionId || !options) {
-        message = "Unexpected response from control plane.";
-        return;
-      }
-      const credential = await getPasskeyAssertion(options);
-      const finish = await hostedCpFetch("account/sessions/finish", {
-        method: "POST",
-        body: JSON.stringify({
-          session_id: sessionId,
-          credential,
-        }),
-      });
-      if (!finish.ok) {
-        message = await readError(finish);
-        return;
-      }
-      const finishBody = await finish.json();
-      const token = String(finishBody.session?.access_token ?? "").trim();
-      if (!token) {
-        message = "Signed in but no session token was returned.";
-        return;
-      }
-      persistHostedCpAccessToken(token);
-      await loadHostedSession();
-      const continuationHandled = await continueLaunchFlowIfPresent();
-      if (continuationHandled.kind === "noop") {
-        await navigateNext();
-      }
-    } catch (e) {
-      message = e instanceof Error ? e.message : "Sign-in failed.";
-    } finally {
-      passkeyBusy = false;
-    }
-  }
-
   async function startOAuth(provider) {
-    const normalizedProvider = String(provider ?? "")
+    message = "";
+    oauthBusyProvider = String(provider ?? "")
       .trim()
       .toLowerCase();
-    message = "";
-    oauthBusyProvider = normalizedProvider;
     try {
-      const start = await hostedCpFetch(
-        `account/oauth/${normalizedProvider}/start`,
-        {
-          method: "POST",
-          body: "{}",
-        },
-      );
-      if (!start.ok) {
-        message = await readError(start);
-        return;
-      }
-      const startBody = await start.json();
-      const oauthSession = startBody?.oauth_session;
-      const authorizationURL = String(
-        oauthSession?.authorization_url ?? "",
-      ).trim();
-      const state = String(oauthSession?.state ?? "").trim();
-      if (!authorizationURL || !state) {
-        message = "Unexpected response from control plane.";
-        return;
-      }
-      storeHostedOAuthContinuation(
-        state,
-        buildHostedOAuthContinuation($page.url, { mode: "signin" }),
-      );
+      const { authorizationURL, provider: normalizedProvider } =
+        await startHostedOAuthFlow({
+          cpFetch: hostedCpFetch,
+          provider,
+          pageUrl: $page.url,
+          mode: "signin",
+        });
+      oauthBusyProvider = normalizedProvider;
       window.location.assign(authorizationURL);
     } catch (e) {
       message = e instanceof Error ? e.message : "OAuth sign-in failed.";
@@ -154,65 +45,23 @@
     }
   }
 
-  async function quickSignIn() {
-    message = "";
-    quickAuthBusy = true;
-    try {
-      const res = await hostedCpFetch("account/dev/session", {
-        method: "POST",
-        body: "{}",
-      });
-      if (!res.ok) {
-        message = await readError(res);
-        return;
-      }
-      const body = await res.json();
-      const token = String(body.session?.access_token ?? "").trim();
-      if (!token) {
-        message = "Quick sign-in succeeded but no session token was returned.";
-        return;
-      }
-      persistHostedCpAccessToken(token);
-      await loadHostedSession();
-      const continuationHandled = await continueLaunchFlowIfPresent();
-      if (continuationHandled.kind === "noop") {
-        await navigateNext();
-      }
-    } catch (e) {
-      message = e instanceof Error ? e.message : "Quick sign-in failed.";
-    } finally {
-      quickAuthBusy = false;
-    }
-  }
-
-  async function navigateNext() {
-    await goto(
-      resolveHostedPostAuthPath({
-        mode: "signin",
-        next: $page.url.searchParams.get("next"),
-      }),
-    );
-  }
-
   async function continueLaunchFlowIfPresent() {
     const launchParams = readHostedLaunchParams($page.url.searchParams);
     if (!launchParams.hasContinuation) return { kind: "noop" };
 
-    const launchResponse = await hostedCpFetch(
-      `workspaces/${encodeURIComponent(launchParams.workspaceId)}/launch-sessions`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          return_path: launchParams.returnPath,
-        }),
-      },
-    );
-    if (!launchResponse.ok) {
-      message = await readError(launchResponse);
+    let launchPayload;
+    try {
+      launchPayload = await createHostedLaunchSession({
+        cpFetch: hostedCpFetch,
+        workspaceId: launchParams.workspaceId,
+        returnPath: launchParams.returnPath,
+      });
+    } catch (error) {
+      message =
+        error instanceof Error ? error.message : "Could not continue launch.";
       return { kind: "error" };
     }
 
-    const launchPayload = await launchResponse.json();
     const finishURL = normalizeHostedLaunchFinishURL(
       launchPayload?.launch_session?.finish_url,
     );
@@ -238,8 +87,7 @@
   <div class="rounded-md border border-line bg-bg-soft px-6 py-6">
     <h1 class="text-display text-fg">Welcome back</h1>
     <p class="mt-1.5 text-meta text-fg-subtle">
-      Hosted sign-in uses Google or GitHub. Other paths below are only for
-      migration or local development.
+      Hosted sign-in uses Google or GitHub only.
     </p>
 
     <div class="mt-5 space-y-3">
@@ -247,7 +95,7 @@
         type="button"
         variant="primary"
         onclick={() => startOAuth("google")}
-        disabled={Boolean(oauthBusyProvider || passkeyBusy || quickAuthBusy)}
+        disabled={Boolean(oauthBusyProvider)}
         class="w-full"
       >
         {oauthBusyProvider === "google"
@@ -258,7 +106,7 @@
         type="button"
         variant="secondary"
         onclick={() => startOAuth("github")}
-        disabled={Boolean(oauthBusyProvider || passkeyBusy || quickAuthBusy)}
+        disabled={Boolean(oauthBusyProvider)}
         class="w-full"
       >
         {oauthBusyProvider === "github"
@@ -274,80 +122,6 @@
       >
         {message}
       </p>
-    {/if}
-
-    <div class="mt-5 border-t border-line pt-3">
-      <button
-        type="button"
-        class="text-micro text-fg-subtle hover:text-fg"
-        onclick={() => (showPasskeyFallback = !showPasskeyFallback)}
-      >
-        {showPasskeyFallback ? "Hide" : "Use a passkey instead"}
-      </button>
-      {#if showPasskeyFallback}
-        <p class="mt-2 text-micro text-fg-subtle">
-          Only use this if your account still depends on a passkey during
-          migration or local testing.
-        </p>
-        <form
-          class="mt-3 space-y-3"
-          onsubmit={(e) => {
-            e.preventDefault();
-            submit();
-          }}
-        >
-          <label class="block text-micro text-fg-muted">
-            Email
-            <input
-              type="email"
-              autocomplete="username webauthn"
-              bind:value={email}
-              disabled={passkeyBusy || Boolean(oauthBusyProvider)}
-              required
-              placeholder="you@company.com"
-              class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-1.5 text-body text-fg placeholder:text-[var(--fg-subtle)]"
-            />
-          </label>
-          <Button
-            type="submit"
-            variant="secondary"
-            busy={passkeyBusy}
-            disabled={passkeyBusy || Boolean(oauthBusyProvider)}
-            class="w-full"
-          >
-            {passkeyBusy ? "Signing in…" : "Continue with passkey"}
-          </Button>
-        </form>
-      {/if}
-    </div>
-
-    {#if quickAuthOptions?.enabled}
-      <div class="mt-5 border-t border-line pt-3">
-        <button
-          type="button"
-          class="text-micro text-fg-subtle hover:text-fg"
-          onclick={() => (showDevShortcut = !showDevShortcut)}
-        >
-          {showDevShortcut ? "Hide" : "Local dev only"}
-        </button>
-        {#if showDevShortcut}
-          <p class="mt-2 text-micro text-fg-subtle">
-            Skips Google, GitHub, and passkey for local resets. Disabled in
-            production.
-          </p>
-          <Button
-            type="button"
-            variant="secondary"
-            onclick={quickSignIn}
-            disabled={passkeyBusy ||
-              Boolean(oauthBusyProvider) ||
-              quickAuthBusy}
-            class="mt-2 w-full"
-          >
-            {quickAuthBusy ? "Signing in…" : quickAuthLabel}
-          </Button>
-        {/if}
-      </div>
     {/if}
   </div>
 

@@ -740,11 +740,6 @@ async function handleHostedApiRoute(route, request, url, pathname, scenario) {
     return;
   }
 
-  if (pathname === "/account/dev/session/options" && request.method() === "GET") {
-    await route.fulfill(jsonResponse(404, { error: { message: "disabled" } }));
-    return;
-  }
-
   if (pathname === "/organizations" && request.method() === "GET") {
     await route.fulfill(
       jsonResponse(200, {

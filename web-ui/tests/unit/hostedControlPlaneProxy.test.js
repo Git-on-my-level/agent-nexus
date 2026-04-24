@@ -3,9 +3,8 @@ import { allowHostedControlPlanePath } from "../../src/lib/server/hostedControlP
 
 describe("allowHostedControlPlanePath", () => {
   it("allows account and organization workspace provisioning paths", () => {
-    expect(
-      allowHostedControlPlanePath("account/passkeys/registrations/start"),
-    ).toBe(true);
+    expect(allowHostedControlPlanePath("account/oauth/google/start")).toBe(true);
+    expect(allowHostedControlPlanePath("account/oauth/github/finish")).toBe(true);
     expect(allowHostedControlPlanePath("account/sessions/current")).toBe(true);
     expect(allowHostedControlPlanePath("organizations")).toBe(true);
     expect(allowHostedControlPlanePath("organizations/org_1")).toBe(true);

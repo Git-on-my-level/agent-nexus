@@ -153,10 +153,10 @@ describe("hosted oauth callback page", () => {
   it("keeps signup continuation available when oauth finish fails", async () => {
     storeHostedOAuthContinuation("state_1", {
       mode: "signup",
-      next: "",
-      workspaceSlug: "",
-      workspaceId: "",
-      returnPath: "/",
+      next: "/hosted/dashboard",
+      workspaceSlug: "acme",
+      workspaceId: "ws_123",
+      returnPath: "/threads/1",
       inviteToken: "inv_signup_123",
     });
     hostedCpFetch.mockResolvedValueOnce({
@@ -173,9 +173,17 @@ describe("hosted oauth callback page", () => {
       expect(alert?.textContent).toContain("oauth_invalid_state");
     });
     expect(container.textContent).toContain("Back to signup");
+    const link = container.querySelector("a[href]");
+    expect(link?.getAttribute("href")).toBe(
+      "/hosted/signup?next=%2Fhosted%2Fdashboard&workspace=acme&workspace_id=ws_123&return_path=%2Fthreads%2F1&invite=inv_signup_123",
+    );
     expect(readHostedOAuthContinuation("state_1")).toEqual(
       expect.objectContaining({
         mode: "signup",
+        next: "/hosted/dashboard",
+        workspaceSlug: "acme",
+        workspaceId: "ws_123",
+        returnPath: "/threads/1",
         inviteToken: "inv_signup_123",
       }),
     );

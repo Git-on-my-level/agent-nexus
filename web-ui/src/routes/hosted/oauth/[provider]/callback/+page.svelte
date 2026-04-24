@@ -10,9 +10,14 @@
     persistHostedCpAccessToken,
   } from "$lib/hosted/cpFetch.js";
   import {
+    createHostedLaunchSession,
+    buildHostedOAuthRecoveryPath,
     clearHostedOAuthContinuation,
     deriveHostedOAuthRedirectURI,
+    friendlyHostedOAuthProviderError,
+    normalizeHostedOAuthMode,
     normalizeHostedOAuthProvider,
+    readHostedOAuthError,
     readHostedOAuthContinuation,
     resolveHostedPostAuthPath,
   } from "$lib/hosted/oauthFlow.js";
@@ -35,7 +40,7 @@
     if (sessionEstablished) {
       return resolveHostedPostAuthPath(continuation);
     }
-    return mode === "signup" ? "/hosted/signup" : "/hosted/signin";
+    return buildHostedOAuthRecoveryPath(continuation);
   });
   const recoveryLabel = $derived.by(() => {
     if (sessionEstablished) {
@@ -51,52 +56,23 @@
     await finishOAuthFlow();
   });
 
-  async function readError(res) {
-    try {
-      const j = await res.json();
-      return j?.error?.message || j?.error?.code || res.statusText;
-    } catch {
-      return res.statusText;
-    }
-  }
-
-  function friendlyProviderError(rawError) {
-    const normalized = String(rawError ?? "")
-      .trim()
-      .toLowerCase();
-    if (
-      normalized === "access_denied" ||
-      normalized === "user_denied" ||
-      normalized === "cancelled_on_user_request"
-    ) {
-      return mode === "signup"
-        ? "Signup was canceled at the identity provider."
-        : "Sign-in was canceled at the identity provider.";
-    }
-    return mode === "signup"
-      ? "Signup could not be completed at the identity provider."
-      : "Sign-in could not be completed at the identity provider.";
-  }
-
   async function continueWorkspaceLaunch() {
     if (!continuation?.workspaceId) {
       return false;
     }
-    const launchResponse = await hostedCpFetch(
-      `workspaces/${encodeURIComponent(continuation.workspaceId)}/launch-sessions`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          return_path: continuation.returnPath || "/",
-        }),
-      },
-    );
-    if (!launchResponse.ok) {
-      message = await readError(launchResponse);
+    let launchPayload;
+    try {
+      launchPayload = await createHostedLaunchSession({
+        cpFetch: hostedCpFetch,
+        workspaceId: continuation.workspaceId,
+        returnPath: continuation.returnPath,
+      });
+    } catch (error) {
+      message =
+        error instanceof Error ? error.message : "Could not continue launch.";
       return false;
     }
 
-    const launchPayload = await launchResponse.json();
     const finishURL = normalizeHostedLaunchFinishURL(
       launchPayload?.launch_session?.finish_url,
     );
@@ -124,13 +100,13 @@
 
     const state = String($page.url.searchParams.get("state") ?? "").trim();
     continuation = readHostedOAuthContinuation(state);
-    mode = continuation?.mode === "signup" ? "signup" : "signin";
+    mode = normalizeHostedOAuthMode(continuation?.mode);
 
     const providerError = String(
       $page.url.searchParams.get("error") ?? "",
     ).trim();
     if (providerError) {
-      message = friendlyProviderError(providerError);
+      message = friendlyHostedOAuthProviderError(providerError, mode);
       busy = false;
       return;
     }
@@ -163,7 +139,7 @@
         }),
       });
       if (!finish.ok) {
-        message = await readError(finish);
+        message = await readHostedOAuthError(finish);
         return;
       }
       const finishBody = await finish.json();
