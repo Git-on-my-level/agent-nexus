@@ -106,8 +106,7 @@ describe("workspaceResolver", () => {
     );
   });
 
-  it("resolves workspace from control plane when SaaS packed-host dev is enabled", async () => {
-    mockState.env.ANX_SAAS_PACKED_HOST_DEV = "1";
+  it("resolves workspace from control plane when ANX_CONTROL_BASE_URL is configured", async () => {
     mockState.env.ANX_CONTROL_BASE_URL = "http://127.0.0.1:8100";
     mockState.env.ANX_CONTROL_PLANE_DEV_ACCESS_TOKEN = "tok_dev";
 
@@ -165,7 +164,6 @@ describe("workspaceResolver", () => {
   });
 
   it("returns workspace_not_ready (503) when CP knows the workspace but core_origin is empty", async () => {
-    mockState.env.ANX_SAAS_PACKED_HOST_DEV = "1";
     mockState.env.ANX_CONTROL_BASE_URL = "http://127.0.0.1:8100";
     mockState.env.ANX_CONTROL_PLANE_DEV_ACCESS_TOKEN = "tok_dev";
 
@@ -222,8 +220,7 @@ describe("workspaceResolver", () => {
     expect(resolved.error.payload.error.message).toMatch(/retry/i);
   });
 
-  it("hydrates workspace catalog from control plane org list in SaaS packed-host mode", async () => {
-    mockState.env.ANX_SAAS_PACKED_HOST_DEV = "1";
+  it("hydrates workspace catalog from control plane org list in hosted mode", async () => {
     mockState.env.ANX_CONTROL_BASE_URL = "http://127.0.0.1:8100";
     mockState.env.ANX_CONTROL_PLANE_DEV_ACCESS_TOKEN = "tok_dev";
 
@@ -298,6 +295,24 @@ describe("workspaceResolver", () => {
     expect(catalog.workspaces).toHaveLength(2);
     expect(catalog.workspaceByComposite.has("acme:beta")).toBe(true);
     expect(catalog.defaultWorkspace.slug).toBe("alpha");
+  });
+
+  it("marks lookup as unauthenticated when hosted provider has no CP token", async () => {
+    mockState.env.ANX_CONTROL_BASE_URL = "http://127.0.0.1:8100";
+    const resolved = await resolveWorkspaceInRoute({
+      organizationSlug: "acme",
+      workspaceSlug: "alpha",
+      event: {
+        fetch: vi.fn(),
+        cookies: { get: () => undefined },
+        locals: {},
+      },
+    });
+    expect(resolved.workspace).toBeNull();
+    expect(resolved.outOfWorkspaceUnauthenticated).toBe(true);
+    expect(resolved.error?.payload?.error?.code).toBe(
+      "workspace_not_configured",
+    );
   });
 
   it("resolves proxy target from static workspace catalog", async () => {

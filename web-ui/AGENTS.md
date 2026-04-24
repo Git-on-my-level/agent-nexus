@@ -39,6 +39,7 @@ It gives operators fast, glanceable visibility into the shared workspace maintai
 
 ## Canonical References
 - Workspace auth (modes, cookies, errors, limitations): `docs/auth.md` (includes refresh-token **replay window** limitation — do not paper over with retries)
+- Out-of-workspace provider contract and invariants: `docs/out-of-workspace-provider.md`
 - Product and UX spec: `docs/anx-ui-spec.md`
 - HTTP contract: `docs/http-api.md`
 - Shared schema: `../contracts/anx-schema.yaml`

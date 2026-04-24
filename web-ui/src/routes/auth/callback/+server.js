@@ -2,13 +2,22 @@ import { env as privateEnv } from "$env/dynamic/private";
 import { error, json } from "@sveltejs/kit";
 
 import { AuthErrorCode } from "$lib/authErrorCodes.js";
-import { resolveAuthCapabilities } from "$lib/server/authCapabilities.js";
-import { fetchWorkspaceByIdFromControlPlane } from "$lib/server/controlPlaneWorkspace.js";
 import { logServerEvent } from "$lib/server/devLog.js";
+import { getOutOfWorkspaceProvider } from "$lib/server/outOfWorkspace/index.js";
 import { runWorkspaceAuthCallbackPost } from "$lib/server/workspaceAuthCallbackPost.js";
 
 function wantsJson(request) {
   return request.headers.get("accept")?.includes("application/json") ?? false;
+}
+
+function unresolvedReason(providerMode, lookupKind) {
+  if (providerMode === "local") {
+    return "control_plane_unavailable";
+  }
+  if (lookupKind === "unauthenticated") {
+    return "control_plane_unauthenticated";
+  }
+  return "workspace_unknown";
 }
 
 /**
@@ -18,43 +27,36 @@ function wantsJson(request) {
  * same exchange logic as the nested route.
  */
 export async function POST(event) {
-  const caps = resolveAuthCapabilities(privateEnv);
+  const provider =
+    event.locals?.outOfWorkspace ?? getOutOfWorkspaceProvider(privateEnv);
   const form = await event.request.formData();
   const workspaceId = String(form.get("workspace_id") ?? "").trim();
   let organizationSlug = "";
   let workspaceSlug = "";
+  let lookupKind = "missing";
 
-  if (workspaceId && caps.supportsCpWorkspaceIdLookup) {
-    const entry = await fetchWorkspaceByIdFromControlPlane({
-      env: privateEnv,
-      workspaceId,
-      fetchFn: event.fetch,
-      getCookie: event.cookies.get.bind(event.cookies),
-    });
-    if (entry?.organizationSlug && entry?.slug) {
-      organizationSlug = entry.organizationSlug;
-      workspaceSlug = entry.slug;
+  if (workspaceId) {
+    const lookup = await provider.resolveWorkspaceById({ event, workspaceId });
+    lookupKind = lookup.kind;
+    if (lookup.kind === "found") {
+      organizationSlug = lookup.workspace.organizationSlug;
+      workspaceSlug = lookup.workspace.slug;
     }
   }
 
   if (!organizationSlug || !workspaceSlug) {
-    const reason =
-      caps.mode === "local"
-        ? "local_mode_no_control_plane"
-        : caps.mode === "hosted"
-          ? "hosted_mode_workspace_id_lookup_disabled"
-          : "lookup_failed_or_missing_token";
+    const reason = unresolvedReason(provider.mode, lookupKind);
     logServerEvent(
       "auth.callback.root.workspace_resolve_failed",
       {
         workspace_id: workspaceId || "(empty)",
-        mode: caps.mode,
+        mode: provider.mode,
         reason,
       },
       { level: "warn" },
     );
     const msg =
-      "Could not resolve workspace for this callback. Ensure the workspace base URL in the control plane includes the full shell path (/o/{org}/w/{workspace}), or configure ANX_SAAS_PACKED_HOST_DEV, ANX_CONTROL_BASE_URL, and ANX_CONTROL_PLANE_DEV_ACCESS_TOKEN (or oar_cp_dev_access_token) so the server can look up the workspace by id.";
+      "Could not resolve workspace for this callback. Ensure the workspace base URL in the control plane includes the full shell path (/o/{org}/w/{workspace}), or configure ANX_CONTROL_BASE_URL plus ANX_CONTROL_PLANE_DEV_ACCESS_TOKEN (or oar_cp_dev_access_token) so the server can look up the workspace by id.";
     if (wantsJson(event.request)) {
       return json(
         {
@@ -62,7 +64,7 @@ export async function POST(event) {
             code: AuthErrorCode.WORKSPACE_RESOLVE_FAILED,
             message: msg,
             reason,
-            mode: caps.mode,
+            mode: provider.mode,
           },
         },
         { status: 400 },

@@ -4,12 +4,10 @@ set -euo pipefail
 # Default core URL for local UI dev when unset (matches seed-core-from-mock.mjs).
 # Without this, `[workspace]/+layout.js` schema verification hits the proxy with an
 # empty workspace coreBaseUrl and returns HTTP 500 on /local.
-# Hosted SaaS packed-host dev (make serve-control-plane) leaves this unset so no core
-# is implied until ANX_WORKSPACES / ANX_SAAS_DEV_PRECONFIGURED_WORKSPACES or CP lookup.
-if [[ -z "${ANX_CORE_BASE_URL:-}" ]]; then
-	if [[ "${ANX_SAAS_PACKED_HOST_DEV:-}" != "1" && "${ANX_SAAS_PACKED_HOST_DEV:-}" != "true" ]]; then
-		export ANX_CORE_BASE_URL="http://127.0.0.1:8000"
-	fi
+# When ANX_CONTROL_BASE_URL is set, cores are resolved from control-plane-backed
+# workspace metadata; do not impose a static default that masks resolver behavior.
+if [[ -z "${ANX_CORE_BASE_URL:-}" && -z "${ANX_CONTROL_BASE_URL:-}" ]]; then
+	export ANX_CORE_BASE_URL="http://127.0.0.1:8000"
 fi
 
 pnpm install

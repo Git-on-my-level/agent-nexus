@@ -95,6 +95,17 @@
   let devPersonaBusy = $state(false);
 
   let activeWorkspace = $derived($page.data.workspace ?? null);
+  let shellCapabilities = $derived(
+    data.shellCapabilities ?? {
+      mode: "local",
+      accountPath: null,
+      publicOrigin: null,
+    },
+  );
+  let hostedMode = $derived(shellCapabilities.mode === "hosted");
+  let hostedAccountPath = $derived(
+    String(shellCapabilities.accountPath ?? "").trim() || "/hosted/onboarding",
+  );
   let activeWorkspaceSlug = $derived(activeWorkspace?.slug ?? "");
   let activeOrganizationSlug = $derived(
     activeWorkspace?.organizationSlug ?? $page.params?.organization ?? "",
@@ -103,7 +114,7 @@
   let workspaceSwitcherSub = $derived.by(() => {
     const d = String(activeWorkspace?.description ?? "").trim();
     if (d) return d;
-    if (data.hostedMode) return "Workspace";
+    if (hostedMode) return "Workspace";
     return "Agent Nexus";
   });
   let currentAppPath = $derived(
@@ -154,7 +165,7 @@
       identityReady &&
       $devActorModeReady &&
       !onLoginRoute &&
-      ((Boolean(data.hostedMode) && !$authenticatedAgent) ||
+      ((hostedMode && !$authenticatedAgent) ||
         (!$devActorMode && !$authenticatedAgent) ||
         ($devActorMode && requiresHumanSession && !hasHumanAuthSession)),
   );
@@ -195,7 +206,7 @@
   });
 
   $effect(() => {
-    if (!browser || !data.hostedMode) {
+    if (!browser || !hostedMode) {
       return;
     }
     void loadHostedSession();
@@ -203,7 +214,7 @@
 
   let shellIdentity = $derived(
     computeWorkspaceShellIdentity({
-      hostedMode: Boolean(data.hostedMode),
+      hostedMode,
       hostedAccount: hostedSessionSnap.account,
       selectedActorName,
       authenticatedAgent: $authenticatedAgent,
@@ -224,7 +235,9 @@
     return parts.join(" · ");
   });
 
-  let hostedCpOrigin = $derived(String(data.hostedCpOrigin ?? "").trim());
+  let hostedCpOrigin = $derived(
+    String(shellCapabilities.publicOrigin ?? "").trim(),
+  );
   let sessionEndedWorkspaceUrl = $derived.by(() => {
     if (!browser || !activeWorkspaceSlug || !activeOrganizationSlug) {
       return "";
@@ -264,7 +277,7 @@
     const agent = get(authenticatedAgent);
     const requiresHumanSession = appPath === "/secrets";
     const hasHumanAuthSession = isHumanWorkspacePrincipal(agent);
-    const hostedMode = Boolean(p.data?.hostedMode);
+    const hostedMode = p.data?.shellCapabilities?.mode === "hosted";
 
     return (
       ((hostedMode || !devMode) && !agent) ||
@@ -1121,8 +1134,8 @@
                 {/each}
               </div>
             </nav>
-            {#if data.hostedMode}
-              <a class="shell-account-link" href={data.hostedAccountPath}>
+            {#if hostedMode}
+              <a class="shell-account-link" href={hostedAccountPath}>
                 <svg
                   class="shell-account-icon"
                   fill="none"

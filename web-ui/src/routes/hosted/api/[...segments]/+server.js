@@ -1,21 +1,17 @@
-import { proxyHostedControlPlaneRequest } from "$lib/server/hostedControlPlaneProxy.js";
+import { env as privateEnv } from "$env/dynamic/private";
 
-/** @param {import('@sveltejs/kit').RequestEvent} event */
-export function GET(event) {
-  return proxyHostedControlPlaneRequest(event, "GET");
-}
+import { getOutOfWorkspaceProvider } from "$lib/server/outOfWorkspace/index.js";
 
-/** @param {import('@sveltejs/kit').RequestEvent} event */
-export function POST(event) {
-  return proxyHostedControlPlaneRequest(event, "POST");
-}
+const handler = (method) => (event) =>
+  (
+    event.locals?.outOfWorkspace ?? getOutOfWorkspaceProvider(privateEnv)
+  ).proxyHostedApi({
+    event,
+    method,
+    subpath: String(event.params.segments ?? ""),
+  });
 
-/** @param {import('@sveltejs/kit').RequestEvent} event */
-export function PATCH(event) {
-  return proxyHostedControlPlaneRequest(event, "PATCH");
-}
-
-/** @param {import('@sveltejs/kit').RequestEvent} event */
-export function DELETE(event) {
-  return proxyHostedControlPlaneRequest(event, "DELETE");
-}
+export const GET = handler("GET");
+export const POST = handler("POST");
+export const PATCH = handler("PATCH");
+export const DELETE = handler("DELETE");

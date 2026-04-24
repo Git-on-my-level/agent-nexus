@@ -460,11 +460,9 @@ export const QA_EVENTS = [
     type: "message_posted",
     actor_id: "actor-zara-ops",
     thread_id: "thread-launch-war-room",
-    refs: [
-      "thread:thread-launch-war-room",
-      "document:doc-launch-checklist",
-    ],
-    summary: "Launch thread updated with the mobile auth rollback recommendation.",
+    refs: ["thread:thread-launch-war-room", "document:doc-launch-checklist"],
+    summary:
+      "Launch thread updated with the mobile auth rollback recommendation.",
   },
   {
     id: "evt-home-receipt-billing",
@@ -484,11 +482,9 @@ export const QA_EVENTS = [
     type: "thread_updated",
     actor_id: "actor-jordan-human",
     thread_id: "thread-billing-rollout",
-    refs: [
-      "topic:topic-billing-rollout",
-      "document:doc-billing-runbook",
-    ],
-    summary: "Billing rollout summary updated after the latest portal smoke pass.",
+    refs: ["topic:topic-billing-rollout", "document:doc-billing-runbook"],
+    summary:
+      "Billing rollout summary updated after the latest portal smoke pass.",
     payload: { changed_fields: ["current_summary", "next_actions"] },
   },
   {
@@ -527,10 +523,7 @@ export const QA_EVENTS = [
     type: "decision_made",
     actor_id: "actor-zara-ops",
     thread_id: "thread-launch-war-room",
-    refs: [
-      "thread:thread-launch-war-room",
-      "document:doc-launch-checklist",
-    ],
+    refs: ["thread:thread-launch-war-room", "document:doc-launch-checklist"],
     summary: "Rollback window approved pending the next monitoring sweep.",
   },
   {
@@ -539,10 +532,7 @@ export const QA_EVENTS = [
     type: "inbox_item_acknowledged",
     actor_id: "actor-jordan-human",
     thread_id: "thread-launch-war-room",
-    refs: [
-      "thread:thread-launch-war-room",
-      "inbox:inbox-ask-auth",
-    ],
+    refs: ["thread:thread-launch-war-room", "inbox:inbox-ask-auth"],
     summary: "Operator acknowledged the auth rollback ask item.",
   },
 ];

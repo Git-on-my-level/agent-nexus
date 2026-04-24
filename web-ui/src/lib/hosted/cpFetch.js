@@ -1,5 +1,6 @@
 /**
- * Same-origin proxy to the control plane (see /hosted/api/*). Requires SaaS packed-host dev.
+ * Same-origin proxy to the control plane (see /hosted/api/*). Available when
+ * web-ui is running in hosted mode (`ANX_CONTROL_BASE_URL` configured).
  * @param {string} path - e.g. `organizations` or `account/sessions/start` (no leading slash)
  * @param {RequestInit} [init]
  */

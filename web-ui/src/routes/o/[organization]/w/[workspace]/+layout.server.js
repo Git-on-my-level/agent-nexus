@@ -1,12 +1,14 @@
 import { env as privateEnv } from "$env/dynamic/private";
 import { error, redirect } from "@sveltejs/kit";
 
+import { sanitizeHostedReturnPath } from "$lib/hosted/launchFlow.js";
 import {
-  buildHostedSignInPath,
-  sanitizeHostedReturnPath,
-} from "$lib/hosted/launchFlow.js";
-import { isHostedWebUiShell } from "$lib/server/controlPlaneWorkspace";
+  getAuthAccessCookieName,
+  getAuthSessionCookieName,
+} from "$lib/server/authSession.js";
 import { logServerEvent } from "$lib/server/devLog";
+import { getOutOfWorkspaceProvider } from "$lib/server/outOfWorkspace/index.js";
+import { handleLaunchInstruction } from "$lib/server/outOfWorkspace/launchSession.js";
 import {
   LAST_WORKSPACE_COOKIE,
   lastWorkspaceCookieValue,
@@ -16,35 +18,34 @@ import {
   resolveWorkspaceCatalog,
   resolveWorkspaceInRoute,
 } from "$lib/server/workspaceResolver";
+import { stripWorkspacePath } from "$lib/workspacePaths";
 
 function isSecureCookieRequest(event) {
   return event.url.protocol === "https:";
 }
 
-/**
- * In hosted dev/SaaS mode the workspace catalog is owned by the control plane.
- * If we can't resolve a workspace because the SSR request has no CP access
- * token (cookie + env both empty), the user is simply unauthenticated — bounce
- * them to /hosted/signin instead of returning the misleading
- * "workspace not configured" 404 page.
- */
-function shouldRedirectToHostedSignIn(event) {
-  if (!isHostedWebUiShell(privateEnv)) {
-    return false;
-  }
-  const envToken = String(
-    privateEnv.ANX_CONTROL_PLANE_DEV_ACCESS_TOKEN ?? "",
+function workspaceHasCoreSession(event, workspaceSlug) {
+  const refreshToken = String(
+    event.cookies.get(getAuthSessionCookieName(workspaceSlug)) ?? "",
   ).trim();
-  if (envToken) {
-    return false;
-  }
-  const cookieToken = String(
-    event.cookies.get("oar_cp_dev_access_token") ?? "",
+  const accessToken = String(
+    event.cookies.get(getAuthAccessCookieName(workspaceSlug)) ?? "",
   ).trim();
-  return cookieToken === "";
+  return refreshToken !== "" || accessToken !== "";
+}
+
+function workspaceRelativeReturnPath(event, organizationSlug, workspaceSlug) {
+  const appPath = stripWorkspacePath(
+    event.url.pathname,
+    organizationSlug,
+    workspaceSlug,
+  );
+  return sanitizeHostedReturnPath(`${appPath}${event.url.search}`, "/");
 }
 
 export async function load(event) {
+  const provider =
+    event.locals?.outOfWorkspace ?? getOutOfWorkspaceProvider(privateEnv);
   const resolved = await resolveWorkspaceInRoute({
     event,
     organizationSlug: event.params.organization,
@@ -68,29 +69,29 @@ export async function load(event) {
       { level: "warn" },
     );
 
-    // Only bounce to /hosted/signin when the workspace appears truly unknown
-    // and the SSR request has no CP token. A "workspace_not_ready" 503 means
-    // we did resolve the workspace from the CP but its core hasn't started
-    // yet — bouncing to signin would loop the user.
-    if (code !== "workspace_not_ready" && shouldRedirectToHostedSignIn(event)) {
-      const returnPath = sanitizeHostedReturnPath(
-        `${event.url.pathname}${event.url.search}`,
-      );
-      const target = buildHostedSignInPath({
+    if (
+      code === "workspace_not_configured" &&
+      provider.mode === "hosted" &&
+      resolved.outOfWorkspaceUnauthenticated
+    ) {
+      const signInUrl = provider.buildSignInUrl({
         workspaceSlug: event.params.workspace,
-        returnPath,
+        returnPath: workspaceRelativeReturnPath(
+          event,
+          event.params.organization,
+          event.params.workspace,
+        ),
       });
-      logServerEvent("workspace.layout.redirect_to_signin", {
-        org: event.params.organization,
-        slug: event.params.workspace,
-        target,
-      });
-      throw redirect(307, target);
+      if (signInUrl) {
+        logServerEvent("workspace.layout.redirect_to_signin", {
+          org: event.params.organization,
+          slug: event.params.workspace,
+          target: signInUrl,
+        });
+        throw redirect(307, signInUrl);
+      }
     }
 
-    // Pass the structured code through so $page.error.code is available
-    // for +error.svelte to render a useful, actionable message instead of
-    // the generic "Internal Error" fallback.
     throw error(resolved.error.status, { message, code });
   }
 
@@ -109,8 +110,30 @@ export async function load(event) {
     },
   );
 
-  const coreBaseUrl = String(resolved.workspace.coreBaseUrl ?? "").trim();
-  const catalog = await resolveWorkspaceCatalog(event);
+  const workspaceId = String(
+    resolved.workspace.workspaceId ?? resolved.workspace.id ?? "",
+  ).trim();
+  if (
+    provider.mode === "hosted" &&
+    workspaceId &&
+    !workspaceHasCoreSession(event, resolved.workspace.slug)
+  ) {
+    const instruction = await provider.beginLaunchSession({
+      event,
+      workspaceId,
+      workspaceSlug: resolved.workspace.slug,
+      returnPath: workspaceRelativeReturnPath(
+        event,
+        resolved.workspace.organizationSlug,
+        resolved.workspace.slug,
+      ),
+    });
+    handleLaunchInstruction(instruction);
+  }
+
+  const catalog = await resolveWorkspaceCatalog(event, {
+    prefetchedResolved: resolved,
+  });
 
   return {
     ...toPublicWorkspaceCatalog(catalog),
@@ -119,7 +142,7 @@ export async function load(event) {
       slug: resolved.workspace.slug,
       label: resolved.workspace.label,
       description: resolved.workspace.description,
-      coreBaseUrl,
+      coreBaseUrl: String(resolved.workspace.coreBaseUrl ?? "").trim(),
     },
   };
 }

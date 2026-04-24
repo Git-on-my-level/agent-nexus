@@ -6,7 +6,11 @@
   import RefLink from "$lib/components/RefLink.svelte";
   import { coreClient } from "$lib/coreClient";
   import { parseTimestampMs } from "$lib/dateUtils";
-  import { buildTimelineRefLabelHints, eventTypeDotClass, toTimelineView } from "$lib/timelineUtils";
+  import {
+    buildTimelineRefLabelHints,
+    eventTypeDotClass,
+    toTimelineView,
+  } from "$lib/timelineUtils";
   import { filterTopLevelDocuments } from "$lib/documentVisibility";
   import { formatTimestamp } from "$lib/formatDate";
   import {
@@ -277,7 +281,9 @@
     const refs = Array.isArray(event?.refs) ? event.refs : [];
 
     for (const prefix of HOME_REF_PRIORITY) {
-      const matched = refs.find((refValue) => splitTypedRef(refValue).prefix === prefix);
+      const matched = refs.find(
+        (refValue) => splitTypedRef(refValue).prefix === prefix,
+      );
       if (matched) return matched;
     }
 
@@ -322,7 +328,9 @@
   }
 
   function timestampToIso(timestampMs) {
-    return Number.isFinite(timestampMs) ? new Date(timestampMs).toISOString() : "";
+    return Number.isFinite(timestampMs)
+      ? new Date(timestampMs).toISOString()
+      : "";
   }
 </script>
 
@@ -374,11 +382,9 @@
         onclick={resolveMarkAsRead}
         disabled={isMarkAsReadDisabled()}
         type="button"
-        title={
-          handoffMarkerIso
-            ? "Update the handoff marker to everything currently represented on Home"
-            : "Set your first handoff marker for this workspace"
-        }
+        title={handoffMarkerIso
+          ? "Update the handoff marker to everything currently represented on Home"
+          : "Set your first handoff marker for this workspace"}
       >
         Mark as read
       </button>
@@ -409,13 +415,17 @@
       </div>
       {#if Number.isFinite(latestTimelineTimestamp())}
         <p class="text-micro text-[var(--fg-muted)]">
-          Latest event {formatTimestamp(timestampToIso(latestTimelineTimestamp()))}
+          Latest event {formatTimestamp(
+            timestampToIso(latestTimelineTimestamp()),
+          )}
         </p>
       {/if}
     </div>
 
     {#if loading && inboxState.status === "idle" && topicsState.status === "idle"}
-      <p class="mt-4 text-meta text-[var(--fg-muted)]">Loading handoff summary…</p>
+      <p class="mt-4 text-meta text-[var(--fg-muted)]">
+        Loading handoff summary…
+      </p>
     {:else}
       <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {#each homeChangeCards as card}
@@ -425,7 +435,9 @@
             <p class="text-micro font-medium text-[var(--fg-muted)]">
               {card.label}
             </p>
-            <p class={`mt-2 text-title font-semibold ${countValueClass(card.count)}`}>
+            <p
+              class={`mt-2 text-title font-semibold ${countValueClass(card.count)}`}
+            >
               {card.count}
             </p>
           </div>
@@ -433,27 +445,35 @@
       </div>
 
       {#if handoffMarkerIso && !handoffHasChanges}
-        <p class="mt-4 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg-muted)]">
+        <p
+          class="mt-4 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg-muted)]"
+        >
           Nothing new since you marked this workspace read.
         </p>
       {/if}
 
       {#if handoffDataErrors.length > 0}
-        <p class="mt-4 rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
+        <p
+          class="mt-4 rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
+        >
           {handoffDataErrors[0]}
         </p>
       {/if}
     {/if}
   </section>
 
-  <div class="grid gap-5 xl:grid-cols-[minmax(0,1.8fr)_minmax(18rem,1fr)] min-w-0">
+  <div
+    class="grid gap-5 xl:grid-cols-[minmax(0,1.8fr)_minmax(18rem,1fr)] min-w-0"
+  >
     <section
       class="min-w-0 rounded-xl border border-[var(--line)] bg-[var(--panel)] p-4 sm:p-5"
       data-testid="home-happenings"
     >
       <div class="flex items-center justify-between gap-3">
         <div>
-          <h2 class="text-meta font-semibold text-[var(--fg)]">What’s happened</h2>
+          <h2 class="text-meta font-semibold text-[var(--fg)]">
+            What’s happened
+          </h2>
           <p class="mt-1 text-micro text-[var(--fg-muted)]">
             High-signal workspace activity since your last handoff mark
           </p>
@@ -461,15 +481,22 @@
       </div>
 
       {#if loading && eventsState.status === "idle"}
-        <p class="mt-4 text-meta text-[var(--fg-muted)]">Loading workspace activity…</p>
+        <p class="mt-4 text-meta text-[var(--fg-muted)]">
+          Loading workspace activity…
+        </p>
       {:else if eventsState.status === "error"}
-        <p class="mt-4 rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
+        <p
+          class="mt-4 rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
+        >
           {eventsState.error}
         </p>
       {:else if handoffTimelineView.length === 0}
-        <p class="mt-4 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-3 text-meta text-[var(--fg-muted)]">
+        <p
+          class="mt-4 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-3 text-meta text-[var(--fg-muted)]"
+        >
           {#if handoffMarkerIso}
-            Nothing new has landed in the workspace timeline since your last handoff mark.
+            Nothing new has landed in the workspace timeline since your last
+            handoff mark.
           {:else}
             No workspace events yet.
           {/if}
@@ -478,7 +505,9 @@
         <div class="mt-4 space-y-3">
           {#each handoffTimelineView as event (event.id)}
             {@const primaryRef = homeEventPrimaryRef(event)}
-            <div class="rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] px-4 py-3">
+            <div
+              class="rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] px-4 py-3"
+            >
               <div class="flex items-start gap-3">
                 <span
                   class={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${eventTypeDotClass(event.rawType)}`}
@@ -488,7 +517,9 @@
                   <p class="text-meta font-medium text-[var(--fg)]">
                     {event.summary || event.typeLabel}
                   </p>
-                  <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-micro text-[var(--fg-muted)]">
+                  <div
+                    class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-micro text-[var(--fg-muted)]"
+                  >
                     <span>{event.typeLabel}</span>
                     <span>•</span>
                     <span>{formatTimestamp(event.ts) || "—"}</span>
@@ -515,7 +546,9 @@
     >
       <div class="flex items-center justify-between gap-2">
         <div>
-          <h2 class="text-meta font-semibold text-[var(--fg)]">Inbox preview</h2>
+          <h2 class="text-meta font-semibold text-[var(--fg)]">
+            Inbox preview
+          </h2>
           <p class="mt-1 text-micro text-[var(--fg-muted)]">
             Top unresolved items right now
           </p>
@@ -529,13 +562,19 @@
       </div>
 
       {#if loading && inboxState.status === "idle"}
-        <p class="mt-4 text-meta text-[var(--fg-muted)]">Loading inbox preview…</p>
+        <p class="mt-4 text-meta text-[var(--fg-muted)]">
+          Loading inbox preview…
+        </p>
       {:else if inboxState.status === "error"}
-        <p class="mt-4 rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
+        <p
+          class="mt-4 rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
+        >
           {inboxState.error}
         </p>
       {:else if inboxPreviewItems.length === 0}
-        <p class="mt-4 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-3 text-meta text-[var(--fg-muted)]">
+        <p
+          class="mt-4 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-3 text-meta text-[var(--fg-muted)]"
+        >
           Inbox is clear.
         </p>
       {:else}
@@ -551,10 +590,14 @@
                     {item.title}
                   </p>
                   <p class="mt-1 text-micro text-[var(--fg-muted)]">
-                    {getInboxSubjectLabel(item) || "Workspace item"} · {formatTimestamp(item.source_event_time) || "—"}
+                    {getInboxSubjectLabel(item) || "Workspace item"} · {formatTimestamp(
+                      item.source_event_time,
+                    ) || "—"}
                   </p>
                 </div>
-                <span class="shrink-0 rounded px-1.5 py-0.5 text-micro font-medium text-[var(--fg)] bg-[var(--line)]">
+                <span
+                  class="shrink-0 rounded px-1.5 py-0.5 text-micro font-medium text-[var(--fg)] bg-[var(--line)]"
+                >
                   {getInboxCategoryLabel(item.category)}
                 </span>
               </div>

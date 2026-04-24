@@ -18,7 +18,7 @@
   let workspaceName = $derived(errorObj?.workspace_name);
 
   let cpOrigin = $derived(
-    String(data?.hostedCpOrigin ?? "").replace(/\/+$/, ""),
+    String(data?.shellCapabilities?.publicOrigin ?? "").replace(/\/+$/, ""),
   );
 
   let dashboardHref = $derived(cpOrigin ? `${cpOrigin}/workspaces` : "");

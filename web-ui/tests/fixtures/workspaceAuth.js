@@ -1,5 +1,5 @@
 /**
- * Shared shapes for auth / workspace tests (agents, CP rows, capability modes).
+ * Shared shapes for auth / workspace tests (agents, CP rows, provider mocks).
  */
 
 export const agents = {
@@ -26,7 +26,7 @@ export const agents = {
   },
 };
 
-export const controlPlaneWorkspaceRows = {
+export const cpWorkspaceRows = {
   minimal: {
     id: "ws-cp-1",
     slug: "alpha",
@@ -52,8 +52,90 @@ export const controlPlaneWorkspaceRows = {
   },
 };
 
-export const capabilities = {
-  hosted: { mode: "hosted", supportsCpWorkspaceIdLookup: false },
-  packedHostDev: { mode: "packed-host-dev", supportsCpWorkspaceIdLookup: true },
-  local: { mode: "local", supportsCpWorkspaceIdLookup: false },
-};
+export function mockLocalProvider(overrides = {}) {
+  return Object.freeze({
+    mode: "local",
+    async resolveWorkspaceBySlug() {
+      return { kind: "missing" };
+    },
+    async resolveWorkspaceById() {
+      return { kind: "missing" };
+    },
+    async listWorkspacesForOrganization() {
+      return [];
+    },
+    async beginLaunchSession() {
+      return { kind: "workspace_native_login" };
+    },
+    async exchangeLaunchSession() {
+      return {
+        ok: false,
+        status: 503,
+        code: "control_plane_unavailable",
+        message: "Self-hosted workspace has no control plane configured.",
+      };
+    },
+    buildSignInUrl() {
+      return null;
+    },
+    async proxyHostedApi() {
+      throw new Error("proxyHostedApi is not available in local provider");
+    },
+    describeShellCapabilities() {
+      return {
+        mode: "local",
+        accountPath: null,
+        publicOrigin: null,
+        allowsEmptyStaticCatalog: false,
+      };
+    },
+    ...overrides,
+  });
+}
+
+export function mockHostedProvider(overrides = {}) {
+  return Object.freeze({
+    mode: "hosted",
+    async resolveWorkspaceBySlug() {
+      return { kind: "missing" };
+    },
+    async resolveWorkspaceById() {
+      return { kind: "missing" };
+    },
+    async listWorkspacesForOrganization() {
+      return [];
+    },
+    async beginLaunchSession() {
+      return { kind: "workspace_native_login" };
+    },
+    async exchangeLaunchSession() {
+      return {
+        ok: false,
+        status: 503,
+        code: "session_exchange_unreachable",
+        message: "Could not reach control plane for session exchange.",
+      };
+    },
+    buildSignInUrl({ workspaceSlug, workspaceId, returnPath } = {}) {
+      const params = new URLSearchParams();
+      if (workspaceSlug) params.set("workspace", workspaceSlug);
+      if (workspaceId) params.set("workspace_id", workspaceId);
+      if (returnPath && returnPath !== "/")
+        params.set("return_path", returnPath);
+      const qs = params.toString();
+      return qs ? `/hosted/signin?${qs}` : "/hosted/signin";
+    },
+    async proxyHostedApi() {
+      return new Response("ok", { status: 200 });
+    },
+    describeShellCapabilities() {
+      return {
+        mode: "hosted",
+        accountPath: "/hosted/onboarding",
+        publicOrigin: "https://cp.example.test",
+        allowsEmptyStaticCatalog: true,
+      };
+    },
+    ...overrides,
+  });
+}

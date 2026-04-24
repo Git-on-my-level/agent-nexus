@@ -11,12 +11,8 @@ import {
   normalizeWorkspaceSlug,
   workspaceCompositeKey,
 } from "../workspacePaths.js";
-import { resolveAuthCapabilities } from "./authCapabilities.js";
-import {
-  fetchWorkspaceEntryFromControlPlane,
-  fetchWorkspaceListFromControlPlane,
-} from "./controlPlaneWorkspace.js";
 import { logServerEvent } from "./devLog.js";
+import { getOutOfWorkspaceProvider } from "./outOfWorkspace/index.js";
 import {
   createWorkspaceCatalog,
   loadWorkspaceCatalog,
@@ -97,9 +93,27 @@ function mergeWorkspaceEntriesByComposite(primary, secondary) {
   return Array.from(map.values());
 }
 
-export async function resolveWorkspaceCatalog(event) {
-  const base = loadWorkspaceCatalog();
-  if (resolveAuthCapabilities(privateEnv).mode !== "packed-host-dev") {
+function resolveOutOfWorkspaceProvider(event) {
+  if (event?.locals?.outOfWorkspace) {
+    return event.locals.outOfWorkspace;
+  }
+  return getOutOfWorkspaceProvider(privateEnv);
+}
+
+function loadCatalogForProvider(provider) {
+  const capabilities = provider.describeShellCapabilities();
+  return loadWorkspaceCatalog(privateEnv, {
+    allowsEmptyStaticCatalog: capabilities.allowsEmptyStaticCatalog,
+  });
+}
+
+export async function resolveWorkspaceCatalog(
+  event,
+  { prefetchedResolved = null } = {},
+) {
+  const provider = resolveOutOfWorkspaceProvider(event);
+  const base = loadCatalogForProvider(provider);
+  if (provider.mode !== "hosted") {
     return base;
   }
 
@@ -109,41 +123,35 @@ export async function resolveWorkspaceCatalog(event) {
     return base;
   }
 
-  const fetchFn = event?.fetch ?? fetch;
-  const getCookie =
-    event && typeof event.cookies?.get === "function"
-      ? (name) => event.cookies.get(name)
-      : undefined;
-
-  const resolved = await resolveWorkspaceInRoute({
-    event,
-    organizationSlug: orgRaw,
-    workspaceSlug: slug,
-  });
+  const resolved =
+    prefetchedResolved ??
+    (await resolveWorkspaceInRoute({
+      event,
+      organizationSlug: orgRaw,
+      workspaceSlug: slug,
+    }));
   if (resolved.error || !resolved.workspace) {
     return base;
   }
 
   let organizationId = String(resolved.workspace.organizationId ?? "").trim();
   if (!organizationId) {
-    const cp = await fetchWorkspaceEntryFromControlPlane({
-      env: privateEnv,
+    const bySlug = await provider.resolveWorkspaceBySlug({
+      event,
       organizationSlug: resolved.workspace.organizationSlug,
       workspaceSlug: resolved.workspace.slug,
-      fetchFn,
-      getCookie,
     });
-    organizationId = String(cp?.organizationId ?? "").trim();
+    if (bySlug.kind === "found") {
+      organizationId = String(bySlug.workspace.organizationId ?? "").trim();
+    }
   }
   if (!organizationId) {
     return base;
   }
 
-  const fromOrg = await fetchWorkspaceListFromControlPlane({
-    env: privateEnv,
-    organizationID: organizationId,
-    fetchFn,
-    getCookie,
+  const fromOrg = await provider.listWorkspacesForOrganization({
+    event,
+    organizationId,
   });
   if (fromOrg.length === 0) {
     return base;
@@ -156,7 +164,7 @@ export async function resolveWorkspaceCatalog(event) {
     defaultOrganizationSlug: resolved.workspace.organizationSlug,
     devActorMode: base.devActorMode,
     usesSyntheticDefaultWorkspace: base.usesSyntheticDefaultWorkspace,
-    hostedDevAllowEmpty: false,
+    allowsEmptyCatalog: false,
   });
 }
 
@@ -165,7 +173,8 @@ export async function resolveWorkspaceInRoute({
   workspaceSlug,
   event,
 }) {
-  const catalog = loadWorkspaceCatalog();
+  const provider = resolveOutOfWorkspaceProvider(event);
+  const catalog = loadCatalogForProvider(provider);
   const rawOrg = String(organizationSlug ?? "").trim();
   const rawSlug = String(workspaceSlug ?? "").trim();
 
@@ -176,6 +185,7 @@ export async function resolveWorkspaceInRoute({
       workspaceSlug: rawSlug,
       workspace: null,
       coreBaseUrl: "",
+      outOfWorkspaceUnauthenticated: false,
       error: createWorkspaceRouteIncompleteError(),
     };
   }
@@ -190,6 +200,7 @@ export async function resolveWorkspaceInRoute({
       workspaceSlug: rawSlug,
       workspace: null,
       coreBaseUrl: "",
+      outOfWorkspaceUnauthenticated: false,
       error: createWorkspaceNotConfiguredError(rawOrg, rawSlug),
     };
   }
@@ -198,34 +209,19 @@ export async function resolveWorkspaceInRoute({
   let workspace = catalog.workspaceByComposite.get(compositeKey);
   let cpLookupAttempted = false;
   let cpLookupHit = false;
+  let cpLookupUnauthenticated = false;
   if (!workspace) {
-    const fetchFn = event?.fetch ?? fetch;
     cpLookupAttempted = true;
-    const cpWorkspace = await fetchWorkspaceEntryFromControlPlane({
-      env: privateEnv,
+    const cpWorkspace = await provider.resolveWorkspaceBySlug({
+      event,
       organizationSlug: normalizedOrg,
       workspaceSlug: normalizedSlug,
-      fetchFn,
-      getCookie:
-        event && typeof event.cookies?.get === "function"
-          ? (name) => event.cookies.get(name)
-          : undefined,
     });
-    if (cpWorkspace) {
+    if (cpWorkspace.kind === "found") {
       cpLookupHit = true;
-      workspace = {
-        organizationSlug: cpWorkspace.organizationSlug || normalizedOrg,
-        slug: cpWorkspace.slug,
-        label: cpWorkspace.label,
-        description: cpWorkspace.description,
-        coreBaseUrl: cpWorkspace.coreBaseUrl,
-        publicOrigin: cpWorkspace.publicOrigin,
-        id: cpWorkspace.id,
-        workspaceId: cpWorkspace.workspaceId,
-        organizationId: cpWorkspace.organizationId,
-        status: cpWorkspace.status,
-        desiredState: cpWorkspace.desiredState,
-      };
+      workspace = cpWorkspace.workspace;
+    } else if (cpWorkspace.kind === "unauthenticated") {
+      cpLookupUnauthenticated = true;
     }
   }
 
@@ -235,7 +231,11 @@ export async function resolveWorkspaceInRoute({
       {
         org: normalizedOrg,
         slug: normalizedSlug,
-        cp_lookup: cpLookupAttempted ? "miss" : "skipped",
+        cp_lookup: cpLookupUnauthenticated
+          ? "unauthenticated"
+          : cpLookupAttempted
+            ? "miss"
+            : "skipped",
       },
       { level: "warn" },
     );
@@ -245,15 +245,11 @@ export async function resolveWorkspaceInRoute({
       workspaceSlug: normalizedSlug,
       workspace: null,
       coreBaseUrl: "",
+      outOfWorkspaceUnauthenticated: cpLookupUnauthenticated,
       error: createWorkspaceNotConfiguredError(rawOrg, rawSlug),
     };
   }
 
-  // The workspace exists in the control plane but its core process hasn't
-  // registered an origin yet (still provisioning, suspended, or anx-core not
-  // running). Surface a 503 with a clear message instead of falling through
-  // and producing a misleading "not configured" 404 or, worse, a generic
-  // "Internal Error" when the empty base URL trips client-side fetches.
   if (!String(workspace.coreBaseUrl ?? "").trim()) {
     logServerEvent(
       "workspace.resolve.not_ready",
@@ -272,6 +268,7 @@ export async function resolveWorkspaceInRoute({
       workspaceSlug: normalizedSlug,
       workspace: null,
       coreBaseUrl: "",
+      outOfWorkspaceUnauthenticated: false,
       error: createWorkspaceProvisioningError(
         rawOrg,
         rawSlug,
@@ -295,6 +292,7 @@ export async function resolveWorkspaceInRoute({
     workspaceSlug: workspace.slug,
     workspace,
     coreBaseUrl: workspace.coreBaseUrl,
+    outOfWorkspaceUnauthenticated: false,
     error: null,
   };
 }

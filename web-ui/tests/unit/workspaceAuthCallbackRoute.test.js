@@ -1,8 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const envState = vi.hoisted(() => ({
-  ANX_CONTROL_BASE_URL: "https://control.example.test",
-}));
+import { mockHostedProvider } from "../fixtures/workspaceAuth.js";
 
 const workspaceResolverMocks = vi.hoisted(() => ({
   resolveWorkspaceInRoute: vi.fn(),
@@ -12,10 +10,6 @@ const authSessionMocks = vi.hoisted(() => ({
   clearRetryableWorkspaceAuthFailureCount: vi.fn(),
   writeWorkspaceAccessToken: vi.fn(),
   writeWorkspaceRefreshToken: vi.fn(),
-}));
-
-vi.mock("$env/dynamic/private", () => ({
-  env: envState,
 }));
 
 vi.mock("$lib/server/workspaceResolver.js", async (importOriginal) => {
@@ -36,7 +30,16 @@ vi.mock("$lib/server/authSession.js", () => ({
 import { POST } from "../../src/routes/o/[organization]/w/[workspace]/auth/callback/+server.js";
 
 function createEvent(formFields, options = {}) {
-  const { headers: headerOverrides = {}, ...rest } = options;
+  const {
+    headers: headerOverrides = {},
+    outOfWorkspace = mockHostedProvider({
+      exchangeLaunchSession: vi.fn(async () => ({
+        ok: true,
+        assertion: "grant_token",
+      })),
+    }),
+    ...rest
+  } = options;
   return {
     params: {
       organization: "local",
@@ -54,6 +57,9 @@ function createEvent(formFields, options = {}) {
         ...rest,
       },
     ),
+    locals: {
+      outOfWorkspace,
+    },
     cookies: {
       set: vi.fn(),
       delete: vi.fn(),
@@ -78,57 +84,59 @@ describe("workspace auth callback route", () => {
     });
   });
 
-  it("exchanges launch session and workspace grant, then redirects with auth cookies", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            grant: { bearer_token: "grant_token" },
-          }),
-          {
-            status: 200,
-            headers: {
-              "content-type": "application/json",
-            },
+  it("exchanges workspace grant and redirects with auth cookies", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          tokens: {
+            access_token: "access_123",
+            refresh_token: "refresh_123",
           },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            tokens: {
-              access_token: "access_123",
-              refresh_token: "refresh_123",
-            },
-          }),
-          {
-            status: 200,
-            headers: {
-              "content-type": "application/json",
-            },
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
           },
-        ),
-      );
+        },
+      ),
+    );
     globalThis.fetch = fetchMock;
 
-    const event = createEvent({
-      exchange_token: "ex_123",
-      state: "state_123",
-      workspace_id: "ws_123",
-      return_path: "/threads?view=mine",
-    });
+    const exchangeLaunchSession = vi.fn(async () => ({
+      ok: true,
+      assertion: "grant_token",
+    }));
+    const event = createEvent(
+      {
+        exchange_token: "ex_123",
+        state: "state_123",
+        workspace_id: "ws_123",
+        return_path: "/threads?view=mine",
+      },
+      {
+        outOfWorkspace: mockHostedProvider({
+          exchangeLaunchSession,
+        }),
+      },
+    );
 
     await expect(POST(event)).rejects.toMatchObject({
       status: 303,
       location: "/o/local/w/acme/threads?view=mine",
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(fetchMock.mock.calls[0][0]).toBe(
-      "https://control.example.test/workspaces/ws_123/session-exchange",
+    expect(exchangeLaunchSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({
+          workspaceId: "ws_123",
+          exchangeToken: "ex_123",
+          state: "state_123",
+        }),
+      }),
     );
-    expect(fetchMock.mock.calls[1][0]).toBe(
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe(
       "https://core.example.test/auth/token",
     );
     expect(authSessionMocks.writeWorkspaceRefreshToken).toHaveBeenCalledWith(
@@ -161,29 +169,24 @@ describe("workspace auth callback route", () => {
     });
   });
 
-  it("returns upstream control-plane failures", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          error: {
+  it("returns provider session-exchange failures", async () => {
+    const event = createEvent(
+      {
+        exchange_token: "ex_123",
+        state: "state_123",
+        workspace_id: "ws_123",
+      },
+      {
+        outOfWorkspace: mockHostedProvider({
+          exchangeLaunchSession: vi.fn(async () => ({
+            ok: false,
+            status: 409,
             code: "exchange_invalid",
             message: "exchange token has already been used",
-          },
+          })),
         }),
-        {
-          status: 409,
-          headers: {
-            "content-type": "application/json",
-          },
-        },
-      ),
+      },
     );
-
-    const event = createEvent({
-      exchange_token: "ex_123",
-      state: "state_123",
-      workspace_id: "ws_123",
-    });
 
     const response = await POST(event);
     expect(response.status).toBe(409);
@@ -196,29 +199,24 @@ describe("workspace auth callback route", () => {
     });
   });
 
-  it("normalizes control-plane state mismatch to state_mismatch", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          error: {
-            code: "exchange_invalid",
+  it("returns provider state_mismatch failures", async () => {
+    const event = createEvent(
+      {
+        exchange_token: "ex_123",
+        state: "state_123",
+        workspace_id: "ws_123",
+      },
+      {
+        outOfWorkspace: mockHostedProvider({
+          exchangeLaunchSession: vi.fn(async () => ({
+            ok: false,
+            status: 401,
+            code: "state_mismatch",
             message: "exchange token state is invalid",
-          },
+          })),
         }),
-        {
-          status: 401,
-          headers: {
-            "content-type": "application/json",
-          },
-        },
-      ),
+      },
     );
-
-    const event = createEvent({
-      exchange_token: "ex_123",
-      state: "state_123",
-      workspace_id: "ws_123",
-    });
 
     const response = await POST(event);
     expect(response.status).toBe(401);
@@ -231,44 +229,39 @@ describe("workspace auth callback route", () => {
   });
 
   it("returns workspace token exchange failures from core", async () => {
-    globalThis.fetch = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            grant: { bearer_token: "grant_token" },
-          }),
-          {
-            status: 200,
-            headers: {
-              "content-type": "application/json",
-            },
+    globalThis.fetch = vi.fn().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "invalid_token",
+            message: "workspace grant assertion could not be validated",
           },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            error: {
-              code: "invalid_token",
-              message: "workspace grant assertion could not be validated",
-            },
-          }),
-          {
-            status: 401,
-            headers: {
-              "content-type": "application/json",
-            },
+        }),
+        {
+          status: 401,
+          headers: {
+            "content-type": "application/json",
           },
-        ),
-      );
+        },
+      ),
+    );
 
-    const event = createEvent({
-      exchange_token: "ex_123",
-      state: "state_123",
-      workspace_id: "ws_123",
-      return_path: "https://evil.test",
-    });
+    const event = createEvent(
+      {
+        exchange_token: "ex_123",
+        state: "state_123",
+        workspace_id: "ws_123",
+        return_path: "https://evil.test",
+      },
+      {
+        outOfWorkspace: mockHostedProvider({
+          exchangeLaunchSession: vi.fn(async () => ({
+            ok: true,
+            assertion: "grant_token",
+          })),
+        }),
+      },
+    );
 
     const response = await POST(event);
     expect(response.status).toBe(401);

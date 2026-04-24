@@ -32,9 +32,10 @@
   let workspaceSlug = $derived($page.params.workspace);
   let workspaces = $derived($page.data?.workspaces ?? []);
   let hasMultipleWorkspaces = $derived(workspaces.length > 1);
-  let hostedMode = $derived(Boolean($page.data?.hostedMode));
+  let hostedMode = $derived($page.data?.shellCapabilities?.mode === "hosted");
   let hostedAccountPath = $derived(
-    String($page.data?.hostedAccountPath ?? "").trim() || "/hosted/onboarding",
+    String($page.data?.shellCapabilities?.accountPath ?? "").trim() ||
+      "/hosted/onboarding",
   );
 
   function workspaceHref(path = "/") {

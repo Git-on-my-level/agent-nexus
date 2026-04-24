@@ -7,7 +7,8 @@
   import { authenticatedAgent } from "$lib/authSession";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import Button from "$lib/components/Button.svelte";
-  import CopyButton from "$lib/components/CopyButton.svelte";
+  import SelectableId from "$lib/components/SelectableId.svelte";
+  import { selectNodeText } from "$lib/dom/selectNodeText.js";
   import { coreClient } from "$lib/coreClient";
   import { formatAbsoluteDateTime, formatTimestamp } from "$lib/formatDate";
   import { buildRegistrationMessage } from "$lib/inviteRegistrationMessage";
@@ -49,7 +50,6 @@
   let createdInviteKind = $state("");
   let createdInviteAgentName = $state("");
   let createdInviteUsername = $state("");
-  let tokenCopied = $state(false);
   let messageCopied = $state(false);
   let tokenDismissed = $state(false);
 
@@ -230,7 +230,6 @@
     inviteError = "";
     createdToken = "";
     createdInviteKind = "";
-    tokenCopied = false;
     messageCopied = false;
     tokenDismissed = false;
 
@@ -345,16 +344,6 @@
         "Failed to revoke principal",
       );
       principalRevokeForcing = false;
-    }
-  }
-
-  async function copyTokenToClipboard() {
-    if (!createdToken) return;
-    try {
-      await navigator.clipboard.writeText(createdToken);
-      tokenCopied = true;
-    } catch {
-      tokenCopied = false;
     }
   }
 
@@ -484,36 +473,78 @@
     return { primary: id ?? null, secondary: null };
   }
 
-  function auditEventDescription(event) {
+  /**
+   * @returns {Array<{ type: "text" | "id"; value: string }>}
+   */
+  function auditEventFirstLineSegments(event) {
     const kind = event?.event_type ?? "";
     const actor = auditActorLabel(event);
     const subject = auditSubjectLabel(event);
     const inviteId = event?.invite_id;
-    const inviteLabel = inviteId ? inviteId.slice(0, 12) + "\u2026" : "invite";
-
     const actorDisplay = actor.primary;
     const subjectDisplay = subject.primary ?? actor.primary;
 
+    /** @type {Array<{ type: "text" | "id"; value: string }>} */
+    const out = [];
+    const pushText = (s) => {
+      if (!s) return;
+      const last = out[out.length - 1];
+      if (last?.type === "text") {
+        last.value += s;
+      } else {
+        out.push({ type: "text", value: s });
+      }
+    };
+    const pushId = (id) => {
+      if (id) out.push({ type: "id", value: id });
+    };
+
     switch (kind) {
       case "bootstrap_consumed":
-        return `Bootstrap consumed by ${subjectDisplay}`;
+        pushText(`Bootstrap consumed by ${subjectDisplay}`);
+        break;
       case "principal_registered":
-        return `Principal ${subjectDisplay} registered`;
+        pushText(`Principal ${subjectDisplay} registered`);
+        break;
       case "invite_created":
-        return `${inviteLabel} created by ${actorDisplay}`;
+        if (inviteId) {
+          pushId(inviteId);
+          pushText(` created by ${actorDisplay}`);
+        } else {
+          pushText(`invite created by ${actorDisplay}`);
+        }
+        break;
       case "invite_consumed":
-        return `${inviteLabel} consumed by ${subjectDisplay}`;
+        if (inviteId) {
+          pushId(inviteId);
+          pushText(` consumed by ${subjectDisplay}`);
+        } else {
+          pushText(`invite consumed by ${subjectDisplay}`);
+        }
+        break;
       case "invite_revoked":
-        return `${inviteLabel} revoked by ${actorDisplay}`;
+        if (inviteId) {
+          pushId(inviteId);
+          pushText(` revoked by ${actorDisplay}`);
+        } else {
+          pushText(`invite revoked by ${actorDisplay}`);
+        }
+        break;
       case "principal_revoked":
-        return `Principal ${subjectDisplay} revoked by ${actorDisplay}`;
+        pushText(`Principal ${subjectDisplay} revoked by ${actorDisplay}`);
+        break;
       case "principal_self_revoked":
-        return `Principal ${subjectDisplay} self-revoked`;
+        pushText(`Principal ${subjectDisplay} self-revoked`);
+        break;
       case "principal_human_lockout_revoked":
-        return `Principal ${subjectDisplay} revoked under human lockout by ${actorDisplay}`;
+        pushText(
+          `Principal ${subjectDisplay} revoked under human lockout by ${actorDisplay}`,
+        );
+        break;
       default:
-        return `${kind || "unknown"} (${actorDisplay})`;
+        pushText(`${kind || "unknown"} (${actorDisplay})`);
     }
+    return out;
   }
 
   function auditEventSecondary(event) {
@@ -544,11 +575,6 @@
   function toggleWakePopover(agentId) {
     wakePopoverTarget = wakePopoverTarget === agentId ? null : agentId;
     wakeRegistrationMessageCopiedFor = "";
-  }
-
-  function truncateId(id, maxLen = 20) {
-    if (!id || id.length <= maxLen) return id ?? "";
-    return id.slice(0, maxLen) + "\u2026";
   }
 
   $effect(() => {
@@ -679,31 +705,32 @@
               Invite created successfully
             </p>
             <p class="mt-1 text-micro text-[var(--fg-muted)]">
-              This one-time token will not be shown again. Copy it now.
+              This one-time token will not be shown again. Double-click the
+              token to select and copy.
+              {#if createdInviteKind === "agent" || createdInviteKind === "any"}
+                For a ready-to-paste CLI command, use the button below.
+              {/if}
             </p>
             <div
-              class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded bg-bg px-2 py-1.5 font-mono text-micro text-[var(--fg)]"
+              class="mt-2 rounded bg-bg px-2 py-1.5 font-mono text-micro text-[var(--fg)]"
             >
-              <span class="min-w-0 shrink break-all">{createdToken}</span>
-              {#if createdInviteKind === "agent" || createdInviteKind === "any"}
-                <Button
-                  class="shrink-0"
-                  variant="ghost"
-                  size="compact"
-                  onclick={copyTokenToClipboard}
-                >
-                  {tokenCopied ? "Copied" : "Copy token"}
-                </Button>
-              {:else}
-                <Button
-                  class="shrink-0"
-                  variant="ghost"
-                  size="compact"
-                  onclick={copyTokenToClipboard}
-                >
-                  {tokenCopied ? "Copied" : "Copy"}
-                </Button>
-              {/if}
+              <span
+                class="block min-w-0 cursor-text break-all [user-select:text]"
+                role="button"
+                tabindex="0"
+                aria-label="One-time invite token, double-click or press Enter to select for copying"
+                title="Double-click to select, then copy (⌘C / Ctrl+C)"
+                ondblclick={(e) => {
+                  e.preventDefault();
+                  selectNodeText(e.currentTarget);
+                }}
+                onkeydown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    selectNodeText(e.currentTarget);
+                  }
+                }}>{createdToken}</span
+              >
             </div>
             {#if createdInviteKind === "agent" || createdInviteKind === "any"}
               <Button
@@ -941,16 +968,11 @@
                   </span>
                 {/if}
                 <div class="min-w-0 flex-1">
-                  <div class="flex items-center gap-1.5">
-                    <p
-                      class="truncate font-mono text-micro text-[var(--fg)]"
-                      title={invite.id}
-                    >
-                      {invite.id.length > 14
-                        ? `${invite.id.slice(0, 14)}…`
-                        : invite.id}
-                    </p>
-                    <CopyButton value={invite.id} label="Copy invite ID" />
+                  <div class="flex min-w-0 items-center">
+                    <SelectableId
+                      className="text-micro text-[var(--fg)]"
+                      id={invite.id}
+                    />
                   </div>
                   <p class="text-micro text-[var(--fg-muted)]">
                     {invite.kind}
@@ -1040,13 +1062,21 @@
                     </span>
                   {/if}
                   <div class="min-w-0 flex-1">
-                    <div class="flex items-center gap-1.5">
-                      <span
-                        class="truncate text-meta font-medium text-[var(--fg)]"
-                      >
-                        {principal.username ||
-                          truncateId(principal.agent_id, 24)}
-                      </span>
+                    <div class="flex min-w-0 items-center gap-1.5">
+                      {#if principal.username}
+                        <span
+                          class="truncate text-meta font-medium text-[var(--fg)]"
+                        >
+                          {principal.username}
+                        </span>
+                      {:else}
+                        <div class="min-w-0 flex-1">
+                          <SelectableId
+                            className="text-meta font-medium text-[var(--fg)]"
+                            id={principal.agent_id}
+                          />
+                        </div>
+                      {/if}
                       <span
                         class="hidden shrink-0 text-micro text-[var(--fg-muted)] sm:inline"
                       >
@@ -1127,20 +1157,16 @@
                         {/if}
                       {/if}
                     </div>
-                    <div
-                      class="mt-0.5 flex min-w-0 items-center gap-1.5 text-micro text-[var(--fg-muted)]"
-                    >
-                      <span
-                        class="min-w-0 shrink truncate font-mono"
-                        title={principal.agent_id}
+                    {#if principal.username}
+                      <div
+                        class="mt-0.5 min-w-0 text-micro text-[var(--fg-muted)]"
                       >
-                        {principal.agent_id}
-                      </span>
-                      <CopyButton
-                        value={principal.agent_id}
-                        label="Copy agent ID"
-                      />
-                    </div>
+                        <SelectableId
+                          className="text-[var(--fg-muted)]"
+                          id={principal.agent_id}
+                        />
+                      </div>
+                    {/if}
                   </div>
                   <div
                     class="hidden shrink-0 text-right text-micro leading-4 text-[var(--fg-muted)] sm:block"
@@ -1349,8 +1375,25 @@
                   : ''}"
               >
                 <div class="min-w-0 flex-1">
-                  <p class="truncate text-meta font-medium text-[var(--fg)]">
-                    {auditEventDescription(event)}
+                  <p
+                    class="flex min-w-0 items-baseline gap-x-0.5 text-meta font-medium text-[var(--fg)]"
+                  >
+                    {#each auditEventFirstLineSegments(event) as part, j (j)}
+                      {#if part.type === "id"}
+                        <span
+                          class="min-w-0 max-w-full flex-1 sm:max-w-[16rem]"
+                        >
+                          <SelectableId
+                            className="font-mono text-inherit"
+                            id={part.value}
+                          />
+                        </span>
+                      {:else}
+                        <span class="shrink-0 [overflow-wrap:anywhere]"
+                          >{part.value}</span
+                        >
+                      {/if}
+                    {/each}
                   </p>
                   <p class="text-micro text-[var(--fg-muted)]">
                     {auditEventSecondary(event)}

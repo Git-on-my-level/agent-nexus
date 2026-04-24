@@ -1,7 +1,6 @@
 import { dev } from "$app/environment";
 import { env as privateEnv } from "$env/dynamic/private";
 import { AuthErrorCode } from "$lib/authErrorCodes.js";
-import { resolveAuthCapabilities } from "$lib/server/authCapabilities.js";
 import { isProxyableCommand } from "$lib/coreRouteCatalog";
 import { getWorkspaceHeader } from "$lib/compat/workspaceCompat";
 import { CURRENT_VERSION } from "$lib/generated/version";
@@ -18,6 +17,7 @@ import { buildProxyRequestInit } from "$lib/server/coreProxy";
 import { logServerError, logServerEvent } from "$lib/server/devLog";
 import { resolveProxyTarget } from "$lib/server/proxyWorkspaceTarget";
 import { isDirectCoreProxyPath } from "$lib/server/directCoreProxyPaths";
+import { getOutOfWorkspaceProvider } from "$lib/server/outOfWorkspace/index.js";
 
 function isDocumentNavigationRequest(request) {
   const method = request.method.toUpperCase();
@@ -288,7 +288,7 @@ export async function handle({ event, resolve }) {
   if (!event.locals) {
     event.locals = {};
   }
-  event.locals.anxAuthCapabilities = resolveAuthCapabilities(privateEnv);
+  event.locals.outOfWorkspace = getOutOfWorkspaceProvider(privateEnv);
 
   const pathname = stripBasePath(event.url.pathname);
   const method = event.request.method;

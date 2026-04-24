@@ -1,45 +1,60 @@
 # Workspace authentication (web-ui)
 
-This document complements [AGENTS.md](../AGENTS.md) with a single map of **modes**, **cookies**, **error codes**, and **tests**.
+This document complements [AGENTS.md](../AGENTS.md) with one map of auth/session behavior and the control-plane provider seam.
 
-## Capability modes (`resolveAuthCapabilities`)
+## Out-of-workspace mode
 
-| Mode | Typical env | CP workspace-by-id lookup |
-|------|-------------|---------------------------|
-| `local` | No `ANX_CONTROL_BASE_URL` | No |
-| `packed-host-dev` | `ANX_SAAS_PACKED_HOST_DEV` + CP URL | Yes (root `/auth/callback`) |
-| `hosted` | CP URL without packed-host flag | No (use full shell path in workspace base URL) |
+`OutOfWorkspaceProvider` is the server-side seam for everything that depends on a control plane.
 
-Implementation: `src/lib/server/authCapabilities.js`.
+Signal:
+- `ANX_CONTROL_BASE_URL` unset -> `mode: "local"`
+- `ANX_CONTROL_BASE_URL` set -> `mode: "hosted"`
+
+Implementation:
+- `src/lib/server/outOfWorkspace/index.js`
+- `src/lib/server/outOfWorkspace/local.js`
+- `src/lib/server/outOfWorkspace/hosted.js`
 
 ## Cookies (workspace vs control plane)
 
-- **Workspace session:** `oar_ui_session_{slug}` (refresh), `oar_ui_access_{slug}` (access).
-- **Control plane (dev):** `oar_cp_dev_access_token` — **not** cleared when switching workspace; workspace callbacks only touch `oar_ui_*`.
+- Workspace session cookies:
+  - `oar_ui_session_{slug}` (refresh token)
+  - `oar_ui_access_{slug}` (access token)
+- Control-plane session cookie:
+  - `oar_cp_dev_access_token`
 
-## Error taxonomy
+Workspace callback routes only write `oar_ui_*`; they never clear the CP cookie.
 
-Canonical codes live in `src/lib/authErrorCodes.js` (`AuthErrorCode`). Server routes should use these constants instead of new string literals.
+## Callback/error taxonomy
 
-Notable codes:
+Canonical callback error codes are surfaced through `src/lib/hosted/callbackErrorCopy.js`.
 
-- `session_ended_by_cp` — terminal; client shows `SessionEndedOverlay`.
-- `workspace_resolve_failed` — root callback could not resolve org/workspace slugs.
-- `request_loop_detected` — SSR loop short-circuit (`hooks.server.js`).
+Notable route behavior:
+- Nested callback (`/o/{org}/w/{workspace}/auth/callback`) always resolves by URL params.
+- Root callback (`/auth/callback`) resolves by `workspace_id` through `event.locals.outOfWorkspace.resolveWorkspaceById`.
+- Root callback unresolved reasons:
+  - `control_plane_unavailable`
+  - `control_plane_unauthenticated`
+  - `workspace_unknown`
 
-## Client session state (`src/lib/authSession.js`)
+## Client session state
 
-Documented in file header: `authSessionReady`, `authenticatedAgent`, `sessionEndedByCp`, single-flight `initializeAuthSession`, optional `authDriver: "layout"`.
+`src/lib/authSession.js` owns:
+- `authSessionReady`
+- `authenticatedAgent`
+- `sessionEndedByCp`
+- single-flight `initializeAuthSession`
 
-## Known limitations
+## Known limitation
 
-- **Refresh replay window** (`REFRESH_REPLAY_WINDOW_MS` in `src/lib/server/authSession.js`): in-memory only for the current dev server process; do not “fix” with blind retries. See [AGENTS.md](../AGENTS.md) pointer below.
+Refresh replay detection (`REFRESH_REPLAY_WINDOW_MS` in `src/lib/server/authSession.js`) is in-memory per web-ui process.
 
 ## Commands
 
 - Unit tests: `pnpm run test:unit`
-- Full check: `pnpm test` (lint + unit + e2e)
+- Full checks: `pnpm test`
 
-## Test pointers
+## Related docs
 
-See [tests/README.md](../tests/README.md) for callback matrices and fixtures.
+- Provider contract: [out-of-workspace-provider.md](./out-of-workspace-provider.md)
+- Test guide: [tests/README.md](../tests/README.md)

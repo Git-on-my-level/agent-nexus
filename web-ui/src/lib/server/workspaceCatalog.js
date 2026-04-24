@@ -7,7 +7,6 @@ import {
 } from "$lib/workspacePaths";
 import { normalizeBaseUrl } from "$lib/config";
 import { resolveWorkspaceEnv } from "$lib/compat/workspaceCompat";
-import { isSaasPackedHostDev } from "$lib/server/controlPlaneWorkspace.js";
 
 /** Shown in parse errors; keep in sync with web-ui README / runbook examples. */
 const ANX_WORKSPACES_JSON_EXAMPLE =
@@ -132,16 +131,16 @@ export function createWorkspaceCatalog({
   defaultOrganizationSlug = "",
   devActorMode = false,
   usesSyntheticDefaultWorkspace = false,
-  hostedDevAllowEmpty = false,
+  allowsEmptyCatalog = false,
 }) {
-  if (hostedDevAllowEmpty && workspaces.length === 0) {
+  if (allowsEmptyCatalog && workspaces.length === 0) {
     return {
       defaultWorkspace: null,
       workspaces: [],
       workspaceByComposite: new Map(),
       devActorMode,
       usesSyntheticDefaultWorkspace: false,
-      hostedDevEmpty: true,
+      allowsEmptyCatalog: true,
     };
   }
 
@@ -152,7 +151,7 @@ export function createWorkspaceCatalog({
       workspaceByComposite: new Map(),
       devActorMode,
       usesSyntheticDefaultWorkspace: false,
-      hostedDevEmpty: false,
+      allowsEmptyCatalog: false,
     };
   }
 
@@ -184,7 +183,7 @@ export function createWorkspaceCatalog({
       workspaceByComposite: new Map(),
       devActorMode,
       usesSyntheticDefaultWorkspace: false,
-      hostedDevEmpty: false,
+      allowsEmptyCatalog: false,
     };
   }
 
@@ -199,11 +198,14 @@ export function createWorkspaceCatalog({
     ),
     devActorMode,
     usesSyntheticDefaultWorkspace,
-    hostedDevEmpty: false,
+    allowsEmptyCatalog: false,
   };
 }
 
-export function loadWorkspaceCatalog(env = privateEnv) {
+export function loadWorkspaceCatalog(
+  env = privateEnv,
+  { allowsEmptyStaticCatalog = false } = {},
+) {
   const resolved = resolveWorkspaceEnv(env);
   const defaultOrgHint = String(resolved.ANX_DEFAULT_ORGANIZATION ?? "").trim();
   const configuredWorkspaces = parseWorkspaceEntries(
@@ -214,7 +216,6 @@ export function loadWorkspaceCatalog(env = privateEnv) {
     env.ANX_SAAS_DEV_PRECONFIGURED_WORKSPACES,
     defaultOrgHint,
   );
-  const saasPackedHost = isSaasPackedHostDev(env);
 
   let workspaces;
   let usesSyntheticDefaultWorkspace = false;
@@ -224,7 +225,7 @@ export function loadWorkspaceCatalog(env = privateEnv) {
   } else if (preconfiguredWorkspaces.length > 0) {
     workspaces = preconfiguredWorkspaces;
     usesSyntheticDefaultWorkspace = false;
-  } else if (saasPackedHost) {
+  } else if (allowsEmptyStaticCatalog) {
     workspaces = [];
     usesSyntheticDefaultWorkspace = false;
   } else {
@@ -240,7 +241,7 @@ export function loadWorkspaceCatalog(env = privateEnv) {
     defaultOrganizationSlug: resolved.ANX_DEFAULT_ORGANIZATION,
     devActorMode,
     usesSyntheticDefaultWorkspace,
-    hostedDevAllowEmpty: saasPackedHost && workspaces.length === 0,
+    allowsEmptyCatalog: allowsEmptyStaticCatalog && workspaces.length === 0,
   });
 }
 

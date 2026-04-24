@@ -139,9 +139,6 @@ describe("homeHandoff helpers", () => {
       { markerIso },
     );
 
-    expect(events.map((event) => event.id)).toEqual([
-      "evt-unknown",
-      "evt-msg",
-    ]);
+    expect(events.map((event) => event.id)).toEqual(["evt-unknown", "evt-msg"]);
   });
 });

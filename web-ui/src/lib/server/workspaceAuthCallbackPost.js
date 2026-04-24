@@ -1,4 +1,3 @@
-import { env as privateEnv } from "$env/dynamic/private";
 import { error, json, redirect } from "@sveltejs/kit";
 
 import { normalizeBaseUrl } from "$lib/config.js";
@@ -13,34 +12,12 @@ import {
   writeWorkspaceAccessToken,
   writeWorkspaceRefreshToken,
 } from "$lib/server/authSession.js";
+import { getOutOfWorkspaceProvider } from "$lib/server/outOfWorkspace/index.js";
 import { resolveWorkspaceInRoute } from "$lib/server/workspaceResolver.js";
 import { workspacePath } from "$lib/workspacePaths.js";
 
 function wantsJson(request) {
   return request.headers.get("accept")?.includes("application/json") ?? false;
-}
-
-/**
- * Maps CP session-exchange errors to canonical BFF codes (`state_mismatch` vs `exchange_invalid`).
- * @param {number} httpStatus
- * @param {string} cpCode
- * @param {string} cpMessage
- */
-function canonicalizeSessionExchangeError(httpStatus, cpCode, cpMessage) {
-  const msg = String(cpMessage ?? "");
-  if (cpCode === "state_mismatch") {
-    return "state_mismatch";
-  }
-  if (cpCode === "exchange_expired") {
-    return "exchange_expired";
-  }
-  if (cpCode === "exchange_invalid") {
-    if (httpStatus === 401 || msg.toLowerCase().includes("state is invalid")) {
-      return "state_mismatch";
-    }
-    return "exchange_invalid";
-  }
-  return cpCode;
 }
 
 function userFacingBody(code, technicalMessage) {
@@ -211,6 +188,7 @@ export async function runWorkspaceAuthCallbackPost(
   routeParams,
   formOverride,
 ) {
+  const provider = event.locals?.outOfWorkspace ?? getOutOfWorkspaceProvider();
   const resolved = await resolveWorkspaceInRoute({
     event,
     organizationSlug: routeParams.organizationSlug,
@@ -250,17 +228,6 @@ export async function runWorkspaceAuthCallbackPost(
       503,
       "workspace_unavailable",
       "Workspace core endpoint is unavailable.",
-      { workspace_name: workspaceNameEarly },
-    );
-  }
-
-  const controlBaseURL = normalizeBaseUrl(privateEnv.ANX_CONTROL_BASE_URL);
-  if (!controlBaseURL) {
-    return respondWithCallbackError(
-      event,
-      503,
-      "control_plane_unavailable",
-      "Control plane URL is not configured.",
       { workspace_name: workspaceNameEarly },
     );
   }
@@ -308,58 +275,25 @@ export async function runWorkspaceAuthCallbackPost(
   }
 
   const workspaceName = workspaceNameEarly;
-
-  const sessionExchangeURL = new URL(
-    `/workspaces/${encodeURIComponent(workspaceID)}/session-exchange`,
-    `${controlBaseURL}/`,
-  ).toString();
-  let exchanged;
-  try {
-    exchanged = await postJSON(sessionExchangeURL, {
-      exchange_token: exchangeToken,
+  const exchanged = await provider.exchangeLaunchSession({
+    event,
+    request: {
+      workspaceId: workspaceID,
+      exchangeToken,
       state,
-    });
-  } catch (err) {
+    },
+  });
+  if (!exchanged.ok) {
     return respondWithCallbackError(
       event,
-      503,
-      "session_exchange_unreachable",
-      `Could not reach control plane for session exchange (${fetchErrorDetail(err)}).`,
-      { workspace_name: workspaceName },
-    );
-  }
-  if (!exchanged.response.ok) {
-    const cpCode = String(
-      exchanged.payload?.error?.code ?? "session_exchange_failed",
-    );
-    const cpMessage = String(
-      exchanged.payload?.error?.message ??
+      exchanged.status || 502,
+      exchanged.code || "session_exchange_failed",
+      exchanged.message ||
         "Failed to exchange launch session with control plane.",
-    );
-    const canonical = canonicalizeSessionExchangeError(
-      exchanged.response.status || 502,
-      cpCode,
-      cpMessage,
-    );
-    return respondWithCallbackError(
-      event,
-      exchanged.response.status || 502,
-      canonical,
-      cpMessage,
       { workspace_name: workspaceName },
     );
   }
-
-  const assertion = String(exchanged.payload?.grant?.bearer_token ?? "").trim();
-  if (!assertion) {
-    return respondWithCallbackError(
-      event,
-      502,
-      "invalid_control_plane_response",
-      "Control plane response did not include a workspace grant token.",
-      { workspace_name: workspaceName },
-    );
-  }
+  const assertion = exchanged.assertion;
 
   const authTokenURL = new URL("/auth/token", `${coreBaseURL}/`).toString();
   let tokenExchange;

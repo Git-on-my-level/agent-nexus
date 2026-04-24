@@ -1,4 +1,9 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+import {
+  mockHostedProvider,
+  mockLocalProvider,
+} from "../fixtures/workspaceAuth.js";
 
 const workspaceResolverMocks = vi.hoisted(() => ({
   resolveWorkspaceInRoute: vi.fn(),
@@ -6,14 +11,6 @@ const workspaceResolverMocks = vi.hoisted(() => ({
 
 const authSessionMocks = vi.hoisted(() => ({
   loadWorkspaceAuthenticatedAgent: vi.fn(),
-}));
-
-const dynamicPrivateEnv = vi.hoisted(() => ({
-  ANX_CONTROL_BASE_URL: "",
-}));
-
-vi.mock("$env/dynamic/private", () => ({
-  env: dynamicPrivateEnv,
 }));
 
 vi.mock("$lib/server/workspaceResolver", async (importOriginal) => {
@@ -55,13 +52,12 @@ function createEvent(overrides = {}) {
           },
         ),
     ),
+    locals: {
+      outOfWorkspace: mockLocalProvider(),
+    },
     ...overrides,
   };
 }
-
-afterEach(() => {
-  dynamicPrivateEnv.ANX_CONTROL_BASE_URL = "";
-});
 
 describe("workspace login route", () => {
   it("redirects to hosted sign-in for external grant mode when unauthenticated", async () => {
@@ -94,6 +90,15 @@ describe("workspace login route", () => {
             },
           ),
       ),
+      locals: {
+        outOfWorkspace: mockHostedProvider({
+          beginLaunchSession: vi.fn(async () => ({
+            kind: "needs_signin",
+            signInUrl:
+              "/hosted/signin?workspace=acme&workspace_id=ws_123&return_path=%2Fthreads%2F123%3Ftab%3Dnotes",
+          })),
+        }),
+      },
     });
 
     await expect(load(event)).rejects.toMatchObject({
@@ -135,6 +140,14 @@ describe("workspace login route", () => {
       fetch: vi.fn(async () => {
         throw new Error("network timeout");
       }),
+      locals: {
+        outOfWorkspace: mockHostedProvider({
+          beginLaunchSession: vi.fn(async () => ({
+            kind: "needs_signin",
+            signInUrl: "/hosted/signin?workspace=acme&workspace_id=ws_123",
+          })),
+        }),
+      },
     });
 
     await expect(load(event)).rejects.toMatchObject({
@@ -165,6 +178,14 @@ describe("workspace login route", () => {
             },
           }),
       ),
+      locals: {
+        outOfWorkspace: mockHostedProvider({
+          beginLaunchSession: vi.fn(async () => ({
+            kind: "needs_signin",
+            signInUrl: "/hosted/signin?workspace=acme&workspace_id=ws_123",
+          })),
+        }),
+      },
     });
 
     await expect(load(event)).rejects.toMatchObject({
@@ -193,6 +214,9 @@ describe("workspace login route", () => {
       fetch: vi.fn(async () => {
         throw new Error("network timeout");
       }),
+      locals: {
+        outOfWorkspace: mockLocalProvider(),
+      },
     });
 
     await expect(load(event)).resolves.toBeUndefined();
@@ -219,8 +243,7 @@ describe("workspace login route", () => {
     });
   });
 
-  it("redirects to launch finish when control-plane session cookie can mint a launch session", async () => {
-    dynamicPrivateEnv.ANX_CONTROL_BASE_URL = "https://cp.example.test";
+  it("redirects to launch finish when provider returns redirect launch instruction", async () => {
     workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
       organizationSlug: "local",
       workspaceSlug: "acme",
@@ -232,15 +255,10 @@ describe("workspace login route", () => {
     });
     authSessionMocks.loadWorkspaceAuthenticatedAgent.mockResolvedValue(null);
 
-    const cookieGet = vi.fn((name) =>
-      name === "oar_cp_dev_access_token" ? "cp-session-token" : "",
-    );
-
     const event = createEvent({
-      fetch: vi.fn(async (url) => {
-        const u = String(url);
-        if (u.includes("/meta/handshake")) {
-          return new Response(
+      fetch: vi.fn(
+        async () =>
+          new Response(
             JSON.stringify({
               human_auth_mode: "external_grant",
             }),
@@ -248,25 +266,17 @@ describe("workspace login route", () => {
               status: 200,
               headers: { "content-type": "application/json" },
             },
-          );
-        }
-        if (u.includes("/workspaces/ws_123/launch-sessions")) {
-          expect(u.startsWith("https://cp.example.test/")).toBe(true);
-          return new Response(
-            JSON.stringify({
-              launch_session: {
-                finish_url: "/workspaces/ws_123/launch-finish?lid=launch_abc",
-              },
-            }),
-            {
-              status: 200,
-              headers: { "content-type": "application/json" },
-            },
-          );
-        }
-        return new Response("unexpected url", { status: 500 });
-      }),
-      cookies: { get: cookieGet },
+          ),
+      ),
+      locals: {
+        outOfWorkspace: mockHostedProvider({
+          beginLaunchSession: vi.fn(async () => ({
+            kind: "redirect",
+            finishUrl:
+              "/hosted/api/workspaces/ws_123/launch-finish?lid=launch_abc",
+          })),
+        }),
+      },
     });
 
     await expect(load(event)).rejects.toMatchObject({
@@ -275,8 +285,7 @@ describe("workspace login route", () => {
     });
   });
 
-  it("falls through to hosted sign-in when launch-sessions returns 401", async () => {
-    dynamicPrivateEnv.ANX_CONTROL_BASE_URL = "https://cp.example.test";
+  it("falls through to hosted sign-in when provider returns needs_signin", async () => {
     workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
       organizationSlug: "local",
       workspaceSlug: "acme",
@@ -292,10 +301,9 @@ describe("workspace login route", () => {
       url: new URL(
         "https://ui.example.test/o/local/w/acme/login?return_to=%2Fthreads%2F1",
       ),
-      fetch: vi.fn(async (url) => {
-        const u = String(url);
-        if (u.includes("/meta/handshake")) {
-          return new Response(
+      fetch: vi.fn(
+        async () =>
+          new Response(
             JSON.stringify({
               human_auth_mode: "external_grant",
             }),
@@ -303,20 +311,16 @@ describe("workspace login route", () => {
               status: 200,
               headers: { "content-type": "application/json" },
             },
-          );
-        }
-        if (u.includes("/launch-sessions")) {
-          return new Response(
-            JSON.stringify({ error: { code: "unauthorized" } }),
-            { status: 401, headers: { "content-type": "application/json" } },
-          );
-        }
-        return new Response("unexpected", { status: 500 });
-      }),
-      cookies: {
-        get: vi.fn((name) =>
-          name === "oar_cp_dev_access_token" ? "stale-token" : "",
-        ),
+          ),
+      ),
+      locals: {
+        outOfWorkspace: mockHostedProvider({
+          beginLaunchSession: vi.fn(async () => ({
+            kind: "needs_signin",
+            signInUrl:
+              "/hosted/signin?workspace=acme&workspace_id=ws_123&return_path=%2Fthreads%2F1",
+          })),
+        }),
       },
     });
 

@@ -1,6 +1,6 @@
 /**
  * Integration test: SvelteKit `+layout.server.js` for the workspace route,
- * wired to the REAL workspaceResolver + REAL controlPlaneWorkspace fetch
+ * wired to the REAL workspaceResolver + REAL out-of-workspace hosted fetch
  * layer, with only the network `fetch` stubbed.
  *
  * This is the closest-to-prod test we can run in vitest without spinning up
@@ -84,10 +84,9 @@ function createEvent({
 describe("workspace +layout.server.js (integration with real resolver)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // SaaS hosted dev mode + CP base URL so resolveWorkspaceInRoute will
-    // call the (stubbed) CP fetch layer.
+    // Hosted mode (CP base URL set) so resolveWorkspaceInRoute will call
+    // the (stubbed) CP fetch layer.
     resetEnv({
-      ANX_SAAS_PACKED_HOST_DEV: "1",
       ANX_CONTROL_BASE_URL: "http://127.0.0.1:8100",
       ANX_CONTROL_PLANE_DEV_ACCESS_TOKEN: "tok-dev",
     });
@@ -153,7 +152,6 @@ describe("workspace +layout.server.js (integration with real resolver)", () => {
 
   it("redirects 307 to /hosted/signin when CP returns no workspace AND there is no CP token at all", async () => {
     resetEnv({
-      ANX_SAAS_PACKED_HOST_DEV: "1",
       ANX_CONTROL_BASE_URL: "http://127.0.0.1:8100",
       // No ANX_CONTROL_PLANE_DEV_ACCESS_TOKEN, no cookie.
     });
@@ -194,6 +192,9 @@ describe("workspace +layout.server.js (integration with real resolver)", () => {
     });
 
     const event = createEvent({ fetchFn });
+    event.cookies.get = vi.fn((name) =>
+      name === "oar_ui_session_my-ws" ? "refresh-token" : "",
+    );
     const result = await load(event);
 
     expect(result.workspace).toMatchObject({

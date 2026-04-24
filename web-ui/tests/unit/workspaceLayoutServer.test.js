@@ -1,18 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const envState = vi.hoisted(() => ({}));
+import {
+  mockHostedProvider,
+  mockLocalProvider,
+} from "../fixtures/workspaceAuth.js";
 
 const workspaceResolverMocks = vi.hoisted(() => ({
   resolveWorkspaceInRoute: vi.fn(),
   resolveWorkspaceCatalog: vi.fn(),
-}));
-
-const controlPlaneWorkspaceMocks = vi.hoisted(() => ({
-  isHostedWebUiShell: vi.fn(),
-}));
-
-vi.mock("$env/dynamic/private", () => ({
-  env: envState,
 }));
 
 vi.mock("$lib/server/workspaceResolver", async (importOriginal) => {
@@ -24,19 +19,12 @@ vi.mock("$lib/server/workspaceResolver", async (importOriginal) => {
   };
 });
 
-vi.mock("$lib/server/controlPlaneWorkspace", async (importOriginal) => {
-  const actual = await importOriginal();
-  return {
-    ...actual,
-    isHostedWebUiShell: controlPlaneWorkspaceMocks.isHostedWebUiShell,
-  };
-});
-
 import { load } from "../../src/routes/o/[organization]/w/[workspace]/+layout.server.js";
 
 function createEvent({
   pathname = "/o/my-org/w/my-ws/login",
   cookies = {},
+  outOfWorkspace = mockLocalProvider(),
 } = {}) {
   return {
     params: { organization: "my-org", workspace: "my-ws" },
@@ -46,21 +34,15 @@ function createEvent({
       set: vi.fn(),
       delete: vi.fn(),
     },
+    locals: {
+      outOfWorkspace,
+    },
   };
-}
-
-function resetEnv(overrides = {}) {
-  for (const key of Object.keys(envState)) {
-    delete envState[key];
-  }
-  Object.assign(envState, overrides);
 }
 
 describe("workspace +layout.server.js", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    resetEnv();
-    controlPlaneWorkspaceMocks.isHostedWebUiShell.mockReturnValue(false);
     workspaceResolverMocks.resolveWorkspaceCatalog.mockResolvedValue({
       workspaces: [],
       defaultWorkspaceSlug: null,
@@ -68,94 +50,62 @@ describe("workspace +layout.server.js", () => {
     });
   });
 
-  it("redirects to /hosted/signin in hosted mode when workspace resolution fails and no CP token is present", async () => {
-    controlPlaneWorkspaceMocks.isHostedWebUiShell.mockReturnValue(true);
+  it("redirects to /hosted/signin when hosted provider is unauthenticated for workspace lookup", async () => {
     workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
-      error: { status: 404, payload: { error: { message: "missing" } } },
+      error: {
+        status: 404,
+        payload: {
+          error: { code: "workspace_not_configured", message: "missing" },
+        },
+      },
+      outOfWorkspaceUnauthenticated: true,
     });
+    const hosted = mockHostedProvider({
+      buildSignInUrl: vi.fn(() => "/hosted/signin?workspace=my-ws"),
+    });
+    const event = createEvent({ outOfWorkspace: hosted });
 
-    const event = createEvent({ pathname: "/o/my-org/w/my-ws/login" });
-
-    let thrown;
-    try {
-      await load(event);
-    } catch (err) {
-      thrown = err;
-    }
-
-    expect(thrown).toBeDefined();
-    expect(thrown.status).toBe(307);
-    expect(thrown.location).toContain("/hosted/signin");
-    expect(thrown.location).toContain("workspace=my-ws");
-    expect(thrown.location).toContain(
-      `return_path=${encodeURIComponent("/o/my-org/w/my-ws/login")}`,
-    );
+    await expect(load(event)).rejects.toMatchObject({
+      status: 307,
+      location: "/hosted/signin?workspace=my-ws",
+    });
   });
 
-  it("does NOT redirect when a CP access token cookie is present (real failure)", async () => {
-    controlPlaneWorkspaceMocks.isHostedWebUiShell.mockReturnValue(true);
+  it("does not redirect to signin when hosted provider resolved lookup but workspace is missing", async () => {
     workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
-      error: { status: 404, payload: { error: { message: "boom" } } },
+      error: {
+        status: 404,
+        payload: {
+          error: { code: "workspace_not_configured", message: "boom" },
+        },
+      },
+      outOfWorkspaceUnauthenticated: false,
     });
+    const event = createEvent({ outOfWorkspace: mockHostedProvider() });
 
-    const event = createEvent({
-      cookies: { oar_cp_dev_access_token: "tok-123" },
+    await expect(load(event)).rejects.toMatchObject({
+      status: 404,
     });
-
-    let thrown;
-    try {
-      await load(event);
-    } catch (err) {
-      thrown = err;
-    }
-
-    expect(thrown).toBeDefined();
-    expect(thrown.status).toBe(404);
-    expect(thrown.location).toBeUndefined();
-    expect(thrown.body?.message ?? thrown.message).toContain("boom");
   });
 
-  it("does NOT redirect in non-hosted mode (regression: keep 404 behavior)", async () => {
-    controlPlaneWorkspaceMocks.isHostedWebUiShell.mockReturnValue(false);
+  it("does not redirect in local provider mode", async () => {
     workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
-      error: { status: 404, payload: { error: { message: "missing" } } },
+      error: {
+        status: 404,
+        payload: {
+          error: { code: "workspace_not_configured", message: "missing" },
+        },
+      },
+      outOfWorkspaceUnauthenticated: false,
     });
-
     const event = createEvent();
 
-    let thrown;
-    try {
-      await load(event);
-    } catch (err) {
-      thrown = err;
-    }
-
-    expect(thrown.status).toBe(404);
-    expect(thrown.location).toBeUndefined();
-  });
-
-  it("does NOT redirect when ANX_CONTROL_PLANE_DEV_ACCESS_TOKEN is set in env", async () => {
-    controlPlaneWorkspaceMocks.isHostedWebUiShell.mockReturnValue(true);
-    resetEnv({ ANX_CONTROL_PLANE_DEV_ACCESS_TOKEN: "env-tok" });
-    workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
-      error: { status: 404, payload: { error: { message: "missing" } } },
+    await expect(load(event)).rejects.toMatchObject({
+      status: 404,
     });
-
-    const event = createEvent();
-
-    let thrown;
-    try {
-      await load(event);
-    } catch (err) {
-      thrown = err;
-    }
-
-    expect(thrown.status).toBe(404);
-    expect(thrown.location).toBeUndefined();
   });
 
-  it("does NOT redirect to signin for workspace_not_ready (503) — surfaces the 503 instead", async () => {
-    controlPlaneWorkspaceMocks.isHostedWebUiShell.mockReturnValue(true);
+  it("does not redirect for workspace_not_ready", async () => {
     workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
       error: {
         status: 503,
@@ -166,30 +116,20 @@ describe("workspace +layout.server.js", () => {
           },
         },
       },
+      outOfWorkspaceUnauthenticated: false,
     });
+    const event = createEvent({ outOfWorkspace: mockHostedProvider() });
 
-    const event = createEvent();
-
-    let thrown;
-    try {
-      await load(event);
-    } catch (err) {
-      thrown = err;
-    }
-
-    expect(thrown).toBeDefined();
-    expect(thrown.status).toBe(503);
-    expect(thrown.location).toBeUndefined();
-    expect(thrown.body?.message ?? thrown.message).toMatch(/not ready/);
-    // The structured `code` must be on the thrown body so $page.error.code
-    // is populated and +error.svelte renders the friendly copy instead of
-    // the generic "Internal Error".
-    expect(thrown.body?.code).toBe("workspace_not_ready");
+    await expect(load(event)).rejects.toMatchObject({
+      status: 503,
+      body: expect.objectContaining({ code: "workspace_not_ready" }),
+    });
   });
 
   it("returns workspace data on successful resolution", async () => {
-    workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
+    const resolvedWorkspace = {
       error: null,
+      outOfWorkspaceUnauthenticated: false,
       workspace: {
         organizationSlug: "my-org",
         slug: "my-ws",
@@ -197,16 +137,60 @@ describe("workspace +layout.server.js", () => {
         description: "",
         coreBaseUrl: "https://core.example.test",
       },
-    });
+    };
+    workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue(
+      resolvedWorkspace,
+    );
 
     const event = createEvent();
     const result = await load(event);
 
     expect(result.workspace.slug).toBe("my-ws");
+    expect(workspaceResolverMocks.resolveWorkspaceCatalog).toHaveBeenCalledWith(
+      event,
+      { prefetchedResolved: resolvedWorkspace },
+    );
     expect(event.cookies.set).toHaveBeenCalledWith(
       expect.any(String),
       expect.stringContaining("my-org"),
       expect.objectContaining({ path: "/", httpOnly: true }),
+    );
+  });
+
+  it("runs silent hosted launch bridge when no workspace auth cookies are present", async () => {
+    const beginLaunchSession = vi.fn(async () => ({
+      kind: "redirect",
+      finishUrl: "/hosted/api/workspaces/ws-1/launch-finish?lid=abc",
+    }));
+    workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
+      error: null,
+      outOfWorkspaceUnauthenticated: false,
+      workspace: {
+        organizationSlug: "my-org",
+        slug: "my-ws",
+        label: "My WS",
+        description: "",
+        coreBaseUrl: "https://core.example.test",
+        workspaceId: "ws-1",
+      },
+    });
+    const event = createEvent({
+      outOfWorkspace: mockHostedProvider({
+        beginLaunchSession,
+      }),
+      cookies: {},
+      pathname: "/o/my-org/w/my-ws/threads/123?tab=notes",
+    });
+
+    await expect(load(event)).rejects.toMatchObject({
+      status: 303,
+      location: "/hosted/api/workspaces/ws-1/launch-finish?lid=abc",
+    });
+    expect(beginLaunchSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        returnPath: "/threads/123?tab=notes",
+      }),
     );
   });
 });

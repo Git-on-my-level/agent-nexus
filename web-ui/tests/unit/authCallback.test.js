@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createFormPostEvent } from "../helpers/svelteKitRequestEvent.js";
+import { mockHostedProvider } from "../fixtures/workspaceAuth.js";
 
 const workspaceResolverMocks = vi.hoisted(() => ({
   resolveWorkspaceInRoute: vi.fn(),
@@ -13,12 +14,6 @@ vi.mock("$lib/server/workspaceResolver", async (importOriginal) => {
     resolveWorkspaceInRoute: workspaceResolverMocks.resolveWorkspaceInRoute,
   };
 });
-
-vi.mock("$env/dynamic/private", () => ({
-  env: {
-    ANX_CONTROL_BASE_URL: "https://cp.example",
-  },
-}));
 
 vi.mock("$app/paths", () => ({
   base: "",
@@ -45,6 +40,21 @@ function mockResolvedWorkspace() {
   });
 }
 
+function createEvent(fields, outOfWorkspace) {
+  const event = createFormPostEvent(fields);
+  event.locals = {
+    outOfWorkspace:
+      outOfWorkspace ??
+      mockHostedProvider({
+        exchangeLaunchSession: vi.fn(async () => ({
+          ok: true,
+          assertion: "assertion-happy",
+        })),
+      }),
+  };
+  return event;
+}
+
 async function readErrorJson(response) {
   const data = await response.json();
   return data;
@@ -65,17 +75,6 @@ describe("auth callback POST (+server)", () => {
   it("redirects on happy path, sets workspace cookies, uses sanitized return_path", async () => {
     const fetchMock = vi.fn(async (url) => {
       const u = String(url);
-      if (u.includes("/session-exchange")) {
-        return new Response(
-          JSON.stringify({
-            grant: { bearer_token: "assertion-happy" },
-          }),
-          {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          },
-        );
-      }
       if (u.includes("/auth/token")) {
         return new Response(
           JSON.stringify({
@@ -94,12 +93,21 @@ describe("auth callback POST (+server)", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const event = createFormPostEvent({
-      exchange_token: "ex-tok",
-      state: "state-val",
-      workspace_id: WORKSPACE_ID,
-      return_path: "/threads",
-    });
+    const exchangeLaunchSession = vi.fn(async () => ({
+      ok: true,
+      assertion: "assertion-happy",
+    }));
+    const event = createEvent(
+      {
+        exchange_token: "ex-tok",
+        state: "state-val",
+        workspace_id: WORKSPACE_ID,
+        return_path: "/threads",
+      },
+      mockHostedProvider({
+        exchangeLaunchSession,
+      }),
+    );
 
     let thrown;
     try {
@@ -112,6 +120,7 @@ describe("auth callback POST (+server)", () => {
       status: 303,
       location: "/o/local/w/alpha/threads",
     });
+    expect(exchangeLaunchSession).toHaveBeenCalled();
     expect(
       event.cookieCalls.some((c) => c.name === "oar_ui_session_alpha"),
     ).toBe(true);
@@ -121,7 +130,7 @@ describe("auth callback POST (+server)", () => {
     expect(
       event.cookieCalls.some((c) => c.name === "oar_ui_access_alpha"),
     ).toBe(true);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     const tokenCall = fetchMock.mock.calls.find((c) =>
       String(c[0]).includes("/auth/token"),
     );
@@ -132,34 +141,22 @@ describe("auth callback POST (+server)", () => {
     });
   });
 
-  it("returns state_mismatch when control plane session-exchange fails (400)", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url) => {
-        const u = String(url);
-        if (u.includes("/session-exchange")) {
-          return new Response(
-            JSON.stringify({
-              error: {
-                code: "state_mismatch",
-                message: "State does not match.",
-              },
-            }),
-            {
-              status: 400,
-              headers: { "content-type": "application/json" },
-            },
-          );
-        }
-        throw new Error(`unexpected fetch: ${u}`);
+  it("returns state_mismatch from provider session exchange failure", async () => {
+    const event = createEvent(
+      {
+        exchange_token: "ex",
+        state: "bad",
+        workspace_id: WORKSPACE_ID,
+      },
+      mockHostedProvider({
+        exchangeLaunchSession: vi.fn(async () => ({
+          ok: false,
+          status: 400,
+          code: "state_mismatch",
+          message: "State does not match.",
+        })),
       }),
     );
-
-    const event = createFormPostEvent({
-      exchange_token: "ex",
-      state: "bad",
-      workspace_id: WORKSPACE_ID,
-    });
     const res = await POST(/** @type {any} */ (event));
     expect(res.status).toBe(400);
     const body = await readErrorJson(res);
@@ -167,34 +164,22 @@ describe("auth callback POST (+server)", () => {
     expect(body.error.message).toBeTruthy();
   });
 
-  it("forwards exchange_expired from control plane (409)", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url) => {
-        const u = String(url);
-        if (u.includes("/session-exchange")) {
-          return new Response(
-            JSON.stringify({
-              error: {
-                code: "exchange_expired",
-                message: "Exchange token expired.",
-              },
-            }),
-            {
-              status: 409,
-              headers: { "content-type": "application/json" },
-            },
-          );
-        }
-        throw new Error(`unexpected fetch: ${u}`);
+  it("forwards exchange_expired from provider (409)", async () => {
+    const event = createEvent(
+      {
+        exchange_token: "ex",
+        state: "st",
+        workspace_id: WORKSPACE_ID,
+      },
+      mockHostedProvider({
+        exchangeLaunchSession: vi.fn(async () => ({
+          ok: false,
+          status: 409,
+          code: "exchange_expired",
+          message: "Exchange token expired.",
+        })),
       }),
     );
-
-    const event = createFormPostEvent({
-      exchange_token: "ex",
-      state: "st",
-      workspace_id: WORKSPACE_ID,
-    });
     const res = await POST(/** @type {any} */ (event));
     expect(res.status).toBe(409);
     const body = await readErrorJson(res);
@@ -208,17 +193,6 @@ describe("auth callback POST (+server)", () => {
       "fetch",
       vi.fn(async (url) => {
         const u = String(url);
-        if (u.includes("/session-exchange")) {
-          return new Response(
-            JSON.stringify({
-              grant: { bearer_token: "assertion-net" },
-            }),
-            {
-              status: 200,
-              headers: { "content-type": "application/json" },
-            },
-          );
-        }
         if (u.includes("/auth/token")) {
           const err = new Error("fetch failed");
           err.cause = { code: "ECONNREFUSED", message: "connection refused" };
@@ -228,7 +202,7 @@ describe("auth callback POST (+server)", () => {
       }),
     );
 
-    const event = createFormPostEvent({
+    const event = createEvent({
       exchange_token: "ex",
       state: "st",
       workspace_id: WORKSPACE_ID,
@@ -249,17 +223,6 @@ describe("auth callback POST (+server)", () => {
       "fetch",
       vi.fn(async (url) => {
         const u = String(url);
-        if (u.includes("/session-exchange")) {
-          return new Response(
-            JSON.stringify({
-              grant: { bearer_token: "assertion-rl" },
-            }),
-            {
-              status: 200,
-              headers: { "content-type": "application/json" },
-            },
-          );
-        }
         if (u.includes("/auth/token")) {
           return new Response(
             JSON.stringify({
@@ -278,7 +241,7 @@ describe("auth callback POST (+server)", () => {
       }),
     );
 
-    const event = createFormPostEvent({
+    const event = createEvent({
       exchange_token: "ex",
       state: "st",
       workspace_id: WORKSPACE_ID,

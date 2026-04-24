@@ -1,57 +1,12 @@
 import { env as privateEnv } from "$env/dynamic/private";
 import { redirect } from "@sveltejs/kit";
 
-import { normalizeBaseUrl } from "$lib/config.js";
-import {
-  buildHostedSignInPath,
-  normalizeHostedLaunchFinishURL,
-  sanitizeHostedReturnPath,
-} from "$lib/hosted/launchFlow.js";
+import { sanitizeHostedReturnPath } from "$lib/hosted/launchFlow.js";
 import { loadWorkspaceAuthenticatedAgent } from "$lib/server/authSession";
+import { getOutOfWorkspaceProvider } from "$lib/server/outOfWorkspace/index.js";
+import { handleLaunchInstruction } from "$lib/server/outOfWorkspace/launchSession.js";
 import { resolveWorkspaceInRoute } from "$lib/server/workspaceResolver";
 import { workspacePath } from "$lib/workspacePaths";
-
-async function tryHostedLaunchFinishUrl({
-  fetchFn,
-  controlBaseUrl,
-  workspaceID,
-  accessToken,
-  returnPath,
-}) {
-  const base = normalizeBaseUrl(controlBaseUrl);
-  const token = String(accessToken ?? "").trim();
-  const wsId = String(workspaceID ?? "").trim();
-  const doFetch = typeof fetchFn === "function" ? fetchFn : fetch;
-  if (!base || !token || !wsId) {
-    return "";
-  }
-  const url = `${base}/workspaces/${encodeURIComponent(wsId)}/launch-sessions`;
-  let response;
-  try {
-    response = await doFetch(url, {
-      method: "POST",
-      headers: {
-        accept: "application/json",
-        "content-type": "application/json",
-        authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ return_path: returnPath }),
-    });
-  } catch {
-    return "";
-  }
-  if (!response.ok) {
-    return "";
-  }
-  let payload;
-  try {
-    payload = await response.json();
-  } catch {
-    return "";
-  }
-  const finishRaw = String(payload?.launch_session?.finish_url ?? "").trim();
-  return normalizeHostedLaunchFinishURL(finishRaw);
-}
 
 async function loadWorkspaceHumanAuthMode(event, coreBaseUrl) {
   if (!coreBaseUrl) {
@@ -85,6 +40,8 @@ function isHostedWorkspaceContext(workspace) {
 }
 
 export async function load(event) {
+  const provider =
+    event.locals?.outOfWorkspace ?? getOutOfWorkspaceProvider(privateEnv);
   const resolved = await resolveWorkspaceInRoute({
     event,
     organizationSlug: event.params.organization,
@@ -149,31 +106,11 @@ export async function load(event) {
       "/",
   );
 
-  const controlBaseUrl = normalizeBaseUrl(
-    privateEnv.ANX_CONTROL_BASE_URL ?? "",
-  );
-  const cpAccessToken = String(
-    event.cookies.get("oar_cp_dev_access_token") ?? "",
-  ).trim();
-  if (controlBaseUrl && cpAccessToken) {
-    const finishUrl = await tryHostedLaunchFinishUrl({
-      fetchFn: event.fetch,
-      controlBaseUrl,
-      workspaceID,
-      accessToken: cpAccessToken,
-      returnPath,
-    });
-    if (finishUrl) {
-      throw redirect(303, finishUrl);
-    }
-  }
-
-  throw redirect(
-    307,
-    buildHostedSignInPath({
-      workspaceSlug: resolved.workspaceSlug,
-      workspaceId: workspaceID,
-      returnPath,
-    }),
-  );
+  const instruction = await provider.beginLaunchSession({
+    event,
+    workspaceId: workspaceID,
+    workspaceSlug: resolved.workspaceSlug,
+    returnPath,
+  });
+  handleLaunchInstruction(instruction);
 }

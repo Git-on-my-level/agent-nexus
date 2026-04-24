@@ -99,19 +99,18 @@ describe("workspaceCatalog", () => {
     expect(catalog.defaultWorkspace).toBeNull();
   });
 
-  it("should allow an empty catalog for SaaS packed-host dev", () => {
-    const env = {
-      ANX_SAAS_PACKED_HOST_DEV: "1",
-    };
-    const catalog = loadWorkspaceCatalog(env);
+  it("should allow an empty catalog when resolver enables hosted empty-static mode", () => {
+    const env = {};
+    const catalog = loadWorkspaceCatalog(env, {
+      allowsEmptyStaticCatalog: true,
+    });
     expect(catalog.defaultWorkspace).toBeNull();
     expect(catalog.workspaces).toHaveLength(0);
-    expect(catalog.hostedDevEmpty).toBe(true);
+    expect(catalog.allowsEmptyCatalog).toBe(true);
   });
 
   it("should prefer ANX_SAAS_DEV_PRECONFIGURED_WORKSPACES when ANX_WORKSPACES is unset", () => {
     const env = {
-      ANX_SAAS_PACKED_HOST_DEV: "1",
       ANX_SAAS_DEV_PRECONFIGURED_WORKSPACES:
         '[{"organizationSlug":"local","slug":"demo","label":"Demo","coreBaseUrl":"http://127.0.0.1:9000"}]',
     };

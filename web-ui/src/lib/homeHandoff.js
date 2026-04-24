@@ -27,7 +27,9 @@ function normalizeStorageSegment(value) {
 }
 
 function timestampToIso(timestampMs) {
-  return Number.isFinite(timestampMs) ? new Date(timestampMs).toISOString() : "";
+  return Number.isFinite(timestampMs)
+    ? new Date(timestampMs).toISOString()
+    : "";
 }
 
 function parseMarkerMs(markerIso) {
@@ -63,7 +65,11 @@ function compareEventsNewestFirst(left, right) {
   const leftTs = parseTimestampMs(left?.ts);
   const rightTs = parseTimestampMs(right?.ts);
 
-  if (Number.isFinite(leftTs) && Number.isFinite(rightTs) && leftTs !== rightTs) {
+  if (
+    Number.isFinite(leftTs) &&
+    Number.isFinite(rightTs) &&
+    leftTs !== rightTs
+  ) {
     return rightTs - leftTs;
   }
 
@@ -92,7 +98,11 @@ export function readHomeHandoffMarker(organizationSlug, workspaceSlug) {
   return Number.isFinite(parseMarkerMs(stored)) ? stored : "";
 }
 
-export function writeHomeHandoffMarker(organizationSlug, workspaceSlug, markerIso) {
+export function writeHomeHandoffMarker(
+  organizationSlug,
+  workspaceSlug,
+  markerIso,
+) {
   if (typeof localStorage === "undefined") return;
   const key = homeHandoffStorageKey(organizationSlug, workspaceSlug);
   const normalized = String(markerIso ?? "").trim();
@@ -147,7 +157,9 @@ export function buildHomeChangeCards({
     {
       id: "inbox",
       label: "Inbox changes",
-      count: countDistinct(inboxItems, cutoffMs, (item) => readSourceEventTime(item)),
+      count: countDistinct(inboxItems, cutoffMs, (item) =>
+        readSourceEventTime(item),
+      ),
     },
     {
       id: "topics",
@@ -198,12 +210,18 @@ export function computeNextHomeHandoffMarker({
 
   for (const topic of topics) {
     if (!isNewerThanCutoff(topic?.updated_at, cutoffMs)) continue;
-    latestTimestampMs = updateLatestTimestamp(latestTimestampMs, topic?.updated_at);
+    latestTimestampMs = updateLatestTimestamp(
+      latestTimestampMs,
+      topic?.updated_at,
+    );
   }
 
   for (const board of boards) {
     if (!isNewerThanCutoff(board?.updated_at, cutoffMs)) continue;
-    latestTimestampMs = updateLatestTimestamp(latestTimestampMs, board?.updated_at);
+    latestTimestampMs = updateLatestTimestamp(
+      latestTimestampMs,
+      board?.updated_at,
+    );
   }
 
   for (const document of documents) {
@@ -222,7 +240,10 @@ export function computeNextHomeHandoffMarker({
     );
   }
 
-  for (const event of filterHomeTimelineEvents(events, { markerIso, limit: 10_000 })) {
+  for (const event of filterHomeTimelineEvents(events, {
+    markerIso,
+    limit: 10_000,
+  })) {
     latestTimestampMs = updateLatestTimestamp(latestTimestampMs, event?.ts);
   }
 
@@ -238,5 +259,7 @@ export function computeNextHomeHandoffMarker({
     return timestampToIso(latestTimestampMs);
   }
 
-  return timestampToIso(typeof now === "number" ? now : Date.parse(String(now)));
+  return timestampToIso(
+    typeof now === "number" ? now : Date.parse(String(now)),
+  );
 }
