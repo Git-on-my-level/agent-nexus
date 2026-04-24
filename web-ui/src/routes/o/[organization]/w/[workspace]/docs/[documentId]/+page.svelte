@@ -1,21 +1,24 @@
 <script>
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
-  import ArchiveButton from "$lib/components/ArchiveButton.svelte";
   import Button from "$lib/components/Button.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
-  import CopyButton from "$lib/components/CopyButton.svelte";
-  import TrashButton from "$lib/components/TrashButton.svelte";
+  import IdsIntegrityDisclosure from "$lib/components/IdsIntegrityDisclosure.svelte";
+  import RefLink from "$lib/components/RefLink.svelte";
+  import ResourceShareMenu from "$lib/components/ResourceShareMenu.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
-  import { topicDetailPathFromSubject } from "$lib/topicRouteUtils";
+  import { splitTypedRef } from "$lib/inboxUtils";
   import { workspacePath } from "$lib/workspacePaths";
   import {
     lookupActorDisplayName,
     actorRegistry,
     principalRegistry,
   } from "$lib/actorSession";
+  import DocumentDiscussionRail from "$lib/components/document-detail/DocumentDiscussionRail.svelte";
+
+  let { data } = $props();
 
   let documentId = $derived($page.params.documentId);
   let organizationSlug = $derived($page.params.organization);
@@ -36,6 +39,15 @@
   let loadError = $state("");
   let loadedDocumentId = $state("");
   let historyOpen = $state(false);
+  /**
+   * Per polish §P5 the breadcrumb shows the parent topic when the document is
+   * anchored to a topic ref. We cache `{id, title}` here and only fetch when
+   * the resolved topic id changes; failures fall back to the doc-only crumb.
+   */
+  let parentTopic = $state(
+    /** @type {{ id: string, title: string } | null} */ (null),
+  );
+  let parentTopicLoadedFor = $state("");
 
   let editOpen = $state(false);
   let editDraft = $state({
@@ -49,14 +61,94 @@
   let metadataExpanded = $state(false);
   let confirmModal = $state({ open: false, action: "" });
   let docLifecycleBusy = $state(false);
-  let documentTopicHref = $derived(
-    document
-      ? topicDetailPathFromSubject({
-          subjectRef: document.subject_ref,
-          threadId: document.thread_id,
-        })
-      : "",
+  /**
+   * Per polish §P8: Archive and Trash collapse into a single "More actions"
+   * kebab so "New revision" is the only competing primary in the doc header.
+   */
+  let moreActionsOpen = $state(false);
+  let moreActionsRoot = $state(null);
+  function toggleMoreActions() {
+    moreActionsOpen = !moreActionsOpen;
+  }
+  function closeMoreActions() {
+    moreActionsOpen = false;
+  }
+
+  $effect(() => {
+    if (!moreActionsOpen) return;
+    function onDocPointerDown(e) {
+      if (
+        moreActionsRoot &&
+        e.target instanceof Node &&
+        !moreActionsRoot.contains(e.target)
+      ) {
+        moreActionsOpen = false;
+      }
+    }
+    function onDocKey(e) {
+      if (e.key === "Escape") moreActionsOpen = false;
+    }
+    document.addEventListener("pointerdown", onDocPointerDown, true);
+    document.addEventListener("keydown", onDocKey, true);
+    return () => {
+      document.removeEventListener("pointerdown", onDocPointerDown, true);
+      document.removeEventListener("keydown", onDocKey, true);
+    };
+  });
+  function documentTopicRefForLink(doc) {
+    if (!doc || typeof doc !== "object") return "";
+    const sr = String(doc.subject_ref ?? "").trim();
+    if (sr) {
+      const { prefix, id } = splitTypedRef(sr);
+      if (prefix === "topic" && id) return `topic:${id}`;
+      if (prefix === "thread" && id) return `thread:${id}`;
+      if (!sr.includes(":") && sr) return `topic:${sr}`;
+    }
+    const tid = String(doc.thread_id ?? "").trim();
+    return tid ? `thread:${tid}` : "";
+  }
+
+  let documentTopicRefValue = $derived(
+    document ? documentTopicRefForLink(document) : "",
   );
+
+  let parentTopicId = $derived.by(() => {
+    if (!document) return "";
+    const sr = String(document.subject_ref ?? "").trim();
+    if (!sr) return "";
+    const { prefix, id } = splitTypedRef(sr);
+    return prefix === "topic" && id ? String(id) : "";
+  });
+
+  $effect(() => {
+    const tid = parentTopicId;
+    if (!tid) {
+      parentTopic = null;
+      parentTopicLoadedFor = "";
+      return;
+    }
+    if (parentTopicLoadedFor === tid) return;
+    parentTopicLoadedFor = tid;
+    void (async () => {
+      try {
+        const result = await coreClient.getTopic(tid);
+        const t = result?.topic ?? result ?? null;
+        if (parentTopicLoadedFor !== tid) return;
+        if (t && (t.id === tid || String(t.id ?? "") === tid)) {
+          parentTopic = {
+            id: tid,
+            title: String(t.title ?? "").trim() || tid,
+          };
+        } else {
+          parentTopic = { id: tid, title: tid };
+        }
+      } catch {
+        if (parentTopicLoadedFor === tid) {
+          parentTopic = null;
+        }
+      }
+    })();
+  });
 
   let displayedContent = $derived(
     selectedRevision?.content ?? headRevision?.content ?? "",
@@ -66,6 +158,61 @@
     selectedRevision &&
       selectedRevision.revision_id !== headRevision?.revision_id,
   );
+
+  let docIntegrityRows = $derived.by(() => {
+    const d = document;
+    const rev = displayedRevision;
+    if (!d) return [];
+    const rows = [];
+    if (rev?.content_hash) {
+      rows.push({
+        label: "Content hash",
+        value: String(rev.content_hash),
+        copyLabel: "Copy content hash",
+      });
+    }
+    if (rev?.revision_hash) {
+      rows.push({
+        label: "Revision hash",
+        value: String(rev.revision_hash),
+        copyLabel: "Copy revision hash",
+      });
+    }
+    if (d.id) {
+      rows.push({
+        label: "Document ID",
+        value: String(d.id),
+        copyLabel: "Copy document ID",
+      });
+    }
+    if (rev?.revision_id) {
+      rows.push({
+        label: "Revision ID",
+        value: String(rev.revision_id),
+        copyLabel: "Copy revision ID",
+      });
+    }
+    const threadId = String(d.thread_id ?? "").trim();
+    if (threadId) {
+      rows.push({
+        label: "Thread ID",
+        value: threadId,
+        copyLabel: "Copy thread ID",
+      });
+    }
+    const subjectRef = String(d.subject_ref ?? "").trim();
+    if (subjectRef) {
+      rows.push({
+        label: "Subject ref",
+        value: subjectRef,
+        copyLabel: "Copy subject ref",
+        mono: true,
+      });
+    }
+    return rows;
+  });
+
+  let docRawJson = $derived(document ? JSON.stringify(document, null, 2) : "");
 
   // Only text documents can be edited in the textarea-based editor.
   // Structured and binary revisions must be updated via CLI/API.
@@ -377,10 +524,24 @@
     class="transition-colors hover:text-[var(--fg)]"
     href={workspaceHref("/docs")}>Docs</a
   >
+  {#if parentTopic}
+    <span class="text-[var(--fg-subtle)]">/</span>
+    <a
+      class="max-w-[16rem] truncate transition-colors hover:text-[var(--fg)]"
+      href={workspaceHref(`/topics/${encodeURIComponent(parentTopic.id)}`)}
+      title={parentTopic.title}
+    >
+      {parentTopic.title}
+    </a>
+  {/if}
   <span class="text-[var(--fg-subtle)]">/</span>
-  <span class="truncate text-[var(--fg-muted)]"
-    >{document?.title || documentId}</span
+  <span
+    class="truncate text-[var(--fg-muted)]"
+    aria-current="page"
+    title={document?.title || documentId}
   >
+    {document?.title || documentId}
+  </span>
 </nav>
 
 {#if loading}
@@ -460,489 +621,481 @@
     </div>
   {/if}
 
-  <div class="flex gap-4">
+  <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-4">
     <div class="min-w-0 flex-1">
-      <div class="flex items-start justify-between gap-3">
+      <div class="flex gap-4">
         <div class="min-w-0 flex-1">
-          <h1 class="text-subtitle font-semibold text-[var(--fg)]">
-            {document.title || ""}{#if !document.title}<span
-                class="font-mono text-[var(--fg-muted)]">{document.id}</span
-              >{/if}
-          </h1>
-          <div class="mt-1 flex flex-wrap items-center gap-1.5 text-micro">
-            {#if document.state}
-              <span
-                class="rounded px-1.5 py-0.5 font-medium {document.state ===
-                'active'
-                  ? 'text-ok-text bg-ok-soft'
-                  : document.state === 'trashed'
-                    ? 'text-danger-text bg-danger-soft'
-                    : 'text-warn-text bg-warn-soft'}"
-                >{{
-                  active: "Active",
-                  archived: "Archived",
-                  trashed: "Trashed",
-                }[document.state] ?? document.state}</span
-              >
-            {/if}
-            {#each document.labels ?? [] as label}
-              <span
-                class="rounded bg-[var(--line)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
-                >{label}</span
-              >
-            {/each}
-            <span class="text-[var(--fg-subtle)]">·</span>
-            <span class="text-[var(--fg-muted)]"
-              >v{displayedRevision?.revision_number ?? "\u2014"}</span
-            >
-            <span class="text-[var(--fg-subtle)]">·</span>
-            <span class="text-[var(--fg-muted)]"
-              >{formatTimestamp(displayedRevision?.created_at) || "—"}</span
-            >
-            <span class="text-[var(--fg-subtle)]">·</span>
-            <span class="text-[var(--fg-muted)]"
-              >by {actorName(displayedRevision?.created_by)}</span
-            >
-          </div>
-          {#if document.thread_id && documentTopicHref}
-            <p class="mt-0.5 text-micro text-[var(--fg-muted)]">
-              <span class="text-[var(--fg-muted)]">Topic</span>
-              <a
-                class="ml-1 text-accent-text transition-colors hover:text-accent-text"
-                href={workspaceHref(documentTopicHref)}
-                >{String(document.subject_ref ?? "")
-                  .replace(/^topic:/, "")
-                  .trim() || document.thread_id}</a
-              >
-            </p>
-          {/if}
-        </div>
-        {#if !document.trashed_at}
-          <div class="flex shrink-0 items-center gap-1.5">
-            {#if isTextEditable}
-              <Button
-                variant="primary"
-                size="compact"
-                onclick={openEdit}
-                type="button"
-              >
-                <svg
-                  class="h-3.5 w-3.5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  stroke-width="2"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                  />
-                </svg>
-                New revision
-              </Button>
-            {:else}
-              <span
-                class="inline-flex items-center gap-1 rounded-md border border-[var(--line)] px-2.5 py-1.5 text-micro text-[var(--fg-muted)]"
-                title="Content type '{headContentType}' can only be updated via the CLI or API"
-              >
-                <svg
-                  class="h-3.5 w-3.5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  stroke-width="2"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-                {headContentType} — edit via CLI
-              </span>
-            {/if}
-            <Button
-              variant="secondary"
-              size="compact"
-              onclick={loadHistory}
-              type="button"
-            >
-              <svg
-                class="h-3.5 w-3.5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-              Revision history
-            </Button>
-            {#if !document.archived_at}
-              <ArchiveButton
-                busy={docLifecycleBusy}
-                size="md"
-                onarchive={() =>
-                  (confirmModal = { open: true, action: "archive" })}
-              />
-            {/if}
-            <TrashButton
-              busy={docLifecycleBusy}
-              size="md"
-              ontrash={() => (confirmModal = { open: true, action: "trash" })}
-            />
-          </div>
-        {/if}
-      </div>
-
-      {#if editOpen}
-        <form
-          class="mt-3 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] p-4"
-          onsubmit={(e) => {
-            e.preventDefault();
-            void handleSave();
-          }}
-        >
-          <div class="mb-3">
-            <button
-              class="cursor-pointer flex w-full items-center gap-2 text-left"
-              onclick={() => (metadataExpanded = !metadataExpanded)}
-              type="button"
-            >
-              <svg
-                class="h-3 w-3 text-[var(--fg-muted)] transition-transform {metadataExpanded
-                  ? 'rotate-90'
-                  : ''}"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M9 5l7 7-7 7"
-                />
-              </svg>
-              <span class="text-micro font-medium text-[var(--fg-muted)]"
-                >Metadata</span
-              >
-            </button>
-            {#if !metadataExpanded}
-              <p class="mt-1 ml-5 truncate text-micro text-[var(--fg-muted)]">
-                Title: {editDraft.title || "—"} · Labels: {editDraft.labels ||
-                  "none"}
-              </p>
-            {/if}
-            {#if metadataExpanded}
-              <div class="mt-2 ml-5 grid gap-3 sm:grid-cols-2">
-                <label class="sm:col-span-2">
-                  <span class="text-micro font-medium text-[var(--fg-muted)]"
-                    >Title</span
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0 flex-1">
+              <h1 class="text-subtitle font-semibold text-[var(--fg)]">
+                {document.title || ""}{#if !document.title}<span
+                    class="font-mono text-[var(--fg-muted)]">{document.id}</span
+                  >{/if}
+              </h1>
+              <div class="mt-1 flex flex-wrap items-center gap-1.5 text-micro">
+                {#if document.state}
+                  <span
+                    class="rounded px-1.5 py-0.5 font-medium {document.state ===
+                    'active'
+                      ? 'text-ok-text bg-ok-soft'
+                      : document.state === 'trashed'
+                        ? 'text-danger-text bg-danger-soft'
+                        : 'text-warn-text bg-warn-soft'}"
+                    >{{
+                      active: "Active",
+                      archived: "Archived",
+                      trashed: "Trashed",
+                    }[document.state] ?? document.state}</span
                   >
-                  <input
-                    bind:value={editDraft.title}
-                    class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-meta text-[var(--fg)]"
-                    type="text"
-                  />
-                </label>
-                <label>
-                  <span class="text-micro font-medium text-[var(--fg-muted)]"
-                    >Labels (comma-separated)</span
+                {/if}
+                {#each document.labels ?? [] as label}
+                  <span
+                    class="rounded bg-[var(--line)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
+                    >{label}</span
                   >
-                  <input
-                    bind:value={editDraft.labels}
-                    class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-meta text-[var(--fg)] placeholder:text-[var(--fg-subtle)]"
-                    placeholder="ops, runbook"
-                    type="text"
+                {/each}
+                <span class="text-[var(--fg-subtle)]">·</span>
+                <span class="text-[var(--fg-muted)]"
+                  >v{displayedRevision?.revision_number ?? "\u2014"}</span
+                >
+                <span class="text-[var(--fg-subtle)]">·</span>
+                <span class="text-[var(--fg-muted)]"
+                  >{formatTimestamp(displayedRevision?.created_at) || "—"}</span
+                >
+                <span class="text-[var(--fg-subtle)]">·</span>
+                <span class="text-[var(--fg-muted)]"
+                  >by {actorName(displayedRevision?.created_by)}</span
+                >
+              </div>
+              {#if documentTopicRefValue}
+                <p
+                  class="mt-0.5 flex flex-wrap items-baseline gap-x-1.5 text-micro text-[var(--fg-muted)]"
+                >
+                  <span>Topic / thread</span>
+                  <RefLink
+                    refValue={documentTopicRefValue}
+                    threadId={document.thread_id}
+                    humanize
+                    showRaw
                   />
-                </label>
+                </p>
+              {/if}
+            </div>
+            {#if !document.trashed_at}
+              <div class="flex shrink-0 items-center gap-1.5">
+                <ResourceShareMenu
+                  resourceId={document.id}
+                  rawRecord={document}
+                  contentHash={headRevision?.content_hash
+                    ? String(headRevision.content_hash)
+                    : ""}
+                />
+                {#if isTextEditable}
+                  <Button
+                    variant="primary"
+                    size="compact"
+                    onclick={openEdit}
+                    type="button"
+                  >
+                    <svg
+                      class="h-3.5 w-3.5"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                      />
+                    </svg>
+                    New revision
+                  </Button>
+                {:else}
+                  <span
+                    class="inline-flex items-center gap-1 rounded-md border border-[var(--line)] px-2.5 py-1.5 text-micro text-[var(--fg-muted)]"
+                    title="Content type '{headContentType}' can only be updated via the CLI or API"
+                  >
+                    <svg
+                      class="h-3.5 w-3.5"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                    </svg>
+                    {headContentType} — edit via CLI
+                  </span>
+                {/if}
+                <Button
+                  variant="secondary"
+                  size="compact"
+                  onclick={loadHistory}
+                  type="button"
+                >
+                  <svg
+                    class="h-3.5 w-3.5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                  Revision history
+                </Button>
+                <div bind:this={moreActionsRoot} class="relative">
+                  <button
+                    type="button"
+                    class="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-line bg-transparent text-fg-muted transition-colors hover:bg-panel-hover hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
+                    aria-label="More actions"
+                    aria-haspopup="menu"
+                    aria-expanded={moreActionsOpen}
+                    disabled={docLifecycleBusy}
+                    onclick={toggleMoreActions}
+                  >
+                    <svg
+                      class="h-4 w-4"
+                      fill="currentColor"
+                      viewBox="0 0 24 24"
+                      aria-hidden="true"
+                    >
+                      <circle cx="12" cy="5" r="1.75" />
+                      <circle cx="12" cy="12" r="1.75" />
+                      <circle cx="12" cy="19" r="1.75" />
+                    </svg>
+                  </button>
+                  {#if moreActionsOpen}
+                    <div
+                      class="absolute right-0 z-50 mt-1 min-w-[10rem] rounded-md border border-[var(--line)] bg-[var(--panel)] py-1 shadow-lg"
+                      role="menu"
+                    >
+                      {#if !document.archived_at}
+                        <button
+                          type="button"
+                          role="menuitem"
+                          class="block w-full px-3 py-2 text-left text-micro text-[var(--fg)] hover:bg-[var(--line-subtle)] disabled:opacity-50"
+                          disabled={docLifecycleBusy}
+                          onclick={() => {
+                            closeMoreActions();
+                            confirmModal = { open: true, action: "archive" };
+                          }}
+                        >
+                          Archive
+                        </button>
+                      {/if}
+                      <button
+                        type="button"
+                        role="menuitem"
+                        class="block w-full px-3 py-2 text-left text-micro text-danger-text hover:bg-[var(--line-subtle)] disabled:opacity-50"
+                        disabled={docLifecycleBusy}
+                        onclick={() => {
+                          closeMoreActions();
+                          confirmModal = { open: true, action: "trash" };
+                        }}
+                      >
+                        Move to trash
+                      </button>
+                    </div>
+                  {/if}
+                </div>
               </div>
             {/if}
           </div>
 
-          <label>
-            <span class="text-micro font-medium text-[var(--fg-muted)]"
-              >Content (Markdown) <span class="text-danger-text">*</span></span
+          {#if editOpen}
+            <form
+              class="mt-3 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] p-4"
+              onsubmit={(e) => {
+                e.preventDefault();
+                void handleSave();
+              }}
             >
-            <textarea
-              bind:value={editDraft.content}
-              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-2 text-meta text-[var(--fg)] font-mono leading-relaxed resize-y"
-              rows="20"
-            ></textarea>
-          </label>
-
-          <div class="mt-3 flex items-center gap-2">
-            <Button
-              type="submit"
-              variant="primary"
-              size="compact"
-              disabled={saving}
-            >
-              {saving ? "Saving…" : "Save revision"}
-            </Button>
-            <Button
-              variant="secondary"
-              size="compact"
-              onclick={closeEdit}
-              type="button"
-            >
-              Cancel
-            </Button>
-          </div>
-
-          {#if saveError}
-            <div
-              class="mt-3 rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
-              role="alert"
-            >
-              {saveError}
-            </div>
-          {/if}
-          <p class="mt-2 text-micro text-[var(--fg-muted)]">
-            Base revision: <span class="font-mono"
-              >{headRevision?.revision_id ?? "—"}</span
-            > — optimistic concurrency is enforced.
-          </p>
-        </form>
-      {/if}
-
-      {#if isViewingOldRevision}
-        <div
-          class="mt-3 flex items-center gap-2 rounded-md bg-warn-soft px-3 py-2 text-micro text-warn-text"
-        >
-          <span
-            >Viewing revision {selectedRevision.revision_number} from {formatTimestamp(
-              selectedRevision.created_at,
-            )}</span
-          >
-          <button
-            class="cursor-pointer ml-auto font-medium underline"
-            onclick={returnToHead}
-            type="button">Return to current</button
-          >
-        </div>
-      {/if}
-
-      <div
-        class="mt-3 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
-      >
-        <div class="px-4 py-3">
-          {#if displayedContent}
-            <MarkdownRenderer
-              source={displayedContent}
-              class="text-meta leading-relaxed text-[var(--fg)]"
-            />
-          {:else}
-            <p class="text-meta text-[var(--fg-muted)]">(No content)</p>
-          {/if}
-        </div>
-      </div>
-
-      <div class="mt-6 border-t border-[var(--line)] pt-4">
-        <p
-          class="mb-2 text-micro font-medium uppercase tracking-[0.12em] text-[var(--fg-muted)]"
-        >
-          Technical details
-        </p>
-
-        {#if displayedRevision?.content_hash || displayedRevision?.revision_hash}
-          <details
-            class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
-          >
-            <summary
-              class="cursor-pointer px-4 py-2.5 text-micro text-[var(--fg-muted)] hover:text-[var(--fg)]"
-              >Integrity hashes</summary
-            >
-            <div class="px-4 pb-3 pt-1 space-y-2">
-              {#if displayedRevision.content_hash}
-                <div>
-                  <p
-                    class="text-micro uppercase tracking-[0.12em] text-[var(--fg-muted)]"
-                  >
-                    Content hash
-                  </p>
-                  <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span
-                      class="min-w-0 shrink break-all font-mono text-micro text-[var(--fg-muted)]"
-                    >
-                      {displayedRevision.content_hash}
-                    </span>
-                    <CopyButton
-                      value={displayedRevision.content_hash}
-                      label="Copy content hash"
-                    />
-                  </div>
-                </div>
-              {/if}
-              {#if displayedRevision.revision_hash}
-                <div>
-                  <p
-                    class="text-micro uppercase tracking-[0.12em] text-[var(--fg-muted)]"
-                  >
-                    Revision hash
-                  </p>
-                  <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span
-                      class="min-w-0 shrink break-all font-mono text-micro text-[var(--fg-muted)]"
-                    >
-                      {displayedRevision.revision_hash}
-                    </span>
-                    <CopyButton
-                      value={displayedRevision.revision_hash}
-                      label="Copy revision hash"
-                    />
-                  </div>
-                </div>
-              {/if}
-            </div>
-          </details>
-        {/if}
-
-        <details
-          class="mt-2 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
-        >
-          <summary
-            class="cursor-pointer px-4 py-2.5 text-micro text-[var(--fg-muted)] hover:text-[var(--fg)]"
-            >Raw metadata JSON</summary
-          >
-          <div
-            class="flex items-start gap-2 px-4 pt-1 pb-3 text-micro text-[var(--fg-muted)]"
-          >
-            <CopyButton
-              value={JSON.stringify(document, null, 2)}
-              label="Copy metadata JSON"
-            />
-            <pre class="min-w-0 flex-1 overflow-auto">{JSON.stringify(
-                document,
-                null,
-                2,
-              )}</pre>
-          </div>
-        </details>
-      </div>
-    </div>
-
-    {#if historyOpen}
-      <aside class="w-72 shrink-0">
-        <div
-          class="sticky top-4 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
-        >
-          <div
-            class="flex items-center justify-between border-b border-[var(--line)] px-4 py-2.5"
-          >
-            <h2 class="text-meta font-medium text-[var(--fg)]">
-              Revision history
-            </h2>
-            <button
-              class="cursor-pointer text-[var(--fg-muted)] hover:text-[var(--fg)]"
-              onclick={() => (historyOpen = false)}
-              type="button"
-              aria-label="Close history"
-            >
-              <svg
-                class="h-4 w-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
-          </div>
-
-          {#if historyLoading}
-            <div
-              class="flex items-center gap-2 px-4 py-4 text-micro text-[var(--fg-muted)]"
-            >
-              <svg
-                class="h-3.5 w-3.5 animate-spin"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  class="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  stroke-width="4"
-                ></circle>
-                <path
-                  class="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                ></path>
-              </svg>
-              Loading revision history...
-            </div>
-          {:else if revisions.length === 0}
-            <p class="px-4 py-4 text-micro text-[var(--fg-muted)]">
-              No earlier revisions found.
-            </p>
-          {:else}
-            <div class="max-h-[calc(100vh-12rem)] overflow-y-auto">
-              {#each revisions as rev, i}
-                {@const isHead = rev.revision_id === headRevision?.revision_id}
-                {@const isSelected =
-                  displayedRevision?.revision_id === rev.revision_id}
+              <div class="mb-3">
                 <button
-                  class="w-full text-left px-4 py-3 transition-colors hover:bg-[var(--line-subtle)] {i >
-                  0
-                    ? 'border-t border-[var(--line)]'
-                    : ''} {isSelected ? 'bg-[var(--line-subtle)]' : ''}"
-                  onclick={() => selectRevision(rev)}
+                  class="cursor-pointer flex w-full items-center gap-2 text-left"
+                  onclick={() => (metadataExpanded = !metadataExpanded)}
                   type="button"
                 >
-                  <div class="flex items-center gap-2">
-                    <div class="relative flex flex-col items-center">
-                      <div
-                        class="h-2.5 w-2.5 rounded-full {isHead
-                          ? 'bg-ok-text'
-                          : isSelected
-                            ? 'bg-accent-text'
-                            : 'bg-[var(--fg-subtle)]'}"
-                      ></div>
-                      {#if i < revisions.length - 1}
-                        <div
-                          class="absolute top-3 h-full w-px bg-[var(--line)]"
-                        ></div>
-                      {/if}
-                    </div>
-                    <div class="min-w-0 flex-1">
-                      <p class="text-micro font-medium text-[var(--fg)]">
-                        {#if isHead}Current version{:else}Version {rev.revision_number}{/if}
-                      </p>
-                      <p class="text-micro text-[var(--fg-muted)]">
-                        {formatTimestamp(rev.created_at)} · {actorName(
-                          rev.created_by,
-                        )}
-                      </p>
-                      {#if rev.revision_hash}
-                        <p
-                          class="mt-0.5 font-mono text-micro text-[var(--fg-muted)]"
-                        >
-                          {rev.revision_hash.slice(0, 12)}...
-                        </p>
-                      {/if}
-                    </div>
-                  </div>
+                  <svg
+                    class="h-3 w-3 text-[var(--fg-muted)] transition-transform {metadataExpanded
+                      ? 'rotate-90'
+                      : ''}"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M9 5l7 7-7 7"
+                    />
+                  </svg>
+                  <span class="text-micro font-medium text-[var(--fg-muted)]"
+                    >Metadata</span
+                  >
                 </button>
-              {/each}
+                {#if !metadataExpanded}
+                  <p
+                    class="mt-1 ml-5 truncate text-micro text-[var(--fg-muted)]"
+                  >
+                    Title: {editDraft.title || "—"} · Labels: {editDraft.labels ||
+                      "none"}
+                  </p>
+                {/if}
+                {#if metadataExpanded}
+                  <div class="mt-2 ml-5 grid gap-3 sm:grid-cols-2">
+                    <label class="sm:col-span-2">
+                      <span
+                        class="text-micro font-medium text-[var(--fg-muted)]"
+                        >Title</span
+                      >
+                      <input
+                        bind:value={editDraft.title}
+                        class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-meta text-[var(--fg)]"
+                        type="text"
+                      />
+                    </label>
+                    <label>
+                      <span
+                        class="text-micro font-medium text-[var(--fg-muted)]"
+                        >Labels (comma-separated)</span
+                      >
+                      <input
+                        bind:value={editDraft.labels}
+                        class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-meta text-[var(--fg)] placeholder:text-[var(--fg-subtle)]"
+                        placeholder="ops, runbook"
+                        type="text"
+                      />
+                    </label>
+                  </div>
+                {/if}
+              </div>
+
+              <label>
+                <span class="text-micro font-medium text-[var(--fg-muted)]"
+                  >Content (Markdown) <span class="text-danger-text">*</span
+                  ></span
+                >
+                <textarea
+                  bind:value={editDraft.content}
+                  class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-2 text-meta text-[var(--fg)] font-mono leading-relaxed resize-y"
+                  rows="20"
+                ></textarea>
+              </label>
+
+              <div class="mt-3 flex items-center gap-2">
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="compact"
+                  disabled={saving}
+                >
+                  {saving ? "Saving…" : "Save revision"}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="compact"
+                  onclick={closeEdit}
+                  type="button"
+                >
+                  Cancel
+                </Button>
+              </div>
+
+              {#if saveError}
+                <div
+                  class="mt-3 rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
+                  role="alert"
+                >
+                  {saveError}
+                </div>
+              {/if}
+              <p class="mt-2 text-micro text-[var(--fg-muted)]">
+                Base revision: <span class="font-mono"
+                  >{headRevision?.revision_id ?? "—"}</span
+                > — optimistic concurrency is enforced.
+              </p>
+            </form>
+          {/if}
+
+          {#if isViewingOldRevision}
+            <div
+              class="mt-3 flex items-center gap-2 rounded-md bg-warn-soft px-3 py-2 text-micro text-warn-text"
+            >
+              <span
+                >Viewing revision {selectedRevision.revision_number} from {formatTimestamp(
+                  selectedRevision.created_at,
+                )}</span
+              >
+              <button
+                class="cursor-pointer ml-auto font-medium underline"
+                onclick={returnToHead}
+                type="button">Return to current</button
+              >
             </div>
           {/if}
+
+          <div
+            class="mt-3 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
+          >
+            <div class="px-4 py-3">
+              {#if displayedContent}
+                <MarkdownRenderer
+                  source={displayedContent}
+                  class="text-meta leading-relaxed text-[var(--fg)]"
+                />
+              {:else}
+                <p class="text-meta text-[var(--fg-muted)]">(No content)</p>
+              {/if}
+            </div>
+          </div>
+
+          <div class="mt-6 border-t border-[var(--line)] pt-4">
+            <IdsIntegrityDisclosure
+              rows={docIntegrityRows}
+              rawJson={docRawJson}
+              rawJsonCopyLabel="Copy document JSON"
+            />
+          </div>
         </div>
-      </aside>
+
+        {#if historyOpen}
+          <aside class="w-72 shrink-0">
+            <div
+              class="sticky top-4 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
+            >
+              <div
+                class="flex items-center justify-between border-b border-[var(--line)] px-4 py-2.5"
+              >
+                <h2 class="text-meta font-medium text-[var(--fg)]">
+                  Revision history
+                </h2>
+                <button
+                  class="cursor-pointer text-[var(--fg-muted)] hover:text-[var(--fg)]"
+                  onclick={() => (historyOpen = false)}
+                  type="button"
+                  aria-label="Close history"
+                >
+                  <svg
+                    class="h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              </div>
+
+              {#if historyLoading}
+                <div
+                  class="flex items-center gap-2 px-4 py-4 text-micro text-[var(--fg-muted)]"
+                >
+                  <svg
+                    class="h-3.5 w-3.5 animate-spin"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      class="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      stroke-width="4"
+                    ></circle>
+                    <path
+                      class="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                  Loading revision history...
+                </div>
+              {:else if revisions.length === 0}
+                <p class="px-4 py-4 text-micro text-[var(--fg-muted)]">
+                  No earlier revisions found.
+                </p>
+              {:else}
+                <div class="max-h-[calc(100vh-12rem)] overflow-y-auto">
+                  {#each revisions as rev, i}
+                    {@const isHead =
+                      rev.revision_id === headRevision?.revision_id}
+                    {@const isSelected =
+                      displayedRevision?.revision_id === rev.revision_id}
+                    <button
+                      class="w-full text-left px-4 py-3 transition-colors hover:bg-[var(--line-subtle)] {i >
+                      0
+                        ? 'border-t border-[var(--line)]'
+                        : ''} {isSelected ? 'bg-[var(--line-subtle)]' : ''}"
+                      onclick={() => selectRevision(rev)}
+                      type="button"
+                    >
+                      <div class="flex items-center gap-2">
+                        <div class="relative flex flex-col items-center">
+                          <div
+                            class="h-2.5 w-2.5 rounded-full {isHead
+                              ? 'bg-ok-text'
+                              : isSelected
+                                ? 'bg-accent-text'
+                                : 'bg-[var(--fg-subtle)]'}"
+                          ></div>
+                          {#if i < revisions.length - 1}
+                            <div
+                              class="absolute top-3 h-full w-px bg-[var(--line)]"
+                            ></div>
+                          {/if}
+                        </div>
+                        <div class="min-w-0 flex-1">
+                          <p class="text-micro font-medium text-[var(--fg)]">
+                            {#if isHead}Current version{:else}Version {rev.revision_number}{/if}
+                          </p>
+                          <p class="text-micro text-[var(--fg-muted)]">
+                            {formatTimestamp(rev.created_at)} · {actorName(
+                              rev.created_by,
+                            )}
+                          </p>
+                          {#if rev.revision_hash}
+                            <p
+                              class="mt-0.5 font-mono text-micro text-[var(--fg-muted)]"
+                            >
+                              {rev.revision_hash.slice(0, 12)}...
+                            </p>
+                          {/if}
+                        </div>
+                      </div>
+                    </button>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          </aside>
+        {/if}
+      </div>
+    </div>
+    {#if document.thread_id}
+      <DocumentDiscussionRail
+        doc={document}
+        {workspaceSlug}
+        workspaceId={data?.workspaceId ?? ""}
+      />
     {/if}
   </div>
 {:else}

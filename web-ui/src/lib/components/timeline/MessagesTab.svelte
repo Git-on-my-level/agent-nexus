@@ -15,8 +15,11 @@
   import { enrichPrincipalsWithWakeRouting } from "$lib/principalWakeRouting.js";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import MessageItem from "$lib/components/timeline/MessageItem.svelte";
+  import ThreadActivityRow from "$lib/components/timeline/ThreadActivityRow.svelte";
   import {
+    eventRefsInclude,
     flattenMessageThreadView,
+    mergeThreadRootsWithNonMessageActivity,
     toMessageThreadView,
   } from "$lib/messageThreadUtils";
   import {
@@ -33,7 +36,20 @@
     postRouteScopeId = "",
     onMessagePost,
     workspaceId = "",
+    /** When set (e.g. document:abc), only timeline events whose refs include this exact string are shown. */
+    subjectRefFilter = "",
+    /** Appended to posted message refs (deduped); e.g. `document:<id>` for doc-scoped discussion. */
+    extraPostRefs = [],
+    /** Replaces default zero-state copy when there are no messages in view. */
+    discussionEmptyMessage = "",
+    /**
+     * When false, never interleaves non-message timeline rows (e.g. board strip).
+     * Subject ref scoping also disables interleaving regardless of this flag.
+     */
+    allowActivityInterleave = undefined,
   } = $props();
+
+  let subjectRefFilterNorm = $derived(String(subjectRefFilter ?? "").trim());
 
   let routeScopeForPost = $derived(
     String(postRouteScopeId || threadId || "").trim(),
@@ -57,20 +73,47 @@
   let lifecycleBusy = $state(false);
   let lifecycleError = $state("");
 
+  let refScopedTimeline = $derived(
+    subjectRefFilterNorm
+      ? (Array.isArray(timeline) ? timeline : []).filter((event) =>
+          eventRefsInclude(event, subjectRefFilterNorm),
+        )
+      : Array.isArray(timeline)
+        ? timeline
+        : [],
+  );
+
   let filteredTimeline = $derived(
-    (Array.isArray(timeline) ? timeline : []).filter((event) => {
+    refScopedTimeline.filter((event) => {
       if (event.trashed_at) return false;
       if (!showArchived && event.archived_at) return false;
       return true;
     }),
   );
+  let canOfferActivityToggle = $derived(
+    !subjectRefFilterNorm && allowActivityInterleave !== false,
+  );
   let messageThreads = $derived(
     toMessageThreadView(filteredTimeline, { threadId }),
+  );
+  let nonMessageEvents = $derived(
+    filteredTimeline.filter(
+      (event) => String(event?.type ?? "") !== "message_posted",
+    ),
+  );
+  let hasActivityInView = $derived(nonMessageEvents.length > 0);
+  /**
+   * Per polish §P1: only render the "Show thread activity" toggle when there is
+   * activity to interleave. When the timeline is messages-only the toggle would
+   * have no effect and just adds noise to the chrome.
+   */
+  let showActivityToggle = $derived(
+    canOfferActivityToggle && hasActivityInView,
   );
   let allMessages = $derived(flattenMessageThreadView(messageThreads));
   let hasMessages = $derived(messageThreads.length > 0);
   let archivedMessageCount = $derived(
-    (Array.isArray(timeline) ? timeline : []).filter(
+    refScopedTimeline.filter(
       (e) =>
         String(e?.type ?? "") === "message_posted" &&
         e.archived_at &&
@@ -78,16 +121,54 @@
     ).length,
   );
   let timelineHasAnyMessagePosted = $derived(
-    (Array.isArray(timeline) ? timeline : []).some(
-      (e) => String(e?.type ?? "") === "message_posted",
-    ),
+    refScopedTimeline.some((e) => String(e?.type ?? "") === "message_posted"),
   );
   let hasAnyNonTrashedMessage = $derived(
-    (Array.isArray(timeline) ? timeline : []).some(
+    refScopedTimeline.some(
       (e) => String(e?.type ?? "") === "message_posted" && !e.trashed_at,
     ),
   );
   let showSyncStatus = $derived(timelineLoading && timelineHasAnyMessagePosted);
+
+  /** When true, non-`message_posted` rows are merged into the feed (topic thread only). */
+  let showThreadActivityUser = $state(true);
+
+  let effectiveShowActivity = $derived(
+    canOfferActivityToggle && showThreadActivityUser,
+  );
+
+  let mergedFeedItems = $derived(
+    effectiveShowActivity
+      ? mergeThreadRootsWithNonMessageActivity(messageThreads, nonMessageEvents)
+      : messageThreads.map((t) => ({ kind: "thread", thread: t })),
+  );
+
+  $effect(() => {
+    if (!browser) {
+      return;
+    }
+    const tid = String(threadId ?? "").trim();
+    if (!tid || !canOfferActivityToggle) {
+      return;
+    }
+    const key = `messages-tab-show-activity:${tid}`;
+    const raw = localStorage.getItem(key);
+    showThreadActivityUser = raw !== "false";
+  });
+
+  function toggleShowThreadActivity() {
+    if (!canOfferActivityToggle) {
+      return;
+    }
+    const next = !showThreadActivityUser;
+    showThreadActivityUser = next;
+    if (browser) {
+      const tid = String(threadId ?? "").trim();
+      if (tid) {
+        localStorage.setItem(`messages-tab-show-activity:${tid}`, String(next));
+      }
+    }
+  }
 
   let messageText = $state("");
   let replyToEventId = $state("");
@@ -328,14 +409,19 @@
     postingMessage = true;
     postMessageError = "";
     try {
+      const baseRefs = [
+        `thread:${threadId}`,
+        ...(replyToEventId ? [`event:${replyToEventId}`] : []),
+      ];
+      const extra = (Array.isArray(extraPostRefs) ? extraPostRefs : [])
+        .map((r) => String(r ?? "").trim())
+        .filter(Boolean);
+      const refs = [...new Set([...baseRefs, ...extra])];
       await onMessagePost(routeScopeForPost, {
         type: "message_posted",
         thread_id: threadId,
         thread_ref: `thread:${threadId}`,
-        refs: [
-          `thread:${threadId}`,
-          ...(replyToEventId ? [`event:${replyToEventId}`] : []),
-        ],
+        refs,
         summary: `Message: ${messageText.trim().slice(0, 100)}`,
         payload: { text: messageText.trim() },
         provenance: { sources: ["actor_statement:ui"] },
@@ -352,9 +438,9 @@
 </script>
 
 <div>
-  {#if archivedMessageCount > 0 || showSyncStatus}
+  {#if archivedMessageCount > 0 || showSyncStatus || showActivityToggle}
     <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
-      <div class="flex flex-wrap items-center gap-3">
+      <div class="flex flex-wrap items-center gap-2 sm:gap-3">
         {#if archivedMessageCount > 0}
           <label
             class="flex items-center gap-1.5 text-micro text-[var(--fg-muted)]"
@@ -366,6 +452,20 @@
             />
             Show archived ({archivedMessageCount})
           </label>
+        {/if}
+        {#if showActivityToggle}
+          <button
+            type="button"
+            role="switch"
+            aria-checked={showThreadActivityUser}
+            class="cursor-pointer rounded-full border px-2.5 py-0.5 text-micro hover:bg-[var(--bg-soft)] {showThreadActivityUser
+              ? 'border-[var(--accent)] bg-[var(--bg-soft)] text-[var(--fg)]'
+              : 'border-[var(--line)] bg-[var(--panel)] text-[var(--fg-muted)]'}"
+            title="Show card updates and other timeline events between messages"
+            onclick={toggleShowThreadActivity}
+          >
+            Show thread activity ({nonMessageEvents.length})
+          </button>
         {/if}
       </div>
       <div class="min-h-[1rem] text-right" aria-live="polite">
@@ -381,11 +481,13 @@
     </p>
   {:else if timelineLoading && !hasAnyNonTrashedMessage}
     <p class="text-meta text-[var(--fg-muted)]">Loading messages...</p>
-  {:else if !hasAnyNonTrashedMessage}
+  {:else if !hasAnyNonTrashedMessage && !(effectiveShowActivity && hasActivityInView)}
     <p class="py-6 text-center text-meta text-[var(--fg-muted)]">
-      No messages yet. Post a message below to start the conversation.
+      {String(discussionEmptyMessage ?? "").trim()
+        ? String(discussionEmptyMessage)
+        : "No messages yet. Post a message below to start the conversation."}
     </p>
-  {:else if !hasMessages}
+  {:else if !hasMessages && !(effectiveShowActivity && hasActivityInView)}
     <p class="text-meta text-[var(--fg-muted)]">
       No messages in view. Turn on Show archived to see archived messages.
     </p>
@@ -405,17 +507,21 @@
       </p>
     {/if}
     <div class="space-y-3">
-      {#each messageThreads as message (message.id)}
-        <MessageItem
-          {message}
-          {threadId}
-          {actorName}
-          onReply={setReplyTarget}
-          onArchive={openArchiveConfirm}
-          onTrash={openTrashConfirm}
-          onUnarchive={doUnarchive}
-          {lifecycleBusy}
-        />
+      {#each mergedFeedItems as item (item.kind === "thread" ? `t:${item.thread.id}` : `a:${item.event.id}`)}
+        {#if item.kind === "thread"}
+          <MessageItem
+            message={item.thread}
+            {threadId}
+            {actorName}
+            onReply={setReplyTarget}
+            onArchive={openArchiveConfirm}
+            onTrash={openTrashConfirm}
+            onUnarchive={doUnarchive}
+            {lifecycleBusy}
+          />
+        {:else}
+          <ThreadActivityRow rawEvent={item.event} {threadId} {actorName} />
+        {/if}
       {/each}
     </div>
   {/if}

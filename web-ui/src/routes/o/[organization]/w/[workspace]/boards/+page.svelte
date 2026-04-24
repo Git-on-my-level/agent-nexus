@@ -616,7 +616,7 @@
 {:else if boards.length === 0 && !error}
   <StateEmpty
     title="No boards yet"
-    helper="Create a board to give operators a trustworthy visual map of active work."
+    helper="Boards group cards into columns so the team can see what's planned, in flight, and done at a glance."
     actionLabel="Create board"
     onclick={openCreateBoardForm}
   />

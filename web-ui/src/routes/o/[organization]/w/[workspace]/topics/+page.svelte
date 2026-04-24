@@ -30,6 +30,8 @@
   import Skeleton from "$lib/components/state/Skeleton.svelte";
   import StateEmpty from "$lib/components/state/StateEmpty.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
+  import RefLink from "$lib/components/RefLink.svelte";
+  import TopicTypeGlyph from "$lib/components/TopicTypeGlyph.svelte";
 
   /** Virtual filter: non-closed topics (matches dashboard "Open"); distinct from status=active|paused. */
   const STATUS_OPEN_NOT_CLOSED = "__open__";
@@ -674,7 +676,7 @@
         : "No topics yet"}
       helper={hasActiveFilters
         ? "Try adjusting or clearing the current filters."
-        : "Create a topic to start tracking a thread."}
+        : "Topics track ongoing work — a project, an incident, a decision, or a recurring process. Create one to start the conversation."}
       actionLabel={hasActiveFilters ? "Clear filters" : ""}
       onclick={hasActiveFilters ? resetFilters : undefined}
     />
@@ -699,6 +701,7 @@
               )}"
               title={getPriorityLabel(topic.priority)}
             ></span>
+            <TopicTypeGlyph type={topic.type} class="shrink-0" />
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-center gap-2">
                 <p class="truncate text-meta font-medium text-[var(--fg)]">
@@ -832,11 +835,9 @@
           <div
             class="flex shrink-0 items-center border-l border-[var(--line)] px-2"
           >
-            <a
-              class="text-micro font-medium text-accent-text transition-colors hover:text-accent-text"
-              href={workspaceHref(`/topics/${encodeURIComponent(topicSeg)}`)}
-              >Topic</a
-            >
+            <span class="text-micro font-medium">
+              <RefLink refValue={`topic:${topicSeg}`} humanize showRaw />
+            </span>
           </div>
         {/if}
       </div>

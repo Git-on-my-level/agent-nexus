@@ -1,9 +1,12 @@
 <script>
   import { goto, replaceState } from "$app/navigation";
   import { page } from "$app/stores";
+  import BoardFeedStrip from "$lib/components/BoardFeedStrip.svelte";
   import BoardCard from "$lib/components/BoardCard.svelte";
   import CardDetailModal from "$lib/components/CardDetailModal.svelte";
+  import IdsIntegrityDisclosure from "$lib/components/IdsIntegrityDisclosure.svelte";
   import ArchiveButton from "$lib/components/ArchiveButton.svelte";
+  import ResourceShareMenu from "$lib/components/ResourceShareMenu.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import TrashButton from "$lib/components/TrashButton.svelte";
   import GuidedTypedRefsInput from "$lib/components/GuidedTypedRefsInput.svelte";
@@ -47,6 +50,8 @@
     parseDelimitedValues,
   } from "$lib/boardUtils";
   import { withUpdatedSearchParams } from "$lib/urlState";
+
+  let { data } = $props();
 
   let workspace = $state(null);
   let loading = $state(false);
@@ -643,6 +648,7 @@
 
       {#if !board.trashed_at}
         <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <ResourceShareMenu resourceId={board.id} rawRecord={board} />
           <button
             class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
             onclick={openBoardEditForm}
@@ -1045,6 +1051,12 @@
     </section>
   {/if}
 
+  <BoardFeedStrip
+    {board}
+    {workspaceSlug}
+    workspaceId={data?.workspaceId ?? ""}
+  />
+
   {#snippet renderCard(cardItem)}
     <BoardCard
       {cardItem}
@@ -1278,6 +1290,20 @@
     </section>
   </div>
 
+  <div class="mt-4">
+    <IdsIntegrityDisclosure
+      rows={[
+        {
+          label: "Board ID",
+          value: board.id,
+          copyLabel: "Copy board ID",
+        },
+      ]}
+      rawJson={JSON.stringify(board, null, 2)}
+      rawJsonCopyLabel="Copy board JSON"
+    />
+  </div>
+
   {#if boardWarnings.length > 0}
     <section
       class="mt-4 rounded-md border border-warn/20 bg-warn-soft px-4 py-3"
@@ -1313,8 +1339,8 @@
   cardItem={detailModalCard}
   {boardId}
   board={workspace?.board ?? null}
-  {organizationSlug}
   {workspaceSlug}
+  workspaceId={data?.workspaceId ?? ""}
   primaryTopic={workspace?.primary_topic ?? null}
   {actorName}
   onclose={closeCardDetailModal}

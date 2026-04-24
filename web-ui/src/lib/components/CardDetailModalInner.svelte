@@ -43,14 +43,14 @@
     createTimelineContext,
     setTimelineContext,
   } from "$lib/timelineContext";
-  import { workspacePath } from "$lib/workspacePaths";
-
   import Button from "$lib/components/Button.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
+  import IdsIntegrityDisclosure from "$lib/components/IdsIntegrityDisclosure.svelte";
   import GuidedTypedRefsInput from "$lib/components/GuidedTypedRefsInput.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import MessagesTab from "$lib/components/timeline/MessagesTab.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
+  import ResourceShareMenu from "$lib/components/ResourceShareMenu.svelte";
   import SearchableEntityPicker from "$lib/components/SearchableEntityPicker.svelte";
   import SearchableMultiEntityPicker from "$lib/components/SearchableMultiEntityPicker.svelte";
   import TimelineTab from "$lib/components/timeline/TimelineTab.svelte";
@@ -59,8 +59,8 @@
     cardItem,
     boardId,
     board,
-    organizationSlug = "",
     workspaceSlug,
+    workspaceId = "",
     /** @type {{ id?: string, title?: string } | null | undefined} */
     primaryTopic = null,
     actorName,
@@ -119,17 +119,12 @@
     });
   });
 
-  let topicHref = $derived.by(() => {
-    if (!organizationSlug || !workspaceSlug || !cardInspectNav) return "";
-    const path =
-      cardInspectNav.kind === "topic"
-        ? `/topics/${encodeURIComponent(cardInspectNav.segment)}`
-        : `/threads/${encodeURIComponent(cardInspectNav.segment)}`;
-    try {
-      return workspacePath(organizationSlug, workspaceSlug, path);
-    } catch {
-      return "";
-    }
+  let cardTopicThreadRef = $derived.by(() => {
+    const nav = cardInspectNav;
+    if (!nav) return "";
+    return nav.kind === "topic"
+      ? `topic:${nav.segment}`
+      : `thread:${nav.segment}`;
   });
 
   let actorOptions = $derived(toActorPickerOptions($actorRegistry));
@@ -151,17 +146,6 @@
   let editDueAt = $state("");
   let editDefinitionOfDone = $state("");
   let moveColumnKey = $state("");
-
-  let topicDisplayName = $derived.by(() => {
-    if (!cardInspectNav) return "";
-    if (
-      cardInspectNav.kind === "topic" &&
-      primaryTopic?.id === cardInspectNav.segment
-    ) {
-      return String(primaryTopic.title ?? "").trim() || cardInspectNav.segment;
-    }
-    return cardInspectNav.segment;
-  });
 
   function documentIdFromRef(ref) {
     const s = String(ref ?? "").trim();
@@ -453,12 +437,48 @@
         if (topicRef) hints[topicRef] = title;
       }
     }
+    const pt = primaryTopic;
+    if (pt && typeof pt === "object" && pt.id) {
+      const ptitle = String(pt.title ?? "").trim();
+      hints[`topic:${pt.id}`] = ptitle || pt.id;
+    }
     return hints;
   });
 
   let showSummary = $derived(
     Boolean(summaryText) && summaryText !== headerTitle,
   );
+
+  let cardIntegrityRows = $derived.by(() => {
+    const m = membership;
+    if (!m) return [];
+    const rows = [];
+    const cid = boardCardStableId(m);
+    if (cid) {
+      rows.push({
+        label: "Card ID",
+        value: cid,
+        copyLabel: "Copy card ID",
+      });
+    }
+    const bid = String(boardId ?? "").trim();
+    if (bid) {
+      rows.push({
+        label: "Board ID",
+        value: bid,
+        copyLabel: "Copy board ID",
+      });
+    }
+    if (linkedThreadId) {
+      rows.push({
+        label: "Thread ID",
+        value: linkedThreadId,
+        copyLabel: "Copy thread ID",
+      });
+    }
+    return rows;
+  });
+  let cardRawJson = $derived(cardItem ? JSON.stringify(cardItem, null, 2) : "");
 
   let nonZeroDerivedCounts = $derived.by(() => {
     if (!derivedSummary || typeof derivedSummary !== "object") return [];
@@ -542,26 +562,31 @@
             {board?.title ?? boardId}
           </div>
         </div>
-        <button
-          type="button"
-          class="shrink-0 rounded-md border border-[var(--line)] p-1.5 text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
-          onclick={() => onclose()}
-          aria-label="Close"
-        >
-          <svg
-            class="h-4 w-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            stroke-width="2"
+        <div class="flex shrink-0 items-center gap-1">
+          {#if cardKey}
+            <ResourceShareMenu resourceId={cardKey} rawRecord={cardItem} />
+          {/if}
+          <button
+            type="button"
+            class="shrink-0 rounded-md border border-[var(--line)] p-1.5 text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
+            onclick={() => onclose()}
+            aria-label="Close"
           >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              d="M6 18L18 6M6 6l12 12"
-            />
-          </svg>
-        </button>
+            <svg
+              class="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        </div>
       </div>
 
       <div
@@ -760,7 +785,7 @@
                   <div
                     class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2"
                   >
-                    <MarkdownRenderer content={summaryText} />
+                    <MarkdownRenderer source={summaryText} />
                   </div>
                 </section>
               {/if}
@@ -884,19 +909,23 @@
                 {/if}
               </section>
 
-              {#if cardInspectNav && topicHref}
-                <div class="flex items-center gap-1.5 text-micro">
+              {#if cardInspectNav && cardTopicThreadRef}
+                <div
+                  class="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-micro"
+                >
                   <span class="text-[var(--fg-muted)]"
                     >{cardInspectNav.kind === "topic"
                       ? "Topic"
                       : "Thread"}</span
                   >
-                  <a
-                    class="text-accent-text hover:text-accent-text"
-                    href={topicHref}
-                  >
-                    {topicDisplayName}
-                  </a>
+                  <RefLink
+                    refValue={cardTopicThreadRef}
+                    threadId={linkedThreadId}
+                    {boardId}
+                    humanize
+                    showRaw
+                    labelHints={refLabelHints}
+                  />
                 </div>
               {/if}
 
@@ -910,6 +939,14 @@
                   {/if}
                 </p>
               {/if}
+
+              <div class="mt-2">
+                <IdsIntegrityDisclosure
+                  rows={cardIntegrityRows}
+                  rawJson={cardRawJson}
+                  rawJsonCopyLabel="Copy card JSON"
+                />
+              </div>
             </div>
           {/if}
         </div>
@@ -919,7 +956,7 @@
             <MessagesTab
               threadId={linkedThreadId}
               onMessagePost={handleMessagePost}
-              workspaceId=""
+              {workspaceId}
             />
           {:else}
             <p class="text-meta text-[var(--fg-muted)]">

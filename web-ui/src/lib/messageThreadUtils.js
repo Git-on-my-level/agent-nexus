@@ -1,5 +1,15 @@
 import { toTimelineViewEvent } from "./timelineUtils.js";
 
+/** @param {unknown} event @param {string} requiredRef */
+export function eventRefsInclude(event, requiredRef) {
+  const want = String(requiredRef ?? "").trim();
+  if (!want) {
+    return true;
+  }
+  const refs = Array.isArray(event?.refs) ? event.refs : [];
+  return refs.some((r) => String(r).trim() === want);
+}
+
 function parseEventTimeMs(event) {
   const ts = event?.ts;
   if (ts == null || ts === "") {
@@ -190,4 +200,36 @@ export function flattenMessageThreadView(threads = []) {
 
   visit(Array.isArray(threads) ? threads : []);
   return out;
+}
+
+/**
+ * Interleave root message threads with non-message timeline events, oldest first,
+ * using each item's `ts` then `id` as a stable tiebreak.
+ *
+ * @param {unknown[]} threadRoots
+ * @param {unknown[]} nonMessageEvents raw events (not `message_posted`)
+ * @returns {Array<{ kind: 'thread', thread: unknown } | { kind: 'activity', event: unknown }>}
+ */
+export function mergeThreadRootsWithNonMessageActivity(
+  threadRoots = [],
+  nonMessageEvents = [],
+) {
+  const roots = Array.isArray(threadRoots) ? threadRoots : [];
+  const extras = Array.isArray(nonMessageEvents) ? nonMessageEvents : [];
+  const keys = [];
+
+  for (const thread of roots) {
+    keys.push({ kind: "thread", thread, sortKey: thread });
+  }
+  for (const event of extras) {
+    keys.push({ kind: "activity", event, sortKey: event });
+  }
+
+  keys.sort((a, b) => compareEventsOldestFirst(a.sortKey, b.sortKey));
+
+  return keys.map((row) =>
+    row.kind === "thread"
+      ? { kind: "thread", thread: row.thread }
+      : { kind: "activity", event: row.event },
+  );
 }

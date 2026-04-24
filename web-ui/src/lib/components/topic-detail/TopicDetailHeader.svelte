@@ -10,19 +10,21 @@
   import ArchiveButton from "$lib/components/ArchiveButton.svelte";
   import Button from "$lib/components/Button.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
+  import ResourceShareMenu from "$lib/components/ResourceShareMenu.svelte";
+  import TopicTypeGlyph from "$lib/components/TopicTypeGlyph.svelte";
   import TrashButton from "$lib/components/TrashButton.svelte";
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
   import { topicDetailStore } from "$lib/topicDetailStore";
-  import { getPriorityLabel } from "$lib/topicFilters";
-  import { priorityBadgeClasses } from "$lib/cardDisplayUtils";
+  import { formatCadenceLabel, getPriorityLabel } from "$lib/topicFilters";
   import { workspacePath } from "$lib/workspacePaths";
 
   function topicStatusBadgeClass(status) {
+    // Tone scale follows status semantics rather than ad-hoc Tailwind palette
+    // (per polish §N6) so themes can recolor via CSS tokens.
     if (status === "active") return "bg-ok-soft text-ok-text";
-    if (status === "paused") return "bg-warn-soft text-warn-text";
-    if (status === "closed") return "bg-slate-500/10 text-slate-300";
-    if (status === "resolved") return "bg-slate-500/10 text-slate-300";
+    if (status === "paused" || status === "blocked")
+      return "bg-warn-soft text-warn-text";
     return "bg-[var(--line)] text-[var(--fg-muted)]";
   }
 
@@ -189,45 +191,85 @@
 {/if}
 
 {#if topic}
-  <div class="flex items-start justify-between gap-4">
-    <h1 class="text-title font-semibold text-[var(--fg)]">
-      {topic.title}
-    </h1>
-    <div
-      class="flex shrink-0 flex-wrap items-center justify-end gap-2 text-micro"
+  <div class="flex flex-col gap-2">
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div class="flex min-w-0 flex-1 items-start gap-2">
+        <TopicTypeGlyph type={topic.type} class="mt-0.5" />
+        <div class="min-w-0 flex-1">
+          <div class="flex min-w-0 flex-wrap items-center gap-2">
+            <h1
+              class="min-w-0 flex-1 truncate text-title font-semibold text-[var(--fg)]"
+            >
+              {topic.title}
+            </h1>
+            <span
+              class="shrink-0 rounded px-2 py-0.5 text-micro font-medium capitalize {topicStatusBadgeClass(
+                topic.status,
+              )}">{topic.status}</span
+            >
+          </div>
+          {#if String(topic.current_summary ?? "").trim()}
+            <p
+              class="mt-1 line-clamp-2 text-meta text-[var(--fg-muted)]"
+              title={String(topic.current_summary).trim()}
+            >
+              {String(topic.current_summary).trim()}
+            </p>
+          {/if}
+        </div>
+      </div>
+      <div
+        class="flex shrink-0 flex-wrap items-center justify-end gap-2 text-micro"
+      >
+        {#if topic?.id}
+          <ResourceShareMenu resourceId={topic.id} rawRecord={topic} />
+        {/if}
+        {#if detailAsTopic && !topic.trashed_at && threadId}
+          {#if !topic.archived_at}
+            <ArchiveButton
+              busy={lifecycleBusy}
+              size="md"
+              onarchive={() =>
+                (confirmModal = { open: true, action: "archive" })}
+            />
+          {/if}
+          <TrashButton
+            busy={lifecycleBusy}
+            size="md"
+            ontrash={() => (confirmModal = { open: true, action: "trash" })}
+          />
+        {/if}
+      </div>
+    </div>
+    <p
+      class="flex flex-wrap items-center gap-x-2 gap-y-1 text-meta text-[var(--fg-muted)]"
     >
+      <span class="whitespace-nowrap">{getPriorityLabel(topic.priority)}</span>
+      <span class="text-[var(--fg-subtle)]" aria-hidden="true">·</span>
+      <span class="whitespace-nowrap"
+        >{formatCadenceLabel(topic.cadence, { includeExpression: false })}</span
+      >
+      <span class="text-[var(--fg-subtle)]" aria-hidden="true">·</span>
+      <span class="whitespace-nowrap"
+        >Updated {formatTimestamp(topic.updated_at) || "—"}</span
+      >
+      {#if topic.created_by}
+        <span class="text-[var(--fg-subtle)]" aria-hidden="true">·</span>
+        <span class="min-w-0 whitespace-nowrap"
+          >by {actorName(topic.created_by)}</span
+        >
+      {/if}
       {#if staleness}
+        <span class="text-[var(--fg-subtle)]" aria-hidden="true">·</span>
         <span
-          class="rounded px-2 py-0.5 {staleness.stale
+          class="whitespace-nowrap rounded px-1.5 py-0.5 text-micro font-medium {staleness.stale
             ? 'bg-rose-500/10 text-rose-400'
             : 'bg-ok-soft text-ok-text'}"
         >
           {staleness.label}
         </span>
       {/if}
-      <span
-        class="rounded px-2 py-0.5 capitalize {topicStatusBadgeClass(
-          topic.status,
-        )}">{topic.status}</span
-      >
-      <span class="rounded px-2 py-0.5 {priorityBadgeClasses(topic.priority)}"
-        >{getPriorityLabel(topic.priority)}</span
-      >
-      {#if detailAsTopic && !topic.trashed_at && threadId}
-        {#if !topic.archived_at}
-          <ArchiveButton
-            busy={lifecycleBusy}
-            size="md"
-            onarchive={() => (confirmModal = { open: true, action: "archive" })}
-          />
-        {/if}
-        <TrashButton
-          busy={lifecycleBusy}
-          size="md"
-          ontrash={() => (confirmModal = { open: true, action: "trash" })}
-        />
-      {/if}
-    </div>
+    </p>
   </div>
 {/if}
 

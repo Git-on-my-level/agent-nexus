@@ -1,19 +1,15 @@
 <script>
   import { topicDetailStore } from "$lib/topicDetailStore";
   import {
-    actorRegistry,
-    lookupActorDisplayName,
-    principalRegistry,
-  } from "$lib/actorSession";
-  import {
     formatTimestamp,
     isoToDatetimeLocal,
     datetimeLocalToIso,
   } from "$lib/formatDate";
-  import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
+  import IdsIntegrityDisclosure from "$lib/components/IdsIntegrityDisclosure.svelte";
   import Button from "$lib/components/Button.svelte";
   import ProvenanceBadge from "$lib/components/ProvenanceBadge.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
+  import { splitTypedRef } from "$lib/inboxUtils";
   import {
     buildTopicPatch,
     describeCron,
@@ -25,23 +21,52 @@
     TOPIC_SCHEDULE_PRESET_LABELS,
     cadencePresetFromValue,
     cadenceToRequestValue,
-    formatCadenceLabel,
     isLikelyCronExpression,
     validateCadenceSelection,
   } from "$lib/topicFilters";
   import { parseRef } from "$lib/typedRefs";
+  import { topicTypeSelectOptions } from "$lib/topicTypeGlyph.js";
 
   let { threadId, onSave, conflictWarning = "", editNotice = "" } = $props();
 
   let topic = $derived($topicDetailStore.topic);
-  let actorName = $derived((id) =>
-    lookupActorDisplayName(id, $actorRegistry, $principalRegistry),
-  );
+  let topicIntegrityRows = $derived.by(() => {
+    if (!topic) return [];
+    const topicRef = String(topic.topic_ref ?? "").trim();
+    const p = splitTypedRef(topicRef);
+    const rows = [];
+    if (p.prefix === "topic" && p.id) {
+      rows.push({
+        label: "Topic ID",
+        value: p.id,
+        copyLabel: "Copy topic ID",
+      });
+    }
+    if (topic.id) {
+      rows.push({
+        label: "Thread ID",
+        value: String(topic.id),
+        copyLabel: "Copy thread ID",
+      });
+    }
+    if (topicRef) {
+      rows.push({
+        label: "topic_ref",
+        value: topicRef,
+        copyLabel: "Copy topic ref",
+        mono: true,
+      });
+    }
+    return rows;
+  });
+  let topicRawJson = $derived(topic ? JSON.stringify(topic, null, 2) : "");
 
   let editOpen = $state(false);
   let editDraft = $state(null);
   let savingEdit = $state(false);
   let editError = $state("");
+
+  let topicTypeOptions = $derived(topicTypeSelectOptions(editDraft?.type));
 
   function normalizeKeyArtifactRef(rawValue) {
     const normalized = String(rawValue ?? "").trim();
@@ -56,7 +81,7 @@
     const cadencePreset = cadencePresetFromValue(cadenceValue);
     return {
       title: thread.title ?? "",
-      type: thread.type ?? "case",
+      type: thread.type ?? "other",
       status: thread.status ?? "active",
       priority: thread.priority ?? "p2",
       cadencePreset,
@@ -160,44 +185,40 @@
       </button>
     </div>
 
+    <!--
+      Per polish §P4 the Details strip only carries fields that are NOT already
+      in the topic header. Priority, cadence, updated/by, and staleness all
+      live in the header meta line (`TopicDetailHeader.svelte`); duplicating
+      them here just bulks the panel.
+    -->
     <div
       class="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 py-2.5 text-micro text-[var(--fg-muted)]"
     >
       <span class="capitalize text-[var(--fg)]">{topic.type}</span>
-      <span aria-hidden="true">·</span>
-      <span>{formatCadenceLabel(topic.cadence)}</span>
       {#if topic.next_check_in_at}
         <span aria-hidden="true">·</span>
         <span>next check-in {formatTimestamp(topic.next_check_in_at)}</span>
       {/if}
-      <span aria-hidden="true">·</span>
-      <span
-        >updated {formatTimestamp(topic.updated_at) || "—"} by {actorName(
-          topic.updated_by,
-        )}</span
-      >
-    </div>
-
-    {#if (topic.tags ?? []).length > 0}
-      <div class="border-t border-[var(--line-subtle)] px-4 py-2.5">
-        <div class="flex flex-wrap gap-1.5">
+      {#if (topic.tags ?? []).length > 0}
+        <span aria-hidden="true">·</span>
+        <span class="flex flex-wrap items-center gap-1.5">
           {#each topic.tags ?? [] as tag}
             <span
-              class="rounded bg-[var(--line)] px-2 py-0.5 text-micro text-[var(--fg-muted)]"
+              class="rounded bg-[var(--line)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
               >{tag}</span
             >
           {/each}
-        </div>
-      </div>
-    {/if}
-
-    <div class="border-t border-[var(--line-subtle)] px-4 py-3">
-      <p class="text-micro text-[var(--fg-muted)]">Summary</p>
-      <MarkdownRenderer
-        source={topic.current_summary}
-        class="mt-1 text-meta text-[var(--fg)]"
-      />
+        </span>
+      {/if}
     </div>
+
+    <!--
+      Per polish §P3: the topic header already shows a `line-clamp-2` summary
+      preview with the full text in the `title` attribute. Repeating the same
+      body here read as a bug for short summaries; long ones now belong to a
+      future "expand summary" affordance in the header rather than a duplicate
+      block.
+    -->
 
     {#if (topic.next_actions ?? []).length > 0}
       <div class="border-t border-[var(--line-subtle)] px-4 py-3">
@@ -228,18 +249,13 @@
       <ProvenanceBadge provenance={topic.provenance} />
     </div>
 
-    <details class="border-t border-[var(--line-subtle)]">
-      <summary
-        class="cursor-pointer px-4 py-2.5 text-micro text-[var(--fg-muted)] hover:text-[var(--fg)]"
-        >Debug data</summary
-      >
-      <pre
-        class="overflow-auto px-4 pb-3 text-micro text-[var(--fg-muted)]">{JSON.stringify(
-          topic,
-          null,
-          2,
-        )}</pre>
-    </details>
+    <div class="border-t border-[var(--line-subtle)] p-3">
+      <IdsIntegrityDisclosure
+        rows={topicIntegrityRows}
+        rawJson={topicRawJson}
+        rawJsonCopyLabel="Copy topic JSON"
+      />
+    </div>
   </div>
 
   {#if editOpen && editDraft}
@@ -269,22 +285,22 @@
           >Type <select
             bind:value={editDraft.type}
             class="mt-1 w-full rounded border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-1.5 text-meta text-[var(--fg)]"
-            ><option value="case">Case</option><option value="process"
-              >Process</option
-            ><option value="relationship">Relationship</option><option
-              value="initiative">Initiative</option
-            ><option value="incident">Incident</option><option value="other"
-              >Other</option
-            ></select
+            >{#each topicTypeOptions as opt (opt.value)}<option
+                value={opt.value}>{opt.label}</option
+              >{/each}</select
           ></label
         >
         <label class="text-micro font-medium text-[var(--fg-muted)]"
           >Status <select
             bind:value={editDraft.status}
             class="mt-1 w-full rounded border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-1.5 text-meta text-[var(--fg)]"
-            ><option value="active">Active</option><option value="paused"
-              >Paused</option
-            ><option value="closed">Closed</option></select
+            ><option value="proposed">Proposed</option><option value="active"
+              >Active</option
+            ><option value="paused">Paused</option><option value="blocked"
+              >Blocked</option
+            ><option value="resolved">Resolved</option><option value="closed"
+              >Closed</option
+            ></select
           ></label
         >
         <label class="text-micro font-medium text-[var(--fg-muted)]"

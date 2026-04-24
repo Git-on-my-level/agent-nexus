@@ -4,6 +4,7 @@
   import { onDestroy, onMount } from "svelte";
 
   import RefLink from "$lib/components/RefLink.svelte";
+  import TopicTypeGlyph from "$lib/components/TopicTypeGlyph.svelte";
   import { coreClient } from "$lib/coreClient";
   import { parseTimestampMs } from "$lib/dateUtils";
   import {
@@ -136,6 +137,22 @@
     ]
       .filter((state) => state.status === "error" && state.error)
       .map((state) => state.error),
+  );
+
+  let homeRecentTopics = $derived(
+    topicsState.status === "ready"
+      ? [...topicsState.items]
+          .filter((t) => String(t?.id ?? "").trim())
+          .sort((a, b) => {
+            const tb = parseTimestampMs(b?.updated_at);
+            const ta = parseTimestampMs(a?.updated_at);
+            if (Number.isFinite(tb) && Number.isFinite(ta) && tb !== ta) {
+              return tb - ta;
+            }
+            return String(b?.id ?? "").localeCompare(String(a?.id ?? ""));
+          })
+          .slice(0, 5)
+      : [],
   );
 
   let pollTimer;
@@ -397,6 +414,43 @@
       </button>
     </div>
   </div>
+
+  {#if homeRecentTopics.length > 0}
+    <section
+      class="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-4 sm:p-5"
+      aria-label="Recent topics"
+    >
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h2 class="text-meta font-semibold text-[var(--fg)]">Recent topics</h2>
+        <a
+          class="text-micro font-medium text-[var(--fg-muted)] transition-colors hover:text-[var(--fg)]"
+          href={workspaceHref("/topics")}
+        >
+          View all
+        </a>
+      </div>
+      <ul class="mt-3 space-y-2">
+        {#each homeRecentTopics as topic (topic.id)}
+          <li>
+            <a
+              class="flex min-w-0 items-center gap-2.5 rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2.5 transition-colors hover:bg-[var(--line-subtle)]"
+              href={workspaceHref(`/topics/${encodeURIComponent(topic.id)}`)}
+            >
+              <TopicTypeGlyph type={topic.type} class="shrink-0" />
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-meta font-medium text-[var(--fg)]">
+                  {topic.title}
+                </p>
+                <p class="mt-0.5 text-micro text-[var(--fg-muted)]">
+                  Updated {formatTimestamp(topic.updated_at) || "—"}
+                </p>
+              </div>
+            </a>
+          </li>
+        {/each}
+      </ul>
+    </section>
+  {/if}
 
   <section
     class="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-4 sm:p-5"

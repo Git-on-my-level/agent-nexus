@@ -18,6 +18,7 @@
   import Skeleton from "$lib/components/state/Skeleton.svelte";
   import StateEmpty from "$lib/components/state/StateEmpty.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
+  import RefLink from "$lib/components/RefLink.svelte";
   import { parseDelimitedValues } from "$lib/boardUtils";
 
   const DOC_STATE_LABELS = {
@@ -291,12 +292,7 @@
     {#if scopedThreadId}
       <p class="mt-1 text-micro text-[var(--fg-muted)]">
         Scoped to backing thread
-        <a
-          class="text-accent-text transition-colors hover:text-accent-text"
-          href={workspaceHref(`/threads/${encodeURIComponent(scopedThreadId)}`)}
-        >
-          {scopedThreadId}
-        </a>
+        <RefLink refValue={`thread:${scopedThreadId}`} humanize showRaw />
       </p>
     {/if}
   </div>
@@ -359,8 +355,8 @@
       onclick={toggleCreate}
       type="button"
       title={scopedThreadId
-        ? "Clear the backing-thread scope to create a new document lineage."
-        : "Create a new document lineage"}
+        ? "Clear the backing-thread scope to create a new document."
+        : "Create a new document"}
     >
       {#if !createOpen}
         <svg
@@ -436,8 +432,8 @@
       Showing only documents on this backing thread timeline.
     </p>
     <p class="text-micro text-[var(--fg-muted)]">
-      Create from the unscoped docs view. New document lineages always get their
-      own backing thread.
+      Create from the unscoped docs view. New documents always get their own
+      backing thread.
     </p>
     <a
       class="text-micro font-medium text-accent-text transition-colors hover:text-accent-text"
@@ -456,11 +452,10 @@
       void handleCreate();
     }}
   >
-    <h2 class="mb-3 text-meta font-semibold text-[var(--fg)]">
-      New doc lineage
-    </h2>
+    <h2 class="mb-3 text-meta font-semibold text-[var(--fg)]">New document</h2>
     <p class="mb-3 text-micro text-[var(--fg-muted)]">
-      Create the lineage metadata and its first head revision together.
+      Title and labels are saved together with the first revision. You can edit
+      the body and add more revisions afterward.
     </p>
     <div class="grid gap-3 sm:grid-cols-2">
       <label class="sm:col-span-2">
@@ -548,7 +543,7 @@
 {:else if documents.length === 0}
   <StateEmpty
     title="No docs yet"
-    helper="Create a document lineage to start a head revision and revision history."
+    helper="Documents capture decisions, runbooks, and reference material. Each one keeps a full revision history."
   />
 {/if}
 

@@ -7,7 +7,10 @@
   import { coreClient } from "$lib/coreClient";
   import { topicDetailStore } from "$lib/topicDetailStore";
   import { setTimelineContext } from "$lib/timelineContext";
-  import { readEnumSearchParam, withUpdatedSearchParams } from "$lib/urlState";
+  import {
+    readEnumSearchParamWithAliases,
+    withUpdatedSearchParams,
+  } from "$lib/urlState";
 
   import TopicDetailHeader from "$lib/components/topic-detail/TopicDetailHeader.svelte";
   import TopicOverviewTab from "$lib/components/topic-detail/TopicOverviewTab.svelte";
@@ -16,7 +19,14 @@
   import MessagesTab from "$lib/components/timeline/MessagesTab.svelte";
   import TimelineTab from "$lib/components/timeline/TimelineTab.svelte";
 
-  const TOPIC_DETAIL_TABS = ["overview", "messages", "timeline"];
+  const TOPIC_DETAIL_TABS = [
+    "messages",
+    "about",
+    "documents",
+    "boards",
+    "timeline",
+  ];
+  const TOPIC_TAB_ALIASES = { overview: "about" };
 
   let { data } = $props();
   /** Canonical id for the URL (topic id on /topics/…, else backing thread id on /threads/…). */
@@ -54,9 +64,21 @@
   let topicError = $derived($topicDetailStore.topicError);
 
   let requestedTab = $derived(
-    readEnumSearchParam($page.url.searchParams, "tab", TOPIC_DETAIL_TABS, ""),
+    readEnumSearchParamWithAliases(
+      $page.url.searchParams,
+      "tab",
+      TOPIC_DETAIL_TABS,
+      TOPIC_TAB_ALIASES,
+      "",
+    ),
   );
-  let activeTab = $derived(requestedTab || "overview");
+  let activeTab = $derived(requestedTab || "messages");
+
+  let documentCount = $derived($topicDetailStore.documents.length);
+  let boardCount = $derived(
+    $topicDetailStore.ownedBoards.length +
+      $topicDetailStore.boardMemberships.length,
+  );
 
   let conflictWarning = $state("");
   let editNotice = $state("");
@@ -324,17 +346,20 @@
     aria-label="Topic sections"
     role="tablist"
   >
-    {#each [["overview", "Overview"], ["messages", "Messages"], ["timeline", "Timeline"]] as [tabId, tabLabel]}
+    {#each [{ id: "messages", label: "Messages" }, { id: "about", label: "About" }, { id: "documents", label: "Docs", badge: documentCount }, { id: "boards", label: "Boards", badge: boardCount }, { id: "timeline", label: "Timeline" }] as tab}
       <button
-        class={`relative cursor-pointer px-3 py-2 text-[13px] font-medium transition-colors ${activeTab === tabId ? "text-[var(--fg)]" : "text-[var(--fg-muted)] hover:text-[var(--fg)]"}`}
-        onclick={() => void setActiveTab(tabId)}
+        class={`relative cursor-pointer px-3 py-2 text-[13px] font-medium transition-colors ${activeTab === tab.id ? "text-[var(--fg)]" : "text-[var(--fg-muted)] hover:text-[var(--fg)]"}`}
+        onclick={() => void setActiveTab(tab.id)}
         type="button"
         role="tab"
-        aria-selected={activeTab === tabId}
-        tabindex={activeTab === tabId ? 0 : -1}
+        aria-selected={activeTab === tab.id}
+        tabindex={activeTab === tab.id ? 0 : -1}
       >
-        {tabLabel}
-        {#if activeTab === tabId}
+        {tab.label}{#if tab.badge !== undefined}
+          <span class="ml-0.5 tabular-nums text-[var(--fg-muted)]"
+            >({tab.badge})</span
+          >{/if}
+        {#if activeTab === tab.id}
           <span
             class="pointer-events-none absolute inset-x-0 -bottom-px h-0.5 bg-accent-solid"
           ></span>
@@ -343,7 +368,7 @@
     {/each}
   </div>
 
-  {#if activeTab === "overview"}
+  {#if activeTab === "about"}
     <div role="tabpanel" tabindex="0">
       <TopicOverviewTab
         {threadId}
@@ -351,8 +376,18 @@
         {conflictWarning}
         {editNotice}
       />
-      <TopicBoardsPanel {threadId} />
+    </div>
+  {/if}
+
+  {#if activeTab === "documents"}
+    <div role="tabpanel" tabindex="0">
       <TopicDocumentsPanel {threadId} />
+    </div>
+  {/if}
+
+  {#if activeTab === "boards"}
+    <div role="tabpanel" tabindex="0">
+      <TopicBoardsPanel {threadId} />
     </div>
   {/if}
 
@@ -363,6 +398,7 @@
         postRouteScopeId={threadId}
         onMessagePost={handleMessagePost}
         workspaceId={data?.workspaceId ?? ""}
+        discussionEmptyMessage={`Everything about ${topic.title || "this topic"} lives here. Post a message to start the conversation. Docs and Boards you link to this topic appear in their tabs.`}
       />
     </div>
   {/if}
