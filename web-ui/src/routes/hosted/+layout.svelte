@@ -22,6 +22,7 @@
     "/hosted/start",
     "/hosted/signup",
     "/hosted/signin",
+    "/hosted/oauth",
     "/hosted/billing/return",
   ];
 

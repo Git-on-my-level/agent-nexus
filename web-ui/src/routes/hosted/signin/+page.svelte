@@ -6,6 +6,11 @@
 
   import Button from "$lib/components/Button.svelte";
   import {
+    buildHostedOAuthContinuation,
+    resolveHostedPostAuthPath,
+    storeHostedOAuthContinuation,
+  } from "$lib/hosted/oauthFlow.js";
+  import {
     normalizeHostedLaunchFinishURL,
     readHostedLaunchParams,
   } from "$lib/hosted/launchFlow.js";
@@ -17,11 +22,13 @@
   import { loadHostedSession } from "$lib/hosted/session.js";
 
   let email = $state("");
-  let busy = $state(false);
+  let passkeyBusy = $state(false);
+  let oauthBusyProvider = $state("");
   let quickAuthBusy = $state(false);
   let quickAuthOptions = $state(null);
   let message = $state("");
   let showDevShortcut = $state(false);
+  let showPasskeyFallback = $state(false);
   const continuationQuery = $derived($page.url.search ?? "");
   const quickAuthLabel = $derived.by(() => {
     if (!quickAuthOptions?.enabled) return "";
@@ -59,7 +66,7 @@
       message = "Enter the email you signed up with.";
       return;
     }
-    busy = true;
+    passkeyBusy = true;
     try {
       const start = await hostedCpFetch("account/sessions/start", {
         method: "POST",
@@ -103,7 +110,47 @@
     } catch (e) {
       message = e instanceof Error ? e.message : "Sign-in failed.";
     } finally {
-      busy = false;
+      passkeyBusy = false;
+    }
+  }
+
+  async function startOAuth(provider) {
+    const normalizedProvider = String(provider ?? "")
+      .trim()
+      .toLowerCase();
+    message = "";
+    oauthBusyProvider = normalizedProvider;
+    try {
+      const start = await hostedCpFetch(
+        `account/oauth/${normalizedProvider}/start`,
+        {
+          method: "POST",
+          body: "{}",
+        },
+      );
+      if (!start.ok) {
+        message = await readError(start);
+        return;
+      }
+      const startBody = await start.json();
+      const oauthSession = startBody?.oauth_session;
+      const authorizationURL = String(
+        oauthSession?.authorization_url ?? "",
+      ).trim();
+      const state = String(oauthSession?.state ?? "").trim();
+      if (!authorizationURL || !state) {
+        message = "Unexpected response from control plane.";
+        return;
+      }
+      storeHostedOAuthContinuation(
+        state,
+        buildHostedOAuthContinuation($page.url, { mode: "signin" }),
+      );
+      window.location.assign(authorizationURL);
+    } catch (e) {
+      message = e instanceof Error ? e.message : "OAuth sign-in failed.";
+    } finally {
+      oauthBusyProvider = "";
     }
   }
 
@@ -139,8 +186,12 @@
   }
 
   async function navigateNext() {
-    const next = String($page.url.searchParams.get("next") ?? "").trim();
-    await goto(next || "/hosted/dashboard");
+    await goto(
+      resolveHostedPostAuthPath({
+        mode: "signin",
+        next: $page.url.searchParams.get("next"),
+      }),
+    );
   }
 
   async function continueLaunchFlowIfPresent() {
@@ -187,49 +238,88 @@
   <div class="rounded-md border border-line bg-bg-soft px-6 py-6">
     <h1 class="text-display text-fg">Welcome back</h1>
     <p class="mt-1.5 text-meta text-fg-subtle">
-      Enter the email you signed up with. Your browser will prompt you for the
-      passkey on this device.
+      Hosted sign-in uses Google or GitHub. Other paths below are only for
+      migration or local development.
     </p>
 
-    <form
-      class="mt-5 space-y-3"
-      onsubmit={(e) => {
-        e.preventDefault();
-        submit();
-      }}
-    >
-      <label class="block text-micro text-fg-muted">
-        Email
-        <input
-          type="email"
-          autocomplete="username webauthn"
-          bind:value={email}
-          disabled={busy}
-          required
-          placeholder="you@company.com"
-          class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-1.5 text-body text-fg placeholder:text-[var(--fg-subtle)]"
-        />
-      </label>
-
-      {#if message}
-        <p
-          role="alert"
-          class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
-        >
-          {message}
-        </p>
-      {/if}
-
+    <div class="mt-5 space-y-3">
       <Button
-        type="submit"
+        type="button"
         variant="primary"
-        {busy}
-        disabled={busy}
+        onclick={() => startOAuth("google")}
+        disabled={Boolean(oauthBusyProvider || passkeyBusy || quickAuthBusy)}
         class="w-full"
       >
-        {busy ? "Signing in…" : "Continue with passkey"}
+        {oauthBusyProvider === "google"
+          ? "Redirecting to Google…"
+          : "Continue with Google"}
       </Button>
-    </form>
+      <Button
+        type="button"
+        variant="secondary"
+        onclick={() => startOAuth("github")}
+        disabled={Boolean(oauthBusyProvider || passkeyBusy || quickAuthBusy)}
+        class="w-full"
+      >
+        {oauthBusyProvider === "github"
+          ? "Redirecting to GitHub…"
+          : "Continue with GitHub"}
+      </Button>
+    </div>
+
+    {#if message}
+      <p
+        role="alert"
+        class="mt-4 rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
+      >
+        {message}
+      </p>
+    {/if}
+
+    <div class="mt-5 border-t border-line pt-3">
+      <button
+        type="button"
+        class="text-micro text-fg-subtle hover:text-fg"
+        onclick={() => (showPasskeyFallback = !showPasskeyFallback)}
+      >
+        {showPasskeyFallback ? "Hide" : "Use a passkey instead"}
+      </button>
+      {#if showPasskeyFallback}
+        <p class="mt-2 text-micro text-fg-subtle">
+          Only use this if your account still depends on a passkey during
+          migration or local testing.
+        </p>
+        <form
+          class="mt-3 space-y-3"
+          onsubmit={(e) => {
+            e.preventDefault();
+            submit();
+          }}
+        >
+          <label class="block text-micro text-fg-muted">
+            Email
+            <input
+              type="email"
+              autocomplete="username webauthn"
+              bind:value={email}
+              disabled={passkeyBusy || Boolean(oauthBusyProvider)}
+              required
+              placeholder="you@company.com"
+              class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-1.5 text-body text-fg placeholder:text-[var(--fg-subtle)]"
+            />
+          </label>
+          <Button
+            type="submit"
+            variant="secondary"
+            busy={passkeyBusy}
+            disabled={passkeyBusy || Boolean(oauthBusyProvider)}
+            class="w-full"
+          >
+            {passkeyBusy ? "Signing in…" : "Continue with passkey"}
+          </Button>
+        </form>
+      {/if}
+    </div>
 
     {#if quickAuthOptions?.enabled}
       <div class="mt-5 border-t border-line pt-3">
@@ -238,17 +328,20 @@
           class="text-micro text-fg-subtle hover:text-fg"
           onclick={() => (showDevShortcut = !showDevShortcut)}
         >
-          {showDevShortcut ? "Hide" : "Show"} local dev shortcut
+          {showDevShortcut ? "Hide" : "Local dev only"}
         </button>
         {#if showDevShortcut}
           <p class="mt-2 text-micro text-fg-subtle">
-            Skips the passkey for local resets. Disabled in production.
+            Skips Google, GitHub, and passkey for local resets. Disabled in
+            production.
           </p>
           <Button
             type="button"
             variant="secondary"
             onclick={quickSignIn}
-            disabled={busy || quickAuthBusy}
+            disabled={passkeyBusy ||
+              Boolean(oauthBusyProvider) ||
+              quickAuthBusy}
             class="mt-2 w-full"
           >
             {quickAuthBusy ? "Signing in…" : quickAuthLabel}
