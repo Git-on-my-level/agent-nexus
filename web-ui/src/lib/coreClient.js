@@ -7,12 +7,14 @@ import { getSelectedActorId } from "$lib/actorSession";
 import { createAnxCoreClient } from "$lib/anxCoreClient";
 import { buildCoreRequestContextHeaders } from "$lib/coreClientRequestHeaders";
 import {
+  getCurrentCoreBaseUrl,
   getCurrentOrganizationSlug,
   getCurrentWorkspaceSlug,
 } from "$lib/workspaceContext";
 import { APP_BASE_PATH } from "$lib/workspacePaths";
 
 let browserClient;
+let browserClientBaseUrl = null;
 
 /**
  * Options passed to {@link createAnxCoreClient} for the browser shell (tests
@@ -20,6 +22,7 @@ let browserClient;
  */
 export function getBrowserCoreClientOptions() {
   return {
+    baseUrl: getCurrentCoreBaseUrl(),
     actorIdProvider: () => getAuthenticatedActorId() || getSelectedActorId(),
     lockActorIdProvider: () => Boolean(getAuthenticatedAgent()?.agent_id),
     requestContextHeadersProvider: () =>
@@ -39,12 +42,25 @@ function resolveBrowserClient() {
     );
   }
 
+  const fetchFn = globalThis.fetch.bind(globalThis);
+
   if (!browserClient) {
-    const fetchFn = globalThis.fetch.bind(globalThis);
+    const options = getBrowserCoreClientOptions();
     browserClient = createAnxCoreClient({
-      ...getBrowserCoreClientOptions(),
+      ...options,
       fetchFn,
     });
+    browserClientBaseUrl = String(options.baseUrl ?? "").trim();
+  } else {
+    const nextBaseUrl = getCurrentCoreBaseUrl();
+    if (String(nextBaseUrl ?? "").trim() !== browserClientBaseUrl) {
+      const options = getBrowserCoreClientOptions();
+      browserClient = createAnxCoreClient({
+        ...options,
+        fetchFn,
+      });
+      browserClientBaseUrl = String(options.baseUrl ?? "").trim();
+    }
   }
 
   return browserClient;

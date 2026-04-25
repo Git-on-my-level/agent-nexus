@@ -49,6 +49,7 @@
     settingsNavItems,
   } from "$lib/navigation";
   import {
+    setCurrentCoreBaseUrl,
     setCurrentOrganizationSlug,
     setCurrentWorkspaceSlug,
     setDevActorMode,
@@ -405,6 +406,7 @@
     setCurrentOrganizationSlug(
       activeOrganizationSlug || $page.params?.organization || "",
     );
+    setCurrentCoreBaseUrl(activeWorkspace?.coreBaseUrl ?? "");
     if (hydratedWorkspaceSlug === workspaceSlug) {
       return;
     }

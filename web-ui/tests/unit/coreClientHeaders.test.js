@@ -100,6 +100,20 @@ describe("buildCoreRequestContextHeaders", () => {
     });
   });
 
+  it("fills missing slugs from /ws/{org}/{ws}/ API path", () => {
+    expect(
+      buildCoreRequestContextHeaders({
+        storeOrg: "",
+        storeWorkspace: "",
+        pathname: "/ws/x/y/topics",
+        basePath: "",
+      }),
+    ).toEqual({
+      [WORKSPACE_HEADER]: "y",
+      [WORKSPACE_HEADER_CONSTANTS.ORGANIZATION_HEADER]: "x",
+    });
+  });
+
   it("omits headers for empty trimmed store values without a URL match", () => {
     expect(
       buildCoreRequestContextHeaders({

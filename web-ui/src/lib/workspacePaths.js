@@ -49,13 +49,16 @@ export function stripBasePath(pathname = "/", basePath = APP_BASE_PATH) {
 }
 
 const WORKSPACE_ROUTE_RE = /^\/o\/([^/]+)\/w\/([^/]+)(?:\/.*)?$/;
+const WORKSPACE_API_ROUTE_RE = /^\/ws\/([^/]+)\/([^/]+)(?:\/.*)?$/;
 
 export function parseWorkspaceRouteSlugs(
   pathname = "/",
   basePath = APP_BASE_PATH,
 ) {
   const stripped = stripBasePath(pathname, basePath);
-  const match = stripped.match(WORKSPACE_ROUTE_RE);
+  const match =
+    stripped.match(WORKSPACE_ROUTE_RE) ??
+    stripped.match(WORKSPACE_API_ROUTE_RE);
   if (!match) {
     return { organizationSlug: "", workspaceSlug: "" };
   }

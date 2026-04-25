@@ -13,6 +13,7 @@ vi.mock("$lib/actorSession.js", () => ({
 }));
 
 vi.mock("$lib/workspaceContext.js", () => ({
+  getCurrentCoreBaseUrl: vi.fn(() => "https://anx.example.test/ws/org/ws"),
   getCurrentOrganizationSlug: vi.fn(() => "org"),
   getCurrentWorkspaceSlug: vi.fn(() => "ws"),
 }));
@@ -34,6 +35,7 @@ import { getBrowserCoreClientOptions } from "../../src/lib/coreClient.js";
 describe("getBrowserCoreClientOptions", () => {
   it("wires actor providers for createAnxCoreClient", () => {
     const opts = getBrowserCoreClientOptions();
+    expect(opts.baseUrl).toBe("https://anx.example.test/ws/org/ws");
     expect(opts.actorIdProvider()).toBe("actor-1");
     expect(opts.lockActorIdProvider()).toBe(true);
     expect(opts.requestContextHeadersProvider()).toMatchObject({

@@ -2,6 +2,7 @@ import { get, writable } from "svelte/store";
 
 export const currentWorkspaceSlug = writable("");
 export const currentOrganizationSlug = writable("");
+export const currentCoreBaseUrl = writable("");
 export const devActorMode = writable(false);
 export const devActorModeReady = writable(false);
 
@@ -23,6 +24,16 @@ export function setCurrentOrganizationSlug(organizationSlug) {
 
 export function getCurrentOrganizationSlug() {
   return get(currentOrganizationSlug);
+}
+
+export function setCurrentCoreBaseUrl(coreBaseUrl) {
+  const normalized = String(coreBaseUrl ?? "").trim();
+  currentCoreBaseUrl.set(normalized);
+  return normalized;
+}
+
+export function getCurrentCoreBaseUrl() {
+  return get(currentCoreBaseUrl);
 }
 
 export function setDevActorMode(enabled) {
