@@ -154,7 +154,7 @@ Options:
   --no-full-page        Capture viewport only
   --wait <ms>           Extra settle time after load  (default: 800)
   --compare <dir>       Compare against a previous run directory
-  --baseline            Capture the committed QA baseline into .qa-baseline/
+  --baseline            Capture the committed QA baseline into tests/fixtures/qa-visual-baseline/
   --json                Print manifest JSON to stdout on completion
   --no-axe              Skip accessibility audits (faster)
   --no-detail           Skip detail page auto-discovery
@@ -724,7 +724,7 @@ async function main() {
   if (opts.baseline) {
     const exitCode = await runQaVisualCommand({
       mode: "baseline",
-      outDir: path.join(projectRoot, ".qa-baseline"),
+      outDir: path.join(projectRoot, "tests", "fixtures", "qa-visual-baseline"),
       port: Number(process.env.QA_VISUAL_PORT ?? 4273),
       thresholdRatio: 0.001,
       json: opts.json,

@@ -44,11 +44,16 @@ const DEFAULT_VIEWPORT = { width: 1440, height: 900 };
 const DEFAULT_PORT = Number(process.env.QA_VISUAL_PORT ?? 4273);
 const DEFAULT_CORE_PORT = Number(process.env.QA_VISUAL_CORE_PORT ?? 8000);
 const DEFAULT_THRESHOLD_RATIO = 0.001;
-const QA_BASELINE_DIR = path.join(projectRoot, ".qa-baseline");
+/** Git-tracked PNGs for `qa:diff` in CI (`.qa-baseline/` is gitignored for local captures). */
+const QA_BASELINE_DIR = path.join(
+  projectRoot,
+  "tests",
+  "fixtures",
+  "qa-visual-baseline",
+);
 const QA_CURRENT_DIR = path.join(projectRoot, ".qa-current");
 const QA_DIFF_DIR = path.join(projectRoot, ".qa-diff");
-const QA_HOME_HANDOFF_STORAGE_KEY =
-  "anx.home.handoff.lastRead.v1.local.local";
+const QA_HOME_HANDOFF_STORAGE_KEY = "anx.home.handoff.lastRead.v1.local.local";
 
 const QA_SCENES = [
   {
@@ -120,7 +125,9 @@ const QA_SCENES = [
     path: "/hosted/billing/return?session_id=cs_mock_qa_1",
     hostedMode: "authed-dashboard",
     waitFor: async (page) => {
-      await page.waitForURL(/\/hosted\/organizations\/org_qa_primary\/billing\?activating=1$/);
+      await page.waitForURL(
+        /\/hosted\/organizations\/org_qa_primary\/billing\?activating=1$/,
+      );
       await page.waitForSelector("text=Manage in Stripe");
     },
   },
@@ -154,7 +161,9 @@ const QA_SCENES = [
     workspaceMode: "workspace-default",
     waitFor: async (page) => {
       await page.waitForSelector('[data-testid="home-change-counts"]');
-      await page.waitForSelector("text=Showing all recent workspace changes until you mark this handoff read.");
+      await page.waitForSelector(
+        "text=Showing all recent workspace changes until you mark this handoff read.",
+      );
     },
   },
   {
@@ -178,7 +187,9 @@ const QA_SCENES = [
     },
     waitFor: async (page) => {
       await page.waitForSelector('[data-testid="home-change-counts"]');
-      await page.waitForSelector("text=Nothing new since you marked this workspace read.");
+      await page.waitForSelector(
+        "text=Nothing new since you marked this workspace read.",
+      );
     },
   },
   {
@@ -323,7 +334,7 @@ function parseCliArgs(argv) {
     mode: "diff",
     port: DEFAULT_PORT,
     thresholdRatio: DEFAULT_THRESHOLD_RATIO,
-    outDir: QA_BASELINE_DIR,
+    outDir: QA_CURRENT_DIR,
     json: false,
   };
 
@@ -347,7 +358,9 @@ function parseCliArgs(argv) {
         index += 1;
         break;
       case "--threshold":
-        options.thresholdRatio = Number(args[index + 1] ?? DEFAULT_THRESHOLD_RATIO);
+        options.thresholdRatio = Number(
+          args[index + 1] ?? DEFAULT_THRESHOLD_RATIO,
+        );
         index += 1;
         break;
       case "--json":
@@ -367,7 +380,8 @@ function parseCliArgs(argv) {
 }
 
 function printUsage() {
-  console.log(`
+  console.log(
+    `
 QA Visual Harness
 
 Usage:
@@ -375,13 +389,14 @@ Usage:
   node scripts/qa-visual.mjs --diff
 
 Options:
-  --baseline            Capture the canonical baseline into .qa-baseline/
-  --diff                Capture current screenshots and diff against .qa-baseline/
+  --baseline            Capture the canonical baseline into tests/fixtures/qa-visual-baseline/
+  --diff                Capture current screenshots and diff against that baseline
   --out <dir>           Override the output directory for fresh captures
   --port <port>         Preview server port (default: ${DEFAULT_PORT})
   --threshold <ratio>   Max differing-pixel ratio before failing (default: ${DEFAULT_THRESHOLD_RATIO})
   --json                Emit machine-readable JSON summary
-`.trim());
+`.trim(),
+  );
 }
 
 function normalizePathname(pathname) {
@@ -592,23 +607,19 @@ async function startBuiltUiServer(port) {
       coreBaseUrl: `http://127.0.0.1:${DEFAULT_CORE_PORT}`,
     },
   ]);
-  const child = spawn(
-    "node",
-    ["build/index.js"],
-    {
-      cwd: projectRoot,
-      stdio: "inherit",
-      shell: false,
-      env: {
-        ...process.env,
-        HOST: "127.0.0.1",
-        PORT: String(port),
-        ORIGIN: `http://127.0.0.1:${port}`,
-        ANX_WORKSPACES: qaWorkspaceCatalog,
-        ANX_UI_CSP_SCRIPT_SRC_EXTRA: "'unsafe-inline'",
-      },
+  const child = spawn("node", ["build/index.js"], {
+    cwd: projectRoot,
+    stdio: "inherit",
+    shell: false,
+    env: {
+      ...process.env,
+      HOST: "127.0.0.1",
+      PORT: String(port),
+      ORIGIN: `http://127.0.0.1:${port}`,
+      ANX_WORKSPACES: qaWorkspaceCatalog,
+      ANX_UI_CSP_SCRIPT_SRC_EXTRA: "'unsafe-inline'",
     },
-  );
+  });
 
   const baseUrl = `http://127.0.0.1:${port}`;
   try {
@@ -722,7 +733,13 @@ async function installQaRoutes(page, scene) {
       return;
     }
 
-    await handleWorkspaceApiRoute(route, request, url, pathname, workspaceScenario);
+    await handleWorkspaceApiRoute(
+      route,
+      request,
+      url,
+      pathname,
+      workspaceScenario,
+    );
   });
 }
 
@@ -733,7 +750,9 @@ async function handleHostedApiRoute(route, request, url, pathname, scenario) {
       return;
     }
     if (scenario.accountState !== "authed") {
-      await route.fulfill(jsonResponse(401, { error: { message: "unauthorized" } }));
+      await route.fulfill(
+        jsonResponse(401, { error: { message: "unauthorized" } }),
+      );
       return;
     }
     await route.fulfill(jsonResponse(200, { account: QA_HOSTED_ACCOUNT }));
@@ -771,18 +790,26 @@ async function handleHostedApiRoute(route, request, url, pathname, scenario) {
   if (billingMatch && request.method() === "GET") {
     const organizationId = billingMatch[1];
     if (organizationId !== QA_HOSTED_BILLING_SUMMARY.organization_id) {
-      await route.fulfill(jsonResponse(404, { error: { message: "not found" } }));
+      await route.fulfill(
+        jsonResponse(404, { error: { message: "not found" } }),
+      );
       return;
     }
-    await route.fulfill(jsonResponse(200, { summary: QA_HOSTED_BILLING_SUMMARY }));
+    await route.fulfill(
+      jsonResponse(200, { summary: QA_HOSTED_BILLING_SUMMARY }),
+    );
     return;
   }
 
-  const usageMatch = pathname.match(/^\/organizations\/([^/]+)\/usage-summary$/);
+  const usageMatch = pathname.match(
+    /^\/organizations\/([^/]+)\/usage-summary$/,
+  );
   if (usageMatch && request.method() === "GET") {
     const organizationId = usageMatch[1];
     if (organizationId !== QA_HOSTED_BILLING_SUMMARY.organization_id) {
-      await route.fulfill(jsonResponse(404, { error: { message: "not found" } }));
+      await route.fulfill(
+        jsonResponse(404, { error: { message: "not found" } }),
+      );
       return;
     }
     await route.fulfill(
@@ -791,7 +818,9 @@ async function handleHostedApiRoute(route, request, url, pathname, scenario) {
     return;
   }
 
-  const membershipsMatch = pathname.match(/^\/organizations\/([^/]+)\/memberships$/);
+  const membershipsMatch = pathname.match(
+    /^\/organizations\/([^/]+)\/memberships$/,
+  );
   if (membershipsMatch && request.method() === "GET") {
     await route.fulfill(
       jsonResponse(200, {
@@ -816,14 +845,18 @@ async function handleHostedApiRoute(route, request, url, pathname, scenario) {
       (item) => String(item.id) === organizationMatch[1],
     );
     if (!organization) {
-      await route.fulfill(jsonResponse(404, { error: { message: "not found" } }));
+      await route.fulfill(
+        jsonResponse(404, { error: { message: "not found" } }),
+      );
       return;
     }
     await route.fulfill(jsonResponse(200, { organization }));
     return;
   }
 
-  const checkoutSessionMatch = pathname.match(/^\/billing\/checkout-session\/([^/]+)$/);
+  const checkoutSessionMatch = pathname.match(
+    /^\/billing\/checkout-session\/([^/]+)$/,
+  );
   if (checkoutSessionMatch && request.method() === "GET") {
     await route.fulfill(
       jsonResponse(200, {
@@ -844,7 +877,13 @@ async function handleHostedApiRoute(route, request, url, pathname, scenario) {
   await route.fulfill(jsonResponse(404, { error: { message: "not found" } }));
 }
 
-async function handleWorkspaceApiRoute(route, request, url, pathname, scenario) {
+async function handleWorkspaceApiRoute(
+  route,
+  request,
+  url,
+  pathname,
+  scenario,
+) {
   if (pathname === "/auth/session" && request.method() === "GET") {
     await route.fulfill(jsonResponse(200, { agent: QA_AUTH_AGENT }));
     return;
@@ -948,12 +987,16 @@ async function handleWorkspaceApiRoute(route, request, url, pathname, scenario) 
   if (inboxItemMatch && request.method() === "GET") {
     if (scenario.askState === "error") {
       await route.fulfill(
-        jsonResponse(500, { error: { message: "QA baseline ask context failed." } }),
+        jsonResponse(500, {
+          error: { message: "QA baseline ask context failed." },
+        }),
       );
       return;
     }
     if (inboxItemMatch[1] !== QA_ASK_ITEM.id) {
-      await route.fulfill(jsonResponse(404, { error: { message: "not found" } }));
+      await route.fulfill(
+        jsonResponse(404, { error: { message: "not found" } }),
+      );
       return;
     }
     await route.fulfill(jsonResponse(200, { item: QA_ASK_ITEM }));
@@ -1159,7 +1202,9 @@ export async function runQaVisualCommand(options) {
     if (options.json) {
       console.log(JSON.stringify(summary, null, 2));
     } else {
-      console.log(`Captured ${results.length} QA baseline screenshots into ${options.outDir}`);
+      console.log(
+        `Captured ${results.length} QA baseline screenshots into ${options.outDir}`,
+      );
     }
     return 0;
   }
@@ -1237,13 +1282,19 @@ export async function runQaVisualCommand(options) {
   return failures.length === 0 ? 0 : 1;
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+if (
+  process.argv[1] &&
+  fileURLToPath(import.meta.url) === path.resolve(process.argv[1])
+) {
   runQaVisualCommand(parseCliArgs(process.argv))
     .then((code) => {
       process.exit(code);
     })
     .catch((error) => {
-      console.error("qa-visual failed:", error instanceof Error ? error.message : error);
+      console.error(
+        "qa-visual failed:",
+        error instanceof Error ? error.message : error,
+      );
       process.exit(1);
     });
 }
