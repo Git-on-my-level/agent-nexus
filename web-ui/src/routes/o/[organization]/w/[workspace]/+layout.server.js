@@ -151,6 +151,7 @@ export async function load(event) {
       label: resolved.workspace.label,
       description: resolved.workspace.description,
       coreBaseUrl: String(resolved.workspace.coreBaseUrl ?? "").trim(),
+      workspaceId,
     },
   };
 }
