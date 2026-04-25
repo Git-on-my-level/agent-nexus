@@ -207,6 +207,7 @@ CORE_PORT="$(resolve_port "${REQUESTED_CORE_PORT}" "anx-core")"
 UI_PORT="$(resolve_port "${REQUESTED_UI_PORT}" "web-ui")"
 CORE_BASE_URL="http://${CORE_HOST}:${CORE_PORT}"
 UI_BASE_URL="http://${UI_HOST}:${UI_PORT}"
+UI_ORG_SLUG="${ANX_DEFAULT_ORGANIZATION:-local}"
 
 # Build CLI binary once for deterministic smoke steps.
 (
@@ -242,7 +243,9 @@ fi
 ) &
 UI_PID=$!
 
-if ! wait_for_url "$UI_BASE_URL/meta/handshake" 180 0.2 -H "x-anx-workspace-slug: ${UI_WORKSPACE_SLUG}"; then
+if ! wait_for_url "$UI_BASE_URL/meta/handshake" 180 0.2 \
+  -H "x-anx-organization-slug: ${UI_ORG_SLUG}" \
+  -H "x-anx-workspace-slug: ${UI_WORKSPACE_SLUG}"; then
   echo "web-ui did not become ready on /meta/handshake" >&2
   cat "$UI_LOG" >&2 || true
   exit 1
@@ -507,7 +510,7 @@ assert_contains "$TMP_DIR/board-workspace.json" "\"board_id\"[[:space:]]*:[[:spa
 assert_contains "$TMP_DIR/board-workspace.json" '"topic:topic-smoke-board-b"'
 assert_contains "$TMP_DIR/board-workspace.json" "\"column_key\"[[:space:]]*:[[:space:]]*\"review\""
 
-curl -fsS -H "x-anx-workspace-slug: ${UI_WORKSPACE_SLUG}" -H "Authorization: Bearer $ACCESS_TOKEN" "$UI_BASE_URL/boards/${BOARD_ID}/workspace" >"$TMP_DIR/ui-board-workspace.json"
+curl -fsS -H "x-anx-organization-slug: ${UI_ORG_SLUG}" -H "x-anx-workspace-slug: ${UI_WORKSPACE_SLUG}" -H "Authorization: Bearer $ACCESS_TOKEN" "$UI_BASE_URL/boards/${BOARD_ID}/workspace" >"$TMP_DIR/ui-board-workspace.json"
 assert_contains "$TMP_DIR/ui-board-workspace.json" "\"board_id\"[[:space:]]*:[[:space:]]*\"$BOARD_ID\""
 
 # Refresh board concurrency token (cards.move may not echo `board` in the CLI envelope).
@@ -587,7 +590,7 @@ printf '{"event":{"type":"message_posted","thread_id":"%s","summary":"smoke stre
   | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" events create >"$TMP_DIR/event-create.json"
 
 # Basic UI compatibility check after typed flow.
-curl -fsS -H "x-anx-workspace-slug: ${UI_WORKSPACE_SLUG}" "$UI_BASE_URL/meta/handshake" >"$TMP_DIR/ui-handshake.json"
+curl -fsS -H "x-anx-organization-slug: ${UI_ORG_SLUG}" -H "x-anx-workspace-slug: ${UI_WORKSPACE_SLUG}" "$UI_BASE_URL/meta/handshake" >"$TMP_DIR/ui-handshake.json"
 assert_contains "$TMP_DIR/ui-handshake.json" '"schema_version"'
 
 cat >"$TMP_DIR/summary.txt" <<SUMMARY
