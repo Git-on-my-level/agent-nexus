@@ -8,37 +8,6 @@ import { handleLaunchInstruction } from "$lib/server/outOfWorkspace/launchSessio
 import { resolveWorkspaceInRoute } from "$lib/server/workspaceResolver";
 import { workspacePath } from "$lib/workspacePaths";
 
-async function loadWorkspaceHumanAuthMode(event, coreBaseUrl) {
-  if (!coreBaseUrl) {
-    return { available: false, mode: "" };
-  }
-  const handshakeURL = new URL("/meta/handshake", `${coreBaseUrl}/`).toString();
-  try {
-    const response = await event.fetch(handshakeURL, {
-      headers: {
-        accept: "application/json",
-      },
-    });
-    if (!response.ok) {
-      return { available: false, mode: "" };
-    }
-    const payload = await response.json();
-    return {
-      available: true,
-      mode: String(payload?.human_auth_mode ?? "").trim(),
-    };
-  } catch {
-    return { available: false, mode: "" };
-  }
-}
-
-function isHostedWorkspaceContext(workspace) {
-  const workspaceID = String(
-    workspace?.workspaceId ?? workspace?.id ?? "",
-  ).trim();
-  return workspaceID !== "";
-}
-
 export async function load(event) {
   const provider =
     event.locals?.outOfWorkspace ?? getOutOfWorkspaceProvider(privateEnv);
@@ -83,17 +52,7 @@ export async function load(event) {
     );
   }
 
-  const authModeLookup = await loadWorkspaceHumanAuthMode(
-    event,
-    workspace.coreBaseUrl,
-  );
-  const hostedWorkspace = isHostedWorkspaceContext(workspace);
-  const failClosedToHostedSSO =
-    hostedWorkspace &&
-    (!authModeLookup.available ||
-      authModeLookup.mode === "external_grant" ||
-      authModeLookup.mode === "");
-  if (!failClosedToHostedSSO) {
+  if (provider.mode !== "hosted") {
     return;
   }
 
