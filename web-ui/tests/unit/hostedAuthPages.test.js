@@ -58,17 +58,24 @@ describe("hosted auth pages", () => {
     expect(container.textContent).toContain("Continue with GitHub");
   });
 
-  it("keeps hosted signup oauth-first with invite token entry", () => {
+  it("keeps hosted signup oauth-only with optional org invite and no passkey copy", () => {
     currentPage = {
       url: new URL("/hosted/signup?invite=inv_123", window.location.origin),
       params: {},
     };
     const { container } = render(HostedSignupPage);
 
-    expect(container.textContent).toMatch(/invite-only/i);
+    expect(container.textContent).toContain(
+      "Hosted sign-up uses Google or GitHub only.",
+    );
+    expect(container.textContent).not.toMatch(/invite-only/i);
+    expect(container.textContent).not.toMatch(/beta/i);
     expect(container.textContent).not.toContain("passkey");
-    expect(container.textContent).toMatch(/Invitation token/i);
+    expect(container.textContent).toContain("Organization invite (optional)");
     expect(container.textContent).toContain("Continue with Google");
     expect(container.textContent).toContain("Continue with GitHub");
+    for (const btn of container.querySelectorAll("button")) {
+      expect(/** @type {HTMLButtonElement} */ (btn).disabled).toBe(false);
+    }
   });
 });

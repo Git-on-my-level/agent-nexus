@@ -11,7 +11,6 @@
   let oauthBusyProvider = $state("");
   let message = $state("");
   const continuationQuery = $derived($page.url.search ?? "");
-  const inviteReady = $derived(Boolean(inviteToken.trim()));
 
   onMount(() => {
     const inv = $page.url.searchParams.get("invite");
@@ -52,33 +51,26 @@
   <div class="rounded-md border border-line bg-bg-soft px-6 py-6">
     <h1 class="text-display text-fg">Create your account</h1>
     <p class="mt-1.5 text-meta text-fg-subtle">
-      The hosted beta is <strong class="text-fg">invite-only</strong>. Paste the
-      token from your email, then continue with Google or GitHub.
+      Hosted sign-up uses Google or GitHub only.
     </p>
 
     <div class="mt-5 space-y-3">
       <label class="block text-micro text-fg-muted">
-        Invitation token
+        Organization invite (optional)
         <input
           type="text"
           bind:value={inviteToken}
           disabled={Boolean(oauthBusyProvider)}
-          placeholder="From your organization admin"
+          placeholder="If your team sent a code, paste it here."
           class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-1.5 text-body text-fg placeholder:text-[var(--fg-subtle)]"
         />
       </label>
-
-      {#if inviteToken.trim()}
-        <p class="rounded-md bg-ok-soft px-3 py-2 text-micro text-ok-text">
-          Token will be sent when you continue to Google or GitHub.
-        </p>
-      {/if}
 
       <Button
         type="button"
         variant="primary"
         onclick={() => startOAuth("google")}
-        disabled={Boolean(oauthBusyProvider) || !inviteReady}
+        disabled={Boolean(oauthBusyProvider)}
         class="w-full"
       >
         {oauthBusyProvider === "google"
@@ -89,7 +81,7 @@
         type="button"
         variant="secondary"
         onclick={() => startOAuth("github")}
-        disabled={Boolean(oauthBusyProvider) || !inviteReady}
+        disabled={Boolean(oauthBusyProvider)}
         class="w-full"
       >
         {oauthBusyProvider === "github"

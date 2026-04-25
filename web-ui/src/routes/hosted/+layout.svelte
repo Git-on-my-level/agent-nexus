@@ -4,7 +4,7 @@
   import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
-  import { PUBLIC_ANX_SUPPORT_URL } from "$env/static/public";
+  import { env } from "$env/dynamic/public";
 
   import Button from "$lib/components/Button.svelte";
   import Avatar from "$lib/hosted/Avatar.svelte";
@@ -23,7 +23,7 @@
 
   let { children } = $props();
 
-  const supportHref = resolveHostedSupportUrl(PUBLIC_ANX_SUPPORT_URL);
+  const supportHref = resolveHostedSupportUrl(env.PUBLIC_ANX_SUPPORT_URL);
   const supportExternal = supportLinkOpensInNewTab(supportHref);
 
   /** Routes that don't require auth (and shouldn't load the session). */

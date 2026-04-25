@@ -46,6 +46,7 @@ function normalizeHostedNextPath(rawValue) {
   return sanitizeHostedReturnPath(candidate, "");
 }
 
+/** @param {object} [options] Pass inviteToken (optional) to attach a pending org invite at OAuth finish. */
 export function buildHostedOAuthContinuation(urlLike, options = {}) {
   const url =
     urlLike instanceof URL

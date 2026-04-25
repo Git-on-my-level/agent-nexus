@@ -1,5 +1,5 @@
 <script>
-  import { PUBLIC_ANX_SUPPORT_URL } from "$env/static/public";
+  import { env } from "$env/dynamic/public";
 
   import Button from "$lib/components/Button.svelte";
   import {
@@ -16,7 +16,7 @@
     class: className = "",
   } = $props();
 
-  const supportHref = resolveHostedSupportUrl(PUBLIC_ANX_SUPPORT_URL);
+  const supportHref = resolveHostedSupportUrl(env.PUBLIC_ANX_SUPPORT_URL);
   const supportExternal = supportLinkOpensInNewTab(supportHref);
 </script>
 
