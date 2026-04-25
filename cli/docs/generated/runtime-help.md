@@ -1859,8 +1859,8 @@ Generated Help: topics patch
 Inputs:
   Required:
   - path `topic_id`
-  Optional:
   - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
+  Optional:
   - body `patch.board_refs` (list<any>)
   - body `patch.document_refs` (list<any>)
   - body `patch.owner_refs` (list<any>)
@@ -2181,8 +2181,8 @@ Generated Help: cards patch
 Inputs:
   Required:
   - path `card_id`
-  Optional:
   - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
+  Optional:
   - body `patch.assignee_refs` (list<any>)
   - body `patch.definition_of_done` (list<string>)
   - body `patch.document_ref` (string)
