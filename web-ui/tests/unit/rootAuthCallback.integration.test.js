@@ -15,7 +15,7 @@ vi.mock("$lib/server/devLog.js", () => ({
   logServerEvent: vi.fn(),
 }));
 
-import { POST } from "../../src/routes/auth/callback/+server.js";
+import { GET, POST } from "../../src/routes/auth/callback/+server.js";
 
 function rootEvent(form, outOfWorkspace = mockLocalProvider()) {
   return {
@@ -25,6 +25,22 @@ function rootEvent(form, outOfWorkspace = mockLocalProvider()) {
       headers: { accept: "application/json" },
     }),
     url: new URL("http://localhost/auth/callback"),
+    params: {},
+    locals: { outOfWorkspace },
+    cookies: { get: vi.fn(() => "") },
+    fetch: globalThis.fetch,
+  };
+}
+
+function rootGetEvent(query, outOfWorkspace = mockLocalProvider()) {
+  const params = new URLSearchParams(query);
+  const url = `http://localhost/auth/callback${params.size > 0 ? `?${params.toString()}` : ""}`;
+  return {
+    request: new Request(url, {
+      method: "GET",
+      headers: { accept: "application/json" },
+    }),
+    url: new URL(url),
     params: {},
     locals: { outOfWorkspace },
     cookies: { get: vi.fn(() => "") },
@@ -84,6 +100,35 @@ describe("root /auth/callback POST", () => {
     form.set("exchange_token", "x");
     form.set("state", "s");
     await POST(/** @type {any} */ (rootEvent(form, provider)));
+
+    expect(provider.resolveWorkspaceById).toHaveBeenCalled();
+    expect(runPost).toHaveBeenCalled();
+  });
+
+  it("accepts GET callback query params", async () => {
+    const provider = mockHostedProvider({
+      resolveWorkspaceById: vi.fn(async () => ({
+        kind: "found",
+        workspace: {
+          organizationSlug: "acme",
+          slug: "alpha",
+        },
+      })),
+    });
+    runPost.mockResolvedValue(new Response(null, { status: 204 }));
+
+    await GET(
+      /** @type {any} */ (
+        rootGetEvent(
+          {
+            workspace_id: "ws-1",
+            exchange_token: "x",
+            state: "s",
+          },
+          provider,
+        )
+      ),
+    );
 
     expect(provider.resolveWorkspaceById).toHaveBeenCalled();
     expect(runPost).toHaveBeenCalled();

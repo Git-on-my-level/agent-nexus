@@ -20,6 +20,14 @@ function unresolvedReason(providerMode, lookupKind) {
   return "workspace_unknown";
 }
 
+function formDataFromSearchParams(url) {
+  const form = new FormData();
+  for (const [key, value] of url.searchParams.entries()) {
+    form.append(key, value);
+  }
+  return form;
+}
+
 /**
  * Control plane posts the launch finish form to `workspace.base_url + "/auth/callback"`.
  * When `base_url` is only the web UI origin (no `/o/{org}/w/{workspace}` prefix), the
@@ -30,6 +38,16 @@ export async function POST(event) {
   const provider =
     event.locals?.outOfWorkspace ?? getOutOfWorkspaceProvider(privateEnv);
   const form = await event.request.formData();
+  return handleCallback(event, provider, form);
+}
+
+export async function GET(event) {
+  const provider =
+    event.locals?.outOfWorkspace ?? getOutOfWorkspaceProvider(privateEnv);
+  return handleCallback(event, provider, formDataFromSearchParams(event.url));
+}
+
+async function handleCallback(event, provider, form) {
   const workspaceId = String(form.get("workspace_id") ?? "").trim();
   let organizationSlug = "";
   let workspaceSlug = "";

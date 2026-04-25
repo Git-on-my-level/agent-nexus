@@ -27,7 +27,10 @@ vi.mock("$lib/server/authSession.js", () => ({
   writeWorkspaceRefreshToken: authSessionMocks.writeWorkspaceRefreshToken,
 }));
 
-import { POST } from "../../src/routes/o/[organization]/w/[workspace]/auth/callback/+server.js";
+import {
+  GET,
+  POST,
+} from "../../src/routes/o/[organization]/w/[workspace]/auth/callback/+server.js";
 
 function createEvent(formFields, options = {}) {
   const {
@@ -57,6 +60,42 @@ function createEvent(formFields, options = {}) {
         ...rest,
       },
     ),
+    locals: {
+      outOfWorkspace,
+    },
+    cookies: {
+      set: vi.fn(),
+      delete: vi.fn(),
+      get: vi.fn(),
+    },
+  };
+}
+
+function createGetEvent(queryFields, options = {}) {
+  const {
+    headers: headerOverrides = {},
+    outOfWorkspace = mockHostedProvider({
+      exchangeLaunchSession: vi.fn(async () => ({
+        ok: true,
+        assertion: "grant_token",
+      })),
+    }),
+  } = options;
+  const query = new URLSearchParams(queryFields).toString();
+  const url = `https://ui.example.test/o/local/w/acme/auth/callback${query ? `?${query}` : ""}`;
+  return {
+    params: {
+      organization: "local",
+      workspace: "acme",
+    },
+    url: new URL(url),
+    request: new Request(url, {
+      method: "GET",
+      headers: {
+        accept: "application/json",
+        ...headerOverrides,
+      },
+    }),
     locals: {
       outOfWorkspace,
     },
@@ -166,6 +205,37 @@ describe("workspace auth callback route", () => {
       error: {
         code: "invalid_request",
       },
+    });
+  });
+
+  it("accepts GET callback query params", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          tokens: {
+            access_token: "access_123",
+            refresh_token: "refresh_123",
+          },
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+          },
+        },
+      ),
+    );
+
+    const event = createGetEvent({
+      exchange_token: "ex_123",
+      state: "state_123",
+      workspace_id: "ws_123",
+      return_path: "/",
+    });
+
+    await expect(GET(event)).rejects.toMatchObject({
+      status: 303,
+      location: "/o/local/w/acme",
     });
   });
 
