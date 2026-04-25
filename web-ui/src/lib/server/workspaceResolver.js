@@ -9,6 +9,7 @@ import {
   WORKSPACE_HEADER,
   normalizeOrganizationSlug,
   normalizeWorkspaceSlug,
+  parseWorkspaceRouteSlugs,
   workspaceCompositeKey,
 } from "../workspacePaths.js";
 import { logServerEvent } from "./devLog.js";
@@ -311,8 +312,28 @@ export async function resolveWorkspaceFromEvent(event) {
   });
 }
 
+function workspaceRouteSlugsFromReferer(event) {
+  const referer = String(event?.request?.headers?.get("referer") ?? "").trim();
+  if (!referer) {
+    return { organizationSlug: "", workspaceSlug: "" };
+  }
+
+  try {
+    const refererUrl = new URL(referer);
+    if (event?.url?.origin && refererUrl.origin !== event.url.origin) {
+      return { organizationSlug: "", workspaceSlug: "" };
+    }
+    return parseWorkspaceRouteSlugs(refererUrl.pathname);
+  } catch {
+    return { organizationSlug: "", workspaceSlug: "" };
+  }
+}
+
 export async function resolveProxyWorkspaceTarget({ workspaceSlug, event }) {
-  const slug = String(workspaceSlug ?? "").trim();
+  const refererSlugs = workspaceRouteSlugsFromReferer(event);
+  const slug =
+    String(workspaceSlug ?? "").trim() ||
+    String(refererSlugs.workspaceSlug ?? "").trim();
   if (!slug) {
     return {
       status: 400,
@@ -328,7 +349,9 @@ export async function resolveProxyWorkspaceTarget({ workspaceSlug, event }) {
   const orgSlug = event?.request
     ? getOrganizationHeader(event.request.headers)
     : "";
-  const trimmedOrg = String(orgSlug ?? "").trim();
+  const trimmedOrg =
+    String(orgSlug ?? "").trim() ||
+    String(refererSlugs.organizationSlug ?? "").trim();
   if (!trimmedOrg) {
     return {
       status: 400,

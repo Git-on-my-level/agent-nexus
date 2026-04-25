@@ -220,6 +220,53 @@ describe("workspaceResolver", () => {
     expect(resolved.error.payload.error.message).toMatch(/retry/i);
   });
 
+  it("derives proxy workspace target from same-origin referer when headers are missing", async () => {
+    mockState.env.ANX_WORKSPACES =
+      '[{"organizationSlug":"local","slug":"ops","label":"Ops","coreBaseUrl":"http://127.0.0.1:8001"}]';
+
+    const target = await resolveProxyWorkspaceTarget({
+      workspaceSlug: "",
+      event: {
+        url: new URL("https://anx.example.test/api/threads"),
+        request: new Request("https://anx.example.test/api/threads", {
+          headers: {
+            referer: "https://anx.example.test/o/local/w/ops/topics",
+          },
+        }),
+      },
+    });
+
+    expect(target.status).toBeUndefined();
+    expect(target.workspace).toMatchObject({
+      organizationSlug: "local",
+      slug: "ops",
+    });
+    expect(target.coreBaseUrl).toBe("http://127.0.0.1:8001");
+  });
+
+  it("does not trust cross-origin referers for proxy workspace fallback", async () => {
+    const target = await resolveProxyWorkspaceTarget({
+      workspaceSlug: "",
+      event: {
+        url: new URL("https://anx.example.test/api/threads"),
+        request: new Request("https://anx.example.test/api/threads", {
+          headers: {
+            referer: "https://evil.example.test/o/local/w/ops/topics",
+          },
+        }),
+      },
+    });
+
+    expect(target).toMatchObject({
+      status: 400,
+      payload: {
+        error: {
+          code: "workspace_header_required",
+        },
+      },
+    });
+  });
+
   it("hydrates workspace catalog from control plane org list in hosted mode", async () => {
     mockState.env.ANX_CONTROL_BASE_URL = "http://127.0.0.1:8100";
     mockState.env.ANX_CONTROL_PLANE_DEV_ACCESS_TOKEN = "tok_dev";
