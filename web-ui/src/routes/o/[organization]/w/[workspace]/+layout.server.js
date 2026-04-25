@@ -40,6 +40,14 @@ function workspaceRelativeReturnPath(event, organizationSlug, workspaceSlug) {
     organizationSlug,
     workspaceSlug,
   );
+  if (appPath === "/login") {
+    return sanitizeHostedReturnPath(
+      event.url.searchParams.get("return_to") ??
+        event.url.searchParams.get("return_path") ??
+        "/",
+      "/",
+    );
+  }
   return sanitizeHostedReturnPath(`${appPath}${event.url.search}`, "/");
 }
 

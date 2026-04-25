@@ -124,6 +124,49 @@ describe("workspace login route", () => {
     await expect(load(event)).resolves.toBeUndefined();
   });
 
+  it("does not render workspace-local login when hosted provider is active", async () => {
+    workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
+      organizationSlug: "local",
+      workspaceSlug: "acme",
+      workspace: {
+        coreBaseUrl: "https://core.example.test",
+        workspaceId: "ws_123",
+      },
+      error: null,
+    });
+    authSessionMocks.loadWorkspaceAuthenticatedAgent.mockResolvedValue(null);
+
+    const event = createEvent({
+      fetch: vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              human_auth_mode: "workspace_local",
+            }),
+            {
+              status: 200,
+              headers: {
+                "content-type": "application/json",
+              },
+            },
+          ),
+      ),
+      locals: {
+        outOfWorkspace: mockHostedProvider({
+          beginLaunchSession: vi.fn(async () => ({
+            kind: "needs_signin",
+            signInUrl: "/hosted/signin?workspace=acme&workspace_id=ws_123",
+          })),
+        }),
+      },
+    });
+
+    await expect(load(event)).rejects.toMatchObject({
+      status: 307,
+      location: "/hosted/signin?workspace=acme&workspace_id=ws_123",
+    });
+  });
+
   it("fails closed to hosted sign-in when hosted handshake lookup fails", async () => {
     workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
       organizationSlug: "local",

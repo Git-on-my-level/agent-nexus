@@ -174,6 +174,32 @@ describe("workspace +layout.server.js (integration with real resolver)", () => {
     expect(thrown.location).toContain("/hosted/signin");
   });
 
+  it("uses the nested login return_to as hosted return_path", async () => {
+    resetEnv({
+      ANX_CONTROL_BASE_URL: "http://127.0.0.1:8100",
+    });
+    const fetchFn = makeCpFetchMock({ workspaces: [] });
+
+    const event = createEvent({
+      pathname: "/o/my-org/w/my-ws/login?return_to=%2Faccess",
+      fetchFn,
+      cookies: {},
+    });
+
+    let thrown;
+    try {
+      await load(event);
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBeDefined();
+    expect(thrown.status).toBe(307);
+    expect(thrown.location).toContain("/hosted/signin");
+    expect(thrown.location).toContain("return_path=%2Faccess");
+    expect(thrown.location).not.toContain("%2Flogin");
+  });
+
   it("returns workspace data when the CP returns a fully ready workspace with a core origin", async () => {
     const fetchFn = makeCpFetchMock({
       workspaces: [
