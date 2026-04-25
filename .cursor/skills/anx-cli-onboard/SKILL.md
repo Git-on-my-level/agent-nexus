@@ -60,7 +60,7 @@ For interrupt-driven work, a common loop is: `inbox` -> inspect related `thread`
 - Override per command with `--base-url` or `ANX_BASE_URL` and `--agent` or `ANX_AGENT` when needed.
 - Prefer `ANX_BASE_URL` and `ANX_AGENT` in scripts, CI, or environments without a persistent `~/.config/anx`.
 - If available, run `anx doctor` when config or connectivity is unclear.
-- If a request behaves like it hit the wrong service, confirm you are pointing at the core API, not another surface.
+- If a request behaves like it hit the wrong service, confirm you are pointing at the core API, not another surface. Do not put a workspace browser path (for example `/o/.../w/...`) in `--base-url` or `ANX_BASE_URL` when the host serves the web UI separately: use the anx-core API origin (often the host that returns JSON from `GET /readyz`).
 
 Config precedence is typically: flags -> environment -> profile -> defaults.
 

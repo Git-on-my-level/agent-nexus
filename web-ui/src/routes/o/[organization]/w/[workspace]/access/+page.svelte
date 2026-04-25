@@ -52,6 +52,9 @@
   let createdInviteUsername = $state("");
   let messageCopied = $state(false);
   let tokenDismissed = $state(false);
+  let createdInviteCommandHasPlaceholders = $derived(
+    !createdInviteAgentName || !createdInviteUsername,
+  );
 
   let revokingInviteId = $state("");
   let revokeInviteConfirm = $state({ open: false, id: "" });
@@ -708,7 +711,9 @@
               This one-time token will not be shown again. Double-click the
               token to select and copy.
               {#if createdInviteKind === "agent" || createdInviteKind === "any"}
-                For a ready-to-paste CLI command, use the button below.
+                {createdInviteCommandHasPlaceholders
+                  ? "For a CLI command template, use the button below."
+                  : "For a ready-to-paste CLI command, use the button below."}
               {/if}
             </p>
             <div
@@ -741,8 +746,9 @@
                 {messageCopied ? "Copied" : "Copy registration message"}
               </Button>
               <p class="mt-1.5 text-micro text-[var(--fg-muted)]">
-                Copies a ready-to-paste command with instructions for your agent
-                to register.
+                {createdInviteCommandHasPlaceholders
+                  ? "Copies a command template with instructions for your agent to finish before registering."
+                  : "Copies a ready-to-paste command with instructions for your agent to register."}
               </p>
             {/if}
           </div>

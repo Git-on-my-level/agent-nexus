@@ -33,7 +33,18 @@ function resolveWorkspacePublicUrl(resolved, requestPath = "") {
   }
 }
 
+/**
+ * Base URL for `anx --base-url` in copied CLI commands (anx-core API origin).
+ * Prefer the workspace `coreBaseUrl` from the catalog. When it is missing,
+ * fall back to public/browser workspace URLs (degraded: operators should set
+ * `coreBaseUrl` on `ANX_WORKSPACES` entries so copied commands hit the API).
+ */
 function resolveRegistrationBaseUrl(event, resolved) {
+  const core = normalizeBaseUrl(resolved.workspace?.coreBaseUrl ?? "");
+  if (core) {
+    return core;
+  }
+
   const requestPath = String(event?.url?.pathname ?? "");
   const browserWorkspaceUrl = requestPath.endsWith("/access")
     ? normalizeBaseUrl(`${event.url.origin}${requestPath.slice(0, -7)}`)

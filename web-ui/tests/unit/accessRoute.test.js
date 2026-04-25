@@ -15,7 +15,7 @@ vi.mock("$lib/server/workspaceResolver", async (importOriginal) => {
 import { load } from "../../src/routes/o/[organization]/w/[workspace]/access/+page.server.js";
 
 describe("access route", () => {
-  it("uses the current browser workspace path for copied registration commands", async () => {
+  it("uses workspace coreBaseUrl for copied anx CLI --base-url (API origin)", async () => {
     workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
       organizationSlug: "local",
       workspaceSlug: "scalingforever",
@@ -40,12 +40,11 @@ describe("access route", () => {
     expect(result).toEqual({
       coreBaseUrl: "http://127.0.0.1:8002",
       workspaceId: "ws-scalingforever",
-      registrationBaseUrl:
-        "https://m2-internal.scalingforever.com/anx/o/local/w/scalingforever",
+      registrationBaseUrl: "http://127.0.0.1:8002",
     });
   });
 
-  it("falls back to the configured public origin when the request origin is loopback", async () => {
+  it("uses coreBaseUrl over public origin when the request origin is loopback", async () => {
     workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
       organizationSlug: "local",
       workspaceSlug: "scalingforever",
@@ -68,12 +67,11 @@ describe("access route", () => {
     expect(result).toEqual({
       coreBaseUrl: "http://127.0.0.1:8002",
       workspaceId: "ws-scalingforever",
-      registrationBaseUrl:
-        "https://m2-internal.tail7e1eb.ts.net/anx/o/local/w/scalingforever",
+      registrationBaseUrl: "http://127.0.0.1:8002",
     });
   });
 
-  it("treats bracketed ipv6 loopback as a local request origin", async () => {
+  it("treats bracketed ipv6 loopback as a local request origin and still prefers coreBaseUrl", async () => {
     workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
       organizationSlug: "local",
       workspaceSlug: "scalingforever",
@@ -95,6 +93,33 @@ describe("access route", () => {
 
     expect(result).toEqual({
       coreBaseUrl: "http://127.0.0.1:8002",
+      workspaceId: "ws-scalingforever",
+      registrationBaseUrl: "http://127.0.0.1:8002",
+    });
+  });
+
+  it("falls back to public workspace URL when coreBaseUrl is not configured", async () => {
+    workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
+      organizationSlug: "local",
+      workspaceSlug: "scalingforever",
+      workspace: {
+        coreBaseUrl: "",
+        publicOrigin: "https://m2-internal.tail7e1eb.ts.net",
+        workspaceId: "ws-scalingforever",
+      },
+      error: null,
+    });
+
+    const result = await load({
+      params: {
+        organization: "local",
+        workspace: "scalingforever",
+      },
+      url: new URL("http://127.0.0.1:4173/anx/o/local/w/scalingforever/access"),
+    });
+
+    expect(result).toEqual({
+      coreBaseUrl: "",
       workspaceId: "ws-scalingforever",
       registrationBaseUrl:
         "https://m2-internal.tail7e1eb.ts.net/anx/o/local/w/scalingforever",

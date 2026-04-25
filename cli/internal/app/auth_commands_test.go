@@ -527,6 +527,40 @@ func TestAuthPrincipalsListFilteredEmptyPageShowsNextCursor(t *testing.T) {
 	}
 }
 
+func TestAuthRegisterNotFoundHTMLSuggestsCoreBaseURL(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/auth/agents/register" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte("<!DOCTYPE html><html><head></head><body>Not found</body></html>"))
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"--agent", "agent-html-404",
+		"auth", "register",
+		"--username", "u1",
+		"--invite-token", "oinv_testtoken",
+	})
+	payload := assertEnvelopeError(t, raw)
+	errObj, _ := payload["error"].(map[string]any)
+	if errObj == nil {
+		t.Fatalf("missing error object: %#v", payload)
+	}
+	hint := strings.TrimSpace(anyStr(errObj["hint"]))
+	if !strings.Contains(hint, "anx-core") || !strings.Contains(hint, "/o/") {
+		t.Fatalf("expected base-url hint for non-core 404, got %q payload=%#v", hint, payload)
+	}
+}
+
 func TestAuthRegisterInternalErrorIsActionable(t *testing.T) {
 	t.Parallel()
 

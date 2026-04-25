@@ -222,6 +222,12 @@ func TestRunGeneratedAuthHelpTopics(t *testing.T) {
 	if !strings.Contains(invitesOutput, "auth invites create") || !strings.Contains(invitesOutput, "auth invites revoke") {
 		t.Fatalf("expected auth invites subcommand discoverability output=%s", invitesOutput)
 	}
+	if !strings.Contains(invitesOutput, "auth invites revoke --invite-id <id>") {
+		t.Fatalf("expected auth invites revoke example to use invite-id output=%s", invitesOutput)
+	}
+	if strings.Contains(invitesOutput, "auth invites revoke --token") {
+		t.Fatalf("auth invites revoke help references removed --token flag output=%s", invitesOutput)
+	}
 }
 
 func TestRunLocalAuthLifecycleHelpTopics(t *testing.T) {

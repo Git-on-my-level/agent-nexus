@@ -6,32 +6,35 @@ describe("inviteRegistrationMessage", () => {
   it("fills in agent name and username when provided", () => {
     const message = buildRegistrationMessage(
       "oinv_123",
-      "https://example.com/anx/team-alpha",
+      "https://core.example.com",
       "hermes-prod",
       "hermes.prod",
     );
 
     expect(message).toContain(
-      "anx --base-url https://example.com/anx/team-alpha --agent hermes-prod auth register --username hermes.prod --invite-token oinv_123",
+      "anx --base-url https://core.example.com --agent hermes-prod auth register --username hermes.prod --invite-token oinv_123",
+    );
+    expect(message).toContain(
+      "Use the anx-core API origin for --base-url (the same value as the workspace coreBaseUrl), not the web app path under /o/.../w/....",
     );
     expect(message).not.toContain("replace any placeholder values");
   });
 
-  it("tells the agent how placeholder values behave when names are missing", () => {
+  it("tells the agent to replace required placeholder values when names are missing", () => {
     const message = buildRegistrationMessage(
       "oinv_123",
-      "https://example.com/anx/team-alpha",
+      "https://core.example.com",
       "",
       "",
     );
 
     expect(message).toContain(
-      "If you want to set your own agent profile name and username, replace the placeholder values before running the command.",
+      "Replace the placeholder values for agent profile name and username before running the command.",
     );
     expect(message).toContain(
-      "If you leave the placeholders in place, ANX chooses the agent profile name and the username during registration.",
+      "The CLI requires --username; it will not choose one automatically.",
     );
-    expect(message).toContain("--agent <agent-name>");
-    expect(message).toContain("--username <username>");
+    expect(message).toContain("--agent '<agent-name>'");
+    expect(message).toContain("--username '<username>'");
   });
 });

@@ -1,6 +1,7 @@
 package authcli
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"encoding/base64"
@@ -929,8 +930,39 @@ func classifyRegisterTransportError(cause error) error {
 	return errnorm.Wrap(errnorm.KindNetwork, "request_failed", "register request failed", cause)
 }
 
+const registerWrongBaseURLHint = "This response does not look like an anx-core API. Set --base-url (or ANX_BASE_URL) to the anx-core origin with no /o/.../w/... path (the host that serves /readyz), not the web app workspace URL."
+
+func register404MayBeWrongBaseURL(status int, body []byte) bool {
+	if status != http.StatusNotFound {
+		return false
+	}
+	trimmed := bytes.TrimSpace(body)
+	if len(trimmed) == 0 {
+		return false
+	}
+	lower := bytes.ToLower(trimmed)
+	if bytes.Contains(lower, []byte("<!doctype")) || bytes.Contains(lower, []byte("<html")) {
+		return true
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return true
+	}
+	errObj, ok := parsed["error"].(map[string]any)
+	if !ok {
+		// e.g. SvelteKit / SPA JSON without an anx-core { error: { code } } shape
+		return true
+	}
+	_, hasCode := errObj["code"]
+	return !hasCode
+}
+
 func classifyRegisterHTTPFailure(statusCode int, responseBody []byte) error {
 	failure := errnorm.FromHTTPFailure(statusCode, responseBody)
+	if failure != nil && register404MayBeWrongBaseURL(statusCode, responseBody) {
+		// FromHTTPFailure often sets a generic hint for code remote_error; prefer this diagnosis.
+		failure.Hint = registerWrongBaseURLHint
+	}
 	normalized := errnorm.Normalize(failure)
 	if normalized == nil {
 		return failure

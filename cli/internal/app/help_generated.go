@@ -1200,7 +1200,7 @@ func authLocalHelpText(topic string) (string, bool) {
 		"auth invites": {
 			summary:  "Manage invite tokens and invite-backed registration for later principals.",
 			usage:    "anx auth invites",
-			examples: []string{"anx auth invites create --kind human", "anx auth invites revoke --token <invite-token>"},
+			examples: []string{"anx auth invites create --kind human", "anx auth invites revoke --invite-id <id>"},
 		},
 		"auth bootstrap": {
 			summary:  "Inspect whether bootstrap registration is still available for the first principal.",

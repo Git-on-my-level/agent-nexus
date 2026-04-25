@@ -1,16 +1,16 @@
 export function buildWakeRegistrationMessage(baseUrl, workspaceId, handle) {
   const normalizedBaseUrl =
-    String(baseUrl ?? "").trim() || "<ANX_WORKSPACE_URL>";
+    String(baseUrl ?? "").trim() || "<ANX_CORE_BASE_URL>";
   const normalizedWorkspaceId =
     String(workspaceId ?? "").trim() || "<workspace-id>";
   const normalizedHandle = String(handle ?? "").trim() || "<handle>";
 
   return [
-    `You already have ANX CLI auth for ${normalizedBaseUrl}. To register @${normalizedHandle} for wakes on workspace ${normalizedWorkspaceId}, run:`,
+    `You already have ANX CLI auth for the core API at ${normalizedBaseUrl}. To register @${normalizedHandle} for wakes on workspace ${normalizedWorkspaceId}, run:`,
     "",
     "  anx bridge install",
-    `  anx bridge init-config --kind <bridge-kind> --output ./agent.toml --workspace-id ${normalizedWorkspaceId} --handle ${normalizedHandle}`,
-    "  anx bridge import-auth --config ./agent.toml --from-profile <anx-profile>",
+    `  anx bridge init-config --kind '<bridge-kind>' --output ./agent.toml --workspace-id ${normalizedWorkspaceId} --handle ${normalizedHandle}`,
+    "  anx bridge import-auth --config ./agent.toml --from-profile '<anx-profile>'",
     "  anx-agent-bridge registration apply --config ./agent.toml",
     "  anx bridge start --config ./agent.toml",
     "  anx bridge doctor --config ./agent.toml",
