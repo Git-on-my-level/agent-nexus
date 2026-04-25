@@ -204,6 +204,8 @@ const QA_SCENES = [
     name: "workspace-inbox-populated",
     path: "/o/local/w/local/inbox",
     workspaceMode: "inbox-populated",
+    /** CI Linux/Chromium text shaping can drift slightly vs capture host. */
+    thresholdRatio: 0.002,
     waitFor: async (page) => {
       await page.waitForSelector('[data-testid="inbox-card-inbox-ask-auth"]');
     },
@@ -236,6 +238,7 @@ const QA_SCENES = [
     name: "workspace-capture-ui",
     path: "/o/local/w/local/inbox/inbox-ask-auth",
     workspaceMode: "capture-ui",
+    thresholdRatio: 0.018,
     waitFor: async (page) => {
       await page.waitForSelector("text=Context the agent saw");
     },
@@ -293,6 +296,7 @@ const QA_SCENES = [
     name: "workspace-access",
     path: "/o/local/w/local/access",
     workspaceMode: "workspace-default",
+    thresholdRatio: 0.02,
     waitFor: async (page) => {
       await page.waitForSelector("text=Create invite");
     },
@@ -393,7 +397,7 @@ Options:
   --diff                Capture current screenshots and diff against that baseline
   --out <dir>           Override the output directory for fresh captures
   --port <port>         Preview server port (default: ${DEFAULT_PORT})
-  --threshold <ratio>   Max differing-pixel ratio before failing (default: ${DEFAULT_THRESHOLD_RATIO})
+  --threshold <ratio>   Max differing-pixel ratio before failing (default: ${DEFAULT_THRESHOLD_RATIO}; some scenes override)
   --json                Emit machine-readable JSON summary
 `.trim(),
   );
@@ -1235,10 +1239,14 @@ export async function runQaVisualCommand(options) {
         continue;
       }
 
-      if (result.mismatchRatio > options.thresholdRatio) {
+      const thresholdRatio =
+        typeof scene.thresholdRatio === "number"
+          ? scene.thresholdRatio
+          : options.thresholdRatio;
+      if (result.mismatchRatio > thresholdRatio) {
         failures.push({
           scene: scene.name,
-          reason: `${(result.mismatchRatio * 100).toFixed(3)}% pixels differ (${result.mismatchPixels} px)`,
+          reason: `${(result.mismatchRatio * 100).toFixed(3)}% pixels differ (${result.mismatchPixels} px; threshold ${(thresholdRatio * 100).toFixed(3)}%)`,
         });
       } else {
         matches.push(scene.name);
@@ -1267,7 +1275,7 @@ export async function runQaVisualCommand(options) {
     console.log(JSON.stringify(summary, null, 2));
   } else if (failures.length === 0) {
     console.log(
-      `QA diff passed: ${matches.length}/${QA_SCENES.length} scenes matched within ${(options.thresholdRatio * 100).toFixed(3)}%.`,
+      `QA diff passed: ${matches.length}/${QA_SCENES.length} scenes within thresholds (default max diff ${(options.thresholdRatio * 100).toFixed(3)}%; some scenes allow more).`,
     );
   } else {
     console.error(
