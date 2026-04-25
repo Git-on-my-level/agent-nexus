@@ -20,6 +20,11 @@
     writeBillingSnapshot,
   } from "$lib/hosted/billingActivation.js";
   import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
+  import {
+    ENTERPRISE_SALES_HREF,
+    PLAN_CARDS,
+    planLabel,
+  } from "$lib/hosted/planCatalog.js";
   import { setActiveOrg } from "$lib/hosted/session.js";
 
   const orgId = $derived(String($page.params.orgId ?? ""));
@@ -36,70 +41,6 @@
   let pollStop = $state(() => {});
   let upgradeBusy = $state("");
   let roleRetryBusy = $state(false);
-
-  const PLAN_CARDS = [
-    {
-      id: "starter",
-      name: "Starter",
-      price: "$0",
-      priceSuffix: "/mo",
-      tagline: "Free forever — perfect for evaluating.",
-      features: [
-        "1 workspace",
-        "1,000 artifacts total (org-wide pool)",
-        "1 GB storage (org)",
-        "Community support",
-      ],
-      ctaLabel: "Free plan",
-      ctaUpgrade: false,
-    },
-    {
-      id: "team",
-      name: "Pro",
-      price: "$29",
-      priceSuffix: "/seat / mo",
-      tagline: "For professionals and teams shipping with AI agents.",
-      features: [
-        "5 workspaces",
-        "125,000 artifacts total (org-wide pool)",
-        "25 GB storage (org)",
-        "Email support",
-      ],
-      highlight: true,
-      ctaLabel: "Upgrade to Pro",
-      ctaUpgrade: true,
-    },
-    {
-      id: "scale",
-      name: "Scale",
-      price: "$99",
-      priceSuffix: "/seat / mo",
-      tagline: "Higher limits and SSO-ready.",
-      features: [
-        "25 workspaces",
-        "2.5M artifacts total (org-wide pool)",
-        "250 GB storage (org)",
-        "Priority support",
-      ],
-      ctaLabel: "Upgrade to Scale",
-      ctaUpgrade: true,
-    },
-    {
-      id: "enterprise",
-      name: "Enterprise",
-      price: "Custom",
-      priceSuffix: "",
-      tagline: "Dedicated infra, SSO, and contracts.",
-      features: [
-        "100 workspaces",
-        "100M artifacts total (org-wide pool)",
-        "1,000 GB storage (org)",
-        "SSO + audit logs · dedicated support",
-      ],
-      ctaLabel: "Talk to sales",
-      ctaUpgrade: false,
-    },
-  ];
 
   async function readError(res) {
     try {
@@ -504,7 +445,7 @@
           </div>
           <div class="mt-0.5 flex items-center gap-2">
             <span class="text-subtitle tabular-nums text-fg"
-              >{plan.display_name ?? "Starter"}</span
+              >{plan.display_name ?? planLabel(currentTier)}</span
             >
             {#if showSubscriptionStatusBadge(ba)}
               <span
@@ -576,17 +517,19 @@
                 >
               {/if}
             </div>
-            <ul class="mt-3 space-y-1.5 text-meta text-fg-muted">
-              {#each planCard.features as feat}
-                <li class="flex items-start gap-1.5">
-                  <span
-                    class="mt-1.5 inline-block h-1 w-1 shrink-0 rounded-full bg-fg-muted"
-                    aria-hidden="true"
-                  ></span>
-                  <span>{feat}</span>
-                </li>
-              {/each}
-            </ul>
+            {#if planCard.features?.length}
+              <ul class="mt-3 space-y-1.5 text-meta text-fg-muted">
+                {#each planCard.features as feat}
+                  <li class="flex items-start gap-1.5">
+                    <span
+                      class="mt-1.5 inline-block h-1 w-1 shrink-0 rounded-full bg-fg-muted"
+                      aria-hidden="true"
+                    ></span>
+                    <span>{feat}</span>
+                  </li>
+                {/each}
+              </ul>
+            {/if}
             <div class="mt-auto pt-4">
               {#if isCurrent}
                 <Button variant="secondary" class="w-full" disabled
@@ -596,7 +539,7 @@
                 <Button
                   variant="secondary"
                   class="w-full"
-                  href="mailto:sales@oar.app?subject=Enterprise%20plan%20inquiry"
+                  href={ENTERPRISE_SALES_HREF}
                   >Talk to sales</Button
                 >
               {:else if publicBeta && planCard.ctaUpgrade}

@@ -13,6 +13,7 @@
     errorUserMessage,
     isAuthError,
   } from "$lib/hosted/fetchState.js";
+  import { planBadgeClasses, planLabel } from "$lib/hosted/planCatalog.js";
   import { setActiveOrg } from "$lib/hosted/session.js";
 
   let phase = $state("loading");
@@ -21,19 +22,6 @@
   let message = $state("");
   /** @type {any[]} */
   let organizations = $state([]);
-
-  function planBadgeClasses(planTier) {
-    const t = String(planTier ?? "starter").toLowerCase();
-    if (t === "enterprise") return "text-fuchsia-400 bg-fuchsia-500/10";
-    if (t === "scale") return "text-accent-text bg-accent-soft";
-    if (t === "team") return "text-ok-text bg-ok-soft";
-    return "text-fg-subtle bg-panel-hover";
-  }
-
-  function planLabel(planTier) {
-    const t = String(planTier ?? "starter").toLowerCase();
-    return t.charAt(0).toUpperCase() + t.slice(1);
-  }
 
   function openOrg(org) {
     setActiveOrg(String(org.id));
