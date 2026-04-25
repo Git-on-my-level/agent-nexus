@@ -177,5 +177,4 @@ describe("message thread utils", () => {
       flattenMessageThreadView(threads).map((message) => message.id),
     ).toEqual(["root-1", "reply-1"]);
   });
-
 });

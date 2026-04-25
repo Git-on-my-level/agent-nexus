@@ -75,11 +75,11 @@
     if (e?.currentTarget && "hasPointerCapture" in e.currentTarget) {
       try {
         if (
-          (/** @type {HTMLElement} */ (e.currentTarget)).hasPointerCapture(
+          /** @type {HTMLElement} */ (e.currentTarget).hasPointerCapture(
             e.pointerId,
           )
         ) {
-          (/** @type {HTMLElement} */ (e.currentTarget)).releasePointerCapture(
+          /** @type {HTMLElement} */ (e.currentTarget).releasePointerCapture(
             e.pointerId,
           );
         }
@@ -103,9 +103,7 @@
     resizeStartX = e.clientX;
     resizeStartWidth = railWidth;
     railResizing = true;
-    (/** @type {HTMLElement} */ (e.currentTarget)).setPointerCapture(
-      e.pointerId,
-    );
+    /** @type {HTMLElement} */ (e.currentTarget).setPointerCapture(e.pointerId);
     if (browser) {
       document.body.style.cursor = "ew-resize";
       document.body.style.userSelect = "none";

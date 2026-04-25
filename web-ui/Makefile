@@ -38,10 +38,10 @@ qa: qa-capture ## Alias for qa-capture
 qa-capture: ## Capture QA screenshots of all pages (requires running dev server)
 	node scripts/qa-capture.mjs $(QA_CAPTURE_ARGS)
 
-qa-baseline: ## Capture the committed QA baseline into .qa-baseline/
+qa-baseline: ## Capture the committed QA baseline into tests/fixtures/qa-visual-baseline/
 	node scripts/qa-capture.mjs --baseline
 
-qa-diff: ## Diff current UI against the committed QA baseline
+qa-diff: ## Diff current UI against tests/fixtures/qa-visual-baseline/
 	$(PNPM) run qa:diff
 
 qa-viewports: ## Dashboard + inbox screenshots at several widths (requires running dev server)

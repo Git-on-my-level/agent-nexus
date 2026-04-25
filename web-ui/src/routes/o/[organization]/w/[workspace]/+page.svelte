@@ -476,8 +476,12 @@
       class="flex flex-wrap items-start justify-between gap-x-3 gap-y-1 min-w-0"
     >
       <div>
-        <h2 class="text-meta font-semibold text-[var(--fg)]">What’s happened</h2>
-        <p class="mt-0.5 text-[0.65rem] leading-snug text-[var(--fg-muted)] sm:text-micro">
+        <h2 class="text-meta font-semibold text-[var(--fg)]">
+          What’s happened
+        </h2>
+        <p
+          class="mt-0.5 text-[0.65rem] leading-snug text-[var(--fg-muted)] sm:text-micro"
+        >
           Change counts and high-signal workspace events since your last handoff
           mark
         </p>
@@ -502,7 +506,8 @@
         {#each homeChangeCards as card (card.id)}
           <li class="m-0 p-0" role="listitem">
             <button
-              class="inline-flex max-w-full cursor-pointer items-baseline gap-0.5 rounded-full border border-[var(--line)] px-1.5 py-0.5 text-left text-[0.65rem] transition-colors sm:gap-0.5 sm:px-2 sm:py-0.5 sm:text-micro {card.count > 0
+              class="inline-flex max-w-full cursor-pointer items-baseline gap-0.5 rounded-full border border-[var(--line)] px-1.5 py-0.5 text-left text-[0.65rem] transition-colors sm:gap-0.5 sm:px-2 sm:py-0.5 sm:text-micro {card.count >
+              0
                 ? 'bg-[var(--bg-soft)]'
                 : 'bg-[var(--panel)]'} {handoffPillFilter === card.id
                 ? 'ring-1 ring-[var(--fg-muted)] ring-offset-1 ring-offset-[var(--panel)]'
@@ -631,7 +636,9 @@
         aria-label="Recent topics"
       >
         <div class="flex flex-wrap items-center justify-between gap-2">
-          <h2 class="text-meta font-semibold text-[var(--fg)]">Recent topics</h2>
+          <h2 class="text-meta font-semibold text-[var(--fg)]">
+            Recent topics
+          </h2>
           <a
             class="text-micro font-medium text-[var(--fg-muted)] transition-colors hover:text-[var(--fg)]"
             href={workspaceHref("/topics")}

@@ -30,8 +30,6 @@ describe("supportLinkOpensInNewTab", () => {
   });
 
   it("is false for mailto", () => {
-    expect(supportLinkOpensInNewTab("mailto:support@example.com")).toBe(
-      false,
-    );
+    expect(supportLinkOpensInNewTab("mailto:support@example.com")).toBe(false);
   });
 });

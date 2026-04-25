@@ -66,12 +66,12 @@ describe("redirectToRecentWorkspaceOrChooser", () => {
     });
     oowMocks.getOutOfWorkspaceProvider.mockReturnValue({ mode: "local" });
 
-    await expect(redirectToRecentWorkspaceOrChooser(event, "")).rejects.toMatchObject(
-      {
-        status: 307,
-        location: "/o/local/w/local",
-      },
-    );
+    await expect(
+      redirectToRecentWorkspaceOrChooser(event, ""),
+    ).rejects.toMatchObject({
+      status: 307,
+      location: "/o/local/w/local",
+    });
   });
 
   it("redirects to /hosted/start when the provider is hosted", async () => {
@@ -81,12 +81,12 @@ describe("redirectToRecentWorkspaceOrChooser", () => {
     });
     oowMocks.getOutOfWorkspaceProvider.mockReturnValue({ mode: "hosted" });
 
-    await expect(redirectToRecentWorkspaceOrChooser(event, "")).rejects.toMatchObject(
-      {
-        status: 307,
-        location: "/hosted/start",
-      },
-    );
+    await expect(
+      redirectToRecentWorkspaceOrChooser(event, ""),
+    ).rejects.toMatchObject({
+      status: 307,
+      location: "/hosted/start",
+    });
   });
 
   it("redirects to /hosted/start when local but no default workspace is configured", async () => {
@@ -96,11 +96,11 @@ describe("redirectToRecentWorkspaceOrChooser", () => {
     });
     oowMocks.getOutOfWorkspaceProvider.mockReturnValue({ mode: "local" });
 
-    await expect(redirectToRecentWorkspaceOrChooser(event, "")).rejects.toMatchObject(
-      {
-        status: 307,
-        location: "/hosted/start",
-      },
-    );
+    await expect(
+      redirectToRecentWorkspaceOrChooser(event, ""),
+    ).rejects.toMatchObject({
+      status: 307,
+      location: "/hosted/start",
+    });
   });
 });

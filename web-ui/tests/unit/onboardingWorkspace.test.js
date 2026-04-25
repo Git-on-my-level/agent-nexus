@@ -9,7 +9,7 @@ vi.mock("$app/navigation", () => ({
   goto: (...args) => mockGoto(...args),
   invalidate: vi.fn(),
   invalidateAll: vi.fn(),
-  beforeNavigimport: vi.fn(),
+  beforeNavigate: vi.fn(),
   afterNavigate: vi.fn(),
 }));
 
@@ -199,7 +199,7 @@ describe("Onboarding workspace page — form submission", () => {
     expect(callBody.organization_id).toBe("org1");
 
     await waitFor(() => {
-      expect(mockGoto).toHaveBeenCalledWith("/main/inbox", {
+      expect(mockGoto).toHaveBeenCalledWith("/o/acme/w/main/inbox", {
         replaceState: true,
       });
     });

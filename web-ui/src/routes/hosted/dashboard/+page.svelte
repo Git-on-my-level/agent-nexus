@@ -158,8 +158,8 @@
       role="alert"
       class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
     >
-      {message} If this persists, use the Support link in the footer or retry
-      after a few minutes.
+      {message} If this persists, use the Support link in the footer or retry after
+      a few minutes.
     </p>
   {/if}
 

@@ -1,9 +1,5 @@
 <script>
-  let {
-    title,
-    lastUpdated = "2026-04-25",
-    children,
-  } = $props();
+  let { title, lastUpdated = "2026-04-25", children } = $props();
 </script>
 
 <article class="mx-auto max-w-2xl space-y-4 text-fg">

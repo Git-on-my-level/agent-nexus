@@ -346,8 +346,7 @@
             >
               {sessionRetrying ? "Retrying…" : "Retry"}
             </Button>
-            <Button variant="secondary" onclick={handleSignOut}
-              >Sign out</Button
+            <Button variant="secondary" onclick={handleSignOut}>Sign out</Button
             >
           </div>
         {:else if isPublic && path !== "/hosted/signin"}
@@ -418,18 +417,15 @@
         >
         <a
           class="transition-colors hover:text-fg inline-block py-1"
-          href="/hosted/legal/terms"
-          >Terms</a
+          href="/hosted/legal/terms">Terms</a
         >
         <a
           class="transition-colors hover:text-fg inline-block py-1"
-          href="/hosted/legal/privacy"
-          >Privacy</a
+          href="/hosted/legal/privacy">Privacy</a
         >
         <a
           class="transition-colors hover:text-fg inline-block py-1"
-          href="/hosted/legal/cookies"
-          >Cookies</a
+          href="/hosted/legal/cookies">Cookies</a
         >
         <a
           class="transition-colors hover:text-fg inline-block py-1"

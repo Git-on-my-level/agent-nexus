@@ -9,6 +9,7 @@
   import Button from "$lib/components/Button.svelte";
   import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
   import { hostedSession, loadHostedSession } from "$lib/hosted/session.js";
+  import { workspacePath } from "$lib/workspacePaths.js";
 
   let workspaceName = $state("Main");
   let busy = $state(false);
@@ -21,6 +22,9 @@
   const session = $derived($hostedSession);
   const orgs = $derived(session.organizations);
   const activeOrgId = $derived(session.activeOrgId);
+  const activeOrg = $derived(
+    orgs.find((org) => String(org.id) === String(activeOrgId)) ?? null,
+  );
 
   function slugify(input) {
     return String(input ?? "")
@@ -181,11 +185,18 @@
       const body = await res.json();
       const ws = body.workspace ?? body;
       const slug = ws?.slug;
+      const orgSlug = ws?.organization_slug ?? activeOrg?.slug;
       if (!slug) {
         message = "Workspace created but no slug was returned.";
         return;
       }
-      await goto(`/${slug}/inbox`, { replaceState: true });
+      if (!orgSlug) {
+        message = "Workspace created but no organization slug was returned.";
+        return;
+      }
+      await goto(workspacePath(orgSlug, slug, "/inbox"), {
+        replaceState: true,
+      });
     } catch (e) {
       message = e instanceof Error ? e.message : "Failed to create workspace.";
     } finally {

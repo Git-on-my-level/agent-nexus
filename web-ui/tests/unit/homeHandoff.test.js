@@ -178,14 +178,17 @@ describe("homeHandoff helpers", () => {
 
   it("classifies events into Home pill filters from refs in priority order", () => {
     expect(
-      homeHandoffEventPillId({ refs: ["board:b1", "thread:t1"], type: "card_updated" }),
+      homeHandoffEventPillId({
+        refs: ["board:b1", "thread:t1"],
+        type: "card_updated",
+      }),
     ).toBe("topics");
     expect(
       homeHandoffEventPillId({ refs: ["board:b1"], type: "card_updated" }),
     ).toBe("boards");
-    expect(homeHandoffEventPillId({ refs: ["inbox:n1"], type: "decision_made" })).toBe(
-      "inbox",
-    );
+    expect(
+      homeHandoffEventPillId({ refs: ["inbox:n1"], type: "decision_made" }),
+    ).toBe("inbox");
     expect(
       homeHandoffEventPillId({ refs: ["document:d1"], type: "decision_made" }),
     ).toBe("docs-proof");

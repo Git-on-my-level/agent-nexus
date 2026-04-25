@@ -323,16 +323,15 @@
         </Button>
       </div>
       {#if inviteError}
-        <p
-          role="alert"
-          class="text-micro text-danger-text"
-        >
+        <p role="alert" class="text-micro text-danger-text">
           {inviteError}
         </p>
       {/if}
     </section>
   {:else if !loadError && session.phase === "authed" && !canManage}
-    <p class="rounded-md border border-line bg-bg-soft px-4 py-3 text-body text-fg-subtle">
+    <p
+      class="rounded-md border border-line bg-bg-soft px-4 py-3 text-body text-fg-subtle"
+    >
       Only organization <strong class="text-fg">owners</strong> and
       <strong class="text-fg">admins</strong> can send invites and change roles.
     </p>
