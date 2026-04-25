@@ -178,14 +178,7 @@
         message = await readError(res);
         return;
       }
-      const body = await res.json();
-      const ws = body.workspace ?? body;
-      const slug = ws?.slug;
-      if (!slug) {
-        message = "Workspace created but no slug was returned.";
-        return;
-      }
-      await goto(`/${slug}/inbox`, { replaceState: true });
+      await goto("/hosted/dashboard", { replaceState: true });
     } catch (e) {
       message = e instanceof Error ? e.message : "Failed to create workspace.";
     } finally {
