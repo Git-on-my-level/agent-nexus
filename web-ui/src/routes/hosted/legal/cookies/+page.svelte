@@ -16,26 +16,26 @@
     In the default public beta configuration, we use
     <strong>strictly necessary</strong> cookies and similar storage to keep you
     signed in, protect sessions, and complete login flows. We do
-    <strong>not</strong> rely on third-party advertising or analytics cookies
-    in the default product configuration described in this repository.
+    <strong>not</strong> rely on third-party advertising or analytics cookies in the
+    default product configuration described in this repository.
   </p>
 
   <h2>What the app may set</h2>
   <ul>
     <li>
-      <strong>Hosted session</strong> — Server-set cookies (including HttpOnly
-      where applicable) for OAuth completion and control-plane API access.
-      Required for the hosted product.
+      <strong>Hosted session</strong> — Server-set cookies (including HttpOnly where
+      applicable) for OAuth completion and control-plane API access. Required for
+      the hosted product.
     </li>
     <li>
       <strong>Client storage</strong> — Short-lived data in
-      <span class="font-mono text-[11px]">sessionStorage</span> (or similar) for
-      login continuation. Not used for off-site ad tracking.
+      <span class="font-mono text-[11px]">sessionStorage</span> (or similar) for login
+      continuation. Not used for off-site ad tracking.
     </li>
     <li>
       <strong>Self-hosted OSS builds</strong> — Different names and behavior
-      apply when you run the open-source stack yourself; this notice targets
-      the <strong>hosted</strong> beta.
+      apply when you run the open-source stack yourself; this notice targets the
+      <strong>hosted</strong> beta.
     </li>
   </ul>
 

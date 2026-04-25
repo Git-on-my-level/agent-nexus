@@ -416,16 +416,12 @@
   {:else}
     <div class="flex min-w-0 flex-col gap-3">
       {#if lifecycleError}
-        <p
-          class="rounded bg-danger-soft px-3 py-2 text-meta text-danger-text"
-        >
+        <p class="rounded bg-danger-soft px-3 py-2 text-meta text-danger-text">
           {lifecycleError}
         </p>
       {/if}
       {#if timelineError}
-        <p
-          class="rounded bg-danger-soft px-3 py-2 text-meta text-danger-text"
-        >
+        <p class="rounded bg-danger-soft px-3 py-2 text-meta text-danger-text">
           {timelineError}
         </p>
       {/if}

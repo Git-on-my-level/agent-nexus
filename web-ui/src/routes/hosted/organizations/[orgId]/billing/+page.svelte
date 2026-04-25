@@ -418,7 +418,8 @@
       <section
         class="rounded-md border border-line bg-bg-soft px-4 py-3 text-meta text-fg"
       >
-        <strong class="text-body text-fg">Public beta — no live payments</strong>
+        <strong class="text-body text-fg">Public beta — no live payments</strong
+        >
         <p class="mt-1.5 text-fg-subtle">
           Self-serve plan upgrades and in-app checkout are not available. Your
           organization uses the free tier. Contact us if you need a change for
@@ -474,8 +475,8 @@
       <h2 class="text-subtitle text-fg">Plans</h2>
       <p class="mt-1 text-meta text-fg-subtle">
         {#if publicBeta}
-          The public beta includes the free tier. Paid self-serve upgrades are not
-          available in this environment.
+          The public beta includes the free tier. Paid self-serve upgrades are
+          not available in this environment.
         {:else}
           Switch any time — you'll only pay the prorated difference.
         {/if}
@@ -539,8 +540,7 @@
                 <Button
                   variant="secondary"
                   class="w-full"
-                  href={ENTERPRISE_SALES_HREF}
-                  >Talk to sales</Button
+                  href={ENTERPRISE_SALES_HREF}>Talk to sales</Button
                 >
               {:else if publicBeta && planCard.ctaUpgrade}
                 <Button variant="secondary" class="w-full" disabled

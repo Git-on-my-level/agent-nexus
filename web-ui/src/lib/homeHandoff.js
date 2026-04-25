@@ -248,13 +248,20 @@ export function homeHandoffEventPillId(event) {
     if (pill) return pill;
   }
 
-  if (String(event?.type ?? "") === "message_posted" && primaryThreadIdFromEvent(event)) {
+  if (
+    String(event?.type ?? "") === "message_posted" &&
+    primaryThreadIdFromEvent(event)
+  ) {
     return "topics";
   }
 
   const t = String(event?.type ?? "");
   if (t.startsWith("card_")) return "boards";
-  if (t === "message_posted" || t === "thread_created" || t === "thread_updated") {
+  if (
+    t === "message_posted" ||
+    t === "thread_created" ||
+    t === "thread_updated"
+  ) {
     return "topics";
   }
   if (t === "receipt_added" || t === "review_completed") {

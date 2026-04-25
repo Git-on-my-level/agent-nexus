@@ -93,9 +93,8 @@ describe("workspaceCatalog", () => {
   it("ignores ANX_DEV_ACTOR_MODE in production-like builds (dev is false)", async () => {
     vi.resetModules();
     vi.doMock("$app/environment", () => ({ dev: false }));
-    const { loadWorkspaceCatalog: loadProd } = await import(
-      "$lib/server/workspaceCatalog.js"
-    );
+    const { loadWorkspaceCatalog: loadProd } =
+      await import("$lib/server/workspaceCatalog.js");
     const env = {
       ANX_WORKSPACES: "[]",
       ANX_DEV_ACTOR_MODE: "true",
