@@ -130,7 +130,7 @@
 </script>
 
 <svelte:head>
-  <title>Dashboard — ANX</title>
+  <title>Dashboard — Agent Nexus (ANX)</title>
 </svelte:head>
 
 <div class="space-y-6">
@@ -139,7 +139,7 @@
       <h1 class="text-display text-fg">
         {activeOrg
           ? `${activeOrg.display_name || activeOrg.slug} workspaces`
-          : "Welcome to ANX"}
+          : "Welcome to Agent Nexus"}
       </h1>
       <p class="mt-1 hidden text-meta text-fg-subtle sm:block">
         Workspaces are isolated environments where your AI agents do their work.
@@ -158,7 +158,8 @@
       role="alert"
       class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
     >
-      {message}
+      {message} If this persists, use the Support link in the footer or retry
+      after a few minutes.
     </p>
   {/if}
 
@@ -178,6 +179,7 @@
       message={wsError}
       onretry={retryWorkspaces}
       retrying={wsRetrying}
+      supportHint={true}
     />
   {:else if workspaces.length === 0}
     <StateEmpty

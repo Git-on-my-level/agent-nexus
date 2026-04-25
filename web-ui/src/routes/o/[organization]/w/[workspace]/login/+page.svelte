@@ -1,5 +1,5 @@
 <script>
-  import { browser } from "$app/environment";
+  import { browser, dev } from "$app/environment";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
   import { onMount } from "svelte";
@@ -57,6 +57,8 @@
   let loadingDevLogin = $state(false);
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
+  /** Core may advertise a dev bypass, but production builds never show it. */
+  let showDevLocalPasskeyBypass = $derived(dev && devPasskeyBypassAvailable);
 
   onMount(async () => {
     redirectToWorkspaceIfNeeded();
@@ -237,14 +239,14 @@
             Sign in
           </p>
           <h1 class="mt-1 text-subtitle font-semibold text-[var(--fg)]">
-            {#if devPasskeyBypassAvailable}
+            {#if showDevLocalPasskeyBypass}
               Sign in
             {:else}
               Sign in with a passkey
             {/if}
           </h1>
           <p class="mt-2 text-meta text-[var(--fg-muted)]">
-            {#if devPasskeyBypassAvailable}
+            {#if showDevLocalPasskeyBypass}
               Dev sign-in is the default in local mode. Expand the section below
               if you need WebAuthn passkey authentication.
             {:else}
@@ -255,7 +257,7 @@
         </div>
 
         <div class="space-y-3 px-4 py-3">
-          {#if devPasskeyBypassAvailable}
+          {#if showDevLocalPasskeyBypass}
             <div class="space-y-3">
               <p
                 class="text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)]"
@@ -453,7 +455,7 @@
                 ? "Creating account…"
                 : "Create passkey and join"}
             </Button>
-            {#if devPasskeyBypassAvailable}
+            {#if showDevLocalPasskeyBypass}
               <Button
                 variant="secondary"
                 disabled={loadingRegistration || !registrationToken.trim()}

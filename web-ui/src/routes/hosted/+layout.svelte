@@ -4,9 +4,15 @@
   import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
+  import { PUBLIC_ANX_SUPPORT_URL } from "$env/static/public";
 
   import Button from "$lib/components/Button.svelte";
   import Avatar from "$lib/hosted/Avatar.svelte";
+  import HostedSessionErrorPanel from "$lib/hosted/HostedSessionErrorPanel.svelte";
+  import {
+    resolveHostedSupportUrl,
+    supportLinkOpensInNewTab,
+  } from "$lib/hosted/supportLink.js";
   import {
     hostedSession,
     initialsFor,
@@ -17,6 +23,9 @@
 
   let { children } = $props();
 
+  const supportHref = resolveHostedSupportUrl(PUBLIC_ANX_SUPPORT_URL);
+  const supportExternal = supportLinkOpensInNewTab(supportHref);
+
   /** Routes that don't require auth (and shouldn't load the session). */
   const PUBLIC_PREFIXES = [
     "/hosted/start",
@@ -24,12 +33,14 @@
     "/hosted/signin",
     "/hosted/oauth",
     "/hosted/billing/return",
+    "/hosted/legal",
   ];
 
   let menuOpen = $state(false);
   let orgPickerOpen = $state(false);
   /** Avoid duplicate `goto` while an unauth redirect is in flight. */
   let unauthRedirectInFlight = false;
+  let sessionRetrying = $state(false);
 
   const path = $derived($page.url.pathname);
   /** Full product name on the public landing page only; app chrome stays "ANX". */
@@ -51,6 +62,7 @@
       const base = `/hosted/organizations/${encodeURIComponent(activeOrg.id)}`;
       items.push(
         { href: base, label: "Overview" },
+        { href: `${base}/team`, label: "Team" },
         { href: `${base}/usage`, label: "Usage" },
         { href: `${base}/billing`, label: "Billing" },
       );
@@ -103,6 +115,15 @@
     await goto("/hosted/start");
   }
 
+  async function retryHostedSession() {
+    sessionRetrying = true;
+    try {
+      await loadHostedSession();
+    } finally {
+      sessionRetrying = false;
+    }
+  }
+
   function pickOrg(orgId) {
     setActiveOrg(orgId);
     orgPickerOpen = false;
@@ -132,7 +153,7 @@
           {isLandingMarketing ? "Agent Nexus" : "ANX"}
         </a>
 
-        {#if session.phase === "authed"}
+        {#if session.phase === "authed" || (!isPublic && session.phase === "error")}
           <nav class="hidden items-center gap-1 md:flex" aria-label="Primary">
             {#each primaryNav as item (item.href)}
               <a
@@ -315,6 +336,20 @@
               </div>
             {/if}
           </div>
+        {:else if !isPublic && session.phase === "error"}
+          <div class="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              onclick={retryHostedSession}
+              busy={sessionRetrying}
+              disabled={sessionRetrying}
+            >
+              {sessionRetrying ? "Retrying…" : "Retry"}
+            </Button>
+            <Button variant="secondary" onclick={handleSignOut}
+              >Sign out</Button
+            >
+          </div>
         {:else if isPublic && path !== "/hosted/signin"}
           <Button variant="ghost" href="/hosted/signin">Sign in</Button>
           {#if path !== "/hosted/signup"}
@@ -324,7 +359,7 @@
       </div>
     </div>
 
-    {#if session.phase === "authed"}
+    {#if session.phase === "authed" || (!isPublic && session.phase === "error")}
       <nav
         class="flex items-center gap-1 overflow-x-auto border-t border-line px-4 py-1 md:hidden"
         aria-label="Primary mobile"
@@ -345,7 +380,17 @@
   </header>
 
   <main class="mx-auto w-full max-w-6xl px-4 py-6">
-    {@render children()}
+    {#if !isPublic && session.phase === "error"}
+      <HostedSessionErrorPanel
+        message={session.error ||
+          "Something went wrong loading your Agent Nexus session."}
+        onretry={retryHostedSession}
+        retrying={sessionRetrying}
+        onsignout={handleSignOut}
+      />
+    {:else}
+      {@render children()}
+    {/if}
   </main>
 
   <footer
@@ -373,6 +418,21 @@
         >
         <a
           class="transition-colors hover:text-fg inline-block py-1"
+          href="/hosted/legal/terms"
+          >Terms</a
+        >
+        <a
+          class="transition-colors hover:text-fg inline-block py-1"
+          href="/hosted/legal/privacy"
+          >Privacy</a
+        >
+        <a
+          class="transition-colors hover:text-fg inline-block py-1"
+          href="/hosted/legal/cookies"
+          >Cookies</a
+        >
+        <a
+          class="transition-colors hover:text-fg inline-block py-1"
           href="https://github.com/run-llama/oar"
           rel="noreferrer"
           target="_blank">GitHub</a
@@ -391,7 +451,9 @@
         </a>
         <a
           class="transition-colors hover:text-fg inline-block py-1"
-          href="mailto:support@runoar.com">Support</a
+          href={supportHref}
+          {...supportExternal ? { target: "_blank", rel: "noreferrer" } : {}}
+          >Support</a
         >
       </nav>
     </div>

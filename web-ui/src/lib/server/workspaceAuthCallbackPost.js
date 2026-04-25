@@ -176,8 +176,9 @@ function workspaceDisplayName(resolved) {
  *
  * **Hosted workspace switches:** this path only writes **workspace-scoped**
  * cookies (`oar_ui_session_*` / `oar_ui_access_*`). It does **not** clear the
- * control-plane dev session cookie (`oar_cp_dev_access_token`), so switching
- * between hosted workspaces reuses the CP session as intended.
+ * control-plane session cookies (`oar_cp_access_token` in production,
+ * `oar_cp_dev_access_token` in local dev), so switching between hosted
+ * workspaces reuses the CP session as intended.
  *
  * @param {import('@sveltejs/kit').RequestEvent} event
  * @param {{ organizationSlug: string, workspaceSlug: string }} routeParams

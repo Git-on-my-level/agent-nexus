@@ -119,11 +119,14 @@ async function runLoadHostedSession() {
       return get(hostedSession);
     }
     if (!res.ok) {
-      hostedSession.update((s) => ({
-        ...s,
+      writeActiveOrgToStorage("");
+      hostedSession.set({
         phase: "error",
         error: `Could not load account (${res.status}).`,
-      }));
+        account: null,
+        organizations: [],
+        activeOrgId: "",
+      });
       return get(hostedSession);
     }
     const body = await res.json();
@@ -149,11 +152,14 @@ async function runLoadHostedSession() {
     }
     if (!orgRes.ok) {
       const errMsg = await readError(orgRes);
-      hostedSession.update((s) => ({
-        ...s,
+      writeActiveOrgToStorage("");
+      hostedSession.set({
         phase: "error",
         error: errMsg,
-      }));
+        account: me,
+        organizations: [],
+        activeOrgId: "",
+      });
       return get(hostedSession);
     }
     const body = await orgRes.json();
@@ -161,12 +167,15 @@ async function runLoadHostedSession() {
       ? body.organizations
       : [];
   } catch (err) {
-    hostedSession.update((s) => ({
-      ...s,
+    writeActiveOrgToStorage("");
+    hostedSession.set({
       phase: "error",
       error:
         err instanceof Error ? err.message : "Failed to load organizations.",
-    }));
+      account: me,
+      organizations: [],
+      activeOrgId: "",
+    });
     return get(hostedSession);
   }
 
@@ -208,7 +217,7 @@ export async function signOutHostedSession() {
   } catch {
     // best-effort
   }
-  clearHostedCpAccessToken();
+  await clearHostedCpAccessToken();
   writeActiveOrgToStorage("");
   hostedSession.set({
     phase: "unauthed",

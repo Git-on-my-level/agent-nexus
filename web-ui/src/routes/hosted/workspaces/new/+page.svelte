@@ -186,6 +186,10 @@
             class="mt-3 space-y-3 rounded-md border border-line bg-bg px-3 py-3"
           >
             <p class="text-micro text-fg-subtle">
+              Optional fleet provisioning for operators. Agent access in the
+              workspace uses invites, not these fields.
+            </p>
+            <p class="text-micro text-fg-subtle">
               Platform provisioning is the default. Set both fields only for
               bring-your-own service identity.
             </p>

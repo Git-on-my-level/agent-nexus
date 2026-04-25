@@ -220,7 +220,12 @@
   </div>
 
   {#if orgError}
-    <StateError message={orgError} onretry={retry} {retrying} />
+    <StateError
+      message={orgError}
+      onretry={retry}
+      {retrying}
+      supportHint={true}
+    />
   {/if}
 
   {#if phase === "loading"}
@@ -243,6 +248,7 @@
         message={usageError}
         onretry={retry}
         {retrying}
+        supportHint={true}
       />
     {/if}
     {#if usage}
@@ -292,6 +298,7 @@
               message={wsError}
               onretry={retry}
               {retrying}
+              supportHint={true}
             />
           </div>
         {:else if workspaces.length === 0}

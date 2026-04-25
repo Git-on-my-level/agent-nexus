@@ -12,6 +12,7 @@ import {
 } from "$lib/workspacePaths.js";
 
 import { allowHostedControlPlanePath } from "../hostedControlPlaneAllowlist.js";
+import { readHostedControlPlaneProxyBearer } from "./cpSessionCookie.js";
 
 import { createControlPlaneClient } from "./cpClient.js";
 
@@ -244,9 +245,7 @@ export function createHostedProvider({ controlPlaneBaseUrl, env }) {
         headers.set("origin", origin);
       }
       const forwardedAuth = event.request.headers.get("authorization");
-      const cookieToken = String(
-        event.cookies.get("oar_cp_dev_access_token") ?? "",
-      ).trim();
+      const cookieToken = readHostedControlPlaneProxyBearer(event);
       if (forwardedAuth) {
         headers.set("authorization", forwardedAuth);
       } else if (cookieToken) {

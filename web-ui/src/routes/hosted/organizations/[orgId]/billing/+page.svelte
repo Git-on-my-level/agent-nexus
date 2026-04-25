@@ -430,7 +430,9 @@
       {/if}
     </section>
   {:else if role === "manager" && summary}
-    {#if activatingBanner}
+    {@const cfg = summary.configuration ?? {}}
+    {@const publicBeta = Boolean(cfg.public_beta_no_paid_upgrades)}
+    {#if activatingBanner && !publicBeta}
       <div
         class="flex items-start gap-3 rounded-md bg-accent-soft px-3 py-2 text-micro text-accent-text"
         role="status"
@@ -465,14 +467,26 @@
       </div>
     {/if}
 
-    {@const cfg = summary.configuration ?? {}}
     {@const ba = summary.billing_account ?? {}}
     {@const us = summary.usage_summary ?? {}}
     {@const plan = us.plan ?? {}}
     {@const currentTier = String(summary.plan_tier ?? "starter").toLowerCase()}
     {@const managed = stripeSubscriptionManagedClient(ba)}
 
-    {#if cfg.configured === false || (cfg.missing_configuration?.length ?? 0) > 0}
+    {#if publicBeta}
+      <section
+        class="rounded-md border border-line bg-bg-soft px-4 py-3 text-meta text-fg"
+      >
+        <strong class="text-body text-fg">Public beta — no live payments</strong>
+        <p class="mt-1.5 text-fg-subtle">
+          Self-serve plan upgrades and in-app checkout are not available. Your
+          organization uses the free tier. Contact us if you need a change for
+          your team.
+        </p>
+      </section>
+    {/if}
+
+    {#if !publicBeta && (cfg.configured === false || (cfg.missing_configuration?.length ?? 0) > 0)}
       <section
         class="rounded-md bg-warn-soft px-3 py-2 text-micro text-warn-text"
       >
@@ -507,7 +521,7 @@
             </p>
           {/if}
         </div>
-        {#if managed}
+        {#if managed && !publicBeta}
           <Button variant="secondary" onclick={() => openPortal()}
             >Manage in Stripe</Button
           >
@@ -518,7 +532,12 @@
     <section>
       <h2 class="text-subtitle text-fg">Plans</h2>
       <p class="mt-1 text-meta text-fg-subtle">
-        Switch any time — you'll only pay the prorated difference.
+        {#if publicBeta}
+          The public beta includes the free tier. Paid self-serve upgrades are not
+          available in this environment.
+        {:else}
+          Switch any time — you'll only pay the prorated difference.
+        {/if}
       </p>
       <div class="mt-3 grid gap-3 lg:grid-cols-4 lg:items-stretch">
         {#each PLAN_CARDS as planCard (planCard.id)}
@@ -579,6 +598,10 @@
                   class="w-full"
                   href="mailto:sales@oar.app?subject=Enterprise%20plan%20inquiry"
                   >Talk to sales</Button
+                >
+              {:else if publicBeta && planCard.ctaUpgrade}
+                <Button variant="secondary" class="w-full" disabled
+                  >Not available in public beta</Button
                 >
               {:else if planCard.ctaUpgrade && managed}
                 <Button

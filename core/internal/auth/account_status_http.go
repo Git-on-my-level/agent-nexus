@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -39,6 +40,21 @@ const (
 
 	defaultAccountStatusEndpointPath = "v1/internal/accounts/status"
 )
+
+// AccountStatusBaseURLFromEnv returns the HTTP base URL for optional account status checks.
+// If ANX_ACCOUNT_STATUS_URL is set, it wins. Otherwise ANX_CONTROL_PLANE_URL (deprecated
+// name) is used when set; the second return is true in that case so callers can log once.
+func AccountStatusBaseURLFromEnv() (base string, usedDeprecatedControlPlaneAlias bool) {
+	primary := strings.TrimSpace(os.Getenv("ANX_ACCOUNT_STATUS_URL"))
+	legacy := strings.TrimSpace(os.Getenv("ANX_CONTROL_PLANE_URL"))
+	if primary != "" {
+		return primary, false
+	}
+	if legacy != "" {
+		return legacy, true
+	}
+	return "", false
+}
 
 // ErrAccountInactive is returned by AccountStatusChecker when the account status
 // endpoint reports the account is not active.

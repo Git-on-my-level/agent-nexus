@@ -1,18 +1,12 @@
 import { normalizeBaseUrl } from "$lib/config.js";
+import { readHostedControlPlaneAccessToken } from "./cpSessionCookie.js";
 import {
   normalizeOrganizationSlug,
   normalizeWorkspaceSlug,
 } from "$lib/workspacePaths.js";
 
 function controlPlaneAccessToken(env, event) {
-  const fromEnv = String(env?.ANX_CONTROL_PLANE_DEV_ACCESS_TOKEN ?? "").trim();
-  if (fromEnv) {
-    return fromEnv;
-  }
-  if (typeof event?.cookies?.get !== "function") {
-    return "";
-  }
-  return String(event.cookies.get("oar_cp_dev_access_token") ?? "").trim();
+  return readHostedControlPlaneAccessToken(event, env ?? {});
 }
 
 async function readResponseBody(response) {

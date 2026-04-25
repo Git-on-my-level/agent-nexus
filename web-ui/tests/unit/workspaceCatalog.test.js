@@ -90,6 +90,20 @@ describe("workspaceCatalog", () => {
     expect(catalog.devActorMode).toBe(true);
   });
 
+  it("ignores ANX_DEV_ACTOR_MODE in production-like builds (dev is false)", async () => {
+    vi.resetModules();
+    vi.doMock("$app/environment", () => ({ dev: false }));
+    const { loadWorkspaceCatalog: loadProd } = await import(
+      "$lib/server/workspaceCatalog.js"
+    );
+    const env = {
+      ANX_WORKSPACES: "[]",
+      ANX_DEV_ACTOR_MODE: "true",
+    };
+    const catalog = loadProd(env);
+    expect(catalog.devActorMode).toBe(false);
+  });
+
   it("should return an empty catalog when ANX_WORKSPACES is empty", () => {
     const env = {
       ANX_CORE_BASE_URL: "http://localhost:3000",

@@ -288,11 +288,9 @@ func main() {
 	}
 
 	var accountStatusChecker auth.AccountStatusChecker
-	accountStatusBase := strings.TrimSpace(os.Getenv("ANX_ACCOUNT_STATUS_URL"))
-	legacyAccountStatusBase := strings.TrimSpace(os.Getenv("ANX_CONTROL_PLANE_URL"))
-	if accountStatusBase == "" && legacyAccountStatusBase != "" {
-		accountStatusBase = legacyAccountStatusBase
-		log.Printf("ANX_CONTROL_PLANE_URL is deprecated, use ANX_ACCOUNT_STATUS_URL")
+	accountStatusBase, usedDeprecatedAccountStatusAlias := auth.AccountStatusBaseURLFromEnv()
+	if usedDeprecatedAccountStatusAlias {
+		log.Printf("deprecated env: ANX_CONTROL_PLANE_URL is set; use ANX_ACCOUNT_STATUS_URL instead (same value, generic name for non-control-plane HTTP account status hosts)")
 	}
 	if accountStatusBase != "" {
 		serviceIdentityID := strings.TrimSpace(os.Getenv("ANX_WORKSPACE_SERVICE_ID"))

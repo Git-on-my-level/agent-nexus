@@ -56,7 +56,7 @@ export async function POST(event) {
       { level: "warn" },
     );
     const msg =
-      "Could not resolve workspace for this callback. Ensure the workspace base URL in the control plane includes the full shell path (/o/{org}/w/{workspace}), or configure ANX_CONTROL_BASE_URL plus ANX_CONTROL_PLANE_DEV_ACCESS_TOKEN (or oar_cp_dev_access_token) so the server can look up the workspace by id.";
+      "Could not resolve workspace for this callback. Ensure the workspace base URL in the control plane includes the full shell path (/o/{org}/w/{workspace}), or configure ANX_CONTROL_BASE_URL plus ANX_CONTROL_PLANE_DEV_ACCESS_TOKEN, or sign in to hosted so the shell sets the control-plane session cookie (HttpOnly in production; dev-only `oar_cp_dev_access_token` under `vite dev`).";
     if (wantsJson(event.request)) {
       return json(
         {

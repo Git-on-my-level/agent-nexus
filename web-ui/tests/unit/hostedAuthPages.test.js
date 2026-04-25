@@ -58,18 +58,16 @@ describe("hosted auth pages", () => {
     expect(container.textContent).toContain("Continue with GitHub");
   });
 
-  it("keeps hosted signup oauth-first while preserving invite entry", () => {
+  it("keeps hosted signup oauth-first with invite token entry", () => {
     currentPage = {
       url: new URL("/hosted/signup?invite=inv_123", window.location.origin),
       params: {},
     };
     const { container } = render(HostedSignupPage);
 
-    expect(container.textContent).toContain(
-      "Hosted signup is Google or GitHub first.",
-    );
+    expect(container.textContent).toMatch(/invite-only/i);
     expect(container.textContent).not.toContain("passkey");
-    expect(container.textContent).toContain("Invite token");
+    expect(container.textContent).toMatch(/Invitation token/i);
     expect(container.textContent).toContain("Continue with Google");
     expect(container.textContent).toContain("Continue with GitHub");
   });

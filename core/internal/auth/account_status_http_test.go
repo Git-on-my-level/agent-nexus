@@ -394,3 +394,23 @@ func TestHTTPAccountStatusChecker_CustomEndpointPath(t *testing.T) {
 		t.Fatalf("request path = %q, want /custom/status", p)
 	}
 }
+
+func TestAccountStatusBaseURLFromEnv(t *testing.T) {
+	t.Setenv("ANX_ACCOUNT_STATUS_URL", "")
+	t.Setenv("ANX_CONTROL_PLANE_URL", "")
+	if base, dep := AccountStatusBaseURLFromEnv(); base != "" || dep {
+		t.Fatalf("empty env: got base=%q dep=%v", base, dep)
+	}
+
+	t.Setenv("ANX_ACCOUNT_STATUS_URL", "https://status.example")
+	t.Setenv("ANX_CONTROL_PLANE_URL", "https://legacy.example")
+	if base, dep := AccountStatusBaseURLFromEnv(); base != "https://status.example" || dep {
+		t.Fatalf("primary wins: got base=%q dep=%v", base, dep)
+	}
+
+	t.Setenv("ANX_ACCOUNT_STATUS_URL", "")
+	t.Setenv("ANX_CONTROL_PLANE_URL", "https://legacy-only.example")
+	if base, dep := AccountStatusBaseURLFromEnv(); base != "https://legacy-only.example" || !dep {
+		t.Fatalf("legacy only: got base=%q dep=%v", base, dep)
+	}
+}

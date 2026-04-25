@@ -1,3 +1,4 @@
+import { dev } from "$app/environment";
 import { env as privateEnv } from "$env/dynamic/private";
 
 import {
@@ -232,8 +233,9 @@ export function loadWorkspaceCatalog(
     workspaces = [];
     usesSyntheticDefaultWorkspace = false;
   }
-  const devActorMode =
+  const devActorFromEnv =
     env.ANX_DEV_ACTOR_MODE === "true" || env.ANX_DEV_ACTOR_MODE === "1";
+  const devActorMode = dev && devActorFromEnv;
 
   return createWorkspaceCatalog({
     workspaces,

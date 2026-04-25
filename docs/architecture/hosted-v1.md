@@ -1,5 +1,7 @@
 # Hosted v1
 
+> **Superseded for the private hosted SaaS product.** The **agent-nexus-saas** monorepo (root `ARCHITECTURE.md`, `controlplane/`, and `docs/legal/`) is the source of truth for the current **multi-tenant control plane** + per-workspace `anx-core` model, OAuth, and org/workspace registry. This file describes an **older OSS-repo “operator-managed single workspace per deployment”** cut line kept for public repo history. For current deployment runbooks, use the private monorepo’s `controlplane/runbooks/`.
+
 Hosted v1 is a managed hosted offering built from one isolated workspace
 deployment per customer/workspace. This document is the authoritative cut line
 for the current hosted-v1 pack.

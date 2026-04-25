@@ -10,14 +10,13 @@
   let inviteToken = $state("");
   let oauthBusyProvider = $state("");
   let message = $state("");
-  let showInviteField = $state(false);
   const continuationQuery = $derived($page.url.search ?? "");
+  const inviteReady = $derived(Boolean(inviteToken.trim()));
 
   onMount(() => {
     const inv = $page.url.searchParams.get("invite");
     if (inv) {
       inviteToken = inv;
-      showInviteField = true;
     }
   });
 
@@ -46,43 +45,32 @@
 </script>
 
 <svelte:head>
-  <title>Create your account — ANX</title>
+  <title>Create your account — Agent Nexus (ANX)</title>
 </svelte:head>
 
 <div class="mx-auto max-w-md py-8">
   <div class="rounded-md border border-line bg-bg-soft px-6 py-6">
     <h1 class="text-display text-fg">Create your account</h1>
     <p class="mt-1.5 text-meta text-fg-subtle">
-      Hosted signup is Google or GitHub first. Invite tokens are still accepted
-      here when you have one.
+      The hosted beta is <strong class="text-fg">invite-only</strong>. Paste the
+      token from your email, then continue with Google or GitHub.
     </p>
 
     <div class="mt-5 space-y-3">
-      {#if showInviteField}
-        <label class="block text-micro text-fg-muted">
-          Invite token
-          <input
-            type="text"
-            bind:value={inviteToken}
-            disabled={Boolean(oauthBusyProvider)}
-            placeholder="From your invite email"
-            class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-1.5 text-body text-fg placeholder:text-[var(--fg-subtle)]"
-          />
-        </label>
-      {:else}
-        <button
-          type="button"
-          class="text-micro text-accent-text hover:text-accent-text"
-          onclick={() => (showInviteField = true)}
-        >
-          + I have an invite token
-        </button>
-      {/if}
+      <label class="block text-micro text-fg-muted">
+        Invitation token
+        <input
+          type="text"
+          bind:value={inviteToken}
+          disabled={Boolean(oauthBusyProvider)}
+          placeholder="From your organization admin"
+          class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-1.5 text-body text-fg placeholder:text-[var(--fg-subtle)]"
+        />
+      </label>
 
       {#if inviteToken.trim()}
         <p class="rounded-md bg-ok-soft px-3 py-2 text-micro text-ok-text">
-          Invite token attached. It will continue through Google or GitHub
-          signup.
+          Token will be sent when you continue to Google or GitHub.
         </p>
       {/if}
 
@@ -90,7 +78,7 @@
         type="button"
         variant="primary"
         onclick={() => startOAuth("google")}
-        disabled={Boolean(oauthBusyProvider)}
+        disabled={Boolean(oauthBusyProvider) || !inviteReady}
         class="w-full"
       >
         {oauthBusyProvider === "google"
@@ -101,7 +89,7 @@
         type="button"
         variant="secondary"
         onclick={() => startOAuth("github")}
-        disabled={Boolean(oauthBusyProvider)}
+        disabled={Boolean(oauthBusyProvider) || !inviteReady}
         class="w-full"
       >
         {oauthBusyProvider === "github"
@@ -121,7 +109,7 @@
 
     <div class="mt-4">
       <p class="text-micro text-fg-subtle">
-        By continuing you agree to the ANX terms of service.
+        By continuing you agree to the Agent Nexus (ANX) terms of service.
       </p>
     </div>
   </div>

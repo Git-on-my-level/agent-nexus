@@ -22,6 +22,9 @@ export default defineConfig({
       "$app/environment": fileURLToPath(
         new URL("./tests/mocks/app-environment.js", import.meta.url),
       ),
+      "$env/static/public": fileURLToPath(
+        new URL("./tests/mocks/env-static-public.js", import.meta.url),
+      ),
       "$app/stores": fileURLToPath(
         new URL("./tests/mocks/app-stores.js", import.meta.url),
       ),

@@ -92,7 +92,12 @@
   </div>
 
   {#if loadError}
-    <StateError message={loadError} onretry={retry} {retrying} />
+    <StateError
+      message={loadError}
+      onretry={retry}
+      {retrying}
+      supportHint={true}
+    />
   {/if}
 
   {#if phase === "loading"}

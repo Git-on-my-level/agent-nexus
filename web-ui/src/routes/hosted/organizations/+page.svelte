@@ -103,7 +103,12 @@
       <Skeleton rows={4} />
     </div>
   {:else if loadError}
-    <StateError message={loadError} onretry={retry} {retrying} />
+    <StateError
+      message={loadError}
+      onretry={retry}
+      {retrying}
+      supportHint={true}
+    />
   {:else if organizations.length === 0}
     <StateEmpty
       title="No organizations yet"

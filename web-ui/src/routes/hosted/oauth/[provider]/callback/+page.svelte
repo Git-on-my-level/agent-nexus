@@ -151,7 +151,7 @@
             : "Signed in but no session token was returned.";
         return;
       }
-      persistHostedCpAccessToken(token);
+      await persistHostedCpAccessToken(token);
       await loadHostedSession();
       sessionEstablished = true;
 

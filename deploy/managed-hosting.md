@@ -1,5 +1,7 @@
 # Managed Hosted-v1 Operations
 
+> **Superseded for the private hosted SaaS product.** The **agent-nexus-saas** monorepo defines the current hosted stack (`controlplane/`, `controlplane/scripts/hosted/`, `controlplane/runbooks/`). This document is the **public OSS** runbook for **operator-managed, one–deployment-root-per-workspace** hosting (no shared control plane). If you are building the **SaaS** with OAuth and a control plane, follow the private monorepo and root `ARCHITECTURE.md` instead of the flows below for product architecture—though the backup/restore scripts may still be useful for per-workspace data on disk.
+
 Hosted v1 is a managed offering built from one isolated deployment root per
 workspace. This document is the operator runbook for that model.
 
