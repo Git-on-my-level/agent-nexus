@@ -34,7 +34,10 @@
   import SessionEndedOverlay from "$lib/components/SessionEndedOverlay.svelte";
   import { listAllPrincipals } from "$lib/authPrincipals";
   import CommandPalette from "$lib/components/CommandPalette.svelte";
-  import { sanitizeHostedReturnPath } from "$lib/hosted/launchFlow.js";
+  import {
+    buildHostedSignInPath,
+    sanitizeHostedReturnPath,
+  } from "$lib/hosted/launchFlow.js";
   import { hostedSession, loadHostedSession } from "$lib/hosted/session.js";
   import { coreClient } from "$lib/coreClient";
   import { computeWorkspaceShellIdentity } from "$lib/workspaceShellIdentity.js";
@@ -340,16 +343,25 @@
       return;
     }
 
-    const loginPath = workspacePath(org, ws, "/login");
     const returnTo = sanitizeHostedReturnPath(
       `${currentAppPath || "/"}${$page.url.search || ""}`,
     );
-    const params = new URLSearchParams();
-    if (returnTo !== "/") {
-      params.set("return_to", returnTo);
-    }
-    const destination =
-      params.size > 0 ? `${loginPath}?${params.toString()}` : loginPath;
+    const destination = hostedMode
+      ? buildHostedSignInPath({
+          workspaceSlug: ws,
+          workspaceId: $page.data?.workspace?.workspaceId,
+          returnPath: returnTo,
+        })
+      : (() => {
+          const loginPath = workspacePath(org, ws, "/login");
+          const params = new URLSearchParams();
+          if (returnTo !== "/") {
+            params.set("return_to", returnTo);
+          }
+          return params.size > 0
+            ? `${loginPath}?${params.toString()}`
+            : loginPath;
+        })();
 
     const generation = ++loginRedirectGeneration;
 
