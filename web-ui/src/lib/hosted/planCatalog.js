@@ -51,7 +51,7 @@ export const PLAN_CARDS = [
   {
     id: "team",
     name: "Pro",
-    price: "$29",
+    price: "$10",
     priceSuffix: "/mo",
     tagline: "Run real AI-first organizations.",
     features: ["Email support", "Built for growing teams"],
@@ -62,7 +62,7 @@ export const PLAN_CARDS = [
   {
     id: "scale",
     name: "Scale",
-    price: "$99",
+    price: "$50",
     priceSuffix: "/mo",
     tagline: "Run multiple AI-first organizations at the same time.",
     features: ["Priority support", "SSO-ready options"],
