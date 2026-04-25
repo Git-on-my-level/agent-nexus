@@ -26,6 +26,7 @@ export async function load({ fetch, data, url }) {
   const cacheKey = workspaceCompositeKey(organizationSlug, workspaceSlug);
   if (!schemaCheckPromises.has(cacheKey)) {
     const client = createAnxCoreClient({
+      baseUrl: coreBaseUrl,
       fetchFn: fetch,
       requestContextHeadersProvider: () => ({
         [WORKSPACE_HEADER]: workspaceSlug,
