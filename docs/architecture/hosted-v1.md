@@ -1,25 +1,26 @@
-# Hosted v1
+# Hosted v1 (historical)
 
-> **Superseded for the private hosted SaaS product.** The **agent-nexus-saas** monorepo (root `ARCHITECTURE.md`, `controlplane/`, and `docs/legal/`) is the source of truth for the current **multi-tenant control plane** + per-workspace `anx-core` model, OAuth, and org/workspace registry. This file describes an **older OSS-repo “operator-managed single workspace per deployment”** cut line kept for public repo history. For current deployment runbooks, use the private monorepo’s `controlplane/runbooks/`.
+> **Superseded for the private hosted SaaS product.** The **agent-nexus-saas** monorepo (root `ARCHITECTURE.md`, `controlplane/`, and `docs/legal/`) is the source of truth for the current **multi-tenant control plane** + per-workspace `anx-core` model, OAuth, and org/workspace registry. This file is **historical**: it records an **OSS-repo-era, operator-managed “one isolated workspace per deployment”** cut line kept for public repo history. For current deployment runbooks, use the private monorepo’s `controlplane/runbooks/`.
 
-Hosted v1 is a managed hosted offering built from one isolated workspace
-deployment per customer/workspace. This document is the authoritative cut line
-for the current hosted-v1 pack.
+## What this document was
 
-## Status
+**Hosted v1** described a managed offering built from **one** isolated workspace deployment per customer/workspace—**without** the later private control plane (OAuth org registry, launch brokering across many workspaces, SaaS billing). That model was a **shipped cut line for its time** in the OSS repo; it is **not** the current Agent Nexus hosted SaaS architecture.
 
-This is the shipped hosted-v1 cut line for the current branch. Shared
-organizations, self-serve workspace creation, launch brokering, and quota
-envelopes are out of scope for this document.
+## Status (frozen)
 
-## Hosted cut line
+- **Shipped cut line (historical):** single-workspace-per-deployment, operator scripts, no shared multitenancy inside `anx-core`.
+- **Explicitly out of scope for this doc (then and now):** shared organizations, self-serve workspace creation, launch brokering, quota envelopes—these belong to the **current** monorepo design, not to this v1 snapshot.
+
+The statements below describe that **historical** pack only.
+
+## Hosted cut line (historical)
 
 - One deployment equals one isolated workspace and one isolated storage domain.
 - Hosted v1 does not introduce shared row-level multitenancy.
 - Hosted v1 does not require a self-service control plane. Provisioning is
   managed by operators using deployment and recovery scripts.
 
-## Auth and onboarding
+## Auth and onboarding (historical)
 
 - Outside development mode, all workspace data routes require authentication.
 - Hosted v1 is not open signup. New principals enter through managed bootstrap
@@ -29,7 +30,8 @@ envelopes are out of scope for this document.
 - Hosted v1 intentionally has no fine-grained RBAC. Any authenticated
   principal has the same workspace authority, including invite issuance and
   invite revocation.
-## Client and data contract
+
+## Client and data contract (historical)
 
 - Agents should prefer the CLI and generated clients over hand-authoring HTTP
   calls.
@@ -40,12 +42,11 @@ envelopes are out of scope for this document.
 - Blob storage stays behind a backend seam. Filesystem storage is only the
   first backend, not a hosted-v1 long-term architectural guarantee.
 
-## Operations
+## Operations (historical)
 
 - Hosted ops in v1 rely on managed provisioning plus backup/restore scripts.
 - Backup, restore, and workspace replacement happen per isolated deployment.
-- Deploy docs should talk about managed instance provisioning now, not a
-  required control plane that does not exist yet.
+- Deploy docs for **this** era described managed instance provisioning **without** requiring the **later** private multi-tenant control plane product (which is documented in **agent-nexus-saas**).
 
 See `hosted-gate.md` for the short assumption list that downstream tickets
-should treat as fixed.
+should treat as fixed (in the historical OSS context).

@@ -37,7 +37,7 @@ test("inbox triage shows urgency summary and acknowledging removes an item", asy
   ];
 
   await page.addInitScript((selectedActorId) => {
-    window.localStorage.setItem("oar_ui_actor_id", selectedActorId);
+    window.localStorage.setItem("anx_ui_actor_id", selectedActorId);
   }, actorId);
 
   await page.route(/\/actors(\?.*)?$/, async (route) => {
@@ -134,7 +134,7 @@ test("inbox urgency filters reduce visible cards", async ({ page }) => {
   ];
 
   await page.addInitScript((selectedActorId) => {
-    window.localStorage.setItem("oar_ui_actor_id", selectedActorId);
+    window.localStorage.setItem("anx_ui_actor_id", selectedActorId);
   }, actorId);
 
   await page.route(/\/actors(\?.*)?$/, async (route) => {
@@ -208,7 +208,7 @@ test("recording a decision marks only the selected inbox item", async ({
   ];
 
   await page.addInitScript((selectedActorId) => {
-    window.localStorage.setItem("oar_ui_actor_id", selectedActorId);
+    window.localStorage.setItem("anx_ui_actor_id", selectedActorId);
   }, actorId);
 
   await page.route(/\/actors(\?.*)?$/, async (route) => {
@@ -314,7 +314,7 @@ test("undo returns a queued inbox decision before it is sent to core", async ({
   ];
 
   await page.addInitScript((selectedActorId) => {
-    window.localStorage.setItem("oar_ui_actor_id", selectedActorId);
+    window.localStorage.setItem("anx_ui_actor_id", selectedActorId);
   }, actorId);
 
   await page.route(/\/actors(\?.*)?$/, async (route) => {

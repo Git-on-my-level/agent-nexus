@@ -308,6 +308,8 @@ func (a *App) normalizeCardMutationBody(ctx context.Context, cfg config.Resolved
 		}
 		if err := a.normalizeMutationFields(ctx, cfg, move, []mutationFieldSpec{
 			{key: "resolution_refs", kind: mutationFieldTypedRefList},
+			{key: "after_thread_id", kind: mutationFieldThreadID},
+			{key: "before_thread_id", kind: mutationFieldThreadID},
 		}); err != nil {
 			return err
 		}
@@ -356,7 +358,7 @@ func (a *App) normalizeMutationCommandBodyLegacy(ctx context.Context, cfg config
 		return a.normalizeMutationFields(ctx, cfg, nestedMutationMap(body, "board"), []mutationFieldSpec{
 			{key: "pinned_refs", kind: mutationFieldTypedRefList},
 		})
-	case "boards.update":
+	case "boards.patch":
 		return a.normalizeMutationFields(ctx, cfg, nestedMutationMap(body, "patch"), []mutationFieldSpec{
 			{key: "pinned_refs", kind: mutationFieldTypedRefList},
 		})
@@ -398,6 +400,13 @@ func (a *App) normalizeMutationCommandBodyLegacy(ctx context.Context, cfg config
 		}
 		resolvedBoard, err := a.resolveMaybeBoardID(ctx, cfg, rawBoardID)
 		if err != nil {
+			return err
+		}
+		if err := a.normalizeMutationFields(ctx, cfg, body, []mutationFieldSpec{
+			{key: "thread_id", kind: mutationFieldThreadID},
+			{key: "after_thread_id", kind: mutationFieldThreadID},
+			{key: "parent_thread", kind: mutationFieldThreadID},
+		}); err != nil {
 			return err
 		}
 		if err := a.normalizeBoardMutationCardAnchorField(ctx, cfg, resolvedBoard, body, "before_card_id"); err != nil {

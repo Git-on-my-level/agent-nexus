@@ -53,10 +53,10 @@ describe("workspace paths", () => {
 
   it("requires slugs for workspace storage keys", async () => {
     const { buildWorkspaceStorageKey } = await loadWorkspacePaths();
-    expect(buildWorkspaceStorageKey("oar_ui_actor", "alpha")).toBe(
-      "oar_ui_actor:alpha",
+    expect(buildWorkspaceStorageKey("anx_ui_actor", "alpha")).toBe(
+      "anx_ui_actor:alpha",
     );
-    expect(() => buildWorkspaceStorageKey("oar_ui_actor", "")).toThrow(
+    expect(() => buildWorkspaceStorageKey("anx_ui_actor", "")).toThrow(
       /workspace slug is required/,
     );
   });

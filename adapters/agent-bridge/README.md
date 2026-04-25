@@ -1,6 +1,6 @@
 # ANX Agent Bridge
 
-Bridge adapters for Organization Autorunner (ANX).
+Bridge adapters for Agent Nexus (ANX).
 
 This package is bridge-only. Workspace `@handle` routing is owned by the embedded `anx-router` sidecar inside `anx-core`. `anx-agent-bridge` assumes durable wake requests already exist in ANX and focuses on per-agent execution.
 

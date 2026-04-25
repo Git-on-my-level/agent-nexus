@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -97,7 +96,7 @@ func main() {
 		webAuthnRPID                = envString("ANX_WEBAUTHN_RPID", "")
 		webAuthnOrigin              = envString("ANX_WEBAUTHN_ORIGIN", "")
 		webAuthnAllowedOrigins      = envCSV("ANX_WEBAUTHN_ALLOWED_ORIGINS")
-		webAuthnDisplayName         = envString("ANX_WEBAUTHN_RP_DISPLAY_NAME", "OAR")
+		webAuthnDisplayName         = envString("ANX_WEBAUTHN_RP_DISPLAY_NAME", "Agent Nexus")
 		workspaceID                 = envString("ANX_WORKSPACE_ID", "")
 		workspaceHumanGrantIssuer   = envString("ANX_WORKSPACE_HUMAN_GRANT_ISSUER", "")
 		workspaceHumanGrantAudience = envString("ANX_WORKSPACE_HUMAN_GRANT_AUDIENCE", "")
@@ -163,6 +162,11 @@ func main() {
 		os.Exit(1)
 	}
 	projectionMode = parsedProjectionMode
+
+	if err := auth.ValidateBootstrapTokenForNonDevDeploy(bootstrapToken); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
 
 	workspace, err := storage.InitializeWorkspace(context.Background(), workspaceRoot)
 	if err != nil {
@@ -288,15 +292,12 @@ func main() {
 	}
 
 	var accountStatusChecker auth.AccountStatusChecker
-	accountStatusBase, usedDeprecatedAccountStatusAlias := auth.AccountStatusBaseURLFromEnv()
-	if usedDeprecatedAccountStatusAlias {
-		log.Printf("deprecated env: ANX_CONTROL_PLANE_URL is set; use ANX_ACCOUNT_STATUS_URL instead (same value, generic name for non-control-plane HTTP account status hosts)")
-	}
+	accountStatusBase := auth.AccountStatusBaseURLFromEnv()
 	if accountStatusBase != "" {
 		serviceIdentityID := strings.TrimSpace(os.Getenv("ANX_WORKSPACE_SERVICE_ID"))
 		serviceIdentityPrivateKeyB64 := strings.TrimSpace(os.Getenv("ANX_WORKSPACE_SERVICE_PRIVATE_KEY"))
 		if serviceIdentityID == "" || serviceIdentityPrivateKeyB64 == "" {
-			fmt.Fprintln(os.Stderr, "ANX_ACCOUNT_STATUS_URL (or deprecated ANX_CONTROL_PLANE_URL) is set but ANX_WORKSPACE_SERVICE_ID and ANX_WORKSPACE_SERVICE_PRIVATE_KEY are required for account status checks")
+			fmt.Fprintln(os.Stderr, "ANX_ACCOUNT_STATUS_URL is set but ANX_WORKSPACE_SERVICE_ID and ANX_WORKSPACE_SERVICE_PRIVATE_KEY are required for account status checks")
 			os.Exit(1)
 		}
 		raw, err := base64.StdEncoding.DecodeString(serviceIdentityPrivateKeyB64)

@@ -114,7 +114,7 @@ If you are writing registration state manually, update the agent principal regis
 
 2. Resolve the durable workspace id you want to enable:
 
-  - If an existing registration is available, start with <<tick>>anx bridge workspace-id --handle <handle><<tick>> or the legacy alias <<tick>>anx bridge workspace-id --document-id agentreg.<handle><<tick>>.
+  - If an existing registration is available, start with <<tick>>anx bridge workspace-id --handle <handle><<tick>>.
   - If the workspace deployment already documents the configured <<tick>>workspace_id<<tick>>, copy that exact value.
   - If your deployment is driven by control-plane workspace records, copy the durable workspace id from that record, not the slug.
   - The bundled example value <<tick>>ws_main<<tick>> is only a sample.

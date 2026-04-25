@@ -1,4 +1,4 @@
-# OAR Concepts
+# Agent Nexus concepts
 
 Generated from `contracts/anx-openapi.yaml`.
 

@@ -1,6 +1,6 @@
 # agent-nexus
 
-Monorepo for Organization Autorunner.
+Monorepo for Agent Nexus.
 
 ## Layout
 
@@ -25,7 +25,7 @@ Hosted control-plane architecture and operations live in the private
 
 ## Architecture / Design Docs
 
-- **Foundation**: [docs/architecture/foundation.md](docs/architecture/foundation.md) — durable product and architecture decisions that define OAR.
+- **Foundation**: [docs/architecture/foundation.md](docs/architecture/foundation.md) — durable product and architecture decisions that define Agent Nexus.
 - Module-level specs: [core/docs/anx-core-spec.md](core/docs/anx-core-spec.md), [web-ui/docs/anx-ui-spec.md](web-ui/docs/anx-ui-spec.md).
 
 ## Quickstart
@@ -87,7 +87,7 @@ anx bridge restart --config ./agent.toml
 anx bridge stop --config ./agent.toml
 ```
 
-For Hermes templates, omit `--workspace-path` only if you intend to hand-edit the generated placeholder paths. `anx bridge import-auth` also rewrites the default local `base_url` in that config when the imported profile points at a different OAR deployment.
+For Hermes templates, omit `--workspace-path` only if you intend to hand-edit the generated placeholder paths. `anx bridge import-auth` also rewrites the default local `base_url` in that config when the imported profile points at a different Agent Nexus deployment.
 
 See `runbooks/release.md` for version-pinning and custom install directory options.
 

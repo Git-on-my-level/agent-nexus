@@ -10,34 +10,16 @@ import (
 	"testing"
 )
 
-func TestApplyCommandShapeCompatibilityAliasExactMatches(t *testing.T) {
+func TestApplyCommandShapeCompatibilityAliasNoLegacyShapes(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name string
 		args []string
-		want []string
 	}{
-		{
-			name: "packets receipts create",
-			args: []string{"packets", "receipts", "create", "--from-file", "payload.json"},
-			want: []string{"receipts", "create", "--from-file", "payload.json"},
-		},
-		{
-			name: "packets reviews create",
-			args: []string{"packets", "reviews", "create", "--from-file", "payload.json"},
-			want: []string{"reviews", "create", "--from-file", "payload.json"},
-		},
-		{
-			name: "artifacts content get",
-			args: []string{"artifacts", "content", "get", "--artifact-id", "artifact_123"},
-			want: []string{"artifacts", "content", "--artifact-id", "artifact_123"},
-		},
-		{
-			name: "topics update",
-			args: []string{"topics", "update", "--topic-id", "topic_123"},
-			want: []string{"topics", "patch", "--topic-id", "topic_123"},
-		},
+		{name: "packets receipts create", args: []string{"packets", "receipts", "create", "--from-file", "payload.json"}},
+		{name: "artifacts content get", args: []string{"artifacts", "content", "get", "--artifact-id", "artifact_123"}},
+		{name: "topics update", args: []string{"topics", "update", "--topic-id", "topic_123"}},
 	}
 
 	for _, tt := range tests {
@@ -45,17 +27,17 @@ func TestApplyCommandShapeCompatibilityAliasExactMatches(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			got, ok := applyCommandShapeCompatibilityAlias(tt.args)
-			if !ok {
-				t.Fatalf("expected alias match for %q", strings.Join(tt.args, " "))
+			if ok {
+				t.Fatalf("expected no alias rewrite, got ok=true args=%#v", got)
 			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Fatalf("unexpected rewritten args:\n  got:  %#v\n  want: %#v", got, tt.want)
+			if !reflect.DeepEqual(got, tt.args) {
+				t.Fatalf("expected args unchanged, got %#v want %#v", got, tt.args)
 			}
 		})
 	}
 }
 
-func TestCommandShapeCompatibilityAliasesResolveToCanonicalHandlers(t *testing.T) {
+func TestCanonicalCommandPathsHitRegistryHandlers(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -67,38 +49,31 @@ func TestCommandShapeCompatibilityAliasesResolveToCanonicalHandlers(t *testing.T
 		wantCommand string
 	}{
 		{
-			name:        "packets receipts create",
-			args:        []string{"packets", "receipts", "create"},
+			name:        "receipts create",
+			args:        []string{"receipts", "create"},
 			stdin:       `{"receipt":{"thread_id":"thread_1"}}`,
 			wantMethod:  http.MethodPost,
 			wantPath:    "/packets/receipts",
 			wantCommand: "receipts create",
 		},
 		{
-			name:        "packets reviews create",
-			args:        []string{"packets", "reviews", "create"},
+			name:        "reviews create",
+			args:        []string{"reviews", "create"},
 			stdin:       `{"review":{"thread_id":"thread_1"}}`,
 			wantMethod:  http.MethodPost,
 			wantPath:    "/packets/reviews",
 			wantCommand: "reviews create",
 		},
 		{
-			name:        "artifacts content get",
-			args:        []string{"artifacts", "content", "get", "--artifact-id", "artifact_1"},
+			name:        "artifacts content with id flag",
+			args:        []string{"artifacts", "content", "--artifact-id", "artifact_1"},
 			wantMethod:  http.MethodGet,
 			wantPath:    "/artifacts/artifact_1/content",
 			wantCommand: "artifacts content",
 		},
 		{
-			name:        "artifacts content positional get id",
-			args:        []string{"artifacts", "content", "get"},
-			wantMethod:  http.MethodGet,
-			wantPath:    "/artifacts/get/content",
-			wantCommand: "artifacts content",
-		},
-		{
-			name:        "topics update",
-			args:        []string{"topics", "update", "--topic-id", "topic_1"},
+			name:        "topics patch",
+			args:        []string{"topics", "patch", "--topic-id", "topic_1"},
 			stdin:       `{"patch":{"status":"resolved"}}`,
 			wantMethod:  http.MethodPatch,
 			wantPath:    "/topics/topic_1",

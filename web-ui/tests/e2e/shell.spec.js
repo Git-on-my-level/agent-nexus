@@ -51,7 +51,7 @@ test("renders a dashboard on workspace root and routes into inbox", async ({
   page,
 }) => {
   await page.addInitScript(() => {
-    window.localStorage.setItem("oar_ui_actor_id", "actor-ops-ai");
+    window.localStorage.setItem("anx_ui_actor_id", "actor-ops-ai");
   });
 
   await page.goto(WS_HOME);
@@ -76,7 +76,7 @@ test("shows partial-failure messaging when one dashboard source is unavailable",
   page,
 }) => {
   await page.addInitScript(() => {
-    window.localStorage.setItem("oar_ui_actor_id", "actor-ops-ai");
+    window.localStorage.setItem("anx_ui_actor_id", "actor-ops-ai");
   });
 
   await page.route(/\/topics(\?.*)?$/, async (route) => {
@@ -109,7 +109,7 @@ test("opens mobile drawer navigation and navigates between routes", async ({
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.addInitScript(() => {
-    window.localStorage.setItem("oar_ui_actor_id", "actor-ops-ai");
+    window.localStorage.setItem("anx_ui_actor_id", "actor-ops-ai");
   });
 
   await page.goto(`${WS_HOME}/inbox`);

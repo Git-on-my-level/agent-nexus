@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Headless QA capture tool for OAR web-ui.
+ * Headless QA capture tool for Agent Nexus web-ui.
  *
  * Launches Playwright Chromium against a running dev server, captures
  * full-page screenshots of every major route, runs axe-core accessibility
@@ -137,7 +137,7 @@ function parseArgs(argv) {
 function printUsage() {
   console.log(
     `
-QA Capture — Headless screenshot + accessibility tool for OAR web-ui
+QA Capture — Headless screenshot + accessibility tool for Agent Nexus web-ui
 
 Usage: node scripts/qa-capture.mjs [options]
 
@@ -542,8 +542,8 @@ async function authenticateDevPersona(page, opts) {
 
   await page.addInitScript(
     ({ actorId, workspace }) => {
-      localStorage.setItem("oar_ui_actor_id", actorId);
-      localStorage.setItem(`oar_ui_actor_id:${workspace}`, actorId);
+      localStorage.setItem("anx_ui_actor_id", actorId);
+      localStorage.setItem(`anx_ui_actor_id:${workspace}`, actorId);
     },
     { actorId, workspace: opts.workspace },
   );

@@ -7,7 +7,7 @@ export const commandRegistry = [
         "path": "/actors",
         "operation_id": "createActor",
         "summary": "Create actor (dev fixture)",
-        "why": "Legacy dev actor registration when dev_actor_mode is enabled.",
+        "why": "Dev-only actor registration when dev_actor_mode is enabled.",
         "input_mode": "json-body",
         "streaming": {
             "mode": "none"
@@ -4309,7 +4309,7 @@ export const commandRegistry = [
         "path": "/meta/commands",
         "operation_id": "listMetaCommands",
         "summary": "List command registry metadata",
-        "why": "Expose embedded OAR command metadata for discovery and codegen parity.",
+        "why": "Expose embedded Agent Nexus command metadata for discovery and codegen parity.",
         "input_mode": "none",
         "streaming": {
             "mode": "none"
@@ -5974,7 +5974,7 @@ function withQuery(path, query) {
     }
     return `${path}?${encoded}`;
 }
-export class OarClient {
+export class AnxClient {
     constructor(baseUrl, fetchFn = fetch) {
         this.baseUrl = String(baseUrl || "").replace(/\/+$/, "");
         this.fetchFn = fetchFn;

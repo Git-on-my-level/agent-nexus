@@ -10,7 +10,7 @@
       "decision_requests": [
         {
           "id": "event_ctx_2",
-          "short_id": "event_ctx_2",
+          "short_id": "event_ctx_",
           "summary": "confirm canonical command labels",
           "summary_preview": "confirm canonical command labels",
           "thread_id": "thread_123",
@@ -35,7 +35,7 @@
       "recommendations": [
         {
           "id": "event_ctx_1",
-          "short_id": "event_ctx_1",
+          "short_id": "event_ctx_",
           "summary": "normalize frame shape",
           "summary_preview": "normalize frame shape",
           "thread_id": "thread_123",
@@ -53,12 +53,11 @@
           "revision_number": 3
         },
         "id": "doc_ctx_1",
-        "status": "active",
+        "state": "active",
         "title": "Runbook",
         "updated_at": "2026-03-07T00:02:00Z"
       }
     ],
-    "full_id": false,
     "key_artifacts": [
       {
         "id": "artifact_ctx_1",
@@ -74,7 +73,7 @@
     "recent_events": [
       {
         "id": "event_ctx_1",
-        "short_id": "event_ctx_1",
+        "short_id": "event_ctx_",
         "summary": "normalize frame shape",
         "summary_preview": "normalize frame shape",
         "thread_id": "thread_123",
@@ -82,7 +81,7 @@
       },
       {
         "id": "event_ctx_2",
-        "short_id": "event_ctx_2",
+        "short_id": "event_ctx_",
         "summary": "confirm canonical command labels",
         "summary_preview": "confirm canonical command labels",
         "thread_id": "thread_123",
@@ -92,6 +91,7 @@
     "thread": {
       "id": "thread_123",
       "title": "Machine-facing consistency"
-    }
+    },
+    "thread_id": "thread_123"
   }
 }

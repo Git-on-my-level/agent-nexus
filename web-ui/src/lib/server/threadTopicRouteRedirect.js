@@ -1,5 +1,5 @@
-import { createOarCoreClient } from "$lib/anxCoreClient";
-import { LEGACY_CONSTANTS } from "$lib/compat/workspaceCompat";
+import { createAnxCoreClient } from "$lib/anxCoreClient";
+import { WORKSPACE_HEADER_CONSTANTS } from "$lib/compat/workspaceCompat";
 import { topicRouteSegmentFromBackingThread } from "$lib/topicRouteUtils";
 import { WORKSPACE_HEADER } from "$lib/workspacePaths";
 
@@ -19,7 +19,7 @@ export async function resolveLegacyThreadCanonicalAppPath({
 
   const slug = String(workspaceSlug ?? "").trim();
   const org = String(organizationSlug ?? "").trim();
-  const client = createOarCoreClient({
+  const client = createAnxCoreClient({
     fetchFn,
     requestContextHeadersProvider: () => {
       const headers = {};
@@ -27,7 +27,7 @@ export async function resolveLegacyThreadCanonicalAppPath({
         headers[WORKSPACE_HEADER] = slug;
       }
       if (org) {
-        headers[LEGACY_CONSTANTS.ORGANIZATION_HEADER] = org;
+        headers[WORKSPACE_HEADER_CONSTANTS.ORGANIZATION_HEADER] = org;
       }
       return headers;
     },

@@ -2,7 +2,7 @@ import { writable } from "svelte/store";
 import { setContext, getContext } from "svelte";
 
 /** Use Symbol.for so HMR / duplicate module instances still share context. */
-const TIMELINE_KEY = Symbol.for("oar.timeline.context");
+const TIMELINE_KEY = Symbol.for("anx.timeline.context");
 
 function timelineEventsFromResult(res) {
   if (res && typeof res === "object" && Array.isArray(res.events)) {

@@ -55,7 +55,7 @@ test.describe("workspace route accessibility (requires anx-core)", () => {
   test.slow();
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
-      window.localStorage.setItem("oar_ui_actor_id", "actor-ops-ai");
+      window.localStorage.setItem("anx_ui_actor_id", "actor-ops-ai");
     });
   });
 

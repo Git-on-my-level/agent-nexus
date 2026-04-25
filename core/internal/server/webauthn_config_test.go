@@ -11,7 +11,7 @@ func TestWebAuthnConfigBuildForRequestDerivesOriginAndRPIDFromBrowserOrigin(t *t
 	req := httptest.NewRequest("POST", "http://127.0.0.1:8000/auth/passkey/register/options", nil)
 	req.Header.Set("Origin", "http://localhost:5173")
 
-	webAuthn, err := (WebAuthnConfig{RPDisplayName: "OAR"}).buildForRequest(req)
+	webAuthn, err := (WebAuthnConfig{RPDisplayName: "Agent Nexus"}).buildForRequest(req)
 	if err != nil {
 		t.Fatalf("build WebAuthn config: %v", err)
 	}
@@ -31,7 +31,7 @@ func TestWebAuthnConfigBuildForRequestUsesForwardedHostWhenOriginMissing(t *test
 	req.Header.Set("X-Forwarded-Proto", "https")
 	req.Header.Set("X-Forwarded-Host", "login.example.test")
 
-	webAuthn, err := (WebAuthnConfig{RPDisplayName: "OAR"}).buildForRequest(req)
+	webAuthn, err := (WebAuthnConfig{RPDisplayName: "Agent Nexus"}).buildForRequest(req)
 	if err != nil {
 		t.Fatalf("build WebAuthn config: %v", err)
 	}
@@ -52,7 +52,7 @@ func TestWebAuthnConfigBuildForRequestIgnoresForwardedHostFromUntrustedPeer(t *t
 	req.Header.Set("X-Forwarded-Proto", "https")
 	req.Header.Set("X-Forwarded-Host", "login.example.test")
 
-	webAuthn, err := (WebAuthnConfig{RPDisplayName: "OAR"}).buildForRequest(req)
+	webAuthn, err := (WebAuthnConfig{RPDisplayName: "Agent Nexus"}).buildForRequest(req)
 	if err != nil {
 		t.Fatalf("build WebAuthn config: %v", err)
 	}
@@ -71,7 +71,7 @@ func TestWebAuthnConfigBuildForRequestRejectsConfiguredOriginMismatch(t *testing
 	req.Header.Set("Origin", "http://localhost:5173")
 
 	_, err := (WebAuthnConfig{
-		RPDisplayName: "OAR",
+		RPDisplayName: "Agent Nexus",
 		RPOrigin:      "http://127.0.0.1:5173",
 		RPID:          "127.0.0.1",
 	}).buildForRequest(req)
@@ -90,7 +90,7 @@ func TestWebAuthnConfigBuildForRequestAllowsConfiguredAllowedOrigin(t *testing.T
 	req.Header.Set("Origin", "https://m2-internal.scalingforever.com")
 
 	webAuthn, err := (WebAuthnConfig{
-		RPDisplayName: "OAR",
+		RPDisplayName: "Agent Nexus",
 		RPID:          "scalingforever.com",
 		RPOrigin:      "https://ignored.example.test",
 		AllowedOrigins: []string{
@@ -116,7 +116,7 @@ func TestWebAuthnConfigBuildForRequestRejectsOriginOutsideAllowedOrigins(t *test
 	req.Header.Set("Origin", "https://untrusted.example.test")
 
 	_, err := (WebAuthnConfig{
-		RPDisplayName:  "OAR",
+		RPDisplayName:  "Agent Nexus",
 		AllowedOrigins: []string{"https://m2-internal.scalingforever.com"},
 	}).buildForRequest(req)
 	if err == nil {

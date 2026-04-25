@@ -1,3 +1,9 @@
+/**
+ * Core-backed Playwright E2E: **opt-in** only. Tests skip unless
+ * `ANX_CORE_BASE_URL` or `PUBLIC_ANX_CORE_BASE_URL` is set. Default CI does not run
+ * this file unless the environment is configured (see `web-ui/docs/runbook.md` and
+ * `web-ui/docs/spec-compliance.md` — integration execution notes).
+ */
 import { expect, test } from "@playwright/test";
 
 function normalizeBaseUrl(value) {
@@ -134,7 +140,7 @@ test("golden path integration runs against a real anx-core", async ({
 
         if (
           await page
-            .getByRole("heading", { name: "Organization Autorunner UI" })
+            .getByRole("heading", { name: "Home" })
             .isVisible()
             .catch(() => false)
         ) {
@@ -181,9 +187,9 @@ test("golden path integration runs against a real anx-core", async ({
 
   expect(actorId).toBeTruthy();
 
-  await expect(
-    page.getByRole("heading", { name: "Organization Autorunner UI" }),
-  ).toBeVisible({ timeout: 30000 });
+  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible({
+    timeout: 30000,
+  });
 
   await page.getByRole("link", { name: "Topics", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Topics" })).toBeVisible();

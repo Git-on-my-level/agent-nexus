@@ -183,8 +183,8 @@ async function main() {
     log("cookies set:", cookieNames.join(", ") || "(none)");
     log("agent:", payload.agent?.username ?? payload.agent?.agent_id);
 
-    const sessionCookie = `oar_ui_session_${WORKSPACE_SLUG}`;
-    const accessCookie = `oar_ui_access_${WORKSPACE_SLUG}`;
+    const sessionCookie = `anx_ui_session_${WORKSPACE_SLUG}`;
+    const accessCookie = `anx_ui_access_${WORKSPACE_SLUG}`;
     assert(
       cookies[sessionCookie] || cookieJar[sessionCookie],
       `refresh cookie ${sessionCookie} not set. Got: ${cookieNames.join(", ")}`,

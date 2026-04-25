@@ -113,6 +113,12 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `meta concept` (command): Get commands grouped by concept
 - `receipts create` (command): Create receipt packet
 - `reviews create` (command): Create review packet
+- `secret list` (command): List secrets
+- `secret create` (command): Create secret
+- `secret delete` (command): Delete secret
+- `secret get --reveal` (command): Reveal secret value
+- `secret exec` (command): Reveal multiple secrets by name
+- `secret update` (command): Update secret value
 - `events list` (local-helper): Compose backing-thread timeline reads with client-side thread/type/actor filters and preview summaries.
 - `events validate` (local-helper): Validate an `events create` payload locally from stdin or `--from-file` without sending it.
 - `events explain` (local-helper): Explain known event-type conventions, required refs, and validation hints, including when `message_posted` targets a backing-thread message stream.
@@ -653,7 +659,7 @@ If you are writing registration state manually, update the agent principal regis
 
 2. Resolve the durable workspace id you want to enable:
 
-  - If an existing registration is available, start with `anx bridge workspace-id --handle <handle>` or the legacy alias `anx bridge workspace-id --document-id agentreg.<handle>`.
+  - If an existing registration is available, start with `anx bridge workspace-id --handle <handle>`.
   - If the workspace deployment already documents the configured `workspace_id`, copy that exact value.
   - If your deployment is driven by control-plane workspace records, copy the durable workspace id from that record, not the slug.
   - The bundled example value `ws_main` is only a sample.
@@ -3756,7 +3762,7 @@ Generated Help: meta commands
 - HTTP: `GET /meta/commands`
 - Stability: `stable`
 - Input mode: `none`
-- Why: Expose embedded OAR command metadata for discovery and codegen parity.
+- Why: Expose embedded Agent Nexus command metadata for discovery and codegen parity.
 - Output: Returns generated command registry JSON.
 - Error codes: `meta_unavailable`
 - Concepts: `compatibility`
@@ -3922,6 +3928,182 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx reviews create ... ; anx --json reviews create ... ; anx reviews create ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `secret list`
+
+List secrets
+
+```text
+Generated Help: secret list
+
+- Command ID: `secrets.list`
+- CLI path: `secret list`
+- HTTP: `GET /secrets`
+- Stability: `beta`
+- Input mode: `none`
+- Why: List workspace secret metadata without exposing values.
+- Output: Returns `{ secrets }`.
+- Error codes: `auth_required`, `invalid_token`
+- Concepts: `secrets`
+- Adjacent commands: `secret create`, `secret delete`, `secret exec`, `secret get --reveal`, `secret update`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx secret list ... ; anx --json secret list ... ; anx secret list ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `secret create`
+
+Create secret
+
+```text
+Generated Help: secret create
+
+- Command ID: `secrets.create`
+- CLI path: `secret create`
+- HTTP: `POST /secrets`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Store an encrypted workspace credential with metadata.
+- Output: Returns `{ secret }` (metadata only, value is not echoed).
+- Error codes: `auth_required`, `invalid_token`, `human_only`, `invalid_request`, `resource_exists`, `secrets_not_configured`
+- Concepts: `secrets`, `write`
+- Agent notes: Only human principals may create secrets.
+- Adjacent commands: `secret delete`, `secret exec`, `secret get --reveal`, `secret list`, `secret update`
+
+Inputs:
+  Required:
+  - body `name` (string)
+  - body `value` (string)
+  Optional:
+  - body `description` (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx secret create ... ; anx --json secret create ... ; anx secret create ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `secret delete`
+
+Delete secret
+
+```text
+Generated Help: secret delete
+
+- Command ID: `secrets.delete`
+- CLI path: `secret delete`
+- HTTP: `DELETE /secrets/{secret_id}`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Permanently remove a secret and its encrypted value.
+- Output: Returns `{ deleted: true, secret_id }`.
+- Error codes: `auth_required`, `invalid_token`, `human_only`, `not_found`, `secrets_not_configured`
+- Concepts: `secrets`, `write`
+- Agent notes: Only human principals may delete secrets.
+- Adjacent commands: `secret create`, `secret exec`, `secret get --reveal`, `secret list`, `secret update`
+
+Inputs:
+  Required:
+  - path `secret_id`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx secret delete ... ; anx --json secret delete ... ; anx secret delete ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `secret get --reveal`
+
+Reveal secret value
+
+```text
+Generated Help: secret get --reveal
+
+- Command ID: `secrets.reveal`
+- CLI path: `secret get --reveal`
+- HTTP: `POST /secrets/{secret_id}/reveal`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Decrypt and return a secret value. Logged in audit.
+- Output: Returns `{ name, value }`.
+- Error codes: `auth_required`, `invalid_token`, `not_found`, `secrets_not_configured`
+- Concepts: `secrets`
+- Agent notes: Every reveal is logged in auth audit. POST (not GET) to prevent caching.
+- Adjacent commands: `secret create`, `secret delete`, `secret exec`, `secret list`, `secret update`
+
+Inputs:
+  Required:
+  - path `secret_id`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx secret get --reveal ... ; anx --json secret get --reveal ... ; anx secret get --reveal ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `secret exec`
+
+Reveal multiple secrets by name
+
+```text
+Generated Help: secret exec
+
+- Command ID: `secrets.reveal-batch`
+- CLI path: `secret exec`
+- HTTP: `POST /secrets/reveal-batch`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Batch-fetch secrets for env injection. Each reveal is audited.
+- Output: Returns `{ secrets: [{ name, value }] }`.
+- Error codes: `auth_required`, `invalid_token`, `not_found`, `invalid_request`, `secrets_not_configured`
+- Concepts: `secrets`
+- Agent notes: Each resolved secret generates an audit event. Missing names return not_found.
+- Adjacent commands: `secret create`, `secret delete`, `secret get --reveal`, `secret list`, `secret update`
+
+Inputs:
+  Required:
+  - body `names` (list<string>)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx secret exec ... ; anx --json secret exec ... ; anx secret exec ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `secret update`
+
+Update secret value
+
+```text
+Generated Help: secret update
+
+- Command ID: `secrets.update`
+- CLI path: `secret update`
+- HTTP: `PUT /secrets/{secret_id}`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Replace an encrypted secret value.
+- Output: Returns `{ secret }` (metadata only).
+- Error codes: `auth_required`, `invalid_token`, `human_only`, `not_found`, `invalid_request`, `secrets_not_configured`
+- Concepts: `secrets`, `write`
+- Agent notes: Only human principals may update secrets.
+- Adjacent commands: `secret create`, `secret delete`, `secret exec`, `secret get --reveal`, `secret list`
+
+Inputs:
+  Required:
+  - path `secret_id`
+  - body `value` (string)
+  Optional:
+  - body `description` (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx secret update ... ; anx --json secret update ... ; anx secret update ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4421,11 +4603,9 @@ Local Help: bridge workspace-id
 - JSON body: `agent_id`, `handle`, `actor_id`, `registration_status`, `workspace_ids`, `workspace_bindings`
 - Examples:
   - `anx --agent agent-a bridge workspace-id --handle hermes`
-  - `anx bridge workspace-id --document-id agentreg.hermes`
 
 Flags:
   --handle <name>              Agent handle whose wake registration should be inspected.
-  --document-id <id>           Legacy registration document alias. Accepts only `agentreg.<handle>`.
 
 
 Global flags:

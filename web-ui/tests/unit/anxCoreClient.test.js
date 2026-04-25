@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { getExpectedCommandRegistryDigest } from "../../src/lib/commandRegistryDigest.js";
 import {
-  createOarCoreClient,
+  createAnxCoreClient,
   verifyCoreSchemaVersion,
 } from "../../src/lib/anxCoreClient.js";
 import { buildTopicCreatePayloadFromDraft } from "../../src/lib/topicCreatePayload.js";
@@ -10,7 +10,7 @@ import { buildTopicCreatePayloadFromDraft } from "../../src/lib/topicCreatePaylo
 describe("anxCoreClient error messaging", () => {
   it("sends empty actor_id for writes when session locks identity and provider is empty", async () => {
     const seenBodies = [];
-    const client = createOarCoreClient({
+    const client = createAnxCoreClient({
       baseUrl: "http://core.test",
       actorIdProvider: () => "",
       lockActorIdProvider: () => true,
@@ -37,7 +37,7 @@ describe("anxCoreClient error messaging", () => {
 
   it("forwards actor list query parameters", async () => {
     const seenUrls = [];
-    const client = createOarCoreClient({
+    const client = createAnxCoreClient({
       baseUrl: "http://core.test",
       fetchFn: async (url) => {
         seenUrls.push(String(url));
@@ -54,7 +54,7 @@ describe("anxCoreClient error messaging", () => {
   });
 
   it("returns actionable guidance when core is unreachable", async () => {
-    const client = createOarCoreClient({
+    const client = createAnxCoreClient({
       baseUrl: "http://core.test",
       fetchFn: async () => {
         throw new TypeError("fetch failed");
@@ -67,7 +67,7 @@ describe("anxCoreClient error messaging", () => {
   });
 
   it("extracts nested JSON error messages from non-2xx responses", async () => {
-    const client = createOarCoreClient({
+    const client = createAnxCoreClient({
       baseUrl: "http://core.test",
       fetchFn: async () =>
         new Response(
@@ -91,7 +91,7 @@ describe("anxCoreClient error messaging", () => {
   });
 
   it("reports raw-response failures once with command context", async () => {
-    const client = createOarCoreClient({
+    const client = createAnxCoreClient({
       baseUrl: "http://core.test",
       fetchFn: async () =>
         new Response(JSON.stringify({ error: "bad actor filter" }), {
@@ -108,7 +108,7 @@ describe("anxCoreClient error messaging", () => {
 
   it("verifies schema via handshake when available", async () => {
     const expectedDigest = await getExpectedCommandRegistryDigest();
-    const client = createOarCoreClient({
+    const client = createAnxCoreClient({
       baseUrl: "http://core.test",
       fetchFn: async (url) => {
         if (String(url).endsWith("/meta/handshake")) {
@@ -139,7 +139,7 @@ describe("anxCoreClient error messaging", () => {
   });
 
   it("rejects with guidance when handshake returns empty body", async () => {
-    const client = createOarCoreClient({
+    const client = createAnxCoreClient({
       baseUrl: "http://core.test",
       fetchFn: async () =>
         new Response("", {
@@ -155,7 +155,7 @@ describe("anxCoreClient error messaging", () => {
 
   it("falls back to /version when handshake is unavailable", async () => {
     const expectedDigest = await getExpectedCommandRegistryDigest();
-    const client = createOarCoreClient({
+    const client = createAnxCoreClient({
       baseUrl: "http://core.test",
       fetchFn: async (url) => {
         if (String(url).endsWith("/meta/handshake")) {
@@ -209,7 +209,7 @@ describe("anxCoreClient error messaging", () => {
   });
 
   it("rejects when the deployed core advertises a different command registry", async () => {
-    const client = createOarCoreClient({
+    const client = createAnxCoreClient({
       baseUrl: "http://core.test",
       fetchFn: async (url) => {
         if (String(url).endsWith("/meta/handshake")) {
@@ -243,7 +243,7 @@ describe("anxCoreClient error messaging", () => {
     const events = [];
     const seenUrls = [];
     const encoder = new TextEncoder();
-    const client = createOarCoreClient({
+    const client = createAnxCoreClient({
       baseUrl: "http://core.test",
       fetchFn: async (url) => {
         seenUrls.push(String(url));
@@ -291,7 +291,7 @@ describe("anxCoreClient error messaging", () => {
 
   it("forwards receipt create bodies without mutating packet", async () => {
     const seenBodies = [];
-    const client = createOarCoreClient({
+    const client = createAnxCoreClient({
       baseUrl: "http://core.test",
       actorIdProvider: () => "actor-1",
       fetchFn: async (url, init) => {
@@ -331,7 +331,7 @@ describe("anxCoreClient error messaging", () => {
 
   it("posts inbox acknowledgements to the contract acknowledge path", async () => {
     const seenRequests = [];
-    const client = createOarCoreClient({
+    const client = createAnxCoreClient({
       baseUrl: "http://core.test",
       actorIdProvider: () => "actor-1",
       fetchFn: async (url, init) => {
@@ -367,7 +367,7 @@ describe("anxCoreClient error messaging", () => {
 
   it("routes card archive, restore, and purge through generated command paths", async () => {
     const seen = [];
-    const client = createOarCoreClient({
+    const client = createAnxCoreClient({
       baseUrl: "http://core.test",
       actorIdProvider: () => "actor-1",
       fetchFn: async (url, init) => {
@@ -404,7 +404,7 @@ describe("anxCoreClient error messaging", () => {
 
   it("respondInboxAsk POSTs /inbox/{id}/respond with actor_id and snake_case fields", async () => {
     const requests = [];
-    const client = createOarCoreClient({
+    const client = createAnxCoreClient({
       baseUrl: "http://core.test",
       actorIdProvider: () => "actor-1",
       fetchFn: async (url, init) => {

@@ -10,7 +10,7 @@
       "decision_requests": [
         {
           "id": "event_ctx_2",
-          "short_id": "event_ctx_2",
+          "short_id": "event_ctx_",
           "summary": "confirm canonical command labels",
           "summary_preview": "confirm canonical command labels",
           "thread_id": "thread_123",
@@ -35,7 +35,7 @@
       "recommendations": [
         {
           "id": "event_ctx_1",
-          "short_id": "event_ctx_1",
+          "short_id": "event_ctx_",
           "summary": "normalize frame shape",
           "summary_preview": "normalize frame shape",
           "thread_id": "thread_123",
@@ -44,6 +44,46 @@
       ]
     },
     "context": {
+      "collaboration_summary": {
+        "artifact_count": 1,
+        "decision_count": 0,
+        "decision_request_count": 1,
+        "decision_requests": [
+          {
+            "id": "event_ctx_2",
+            "short_id": "event_ctx_",
+            "summary": "confirm canonical command labels",
+            "summary_preview": "confirm canonical command labels",
+            "thread_id": "thread_123",
+            "type": "decision_needed"
+          }
+        ],
+        "decisions": [],
+        "key_artifacts": [
+          {
+            "id": "artifact_ctx_1",
+            "kind": "receipt"
+          }
+        ],
+        "open_card_count": 1,
+        "open_cards": [
+          {
+            "id": "card_ctx_1",
+            "status": "open"
+          }
+        ],
+        "recommendation_count": 1,
+        "recommendations": [
+          {
+            "id": "event_ctx_1",
+            "short_id": "event_ctx_",
+            "summary": "normalize frame shape",
+            "summary_preview": "normalize frame shape",
+            "thread_id": "thread_123",
+            "type": "actor_statement"
+          }
+        ]
+      },
       "documents": [
         {
           "head_revision": {
@@ -54,11 +94,12 @@
             "revision_number": 3
           },
           "id": "doc_ctx_1",
-          "status": "active",
+          "state": "active",
           "title": "Runbook",
           "updated_at": "2026-03-07T00:02:00Z"
         }
       ],
+      "full_id": false,
       "key_artifacts": [
         {
           "id": "artifact_ctx_1",
@@ -74,7 +115,7 @@
       "recent_events": [
         {
           "id": "event_ctx_1",
-          "short_id": "event_ctx_1",
+          "short_id": "event_ctx_",
           "summary": "normalize frame shape",
           "summary_preview": "normalize frame shape",
           "thread_id": "thread_123",
@@ -82,13 +123,18 @@
         },
         {
           "id": "event_ctx_2",
-          "short_id": "event_ctx_2",
+          "short_id": "event_ctx_",
           "summary": "confirm canonical command labels",
           "summary_preview": "confirm canonical command labels",
           "thread_id": "thread_123",
           "type": "decision_needed"
         }
-      ]
+      ],
+      "thread": {
+        "id": "thread_123",
+        "title": "Machine-facing consistency"
+      },
+      "thread_id": "thread_123"
     },
     "context_source": "threads.context",
     "full_id": false,
@@ -97,9 +143,9 @@
       "full_id": false,
       "items": [
         {
-          "alias": "ibx_483c273add26",
+          "alias": "ibx_PLACEHOLDER",
           "id": "inbox:action_needed:thread_123:none:event_ctx_2",
-          "short_id": "inbox:action",
+          "short_id": "inbox:acti",
           "summary": "confirm canonical command labels",
           "thread_id": "thread_123",
           "thread_short_id": "thread_123",

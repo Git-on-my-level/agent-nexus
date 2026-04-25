@@ -11,7 +11,7 @@ import {
   SYSTEM_ACTOR_DISPLAY_LABEL,
 } from "./systemActor.js";
 
-export const ACTOR_STORAGE_KEY = "oar_ui_actor_id";
+export const ACTOR_STORAGE_KEY = "anx_ui_actor_id";
 
 export const actorSessionReady = writable(false);
 export const selectedActorId = writable("");

@@ -4,9 +4,10 @@
  * - **authSessionReady** / internal `ready`: `/auth/session` hydration finished
  *   (success or handled failure).
  * - **authenticatedAgent**: current agent row or null.
- * - **sessionEndedByCp**: terminal CP revocation; set when `/auth/session`
- *   returns **401** with `error.code === session_ended_by_cp` (see
- *   {@link AuthErrorCode.SESSION_ENDED_BY_CP}).
+ * - **sessionEndedByAccountStatus**: terminal account-status revocation; set when
+ *   `/auth/session` returns **401** with
+ *   `error.code === session_ended_by_account_status` (see
+ *   {@link AuthErrorCode.SESSION_ENDED_BY_ACCOUNT_STATUS}).
  *
  * **Single-flight:** concurrent {@link initializeAuthSession} calls share one
  * in-flight promise. The shell should pass `authDriver: "layout"` so devtools
@@ -30,8 +31,8 @@ import { APP_BASE_PATH, WORKSPACE_HEADER, appPath } from "./workspacePaths.js";
 
 export const authSessionReady = writable(false);
 export const authenticatedAgent = writable(null);
-/** True when CP ended the session ({@link AuthErrorCode.SESSION_ENDED_BY_CP}). */
-export const sessionEndedByCp = writable(false);
+/** True when account status ended the session ({@link AuthErrorCode.SESSION_ENDED_BY_ACCOUNT_STATUS}). */
+export const sessionEndedByAccountStatus = writable(false);
 
 /** @type {Map<string, string>} */
 const authDriverByWorkspace = new Map();
@@ -104,14 +105,14 @@ function createErrorFromResponse(status, details) {
   return error;
 }
 
-function applySessionEndedByCp(status, payload, workspaceSlug) {
+function applySessionEndedByAccountStatus(status, payload, workspaceSlug) {
   if (
     status !== 401 ||
-    payload?.error?.code !== AuthErrorCode.SESSION_ENDED_BY_CP
+    payload?.error?.code !== AuthErrorCode.SESSION_ENDED_BY_ACCOUNT_STATUS
   ) {
     return false;
   }
-  sessionEndedByCp.set(true);
+  sessionEndedByAccountStatus.set(true);
   const slug = String(workspaceSlug ?? "").trim() || getCurrentWorkspaceSlug();
   clearAuthSession(slug);
   return true;
@@ -176,7 +177,7 @@ async function requestJSON(
     }
   }
   if (!response.ok) {
-    applySessionEndedByCp(response.status, payload, workspaceSlug);
+    applySessionEndedByAccountStatus(response.status, payload, workspaceSlug);
     throw createErrorFromResponse(response.status, payload);
   }
 
@@ -207,7 +208,7 @@ export function isAuthenticated(workspaceSlug = getCurrentWorkspaceSlug()) {
   return Boolean(getAuthenticatedAgent(workspaceSlug)?.agent_id);
 }
 
-/** Human principals for workspace auth (passkey, control plane). Matches core `human_only` routes. */
+/** Human principals for workspace auth (passkey, hosted account directory, external grant). Matches core `human_only` routes. */
 export function isHumanWorkspacePrincipal(agent) {
   if (!agent || typeof agent !== "object") {
     return false;
@@ -220,7 +221,7 @@ export function isHumanWorkspacePrincipal(agent) {
     .toLowerCase();
   return (
     method === "passkey" ||
-    method === "control_plane" ||
+    method === "control_plane" || // core auth_method sentinel (not user-facing)
     method === "external_grant"
   );
 }

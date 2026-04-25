@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { createOarCoreClient } from "../../src/lib/anxCoreClient.js";
+import { createAnxCoreClient } from "../../src/lib/anxCoreClient.js";
 
 describe("anxCoreClient auth behavior", () => {
   it("refreshes once on 401 responses and retries with the new bearer token", async () => {
     let accessToken = "stale-token";
     const seenAuthHeaders = [];
 
-    const client = createOarCoreClient({
+    const client = createAnxCoreClient({
       baseUrl: "http://core.test",
       tokenProvider: {
         getAccessToken() {
@@ -57,7 +57,7 @@ describe("anxCoreClient auth behavior", () => {
   it("locks actor_id to the authenticated principal actor when requested", async () => {
     let capturedBody;
 
-    const client = createOarCoreClient({
+    const client = createAnxCoreClient({
       baseUrl: "http://core.test",
       actorIdProvider: () => "actor-principal",
       lockActorIdProvider: true,

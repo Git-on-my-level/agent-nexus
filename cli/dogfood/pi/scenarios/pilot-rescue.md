@@ -1,11 +1,11 @@
 # NorthWave Pilot Rescue
 
-You are dogfooding the OAR CLI against a live seeded workspace representing a cross-functional pilot rescue sprint.
+You are dogfooding the `anx` CLI against a live seeded workspace representing a cross-functional pilot rescue sprint.
 
 Shared goal:
 - publish a credible Friday rescue plan for NorthWave's pilot launch
 - resolve the highest-signal customer feedback without promising work that does not fit Friday scope
-- leave behind enough structured output in OAR that another agent or operator can continue from your work
+- leave behind enough structured output in the workspace that another agent or operator can continue from your work
 
 The scenario intentionally mixes:
 - active customer feedback
@@ -21,7 +21,7 @@ What makes this run successful:
 5. Every role writes `result.md` documenting friction and concrete CLI improvements.
 
 Constraints:
-- Use only the `anx` binary for OAR interactions.
+- Use only the `anx` binary for Agent Nexus (anx-core) interactions.
 - Do not use `curl` or edit repository source files.
 - Keep notes and helper files inside the current working directory.
 - Prefer the exact commands in `COMMANDS.md` and the resolved IDs in `TARGETS.md` over rediscovery.

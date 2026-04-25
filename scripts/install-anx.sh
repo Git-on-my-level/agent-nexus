@@ -32,9 +32,9 @@ resolve_version() {
   if ! command -v curl >/dev/null 2>&1; then
     fatal "curl is required to resolve the latest version"
   fi
-  tag=$(curl -fsSL -o /dev/null -w '%{redirect_url}' \
-    "https://github.com/${REPO}/releases/latest" 2>/dev/null \
-    | sed 's|.*/||')
+  if ! tag=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1); then
+    fatal "Could not determine latest release. Set VERSION explicitly."
+  fi
   if [ -z "$tag" ]; then
     fatal "Could not determine latest release. Set VERSION explicitly."
   fi
@@ -50,9 +50,9 @@ main() {
 
   info "Version:  ${VERSION}"
   info "OS/Arch:  ${OS}/${ARCH}"
-  info "Install:  ${INSTALL_DIR}/oar"
+  info "Install:  ${INSTALL_DIR}/anx"
 
-  ARCHIVE="oar_${VERSION}_${OS}_${ARCH}.tar.gz"
+  ARCHIVE="anx_${VERSION}_${OS}_${ARCH}.tar.gz"
   BASE_URL="https://github.com/${REPO}/releases/download/${VERSION}"
   ARCHIVE_URL="${BASE_URL}/${ARCHIVE}"
   CHECKSUMS_URL="${BASE_URL}/checksums.txt"
@@ -86,12 +86,13 @@ main() {
     fatal "Checksum mismatch:\n  expected: ${EXPECTED}\n  actual:   ${ACTUAL}"
   fi
 
+  mkdir -p "$INSTALL_DIR"
   info "Extracting..."
-  tar -xzf "${TMPDIR_DL}/${ARCHIVE}" -C "${TMPDIR_DL}" anx mkdir -p "$INSTALL_DIR"
-  mv "${TMPDIR_DL}/oar" "${INSTALL_DIR}/oar"
-  chmod +x "${INSTALL_DIR}/oar"
+  tar -xzf "${TMPDIR_DL}/${ARCHIVE}" -C "${TMPDIR_DL}"
+  mv "${TMPDIR_DL}/anx" "${INSTALL_DIR}/anx"
+  chmod +x "${INSTALL_DIR}/anx"
 
-  printf '\noar %s installed to %s/oar\n' "$VERSION" "$INSTALL_DIR"
+  printf '\nanx %s installed to %s/anx\n' "$VERSION" "$INSTALL_DIR"
 
   if ! echo "$PATH" | tr ':' '\n' | grep -qx "$INSTALL_DIR"; then
     printf '\n  NOTE: %s is not in your PATH.\n' "$INSTALL_DIR"

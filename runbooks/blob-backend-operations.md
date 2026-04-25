@@ -1,6 +1,6 @@
 # Blob backend operations
 
-This runbook covers blob backend choices and operational procedures for Organization Autorunner.
+This runbook covers blob backend choices and operational procedures for Agent Nexus workspace cores.
 
 ## Backend choices
 

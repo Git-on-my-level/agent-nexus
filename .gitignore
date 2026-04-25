@@ -9,7 +9,7 @@ _src_core/
 # Local dev-only encryption key for `make serve` (workspace secrets)
 core/.anx-dev-secrets-key
 core/.anx-dev-saas-ed25519
-# Legacy paths (pre OAR→ANX rename); safe to delete locally
+# Historical local paths (older CLI layouts); safe to delete locally
 core/.oar-dev-secrets-key
 core/.oar-dev-saas-ed25519
 core/.oar-workspace/
@@ -26,8 +26,6 @@ _ui_working_tree.patch
 
 .secrets/
 .anx-import/
-!cli/internal/app/.anx-import/
-!cli/internal/app/.anx-import/**
 .desloppify/
 .superset/
 

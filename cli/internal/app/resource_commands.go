@@ -1571,7 +1571,7 @@ func (a *App) runBoardsCommand(ctx context.Context, args []string, cfg config.Re
 			ctx,
 			cfg,
 			"boards update",
-			"boards.update",
+			"boards.patch",
 			"board_id",
 			id,
 			boardIDLookupSpec,
@@ -1885,7 +1885,7 @@ func (a *App) runBoardCardsCommand(ctx context.Context, args []string, cfg confi
 		if err != nil {
 			return nil, "boards cards get", err
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "boards cards get", "boards.cards.get", map[string]string{"board_id": resolvedBoard, "id": resolvedCard}, nil, nil)
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "boards cards get", "boards.cards.get", map[string]string{"board_id": resolvedBoard, "card_id": resolvedCard}, nil, nil)
 		return result, "boards cards get", callErr
 	case "update":
 		pathParams, body, err := a.parseBoardCardUpdateInput(ctx, args[1:], cfg, "boards cards update")
@@ -3162,7 +3162,6 @@ func (a *App) runEventsStream(ctx context.Context, args []string, cfg config.Res
 	fs := newSilentFlagSet(commandName)
 	var threadIDFlag, typesCSVFlag, lastEventIDFlag, cursorFlag trackedString
 	var followFlag trackedBool
-	var reconnectFlag trackedBool
 	var maxEventsFlag trackedInt
 	var typeFlags trackedStrings
 	fs.Var(&threadIDFlag, "thread-id", "Stream events for one thread id")
@@ -3171,7 +3170,6 @@ func (a *App) runEventsStream(ctx context.Context, args []string, cfg config.Res
 	fs.Var(&followFlag, "follow", "Keep stream open and reconnect when it drops")
 	fs.Var(&lastEventIDFlag, "last-event-id", "Resume stream after this event id")
 	fs.Var(&cursorFlag, "cursor", "Alias of --last-event-id")
-	fs.Var(&reconnectFlag, "reconnect", "Deprecated alias for --follow (default false)")
 	fs.Var(&maxEventsFlag, "max-events", "Exit after receiving N events (0 means unlimited)")
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
@@ -3189,11 +3187,7 @@ func (a *App) runEventsStream(ctx context.Context, args []string, cfg config.Res
 	if followFlag.set {
 		follow = followFlag.value
 	}
-	if reconnectFlag.set {
-		follow = reconnectFlag.value
-	}
-	reconnect := follow
-	return a.runTailStream(ctx, cfg, commandName, "events.stream", query, lastEventID, follow, reconnect, maxEventsFlag.value)
+	return a.runTailStream(ctx, cfg, commandName, "events.stream", query, lastEventID, follow, maxEventsFlag.value)
 }
 
 func (a *App) runInboxStream(ctx context.Context, args []string, cfg config.Resolved, commandName string, defaultFollow bool) (*commandResult, error) {
@@ -3201,13 +3195,11 @@ func (a *App) runInboxStream(ctx context.Context, args []string, cfg config.Reso
 	var riskHorizonFlag trackedInt
 	var lastEventIDFlag, cursorFlag trackedString
 	var followFlag trackedBool
-	var reconnectFlag trackedBool
 	var maxEventsFlag trackedInt
 	fs.Var(&riskHorizonFlag, "risk-horizon-days", "Derived inbox risk horizon days")
 	fs.Var(&followFlag, "follow", "Keep stream open and reconnect when it drops")
 	fs.Var(&lastEventIDFlag, "last-event-id", "Resume stream after this event id")
 	fs.Var(&cursorFlag, "cursor", "Alias of --last-event-id")
-	fs.Var(&reconnectFlag, "reconnect", "Deprecated alias for --follow (default false)")
 	fs.Var(&maxEventsFlag, "max-events", "Exit after receiving N events (0 means unlimited)")
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
@@ -3225,11 +3217,7 @@ func (a *App) runInboxStream(ctx context.Context, args []string, cfg config.Reso
 	if followFlag.set {
 		follow = followFlag.value
 	}
-	if reconnectFlag.set {
-		follow = reconnectFlag.value
-	}
-	reconnect := follow
-	return a.runTailStream(ctx, cfg, commandName, "inbox.stream", query, lastEventID, follow, reconnect, maxEventsFlag.value)
+	return a.runTailStream(ctx, cfg, commandName, "inbox.stream", query, lastEventID, follow, maxEventsFlag.value)
 }
 
 type jsonBodyInputOptions struct {

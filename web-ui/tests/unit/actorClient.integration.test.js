@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { chooseActor } from "../../src/lib/actorSession.js";
-import { createOarCoreClient } from "../../src/lib/anxCoreClient.js";
+import { createAnxCoreClient } from "../../src/lib/anxCoreClient.js";
 
 function createMemoryStorage() {
   const data = new Map();
@@ -64,7 +64,7 @@ describe("actor flow integration (mocked)", () => {
       });
     };
 
-    const client = createOarCoreClient({
+    const client = createAnxCoreClient({
       baseUrl: "http://anx-core.test",
       fetchFn,
       actorIdProvider: () => selectedActorId,

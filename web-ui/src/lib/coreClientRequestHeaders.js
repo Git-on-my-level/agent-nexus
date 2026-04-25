@@ -1,4 +1,4 @@
-import { LEGACY_CONSTANTS } from "$lib/compat/workspaceCompat";
+import { WORKSPACE_HEADER_CONSTANTS } from "$lib/compat/workspaceCompat";
 import {
   APP_BASE_PATH,
   WORKSPACE_HEADER,
@@ -28,7 +28,7 @@ export function buildCoreRequestContextHeaders({
     headers[WORKSPACE_HEADER] = workspace;
   }
   if (org) {
-    headers[LEGACY_CONSTANTS.ORGANIZATION_HEADER] = org;
+    headers[WORKSPACE_HEADER_CONSTANTS.ORGANIZATION_HEADER] = org;
   }
   return headers;
 }

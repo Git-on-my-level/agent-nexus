@@ -141,8 +141,8 @@ describe("hooks proxy retry", () => {
     const requestBody = JSON.stringify({ action: "update", value: 42 });
     const response = await handle({
       event: {
-        url: new URL("https://oar.example.test/api/threads"),
-        request: new Request("https://oar.example.test/api/threads", {
+        url: new URL("https://anx.example.test/api/threads"),
+        request: new Request("https://anx.example.test/api/threads", {
           method: "POST",
           headers: {
             accept: "application/json",
@@ -193,8 +193,8 @@ describe("hooks proxy retry", () => {
 
     const response = await handle({
       event: {
-        url: new URL("https://oar.example.test/api/threads"),
-        request: new Request("https://oar.example.test/api/threads", {
+        url: new URL("https://anx.example.test/api/threads"),
+        request: new Request("https://anx.example.test/api/threads", {
           method: "GET",
           headers: {
             accept: "application/json",
@@ -232,8 +232,8 @@ describe("hooks proxy retry", () => {
 
     const response = await handle({
       event: {
-        url: new URL("https://oar.example.test/api/threads"),
-        request: new Request("https://oar.example.test/api/threads", {
+        url: new URL("https://anx.example.test/api/threads"),
+        request: new Request("https://anx.example.test/api/threads", {
           method: "GET",
           headers: {
             accept: "application/json",
@@ -274,8 +274,8 @@ describe("hooks proxy retry", () => {
 
     const response = await handle({
       event: {
-        url: new URL("https://oar.example.test/api/threads"),
-        request: new Request("https://oar.example.test/api/threads", {
+        url: new URL("https://anx.example.test/api/threads"),
+        request: new Request("https://anx.example.test/api/threads", {
           method: "GET",
           headers: {
             accept: "application/json",
@@ -325,8 +325,8 @@ describe("hooks proxy retry", () => {
 
     const response = await handle({
       event: {
-        url: new URL("https://oar.example.test/api/threads"),
-        request: new Request("https://oar.example.test/api/threads", {
+        url: new URL("https://anx.example.test/api/threads"),
+        request: new Request("https://anx.example.test/api/threads", {
           method: "GET",
           headers: {
             accept: "application/json",
@@ -351,8 +351,8 @@ describe("hooks proxy retry", () => {
 
     const response = await handle({
       event: {
-        url: new URL("https://oar.example.test/threads"),
-        request: new Request("https://oar.example.test/threads", {
+        url: new URL("https://anx.example.test/threads"),
+        request: new Request("https://anx.example.test/threads", {
           method: "GET",
           headers: {
             accept: "application/json",
@@ -388,10 +388,10 @@ describe("hooks proxy retry", () => {
     const response = await handle({
       event: {
         url: new URL(
-          "https://oar.example.test/events/stream?thread_id=thread-1",
+          "https://anx.example.test/events/stream?thread_id=thread-1",
         ),
         request: new Request(
-          "https://oar.example.test/events/stream?thread_id=thread-1",
+          "https://anx.example.test/events/stream?thread_id=thread-1",
           {
             method: "GET",
             headers: {
@@ -421,8 +421,8 @@ describe("hooks proxy retry", () => {
 
     const response = await handle({
       event: {
-        url: new URL("https://oar.example.test/threads"),
-        request: new Request("https://oar.example.test/threads", {
+        url: new URL("https://anx.example.test/threads"),
+        request: new Request("https://anx.example.test/threads", {
           method: "GET",
           headers: {
             accept: "text/html",

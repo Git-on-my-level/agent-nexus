@@ -35,15 +35,15 @@ const inFlightRefreshes = new Map();
 const recentRefreshResults = new Map();
 
 export function getAuthSessionCookieName(workspaceSlug) {
-  return `oar_ui_session_${getWorkspaceSlug(workspaceSlug)}`;
+  return `anx_ui_session_${getWorkspaceSlug(workspaceSlug)}`;
 }
 
 export function getAuthAccessCookieName(workspaceSlug) {
-  return `oar_ui_access_${getWorkspaceSlug(workspaceSlug)}`;
+  return `anx_ui_access_${getWorkspaceSlug(workspaceSlug)}`;
 }
 
 function getRetryableAuthFailureCookieName(workspaceSlug) {
-  return `oar_ui_auth_retry_${getWorkspaceSlug(workspaceSlug)}`;
+  return `anx_ui_auth_retry_${getWorkspaceSlug(workspaceSlug)}`;
 }
 
 function isSecureCookieRequest(event) {
@@ -223,11 +223,11 @@ export function clearWorkspaceAuthSession(event, workspaceSlug) {
   clearRetryableWorkspaceAuthFailureCount(event, workspaceSlug);
 }
 
-/** CP ended the account/session (inactive, revoked). Maps to SessionEndedOverlay. */
-export function isTerminalCpSessionFailure(error) {
+/** Account status ended the account/session (inactive, revoked). Maps to SessionEndedOverlay. */
+export function isTerminalAccountSessionFailure(error) {
   const code = error?.details?.error?.code;
   return (
-    code === AuthErrorCode.SESSION_ENDED_BY_CP ||
+    code === AuthErrorCode.SESSION_ENDED_BY_ACCOUNT_STATUS ||
     code === AuthErrorCode.CP_ACCOUNT_INACTIVE
   );
 }
@@ -430,7 +430,7 @@ export async function loadWorkspaceAuthenticatedAgent({
       clearRetryableWorkspaceAuthFailureCount(event, workspaceSlug);
       return agent;
     } catch (error) {
-      if (isTerminalCpSessionFailure(error)) {
+      if (isTerminalAccountSessionFailure(error)) {
         throw error;
       }
       if (error?.status !== 401) {
@@ -461,7 +461,7 @@ export async function loadWorkspaceAuthenticatedAgent({
     clearRetryableWorkspaceAuthFailureCount(event, workspaceSlug);
     return agent;
   } catch (error) {
-    if (isTerminalCpSessionFailure(error)) {
+    if (isTerminalAccountSessionFailure(error)) {
       throw error;
     }
     if (

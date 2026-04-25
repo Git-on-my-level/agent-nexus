@@ -274,7 +274,7 @@ func isHelpToken(value string) bool {
 
 func (a *App) rootUsageText() string {
 	var b strings.Builder
-	b.WriteString(strings.TrimSpace(`anx - Organization Autorunner CLI
+	b.WriteString(strings.TrimSpace(`anx - Agent Nexus CLI
 
 Usage:
   anx [global flags] <command>
@@ -993,7 +993,24 @@ func runtimeGeneratedRegistryPaths() []string {
 		}
 		paths = append(paths, path)
 	}
+	for _, path := range runtimeRegistrySecretHelpPaths {
+		path = strings.Join(strings.Fields(strings.TrimSpace(path)), " ")
+		if path == "" {
+			continue
+		}
+		paths = append(paths, path)
+	}
 	return paths
+}
+
+// runtimeRegistrySecretHelpPaths are contract x-anx-cli-path values for secret commands (registry 1:1).
+var runtimeRegistrySecretHelpPaths = []string{
+	"secret list",
+	"secret create",
+	"secret delete",
+	"secret get --reveal",
+	"secret exec",
+	"secret update",
 }
 
 func onboardingHelpText() string {

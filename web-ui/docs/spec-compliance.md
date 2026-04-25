@@ -7,6 +7,8 @@ known limitations, and test coverage.
 
 ## Integration Execution Notes
 
+`tests/e2e/integration-core-golden-path.spec.js` is **opt-in** via `ANX_CORE_BASE_URL` / `PUBLIC_ANX_CORE_BASE_URL`; without it, those tests are skipped. It is not default CI unless the pipeline sets that environment (see `docs/runbook.md`).
+
 Backend (Terminal A):
 
 ```bash

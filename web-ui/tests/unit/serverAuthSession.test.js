@@ -43,10 +43,10 @@ function createSessionEvent({
 } = {}) {
   const recorder = createCookieRecorder();
   if (refreshToken) {
-    recorder.values.set(`oar_ui_session_${workspaceSlug}`, refreshToken);
+    recorder.values.set(`anx_ui_session_${workspaceSlug}`, refreshToken);
   }
   if (accessToken) {
-    recorder.values.set(`oar_ui_access_${workspaceSlug}`, accessToken);
+    recorder.values.set(`anx_ui_access_${workspaceSlug}`, accessToken);
   }
   return {
     recorder,
@@ -75,7 +75,7 @@ describe("server auth session helpers", () => {
 
     expect(recorder.setCalls).toHaveLength(1);
     expect(recorder.setCalls[0]).toMatchObject({
-      name: "oar_ui_session_alpha",
+      name: "anx_ui_session_alpha",
       value: "refresh-token",
       options: {
         httpOnly: true,
@@ -98,7 +98,7 @@ describe("server auth session helpers", () => {
 
     expect(recorder.setCalls).toHaveLength(1);
     expect(recorder.setCalls[0]).toMatchObject({
-      name: "oar_ui_access_alpha",
+      name: "anx_ui_access_alpha",
       value: "access-token",
       options: {
         httpOnly: true,
@@ -120,7 +120,7 @@ describe("server auth session helpers", () => {
 
     expect(recorder.deleteCalls).toEqual([
       {
-        name: "oar_ui_session_alpha",
+        name: "anx_ui_session_alpha",
         options: {
           path: "/",
         },
@@ -138,7 +138,7 @@ describe("server auth session helpers", () => {
 
     expect(recorder.deleteCalls).toEqual([
       {
-        name: "oar_ui_access_alpha",
+        name: "anx_ui_access_alpha",
         options: {
           path: "/",
         },
@@ -187,7 +187,7 @@ describe("server auth session helpers", () => {
     });
     expect(recorder.setCalls).toEqual([
       {
-        name: "oar_ui_session_alpha",
+        name: "anx_ui_session_alpha",
         value: "refresh-token",
         options: {
           httpOnly: true,
@@ -198,7 +198,7 @@ describe("server auth session helpers", () => {
         },
       },
       {
-        name: "oar_ui_access_alpha",
+        name: "anx_ui_access_alpha",
         value: "access-token",
         options: {
           httpOnly: true,
@@ -259,10 +259,10 @@ describe("server auth session helpers", () => {
       accessToken: "next-access-token",
       refreshToken: "next-refresh-token",
     });
-    expect(first.recorder.values.get("oar_ui_session_alpha")).toBe(
+    expect(first.recorder.values.get("anx_ui_session_alpha")).toBe(
       "next-refresh-token",
     );
-    expect(second.recorder.values.get("oar_ui_session_alpha")).toBe(
+    expect(second.recorder.values.get("anx_ui_session_alpha")).toBe(
       "next-refresh-token",
     );
   });
@@ -310,10 +310,10 @@ describe("server auth session helpers", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(second.recorder.values.get("oar_ui_session_alpha")).toBe(
+    expect(second.recorder.values.get("anx_ui_session_alpha")).toBe(
       "next-refresh-token",
     );
-    expect(second.recorder.values.get("oar_ui_access_alpha")).toBe(
+    expect(second.recorder.values.get("anx_ui_access_alpha")).toBe(
       "next-access-token",
     );
   });
@@ -406,11 +406,11 @@ describe("server auth session helpers", () => {
       code: "auth_session_retryable",
     });
 
-    expect(recorder.values.get("oar_ui_session_alpha")).toBe("refresh-token");
-    expect(recorder.values.get("oar_ui_access_alpha")).toBe(
+    expect(recorder.values.get("anx_ui_session_alpha")).toBe("refresh-token");
+    expect(recorder.values.get("anx_ui_access_alpha")).toBe(
       "expired-access-token",
     );
-    expect(recorder.values.get("oar_ui_auth_retry_alpha")).toBe("1");
+    expect(recorder.values.get("anx_ui_auth_retry_alpha")).toBe("1");
     expect(recorder.deleteCalls).toEqual([]);
   });
 
@@ -445,8 +445,8 @@ describe("server auth session helpers", () => {
       code: "auth_session_retryable",
     });
 
-    expect(recorder.values.get("oar_ui_session_alpha")).toBe("refresh-token");
-    expect(recorder.values.get("oar_ui_auth_retry_alpha")).toBe("1");
+    expect(recorder.values.get("anx_ui_session_alpha")).toBe("refresh-token");
+    expect(recorder.values.get("anx_ui_auth_retry_alpha")).toBe("1");
     expect(recorder.deleteCalls).toEqual([]);
   });
 
@@ -454,7 +454,7 @@ describe("server auth session helpers", () => {
     const { event, recorder } = createSessionEvent({
       refreshToken: "refresh-token",
     });
-    recorder.values.set("oar_ui_auth_retry_alpha", "1");
+    recorder.values.set("anx_ui_auth_retry_alpha", "1");
     const fetchMock = vi.fn().mockResolvedValueOnce(
       new Response(
         JSON.stringify({
@@ -479,29 +479,29 @@ describe("server auth session helpers", () => {
       }),
     ).resolves.toBeNull();
 
-    expect(recorder.values.get("oar_ui_session_alpha")).toBeUndefined();
-    expect(recorder.values.get("oar_ui_auth_retry_alpha")).toBeUndefined();
+    expect(recorder.values.get("anx_ui_session_alpha")).toBeUndefined();
+    expect(recorder.values.get("anx_ui_auth_retry_alpha")).toBeUndefined();
     expect(recorder.deleteCalls).toEqual([
       {
-        name: "oar_ui_auth_retry_alpha",
+        name: "anx_ui_auth_retry_alpha",
         options: {
           path: "/",
         },
       },
       {
-        name: "oar_ui_session_alpha",
+        name: "anx_ui_session_alpha",
         options: {
           path: "/",
         },
       },
       {
-        name: "oar_ui_access_alpha",
+        name: "anx_ui_access_alpha",
         options: {
           path: "/",
         },
       },
       {
-        name: "oar_ui_auth_retry_alpha",
+        name: "anx_ui_auth_retry_alpha",
         options: {
           path: "/",
         },
@@ -558,10 +558,10 @@ describe("server auth session helpers", () => {
       username: "passkey.user",
     });
 
-    expect(recorder.values.get("oar_ui_session_alpha")).toBe(
+    expect(recorder.values.get("anx_ui_session_alpha")).toBe(
       "next-refresh-token",
     );
-    expect(recorder.values.get("oar_ui_access_alpha")).toBe(
+    expect(recorder.values.get("anx_ui_access_alpha")).toBe(
       "next-access-token",
     );
     expect(fetchMock).toHaveBeenNthCalledWith(

@@ -64,7 +64,7 @@ func commandSupportsMutationIDResolution(commandID string) bool {
 	case "topics.create",
 		"topics.patch",
 		"boards.create",
-		"boards.update",
+		"boards.patch",
 		"boards.cards.add",
 		"boards.cards.create",
 		"boards.cards.batch_add",

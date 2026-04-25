@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createOarCoreClient } from "../../src/lib/anxCoreClient.js";
+import { createAnxCoreClient } from "../../src/lib/anxCoreClient.js";
 
 /**
  * Mirrors browser `coreClient.js`: authenticated workspace user with no selected
@@ -30,7 +30,7 @@ function brokenOldLockOptions(fetchFn) {
 describe("coreClient workspace write path (integration)", () => {
   it("createDocument succeeds with empty actor_id when session is locked (agent present)", async () => {
     const bodies = [];
-    const client = createOarCoreClient(
+    const client = createAnxCoreClient(
       workspaceShellClientOptions(async (_url, init) => {
         bodies.push(JSON.parse(init.body));
         return new Response(
@@ -58,7 +58,7 @@ describe("coreClient workspace write path (integration)", () => {
   });
 
   it("createDocument throws when lock is off and no actor is selected (regression guard)", async () => {
-    const client = createOarCoreClient(
+    const client = createAnxCoreClient(
       brokenOldLockOptions(async () => {
         throw new Error("fetch should not run");
       }),

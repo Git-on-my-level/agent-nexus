@@ -350,7 +350,7 @@ test("board UI supports create/edit and card mutation flows", async ({
   }
 
   await page.addInitScript((selectedActorId) => {
-    window.localStorage.setItem("oar_ui_actor_id", selectedActorId);
+    window.localStorage.setItem("anx_ui_actor_id", selectedActorId);
   }, actorId);
 
   await page.route(/\/actors$/, async (route) => {
@@ -977,7 +977,7 @@ test("board detail shows pending freshness and hides derived card counts until r
   ];
 
   await page.addInitScript((selectedActorId) => {
-    window.localStorage.setItem("oar_ui_actor_id", selectedActorId);
+    window.localStorage.setItem("anx_ui_actor_id", selectedActorId);
   }, actorId);
 
   await page.route(/\/actors$/, async (route) => {
@@ -1084,7 +1084,7 @@ test("board edit conflict reloads latest state and allows retry", async ({
   let patchAttempt = 0;
 
   await page.addInitScript((selectedActorId) => {
-    window.localStorage.setItem("oar_ui_actor_id", selectedActorId);
+    window.localStorage.setItem("anx_ui_actor_id", selectedActorId);
   }, actorId);
 
   await page.route(/\/actors$/, async (route) => {

@@ -26,16 +26,15 @@ var ErrKeyMismatch = errors.New("key_mismatch")
 var ErrAgentNotFound = errors.New("agent_not_found")
 var ErrLastActivePrincipal = errors.New("last_active_principal")
 var ErrAccountDisabled = errors.New("account_disabled")
-var ErrCPUnreachable = errors.New("control_plane_unreachable")
+var ErrAccountStatusUnreachable = errors.New("account_status_unreachable")
 
 const (
-	bootstrapTokenPlaceholder = "REPLACE_WITH_SECURE_BOOTSTRAP_TOKEN"
-	defaultAccessTokenTTL     = 15 * time.Minute
-	defaultRefreshTokenTTL    = 30 * 24 * time.Hour
-	defaultAssertionSkew      = 5 * time.Minute
-	registerAgentMaxRetries   = 8
-	registerAgentRetryBase    = 15 * time.Millisecond
-	registerAgentRetryMax     = 250 * time.Millisecond
+	defaultAccessTokenTTL   = 15 * time.Minute
+	defaultRefreshTokenTTL  = 30 * 24 * time.Hour
+	defaultAssertionSkew    = 5 * time.Minute
+	registerAgentMaxRetries = 8
+	registerAgentRetryBase  = 15 * time.Millisecond
+	registerAgentRetryMax   = 250 * time.Millisecond
 )
 
 type Option func(*Store)
@@ -162,7 +161,7 @@ func WithAssertionSkew(skew time.Duration) Option {
 func WithBootstrapToken(token string) Option {
 	return func(store *Store) {
 		token = strings.TrimSpace(token)
-		if token == "" || token == bootstrapTokenPlaceholder {
+		if token == "" || token == BootstrapTokenPlaceholder {
 			store.bootstrapTokenHash = ""
 			return
 		}
@@ -662,8 +661,8 @@ func (s *Store) IssueTokenFromRefresh(ctx context.Context, refreshToken string) 
 				switch {
 				case errors.Is(err, ErrAccountInactive):
 					return TokenBundle{}, ErrAccountDisabled
-				case errors.Is(err, ErrCPUnreachable):
-					return TokenBundle{}, ErrCPUnreachable
+				case errors.Is(err, ErrAccountStatusUnreachable):
+					return TokenBundle{}, ErrAccountStatusUnreachable
 				default:
 					return TokenBundle{}, err
 				}

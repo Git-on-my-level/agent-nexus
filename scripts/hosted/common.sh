@@ -8,6 +8,39 @@ HOSTED_BACKUP_FORMAT_VERSION="hosted-ops-backup/v1"
 HOSTED_INSTANCE_FORMAT_VERSION="hosted-instance/v1"
 HOSTED_BOOTSTRAP_PLACEHOLDER="REPLACE_WITH_SECURE_BOOTSTRAP_TOKEN"
 
+# Returns 0 when ANX_ENV / ANX_ANX_IS_PROD indicate a non-development deployment
+# (anx-core must not run with the template bootstrap token in that case).
+hosted_env_is_non_dev() {
+  if [[ "${ANX_HOSTED_DEV_MODE:-0}" == "1" ]]; then
+    return 1
+  fi
+  local e
+  e="$(printf '%s' "${ANX_ENV:-}" | tr '[:upper:]' '[:lower:]')"
+  case "$e" in
+    development|dev|test|local) return 1 ;;
+  esac
+  if [[ "$e" == "production" ]]; then
+    return 0
+  fi
+  local p
+  p="$(printf '%s' "${ANX_ANX_IS_PROD:-}" | tr '[:upper:]' '[:lower:]')"
+  if [[ "$p" == "1" || "$p" == "true" || "$p" == "yes" ]]; then
+    return 0
+  fi
+  return 1
+}
+
+# Exits if the bootstrap token is the template value in a non-dev environment.
+refuse_bootstrap_placeholder_in_non_dev() {
+  local token="${1:-}"
+  [[ -z "$token" ]] && return 0
+  [[ "$token" == "$HOSTED_BOOTSTRAP_PLACEHOLDER" ]] || return 0
+  if ! hosted_env_is_non_dev; then
+    return 0
+  fi
+  die "refusing: ANX_BOOTSTRAP_TOKEN is the template placeholder ${HOSTED_BOOTSTRAP_PLACEHOLDER} in a non-development environment; set a real token, --clear-bootstrap-token, --generate-bootstrap-token, or ANX_HOSTED_DEV_MODE=1 for local only"
+}
+
 log() {
   printf '%s\n' "$*"
 }
@@ -672,6 +705,7 @@ start_core_server() {
         unset ANX_BOOTSTRAP_TOKEN
         ;;
       set)
+        refuse_bootstrap_placeholder_in_non_dev "$bootstrap_token"
         export ANX_BOOTSTRAP_TOKEN="$bootstrap_token"
         ;;
       *)

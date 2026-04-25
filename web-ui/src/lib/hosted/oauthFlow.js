@@ -5,7 +5,7 @@ import {
   sanitizeHostedReturnPath,
 } from "$lib/hosted/launchFlow.js";
 
-const HOSTED_OAUTH_STORAGE_KEY = "oar_hosted_oauth_continuations_v1";
+const HOSTED_OAUTH_STORAGE_KEY = "anx_hosted_oauth_continuations_v1";
 const HOSTED_OAUTH_MAX_AGE_MS = 15 * 60 * 1000;
 
 export function normalizeHostedOAuthMode(rawMode) {

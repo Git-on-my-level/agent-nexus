@@ -25,8 +25,8 @@ test("preserves a configured mount prefix in redirects and generated links", asy
   page,
 }) => {
   await page.addInitScript(() => {
-    window.localStorage.setItem("oar_ui_actor_id", "actor-ops-ai");
-    window.localStorage.setItem("oar_ui_actor_id:local", "actor-ops-ai");
+    window.localStorage.setItem("anx_ui_actor_id", "actor-ops-ai");
+    window.localStorage.setItem("anx_ui_actor_id:local", "actor-ops-ai");
   });
 
   await page.context().addCookies([

@@ -411,7 +411,7 @@
       >
         <a
           class="transition-colors hover:text-fg inline-block py-1"
-          href="https://github.com/run-llama/oar"
+          href="https://github.com/Git-on-my-level/agent-nexus"
           rel="noreferrer"
           target="_blank">Docs</a
         >
@@ -429,13 +429,13 @@
         >
         <a
           class="transition-colors hover:text-fg inline-block py-1"
-          href="https://github.com/run-llama/oar"
+          href="https://github.com/Git-on-my-level/agent-nexus"
           rel="noreferrer"
           target="_blank">GitHub</a
         >
         <a
           class="transition-colors hover:text-fg inline-block py-1"
-          href="https://status.runoar.com"
+          href="https://status.agentnexus.com"
           rel="noreferrer"
           target="_blank"
         >

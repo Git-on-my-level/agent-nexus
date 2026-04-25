@@ -11,7 +11,7 @@ import (
 	webauthnlib "github.com/go-webauthn/webauthn/webauthn"
 )
 
-const defaultWebAuthnDisplayName = "OAR"
+const defaultWebAuthnDisplayName = "Agent Nexus"
 
 type WebAuthnConfig struct {
 	RPDisplayName  string

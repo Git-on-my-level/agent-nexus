@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -2054,7 +2055,6 @@ func TestCardsTimelineDispatchesToAPI(t *testing.T) {
 
 func TestBoardCommands(t *testing.T) {
 	t.Parallel()
-	t.Skip("obsolete compatibility coverage")
 
 	const (
 		boardID       = "board_product_launch_123456"
@@ -2166,8 +2166,8 @@ func TestBoardCommands(t *testing.T) {
 	}
 
 	updatePayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"if_updated_at":"`+updatedAt+`","patch":{"title":"Launch Updated"}}`), []string{"--json", "--base-url", server.URL, "boards", "update", "--board-id", boardID}))
-	if got := anyStringValue(updatePayload["command_id"]); got != "boards.update" {
-		t.Fatalf("expected boards.update command_id, got %#v", updatePayload)
+	if got := anyStringValue(updatePayload["command_id"]); got != "boards.patch" {
+		t.Fatalf("expected boards.patch command_id, got %#v", updatePayload)
 	}
 
 	workspacePayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "boards", "workspace", "--board-id", boardID}))
@@ -2191,18 +2191,18 @@ func TestBoardCommands(t *testing.T) {
 	}
 
 	updateCardPayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "boards", "cards", "update", "--card-id", cardID, "--if-updated-at", updatedAt, "--status", "done"}))
-	if got := anyStringValue(updateCardPayload["command_id"]); got != "cards.patch" {
-		t.Fatalf("expected cards.patch command_id, got %#v", updateCardPayload)
+	if got := anyStringValue(updateCardPayload["command_id"]); got != "boards.cards.update" {
+		t.Fatalf("expected boards.cards.update command_id, got %#v", updateCardPayload)
 	}
 
 	movePayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "boards", "cards", "move", "--board-id", boardID, "--card-id", cardID, "--if-board-updated-at", updatedAt, "--column", "review", "--after-card-id", peerCardID}))
-	if got := anyStringValue(movePayload["command_id"]); got != "cards.move" {
-		t.Fatalf("expected cards.move command_id, got %#v", movePayload)
+	if got := anyStringValue(movePayload["command_id"]); got != "boards.cards.move" {
+		t.Fatalf("expected boards.cards.move command_id, got %#v", movePayload)
 	}
 
 	archivePayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "boards", "cards", "archive", "--card-id", cardID, "--if-board-updated-at", updatedAt}))
-	if got := anyStringValue(archivePayload["command_id"]); got != "cards.archive" {
-		t.Fatalf("expected cards.archive command_id, got %#v", archivePayload)
+	if got := anyStringValue(archivePayload["command_id"]); got != "boards.cards.archive" {
+		t.Fatalf("expected boards.cards.archive command_id, got %#v", archivePayload)
 	}
 }
 
@@ -2284,14 +2284,13 @@ func TestBoardCardsMoveRejectsBeforeAndAfterFlags(t *testing.T) {
 
 func TestBoardCardMutationsResolveShortThreadIDsInBodies(t *testing.T) {
 	t.Parallel()
-	t.Skip("obsolete compatibility coverage")
 
 	const canonicalBoardID = "board_1234567890abcdef"
-	const shortBoardID = "board_123456"
+	const shortBoardID = "board_1234"
 	const canonicalCardThreadID = "thread_1234567890abcdef"
-	const shortCardThreadID = "thread_12345"
+	const shortCardThreadID = "thread_123"
 	const canonicalAnchorThreadID = "thread_anchor_1234567890"
-	const shortAnchorThreadID = "thread_ancho"
+	const shortAnchorThreadID = "thread_anc"
 	const updatedAt = "2026-03-08T00:00:00Z"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -2313,7 +2312,7 @@ func TestBoardCardMutationsResolveShortThreadIDsInBodies(t *testing.T) {
 				t.Fatalf("expected canonical create after_thread_id %q, got %#v", canonicalAnchorThreadID, payload)
 			}
 			_, _ = w.Write([]byte(`{"board":{"id":"` + canonicalBoardID + `","updated_at":"` + updatedAt + `"},"card":{"id":"card_123","board_id":"` + canonicalBoardID + `","thread_id":"` + canonicalCardThreadID + `","parent_thread":"` + canonicalCardThreadID + `","title":"Execution Track","body":"","version":1,"column_key":"ready","rank":"a","assignee":null,"priority":null,"status":"todo","pinned_document_id":null,"created_at":"` + updatedAt + `","created_by":"actor_1","updated_at":"` + updatedAt + `","updated_by":"actor_1","provenance":{"sources":["inferred"]}}}`))
-		case r.Method == http.MethodPost && r.URL.Path == "/boards/"+canonicalBoardID+"/cards/"+canonicalCardThreadID+"/move":
+		case r.Method == http.MethodPost && r.URL.Path == "/cards/card_123/move":
 			var payload map[string]any
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 				t.Fatalf("decode move body: %v", err)
@@ -2342,27 +2341,29 @@ func TestBoardCardMutationsResolveShortThreadIDsInBodies(t *testing.T) {
 		"--from-file", addFile,
 	}))
 
+	moveFile := filepath.Join(home, "board-thread-move.json")
+	if err := os.WriteFile(moveFile, []byte(`{"if_board_updated_at":"`+updatedAt+`","column_key":"review","after_thread_id":"`+shortAnchorThreadID+`"}`), 0o600); err != nil {
+		t.Fatalf("write move file: %v", err)
+	}
+
 	assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
 		"--base-url", server.URL,
 		"boards", "cards", "move",
 		"--board-id", shortBoardID,
-		"--thread-id", shortCardThreadID,
-		"--if-board-updated-at", updatedAt,
-		"--column", "review",
-		"--after", shortAnchorThreadID,
+		"--card-id", "card_123",
+		"--from-file", moveFile,
 	}))
 }
 
 func TestBoardCardMoveResolvesShortAfterCardID(t *testing.T) {
 	t.Parallel()
-	t.Skip("obsolete compatibility coverage")
 
 	const canonicalBoardID = "board_1234567890abcdef"
-	const shortBoardID = "board_123456"
+	const shortBoardID = "board_1234"
 	const movingCardID = "card_moving_1234567890ab"
 	const afterCardID = "card_afterxx_1234567890ab"
-	const shortAfterCardID = "card_afterxx"
+	const shortAfterCardID = "card_after"
 	const updatedAt = "2026-03-08T00:00:00Z"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -2375,7 +2376,7 @@ func TestBoardCardMoveResolvesShortAfterCardID(t *testing.T) {
 				{"id":"` + movingCardID + `","board_id":"` + canonicalBoardID + `","column_key":"ready","rank":"a","title":"Moving","body":"","version":1,"parent_thread":null,"thread_id":null,"pinned_document_id":null,"assignee":null,"priority":null,"status":"todo","created_at":"` + updatedAt + `","created_by":"actor_1","updated_at":"` + updatedAt + `","updated_by":"actor_1","provenance":{"sources":["inferred"]}},
 				{"id":"` + afterCardID + `","board_id":"` + canonicalBoardID + `","column_key":"ready","rank":"b","title":"Anchor","body":"","version":1,"parent_thread":null,"thread_id":null,"pinned_document_id":null,"assignee":null,"priority":null,"status":"todo","created_at":"` + updatedAt + `","created_by":"actor_1","updated_at":"` + updatedAt + `","updated_by":"actor_1","provenance":{"sources":["inferred"]}}
 			]}`))
-		case r.Method == http.MethodPost && r.URL.Path == "/boards/"+canonicalBoardID+"/cards/"+movingCardID+"/move":
+		case r.Method == http.MethodPost && r.URL.Path == "/cards/"+movingCardID+"/move":
 			var payload map[string]any
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 				t.Fatalf("decode move body: %v", err)
@@ -2405,13 +2406,12 @@ func TestBoardCardMoveResolvesShortAfterCardID(t *testing.T) {
 
 func TestBoardCardMoveResolvesShortAfterCardIDFromFile(t *testing.T) {
 	t.Parallel()
-	t.Skip("obsolete compatibility coverage")
 
 	const canonicalBoardID = "board_1234567890abcdef"
-	const shortBoardID = "board_123456"
+	const shortBoardID = "board_1234"
 	const movingCardID = "card_moving_1234567890ab"
 	const afterCardID = "card_afterxx_1234567890ab"
-	const shortAfterCardID = "card_afterxx"
+	const shortAfterCardID = "card_after"
 	const updatedAt = "2026-03-08T00:00:00Z"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -2424,7 +2424,7 @@ func TestBoardCardMoveResolvesShortAfterCardIDFromFile(t *testing.T) {
 				{"id":"` + movingCardID + `","board_id":"` + canonicalBoardID + `","column_key":"ready","rank":"a","title":"Moving","body":"","version":1,"parent_thread":null,"thread_id":null,"pinned_document_id":null,"assignee":null,"priority":null,"status":"todo","created_at":"` + updatedAt + `","created_by":"actor_1","updated_at":"` + updatedAt + `","updated_by":"actor_1","provenance":{"sources":["inferred"]}},
 				{"id":"` + afterCardID + `","board_id":"` + canonicalBoardID + `","column_key":"ready","rank":"b","title":"Anchor","body":"","version":1,"parent_thread":null,"thread_id":null,"pinned_document_id":null,"assignee":null,"priority":null,"status":"todo","created_at":"` + updatedAt + `","created_by":"actor_1","updated_at":"` + updatedAt + `","updated_by":"actor_1","provenance":{"sources":["inferred"]}}
 			]}`))
-		case r.Method == http.MethodPost && r.URL.Path == "/boards/"+canonicalBoardID+"/cards/"+movingCardID+"/move":
+		case r.Method == http.MethodPost && r.URL.Path == "/cards/"+movingCardID+"/move":
 			var payload map[string]any
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 				t.Fatalf("decode move body: %v", err)
@@ -2457,12 +2457,11 @@ func TestBoardCardMoveResolvesShortAfterCardIDFromFile(t *testing.T) {
 
 func TestBoardCardUpdateAndMoveAllowJSONBodyWithoutConcurrencyFlags(t *testing.T) {
 	t.Parallel()
-	t.Skip("obsolete compatibility coverage")
 
 	const canonicalBoardID = "board_1234567890abcdef"
 	const canonicalCardID = "card_1234567890abcdef"
 	const canonicalAnchorThreadID = "thread_anchor_1234567890"
-	const shortAnchorThreadID = "thread_ancho"
+	const shortAnchorThreadID = "thread_anc"
 	const updatedAt = "2026-03-08T00:00:00Z"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -2483,7 +2482,7 @@ func TestBoardCardUpdateAndMoveAllowJSONBodyWithoutConcurrencyFlags(t *testing.T
 				t.Fatalf("expected update patch status done, got %#v", payload)
 			}
 			_, _ = w.Write([]byte(`{"board":{"id":"` + canonicalBoardID + `","updated_at":"` + updatedAt + `"},"card":{"id":"` + canonicalCardID + `","board_id":"` + canonicalBoardID + `","status":"done"}}`))
-		case r.Method == http.MethodPost && r.URL.Path == "/boards/"+canonicalBoardID+"/cards/"+canonicalCardID+"/move":
+		case r.Method == http.MethodPost && r.URL.Path == "/cards/"+canonicalCardID+"/move":
 			var payload map[string]any
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 				t.Fatalf("decode move body: %v", err)
@@ -3290,7 +3289,6 @@ func TestThreadsRecommendationsSkipsMissingRelatedThreadsWithWarnings(t *testing
 
 func TestThreadsRecommendationsCanHydrateRelatedEventContent(t *testing.T) {
 	t.Parallel()
-	t.Skip("obsolete compatibility coverage")
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -4459,6 +4457,11 @@ func TestEventsTailReconnect(t *testing.T) {
 	}
 }
 
+var (
+	goldenInboxAliasPattern   = regexp.MustCompile(`"alias": "ibx_[^"]+"`)
+	goldenInboxItemShortIDPat = regexp.MustCompile(`"short_id": "inbox:[^"]+"`)
+)
+
 func assertGolden(t *testing.T, goldenFile string, actual string) {
 	t.Helper()
 	path := filepath.Join("testdata", goldenFile)
@@ -4467,6 +4470,25 @@ func assertGolden(t *testing.T, goldenFile string, actual string) {
 		t.Fatalf("read golden %s: %v", path, err)
 	}
 	if string(expected) != actual {
+		t.Fatalf("golden mismatch for %s\n--- expected ---\n%s\n--- actual ---\n%s", goldenFile, string(expected), actual)
+	}
+}
+
+func stableMachineInboxJSON(s string) string {
+	s = goldenInboxAliasPattern.ReplaceAllString(s, `"alias": "ibx_STABLE"`)
+	return goldenInboxItemShortIDPat.ReplaceAllString(s, `"short_id": "inbox:STABLE"`)
+}
+
+// assertGoldenStabilizedInboxAliases compares thread machine JSON but normalizes non-deterministic
+// inbox item fields (per-run ibx_ alias, truncated inbox: short_id).
+func assertGoldenStabilizedInboxAliases(t *testing.T, goldenFile string, actual string) {
+	t.Helper()
+	path := filepath.Join("testdata", goldenFile)
+	expected, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read golden %s: %v", path, err)
+	}
+	if stableMachineInboxJSON(string(expected)) != stableMachineInboxJSON(actual) {
 		t.Fatalf("golden mismatch for %s\n--- expected ---\n%s\n--- actual ---\n%s", goldenFile, string(expected), actual)
 	}
 }
@@ -4568,7 +4590,6 @@ func TestEventsStreamDefaultNoFollow(t *testing.T) {
 
 func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 	t.Parallel()
-	t.Skip("obsolete compatibility coverage")
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -4764,7 +4785,7 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 		"threads", "inspect",
 		"--thread-id", "thread_123",
 	})
-	assertGolden(t, "threads_inspect_machine.golden.json", threadsInspectOut)
+	assertGoldenStabilizedInboxAliases(t, "threads_inspect_machine.golden.json", threadsInspectOut)
 	threadsInspectPayload := assertEnvelopeOK(t, threadsInspectOut)
 	if got := anyStringValue(threadsInspectPayload["command"]); got != "threads inspect" {
 		t.Fatalf("expected threads inspect command label, got %#v", threadsInspectPayload)
@@ -4792,7 +4813,7 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 		"threads", "workspace",
 		"--thread-id", "thread_123",
 	})
-	assertGolden(t, "threads_workspace_machine.golden.json", threadsWorkspaceOut)
+	assertGoldenStabilizedInboxAliases(t, "threads_workspace_machine.golden.json", threadsWorkspaceOut)
 	threadsWorkspacePayload := assertEnvelopeOK(t, threadsWorkspaceOut)
 	if got := anyStringValue(threadsWorkspacePayload["command"]); got != "threads workspace" {
 		t.Fatalf("expected threads workspace command label, got %#v", threadsWorkspacePayload)
@@ -4856,7 +4877,7 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 		"threads", "recommendations",
 		"--thread-id", "thread_123",
 	})
-	assertGolden(t, "threads_recommendations_machine.golden.json", threadsRecommendationsOut)
+	assertGoldenStabilizedInboxAliases(t, "threads_recommendations_machine.golden.json", threadsRecommendationsOut)
 	threadsRecommendationsPayload := assertEnvelopeOK(t, threadsRecommendationsOut)
 	if got := anyStringValue(threadsRecommendationsPayload["command"]); got != "threads recommendations" {
 		t.Fatalf("expected threads recommendations command label, got %#v", threadsRecommendationsPayload)
@@ -4981,7 +5002,6 @@ func TestStreamAliasCommandsUseCanonicalMachineIdentity(t *testing.T) {
 
 func TestMachineFacingNonStreamErrorsIncludeCommandIdentity(t *testing.T) {
 	t.Parallel()
-	t.Skip("obsolete compatibility coverage")
 
 	home := t.TempDir()
 	env := map[string]string{}

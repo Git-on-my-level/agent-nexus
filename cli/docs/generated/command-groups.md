@@ -1,4 +1,4 @@
-# OAR Command Groups
+# Agent Nexus command groups
 
 Generated from `contracts/anx-openapi.yaml`.
 

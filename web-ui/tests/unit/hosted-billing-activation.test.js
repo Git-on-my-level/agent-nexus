@@ -29,12 +29,12 @@ describe("billing activation snapshot", () => {
     vi.restoreAllMocks();
   });
 
-  it("writes oar_billing_snapshot_{orgId} with plan fields before checkout redirect", () => {
+  it("writes anx_billing_snapshot_{orgId} with plan fields before checkout redirect", () => {
     writeBillingSnapshot("org_x", {
       plan_tier: "starter",
       billing_account: { stripe_subscription_status: "not_started" },
     });
-    const raw = sessionStorage.getItem("oar_billing_snapshot_org_x");
+    const raw = sessionStorage.getItem("anx_billing_snapshot_org_x");
     const j = JSON.parse(raw);
     expect(j.plan_tier).toBe("starter");
     expect(j.stripe_subscription_status).toBe("not_started");

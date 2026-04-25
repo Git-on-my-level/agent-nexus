@@ -1,6 +1,6 @@
-# OAR HTTP API Contract (v0.3.0)
+# Agent Nexus HTTP API Contract (v0.3.0)
 
-This document defines the **concrete HTTP/JSON surface** used for integration between **anx-core** and clients (including **oar-ui** and agents).
+This document defines the **concrete HTTP/JSON surface** used for integration between **anx-core** and clients (including **the web UI** and agents).
 
 The schema of objects is defined by `../contracts/anx-schema.yaml`.
 
@@ -45,9 +45,13 @@ The schema of objects is defined by `../contracts/anx-schema.yaml`.
   - `agent_revoked`
   - `key_mismatch`
 
+#### Workspace service JWT assertions
+
+When a hosted **workspace service** (anx-core) calls the **control plane** (e.g. heartbeat telemetry, account status), it may authenticate with a short-lived **Ed25519 (EdDSA) JWT** in `Authorization: Bearer <jwt>`. The signing implementation lives in `core/internal/wsservicejwt` (single source of truth in this repo). **The control plane’s verifier for these assertions must track the same claim set and time windows** (`iss`/`sub`, `aud`, `iat`/`nbf`/`exp`, `workspace_id`, `purpose`); that code lives in the control plane repository, so any contract change (TTL, skew, new claims) requires coordinated updates in both places.
+
 ## API Surface Classification
 
-Each endpoint is classified with an `x-oar-surface` extension indicating its role:
+Each endpoint is classified with an `x-anx-surface` extension indicating its role:
 
 - **`canonical`**: CRUD/list/get endpoints over canonical resources (topics, cards, artifacts, documents, boards, board cards, events, packets), plus **read-only** thread list/inspect routes for backing-thread inspection. These are the durable substrate for automation.
 
@@ -61,18 +65,18 @@ Projection endpoints return a `section_kinds` field to distinguish canonical vs 
 
 **Do not treat this file as a per-path API list.** Machine-verifiable workspace HTTP is defined only in:
 
-- [`contracts/anx-openapi.yaml`](../../contracts/anx-openapi.yaml) — paths, methods, request/response schemas, and `x-oar-surface` / `x-oar-command-id`.
+- [`contracts/anx-openapi.yaml`](../../contracts/anx-openapi.yaml) — paths, methods, request/response schemas, and `x-anx-surface` / `x-anx-command-id`.
 - Generated references: [`contracts/gen/meta/commands.json`](../../contracts/gen/meta/commands.json) (structured metadata) and [`contracts/gen/docs/commands.md`](../../contracts/gen/docs/commands.md) (human-oriented command index).
 
 Drift from the live router is gated in CI: `core` runs `TestExactRegisterRoutesCoveredByOpenAPOrExceptions`, which requires every `registerRoute(..., exactRouteAccess(...))` entry in `handler.go` to map to **OpenAPI-derived** commands or to an explicit row in [`contracts/non-openapi-endpoints.yaml`](../../contracts/non-openapi-endpoints.yaml).
 
 ### Narrative notes (not exhaustive)
 
-- **CLI version gate**: Clients may send `X-ANX-CLI-Version`. When below minimum compatibility, core responds with `426` and `cli_outdated` except on a small set of public/meta/auth bootstrap routes; see `x-oar-*` and handler logic — exact allowlist is in OpenAPI and code, not duplicated here.
+- **CLI version gate**: Clients may send `X-ANX-CLI-Version`. When below minimum compatibility, core responds with `426` and `cli_outdated` except on a small set of public/meta/auth bootstrap routes; see `x-anx-*` and handler logic — exact allowlist is in OpenAPI and code, not duplicated here.
 - **Document body updates**: Canonical write is `POST /docs/{document_id}/revisions` (`docs.revisions.create`). There is no `PATCH /docs/{document_id}` on workspace core.
 - **Packets**: Receipts and reviews are created via `POST /packets/receipts` and `POST /packets/reviews` only.
 - **Cards**: Patch, move, and archive use first-class `PATCH /cards/{card_id}`, `POST /cards/{card_id}/move`, and `POST /cards/{card_id}/archive` (or trash/restore/purge as documented in OpenAPI). Board-scoped duplicate paths have been removed. **Batch card create** is `POST /boards/{board_id}/cards/batch` (`boards.cards.batch_add`): one `if_board_updated_at`, many `items`, single transaction.
-- **SSE**: `GET /stream/events` and `GET /stream/inbox` use `text/event-stream`; see OpenAPI `x-oar-input-mode` / streaming metadata.
+- **SSE**: `GET /stream/events` and `GET /stream/inbox` use `text/event-stream`; see OpenAPI `x-anx-input-mode` / streaming metadata.
 
 ## Derived projections (materialized views)
 

@@ -51,6 +51,7 @@ var machineCommandIdentityByPath = map[string]machineCommandIdentity{
 		Command:   "docs revision get",
 		CommandID: "docs.revisions.get",
 	},
+	"boards update": {Command: "boards update", CommandID: "boards.patch"},
 }
 
 func resolveMachineCommandIdentity(command string) machineCommandIdentity {

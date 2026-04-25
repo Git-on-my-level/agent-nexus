@@ -653,10 +653,8 @@ function buildSceneUrl(baseUrl, scenePath) {
 }
 
 async function installQaEnvironment(page, scene) {
-  const workspaceScenario = createWorkspaceScenario(scene.workspaceMode);
-
   await page.addInitScript(
-    ({ fixedNowIso, workspaceScenario, sceneLocalStorage }) => {
+    ({ fixedNowIso, sceneLocalStorage }) => {
       const fixedNowMs = Date.parse(fixedNowIso);
       const RealDate = Date;
 
@@ -683,12 +681,7 @@ async function installQaEnvironment(page, scene) {
         return seed / 0x7fffffff;
       };
 
-      localStorage.setItem("oar_hosted_active_org_id", "org_qa_primary");
-      localStorage.removeItem("anx.tour.inbox.v1.local");
-      localStorage.removeItem("anx.tour.inbox.v1.local.firstSeen");
-      if (workspaceScenario.inboxState !== "fresh") {
-        localStorage.setItem("anx.tour.inbox.v1.local", "dismissed");
-      }
+      localStorage.setItem("anx_hosted_active_org_id", "org_qa_primary");
 
       for (const [key, value] of Object.entries(sceneLocalStorage ?? {})) {
         if (value == null) {
@@ -704,7 +697,6 @@ async function installQaEnvironment(page, scene) {
     },
     {
       fixedNowIso: QA_FIXED_NOW_ISO,
-      workspaceScenario,
       sceneLocalStorage: scene.localStorage ?? {},
     },
   );

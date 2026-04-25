@@ -8,7 +8,7 @@ Read this after the root [AGENTS.md](../AGENTS.md). Use child `AGENTS.md` files 
 
 ## Module Purpose
 
-`cli` is the agent-first command-line runtime for Organization Autorunner.
+`cli` is the agent-first command-line runtime for Agent Nexus.
 
 Its job is to give LLM agents and other automation a stable, non-interactive, contract-aligned way to read state, submit work, and inspect results. The durable value of this module is predictable command behavior, deterministic I/O, and automation-safe ergonomics rather than any specific implementation language or command layout.
 
@@ -31,7 +31,7 @@ The CLI is **for agents and automation** (LLM tooling, CI, scripts, integrations
 - Streaming commands preserve their documented stream framing and resume behavior.
 - Exit code `2` remains reserved for local usage and validation failures.
 - Default text output (non-JSON) should stay line-oriented and concise rather than depending on rich terminal interaction.
-- Remote API failures: stderr prints `Error (<code>): <message>` plus a `Hint:` line when the CLI has recovery guidance. In `--json` mode, the same hint is in `error.hint`, and `error.details.hint` is kept in sync with that value when enrichment runs. `error.details` may include `oar_cli_recovery` (e.g. `kind` values such as `stale_concurrency_token`, `invalid_enum`, `auth_refresh`, `key_mismatch`, `agent_revoked`, `resource_exists`, plus `field`, `schema_enum`, `refresh_cli`, `valid_enum_values`, `reason`, `list_cli`, `register_cli`) as a machine-readable supplement—do not rely on it without checking `kind`. Deeper fields under `error.details.parsed` still mirror the raw API payload.
+- Remote API failures: stderr prints `Error (<code>): <message>` plus a `Hint:` line when the CLI has recovery guidance. In `--json` mode, the same hint is in `error.hint`, and `error.details.hint` is kept in sync with that value when enrichment runs. `error.details` may include `anx_cli_recovery` (e.g. `kind` values such as `stale_concurrency_token`, `invalid_enum`, `auth_refresh`, `key_mismatch`, `agent_revoked`, `resource_exists`, plus `field`, `schema_enum`, `refresh_cli`, `valid_enum_values`, `reason`, `list_cli`, `register_cli`) as a machine-readable supplement—do not rely on it without checking `kind`. Deeper fields under `error.details.parsed` still mirror the raw API payload.
 
 ## What CLI Does Not Own
 

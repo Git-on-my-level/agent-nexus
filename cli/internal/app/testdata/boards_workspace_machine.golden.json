@@ -47,8 +47,8 @@
             "document_count": 1,
             "inbox_count": 1,
             "latest_activity_at": "2026-03-07T00:03:00Z",
-            "related_topic_count": 1,
             "recommendation_count": 1,
+            "related_topic_count": 1,
             "stale": false
           },
           "thread": {
@@ -63,7 +63,7 @@
       "items": [
         {
           "id": "doc_ctx_1",
-          "status": "active",
+          "state": "active",
           "title": "Runbook"
         }
       ]
@@ -82,9 +82,9 @@
     "section_kinds": {
       "board": "canonical",
       "cards": "canonical",
-      "topics": "derived",
       "documents": "derived",
       "inbox": "derived",
+      "topics": "derived",
       "warnings": "derived"
     },
     "warnings": {

@@ -5,10 +5,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 CORE_BASE_URL="${ANX_CORE_BASE_URL:-http://127.0.0.1:8000}"
-WORKSPACE_SLUG="${ANX_E2E_WORKSPACE:-${ANX_E2E_PROJECT:-${ANX_DEFAULT_WORKSPACE:-${ANX_DEFAULT_PROJECT:-local}}}}"
+WORKSPACE_SLUG="${ANX_E2E_WORKSPACE:-${ANX_E2E_PROJECT:-${ANX_DEFAULT_WORKSPACE:-local}}}"
 HEALTHCHECK_TIMEOUT_SECONDS="${ANX_CORE_HEALTHCHECK_TIMEOUT_SECONDS:-5}"
 
-WORKSPACE_CATALOG="${ANX_WORKSPACES:-${ANX_PROJECTS:-}}"
+WORKSPACE_CATALOG="${ANX_WORKSPACES:-}"
 
 if [[ -n "${WORKSPACE_CATALOG:-}" ]]; then
   if ! CORE_BASE_URL="$(
@@ -45,7 +45,7 @@ sys.exit(1)
 PY
   )"; then
     cat >&2 <<EOF
-ERROR: Could not resolve workspace '${WORKSPACE_SLUG}' from ANX_WORKSPACES/ANX_PROJECTS.
+ERROR: Could not resolve workspace '${WORKSPACE_SLUG}' from ANX_WORKSPACES.
 Set ANX_WORKSPACES to include that slug, or omit the workspace catalog and set ANX_CORE_BASE_URL.
 EOF
     exit 1
@@ -59,10 +59,6 @@ CORE_BASE_URL="${CORE_BASE_URL%/}"
 VERSION_URL="${CORE_BASE_URL}/version"
 HANDSHAKE_URL="${CORE_BASE_URL}/meta/handshake"
 export ANX_DEFAULT_WORKSPACE="${WORKSPACE_SLUG}"
-export ANX_DEFAULT_PROJECT="${WORKSPACE_SLUG}"
-if [[ -n "${ANX_WORKSPACES:-}" ]]; then
-  export ANX_PROJECTS="${ANX_PROJECTS:-${ANX_WORKSPACES}}"
-fi
 
 echo "Checking anx-core availability at ${HANDSHAKE_URL} ..."
 if ! version_payload="$(

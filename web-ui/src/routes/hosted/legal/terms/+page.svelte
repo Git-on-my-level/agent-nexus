@@ -66,8 +66,8 @@
 
   <h2>7. Contact</h2>
   <p>
-    Questions: <a href="mailto:support@runoar.com">support@runoar.com</a> (or the
-    support link shown in the app).
+    Questions: <a href="mailto:support@agentnexus.com">support@agentnexus.com</a
+    > (or the support link shown in the app).
   </p>
   <p class="text-micro text-fg-subtle">
     Canonical copy for operators:

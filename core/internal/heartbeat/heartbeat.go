@@ -12,13 +12,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
+	"agent-nexus-core/internal/wsservicejwt"
 )
 
 const (
 	DefaultInterval       = 30 * time.Second
-	DefaultAudience       = "anx-control-plane"
-	defaultAssertionTTL   = 60 * time.Second
+	DefaultAudience       = wsservicejwt.DefaultAudience
 	defaultRetryBackoff   = 200 * time.Millisecond
 	defaultRequestTimeout = 15 * time.Second
 	defaultMaxAttempts    = 3
@@ -53,8 +52,6 @@ type Publisher struct {
 	RetryBackoff time.Duration
 	MaxAttempts  int
 }
-
-// TODO(shared-auth-module): replace with import from shared auth module per TODOS.md.
 
 func (p *Publisher) Run(ctx context.Context) {
 	if p == nil || ctx == nil || ctx.Err() != nil {
@@ -124,19 +121,14 @@ func (p *Publisher) publishOnce(ctx context.Context) error {
 }
 
 func (p *Publisher) signAssertion() (string, error) {
-	now := p.now().UTC()
-	claims := jwt.MapClaims{
-		"iss":          p.Identity.ID,
-		"sub":          p.Identity.ID,
-		"aud":          p.audience(),
-		"iat":          now.Unix(),
-		"nbf":          now.Add(-30 * time.Second).Unix(),
-		"exp":          now.Add(defaultAssertionTTL).Unix(),
-		"workspace_id": p.WorkspaceID,
-		"purpose":      "heartbeat",
-	}
-	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
-	signed, err := token.SignedString(p.Identity.PrivateKey)
+	signed, err := wsservicejwt.Sign(
+		p.Identity.ID,
+		p.Identity.PrivateKey,
+		p.audience(),
+		p.WorkspaceID,
+		"heartbeat",
+		p.now().UTC(),
+	)
 	if err != nil {
 		return "", fmt.Errorf("sign heartbeat assertion: %w", err)
 	}

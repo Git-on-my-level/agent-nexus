@@ -66,7 +66,7 @@ function createEvent({
   organization = "my-org",
   workspace = "my-ws",
   pathname = "/o/my-org/w/my-ws/login",
-  cookies = { oar_cp_dev_access_token: "tok-dev" },
+  cookies = { anx_cp_dev_access_token: "tok-dev" },
   fetchFn,
 } = {}) {
   return {
@@ -159,7 +159,7 @@ describe("workspace +layout.server.js (integration with real resolver)", () => {
 
     const event = createEvent({
       fetchFn,
-      cookies: {}, // no oar_cp_dev_access_token
+      cookies: {}, // no anx_cp_dev_access_token
     });
 
     let thrown;
@@ -219,7 +219,7 @@ describe("workspace +layout.server.js (integration with real resolver)", () => {
 
     const event = createEvent({ fetchFn });
     event.cookies.get = vi.fn((name) =>
-      name === "oar_ui_session_my-ws" ? "refresh-token" : "",
+      name === "anx_ui_session_my-ws" ? "refresh-token" : "",
     );
     const result = await load(event);
 

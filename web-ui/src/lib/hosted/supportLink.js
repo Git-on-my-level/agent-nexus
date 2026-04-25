@@ -4,7 +4,7 @@
  */
 
 /** @type {string} */
-export const DEFAULT_HOSTED_SUPPORT_HREF = "mailto:support@runoar.com";
+export const DEFAULT_HOSTED_SUPPORT_HREF = "mailto:support@agentnexus.com";
 
 /**
  * @param {string} [configured] - Typically `PUBLIC_ANX_SUPPORT_URL` from SvelteKit public env.

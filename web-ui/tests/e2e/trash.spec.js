@@ -161,7 +161,7 @@ test("trash page restores archived topics, boards, cards, documents, and artifac
   }
 
   await page.addInitScript((selectedActorId) => {
-    window.localStorage.setItem("oar_ui_actor_id", selectedActorId);
+    window.localStorage.setItem("anx_ui_actor_id", selectedActorId);
   }, actorId);
 
   await page.route(/\/actors$/, async (route) => {
@@ -455,7 +455,7 @@ test("trash page purges a card after confirmation (human principal)", async ({
   ];
 
   await page.addInitScript((selectedActorId) => {
-    window.localStorage.setItem("oar_ui_actor_id", selectedActorId);
+    window.localStorage.setItem("anx_ui_actor_id", selectedActorId);
   }, actorId);
 
   await page.route(/\/actors$/, async (route) => {

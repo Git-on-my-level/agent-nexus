@@ -1,5 +1,5 @@
 /** Attribute on a <form> or field control to disable ⌘/Ctrl+Enter submission. */
-export const FORM_SUBMIT_SHORTCUT_OPT_OUT = "data-oar-no-submit-shortcut";
+export const FORM_SUBMIT_SHORTCUT_OPT_OUT = "data-anx-no-submit-shortcut";
 
 /**
  * ⌘/Ctrl+Enter on a text-like control inside a <form> runs the form's implicit submit

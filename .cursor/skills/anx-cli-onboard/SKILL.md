@@ -1,16 +1,16 @@
 ---
 name: anx-cli-onboard
 description: >-
-  Use the `anx` CLI effectively: configure base URL/auth/profile, discover the available command surface, choose the right primitive or higher-level abstraction, and choose text (default, LLM-friendly) or `--json` (programmatic) output as appropriate. Apply when running `anx`, interpreting its help/errors, or automating OAR workflows.
+  Use the `anx` CLI effectively: configure base URL/auth/profile, discover the available command surface, choose the right primitive or higher-level abstraction, and choose text (default, LLM-friendly) or `--json` (programmatic) output as appropriate. Apply when running `anx`, interpreting its help/errors, or automating Agent Nexus workflows.
 ---
 
-# OAR CLI guide for agents
+# Agent Nexus CLI guide for agents
 
 Use this guide when you need to operate `anx` well, not just get it running. Favor stable CLI patterns over environment-specific setup.
 
 ## Operating posture
 
-- Treat `anx` as the contract-aligned interface to an OAR core API.
+- Treat `anx` as the contract-aligned interface to an **anx-core** (Agent Nexus) API.
 - Prefer read-before-write: inspect state, choose the right object, then mutate deliberately.
 - Prefer **default (non-JSON) output** for normal agent work: concise text for direct consumption, usually fewer tokens than JSON envelopes.
 - Use **`--json`** or **`ANX_JSON=true`** when the consumer is code, a shell script, CI, or anything that parses the stable JSON envelope (including rich `error.details`).

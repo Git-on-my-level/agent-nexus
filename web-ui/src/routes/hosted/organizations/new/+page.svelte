@@ -115,7 +115,7 @@
       >
         <span
           class="flex items-center border-r border-line bg-bg-soft px-2.5 font-mono text-mono text-fg-subtle"
-          >oar.app /</span
+          >agentnexus.com /</span
         >
         <input
           type="text"

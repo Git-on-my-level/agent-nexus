@@ -475,7 +475,7 @@ function commandGuide(baseUrl, defaultUsername, { profileReady = false } = {}) {
         `- Register default profile: \`anx auth register --username ${defaultUsername}\``,
         "- Verify current profile: `anx auth whoami`",
       ];
-  return `# OAR Command Guide
+  return `# Agent Nexus command guide
 
 Use these exact command shapes. Prefer them over guessing.
 
@@ -533,7 +533,7 @@ function resultTemplate() {
 
 ## Summary
 
-## OAR Commands Attempted
+## anx commands attempted
 
 ## Friction
 
@@ -1652,7 +1652,7 @@ Agent role:
 - Focus: ${role.focus}
 
 Environment:
-- OAR base URL: ${coreBaseUrl}
+- Agent Nexus base URL: ${coreBaseUrl}
 - Working directory: ${workspaceDir}
 - Scenario brief: ./SCENARIO.md
 - Chapter id: ${chapterID}
@@ -1732,7 +1732,7 @@ ${continuationFiles.join("\n")}
     "--no-prompt-templates",
     "--no-themes",
     "--append-system-prompt",
-    `Use anx on PATH for OAR interactions. Do not use curl. Work only inside the current directory. ${authPromptLine}`,
+    `Use anx on PATH for Agent Nexus (anx-core) interactions. Do not use curl. Work only inside the current directory. ${authPromptLine}`,
     "@SCENARIO.md",
     prompt,
   ];

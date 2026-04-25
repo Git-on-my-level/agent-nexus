@@ -254,7 +254,7 @@ func RedactHeaders(header http.Header) map[string][]string {
 
 func isSensitiveHeader(key string) bool {
 	switch strings.ToLower(strings.TrimSpace(key)) {
-	case "authorization", "cookie", "set-cookie", "proxy-authorization", "x-api-key", "x-oar-bootstrap-token":
+	case "authorization", "cookie", "set-cookie", "proxy-authorization", "x-api-key", "x-anx-bootstrap-token":
 		return true
 	default:
 		return false

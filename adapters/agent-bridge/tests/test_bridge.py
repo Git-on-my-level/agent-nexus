@@ -257,7 +257,9 @@ def test_handle_notification_marks_read_after_dispatch():
 
     assert client.notification_reads == ["wake-1"]
     assert "wake-1" in state.handled_wakeup_ids()
-    assert bridge.adapter.last_prompt_text.startswith("You were tagged in an OAR topic or card.")
+    assert bridge.adapter.last_prompt_text.startswith(
+        "You were tagged in an Agent Nexus topic or card."
+    )
     assert '"subject_ref": "topic:topic-1"' in bridge.adapter.last_prompt_text
     assert '"resolved_subject"' in bridge.adapter.last_prompt_text
     assert [entry["event"]["type"] for entry in client.created_events] == [

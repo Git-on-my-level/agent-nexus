@@ -1,6 +1,6 @@
 # Pi Dogfood
 
-Manual OAR CLI dogfood runs using a real Pi agent with bash and filesystem tools.
+Manual `anx` CLI dogfood runs using a real Pi agent with bash and filesystem tools.
 
 Goals:
 - exercise the real `anx` binary against a managed seeded `anx-core`
@@ -96,7 +96,7 @@ The runner also:
 - points Pi at that isolated core via `ANX_BASE_URL`
 
 Constraints enforced by the run workspace:
-- use `anx` on `PATH` for OAR interactions
+- use `anx` on `PATH` for Agent Nexus (anx-core) interactions
 - do not edit repo source files
 - work inside the temporary run directory
 - in team mode, each agent gets its own profile/home/workspace but shares the same managed core

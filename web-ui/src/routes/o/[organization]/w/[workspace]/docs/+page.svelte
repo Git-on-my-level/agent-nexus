@@ -56,7 +56,7 @@
   );
 
   let groupByLabel = $state(
-    browser && localStorage.getItem("oar-docs-group-by-label") === "true",
+    browser && localStorage.getItem("anx-docs-group-by-label") === "true",
   );
   let collapsedGroups = $state(new Set());
 
@@ -80,7 +80,7 @@
     groupByLabel = !groupByLabel;
     collapsedGroups = new Set();
     if (browser)
-      localStorage.setItem("oar-docs-group-by-label", String(groupByLabel));
+      localStorage.setItem("anx-docs-group-by-label", String(groupByLabel));
   }
 
   function toggleGroup(label) {

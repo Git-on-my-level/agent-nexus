@@ -50,18 +50,13 @@
     Retention and automated export are <strong>not</strong> fully built out in
     this beta. To <strong>request account or data deletion</strong>, or to
     discuss export, email
-    <a href="mailto:support@runoar.com?subject=Data%20deletion%20request"
-      >support@runoar.com</a
+    <a href="mailto:support@agentnexus.com?subject=Data%20deletion%20request"
+      >support@agentnexus.com</a
     >
     with subject
     <span class="font-mono text-[11px]">Data deletion request</span>
     and the email you use to sign in. We may need to verify ownership. Response times
     are best-effort during beta.
-  </p>
-  <p class="text-micro text-fg-subtle">
-    Intended long-term data lifecycle and gaps are tracked in
-    <span class="font-mono">TODOS.md</span> and
-    <span class="font-mono">LAUNCH_CHECKLIST.md</span> in the monorepo.
   </p>
 
   <h2>Where data is processed</h2>
@@ -84,7 +79,7 @@
     <li>
       <strong>Rights:</strong> If applicable law gives you access, correction,
       or deletion rights, contact
-      <a href="mailto:support@runoar.com">support@runoar.com</a>.
+      <a href="mailto:support@agentnexus.com">support@agentnexus.com</a>.
     </li>
   </ul>
 
@@ -102,11 +97,7 @@
 
   <h2>Contact</h2>
   <p>
-    <a href="mailto:support@runoar.com">support@runoar.com</a> (or the support address
-    shown in the product).
-  </p>
-  <p class="text-micro text-fg-subtle">
-    Canonical copy:
-    <code class="font-mono text-[11px]">docs/legal/beta-privacy.md</code>
+    <a href="mailto:support@agentnexus.com">support@agentnexus.com</a> (or the support
+    address shown in the product).
   </p>
 </LegalPageShell>

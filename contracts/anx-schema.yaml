@@ -1,6 +1,6 @@
 # anx-schema.yaml
 #
-# Shared contract for OAR (Organization Autorunner).
+# Shared contract for Agent Nexus (anx-core and clients).
 # The canonical workspace model exposes topics, documents, boards, and cards as
 # first-class resources. Threads remain backing infrastructure for evidence,
 # sequencing, and timeline inspection.
@@ -153,7 +153,7 @@ provenance:
 
 actor:
   description: >
-    Actors are opaque IDs. OAR does not encode human versus agent distinctions
+    Actors are opaque IDs. Agent Nexus does not encode human versus agent distinctions
     in the durable schema.
   registry_fields:
     id: { type: string, required: true }
@@ -344,7 +344,7 @@ resources:
 
 packets:
   _id_rule: >
-    Packet content ID fields MUST equal the enclosing artifact id. OAR core
+    Packet content ID fields MUST equal the enclosing artifact id. anx-core
     MUST reject mismatches on write.
 
   receipt:

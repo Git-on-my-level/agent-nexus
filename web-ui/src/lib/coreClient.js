@@ -4,7 +4,7 @@ import {
   getAuthenticatedAgent,
 } from "$lib/authSession";
 import { getSelectedActorId } from "$lib/actorSession";
-import { createOarCoreClient } from "$lib/anxCoreClient";
+import { createAnxCoreClient } from "$lib/anxCoreClient";
 import { buildCoreRequestContextHeaders } from "$lib/coreClientRequestHeaders";
 import {
   getCurrentOrganizationSlug,
@@ -15,7 +15,7 @@ import { APP_BASE_PATH } from "$lib/workspacePaths";
 let browserClient;
 
 /**
- * Options passed to {@link createOarCoreClient} for the browser shell (tests
+ * Options passed to {@link createAnxCoreClient} for the browser shell (tests
  * can assert actor/lock wiring without instantiating the full proxy).
  */
 export function getBrowserCoreClientOptions() {
@@ -35,13 +35,13 @@ export function getBrowserCoreClientOptions() {
 function resolveBrowserClient() {
   if (!browser) {
     throw new Error(
-      "coreClient cannot run during SSR. Use onMount or a load-scoped client created with createOarCoreClient({ fetchFn: fetch }).",
+      "coreClient cannot run during SSR. Use onMount or a load-scoped client created with createAnxCoreClient({ fetchFn: fetch }).",
     );
   }
 
   if (!browserClient) {
     const fetchFn = globalThis.fetch.bind(globalThis);
-    browserClient = createOarCoreClient({
+    browserClient = createAnxCoreClient({
       ...getBrowserCoreClientOptions(),
       fetchFn,
     });

@@ -1,8 +1,8 @@
 import {
-  createOarCoreClient,
+  createAnxCoreClient,
   verifyCoreSchemaVersion,
 } from "$lib/anxCoreClient";
-import { LEGACY_CONSTANTS } from "$lib/compat/workspaceCompat";
+import { WORKSPACE_HEADER_CONSTANTS } from "$lib/compat/workspaceCompat";
 import { WORKSPACE_HEADER, workspaceCompositeKey } from "$lib/workspacePaths";
 
 const schemaCheckPromises = new Map();
@@ -25,11 +25,11 @@ export async function load({ fetch, data, url }) {
 
   const cacheKey = workspaceCompositeKey(organizationSlug, workspaceSlug);
   if (!schemaCheckPromises.has(cacheKey)) {
-    const client = createOarCoreClient({
+    const client = createAnxCoreClient({
       fetchFn: fetch,
       requestContextHeadersProvider: () => ({
         [WORKSPACE_HEADER]: workspaceSlug,
-        [LEGACY_CONSTANTS.ORGANIZATION_HEADER]: organizationSlug,
+        [WORKSPACE_HEADER_CONSTANTS.ORGANIZATION_HEADER]: organizationSlug,
       }),
     });
     const promise = verifyCoreSchemaVersion(client).catch((error) => {

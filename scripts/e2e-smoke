@@ -19,7 +19,7 @@ UI_LOG="$TMP_DIR/web-ui.log"
 
 HOME_DIR="$TMP_DIR/home"
 mkdir -p "$HOME_DIR"
-CLI_BIN="$TMP_DIR/oar"
+CLI_BIN="$TMP_DIR/anx"
 AGENT_NAME="smoke-agent"
 USERNAME="smoke.agent"
 
@@ -275,7 +275,7 @@ fi
 UI_VERSION_HEADER="$(
   awk -F': *' '
     BEGIN { IGNORECASE = 1 }
-    tolower($1) == "x-anx-ui-version" || tolower($1) == "x-oar-ui-version" {
+    tolower($1) == "x-anx-ui-version" {
       value = $2
       sub(/\r$/, "", value)
       print value

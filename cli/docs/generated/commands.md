@@ -1,4 +1,4 @@
-# OAR Command Registry
+# Agent Nexus command registry
 
 Generated from `contracts/anx-openapi.yaml`.
 
@@ -13,7 +13,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `utility`
 - Input mode: `json-body`
-- Why: Legacy dev actor registration when dev_actor_mode is enabled.
+- Why: Dev-only actor registration when dev_actor_mode is enabled.
 - Concepts: `actors`, `auth`
 - Error codes: `auth_required`, `invalid_request`, `dev_actor_mode_disabled`
 - Output: Returns `{ actor }`.
@@ -996,7 +996,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `stable`
 - Surface: `utility`
 - Input mode: `none`
-- Why: Expose embedded OAR command metadata for discovery and codegen parity.
+- Why: Expose embedded Agent Nexus command metadata for discovery and codegen parity.
 - Concepts: `compatibility`
 - Error codes: `meta_unavailable`
 - Output: Returns generated command registry JSON.

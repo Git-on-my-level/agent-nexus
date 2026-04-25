@@ -575,13 +575,13 @@ func buildBinaries(t *testing.T) (string, string) {
 
 	buildOnce.Do(func() {
 		root := repoRoot(t)
-		tempDir, err := os.MkdirTemp("", "oar-cli-integration-bin-*")
+		tempDir, err := os.MkdirTemp("", "anx-cli-integration-bin-*")
 		if err != nil {
 			binaries.err = fmt.Errorf("create build temp dir: %w", err)
 			return
 		}
 
-		cliPath := filepath.Join(tempDir, "oar")
+		cliPath := filepath.Join(tempDir, "anx")
 		corePath := filepath.Join(tempDir, "anx-core")
 
 		if err := buildGoBinary(filepath.Join(root, "cli"), "./cmd/anx", cliPath); err != nil {

@@ -189,7 +189,7 @@ func buildReleaseArchiveForTest(t *testing.T, archiveName string, binary []byte)
 	if strings.HasSuffix(archiveName, ".zip") {
 		var buf bytes.Buffer
 		zw := zip.NewWriter(&buf)
-		name := "oar.exe"
+		name := "anx.exe"
 		file, err := zw.Create(name)
 		if err != nil {
 			t.Fatalf("create zip entry: %v", err)
@@ -207,7 +207,7 @@ func buildReleaseArchiveForTest(t *testing.T, archiveName string, binary []byte)
 	gz := gzip.NewWriter(&raw)
 	tw := tar.NewWriter(gz)
 	header := &tar.Header{
-		Name: "oar",
+		Name: "anx",
 		Mode: 0o755,
 		Size: int64(len(binary)),
 	}
@@ -228,9 +228,9 @@ func buildReleaseArchiveForTest(t *testing.T, archiveName string, binary []byte)
 
 func executableNameForTest() string {
 	if runtime.GOOS == "windows" {
-		return "oar.exe"
+		return "anx.exe"
 	}
-	return "oar"
+	return "anx"
 }
 
 func sha256HexForTest(body []byte) string {

@@ -69,7 +69,7 @@ test("artifact filters are URL-backed and survive refresh", async ({
   ];
 
   await page.addInitScript((selectedActorId) => {
-    window.localStorage.setItem("oar_ui_actor_id", selectedActorId);
+    window.localStorage.setItem("anx_ui_actor_id", selectedActorId);
   }, actorId);
 
   await page.route(/\/actors(\?.*)?$/, async (route) => {

@@ -38,7 +38,7 @@ variables.
 | WebAuthn RP ID | n/a | `ANX_WEBAUTHN_RPID` | derived from browser origin host |
 | WebAuthn origin | n/a | `ANX_WEBAUTHN_ORIGIN` | derived from browser request origin |
 | WebAuthn allowed origins | n/a | `ANX_WEBAUTHN_ALLOWED_ORIGINS` | unset |
-| WebAuthn RP display name | n/a | `ANX_WEBAUTHN_RP_DISPLAY_NAME` | `OAR` |
+| WebAuthn RP display name | n/a | `ANX_WEBAUTHN_RP_DISPLAY_NAME` | `Agent Nexus` |
 | CORS allowed origins | n/a | `ANX_CORS_ALLOWED_ORIGINS` | unset (CORS disabled) |
 | Enforce local workspace quotas on writes | `--enforce-local-quotas` | `ANX_ENFORCE_LOCAL_QUOTAS` | `true` |
 | Workspace blob quota | n/a | `ANX_WORKSPACE_MAX_BLOB_BYTES` | `1073741824` |
@@ -67,8 +67,7 @@ See `AGENTS.md` in this module for the canonical list. Summary:
 - **Account status HTTP checker**: `ANX_ACCOUNT_STATUS_URL` (base URL) plus the
   same service identity env vars; optional `ANX_ACCOUNT_STATUS_PATH` (default
   `v1/internal/accounts/status`), `ANX_ACCOUNT_STATUS_AUDIENCE` (default
-  `anx-control-plane`). `ANX_CONTROL_PLANE_URL` is a deprecated alias for
-  `ANX_ACCOUNT_STATUS_URL` and logs a deprecation warning when used alone.
+  `anx-control-plane`).
 
 Filesystem blobs remain the default for self-hosted deployments.
 

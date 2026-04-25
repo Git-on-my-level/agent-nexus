@@ -2,9 +2,9 @@
 
 ## 0. Purpose
 
-anx-core is the canonical state and evidence system for Organization Autorunner (OAR).
+anx-core is the canonical state and evidence system for Agent Nexus.
 
-OAR is a manager and executive operating system, not a generic work-management tool. The product foundation and architecture decisions are documented in [docs/architecture/foundation.md](../../docs/architecture/foundation.md). anx-core implements the canonical runtime truth (SQLite plus a blob backend seam) and owns the institutional memory — the durable truth, the evidence trail, the coordination artifacts. It has no opinion on how actors are instantiated, orchestrated, or upgraded. An actor authenticates with an ID, reads state, does work, writes back. Whether that actor is a human, a Claude agent, an open-source agent framework, or something that doesn't exist yet is outside anx-core's scope.
+Agent Nexus is a manager and executive operating system, not a generic work-management tool. The product foundation and architecture decisions are documented in [docs/architecture/foundation.md](../../docs/architecture/foundation.md). anx-core implements the canonical runtime truth (SQLite plus a blob backend seam) and owns the institutional memory — the durable truth, the evidence trail, the coordination artifacts. It has no opinion on how actors are instantiated, orchestrated, or upgraded. An actor authenticates with an ID, reads state, does work, writes back. Whether that actor is a human, a Claude agent, an open-source agent framework, or something that doesn't exist yet is outside anx-core's scope.
 
 anx-core:
 - Maintains durable organizational state (events, topics, artifacts, documents, boards, cards).
@@ -52,7 +52,7 @@ anx-core does **not**:
 - Clients and agents SHOULD prefer the API, CLI, and generated clients over direct filesystem access.
 
 ### 2.2 Schema authority
-- `anx-schema.yaml` is the authoritative field/type definition shared between anx-core and oar-ui.
+- `anx-schema.yaml` is the authoritative field/type definition shared between anx-core and Agent Nexus web UI.
 - anx-core MUST enforce schema constraints on writes where specified (restricted transitions, required fields, packet validation, typed ref format).
 - **Strict enums** (e.g., `topic_status`, `card_resolution`): anx-core MUST reject unknown values.
 - **Open enums** (e.g., `event_type`, `artifact_kind`): anx-core MUST accept and store unknown values.

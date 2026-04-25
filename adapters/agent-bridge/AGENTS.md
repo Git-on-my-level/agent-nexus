@@ -15,14 +15,14 @@ It owns:
 
 It does not own workspace routing. `@handle` mention routing lives in the workspace router deployed with `anx-core`.
 
-It does not own canonical OAR state. The durable truth still lives in OAR primitives.
+It does not own canonical Agent Nexus state. The durable truth still lives in Agent Nexus primitives.
 
 ## High-Value Invariants
 - Durable taggability is driven by a valid registration plus workspace binding, not bridge uptime.
 - Bridge-managed registrations stay `pending` until the bridge has checked in.
 - Routing must treat stale or missing bridge check-ins as offline for immediate delivery, while leaving durable notifications queueable.
 - Workspace binding must use the durable `workspace_id`, never a slug or UI path segment.
-- Keep the runtime working with only documented OAR primitives: auth principals, events, and artifacts.
+- Keep the runtime working with only documented Agent Nexus primitives: auth principals, events, and artifacts.
 
 ## Local Workflow
 - Python `3.11+` is required. The repo-local convention is `.python-version = 3.11`.

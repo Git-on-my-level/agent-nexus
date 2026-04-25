@@ -106,11 +106,9 @@ func init() {
 			Composition: "Uses the active `anx` auth/profile to read agent principal registration metadata and extract enabled workspace bindings so bridge bootstrap can reuse the real durable workspace id instead of guessing.",
 			Examples: []string{
 				"anx --agent agent-a bridge workspace-id --handle hermes",
-				"anx bridge workspace-id --document-id agentreg.hermes",
 			},
 			Flags: []localHelperFlag{
 				{Name: "--handle <name>", Description: "Agent handle whose wake registration should be inspected."},
-				{Name: "--document-id <id>", Description: "Legacy registration document alias. Accepts only `agentreg.<handle>`."},
 			},
 		},
 		localHelperTopic{
@@ -571,8 +569,6 @@ func (a *App) runBridgeWorkspaceID(ctx context.Context, args []string, cfg confi
 	fs := newSilentFlagSet("bridge workspace-id")
 	var handleFlag trackedString
 	fs.Var(&handleFlag, "handle", "Agent handle whose registration should be inspected")
-	var documentIDFlag trackedString
-	fs.Var(&documentIDFlag, "document-id", "Legacy registration document id alias (`agentreg.<handle>`) to inspect")
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
@@ -581,17 +577,8 @@ func (a *App) runBridgeWorkspaceID(ctx context.Context, args []string, cfg confi
 	}
 
 	handle := strings.TrimSpace(handleFlag.value)
-	documentID := strings.TrimSpace(documentIDFlag.value)
-	switch {
-	case documentID == "" && handle == "":
-		return nil, errnorm.Usage("invalid_request", "either --handle or --document-id is required")
-	case documentID != "" && handle != "":
-		return nil, errnorm.Usage("invalid_request", "--handle and --document-id cannot be combined")
-	case documentID != "":
-		if !strings.HasPrefix(documentID, "agentreg.") {
-			return nil, errnorm.Usage("invalid_request", "--document-id must use the legacy form `agentreg.<handle>`")
-		}
-		handle = strings.TrimSpace(strings.TrimPrefix(documentID, "agentreg."))
+	if handle == "" {
+		return nil, errnorm.Usage("invalid_request", "--handle is required")
 	}
 
 	principal, err := a.lookupPrincipalByHandle(ctx, cfg, handle)

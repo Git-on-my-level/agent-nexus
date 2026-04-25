@@ -1,4 +1,4 @@
-# OAR UI Style Guide
+# Agent Nexus UI Style Guide
 
 Reference for visual conventions, color usage, and component patterns.
 Follow this guide when adding or modifying UI in the web-ui codebase.
@@ -308,7 +308,7 @@ Internal navigation links that sit inline: `text-indigo-400 hover:text-indigo-30
 
 ### IDs, Hashes, and Ref Metadata
 
-Long identifiers (UUIDs, thread IDs, content hashes) are common in OAR data. Display rules:
+Long identifiers (UUIDs, thread IDs, content hashes) are common in Agent Nexus data. Display rules:
 
 1. **Truncate in list contexts.** Show the first 10 characters followed by `…` for UUIDs and hashes. Use `title` attribute or copy-on-click for the full value.
 2. **Monospace for IDs.** Use `font-mono text-[11px]` for raw identifiers to distinguish them from prose.
@@ -353,7 +353,7 @@ On screens narrower than 1024px a fixed bottom tab bar (`.shell-bottom-nav`) rep
 
 ### Mobile Header
 
-The sticky top bar (`.shell-mobile-header`) is minimal: **OAR** wordmark and an identity control (initials + **Switch** or **Sign out**). Secondary destinations (Artifacts, Trash, Access), multi-workspace switching when applicable, and full identity copy live on the **`/more`** page, linked from the bottom tab bar.
+The sticky top bar (`.shell-mobile-header`) is minimal: **Agent Nexus** wordmark and an identity control (initials + **Switch** or **Sign out**). Secondary destinations (Artifacts, Trash, Access), multi-workspace switching when applicable, and full identity copy live on the **`/more`** page, linked from the bottom tab bar.
 
 ### Page Header Toolbars on Mobile
 

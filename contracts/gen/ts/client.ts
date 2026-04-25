@@ -52,7 +52,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/actors",
     "operation_id": "createActor",
     "summary": "Create actor (dev fixture)",
-    "why": "Legacy dev actor registration when dev_actor_mode is enabled.",
+    "why": "Dev-only actor registration when dev_actor_mode is enabled.",
     "input_mode": "json-body",
     "streaming": {
       "mode": "none"
@@ -4354,7 +4354,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/meta/commands",
     "operation_id": "listMetaCommands",
     "summary": "List command registry metadata",
-    "why": "Expose embedded OAR command metadata for discovery and codegen parity.",
+    "why": "Expose embedded Agent Nexus command metadata for discovery and codegen parity.",
     "input_mode": "none",
     "streaming": {
       "mode": "none"
@@ -6023,7 +6023,7 @@ function withQuery(path: string, query: RequestOptions["query"]): string {
   return `${path}?${encoded}`;
 }
 
-export class OarClient {
+export class AnxClient {
   private readonly baseUrl: string;
   private readonly fetchFn: typeof fetch;
 

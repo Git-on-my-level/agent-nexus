@@ -1,7 +1,7 @@
 {
-  "name": "Organization Autorunner",
-  "short_name": "OAR",
-  "description": "Organization Autorunner control surface",
+  "name": "Agent Nexus",
+  "short_name": "anx",
+  "description": "Agent Nexus control surface",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0e1015",

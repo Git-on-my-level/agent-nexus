@@ -80,7 +80,7 @@ test("document typed refs navigate from overview chips, timeline refs, and recei
   };
 
   await page.addInitScript((selectedActorId) => {
-    window.localStorage.setItem("oar_ui_actor_id", selectedActorId);
+    window.localStorage.setItem("anx_ui_actor_id", selectedActorId);
   }, actorId);
 
   await page.route(/\/actors$/, async (route) => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { LEGACY_CONSTANTS } from "../../src/lib/compat/workspaceCompat";
+import { WORKSPACE_HEADER_CONSTANTS } from "../../src/lib/compat/workspaceCompat";
 import { buildCoreRequestContextHeaders } from "../../src/lib/coreClientRequestHeaders";
 import { WORKSPACE_HEADER } from "../../src/lib/workspacePaths";
 
@@ -15,7 +15,7 @@ describe("buildCoreRequestContextHeaders", () => {
       }),
     ).toEqual({
       [WORKSPACE_HEADER]: "prod",
-      [LEGACY_CONSTANTS.ORGANIZATION_HEADER]: "acme",
+      [WORKSPACE_HEADER_CONSTANTS.ORGANIZATION_HEADER]: "acme",
     });
   });
 
@@ -29,7 +29,7 @@ describe("buildCoreRequestContextHeaders", () => {
       }),
     ).toEqual({
       [WORKSPACE_HEADER]: "y",
-      [LEGACY_CONSTANTS.ORGANIZATION_HEADER]: "x",
+      [WORKSPACE_HEADER_CONSTANTS.ORGANIZATION_HEADER]: "x",
     });
   });
 
@@ -43,7 +43,7 @@ describe("buildCoreRequestContextHeaders", () => {
       }),
     ).toEqual({
       [WORKSPACE_HEADER]: "y",
-      [LEGACY_CONSTANTS.ORGANIZATION_HEADER]: "x",
+      [WORKSPACE_HEADER_CONSTANTS.ORGANIZATION_HEADER]: "x",
     });
   });
 
@@ -68,7 +68,7 @@ describe("buildCoreRequestContextHeaders", () => {
       }),
     ).toEqual({
       [WORKSPACE_HEADER]: "url-ws",
-      [LEGACY_CONSTANTS.ORGANIZATION_HEADER]: "stored-org",
+      [WORKSPACE_HEADER_CONSTANTS.ORGANIZATION_HEADER]: "stored-org",
     });
   });
 
@@ -82,7 +82,7 @@ describe("buildCoreRequestContextHeaders", () => {
       }),
     ).toEqual({
       [WORKSPACE_HEADER]: "stored-ws",
-      [LEGACY_CONSTANTS.ORGANIZATION_HEADER]: "url-org",
+      [WORKSPACE_HEADER_CONSTANTS.ORGANIZATION_HEADER]: "url-org",
     });
   });
 
@@ -96,7 +96,7 @@ describe("buildCoreRequestContextHeaders", () => {
       }),
     ).toEqual({
       [WORKSPACE_HEADER]: "beta",
-      [LEGACY_CONSTANTS.ORGANIZATION_HEADER]: "alpha",
+      [WORKSPACE_HEADER_CONSTANTS.ORGANIZATION_HEADER]: "alpha",
     });
   });
 

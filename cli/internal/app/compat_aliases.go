@@ -8,25 +8,9 @@ type commandShapeCompatibilityAlias struct {
 	requireTrailingArgs bool
 }
 
-var commandShapeCompatibilityAliases = []commandShapeCompatibilityAlias{
-	{
-		from: []string{"packets", "receipts", "create"},
-		to:   []string{"receipts", "create"},
-	},
-	{
-		from: []string{"packets", "reviews", "create"},
-		to:   []string{"reviews", "create"},
-	},
-	{
-		from:                []string{"artifacts", "content", "get"},
-		to:                  []string{"artifacts", "content"},
-		requireTrailingArgs: true,
-	},
-	{
-		from: []string{"topics", "update"},
-		to:   []string{"topics", "patch"},
-	},
-}
+// commandShapeCompatibilityAliases is intentionally empty (pre-user: removed old shapes).
+// mapRuntimePathToRegistryPath in help_generated.go still maps legacy *help topic* phrasing.
+var commandShapeCompatibilityAliases = []commandShapeCompatibilityAlias{}
 
 func applyCommandShapeCompatibilityAlias(args []string) ([]string, bool) {
 	for _, alias := range commandShapeCompatibilityAliases {

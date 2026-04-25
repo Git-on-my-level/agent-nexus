@@ -44,7 +44,7 @@ function collectEventRefIds(event) {
 }
 
 /**
- * Parent for a reply is conveyed as `event:<parent_event_id>` in refs (see oar-schema
+ * Parent for a reply is conveyed as `event:<parent_event_id>` in refs (see anx-schema
  * message_posted). Messages may include multiple `event:` refs (e.g. citations); the
  * parent is the ref that points at another message_posted in this thread when possible.
  */

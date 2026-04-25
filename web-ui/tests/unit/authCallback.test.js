@@ -122,13 +122,13 @@ describe("auth callback POST (+server)", () => {
     });
     expect(exchangeLaunchSession).toHaveBeenCalled();
     expect(
-      event.cookieCalls.some((c) => c.name === "oar_ui_session_alpha"),
+      event.cookieCalls.some((c) => c.name === "anx_ui_session_alpha"),
     ).toBe(true);
     expect(
-      event.cookieCalls.find((c) => c.name === "oar_ui_session_alpha")?.value,
+      event.cookieCalls.find((c) => c.name === "anx_ui_session_alpha")?.value,
     ).toBe("rt-happy");
     expect(
-      event.cookieCalls.some((c) => c.name === "oar_ui_access_alpha"),
+      event.cookieCalls.some((c) => c.name === "anx_ui_access_alpha"),
     ).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const tokenCall = fetchMock.mock.calls.find((c) =>
@@ -186,7 +186,7 @@ describe("auth callback POST (+server)", () => {
     expect(body.error.code).toBe("exchange_expired");
   });
 
-  it("returns workspace_core_unreachable when oar-core /auth/token never connects", async () => {
+  it("returns workspace_core_unreachable when anx-core /auth/token never connects", async () => {
     vi.useFakeTimers();
 
     vi.stubGlobal(

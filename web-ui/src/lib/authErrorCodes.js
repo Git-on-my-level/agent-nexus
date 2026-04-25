@@ -4,7 +4,7 @@
  * literals so new codes are added in one place.
  */
 export const AuthErrorCode = Object.freeze({
-  SESSION_ENDED_BY_CP: "session_ended_by_cp",
+  SESSION_ENDED_BY_ACCOUNT_STATUS: "session_ended_by_account_status",
   WORKSPACE_RESOLVE_FAILED: "workspace_resolve_failed",
   EXCHANGE_FAILED: "exchange_failed",
   EXCHANGE_EXPIRED: "exchange_expired",

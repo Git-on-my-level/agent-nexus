@@ -235,7 +235,7 @@ func TestRunLocalAuthLifecycleHelpTopics(t *testing.T) {
 	}
 }
 
-func TestRunGeneratedHelpTopicSupportsCompatibilityAliasPath(t *testing.T) {
+func TestRunGeneratedHelpTopicSupportsPacketsReceiptsCreatePath(t *testing.T) {
 	t.Parallel()
 
 	stdout := &bytes.Buffer{}
@@ -255,11 +255,8 @@ func TestRunGeneratedHelpTopicSupportsCompatibilityAliasPath(t *testing.T) {
 		t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
 	output := stdout.String()
-	if !strings.Contains(output, "Generated Help: receipts create") {
-		t.Fatalf("expected compatibility alias help to resolve to canonical topic output=%s", output)
-	}
-	if !strings.Contains(output, "- CLI path: `receipts create`") {
-		t.Fatalf("expected canonical CLI path in help output=%s", output)
+	if !strings.Contains(output, "Generated Help: packets receipts create") {
+		t.Fatalf("expected registry topic output=%s", output)
 	}
 }
 
@@ -987,6 +984,9 @@ func expectedRuntimeSupportedCommandIDs(meta registry.MetaRegistry) map[string]s
 	for _, resource := range []string{"receipts", "reviews"} {
 		addPath(resource + " create")
 	}
+	for _, path := range runtimeRegistrySecretHelpPaths {
+		addPath(path)
+	}
 
 	return expected
 }
@@ -1012,6 +1012,9 @@ func expectedGeneratedHelpRuntimePaths() []string {
 	}
 	for _, resource := range []string{"receipts", "reviews"} {
 		appendPath(resource + " create")
+	}
+	for _, path := range runtimeRegistrySecretHelpPaths {
+		appendPath(path)
 	}
 
 	return paths

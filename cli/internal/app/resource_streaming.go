@@ -21,7 +21,7 @@ import (
 	"agent-nexus-cli/internal/streaming"
 )
 
-func (a *App) runTailStream(ctx context.Context, cfg config.Resolved, commandName string, commandID string, query []queryParam, lastEventID string, follow bool, reconnect bool, maxEvents int) (*commandResult, error) {
+func (a *App) runTailStream(ctx context.Context, cfg config.Resolved, commandName string, commandID string, query []queryParam, lastEventID string, follow bool, maxEvents int) (*commandResult, error) {
 	if maxEvents < 0 {
 		return nil, errnorm.Usage("invalid_request", "--max-events must be >= 0")
 	}
@@ -47,7 +47,7 @@ func (a *App) runTailStream(ctx context.Context, cfg config.Resolved, commandNam
 		requestPath := streamPathForCommand(commandID, query, cursor)
 		resp, streamErr := client.OpenStream(callCtx, httpclient.RawRequest{Method: http.MethodGet, Path: requestPath, Headers: headers})
 		if streamErr != nil {
-			if !follow || !reconnect {
+			if !follow {
 				return nil, errnorm.Wrap(errnorm.KindNetwork, "stream_connect_failed", "failed to connect stream", streamErr)
 			}
 			time.Sleep(250 * time.Millisecond)
@@ -74,7 +74,7 @@ func (a *App) runTailStream(ctx context.Context, cfg config.Resolved, commandNam
 					break
 				}
 				_ = resp.Body.Close()
-				if !follow || !reconnect {
+				if !follow {
 					return nil, errnorm.Wrap(errnorm.KindNetwork, "stream_read_failed", "failed to read stream", readErr)
 				}
 				dropped = true
@@ -94,7 +94,7 @@ func (a *App) runTailStream(ctx context.Context, cfg config.Resolved, commandNam
 			}
 		}
 		_ = resp.Body.Close()
-		if !follow || !reconnect || !dropped {
+		if !follow || !dropped {
 			return &commandResult{RawWritten: true}, nil
 		}
 		time.Sleep(250 * time.Millisecond)

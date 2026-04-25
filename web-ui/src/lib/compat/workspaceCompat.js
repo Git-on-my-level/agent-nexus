@@ -1,18 +1,16 @@
 import { normalizeWorkspaceSlug } from "$lib/workspacePaths";
 
-const LEGACY_PROJECTS_ENV = "ANX_PROJECTS";
-const LEGACY_DEFAULT_PROJECT_ENV = "ANX_DEFAULT_PROJECT";
-const LEGACY_PROJECT_HEADER = "x-oar-project-slug";
 const ORGANIZATION_HEADER = "x-anx-organization-slug";
 
+/**
+ * Resolves workspace catalog from env. Only `ANX_WORKSPACES` and
+ * `ANX_DEFAULT_WORKSPACE` are read; legacy `ANX_PROJECTS` / `ANX_DEFAULT_PROJECT`
+ * are not supported.
+ */
 export function resolveWorkspaceEnv(env) {
-  const workspacesRaw = env.ANX_WORKSPACES ?? env[LEGACY_PROJECTS_ENV];
-  const defaultWorkspaceRaw =
-    env.ANX_DEFAULT_WORKSPACE ?? env[LEGACY_DEFAULT_PROJECT_ENV];
-
   return {
-    ANX_WORKSPACES: workspacesRaw,
-    ANX_DEFAULT_WORKSPACE: defaultWorkspaceRaw,
+    ANX_WORKSPACES: env.ANX_WORKSPACES,
+    ANX_DEFAULT_WORKSPACE: env.ANX_DEFAULT_WORKSPACE,
     ANX_DEFAULT_ORGANIZATION: env.ANX_DEFAULT_ORGANIZATION,
   };
 }
@@ -21,11 +19,6 @@ export function getWorkspaceHeader(headers) {
   const workspaceSlug = headers.get("x-anx-workspace-slug");
   if (workspaceSlug) {
     return workspaceSlug;
-  }
-
-  const legacyProjectSlug = headers.get(LEGACY_PROJECT_HEADER);
-  if (legacyProjectSlug) {
-    return legacyProjectSlug;
   }
 
   return null;
@@ -39,6 +32,10 @@ export function getOrganizationHeader(headers) {
   return readOrganizationSlugHeader(headers);
 }
 
+/**
+ * Per-workspace localStorage key. The "legacy" name reflects older "project"
+ * terminology in persisted keys, not environment variable compatibility.
+ */
 export function buildLegacyProjectStorageKey(baseKey, workspaceSlug) {
   const slug = normalizeWorkspaceSlug(workspaceSlug);
   if (!slug) {
@@ -47,9 +44,6 @@ export function buildLegacyProjectStorageKey(baseKey, workspaceSlug) {
   return `${baseKey}:${slug}`;
 }
 
-export const LEGACY_CONSTANTS = {
-  PROJECTS_ENV: LEGACY_PROJECTS_ENV,
-  DEFAULT_PROJECT_ENV: LEGACY_DEFAULT_PROJECT_ENV,
-  PROJECT_HEADER: LEGACY_PROJECT_HEADER,
+export const WORKSPACE_HEADER_CONSTANTS = {
   ORGANIZATION_HEADER,
 };

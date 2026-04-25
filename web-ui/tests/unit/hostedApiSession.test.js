@@ -31,7 +31,7 @@ describe("hosted /api/session", () => {
     const res = await POST(event);
     expect(res.status).toBe(200);
     expect(cookies.set).toHaveBeenCalledWith(
-      "oar_cp_access_token",
+      "anx_cp_access_token",
       "cp_secret",
       expect.objectContaining({
         path: "/",
@@ -40,7 +40,7 @@ describe("hosted /api/session", () => {
         secure: true,
       }),
     );
-    expect(cookies.delete).toHaveBeenCalledWith("oar_cp_dev_access_token", {
+    expect(cookies.delete).toHaveBeenCalledWith("anx_cp_dev_access_token", {
       path: "/",
     });
   });
@@ -59,7 +59,7 @@ describe("hosted /api/session", () => {
     };
     await POST(event);
     expect(cookies.set).toHaveBeenCalledWith(
-      "oar_cp_access_token",
+      "anx_cp_access_token",
       "tok",
       expect.objectContaining({ secure: true }),
     );
@@ -108,10 +108,10 @@ describe("hosted /api/session", () => {
     };
     const res = await DELETE(event);
     expect(res.status).toBe(200);
-    expect(cookies.delete).toHaveBeenCalledWith("oar_cp_access_token", {
+    expect(cookies.delete).toHaveBeenCalledWith("anx_cp_access_token", {
       path: "/",
     });
-    expect(cookies.delete).toHaveBeenCalledWith("oar_cp_dev_access_token", {
+    expect(cookies.delete).toHaveBeenCalledWith("anx_cp_dev_access_token", {
       path: "/",
     });
   });

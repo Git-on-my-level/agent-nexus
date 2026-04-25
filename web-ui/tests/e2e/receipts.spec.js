@@ -8,7 +8,7 @@ test("thread work tab points operators to card-scoped receipts", async ({
   const actorId = "actor-receipt-e2e";
 
   await page.addInitScript((selectedActorId) => {
-    window.localStorage.setItem("oar_ui_actor_id", selectedActorId);
+    window.localStorage.setItem("anx_ui_actor_id", selectedActorId);
   }, actorId);
 
   await page.route(/\/actors$/, async (route) => {

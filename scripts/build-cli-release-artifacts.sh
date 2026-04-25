@@ -51,7 +51,7 @@ mkdir -p "${DIST_DIR}"
 
 for GOOS in linux darwin windows; do
   for GOARCH in amd64 arm64; do
-    TARGET="oar_${VERSION}_${GOOS}_${GOARCH}"
+    TARGET="anx_${VERSION}_${GOOS}_${GOARCH}"
     STAGE_DIR="${DIST_DIR}/${TARGET}"
     BIN_NAME="anx"
     BIN_EXT=""

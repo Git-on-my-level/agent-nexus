@@ -16,19 +16,19 @@ vi.mock("$lib/server/authSession.js", async (importOriginal) => {
     })),
     clearWorkspaceAuthSession: vi.fn(),
     isRetryableWorkspaceAuthSessionError: vi.fn(() => false),
-    isTerminalCpSessionFailure: actual.isTerminalCpSessionFailure,
+    isTerminalAccountSessionFailure: actual.isTerminalAccountSessionFailure,
   };
 });
 
 import { GET } from "../../src/routes/auth/session/+server.js";
 
 describe("session ended surface (BFF)", () => {
-  it("GET /auth/session returns 401 with session_ended_by_cp for terminal CP failures", async () => {
+  it("GET /auth/session returns 401 with session_ended_by_account_status for terminal account-status failures", async () => {
     const err = new Error("session ended");
     err.status = 401;
     err.details = {
       error: {
-        code: AuthErrorCode.SESSION_ENDED_BY_CP,
+        code: AuthErrorCode.SESSION_ENDED_BY_ACCOUNT_STATUS,
         message: "Account inactive",
       },
     };
@@ -42,6 +42,8 @@ describe("session ended surface (BFF)", () => {
     );
     expect(res.status).toBe(401);
     const body = await res.json();
-    expect(body.error?.code).toBe(AuthErrorCode.SESSION_ENDED_BY_CP);
+    expect(body.error?.code).toBe(
+      AuthErrorCode.SESSION_ENDED_BY_ACCOUNT_STATUS,
+    );
   });
 });

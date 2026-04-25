@@ -44,13 +44,12 @@ func TestDraftCreateAggregatesEventValidationErrors(t *testing.T) {
 	}
 }
 
-func TestDraftCreateEventRequiresThreadIDForThreadScopedTypes(t *testing.T) {
+func TestDraftCreateInterventionNeededRequiresThreadRefInRefs(t *testing.T) {
 	t.Parallel()
-	t.Skip("obsolete compatibility coverage")
 
 	home := t.TempDir()
 	env := map[string]string{}
-	raw := runCLIForTest(t, home, env, strings.NewReader(`{"event":{"type":"message_posted","summary":"hello","refs":["thread:thread_1"],"provenance":{"sources":["actor_statement:event_seed"]}}}`), []string{
+	raw := runCLIForTest(t, home, env, strings.NewReader(`{"event":{"type":"intervention_needed","summary":"unblock me","refs":["topic:top_1"],"provenance":{"sources":["actor_statement:event_seed"]}}}`), []string{
 		"--json",
 		"--agent", "agent-a",
 		"draft", "create",
@@ -68,8 +67,8 @@ func TestDraftCreateEventRequiresThreadIDForThreadScopedTypes(t *testing.T) {
 		joined = append(joined, anyStringValue(item))
 	}
 	joinedText := strings.Join(joined, "\n")
-	if !strings.Contains(joinedText, `event.thread_id is required for event.type="message_posted"`) {
-		t.Fatalf("expected thread requirement validation in payload=%#v", payload)
+	if !strings.Contains(joinedText, `event.refs must include a "thread:<id>" typed ref for event.type="intervention_needed"`) {
+		t.Fatalf("expected thread ref validation in payload=%#v", payload)
 	}
 }
 
@@ -109,21 +108,20 @@ func TestDraftCreateDerivedRebuildRejectsEmptyActorIDWhenProvided(t *testing.T) 
 	}
 }
 
-func TestDraftCreateAcceptsCLIPathCommand(t *testing.T) {
+func TestDraftCreateResolvesCLITokensToCommandID(t *testing.T) {
 	t.Parallel()
-	t.Skip("obsolete compatibility coverage")
 
 	home := t.TempDir()
 	env := map[string]string{}
-	raw := runCLIForTest(t, home, env, strings.NewReader(`{"thread":{"title":"Alpha","type":"incident","status":"active","priority":"p2","tags":[],"cadence":"reactive","current_summary":"seed","next_actions":[],"key_artifacts":[],"provenance":{"sources":["actor_statement:event_seed"]}}}`), []string{
+	raw := runCLIForTest(t, home, env, strings.NewReader(`{"topic":{"type":"incident","status":"active","title":"Alpha","summary":"seed","owner_refs":["thread:thread_1"],"document_refs":[],"board_refs":[],"related_refs":[],"provenance":{"sources":["actor_statement:event_seed"]}}}`), []string{
 		"--json",
 		"--agent", "agent-a",
 		"draft", "create",
-		"--command", "threads create",
+		"--command", "topics create",
 	})
 	payload := assertEnvelopeOK(t, raw)
 	data, _ := payload["data"].(map[string]any)
-	if strings.TrimSpace(anyStringValue(data["command_id"])) != "threads.create" {
+	if strings.TrimSpace(anyStringValue(data["command_id"])) != "topics.create" {
 		t.Fatalf("unexpected command resolution payload: %#v", payload)
 	}
 }

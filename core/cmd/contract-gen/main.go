@@ -45,7 +45,7 @@ type operation struct {
 	CommandID   string       `yaml:"x-anx-command-id"`
 	CLIPath     string       `yaml:"x-anx-cli-path"`
 	Why         string       `yaml:"x-anx-why"`
-	Examples    []oarExample `yaml:"x-anx-examples"`
+	Examples    []anxExample `yaml:"x-anx-examples"`
 	InputMode   string       `yaml:"x-anx-input-mode"`
 	Streaming   any          `yaml:"x-anx-streaming"`
 	Output      string       `yaml:"x-anx-output-envelope"`
@@ -81,50 +81,50 @@ type openAPISchema struct {
 	AdditionalProperties any                      `yaml:"additionalProperties"`
 }
 
-type oarSchemaDocument struct {
-	Enums                map[string]oarEnumDef             `yaml:"enums"`
-	Provenance           oarFieldContainer                 `yaml:"provenance"`
-	Primitives           map[string]oarMaybeFieldContainer `yaml:"primitives"`
-	Threads              map[string]oarMaybeFieldContainer `yaml:"-"`
-	Packets              map[string]oarMaybeFieldContainer `yaml:"packets"`
-	ReferenceConventions oarReferenceConventions           `yaml:"reference_conventions"`
+type anxSchemaDocument struct {
+	Enums                map[string]anxEnumDef             `yaml:"enums"`
+	Provenance           anxFieldContainer                 `yaml:"provenance"`
+	Primitives           map[string]anxMaybeFieldContainer `yaml:"primitives"`
+	Threads              map[string]anxMaybeFieldContainer `yaml:"-"`
+	Packets              map[string]anxMaybeFieldContainer `yaml:"packets"`
+	ReferenceConventions anxReferenceConventions           `yaml:"reference_conventions"`
 }
 
-type oarEnumDef struct {
+type anxEnumDef struct {
 	EnumPolicy string   `yaml:"enum_policy"`
 	Values     []string `yaml:"values"`
 }
 
-type oarFieldContainer struct {
-	Fields map[string]oarFieldDef `yaml:"fields"`
+type anxFieldContainer struct {
+	Fields map[string]anxFieldDef `yaml:"fields"`
 }
 
-type oarFieldDef struct {
+type anxFieldDef struct {
 	Type        string `yaml:"type"`
 	Required    bool   `yaml:"required"`
 	Ref         string `yaml:"ref"`
 	Description string `yaml:"description"`
 }
 
-type oarMaybeFieldContainer struct {
-	Fields map[string]oarFieldDef `yaml:"fields"`
+type anxMaybeFieldContainer struct {
+	Fields map[string]anxFieldDef `yaml:"fields"`
 }
 
-type oarReferenceConventions struct {
-	EventRefs oarEventRefConventions `yaml:"event_refs"`
+type anxReferenceConventions struct {
+	EventRefs anxEventRefConventions `yaml:"event_refs"`
 }
 
-type oarEventRefConventions struct {
-	Rules map[string]oarEventRefRule
+type anxEventRefConventions struct {
+	Rules map[string]anxEventRefRule
 }
 
-func (c *oarEventRefConventions) UnmarshalYAML(value *yaml.Node) error {
+func (c *anxEventRefConventions) UnmarshalYAML(value *yaml.Node) error {
 	if value == nil || value.Kind != yaml.MappingNode {
 		c.Rules = nil
 		return nil
 	}
 
-	c.Rules = make(map[string]oarEventRefRule)
+	c.Rules = make(map[string]anxEventRefRule)
 	for i := 0; i+1 < len(value.Content); i += 2 {
 		keyNode := value.Content[i]
 		valueNode := value.Content[i+1]
@@ -133,7 +133,7 @@ func (c *oarEventRefConventions) UnmarshalYAML(value *yaml.Node) error {
 			continue
 		}
 
-		var rule oarEventRefRule
+		var rule anxEventRefRule
 		if err := valueNode.Decode(&rule); err != nil {
 			return err
 		}
@@ -142,35 +142,35 @@ func (c *oarEventRefConventions) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
-type oarEventRefRule struct {
+type anxEventRefRule struct {
 	ThreadID           string                  `yaml:"thread_id" json:"thread_id,omitempty"`
 	RefsMustInclude    []string                `yaml:"refs_must_include" json:"refs_must_include,omitempty"`
 	RefsConditional    string                  `yaml:"refs_conditional" json:"refs_conditional,omitempty"`
 	PayloadMustInclude []string                `yaml:"payload_must_include" json:"payload_must_include,omitempty"`
-	ConditionalRefs    []oarConditionalRefRule `yaml:"conditional_refs" json:"conditional_refs,omitempty"`
+	ConditionalRefs    []anxConditionalRefRule `yaml:"conditional_refs" json:"conditional_refs,omitempty"`
 }
 
-type oarConditionalRefRule struct {
-	When      oarWhenCondition  `yaml:"when" json:"when"`
-	MustHave  []oarRefPrefixReq `yaml:"must_have" json:"must_have,omitempty"`
+type anxConditionalRefRule struct {
+	When      anxWhenCondition  `yaml:"when" json:"when"`
+	MustHave  []anxRefPrefixReq `yaml:"must_have" json:"must_have,omitempty"`
 	Condition string            `yaml:"condition" json:"condition,omitempty"`
 }
 
-type oarWhenCondition struct {
+type anxWhenCondition struct {
 	PayloadField string `yaml:"payload_field" json:"payload_field"`
 	Equals       string `yaml:"equals" json:"equals"`
 }
 
-type oarRefPrefixReq struct {
+type anxRefPrefixReq struct {
 	Prefix string `yaml:"prefix" json:"prefix"`
 }
 
-func (c *oarMaybeFieldContainer) UnmarshalYAML(value *yaml.Node) error {
+func (c *anxMaybeFieldContainer) UnmarshalYAML(value *yaml.Node) error {
 	if value == nil || value.Kind != yaml.MappingNode {
 		c.Fields = nil
 		return nil
 	}
-	type alias oarMaybeFieldContainer
+	type alias anxMaybeFieldContainer
 	var decoded alias
 	if err := value.Decode(&decoded); err != nil {
 		return err
@@ -179,17 +179,17 @@ func (c *oarMaybeFieldContainer) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
-func (d *oarSchemaDocument) UnmarshalYAML(value *yaml.Node) error {
-	type alias oarSchemaDocument
+func (d *anxSchemaDocument) UnmarshalYAML(value *yaml.Node) error {
+	type alias anxSchemaDocument
 	var decoded struct {
 		alias              `yaml:",inline"`
-		LegacyThreadFields map[string]oarMaybeFieldContainer `yaml:"snapshots"`
+		LegacyThreadFields map[string]anxMaybeFieldContainer `yaml:"snapshots"`
 	}
 	if err := value.Decode(&decoded); err != nil {
 		return err
 	}
-	*d = oarSchemaDocument(decoded.alias)
-	d.Threads = make(map[string]oarMaybeFieldContainer, 1)
+	*d = anxSchemaDocument(decoded.alias)
+	d.Threads = make(map[string]anxMaybeFieldContainer, 1)
 	if source, ok := d.Primitives["thread"]; ok {
 		d.Threads["thread"] = source
 		return nil
@@ -200,7 +200,7 @@ func (d *oarSchemaDocument) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
-type oarExample struct {
+type anxExample struct {
 	Title       string `yaml:"title" json:"title"`
 	Command     string `yaml:"command" json:"command"`
 	Description string `yaml:"description,omitempty" json:"description,omitempty"`
@@ -224,7 +224,7 @@ type command struct {
 	Stability   string       `json:"stability,omitempty"`
 	Surface     string       `json:"surface,omitempty"`
 	AgentNotes  string       `json:"agent_notes,omitempty"`
-	Examples    []oarExample `json:"examples,omitempty"`
+	Examples    []anxExample `json:"examples,omitempty"`
 	BodySchema  *bodySchema  `json:"body_schema,omitempty"`
 	PathParams  []string     `json:"path_params,omitempty"`
 	Adjacent    []string     `json:"adjacent_commands,omitempty"`
@@ -323,7 +323,7 @@ func main() {
 	if err != nil {
 		exitf("read schema contract: %v", err)
 	}
-	var schemaDoc oarSchemaDocument
+	var schemaDoc anxSchemaDocument
 	if err := yaml.Unmarshal(schemaRaw, &schemaDoc); err != nil {
 		exitf("decode schema yaml: %v", err)
 	}
@@ -354,7 +354,7 @@ func main() {
 	}
 }
 
-func collectCommands(doc openAPIDocument, schemaDoc oarSchemaDocument) []command {
+func collectCommands(doc openAPIDocument, schemaDoc anxSchemaDocument) []command {
 	paths := make([]string, 0, len(doc.Paths))
 	for path := range doc.Paths {
 		paths = append(paths, path)
@@ -469,13 +469,13 @@ type bodyFieldState struct {
 	required bool
 }
 
-type oarExpansionOptions struct {
+type anxExpansionOptions struct {
 	exclude          map[string]struct{}
 	forceOptional    map[string]struct{}
 	forceOptionalAll bool
 }
 
-func deriveBodySchema(doc openAPIDocument, schemaDoc oarSchemaDocument, commandID string, op *operation) *bodySchema {
+func deriveBodySchema(doc openAPIDocument, schemaDoc anxSchemaDocument, commandID string, op *operation) *bodySchema {
 	if op == nil || op.RequestBody == nil {
 		return nil
 	}
@@ -485,7 +485,7 @@ func deriveBodySchema(doc openAPIDocument, schemaDoc oarSchemaDocument, commandI
 	}
 	acc := map[string]bodyFieldState{}
 	collectOpenAPISchemaFields(doc, *requestSchema, "", true, acc, map[string]struct{}{})
-	applyOARSchemaOverlays(acc, schemaDoc, strings.TrimSpace(commandID))
+	applyAnxSchemaOverlays(acc, schemaDoc, strings.TrimSpace(commandID))
 	schema := bodySchemaFromAccumulator(acc)
 	if len(schema.Required) == 0 && len(schema.Optional) == 0 {
 		return nil
@@ -691,45 +691,45 @@ func upsertBodyField(acc map[string]bodyFieldState, field bodyField, required bo
 	acc[field.Name] = current
 }
 
-func applyOARSchemaOverlays(acc map[string]bodyFieldState, schemaDoc oarSchemaDocument, commandID string) {
+func applyAnxSchemaOverlays(acc map[string]bodyFieldState, schemaDoc anxSchemaDocument, commandID string) {
 	switch commandID {
 	case "events.create":
 		if source, ok := schemaDoc.Primitives["event"]; ok {
-			expandContainerFromOAR(acc, schemaDoc, "event", source, oarExpansionOptions{
+			expandContainerFromAnx(acc, schemaDoc, "event", source, anxExpansionOptions{
 				exclude:       map[string]struct{}{"id": {}, "ts": {}},
 				forceOptional: map[string]struct{}{"actor_id": {}},
 			})
 		}
 	case "threads.create":
 		if source, ok := schemaDoc.Threads["thread"]; ok {
-			expandContainerFromOAR(acc, schemaDoc, "thread", source, oarExpansionOptions{
+			expandContainerFromAnx(acc, schemaDoc, "thread", source, anxExpansionOptions{
 				exclude: map[string]struct{}{"open_cards": {}},
 			})
 		}
 	case "threads.patch":
 		if source, ok := schemaDoc.Threads["thread"]; ok {
-			expandContainerFromOAR(acc, schemaDoc, "patch", source, oarExpansionOptions{
+			expandContainerFromAnx(acc, schemaDoc, "patch", source, anxExpansionOptions{
 				exclude:          map[string]struct{}{"open_cards": {}},
 				forceOptionalAll: true,
 			})
 		}
 	case "packets.receipts.create":
 		if source, ok := schemaDoc.Packets["receipt"]; ok {
-			expandContainerFromOAR(acc, schemaDoc, "packet", source, oarExpansionOptions{})
+			expandContainerFromAnx(acc, schemaDoc, "packet", source, anxExpansionOptions{})
 		}
 	case "packets.reviews.create":
 		if source, ok := schemaDoc.Packets["review"]; ok {
-			expandContainerFromOAR(acc, schemaDoc, "packet", source, oarExpansionOptions{})
+			expandContainerFromAnx(acc, schemaDoc, "packet", source, anxExpansionOptions{})
 		}
 	}
 }
 
-func expandContainerFromOAR(
+func expandContainerFromAnx(
 	acc map[string]bodyFieldState,
-	schemaDoc oarSchemaDocument,
+	schemaDoc anxSchemaDocument,
 	container string,
-	source oarMaybeFieldContainer,
-	options oarExpansionOptions,
+	source anxMaybeFieldContainer,
+	options anxExpansionOptions,
 ) {
 	container = strings.TrimSpace(container)
 	if container == "" || len(source.Fields) == 0 {
@@ -762,10 +762,10 @@ func expandContainerFromOAR(
 			expandProvenanceField(acc, schemaDoc, path, required, options.forceOptionalAll)
 			continue
 		}
-		values, policy := enumFromOARRef(schemaDoc, field.Ref)
+		values, policy := enumFromAnxRef(schemaDoc, field.Ref)
 		upsertBodyField(acc, bodyField{
 			Name:       path,
-			Type:       normalizeOARFieldType(field.Type),
+			Type:       normalizeAnxFieldType(field.Type),
 			EnumValues: values,
 			EnumPolicy: policy,
 		}, required)
@@ -774,7 +774,7 @@ func expandContainerFromOAR(
 
 func expandProvenanceField(
 	acc map[string]bodyFieldState,
-	schemaDoc oarSchemaDocument,
+	schemaDoc anxSchemaDocument,
 	prefix string,
 	parentRequired bool,
 	forceOptionalAll bool,
@@ -790,17 +790,17 @@ func expandProvenanceField(
 		if forceOptionalAll {
 			required = false
 		}
-		values, policy := enumFromOARRef(schemaDoc, field.Ref)
+		values, policy := enumFromAnxRef(schemaDoc, field.Ref)
 		upsertBodyField(acc, bodyField{
 			Name:       prefix + "." + key,
-			Type:       normalizeOARFieldType(field.Type),
+			Type:       normalizeAnxFieldType(field.Type),
 			EnumValues: values,
 			EnumPolicy: policy,
 		}, required)
 	}
 }
 
-func enumFromOARRef(schemaDoc oarSchemaDocument, ref string) ([]string, string) {
+func enumFromAnxRef(schemaDoc anxSchemaDocument, ref string) ([]string, string) {
 	ref = strings.TrimSpace(ref)
 	if !strings.HasPrefix(ref, "enums.") {
 		return nil, ""
@@ -816,7 +816,7 @@ func enumFromOARRef(schemaDoc oarSchemaDocument, ref string) ([]string, string) 
 	return sortedUniqueStrings(enumDef.Values), strings.TrimSpace(enumDef.EnumPolicy)
 }
 
-func normalizeOARFieldType(raw string) string {
+func normalizeAnxFieldType(raw string) string {
 	raw = strings.TrimSpace(raw)
 	raw = strings.Trim(raw, "\"")
 	if raw == "" {
@@ -825,22 +825,22 @@ func normalizeOARFieldType(raw string) string {
 	return raw
 }
 
-func normalizeOAREventRefRule(rule oarEventRefRule) oarEventRefRule {
-	out := oarEventRefRule{
+func normalizeAnxEventRefRule(rule anxEventRefRule) anxEventRefRule {
+	out := anxEventRefRule{
 		ThreadID:           strings.TrimSpace(rule.ThreadID),
 		RefsMustInclude:    compactStrings(rule.RefsMustInclude),
 		RefsConditional:    strings.TrimSpace(rule.RefsConditional),
 		PayloadMustInclude: compactStrings(rule.PayloadMustInclude),
-		ConditionalRefs:    make([]oarConditionalRefRule, 0, len(rule.ConditionalRefs)),
+		ConditionalRefs:    make([]anxConditionalRefRule, 0, len(rule.ConditionalRefs)),
 	}
 
 	for _, conditional := range rule.ConditionalRefs {
-		out.ConditionalRefs = append(out.ConditionalRefs, oarConditionalRefRule{
-			When: oarWhenCondition{
+		out.ConditionalRefs = append(out.ConditionalRefs, anxConditionalRefRule{
+			When: anxWhenCondition{
 				PayloadField: strings.TrimSpace(conditional.When.PayloadField),
 				Equals:       strings.TrimSpace(conditional.When.Equals),
 			},
-			MustHave:  normalizeOARRefPrefixReqs(conditional.MustHave),
+			MustHave:  normalizeAnxRefPrefixReqs(conditional.MustHave),
 			Condition: strings.TrimSpace(conditional.Condition),
 		})
 	}
@@ -852,17 +852,17 @@ func normalizeOAREventRefRule(rule oarEventRefRule) oarEventRefRule {
 	return out
 }
 
-func normalizeOARRefPrefixReqs(values []oarRefPrefixReq) []oarRefPrefixReq {
+func normalizeAnxRefPrefixReqs(values []anxRefPrefixReq) []anxRefPrefixReq {
 	if len(values) == 0 {
 		return nil
 	}
-	out := make([]oarRefPrefixReq, 0, len(values))
+	out := make([]anxRefPrefixReq, 0, len(values))
 	for _, value := range values {
 		prefix := strings.TrimSpace(value.Prefix)
 		if prefix == "" {
 			continue
 		}
-		out = append(out, oarRefPrefixReq{Prefix: prefix})
+		out = append(out, anxRefPrefixReq{Prefix: prefix})
 	}
 	if len(out) == 0 {
 		return nil
@@ -909,7 +909,7 @@ func sortedUniqueStrings(values []string) []string {
 	return out
 }
 
-func generateAll(outDir string, doc openAPIDocument, commands []command, schemaDoc oarSchemaDocument, config generatorConfig) error {
+func generateAll(outDir string, doc openAPIDocument, commands []command, schemaDoc anxSchemaDocument, config generatorConfig) error {
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return err
 	}
@@ -937,7 +937,7 @@ func generateAll(outDir string, doc openAPIDocument, commands []command, schemaD
 	if err := writeConceptsMarkdown(filepath.Join(outDir, "docs", "concepts.md"), doc, commands, config.SourceLabel); err != nil {
 		return err
 	}
-	if err := writeXOARAuthoringMarkdown(filepath.Join(outDir, "docs", "x-anx-authoring.md")); err != nil {
+	if err := writeXAnxAuthoringMarkdown(filepath.Join(outDir, "docs", "x-anx-authoring.md")); err != nil {
 		return err
 	}
 	if err := writeGoClient(filepath.Join(outDir, "go"), commands, config.GoModule); err != nil {
@@ -1014,18 +1014,18 @@ func writeHelpMeta(path string, doc openAPIDocument, commands []command) error {
 	return os.WriteFile(path, b, 0o644)
 }
 
-func writeEventRefRulesMeta(path string, doc openAPIDocument, schemaDoc oarSchemaDocument) error {
+func writeEventRefRulesMeta(path string, doc openAPIDocument, schemaDoc anxSchemaDocument) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
 
-	rules := make(map[string]oarEventRefRule, len(schemaDoc.ReferenceConventions.EventRefs.Rules))
+	rules := make(map[string]anxEventRefRule, len(schemaDoc.ReferenceConventions.EventRefs.Rules))
 	for eventType, rule := range schemaDoc.ReferenceConventions.EventRefs.Rules {
 		eventType = strings.TrimSpace(eventType)
 		if eventType == "" {
 			continue
 		}
-		rules[eventType] = normalizeOAREventRefRule(rule)
+		rules[eventType] = normalizeAnxEventRefRule(rule)
 	}
 
 	eventTypeOpenEnum := false
@@ -1039,7 +1039,7 @@ func writeEventRefRulesMeta(path string, doc openAPIDocument, schemaDoc oarSchem
 		GeneratedBy       string                     `json:"generated_by"`
 		EventTypeOpenEnum bool                       `json:"event_type_open_enum"`
 		RuleCount         int                        `json:"rule_count"`
-		Rules             map[string]oarEventRefRule `json:"rules"`
+		Rules             map[string]anxEventRefRule `json:"rules"`
 	}{
 		OpenAPIVersion:    doc.OpenAPI,
 		ContractVersion:   strings.TrimSpace(doc.Info.Version),
@@ -1063,7 +1063,7 @@ func writeMarkdown(path string, doc openAPIDocument, commands []command, sourceL
 	}
 
 	var b strings.Builder
-	b.WriteString("# OAR Command Registry\n\n")
+	b.WriteString("# Agent Nexus command registry\n\n")
 	b.WriteString(fmt.Sprintf("Generated from `%s`.\n\n", sourceLabel))
 	b.WriteString(fmt.Sprintf("- OpenAPI version: `%s`\n", doc.OpenAPI))
 	b.WriteString(fmt.Sprintf("- Contract version: `%s`\n", strings.TrimSpace(doc.Info.Version)))
@@ -1127,7 +1127,7 @@ func writeGroupsMarkdown(path string, doc openAPIDocument, commands []command, s
 	}
 
 	var b strings.Builder
-	b.WriteString("# OAR Command Groups\n\n")
+	b.WriteString("# Agent Nexus command groups\n\n")
 	b.WriteString(fmt.Sprintf("Generated from `%s`.\n\n", sourceLabel))
 	b.WriteString(fmt.Sprintf("- OpenAPI version: `%s`\n", doc.OpenAPI))
 	b.WriteString(fmt.Sprintf("- Contract version: `%s`\n", strings.TrimSpace(doc.Info.Version)))
@@ -1154,7 +1154,7 @@ func writeConceptsMarkdown(path string, doc openAPIDocument, commands []command,
 	concepts := deriveConcepts(commands)
 
 	var b strings.Builder
-	b.WriteString("# OAR Concepts\n\n")
+	b.WriteString("# Agent Nexus concepts\n\n")
 	b.WriteString(fmt.Sprintf("Generated from `%s`.\n\n", sourceLabel))
 	b.WriteString(fmt.Sprintf("- OpenAPI version: `%s`\n", doc.OpenAPI))
 	b.WriteString(fmt.Sprintf("- Contract version: `%s`\n", strings.TrimSpace(doc.Info.Version)))
@@ -1173,7 +1173,7 @@ func writeConceptsMarkdown(path string, doc openAPIDocument, commands []command,
 	return os.WriteFile(path, []byte(b.String()), 0o644)
 }
 
-func writeXOARAuthoringMarkdown(path string) error {
+func writeXAnxAuthoringMarkdown(path string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
@@ -1551,7 +1551,7 @@ func writeTSClient(tsOutDir string, commands []command, packageName string) erro
 	b.WriteString("  return `${path}?${encoded}`;\n")
 	b.WriteString("}\n\n")
 
-	b.WriteString("export class OarClient {\n")
+	b.WriteString("export class AnxClient {\n")
 	b.WriteString("  private readonly baseUrl: string;\n")
 	b.WriteString("  private readonly fetchFn: typeof fetch;\n\n")
 	b.WriteString("  constructor(baseUrl: string, fetchFn: typeof fetch = fetch) {\n")
@@ -1655,11 +1655,11 @@ func compactStrings(values []string) []string {
 	return out
 }
 
-func compactExamples(values []oarExample) []oarExample {
+func compactExamples(values []anxExample) []anxExample {
 	if len(values) == 0 {
 		return nil
 	}
-	out := make([]oarExample, 0, len(values))
+	out := make([]anxExample, 0, len(values))
 	for _, value := range values {
 		value.Title = strings.TrimSpace(value.Title)
 		value.Command = strings.TrimSpace(value.Command)

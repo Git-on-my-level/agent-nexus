@@ -1,5 +1,5 @@
 /** sessionStorage snapshot before Checkout redirect; per-tab; see hosted billing UX plan. */
-export const BILLING_SNAPSHOT_PREFIX = "oar_billing_snapshot_";
+export const BILLING_SNAPSHOT_PREFIX = "anx_billing_snapshot_";
 
 /** @param {string} orgId */
 export function billingSnapshotKey(orgId) {

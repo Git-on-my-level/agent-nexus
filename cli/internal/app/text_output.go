@@ -124,7 +124,7 @@ func formatCommandSummary(commandID string, body any) string {
 		return formatProvenanceWalkSummary(asMap(body))
 	case "boards.list":
 		return formatBoardsList(body)
-	case "boards.get", "boards.create", "boards.update", "boards.archive", "boards.unarchive", "boards.trash", "boards.restore":
+	case "boards.get", "boards.create", "boards.patch", "boards.archive", "boards.unarchive", "boards.trash", "boards.restore":
 		return formatBoardRecord(extractNestedMap(body, "board"))
 	case "boards.purge":
 		root := asMap(body)

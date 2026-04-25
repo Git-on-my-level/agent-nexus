@@ -21,7 +21,7 @@ type WakePacket struct {
 	TriggerText          string
 	CurrentSummary       string
 	SessionKey           string
-	OARBaseURL           string
+	AnxBaseURL           string
 	ThreadContextURL     string
 	ThreadWorkspaceURL   string
 	TopicWorkspaceURL    string
@@ -137,7 +137,7 @@ func (p WakePacket) ToContent() map[string]any {
 		cliFetch = []string{p.CLITopicWorkspace, p.CLIThreadWorkspace, p.CLIThreadInspect}
 	}
 	apiFetch := map[string]any{
-		"thread":        strings.TrimRight(p.OARBaseURL, "/") + "/threads/" + p.ThreadID,
+		"thread":        strings.TrimRight(p.AnxBaseURL, "/") + "/threads/" + p.ThreadID,
 		"context":       p.ThreadContextURL,
 		"workspace":     p.ThreadWorkspaceURL,
 		"trigger_event": p.TriggerEventURL,

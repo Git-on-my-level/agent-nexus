@@ -199,12 +199,12 @@ test("card detail modal Messages and Timeline tabs render without request storms
   ];
 
   await page.addInitScript((selectedActorId) => {
-    window.localStorage.setItem("oar_ui_actor_id", selectedActorId);
+    window.localStorage.setItem("anx_ui_actor_id", selectedActorId);
   }, actorId);
 
   await page.context().addCookies([
     {
-      name: "oar_ui_session_local",
+      name: "anx_ui_session_local",
       value: "test-refresh-token",
       domain: "127.0.0.1",
       path: "/",

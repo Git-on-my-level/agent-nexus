@@ -40,7 +40,7 @@ describe("refreshWorkspaceAuthSession dedup", () => {
     const event = {
       cookies: {
         get: vi.fn((name) =>
-          name === "oar_ui_session_alpha" ? "rt-same" : "",
+          name === "anx_ui_session_alpha" ? "rt-same" : "",
         ),
         set: vi.fn(),
         delete: vi.fn(),

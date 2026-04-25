@@ -5,6 +5,10 @@ workspace-aware `anx-ui`.
 
 ## Configuration
 
+### Core-backed Playwright (optional)
+
+`tests/e2e/integration-core-golden-path.spec.js` exercises the UI against a **real** `anx-core`. It is **opt-in**: the spec skips unless you set `ANX_CORE_BASE_URL` or `PUBLIC_ANX_CORE_BASE_URL`. Default CI for the web UI does not assume a running core; enable that env in a dedicated job or locally when you want this coverage (see `docs/spec-compliance.md` — integration execution notes).
+
 ### Workspace catalog
 
 Canonical runtime config is `ANX_WORKSPACES`.
@@ -29,11 +33,6 @@ export ANX_WORKSPACES='[
 export ANX_DEFAULT_WORKSPACE=dtrinity
 export ANX_DEFAULT_ORGANIZATION=local
 ```
-
-Legacy aliases (deprecated):
-
-- `ANX_PROJECTS` is accepted if `ANX_WORKSPACES` is not set.
-- `ANX_DEFAULT_PROJECT` is accepted if `ANX_DEFAULT_WORKSPACE` is not set.
 
 Route model:
 

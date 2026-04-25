@@ -29,7 +29,7 @@
     initializeAuthSession,
     isHumanWorkspacePrincipal,
     logoutAuthSession,
-    sessionEndedByCp,
+    sessionEndedByAccountStatus,
   } from "$lib/authSession";
   import SessionEndedOverlay from "$lib/components/SessionEndedOverlay.svelte";
   import { listAllPrincipals } from "$lib/authPrincipals";
@@ -1307,7 +1307,7 @@
     />
   {/if}
 
-  {#if $sessionEndedByCp}
+  {#if $sessionEndedByAccountStatus}
     <SessionEndedOverlay
       open={true}
       cpOrigin={hostedCpOrigin}

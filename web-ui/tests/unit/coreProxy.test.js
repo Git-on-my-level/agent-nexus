@@ -14,7 +14,7 @@ describe("buildProxyRequestInit", () => {
             origin: "http://localhost:5173",
             host: "localhost:5173",
             "content-type": "application/json",
-            cookie: "oar_ui_session_local=refresh-token",
+            cookie: "anx_ui_session_local=refresh-token",
             authorization: "Bearer token",
           },
           body: JSON.stringify({ display_name: "Alex Chen" }),

@@ -57,8 +57,8 @@ const { handle, __resetLoopTrackerForTests } =
 
 function makeNavRequest(pathname) {
   return {
-    url: new URL(`https://oar.example.test${pathname}`),
-    request: new Request(`https://oar.example.test${pathname}`, {
+    url: new URL(`https://anx.example.test${pathname}`),
+    request: new Request(`https://anx.example.test${pathname}`, {
       method: "GET",
       headers: {
         accept: "application/json",
@@ -70,8 +70,8 @@ function makeNavRequest(pathname) {
 
 function makeDataFetch(pathname) {
   return {
-    url: new URL(`https://oar.example.test${pathname}/__data.json`),
-    request: new Request(`https://oar.example.test${pathname}/__data.json`, {
+    url: new URL(`https://anx.example.test${pathname}/__data.json`),
+    request: new Request(`https://anx.example.test${pathname}/__data.json`, {
       method: "GET",
       headers: {
         accept: "application/json",

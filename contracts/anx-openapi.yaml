@@ -1,9 +1,9 @@
 openapi: 3.1.0
 info:
-  title: Organization Autorunner HTTP API
+  title: Agent Nexus HTTP API
   version: 0.3.0
   description: |
-    Canonical workspace HTTP contract for Organization Autorunner.
+    Canonical workspace HTTP contract for Agent Nexus.
 
     Topics and cards are the primary durable resources. Threads remain backing
     infrastructure surfaced through read-only inspection and workspace views.
@@ -2745,7 +2745,7 @@ paths:
       x-anx-surface: utility
       x-anx-command-id: meta.commands.list
       x-anx-cli-path: meta commands list
-      x-anx-why: Expose embedded OAR command metadata for discovery and codegen parity.
+      x-anx-why: Expose embedded Agent Nexus command metadata for discovery and codegen parity.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns generated command registry JSON."
@@ -2992,7 +2992,7 @@ paths:
       x-anx-surface: utility
       x-anx-command-id: actors.create
       x-anx-cli-path: actors create
-      x-anx-why: Legacy dev actor registration when dev_actor_mode is enabled.
+      x-anx-why: Dev-only actor registration when dev_actor_mode is enabled.
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ actor }`."

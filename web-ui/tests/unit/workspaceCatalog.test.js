@@ -46,16 +46,6 @@ describe("workspaceCatalog", () => {
     );
   });
 
-  it("should parse legacy ANX_PROJECTS env var", () => {
-    const env = {
-      ANX_PROJECTS:
-        '[{"organizationSlug":"local","slug":"legacy1","label":"Legacy 1","coreBaseUrl":"http://localhost:8000"}]',
-    };
-    const catalog = loadWorkspaceCatalog(env);
-    expect(catalog.workspaces).toHaveLength(1);
-    expect(catalog.defaultWorkspace.slug).toBe("legacy1");
-  });
-
   it("should parse object-form ANX_WORKSPACES string URL entries", () => {
     const env = {
       ANX_WORKSPACES:
@@ -70,11 +60,21 @@ describe("workspaceCatalog", () => {
     expect(catalog.defaultWorkspace.slug).toBe("ws2");
   });
 
-  it("should parse legacy ANX_DEFAULT_PROJECT env var", () => {
+  it("does not use ANX_PROJECTS for the workspace catalog", () => {
+    const env = {
+      ANX_PROJECTS:
+        '[{"organizationSlug":"local","slug":"legacy1","label":"Legacy 1","coreBaseUrl":"http://localhost:8000"}]',
+    };
+    const catalog = loadWorkspaceCatalog(env);
+    expect(catalog.workspaces).toHaveLength(0);
+    expect(catalog.defaultWorkspace).toBeNull();
+  });
+
+  it("does not use ANX_DEFAULT_PROJECT for default workspace selection", () => {
     const env = {
       ANX_WORKSPACES:
-        '[{"organizationSlug":"local","slug":"ws1","label":"Workspace 1","coreBaseUrl":"http://localhost:8000"}]',
-      ANX_DEFAULT_PROJECT: "ws1",
+        '[{"organizationSlug":"local","slug":"ws1","label":"Workspace 1","coreBaseUrl":"http://localhost:8000"},{"organizationSlug":"local","slug":"ws2","label":"Workspace 2","coreBaseUrl":"http://localhost:8001"}]',
+      ANX_DEFAULT_PROJECT: "ws2",
       ANX_DEFAULT_ORGANIZATION: "local",
     };
     const catalog = loadWorkspaceCatalog(env);

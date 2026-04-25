@@ -7,7 +7,7 @@ test("renders the access page without auth seeding", async ({ page }) => {
     page.getByRole("heading", { name: "Select Actor Identity" }),
   ).toBeVisible();
   await expect(page.getByText("Prefer authenticated access?")).toBeVisible();
-  await expect(page.locator("body")).not.toContainText("oar_ui_refresh_token");
+  await expect(page.locator("body")).not.toContainText("anx_ui_refresh_token");
 });
 
 test("reads the cookie-backed session from the same-origin endpoint", async ({
@@ -15,7 +15,7 @@ test("reads the cookie-backed session from the same-origin endpoint", async ({
 }) => {
   await page.context().addCookies([
     {
-      name: "oar_ui_session_local",
+      name: "anx_ui_session_local",
       value: "test-refresh-token",
       domain: "127.0.0.1",
       path: "/",
@@ -25,7 +25,7 @@ test("reads the cookie-backed session from the same-origin endpoint", async ({
 
   await page.route("**/auth/session", async (route) => {
     expect(route.request().headers().cookie ?? "").toContain(
-      "oar_ui_session_local=test-refresh-token",
+      "anx_ui_session_local=test-refresh-token",
     );
     await route.fulfill({
       status: 200,
@@ -65,7 +65,7 @@ test("reads the cookie-backed session from the same-origin endpoint", async ({
 test("does not repeat the username in principal rows", async ({ page }) => {
   await page.context().addCookies([
     {
-      name: "oar_ui_session_local",
+      name: "anx_ui_session_local",
       value: "test-refresh-token",
       domain: "127.0.0.1",
       path: "/",

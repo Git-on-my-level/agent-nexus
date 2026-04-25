@@ -10,13 +10,13 @@ Read this after [core/AGENTS.md](../../AGENTS.md). This package owns the workspa
 
 It should stay:
 - lightweight to host inside `anx-core`
-- bounded to explicit internal dependencies and documented OAR primitives
+- bounded to explicit internal dependencies and documented Agent Nexus primitives
 - explicit about workspace scope rather than host scope
 - easy for future agents to extend without re-reading the whole repo
 
 ## High-Value Invariants
 - Routing is workspace-scoped. Do not add host-local assumptions to wake decisions.
-- Router state is local operational state only; canonical truth still lives in OAR primitives.
+- Router state is local operational state only; canonical truth still lives in Agent Nexus primitives.
 - Taggability must remain driven by registration plus workspace binding, never by a transient live bridge check-in.
 - Bridge check-ins control online delivery semantics, not whether a valid registered agent can be tagged.
 - Event handling must be idempotent across reconnects and duplicate deliveries.

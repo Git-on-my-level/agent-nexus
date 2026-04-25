@@ -17,11 +17,12 @@ import (
 
 var secretSubcommandSpec = subcommandSpec{
 	command: "secret",
-	valid:   []string{"list", "create", "get", "delete", "exec"},
+	valid:   []string{"list", "create", "get", "update", "delete", "exec"},
 	examples: []string{
 		"anx secret list",
 		"anx secret create OPENAI_API_KEY",
 		"anx secret get OPENAI_API_KEY --reveal",
+		"anx secret update OPENAI_API_KEY",
 		"anx secret delete OPENAI_API_KEY",
 		"anx secret exec --secret OPENAI_API_KEY -- ./my-agent.sh",
 	},
@@ -43,6 +44,8 @@ func (a *App) runSecretCommand(ctx context.Context, args []string, cfg config.Re
 		return a.runSecretCreate(ctx, args[1:], cfg)
 	case "get":
 		return a.runSecretGet(ctx, args[1:], cfg)
+	case "update":
+		return a.runSecretUpdate(ctx, args[1:], cfg)
 	case "delete":
 		return a.runSecretDelete(ctx, args[1:], cfg)
 	case "exec":
@@ -236,6 +239,86 @@ func (a *App) runSecretGet(ctx context.Context, args []string, cfg config.Resolv
 		}
 	}
 	return &commandResult{Text: value, Data: map[string]any{"status_code": resp.StatusCode, "body": parsed}}, "secret get", nil
+}
+
+func (a *App) runSecretUpdate(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
+	fs := newSilentFlagSet("secret update")
+	var fromStdin trackedBool
+	var descFlag trackedString
+	fs.Var(&fromStdin, "from-stdin", "Read new secret value from stdin")
+	fs.Var(&descFlag, "description", "New description (omit to keep the current description)")
+	if err := fs.Parse(args); err != nil {
+		return nil, "secret update", errnorm.Usage("invalid_flags", err.Error())
+	}
+	positionals := fs.Args()
+	if len(positionals) == 0 {
+		return nil, "secret update", errnorm.Usage("invalid_args", "secret name or ID is required: anx secret update <NAME_OR_ID>")
+	}
+	nameOrID := strings.TrimSpace(positionals[0])
+	if len(positionals) > 1 {
+		return nil, "secret update", errnorm.Usage("invalid_args", "too many positional arguments")
+	}
+
+	var value string
+	if fromStdin.set && fromStdin.value {
+		data, err := io.ReadAll(a.Stdin)
+		if err != nil {
+			return nil, "secret update", errnorm.Wrap(errnorm.KindLocal, "stdin_read_failed", "failed to read from stdin", err)
+		}
+		value = strings.TrimRight(string(data), "\n\r")
+	} else {
+		fmt.Fprint(a.Stderr, "Enter new secret value: ")
+		data, err := io.ReadAll(a.Stdin)
+		if err != nil {
+			return nil, "secret update", errnorm.Wrap(errnorm.KindLocal, "stdin_read_failed", "failed to read value", err)
+		}
+		value = strings.TrimRight(string(data), "\n\r")
+	}
+	if value == "" {
+		return nil, "secret update", errnorm.Usage("invalid_request", "secret value must not be empty")
+	}
+
+	body := map[string]any{"value": value}
+	if descFlag.set {
+		body["description"] = strings.TrimSpace(descFlag.value)
+	}
+
+	bodyBytes, err := json.Marshal(body)
+	if err != nil {
+		return nil, "secret update", errnorm.Wrap(errnorm.KindLocal, "request_body_encode_failed", "failed to encode request body", err)
+	}
+
+	authCfg, err := a.cfgWithResolvedAuthToken(ctx, cfg)
+	if err != nil {
+		return nil, "secret update", err
+	}
+	client, err := httpclient.New(authCfg)
+	if err != nil {
+		return nil, "secret update", errnorm.Wrap(errnorm.KindLocal, "http_client_init_failed", "failed to initialize HTTP client", err)
+	}
+
+	secretID, resolveErr := a.resolveSecretID(ctx, client, authCfg, nameOrID)
+	if resolveErr != nil {
+		return nil, "secret update", resolveErr
+	}
+
+	callCtx, cancel := httpclient.WithTimeout(ctx, authCfg.Timeout)
+	defer cancel()
+	resp, err := client.RawCall(callCtx, httpclient.RawRequest{
+		Method:  "PUT",
+		Path:    fmt.Sprintf("/secrets/%s", url.PathEscape(secretID)),
+		Headers: generatedHeaders(authCfg),
+		Body:    bodyBytes,
+	})
+	if err != nil {
+		return nil, "secret update", errnorm.Wrap(errnorm.KindNetwork, "request_failed", "secret update request failed", err)
+	}
+	if resp.StatusCode >= 400 {
+		return nil, "secret update", errnorm.FromHTTPFailure(resp.StatusCode, resp.Body)
+	}
+	parsed := parseResponseBody(resp.Body)
+	text := fmt.Sprintf("Secret %q updated.", nameOrID)
+	return &commandResult{Text: text, Data: map[string]any{"status_code": resp.StatusCode, "body": parsed}}, "secret update", nil
 }
 
 func (a *App) runSecretDelete(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {

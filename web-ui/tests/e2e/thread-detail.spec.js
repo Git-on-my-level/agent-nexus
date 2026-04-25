@@ -57,11 +57,11 @@ test("thread detail separates messages from timeline and nests replies", async (
   ];
 
   await page.addInitScript((selectedActorId) => {
-    window.localStorage.setItem("oar_ui_actor_id", selectedActorId);
+    window.localStorage.setItem("anx_ui_actor_id", selectedActorId);
   }, actorId);
   await page.context().addCookies([
     {
-      name: "oar_ui_session_local",
+      name: "anx_ui_session_local",
       value: "test-refresh-token",
       domain: "127.0.0.1",
       path: "/",
@@ -521,7 +521,7 @@ test("thread detail handles snapshot update conflict and retries after reload", 
   };
 
   await page.addInitScript((selectedActorId) => {
-    window.localStorage.setItem("oar_ui_actor_id", selectedActorId);
+    window.localStorage.setItem("anx_ui_actor_id", selectedActorId);
   }, actorId);
 
   await page.route(/\/actors$/, async (route) => {
@@ -780,7 +780,7 @@ test("thread detail updates workspace panels from another actor via event stream
   });
 
   await page.addInitScript((selectedActorId) => {
-    window.localStorage.setItem("oar_ui_actor_id", selectedActorId);
+    window.localStorage.setItem("anx_ui_actor_id", selectedActorId);
   }, actorId);
 
   await page.route(/\/actors$/, async (route) => {

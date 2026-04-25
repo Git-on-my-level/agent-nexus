@@ -18,12 +18,12 @@ Implementation:
 ## Cookies (workspace vs control plane)
 
 - Workspace session cookies:
-  - `oar_ui_session_{slug}` (refresh token)
-  - `oar_ui_access_{slug}` (access token)
+  - `anx_ui_session_{slug}` (refresh token)
+  - `anx_ui_access_{slug}` (access token)
 - Control-plane session cookie:
-  - `oar_cp_dev_access_token`
+  - `anx_cp_dev_access_token`
 
-Workspace callback routes only write `oar_ui_*`; they never clear the CP cookie.
+Workspace callback routes only write `anx_ui_*`; they never clear the CP cookie.
 
 ## Callback/error taxonomy
 
@@ -42,7 +42,7 @@ Notable route behavior:
 `src/lib/authSession.js` owns:
 - `authSessionReady`
 - `authenticatedAgent`
-- `sessionEndedByCp`
+- `sessionEndedByAccountStatus` (terminal session: account disabled or account-status checks failed)
 - single-flight `initializeAuthSession`
 
 ## Known limitation

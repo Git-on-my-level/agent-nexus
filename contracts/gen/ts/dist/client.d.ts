@@ -39,7 +39,7 @@ export interface InvokeResult {
     body: string;
 }
 export declare const commandRegistry: CommandSpec[];
-export declare class OarClient {
+export declare class AnxClient {
     private readonly baseUrl;
     private readonly fetchFn;
     constructor(baseUrl: string, fetchFn?: typeof fetch);

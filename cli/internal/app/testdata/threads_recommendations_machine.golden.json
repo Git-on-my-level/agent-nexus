@@ -9,7 +9,7 @@
       "items": [
         {
           "id": "event_ctx_2",
-          "short_id": "event_ctx_2",
+          "short_id": "event_ctx_",
           "summary": "confirm canonical command labels",
           "summary_preview": "confirm canonical command labels",
           "thread_id": "thread_123",
@@ -53,7 +53,7 @@
       "items": [
         {
           "id": "event_ctx_1",
-          "short_id": "event_ctx_1",
+          "short_id": "event_ctx_",
           "summary": "normalize frame shape",
           "summary_preview": "normalize frame shape",
           "thread_id": "thread_123",

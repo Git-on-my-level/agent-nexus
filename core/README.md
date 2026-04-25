@@ -1,6 +1,6 @@
 # agent-nexus-core
 
-Go-first bootstrap for the Organization Autorunner core backend.
+Go-first bootstrap for the Agent Nexus core backend.
 
 This repo currently includes:
 - `docs/`: spec + HTTP contract

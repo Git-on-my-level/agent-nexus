@@ -17,7 +17,7 @@ describe("readHostedControlPlaneProxyBearer", () => {
     const { readHostedControlPlaneProxyBearer } = await loadModule(false);
     const event = {
       cookies: {
-        get: (name) => (name === "oar_cp_access_token" ? "sess" : ""),
+        get: (name) => (name === "anx_cp_access_token" ? "sess" : ""),
       },
     };
     expect(readHostedControlPlaneProxyBearer(event)).toBe("sess");
@@ -35,7 +35,7 @@ describe("readHostedControlPlaneAccessToken", () => {
     const { readHostedControlPlaneAccessToken } = await loadModule(true);
     const event = {
       cookies: {
-        get: (name) => (name === "oar_cp_access_token" ? "sess" : ""),
+        get: (name) => (name === "anx_cp_access_token" ? "sess" : ""),
       },
     };
     expect(
@@ -49,7 +49,7 @@ describe("readHostedControlPlaneAccessToken", () => {
     const { readHostedControlPlaneAccessToken } = await loadModule(false);
     const event = {
       cookies: {
-        get: (name) => (name === "oar_cp_access_token" ? "sess" : ""),
+        get: (name) => (name === "anx_cp_access_token" ? "sess" : ""),
       },
     };
     expect(
@@ -63,7 +63,7 @@ describe("readHostedControlPlaneAccessToken", () => {
     const { readHostedControlPlaneAccessToken } = await loadModule(false);
     const event = {
       cookies: {
-        get: (name) => (name === "oar_cp_access_token" ? "sess" : ""),
+        get: (name) => (name === "anx_cp_access_token" ? "sess" : ""),
       },
     };
     expect(readHostedControlPlaneAccessToken(event, {})).toBe("sess");
@@ -73,7 +73,7 @@ describe("readHostedControlPlaneAccessToken", () => {
     const { readHostedControlPlaneAccessToken } = await loadModule(false);
     const event = {
       cookies: {
-        get: (name) => (name === "oar_cp_dev_access_token" ? "devtok" : ""),
+        get: (name) => (name === "anx_cp_dev_access_token" ? "devtok" : ""),
       },
     };
     expect(readHostedControlPlaneAccessToken(event, {})).toBe("");
@@ -83,7 +83,7 @@ describe("readHostedControlPlaneAccessToken", () => {
     const { readHostedControlPlaneAccessToken } = await loadModule(true);
     const event = {
       cookies: {
-        get: (name) => (name === "oar_cp_dev_access_token" ? "devtok" : ""),
+        get: (name) => (name === "anx_cp_dev_access_token" ? "devtok" : ""),
       },
     };
     expect(readHostedControlPlaneAccessToken(event, {})).toBe("devtok");
@@ -94,8 +94,8 @@ describe("readHostedControlPlaneAccessToken", () => {
     const event = {
       cookies: {
         get: (name) => {
-          if (name === "oar_cp_access_token") return "sess";
-          if (name === "oar_cp_dev_access_token") return "devtok";
+          if (name === "anx_cp_access_token") return "sess";
+          if (name === "anx_cp_dev_access_token") return "devtok";
           return "";
         },
       },

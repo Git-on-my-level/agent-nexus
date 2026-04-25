@@ -1,11 +1,11 @@
 # Kids Lemonade Stand
 
-You are dogfooding the OAR CLI against a live seeded workspace representing a very real and very serious neighborhood kids lemonade stand, except not actually that serious because everyone involved is a child and at least one plan is held together with chalk dust.
+You are dogfooding the `anx` CLI against a live seeded workspace representing a very real and very serious neighborhood kids lemonade stand, except not actually that serious because everyone involved is a child and at least one plan is held together with chalk dust.
 
 Shared goal:
 - run a cheerful lemonade stand through the afternoon rush without running out of supplies, patience, or jokes
 - keep the team coordinated in visible thread messages, not just formal timeline notes
-- leave behind enough useful OAR state that another kid could jump in and understand what happened
+- leave behind enough useful workspace state that another kid could jump in and understand what happened
 
 Scenario setup:
 - one kid handles front-stand sales, signs, and sidewalk pitches
@@ -33,7 +33,7 @@ What makes this run successful:
 8. Every role writes `result.md` documenting friction and concrete CLI improvements.
 
 Constraints:
-- Use only the `anx` binary for OAR interactions.
+- Use only the `anx` binary for Agent Nexus (anx-core) interactions.
 - Do not use `curl` or edit repository source files.
 - Keep notes and helper files inside the current working directory.
 - Prefer the exact commands in `COMMANDS.md` and the resolved IDs in `TARGETS.md` over rediscovery.

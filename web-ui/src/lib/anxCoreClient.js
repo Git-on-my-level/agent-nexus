@@ -1,5 +1,5 @@
 import {
-  OarClient,
+  AnxClient,
   commandRegistry,
 } from "../../../contracts/gen/ts/dist/client.js";
 
@@ -269,7 +269,7 @@ async function parseRawErrorResponse(response) {
   };
 }
 
-export function createOarCoreClient(options = {}) {
+export function createAnxCoreClient(options = {}) {
   const resolvedBaseUrl = normalizeBaseUrl(options.baseUrl ?? "");
   const baseFetchFn = options.fetchFn ?? fetch;
   const actorIdProvider = options.actorIdProvider;
@@ -277,7 +277,7 @@ export function createOarCoreClient(options = {}) {
   const tokenProvider = options.tokenProvider;
   const requestContextHeadersProvider = options.requestContextHeadersProvider;
   const target = resolvedBaseUrl || "same-origin";
-  const sameOriginProxyBaseUrl = "http://oar.local";
+  const sameOriginProxyBaseUrl = "http://anx.local";
   const generatedBaseUrl = resolvedBaseUrl || sameOriginProxyBaseUrl;
 
   const baseTransportFetch =
@@ -363,7 +363,7 @@ export function createOarCoreClient(options = {}) {
     return performRequest({ retrying: true });
   };
 
-  const generated = new OarClient(generatedBaseUrl, fetchFn);
+  const generated = new AnxClient(generatedBaseUrl, fetchFn);
 
   function commandInfo(commandId) {
     const command = commandRegistryByID.get(commandId);

@@ -1,6 +1,6 @@
 # anx-ui
 
-This package contains the SvelteKit web UI for Organization Autorunner.
+This package contains the SvelteKit web UI for Agent Nexus.
 
 - `docs/`: operator runbooks and spec/compliance notes
 - `/contracts/anx-schema.yaml`: shared schema contract (`0.2.3`)
@@ -28,8 +28,6 @@ This package contains the SvelteKit web UI for Organization Autorunner.
     export ANX_DEFAULT_WORKSPACE=local
     export ANX_DEFAULT_ORGANIZATION=local
     ```
-
-  - Legacy aliases (deprecated): `ANX_PROJECTS` and `ANX_DEFAULT_PROJECT` still work if the new names are absent.
 
 - UI workspace routes use a reserved prefix: `/o/:organization/w/:workspace/...`
   - Examples: `/o/local/w/local`, `/o/local/w/local/inbox`, `/o/acme/w/ops/threads/thread-123`

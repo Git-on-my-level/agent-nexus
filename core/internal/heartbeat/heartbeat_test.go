@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"agent-nexus-core/internal/wsservicejwt"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -103,8 +104,8 @@ func TestPublisherPublishOnceSignsExpectedClaims(t *testing.T) {
 
 	iat := int64(claims["iat"].(float64))
 	exp := int64(claims["exp"].(float64))
-	if got := exp - iat; got != int64(defaultAssertionTTL.Seconds()) {
-		t.Fatalf("expected assertion ttl %d seconds, got %d", int64(defaultAssertionTTL.Seconds()), got)
+	if got := exp - iat; got != int64(wsservicejwt.AssertionTTL.Seconds()) {
+		t.Fatalf("expected assertion ttl %d seconds, got %d", int64(wsservicejwt.AssertionTTL.Seconds()), got)
 	}
 }
 

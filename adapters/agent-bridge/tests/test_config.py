@@ -8,7 +8,7 @@ def test_load_config_parses_false_like_verify_ssl(tmp_path: Path):
     config_path.write_text(
         """
 [anx]
-base_url = "https://oar.example"
+base_url = "https://anx.example"
 workspace_id = "ws_main"
 workspace_name = "Main"
 verify_ssl = "false"
@@ -27,7 +27,7 @@ def test_load_config_defaults_agent_checkin_lifecycle(tmp_path: Path):
     config_path.write_text(
         """
 [anx]
-base_url = "https://oar.example"
+base_url = "https://anx.example"
 workspace_id = "ws_main"
 workspace_name = "Main"
 
@@ -55,7 +55,7 @@ def test_load_config_ignores_legacy_router_section(tmp_path: Path):
     config_path.write_text(
         """
 [anx]
-base_url = "https://oar.example"
+base_url = "https://anx.example"
 workspace_id = "ws_main"
 workspace_name = "Main"
 

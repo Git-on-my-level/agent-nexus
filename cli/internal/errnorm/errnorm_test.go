@@ -60,7 +60,7 @@ func TestEnrichConflictBoardStale(t *testing.T) {
 	if got, _ := details["hint"].(string); got != err.Hint {
 		t.Fatalf("details.hint should match normalized hint for JSON consumers: details=%q err.Hint=%q", got, err.Hint)
 	}
-	rec, _ := details["oar_cli_recovery"].(map[string]any)
+	rec, _ := details["anx_cli_recovery"].(map[string]any)
 	if rec["field"] != "if_board_updated_at" {
 		t.Fatalf("unexpected recovery: %#v", rec)
 	}
@@ -112,7 +112,7 @@ func TestEnrichColumnKeyInvalidMessage(t *testing.T) {
 		t.Fatalf("expected compact enum guidance, got %q", err.Hint)
 	}
 	details, _ := err.Details.(map[string]any)
-	rec, _ := details["oar_cli_recovery"].(map[string]any)
+	rec, _ := details["anx_cli_recovery"].(map[string]any)
 	if rec["field"] != "column_key" {
 		t.Fatalf("unexpected recovery: %#v", rec)
 	}
@@ -126,7 +126,7 @@ func TestEnrichKeyMismatchAssertion(t *testing.T) {
 		t.Fatalf("expected key mismatch recovery hint, got %q", err.Hint)
 	}
 	details, _ := err.Details.(map[string]any)
-	rec, _ := details["oar_cli_recovery"].(map[string]any)
+	rec, _ := details["anx_cli_recovery"].(map[string]any)
 	if rec["reason"] != "key_assertion_failed" {
 		t.Fatalf("unexpected recovery: %#v", rec)
 	}
@@ -201,7 +201,7 @@ func TestEnrichInvalidRequestRFC3339Field(t *testing.T) {
 		t.Fatalf("unexpected hint: %q", err.Hint)
 	}
 	details, _ := err.Details.(map[string]any)
-	rec, _ := details["oar_cli_recovery"].(map[string]any)
+	rec, _ := details["anx_cli_recovery"].(map[string]any)
 	if rec["kind"] != "invalid_timestamp_format" {
 		t.Fatalf("unexpected recovery kind: %#v", rec)
 	}
@@ -215,7 +215,7 @@ func TestEnrichResolutionRequiresDoneColumn(t *testing.T) {
 		t.Fatalf("unexpected hint: %q", err.Hint)
 	}
 	details, _ := err.Details.(map[string]any)
-	rec, _ := details["oar_cli_recovery"].(map[string]any)
+	rec, _ := details["anx_cli_recovery"].(map[string]any)
 	if rec["kind"] != "resolution_workflow" {
 		t.Fatalf("unexpected recovery: %#v", rec)
 	}
@@ -238,7 +238,7 @@ func TestEnrichLimitPagination(t *testing.T) {
 		t.Fatalf("unexpected hint: %q", err.Hint)
 	}
 	details, _ := err.Details.(map[string]any)
-	rec, _ := details["oar_cli_recovery"].(map[string]any)
+	rec, _ := details["anx_cli_recovery"].(map[string]any)
 	if rec["kind"] != "invalid_pagination" {
 		t.Fatalf("unexpected recovery: %#v", rec)
 	}
@@ -268,9 +268,9 @@ func TestNormalizeEnrichesLocalLimitInvalidRequest(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected details map, got %T", err.Details)
 	}
-	rec, ok := details["oar_cli_recovery"].(map[string]any)
+	rec, ok := details["anx_cli_recovery"].(map[string]any)
 	if !ok || rec["kind"] != "invalid_pagination" {
-		t.Fatalf("unexpected oar_cli_recovery: %#v", details["oar_cli_recovery"])
+		t.Fatalf("unexpected anx_cli_recovery: %#v", details["anx_cli_recovery"])
 	}
 }
 

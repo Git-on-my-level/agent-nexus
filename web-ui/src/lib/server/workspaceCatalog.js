@@ -14,14 +14,14 @@ const ANX_WORKSPACES_JSON_EXAMPLE =
   '[{"organizationSlug":"local","slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"}]';
 
 /** `..."http://..." ]` instead of `..."http://..."} ]` — common .env / copy-paste mistake. */
-function hintOarWorkspacesBracketTypo(trimmed) {
+function hintAnxWorkspacesBracketTypo(trimmed) {
   if (!/"http[s]?:\/\/[^"]+"\s*\]/.test(trimmed)) {
     return "";
   }
   return ' Hint: close the workspace object with "}" before the final "]" (e.g. ..."8000"}] not ..."8000"]).';
 }
 
-function formatOarWorkspacesJsonError(trimmed, error) {
+function formatAnxWorkspacesJsonError(trimmed, error) {
   const reason = error instanceof Error ? error.message : String(error);
   const posMatch = reason.match(/position (\d+)/);
   const pos = posMatch ? Number(posMatch[1]) : NaN;
@@ -35,16 +35,16 @@ function formatOarWorkspacesJsonError(trimmed, error) {
     context = ` Context around failure: ${JSON.stringify(slice)} ${caret}`;
   }
   const typoHint = /Expected ',' or '}'/.test(reason)
-    ? hintOarWorkspacesBracketTypo(trimmed)
+    ? hintAnxWorkspacesBracketTypo(trimmed)
     : "";
-  return `ANX_WORKSPACES must be valid JSON. ${reason}.${context}${typoHint} Unset ANX_WORKSPACES (and ANX_PROJECTS) to fall back to an empty catalog, or fix the value. Example: ${ANX_WORKSPACES_JSON_EXAMPLE}`;
+  return `ANX_WORKSPACES must be valid JSON. ${reason}.${context}${typoHint} Unset ANX_WORKSPACES to fall back to an empty catalog, or fix the value. Example: ${ANX_WORKSPACES_JSON_EXAMPLE}`;
 }
 
 /**
  * Fixes two copy/paste typos seen in ANX_WORKSPACES without changing valid JSON.
  * Only applied after JSON.parse fails.
  */
-function repairCommonOarWorkspacesJsonTypos(trimmed) {
+function repairCommonAnxWorkspacesJsonTypos(trimmed) {
   let s = trimmed;
   const afterSwap = s.replace(/("http[s]?:\/\/[^"]+")\s*\]\s*\}\s*$/, "$1}]");
   if (afterSwap !== s) return afterSwap;
@@ -95,15 +95,15 @@ function parseWorkspaceEntries(rawValue, defaultOrganizationSlugHint = "") {
   try {
     parsed = JSON.parse(trimmed);
   } catch (firstError) {
-    const repaired = repairCommonOarWorkspacesJsonTypos(trimmed);
+    const repaired = repairCommonAnxWorkspacesJsonTypos(trimmed);
     if (repaired !== trimmed) {
       try {
         parsed = JSON.parse(repaired);
       } catch {
-        throw new Error(formatOarWorkspacesJsonError(trimmed, firstError));
+        throw new Error(formatAnxWorkspacesJsonError(trimmed, firstError));
       }
     } else {
-      throw new Error(formatOarWorkspacesJsonError(trimmed, firstError));
+      throw new Error(formatAnxWorkspacesJsonError(trimmed, firstError));
     }
   }
 

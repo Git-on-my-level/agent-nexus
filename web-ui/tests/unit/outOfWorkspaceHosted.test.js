@@ -18,7 +18,7 @@ function eventWithFetch(fetchFn, cookieToken = "") {
     fetch: fetchFn,
     cookies: {
       get: vi.fn((name) =>
-        name === "oar_cp_dev_access_token" ? cookieToken : "",
+        name === "anx_cp_dev_access_token" ? cookieToken : "",
       ),
     },
     locals: {},

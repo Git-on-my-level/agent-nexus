@@ -6,7 +6,7 @@ Guide for work inside `contracts/`.
 Read this after the root [AGENTS.md](../AGENTS.md). This module defines the shared compatibility boundary for the monorepo.
 
 ## Module Purpose
-`contracts` is the canonical contract source of truth for Organization Autorunner.
+`contracts` is the canonical contract source of truth for Agent Nexus.
 
 It defines the durable language that `core`, `cli`, and `web-ui` use to interoperate: API shapes, schema rules, typed references, and command metadata inputs. Changes here are cross-module changes by default.
 

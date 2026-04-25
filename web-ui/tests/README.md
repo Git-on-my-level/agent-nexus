@@ -19,7 +19,7 @@ Fixtures in `tests/fixtures/workspaceAuth.js` include human agent shapes with `a
 ## Environment
 
 - Hosted behavior is enabled by `ANX_CONTROL_BASE_URL`.
-- CP auth in tests uses env token (`ANX_CONTROL_PLANE_DEV_ACCESS_TOKEN`) or cookie token (`oar_cp_dev_access_token`).
+- CP auth in tests uses env token (`ANX_CONTROL_PLANE_DEV_ACCESS_TOKEN`) or cookie token (`anx_cp_dev_access_token`).
 - Most unit tests now inject provider mocks (`mockLocalProvider`, `mockHostedProvider`) through `event.locals.outOfWorkspace` instead of mocking legacy helper modules.
 
 ## Helpers

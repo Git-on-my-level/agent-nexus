@@ -169,7 +169,7 @@ func TestStoreEnsureSystemActorMigratesLegacyRow(t *testing.T) {
 	legacyAt := time.Date(2026, time.March, 1, 12, 0, 0, 0, time.UTC)
 	if _, err := store.Register(context.Background(), actors.Actor{
 		ID:          "anx-core",
-		DisplayName: "OAR Core",
+		DisplayName: "Agent Nexus Core",
 		Tags:        []string{"system"},
 		CreatedAt:   legacyAt.Format(time.RFC3339Nano),
 	}); err != nil {

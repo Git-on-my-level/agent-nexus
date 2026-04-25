@@ -528,7 +528,7 @@ seed_workspace_fixture "${S3_SOURCE_ROOT}/workspace" "$CORE_BIN" "$SCHEMA_PATH" 
   --listen-port 8022 \
   --web-ui-port 3022 \
   --blob-backend s3 \
-  --blob-s3-bucket oar-test-blobs \
+  --blob-s3-bucket anx-test-blobs \
   --blob-s3-prefix workspaces/team-s3/ \
   --blob-s3-region auto \
   --blob-s3-endpoint https://r2.example.test \
@@ -546,7 +546,7 @@ assert_equals "remote" "$(manifest_get "${S3_BACKUP_DIR}/manifest.env" BLOB_STOR
 assert_equals "reference" "$(manifest_get "${S3_BACKUP_DIR}/manifest.env" BLOB_BACKUP_MODE)" "s3 manifest blob backup mode"
 assert_equals "0" "$(manifest_get "${S3_BACKUP_DIR}/manifest.env" BLOB_FILE_COUNT)" "s3 manifest blob file count"
 assert_equals "" "$(manifest_get "${S3_BACKUP_DIR}/manifest.env" BLOB_BUNDLE_PATH)" "s3 manifest blob bundle path"
-assert_equals "oar-test-blobs" "$(manifest_get "${S3_BACKUP_DIR}/manifest.env" BLOB_S3_BUCKET)" "s3 manifest bucket"
+assert_equals "anx-test-blobs" "$(manifest_get "${S3_BACKUP_DIR}/manifest.env" BLOB_S3_BUCKET)" "s3 manifest bucket"
 assert_equals "workspaces/team-s3/" "$(manifest_get "${S3_BACKUP_DIR}/manifest.env" BLOB_S3_PREFIX)" "s3 manifest prefix"
 assert_equals "auto" "$(manifest_get "${S3_BACKUP_DIR}/manifest.env" BLOB_S3_REGION)" "s3 manifest region"
 assert_equals "https://r2.example.test" "$(manifest_get "${S3_BACKUP_DIR}/manifest.env" BLOB_S3_ENDPOINT)" "s3 manifest endpoint"
@@ -563,14 +563,14 @@ assert_equals "true" "$(manifest_get "${S3_BACKUP_DIR}/manifest.env" BLOB_S3_FOR
 S3_RESTORE_ROOT="$(cd "$S3_RESTORE_ROOT" && pwd -P)"
 
 assert_equals "s3" "$(dotenv_get "${S3_RESTORE_ROOT}/config/env.production" ANX_BLOB_BACKEND)" "s3 restore env blob backend"
-assert_equals "oar-test-blobs" "$(dotenv_get "${S3_RESTORE_ROOT}/config/env.production" ANX_BLOB_S3_BUCKET)" "s3 restore env bucket"
+assert_equals "anx-test-blobs" "$(dotenv_get "${S3_RESTORE_ROOT}/config/env.production" ANX_BLOB_S3_BUCKET)" "s3 restore env bucket"
 assert_equals "workspaces/team-s3/" "$(dotenv_get "${S3_RESTORE_ROOT}/config/env.production" ANX_BLOB_S3_PREFIX)" "s3 restore env prefix"
 assert_equals "auto" "$(dotenv_get "${S3_RESTORE_ROOT}/config/env.production" ANX_BLOB_S3_REGION)" "s3 restore env region"
 assert_equals "https://r2.example.test" "$(dotenv_get "${S3_RESTORE_ROOT}/config/env.production" ANX_BLOB_S3_ENDPOINT)" "s3 restore env endpoint"
 assert_equals "true" "$(dotenv_get "${S3_RESTORE_ROOT}/config/env.production" ANX_BLOB_S3_FORCE_PATH_STYLE)" "s3 restore env force path style"
 assert_equals "s3" "$(dotenv_get "${S3_RESTORE_ROOT}/metadata/instance.env" BLOB_BACKEND)" "s3 restore metadata blob backend"
 assert_equals "reference-remote-blob-store" "$(dotenv_get "${S3_RESTORE_ROOT}/metadata/restore-receipt.env" TARGET_BLOB_RESTORE_ACTION)" "s3 restore receipt blob action"
-assert_equals "s3://oar-test-blobs/workspaces/team-s3/" "$(dotenv_get "${S3_RESTORE_ROOT}/metadata/restore-receipt.env" TARGET_BLOB_EFFECTIVE_LOCATION)" "s3 restore receipt blob location"
+assert_equals "s3://anx-test-blobs/workspaces/team-s3/" "$(dotenv_get "${S3_RESTORE_ROOT}/metadata/restore-receipt.env" TARGET_BLOB_EFFECTIVE_LOCATION)" "s3 restore receipt blob location"
 
 KEEP_SOURCE_ERR="${TMP_ROOT}/keep-source-err"
 if "${SCRIPT_DIR}/restore-workspace.sh" \

@@ -1,5 +1,6 @@
 # Local build outputs
-/anx /oar-scenario
+/anx
+/anx-scenario
 
 .tmp/
 .secrets/

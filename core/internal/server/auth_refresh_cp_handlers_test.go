@@ -137,7 +137,7 @@ func TestHandleIssueAuthToken_Refresh_SessionEndedByCP(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("json: %v", err)
 	}
-	if payload.Error.Code != "session_ended_by_cp" {
+	if payload.Error.Code != "session_ended_by_account_status" {
 		t.Fatalf("code=%q", payload.Error.Code)
 	}
 }
@@ -189,7 +189,7 @@ func TestHandleIssueAuthToken_Refresh_CPUnreachable(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("json: %v", err)
 	}
-	if payload.Error.Code != "cp_unreachable" {
+	if payload.Error.Code != "account_status_unreachable" {
 		t.Fatalf("code=%q", payload.Error.Code)
 	}
 }

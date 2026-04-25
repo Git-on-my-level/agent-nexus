@@ -227,7 +227,7 @@ export function deriveInboxUrgency(item, options = {}) {
 
 /**
  * Secondary line text for board workspace inbox preview rows (after urgency label).
- * Labels are aligned with `inbox_item.subject_ref` (see oar-schema `inbox_item`):
+ * Labels are aligned with `inbox_item.subject_ref` (see anx-schema `inbox_item`):
  * we use enriched `subject_kind` / `subject_id` only, so a denormalized `topic_id`
  * on a card- or thread-anchored item never produces a misleading "Topic …" label.
  *

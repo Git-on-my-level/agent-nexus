@@ -86,7 +86,7 @@ func mergeRecovery(details map[string]any, rec map[string]any) {
 	if len(rec) == 0 {
 		return
 	}
-	details["oar_cli_recovery"] = rec
+	details["anx_cli_recovery"] = rec
 }
 
 // enrichConflict maps core conflict messages (boards_handlers.go, cards_handlers.go, …) to hints.

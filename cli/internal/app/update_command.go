@@ -192,9 +192,9 @@ func updateArchiveName(version string) (string, error) {
 	}
 
 	if goos == "windows" {
-		return fmt.Sprintf("oar_%s_%s_%s.zip", version, goos, goarch), nil
+		return fmt.Sprintf("anx_%s_%s_%s.zip", version, goos, goarch), nil
 	}
-	return fmt.Sprintf("oar_%s_%s_%s.tar.gz", version, goos, goarch), nil
+	return fmt.Sprintf("anx_%s_%s_%s.tar.gz", version, goos, goarch), nil
 }
 
 func downloadUpdateBinary(ctx context.Context, timeout time.Duration, version string, archiveName string) ([]byte, os.FileMode, error) {
@@ -274,7 +274,7 @@ func extractZIPBinary(archiveBytes []byte) ([]byte, os.FileMode, error) {
 		return nil, 0, errnorm.Wrap(errnorm.KindLocal, "archive_invalid", "failed to read CLI zip archive", err)
 	}
 	for _, file := range reader.File {
-		if pathBase(file.Name) != "oar.exe" {
+		if pathBase(file.Name) != "anx.exe" {
 			continue
 		}
 		rc, err := file.Open()
@@ -292,7 +292,7 @@ func extractZIPBinary(archiveBytes []byte) ([]byte, os.FileMode, error) {
 		}
 		return body, mode, nil
 	}
-	return nil, 0, errnorm.Local("archive_invalid", "CLI zip archive did not contain oar.exe")
+	return nil, 0, errnorm.Local("archive_invalid", "CLI zip archive did not contain anx.exe")
 }
 
 func extractTarGZBinary(archiveBytes []byte) ([]byte, os.FileMode, error) {
@@ -314,7 +314,7 @@ func extractTarGZBinary(archiveBytes []byte) ([]byte, os.FileMode, error) {
 		if header.Typeflag != tar.TypeReg {
 			continue
 		}
-		if pathBase(header.Name) != "oar" {
+		if pathBase(header.Name) != "anx" {
 			continue
 		}
 		body, err := io.ReadAll(tarReader)
@@ -327,7 +327,7 @@ func extractTarGZBinary(archiveBytes []byte) ([]byte, os.FileMode, error) {
 		}
 		return body, mode, nil
 	}
-	return nil, 0, errnorm.Local("archive_invalid", "CLI tar.gz archive did not contain oar")
+	return nil, 0, errnorm.Local("archive_invalid", "CLI tar.gz archive did not contain anx")
 }
 
 func replaceExecutable(installPath string, binaryBytes []byte, mode os.FileMode) error {

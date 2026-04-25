@@ -15,7 +15,7 @@ def test_roundtrip_packet_content():
         trigger_author_actor_id="actor_user",
         trigger_text="@hermes please help",
         current_summary="summary",
-        session_key="oar:ws_main:thread_1:hermes",
+        session_key="anx:ws_main:thread_1:hermes",
         anx_base_url="http://localhost:8080",
         thread_context_url="http://localhost:8080/threads/thread_1/context",
         thread_workspace_url="http://localhost:8080/threads/thread_1/workspace",

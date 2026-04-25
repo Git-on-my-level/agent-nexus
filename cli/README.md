@@ -1,6 +1,6 @@
 # anx-cli
 
-Bootstrap CLI module for Organization Autorunner.
+Bootstrap CLI module for Agent Nexus.
 
 ## Quickstart
 
@@ -27,22 +27,12 @@ API shape and errors: `../contracts/anx-openapi.yaml` (`/secrets`). Core enforce
 
 - **Flag order:** use `anx secret get --reveal NAME` (not `get NAME --reveal`; Go `flag` stops at the first non-flag).
 - **Pipes:** if the active profile sets `"json": true` (legacy or manual), use `--json=false` or `ANX_JSON=false` when you need plaintext secret-only stdout on `--reveal`. Prefer `secret exec --secret NAME -- cmd` for subprocess env injection.
-- **`secret update`** is not implemented in the CLI (some generated metadata still mentions it); use the HTTP API if you need value rotation.
+- **`secret update`** rotates the encrypted value (human-only; same auth rules as create/delete). Use `--from-stdin` for non-interactive scripts.
 
 Generated command/concept docs are under `docs/generated/`.
 The shipped runtime reference is available from the binary with `anx meta docs` / `anx meta doc <topic>`, including the bundled `agent-guide` topic. Editor-specific agent skill exports are available with `anx meta skill <target>`, for example `anx meta skill cursor --write-dir ~/.cursor/skills/anx-cli-onboard`. The checked-in runtime-help artifact is regenerated with `go run ./cmd/anx-docs-gen`.
 
 Default text output uses payload-first summaries; list-style payloads include **10-character** `short_id` fields, and the CLI resolves those prefixes (and other supported short ids) to canonical ids on subsequent commands. Use `--full-id` when you need full ids or hit ambiguous-prefix errors. Use `--verbose` to print the full response body and `--headers` to opt into response status/header framing when debugging.
-
-## Command-shape compatibility aliases
-
-The CLI supports a small exact-token compatibility layer for high-value command-shape drift:
-
-- `anx packets receipts create ...` -> `anx receipts create ...`
-- `anx packets reviews create ...` -> `anx reviews create ...`
-- `anx artifacts content get ...` -> `anx artifacts content ...`
-
-These aliases are explicit and exact only; unknown command paths still fail when no compatibility alias matches.
 
 See `docs/runbook.md` for command, integration-test, and Pi dogfood details.
 

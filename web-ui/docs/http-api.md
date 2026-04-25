@@ -1,6 +1,6 @@
-# OAR HTTP API Contract (v0)
+# Agent Nexus HTTP API Contract (v0)
 
-This document defines the **concrete HTTP/JSON surface** used for integration between **anx-core** and clients (including **oar-ui** and agents).
+This document defines the **concrete HTTP/JSON surface** used for integration between **anx-core** and clients (including **the web UI** and agents).
 
 The schema of objects is defined by `/contracts/anx-schema.yaml`.
 
@@ -13,7 +13,7 @@ The schema of objects is defined by `/contracts/anx-schema.yaml`.
 
 ## API Surface Classification
 
-Each endpoint is classified with an `x-oar-surface` extension indicating its role:
+Each endpoint is classified with an `x-anx-surface` extension indicating its role:
 
 - **`canonical`**: CRUD/list/get endpoints over canonical resources (topics, cards, boards, documents, artifacts, events, packets, plus read-only thread compatibility endpoints). These are the durable substrate.
 

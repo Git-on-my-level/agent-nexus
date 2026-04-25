@@ -68,7 +68,7 @@ class AgentBridge:
                 time.sleep(BRIDGE_RECONNECT_DELAY_SECONDS)
 
     def _start_checkin_loop(self) -> None:
-        thread = threading.Thread(target=self._run_checkin_loop, name=f"oar-bridge-checkin-{self.handle}", daemon=True)
+        thread = threading.Thread(target=self._run_checkin_loop, name=f"anx-bridge-checkin-{self.handle}", daemon=True)
         thread.start()
 
     def _run_checkin_loop(self) -> None:

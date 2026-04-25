@@ -22,7 +22,7 @@ func TestScanDedupePlanApplyPreviewFlow(t *testing.T) {
 		t.Fatalf("mkdir assets: %v", err)
 	}
 
-	note := "# Meeting Notes\n\nDecided to migrate the workspace into OAR with a hub doc and collector thread.\n"
+	note := "# Meeting Notes\n\nDecided to migrate the workspace into Agent Nexus with a hub doc and collector thread.\n"
 	if err := os.WriteFile(filepath.Join(root, "notes", "meeting.md"), []byte(note), 0o644); err != nil {
 		t.Fatalf("write meeting note: %v", err)
 	}

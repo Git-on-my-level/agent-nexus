@@ -116,17 +116,17 @@ Example nginx configuration:
 
 ```nginx
 http {
-  limit_req_zone $binary_remote_addr zone=oar_auth:10m rate=30r/m;
-  limit_req_zone $binary_remote_addr zone=oar_write:10m rate=300r/m;
+  limit_req_zone $binary_remote_addr zone=anx_auth:10m rate=30r/m;
+  limit_req_zone $binary_remote_addr zone=anx_write:10m rate=300r/m;
 
   server {
     location /auth/ {
-      limit_req zone=oar_auth burst=10 nodelay;
+      limit_req zone=anx_auth burst=10 nodelay;
       proxy_pass http://127.0.0.1:8001;
     }
 
     location ~ ^/(threads|topics|cards|boards|docs|artifacts|events|receipts|reviews|inbox/ack|derived/rebuild) {
-      limit_req zone=oar_write burst=100 nodelay;
+      limit_req zone=anx_write burst=100 nodelay;
       proxy_pass http://127.0.0.1:8001;
     }
   }

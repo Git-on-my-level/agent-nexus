@@ -1,5 +1,5 @@
 [Unit]
-Description=OAR workspace core (%i)
+Description=Agent Nexus workspace core (%i)
 After=network-online.target
 Wants=network-online.target
 

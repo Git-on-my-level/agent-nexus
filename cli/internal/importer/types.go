@@ -84,7 +84,7 @@ type ReviewBundle struct {
 	ClusterHint string  `json:"cluster_hint,omitempty"`
 }
 
-// PlanObject is one proposed OAR write with refs that may include $REF:key placeholders.
+// PlanObject is one proposed Agent Nexus write with refs that may include $REF:key placeholders.
 type PlanObject struct {
 	Key                 string         `json:"key"`
 	Kind                string         `json:"kind"`

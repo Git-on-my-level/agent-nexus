@@ -19,7 +19,7 @@ import {
 function createEvent() {
   return {
     params: {},
-    request: new Request("https://oar.example.test/api/threads", {
+    request: new Request("https://anx.example.test/api/threads", {
       headers: {
         "x-anx-organization-slug": "local",
       },

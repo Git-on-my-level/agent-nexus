@@ -32,7 +32,7 @@ vi.mock("$lib/workspacePaths.js", async (importOriginal) => {
 import { getBrowserCoreClientOptions } from "../../src/lib/coreClient.js";
 
 describe("getBrowserCoreClientOptions", () => {
-  it("wires actor providers for createOarCoreClient", () => {
+  it("wires actor providers for createAnxCoreClient", () => {
     const opts = getBrowserCoreClientOptions();
     expect(opts.actorIdProvider()).toBe("actor-1");
     expect(opts.lockActorIdProvider()).toBe(true);

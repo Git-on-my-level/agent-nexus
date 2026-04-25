@@ -4,7 +4,7 @@ import { AuthErrorCode } from "$lib/authErrorCodes.js";
 import {
   clearWorkspaceAuthSession,
   isRetryableWorkspaceAuthSessionError,
-  isTerminalCpSessionFailure,
+  isTerminalAccountSessionFailure,
   loadWorkspaceAuthenticatedAgent,
   resolveWorkspaceSlugFromEvent,
 } from "$lib/server/authSession";
@@ -53,17 +53,17 @@ export async function GET(event) {
         },
       );
     }
-    if (isTerminalCpSessionFailure(error)) {
+    if (isTerminalAccountSessionFailure(error)) {
       clearWorkspaceAuthSession(event, resolved.workspaceSlug);
       return json(
         {
           authenticated: false,
           agent: null,
           error: {
-            code: AuthErrorCode.SESSION_ENDED_BY_CP,
+            code: AuthErrorCode.SESSION_ENDED_BY_ACCOUNT_STATUS,
             message:
               error?.details?.error?.message ??
-              "Session ended by control plane.",
+              "Your organization session has ended. Sign in again.",
           },
         },
         {

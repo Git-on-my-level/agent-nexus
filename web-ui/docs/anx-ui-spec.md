@@ -2,11 +2,11 @@
 
 ## 0. Purpose
 
-oar-ui is the operator interface for Organization Autorunner.
+Agent Nexus web UI is the operator interface for Agent Nexus.
 
-OAR is a manager and executive operating system, not a generic work-management tool. The product foundation and architecture decisions are documented in [docs/architecture/foundation.md](../../docs/architecture/foundation.md). oar-ui provides visibility into the workspace maintained by anx-core and a surface for operator intervention: topics, boards, cards, documents, packets, and message posting. It is one of many possible clients of anx-core — agents should prefer the CLI and generated clients; operators use this UI.
+Agent Nexus is a manager and executive operating system, not a generic work-management tool. The product foundation and architecture decisions are documented in [docs/architecture/foundation.md](../../docs/architecture/foundation.md). Agent Nexus web UI provides visibility into the workspace maintained by anx-core and a surface for operator intervention: topics, boards, cards, documents, packets, and message posting. It is one of many possible clients of anx-core — agents should prefer the CLI and generated clients; operators use this UI.
 
-oar-ui does **not**:
+Agent Nexus web UI does **not**:
 
 - Maintain an independent database of organizational state.
 - Perform real-world side effects (sending, spending, posting, deploying).
@@ -18,21 +18,21 @@ oar-ui does **not**:
 
 ### 1.1 Single source of truth
 
-- oar-ui MUST treat anx-core as the system of record.
+- Agent Nexus web UI MUST treat anx-core as the system of record.
 - All persistent changes MUST be executed via anx-core API calls.
-- oar-ui MAY cache for performance, but caches MUST be invalidatable and MUST NOT create divergent state.
+- Agent Nexus web UI MAY cache for performance, but caches MUST be invalidatable and MUST NOT create divergent state.
 
 ### 1.2 Object compatibility
 
-- oar-ui MUST support all primitives and typed conventions defined in `/contracts/anx-schema.yaml`: events, topics, cards, boards, documents, artifacts, packets, and read-only thread timelines.
-- oar-ui MUST respect **enum policies**: strict enums are closed sets; open enums may contain unknown values.
-- oar-ui MUST handle unknown event types and artifact kinds gracefully — render them as "unknown type" with raw payload, summary, and refs visible.
-- oar-ui MUST handle unknown fields on any object gracefully — preserve them on round-trip and do not hide them from display.
+- Agent Nexus web UI MUST support all primitives and typed conventions defined in `/contracts/anx-schema.yaml`: events, topics, cards, boards, documents, artifacts, packets, and read-only thread timelines.
+- Agent Nexus web UI MUST respect **enum policies**: strict enums are closed sets; open enums may contain unknown values.
+- Agent Nexus web UI MUST handle unknown event types and artifact kinds gracefully — render them as "unknown type" with raw payload, summary, and refs visible.
+- Agent Nexus web UI MUST handle unknown fields on any object gracefully — preserve them on round-trip and do not hide them from display.
 
 ### 1.3 Typed references
 
 - All ref strings use typed prefixes as defined in `/contracts/anx-schema.yaml` → `ref_format` (e.g., `artifact:<id>`, `topic:<id>`, `card:<id>`, `board:<id>`, `document:<id>`, `event:<id>`, `thread:<id>`, `inbox:<id>`, `url:<url>`).
-- oar-ui MUST parse ref prefixes to determine link targets and render appropriate navigation (e.g., `artifact:` links navigate to artifact detail, `url:` links open externally, `event:` links scroll to timeline entry).
+- Agent Nexus web UI MUST parse ref prefixes to determine link targets and render appropriate navigation (e.g., `artifact:` links navigate to artifact detail, `url:` links open externally, `event:` links scroll to timeline entry).
 - Unknown ref prefixes MUST be rendered as raw text, not hidden or discarded.
 
 ### 1.4 Actor identity
@@ -49,22 +49,22 @@ oar-ui does **not**:
 
 ### 1.5 Provenance visibility
 
-- oar-ui MUST display provenance using the standardized provenance shape defined in `/contracts/anx-schema.yaml` → `provenance`.
+- Agent Nexus web UI MUST display provenance using the standardized provenance shape defined in `/contracts/anx-schema.yaml` → `provenance`.
 - The `sources` list determines display: if any source is `inferred`, the UI MUST render it visually distinct from evidence-backed provenance (e.g., different color, icon, or label).
 - When `by_field` is present (restricted field updates), the UI MUST show per-field provenance on the relevant fields.
 - Provenance MUST be displayed on any field flagged as restricted by the schema, plus packet-linked outcomes and other state where evidence vs inference matters.
 
 ### 1.6 Topic and card patch semantics
 
-- oar-ui MUST use **patch/merge** semantics when updating topics and cards: send only changed fields.
+- Agent Nexus web UI MUST use **patch/merge** semantics when updating topics and cards: send only changed fields.
 - **List-valued fields** (e.g., `tags`, `key_artifacts`, `links`) are **replaced wholesale** when present in a patch. Absence means no change.
 - This ensures unknown fields (added by newer clients or agents) are preserved.
-- oar-ui MUST NOT write to core-maintained fields.
+- Agent Nexus web UI MUST NOT write to core-maintained fields.
 
 ### 1.7 Reference conventions
 
-- oar-ui MUST follow the reference conventions defined in `/contracts/anx-schema.yaml` → `reference_conventions` when creating events.
-- oar-ui relies on these conventions for deterministic navigation: e.g., a `receipt_added` event's `refs` will include `artifact:<receipt_id>` and the receipt's `card:<card_id>` subject anchor where applicable, enabling the UI to link to evidence and the card scope.
+- Agent Nexus web UI MUST follow the reference conventions defined in `/contracts/anx-schema.yaml` → `reference_conventions` when creating events.
+- Agent Nexus web UI relies on these conventions for deterministic navigation: e.g., a `receipt_added` event's `refs` will include `artifact:<receipt_id>` and the receipt's `card:<card_id>` subject anchor where applicable, enabling the UI to link to evidence and the card scope.
 
 ### 1.8 Canonical operator vocabulary
 
@@ -260,7 +260,7 @@ Replies SHOULD reference the parent event ID as `event:<parent_event_id>` in the
 
 ## 6. Concurrency
 
-- oar-ui MUST assume multiple writers (operators and agents) may update anx-core concurrently.
+- Agent Nexus web UI MUST assume multiple writers (operators and agents) may update anx-core concurrently.
 - The UI SHOULD poll or subscribe for changes and refresh when canonical state changes.
 - For v0, optimistic locking on current-state edits is sufficient: if a view's `updated_at` has changed since the UI loaded it, warn the operator and reload before saving. Patch/merge semantics with wholesale list replacement reduce the risk of accidental field erasure.
 
@@ -278,7 +278,7 @@ Replies SHOULD reference the parent event ID as `event:<parent_event_id>` in the
 
 ## 8. v0 release definition
 
-oar-ui v0 is complete when it can:
+Agent Nexus web UI v0 is complete when it can:
 
 - Display the inbox grouped by category with navigation to relevant topics, boards, cards, or threads, and support acknowledgment that persists across inbox rebuilds.
 - List and filter topics.

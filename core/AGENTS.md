@@ -6,7 +6,7 @@ Guide for work inside `core/`.
 Read this after the root [AGENTS.md](../AGENTS.md). Keep this file focused on durable core purpose, invariants, and edit routing. Put volatile implementation detail in specs, runbooks, and code-local docs instead.
 
 ## Module Purpose
-`core` is the authoritative state and evidence service for Organization Autorunner.
+`core` is the authoritative state and evidence service for Agent Nexus.
 
 It owns the canonical organizational record, validates and records state transitions for all actors, and exposes a stable programmatic interface to that record. Derived collaboration views exist to help clients operate, but they remain projections of canonical truth rather than independent sources of truth.
 
@@ -20,7 +20,7 @@ It owns the canonical organizational record, validates and records state transit
 ## What Core Does Not Own
 - Agent orchestration, dispatch, or lifecycle management.
 - Human-facing operator UX beyond the API contract.
-- Real-world side effects outside the OAR workspace.
+- Real-world side effects outside the Agent Nexus workspace.
 - Control-plane-specific integration types, clients, or endpoint constants.
   Allowed carve-outs: generic env-driven contracts for the heartbeat publisher
   and for the optional HTTP account status checker (see below).
@@ -52,7 +52,6 @@ It owns the canonical organizational record, validates and records state transit
 - `ANX_ACCOUNT_STATUS_URL`: when set, enables optional HTTP account status checks during hosted human refresh flows (base URL only; path is configurable separately).
 - `ANX_ACCOUNT_STATUS_PATH`: optional path suffix joined to the base URL, default `v1/internal/accounts/status`.
 - `ANX_ACCOUNT_STATUS_AUDIENCE`: optional JWT audience for the workspace service assertion, default `anx-control-plane` (same default as the signer when audience is omitted in code).
-- `ANX_CONTROL_PLANE_URL`: **deprecated** alias for `ANX_ACCOUNT_STATUS_URL`; if `ANX_ACCOUNT_STATUS_URL` is unset, this value is used and a deprecation log line is emitted.
 - `ANX_WORKSPACE_SERVICE_ID` / `ANX_WORKSPACE_SERVICE_PRIVATE_KEY`: required when account status checks are enabled (same identity material as the heartbeat publisher).
 
 ## Edit Routing

@@ -12,7 +12,7 @@ Guide for work inside `web-ui/`.
 Read this after the root [AGENTS.md](../AGENTS.md). Keep this file focused on durable operator-facing purpose, UI boundaries, and the invariants that protect safe interaction with `anx-core`.
 
 ## Module Purpose
-`web-ui` is the operator control surface for Organization Autorunner.
+`web-ui` is the operator control surface for Agent Nexus.
 
 It gives operators fast, glanceable visibility into the shared workspace maintained by `anx-core` and provides explicit paths for operator intervention such as decisions, reviews, resource edits (topics, docs, boards, cards), acknowledgments, and message posting. It is a client of `anx-core`, not an agent runtime or orchestration layer.
 
@@ -35,7 +35,7 @@ It gives operators fast, glanceable visibility into the shared workspace maintai
 ## What Web UI Does Not Own
 - Canonical storage or schema authority.
 - Agent orchestration or automation workflows.
-- Real-world side effects outside the OAR workspace.
+- Real-world side effects outside the Agent Nexus workspace.
 
 ## Canonical References
 - **Hosted billing / plan catalog** (customer-facing plan cards, org plan badge labels, Enterprise sales contact): `src/lib/hosted/planCatalog.js`. **Numeric quotas** come from the control plane usage APIs / `planForTier` (see `controlplane/PLANS.md`); do not hardcode limit numbers in hosted route code—use API fields (e.g. usage summary) for meters.

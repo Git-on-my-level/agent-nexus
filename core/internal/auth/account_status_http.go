@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
+	"agent-nexus-core/internal/wsservicejwt"
 )
 
 // Account status cache: fresh TTL 5m; fail-open allowed when last successful check
@@ -25,7 +25,6 @@ const (
 	accountStatusCacheFreshTTL = 5 * time.Minute
 	accountStatusCacheMaxStale = 2 * accountStatusCacheFreshTTL
 	accountStatusHTTPTimeout   = 3 * time.Second
-	accountStatusAssertionTTL  = 60 * time.Second
 	accountStatusPurpose       = "account_status_check"
 
 	// defaultAccountStatusAudience is the default JWT aud claim when the signer is
@@ -41,24 +40,16 @@ const (
 	defaultAccountStatusEndpointPath = "v1/internal/accounts/status"
 )
 
-// AccountStatusBaseURLFromEnv returns the HTTP base URL for optional account status checks.
-// If ANX_ACCOUNT_STATUS_URL is set, it wins. Otherwise ANX_CONTROL_PLANE_URL (deprecated
-// name) is used when set; the second return is true in that case so callers can log once.
-func AccountStatusBaseURLFromEnv() (base string, usedDeprecatedControlPlaneAlias bool) {
-	primary := strings.TrimSpace(os.Getenv("ANX_ACCOUNT_STATUS_URL"))
-	legacy := strings.TrimSpace(os.Getenv("ANX_CONTROL_PLANE_URL"))
-	if primary != "" {
-		return primary, false
-	}
-	if legacy != "" {
-		return legacy, true
-	}
-	return "", false
+// AccountStatusBaseURLFromEnv returns the HTTP base URL for optional account status checks
+// from ANX_ACCOUNT_STATUS_URL. Optional path/audience are ANX_ACCOUNT_STATUS_PATH and
+// ANX_ACCOUNT_STATUS_AUDIENCE (see HTTPAccountStatusChecker / main wiring).
+func AccountStatusBaseURLFromEnv() string {
+	return strings.TrimSpace(os.Getenv("ANX_ACCOUNT_STATUS_URL"))
 }
 
 // ErrAccountInactive is returned by AccountStatusChecker when the account status
 // endpoint reports the account is not active.
-var ErrAccountInactive = errors.New("auth: account inactive on control plane")
+var ErrAccountInactive = errors.New("auth: account inactive (account status check)")
 
 // AccountStatusChecker is implemented by the optional HTTP account-status client.
 // OSS/local mode passes a nil checker.
@@ -114,22 +105,7 @@ func (s *ed25519WorkspaceServiceSigner) Sign(ctx context.Context) (string, error
 		nowFn = time.Now
 	}
 	now := nowFn().UTC()
-	claims := jwt.MapClaims{
-		"iss":          s.identityID,
-		"sub":          s.identityID,
-		"aud":          s.audience,
-		"iat":          now.Unix(),
-		"nbf":          now.Add(-30 * time.Second).Unix(),
-		"exp":          now.Add(accountStatusAssertionTTL).Unix(),
-		"workspace_id": s.workspaceID,
-		"purpose":      accountStatusPurpose,
-	}
-	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
-	signed, err := token.SignedString(s.privateKey)
-	if err != nil {
-		return "", fmt.Errorf("sign service assertion: %w", err)
-	}
-	return signed, nil
+	return wsservicejwt.Sign(s.identityID, s.privateKey, s.audience, s.workspaceID, accountStatusPurpose, now)
 }
 
 // HTTPAccountStatusCheckerConfig configures the HTTP account status client.
@@ -262,12 +238,12 @@ func (c *HTTPAccountStatusChecker) CheckActive(ctx context.Context, accountID st
 		return true, nil
 	}
 
-	if errors.Is(err, ErrCPUnreachable) {
+	if errors.Is(err, ErrAccountStatusUnreachable) {
 		if hadCache {
 			age := now.Sub(prevEntry.checkedAt)
 			if age < accountStatusCacheMaxStale {
 				if prevEntry.active {
-					c.logf("event=session_exchange account_id=%s workspace_id=%s outcome=cp_unreachable (fail_open_stale_cache age=%s)", accountID, c.workspaceID, age.String())
+					c.logf("event=session_exchange account_id=%s workspace_id=%s outcome=account_status_unreachable (fail_open_stale_cache age=%s)", accountID, c.workspaceID, age.String())
 					c.logSessionExchange(accountID, "ok")
 					return true, nil
 				}
@@ -275,8 +251,8 @@ func (c *HTTPAccountStatusChecker) CheckActive(ctx context.Context, accountID st
 				return false, ErrAccountInactive
 			}
 		}
-		c.logSessionExchange(accountID, "cp_unreachable")
-		return false, ErrCPUnreachable
+		c.logSessionExchange(accountID, "account_status_unreachable")
+		return false, ErrAccountStatusUnreachable
 	}
 
 	return false, err
@@ -310,7 +286,7 @@ func (c *HTTPAccountStatusChecker) fetchActiveRemote(ctx context.Context, accoun
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return false, fmt.Errorf("%w: %v", ErrCPUnreachable, err)
+		return false, fmt.Errorf("%w: %v", ErrAccountStatusUnreachable, err)
 	}
 	defer resp.Body.Close()
 
@@ -327,7 +303,7 @@ func (c *HTTPAccountStatusChecker) fetchActiveRemote(ctx context.Context, accoun
 	}
 
 	if resp.StatusCode >= 500 {
-		return false, fmt.Errorf("%w: control plane returned %s", ErrCPUnreachable, resp.Status)
+		return false, fmt.Errorf("%w: account status HTTP API returned %s", ErrAccountStatusUnreachable, resp.Status)
 	}
 
 	msg := strings.TrimSpace(string(respBody))

@@ -352,7 +352,7 @@ func (s *Service) routeMention(ctx context.Context, handle string, event map[str
 		TriggerText:          text,
 		CurrentSummary:       anyString(thread["current_summary"]),
 		SessionKey:           sessionKey,
-		OARBaseURL:           baseURL,
+		AnxBaseURL:           baseURL,
 		ThreadContextURL:     fmt.Sprintf("%s/threads/%s/context", baseURL, threadID),
 		ThreadWorkspaceURL:   fmt.Sprintf("%s/threads/%s/workspace", baseURL, threadID),
 		TopicWorkspaceURL:    topicWorkspaceURL,

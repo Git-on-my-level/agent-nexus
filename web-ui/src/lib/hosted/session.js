@@ -13,7 +13,7 @@ import {
   hostedCpFetch,
 } from "$lib/hosted/cpFetch.js";
 
-const ACTIVE_ORG_KEY = "oar_hosted_active_org_id";
+const ACTIVE_ORG_KEY = "anx_hosted_active_org_id";
 
 /** @typedef {{ id: string, email?: string, display_name?: string }} HostedAccount */
 /** @typedef {{ id: string, slug: string, display_name: string, plan_tier?: string }} HostedOrganization */
