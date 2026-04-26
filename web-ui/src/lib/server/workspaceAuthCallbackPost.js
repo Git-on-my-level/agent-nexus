@@ -190,6 +190,8 @@ export async function runWorkspaceAuthCallbackPost(
   formOverride,
 ) {
   const provider = event.locals?.outOfWorkspace ?? getOutOfWorkspaceProvider();
+  const form = formOverride ?? (await event.request.formData());
+  const formWorkspaceID = String(form.get("workspace_id") ?? "").trim();
   const resolved = await resolveWorkspaceInRoute({
     event,
     organizationSlug: routeParams.organizationSlug,
@@ -197,7 +199,34 @@ export async function runWorkspaceAuthCallbackPost(
   });
   const workspaceNameEarly = workspaceDisplayName(resolved);
 
-  if (resolved.error || !resolved.workspace) {
+  let resolvedWorkspace = resolved.workspace ?? null;
+  let resolvedOrganizationSlug = resolved.organizationSlug ?? "";
+  let resolvedWorkspaceSlug = resolved.workspaceSlug ?? "";
+
+  if ((resolved.error || !resolvedWorkspace) && formWorkspaceID) {
+    const fallback = await provider.resolveWorkspaceById({
+      event,
+      workspaceId: formWorkspaceID,
+    });
+    if (fallback.kind === "found" && fallback.workspace) {
+      const fallbackOrg = String(
+        fallback.workspace.organizationSlug ?? "",
+      ).trim();
+      const fallbackSlug = String(fallback.workspace.slug ?? "").trim();
+      const routeOrg = String(routeParams.organizationSlug ?? "").trim();
+      const routeSlug = String(routeParams.workspaceSlug ?? "").trim();
+      if (
+        (!routeOrg || routeOrg === fallbackOrg) &&
+        (!routeSlug || routeSlug === fallbackSlug)
+      ) {
+        resolvedWorkspace = fallback.workspace;
+        resolvedOrganizationSlug = fallbackOrg;
+        resolvedWorkspaceSlug = fallbackSlug;
+      }
+    }
+  }
+
+  if (!resolvedWorkspace) {
     if (wantsJson(event.request)) {
       return json(
         resolved.error?.payload ?? {
@@ -219,9 +248,9 @@ export async function runWorkspaceAuthCallbackPost(
     });
   }
 
-  const workspaceSlug = resolved.workspaceSlug;
+  const workspaceSlug = resolvedWorkspaceSlug;
   const coreBaseURL = coreBaseUrlForServerFetch(
-    normalizeBaseUrl(resolved.workspace.coreBaseUrl),
+    normalizeBaseUrl(resolvedWorkspace.coreBaseUrl),
   );
   if (!coreBaseURL) {
     return respondWithCallbackError(
@@ -233,10 +262,8 @@ export async function runWorkspaceAuthCallbackPost(
     );
   }
 
-  const form = formOverride ?? (await event.request.formData());
   const exchangeToken = String(form.get("exchange_token") ?? "").trim();
   const state = String(form.get("state") ?? "").trim();
-  const formWorkspaceID = String(form.get("workspace_id") ?? "").trim();
   const returnPath = sanitizeHostedReturnPath(form.get("return_path") ?? "/");
   if (!exchangeToken || !state) {
     return respondWithCallbackError(
@@ -249,7 +276,7 @@ export async function runWorkspaceAuthCallbackPost(
   }
 
   const resolvedWorkspaceID = String(
-    resolved.workspace.workspaceId ?? resolved.workspace.id ?? "",
+    resolvedWorkspace.workspaceId ?? resolvedWorkspace.id ?? "",
   ).trim();
   if (
     formWorkspaceID &&
@@ -352,6 +379,6 @@ export async function runWorkspaceAuthCallbackPost(
 
   throw redirect(
     303,
-    workspacePath(resolved.organizationSlug, workspaceSlug, returnPath),
+    workspacePath(resolvedOrganizationSlug, workspaceSlug, returnPath),
   );
 }

@@ -341,4 +341,87 @@ describe("workspace auth callback route", () => {
       },
     });
   });
+
+  it("falls back to workspace_id lookup when slug resolution fails", async () => {
+    workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValueOnce({
+      organizationSlug: "local",
+      workspaceSlug: "acme",
+      workspace: null,
+      error: {
+        status: 404,
+        payload: {
+          error: {
+            code: "workspace_not_configured",
+            message: "missing",
+          },
+        },
+      },
+    });
+
+    globalThis.fetch = vi.fn().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          tokens: {
+            access_token: "access_fb",
+            refresh_token: "refresh_fb",
+          },
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+          },
+        },
+      ),
+    );
+
+    const exchangeLaunchSession = vi.fn(async () => ({
+      ok: true,
+      assertion: "grant_token",
+    }));
+    const resolveWorkspaceById = vi.fn(async () => ({
+      kind: "found",
+      workspace: {
+        organizationSlug: "local",
+        slug: "acme",
+        label: "Acme",
+        coreBaseUrl: "https://core.example.test",
+        workspaceId: "ws_123",
+      },
+    }));
+    const event = createEvent(
+      {
+        exchange_token: "ex_123",
+        state: "state_123",
+        workspace_id: "ws_123",
+      },
+      {
+        outOfWorkspace: mockHostedProvider({
+          exchangeLaunchSession,
+          resolveWorkspaceById,
+        }),
+      },
+    );
+
+    await expect(POST(event)).rejects.toMatchObject({
+      status: 303,
+      location: "/o/local/w/acme",
+    });
+
+    expect(resolveWorkspaceById).toHaveBeenCalledWith({
+      event,
+      workspaceId: "ws_123",
+    });
+    expect(exchangeLaunchSession).toHaveBeenCalled();
+    expect(authSessionMocks.writeWorkspaceRefreshToken).toHaveBeenCalledWith(
+      event,
+      "acme",
+      "refresh_fb",
+    );
+    expect(authSessionMocks.writeWorkspaceAccessToken).toHaveBeenCalledWith(
+      event,
+      "acme",
+      "access_fb",
+    );
+  });
 });
