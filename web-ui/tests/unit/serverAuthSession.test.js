@@ -486,14 +486,10 @@ describe("server auth session helpers", () => {
     });
 
     expect(
-      recorder.values.get(
-        getAuthSessionCookieName(DEFAULT_ORG, DEFAULT_WS),
-      ),
+      recorder.values.get(getAuthSessionCookieName(DEFAULT_ORG, DEFAULT_WS)),
     ).toBe("refresh-token");
     expect(
-      recorder.values.get(
-        getAuthAccessCookieName(DEFAULT_ORG, DEFAULT_WS),
-      ),
+      recorder.values.get(getAuthAccessCookieName(DEFAULT_ORG, DEFAULT_WS)),
     ).toBe("expired-access-token");
     expect(recorder.values.get("anx_ui_auth_retry_local__alpha")).toBe("1");
     expect(recorder.deleteCalls).toEqual([]);
@@ -532,9 +528,7 @@ describe("server auth session helpers", () => {
     });
 
     expect(
-      recorder.values.get(
-        getAuthSessionCookieName(DEFAULT_ORG, DEFAULT_WS),
-      ),
+      recorder.values.get(getAuthSessionCookieName(DEFAULT_ORG, DEFAULT_WS)),
     ).toBe("refresh-token");
     expect(recorder.values.get("anx_ui_auth_retry_local__alpha")).toBe("1");
     expect(recorder.deleteCalls).toEqual([]);
@@ -571,11 +565,11 @@ describe("server auth session helpers", () => {
     ).resolves.toBeNull();
 
     expect(
-      recorder.values.get(
-        getAuthSessionCookieName(DEFAULT_ORG, DEFAULT_WS),
-      ),
+      recorder.values.get(getAuthSessionCookieName(DEFAULT_ORG, DEFAULT_WS)),
     ).toBeUndefined();
-    expect(recorder.values.get("anx_ui_auth_retry_local__alpha")).toBeUndefined();
+    expect(
+      recorder.values.get("anx_ui_auth_retry_local__alpha"),
+    ).toBeUndefined();
     expect(recorder.deleteCalls).toEqual([
       {
         name: "anx_ui_auth_retry_local__alpha",
@@ -659,14 +653,10 @@ describe("server auth session helpers", () => {
     });
 
     expect(
-      recorder.values.get(
-        getAuthSessionCookieName(DEFAULT_ORG, DEFAULT_WS),
-      ),
+      recorder.values.get(getAuthSessionCookieName(DEFAULT_ORG, DEFAULT_WS)),
     ).toBe("next-refresh-token");
     expect(
-      recorder.values.get(
-        getAuthAccessCookieName(DEFAULT_ORG, DEFAULT_WS),
-      ),
+      recorder.values.get(getAuthAccessCookieName(DEFAULT_ORG, DEFAULT_WS)),
     ).toBe("next-access-token");
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,

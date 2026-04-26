@@ -8,7 +8,11 @@
  * @returns {string}
  */
 export function coreEndpointURL(coreBaseUrl, pathname) {
-  const base = String(coreBaseUrl ?? "").trim().replace(/\/+$/, "");
-  const path = String(pathname ?? "").trim().replace(/^\/+/, "");
+  const base = String(coreBaseUrl ?? "")
+    .trim()
+    .replace(/\/+$/, "");
+  const path = String(pathname ?? "")
+    .trim()
+    .replace(/^\/+/, "");
   return new URL(path, `${base}/`).toString();
 }

@@ -2,8 +2,7 @@ import { describe, expect, it } from "vitest";
 import { coreEndpointURL } from "../../src/lib/server/coreEndpoint.js";
 
 describe("coreEndpointURL (hosted base path preservation)", () => {
-  const hostedBase =
-    "http://localhost:5173/ws/scaling-forever/personal";
+  const hostedBase = "http://localhost:5173/ws/scaling-forever/personal";
 
   it("joins /auth/token without dropping /ws/{org}/{workspace}", () => {
     expect(coreEndpointURL(hostedBase, "/auth/token")).toBe(

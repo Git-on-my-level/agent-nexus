@@ -255,16 +255,15 @@ function readRecentRefreshResult(key) {
   return cached.result;
 }
 
-function applyRefreshResult(
-  event,
-  organizationSlug,
-  workspaceSlug,
-  tokens,
-) {
+function applyRefreshResult(event, organizationSlug, workspaceSlug, tokens) {
   if (!tokens) {
     return null;
   }
-  clearRetryableWorkspaceAuthFailureCount(event, organizationSlug, workspaceSlug);
+  clearRetryableWorkspaceAuthFailureCount(
+    event,
+    organizationSlug,
+    workspaceSlug,
+  );
   if (tokens.refreshToken) {
     writeWorkspaceRefreshToken(
       event,
@@ -297,7 +296,11 @@ export function readWorkspaceAccessToken(
   organizationSlug,
   workspaceSlug,
 ) {
-  return event.cookies.get(getAuthAccessCookieName(organizationSlug, workspaceSlug)) ?? "";
+  return (
+    event.cookies.get(
+      getAuthAccessCookieName(organizationSlug, workspaceSlug),
+    ) ?? ""
+  );
 }
 
 function assertSessionIdentityMatchesRoute(
@@ -363,9 +366,12 @@ export function clearWorkspaceAccessToken(
   organizationSlug,
   workspaceSlug,
 ) {
-  event.cookies.delete(getAuthAccessCookieName(organizationSlug, workspaceSlug), {
-    path: "/",
-  });
+  event.cookies.delete(
+    getAuthAccessCookieName(organizationSlug, workspaceSlug),
+    {
+      path: "/",
+    },
+  );
 }
 
 export function getWorkspaceAuthSession(
@@ -427,7 +433,11 @@ export function readWorkspaceRefreshToken(
     organizationSlug,
     workspaceSlug,
   );
-  return event.cookies.get(getAuthSessionCookieName(organizationSlug, workspaceSlug)) ?? "";
+  return (
+    event.cookies.get(
+      getAuthSessionCookieName(organizationSlug, workspaceSlug),
+    ) ?? ""
+  );
 }
 
 export function writeWorkspaceRefreshToken(
@@ -458,9 +468,12 @@ export function clearWorkspaceRefreshToken(
   organizationSlug,
   workspaceSlug,
 ) {
-  event.cookies.delete(getAuthSessionCookieName(organizationSlug, workspaceSlug), {
-    path: "/",
-  });
+  event.cookies.delete(
+    getAuthSessionCookieName(organizationSlug, workspaceSlug),
+    {
+      path: "/",
+    },
+  );
 }
 
 function readRetryableWorkspaceAuthFailureCount(
@@ -487,7 +500,11 @@ function writeRetryableWorkspaceAuthFailureCount(
   count,
 ) {
   if (!Number.isInteger(count) || count <= 0) {
-    clearRetryableWorkspaceAuthFailureCount(event, organizationSlug, workspaceSlug);
+    clearRetryableWorkspaceAuthFailureCount(
+      event,
+      organizationSlug,
+      workspaceSlug,
+    );
     return;
   }
 
@@ -848,7 +865,10 @@ export async function proxyWorkspaceAuthVerify({
   coreBaseUrl,
   pathname,
 }) {
-  const targetUrl = coreEndpointURL(coreBaseUrlForNodeFetch(coreBaseUrl), pathname);
+  const targetUrl = coreEndpointURL(
+    coreBaseUrlForNodeFetch(coreBaseUrl),
+    pathname,
+  );
   const requestInit = buildProxyRequestInit(event);
   requestInit.headers.delete("cookie");
   requestInit.headers.delete("authorization");

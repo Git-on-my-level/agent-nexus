@@ -7,6 +7,11 @@ const envState = vi.hoisted(() => ({}));
 
 const authSessionMocks = vi.hoisted(() => ({
   getWorkspaceAuthSession: vi.fn(() => null),
+  readWorkspaceRefreshToken: vi.fn(() => ""),
+  refreshWorkspaceAuthSession: vi.fn(async () => null),
+  clearWorkspaceAuthSession: vi.fn(),
+  isRetryableWorkspaceRefreshFailure: vi.fn(() => false),
+  shouldClearWorkspaceAuthSessionAfterRetryableFailure: vi.fn(() => false),
 }));
 
 const logServerEventMock = vi.hoisted(() => vi.fn());
@@ -21,6 +26,13 @@ vi.mock("$env/dynamic/private", () => ({
 
 vi.mock("$lib/server/authSession", () => ({
   getWorkspaceAuthSession: authSessionMocks.getWorkspaceAuthSession,
+  readWorkspaceRefreshToken: authSessionMocks.readWorkspaceRefreshToken,
+  refreshWorkspaceAuthSession: authSessionMocks.refreshWorkspaceAuthSession,
+  clearWorkspaceAuthSession: authSessionMocks.clearWorkspaceAuthSession,
+  isRetryableWorkspaceRefreshFailure:
+    authSessionMocks.isRetryableWorkspaceRefreshFailure,
+  shouldClearWorkspaceAuthSessionAfterRetryableFailure:
+    authSessionMocks.shouldClearWorkspaceAuthSessionAfterRetryableFailure,
 }));
 
 import {
@@ -49,7 +61,9 @@ describe("classifyWorkspaceProxyPathShape", () => {
   });
 
   it("classifies /ws/demo as too_few_segments", () => {
-    expect(classifyWorkspaceProxyPathShape("/ws/demo")).toBe("too_few_segments");
+    expect(classifyWorkspaceProxyPathShape("/ws/demo")).toBe(
+      "too_few_segments",
+    );
   });
 
   it("classifies /ws//demo/livez as empty_segment", () => {
@@ -74,6 +88,13 @@ describe("hostedWorkspaceProxy (proxyToControlPlaneWorkspace)", () => {
     vi.clearAllMocks();
     logServerEventMock.mockClear();
     authSessionMocks.getWorkspaceAuthSession.mockReturnValue(null);
+    authSessionMocks.readWorkspaceRefreshToken.mockReturnValue("");
+    authSessionMocks.refreshWorkspaceAuthSession.mockResolvedValue(null);
+    authSessionMocks.clearWorkspaceAuthSession.mockReset();
+    authSessionMocks.isRetryableWorkspaceRefreshFailure.mockReturnValue(false);
+    authSessionMocks.shouldClearWorkspaceAuthSessionAfterRetryableFailure.mockReturnValue(
+      false,
+    );
     for (const key of Object.keys(envState)) {
       delete envState[key];
     }
@@ -151,7 +172,9 @@ describe("hostedWorkspaceProxy (proxyToControlPlaneWorkspace)", () => {
   it("forwards POST with body to upstream", async () => {
     envState.ANX_CONTROL_BASE_URL = "http://control.example.test";
     const payload = new Uint8Array([1, 2, 3]);
-    globalThis.fetch = vi.fn(async () => new Response("created", { status: 201 }));
+    globalThis.fetch = vi.fn(
+      async () => new Response("created", { status: 201 }),
+    );
     const pathname = "/ws/o/w/thread";
     const event = createEvent(pathname, {
       method: "POST",
@@ -265,6 +288,59 @@ describe("hostedWorkspaceProxy (proxyToControlPlaneWorkspace)", () => {
     const [, initA] = globalThis.fetch.mock.calls[0];
     const [, initB] = globalThis.fetch.mock.calls[1];
     expect(initA.headers.get("authorization")).toBe("Bearer tok-acme-personal");
-    expect(initB.headers.get("authorization")).toBe("Bearer tok-other-personal");
+    expect(initB.headers.get("authorization")).toBe(
+      "Bearer tok-other-personal",
+    );
+  });
+
+  it("refreshes and retries when only a refresh token is present", async () => {
+    envState.ANX_CONTROL_BASE_URL = "http://control.example.test";
+    authSessionMocks.getWorkspaceAuthSession
+      .mockReturnValueOnce({ refreshToken: "refresh-only", accessToken: "" })
+      .mockReturnValueOnce({
+        refreshToken: "refresh-only",
+        accessToken: "fresh-access",
+      });
+    authSessionMocks.readWorkspaceRefreshToken.mockReturnValue("refresh-only");
+    globalThis.fetch = vi.fn(async () => new Response("ok", { status: 200 }));
+    const pathname = "/ws/acme/ops/inbox";
+    const event = createEvent(pathname);
+
+    const response = await proxyToControlPlaneWorkspace(event, pathname);
+
+    expect(authSessionMocks.refreshWorkspaceAuthSession).toHaveBeenCalledWith({
+      event,
+      organizationSlug: "acme",
+      workspaceSlug: "ops",
+      coreBaseUrl: "http://control.example.test/ws/acme/ops",
+    });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    const init = globalThis.fetch.mock.calls[0][1];
+    expect(init.headers.get("authorization")).toBe("Bearer fresh-access");
+    expect(response.status).toBe(200);
+  });
+
+  it("refreshes and retries after an upstream 401", async () => {
+    envState.ANX_CONTROL_BASE_URL = "http://control.example.test";
+    authSessionMocks.getWorkspaceAuthSession
+      .mockReturnValueOnce({ refreshToken: "refresh", accessToken: "stale" })
+      .mockReturnValueOnce({ refreshToken: "refresh", accessToken: "fresh" });
+    authSessionMocks.readWorkspaceRefreshToken.mockReturnValue("refresh");
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("unauthorized", { status: 401 }))
+      .mockResolvedValueOnce(new Response("ok", { status: 200 }));
+    const pathname = "/ws/acme/ops/events";
+    const event = createEvent(pathname);
+
+    const response = await proxyToControlPlaneWorkspace(event, pathname);
+
+    expect(authSessionMocks.refreshWorkspaceAuthSession).toHaveBeenCalledTimes(
+      1,
+    );
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    const retryInit = globalThis.fetch.mock.calls[1][1];
+    expect(retryInit.headers.get("authorization")).toBe("Bearer fresh");
+    expect(response.status).toBe(200);
   });
 });

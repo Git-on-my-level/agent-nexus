@@ -8,9 +8,7 @@ describe("parseWorkspaceRouteSlugs (hosted /ws and UI /o/.../w/...)", () => {
       organizationSlug: "acme-corp",
       workspaceSlug: "alpha",
     });
-    expect(
-      parseWorkspaceRouteSlugs("/o/acme-corp/w/alpha/inbox", ""),
-    ).toEqual({
+    expect(parseWorkspaceRouteSlugs("/o/acme-corp/w/alpha/inbox", "")).toEqual({
       organizationSlug: "acme-corp",
       workspaceSlug: "alpha",
     });
@@ -22,10 +20,7 @@ describe("parseWorkspaceRouteSlugs (hosted /ws and UI /o/.../w/...)", () => {
       workspaceSlug: "personal",
     });
     expect(
-      parseWorkspaceRouteSlugs(
-        "/ws/scaling-forever/personal/auth/token",
-        "",
-      ),
+      parseWorkspaceRouteSlugs("/ws/scaling-forever/personal/auth/token", ""),
     ).toEqual({
       organizationSlug: "scaling-forever",
       workspaceSlug: "personal",
@@ -50,10 +45,7 @@ describe("parseWorkspaceRouteSlugs (hosted /ws and UI /o/.../w/...)", () => {
 
   it("strips a configured app base before matching (e.g. packed/mounted base path)", () => {
     expect(
-      parseWorkspaceRouteSlugs(
-        "/app/ws/my-org/my-ws/threads",
-        "/app",
-      ),
+      parseWorkspaceRouteSlugs("/app/ws/my-org/my-ws/threads", "/app"),
     ).toEqual({
       organizationSlug: "my-org",
       workspaceSlug: "my-ws",
@@ -67,9 +59,9 @@ describe("parseWorkspaceRouteSlugs (hosted /ws and UI /o/.../w/...)", () => {
     expect(parseWorkspaceRouteSlugs("/ws")).toEqual(empty);
     expect(parseWorkspaceRouteSlugs("/ws/")).toEqual(empty);
     expect(parseWorkspaceRouteSlugs("/ws/only-one-segment")).toEqual(empty);
-    expect(
-      parseWorkspaceRouteSlugs("/o/missing-w-segment/alpha"),
-    ).toEqual(empty);
+    expect(parseWorkspaceRouteSlugs("/o/missing-w-segment/alpha")).toEqual(
+      empty,
+    );
     expect(parseWorkspaceRouteSlugs("/o/acme/w")).toEqual(empty);
   });
 });
