@@ -49,6 +49,7 @@ It gives operators fast, glanceable visibility into the shared workspace maintai
 - Visual style guidance: `docs/style-guide.md`
 
 ## Edit Routing
+- **Hosted workspace API (two-hop BFF):** the browser talks same-origin to `web-ui`; the server proxies to core under `/ws/{org}/{workspace}/...` (or direct core base in dev). CLI or API clients pointed at a hosted deployment should use a **base URL that includes that prefix** so resolved paths stay workspace-scoped.
 - Shared API or schema changes start in [../contracts/AGENTS.md](../contracts/AGENTS.md).
 - Changes to `scripts/seed-core-from-mock.mjs` (or env it relies on) can affect **CLI-local artifacts** under `../cli/dogfood-resources/`; coordinate with [../cli/AGENTS.md](../cli/AGENTS.md) and `../cli/docs/runbook.md`.
 - UI behavior changes should be checked against operator clarity first, then contract compatibility.

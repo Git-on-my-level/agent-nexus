@@ -25,7 +25,9 @@ _src_ui/
 _ui_working_tree.patch
 
 .secrets/
+# Local CLI import/scan output (any depth; un-ignore only if a path must be vendored on purpose)
 .anx-import/
+**/.anx-import/
 .desloppify/
 .superset/
 

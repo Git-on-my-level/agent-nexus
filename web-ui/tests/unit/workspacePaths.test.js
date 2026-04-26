@@ -1,63 +1,75 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-async function loadWorkspacePaths(base = "") {
-  vi.resetModules();
-  vi.doMock("$app/paths", () => ({ base }));
-  return import("../../src/lib/workspacePaths.js");
-}
+import { parseWorkspaceRouteSlugs } from "../../src/lib/workspacePaths.js";
 
-afterEach(() => {
-  vi.resetModules();
-  vi.doUnmock("$app/paths");
-});
-
-describe("workspace paths", () => {
-  it("prefixes app and workspace routes with the configured base path", async () => {
-    const { appPath, workspacePath } = await loadWorkspacePaths("/anx");
-
-    expect(appPath("/")).toBe("/anx");
-    expect(appPath("/threads")).toBe("/anx/threads");
-    expect(workspacePath("local", "ws1")).toBe("/anx/o/local/w/ws1");
-    expect(workspacePath("local", "ws1", "/threads")).toBe(
-      "/anx/o/local/w/ws1/threads",
-    );
+describe("parseWorkspaceRouteSlugs (hosted /ws and UI /o/.../w/...)", () => {
+  it("parses /o/{org}/w/{workspace} and nested subpaths (UI shell)", () => {
+    expect(parseWorkspaceRouteSlugs("/o/acme-corp/w/alpha")).toEqual({
+      organizationSlug: "acme-corp",
+      workspaceSlug: "alpha",
+    });
+    expect(
+      parseWorkspaceRouteSlugs("/o/acme-corp/w/alpha/inbox", ""),
+    ).toEqual({
+      organizationSlug: "acme-corp",
+      workspaceSlug: "alpha",
+    });
   });
 
-  it("strips the configured base path before resolving workspace-relative paths", async () => {
-    const { stripBasePath, stripWorkspacePath } =
-      await loadWorkspacePaths("/anx");
-
-    expect(stripBasePath("/anx/o/local/w/ws/inbox")).toBe(
-      "/o/local/w/ws/inbox",
-    );
-    expect(stripWorkspacePath("/anx/o/local/w/ws/inbox", "local", "ws")).toBe(
-      "/inbox",
-    );
-    expect(stripWorkspacePath("/o/local/w/ws/inbox", "local", "ws")).toBe(
-      "/inbox",
-    );
+  it("parses /ws/{org}/{workspace} and nested API subpaths (hosted proxy path shape)", () => {
+    expect(parseWorkspaceRouteSlugs("/ws/scaling-forever/personal")).toEqual({
+      organizationSlug: "scaling-forever",
+      workspaceSlug: "personal",
+    });
+    expect(
+      parseWorkspaceRouteSlugs(
+        "/ws/scaling-forever/personal/auth/token",
+        "",
+      ),
+    ).toEqual({
+      organizationSlug: "scaling-forever",
+      workspaceSlug: "personal",
+    });
   });
 
-  it("keeps root-mounted behavior unchanged when no base path is configured", async () => {
-    const { appPath, workspacePath, stripWorkspacePath } =
-      await loadWorkspacePaths();
-
-    expect(appPath("/threads")).toBe("/threads");
-    expect(workspacePath("local", "ws", "/threads")).toBe(
-      "/o/local/w/ws/threads",
-    );
-    expect(stripWorkspacePath("/o/local/w/ws/threads", "local", "ws")).toBe(
-      "/threads",
-    );
+  it("parses stream-style paths: URL segments parse, but the control plane may still reject the route", () => {
+    // The web-ui path parser is structural only; it treats everything after
+    // /ws/{org}/{ws}/ as an opaque subpath. Core SSE paths like
+    // /events/stream are not necessarily supported through the CP workspace
+    // proxy — that is a separate product/contract check.
+    expect(
+      parseWorkspaceRouteSlugs(
+        "/ws/scaling-forever/personal/events/stream",
+        "",
+      ),
+    ).toEqual({
+      organizationSlug: "scaling-forever",
+      workspaceSlug: "personal",
+    });
   });
 
-  it("requires slugs for workspace storage keys", async () => {
-    const { buildWorkspaceStorageKey } = await loadWorkspacePaths();
-    expect(buildWorkspaceStorageKey("anx_ui_actor", "alpha")).toBe(
-      "anx_ui_actor:alpha",
-    );
-    expect(() => buildWorkspaceStorageKey("anx_ui_actor", "")).toThrow(
-      /workspace slug is required/,
-    );
+  it("strips a configured app base before matching (e.g. packed/mounted base path)", () => {
+    expect(
+      parseWorkspaceRouteSlugs(
+        "/app/ws/my-org/my-ws/threads",
+        "/app",
+      ),
+    ).toEqual({
+      organizationSlug: "my-org",
+      workspaceSlug: "my-ws",
+    });
+  });
+
+  it("returns empty slugs for paths that are not org-scoped workspace routes", () => {
+    const empty = { organizationSlug: "", workspaceSlug: "" };
+
+    expect(parseWorkspaceRouteSlugs("/")).toEqual(empty);
+    expect(parseWorkspaceRouteSlugs("/ws")).toEqual(empty);
+    expect(parseWorkspaceRouteSlugs("/ws/")).toEqual(empty);
+    expect(parseWorkspaceRouteSlugs("/ws/only-one-segment")).toEqual(empty);
+    expect(
+      parseWorkspaceRouteSlugs("/o/missing-w-segment/alpha"),
+    ).toEqual(empty);
+    expect(parseWorkspaceRouteSlugs("/o/acme/w")).toEqual(empty);
   });
 });

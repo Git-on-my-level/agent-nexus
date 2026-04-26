@@ -19,6 +19,8 @@ export const AuthErrorCode = Object.freeze({
   INVALID_TOKEN: "invalid_token",
   /** SSR detected a runaway navigation / __data.json loop. */
   REQUEST_LOOP_DETECTED: "request_loop_detected",
+  /** Hosted BFF `/ws/...` path did not match `/ws/{org}/{ws}/...`. */
+  INVALID_WORKSPACE_PROXY_PATH: "invalid_workspace_proxy_path",
 });
 
 /** @type {Set<string>} */

@@ -10,6 +10,8 @@ import {
   writeWorkspaceAccessToken,
   writeWorkspaceRefreshToken,
 } from "$lib/server/authSession.js";
+import { coreBaseUrlForNodeFetch } from "$lib/server/coreBaseUrlForNodeFetch.js";
+import { coreEndpointURL } from "$lib/server/coreEndpoint.js";
 import { loadWorkspaceCatalog } from "$lib/server/workspaceCatalog.js";
 
 function allowDevIdentityRoutes() {
@@ -25,7 +27,10 @@ function allowDevIdentityRoutes() {
  * needing the original (possibly consumed) refresh token from the bundle.
  */
 async function devLoginForFreshTokens(coreBaseUrl, username) {
-  const url = new URL("/auth/passkey/dev/login", `${coreBaseUrl}/`).toString();
+  const url = coreEndpointURL(
+    coreBaseUrlForNodeFetch(coreBaseUrl),
+    "/auth/passkey/dev/login",
+  );
   const body = username ? { username } : {};
   const response = await fetch(url, {
     method: "POST",
@@ -80,6 +85,7 @@ export async function POST(event) {
   try {
     const existingAgent = await loadWorkspaceAuthenticatedAgent({
       event,
+      organizationSlug: resolved.organizationSlug,
       workspaceSlug: resolved.workspaceSlug,
       coreBaseUrl: resolved.coreBaseUrl,
     });
@@ -102,17 +108,20 @@ export async function POST(event) {
   if (bundleRefreshToken) {
     writeWorkspaceRefreshToken(
       event,
+      resolved.organizationSlug,
       resolved.workspaceSlug,
       bundleRefreshToken,
     );
     try {
       await refreshWorkspaceAuthSession({
         event,
+        organizationSlug: resolved.organizationSlug,
         workspaceSlug: resolved.workspaceSlug,
         coreBaseUrl: resolved.coreBaseUrl,
       });
       const agent = await loadWorkspaceAuthenticatedAgent({
         event,
+        organizationSlug: resolved.organizationSlug,
         workspaceSlug: resolved.workspaceSlug,
         coreBaseUrl: resolved.coreBaseUrl,
       });
@@ -148,12 +157,14 @@ export async function POST(event) {
       if (loginResult.refreshToken) {
         writeWorkspaceRefreshToken(
           event,
+          resolved.organizationSlug,
           resolved.workspaceSlug,
           loginResult.refreshToken,
         );
       }
       writeWorkspaceAccessToken(
         event,
+        resolved.organizationSlug,
         resolved.workspaceSlug,
         loginResult.accessToken,
       );

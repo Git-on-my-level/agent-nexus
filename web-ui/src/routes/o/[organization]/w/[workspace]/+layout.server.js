@@ -24,12 +24,20 @@ function isSecureCookieRequest(event) {
   return event.url.protocol === "https:";
 }
 
-function workspaceHasCoreSession(event, workspaceSlug) {
+function workspaceHasCoreSession(
+  event,
+  organizationSlug,
+  workspaceSlug,
+) {
   const refreshToken = String(
-    event.cookies.get(getAuthSessionCookieName(workspaceSlug)) ?? "",
+    event.cookies.get(
+      getAuthSessionCookieName(organizationSlug, workspaceSlug),
+    ) ?? "",
   ).trim();
   const accessToken = String(
-    event.cookies.get(getAuthAccessCookieName(workspaceSlug)) ?? "",
+    event.cookies.get(
+      getAuthAccessCookieName(organizationSlug, workspaceSlug),
+    ) ?? "",
   ).trim();
   return refreshToken !== "" || accessToken !== "";
 }
@@ -124,7 +132,11 @@ export async function load(event) {
   if (
     provider.mode === "hosted" &&
     workspaceId &&
-    !workspaceHasCoreSession(event, resolved.workspace.slug)
+    !workspaceHasCoreSession(
+      event,
+      resolved.workspace.organizationSlug,
+      resolved.workspace.slug,
+    )
   ) {
     const instruction = await provider.beginLaunchSession({
       event,

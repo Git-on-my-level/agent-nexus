@@ -26,6 +26,7 @@ export async function load(event) {
   try {
     agent = await loadWorkspaceAuthenticatedAgent({
       event,
+      organizationSlug: resolved.organizationSlug,
       workspaceSlug: resolved.workspaceSlug,
       coreBaseUrl: workspace.coreBaseUrl,
     });

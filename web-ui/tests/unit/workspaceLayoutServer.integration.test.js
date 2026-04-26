@@ -219,7 +219,7 @@ describe("workspace +layout.server.js (integration with real resolver)", () => {
 
     const event = createEvent({ fetchFn });
     event.cookies.get = vi.fn((name) =>
-      name === "anx_ui_session_my-ws" ? "refresh-token" : "",
+      name === "anx_ui_session_my-org__my-ws" ? "refresh-token" : "",
     );
     const result = await load(event);
 

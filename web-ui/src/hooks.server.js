@@ -13,8 +13,14 @@ import {
   refreshWorkspaceAuthSession,
   shouldClearWorkspaceAuthSessionAfterRetryableFailure,
 } from "$lib/server/authSession";
+import { coreBaseUrlForNodeFetch } from "$lib/server/coreBaseUrlForNodeFetch.js";
+import { coreEndpointURL } from "$lib/server/coreEndpoint";
 import { buildProxyRequestInit } from "$lib/server/coreProxy";
 import { logServerError, logServerEvent } from "$lib/server/devLog";
+import {
+  isHostedWorkspaceProxyPath,
+  proxyToControlPlaneWorkspace,
+} from "$lib/server/hostedWorkspaceProxy";
 import { resolveProxyTarget } from "$lib/server/proxyWorkspaceTarget";
 import { isDirectCoreProxyPath } from "$lib/server/directCoreProxyPaths";
 import { getOutOfWorkspaceProvider } from "$lib/server/outOfWorkspace/index.js";
@@ -95,18 +101,20 @@ function shouldBypassProxy(pathname, method) {
 async function refreshAndRetry(
   event,
   coreBaseUrl,
+  organizationSlug,
   workspaceSlug,
   targetUrl,
   requestBody,
   hadAccessToken,
 ) {
-  if (!readWorkspaceRefreshToken(event, workspaceSlug)) {
+  if (!readWorkspaceRefreshToken(event, organizationSlug, workspaceSlug)) {
     return null;
   }
 
   try {
     await refreshWorkspaceAuthSession({
       event,
+      organizationSlug,
       workspaceSlug,
       coreBaseUrl,
     });
@@ -120,19 +128,24 @@ async function refreshAndRetry(
       if (
         shouldClearWorkspaceAuthSessionAfterRetryableFailure(
           event,
+          organizationSlug,
           workspaceSlug,
         )
       ) {
-        clearWorkspaceAuthSession(event, workspaceSlug);
+        clearWorkspaceAuthSession(event, organizationSlug, workspaceSlug);
       }
       return null;
     }
 
-    clearWorkspaceAuthSession(event, workspaceSlug);
+    clearWorkspaceAuthSession(event, organizationSlug, workspaceSlug);
     return null;
   }
 
-  const refreshedSession = getWorkspaceAuthSession(event, workspaceSlug);
+  const refreshedSession = getWorkspaceAuthSession(
+    event,
+    organizationSlug,
+    workspaceSlug,
+  );
   if (!refreshedSession?.accessToken) {
     return null;
   }
@@ -154,12 +167,17 @@ async function refreshAndRetry(
   }
 }
 
-async function proxyToCore(event, coreBaseUrl, workspaceSlug) {
+async function proxyToCore(
+  event,
+  coreBaseUrl,
+  organizationSlug,
+  workspaceSlug,
+) {
+  const baseForFetch = coreBaseUrlForNodeFetch(coreBaseUrl);
   const corePathname = stripBasePath(event.url.pathname);
-  const targetUrl = new URL(
-    `${corePathname}${event.url.search}`,
-    `${coreBaseUrl}/`,
-  ).toString();
+  const u = new URL(coreEndpointURL(baseForFetch, corePathname));
+  u.search = event.url.search;
+  const targetUrl = u.toString();
   const method = event.request.method.toUpperCase();
   let requestBody;
   if (method !== "GET" && method !== "HEAD") {
@@ -171,7 +189,7 @@ async function proxyToCore(event, coreBaseUrl, workspaceSlug) {
   const requestInit = buildProxyRequestInit(event, {
     body: requestBody,
   });
-  const session = getWorkspaceAuthSession(event, workspaceSlug);
+  const session = getWorkspaceAuthSession(event, organizationSlug, workspaceSlug);
   if (session?.accessToken) {
     requestInit.headers.set("authorization", `Bearer ${session.accessToken}`);
   } else if (incomingAuth) {
@@ -205,6 +223,7 @@ async function proxyToCore(event, coreBaseUrl, workspaceSlug) {
     const retriedResponse = await refreshAndRetry(
       event,
       coreBaseUrl,
+      organizationSlug,
       workspaceSlug,
       targetUrl,
       requestBody,
@@ -213,7 +232,7 @@ async function proxyToCore(event, coreBaseUrl, workspaceSlug) {
     if (retriedResponse) {
       upstreamResponse = retriedResponse;
       if (upstreamResponse.status === 401) {
-        clearWorkspaceAuthSession(event, workspaceSlug);
+        clearWorkspaceAuthSession(event, organizationSlug, workspaceSlug);
       }
     }
   }
@@ -297,6 +316,10 @@ export async function handle({ event, resolve }) {
 
   const pathname = stripBasePath(event.url.pathname);
   const method = event.request.method;
+  if (isHostedWorkspaceProxyPath(pathname)) {
+    return proxyToControlPlaneWorkspace(event, pathname);
+  }
+
   if (shouldBypassProxy(pathname, method)) {
     logServerEvent("auth.callback.proxy_bypass", {
       method,
@@ -346,6 +369,7 @@ export async function handle({ event, resolve }) {
       const response = await proxyToCore(
         event,
         target.coreBaseUrl,
+        target.workspace.organizationSlug,
         target.workspace.slug,
       );
       response.headers.set("X-ANX-UI-Version", CURRENT_VERSION);

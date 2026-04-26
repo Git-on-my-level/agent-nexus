@@ -18,6 +18,7 @@ export async function GET(event) {
   try {
     const agent = await loadWorkspaceAuthenticatedAgent({
       event,
+      organizationSlug: resolved.organizationSlug,
       workspaceSlug: resolved.workspaceSlug,
       coreBaseUrl: resolved.coreBaseUrl,
     });
@@ -54,7 +55,11 @@ export async function GET(event) {
       );
     }
     if (isTerminalAccountSessionFailure(error)) {
-      clearWorkspaceAuthSession(event, resolved.workspaceSlug);
+      clearWorkspaceAuthSession(
+        event,
+        resolved.organizationSlug,
+        resolved.workspaceSlug,
+      );
       return json(
         {
           authenticated: false,
@@ -75,7 +80,11 @@ export async function GET(event) {
       );
     }
     if (error?.status === 401 || error?.status === 403) {
-      clearWorkspaceAuthSession(event, resolved.workspaceSlug);
+      clearWorkspaceAuthSession(
+        event,
+        resolved.organizationSlug,
+        resolved.workspaceSlug,
+      );
       const upstreamCode = String(error?.details?.error?.code ?? "").trim();
       return json(
         {
@@ -122,7 +131,11 @@ export async function DELETE(event) {
     return json(resolved.error.payload, { status: resolved.error.status });
   }
 
-  clearWorkspaceAuthSession(event, resolved.workspaceSlug);
+  clearWorkspaceAuthSession(
+    event,
+    resolved.organizationSlug,
+    resolved.workspaceSlug,
+  );
 
   return json(
     {

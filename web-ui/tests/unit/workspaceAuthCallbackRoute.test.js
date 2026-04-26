@@ -178,19 +178,86 @@ describe("workspace auth callback route", () => {
     expect(fetchMock.mock.calls[0][0]).toBe(
       "https://core.example.test/auth/token",
     );
+    expect(fetchMock.mock.calls[0][1]?.headers).toMatchObject({
+      "x-anx-organization-slug": "local",
+      "x-anx-workspace-slug": "acme",
+    });
     expect(authSessionMocks.writeWorkspaceRefreshToken).toHaveBeenCalledWith(
       event,
+      "local",
       "acme",
       "refresh_123",
     );
     expect(authSessionMocks.writeWorkspaceAccessToken).toHaveBeenCalledWith(
       event,
+      "local",
       "acme",
       "access_123",
     );
     expect(
       authSessionMocks.clearRetryableWorkspaceAuthFailureCount,
-    ).toHaveBeenCalledWith(event, "acme");
+    ).toHaveBeenCalledWith(event, "local", "acme");
+  });
+
+  it("preserves hosted workspace proxy path when exchanging core tokens", async () => {
+    workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValueOnce({
+      organizationSlug: "scaling-forever",
+      workspaceSlug: "personal",
+      workspace: {
+        slug: "personal",
+        label: "Personal",
+        coreBaseUrl: "http://localhost:5173/ws/scaling-forever/personal",
+        workspaceId: "ws_123",
+      },
+      error: null,
+    });
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          tokens: {
+            access_token: "access_123",
+            refresh_token: "refresh_123",
+          },
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+          },
+        },
+      ),
+    );
+    globalThis.fetch = fetchMock;
+
+    const event = createEvent(
+      {
+        exchange_token: "ex_123",
+        state: "state_123",
+        workspace_id: "ws_123",
+      },
+      {
+        outOfWorkspace: mockHostedProvider({
+          exchangeLaunchSession: vi.fn(async () => ({
+            ok: true,
+            assertion: "grant_token",
+          })),
+        }),
+      },
+    );
+
+    await expect(POST(event)).rejects.toMatchObject({
+      status: 303,
+      location: "/o/scaling-forever/w/personal",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "http://127.0.0.1:5173/ws/scaling-forever/personal/auth/token",
+    );
+    expect(fetchMock.mock.calls[0][1]?.headers).toMatchObject({
+      "x-anx-organization-slug": "scaling-forever",
+      "x-anx-workspace-slug": "personal",
+    });
   });
 
   it("rejects invalid callback payloads", async () => {
@@ -415,11 +482,13 @@ describe("workspace auth callback route", () => {
     expect(exchangeLaunchSession).toHaveBeenCalled();
     expect(authSessionMocks.writeWorkspaceRefreshToken).toHaveBeenCalledWith(
       event,
+      "local",
       "acme",
       "refresh_fb",
     );
     expect(authSessionMocks.writeWorkspaceAccessToken).toHaveBeenCalledWith(
       event,
+      "local",
       "acme",
       "access_fb",
     );

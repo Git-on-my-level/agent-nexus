@@ -12,6 +12,9 @@ import {
   writeWorkspaceAccessToken,
   writeWorkspaceRefreshToken,
 } from "$lib/server/authSession.js";
+import { coreBaseUrlForNodeFetch } from "$lib/server/coreBaseUrlForNodeFetch.js";
+import { coreEndpointURL } from "$lib/server/coreEndpoint.js";
+import { buildServerCoreWorkspaceContextHeaders } from "$lib/server/coreWorkspaceContextHeaders.js";
 import { logServerEvent } from "$lib/server/devLog";
 import { getOutOfWorkspaceProvider } from "$lib/server/outOfWorkspace/index.js";
 import { resolveWorkspaceInRoute } from "$lib/server/workspaceResolver.js";
@@ -80,27 +83,6 @@ async function readJSONPayload(response) {
   }
 }
 
-/** Node may resolve `localhost` to ::1 while anx-core listens on 127.0.0.1 only. */
-function coreBaseUrlForServerFetch(url) {
-  const trimmed = String(url ?? "").trim();
-  if (!trimmed) {
-    return "";
-  }
-  try {
-    const parsed = new URL(trimmed.endsWith("/") ? trimmed : `${trimmed}/`);
-    if (parsed.hostname === "localhost") {
-      parsed.hostname = "127.0.0.1";
-    }
-    let out = parsed.toString();
-    if (out.endsWith("/")) {
-      out = out.slice(0, -1);
-    }
-    return out;
-  } catch {
-    return trimmed.replace(/\/+$/, "");
-  }
-}
-
 function fetchErrorDetail(err) {
   if (!err || typeof err !== "object") {
     return String(err ?? "fetch failed");
@@ -123,12 +105,13 @@ function fetchErrorDetail(err) {
   return message || "fetch failed";
 }
 
-async function postJSON(url, body) {
+async function postJSON(url, body, options = {}) {
   const response = await fetch(url, {
     method: "POST",
     headers: {
       accept: "application/json",
       "content-type": "application/json",
+      ...(options.headers ?? {}),
     },
     body: JSON.stringify(body),
   });
@@ -145,7 +128,7 @@ async function postJSONWithNetworkRetries(url, body, options) {
   let lastErr = /** @type {unknown} */ (null);
   for (let i = 0; i < attempts; i++) {
     try {
-      return await postJSON(url, body);
+      return await postJSON(url, body, options);
     } catch (err) {
       lastErr = err;
       if (i + 1 < attempts) {
@@ -273,7 +256,7 @@ export async function runWorkspaceAuthCallbackPost(
   }
 
   const workspaceSlug = resolvedWorkspaceSlug;
-  const coreBaseURL = coreBaseUrlForServerFetch(
+  const coreBaseURL = coreBaseUrlForNodeFetch(
     normalizeBaseUrl(resolvedWorkspace.coreBaseUrl),
   );
   if (!coreBaseURL) {
@@ -370,7 +353,11 @@ export async function runWorkspaceAuthCallbackPost(
     workspace: workspaceSlug,
   });
 
-  const authTokenURL = new URL("/auth/token", `${coreBaseURL}/`).toString();
+  const authTokenURL = coreEndpointURL(coreBaseURL, "/auth/token");
+  const coreContextHeaders = buildServerCoreWorkspaceContextHeaders({
+    organizationSlug: resolvedOrganizationSlug,
+    workspaceSlug,
+  });
   let tokenExchange;
   try {
     tokenExchange = await postJSONWithNetworkRetries(
@@ -379,7 +366,7 @@ export async function runWorkspaceAuthCallbackPost(
         grant_type: "workspace_human_grant",
         assertion,
       },
-      { attempts: 10, delayMs: 500 },
+      { attempts: 10, delayMs: 500, headers: coreContextHeaders },
     );
   } catch (err) {
     logServerEvent(
@@ -449,9 +436,23 @@ export async function runWorkspaceAuthCallbackPost(
     );
   }
 
-  writeWorkspaceRefreshToken(event, workspaceSlug, refreshToken);
-  writeWorkspaceAccessToken(event, workspaceSlug, accessToken);
-  clearRetryableWorkspaceAuthFailureCount(event, workspaceSlug);
+  writeWorkspaceRefreshToken(
+    event,
+    resolvedOrganizationSlug,
+    workspaceSlug,
+    refreshToken,
+  );
+  writeWorkspaceAccessToken(
+    event,
+    resolvedOrganizationSlug,
+    workspaceSlug,
+    accessToken,
+  );
+  clearRetryableWorkspaceAuthFailureCount(
+    event,
+    resolvedOrganizationSlug,
+    workspaceSlug,
+  );
   logServerEvent("auth.callback.redirect", {
     path: eventPath,
     workspace: workspaceSlug,

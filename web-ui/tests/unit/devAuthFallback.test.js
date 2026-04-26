@@ -57,6 +57,7 @@ describe("POST /auth/dev/session", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resolveMocks.resolveWorkspaceSlugFromEvent.mockResolvedValue({
+      organizationSlug: "local",
       workspaceSlug: "alpha",
       coreBaseUrl: "http://127.0.0.1:9000",
       error: null,

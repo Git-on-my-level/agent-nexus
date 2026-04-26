@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { AuthErrorCode } from "../../src/lib/authErrorCodes.js";
 import { CURRENT_VERSION } from "../../src/lib/generated/version.js";
 
 const authSessionState = {
@@ -15,7 +16,7 @@ const proxyWorkspaceTargetMocks = vi.hoisted(() => ({
   resolveProxyTarget: vi.fn(() =>
     Promise.resolve({
       coreBaseUrl: "https://core.example.test",
-      workspace: { slug: "ops" },
+      workspace: { slug: "ops", organizationSlug: "acme" },
     }),
   ),
 }));
@@ -79,6 +80,7 @@ vi.mock("$lib/server/proxyWorkspaceTarget", () => ({
 }));
 
 import { handle } from "../../src/hooks.server.js";
+import { stripBasePath } from "../../src/lib/workspacePaths.js";
 
 function bodyText(body) {
   if (!body) {
@@ -100,7 +102,7 @@ describe("hooks proxy retry", () => {
     proxyWorkspaceTargetMocks.resolveProxyTarget.mockImplementation(() =>
       Promise.resolve({
         coreBaseUrl: "https://core.example.test",
-        workspace: { slug: "ops" },
+        workspace: { slug: "ops", organizationSlug: "acme" },
       }),
     );
     coreRouteCatalogMocks.isProxyableCommand.mockReturnValue(true);
@@ -115,6 +117,116 @@ describe("hooks proxy retry", () => {
     for (const key of Object.keys(envState)) {
       delete envState[key];
     }
+  });
+
+  it("with app base path, malformed hosted path returns 400 with invalid_workspace_proxy_path", async () => {
+    envState.ANX_CONTROL_BASE_URL = "http://control.example.test";
+    globalThis.fetch = vi.fn();
+    stripBasePath.mockImplementation((pathname) => {
+      const base = "/app";
+      const p = String(pathname ?? "");
+      if (p === base) {
+        return "/";
+      }
+      if (p.startsWith(`${base}/`)) {
+        return p.slice(base.length) || "/";
+      }
+      return p;
+    });
+    const resolve = vi.fn();
+    const response = await handle({
+      event: {
+        url: new URL("http://localhost:5173/app/ws/only"),
+        request: new Request("http://localhost:5173/app/ws/only", {
+          method: "GET",
+        }),
+      },
+      resolve,
+    });
+    stripBasePath.mockImplementation((pathname) => pathname);
+    expect(resolve).not.toHaveBeenCalled();
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(response.status).toBe(400);
+    const json = await response.json();
+    expect(json.error.code).toBe(AuthErrorCode.INVALID_WORKSPACE_PROXY_PATH);
+  });
+
+  it("forwards non-/ws/ API paths via proxyToCore to the workspace core base URL", async () => {
+    globalThis.fetch = vi.fn(
+      async () =>
+        new Response("{}", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    const response = await handle({
+      event: {
+        url: new URL("https://anx.example.test/api/threads"),
+        request: new Request("https://anx.example.test/api/threads", {
+          method: "GET",
+          headers: { accept: "application/json" },
+        }),
+      },
+      resolve: vi.fn(),
+    });
+    expect(response.status).toBe(200);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "https://core.example.test/api/threads",
+      expect.anything(),
+    );
+  });
+
+  it("forwards hosted /ws workspace proxy paths to the control plane", async () => {
+    envState.ANX_CONTROL_BASE_URL = "http://control.example.test";
+    authSessionState.currentSession = null;
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ tokens: { access_token: "ok" } }), {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+            "x-upstream": "control-plane",
+          },
+        }),
+    );
+    globalThis.fetch = fetchMock;
+    const resolve = vi.fn();
+
+    const response = await handle({
+      event: {
+        url: new URL(
+          "http://localhost:5173/ws/scaling-forever/personal/auth/token",
+        ),
+        request: new Request(
+          "http://localhost:5173/ws/scaling-forever/personal/auth/token",
+          {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-anx-organization-slug": "scaling-forever",
+              "x-anx-workspace-slug": "personal",
+            },
+            body: JSON.stringify({
+              grant_type: "workspace_human_grant",
+              assertion: "grant",
+            }),
+          },
+        ),
+      },
+      resolve,
+    });
+
+    expect(resolve).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "http://control.example.test/ws/scaling-forever/personal/auth/token",
+    );
+    expect(bodyText(fetchMock.mock.calls[0][1]?.body)).toContain(
+      "workspace_human_grant",
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-upstream")).toBe("control-plane");
+    expect(response.headers.get("X-ANX-UI-Version")).toBe(CURRENT_VERSION);
   });
 
   it("replays the original request body after refreshing workspace auth", async () => {
@@ -246,6 +358,7 @@ describe("hooks proxy retry", () => {
     expect(response.status).toBe(401);
     expect(authSessionMocks.clearWorkspaceAuthSession).toHaveBeenCalledWith(
       expect.anything(),
+      "acme",
       "ops",
     );
   });
@@ -294,7 +407,7 @@ describe("hooks proxy retry", () => {
     });
     expect(
       authSessionMocks.shouldClearWorkspaceAuthSessionAfterRetryableFailure,
-    ).toHaveBeenCalledWith(expect.anything(), "ops");
+    ).toHaveBeenCalledWith(expect.anything(), "acme", "ops");
     expect(authSessionMocks.clearWorkspaceAuthSession).not.toHaveBeenCalled();
   });
 
@@ -339,13 +452,14 @@ describe("hooks proxy retry", () => {
     expect(response.status).toBe(401);
     expect(authSessionMocks.clearWorkspaceAuthSession).toHaveBeenCalledWith(
       expect.anything(),
+      "acme",
       "ops",
     );
   });
 
   it("returns 503 when proxyable but workspace has no coreBaseUrl", async () => {
     proxyWorkspaceTargetMocks.resolveProxyTarget.mockResolvedValueOnce({
-      workspace: { slug: "ops" },
+      workspace: { slug: "ops", organizationSlug: "acme" },
       coreBaseUrl: "",
     });
 

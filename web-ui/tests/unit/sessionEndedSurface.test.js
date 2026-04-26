@@ -10,6 +10,7 @@ vi.mock("$lib/server/authSession.js", async (importOriginal) => {
     ...actual,
     loadWorkspaceAuthenticatedAgent: loadAgent,
     resolveWorkspaceSlugFromEvent: vi.fn(async () => ({
+      organizationSlug: "local",
       workspaceSlug: "alpha",
       coreBaseUrl: "http://127.0.0.1:9000",
       error: null,

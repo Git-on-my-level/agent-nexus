@@ -122,13 +122,14 @@ describe("auth callback POST (+server)", () => {
     });
     expect(exchangeLaunchSession).toHaveBeenCalled();
     expect(
-      event.cookieCalls.some((c) => c.name === "anx_ui_session_alpha"),
+      event.cookieCalls.some((c) => c.name === "anx_ui_session_local__alpha"),
     ).toBe(true);
     expect(
-      event.cookieCalls.find((c) => c.name === "anx_ui_session_alpha")?.value,
+      event.cookieCalls.find((c) => c.name === "anx_ui_session_local__alpha")
+        ?.value,
     ).toBe("rt-happy");
     expect(
-      event.cookieCalls.some((c) => c.name === "anx_ui_access_alpha"),
+      event.cookieCalls.some((c) => c.name === "anx_ui_access_local__alpha"),
     ).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const tokenCall = fetchMock.mock.calls.find((c) =>

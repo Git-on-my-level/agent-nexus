@@ -1,9 +1,5 @@
-import { WORKSPACE_HEADER_CONSTANTS } from "$lib/compat/workspaceCompat";
-import {
-  APP_BASE_PATH,
-  WORKSPACE_HEADER,
-  parseWorkspaceRouteSlugs,
-} from "$lib/workspacePaths";
+import { buildCoreWorkspaceRoutingHeadersFromSlugs } from "$lib/coreWorkspaceHeadersShared";
+import { APP_BASE_PATH, parseWorkspaceRouteSlugs } from "$lib/workspacePaths";
 
 export function buildCoreRequestContextHeaders({
   storeOrg,
@@ -23,12 +19,8 @@ export function buildCoreRequestContextHeaders({
     }
   }
 
-  const headers = {};
-  if (workspace) {
-    headers[WORKSPACE_HEADER] = workspace;
-  }
-  if (org) {
-    headers[WORKSPACE_HEADER_CONSTANTS.ORGANIZATION_HEADER] = org;
-  }
-  return headers;
+  return buildCoreWorkspaceRoutingHeadersFromSlugs({
+    organizationSlug: org,
+    workspaceSlug: workspace,
+  });
 }

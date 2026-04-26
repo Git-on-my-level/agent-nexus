@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   clearWorkspaceAccessToken,
   clearWorkspaceRefreshToken,
+  getAuthAccessCookieName,
+  getAuthSessionCookieName,
   getRecentRefreshResultCountForTests,
   handleWorkspaceAuthVerifyResponse,
   loadWorkspaceAuthenticatedAgent,
@@ -11,6 +13,9 @@ import {
   writeWorkspaceAccessToken,
   writeWorkspaceRefreshToken,
 } from "../../src/lib/server/authSession.js";
+
+const DEFAULT_ORG = "local";
+const DEFAULT_WS = "alpha";
 
 function createCookieRecorder() {
   const setCalls = [];
@@ -37,16 +42,23 @@ function createCookieRecorder() {
 }
 
 function createSessionEvent({
+  organizationSlug = DEFAULT_ORG,
   refreshToken = "",
   accessToken = "",
-  workspaceSlug = "alpha",
+  workspaceSlug = DEFAULT_WS,
 } = {}) {
   const recorder = createCookieRecorder();
   if (refreshToken) {
-    recorder.values.set(`anx_ui_session_${workspaceSlug}`, refreshToken);
+    recorder.values.set(
+      getAuthSessionCookieName(organizationSlug, workspaceSlug),
+      refreshToken,
+    );
   }
   if (accessToken) {
-    recorder.values.set(`anx_ui_access_${workspaceSlug}`, accessToken);
+    recorder.values.set(
+      getAuthAccessCookieName(organizationSlug, workspaceSlug),
+      accessToken,
+    );
   }
   return {
     recorder,
@@ -64,6 +76,21 @@ afterEach(() => {
 });
 
 describe("server auth session helpers", () => {
+  it("uses distinct cookie names for the same workspace slug under different orgs", () => {
+    expect(getAuthSessionCookieName("acme", "demo")).toBe(
+      "anx_ui_session_acme__demo",
+    );
+    expect(getAuthSessionCookieName("other", "demo")).toBe(
+      "anx_ui_session_other__demo",
+    );
+    expect(getAuthSessionCookieName("acme", "demo")).not.toBe(
+      getAuthSessionCookieName("other", "demo"),
+    );
+    expect(getAuthAccessCookieName("acme", "demo")).not.toBe(
+      getAuthAccessCookieName("other", "demo"),
+    );
+  });
+
   it("writes HttpOnly and Secure refresh-token cookies on HTTPS", () => {
     const recorder = createCookieRecorder();
     const event = {
@@ -71,11 +98,11 @@ describe("server auth session helpers", () => {
       cookies: recorder.cookies,
     };
 
-    writeWorkspaceRefreshToken(event, "alpha", "refresh-token");
+    writeWorkspaceRefreshToken(event, DEFAULT_ORG, DEFAULT_WS, "refresh-token");
 
     expect(recorder.setCalls).toHaveLength(1);
     expect(recorder.setCalls[0]).toMatchObject({
-      name: "anx_ui_session_alpha",
+      name: "anx_ui_session_local__alpha",
       value: "refresh-token",
       options: {
         httpOnly: true,
@@ -94,11 +121,11 @@ describe("server auth session helpers", () => {
       cookies: recorder.cookies,
     };
 
-    writeWorkspaceAccessToken(event, "alpha", "access-token");
+    writeWorkspaceAccessToken(event, DEFAULT_ORG, DEFAULT_WS, "access-token");
 
     expect(recorder.setCalls).toHaveLength(1);
     expect(recorder.setCalls[0]).toMatchObject({
-      name: "anx_ui_access_alpha",
+      name: "anx_ui_access_local__alpha",
       value: "access-token",
       options: {
         httpOnly: true,
@@ -116,11 +143,11 @@ describe("server auth session helpers", () => {
       cookies: recorder.cookies,
     };
 
-    clearWorkspaceRefreshToken(event, "alpha");
+    clearWorkspaceRefreshToken(event, DEFAULT_ORG, DEFAULT_WS);
 
     expect(recorder.deleteCalls).toEqual([
       {
-        name: "anx_ui_session_alpha",
+        name: "anx_ui_session_local__alpha",
         options: {
           path: "/",
         },
@@ -134,11 +161,11 @@ describe("server auth session helpers", () => {
       cookies: recorder.cookies,
     };
 
-    clearWorkspaceAccessToken(event, "alpha");
+    clearWorkspaceAccessToken(event, DEFAULT_ORG, DEFAULT_WS);
 
     expect(recorder.deleteCalls).toEqual([
       {
-        name: "anx_ui_access_alpha",
+        name: "anx_ui_access_local__alpha",
         options: {
           path: "/",
         },
@@ -174,7 +201,8 @@ describe("server auth session helpers", () => {
 
     const response = await handleWorkspaceAuthVerifyResponse({
       event,
-      workspaceSlug: "alpha",
+      organizationSlug: DEFAULT_ORG,
+      workspaceSlug: DEFAULT_WS,
       upstreamResponse,
     });
 
@@ -187,7 +215,7 @@ describe("server auth session helpers", () => {
     });
     expect(recorder.setCalls).toEqual([
       {
-        name: "anx_ui_session_alpha",
+        name: "anx_ui_session_local__alpha",
         value: "refresh-token",
         options: {
           httpOnly: true,
@@ -198,7 +226,7 @@ describe("server auth session helpers", () => {
         },
       },
       {
-        name: "anx_ui_access_alpha",
+        name: "anx_ui_access_local__alpha",
         value: "access-token",
         options: {
           httpOnly: true,
@@ -225,12 +253,14 @@ describe("server auth session helpers", () => {
 
     const firstRefresh = refreshWorkspaceAuthSession({
       event: first.event,
-      workspaceSlug: "alpha",
+      organizationSlug: DEFAULT_ORG,
+      workspaceSlug: DEFAULT_WS,
       coreBaseUrl: "https://core.example.com",
     });
     const secondRefresh = refreshWorkspaceAuthSession({
       event: second.event,
-      workspaceSlug: "alpha",
+      organizationSlug: DEFAULT_ORG,
+      workspaceSlug: DEFAULT_WS,
       coreBaseUrl: "https://core.example.com",
     });
 
@@ -259,12 +289,52 @@ describe("server auth session helpers", () => {
       accessToken: "next-access-token",
       refreshToken: "next-refresh-token",
     });
-    expect(first.recorder.values.get("anx_ui_session_alpha")).toBe(
-      "next-refresh-token",
+    const sessionName = getAuthSessionCookieName(DEFAULT_ORG, DEFAULT_WS);
+    expect(first.recorder.values.get(sessionName)).toBe("next-refresh-token");
+    expect(second.recorder.values.get(sessionName)).toBe("next-refresh-token");
+  });
+
+  it("runs separate in-flight refresh requests for the same token when organizations differ (same workspace slug)", async () => {
+    const first = createSessionEvent({
+      organizationSlug: "acme",
+      refreshToken: "shared-rt",
+      workspaceSlug: "demo",
+    });
+    const second = createSessionEvent({
+      organizationSlug: "other",
+      refreshToken: "shared-rt",
+      workspaceSlug: "demo",
+    });
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            tokens: {
+              access_token: "at",
+              refresh_token: "shared-rt",
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
     );
-    expect(second.recorder.values.get("anx_ui_session_alpha")).toBe(
-      "next-refresh-token",
-    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await Promise.all([
+      refreshWorkspaceAuthSession({
+        event: first.event,
+        organizationSlug: "acme",
+        workspaceSlug: "demo",
+        coreBaseUrl: "https://core.example.com",
+      }),
+      refreshWorkspaceAuthSession({
+        event: second.event,
+        organizationSlug: "other",
+        workspaceSlug: "demo",
+        coreBaseUrl: "https://core.example.com",
+      }),
+    ]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("reuses a freshly rotated refresh result for a stale follow-up request", async () => {
@@ -290,7 +360,8 @@ describe("server auth session helpers", () => {
     await expect(
       refreshWorkspaceAuthSession({
         event: first.event,
-        workspaceSlug: "alpha",
+        organizationSlug: DEFAULT_ORG,
+        workspaceSlug: DEFAULT_WS,
         coreBaseUrl: "https://core.example.com",
       }),
     ).resolves.toEqual({
@@ -301,7 +372,8 @@ describe("server auth session helpers", () => {
     await expect(
       refreshWorkspaceAuthSession({
         event: second.event,
-        workspaceSlug: "alpha",
+        organizationSlug: DEFAULT_ORG,
+        workspaceSlug: DEFAULT_WS,
         coreBaseUrl: "https://core.example.com",
       }),
     ).resolves.toEqual({
@@ -310,12 +382,16 @@ describe("server auth session helpers", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(second.recorder.values.get("anx_ui_session_alpha")).toBe(
-      "next-refresh-token",
-    );
-    expect(second.recorder.values.get("anx_ui_access_alpha")).toBe(
-      "next-access-token",
-    );
+    expect(
+      second.recorder.values.get(
+        getAuthSessionCookieName(DEFAULT_ORG, DEFAULT_WS),
+      ),
+    ).toBe("next-refresh-token");
+    expect(
+      second.recorder.values.get(
+        getAuthAccessCookieName(DEFAULT_ORG, DEFAULT_WS),
+      ),
+    ).toBe("next-access-token");
   });
 
   it("evicts expired replay entries when caching newer refresh results", async () => {
@@ -342,7 +418,8 @@ describe("server auth session helpers", () => {
 
     await refreshWorkspaceAuthSession({
       event: first.event,
-      workspaceSlug: "alpha",
+      organizationSlug: DEFAULT_ORG,
+      workspaceSlug: DEFAULT_WS,
       coreBaseUrl: "https://core.example.com",
     });
     expect(getRecentRefreshResultCountForTests()).toBe(1);
@@ -351,7 +428,8 @@ describe("server auth session helpers", () => {
 
     await refreshWorkspaceAuthSession({
       event: second.event,
-      workspaceSlug: "alpha",
+      organizationSlug: DEFAULT_ORG,
+      workspaceSlug: DEFAULT_WS,
       coreBaseUrl: "https://core.example.com",
     });
 
@@ -398,7 +476,8 @@ describe("server auth session helpers", () => {
     await expect(
       loadWorkspaceAuthenticatedAgent({
         event,
-        workspaceSlug: "alpha",
+        organizationSlug: DEFAULT_ORG,
+        workspaceSlug: DEFAULT_WS,
         coreBaseUrl: "https://core.example.com",
       }),
     ).rejects.toMatchObject({
@@ -406,11 +485,17 @@ describe("server auth session helpers", () => {
       code: "auth_session_retryable",
     });
 
-    expect(recorder.values.get("anx_ui_session_alpha")).toBe("refresh-token");
-    expect(recorder.values.get("anx_ui_access_alpha")).toBe(
-      "expired-access-token",
-    );
-    expect(recorder.values.get("anx_ui_auth_retry_alpha")).toBe("1");
+    expect(
+      recorder.values.get(
+        getAuthSessionCookieName(DEFAULT_ORG, DEFAULT_WS),
+      ),
+    ).toBe("refresh-token");
+    expect(
+      recorder.values.get(
+        getAuthAccessCookieName(DEFAULT_ORG, DEFAULT_WS),
+      ),
+    ).toBe("expired-access-token");
+    expect(recorder.values.get("anx_ui_auth_retry_local__alpha")).toBe("1");
     expect(recorder.deleteCalls).toEqual([]);
   });
 
@@ -437,7 +522,8 @@ describe("server auth session helpers", () => {
     await expect(
       loadWorkspaceAuthenticatedAgent({
         event,
-        workspaceSlug: "alpha",
+        organizationSlug: DEFAULT_ORG,
+        workspaceSlug: DEFAULT_WS,
         coreBaseUrl: "https://core.example.com",
       }),
     ).rejects.toMatchObject({
@@ -445,8 +531,12 @@ describe("server auth session helpers", () => {
       code: "auth_session_retryable",
     });
 
-    expect(recorder.values.get("anx_ui_session_alpha")).toBe("refresh-token");
-    expect(recorder.values.get("anx_ui_auth_retry_alpha")).toBe("1");
+    expect(
+      recorder.values.get(
+        getAuthSessionCookieName(DEFAULT_ORG, DEFAULT_WS),
+      ),
+    ).toBe("refresh-token");
+    expect(recorder.values.get("anx_ui_auth_retry_local__alpha")).toBe("1");
     expect(recorder.deleteCalls).toEqual([]);
   });
 
@@ -454,7 +544,7 @@ describe("server auth session helpers", () => {
     const { event, recorder } = createSessionEvent({
       refreshToken: "refresh-token",
     });
-    recorder.values.set("anx_ui_auth_retry_alpha", "1");
+    recorder.values.set("anx_ui_auth_retry_local__alpha", "1");
     const fetchMock = vi.fn().mockResolvedValueOnce(
       new Response(
         JSON.stringify({
@@ -474,37 +564,46 @@ describe("server auth session helpers", () => {
     await expect(
       loadWorkspaceAuthenticatedAgent({
         event,
-        workspaceSlug: "alpha",
+        organizationSlug: DEFAULT_ORG,
+        workspaceSlug: DEFAULT_WS,
         coreBaseUrl: "https://core.example.com",
       }),
     ).resolves.toBeNull();
 
-    expect(recorder.values.get("anx_ui_session_alpha")).toBeUndefined();
-    expect(recorder.values.get("anx_ui_auth_retry_alpha")).toBeUndefined();
+    expect(
+      recorder.values.get(
+        getAuthSessionCookieName(DEFAULT_ORG, DEFAULT_WS),
+      ),
+    ).toBeUndefined();
+    expect(recorder.values.get("anx_ui_auth_retry_local__alpha")).toBeUndefined();
     expect(recorder.deleteCalls).toEqual([
       {
-        name: "anx_ui_auth_retry_alpha",
-        options: {
-          path: "/",
-        },
+        name: "anx_ui_auth_retry_local__alpha",
+        options: { path: "/" },
+      },
+      {
+        name: "anx_ui_session_local__alpha",
+        options: { path: "/" },
+      },
+      {
+        name: "anx_ui_access_local__alpha",
+        options: { path: "/" },
+      },
+      {
+        name: "anx_ui_auth_retry_local__alpha",
+        options: { path: "/" },
       },
       {
         name: "anx_ui_session_alpha",
-        options: {
-          path: "/",
-        },
+        options: { path: "/" },
       },
       {
         name: "anx_ui_access_alpha",
-        options: {
-          path: "/",
-        },
+        options: { path: "/" },
       },
       {
         name: "anx_ui_auth_retry_alpha",
-        options: {
-          path: "/",
-        },
+        options: { path: "/" },
       },
     ]);
   });
@@ -549,7 +648,8 @@ describe("server auth session helpers", () => {
     await expect(
       loadWorkspaceAuthenticatedAgent({
         event,
-        workspaceSlug: "alpha",
+        organizationSlug: DEFAULT_ORG,
+        workspaceSlug: DEFAULT_WS,
         coreBaseUrl: "https://core.example.com",
       }),
     ).resolves.toEqual({
@@ -558,12 +658,16 @@ describe("server auth session helpers", () => {
       username: "passkey.user",
     });
 
-    expect(recorder.values.get("anx_ui_session_alpha")).toBe(
-      "next-refresh-token",
-    );
-    expect(recorder.values.get("anx_ui_access_alpha")).toBe(
-      "next-access-token",
-    );
+    expect(
+      recorder.values.get(
+        getAuthSessionCookieName(DEFAULT_ORG, DEFAULT_WS),
+      ),
+    ).toBe("next-refresh-token");
+    expect(
+      recorder.values.get(
+        getAuthAccessCookieName(DEFAULT_ORG, DEFAULT_WS),
+      ),
+    ).toBe("next-access-token");
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       "https://core.example.com/auth/token",
@@ -574,6 +678,77 @@ describe("server auth session helpers", () => {
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       "https://core.example.com/agents/me",
+      expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({
+          authorization: "Bearer next-access-token",
+        }),
+      }),
+    );
+  });
+
+  it("preserves hosted workspace proxy paths for session refresh and agent lookup", async () => {
+    const { event } = createSessionEvent({
+      organizationSlug: "scaling-forever",
+      refreshToken: "refresh-token",
+      workspaceSlug: "alpha",
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            tokens: {
+              access_token: "next-access-token",
+              refresh_token: "next-refresh-token",
+            },
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            agent: {
+              agent_id: "agent-1",
+              actor_id: "actor-1",
+              username: "hosted.user",
+            },
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      loadWorkspaceAuthenticatedAgent({
+        event,
+        organizationSlug: "scaling-forever",
+        workspaceSlug: "alpha",
+        coreBaseUrl: "http://localhost:5173/ws/scaling-forever/alpha",
+      }),
+    ).resolves.toEqual({
+      agent_id: "agent-1",
+      actor_id: "actor-1",
+      username: "hosted.user",
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "http://127.0.0.1:5173/ws/scaling-forever/alpha/auth/token",
+      expect.objectContaining({
+        method: "POST",
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "http://127.0.0.1:5173/ws/scaling-forever/alpha/agents/me",
       expect.objectContaining({
         method: "GET",
         headers: expect.objectContaining({

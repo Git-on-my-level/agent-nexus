@@ -1,6 +1,8 @@
 export function buildProxyRequestInit(event, { body } = {}) {
   const headers = new Headers(event.request.headers);
   headers.delete("host");
+  // Strip browser session and end-user Authorization before the server-to-core hop; core auth
+  // is applied separately (workspace grants / service identity), not forwarded from the browser.
   headers.delete("cookie");
   headers.delete("authorization");
   headers.set("x-forwarded-host", event.url.host);
