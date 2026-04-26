@@ -12,6 +12,7 @@ import {
   writeWorkspaceAccessToken,
   writeWorkspaceRefreshToken,
 } from "$lib/server/authSession.js";
+import { logServerEvent } from "$lib/server/devLog";
 import { getOutOfWorkspaceProvider } from "$lib/server/outOfWorkspace/index.js";
 import { resolveWorkspaceInRoute } from "$lib/server/workspaceResolver.js";
 import { workspacePath } from "$lib/workspacePaths.js";
@@ -189,9 +190,20 @@ export async function runWorkspaceAuthCallbackPost(
   routeParams,
   formOverride,
 ) {
+  const eventPath = String(
+    event.url?.pathname ?? event.request?.url ?? "",
+  ).trim();
   const provider = event.locals?.outOfWorkspace ?? getOutOfWorkspaceProvider();
   const form = formOverride ?? (await event.request.formData());
   const formWorkspaceID = String(form.get("workspace_id") ?? "").trim();
+  logServerEvent("auth.callback.start", {
+    path: eventPath,
+    organization: routeParams.organizationSlug,
+    workspace: routeParams.workspaceSlug,
+    workspace_id: formWorkspaceID,
+    has_exchange_token: String(form.get("exchange_token") ?? "").trim() !== "",
+    has_state: String(form.get("state") ?? "").trim() !== "",
+  });
   const resolved = await resolveWorkspaceInRoute({
     event,
     organizationSlug: routeParams.organizationSlug,
@@ -227,6 +239,18 @@ export async function runWorkspaceAuthCallbackPost(
   }
 
   if (!resolvedWorkspace) {
+    logServerEvent(
+      "auth.callback.workspace_unresolved",
+      {
+        path: eventPath,
+        organization: routeParams.organizationSlug,
+        workspace: routeParams.workspaceSlug,
+        workspace_id: formWorkspaceID,
+        status: resolved.error?.status ?? 404,
+        code: resolved.error?.payload?.error?.code ?? "workspace_not_found",
+      },
+      { level: "warn" },
+    );
     if (wantsJson(event.request)) {
       return json(
         resolved.error?.payload ?? {
@@ -253,6 +277,14 @@ export async function runWorkspaceAuthCallbackPost(
     normalizeBaseUrl(resolvedWorkspace.coreBaseUrl),
   );
   if (!coreBaseURL) {
+    logServerEvent(
+      "auth.callback.core_unavailable",
+      {
+        path: eventPath,
+        workspace: resolvedWorkspaceSlug,
+      },
+      { level: "warn" },
+    );
     return respondWithCallbackError(
       event,
       503,
@@ -312,6 +344,16 @@ export async function runWorkspaceAuthCallbackPost(
     },
   });
   if (!exchanged.ok) {
+    logServerEvent(
+      "auth.callback.exchange_failed",
+      {
+        path: eventPath,
+        workspace_id: workspaceID,
+        status: exchanged.status || 502,
+        code: exchanged.code || "session_exchange_failed",
+      },
+      { level: "warn" },
+    );
     return respondWithCallbackError(
       event,
       exchanged.status || 502,
@@ -322,6 +364,11 @@ export async function runWorkspaceAuthCallbackPost(
     );
   }
   const assertion = exchanged.assertion;
+  logServerEvent("auth.callback.exchange_ok", {
+    path: eventPath,
+    workspace_id: workspaceID,
+    workspace: workspaceSlug,
+  });
 
   const authTokenURL = new URL("/auth/token", `${coreBaseURL}/`).toString();
   let tokenExchange;
@@ -335,6 +382,16 @@ export async function runWorkspaceAuthCallbackPost(
       { attempts: 10, delayMs: 500 },
     );
   } catch (err) {
+    logServerEvent(
+      "auth.callback.core_token_unreachable",
+      {
+        path: eventPath,
+        workspace: workspaceSlug,
+        auth_token_url: authTokenURL,
+        detail: fetchErrorDetail(err),
+      },
+      { level: "error" },
+    );
     return respondWithCallbackError(
       event,
       503,
@@ -351,6 +408,17 @@ export async function runWorkspaceAuthCallbackPost(
       tokenExchange.payload?.error?.message ??
         "Workspace auth token exchange failed.",
     );
+    logServerEvent(
+      "auth.callback.core_token_failed",
+      {
+        path: eventPath,
+        workspace: workspaceSlug,
+        auth_token_url: authTokenURL,
+        status: tokenExchange.response.status || 502,
+        code: coreCode,
+      },
+      { level: "warn" },
+    );
     return respondWithCallbackError(
       event,
       tokenExchange.response.status || 502,
@@ -364,6 +432,14 @@ export async function runWorkspaceAuthCallbackPost(
   const refreshToken = String(tokens.refresh_token ?? "").trim();
   const accessToken = String(tokens.access_token ?? "").trim();
   if (!refreshToken || !accessToken) {
+    logServerEvent(
+      "auth.callback.core_token_invalid",
+      {
+        path: eventPath,
+        workspace: workspaceSlug,
+      },
+      { level: "error" },
+    );
     return respondWithCallbackError(
       event,
       502,
@@ -376,6 +452,11 @@ export async function runWorkspaceAuthCallbackPost(
   writeWorkspaceRefreshToken(event, workspaceSlug, refreshToken);
   writeWorkspaceAccessToken(event, workspaceSlug, accessToken);
   clearRetryableWorkspaceAuthFailureCount(event, workspaceSlug);
+  logServerEvent("auth.callback.redirect", {
+    path: eventPath,
+    workspace: workspaceSlug,
+    return_path: returnPath,
+  });
 
   throw redirect(
     303,
