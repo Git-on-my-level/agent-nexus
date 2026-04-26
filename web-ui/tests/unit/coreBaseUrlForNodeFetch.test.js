@@ -36,8 +36,12 @@ describe("coreEndpointURL join (with normalized base from coreBaseUrlForNodeFetc
     const baseA = coreBaseUrlForNodeFetch("http://localhost:1/prefix/");
     const baseB = coreBaseUrlForNodeFetch("http://localhost:1/prefix");
     const path = "/auth/token";
-    expect(coreEndpointURL(baseA, path)).toBe("http://127.0.0.1:1/prefix/auth/token");
-    expect(coreEndpointURL(baseB, path)).toBe("http://127.0.0.1:1/prefix/auth/token");
+    expect(coreEndpointURL(baseA, path)).toBe(
+      "http://127.0.0.1:1/prefix/auth/token",
+    );
+    expect(coreEndpointURL(baseB, path)).toBe(
+      "http://127.0.0.1:1/prefix/auth/token",
+    );
     expect(coreEndpointURL(baseA, path)).not.toMatch(/[?#]/);
   });
 });

@@ -189,7 +189,11 @@ async function proxyToCore(
   const requestInit = buildProxyRequestInit(event, {
     body: requestBody,
   });
-  const session = getWorkspaceAuthSession(event, organizationSlug, workspaceSlug);
+  const session = getWorkspaceAuthSession(
+    event,
+    organizationSlug,
+    workspaceSlug,
+  );
   if (session?.accessToken) {
     requestInit.headers.set("authorization", `Bearer ${session.accessToken}`);
   } else if (incomingAuth) {

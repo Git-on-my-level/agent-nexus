@@ -8,8 +8,6 @@ import { buildCoreWorkspaceRoutingHeadersFromSlugs } from "$lib/coreWorkspaceHea
  * @param {{ organizationSlug?: string | null, workspaceSlug?: string | null }} params
  * @returns {Record<string, string>}
  */
-export function buildServerCoreWorkspaceContextHeaders(
-  params = {},
-) {
+export function buildServerCoreWorkspaceContextHeaders(params = {}) {
   return buildCoreWorkspaceRoutingHeadersFromSlugs(params);
 }

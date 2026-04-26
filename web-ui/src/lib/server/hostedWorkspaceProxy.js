@@ -3,12 +3,96 @@ import { AuthErrorCode } from "$lib/authErrorCodes.js";
 import { normalizeBaseUrl } from "$lib/config.js";
 import { CURRENT_VERSION } from "$lib/generated/version";
 import { parseWorkspaceRouteSlugs } from "$lib/workspacePaths";
-import { getWorkspaceAuthSession } from "$lib/server/authSession";
+import {
+  clearWorkspaceAuthSession,
+  getWorkspaceAuthSession,
+  isRetryableWorkspaceRefreshFailure,
+  readWorkspaceRefreshToken,
+  refreshWorkspaceAuthSession,
+  shouldClearWorkspaceAuthSessionAfterRetryableFailure,
+} from "$lib/server/authSession";
 import { buildProxyRequestInit } from "$lib/server/coreProxy";
 import { logServerEvent } from "$lib/server/devLog";
 
 export function isHostedWorkspaceProxyPath(pathname) {
   return String(pathname ?? "").startsWith("/ws/");
+}
+
+async function refreshAndRetryHostedWorkspaceRequest(
+  event,
+  controlPlaneBaseUrl,
+  organizationSlug,
+  workspaceSlug,
+  pathname,
+  search,
+  requestBody,
+  hadAccessToken,
+) {
+  if (!readWorkspaceRefreshToken(event, organizationSlug, workspaceSlug)) {
+    return null;
+  }
+
+  const hostedCoreBaseUrl = new URL(
+    `/ws/${organizationSlug}/${workspaceSlug}`,
+    `${controlPlaneBaseUrl}/`,
+  ).toString();
+
+  try {
+    await refreshWorkspaceAuthSession({
+      event,
+      organizationSlug,
+      workspaceSlug,
+      coreBaseUrl: hostedCoreBaseUrl,
+    });
+  } catch (error) {
+    if (
+      isRetryableWorkspaceRefreshFailure(error, {
+        hadAccessToken,
+        hadRefreshToken: true,
+      })
+    ) {
+      if (
+        shouldClearWorkspaceAuthSessionAfterRetryableFailure(
+          event,
+          organizationSlug,
+          workspaceSlug,
+        )
+      ) {
+        clearWorkspaceAuthSession(event, organizationSlug, workspaceSlug);
+      }
+      return null;
+    }
+
+    clearWorkspaceAuthSession(event, organizationSlug, workspaceSlug);
+    return null;
+  }
+
+  const refreshedSession = getWorkspaceAuthSession(
+    event,
+    organizationSlug,
+    workspaceSlug,
+  );
+  if (!refreshedSession?.accessToken) {
+    return null;
+  }
+
+  const targetUrl = new URL(
+    `${pathname}${search}`,
+    `${controlPlaneBaseUrl}/`,
+  ).toString();
+  const requestInit = buildProxyRequestInit(event, {
+    body: requestBody,
+  });
+  requestInit.headers.set(
+    "authorization",
+    `Bearer ${refreshedSession.accessToken}`,
+  );
+
+  try {
+    return await fetch(targetUrl, requestInit);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -73,7 +157,8 @@ export async function proxyToControlPlaneWorkspace(event, pathname) {
     );
   }
 
-  const { organizationSlug, workspaceSlug } = parseWorkspaceRouteSlugs(pathname);
+  const { organizationSlug, workspaceSlug } =
+    parseWorkspaceRouteSlugs(pathname);
   if (!organizationSlug || !workspaceSlug) {
     const method = event.request.method.toUpperCase();
     logServerEvent("workspace.proxy.invalid_path", {
@@ -113,6 +198,7 @@ export async function proxyToControlPlaneWorkspace(event, pathname) {
   const requestInit = buildProxyRequestInit(event, {
     body: requestBody,
   });
+  let upstreamResponse;
   const session = getWorkspaceAuthSession(
     event,
     organizationSlug,
@@ -123,11 +209,24 @@ export async function proxyToControlPlaneWorkspace(event, pathname) {
     requestInit.headers.set("authorization", `Bearer ${session.accessToken}`);
   } else if (incomingAuth) {
     requestInit.headers.set("authorization", incomingAuth);
+  } else if (session?.refreshToken) {
+    const refreshedResponse = await refreshAndRetryHostedWorkspaceRequest(
+      event,
+      controlPlaneBaseUrl,
+      organizationSlug,
+      workspaceSlug,
+      pathname,
+      event.url.search,
+      requestBody,
+      false,
+    );
+    if (refreshedResponse) {
+      upstreamResponse = refreshedResponse;
+    }
   }
 
-  let upstreamResponse;
   try {
-    upstreamResponse = await fetch(targetUrl, requestInit);
+    upstreamResponse ??= await fetch(targetUrl, requestInit);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     return new Response(
@@ -146,6 +245,25 @@ export async function proxyToControlPlaneWorkspace(event, pathname) {
         },
       },
     );
+  }
+
+  if (upstreamResponse.status === 401) {
+    const retriedResponse = await refreshAndRetryHostedWorkspaceRequest(
+      event,
+      controlPlaneBaseUrl,
+      organizationSlug,
+      workspaceSlug,
+      pathname,
+      event.url.search,
+      requestBody,
+      Boolean(session?.accessToken),
+    );
+    if (retriedResponse) {
+      upstreamResponse = retriedResponse;
+      if (upstreamResponse.status === 401) {
+        clearWorkspaceAuthSession(event, organizationSlug, workspaceSlug);
+      }
+    }
   }
 
   const responseHeaders = new Headers(upstreamResponse.headers);

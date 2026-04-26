@@ -24,11 +24,7 @@ function isSecureCookieRequest(event) {
   return event.url.protocol === "https:";
 }
 
-function workspaceHasCoreSession(
-  event,
-  organizationSlug,
-  workspaceSlug,
-) {
+function workspaceHasCoreSession(event, organizationSlug, workspaceSlug) {
   const refreshToken = String(
     event.cookies.get(
       getAuthSessionCookieName(organizationSlug, workspaceSlug),
