@@ -233,6 +233,23 @@ var localHelperTopics = []localHelperTopic{
 		},
 	},
 	{
+		Path:        "docs comments",
+		Summary:     "List line-level document text comments from the document backing thread timeline.",
+		JSONShape:   "`document`, `document_id`, `thread_id`, `comments` (each: `event`, `comment`), `returned`",
+		Composition: "Resolves the document with `docs get`, fetches the backing thread via `threads.timeline`, and filters `message_posted` events for this document with `payload.kind` `document_text_comment`.",
+		Examples: []string{
+			`anx docs comments --document-id <document-id>`,
+			`anx docs comments <document-id>`,
+		},
+		Flags: []localHelperFlag{
+			{Name: "--document-id <document-id>", Description: "Document id or unique alias."},
+			{Name: "--include-archived", Description: "Include archived message events."},
+			{Name: "--archived-only", Description: "Show only archived message events."},
+			{Name: "--include-trashed", Description: "Include trashed message events."},
+			{Name: "--trashed-only", Description: "Show only trashed message events."},
+		},
+	},
+	{
 		Path:        "docs validate-update",
 		Summary:     "Validate a `docs.revisions.create` payload locally from stdin or file without sending the mutation.",
 		JSONShape:   "`command`, `command_id`, `path_params`, `query`, `body`, `valid`",
@@ -570,6 +587,7 @@ func localGroupHelpSupplement(topic string) string {
 	case "docs":
 		return strings.TrimSpace(`Local inspection helpers:
   docs content             Show current document content with revision metadata.
+  docs comments          List anchored document text comments on the backing thread timeline.
   Mutation flow:
   docs propose-update      Stage an update proposal and inspect its diff before applying it.
   docs apply               Apply a staged document update proposal.

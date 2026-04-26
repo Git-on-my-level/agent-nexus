@@ -181,8 +181,8 @@ var boardsCardsSubcommandSpec = subcommandSpec{
 
 var docsSubcommandSpec = subcommandSpec{
 	command:  "docs",
-	valid:    []string{"list", "create", "get", "content", "history", "revision", "trash", "archive", "unarchive", "restore", "purge"},
-	examples: []string{"anx docs list --thread-id <thread-id>", "anx docs content --document-id <document-id>", "anx docs apply --proposal-id <proposal-id>"},
+	valid:    []string{"list", "create", "get", "content", "comments", "history", "revision", "trash", "archive", "unarchive", "restore", "purge"},
+	examples: []string{"anx docs list --thread-id <thread-id>", "anx docs content --document-id <document-id>", "anx docs comments --document-id <document-id>", "anx docs apply --proposal-id <proposal-id>"},
 	aliases: map[string]string{
 		"ls":   "list",
 		"read": "content",

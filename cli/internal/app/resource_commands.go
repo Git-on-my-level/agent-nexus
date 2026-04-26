@@ -2017,6 +2017,9 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 	case "content":
 		result, callErr := a.runDocsContentCommand(ctx, args[1:], cfg)
 		return result, "docs content", callErr
+	case "comments":
+		result, callErr := a.runDocsCommentsCommand(ctx, args[1:], cfg)
+		return result, "docs comments", callErr
 	case "update":
 		result, callErr := a.runDocsUpdateCommand(ctx, args[1:], cfg)
 		return result, "docs update", callErr
@@ -2607,6 +2610,133 @@ func (a *App) runDocsContentCommand(ctx context.Context, args []string, cfg conf
 	return result, nil
 }
 
+// runDocsCommentsCommand lists message_posted events on the document's backing
+// thread with payload.kind=document_text_comment and a document: ref, for agent workflows.
+func (a *App) runDocsCommentsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
+	fs := newSilentFlagSet("docs comments")
+	var documentIDFlag trackedString
+	var includeArchived, archivedOnly, includeTrashed, trashedOnly bool
+	fs.Var(&documentIDFlag, "document-id", "Document id")
+	fs.BoolVar(&includeArchived, "include-archived", false, "Include archived comment events")
+	fs.BoolVar(&archivedOnly, "archived-only", false, "Show only archived comment events")
+	fs.BoolVar(&includeTrashed, "include-trashed", false, "Include trashed comment events")
+	fs.BoolVar(&trashedOnly, "trashed-only", false, "Show only trashed comment events")
+	if err := fs.Parse(args); err != nil {
+		return nil, errnorm.Usage("invalid_flags", err.Error())
+	}
+	if err := validateLifecycleFilterFlags(includeArchived, archivedOnly, includeTrashed, trashedOnly); err != nil {
+		return nil, err
+	}
+	positionals := fs.Args()
+	id := strings.TrimSpace(documentIDFlag.value)
+	if id == "" && len(positionals) > 0 {
+		id = strings.TrimSpace(positionals[0])
+		positionals = positionals[1:]
+	}
+	if err := validateID(id, "document id"); err != nil {
+		return nil, err
+	}
+	if len(positionals) > 0 {
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx docs comments`")
+	}
+
+	getRes, getErr := a.invokeTypedJSONWithIDResolution(
+		ctx, cfg, "docs get", "docs.get", "document_id", id, documentIDLookupSpec, nil, nil,
+	)
+	if getErr != nil {
+		return nil, getErr
+	}
+	getData := asMap(getRes.Data)
+	getBody := asMap(getData["body"])
+	document := extractNestedMap(getBody, "document")
+	if document == nil {
+		document = asMap(getBody["document"])
+	}
+	threadID := strings.TrimSpace(anyString(document["thread_id"]))
+	if threadID == "" {
+		return nil, errnorm.Usage("invalid_response", "document has no thread_id")
+	}
+	wantDocID := strings.TrimSpace(anyString(document["id"]))
+	if wantDocID == "" {
+		wantDocID = id
+	}
+
+	timelineRes, tlErr := a.invokeTypedJSONWithIDResolution(
+		ctx, cfg, "docs comments", "threads.timeline", "thread_id", threadID, threadIDLookupSpec, nil, nil,
+	)
+	if tlErr != nil {
+		return nil, tlErr
+	}
+	tlData := asMap(timelineRes.Data)
+	tlBody := asMap(tlData["body"])
+	rawEvents := asSlice(tlBody["events"])
+	filtered := filterDocumentTextCommentEvents(rawEvents, wantDocID)
+	filtered = filterEventsByLifecycleState(filtered, includeArchived, archivedOnly, includeTrashed, trashedOnly)
+	sortEventsByCreatedAt(filtered)
+
+	commentRows := make([]any, 0, len(filtered))
+	for _, raw := range filtered {
+		event := asMap(raw)
+		if event == nil {
+			continue
+		}
+		norm := normalizeDocumentTextCommentRow(event)
+		commentRows = append(commentRows, map[string]any{
+			"event":   raw,
+			"comment": norm,
+		})
+	}
+
+	outBody := map[string]any{
+		"document":  document,
+		"document_id": wantDocID,
+		"thread_id":  threadID,
+		"comments":   commentRows,
+		"returned":   len(commentRows),
+	}
+	if includeArchived {
+		outBody["include_archived"] = true
+	}
+	if archivedOnly {
+		outBody["archived_only"] = true
+	}
+	if includeTrashed {
+		outBody["include_trashed"] = true
+	}
+	if trashedOnly {
+		outBody["trashed_only"] = true
+	}
+
+	getData = asMap(getRes.Data) // re-read
+	statusCode := intValue(getData["status_code"])
+	if statusCode == 0 {
+		statusCode = intValue(tlData["status_code"])
+	}
+	if statusCode == 0 {
+		statusCode = http.StatusOK
+	}
+	headers := headerValues(getData["headers"])
+	if len(headers) == 0 {
+		headers = headerValues(tlData["headers"])
+	}
+
+	resultData := map[string]any{
+		"status_code": statusCode,
+		"headers":     headers,
+		"body":        outBody,
+	}
+	result := &commandResult{Data: resultData}
+	result.Text = formatTypedCommandText(
+		"docs.comments",
+		statusCode,
+		headers,
+		outBody,
+		cfg.Verbose,
+		cfg.Headers,
+	)
+	return result, nil
+}
+
 func (a *App) runDocsUpdateCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
 	id, body, err := a.parseDocsUpdateInput(args, "docs update", cfg)
 	if err != nil {
@@ -2614,6 +2744,68 @@ func (a *App) runDocsUpdateCommand(ctx context.Context, args []string, cfg confi
 	}
 	wireBody := normalizeDocsRevisionRequestForContract(body)
 	return a.invokeTypedJSONWithIDResolution(ctx, cfg, "docs update", "docs.revisions.create", "document_id", id, documentIDLookupSpec, nil, wireBody)
+}
+
+func filterDocumentTextCommentEvents(events []any, wantDocID string) []any {
+	wantRef := "document:" + strings.TrimSpace(wantDocID)
+	out := make([]any, 0, len(events))
+	for _, raw := range events {
+		ev := asMap(raw)
+		if ev == nil {
+			continue
+		}
+		if strings.TrimSpace(anyString(ev["type"])) != "message_posted" {
+			continue
+		}
+		payload := asMap(ev["payload"])
+		if payload == nil {
+			continue
+		}
+		if strings.TrimSpace(anyString(payload["kind"])) != "document_text_comment" {
+			continue
+		}
+		refs := asSlice(ev["refs"])
+		found := false
+		for _, r := range refs {
+			if strings.TrimSpace(anyString(r)) == wantRef {
+				found = true
+				break
+			}
+		}
+		if !found {
+			continue
+		}
+		if dcm := asMap(payload["document_comment"]); dcm != nil {
+			if got := strings.TrimSpace(anyString(dcm["document_id"])); got != "" && got != wantDocID {
+				continue
+			}
+		}
+		out = append(out, raw)
+	}
+	return out
+}
+
+func normalizeDocumentTextCommentRow(event map[string]any) map[string]any {
+	payload := asMap(event["payload"])
+	var text string
+	var dc map[string]any
+	if payload != nil {
+		text = strings.TrimSpace(anyString(payload["text"]))
+		dc = asMap(payload["document_comment"])
+	}
+	if dc == nil {
+		dc = map[string]any{}
+	}
+	return map[string]any{
+		"event_id":       strings.TrimSpace(anyString(event["id"])),
+		"text":           text,
+		"selected_quote": strings.TrimSpace(anyString(dc["selected_text"])),
+		"revision_id":    strings.TrimSpace(anyString(dc["revision_id"])),
+		"content_hash":   strings.TrimSpace(anyString(dc["content_hash"])),
+		"anchor_status":  strings.TrimSpace(anyString(dc["anchor_status"])),
+		"actor_id":       strings.TrimSpace(anyString(event["actor_id"])),
+		"ts":             strings.TrimSpace(anyString(event["ts"])),
+	}
 }
 
 func (a *App) runEventsListCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {

@@ -1138,6 +1138,118 @@ func TestDocsContentCommand(t *testing.T) {
 	}
 }
 
+func TestDocsCommentsCommand(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.NotFound(w, r)
+			return
+		}
+		switch r.URL.Path {
+		case "/docs/doc_1":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{
+				"document":{"id":"doc_1","thread_id":"thread_1","title":"Spec"},
+				"revision":{"revision_id":"rev_1","revision_number":1}
+			}`))
+		case "/threads/thread_1/timeline":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{
+				"thread_id":"thread_1",
+				"events":[
+					{
+						"id":"ev_other","thread_id":"thread_1","ts":"2026-02-01T00:00:00Z",
+						"type":"message_posted",
+						"refs":["thread:thread_1","document:other","document_revision:rev_1"],
+						"payload":{"text":"nope","kind":"document_text_comment",
+							"document_comment":{"document_id":"other","selected_text":"x","revision_id":"r0"}
+						}
+					},
+					{
+						"id":"ev_1","thread_id":"thread_1","ts":"2026-02-02T00:00:00Z",
+						"type":"message_posted",
+						"actor_id":"act_1",
+						"refs":["thread:thread_1","document:doc_1","document_revision:rev_1"],
+						"payload":{
+							"text":"Please expand",
+							"kind":"document_text_comment",
+							"document_comment":{
+								"document_id":"doc_1",
+								"revision_id":"rev_1",
+								"content_hash":"ab",
+								"selected_text":"Line two",
+								"anchor_status":"current"
+							}
+						}
+					},
+					{
+						"id":"ev_trash","thread_id":"thread_1","ts":"2026-02-03T00:00:00Z",
+						"trashed_at":"2026-01-01T00:00:00Z",
+						"type":"message_posted",
+						"refs":["thread:thread_1","document:doc_1","document_revision:rev_1"],
+						"payload":{"text":"gone","kind":"document_text_comment",
+							"document_comment":{"document_id":"doc_1","selected_text":"t","revision_id":"rev_1"}}
+					}
+				],
+				"artifacts":{}
+			}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"docs", "comments",
+		"--document-id", "doc_1",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	if got := anyStringValue(payload["command"]); got != "docs comments" {
+		t.Fatalf("unexpected command label: %#v", payload)
+	}
+	flat, _ := payload["data"].(map[string]any)
+	comments, _ := flat["comments"].([]any)
+	if len(comments) != 1 {
+		t.Fatalf("expected 1 non-trashed document comment, got %d: %#v", len(comments), flat)
+	}
+	first, _ := comments[0].(map[string]any)
+	comment, _ := first["comment"].(map[string]any)
+	if anyStringValue(comment["event_id"]) != "ev_1" {
+		t.Fatalf("unexpected row: %#v", first)
+	}
+	if anyStringValue(comment["text"]) != "Please expand" {
+		t.Fatalf("expected comment text, got %#v", comment)
+	}
+
+	// --include-trashed: expect trashed event as well
+	raw2 := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"docs", "comments",
+		"--document-id", "doc_1",
+		"--include-trashed",
+	})
+	p2 := assertEnvelopeOK(t, raw2)
+	f2, _ := p2["data"].(map[string]any)
+	c2, _ := f2["comments"].([]any)
+	if len(c2) != 2 {
+		t.Fatalf("expected 2 with include-trashed, got %d", len(c2))
+	}
+
+	textOut := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--base-url", server.URL,
+		"docs", "comments",
+		"doc_1",
+	})
+	if !strings.Contains(textOut, "ev_1") || !strings.Contains(textOut, "Line two") {
+		t.Fatalf("expected default text for docs comments, got:\n%s", textOut)
+	}
+}
+
 func TestDocsValidateUpdateRequiresBaseRevision(t *testing.T) {
 	t.Parallel()
 

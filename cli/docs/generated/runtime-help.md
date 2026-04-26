@@ -130,6 +130,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `boards cards list` (local-helper): List all cards on a board in canonical column order without hydrating thread details.
 - `docs propose-update` (local-helper): Stage a document update proposal locally and show the content diff before applying it.
 - `docs content` (local-helper): Show the current document content together with authoritative head revision metadata.
+- `docs comments` (local-helper): List line-level document text comments from the document backing thread timeline.
 - `docs validate-update` (local-helper): Validate a `docs.revisions.create` payload locally from stdin or file without sending the mutation.
 - `docs apply` (local-helper): Apply a previously staged document update proposal.
 - `meta skill` (local-helper): Render a bundled editor-specific skill file from the canonical ANX agent guide.
@@ -311,6 +312,7 @@ Higher-level concepts
 - `docs` are the long-lived narrative layer. Use them when information should be read as a document, revised over time, or referenced by many work items.
 - `boards` are coordination views. Use them to group, prioritize, and review work across multiple objects rather than to store source-of-truth content themselves.
 - `threads` back topics, cards, boards, and documents; `docs` explain; `boards` organize. Keep those roles distinct.
+- Before you revise a long-lived `doc` on an operator’s behalf, run `anx docs comments --document-id <id>` to read any anchored line-level discussion on that document’s backing thread (and use `--json` when a script or agent is consuming the output).
 
 
 Standard workflow
@@ -1390,6 +1392,7 @@ Commands:
 
 Local inspection helpers:
   docs content             Show current document content with revision metadata.
+  docs comments          List anchored document text comments on the backing thread timeline.
   Mutation flow:
   docs propose-update      Stage an update proposal and inspect its diff before applying it.
   docs apply               Apply a staged document update proposal.
@@ -4422,6 +4425,35 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs content ... ; anx --json docs content ... ; anx docs content ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `docs comments`
+
+List line-level document text comments from the document backing thread timeline.
+
+```text
+Local Help: docs comments
+
+- Kind: `local helper`
+- Summary: List line-level document text comments from the document backing thread timeline.
+- Composition: Resolves the document with `docs get`, fetches the backing thread via `threads.timeline`, and filters `message_posted` events for this document with `payload.kind` `document_text_comment`.
+- JSON body: `document`, `document_id`, `thread_id`, `comments` (each: `event`, `comment`), `returned`
+- Examples:
+  - `anx docs comments --document-id <document-id>`
+  - `anx docs comments <document-id>`
+
+Flags:
+  --document-id <document-id>  Document id or unique alias.
+  --include-archived           Include archived message events.
+  --archived-only              Show only archived message events.
+  --include-trashed            Include trashed message events.
+  --trashed-only               Show only trashed message events.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx docs comments ... ; anx --json docs comments ... ; anx docs comments ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 

@@ -65,6 +65,7 @@ func agentGuideSections() []guideSection {
 				"- `docs` are the long-lived narrative layer. Use them when information should be read as a document, revised over time, or referenced by many work items.",
 				"- `boards` are coordination views. Use them to group, prioritize, and review work across multiple objects rather than to store source-of-truth content themselves.",
 				"- `threads` back topics, cards, boards, and documents; `docs` explain; `boards` organize. Keep those roles distinct.",
+				"- Before you revise a long-lived `doc` on an operator’s behalf, run `anx docs comments --document-id <id>` to read any anchored line-level discussion on that document’s backing thread (and use `--json` when a script or agent is consuming the output).",
 			},
 		},
 		{

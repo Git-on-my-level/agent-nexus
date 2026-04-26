@@ -118,6 +118,8 @@ func formatCommandSummary(commandID string, body any) string {
 		return formatPrettyBody(body)
 	case "docs.content":
 		return formatDocumentContentRecord(body)
+	case "docs.comments":
+		return formatDocsComments(body)
 	case "docs.revision.get", "docs.revisions.get":
 		return formatRevisionRecord(extractNestedMap(body, "revision"))
 	case "provenance.walk":
@@ -641,6 +643,68 @@ func formatDocumentContentRecord(body any) string {
 	lines = append(lines, "content:")
 	lines = append(lines, indentBlock(strings.TrimSpace(content))...)
 	return strings.Join(lines, "\n")
+}
+
+func formatDocsComments(body any) string {
+	root := asMap(body)
+	if root == nil {
+		return formatPrettyBody(body)
+	}
+	comments := asSlice(root["comments"])
+	docID := strings.TrimSpace(anyString(root["document_id"]))
+	lines := []string{
+		fmt.Sprintf("Document text comments (%d)%s", len(comments), func() string {
+			if docID == "" {
+				return ""
+			}
+			return " for " + docID
+		}()),
+	}
+	if len(comments) == 0 {
+		lines = append(lines, "(none)")
+		return strings.Join(lines, "\n")
+	}
+	for i, row := range comments {
+		m := asMap(row)
+		if m == nil {
+			continue
+		}
+		c := asMap(m["comment"])
+		if c == nil {
+			c = map[string]any{}
+		}
+		evID := strings.TrimSpace(anyString(c["event_id"]))
+		quote := strings.TrimSpace(anyString(c["selected_quote"]))
+		if len(quote) > 200 {
+			quote = quote[:200] + "…"
+		}
+		text := strings.TrimSpace(anyString(c["text"]))
+		revID := strings.TrimSpace(anyString(c["revision_id"]))
+		h := strings.TrimSpace(anyString(c["content_hash"]))
+		if len(h) > 12 {
+			h = h[:12] + "…"
+		}
+		lines = append(lines, fmt.Sprintf("%d) event %s", i+1, evID))
+		if quote != "" {
+			lines = append(lines, "   quote: "+quote)
+		}
+		if text != "" {
+			lines = append(lines, "   text: "+text)
+		}
+		if revID != "" {
+			lines = append(lines, "   revision: "+revID)
+		}
+		if h != "" {
+			lines = append(lines, "   content_hash: "+h)
+		}
+		lines = append(lines, "   actor: "+strings.TrimSpace(anyString(c["actor_id"])))
+		lines = append(lines, "   ts: "+strings.TrimSpace(anyString(c["ts"])))
+		if s := strings.TrimSpace(anyString(c["anchor_status"])); s != "" {
+			lines = append(lines, "   anchor: "+s)
+		}
+		lines = append(lines, "")
+	}
+	return strings.TrimRight(strings.Join(lines, "\n"), "\n")
 }
 
 func formatArtifactInspect(body any) string {
