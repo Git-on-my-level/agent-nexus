@@ -76,6 +76,11 @@
   let moreActionsRoot = $state(null);
   /** Selection stash + discussion rail for document text comments */
   let docBodyMarkdownRoot = $state(null);
+  /** Gutter column aligned with the body (for anchored-comment dots) */
+  let docCommentGutterRoot = $state(/** @type {HTMLElement | null} */ (null));
+  let gutterDocCommentDots = $state(
+    /** @type {Array<{ eventId: string, topPx: number }>} */ ([]),
+  );
   let docStashedSelection = $state("");
   /**
    * Position of the floating "Comment" pill while the operator has an
@@ -114,11 +119,15 @@
     function onDocKey(e) {
       if (e.key === "Escape") moreActionsOpen = false;
     }
-    document.addEventListener("pointerdown", onDocPointerDown, true);
-    document.addEventListener("keydown", onDocKey, true);
+    window.document.addEventListener("pointerdown", onDocPointerDown, true);
+    window.document.addEventListener("keydown", onDocKey, true);
     return () => {
-      document.removeEventListener("pointerdown", onDocPointerDown, true);
-      document.removeEventListener("keydown", onDocKey, true);
+      window.document.removeEventListener(
+        "pointerdown",
+        onDocPointerDown,
+        true,
+      );
+      window.document.removeEventListener("keydown", onDocKey, true);
     };
   });
   function documentTopicRefForLink(doc) {
@@ -610,9 +619,9 @@
     function onSelectionChange() {
       refreshStashedDocSelection();
     }
-    document.addEventListener("selectionchange", onSelectionChange);
+    window.document.addEventListener("selectionchange", onSelectionChange);
     return () => {
-      document.removeEventListener("selectionchange", onSelectionChange);
+      window.document.removeEventListener("selectionchange", onSelectionChange);
     };
   });
 
@@ -635,8 +644,8 @@
       docStashedSelection = String(sel.toString() ?? "");
       beginDocumentTextComment();
     }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    window.document.addEventListener("keydown", onKey);
+    return () => window.document.removeEventListener("keydown", onKey);
   });
 
   /**
@@ -651,8 +660,8 @@
       if (!pendingDocumentComment) return;
       pendingDocumentComment = null;
     }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    window.document.addEventListener("keydown", onKey);
+    return () => window.document.removeEventListener("keydown", onKey);
   });
 
   /**
@@ -677,6 +686,9 @@
           pendingQuote: pending,
         },
       );
+      requestAnimationFrame(() => {
+        recalcGutterDocCommentDots();
+      });
     });
     return () => {
       if (docBodyMarkdownRoot) {
@@ -744,6 +756,92 @@
   function clearDocumentTextComment() {
     pendingDocumentComment = null;
   }
+
+  function recalcGutterDocCommentDots() {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const gut = /** @type {HTMLElement | null} */ (docCommentGutterRoot);
+    const body = /** @type {HTMLElement | null} */ (docBodyMarkdownRoot);
+    if (!gut || !body) {
+      gutterDocCommentDots = [];
+      return;
+    }
+    const posted = documentAnchorContext.posted;
+    if (posted.length === 0) {
+      gutterDocCommentDots = [];
+      return;
+    }
+    const gRect = gut.getBoundingClientRect();
+    /** @type {Array<{ eventId: string, topPx: number }>} */
+    const out = [];
+    const marks = body.querySelectorAll(
+      "mark.js-doc-comment-mark[data-event-id]",
+    );
+    for (const mark of Array.from(marks)) {
+      const id = String(mark.getAttribute("data-event-id") ?? "").trim();
+      if (!id) {
+        continue;
+      }
+      const mRect = mark.getBoundingClientRect();
+      const topPx = mRect.top - gRect.top + mRect.height / 2;
+      if (Number.isFinite(topPx)) {
+        out.push({ eventId: id, topPx });
+      }
+    }
+    out.sort((a, b) => a.topPx - b.topPx);
+    gutterDocCommentDots = out;
+  }
+
+  function fromGutterFocusAnchor(/** @type {string} */ eventId) {
+    if (!eventId) {
+      return;
+    }
+    const wdoc = window.document;
+    if (!wdoc) {
+      return;
+    }
+    const msg = wdoc.getElementById(`message-${eventId}`);
+    if (msg) {
+      msg.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+    docCommentBodyHover.set(eventId);
+    const body = /** @type {HTMLElement | null} */ (docBodyMarkdownRoot);
+    if (body) {
+      for (const m of body.querySelectorAll(
+        "mark.js-doc-comment-mark[data-event-id]",
+      )) {
+        if (m.getAttribute("data-event-id") === eventId) {
+          m.scrollIntoView({ behavior: "smooth", block: "center" });
+          const el = /** @type {HTMLElement} */ (m);
+          const before = el.style.outline;
+          const beforeW = el.style.outlineWidth;
+          el.style.outline = "2px solid var(--accent)";
+          el.style.outlineOffset = "1px";
+          window.setTimeout(() => {
+            el.style.outline = before;
+            el.style.outlineWidth = beforeW;
+          }, 800);
+          break;
+        }
+      }
+    }
+  }
+
+  $effect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const onMove = () => {
+      recalcGutterDocCommentDots();
+    };
+    window.addEventListener("scroll", onMove, true);
+    window.addEventListener("resize", onMove);
+    return () => {
+      window.removeEventListener("scroll", onMove, true);
+      window.removeEventListener("resize", onMove);
+    };
+  });
 </script>
 
 <nav
@@ -1192,25 +1290,45 @@
             </div>
           {/if}
 
-          <div
-            class="mt-3 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
-          >
-            <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+          <div class="mt-3 flex min-w-0 items-stretch gap-0">
+            {#if document.thread_id}
+              <div
+                bind:this={docCommentGutterRoot}
+                class="relative hidden shrink-0 overflow-visible lg:block lg:w-1.5"
+                aria-hidden="true"
+              >
+                {#each gutterDocCommentDots as dot (dot.eventId)}
+                  <button
+                    type="button"
+                    class="absolute left-0 h-1.5 w-1.5 -translate-y-1/2 cursor-pointer rounded-full bg-[var(--accent)] opacity-80 shadow-sm ring-1 ring-[var(--line)] transition hover:opacity-100 hover:ring-2 hover:ring-[var(--accent)]"
+                    style={`top: ${dot.topPx}px;`}
+                    title="Go to comment"
+                    aria-label="Go to anchored comment"
+                    onclick={() => fromGutterFocusAnchor(dot.eventId)}
+                  ></button>
+                {/each}
+              </div>
+            {/if}
             <div
-              bind:this={docBodyMarkdownRoot}
-              class="js-doc-markdown-body px-4 py-3"
-              role="region"
-              aria-label="Document body"
-              onmouseup={refreshStashedDocSelection}
+              class="min-w-0 flex-1 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
             >
-              {#if displayedContent}
-                <MarkdownRenderer
-                  source={displayedContent}
-                  class="text-meta leading-relaxed text-[var(--fg)]"
-                />
-              {:else}
-                <p class="text-meta text-[var(--fg-muted)]">(No content)</p>
-              {/if}
+              <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+              <div
+                bind:this={docBodyMarkdownRoot}
+                class="js-doc-markdown-body px-4 py-3"
+                role="region"
+                aria-label="Document body"
+                onmouseup={refreshStashedDocSelection}
+              >
+                {#if displayedContent}
+                  <MarkdownRenderer
+                    source={displayedContent}
+                    class="text-meta leading-relaxed text-[var(--fg)]"
+                  />
+                {:else}
+                  <p class="text-meta text-[var(--fg-muted)]">(No content)</p>
+                {/if}
+              </div>
             </div>
           </div>
 
