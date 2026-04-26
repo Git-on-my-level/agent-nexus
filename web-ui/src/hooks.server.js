@@ -80,10 +80,13 @@ export function __resetLoopTrackerForTests() {
 
 function shouldBypassProxy(pathname, method) {
   const normalizedMethod = method.toUpperCase();
+  const normalizedPath = String(pathname ?? "").trim();
   return (
-    normalizedMethod === "POST" &&
-    (pathname === "/auth/passkey/login/verify" ||
-      pathname === "/auth/passkey/register/verify")
+    (normalizedMethod === "POST" &&
+      (normalizedPath === "/auth/passkey/login/verify" ||
+        normalizedPath === "/auth/passkey/register/verify")) ||
+    normalizedPath === "/auth/callback" ||
+    normalizedPath.endsWith("/auth/callback")
   );
 }
 
