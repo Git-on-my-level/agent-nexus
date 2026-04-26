@@ -1,13 +1,20 @@
 /**
- * Utilities for wrapping the quoted range of a document text comment in a
- * `<mark>` inside the rendered markdown body, so the operator can see at a
- * glance which span their pending comment is anchored to (Google Docs–style
- * yellow highlight on the selection while you compose).
+ * Utilities for wrapping the quoted range of a document text comment with one
+ * or more `<mark>` elements inside the rendered markdown body, so the operator
+ * can see at a glance which span their pending comment is anchored to (Google
+ * Docs–style highlight on the selection while you compose).
  *
- * Constraints:
+ * Implementation notes:
  *   - The markdown is rendered as opaque HTML by `MarkdownRenderer`, so we
  *     can't reuse the offsets from the raw revision string. We work over
  *     the rendered DOM's text content instead.
+ *   - We create *one `<mark>` per text node fragment* that the quote covers.
+ *     Each mark shares the same `data-event-id` and `data-doc-comment-mark`
+ *     attributes. This is critical for multi-line / multi-block quotes:
+ *     the older approach of wrapping the entire `Range` in a single inline
+ *     `<mark>` would either throw on cross-element ranges or fall back to
+ *     putting block elements inside an inline element, which left some lines
+ *     visually un-highlighted. Per-text-node marks always render correctly.
  *   - Code blocks and pre-formatted regions are skipped: highlighting in
  *     them is rarely useful and risks breaking syntax styling.
  *   - The first occurrence wins (matches `documentCommentAnchor.js`'s
@@ -21,6 +28,7 @@
 
 const MARK_CLASS = "js-doc-comment-mark";
 const MARK_ATTR = "data-doc-comment-mark";
+const SKIP_TAGS = new Set(["CODE", "PRE", "SCRIPT", "STYLE"]);
 
 /**
  * Remove every `<mark>` previously inserted by `highlightDocumentCommentRange`,
@@ -48,27 +56,17 @@ export function clearDocumentCommentMarks(root) {
 }
 
 /**
- * Walk text nodes inside `root` and return the first contiguous range
- * whose visible text equals `quote`. Skips text inside `<code>`, `<pre>`,
- * `<script>`, `<style>`, and any element that already contains a doc
- * comment mark. Returns `null` if the quote is empty or not found.
+ * Walk text nodes inside `root` in document order, returning the flat list
+ * of `(textNode, aggregateStart, aggregateEnd)` tuples and the joined
+ * aggregate string. Skips text inside `<code>`, `<pre>`, `<script>`,
+ * `<style>`, and inside any element already tagged as a doc comment mark.
  *
  * @param {HTMLElement} root
- * @param {string} quote
  */
-function findFirstTextRange(root, quote) {
-  if (!root || !quote || typeof window === "undefined") return null;
-  const doc =
-    root.ownerDocument || (typeof document !== "undefined" ? document : null);
-  if (!doc) return null;
-
-  // Build a flat list of (textNode, offsetWithinAggregate) pairs and the
-  // aggregate string. Skipping nodes inside code/pre/etc. keeps the
-  // mapping stable for the most common comment-on-prose case.
+function collectTextSegments(root) {
   /** @type {Array<{ node: Text, start: number, end: number }>} */
   const segments = [];
   let aggregate = "";
-  const SKIP_TAGS = new Set(["CODE", "PRE", "SCRIPT", "STYLE"]);
 
   /** @param {Node} node */
   function visit(node) {
@@ -92,41 +90,87 @@ function findFirstTextRange(root, quote) {
   }
 
   visit(root);
-  if (segments.length === 0) return null;
-
-  const idx = aggregate.indexOf(quote);
-  if (idx < 0) return null;
-  const endIdx = idx + quote.length;
-
-  let startSeg = null;
-  let endSeg = null;
-  for (const seg of segments) {
-    if (startSeg === null && seg.end > idx) {
-      startSeg = seg;
-    }
-    if (seg.start < endIdx) {
-      endSeg = seg;
-    }
-    if (startSeg && endSeg && seg.start >= endIdx) {
-      break;
-    }
-  }
-  if (!startSeg || !endSeg) return null;
-
-  const range = doc.createRange();
-  try {
-    range.setStart(startSeg.node, idx - startSeg.start);
-    range.setEnd(endSeg.node, endIdx - endSeg.start);
-  } catch {
-    return null;
-  }
-  return range;
+  return { segments, aggregate };
 }
 
 /**
- * Wrap the first occurrence of `quote` inside `root` with a `<mark>`
- * element styled as a doc-comment highlight. Replaces any existing
- * doc-comment marks first. Returns `true` if a mark was created.
+ * Build the inline style string for a doc-comment `<mark>` based on tone.
+ *
+ * Tones:
+ *   - pending: solid soft accent fill (you're composing right now)
+ *   - posted:  subtle dashed underline (an existing comment lives here)
+ *
+ * @param {"pending" | "posted"} tone
+ */
+function styleForTone(tone) {
+  if (tone === "posted") {
+    return {
+      backgroundColor: "color-mix(in oklab, var(--accent) 8%, transparent)",
+      borderBottom: "1px dashed var(--accent)",
+      color: "inherit",
+      borderRadius: "2px",
+      padding: "0 1px",
+      cursor: "pointer",
+    };
+  }
+  return {
+    backgroundColor: "color-mix(in oklab, var(--accent) 22%, transparent)",
+    color: "inherit",
+    borderRadius: "2px",
+    padding: "0 1px",
+  };
+}
+
+/**
+ * Wrap one contiguous slice of a single text node in a `<mark>` element.
+ * Returns the new mark, or `null` if the slice was empty. Splits the text
+ * node into up-to-three pieces (before/marked/after) so adjacent
+ * highlights survive without clobbering each other.
+ *
+ * @param {Document} doc
+ * @param {Text} textNode
+ * @param {number} startInNode
+ * @param {number} endInNode
+ * @param {{ tone: "pending" | "posted", eventId?: string }} opts
+ */
+function wrapTextNodeSlice(doc, textNode, startInNode, endInNode, opts) {
+  if (endInNode <= startInNode) return null;
+  const len = (textNode.data || "").length;
+  const s = Math.max(0, Math.min(len, startInNode));
+  const e = Math.max(s, Math.min(len, endInNode));
+  if (e <= s) return null;
+  const range = doc.createRange();
+  try {
+    range.setStart(textNode, s);
+    range.setEnd(textNode, e);
+  } catch {
+    return null;
+  }
+  const mark = doc.createElement("mark");
+  mark.className = `${MARK_CLASS} ${
+    opts.tone === "posted" ? "is-posted" : "is-pending"
+  }`;
+  mark.setAttribute(MARK_ATTR, "1");
+  if (opts.eventId) {
+    mark.setAttribute("data-event-id", String(opts.eventId));
+  }
+  const style = styleForTone(opts.tone);
+  for (const [k, v] of Object.entries(style)) {
+    /** @type {any} */ (mark.style)[k] = v;
+  }
+  try {
+    range.surroundContents(mark);
+    return mark;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Wrap the first occurrence of `quote` inside `root` with one `<mark>` per
+ * text node fragment that the quote covers. Replaces existing doc-comment
+ * marks first unless `opts.clear === false`. Returns `true` if any mark was
+ * created.
  *
  * @param {HTMLElement | null | undefined} root
  * @param {string} quote
@@ -141,50 +185,48 @@ export function highlightDocumentCommentRange(root, quote, opts = {}) {
   if (!root) return false;
   const text = String(quote ?? "");
   if (!text || !text.trim()) return false;
-  const range = findFirstTextRange(root, text);
-  if (!range) return false;
   const doc = root.ownerDocument;
   if (!doc) return false;
-  const mark = doc.createElement("mark");
-  mark.className = `${MARK_CLASS} ${
-    opts.tone === "posted" ? "is-posted" : "is-pending"
-  }`;
-  mark.setAttribute(MARK_ATTR, "1");
-  if (opts.eventId) {
-    mark.setAttribute("data-event-id", String(opts.eventId));
-  } else {
-    mark.removeAttribute("data-event-id");
-  }
-  // Setting style here keeps the helper self-contained and avoids
-  // requiring the caller to import a stylesheet. Tones:
-  //   - pending: solid soft accent fill (you're composing right now)
-  //   - posted:  subtle dashed underline (an existing comment lives here)
-  if (opts.tone === "posted") {
-    mark.style.backgroundColor = "transparent";
-    mark.style.borderBottom = "1px dashed var(--accent)";
-    mark.style.color = "inherit";
-  } else {
-    mark.style.backgroundColor =
-      "color-mix(in oklab, var(--accent) 22%, transparent)";
-    mark.style.color = "inherit";
-    mark.style.borderRadius = "2px";
-    mark.style.padding = "0 1px";
-  }
-  try {
-    range.surroundContents(mark);
-    return true;
-  } catch {
-    // Range crosses non-text boundaries (e.g. an inline link in the
-    // middle of the quote). Fall back to extracting + reinserting.
-    try {
-      const frag = range.extractContents();
-      mark.appendChild(frag);
-      range.insertNode(mark);
-      return true;
-    } catch {
-      return false;
+
+  const { segments, aggregate } = collectTextSegments(root);
+  if (segments.length === 0) return false;
+  const idx = aggregate.indexOf(text);
+  if (idx < 0) return false;
+  const endIdx = idx + text.length;
+
+  const tone = opts.tone === "posted" ? "posted" : "pending";
+  const wrapOpts = {
+    tone,
+    eventId: opts.eventId ? String(opts.eventId) : "",
+  };
+
+  // Walk segments and wrap each overlapping slice in its own mark. We capture
+  // the text nodes first so splitting (via surroundContents) doesn't corrupt
+  // the live segment list.
+  /** @type {Array<{ node: Text, start: number, end: number }>} */
+  const overlaps = [];
+  for (const seg of segments) {
+    if (seg.end <= idx) continue;
+    if (seg.start >= endIdx) break;
+    const startInNode = Math.max(0, idx - seg.start);
+    const endInNode = Math.min(seg.end - seg.start, endIdx - seg.start);
+    if (endInNode > startInNode) {
+      overlaps.push({ node: seg.node, start: startInNode, end: endInNode });
     }
   }
+
+  let any = false;
+  for (const piece of overlaps) {
+    const mark = wrapTextNodeSlice(
+      doc,
+      piece.node,
+      piece.start,
+      piece.end,
+      wrapOpts,
+    );
+    if (mark) any = true;
+  }
+  return any;
 }
 
 /**

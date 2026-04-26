@@ -565,23 +565,68 @@
   }
 
   /**
-   * Compute page-absolute coordinates for the floating "Comment" pill so
-   * it appears just above the right edge of the current selection rect —
-   * the spot Google Docs uses for inline selection actions. We bake in
-   * `window.scrollX/Y` so the pill stays put through scrolls.
+   * Determine whether the live selection runs forward (anchor→focus) or
+   * backward (focus→anchor). We anchor the floating pill at the *end* of
+   * the user's gesture so it appears where their mouse / caret naturally
+   * came to rest, rather than at the far edge of a multi-line bounding box.
+   */
+  function isSelectionForward(sel) {
+    if (!sel?.anchorNode || !sel?.focusNode) {
+      return true;
+    }
+    if (sel.anchorNode === sel.focusNode) {
+      return sel.anchorOffset <= sel.focusOffset;
+    }
+    const pos = sel.anchorNode.compareDocumentPosition(sel.focusNode);
+    if (pos & Node.DOCUMENT_POSITION_FOLLOWING) return true;
+    if (pos & Node.DOCUMENT_POSITION_PRECEDING) return false;
+    return true;
+  }
+
+  /**
+   * Compute page-absolute coordinates for the floating "Comment" pill.
+   *
+   * For multi-line / wrapped selections, `range.getBoundingClientRect()`
+   * returns the rectangle of the *widest* line, which made the pill leap
+   * to the far right margin even when the operator finished selecting on
+   * a short last line. Instead we walk `range.getClientRects()` (one rect
+   * per visual line) and pin the pill to the line where the selection
+   * actually ends — below the last line on a forward selection, above the
+   * first on a backward one. This matches the Google Docs behaviour where
+   * the pill follows the caret rather than the bounding box.
+   *
+   * `window.scrollX/Y` is baked in so the pill stays put through scrolls.
    */
   function computeSelectionPillPosition(sel) {
     if (!sel || sel.rangeCount === 0) return null;
     const range = sel.getRangeAt(sel.rangeCount - 1);
-    const rect = range.getBoundingClientRect();
-    if (!rect || (rect.width === 0 && rect.height === 0)) {
+    const rects = range.getClientRects();
+    if (!rects || rects.length === 0) {
       return null;
     }
-    const PILL_OFFSET_Y = 36;
-    return {
-      top: Math.max(0, rect.top + window.scrollY - PILL_OFFSET_Y),
-      left: rect.right + window.scrollX - 8,
-    };
+    const forward = isSelectionForward(sel);
+    const anchorRect = forward ? rects[rects.length - 1] : rects[0];
+    if (!anchorRect || (anchorRect.width === 0 && anchorRect.height === 0)) {
+      return null;
+    }
+    const PILL_GAP_Y = 6;
+    const PILL_WIDTH_EST = 110;
+    const top = forward
+      ? anchorRect.bottom + window.scrollY + PILL_GAP_Y
+      : Math.max(0, anchorRect.top + window.scrollY - PILL_GAP_Y - 32);
+    const desiredLeft = forward
+      ? anchorRect.right + window.scrollX - 8
+      : anchorRect.left + window.scrollX - PILL_WIDTH_EST + 8;
+    const viewportWidth =
+      window.document.documentElement?.clientWidth ?? window.innerWidth ?? 0;
+    const left =
+      viewportWidth > 0
+        ? Math.min(
+            window.scrollX + viewportWidth - PILL_WIDTH_EST - 8,
+            Math.max(window.scrollX + 8, desiredLeft),
+          )
+        : desiredLeft;
+    return { top, left };
   }
 
   function refreshStashedDocSelection() {
@@ -665,6 +710,38 @@
   });
 
   /**
+   * Apply (or refresh) the active-comment glow styling on body marks. Called
+   * both reactively (when hover changes) AND right after highlights are
+   * regenerated, since the highlight pass tears down the old `<mark>`
+   * elements and creates fresh ones with only their base inline style — if
+   * we didn't re-apply glow here the rail-card/gutter hover state would
+   * silently desync until the operator nudges their pointer.
+   */
+  function applyDocCommentGlow() {
+    const root = /** @type {HTMLElement | null} */ (docBodyMarkdownRoot);
+    if (!root) return;
+    const activeId = $docCommentBodyHover ?? "";
+    const marks = root.querySelectorAll(
+      "mark.js-doc-comment-mark[data-event-id]",
+    );
+    for (const m of Array.from(marks)) {
+      const el = /** @type {HTMLElement} */ (m);
+      const id = String(m.getAttribute("data-event-id") ?? "").trim();
+      if (m.classList.contains("is-pending")) continue;
+      if (!m.classList.contains("is-posted")) continue;
+      if (activeId && id === activeId) {
+        el.style.backgroundColor =
+          "color-mix(in oklab, var(--accent) 24%, transparent)";
+        el.style.borderBottomStyle = "solid";
+      } else {
+        el.style.backgroundColor =
+          "color-mix(in oklab, var(--accent) 8%, transparent)";
+        el.style.borderBottomStyle = "dashed";
+      }
+    }
+  }
+
+  /**
    * Posted (dashed underline) + pending (soft fill) highlights in the rendered
    * body. Pending wins when the quote matches an existing posted comment.
    * Re-runs when the displayed revision, anchor list from the rail, or
@@ -686,6 +763,9 @@
           pendingQuote: pending,
         },
       );
+      // Re-apply glow on the freshly minted marks so hover state survives
+      // a highlight regeneration (revision/composer/rail change).
+      applyDocCommentGlow();
       requestAnimationFrame(() => {
         recalcGutterDocCommentDots();
       });
@@ -716,11 +796,28 @@
       const m = e.target.closest("mark.js-doc-comment-mark[data-event-id]");
       docCommentBodyHover.set(m?.getAttribute("data-event-id")?.trim() || null);
     }
+    function onPointerLeave() {
+      docCommentBodyHover.set(null);
+    }
     root.addEventListener("pointerover", onPointerOver);
+    root.addEventListener("pointerleave", onPointerLeave);
     return () => {
       root.removeEventListener("pointerover", onPointerOver);
+      root.removeEventListener("pointerleave", onPointerLeave);
       docCommentBodyHover.set(null);
     };
+  });
+
+  /**
+   * Reactive driver for the glow: when hover or the markdown root changes we
+   * just re-apply via the shared helper. Highlight regeneration is handled in
+   * the highlight `$effect` above so the freshly created marks pick up the
+   * current active id immediately.
+   */
+  $effect(() => {
+    void docBodyMarkdownRoot;
+    void $docCommentBodyHover;
+    applyDocCommentGlow();
   });
 
   function beginDocumentTextComment() {
@@ -773,8 +870,13 @@
       return;
     }
     const gRect = gut.getBoundingClientRect();
-    /** @type {Array<{ eventId: string, topPx: number }>} */
-    const out = [];
+    // We now wrap each text-node fragment of a quote in its own <mark> for
+    // reliable multi-line highlighting (see documentCommentHighlight.js).
+    // That means a single comment can produce N marks, and we'd otherwise
+    // render a stack of N gutter pips for it. Dedupe by event id, anchoring
+    // each pip to the *top-most* mark fragment for that comment.
+    /** @type {Map<string, number>} */
+    const minTopByEvent = new Map();
     const marks = body.querySelectorAll(
       "mark.js-doc-comment-mark[data-event-id]",
     );
@@ -785,9 +887,16 @@
       }
       const mRect = mark.getBoundingClientRect();
       const topPx = mRect.top - gRect.top + mRect.height / 2;
-      if (Number.isFinite(topPx)) {
-        out.push({ eventId: id, topPx });
+      if (!Number.isFinite(topPx)) continue;
+      const prev = minTopByEvent.get(id);
+      if (prev === undefined || topPx < prev) {
+        minTopByEvent.set(id, topPx);
       }
+    }
+    /** @type {Array<{ eventId: string, topPx: number }>} */
+    const out = [];
+    for (const [id, topPx] of minTopByEvent.entries()) {
+      out.push({ eventId: id, topPx });
     }
     out.sort((a, b) => a.topPx - b.topPx);
     gutterDocCommentDots = out;
@@ -1292,20 +1401,44 @@
 
           <div class="mt-3 flex min-w-0 items-stretch gap-0">
             {#if document.thread_id}
+              <!--
+                Comment gutter: a thin vertical column to the left of the doc
+                body that hosts a small chat-bubble icon for each anchored
+                comment. The dotted underline in the body shows *that* a
+                comment exists; the gutter icon shows *how many* comments
+                this doc has, gives a clickable jump target, and orients
+                operators on long pages without scanning the body for
+                underlines. Hover/focus also light up the matching rail
+                card and body mark via `docCommentBodyHover`.
+              -->
               <div
                 bind:this={docCommentGutterRoot}
-                class="relative hidden shrink-0 overflow-visible lg:block lg:w-1.5"
-                aria-hidden="true"
+                class="relative hidden shrink-0 overflow-visible lg:block lg:w-5"
               >
                 {#each gutterDocCommentDots as dot (dot.eventId)}
                   <button
                     type="button"
-                    class="absolute left-0 h-1.5 w-1.5 -translate-y-1/2 cursor-pointer rounded-full bg-[var(--accent)] opacity-80 shadow-sm ring-1 ring-[var(--line)] transition hover:opacity-100 hover:ring-2 hover:ring-[var(--accent)]"
+                    class="group absolute left-0 -translate-y-1/2 cursor-pointer rounded-full p-0.5 text-[var(--accent)] transition-colors hover:bg-[var(--bg-soft)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
                     style={`top: ${dot.topPx}px;`}
-                    title="Go to comment"
-                    aria-label="Go to anchored comment"
+                    title="Jump to comment"
+                    aria-label="Jump to anchored comment"
                     onclick={() => fromGutterFocusAnchor(dot.eventId)}
-                  ></button>
+                    onmouseenter={() => docCommentBodyHover.set(dot.eventId)}
+                    onmouseleave={() => docCommentBodyHover.set(null)}
+                    onfocus={() => docCommentBodyHover.set(dot.eventId)}
+                    onblur={() => docCommentBodyHover.set(null)}
+                  >
+                    <svg
+                      class="h-3.5 w-3.5 opacity-70 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+                      fill="currentColor"
+                      viewBox="0 0 24 24"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M4 5a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-4l-4.4 3.3A1 1 0 0 1 7 18.5V16H7a3 3 0 0 1-3-3V5Z"
+                      />
+                    </svg>
+                  </button>
                 {/each}
               </div>
             {/if}

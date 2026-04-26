@@ -1,7 +1,13 @@
 <script>
   import Button from "$lib/components/Button.svelte";
 
-  let { value = "", label = "Copy", size = "sm" } = $props();
+  let {
+    value = "",
+    label = "Copy",
+    size = "sm",
+    /** Icon + checkmark only — no "Copy"/"Copied" text (compact toolbars). */
+    iconOnly = false,
+  } = $props();
 
   let copied = $state(false);
   let timer;
@@ -18,10 +24,13 @@
   }
 
   let btnSize = $derived(size === "md" ? "default" : "compact");
+  let iconBtnClass = $derived(
+    iconOnly ? "!h-6 !min-h-0 !w-6 !min-w-0 !px-0" : "",
+  );
 </script>
 
 <Button
-  class="shrink-0"
+  class="shrink-0 {iconBtnClass}"
   variant="ghost"
   size={btnSize}
   onclick={onCopy}
@@ -39,7 +48,9 @@
     >
       <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
     </svg>
-    Copied
+    {#if !iconOnly}
+      Copied
+    {/if}
   {:else}
     <svg
       class="h-3 w-3"
@@ -55,6 +66,8 @@
         d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-2M8 5a2 2 0 012-2h4a2 2 0 012 2M8 5a2 2 0 002 2h4a2 2 0 002-2M8 5a2 2 0 012-2h4a2 2 0 012 2m0 0h2a2 2 0 012 2v3"
       />
     </svg>
-    Copy
+    {#if !iconOnly}
+      Copy
+    {/if}
   {/if}
 </Button>

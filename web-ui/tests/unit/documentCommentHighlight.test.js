@@ -72,13 +72,57 @@ describe("documentCommentHighlight", () => {
     expect(marks[0].textContent).toBe("gamma");
   });
 
-  it("wraps a quote that crosses inline element boundaries via fallback path", () => {
+  it("wraps a quote that crosses inline element boundaries with per-text-node marks", () => {
     const root = makeRoot("<p>Hello <em>brave</em> new world</p>");
     const ok = highlightDocumentCommentRange(root, "brave new");
     expect(ok).toBe(true);
+    // We now create one <mark> per text node fragment so multi-line and
+    // cross-element selections render reliably. The combined visible text
+    // must still equal the original quote.
     const marks = root.querySelectorAll("mark[data-doc-comment-mark='1']");
-    expect(marks.length).toBe(1);
-    expect(marks[0].textContent.replace(/\s+/g, " ").trim()).toBe("brave new");
+    expect(marks.length).toBeGreaterThanOrEqual(1);
+    const combined = Array.from(marks)
+      .map((m) => m.textContent)
+      .join("");
+    expect(combined).toBe("brave new");
+  });
+
+  it("highlights a multi-block selection with one <mark> per text fragment", () => {
+    const root = makeRoot(
+      "<ul><li>This is my doc</li><li>Second line</li><li>Whatever</li></ul>",
+    );
+    const ok = highlightDocumentCommentRange(
+      root,
+      "This is my docSecond lineWhatever",
+    );
+    expect(ok).toBe(true);
+    const marks = root.querySelectorAll("mark[data-doc-comment-mark='1']");
+    // One <mark> per `<li>` text node — the older single-mark-wraps-everything
+    // approach left the middle line un-highlighted under the
+    // surroundContents() fallback.
+    expect(marks.length).toBe(3);
+    expect(marks[0].textContent).toBe("This is my doc");
+    expect(marks[1].textContent).toBe("Second line");
+    expect(marks[2].textContent).toBe("Whatever");
+  });
+
+  it("propagates data-event-id to every mark covering a multi-block quote", () => {
+    const root = makeRoot(
+      "<ul><li>This is my doc</li><li>Second line</li><li>Whatever</li></ul>",
+    );
+    const ok = highlightDocumentCommentRange(
+      root,
+      "This is my docSecond lineWhatever",
+      { tone: "posted", eventId: "evt-multi" },
+    );
+    expect(ok).toBe(true);
+    const marks = root.querySelectorAll(
+      "mark[data-doc-comment-mark='1'][data-event-id='evt-multi']",
+    );
+    expect(marks.length).toBe(3);
+    for (const m of marks) {
+      expect(m.className).toContain("is-posted");
+    }
   });
 
   it("applyDocumentCommentHighlights renders two posted marks with data-event-id", () => {

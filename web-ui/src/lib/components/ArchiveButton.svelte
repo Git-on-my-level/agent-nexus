@@ -24,15 +24,38 @@
   <Button
     variant="secondary"
     size="compact"
+    class={isResolveKind
+      ? "!h-7 !min-w-0 !border-0 !bg-transparent !px-1.5 hover:!bg-[var(--bg-soft)]"
+      : ""}
     disabled={busy}
     onclick={onunarchive}
+    title={isResolveKind ? "Reopen" : "Unarchive"}
+    aria-label={isResolveKind ? "Reopen" : "Unarchive"}
   >
-    {isResolveKind ? "Reopen" : "Unarchive"}
+    {#if isResolveKind}
+      <svg
+        class={iconSize}
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 0 1 0 12h-3"
+        />
+      </svg>
+    {:else}
+      Unarchive
+    {/if}
   </Button>
 {:else if isResolveKind}
   <Button
     variant="ghost"
     size="compact"
+    class="!h-7 !min-w-0 !px-1.5"
     disabled={busy}
     onclick={onarchive}
     title="Resolve"
@@ -52,7 +75,6 @@
         d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
       />
     </svg>
-    Resolve
   </Button>
 {:else}
   <Button

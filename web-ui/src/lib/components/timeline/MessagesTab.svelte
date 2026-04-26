@@ -73,6 +73,13 @@
 
   let subjectRefFilterNorm = $derived(String(subjectRefFilter ?? "").trim());
 
+  /** In document-scoped discussion, hide `document:` / `document_revision:` chips (we're already on that doc). */
+  let suppressDisplayDocumentId = $derived(
+    subjectRefFilterNorm.startsWith("document:")
+      ? subjectRefFilterNorm.slice("document:".length).trim()
+      : "",
+  );
+
   let routeScopeForPost = $derived(
     String(postRouteScopeId || threadId || "").trim(),
   );
@@ -113,7 +120,10 @@
     }),
   );
   let messageThreads = $derived(
-    toMessageThreadView(filteredTimeline, { threadId }),
+    toMessageThreadView(filteredTimeline, {
+      threadId,
+      suppressDisplayDocumentId,
+    }),
   );
   let allMessages = $derived(flattenMessageThreadView(messageThreads));
   let hasMessages = $derived(messageThreads.length > 0);
@@ -633,7 +643,7 @@
 </div>
 
 <form
-  class="mt-4 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3"
+  class="msg-composer mt-4 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3"
   onsubmit={(e) => {
     e.preventDefault();
     void handlePostMessage();
@@ -694,6 +704,68 @@
         }}
         title="Clear (Esc)"
         aria-label="Clear comment selection"
+      >
+        <svg
+          class="h-3.5 w-3.5"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M6 18 18 6M6 6l12 12"
+          />
+        </svg>
+      </button>
+    </div>
+  {/if}
+  {#if replyToEventId}
+    <!--
+      "Replying to" chip lives above the textarea now (same row as the
+      pending-comment chip when both are present). Previously this chip
+      sat beside the Post button in the footer, which crammed the help
+      text + reply target + Clear + Post button into a single row that
+      could not fit at typical rail widths (~280–360px). Surfacing it
+      here also matches the visual hierarchy of "what you're responding
+      to" → composer → action.
+    -->
+    <div
+      class="mb-2 flex items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-1.5"
+    >
+      <svg
+        class="h-3.5 w-3.5 shrink-0 text-[var(--accent)]"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M9 14 4 9l5-5M4 9h11a5 5 0 0 1 5 5v0a5 5 0 0 1-5 5h-3"
+        />
+      </svg>
+      <span class="shrink-0 text-micro text-[var(--fg-muted)]">
+        Replying to
+      </span>
+      <span
+        class="min-w-0 flex-1 truncate text-meta italic text-[var(--fg)]"
+        title={replyTargetMessage?.messageText || "message"}
+      >
+        {replyTargetMessage?.messageText
+          ? replyTargetMessage.messageText.slice(0, 200)
+          : "message"}
+      </span>
+      <button
+        type="button"
+        class="shrink-0 cursor-pointer rounded p-0.5 text-[var(--fg-muted)] hover:bg-[var(--panel)] hover:text-[var(--fg)]"
+        onclick={clearReplyTarget}
+        title="Clear reply"
+        aria-label="Clear reply target"
       >
         <svg
           class="h-3.5 w-3.5"
@@ -787,52 +859,37 @@
       </div>
     {/if}
   </div>
-  <div
-    class="mt-1.5 flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
-  >
+  <!--
+    Composer footer. The form sets `container-type: inline-size` (see the
+    `<style>` block below), so this row's layout responds to the actual
+    composer width rather than the viewport. At narrow widths typical of
+    the discussion rail we stack: help text on top, action button on its
+    own row aligned right; at wider widths (topic / card pages) we put
+    them side-by-side. This is what fixes the previous "Replying to: …
+    Clear Post message" overlap with the @handle help text.
+  -->
+  <div class="msg-footer mt-1.5 flex flex-col gap-2">
     {#if hasPendingDocumentComment}
       <!--
-        On the "comment on selection" path we don't need the long "wake an
-        agent" explainer above the submit button — the operator just wants
-        to write a comment. The single-word `@` hint keeps mention-to-wake
+        On the "comment on selection" path we don't need the @handle
+        explainer above the submit button — the operator just wants
+        to write a comment. The single-word `@` hint keeps mentions
         discoverable for power users without dominating the composer.
       -->
-      <p
-        class="text-micro leading-snug text-[var(--fg-muted)] sm:min-w-0 sm:flex-1"
-      >
+      <p class="msg-hint text-micro leading-snug text-[var(--fg-muted)]">
         Tip: <code class="text-[var(--fg)]">@</code> mentions an agent · Esc clears
       </p>
     {:else}
-      <p
-        class="text-micro leading-snug text-[var(--fg-muted)] sm:min-w-0 sm:flex-1"
-      >
-        Mention <code class="text-[var(--fg)]">@handle</code> to wake a
-        registered agent in this workspace. See
+      <p class="msg-hint text-micro leading-snug text-[var(--fg-muted)]">
+        Mention <code class="text-[var(--fg)]">@handle</code> to tag a
         <a
           class="text-accent-text hover:text-accent-text"
           href={workspacePath(organizationSlug, workspaceSlug, "/access")}
-          >Access</a
-        >
-        for agent presence and registration status.
+          >registered agent</a
+        >.
       </p>
     {/if}
-    <div
-      class="flex shrink-0 flex-wrap items-center justify-end gap-2 sm:justify-end"
-    >
-      {#if replyToEventId}
-        <span class="max-w-[14rem] truncate text-micro text-[var(--fg-muted)]">
-          Replying to: {replyTargetMessage?.messageText
-            ? replyTargetMessage.messageText.slice(0, 80)
-            : "message"}
-        </span>
-        <button
-          class="cursor-pointer shrink-0 text-micro text-accent-text hover:text-accent-text"
-          onclick={clearReplyTarget}
-          type="button"
-        >
-          Clear
-        </button>
-      {/if}
+    <div class="msg-actions flex shrink-0 items-center justify-end gap-2">
       <button
         class="cursor-pointer rounded bg-accent-solid px-3 py-1 text-micro font-medium text-white hover:bg-accent disabled:opacity-50"
         disabled={!canPost}
@@ -858,3 +915,24 @@
   onconfirm={handleConfirm}
   oncancel={clearConfirmModal}
 />
+
+<style>
+  /* Container query: lets the composer footer adapt to the actual width
+     of the composer (rail vs full page) without a JS resize observer. */
+  .msg-composer {
+    container-type: inline-size;
+    container-name: msg-form;
+  }
+  @container msg-form (min-width: 22rem) {
+    .msg-footer {
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+    .msg-hint {
+      min-width: 0;
+      flex: 1 1 0%;
+    }
+  }
+</style>

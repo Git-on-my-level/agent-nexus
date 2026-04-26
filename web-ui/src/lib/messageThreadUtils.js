@@ -113,6 +113,9 @@ function decorateMessageEvent(event, options = {}) {
   const parentEventId = extractParentEventId(event, messageIdsInThread);
   const threadId = String(options.threadId ?? event?.thread_id ?? "").trim();
   const documentComment = extractDocumentComment(event);
+  const suppressDisplayDocumentId = String(
+    options.suppressDisplayDocumentId ?? "",
+  ).trim();
 
   // When an event is an anchored document text comment, hide the duplicate
   // `document:<id>` and `document_revision:<id>` ref chips from the rendered
@@ -154,6 +157,15 @@ function decorateMessageEvent(event, options = {}) {
         docCommentRevisionId &&
         ref === `document_revision:${docCommentRevisionId}`
       ) {
+        return false;
+      }
+      if (
+        suppressDisplayDocumentId &&
+        ref === `document:${suppressDisplayDocumentId}`
+      ) {
+        return false;
+      }
+      if (suppressDisplayDocumentId && ref.startsWith("document_revision:")) {
         return false;
       }
       return true;

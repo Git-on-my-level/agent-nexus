@@ -270,4 +270,27 @@ describe("message thread utils", () => {
     expect(m.documentComment).toBeNull();
     expect(m.displayRefs).toEqual(["document:doc-1"]);
   });
+
+  it("hides document + document_revision ref chips when suppressDisplayDocumentId matches", () => {
+    const threads = toMessageThreadView(
+      [
+        {
+          id: "m-reply",
+          ts: "2026-04-20T10:00:00.000Z",
+          type: "message_posted",
+          thread_id: "thread-1",
+          actor_id: "a1",
+          refs: [
+            "thread:thread-1",
+            "event:parent",
+            "document:doc-1",
+            "document_revision:rev-1",
+          ],
+          payload: { text: "Nested reply on same doc" },
+        },
+      ],
+      { threadId: "thread-1", suppressDisplayDocumentId: "doc-1" },
+    );
+    expect(threads[0].displayRefs).toEqual([]);
+  });
 });
