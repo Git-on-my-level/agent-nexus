@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"agent-nexus-cli/internal/buildinfo"
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/profile"
 )
@@ -84,6 +85,17 @@ func TestBridgeInstallPackageSpecDefaultsToRepoSubdirectory(t *testing.T) {
 	spec := bridgeInstallPackageSpec("v0.0.6")
 	if !strings.Contains(spec, "agent-nexus.git@v0.0.6#subdirectory=adapters/agent-bridge") {
 		t.Fatalf("unexpected bridge install spec=%s", spec)
+	}
+}
+
+func TestDefaultBridgeInstallRefMatchesCLIVersion(t *testing.T) {
+	t.Parallel()
+	got := defaultBridgeInstallRef()
+	if strings.TrimSpace(got) == "" {
+		t.Fatal("defaultBridgeInstallRef returned empty string")
+	}
+	if got != buildinfo.Current {
+		t.Fatalf("defaultBridgeInstallRef()=%q want buildinfo.Current=%q", got, buildinfo.Current)
 	}
 }
 

@@ -30,7 +30,7 @@ Install on a fresh machine with only <<tick>>anx<<tick>>
 
   anx bridge install
 
-  By default, this installs from <<tick>>main<<tick>> and writes the launcher into <<tick>>~/.local/bin<<tick>>. Override with <<tick>>--ref<<tick>> or <<tick>>--bin-dir<<tick>> if needed. The current bootstrap path also requires <<tick>>git<<tick>> on PATH.
+  By default, this installs the bridge package at the same git ref as your <<tick>>anx<<tick>> release tag and writes the launcher into <<tick>>~/.local/bin<<tick>>. Use <<tick>>--ref main<<tick>> when you need the latest default-branch commit ahead of that tag. Override <<tick>>--bin-dir<<tick>> if needed. The current bootstrap path also requires <<tick>>git<<tick>> on PATH.
 
 2. If you need bridge test dependencies on the same machine:
 

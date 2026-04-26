@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"agent-nexus-cli/internal/buildinfo"
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
 	"agent-nexus-cli/internal/httpclient"
@@ -61,7 +62,7 @@ func init() {
 			Path:        "bridge install",
 			Summary:     "Install `anx-agent-bridge` into a dedicated Python 3.11+ virtualenv and expose a PATH wrapper.",
 			JSONShape:   "`install_dir`, `bin_dir`, `wrapper_path`, `python`, `bridge_binary`, `package_ref`",
-			Composition: "Pure local bootstrap helper with network package download. Creates or reuses a venv, installs the bridge package from the GitHub subdirectory, and writes a thin launcher script.",
+			Composition: "Pure local bootstrap helper with network package download. Creates or reuses a venv, installs the bridge package from the GitHub subdirectory at a pinned git ref (defaults to the running CLI release tag), and writes a thin launcher script.",
 			Examples: []string{
 				"anx bridge install",
 				"anx bridge install --ref main --with-dev",
@@ -70,7 +71,7 @@ func init() {
 				{Name: "--python <exe>", Description: "Preferred Python executable. Default probes for Python 3.11+."},
 				{Name: "--install-dir <dir>", Description: "Root directory for the managed bridge virtualenv."},
 				{Name: "--bin-dir <dir>", Description: "Directory where the `anx-agent-bridge` wrapper should be written."},
-				{Name: "--ref <git-ref>", Description: "Git ref to install from. Defaults to `main` unless you pin a different branch or tag."},
+				{Name: "--ref <git-ref>", Description: "Git ref to install from. Defaults to the running CLI's version tag (e.g. `v0.3.2`) so the bridge matches this binary; use `main` for the latest commit on the default branch."},
 				{Name: "--with-dev", Description: "Also install bridge test dependencies."},
 			},
 		},
@@ -1013,7 +1014,10 @@ func bridgeInstallPackageSpec(ref string) string {
 }
 
 func defaultBridgeInstallRef() string {
-	return "main"
+	// Pin to the same tag as this CLI build so `anx bridge install` pulls a bridge
+	// snapshot that matches the released binary (including adapter surface area).
+	// Development: pass `--ref main` (or a feature branch) when iterating ahead of the tag.
+	return strings.TrimSpace(buildinfo.Current)
 }
 
 func detectBridgePython(ctx context.Context, preferred string) (bridgePythonRuntime, error) {

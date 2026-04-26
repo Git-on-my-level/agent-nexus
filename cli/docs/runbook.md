@@ -57,6 +57,7 @@ If an agent/operator only has the `anx` binary installed and needs the per-agent
 
 ```bash
 # requires Python 3.11+ and git on PATH
+# default: installs bridge at the same git tag as this anx binary (e.g. v0.3.2); use --ref main for default-branch HEAD
 anx bridge install
 anx bridge workspace-id --handle <handle>
 anx bridge init-config --kind subprocess --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py

@@ -424,7 +424,7 @@ Install on a fresh machine with only `anx`
 
   anx bridge install
 
-  By default, this installs from `main` and writes the launcher into `~/.local/bin`. Override with `--ref` or `--bin-dir` if needed. The current bootstrap path also requires `git` on PATH.
+  By default, this installs the bridge package at the same git ref as your `anx` release tag and writes the launcher into `~/.local/bin`. Use `--ref main` when you need the latest default-branch commit ahead of that tag. Override `--bin-dir` if needed. The current bootstrap path also requires `git` on PATH.
 
 2. If you need bridge test dependencies on the same machine:
 
@@ -4515,7 +4515,7 @@ Local Help: bridge install
 
 - Kind: `local helper`
 - Summary: Install `anx-agent-bridge` into a dedicated Python 3.11+ virtualenv and expose a PATH wrapper.
-- Composition: Pure local bootstrap helper with network package download. Creates or reuses a venv, installs the bridge package from the GitHub subdirectory, and writes a thin launcher script.
+- Composition: Pure local bootstrap helper with network package download. Creates or reuses a venv, installs the bridge package from the GitHub subdirectory at a pinned git ref (defaults to the running CLI release tag), and writes a thin launcher script.
 - JSON body: `install_dir`, `bin_dir`, `wrapper_path`, `python`, `bridge_binary`, `package_ref`
 - Examples:
   - `anx bridge install`
@@ -4525,7 +4525,7 @@ Flags:
   --python <exe>               Preferred Python executable. Default probes for Python 3.11+.
   --install-dir <dir>          Root directory for the managed bridge virtualenv.
   --bin-dir <dir>              Directory where the `anx-agent-bridge` wrapper should be written.
-  --ref <git-ref>              Git ref to install from. Defaults to `main` unless you pin a different branch or tag.
+  --ref <git-ref>              Git ref to install from. Defaults to the running CLI's version tag (e.g. `v0.3.2`) so the bridge matches this binary; use `main` for the latest commit on the default branch.
   --with-dev                   Also install bridge test dependencies.
 
 
