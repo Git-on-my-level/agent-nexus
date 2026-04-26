@@ -23,7 +23,25 @@
   const WIDTH_MAX = 520;
   const WIDTH_DEFAULT = 360;
 
-  let { doc, workspaceSlug = "", workspaceId = "" } = $props();
+  let {
+    doc,
+    workspaceSlug = "",
+    workspaceId = "",
+    /** Increment to force the rail open (e.g. when starting a text comment from the doc body). */
+    openSignal = 0,
+    /** Set when the operator is composing a document text comment anchored to a selection. */
+    pendingDocumentComment = null,
+    onPendingDocumentPostConsumed = undefined,
+    onClearPendingDocumentPost = undefined,
+    /**
+     * Live snapshot of the document content currently displayed by the
+     * parent doc page. Forwarded to MessagesTab so anchored comments whose
+     * quoted text no longer occurs in the head render as "Text removed"
+     * (read-side; no event mutation).
+     */
+    currentDocumentContent = "",
+    onDocumentTextAnchorContextChange = undefined,
+  } = $props();
 
   let railOpen = $state(true);
   let railWidth = $state(WIDTH_DEFAULT);
@@ -183,13 +201,35 @@
     }
   });
 
+  let lastOpenSignal = $state(0);
+  let openSignalPriorDoc = $state("");
+
+  $effect(() => {
+    if (docId && docId !== openSignalPriorDoc) {
+      openSignalPriorDoc = docId;
+      lastOpenSignal = 0;
+    }
+  });
+
+  $effect(() => {
+    const n = Number(openSignal ?? 0) || 0;
+    if (n > lastOpenSignal) {
+      lastOpenSignal = n;
+      persistOpen(true);
+    }
+  });
+
   async function handleMessagePost(routeScopeId, event) {
     await coreClient.createEvent({ event });
     await timelineApi.refreshTimeline();
   }
 
+  // Empty-state copy that doubles as a discoverability hint: the operator
+  // sees the floating "Comment" pill on the doc body only after they make a
+  // selection, so a text-anchored mention here teaches the gesture before
+  // they need it. Mod+Opt+M matches Google Docs' comment shortcut.
   const DOC_DISCUSSION_EMPTY =
-    "Discussion about this doc goes here. Posts are part of the topic's thread, filtered to this doc.";
+    "No comments yet. Select text in the doc and press ⌘⌥M (Ctrl+Alt+M) to comment, or write a freeform note below.";
 </script>
 
 {#if threadId && docId}
@@ -305,6 +345,12 @@
               subjectRefFilter={documentRef}
               extraPostRefs={[documentRef]}
               discussionEmptyMessage={DOC_DISCUSSION_EMPTY}
+              {pendingDocumentComment}
+              {onPendingDocumentPostConsumed}
+              {onClearPendingDocumentPost}
+              {currentDocumentContent}
+              archiveLabelKind="resolve"
+              {onDocumentTextAnchorContextChange}
             />
           </div>
         </div>

@@ -41,6 +41,29 @@ function getLines(scriptContent) {
 }
 
 /**
+ * Remove strings, template literals, regex literals, and comments from `<script>` text
+ * so `{` / `}` from prose (e.g. JSDoc `@type {Foo}`, UI strings) do not throw off the
+ * naive brace depth used for "top-level `let`" detection. Newline positions are
+ * preserved so line numbers and line counts still align with the original.
+ *
+ * @param {string} script
+ */
+function stripSvelteScriptForBraceDepth(script) {
+  if (!script) return script;
+  let t = String(script);
+  t = t.replace(/`(?:\\.|[^`\\])*`/g, (m) => m.replace(/[^\n]/g, " "));
+  t = t.replace(/"(?:\\.|[^"\\])*"/g, (m) => m.replace(/[^\n]/g, " "));
+  t = t.replace(/'(?:\\.|[^'\\])*'/g, (m) => m.replace(/[^\n]/g, " "));
+  t = t.replace(
+    /\/(?:\\.|[^/\\\n])+\/[gimsuy]*/g,
+    (m) => m.replace(/[^\n]/g, " "),
+  );
+  t = t.replace(/\/\/[^\n]*/g, (m) => m.replace(/[^\n]/g, " "));
+  t = t.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "));
+  return t;
+}
+
+/**
  * Approximate "top level": not inside function/block body.
  * We track { } depth; top level is depth 0. Ignore depth inside strings and comments for simplicity.
  */
@@ -75,20 +98,14 @@ function checkFile(absPath) {
   if (!scriptContent.trim()) return []; // no script block
 
   const lines = getLines(scriptContent);
+  const depthLines = getLines(stripSvelteScriptForBraceDepth(scriptContent));
   const errors = [];
   let braceDepth = 0;
-  let inBlockComment = false;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+    const lineForBraces = depthLines[i] ?? "";
     const lineNum = content.slice(0, content.indexOf(scriptContent)).split(/\r?\n/).length + i + 1;
-
-    // Skip block comment lines
-    if (line.includes("/*")) inBlockComment = true;
-    if (inBlockComment) {
-      if (line.includes("*/")) inBlockComment = false;
-      continue;
-    }
 
     // Reactive statement: $: ...
     if (/^\s*\$:/.test(line)) {
@@ -100,9 +117,9 @@ function checkFile(absPath) {
       });
     }
 
-    // Track brace depth (simplified: count { and })
-    const open = (line.match(/{/g) || []).length;
-    const close = (line.match(/}/g) || []).length;
+    // Track brace depth (simplified: count { and } on the brace-stripped line)
+    const open = (lineForBraces.match(/{/g) || []).length;
+    const close = (lineForBraces.match(/}/g) || []).length;
     braceDepth += open - close;
 
     // Top-level let without runes (exempt constants)

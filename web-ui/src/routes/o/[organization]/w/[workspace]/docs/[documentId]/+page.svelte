@@ -17,6 +17,13 @@
     principalRegistry,
   } from "$lib/actorSession";
   import DocumentDiscussionRail from "$lib/components/document-detail/DocumentDiscussionRail.svelte";
+  import { buildDocumentCommentFields } from "$lib/documentCommentAnchor.js";
+  import {
+    applyDocumentCommentHighlights,
+    clearDocumentCommentMarks,
+  } from "$lib/documentCommentHighlight.js";
+  import { docCommentBodyHover } from "$lib/stores/docCommentBodyRailSync.js";
+  import { tick } from "svelte";
 
   let { data } = $props();
 
@@ -67,6 +74,25 @@
    */
   let moreActionsOpen = $state(false);
   let moreActionsRoot = $state(null);
+  /** Selection stash + discussion rail for document text comments */
+  let docBodyMarkdownRoot = $state(null);
+  let docStashedSelection = $state("");
+  /**
+   * Position of the floating "Comment" pill while the operator has an
+   * active selection in the doc body. Coordinates are page-absolute
+   * (`window.scrollY/X` baked in) so the pill survives scrolling without
+   * jumping. Null when no usable selection — the pill is then hidden.
+   */
+  let docSelectionPillPos = $state(
+    /** @type {{ top: number, left: number } | null} */ (null),
+  );
+  let pendingDocumentComment = $state(null);
+  let discussionOpenSignal = $state(0);
+  /** @type {{ posted: Array<{ eventId: string, quote: string }>, activeAnchoredCount: number }} */
+  let documentAnchorContext = $state({
+    posted: [],
+    activeAnchoredCount: 0,
+  });
   function toggleMoreActions() {
     moreActionsOpen = !moreActionsOpen;
   }
@@ -514,6 +540,210 @@
       docLifecycleBusy = false;
     }
   }
+
+  function isSelectionInsideDocBody(sel) {
+    if (!sel || sel.isCollapsed || !docBodyMarkdownRoot) {
+      return false;
+    }
+    const root = /** @type {HTMLElement} */ (docBodyMarkdownRoot);
+    for (let i = 0; i < sel.rangeCount; i++) {
+      const r = sel.getRangeAt(i);
+      if (!root.contains(r.commonAncestorContainer)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Compute page-absolute coordinates for the floating "Comment" pill so
+   * it appears just above the right edge of the current selection rect —
+   * the spot Google Docs uses for inline selection actions. We bake in
+   * `window.scrollX/Y` so the pill stays put through scrolls.
+   */
+  function computeSelectionPillPosition(sel) {
+    if (!sel || sel.rangeCount === 0) return null;
+    const range = sel.getRangeAt(sel.rangeCount - 1);
+    const rect = range.getBoundingClientRect();
+    if (!rect || (rect.width === 0 && rect.height === 0)) {
+      return null;
+    }
+    const PILL_OFFSET_Y = 36;
+    return {
+      top: Math.max(0, rect.top + window.scrollY - PILL_OFFSET_Y),
+      left: rect.right + window.scrollX - 8,
+    };
+  }
+
+  function refreshStashedDocSelection() {
+    if (typeof window === "undefined" || !docBodyMarkdownRoot) {
+      return;
+    }
+    // Hide the pill (and forget the stash) while the editor is open or the
+    // doc is in trash — we don't want a "Comment" affordance competing with
+    // the active editor textarea selection or pointing at read-only state.
+    if (editOpen || document?.trashed_at) {
+      docStashedSelection = "";
+      docSelectionPillPos = null;
+      return;
+    }
+    const sel = window.getSelection?.();
+    if (!sel || !isSelectionInsideDocBody(sel)) {
+      docStashedSelection = "";
+      docSelectionPillPos = null;
+      return;
+    }
+    docStashedSelection = String(sel.toString() ?? "");
+    docSelectionPillPos = docStashedSelection.trim()
+      ? computeSelectionPillPosition(sel)
+      : null;
+  }
+
+  /**
+   * Live-update the selection while the operator drags or uses keyboard
+   * selection — `selectionchange` fires on the document, so this stays in
+   * sync without polling and without an extra mouseup handler on every
+   * inline element inside the rendered markdown.
+   */
+  $effect(() => {
+    if (typeof window === "undefined") return;
+    function onSelectionChange() {
+      refreshStashedDocSelection();
+    }
+    document.addEventListener("selectionchange", onSelectionChange);
+    return () => {
+      document.removeEventListener("selectionchange", onSelectionChange);
+    };
+  });
+
+  /**
+   * ⌘⌥M / Ctrl+Alt+M starts a comment on the current selection. Matches
+   * Google Docs' shortcut so muscle memory transfers. We bind it at the
+   * page level rather than on the doc body so it works even when focus
+   * wandered to the rail's textarea after a previous comment.
+   */
+  $effect(() => {
+    if (typeof window === "undefined") return;
+    function onKey(e) {
+      const isMod = e.metaKey || e.ctrlKey;
+      const isM = String(e.key ?? "").toLowerCase() === "m";
+      if (!isMod || !e.altKey || !isM) return;
+      if (editOpen || document?.trashed_at) return;
+      const sel = window.getSelection?.();
+      if (!sel || !isSelectionInsideDocBody(sel)) return;
+      e.preventDefault();
+      docStashedSelection = String(sel.toString() ?? "");
+      beginDocumentTextComment();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  });
+
+  /**
+   * Esc clears a pending document text comment from anywhere on the page
+   * (the rail's composer also handles Esc when its textarea is focused;
+   * this catches the case where focus is on the body or pill).
+   */
+  $effect(() => {
+    if (typeof window === "undefined") return;
+    function onKey(e) {
+      if (e.key !== "Escape") return;
+      if (!pendingDocumentComment) return;
+      pendingDocumentComment = null;
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  });
+
+  /**
+   * Posted (dashed underline) + pending (soft fill) highlights in the rendered
+   * body. Pending wins when the quote matches an existing posted comment.
+   * Re-runs when the displayed revision, anchor list from the rail, or
+   * pending composer state changes.
+   */
+  $effect(() => {
+    const root = /** @type {HTMLElement | null} */ (docBodyMarkdownRoot);
+    if (!root) return;
+    const pending = String(pendingDocumentComment?.selected_text ?? "").trim();
+    void displayedContent;
+    void documentAnchorContext;
+    const posted = documentAnchorContext.posted;
+    void tick().then(() => {
+      if (!docBodyMarkdownRoot) return;
+      applyDocumentCommentHighlights(
+        /** @type {HTMLElement} */ (docBodyMarkdownRoot),
+        {
+          posted,
+          pendingQuote: pending,
+        },
+      );
+    });
+    return () => {
+      if (docBodyMarkdownRoot) {
+        clearDocumentCommentMarks(
+          /** @type {HTMLElement} */ (docBodyMarkdownRoot),
+        );
+      }
+    };
+  });
+
+  /**
+   * Bidirectional hover sync: body marks carry `data-event-id` (set in
+   * `applyDocumentCommentHighlights`); the rail highlights the matching
+   * `MessageItem` via `docCommentBodyHover`.
+   */
+  $effect(() => {
+    const root = /** @type {HTMLElement | null} */ (docBodyMarkdownRoot);
+    if (typeof window === "undefined" || !root) {
+      return;
+    }
+    function onPointerOver(/** @type {PointerEvent} */ e) {
+      if (!(e.target instanceof Element)) {
+        return;
+      }
+      const m = e.target.closest("mark.js-doc-comment-mark[data-event-id]");
+      docCommentBodyHover.set(m?.getAttribute("data-event-id")?.trim() || null);
+    }
+    root.addEventListener("pointerover", onPointerOver);
+    return () => {
+      root.removeEventListener("pointerover", onPointerOver);
+      docCommentBodyHover.set(null);
+    };
+  });
+
+  function beginDocumentTextComment() {
+    const t = String(docStashedSelection ?? "").trim();
+    if (!t || !document?.id || !displayedRevision?.revision_id) {
+      return;
+    }
+    const fields = buildDocumentCommentFields({
+      source: displayedContent,
+      selectedText: t,
+      documentId: document.id,
+      revisionId: displayedRevision.revision_id,
+      contentHash: String(displayedRevision.content_hash ?? "").trim(),
+      isHeadRevision: !isViewingOldRevision,
+    });
+    pendingDocumentComment = {
+      document_id: fields.document_id,
+      revision_id: fields.revision_id,
+      content_hash: fields.content_hash,
+      selected_text: fields.selected_text,
+      context_before: fields.context_before,
+      context_after: fields.context_after,
+      start_offset: fields.start_offset,
+      end_offset: fields.end_offset,
+      anchor_status: fields.anchor_status,
+    };
+    discussionOpenSignal += 1;
+    // Stop the floating pill from lingering over the freshly-cleared
+    // selection while the operator is now writing in the rail.
+    docSelectionPillPos = null;
+  }
+
+  function clearDocumentTextComment() {
+    pendingDocumentComment = null;
+  }
 </script>
 
 <nav
@@ -821,6 +1051,21 @@
                 void handleSave();
               }}
             >
+              {#if documentAnchorContext.activeAnchoredCount > 0}
+                <p
+                  class="mb-3 rounded-md border border-warn/25 bg-warn-soft px-3 py-2 text-micro text-warn-text"
+                  role="status"
+                >
+                  {documentAnchorContext.activeAnchoredCount}
+                  {documentAnchorContext.activeAnchoredCount === 1
+                    ? " comment is"
+                    : " comments are"}
+                  anchored to text in this revision. Removing quoted text will mark
+                  {documentAnchorContext.activeAnchoredCount === 1
+                    ? "it"
+                    : "them"} as “Text removed.”
+                </p>
+              {/if}
               <div class="mb-3">
                 <button
                   class="cursor-pointer flex w-full items-center gap-2 text-left"
@@ -950,7 +1195,14 @@
           <div
             class="mt-3 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
           >
-            <div class="px-4 py-3">
+            <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+            <div
+              bind:this={docBodyMarkdownRoot}
+              class="js-doc-markdown-body px-4 py-3"
+              role="region"
+              aria-label="Document body"
+              onmouseup={refreshStashedDocSelection}
+            >
               {#if displayedContent}
                 <MarkdownRenderer
                   source={displayedContent}
@@ -1095,9 +1347,60 @@
         doc={document}
         {workspaceSlug}
         workspaceId={data?.workspaceId ?? ""}
+        openSignal={discussionOpenSignal}
+        {pendingDocumentComment}
+        onPendingDocumentPostConsumed={clearDocumentTextComment}
+        onClearPendingDocumentPost={clearDocumentTextComment}
+        currentDocumentContent={displayedContent}
+        onDocumentTextAnchorContextChange={(ctx) => {
+          documentAnchorContext = ctx;
+        }}
       />
     {/if}
   </div>
+
+  {#if !document.trashed_at && !editOpen && document.thread_id && docSelectionPillPos && String(docStashedSelection ?? "").trim()}
+    <!--
+      Google Docs–style floating "Comment" pill that follows the selection.
+      Page-absolute so it stays put through scroll; pointer-events-auto on
+      the button itself, none on the container so it never steals clicks
+      from surrounding text. The pill dismisses itself the next time
+      `selectionchange` fires with no usable selection (handled in the
+      effect that keeps `docSelectionPillPos` in sync).
+    -->
+    <div
+      class="pointer-events-none absolute z-30"
+      style={`top: ${docSelectionPillPos.top}px; left: ${docSelectionPillPos.left}px;`}
+    >
+      <button
+        type="button"
+        class="pointer-events-auto inline-flex h-8 items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--panel)] pl-2 pr-2.5 text-micro font-medium text-[var(--fg)] shadow-md transition-colors hover:bg-[var(--bg-soft)]"
+        onmousedown={(e) => {
+          // Prevent the click from collapsing the user's selection before
+          // we capture it. mousedown fires before mouseup → selectionchange.
+          e.preventDefault();
+        }}
+        onclick={beginDocumentTextComment}
+        title="Comment on selection (⌘⌥M)"
+      >
+        <svg
+          class="h-3.5 w-3.5 text-[var(--accent)]"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M8 12h8M8 8h8m-8 8h5m-9 3.5V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-5 3.5Z"
+          />
+        </svg>
+        Comment
+      </button>
+    </div>
+  {/if}
 {:else}
   <div class="mt-8 text-center text-meta text-[var(--fg-muted)]">
     Document not found.

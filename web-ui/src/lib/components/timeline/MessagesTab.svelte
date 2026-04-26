@@ -40,6 +40,35 @@
     extraPostRefs = [],
     /** Replaces default zero-state copy when there are no messages in view. */
     discussionEmptyMessage = "",
+    /**
+     * When set, the next post is a `document_text_comment` (anchor metadata + `payload.text` instruction).
+     * Cleared by the parent via `onPendingDocumentPostConsumed` after a successful post, or `onClearPendingDocumentPost` when the user dismisses.
+     */
+    pendingDocumentComment = null,
+    onPendingDocumentPostConsumed = undefined,
+    onClearPendingDocumentPost = undefined,
+    /** Submit button label override (e.g. "Post comment"). */
+    postButtonLabel = "",
+    /**
+     * Optional snapshot of the document content currently displayed by the
+     * surrounding doc page. When set, anchored comments whose
+     * `selected_text` no longer occurs in this content are surfaced as
+     * `liveAnchorStatus = "stale"` so `MessageItem` can show a soft
+     * "Text removed" chip without mutating the underlying event payload.
+     * Empty string disables stale derivation.
+     */
+    currentDocumentContent = "",
+    /**
+     * Visual variant for the archive lifecycle button on each message
+     * (e.g. "resolve" on the document discussion rail). See ArchiveButton.
+     */
+    archiveLabelKind = "archive",
+    /**
+     * Fired when the set of `document_text_comment` events (for `subjectRefFilter`)
+     * changes, so the parent doc page can mirror quotes in the body. Includes a
+     * count of non-archived anchors for the new-revision editor safeguard.
+     */
+    onDocumentTextAnchorContextChange = undefined,
   } = $props();
 
   let subjectRefFilterNorm = $derived(String(subjectRefFilter ?? "").trim());
@@ -129,6 +158,127 @@
   );
 
   let canPost = $derived(Boolean(messageText.trim()) && !postingMessage);
+
+  function isActiveDocumentComment(
+    /** @type {Record<string, unknown> | null} */ v,
+  ) {
+    if (!v || typeof v !== "object") {
+      return false;
+    }
+    return Boolean(
+      String(v.document_id ?? "").trim() && String(v.revision_id ?? "").trim(),
+    );
+  }
+
+  let hasPendingDocumentComment = $derived(
+    isActiveDocumentComment(
+      /** @type {Record<string, unknown> | null} */ (pendingDocumentComment),
+    ),
+  );
+
+  let postSubmitButtonText = $derived(
+    postingMessage
+      ? "Posting..."
+      : String(postButtonLabel ?? "").trim() ||
+          (hasPendingDocumentComment ? "Comment" : "Post message"),
+  );
+
+  let pendingSelectedQuote = $derived(
+    hasPendingDocumentComment &&
+      pendingDocumentComment &&
+      typeof pendingDocumentComment === "object"
+      ? String(
+          /** @type {any} */ (pendingDocumentComment).selected_text ?? "",
+        ).trim() || "(empty selection)"
+      : "",
+  );
+
+  let pendingIsQuoteOnly = $derived(
+    hasPendingDocumentComment &&
+      pendingDocumentComment &&
+      typeof pendingDocumentComment === "object" &&
+      String(
+        /** @type {any} */ (pendingDocumentComment).anchor_status ?? "",
+      ).trim() === "quote_only",
+  );
+
+  /**
+   * Read-side stale-anchor derivation. We don't mutate the original event
+   * payload; we just compute "is this comment's quoted text still present
+   * in the displayed revision?" once per render and surface it as
+   * `liveAnchorStatus="stale"` on the matching `MessageItem`. This is the
+   * cheap shape of Google Docs' "your comment is now suggesting on text
+   * that no longer exists" treatment, without any backend changes.
+   */
+  let normalizedDocContent = $derived(
+    String(currentDocumentContent ?? "").replace(/\r\n/g, "\n"),
+  );
+  let docContentSearchable = $derived(Boolean(normalizedDocContent));
+  function liveAnchorStatusForMessage(message) {
+    const dc = message?.documentComment;
+    if (!dc) return "";
+    if (!docContentSearchable) return "";
+    const quote = String(dc.selected_text ?? "").trim();
+    if (!quote) return "";
+    if (normalizedDocContent.includes(quote)) {
+      return "";
+    }
+    return "stale";
+  }
+
+  function buildPostedDocumentAnchors() {
+    /** @type {Array<{ eventId: string, quote: string }>} */
+    const out = [];
+    // Match the same events the operator sees in the thread list (respects
+    // "Show archived") so body underlines do not linger for resolved comments
+    // when those rows are hidden.
+    for (const e of filteredTimeline) {
+      if (String(e?.type ?? "") !== "message_posted" || e.trashed_at) continue;
+      if (String(e?.payload?.kind ?? "") !== "document_text_comment") {
+        continue;
+      }
+      const raw = e?.payload?.document_comment;
+      if (!raw || typeof raw !== "object") continue;
+      const q = String(
+        /** @type {Record<string, unknown>} */ (raw).selected_text ?? "",
+      ).trim();
+      if (!q) continue;
+      const id = String(e?.id ?? "").trim();
+      if (!id) continue;
+      out.push({ eventId: id, quote: q });
+    }
+    return out;
+  }
+
+  function countActiveDocumentAnchors() {
+    let n = 0;
+    for (const e of refScopedTimeline) {
+      if (String(e?.type ?? "") !== "message_posted") continue;
+      if (e.trashed_at || e.archived_at) continue;
+      if (String(e?.payload?.kind ?? "") !== "document_text_comment") {
+        continue;
+      }
+      const raw = e?.payload?.document_comment;
+      if (!raw || typeof raw !== "object") continue;
+      const q = String(
+        /** @type {Record<string, unknown>} */ (raw).selected_text ?? "",
+      ).trim();
+      if (q) n += 1;
+    }
+    return n;
+  }
+
+  $effect(() => {
+    if (!browser) {
+      return;
+    }
+    void refScopedTimeline;
+    void showArchived;
+    onDocumentTextAnchorContextChange?.({
+      posted: buildPostedDocumentAnchors(),
+      activeAnchoredCount: countActiveDocumentAnchors(),
+    });
+  });
 
   async function refreshMentionCandidates() {
     if (!browser) {
@@ -239,6 +389,14 @@
 
   function handleMessageKeydown(e) {
     if (!mentionOpen) {
+      // Outside the mention picker, Esc clears a pending document text
+      // comment first (so the operator can quickly back out of "comment on
+      // selection" mode without reaching for the mouse). Falls through if
+      // there is nothing pending.
+      if (e.key === "Escape" && hasPendingDocumentComment) {
+        e.preventDefault();
+        onClearPendingDocumentPost?.();
+      }
       return;
     }
     const list = filterMentionCandidates(mentionCandidates, mentionQuery).slice(
@@ -288,9 +446,13 @@
     confirmModal = { open: true, action: "trash", eventId };
   }
 
+  function clearConfirmModal() {
+    confirmModal = { open: false, action: "", eventId: "" };
+  }
+
   function handleConfirm() {
     const { action, eventId } = confirmModal;
-    confirmModal = { open: false, action: "", eventId: "" };
+    clearConfirmModal();
     if (action === "archive") doArchive(eventId);
     else if (action === "trash") doTrash(eventId);
   }
@@ -352,19 +514,44 @@
       const extra = (Array.isArray(extraPostRefs) ? extraPostRefs : [])
         .map((r) => String(r ?? "").trim())
         .filter(Boolean);
-      const refs = [...new Set([...baseRefs, ...extra])];
+      const docCom = hasPendingDocumentComment
+        ? /** @type {Record<string, unknown>} */ (pendingDocumentComment)
+        : null;
+      const revRef =
+        docCom && String(docCom.revision_id ?? "").trim()
+          ? `document_revision:${String(docCom.revision_id).trim()}`
+          : "";
+      const refs = [
+        ...new Set([...baseRefs, ...extra, ...[revRef].filter(Boolean)]),
+      ];
+      const trimmed = messageText.trim();
+      let summary = `Message: ${trimmed.slice(0, 100)}`;
+      let payload;
+      if (docCom) {
+        summary = `Comment on document text: ${trimmed.slice(0, 80)}`;
+        payload = {
+          text: trimmed,
+          kind: "document_text_comment",
+          document_comment: { ...docCom },
+        };
+      } else {
+        payload = { text: trimmed };
+      }
       await onMessagePost(routeScopeForPost, {
         type: "message_posted",
         thread_id: threadId,
         thread_ref: `thread:${threadId}`,
         refs,
-        summary: `Message: ${messageText.trim().slice(0, 100)}`,
-        payload: { text: messageText.trim() },
+        summary,
+        payload,
         provenance: { sources: ["actor_statement:ui"] },
       });
       messageText = "";
       replyToEventId = "";
       closeMentions();
+      if (docCom) {
+        onPendingDocumentPostConsumed?.();
+      }
     } catch (error) {
       postMessageError = `Failed to post: ${error instanceof Error ? error.message : String(error)}`;
     } finally {
@@ -436,6 +623,8 @@
             onTrash={openTrashConfirm}
             onUnarchive={doUnarchive}
             {lifecycleBusy}
+            {archiveLabelKind}
+            getLiveAnchorStatusForMessage={liveAnchorStatusForMessage}
           />
         {/each}
       </div>
@@ -457,6 +646,72 @@
       {postMessageError}
     </p>
   {/if}
+  {#if hasPendingDocumentComment}
+    <!--
+      Compact "comment on:" chip that lives directly above the textarea.
+      We deliberately drop the older "Replying to selected text" heading +
+      separate quote box: it doubled visual weight without adding info.
+      The leading speech-bubble icon plus a single italic line of quoted
+      text reads as "you are commenting on this" at a glance — closer to
+      Google Docs' inline composer than a mini thread reply.
+    -->
+    <div
+      class="mb-2 flex items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-1.5"
+    >
+      <svg
+        class="h-3.5 w-3.5 shrink-0 text-[var(--accent)]"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M8 12h8M8 8h8m-8 8h5m-9 3.5V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-5 3.5Z"
+        />
+      </svg>
+      <span
+        class="min-w-0 flex-1 truncate text-meta italic text-[var(--fg)]"
+        title={pendingSelectedQuote}
+      >
+        {pendingSelectedQuote}
+      </span>
+      {#if pendingIsQuoteOnly}
+        <span
+          class="shrink-0 rounded bg-[var(--line-subtle)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
+          title="Exact position not unique in this revision — comment is anchored by quote."
+        >
+          Quote only
+        </span>
+      {/if}
+      <button
+        type="button"
+        class="shrink-0 cursor-pointer rounded p-0.5 text-[var(--fg-muted)] hover:bg-[var(--panel)] hover:text-[var(--fg)]"
+        onclick={() => {
+          onClearPendingDocumentPost?.();
+        }}
+        title="Clear (Esc)"
+        aria-label="Clear comment selection"
+      >
+        <svg
+          class="h-3.5 w-3.5"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M6 18 18 6M6 6l12 12"
+          />
+        </svg>
+      </button>
+    </div>
+  {/if}
   <div class="relative">
     <textarea
       bind:this={textareaRef}
@@ -468,7 +723,9 @@
       onclick={updateMentionFromTextarea}
       onkeyup={updateMentionFromTextarea}
       onkeydown={handleMessageKeydown}
-      placeholder="Write a message..."
+      placeholder={hasPendingDocumentComment
+        ? "Add a comment, or @mention an agent…"
+        : "Write a message..."}
       rows="2"
     ></textarea>
     {#if mentionOpen}
@@ -533,18 +790,32 @@
   <div
     class="mt-1.5 flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
   >
-    <p
-      class="text-micro leading-snug text-[var(--fg-muted)] sm:min-w-0 sm:flex-1"
-    >
-      Mention <code class="text-[var(--fg)]">@handle</code> to wake a registered
-      agent in this workspace. See
-      <a
-        class="text-accent-text hover:text-accent-text"
-        href={workspacePath(organizationSlug, workspaceSlug, "/access")}
-        >Access</a
+    {#if hasPendingDocumentComment}
+      <!--
+        On the "comment on selection" path we don't need the long "wake an
+        agent" explainer above the submit button — the operator just wants
+        to write a comment. The single-word `@` hint keeps mention-to-wake
+        discoverable for power users without dominating the composer.
+      -->
+      <p
+        class="text-micro leading-snug text-[var(--fg-muted)] sm:min-w-0 sm:flex-1"
       >
-      for agent presence and registration status.
-    </p>
+        Tip: <code class="text-[var(--fg)]">@</code> mentions an agent · Esc clears
+      </p>
+    {:else}
+      <p
+        class="text-micro leading-snug text-[var(--fg-muted)] sm:min-w-0 sm:flex-1"
+      >
+        Mention <code class="text-[var(--fg)]">@handle</code> to wake a
+        registered agent in this workspace. See
+        <a
+          class="text-accent-text hover:text-accent-text"
+          href={workspacePath(organizationSlug, workspaceSlug, "/access")}
+          >Access</a
+        >
+        for agent presence and registration status.
+      </p>
+    {/if}
     <div
       class="flex shrink-0 flex-wrap items-center justify-end gap-2 sm:justify-end"
     >
@@ -567,7 +838,7 @@
         disabled={!canPost}
         type="submit"
       >
-        {postingMessage ? "Posting..." : "Post message"}
+        {postSubmitButtonText}
       </button>
     </div>
   </div>
@@ -585,5 +856,5 @@
   variant={confirmModal.action === "trash" ? "danger" : "warning"}
   busy={lifecycleBusy}
   onconfirm={handleConfirm}
-  oncancel={() => (confirmModal = { open: false, action: "", eventId: "" })}
+  oncancel={clearConfirmModal}
 />

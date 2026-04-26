@@ -82,22 +82,78 @@ function extractMessageText(event) {
   return stripMessagePrefix(event?.summary);
 }
 
+/**
+ * @param {unknown} event
+ */
+function extractDocumentComment(event) {
+  if (String(event?.payload?.kind ?? "") !== "document_text_comment") {
+    return null;
+  }
+  const raw = event?.payload?.document_comment;
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+  const o = /** @type {Record<string, unknown>} */ (raw);
+  return {
+    document_id: String(o.document_id ?? "").trim(),
+    revision_id: String(o.revision_id ?? "").trim(),
+    content_hash: String(o.content_hash ?? "").trim(),
+    selected_text: String(o.selected_text ?? "").trim(),
+    context_before: String(o.context_before ?? ""),
+    context_after: String(o.context_after ?? ""),
+    start_offset: typeof o.start_offset === "number" ? o.start_offset : null,
+    end_offset: typeof o.end_offset === "number" ? o.end_offset : null,
+    anchor_status: String(o.anchor_status ?? "").trim() || "quote_only",
+  };
+}
+
 function decorateMessageEvent(event, options = {}) {
   const view = toTimelineViewEvent(event, options);
   const messageIdsInThread = options.messageIdsInThread;
   const parentEventId = extractParentEventId(event, messageIdsInThread);
   const threadId = String(options.threadId ?? event?.thread_id ?? "").trim();
+  const documentComment = extractDocumentComment(event);
+
+  // When an event is an anchored document text comment, hide the duplicate
+  // `document:<id>` and `document_revision:<id>` ref chips from the rendered
+  // message header. The same information is already present in the structured
+  // payload (`documentComment.document_id` / `revision_id`) and surfaced
+  // visually by the quoted excerpt + anchor status pip in `MessageItem`.
+  // Suppressing them here removes ~half the visual height of an anchored
+  // comment card without losing any information that agents rely on (the raw
+  // refs remain on the underlying event).
+  const docCommentDocId = documentComment?.document_id
+    ? String(documentComment.document_id).trim()
+    : "";
+  const docCommentRevisionId = documentComment?.revision_id
+    ? String(documentComment.revision_id).trim()
+    : "";
 
   return {
     ...view,
     parentEventId,
     messageText: extractMessageText(event),
+    documentComment,
     displayRefs: view.refs.filter((refValue) => {
       const ref = String(refValue ?? "");
       if (threadId && ref === `thread:${threadId}`) {
         return false;
       }
       if (parentEventId && ref === `event:${parentEventId}`) {
+        return false;
+      }
+      if (
+        documentComment &&
+        docCommentDocId &&
+        ref === `document:${docCommentDocId}`
+      ) {
+        return false;
+      }
+      if (
+        documentComment &&
+        docCommentRevisionId &&
+        ref === `document_revision:${docCommentRevisionId}`
+      ) {
         return false;
       }
       return true;

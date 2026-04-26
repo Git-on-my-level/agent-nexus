@@ -177,4 +177,97 @@ describe("message thread utils", () => {
       flattenMessageThreadView(threads).map((message) => message.id),
     ).toEqual(["root-1", "reply-1"]);
   });
+
+  it("exposes documentComment for document_text_comment payloads", () => {
+    const threads = toMessageThreadView(
+      [
+        {
+          id: "m-1",
+          ts: "2026-04-20T10:00:00.000Z",
+          type: "message_posted",
+          thread_id: "thread-1",
+          actor_id: "a1",
+          refs: [
+            "thread:thread-1",
+            "document:doc-1",
+            "document_revision:rev-1",
+          ],
+          payload: {
+            text: "Fix wording",
+            kind: "document_text_comment",
+            document_comment: {
+              document_id: "doc-1",
+              revision_id: "rev-1",
+              content_hash: "h1",
+              selected_text: "Hello",
+              anchor_status: "current",
+            },
+          },
+        },
+      ],
+      { threadId: "thread-1" },
+    );
+    const m = threads[0];
+    expect(m.messageText).toBe("Fix wording");
+    expect(m.documentComment).toMatchObject({
+      document_id: "doc-1",
+      revision_id: "rev-1",
+      content_hash: "h1",
+      selected_text: "Hello",
+      anchor_status: "current",
+    });
+  });
+
+  it("hides redundant document and document_revision refs on doc-text comments", () => {
+    const threads = toMessageThreadView(
+      [
+        {
+          id: "m-2",
+          ts: "2026-04-20T10:00:00.000Z",
+          type: "message_posted",
+          thread_id: "thread-1",
+          actor_id: "a1",
+          refs: [
+            "thread:thread-1",
+            "document:doc-1",
+            "document_revision:rev-1",
+            "artifact:a-1",
+          ],
+          payload: {
+            text: "Fix wording",
+            kind: "document_text_comment",
+            document_comment: {
+              document_id: "doc-1",
+              revision_id: "rev-1",
+              selected_text: "Hello",
+              anchor_status: "current",
+            },
+          },
+        },
+      ],
+      { threadId: "thread-1" },
+    );
+    const m = threads[0];
+    expect(m.displayRefs).toEqual(["artifact:a-1"]);
+  });
+
+  it("keeps document refs visible on plain (non-anchored) discussion posts", () => {
+    const threads = toMessageThreadView(
+      [
+        {
+          id: "m-3",
+          ts: "2026-04-20T10:00:00.000Z",
+          type: "message_posted",
+          thread_id: "thread-1",
+          actor_id: "a1",
+          refs: ["thread:thread-1", "document:doc-1"],
+          payload: { text: "Plain discussion note" },
+        },
+      ],
+      { threadId: "thread-1" },
+    );
+    const m = threads[0];
+    expect(m.documentComment).toBeNull();
+    expect(m.displayRefs).toEqual(["document:doc-1"]);
+  });
 });
