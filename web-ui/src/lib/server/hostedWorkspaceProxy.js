@@ -211,28 +211,28 @@ export async function proxyToControlPlaneWorkspace(event, pathname) {
     workspaceSlug,
   );
   const incomingAuth = event.request.headers.get("authorization");
-  if (session?.accessToken) {
-    requestInit.headers.set("authorization", `Bearer ${session.accessToken}`);
+  const accessTok = String(session?.accessToken ?? "").trim();
+  const refreshTok = String(session?.refreshToken ?? "").trim();
+  if (accessTok) {
+    requestInit.headers.set("authorization", `Bearer ${accessTok}`);
   } else if (incomingAuth) {
     requestInit.headers.set("authorization", incomingAuth);
-  } else if (session?.refreshToken) {
+  } else if (refreshTok) {
     await ensureWorkspaceAccessTokenForCoreProxy({
       event,
       organizationSlug,
       workspaceSlug,
       coreBaseUrl: hostedCoreBaseUrl,
-      session,
+      session: { accessToken: "", refreshToken: refreshTok },
     });
     const afterEnsure = getWorkspaceAuthSession(
       event,
       organizationSlug,
       workspaceSlug,
     );
-    if (afterEnsure?.accessToken) {
-      requestInit.headers.set(
-        "authorization",
-        `Bearer ${afterEnsure.accessToken}`,
-      );
+    const nextAccess = String(afterEnsure?.accessToken ?? "").trim();
+    if (nextAccess) {
+      requestInit.headers.set("authorization", `Bearer ${nextAccess}`);
     }
   }
 

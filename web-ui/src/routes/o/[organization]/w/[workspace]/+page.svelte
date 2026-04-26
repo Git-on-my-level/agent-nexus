@@ -29,6 +29,7 @@
     selectHomeInboxPreview,
     writeHomeHandoffMarker,
   } from "$lib/homeHandoff";
+  import { initializeAuthSession } from "$lib/authSession";
   import {
     getInboxCategoryLabel,
     getInboxSubjectLabel,
@@ -209,6 +210,14 @@
   async function loadDashboard() {
     const isInitial = !refreshedAt;
     if (isInitial) loading = true;
+
+    if (browser && organizationSlug && workspaceSlug) {
+      await initializeAuthSession({
+        fetchFn: globalThis.fetch.bind(globalThis),
+        workspaceSlug,
+        authDriver: "home-dashboard",
+      });
+    }
 
     const [
       inboxResult,
