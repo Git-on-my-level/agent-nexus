@@ -56,7 +56,9 @@
   );
 
   let isBodyDocCommentHover = $derived(
-    Boolean(docComment) && $docCommentBodyHover === String(message.id),
+    Boolean(docComment) &&
+      Array.isArray($docCommentBodyHover) &&
+      $docCommentBodyHover.includes(String(message.id)),
   );
 
   /**
@@ -168,7 +170,7 @@
     data-anchor-revision-id={docComment?.revision_id || undefined}
     onmouseenter={docComment
       ? () => {
-          docCommentBodyHover.set(String(message.id));
+          docCommentBodyHover.set([String(message.id)]);
         }
       : undefined}
     onmouseleave={docComment

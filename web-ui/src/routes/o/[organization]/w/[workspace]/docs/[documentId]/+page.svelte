@@ -21,6 +21,7 @@
   import {
     applyDocumentCommentHighlights,
     clearDocumentCommentMarks,
+    eventIdsFromDocCommentMark,
   } from "$lib/documentCommentHighlight.js";
   import { docCommentBodyHover } from "$lib/stores/docCommentBodyRailSync.js";
   import { tick } from "svelte";
@@ -76,11 +77,6 @@
   let moreActionsRoot = $state(null);
   /** Selection stash + discussion rail for document text comments */
   let docBodyMarkdownRoot = $state(null);
-  /** Gutter column aligned with the body (for anchored-comment dots) */
-  let docCommentGutterRoot = $state(/** @type {HTMLElement | null} */ (null));
-  let gutterDocCommentDots = $state(
-    /** @type {Array<{ eventId: string, topPx: number }>} */ ([]),
-  );
   let docStashedSelection = $state("");
   /**
    * Position of the floating "Comment" pill while the operator has an
@@ -714,26 +710,30 @@
    * both reactively (when hover changes) AND right after highlights are
    * regenerated, since the highlight pass tears down the old `<mark>`
    * elements and creates fresh ones with only their base inline style — if
-   * we didn't re-apply glow here the rail-card/gutter hover state would
+   * we didn't re-apply glow here the rail hover state would
    * silently desync until the operator nudges their pointer.
    */
   function applyDocCommentGlow() {
     const root = /** @type {HTMLElement | null} */ (docBodyMarkdownRoot);
     if (!root) return;
-    const activeId = $docCommentBodyHover ?? "";
+    const active = $docCommentBodyHover ?? null;
+    const activeSet = new Set(active ?? []);
     const marks = root.querySelectorAll(
       "mark.js-doc-comment-mark[data-event-id]",
     );
     for (const m of Array.from(marks)) {
       const el = /** @type {HTMLElement} */ (m);
-      const id = String(m.getAttribute("data-event-id") ?? "").trim();
       if (m.classList.contains("is-pending")) continue;
       if (!m.classList.contains("is-posted")) continue;
-      if (activeId && id === activeId) {
+      const ids = eventIdsFromDocCommentMark(m);
+      const isActive = ids.some((id) => activeSet.has(id));
+      if (isActive) {
         el.style.backgroundColor =
           "color-mix(in oklab, var(--accent) 24%, transparent)";
+        el.style.outline = "none";
         el.style.borderBottomStyle = "solid";
       } else {
+        el.style.outline = "none";
         el.style.backgroundColor =
           "color-mix(in oklab, var(--accent) 8%, transparent)";
         el.style.borderBottomStyle = "dashed";
@@ -766,9 +766,6 @@
       // Re-apply glow on the freshly minted marks so hover state survives
       // a highlight regeneration (revision/composer/rail change).
       applyDocCommentGlow();
-      requestAnimationFrame(() => {
-        recalcGutterDocCommentDots();
-      });
     });
     return () => {
       if (docBodyMarkdownRoot) {
@@ -780,9 +777,10 @@
   });
 
   /**
-   * Bidirectional hover sync: body marks carry `data-event-id` (set in
-   * `applyDocumentCommentHighlights`); the rail highlights the matching
-   * `MessageItem` via `docCommentBodyHover`.
+   * Bidirectional hover sync: body marks carry `data-event-id` / `data-event-ids`
+   * (set in `applyDocumentCommentHighlights`); the rail highlights the matching
+   * `MessageItem` rows via `docCommentBodyHover` (a list so stacked anchors
+   * highlight every thread on that range).
    */
   $effect(() => {
     const root = /** @type {HTMLElement | null} */ (docBodyMarkdownRoot);
@@ -790,11 +788,21 @@
       return;
     }
     function onPointerOver(/** @type {PointerEvent} */ e) {
-      if (!(e.target instanceof Element)) {
+      const node = e.target;
+      if (!node || !(node instanceof Node)) {
         return;
       }
-      const m = e.target.closest("mark.js-doc-comment-mark[data-event-id]");
-      docCommentBodyHover.set(m?.getAttribute("data-event-id")?.trim() || null);
+      const el = node instanceof Element ? node : node.parentElement;
+      if (!el) {
+        return;
+      }
+      const m = el.closest("mark.js-doc-comment-mark[data-event-id]");
+      if (!m) {
+        docCommentBodyHover.set(null);
+        return;
+      }
+      const ids = eventIdsFromDocCommentMark(m);
+      docCommentBodyHover.set(ids.length > 0 ? ids : null);
     }
     function onPointerLeave() {
       docCommentBodyHover.set(null);
@@ -853,104 +861,6 @@
   function clearDocumentTextComment() {
     pendingDocumentComment = null;
   }
-
-  function recalcGutterDocCommentDots() {
-    if (typeof window === "undefined") {
-      return;
-    }
-    const gut = /** @type {HTMLElement | null} */ (docCommentGutterRoot);
-    const body = /** @type {HTMLElement | null} */ (docBodyMarkdownRoot);
-    if (!gut || !body) {
-      gutterDocCommentDots = [];
-      return;
-    }
-    const posted = documentAnchorContext.posted;
-    if (posted.length === 0) {
-      gutterDocCommentDots = [];
-      return;
-    }
-    const gRect = gut.getBoundingClientRect();
-    // We now wrap each text-node fragment of a quote in its own <mark> for
-    // reliable multi-line highlighting (see documentCommentHighlight.js).
-    // That means a single comment can produce N marks, and we'd otherwise
-    // render a stack of N gutter pips for it. Dedupe by event id, anchoring
-    // each pip to the *top-most* mark fragment for that comment.
-    /** @type {Map<string, number>} */
-    const minTopByEvent = new Map();
-    const marks = body.querySelectorAll(
-      "mark.js-doc-comment-mark[data-event-id]",
-    );
-    for (const mark of Array.from(marks)) {
-      const id = String(mark.getAttribute("data-event-id") ?? "").trim();
-      if (!id) {
-        continue;
-      }
-      const mRect = mark.getBoundingClientRect();
-      const topPx = mRect.top - gRect.top + mRect.height / 2;
-      if (!Number.isFinite(topPx)) continue;
-      const prev = minTopByEvent.get(id);
-      if (prev === undefined || topPx < prev) {
-        minTopByEvent.set(id, topPx);
-      }
-    }
-    /** @type {Array<{ eventId: string, topPx: number }>} */
-    const out = [];
-    for (const [id, topPx] of minTopByEvent.entries()) {
-      out.push({ eventId: id, topPx });
-    }
-    out.sort((a, b) => a.topPx - b.topPx);
-    gutterDocCommentDots = out;
-  }
-
-  function fromGutterFocusAnchor(/** @type {string} */ eventId) {
-    if (!eventId) {
-      return;
-    }
-    const wdoc = window.document;
-    if (!wdoc) {
-      return;
-    }
-    const msg = wdoc.getElementById(`message-${eventId}`);
-    if (msg) {
-      msg.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    }
-    docCommentBodyHover.set(eventId);
-    const body = /** @type {HTMLElement | null} */ (docBodyMarkdownRoot);
-    if (body) {
-      for (const m of body.querySelectorAll(
-        "mark.js-doc-comment-mark[data-event-id]",
-      )) {
-        if (m.getAttribute("data-event-id") === eventId) {
-          m.scrollIntoView({ behavior: "smooth", block: "center" });
-          const el = /** @type {HTMLElement} */ (m);
-          const before = el.style.outline;
-          const beforeW = el.style.outlineWidth;
-          el.style.outline = "2px solid var(--accent)";
-          el.style.outlineOffset = "1px";
-          window.setTimeout(() => {
-            el.style.outline = before;
-            el.style.outlineWidth = beforeW;
-          }, 800);
-          break;
-        }
-      }
-    }
-  }
-
-  $effect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    const onMove = () => {
-      recalcGutterDocCommentDots();
-    };
-    window.addEventListener("scroll", onMove, true);
-    window.addEventListener("resize", onMove);
-    return () => {
-      window.removeEventListener("scroll", onMove, true);
-      window.removeEventListener("resize", onMove);
-    };
-  });
 </script>
 
 <nav
@@ -1399,51 +1309,9 @@
             </div>
           {/if}
 
-          <div class="mt-3 flex min-w-0 items-stretch gap-0">
-            {#if document.thread_id}
-              <!--
-                Comment gutter: a thin vertical column to the left of the doc
-                body that hosts a small chat-bubble icon for each anchored
-                comment. The dotted underline in the body shows *that* a
-                comment exists; the gutter icon shows *how many* comments
-                this doc has, gives a clickable jump target, and orients
-                operators on long pages without scanning the body for
-                underlines. Hover/focus also light up the matching rail
-                card and body mark via `docCommentBodyHover`.
-              -->
-              <div
-                bind:this={docCommentGutterRoot}
-                class="relative hidden shrink-0 overflow-visible lg:block lg:w-5"
-              >
-                {#each gutterDocCommentDots as dot (dot.eventId)}
-                  <button
-                    type="button"
-                    class="group absolute left-0 -translate-y-1/2 cursor-pointer rounded-full p-0.5 text-[var(--accent)] transition-colors hover:bg-[var(--bg-soft)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
-                    style={`top: ${dot.topPx}px;`}
-                    title="Jump to comment"
-                    aria-label="Jump to anchored comment"
-                    onclick={() => fromGutterFocusAnchor(dot.eventId)}
-                    onmouseenter={() => docCommentBodyHover.set(dot.eventId)}
-                    onmouseleave={() => docCommentBodyHover.set(null)}
-                    onfocus={() => docCommentBodyHover.set(dot.eventId)}
-                    onblur={() => docCommentBodyHover.set(null)}
-                  >
-                    <svg
-                      class="h-3.5 w-3.5 opacity-70 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
-                      fill="currentColor"
-                      viewBox="0 0 24 24"
-                      aria-hidden="true"
-                    >
-                      <path
-                        d="M4 5a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-4l-4.4 3.3A1 1 0 0 1 7 18.5V16H7a3 3 0 0 1-3-3V5Z"
-                      />
-                    </svg>
-                  </button>
-                {/each}
-              </div>
-            {/if}
+          <div class="mt-3 min-w-0">
             <div
-              class="min-w-0 flex-1 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
+              class="min-w-0 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
             >
               <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
               <div

@@ -10,6 +10,31 @@ const authSessionMocks = vi.hoisted(() => ({
   readWorkspaceRefreshToken: vi.fn(() => ""),
   refreshWorkspaceAuthSession: vi.fn(async () => null),
   clearWorkspaceAuthSession: vi.fn(),
+  ensureWorkspaceAccessTokenForCoreProxy: vi.fn(
+    async ({ event, organizationSlug, workspaceSlug, coreBaseUrl, session }) => {
+      const s =
+        session ??
+        authSessionMocks.getWorkspaceAuthSession(
+          event,
+          organizationSlug,
+          workspaceSlug,
+        );
+      if (
+        !coreBaseUrl ||
+        !s ||
+        String(s.accessToken ?? "").trim() ||
+        !String(s.refreshToken ?? "").trim()
+      ) {
+        return;
+      }
+      await authSessionMocks.refreshWorkspaceAuthSession({
+        event,
+        organizationSlug,
+        workspaceSlug,
+        coreBaseUrl,
+      });
+    },
+  ),
   isRetryableWorkspaceRefreshFailure: vi.fn(() => false),
   shouldClearWorkspaceAuthSessionAfterRetryableFailure: vi.fn(() => false),
 }));
@@ -29,6 +54,8 @@ vi.mock("$lib/server/authSession", () => ({
   readWorkspaceRefreshToken: authSessionMocks.readWorkspaceRefreshToken,
   refreshWorkspaceAuthSession: authSessionMocks.refreshWorkspaceAuthSession,
   clearWorkspaceAuthSession: authSessionMocks.clearWorkspaceAuthSession,
+  ensureWorkspaceAccessTokenForCoreProxy:
+    authSessionMocks.ensureWorkspaceAccessTokenForCoreProxy,
   isRetryableWorkspaceRefreshFailure:
     authSessionMocks.isRetryableWorkspaceRefreshFailure,
   shouldClearWorkspaceAuthSessionAfterRetryableFailure:

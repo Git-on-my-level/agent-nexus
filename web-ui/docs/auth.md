@@ -49,6 +49,10 @@ Notable route behavior:
 
 Refresh replay detection (`REFRESH_REPLAY_WINDOW_MS` in `src/lib/server/authSession.js`) is in-memory per web-ui process.
 
+## Development / Docker
+
+If a workspace `anx-core` process or container is restarted, its SQLite auth tables are reset while the browser may still hold `anx_ui_*` cookies. Refresh-token exchange then fails until you sign in to the workspace again (or clear those cookies). This is separate from access-token expiry; it can look like “random” 401s after rebuilding or bouncing local cores.
+
 ## Commands
 
 - Unit tests: `pnpm run test:unit`

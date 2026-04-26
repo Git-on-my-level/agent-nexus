@@ -23,6 +23,31 @@ const proxyWorkspaceTargetMocks = vi.hoisted(() => ({
 
 const authSessionMocks = vi.hoisted(() => ({
   clearWorkspaceAuthSession: vi.fn(),
+  ensureWorkspaceAccessTokenForCoreProxy: vi.fn(
+    async ({ event, organizationSlug, workspaceSlug, coreBaseUrl, session }) => {
+      const s =
+        session ??
+        authSessionMocks.getWorkspaceAuthSession(
+          event,
+          organizationSlug,
+          workspaceSlug,
+        );
+      if (
+        !coreBaseUrl ||
+        !s ||
+        String(s.accessToken ?? "").trim() ||
+        !String(s.refreshToken ?? "").trim()
+      ) {
+        return;
+      }
+      await authSessionMocks.refreshWorkspaceAuthSession({
+        event,
+        organizationSlug,
+        workspaceSlug,
+        coreBaseUrl,
+      });
+    },
+  ),
   getWorkspaceAuthSession: vi.fn(() => authSessionState.currentSession),
   isRetryableWorkspaceRefreshFailure: vi.fn(
     (error, options) =>
@@ -62,6 +87,8 @@ vi.mock("$lib/workspacePaths", async (importOriginal) => {
 
 vi.mock("$lib/server/authSession", () => ({
   clearWorkspaceAuthSession: authSessionMocks.clearWorkspaceAuthSession,
+  ensureWorkspaceAccessTokenForCoreProxy:
+    authSessionMocks.ensureWorkspaceAccessTokenForCoreProxy,
   getWorkspaceAuthSession: authSessionMocks.getWorkspaceAuthSession,
   isRetryableWorkspaceRefreshFailure:
     authSessionMocks.isRetryableWorkspaceRefreshFailure,
@@ -173,6 +200,45 @@ describe("hooks proxy retry", () => {
     expect(globalThis.fetch).toHaveBeenCalledWith(
       "https://core.example.test/api/threads",
       expect.anything(),
+    );
+  });
+
+  it("pre-refreshes when only a refresh token exists so the first core fetch includes Authorization", async () => {
+    authSessionState.currentSession = {
+      refreshToken: "rt",
+      accessToken: "",
+    };
+    globalThis.fetch = vi.fn(
+      async () =>
+        new Response("{}", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    await handle({
+      event: {
+        url: new URL("https://anx.example.test/api/threads"),
+        request: new Request("https://anx.example.test/api/threads", {
+          method: "GET",
+          headers: { accept: "application/json" },
+        }),
+      },
+      resolve: vi.fn(),
+    });
+    expect(
+      authSessionMocks.ensureWorkspaceAccessTokenForCoreProxy,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        organizationSlug: "acme",
+        workspaceSlug: "ops",
+        coreBaseUrl: "https://core.example.test",
+      }),
+    );
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    const [, init] = globalThis.fetch.mock.calls[0];
+    expect(init.headers.get("authorization")).toBe("Bearer fresh-token");
+    expect(authSessionMocks.refreshWorkspaceAuthSession).toHaveBeenCalledTimes(
+      1,
     );
   });
 

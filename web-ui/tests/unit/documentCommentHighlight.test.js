@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyDocumentCommentHighlights,
   clearDocumentCommentMarks,
+  eventIdsFromDocCommentMark,
   highlightDocumentCommentRange,
 } from "../../src/lib/documentCommentHighlight.js";
 
@@ -140,6 +141,43 @@ describe("documentCommentHighlight", () => {
     expect(marks.length).toBe(2);
     expect(marks[0].getAttribute("data-event-id")).toBe("evt-a");
     expect(marks[1].getAttribute("data-event-id")).toBe("evt-b");
+  });
+
+  it("splits a shorter quote inside a longer one into distinct marks with correct ids", () => {
+    const root = makeRoot("<p>abcdefgh</p>");
+    applyDocumentCommentHighlights(root, {
+      posted: [
+        { quote: "abcdef", eventId: "long" },
+        { quote: "def", eventId: "short" },
+      ],
+      pendingQuote: "",
+    });
+    const marks = root.querySelectorAll("mark[data-doc-comment-mark='1']");
+    expect(marks.length).toBe(2);
+    expect(marks[0].textContent).toBe("abc");
+    expect(marks[0].getAttribute("data-event-id")).toBe("long");
+    expect(marks[0].hasAttribute("data-event-ids")).toBe(false);
+    expect(marks[1].textContent).toBe("def");
+    expect(marks[1].getAttribute("data-event-id")).toBe("long");
+    expect(marks[1].getAttribute("data-event-ids")).toBe("long short");
+  });
+
+  it("merges two posted comments on the same quote into one mark with data-event-ids", () => {
+    const root = makeRoot("<p>Same line</p>");
+    applyDocumentCommentHighlights(root, {
+      posted: [
+        { quote: "Same line", eventId: "evt-1" },
+        { quote: "Same line", eventId: "evt-2" },
+      ],
+      pendingQuote: "",
+    });
+    const marks = root.querySelectorAll("mark[data-doc-comment-mark='1']");
+    expect(marks.length).toBe(1);
+    expect(marks[0].getAttribute("data-event-id")).toBe("evt-1");
+    expect(marks[0].getAttribute("data-event-ids")).toBe("evt-1 evt-2");
+    expect(
+      eventIdsFromDocCommentMark(/** @type {Element} */ (marks[0])),
+    ).toEqual(["evt-1", "evt-2"]);
   });
 
   it("applyDocumentCommentHighlights prefers pending over a matching posted quote", () => {

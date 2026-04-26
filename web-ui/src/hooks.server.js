@@ -7,6 +7,7 @@ import { CURRENT_VERSION } from "$lib/generated/version";
 import { stripBasePath } from "$lib/workspacePaths";
 import {
   clearWorkspaceAuthSession,
+  ensureWorkspaceAccessTokenForCoreProxy,
   getWorkspaceAuthSession,
   isRetryableWorkspaceRefreshFailure,
   readWorkspaceRefreshToken,
@@ -198,7 +199,28 @@ async function proxyToCore(
     requestInit.headers.set("authorization", `Bearer ${session.accessToken}`);
   } else if (incomingAuth) {
     requestInit.headers.set("authorization", incomingAuth);
+  } else if (session?.refreshToken) {
+    await ensureWorkspaceAccessTokenForCoreProxy({
+      event,
+      organizationSlug,
+      workspaceSlug,
+      coreBaseUrl,
+      session,
+    });
+    const afterEnsure = getWorkspaceAuthSession(
+      event,
+      organizationSlug,
+      workspaceSlug,
+    );
+    if (afterEnsure?.accessToken) {
+      requestInit.headers.set(
+        "authorization",
+        `Bearer ${afterEnsure.accessToken}`,
+      );
+    }
   }
+
+  const hadAccessTokenOnFirstRequest = requestInit.headers.has("authorization");
 
   let upstreamResponse;
   try {
@@ -231,7 +253,7 @@ async function proxyToCore(
       workspaceSlug,
       targetUrl,
       requestBody,
-      Boolean(session?.accessToken),
+      hadAccessTokenOnFirstRequest,
     );
     if (retriedResponse) {
       upstreamResponse = retriedResponse;

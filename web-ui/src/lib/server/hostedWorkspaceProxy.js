@@ -5,6 +5,7 @@ import { CURRENT_VERSION } from "$lib/generated/version";
 import { parseWorkspaceRouteSlugs } from "$lib/workspacePaths";
 import {
   clearWorkspaceAuthSession,
+  ensureWorkspaceAccessTokenForCoreProxy,
   getWorkspaceAuthSession,
   isRetryableWorkspaceRefreshFailure,
   readWorkspaceRefreshToken,
@@ -184,6 +185,11 @@ export async function proxyToControlPlaneWorkspace(event, pathname) {
     );
   }
 
+  const hostedCoreBaseUrl = new URL(
+    `/ws/${organizationSlug}/${workspaceSlug}`,
+    `${controlPlaneBaseUrl}/`,
+  ).toString();
+
   const method = event.request.method.toUpperCase();
   let requestBody;
   if (method !== "GET" && method !== "HEAD") {
@@ -210,20 +216,27 @@ export async function proxyToControlPlaneWorkspace(event, pathname) {
   } else if (incomingAuth) {
     requestInit.headers.set("authorization", incomingAuth);
   } else if (session?.refreshToken) {
-    const refreshedResponse = await refreshAndRetryHostedWorkspaceRequest(
+    await ensureWorkspaceAccessTokenForCoreProxy({
       event,
-      controlPlaneBaseUrl,
       organizationSlug,
       workspaceSlug,
-      pathname,
-      event.url.search,
-      requestBody,
-      false,
+      coreBaseUrl: hostedCoreBaseUrl,
+      session,
+    });
+    const afterEnsure = getWorkspaceAuthSession(
+      event,
+      organizationSlug,
+      workspaceSlug,
     );
-    if (refreshedResponse) {
-      upstreamResponse = refreshedResponse;
+    if (afterEnsure?.accessToken) {
+      requestInit.headers.set(
+        "authorization",
+        `Bearer ${afterEnsure.accessToken}`,
+      );
     }
   }
+
+  const hadAccessTokenOnFirstRequest = requestInit.headers.has("authorization");
 
   try {
     upstreamResponse ??= await fetch(targetUrl, requestInit);
@@ -256,7 +269,7 @@ export async function proxyToControlPlaneWorkspace(event, pathname) {
       pathname,
       event.url.search,
       requestBody,
-      Boolean(session?.accessToken),
+      hadAccessTokenOnFirstRequest,
     );
     if (retriedResponse) {
       upstreamResponse = retriedResponse;

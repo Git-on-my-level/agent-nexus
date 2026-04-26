@@ -129,84 +129,97 @@
     rawRecord != null && typeof rawRecord === "object",
   );
   /**
-   * Per polish §P2 the kebab uses hide-when-absent semantics for every menu
-   * item — if none would render, the kebab itself is suppressed so we never
-   * show a button that opens an empty menu.
+   * Hide-when-absent: if there are no copy-to-clipboard extras, the chevron
+   * segment is omitted so we only show a single Share control.
    */
   let hasMenuItems = $derived(idCopyable || hashCopyable || jsonCopyable);
 </script>
 
-<div
-  bind:this={rootEl}
-  class="relative inline-flex shrink-0 items-center gap-1"
->
+<div bind:this={rootEl} class="relative inline-flex shrink-0">
   <span class="sr-only" aria-live="polite">{liveStatus}</span>
-  <Button
-    variant="secondary"
-    size="compact"
-    onclick={() => void copyShareLink()}
-    aria-label={shareCopied ? "Link copied" : "Copy link to this page"}
-  >
-    {shareCopied ? "Copied" : "Share"}
-  </Button>
   {#if hasMenuItems}
-    <div class="relative">
+    <div
+      class="inline-flex rounded-md border border-line bg-transparent"
+    >
       <button
         type="button"
-        class="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-line bg-transparent text-fg-muted transition-colors hover:bg-panel-hover hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
-        aria-label="More copy options"
-        aria-expanded={menuOpen}
-        aria-haspopup="menu"
-        onclick={toggleMenu}
+        class="inline-flex h-7 min-w-0 max-w-[10rem] shrink items-center justify-center rounded-l-md border-0 bg-transparent px-3 text-micro font-normal text-fg transition-colors hover:bg-panel-hover"
+        aria-label={shareCopied ? "Link copied" : "Copy link to this page"}
+        onclick={() => void copyShareLink()}
       >
-        <svg
-          class="h-4 w-4"
-          fill="currentColor"
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-        >
-          <circle cx="12" cy="5" r="1.75" />
-          <circle cx="12" cy="12" r="1.75" />
-          <circle cx="12" cy="19" r="1.75" />
-        </svg>
+        {shareCopied ? "Copied" : "Share"}
       </button>
-      {#if menuOpen}
-        <div
-          class="absolute right-0 z-50 mt-1 min-w-[11rem] rounded-md border border-[var(--line)] bg-[var(--panel)] py-1 shadow-lg"
-          role="menu"
+      <div class="relative">
+        <button
+          type="button"
+          class="inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-r-md border-0 border-l border-line bg-transparent text-fg-muted transition-colors hover:bg-panel-hover hover:text-fg"
+          aria-label="Copy ID, content hash, or raw JSON"
+          aria-expanded={menuOpen}
+          aria-haspopup="menu"
+          onclick={toggleMenu}
         >
-          {#if idCopyable}
-            <button
-              type="button"
-              role="menuitem"
-              class="block w-full px-3 py-2 text-left text-micro text-[var(--fg)] hover:bg-[var(--line-subtle)]"
-              onclick={() => void copyId()}
-            >
-              {menuItemCopied === "id" ? "Copied" : "Copy ID"}
-            </button>
-          {/if}
-          {#if hashCopyable}
-            <button
-              type="button"
-              role="menuitem"
-              class="block w-full px-3 py-2 text-left text-micro text-[var(--fg)] hover:bg-[var(--line-subtle)]"
-              onclick={() => void copyHash()}
-            >
-              {menuItemCopied === "hash" ? "Copied" : "Copy content hash"}
-            </button>
-          {/if}
-          {#if jsonCopyable}
-            <button
-              type="button"
-              role="menuitem"
-              class="block w-full px-3 py-2 text-left text-micro text-[var(--fg)] hover:bg-[var(--line-subtle)]"
-              onclick={() => void copyJson()}
-            >
-              {menuItemCopied === "json" ? "Copied" : "Copy raw JSON"}
-            </button>
-          {/if}
-        </div>
-      {/if}
+          <svg
+            class="h-3.5 w-3.5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            stroke-width="2"
+            aria-hidden="true"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M19 9l-7 7-7-7"
+            />
+          </svg>
+        </button>
+        {#if menuOpen}
+          <div
+            class="absolute right-0 z-50 mt-1 min-w-[11rem] rounded-md border border-[var(--line)] bg-[var(--panel)] py-1 shadow-lg"
+            role="menu"
+          >
+            {#if idCopyable}
+              <button
+                type="button"
+                role="menuitem"
+                class="block w-full px-3 py-2 text-left text-micro text-[var(--fg)] hover:bg-[var(--line-subtle)]"
+                onclick={() => void copyId()}
+              >
+                {menuItemCopied === "id" ? "Copied" : "Copy ID"}
+              </button>
+            {/if}
+            {#if hashCopyable}
+              <button
+                type="button"
+                role="menuitem"
+                class="block w-full px-3 py-2 text-left text-micro text-[var(--fg)] hover:bg-[var(--line-subtle)]"
+                onclick={() => void copyHash()}
+              >
+                {menuItemCopied === "hash" ? "Copied" : "Copy content hash"}
+              </button>
+            {/if}
+            {#if jsonCopyable}
+              <button
+                type="button"
+                role="menuitem"
+                class="block w-full px-3 py-2 text-left text-micro text-[var(--fg)] hover:bg-[var(--line-subtle)]"
+                onclick={() => void copyJson()}
+              >
+                {menuItemCopied === "json" ? "Copied" : "Copy raw JSON"}
+              </button>
+            {/if}
+          </div>
+        {/if}
+      </div>
     </div>
+  {:else}
+    <Button
+      variant="secondary"
+      size="compact"
+      onclick={() => void copyShareLink()}
+      aria-label={shareCopied ? "Link copied" : "Copy link to this page"}
+    >
+      {shareCopied ? "Copied" : "Share"}
+    </Button>
   {/if}
 </div>

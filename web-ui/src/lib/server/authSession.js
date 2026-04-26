@@ -654,6 +654,73 @@ export async function refreshWorkspaceAuthSession({
   );
 }
 
+/**
+ * When cookies hold a refresh token but the access token is absent or empty,
+ * exchange the refresh once before the first proxied request to anx-core (same
+ * ordering as {@link loadWorkspaceAuthenticatedAgent}).
+ *
+ * @param {object} params
+ * @param {import('@sveltejs/kit').RequestEvent} params.event
+ * @param {string} params.organizationSlug
+ * @param {string} params.workspaceSlug
+ * @param {string} params.coreBaseUrl Base URL for core `/auth/token` (direct core or hosted `/ws/{org}/{ws}` prefix URL)
+ * @param {{ accessToken?: string, refreshToken?: string } | null} [params.session] Optional session from a prior {@link getWorkspaceAuthSession} call
+ * @returns {Promise<void>}
+ */
+export async function ensureWorkspaceAccessTokenForCoreProxy({
+  event,
+  organizationSlug,
+  workspaceSlug,
+  coreBaseUrl,
+  session: sessionHint,
+}) {
+  if (!coreBaseUrl) {
+    return;
+  }
+
+  const session =
+    sessionHint ??
+    getWorkspaceAuthSession(event, organizationSlug, workspaceSlug);
+  if (!session) {
+    return;
+  }
+  if (String(session.accessToken ?? "").trim()) {
+    return;
+  }
+  if (!String(session.refreshToken ?? "").trim()) {
+    return;
+  }
+
+  try {
+    await refreshWorkspaceAuthSession({
+      event,
+      organizationSlug,
+      workspaceSlug,
+      coreBaseUrl,
+    });
+  } catch (error) {
+    if (
+      isRetryableWorkspaceRefreshFailure(error, {
+        hadAccessToken: false,
+        hadRefreshToken: true,
+      })
+    ) {
+      if (
+        shouldClearWorkspaceAuthSessionAfterRetryableFailure(
+          event,
+          organizationSlug,
+          workspaceSlug,
+        )
+      ) {
+        clearWorkspaceAuthSession(event, organizationSlug, workspaceSlug);
+      }
+      return;
+    }
+
+    clearWorkspaceAuthSession(event, organizationSlug, workspaceSlug);
+  }
+}
+
 export function isLikelyStaleWorkspaceRefreshFailure(
   error,
   { hadAccessToken = false } = {},

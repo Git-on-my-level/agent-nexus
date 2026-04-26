@@ -37,6 +37,7 @@ vi.mock("$lib/workspacePaths", async (importOriginal) => {
 
 vi.mock("$lib/server/authSession", () => ({
   clearWorkspaceAuthSession: vi.fn(),
+  ensureWorkspaceAccessTokenForCoreProxy: vi.fn(async () => {}),
   getWorkspaceAuthSession: vi.fn(() => ({ accessToken: "" })),
   isRetryableWorkspaceRefreshFailure: vi.fn(() => false),
   readWorkspaceRefreshToken: vi.fn(() => ""),
