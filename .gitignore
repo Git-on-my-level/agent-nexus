@@ -14,7 +14,7 @@ core/.oar-dev-secrets-key
 core/.oar-dev-saas-ed25519
 core/.oar-workspace/
 core/.oar-control-plane/
-# Local control-plane workspace for `make serve-control-plane` / dev-control-plane
+# Local control-plane workspace for `../controlplane` `make serve` (hosted dev) / dev-control-plane
 core/.anx-control-plane/
 # Regenerated when `make serve` seeds dev identities (contains invite tokens)
 cli/dogfood-resources/*.generated.json

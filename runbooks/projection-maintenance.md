@@ -96,7 +96,9 @@ The rebuild endpoint:
 - Returns when backlog is cleared
 - Safe to call repeatedly
 
-Switching modes at runtime requires restart:
+Switching modes at runtime requires restarting the workspace core. The example
+below is for OSS self-hosted/operator layouts that use the public systemd unit;
+hosted SaaS workspaces are Docker-managed from the private `controlplane/` repo.
 
 ```bash
 # Update env file
