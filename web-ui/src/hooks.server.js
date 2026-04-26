@@ -298,6 +298,12 @@ export async function handle({ event, resolve }) {
   const pathname = stripBasePath(event.url.pathname);
   const method = event.request.method;
   if (shouldBypassProxy(pathname, method)) {
+    logServerEvent("auth.callback.proxy_bypass", {
+      method,
+      path: event.url.pathname,
+      referer: event.request.headers.get("referer") ?? "",
+      origin: event.request.headers.get("origin") ?? "",
+    });
     const response = await resolve(event);
     response.headers.set("X-ANX-UI-Version", CURRENT_VERSION);
     return response;
@@ -310,6 +316,18 @@ export async function handle({ event, resolve }) {
     !documentNavigation;
 
   if (proxyableRequest) {
+    if (String(pathname).includes("/auth/callback")) {
+      logServerEvent(
+        "auth.callback.proxy_unexpected",
+        {
+          method,
+          path: event.url.pathname,
+          referer: event.request.headers.get("referer") ?? "",
+          origin: event.request.headers.get("origin") ?? "",
+        },
+        { level: "error" },
+      );
+    }
     const target = await resolveProxyTarget({
       event,
       workspaceSlug: getWorkspaceHeader(event.request.headers),
