@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from dataclasses import asdict
-from pathlib import Path
 
 from . import __version__
 from .auth import AuthManager
@@ -12,7 +10,15 @@ from .bridge import AgentBridge
 from .config import LoadedConfig, load_config
 from .anx_client import ANXClient
 from .registry import apply_registration, registration_status
-from .adapters import DeterministicAckAdapter, HermesACPAdapter, ZeroClawGatewayAdapter
+from .adapters import (
+    DeterministicAckAdapter,
+    RESPONSE_SCHEMA_VERSION,
+    SubprocessAdapter,
+    build_dispatch_request,
+    build_doctor_request,
+    load_plugin_adapter,
+    sample_wake_packet_for_contract,
+)
 from .state_store import JSONStateStore
 from .util import configure_logging
 
@@ -22,32 +28,44 @@ def build_client(config: LoadedConfig, auth: AuthManager | None = None) -> ANXCl
 
 
 def build_adapter(config: LoadedConfig):
-    kind = config.adapter.get_str("kind", config.agent.adapter_kind if config.agent else "")
-    if kind == "hermes_acp":
-        command = config.adapter.get_list("command") or ["hermes", "acp"]
-        cwd_default = config.adapter.require_str("cwd_default")
-        workspace_map = config.adapter.get_table("workspace_map")
-        env = config.adapter.raw.get("env") if isinstance(config.adapter.raw.get("env"), dict) else None
-        env_str = {str(k): str(v) for k, v in (env or {}).items()}
-        return HermesACPAdapter(
+    if config.agent is None:
+        raise ValueError("bridge adapter requires [agent] in config")
+    kind = config.adapter.get_str("kind", config.agent.adapter_kind).strip()
+    if not kind:
+        raise ValueError("adapter kind is empty; set [adapter].kind or [agent].adapter_kind")
+    if kind == "subprocess":
+        command = config.adapter.get_list("command")
+        if not command:
+            raise ValueError("subprocess adapter requires [adapter].command as a non-empty string array")
+        cwd = config.adapter.get_str("cwd", "") or None
+        env_raw = config.adapter.raw.get("env")
+        env_str: dict[str, str] | None = None
+        if isinstance(env_raw, dict):
+            env_str = {str(k): str(v) for k, v in env_raw.items()}
+        doctor_raw = config.adapter.raw.get("doctor_command")
+        doctor_command: list[str] | None = None
+        if isinstance(doctor_raw, list) and len(doctor_raw) > 0:
+            doctor_command = [str(x) for x in doctor_raw]
+        return SubprocessAdapter(
             command=command,
-            cwd_default=cwd_default,
-            workspace_map=workspace_map,
-            env=env_str or None,
-            auto_select_permission=config.adapter.get_bool("auto_select_permission", True),
-            permission_option_id=config.adapter.get_str("permission_option_id", "") or None,
+            handle=config.agent.handle,
+            workspace_id=config.anx.workspace_id,
+            cwd=cwd,
+            env=env_str,
+            dispatch_timeout_seconds=config.adapter.get_int("timeout_seconds", 600),
+            doctor_timeout_seconds=config.adapter.get_int("doctor_timeout_seconds", 60),
+            doctor_command=doctor_command,
+            adapter_raw=dict(config.adapter.raw),
         )
-    if kind == "zeroclaw_gateway":
-        return ZeroClawGatewayAdapter(
-            base_url=config.adapter.require_str("base_url"),
-            bearer_token=config.adapter.require_str("bearer_token"),
-            webhook_secret=config.adapter.get_str("webhook_secret", "") or None,
-            request_timeout_seconds=config.adapter.get_int("request_timeout_seconds", 600),
-            session_header_name=config.adapter.get_str("session_header_name", "X-Session-Id") or "X-Session-Id",
-        )
+    if kind == "python_plugin":
+        mod = config.adapter.require_str("plugin_module")
+        fac = config.adapter.require_str("plugin_factory")
+        return load_plugin_adapter(mod, fac, dict(config.adapter.raw))
     if kind == "deterministic_ack":
         return DeterministicAckAdapter()
-    raise ValueError(f"Unsupported adapter kind: {kind}")
+    raise ValueError(
+        f"Unsupported adapter kind: {kind!r}; use subprocess, python_plugin, or deterministic_ack (tests only)"
+    )
 
 
 def cmd_auth_register(args: argparse.Namespace) -> int:
@@ -145,6 +163,50 @@ def cmd_bridge_doctor(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_adapter_contract(args: argparse.Namespace) -> int:
+    config = load_config(args.config)
+    if config.agent is None:
+        raise ValueError("adapter contract requires an [agent] section")
+    packet = sample_wake_packet_for_contract(
+        handle=config.agent.handle,
+        workspace_id=config.anx.workspace_id,
+        workspace_name=config.anx.workspace_name,
+        anx_base_url=config.anx.base_url,
+    )
+    adapter_table = dict(config.adapter.raw)
+    dispatch_example = build_dispatch_request(
+        wake_packet=packet,
+        prompt_text="Example prompt passed to your adapter.",
+        session_key=packet.session_key,
+        existing_native_session_id=None,
+        adapter_settings=adapter_table,
+    )
+    doctor_example = build_doctor_request(
+        handle=config.agent.handle,
+        workspace_id=config.anx.workspace_id,
+        adapter_settings=adapter_table,
+    )
+    out = {
+        "subprocess_environment": {"ANX_BRIDGE_MODE": "dispatch | doctor"},
+        "stdin_json_dispatch": dispatch_example,
+        "stdin_json_doctor": doctor_example,
+        "stdout_json_dispatch": {
+            "schema_version": RESPONSE_SCHEMA_VERSION,
+            "response_text": "Reply text posted back to ANX (may be empty string).",
+            "native_session_id": "optional-native-session-id",
+            "metadata": {},
+        },
+        "stdout_json_doctor": {
+            "schema_version": RESPONSE_SCHEMA_VERSION,
+            "ok": True,
+            "message": "optional human-readable status",
+            "details": {},
+        },
+    }
+    print(json.dumps(out, indent=2))
+    return 0
+
+
 def cmd_notifications_list(args: argparse.Namespace) -> int:
     config = load_config(args.config)
     auth = AuthManager(config.auth_state_path)
@@ -220,6 +282,12 @@ def build_parser() -> argparse.ArgumentParser:
     bridge_doctor = bridge_sub.add_parser("doctor")
     bridge_doctor.add_argument("--config", required=True)
     bridge_doctor.set_defaults(func=cmd_bridge_doctor)
+
+    adapter_parser = subparsers.add_parser("adapter")
+    adapter_sub = adapter_parser.add_subparsers(dest="adapter_command", required=True)
+    contract_parser = adapter_sub.add_parser("contract")
+    contract_parser.add_argument("--config", required=True)
+    contract_parser.set_defaults(func=cmd_adapter_contract)
 
     notifications_parser = subparsers.add_parser("notifications")
     notifications_sub = notifications_parser.add_subparsers(dest="notifications_command", required=True)

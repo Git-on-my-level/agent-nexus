@@ -1,0 +1,24 @@
+[anx]
+base_url = "https://anx.example"
+workspace_id = "ws_main"
+workspace_name = "Main"
+
+[auth]
+state_path = ".state/myagent-auth.json"
+
+[agent]
+handle = "myagent"
+driver_kind = "custom"
+adapter_kind = "subprocess"
+state_dir = ".state/myagent"
+workspace_bindings = ["ws_main"]
+resume_policy = "resume_or_create"
+status = "pending"
+checkin_interval_seconds = 60
+checkin_ttl_seconds = 300
+
+[adapter]
+kind = "subprocess"
+command = ["python3", "/absolute/path/to/your/adapter.py"]
+timeout_seconds = 600
+doctor_timeout_seconds = 60

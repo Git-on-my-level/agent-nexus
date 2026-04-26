@@ -41,7 +41,9 @@ It does not own canonical Agent Nexus state. The durable truth still lives in Ag
   - relevant `web-ui` tests when wakeability summaries change
 
 ## Adapters
-- `deterministic_ack` is a **dev-forward** adapter: fixed rotation of short replies, no external model. Use for local wake QA; default examples must not imply it runs in production.
+- **`subprocess`** is the supported production path: any executable receiving JSON on stdin and printing JSON on stdout (`ANX_BRIDGE_MODE=dispatch|doctor`).
+- **`python_plugin`** loads an explicit `plugin_module` + `plugin_factory` for in-process adapters.
+- **`deterministic_ack`** is **dev-forward** only: fixed rotation of short replies. Use for local wake QA; do not imply production use.
 
 ## Editing Guidance
 - Keep install/setup discoverable for two audiences:

@@ -39,6 +39,16 @@ def test_bridge_doctor_subcommand_is_available():
     assert args.config == "agent.toml"
 
 
+def test_adapter_contract_subcommand_is_available():
+    parser = build_parser()
+
+    args = parser.parse_args(["adapter", "contract", "--config", "agent.toml"])
+
+    assert args.command == "adapter"
+    assert args.adapter_command == "contract"
+    assert args.config == "agent.toml"
+
+
 def test_notifications_subcommands_are_available():
     parser = build_parser()
 

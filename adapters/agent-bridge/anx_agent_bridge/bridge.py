@@ -4,6 +4,7 @@ import json
 import logging
 import threading
 import time
+from json import JSONDecodeError
 from typing import Any
 
 from .auth import AuthManager
@@ -41,6 +42,9 @@ class AgentBridge:
         self.state = state
         self.adapter = adapter
         self.handle = config.agent.handle
+        # Wakeup ids where the server already recorded completion but local handled-state write failed
+        # after retries; skip adapter redispatch until restart (set is in-memory only).
+        self._completion_without_local_ack: set[str] = set()
 
     def run_forever(self) -> None:
         self._start_checkin_loop()
@@ -86,7 +90,9 @@ class AgentBridge:
         return {"adapter_kind": type(self.adapter).__name__}
 
     def _publish_checkin(self) -> None:
-        self.doctor()
+        # Check-in proves the bridge process is alive and signing keys work; it does not re-probe the adapter.
+        # Run `anx bridge doctor` / `anx-agent-bridge bridge doctor` before trusting adapter readiness; a broken
+        # adapter can still allow check-ins until the first failing dispatch.
         checked_in_at = utc_now_iso()
         expires_at = utc_after_seconds_iso(self.config.agent.checkin_ttl_seconds)
         proof_signature_b64 = sign_bridge_checkin(
@@ -123,7 +129,11 @@ class AgentBridge:
         data = stream_message.get("data")
         if not isinstance(data, str) or not data.strip():
             return None
-        payload = json.loads(data)
+        try:
+            payload = json.loads(data)
+        except JSONDecodeError:
+            LOGGER.warning("Stream event payload is not valid JSON; skipping this stream message")
+            return None
         if isinstance(payload, dict) and "event" in payload and isinstance(payload["event"], dict):
             return payload["event"]
         if isinstance(payload, dict):
@@ -144,19 +154,49 @@ class AgentBridge:
         target_actor_id = str(notification.get("target_actor_id", "")).strip()
         thread_id = str(notification.get("thread_id", "")).strip()
         request_event_id = str(notification.get("request_event_id", "")).strip()
-        if not wakeup_id or not thread_id:
-            raise RuntimeError(f"Malformed agent notification: {notification}")
-        if wakeup_id in self.state.handled_wakeup_ids():
-            if notification_status != "read":
-                self._mark_notification_read(wakeup_id)
+        try:
+            if not wakeup_id or not thread_id:
+                raise RuntimeError(f"Malformed agent notification: {notification}")
+            if wakeup_id in self._completion_without_local_ack:
+                recovered = False
+                for attempt in range(5):
+                    try:
+                        self.state.mark_wakeup_handled(wakeup_id)
+                        self._completion_without_local_ack.discard(wakeup_id)
+                        recovered = True
+                        break
+                    except Exception as exc:
+                        LOGGER.warning(
+                            "Retry mark_wakeup_handled for %s after prior persist failure (attempt %s/5): %s",
+                            wakeup_id,
+                            attempt + 1,
+                            exc,
+                        )
+                        time.sleep(0.05 * (2**attempt))
+                if recovered:
+                    try:
+                        self._mark_notification_read(wakeup_id)
+                    except Exception:
+                        LOGGER.exception(
+                            "Read-ack for wakeup %s (server-complete, local-state degraded) failed",
+                            wakeup_id,
+                        )
+                return
+            if wakeup_id in self.state.handled_wakeup_ids():
+                if notification_status != "read":
+                    self._mark_notification_read(wakeup_id)
+                return
+            packet_content = self.client.get_artifact_content(wakeup_id)
+            if not isinstance(packet_content, dict):
+                raise RuntimeError(f"Wake artifact {wakeup_id} did not return structured content")
+            packet = WakePacket.from_content(packet_content)
+            claimed = self._claim_wakeup(packet, target_actor_id, request_event_id)
+            if not claimed:
+                return
+        except Exception:
+            LOGGER.exception("Wakeup %s failed before adapter dispatch", wakeup_id or "(unknown)")
             return
-        packet_content = self.client.get_artifact_content(wakeup_id)
-        if not isinstance(packet_content, dict):
-            raise RuntimeError(f"Wake artifact {wakeup_id} did not return structured content")
-        packet = WakePacket.from_content(packet_content)
-        claimed = self._claim_wakeup(packet, target_actor_id, request_event_id)
-        if not claimed:
-            return
+
         prompt_text = build_wake_prompt(packet)
         session_map = self.state.session_map()
         existing_session_id = session_map.get(packet.session_key)
@@ -198,9 +238,34 @@ class AgentBridge:
                 },
                 request_key=failure_request_key(wakeup_id, target_actor_id),
             )
-            raise
-        self.state.mark_wakeup_handled(packet.wakeup_id)
-        self._mark_notification_read(packet.wakeup_id)
+            # Per-wakeup failure only (WAKE_FAILED is durable). Do not re-raise: that would abort
+            # _drain_notifications and run_forever's broad except would log "Bridge loop failed" and
+            # skip other pending notifications for the same drain.
+            return
+        last_exc: BaseException | None = None
+        for attempt in range(5):
+            try:
+                self.state.mark_wakeup_handled(packet.wakeup_id)
+                self._mark_notification_read(packet.wakeup_id)
+                last_exc = None
+                break
+            except Exception as exc:
+                last_exc = exc
+                LOGGER.warning(
+                    "Wakeup %s: persist local handled state / read-ack failed (attempt %s/5): %s",
+                    packet.wakeup_id,
+                    attempt+1,
+                    exc,
+                )
+                time.sleep(0.05 * (2**attempt))
+        if last_exc is not None:
+            LOGGER.critical(
+                "Wakeup %s: server recorded completion but local handled state could not be persisted; "
+                "skipping adapter redispatch for this id until bridge restart (fix disk/permissions)",
+                packet.wakeup_id,
+            )
+            self._completion_without_local_ack.add(packet.wakeup_id)
+            return
 
     def _packet_subject_refs(self, packet: WakePacket) -> list[str]:
         return packet.subject_context_refs()

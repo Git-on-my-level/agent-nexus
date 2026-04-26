@@ -7,7 +7,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `onboarding` (manual): Offline quick-start mental model and first command flow.
 - `concepts` (manual): Quick guide to the core ANX primitives and when to use each.
 - `agent-guide` (manual): Prescriptive agent guide for choosing ANX primitives, operating safely, and automating the CLI well.
-- `agent-bridge` (manual): Install, configure, and operate the preferred `anx-agent-bridge` wake-routing runtime on a fresh machine.
+- `agent-bridge` (manual): Install, configure, and operate the preferred per-agent `anx-agent-bridge` runtime (local adapter + check-in); workspace wake routing still lives in `anx-core`.
 - `wake-routing` (manual): How `@handle` wake routing works, including self-registration, verification, and troubleshooting.
 - `draft` (manual): Local draft staging, listing, commit, and discard workflow.
 - `provenance` (manual): Deterministic provenance walk reference and examples.
@@ -395,7 +395,7 @@ Maintenance rule
 
 ## `agent-bridge`
 
-Install, configure, and operate the preferred `anx-agent-bridge` wake-routing runtime on a fresh machine.
+Install, configure, and operate the preferred per-agent `anx-agent-bridge` runtime (local adapter + check-in); workspace wake routing still lives in `anx-core`.
 
 ```text
 Agent bridge
@@ -446,8 +446,10 @@ Config generation
 
 Generate minimal configs from the CLI:
 
-  anx bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --workspace-path /absolute/path/to/hermes/workspace
-  anx bridge init-config --kind zeroclaw --output ./zeroclaw.toml --workspace-id <workspace-id> --handle <handle>
+  anx bridge init-config --kind subprocess --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py
+  anx bridge init-config --kind python-plugin --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --plugin-module my_bridge --plugin-factory build_adapter
+
+You own the adapter implementation. ANX does not ship or maintain integrations for specific third-party agents.
 
 These templates intentionally default the agent lifecycle to:
 
@@ -472,11 +474,9 @@ First-time agent-host path
 
   anx bridge install
 
-2. Render the agent config:
+2. Render the agent config and implement the adapter (see `anx-agent-bridge adapter contract --config ./agent.toml`):
 
-  anx bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --workspace-path /absolute/path/to/hermes/workspace
-
-  If you omit `--workspace-path`, the rendered Hermes config uses placeholder paths and must be edited before the bridge can run.
+  anx bridge init-config --kind subprocess --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py
 
 3. If a matching `anx` profile already exists for the target principal, import it into the bridge config:
 
@@ -568,7 +568,7 @@ What counts as taggable
 - principal has wake registration metadata
 - registration `actor_id` matches the principal actor
 - registration has an enabled binding for the current workspace
-- registration status is `active`
+- registration status is not `disabled` (often `pending` until the first bridge check-in, then `active`)
 
 What counts as online
 
@@ -609,11 +609,11 @@ Preferred path when you are using `anx-agent-bridge`
 
 2. Confirm the workspace deployment's `anx-core` config and note the durable workspace id it uses.
 
-3. Generate the agent config:
+3. Generate the agent config and implement your adapter (subprocess JSON or python_plugin):
 
-  anx bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --workspace-path /absolute/path/to/hermes/workspace
+  anx bridge init-config --kind subprocess --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py
 
-  If you omit `--workspace-path`, the generated Hermes config keeps placeholder paths and must be edited before the bridge can start.
+  Inspect the exact stdin/stdout JSON contract with `anx-agent-bridge adapter contract --config ./agent.toml`.
 
 4. If matching `anx` auth already exists, import it into the bridge config:
 
@@ -1123,7 +1123,7 @@ Recommended order
 
 1. `anx bridge install`
 2. `anx bridge workspace-id --handle <handle>` if a registration already exists and you need the real durable workspace id
-3. `anx bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --workspace-path /absolute/path/to/hermes/workspace`
+3. `anx bridge init-config --kind subprocess --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py`
 4. `anx bridge import-auth --config ./agent.toml --from-profile <agent>` when matching `anx` auth already exists so bridge auth and the default bridge `[anx].base_url` stay aligned
 5. `anx-agent-bridge auth register ...` for the agent principal when auth does not already exist
 6. `anx bridge start --config ./agent.toml`
@@ -4573,15 +4573,22 @@ Local Help: bridge init-config
 - Composition: Pure local helper. Renders one minimal bridge config template with explicit workspace-id and readiness settings; optionally writes it to disk.
 - JSON body: `kind`, `output`, `workspace_id`, `handle`, `content`
 - Examples:
-  - `anx bridge init-config --kind hermes --output ./agent.toml --workspace-id ws_main --handle hermes --workspace-path /absolute/path/to/hermes/workspace`
-  - `anx bridge init-config --kind zeroclaw --output ./zeroclaw.toml --workspace-id ws_main --handle zeroclaw`
+  - `anx bridge init-config --kind subprocess --output ./agent.toml --workspace-id ws_main --handle myagent --adapter-entrypoint ./adapter.py`
+  - `anx bridge init-config --kind python-plugin --output ./agent.toml --workspace-id ws_main --handle myagent --plugin-module my_bridge --plugin-factory build_adapter`
 
 Flags:
-  --kind <hermes|zeroclaw>     Template kind to render.
+  --kind <subprocess|python-plugin> Template kind to render.
   --output <path>              Write the rendered TOML to a file. Omit to print it.
+  --base-url <url>             ANX base URL for `[anx].base_url` (defaults to active CLI profile base URL).
   --workspace-id <id>          Durable ANX workspace id. Do not use a slug or UI path segment.
-  --handle <name>              Agent handle for bridge templates.
-  --workspace-path <path>      Hermes workspace path. Sets both `[adapter].cwd_default` and `[adapter.workspace_map]`.
+  --workspace-name <name>      Display name for `[anx].workspace_name`.
+  --workspace-url <url>        Optional `[anx].workspace_url`.
+  --handle <name>              Agent handle (required); must match the principal username for bridge-managed registration.
+  --auth-state-path <path>     Optional `[auth].state_path` override.
+  --state-dir <path>           Optional `[agent].state_dir` override prefix.
+  --adapter-entrypoint <path>  Subprocess template: script path used as the second element of `[adapter].command` after python3.
+  --plugin-module <module>     python-plugin template: Python module for `[adapter].plugin_module`.
+  --plugin-factory <callable>  python-plugin template: factory name for `[adapter].plugin_factory`.
 
 
 Global flags:
@@ -4602,7 +4609,7 @@ Local Help: bridge workspace-id
 - Composition: Uses the active `anx` auth/profile to read agent principal registration metadata and extract enabled workspace bindings so bridge bootstrap can reuse the real durable workspace id instead of guessing.
 - JSON body: `agent_id`, `handle`, `actor_id`, `registration_status`, `workspace_ids`, `workspace_bindings`
 - Examples:
-  - `anx --agent agent-a bridge workspace-id --handle hermes`
+  - `anx --agent agent-a bridge workspace-id --handle myagent`
 
 Flags:
   --handle <name>              Agent handle whose wake registration should be inspected.

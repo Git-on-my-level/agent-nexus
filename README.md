@@ -77,7 +77,7 @@ If this agent or machine also needs the per-agent wake bridge runtime, bootstrap
 # requires Python 3.11+ and git on PATH
 anx bridge install
 anx bridge workspace-id --handle <handle>
-anx bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --workspace-path /absolute/path/to/hermes/workspace
+anx bridge init-config --kind subprocess --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py
 anx bridge import-auth --config ./agent.toml --from-profile <agent>
 anx bridge start --config ./agent.toml
 anx bridge status --config ./agent.toml
@@ -87,7 +87,7 @@ anx bridge restart --config ./agent.toml
 anx bridge stop --config ./agent.toml
 ```
 
-For Hermes templates, omit `--workspace-path` only if you intend to hand-edit the generated placeholder paths. `anx bridge import-auth` also rewrites the default local `base_url` in that config when the imported profile points at a different Agent Nexus deployment.
+After `init-config`, edit `[adapter].command` if your adapter is not a Python script, and run `anx-agent-bridge adapter contract --config ./agent.toml` to see the JSON your process must accept. `anx bridge import-auth` rewrites the default local `base_url` in that config when the imported profile points at a different Agent Nexus deployment.
 
 See `runbooks/release.md` for version-pinning and custom install directory options.
 
@@ -161,7 +161,7 @@ See `tools/anx-http-record/README.md` for details.
 ## Adapter Integrations
 
 The vendored bridge package at `adapters/agent-bridge/` provides the per-agent
-bridge runtime and local adapter daemons for Hermes ACP and ZeroClaw Gateway.
+bridge runtime and a generic subprocess (or optional Python plugin) adapter contract you implement locally.
 
 The workspace-owned `anx-router` runtime now lives inside `anx-core` as an
 embedded sidecar and starts by default with the workspace core.

@@ -30,25 +30,53 @@ func TestBridgeHelpTopic(t *testing.T) {
 	}
 }
 
-func TestRenderBridgeHermesTemplateUsesPendingLifecycle(t *testing.T) {
+func TestRenderBridgeSubprocessTemplateUsesPendingLifecycle(t *testing.T) {
 	rendered, handle, err := renderBridgeConfigTemplate(bridgeTemplateParams{
-		Kind:          "hermes",
-		BaseURL:       "https://anx.example",
-		WorkspaceID:   "ws_main",
-		WorkspaceName: "Main",
-		Handle:        "hermes",
+		Kind:              "subprocess",
+		BaseURL:           "https://anx.example",
+		WorkspaceID:       "ws_main",
+		WorkspaceName:     "Main",
+		Handle:            "myagent",
+		AdapterEntrypoint: "./adapter.py",
 	})
 	if err != nil {
 		t.Fatalf("renderBridgeConfigTemplate: %v", err)
 	}
-	if handle != "hermes" {
-		t.Fatalf("expected handle hermes, got %q", handle)
+	if handle != "myagent" {
+		t.Fatalf("expected handle myagent, got %q", handle)
 	}
 	if !strings.Contains(rendered, `status = "pending"`) || !strings.Contains(rendered, "checkin_ttl_seconds = 300") {
 		t.Fatalf("expected pending lifecycle fields output=%s", rendered)
 	}
 	if !strings.Contains(rendered, `workspace_bindings = ["ws_main"]`) {
 		t.Fatalf("expected workspace binding output=%s", rendered)
+	}
+	if !strings.Contains(rendered, `adapter_kind = "subprocess"`) || !strings.Contains(rendered, `kind = "subprocess"`) {
+		t.Fatalf("expected subprocess adapter kind output=%s", rendered)
+	}
+	if !strings.Contains(rendered, `command = ["python3", "./adapter.py"]`) {
+		t.Fatalf("expected subprocess command output=%s", rendered)
+	}
+}
+
+func TestRenderBridgePythonPluginTemplate(t *testing.T) {
+	rendered, handle, err := renderBridgeConfigTemplate(bridgeTemplateParams{
+		Kind:          "python_plugin",
+		BaseURL:       "https://anx.example",
+		WorkspaceID:   "ws_main",
+		WorkspaceName: "Main",
+		Handle:        "myagent",
+		PluginModule:  "my_bridge_adapter",
+		PluginFactory: "build",
+	})
+	if err != nil {
+		t.Fatalf("renderBridgeConfigTemplate: %v", err)
+	}
+	if handle != "myagent" {
+		t.Fatalf("expected handle myagent, got %q", handle)
+	}
+	if !strings.Contains(rendered, `kind = "python_plugin"`) || !strings.Contains(rendered, `plugin_module = "my_bridge_adapter"`) {
+		t.Fatalf("expected python_plugin adapter section output=%s", rendered)
 	}
 }
 
@@ -396,86 +424,82 @@ func TestLoadBridgeConfigDetailsExpandsAuthStatePath(t *testing.T) {
 	}
 }
 
-func TestRenderBridgeHermesTemplateWorkspacePathPrefillsCWD(t *testing.T) {
-	rendered, _, err := renderBridgeConfigTemplate(bridgeTemplateParams{
-		Kind:          "hermes",
-		BaseURL:       "https://anx.example",
-		WorkspaceID:   "ws_main",
-		WorkspaceName: "Main",
-		Handle:        "hermes",
-		HermesCWD:     "/home/user/hermes-workspace",
-	})
-	if err != nil {
-		t.Fatalf("renderBridgeConfigTemplate: %v", err)
-	}
-	if !strings.Contains(rendered, `cwd_default = "/home/user/hermes-workspace"`) {
-		t.Fatalf("expected workspace path in cwd_default, output=%s", rendered)
-	}
-	if !strings.Contains(rendered, `"/home/user/hermes-workspace"`) {
-		t.Fatalf("expected workspace path in workspace_map, output=%s", rendered)
-	}
-}
-
-func TestRenderBridgeHermesTemplateUsesPlaceholderWhenNoWorkspacePath(t *testing.T) {
-	rendered, _, err := renderBridgeConfigTemplate(bridgeTemplateParams{
-		Kind:          "hermes",
-		BaseURL:       "https://anx.example",
-		WorkspaceID:   "ws_main",
-		WorkspaceName: "Main",
-		Handle:        "hermes",
-	})
-	if err != nil {
-		t.Fatalf("renderBridgeConfigTemplate: %v", err)
-	}
-	if !strings.Contains(rendered, "/absolute/path/to/your/hermes/workspace") {
-		t.Fatalf("expected placeholder path when no workspace-path provided, output=%s", rendered)
-	}
-}
-
-func TestBridgeInitConfigWorkspacePathFlagOverridesAdapterCWD(t *testing.T) {
+func TestBridgeInitConfigSubprocessUsesAdapterEntrypoint(t *testing.T) {
 	dir := t.TempDir()
 	outputPath := filepath.Join(dir, "agent.toml")
 	app := New()
 	result, err := app.runBridgeInitConfig([]string{
-		"--kind", "hermes",
+		"--kind", "subprocess",
 		"--output", outputPath,
 		"--workspace-id", "ws_main",
-		"--handle", "hermes",
-		"--workspace-path", "/custom/workspace",
+		"--handle", "myagent",
+		"--adapter-entrypoint", "/custom/adapter.py",
 	}, config.Resolved{})
 	if err != nil {
 		t.Fatalf("runBridgeInitConfig: %v", err)
 	}
-	if strings.Contains(result.Text, "WARNING") {
-		t.Fatalf("expected no warning when workspace-path is provided, output=%s", result.Text)
+	if !strings.Contains(result.Text, "adapter contract") {
+		t.Fatalf("expected contract next step in output=%s", result.Text)
 	}
 	content, err := os.ReadFile(outputPath)
 	if err != nil {
 		t.Fatalf("read output config: %v", err)
 	}
-	if !strings.Contains(string(content), `cwd_default = "/custom/workspace"`) {
-		t.Fatalf("expected workspace-path to be used in cwd_default, content=%s", content)
+	if !strings.Contains(string(content), `command = ["python3", "/custom/adapter.py"]`) {
+		t.Fatalf("expected adapter entrypoint in command, content=%s", content)
 	}
 }
 
-func TestBridgeInitConfigHermesEmitsPlaceholderWarning(t *testing.T) {
+func TestBridgeInitConfigPythonPluginRequiresPluginFlags(t *testing.T) {
+	app := New()
+	_, err := app.runBridgeInitConfig([]string{
+		"--kind", "python-plugin",
+		"--output", filepath.Join(t.TempDir(), "agent.toml"),
+		"--workspace-id", "ws_main",
+		"--handle", "myagent",
+	}, config.Resolved{})
+	if err == nil {
+		t.Fatal("expected error when plugin-module missing")
+	}
+}
+
+func TestBridgeInitConfigRequiresHandle(t *testing.T) {
+	app := New()
+	_, err := app.runBridgeInitConfig([]string{
+		"--kind", "subprocess",
+		"--output", filepath.Join(t.TempDir(), "agent.toml"),
+		"--workspace-id", "ws_main",
+	}, config.Resolved{})
+	if err == nil {
+		t.Fatal("expected error when --handle missing")
+	}
+}
+
+func TestBridgeInitConfigPythonPluginWritesModule(t *testing.T) {
 	dir := t.TempDir()
 	outputPath := filepath.Join(dir, "agent.toml")
 	app := New()
 	result, err := app.runBridgeInitConfig([]string{
-		"--kind", "hermes",
+		"--kind", "python-plugin",
 		"--output", outputPath,
 		"--workspace-id", "ws_main",
-		"--handle", "hermes",
+		"--handle", "myagent",
+		"--plugin-module", "my_mod",
+		"--plugin-factory", "build",
 	}, config.Resolved{})
 	if err != nil {
 		t.Fatalf("runBridgeInitConfig: %v", err)
 	}
-	if !strings.Contains(result.Text, "WARNING") {
-		t.Fatalf("expected placeholder warning when hermes kind without workspace-path, output=%s", result.Text)
+	if !strings.Contains(result.Text, "Bridge config written.") {
+		t.Fatalf("expected success output=%s", result.Text)
 	}
-	if !strings.Contains(result.Text, "placeholder workspace paths") {
-		t.Fatalf("expected specific warning text, output=%s", result.Text)
+	content, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("read output config: %v", err)
+	}
+	body := string(content)
+	if !strings.Contains(body, `plugin_module = "my_mod"`) || !strings.Contains(body, `plugin_factory = "build"`) {
+		t.Fatalf("expected plugin fields, content=%s", content)
 	}
 }
 
@@ -680,5 +704,212 @@ cwd_default = "/path"
 		!strings.Contains(result, "\nbase_url = \"http://127.0.0.1:8002\"\n[adapter]") &&
 			!strings.Contains(result, "\n\nbase_url = \"http://127.0.0.1:8002\"\n[adapter]") {
 		t.Fatalf("expected missing key inserted before next section, got=%s", result)
+	}
+}
+
+func TestLoadBridgeConfigDetailsRejectsInvalidTOML(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "bad.toml")
+	if err := os.WriteFile(configPath, []byte("[agent\nhandle = \"x\"\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	if _, err := loadBridgeConfigDetails(configPath); err == nil {
+		t.Fatal("expected invalid TOML error")
+	}
+}
+
+func TestRunBridgeDoctorRejectsExtraArgs(t *testing.T) {
+	app := New()
+	_, err := app.runBridgeDoctor(context.Background(), []string{"surprise"})
+	if err == nil {
+		t.Fatal("expected usage error for unexpected positional args")
+	}
+}
+
+func TestRunBridgeDoctorWithoutConfigAllChecksPass(t *testing.T) {
+	home := t.TempDir()
+	installDir := filepath.Join(home, ".local", "share", "anx", "agent-bridge")
+	binDir := filepath.Join(home, ".local", "bin")
+	venvPy := filepath.Join(installDir, ".venv", "bin", "python")
+	bridgeBin := filepath.Join(binDir, "anx-agent-bridge")
+	fakePy := filepath.Join(home, "fakepython")
+
+	if err := os.MkdirAll(filepath.Dir(venvPy), 0o755); err != nil {
+		t.Fatalf("mkdir venv: %v", err)
+	}
+	if err := os.WriteFile(venvPy, []byte(""), 0o644); err != nil {
+		t.Fatalf("write venv python: %v", err)
+	}
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	if err := os.WriteFile(bridgeBin, []byte(""), 0o755); err != nil {
+		t.Fatalf("write bridge bin: %v", err)
+	}
+	if err := os.WriteFile(fakePy, []byte(""), 0o755); err != nil {
+		t.Fatalf("write fake python: %v", err)
+	}
+
+	origRun := bridgeCommandRun
+	t.Cleanup(func() { bridgeCommandRun = origRun })
+	bridgeCommandRun = func(ctx context.Context, name string, args ...string) (string, string, error) {
+		if len(args) >= 2 && args[0] == "-c" && strings.Contains(args[1], "sys.version_info") {
+			return "3.12.0", "", nil
+		}
+		if len(args) == 1 && args[0] == "--version" {
+			return "anx-agent-bridge 1.0.0", "", nil
+		}
+		t.Fatalf("unexpected command name=%q args=%v", name, args)
+		return "", "", nil
+	}
+
+	app := New()
+	app.UserHomeDir = func() (string, error) { return home, nil }
+	res, err := app.runBridgeDoctor(context.Background(), []string{"--python", fakePy})
+	if err != nil {
+		t.Fatalf("runBridgeDoctor: %v", err)
+	}
+	data, ok := res.Data.(map[string]any)
+	if !ok {
+		t.Fatalf("expected map data, got %T", res.Data)
+	}
+	checks, ok := data["checks"].([]bridgeDoctorCheck)
+	if !ok {
+		t.Fatalf("checks type %T", data["checks"])
+	}
+	for _, c := range checks {
+		if !c.OK {
+			t.Fatalf("check %s: %s", c.Name, c.Message)
+		}
+	}
+}
+
+func TestRunBridgeDoctorWithConfigAdapterProbeInvalidJSON(t *testing.T) {
+	home := t.TempDir()
+	installDir := filepath.Join(home, ".local", "share", "anx", "agent-bridge")
+	binDir := filepath.Join(home, ".local", "bin")
+	venvPy := filepath.Join(installDir, ".venv", "bin", "python")
+	bridgeBin := filepath.Join(binDir, "anx-agent-bridge")
+	fakePy := filepath.Join(home, "fakepython")
+	configPath := filepath.Join(home, "agent.toml")
+
+	if err := os.MkdirAll(filepath.Dir(venvPy), 0o755); err != nil {
+		t.Fatalf("mkdir venv: %v", err)
+	}
+	if err := os.WriteFile(venvPy, []byte(""), 0o644); err != nil {
+		t.Fatalf("write venv python: %v", err)
+	}
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	if err := os.WriteFile(bridgeBin, []byte(""), 0o755); err != nil {
+		t.Fatalf("write bridge bin: %v", err)
+	}
+	if err := os.WriteFile(fakePy, []byte(""), 0o755); err != nil {
+		t.Fatalf("write fake python: %v", err)
+	}
+	if err := os.WriteFile(configPath, []byte("[agent]\nhandle = \"hermes\"\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	origRun := bridgeCommandRun
+	t.Cleanup(func() { bridgeCommandRun = origRun })
+	bridgeCommandRun = func(ctx context.Context, name string, args ...string) (string, string, error) {
+		if len(args) >= 2 && args[0] == "-c" && strings.Contains(args[1], "sys.version_info") {
+			return "3.12.0", "", nil
+		}
+		if len(args) == 1 && args[0] == "--version" {
+			return "anx-agent-bridge 1.0.0", "", nil
+		}
+		if len(args) >= 4 && args[0] == "bridge" && args[1] == "doctor" {
+			return "NOT JSON", "", nil
+		}
+		if len(args) >= 3 && args[0] == "registration" && args[1] == "status" {
+			return `{"wakeable":true}`, "", nil
+		}
+		t.Fatalf("unexpected command name=%q args=%v", name, args)
+		return "", "", nil
+	}
+
+	app := New()
+	app.UserHomeDir = func() (string, error) { return home, nil }
+	_, err := app.runBridgeDoctor(context.Background(), []string{"--python", fakePy, "--config", configPath})
+	if err == nil {
+		t.Fatal("expected bridge_doctor_failed when adapter stdout is not JSON")
+	}
+}
+
+func TestRunBridgeDoctorWithConfigAllProbesPass(t *testing.T) {
+	home := t.TempDir()
+	installDir := filepath.Join(home, ".local", "share", "anx", "agent-bridge")
+	binDir := filepath.Join(home, ".local", "bin")
+	venvPy := filepath.Join(installDir, ".venv", "bin", "python")
+	bridgeBin := filepath.Join(binDir, "anx-agent-bridge")
+	fakePy := filepath.Join(home, "fakepython")
+	configPath := filepath.Join(home, "agent.toml")
+
+	if err := os.MkdirAll(filepath.Dir(venvPy), 0o755); err != nil {
+		t.Fatalf("mkdir venv: %v", err)
+	}
+	if err := os.WriteFile(venvPy, []byte(""), 0o644); err != nil {
+		t.Fatalf("write venv python: %v", err)
+	}
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	if err := os.WriteFile(bridgeBin, []byte(""), 0o755); err != nil {
+		t.Fatalf("write bridge bin: %v", err)
+	}
+	if err := os.WriteFile(fakePy, []byte(""), 0o755); err != nil {
+		t.Fatalf("write fake python: %v", err)
+	}
+	if err := os.WriteFile(configPath, []byte("[agent]\nhandle = \"hermes\"\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	origRun := bridgeCommandRun
+	t.Cleanup(func() { bridgeCommandRun = origRun })
+	bridgeCommandRun = func(ctx context.Context, name string, args ...string) (string, string, error) {
+		if len(args) >= 2 && args[0] == "-c" && strings.Contains(args[1], "sys.version_info") {
+			return "3.12.0", "", nil
+		}
+		if len(args) == 1 && args[0] == "--version" {
+			return "anx-agent-bridge 1.0.0", "", nil
+		}
+		if len(args) >= 4 && args[0] == "bridge" && args[1] == "doctor" {
+			return `{"ok":true,"adapter_kind":"stub"}`, "", nil
+		}
+		if len(args) >= 3 && args[0] == "registration" && args[1] == "status" {
+			return `{"wakeable":true}`, "", nil
+		}
+		t.Fatalf("unexpected command name=%q args=%v", name, args)
+		return "", "", nil
+	}
+
+	app := New()
+	app.UserHomeDir = func() (string, error) { return home, nil }
+	res, err := app.runBridgeDoctor(context.Background(), []string{"--python", fakePy, "--config", configPath})
+	if err != nil {
+		t.Fatalf("runBridgeDoctor: %v", err)
+	}
+	data, ok := res.Data.(map[string]any)
+	if !ok {
+		t.Fatalf("expected map data, got %T", res.Data)
+	}
+	checks, ok := data["checks"].([]bridgeDoctorCheck)
+	if !ok {
+		t.Fatalf("checks type %T", data["checks"])
+	}
+	byName := map[string]bridgeDoctorCheck{}
+	for _, c := range checks {
+		byName[c.Name] = c
+	}
+	for _, name := range []string{"python", "managed_venv", "bridge_binary", "bridge_version", "config", "adapter", "registration"} {
+		c, ok := byName[name]
+		if !ok {
+			t.Fatalf("missing check %q in %#v", name, checks)
+		}
+		if !c.OK {
+			t.Fatalf("check %s: %s", name, c.Message)
+		}
 	}
 }

@@ -8,21 +8,27 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
-	"net/url"
+	"time"
 
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
 	"agent-nexus-cli/internal/httpclient"
 	"agent-nexus-cli/internal/profile"
+
+	toml "github.com/pelletier/go-toml/v2"
 )
 
 const bridgeRepoURL = "https://github.com/Git-on-my-level/agent-nexus.git"
+
+// bridgeDoctorChildTimeout bounds subprocess calls to anx-agent-bridge (doctor + registration status).
+const bridgeDoctorChildTimeout = 5 * time.Minute
 
 var (
 	bridgeLookPath    = exec.LookPath
@@ -88,15 +94,22 @@ func init() {
 			JSONShape:   "`kind`, `output`, `workspace_id`, `handle`, `content`",
 			Composition: "Pure local helper. Renders one minimal bridge config template with explicit workspace-id and readiness settings; optionally writes it to disk.",
 			Examples: []string{
-				"anx bridge init-config --kind hermes --output ./agent.toml --workspace-id ws_main --handle hermes --workspace-path /absolute/path/to/hermes/workspace",
-				"anx bridge init-config --kind zeroclaw --output ./zeroclaw.toml --workspace-id ws_main --handle zeroclaw",
+				"anx bridge init-config --kind subprocess --output ./agent.toml --workspace-id ws_main --handle myagent --adapter-entrypoint ./adapter.py",
+				"anx bridge init-config --kind python-plugin --output ./agent.toml --workspace-id ws_main --handle myagent --plugin-module my_bridge --plugin-factory build_adapter",
 			},
 			Flags: []localHelperFlag{
-				{Name: "--kind <hermes|zeroclaw>", Description: "Template kind to render."},
+				{Name: "--kind <subprocess|python-plugin>", Description: "Template kind to render."},
 				{Name: "--output <path>", Description: "Write the rendered TOML to a file. Omit to print it."},
+				{Name: "--base-url <url>", Description: "ANX base URL for `[anx].base_url` (defaults to active CLI profile base URL)."},
 				{Name: "--workspace-id <id>", Description: "Durable ANX workspace id. Do not use a slug or UI path segment."},
-				{Name: "--handle <name>", Description: "Agent handle for bridge templates."},
-				{Name: "--workspace-path <path>", Description: "Hermes workspace path. Sets both `[adapter].cwd_default` and `[adapter.workspace_map]`."},
+				{Name: "--workspace-name <name>", Description: "Display name for `[anx].workspace_name`."},
+				{Name: "--workspace-url <url>", Description: "Optional `[anx].workspace_url`."},
+				{Name: "--handle <name>", Description: "Agent handle (required); must match the principal username for bridge-managed registration."},
+				{Name: "--auth-state-path <path>", Description: "Optional `[auth].state_path` override."},
+				{Name: "--state-dir <path>", Description: "Optional `[agent].state_dir` override prefix."},
+				{Name: "--adapter-entrypoint <path>", Description: "Subprocess template: script path used as the second element of `[adapter].command` after python3."},
+				{Name: "--plugin-module <module>", Description: "python-plugin template: Python module for `[adapter].plugin_module`."},
+				{Name: "--plugin-factory <callable>", Description: "python-plugin template: factory name for `[adapter].plugin_factory`."},
 			},
 		},
 		localHelperTopic{
@@ -105,7 +118,7 @@ func init() {
 			JSONShape:   "`agent_id`, `handle`, `actor_id`, `registration_status`, `workspace_ids`, `workspace_bindings`",
 			Composition: "Uses the active `anx` auth/profile to read agent principal registration metadata and extract enabled workspace bindings so bridge bootstrap can reuse the real durable workspace id instead of guessing.",
 			Examples: []string{
-				"anx --agent agent-a bridge workspace-id --handle hermes",
+				"anx --agent agent-a bridge workspace-id --handle myagent",
 			},
 			Flags: []localHelperFlag{
 				{Name: "--handle <name>", Description: "Agent handle whose wake registration should be inspected."},
@@ -204,7 +217,7 @@ Recommended order
 
 1. `+"`anx bridge install`"+`
 2. `+"`anx bridge workspace-id --handle <handle>`"+` if a registration already exists and you need the real durable workspace id
-3. `+"`anx bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --workspace-path /absolute/path/to/hermes/workspace`"+`
+3. `+"`anx bridge init-config --kind subprocess --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py`"+`
 4. `+"`anx bridge import-auth --config ./agent.toml --from-profile <agent>`"+` when matching `+"`anx`"+` auth already exists so bridge auth and the default bridge `+"`[anx].base_url`"+` stay aligned
 5. `+"`anx-agent-bridge auth register ...`"+` for the agent principal when auth does not already exist
 6. `+"`anx bridge start --config ./agent.toml`"+`
@@ -312,7 +325,8 @@ func (a *App) runBridgeInstall(ctx context.Context, args []string) (*commandResu
 		"Python: " + pythonRuntime.Command + " (" + pythonRuntime.Version + ")",
 		"Installed ref: " + ref,
 		"Version: " + strings.TrimSpace(versionOut),
-		"Next step: anx bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --workspace-path /absolute/path/to/hermes/workspace",
+		"Next step: anx bridge init-config --kind subprocess --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py",
+		"Alternative: --kind python-plugin with --plugin-module and --plugin-factory for in-process Python adapters.",
 		"Next step: anx bridge doctor --config ./agent.toml once the bridge has checked in",
 	}
 	if !bridgePathContains(a.Getenv, binDir) {
@@ -469,11 +483,10 @@ func (a *App) runBridgeInitConfig(args []string, cfg config.Resolved) (*commandR
 	var handleFlag trackedString
 	var authStateFlag trackedString
 	var stateDirFlag trackedString
-	var hermesCwdFlag trackedString
-	var zeroclawURLFlag trackedString
-	var zeroclawTokenFlag trackedString
-	var workspacePathFlag trackedString
-	fs.Var(&kindFlag, "kind", "Template kind: hermes or zeroclaw")
+	var adapterEntryFlag trackedString
+	var pluginModuleFlag trackedString
+	var pluginFactoryFlag trackedString
+	fs.Var(&kindFlag, "kind", "Template kind: subprocess or python-plugin")
 	fs.Var(&outputFlag, "output", "Write the rendered TOML to a file")
 	fs.Var(&baseURLFlag, "base-url", "ANX base URL")
 	fs.Var(&workspaceIDFlag, "workspace-id", "Durable ANX workspace id")
@@ -482,20 +495,16 @@ func (a *App) runBridgeInitConfig(args []string, cfg config.Resolved) (*commandR
 	fs.Var(&handleFlag, "handle", "Agent handle for bridge templates")
 	fs.Var(&authStateFlag, "auth-state-path", "Auth state path")
 	fs.Var(&stateDirFlag, "state-dir", "Agent state dir")
-	fs.Var(&hermesCwdFlag, "adapter-cwd", "Default Hermes working directory")
-	fs.Var(&workspacePathFlag, "workspace-path", "Hermes workspace path (sets both cwd_default and workspace_map)")
-	fs.Var(&zeroclawURLFlag, "gateway-url", "ZeroClaw gateway base URL")
-	fs.Var(&zeroclawTokenFlag, "bearer-token", "ZeroClaw bearer token")
+	fs.Var(&adapterEntryFlag, "adapter-entrypoint", "Subprocess template: path for [adapter].command after python3")
+	fs.Var(&pluginModuleFlag, "plugin-module", "python-plugin template: plugin_module value")
+	fs.Var(&pluginFactoryFlag, "plugin-factory", "python-plugin template: plugin_factory value")
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	if len(fs.Args()) > 0 {
 		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx bridge init-config`")
 	}
-	kind := strings.TrimSpace(kindFlag.value)
-	if kind == "" {
-		kind = "hermes"
-	}
+	kind := normalizeBridgeInitConfigKind(kindFlag.value)
 	baseURL := strings.TrimSpace(baseURLFlag.value)
 	if baseURL == "" {
 		baseURL = cfg.BaseURL
@@ -508,25 +517,31 @@ func (a *App) runBridgeInitConfig(args []string, cfg config.Resolved) (*commandR
 	if workspaceName == "" {
 		workspaceName = "Main"
 	}
-	hermesCWD := strings.TrimSpace(hermesCwdFlag.value)
-	workspacePath := strings.TrimSpace(workspacePathFlag.value)
-	if workspacePath != "" {
-		hermesCWD = workspacePath
+	handle := strings.TrimSpace(handleFlag.value)
+	if handle == "" {
+		return nil, errnorm.Usage("invalid_request", "--handle is required")
 	}
-	hermesPlaceholderUsed := kind == "hermes" && hermesCWD == ""
+	if kind == "python_plugin" {
+		if strings.TrimSpace(pluginModuleFlag.value) == "" {
+			return nil, errnorm.Usage("invalid_request", "--plugin-module is required for python-plugin template")
+		}
+		if strings.TrimSpace(pluginFactoryFlag.value) == "" {
+			return nil, errnorm.Usage("invalid_request", "--plugin-factory is required for python-plugin template")
+		}
+	}
 
 	rendered, handle, err := renderBridgeConfigTemplate(bridgeTemplateParams{
-		Kind:          kind,
-		BaseURL:       baseURL,
-		WorkspaceID:   workspaceID,
-		WorkspaceName: workspaceName,
-		WorkspaceURL:  strings.TrimSpace(workspaceURLFlag.value),
-		Handle:        strings.TrimSpace(handleFlag.value),
-		AuthStatePath: strings.TrimSpace(authStateFlag.value),
-		StateDir:      strings.TrimSpace(stateDirFlag.value),
-		HermesCWD:     hermesCWD,
-		ZeroClawURL:   strings.TrimSpace(zeroclawURLFlag.value),
-		ZeroClawToken: strings.TrimSpace(zeroclawTokenFlag.value),
+		Kind:              kind,
+		BaseURL:           baseURL,
+		WorkspaceID:       workspaceID,
+		WorkspaceName:     workspaceName,
+		WorkspaceURL:      strings.TrimSpace(workspaceURLFlag.value),
+		Handle:            handle,
+		AuthStatePath:     strings.TrimSpace(authStateFlag.value),
+		StateDir:          strings.TrimSpace(stateDirFlag.value),
+		AdapterEntrypoint: strings.TrimSpace(adapterEntryFlag.value),
+		PluginModule:      strings.TrimSpace(pluginModuleFlag.value),
+		PluginFactory:     strings.TrimSpace(pluginFactoryFlag.value),
 	})
 	if err != nil {
 		return nil, err
@@ -542,25 +557,18 @@ func (a *App) runBridgeInitConfig(args []string, cfg config.Resolved) (*commandR
 			"Kind: " + kind,
 			"Path: " + outputPath,
 			"Lifecycle: registrations stay pending until the bridge checks in.",
-		}
-		if hermesPlaceholderUsed {
-			textLines = append(textLines,
-				"WARNING: hermes config was generated with placeholder workspace paths.",
-				"  Replace [adapter].cwd_default and [adapter.workspace_map] with actual paths,",
-				"  or re-run with --workspace-path <path> to prefill them.",
-			)
+			"Next: implement your adapter (subprocess JSON or python_plugin), then `anx-agent-bridge adapter contract --config " + outputPath + "`.",
 		}
 		text = strings.Join(textLines, "\n")
 	}
 	return &commandResult{
 		Text: text,
 		Data: map[string]any{
-			"kind":               kind,
-			"output":             outputPath,
-			"workspace_id":       workspaceID,
-			"handle":             handle,
-			"content":            rendered,
-			"hermes_placeholder": hermesPlaceholderUsed,
+			"kind":         kind,
+			"output":       outputPath,
+			"workspace_id": workspaceID,
+			"handle":       handle,
+			"content":      rendered,
 		},
 	}, nil
 }
@@ -656,7 +664,8 @@ func (a *App) runBridgeWorkspaceID(ctx context.Context, args []string, cfg confi
 		lines = append(lines, "- "+workspaceID)
 	}
 	if handle != "" {
-		lines = append(lines, "Next step: anx bridge init-config --kind hermes --output ./agent.toml --workspace-id "+workspaceIDs[0]+" --handle "+handle+" --workspace-path /absolute/path/to/hermes/workspace")
+		lines = append(lines, "Next step: anx bridge init-config --kind subprocess --output ./agent.toml --workspace-id "+workspaceIDs[0]+" --handle "+handle+" --adapter-entrypoint ./adapter.py")
+		lines = append(lines, "Or: --kind python-plugin --plugin-module <mod> --plugin-factory <callable> for an in-process Python adapter.")
 	}
 	return &commandResult{
 		Text: strings.Join(lines, "\n"),
@@ -800,17 +809,23 @@ func (a *App) runBridgeDoctor(ctx context.Context, args []string) (*commandResul
 			addCheck("config", false, "config file not found: "+configPath)
 		} else {
 			addCheck("config", true, "config file present: "+configPath)
-			adapterOut, adapterErr := runBridgeExternalOutput(ctx, bridgeBinary, "bridge", "doctor", "--config", configPath)
+			adapterCtx, cancelAdapter := context.WithTimeout(ctx, bridgeDoctorChildTimeout)
+			adapterOut, adapterErr := runBridgeExternalOutput(adapterCtx, bridgeBinary, "bridge", "doctor", "--config", configPath)
+			cancelAdapter()
 			if adapterErr != nil {
 				addCheck("adapter", false, errnorm.Normalize(adapterErr).Message)
 			} else {
-				addCheck("adapter", true, "adapter readiness probe passed")
 				var adapterData map[string]any
-				if err := json.Unmarshal([]byte(adapterOut), &adapterData); err == nil {
+				if err := json.Unmarshal([]byte(adapterOut), &adapterData); err != nil {
+					addCheck("adapter", false, "adapter doctor stdout was not valid JSON: "+err.Error())
+				} else {
+					addCheck("adapter", true, "adapter readiness probe passed")
 					registrationData["adapter"] = adapterData
 				}
 			}
-			statusOut, statusErr := runBridgeExternalOutput(ctx, bridgeBinary, "registration", "status", "--config", configPath)
+			statusCtx, cancelStatus := context.WithTimeout(ctx, bridgeDoctorChildTimeout)
+			statusOut, statusErr := runBridgeExternalOutput(statusCtx, bridgeBinary, "registration", "status", "--config", configPath)
+			cancelStatus()
 			if statusErr != nil {
 				addCheck("registration", false, errnorm.Normalize(statusErr).Message)
 			} else {
@@ -857,28 +872,45 @@ func (a *App) runBridgeDoctor(ctx context.Context, args []string) (*commandResul
 }
 
 type bridgeTemplateParams struct {
-	Kind          string
-	BaseURL       string
-	WorkspaceID   string
-	WorkspaceName string
-	WorkspaceURL  string
-	Handle        string
-	AuthStatePath string
-	StateDir      string
-	HermesCWD     string
-	ZeroClawURL   string
-	ZeroClawToken string
+	Kind              string
+	BaseURL           string
+	WorkspaceID       string
+	WorkspaceName     string
+	WorkspaceURL      string
+	Handle            string
+	AuthStatePath     string
+	StateDir          string
+	AdapterEntrypoint string
+	PluginModule      string
+	PluginFactory     string
+}
+
+func normalizeBridgeInitConfigKind(kind string) string {
+	k := strings.ToLower(strings.TrimSpace(kind))
+	if k == "" {
+		return "subprocess"
+	}
+	switch k {
+	case "python-plugin", "python_plugin":
+		return "python_plugin"
+	case "subprocess":
+		return "subprocess"
+	default:
+		return k
+	}
 }
 
 func renderBridgeConfigTemplate(params bridgeTemplateParams) (string, string, error) {
 	baseURL := firstNonEmptyString(params.BaseURL, "http://127.0.0.1:8000")
 	workspaceName := firstNonEmptyString(params.WorkspaceName, "Main")
-	switch strings.TrimSpace(params.Kind) {
-	case "hermes":
+	workspaceURL := strings.TrimSpace(params.WorkspaceURL)
+	kind := normalizeBridgeInitConfigKind(params.Kind)
+	switch kind {
+	case "subprocess":
 		handle := firstNonEmptyString(params.Handle, "<handle>")
 		authState := firstNonEmptyString(params.AuthStatePath, ".state/"+handle+"-auth.json")
 		stateDir := firstNonEmptyString(params.StateDir, ".state/"+handle)
-		workspacePath := firstNonEmptyString(params.HermesCWD, "/absolute/path/to/your/hermes/workspace")
+		entry := firstNonEmptyString(params.AdapterEntrypoint, "./adapter.py")
 		return strings.TrimSpace(fmt.Sprintf(`
 [anx]
 base_url = %q
@@ -892,8 +924,8 @@ state_path = %q
 
 [agent]
 handle = %q
-driver_kind = "acp"
-adapter_kind = "hermes_acp"
+driver_kind = "custom"
+adapter_kind = "subprocess"
 state_dir = %q
 workspace_bindings = [%q]
 resume_policy = "resume_or_create"
@@ -902,18 +934,17 @@ checkin_interval_seconds = 60
 checkin_ttl_seconds = 300
 
 [adapter]
-kind = "hermes_acp"
-command = ["hermes", "acp"]
-cwd_default = %q
-auto_select_permission = true
-
-[adapter.workspace_map]
-%q = %q
-`, baseURL, params.WorkspaceID, workspaceName, params.WorkspaceURL, authState, handle, stateDir, params.WorkspaceID, workspacePath, params.WorkspaceID, workspacePath)) + "\n", handle, nil
-	case "zeroclaw":
+kind = "subprocess"
+command = ["python3", %q]
+timeout_seconds = 600
+doctor_timeout_seconds = 60
+`, baseURL, params.WorkspaceID, workspaceName, workspaceURL, authState, handle, stateDir, params.WorkspaceID, entry)) + "\n", handle, nil
+	case "python_plugin":
 		handle := firstNonEmptyString(params.Handle, "<handle>")
 		authState := firstNonEmptyString(params.AuthStatePath, ".state/"+handle+"-auth.json")
 		stateDir := firstNonEmptyString(params.StateDir, ".state/"+handle)
+		mod := strings.TrimSpace(params.PluginModule)
+		fac := strings.TrimSpace(params.PluginFactory)
 		return strings.TrimSpace(fmt.Sprintf(`
 [anx]
 base_url = %q
@@ -927,8 +958,8 @@ state_path = %q
 
 [agent]
 handle = %q
-driver_kind = "http"
-adapter_kind = "zeroclaw_gateway"
+driver_kind = "custom"
+adapter_kind = "python_plugin"
 state_dir = %q
 workspace_bindings = [%q]
 resume_policy = "resume_or_create"
@@ -937,15 +968,12 @@ checkin_interval_seconds = 60
 checkin_ttl_seconds = 300
 
 [adapter]
-kind = "zeroclaw_gateway"
-base_url = %q
-bearer_token = %q
-webhook_secret = ""
-request_timeout_seconds = 600
-session_header_name = "X-Session-Id"
-`, baseURL, params.WorkspaceID, workspaceName, params.WorkspaceURL, authState, handle, stateDir, params.WorkspaceID, firstNonEmptyString(params.ZeroClawURL, "http://127.0.0.1:42617"), firstNonEmptyString(params.ZeroClawToken, "REPLACE_WITH_ZEROCLAW_BEARER_TOKEN"))) + "\n", handle, nil
+kind = "python_plugin"
+plugin_module = %q
+plugin_factory = %q
+`, baseURL, params.WorkspaceID, workspaceName, workspaceURL, authState, handle, stateDir, params.WorkspaceID, mod, fac)) + "\n", handle, nil
 	default:
-		return "", "", errnorm.Usage("invalid_request", "unknown bridge config kind; use hermes or zeroclaw")
+		return "", "", errnorm.Usage("invalid_request", "unknown bridge config kind; use subprocess or python-plugin")
 	}
 }
 
@@ -1135,7 +1163,14 @@ func loadBridgeConfigDetails(configPath string) (bridgeConfigDetails, error) {
 	if err != nil {
 		return bridgeConfigDetails{}, errnorm.Wrap(errnorm.KindLocal, "bridge_config_read_failed", "failed to read bridge config", err)
 	}
-	authStatePath := bridgeConfigStringValue(string(content), "auth", "state_path")
+	var root map[string]any
+	if err := toml.Unmarshal(content, &root); err != nil {
+		return bridgeConfigDetails{}, errnorm.Wrap(errnorm.KindLocal, "bridge_config_toml_invalid", "bridge config is not valid TOML", err)
+	}
+	authStatePath := ""
+	if authSec := bridgeTomlTable(root, "auth"); authSec != nil {
+		authStatePath = strings.TrimSpace(bridgeTomlString(authSec["state_path"]))
+	}
 	if authStatePath == "" {
 		authStatePath = ".state/auth.json"
 	}
@@ -1143,12 +1178,53 @@ func loadBridgeConfigDetails(configPath string) (bridgeConfigDetails, error) {
 	if err != nil {
 		return bridgeConfigDetails{}, err
 	}
+	agentHandle := ""
+	if agentSec := bridgeTomlTable(root, "agent"); agentSec != nil {
+		agentHandle = strings.TrimSpace(bridgeTomlString(agentSec["handle"]))
+	}
+	baseURL := ""
+	if anxSec := bridgeTomlTable(root, "anx"); anxSec != nil {
+		baseURL = strings.TrimSpace(bridgeTomlString(anxSec["base_url"]))
+	}
 	return bridgeConfigDetails{
 		ConfigPath:    absPath,
 		AuthStatePath: authStatePath,
-		AgentHandle:   bridgeConfigStringValue(string(content), "agent", "handle"),
-		BaseURL:       bridgeConfigStringValue(string(content), "anx", "base_url"),
+		AgentHandle:   agentHandle,
+		BaseURL:       baseURL,
 	}, nil
+}
+
+func bridgeTomlTable(root map[string]any, section string) map[string]any {
+	raw, ok := root[section]
+	if !ok || raw == nil {
+		return nil
+	}
+	sec, ok := raw.(map[string]any)
+	if !ok {
+		return nil
+	}
+	return sec
+}
+
+func bridgeTomlString(value any) string {
+	if value == nil {
+		return ""
+	}
+	switch v := value.(type) {
+	case string:
+		return v
+	case bool:
+		if v {
+			return "true"
+		}
+		return "false"
+	case int64:
+		return strconv.FormatInt(v, 10)
+	case float64:
+		return strconv.FormatFloat(v, 'g', -1, 64)
+	default:
+		return strings.TrimSpace(fmt.Sprint(v))
+	}
 }
 
 func bridgeConfigStringValue(content string, section string, key string) string {

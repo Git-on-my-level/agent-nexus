@@ -59,7 +59,7 @@ If an agent/operator only has the `anx` binary installed and needs the per-agent
 # requires Python 3.11+ and git on PATH
 anx bridge install
 anx bridge workspace-id --handle <handle>
-anx bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle>
+anx bridge init-config --kind subprocess --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py
 anx bridge import-auth --config ./agent.toml --from-profile <agent>
 anx bridge start --config ./agent.toml
 anx bridge status --config ./agent.toml

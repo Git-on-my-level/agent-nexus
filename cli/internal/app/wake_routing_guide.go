@@ -23,7 +23,7 @@ What counts as taggable
 - principal has wake registration metadata
 - registration <<tick>>actor_id<<tick>> matches the principal actor
 - registration has an enabled binding for the current workspace
-- registration status is <<tick>>active<<tick>>
+- registration status is not <<tick>>disabled<<tick>> (often <<tick>>pending<<tick>> until the first bridge check-in, then <<tick>>active<<tick>>)
 
 What counts as online
 
@@ -64,11 +64,11 @@ Preferred path when you are using <<tick>>anx-agent-bridge<<tick>>
 
 2. Confirm the workspace deployment's <<tick>>anx-core<<tick>> config and note the durable workspace id it uses.
 
-3. Generate the agent config:
+3. Generate the agent config and implement your adapter (subprocess JSON or python_plugin):
 
-  anx bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --workspace-path /absolute/path/to/hermes/workspace
+  anx bridge init-config --kind subprocess --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py
 
-  If you omit <<tick>>--workspace-path<<tick>>, the generated Hermes config keeps placeholder paths and must be edited before the bridge can start.
+  Inspect the exact stdin/stdout JSON contract with <<tick>>anx-agent-bridge adapter contract --config ./agent.toml<<tick>>.
 
 4. If matching <<tick>>anx<<tick>> auth already exists, import it into the bridge config:
 

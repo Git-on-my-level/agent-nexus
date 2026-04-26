@@ -32,10 +32,10 @@ workspace_id = "ws_main"
 workspace_name = "Main"
 
 [agent]
-handle = "hermes"
-driver_kind = "acp"
-adapter_kind = "hermes_acp"
-state_dir = ".state/hermes"
+handle = "myagent"
+driver_kind = "custom"
+adapter_kind = "subprocess"
+state_dir = ".state/myagent"
 workspace_bindings = ["ws_main"]
 """.strip()
         + "\n",
@@ -60,10 +60,10 @@ workspace_id = "ws_main"
 workspace_name = "Main"
 
 [agent]
-handle = "hermes"
-driver_kind = "acp"
-adapter_kind = "hermes_acp"
-state_dir = ".state/hermes"
+handle = "myagent"
+driver_kind = "custom"
+adapter_kind = "subprocess"
+state_dir = ".state/myagent"
 workspace_bindings = ["ws_main"]
 
 [router]

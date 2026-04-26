@@ -140,7 +140,7 @@ def build_bridge(events):
         agent=AgentConfig(
             handle="hermes",
             driver_kind="custom",
-            adapter_kind="hermes_acp",
+            adapter_kind="subprocess",
             state_dir=Path("/tmp/anx-agent-bridge-test"),
             workspace_bindings=["ws_main"],
         ),
@@ -288,7 +288,7 @@ def test_handle_notification_marks_read_after_dispatch():
 
 
 def test_handle_notification_leaves_notification_unread_when_completion_fails():
-    bridge, _state, client = build_bridge([])
+    bridge, state, client = build_bridge([])
     original_create_event = client.create_event
 
     def fail_completion(**kwargs):
@@ -299,18 +299,69 @@ def test_handle_notification_leaves_notification_unread_when_completion_fails():
 
     client.create_event = fail_completion
 
-    with pytest.raises(RuntimeError, match="completion write failed"):
-        bridge._handle_notification(
-            {
-                "wakeup_id": "wake-1",
-                "target_actor_id": "actor-hermes",
-                "thread_id": "thread-1",
-                "request_event_id": "evt-request",
-                "trigger_event_id": "evt-trigger",
-            }
-        )
+    bridge._handle_notification(
+        {
+            "wakeup_id": "wake-1",
+            "target_actor_id": "actor-hermes",
+            "thread_id": "thread-1",
+            "request_event_id": "evt-request",
+            "trigger_event_id": "evt-trigger",
+        }
+    )
 
     assert client.notification_reads == []
+    assert "wake-1" not in state.handled_wakeup_ids()
+    event_types = [entry["event"]["type"] for entry in client.created_events]
+    assert "agent_wakeup_failed" in event_types
+    assert event_types[-1] == "agent_wakeup_failed"
+
+
+def test_drain_notifications_continues_after_dispatch_failure():
+    bridge, _state, client = build_bridge([])
+    calls = {"n": 0}
+    base_artifact = client.get_artifact_content("wake-1")
+
+    def artifact_for(wakeup_id: str):
+        return {**base_artifact, "wakeup_id": wakeup_id}
+
+    client.get_artifact_content = lambda wid: artifact_for(str(wid))
+
+    def counting_dispatch(*_a, **_k):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("adapter down")
+        from anx_agent_bridge.adapters.base import AdapterResult
+
+        return AdapterResult(response_text="ok", native_session_id=None)
+
+    bridge.adapter.dispatch = counting_dispatch
+    client.notifications = [
+        {
+            "wakeup_id": "wake-bad",
+            "status": "unread",
+            "target_actor_id": "actor-hermes",
+            "thread_id": "thread-1",
+            "request_event_id": "evt-req-b",
+            "trigger_event_id": "evt-trig-b",
+        },
+        {
+            "wakeup_id": "wake-good",
+            "status": "unread",
+            "target_actor_id": "actor-hermes",
+            "thread_id": "thread-1",
+            "request_event_id": "evt-req-g",
+            "trigger_event_id": "evt-trig-g",
+        },
+    ]
+
+    bridge._drain_notifications()
+
+    assert calls["n"] == 2
+    failed = [e for e in client.created_events if e["event"]["type"] == "agent_wakeup_failed"]
+    assert len(failed) == 1
+    assert failed[0]["event"]["payload"]["wakeup_id"] == "wake-bad"
+    completed = [e for e in client.created_events if e["event"]["type"] == "agent_wakeup_completed"]
+    assert len(completed) == 1
 
 
 def test_handle_notification_does_not_emit_failed_when_read_ack_fails(monkeypatch):
@@ -405,17 +456,18 @@ def test_bridge_checkin_upserts_active_registration():
     assert checkin_payload["proof_signature_b64"] != ""
 
 
-def test_bridge_checkin_requires_adapter_doctor_to_pass():
+def test_bridge_checkin_does_not_invoke_adapter_doctor():
     bridge, _state, client = build_bridge([])
 
-    class BrokenAdapter:
+    class NoDoctorAdapter:
         def doctor(self):
-            raise RuntimeError("adapter not ready")
+            raise RuntimeError("adapter doctor should not run during check-in")
 
-    bridge.adapter = BrokenAdapter()
+        def dispatch(self, *_args, **_kwargs):
+            raise NotImplementedError
 
-    with pytest.raises(RuntimeError, match="adapter not ready"):
-        bridge._publish_checkin()
+    bridge.adapter = NoDoctorAdapter()
+    bridge._publish_checkin()
 
-    assert client.registration_updates == []
-    assert client.created_events == []
+    assert len(client.registration_updates) == 1
+    assert client.registration_updates[0]["registration"]["status"] == "active"

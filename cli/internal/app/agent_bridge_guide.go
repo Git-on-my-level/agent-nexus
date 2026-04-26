@@ -52,8 +52,10 @@ Config generation
 
 Generate minimal configs from the CLI:
 
-  anx bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --workspace-path /absolute/path/to/hermes/workspace
-  anx bridge init-config --kind zeroclaw --output ./zeroclaw.toml --workspace-id <workspace-id> --handle <handle>
+  anx bridge init-config --kind subprocess --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py
+  anx bridge init-config --kind python-plugin --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --plugin-module my_bridge --plugin-factory build_adapter
+
+You own the adapter implementation. ANX does not ship or maintain integrations for specific third-party agents.
 
 These templates intentionally default the agent lifecycle to:
 
@@ -78,11 +80,9 @@ First-time agent-host path
 
   anx bridge install
 
-2. Render the agent config:
+2. Render the agent config and implement the adapter (see <<tick>>anx-agent-bridge adapter contract --config ./agent.toml<<tick>>):
 
-  anx bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --workspace-path /absolute/path/to/hermes/workspace
-
-  If you omit <<tick>>--workspace-path<<tick>>, the rendered Hermes config uses placeholder paths and must be edited before the bridge can run.
+  anx bridge init-config --kind subprocess --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py
 
 3. If a matching <<tick>>anx<<tick>> profile already exists for the target principal, import it into the bridge config:
 
