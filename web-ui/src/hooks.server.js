@@ -80,7 +80,9 @@ export function __resetLoopTrackerForTests() {
 
 function shouldBypassProxy(pathname, method) {
   const normalizedMethod = method.toUpperCase();
-  const normalizedPath = String(pathname ?? "").trim();
+  const normalizedPath = String(pathname ?? "")
+    .trim()
+    .replace(/\/+$/, "");
   return (
     (normalizedMethod === "POST" &&
       (normalizedPath === "/auth/passkey/login/verify" ||
@@ -295,13 +297,17 @@ export async function handle({ event, resolve }) {
 
   const pathname = stripBasePath(event.url.pathname);
   const method = event.request.method;
+  if (shouldBypassProxy(pathname, method)) {
+    const response = await resolve(event);
+    response.headers.set("X-ANX-UI-Version", CURRENT_VERSION);
+    return response;
+  }
   const documentNavigation = isDocumentNavigationRequest(event.request);
 
   const proxyableRequest =
     (isProxyableCommand(method, pathname) ||
       isDirectCoreProxyPath(method, pathname)) &&
-    !documentNavigation &&
-    !shouldBypassProxy(pathname, method);
+    !documentNavigation;
 
   if (proxyableRequest) {
     const target = await resolveProxyTarget({

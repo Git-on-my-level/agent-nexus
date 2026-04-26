@@ -487,4 +487,39 @@ describe("hooks proxy retry", () => {
     expect(response.status).toBe(200);
     expect(await response.text()).toBe("callback handled");
   });
+
+  it("bypasses proxy for callback posts with a trailing slash", async () => {
+    const resolve = vi.fn(
+      async () =>
+        new Response("callback handled", {
+          status: 200,
+          headers: {
+            "content-type": "text/plain",
+          },
+        }),
+    );
+
+    const response = await handle({
+      event: {
+        url: new URL("https://anx.example.test/o/local/w/ops/auth/callback/"),
+        request: new Request(
+          "https://anx.example.test/o/local/w/ops/auth/callback/",
+          {
+            method: "POST",
+            headers: {
+              accept: "text/html",
+              "content-type": "application/x-www-form-urlencoded",
+            },
+            body: "exchange_token=tok&state=abc",
+          },
+        ),
+      },
+      resolve,
+    });
+
+    expect(resolve).toHaveBeenCalledTimes(1);
+    expect(proxyWorkspaceTargetMocks.resolveProxyTarget).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("callback handled");
+  });
 });
