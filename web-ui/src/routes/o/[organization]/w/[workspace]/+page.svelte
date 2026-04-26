@@ -12,29 +12,23 @@
   import TopicTypeGlyph from "$lib/components/TopicTypeGlyph.svelte";
   import { coreClient } from "$lib/coreClient";
   import { parseTimestampMs } from "$lib/dateUtils";
-  import {
-    buildTimelineRefLabelHints,
-    eventTypeDotClass,
-    toTimelineView,
-  } from "$lib/timelineUtils";
+  import { eventTypeDotClass, toTimelineView } from "$lib/timelineUtils";
   import { filterTopLevelDocuments } from "$lib/documentVisibility";
   import { boardRecordFromBoardsListRow } from "$lib/searchHelpers";
   import { formatTimestamp } from "$lib/formatDate";
   import {
     buildHomeChangeCards,
+    buildHomeRefLabelHints,
     computeNextHomeHandoffMarker,
     filterHomeTimelineEvents,
     homeHandoffEventPillId,
+    homeTimelinePrimaryRefFromEvent,
     readHomeHandoffMarker,
     selectHomeInboxPreview,
     writeHomeHandoffMarker,
   } from "$lib/homeHandoff";
   import { initializeAuthSession } from "$lib/authSession";
-  import {
-    getInboxCategoryLabel,
-    getInboxSubjectLabel,
-    splitTypedRef,
-  } from "$lib/inboxUtils";
+  import { getInboxCategoryLabel, getInboxSubjectLabel } from "$lib/inboxUtils";
   import { replayWorkspaceTour } from "$lib/tourState";
   import { workspacePath } from "$lib/workspacePaths";
 
@@ -43,18 +37,6 @@
     error: "",
     items: [],
   };
-
-  const HOME_REF_PRIORITY = [
-    "topic",
-    "thread",
-    "board",
-    "document",
-    "artifact",
-    "card",
-    "inbox",
-    "url",
-    "event",
-  ];
 
   const POLL_INTERVAL_MS = 30_000;
 
@@ -65,6 +47,7 @@
   let boardsState = $state({ ...emptySectionState });
   let docsState = $state({ ...emptySectionState });
   let artifactsState = $state({ ...emptySectionState });
+  let cardsState = $state({ ...emptySectionState });
   let eventsState = $state({ ...emptySectionState });
   let handoffMarkerIso = $state("");
   let handoffMarkerLoaded = $state(!browser);
@@ -107,6 +90,7 @@
       boards: boardsState.items,
       documents: docsState.items,
       artifacts: artifactsState.items,
+      cards: cardsState.items,
     }),
   );
 
@@ -154,15 +138,26 @@
         : "",
   );
 
+  const handoffErrorStates = $derived([
+    inboxState,
+    topicsState,
+    boardsState,
+    docsState,
+    artifactsState,
+    cardsState,
+    eventsState,
+  ]);
+
   let handoffDataErrors = $derived(
-    [
-      inboxState,
-      topicsState,
-      boardsState,
-      docsState,
-      artifactsState,
-      eventsState,
-    ]
+    handoffErrorStates
+      .filter((state) => state.status === "error" && state.error)
+      .map((state) => state.error),
+  );
+
+  /** Card list is only used for timeline label hints; failures should not block handoff. */
+  let handoffMarkAsReadBlockingErrors = $derived(
+    handoffErrorStates
+      .filter((state) => state !== cardsState)
       .filter((state) => state.status === "error" && state.error)
       .map((state) => state.error),
   );
@@ -225,6 +220,7 @@
       boardsResult,
       docsResult,
       artifactsResult,
+      cardsResult,
       eventsResult,
     ] = await Promise.allSettled([
       coreClient.listInboxItems({ view: "items" }),
@@ -232,6 +228,10 @@
       coreClient.listBoards({}),
       coreClient.listDocuments({}),
       coreClient.listArtifacts({}),
+      coreClient.listCards({
+        include_archived: "true",
+        include_trashed: "true",
+      }),
       coreClient.listEvents(),
     ]);
 
@@ -256,6 +256,7 @@
       "artifacts",
       "Failed to load artifacts",
     );
+    cardsState = toSectionState(cardsResult, "cards", "Failed to load cards");
     eventsState = toSectionState(
       eventsResult,
       "events",
@@ -294,43 +295,6 @@
     };
   }
 
-  function toIdRecord(items = []) {
-    return Object.fromEntries(
-      items
-        .map((item) => [String(item?.id ?? "").trim(), item])
-        .filter(([id]) => id),
-    );
-  }
-
-  function buildHomeRefLabelHints({
-    topics = [],
-    boards = [],
-    documents = [],
-    artifacts = [],
-  } = {}) {
-    const hints = buildTimelineRefLabelHints(
-      toIdRecord(artifacts),
-      toIdRecord(documents),
-      {},
-    );
-
-    for (const topic of topics) {
-      const topicId = String(topic?.id ?? "").trim();
-      const threadId = String(topic?.thread_id ?? "").trim();
-      const title = String(topic?.title ?? "").trim();
-      if (topicId && title) hints[`topic:${topicId}`] = title;
-      if (threadId && title) hints[`thread:${threadId}`] = title;
-    }
-
-    for (const board of boards) {
-      const boardId = String(board?.id ?? "").trim();
-      const title = String(board?.title ?? "").trim();
-      if (boardId && title) hints[`board:${boardId}`] = title;
-    }
-
-    return hints;
-  }
-
   function workspaceHref(pathname = "/") {
     return workspacePath(organizationSlug, workspaceSlug, pathname);
   }
@@ -338,19 +302,6 @@
   function inboxPreviewHref(item) {
     const id = String(item?.id ?? "").trim();
     return id ? workspaceHref(`/inbox/${id}`) : workspaceHref("/inbox");
-  }
-
-  function homeEventPrimaryRef(event) {
-    const refs = Array.isArray(event?.refs) ? event.refs : [];
-
-    for (const prefix of HOME_REF_PRIORITY) {
-      const matched = refs.find(
-        (refValue) => splitTypedRef(refValue).prefix === prefix,
-      );
-      if (matched) return matched;
-    }
-
-    return "";
   }
 
   function countValueClass(count) {
@@ -402,7 +353,11 @@
   }
 
   function isMarkAsReadDisabled() {
-    return !handoffMarkerLoaded || loading || handoffDataErrors.length > 0;
+    return (
+      !handoffMarkerLoaded ||
+      loading ||
+      handoffMarkAsReadBlockingErrors.length > 0
+    );
   }
 
   function timestampToIso(timestampMs) {
@@ -570,7 +525,7 @@
         {:else if handoffTimelineView.length > 0}
           <div class="space-y-2.5">
             {#each handoffTimelineViewFiltered as event (event.id)}
-              {@const primaryRef = homeEventPrimaryRef(event)}
+              {@const primaryRef = homeTimelinePrimaryRefFromEvent(event)}
               <div
                 class="rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] px-3.5 py-2.5"
               >

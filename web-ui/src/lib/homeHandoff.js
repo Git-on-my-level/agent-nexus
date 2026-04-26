@@ -4,7 +4,10 @@ import {
   sortInboxItems,
   splitTypedRef,
 } from "./inboxUtils.js";
-import { KNOWN_EVENT_TYPES } from "./timelineUtils.js";
+import {
+  buildTimelineRefLabelHints,
+  KNOWN_EVENT_TYPES,
+} from "./timelineUtils.js";
 
 const HOME_HANDOFF_STORAGE_VERSION = "v1";
 
@@ -25,6 +28,140 @@ const HOME_INCLUDED_EVENT_TYPES = new Set([
 ]);
 
 const HOME_EXCLUDED_EVENT_TYPES = new Set(["inbox_item_acknowledged"]);
+
+/**
+ * Prefix order for choosing a single “primary” typed ref on Home (timeline row
+ * link + handoff pill filter). More specific resources win; `thread` is a
+ * fallback for chat-only events.
+ */
+export const HOME_TIMELINE_REF_PREFIX_PRIORITY = [
+  "topic",
+  "document",
+  "document_revision",
+  "card",
+  "board",
+  "artifact",
+  "thread",
+  "inbox",
+  "url",
+  "event",
+];
+
+function toIdRecord(items = []) {
+  return Object.fromEntries(
+    items
+      .map((item) => [String(item?.id ?? "").trim(), item])
+      .filter(([id]) => id),
+  );
+}
+
+function documentBackingThreadIdFromRecord(doc) {
+  const threadId = String(doc?.thread_id ?? "").trim();
+  if (threadId) {
+    return threadId;
+  }
+  return String(doc?.id ?? "").trim();
+}
+
+function documentRevisionMapFromDocuments(documents = []) {
+  /** @type {Record<string, { document_id: string, revision_number?: number }>} */
+  const revisions = {};
+  for (const doc of documents) {
+    const docId = String(doc?.id ?? "").trim();
+    const hr = doc?.head_revision;
+    if (!docId || !hr || typeof hr !== "object") {
+      continue;
+    }
+    const revId = String(hr.revision_id ?? hr.id ?? "").trim();
+    if (!revId) {
+      continue;
+    }
+    const revisionNumber = hr.revision_number;
+    revisions[revId] = {
+      document_id: docId,
+      ...(Number.isFinite(Number(revisionNumber))
+        ? { revision_number: Number(revisionNumber) }
+        : {}),
+    };
+  }
+  return revisions;
+}
+
+/**
+ * Label hints for Home timeline `RefLink` humanization (topics, boards, docs,
+ * artifacts, cards, document threads).
+ *
+ * Topic `thread:` hints win over document-backed `thread:` hints on collision.
+ */
+export function buildHomeRefLabelHints({
+  topics = [],
+  boards = [],
+  documents = [],
+  artifacts = [],
+  cards = [],
+} = {}) {
+  const docById = toIdRecord(documents);
+  const hints = buildTimelineRefLabelHints(
+    toIdRecord(artifacts),
+    docById,
+    documentRevisionMapFromDocuments(documents),
+  );
+
+  for (const topic of topics) {
+    const topicId = String(topic?.id ?? "").trim();
+    const threadId = String(topic?.thread_id ?? "").trim();
+    const title = String(topic?.title ?? "").trim();
+    if (topicId && title) {
+      hints[`topic:${topicId}`] = title;
+    }
+    if (threadId && title) {
+      hints[`thread:${threadId}`] = title;
+    }
+  }
+
+  for (const doc of documents) {
+    const title = String(doc?.title ?? "").trim();
+    const backing = documentBackingThreadIdFromRecord(doc);
+    if (backing && title && !hints[`thread:${backing}`]) {
+      hints[`thread:${backing}`] = title;
+    }
+  }
+
+  for (const board of boards) {
+    const boardId = String(board?.id ?? "").trim();
+    const title = String(board?.title ?? "").trim();
+    if (boardId && title) {
+      hints[`board:${boardId}`] = title;
+    }
+  }
+
+  for (const card of cards) {
+    const cardId = String(card?.id ?? "").trim();
+    if (!cardId) {
+      continue;
+    }
+    const title = String(card?.title ?? "").trim();
+    hints[`card:${cardId}`] = title || cardId;
+  }
+
+  return hints;
+}
+
+export function homeTimelinePrimaryRefFromRefs(refs) {
+  const list = Array.isArray(refs) ? refs : [];
+  for (const prefix of HOME_TIMELINE_REF_PREFIX_PRIORITY) {
+    const matched = list.find((r) => splitTypedRef(r).prefix === prefix);
+    if (matched) {
+      return matched;
+    }
+  }
+  return "";
+}
+
+export function homeTimelinePrimaryRefFromEvent(event) {
+  const refs = Array.isArray(event?.refs) ? event.refs : [];
+  return homeTimelinePrimaryRefFromRefs(refs);
+}
 
 function normalizeStorageSegment(value) {
   return String(value ?? "").trim();
@@ -207,19 +344,6 @@ export function filterHomeTimelineEvents(
     .slice(0, limit);
 }
 
-/** Same priority as Home `homeEventPrimaryRef` for a stable “primary” ref. */
-const HOME_EVENT_REF_PRIORITY = [
-  "topic",
-  "thread",
-  "board",
-  "document",
-  "artifact",
-  "card",
-  "inbox",
-  "url",
-  "event",
-];
-
 function homeHandoffRefPrefixToPillId(prefix) {
   if (prefix === "inbox") return "inbox";
   if (prefix === "topic" || prefix === "thread") return "topics";
@@ -240,7 +364,7 @@ function homeHandoffRefPrefixToPillId(prefix) {
  */
 export function homeHandoffEventPillId(event) {
   const refs = Array.isArray(event?.refs) ? event.refs : [];
-  for (const want of HOME_EVENT_REF_PRIORITY) {
+  for (const want of HOME_TIMELINE_REF_PREFIX_PRIORITY) {
     const matched = refs.find((r) => splitTypedRef(r).prefix === want);
     if (!matched) continue;
     const p = splitTypedRef(matched).prefix;

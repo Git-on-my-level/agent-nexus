@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildHomeChangeCards,
+  buildHomeRefLabelHints,
   computeNextHomeHandoffMarker,
   filterHomeTimelineEvents,
   homeHandoffEventPillId,
+  homeTimelinePrimaryRefFromEvent,
+  homeTimelinePrimaryRefFromRefs,
 } from "../../src/lib/homeHandoff.js";
 
 describe("homeHandoff helpers", () => {
@@ -182,7 +185,7 @@ describe("homeHandoff helpers", () => {
         refs: ["board:b1", "thread:t1"],
         type: "card_updated",
       }),
-    ).toBe("topics");
+    ).toBe("boards");
     expect(
       homeHandoffEventPillId({ refs: ["board:b1"], type: "card_updated" }),
     ).toBe("boards");
@@ -191,6 +194,90 @@ describe("homeHandoff helpers", () => {
     ).toBe("inbox");
     expect(
       homeHandoffEventPillId({ refs: ["document:d1"], type: "decision_made" }),
+    ).toBe("docs-proof");
+    expect(
+      homeHandoffEventPillId({
+        refs: ["thread:t1", "document:d1"],
+        type: "document_updated",
+      }),
+    ).toBe("docs-proof");
+  });
+
+  it("picks document over thread for primary ref when both are present", () => {
+    expect(homeTimelinePrimaryRefFromRefs(["thread:t1", "document:d1"])).toBe(
+      "document:d1",
+    );
+    expect(
+      homeTimelinePrimaryRefFromEvent({
+        refs: ["thread:t1", "document:d1"],
+        type: "document_updated",
+      }),
+    ).toBe("document:d1");
+  });
+
+  it("picks card over board and thread for card lifecycle refs", () => {
+    expect(
+      homeTimelinePrimaryRefFromRefs(["board:b1", "card:c1", "thread:t1"]),
+    ).toBe("card:c1");
+  });
+
+  it("lets topic thread hints win over document-backed thread hints", () => {
+    const hints = buildHomeRefLabelHints({
+      topics: [{ id: "top-1", thread_id: "thr-shared", title: "Topic title" }],
+      documents: [{ id: "doc-1", thread_id: "thr-shared", title: "Doc title" }],
+      boards: [],
+      artifacts: [],
+      cards: [],
+    });
+    expect(hints["thread:thr-shared"]).toBe("Topic title");
+  });
+
+  it("fills thread hint from document backing id when no topic owns that thread", () => {
+    const hints = buildHomeRefLabelHints({
+      topics: [],
+      documents: [{ id: "doc-1", thread_id: "thr-doc", title: "Hello World" }],
+      boards: [],
+      artifacts: [],
+      cards: [],
+    });
+    expect(hints["thread:thr-doc"]).toBe("Hello World");
+    expect(hints["document:doc-1"]).toBe("Hello World");
+  });
+
+  it("adds card title hints", () => {
+    const hints = buildHomeRefLabelHints({
+      topics: [],
+      boards: [],
+      documents: [],
+      artifacts: [],
+      cards: [{ id: "card-1", title: "Fix login" }],
+    });
+    expect(hints["card:card-1"]).toBe("Fix login");
+  });
+
+  it("uses card id as hint when title is empty", () => {
+    const hints = buildHomeRefLabelHints({
+      topics: [],
+      boards: [],
+      documents: [],
+      artifacts: [],
+      cards: [{ id: "card-empty", title: "" }],
+    });
+    expect(hints["card:card-empty"]).toBe("card-empty");
+  });
+
+  it("prefers document over document_revision for primary ref when both exist", () => {
+    expect(
+      homeTimelinePrimaryRefFromRefs([
+        "document_revision:rev-1",
+        "document:doc-1",
+      ]),
+    ).toBe("document:doc-1");
+    expect(
+      homeHandoffEventPillId({
+        refs: ["document_revision:rev-1", "document:doc-1"],
+        type: "document_updated",
+      }),
     ).toBe("docs-proof");
   });
 
