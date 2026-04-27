@@ -186,7 +186,7 @@
   }
 </script>
 
-<div class="flex items-center justify-between mb-4">
+<div class="mb-3 flex max-md:mb-2 items-center justify-between">
   <h1 class="text-subtitle font-semibold text-[var(--fg)]">Artifacts</h1>
   <div class="flex items-center gap-3">
     <label

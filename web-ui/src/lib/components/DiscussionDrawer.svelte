@@ -190,13 +190,13 @@
 
   async function handleMessagePost(routeScopeId, event) {
     if (useParentTimelineContext && hostOnMessagePost) {
-      await hostOnMessagePost(routeScopeId, event);
-      return;
+      return await hostOnMessagePost(routeScopeId, event);
     }
-    await coreClient.createEvent({ event });
+    const result = await coreClient.createEvent({ event });
     if (!useParentTimelineContext) {
       await isolatedTimelineApi.refreshTimeline();
     }
+    return result;
   }
 
   let surfaceEl = $state(/** @type {HTMLDivElement | null} */ (null));

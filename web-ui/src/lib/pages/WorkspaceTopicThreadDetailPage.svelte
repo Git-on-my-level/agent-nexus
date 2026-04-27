@@ -228,11 +228,12 @@
 
   /** @param {string} routeScopeId topic id or thread id for listTopicTimeline / refresh coalescing */
   async function handleMessagePost(routeScopeId, event) {
-    await coreClient.createEvent({ event });
+    const result = await coreClient.createEvent({ event });
     await topicDetailStore.queueRefreshTopicDetail(routeScopeId, {
       workspace: true,
       timeline: true,
     });
+    return result;
   }
 
   function startThreadEventStream(
@@ -387,7 +388,6 @@
     {/if}
 
     {#if activeTab === "messages"}
-      <div class="page-dock-scroll flex-1 min-h-0" aria-hidden="true"></div>
       <div class="page-dock-feed lg:pt-3" role="tabpanel" tabindex="0">
         <DiscussionDrawer
           threadId={String(topic.id)}
@@ -398,6 +398,7 @@
           useParentTimelineContext={true}
           onMessagePost={handleMessagePost}
           pinComposerNarrow={true}
+          pinComposerAlignThreadEnd={true}
           narrowEdgeToEdge
           expandFillsParent
           emptyMessage={`Everything about ${topic.title || "this topic"} lives here. Post a message to start the conversation. Docs and Boards you link to this topic appear in their tabs.`}

@@ -500,7 +500,7 @@
 >
   <div class="cdm-overlay" onclick={handleBackdropClick}></div>
   <div class="cdm-panel">
-    <div class="sticky top-0 z-10 bg-[var(--panel)] px-4 pt-3">
+    <div class="sticky top-0 z-10 bg-[var(--panel)] px-3 pt-2 sm:px-4 sm:pt-3">
       <div class="flex items-start justify-between gap-3">
         <div class="min-w-0 flex-1">
           <div class="flex flex-wrap items-center gap-2">

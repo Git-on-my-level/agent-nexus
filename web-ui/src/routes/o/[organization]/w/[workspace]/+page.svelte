@@ -366,7 +366,7 @@
   }
 </script>
 
-<div class="space-y-6 min-w-0 max-w-full" data-tour="home">
+<div class="min-w-0 max-w-full space-y-6 max-md:space-y-4" data-tour="home">
   <div
     class="flex flex-wrap items-start justify-between gap-x-4 gap-y-3 min-w-0"
   >

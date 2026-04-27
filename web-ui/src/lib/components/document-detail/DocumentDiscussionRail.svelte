@@ -233,8 +233,9 @@
   });
 
   async function handleMessagePost(routeScopeId, event) {
-    await coreClient.createEvent({ event });
+    const result = await coreClient.createEvent({ event });
     await timelineApi.refreshTimeline();
+    return result;
   }
 
   // Empty-state copy that doubles as a discoverability hint: the operator

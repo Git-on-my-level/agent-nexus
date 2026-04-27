@@ -386,7 +386,7 @@
   }
 </script>
 
-<div class="mb-4 flex items-start justify-between gap-4">
+<div class="mb-3 flex max-md:mb-2 items-start justify-between gap-4">
   <div>
     <h1 class="text-subtitle font-semibold text-[var(--fg)]">Trash</h1>
     <p class="mt-0.5 text-micro text-[var(--fg-muted)]">

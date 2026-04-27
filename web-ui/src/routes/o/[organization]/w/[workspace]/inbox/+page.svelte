@@ -623,7 +623,7 @@
 </script>
 
 <div
-  class="flex items-center justify-between pb-4 mb-4 border-b border-[var(--line)]"
+  class="mb-3 flex max-md:mb-2 items-center justify-between border-b border-[var(--line)] pb-3 max-md:pb-2"
 >
   <div>
     <h1 class="text-subtitle font-semibold text-[var(--fg)]">Inbox</h1>

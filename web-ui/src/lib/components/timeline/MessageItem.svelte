@@ -125,7 +125,7 @@
   // the accent — keeps reply trees readable.
   let articleClasses = $derived(
     [
-      "rounded-md border bg-[var(--panel)] px-3 py-2",
+      "rounded-md border bg-[var(--panel)] px-3 py-1.5",
       depth > 0 ? "bg-[var(--bg-soft)]" : "",
       message.archived_at ? "opacity-60" : "",
       isAnchoredComment && depth === 0
@@ -190,7 +190,7 @@
         }
       : undefined}
   >
-    <div class="mb-2 flex min-w-0 w-full items-center gap-1.5">
+    <div class="mb-1.5 flex min-w-0 w-full items-center gap-1.5">
       <div class="flex min-w-0 min-h-[1.25rem] flex-1 items-center gap-0.5">
         <span
           class="min-w-0 max-w-full truncate font-mono text-[0.65rem] leading-tight text-[var(--fg-muted)]"
@@ -221,7 +221,7 @@
         {/if}
         {#if !message.archived_at && !message.trashed_at}
           <button
-            class="inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded text-[var(--fg-muted)] transition-colors hover:bg-[var(--bg-soft)] hover:text-[var(--fg)]"
+            class="inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded text-[var(--fg-muted)] transition-colors hover:bg-[var(--bg-soft)] hover:text-[var(--fg)]"
             onclick={() => onReply(message.id)}
             type="button"
             title="Reply"
@@ -298,7 +298,7 @@
       <div class="text-meta text-[var(--fg)] [overflow-wrap:anywhere]">
         <MarkdownRenderer
           source={message.messageText || message.summary || "Untitled message"}
-          class="text-meta text-[var(--fg)]"
+          class="markdown-rendered--bubble text-meta text-[var(--fg)]"
         />
       </div>
     </div>

@@ -957,11 +957,14 @@
     background: var(--panel);
     color: var(--fg);
     border-radius: var(--radius);
-    padding: 0.3rem 0.4rem;
+    min-height: 2.5rem;
+    padding: 0.45rem 0.5rem;
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 0.25rem;
     font-size: 0.75rem;
+    -webkit-tap-highlight-color: transparent;
   }
 
   .shell-mobile-identity span {
@@ -1111,14 +1114,13 @@
     }
 
     /*
-     * Topic: leave more room below the sticky header + tabs than 8.75rem so the
-     * dock doesn’t crowd the tab strip; cap height so the sheet doesn’t dominate.
+     * Topic Messages is already the active page content, not an auxiliary
+     * drawer. Give its fixed mobile chat dock the full slot below the mobile
+     * chrome + topic tabs so it matches board/doc chat pinning without the
+     * mid-page composer gap.
      */
     .page-dock-layout--fixed-mobile-chat.page-dock-layout--topic-messages {
-      --mobile-chat-panel-height: min(
-        calc(100dvh - 10.75rem),
-        min(68dvh, calc(100dvh - 2.5rem))
-      );
+      --mobile-chat-panel-height: calc(100dvh - 9.75rem);
     }
 
     /**
@@ -1135,34 +1137,84 @@
     }
 
     /*
-     * Topic Messages: `.page-dock-feed` is `position: fixed`, so it is removed
-     * from the flex layout. A `flex: 1` spacer would otherwise grow to fill the
-     * whole viewport under the tabs — a large empty band between tabs and chat.
+     * Topic mobile: one scroll owner — `.msgtab-messages` — not `main`.
+     * Otherwise short threads leave a tall scrollable “void” and the composer
+     * floats above the bottom nav with dead space below.
      */
-    .page-dock-layout--fixed-mobile-chat.page-dock-layout--topic-messages
-      .page-dock-scroll {
-      flex: 0 0 auto;
-      flex-grow: 0;
+    .shell-main-scroll:has(.page-dock-layout--topic-messages) {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow-x: hidden;
+      overflow-y: hidden;
+      /* Topic chat fills the mobile shell slot directly. Do not pair a clipped
+         flex stack with negative-margin bleed; that clips the chat edges. */
+      padding-inline: 0;
     }
 
-    /*
-     * Topic: let the dock height follow messages + composer until the cap, so
-     * short threads are not centered in a tall fixed sheet (huge gaps above/below).
-     */
+    .shell-main-scroll:has(.page-dock-layout--topic-messages) > .shell-content {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .page-dock-layout--fixed-mobile-chat.page-dock-layout--topic-messages {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      max-height: none;
+      overflow: hidden;
+    }
+
     .page-dock-layout--fixed-mobile-chat.page-dock-layout--topic-messages
-      .page-dock-feed:has([data-mobile-chat-expanded]) {
-      height: auto;
+      .page-dock-feed {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 15;
+      width: 100%;
+      max-width: 100%;
+      display: flex;
+      flex-direction: column;
+      box-sizing: border-box;
+      height: var(--mobile-chat-panel-height);
       max-height: var(--mobile-chat-panel-height);
-      min-height: 12.5rem;
+      min-height: 0;
+      margin: 0;
+      padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+      overflow: hidden;
     }
 
     .page-dock-layout--fixed-mobile-chat.page-dock-layout--topic-messages
       .page-dock-feed:has([data-mobile-chat-expanded])
       > * {
       flex: 1 1 auto;
-      height: auto;
-      max-height: 100%;
       min-height: 0;
+      height: 100%;
+      max-height: 100%;
+      align-self: stretch;
+    }
+
+    @media (max-width: 639px) {
+      .page-dock-layout--topic-messages {
+        margin-inline: 0;
+        width: 100%;
+      }
+    }
+
+    @media (min-width: 640px) and (max-width: 1023px) {
+      .page-dock-layout--topic-messages {
+        margin-inline: 0;
+        width: 100%;
+      }
+    }
+
+    /* Topic: composer sits in-flow above bottom nav — don’t reserve nav height twice. */
+    .page-dock-layout--topic-messages .msgtab-wrap--pin-narrow .msg-composer {
+      padding-bottom: 0.75rem;
     }
 
     /* Doc body scrolls only in the shell — avoid nested page-dock scrollers. */
@@ -1284,6 +1336,19 @@
 
   .markdown-rendered p {
     margin: 0.35rem 0;
+  }
+
+  /* Timeline / topic message bubbles: global `p` margins read as excess padding. */
+  .markdown-rendered.markdown-rendered--bubble p {
+    margin: 0.125rem 0;
+  }
+
+  .markdown-rendered.markdown-rendered--bubble p:first-child {
+    margin-top: 0;
+  }
+
+  .markdown-rendered.markdown-rendered--bubble p:last-child {
+    margin-bottom: 0;
   }
 
   .markdown-rendered ul {

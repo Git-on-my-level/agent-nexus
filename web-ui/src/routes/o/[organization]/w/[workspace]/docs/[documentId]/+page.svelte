@@ -17,6 +17,7 @@
     principalRegistry,
   } from "$lib/actorSession";
   import DocumentDiscussionRail from "$lib/components/document-detail/DocumentDiscussionRail.svelte";
+  import WorkspaceResourceTopRow from "$lib/components/WorkspaceResourceTopRow.svelte";
   import { buildDocumentCommentFields } from "$lib/documentCommentAnchor.js";
   import {
     applyDocumentCommentHighlights,
@@ -69,7 +70,7 @@
   let docLifecycleBusy = $state(false);
   /**
    * Per polish §P8: Archive and Trash collapse into a single "More actions"
-   * kebab so "New revision" is the only competing primary in the doc header.
+   * kebab so "Edit" (new revision) is the only competing primary in the doc header.
    */
   let moreActionsOpen = $state(false);
   let moreActionsRoot = $state(null);
@@ -872,35 +873,18 @@
   }
 </script>
 
-<nav
-  class="mb-3 flex items-center gap-1.5 text-micro text-[var(--fg-muted)]"
-  aria-label="Breadcrumb"
->
-  <a
-    class="transition-colors hover:text-[var(--fg)]"
-    href={workspaceHref("/docs")}>Docs</a
-  >
-  {#if parentTopic}
-    <span class="text-[var(--fg-subtle)]">/</span>
-    <a
-      class="max-w-[16rem] truncate transition-colors hover:text-[var(--fg)]"
-      href={workspaceHref(`/topics/${encodeURIComponent(parentTopic.id)}`)}
-      title={parentTopic.title}
-    >
-      {parentTopic.title}
-    </a>
-  {/if}
-  <span class="text-[var(--fg-subtle)]">/</span>
-  <span
-    class="truncate text-[var(--fg-muted)]"
-    aria-current="page"
-    title={document?.title || documentId}
-  >
-    {document?.title || documentId}
-  </span>
-</nav>
-
 {#if loading}
+  <nav
+    class="mb-2 flex min-w-0 items-center gap-1.5 text-micro text-[var(--fg-muted)]"
+    aria-label="Breadcrumb"
+  >
+    <a
+      class="shrink-0 transition-colors hover:text-[var(--fg)]"
+      href={workspaceHref("/docs")}>Docs</a
+    >
+    <span class="shrink-0 text-[var(--fg-subtle)]">/</span>
+    <span class="min-w-0 truncate text-[var(--fg-muted)]">{documentId}</span>
+  </nav>
   <div
     class="mt-8 flex items-center justify-center gap-2 text-meta text-[var(--fg-muted)]"
   >
@@ -922,13 +906,24 @@
     Loading...
   </div>
 {:else if loadError}
+  <nav
+    class="mb-2 flex min-w-0 items-center gap-1.5 text-micro text-[var(--fg-muted)]"
+    aria-label="Breadcrumb"
+  >
+    <a
+      class="shrink-0 transition-colors hover:text-[var(--fg)]"
+      href={workspaceHref("/docs")}>Docs</a
+    >
+    <span class="shrink-0 text-[var(--fg-subtle)]">/</span>
+    <span class="min-w-0 truncate text-[var(--fg-muted)]">{documentId}</span>
+  </nav>
   <div class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
     {loadError}
   </div>
 {:else if document}
   {#if document.trashed_at}
     <div
-      class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-meta text-danger-text"
+      class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-meta text-danger-text"
     >
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2 font-semibold">
@@ -959,12 +954,13 @@
     </div>
   {:else if document.archived_at}
     <div
-      class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-meta text-warn-text"
+      class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-meta text-warn-text"
     >
       <p class="min-w-0 flex-1">
         This document was archived on {formatTimestamp(document.archived_at) ||
-          "—"}{#if document.archived_by}
-          by {actorName(document.archived_by)}{/if}.
+          "—"}{#if document.archived_by}{" by "}{actorName(
+            document.archived_by,
+          )}{/if}.
       </p>
       <button
         class="shrink-0 cursor-pointer rounded-md border border-warn/40 bg-warn-soft px-2 py-1 text-micro font-medium text-warn-text hover:bg-warn/25 disabled:opacity-50"
@@ -976,6 +972,57 @@
       </button>
     </div>
   {/if}
+
+  {#snippet docDesktop()}
+    <h1 class="min-w-0 text-subtitle font-semibold text-[var(--fg)]">
+      {document.title || ""}{#if !document.title}<span
+          class="font-mono text-[var(--fg-muted)]">{document.id}</span
+        >{/if}
+    </h1>
+    <div class="mt-1 flex flex-wrap items-center gap-1.5 text-micro">
+      {#if document.state}
+        <span
+          class="rounded px-1.5 py-0.5 font-medium {document.state === 'active'
+            ? 'text-ok-text bg-ok-soft'
+            : document.state === 'trashed'
+              ? 'text-danger-text bg-danger-soft'
+              : 'text-warn-text bg-warn-soft'}"
+          >{{
+            active: "Active",
+            archived: "Archived",
+            trashed: "Trashed",
+          }[document.state] ?? document.state}</span
+        >
+      {/if}
+      {#if document.state}
+        <span class="text-[var(--fg-subtle)]">·</span>
+      {/if}
+      <span class="text-[var(--fg-muted)]"
+        >v{displayedRevision?.revision_number ?? "\u2014"}</span
+      >
+      <span class="text-[var(--fg-subtle)]">·</span>
+      <span class="text-[var(--fg-muted)]"
+        >{formatTimestamp(displayedRevision?.created_at) || "—"}</span
+      >
+      <span class="text-[var(--fg-subtle)]">·</span>
+      <span class="text-[var(--fg-muted)]"
+        >by {actorName(displayedRevision?.created_by)}</span
+      >
+    </div>
+    {#if documentTopicRefValue}
+      <p
+        class="mt-0.5 flex flex-wrap items-baseline gap-x-1.5 text-micro text-[var(--fg-muted)]"
+      >
+        <span>Topic / thread</span>
+        <RefLink
+          refValue={documentTopicRefValue}
+          threadId={document.thread_id}
+          humanize
+          showRaw
+        />
+      </p>
+    {/if}
+  {/snippet}
 
   <!--
     Mobile (max-lg): wrap body + discussion drawer in a `page-dock-layout`
@@ -991,17 +1038,40 @@
     <div class="min-w-0 flex-1 {document.thread_id ? 'page-dock-scroll' : ''}">
       <div class="flex gap-4">
         <div class="min-w-0 flex-1">
-          <div class="flex items-start justify-between gap-3">
-            <div class="min-w-0 flex-1">
-              <h1 class="text-subtitle font-semibold text-[var(--fg)]">
-                {document.title || ""}{#if !document.title}<span
-                    class="font-mono text-[var(--fg-muted)]">{document.id}</span
-                  >{/if}
-              </h1>
-              <div class="mt-1 flex flex-wrap items-center gap-1.5 text-micro">
+          <WorkspaceResourceTopRow
+            breadcrumbAriaLabel="Breadcrumb and document status"
+            desktopAriaLabel="Document details"
+            desktop={docDesktop}
+          >
+            {#snippet breadcrumb()}
+              <a
+                class="shrink-0 transition-colors hover:text-[var(--fg)]"
+                href={workspaceHref("/docs")}>Docs</a
+              >
+              {#if parentTopic}
+                <span class="shrink-0 text-[var(--fg-subtle)]">/</span>
+                <a
+                  class="min-w-0 max-w-[5.5rem] shrink truncate sm:max-w-[12rem] transition-colors hover:text-[var(--fg)]"
+                  href={workspaceHref(
+                    `/topics/${encodeURIComponent(parentTopic.id)}`,
+                  )}
+                  title={parentTopic.title}
+                >
+                  {parentTopic.title}
+                </a>
+              {/if}
+              <span class="shrink-0 text-[var(--fg-subtle)]">/</span>
+              <div class="flex min-h-0 min-w-0 flex-1 items-center gap-1.5">
+                <span
+                  class="min-w-0 shrink truncate text-[var(--fg-muted)]"
+                  aria-current="page"
+                  title={document?.title || documentId}
+                >
+                  {document?.title || documentId}
+                </span>
                 {#if document.state}
                   <span
-                    class="rounded px-1.5 py-0.5 font-medium {document.state ===
+                    class="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium leading-none sm:px-2 sm:py-0.5 sm:text-micro {document.state ===
                     'active'
                       ? 'text-ok-text bg-ok-soft'
                       : document.state === 'trashed'
@@ -1014,37 +1084,10 @@
                     }[document.state] ?? document.state}</span
                   >
                 {/if}
-                {#if document.state}
-                  <span class="text-[var(--fg-subtle)]">·</span>
-                {/if}
-                <span class="text-[var(--fg-muted)]"
-                  >v{displayedRevision?.revision_number ?? "\u2014"}</span
-                >
-                <span class="text-[var(--fg-subtle)]">·</span>
-                <span class="text-[var(--fg-muted)]"
-                  >{formatTimestamp(displayedRevision?.created_at) || "—"}</span
-                >
-                <span class="text-[var(--fg-subtle)]">·</span>
-                <span class="text-[var(--fg-muted)]"
-                  >by {actorName(displayedRevision?.created_by)}</span
-                >
               </div>
-              {#if documentTopicRefValue}
-                <p
-                  class="mt-0.5 flex flex-wrap items-baseline gap-x-1.5 text-micro text-[var(--fg-muted)]"
-                >
-                  <span>Topic / thread</span>
-                  <RefLink
-                    refValue={documentTopicRefValue}
-                    threadId={document.thread_id}
-                    humanize
-                    showRaw
-                  />
-                </p>
-              {/if}
-            </div>
-            {#if !document.trashed_at}
-              <div class="flex shrink-0 items-center gap-1.5">
+            {/snippet}
+            {#snippet actions()}
+              {#if !document.trashed_at}
                 <ResourceShareMenu
                   resourceId={document.id}
                   rawRecord={document}
@@ -1072,11 +1115,11 @@
                         d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
                       />
                     </svg>
-                    New revision
+                    Edit
                   </Button>
                 {:else}
                   <span
-                    class="inline-flex items-center gap-1 rounded-md border border-[var(--line)] px-2.5 py-1.5 text-micro text-[var(--fg-muted)]"
+                    class="inline-flex max-w-[5rem] items-center gap-1 truncate rounded-md border border-[var(--line)] px-1.5 py-1 text-[10px] text-[var(--fg-muted)] sm:max-w-none sm:px-2.5 sm:py-1.5 sm:text-micro md:inline-flex"
                     title="Content type '{headContentType}' can only be updated via the CLI or API"
                   >
                     <svg
@@ -1096,6 +1139,7 @@
                   </span>
                 {/if}
                 <Button
+                  class="max-md:hidden"
                   variant="secondary"
                   size="compact"
                   onclick={loadHistory}
@@ -1142,6 +1186,17 @@
                       class="absolute right-0 z-50 mt-1 min-w-[10rem] rounded-md border border-[var(--line)] bg-[var(--panel)] py-1 shadow-lg"
                       role="menu"
                     >
+                      <button
+                        type="button"
+                        role="menuitem"
+                        class="block w-full px-3 py-2 text-left text-micro text-[var(--fg)] hover:bg-[var(--line-subtle)] md:hidden"
+                        onclick={() => {
+                          closeMoreActions();
+                          void loadHistory();
+                        }}
+                      >
+                        Revision history
+                      </button>
                       {#if !document.archived_at}
                         <button
                           type="button"
@@ -1171,9 +1226,9 @@
                     </div>
                   {/if}
                 </div>
-              </div>
-            {/if}
-          </div>
+              {/if}
+            {/snippet}
+          </WorkspaceResourceTopRow>
 
           {#if editOpen}
             <form

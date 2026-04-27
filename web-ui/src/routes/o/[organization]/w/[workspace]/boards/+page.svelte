@@ -206,7 +206,7 @@
   }
 </script>
 
-<div class="mb-4 flex flex-wrap items-start justify-between gap-4">
+<div class="mb-3 flex max-md:mb-2 flex-wrap items-start justify-between gap-4">
   <div>
     <h1 class="text-subtitle font-semibold text-[var(--fg)]">Boards</h1>
   </div>
@@ -351,7 +351,7 @@
           : ''}"
       >
         <div
-          class="group relative min-w-0 flex-1 px-4 py-3 text-left transition-colors hover:bg-[var(--line-subtle)]"
+          class="group relative min-w-0 flex-1 px-3 py-2.5 text-left transition-colors hover:bg-[var(--line-subtle)] sm:px-4"
         >
           <a
             aria-label={`Open board ${board.title || board.id}`}
@@ -359,13 +359,20 @@
             href={workspaceHref(`/boards/${board.id}`)}
           ></a>
           <div
-            class="pointer-events-none relative z-10 flex items-start justify-between gap-3"
+            class="pointer-events-none relative z-10 flex min-w-0 items-start justify-between gap-3"
           >
             <div class="min-w-0 flex-1">
-              <div class="flex flex-wrap items-center gap-2">
+              <div
+                class="inline-flex max-w-full min-w-0 items-center gap-x-2 gap-y-1"
+              >
+                <span
+                  class="min-w-0 truncate text-meta font-medium text-[var(--fg)] group-hover:text-accent-text"
+                >
+                  {board.title || board.id}
+                </span>
                 {#if board.state}
                   <span
-                    class="inline-flex rounded px-1.5 py-0.5 text-micro font-semibold {lifecycleStateColor(
+                    class="inline-flex shrink-0 rounded px-1.5 py-0.5 text-micro font-semibold {lifecycleStateColor(
                       board.state,
                     )}"
                   >
@@ -374,33 +381,31 @@
                 {/if}
                 {#if isBoardArchived(board)}
                   <span
-                    class="rounded bg-warn-soft px-1.5 py-0.5 text-micro font-medium text-warn-text"
+                    class="shrink-0 rounded bg-warn-soft px-1.5 py-0.5 text-micro font-medium text-warn-text"
                     >Archived</span
                   >
                 {/if}
-                {#if projectionFreshness}
-                  <span
-                    class="inline-flex rounded px-1.5 py-0.5 text-micro font-medium {freshnessStatusTone(
-                      projectionFreshness.status,
-                    )}"
-                  >
-                    {freshnessStatusLabel(projectionFreshness.status)}
-                  </span>
-                {/if}
-                {#if summary?.has_document_refs || summary?.has_document_ref}
-                  <span
-                    class="rounded bg-accent-soft px-1.5 py-0.5 text-micro text-accent-text"
-                  >
-                    Has doc
-                  </span>
-                {/if}
               </div>
-
-              <span
-                class="mt-1 block truncate text-meta font-medium text-[var(--fg)] group-hover:text-accent-text"
-              >
-                {board.title || board.id}
-              </span>
+              {#if projectionFreshness || summary?.has_document_refs || summary?.has_document_ref}
+                <div class="mt-1.5 flex flex-wrap items-center gap-2">
+                  {#if projectionFreshness}
+                    <span
+                      class="inline-flex rounded px-1.5 py-0.5 text-micro font-medium {freshnessStatusTone(
+                        projectionFreshness.status,
+                      )}"
+                    >
+                      {freshnessStatusLabel(projectionFreshness.status)}
+                    </span>
+                  {/if}
+                  {#if summary?.has_document_refs || summary?.has_document_ref}
+                    <span
+                      class="rounded bg-accent-soft px-1.5 py-0.5 text-micro text-accent-text"
+                    >
+                      Has doc
+                    </span>
+                  {/if}
+                </div>
+              {/if}
 
               <div
                 class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-micro text-[var(--fg-muted)]"
@@ -419,16 +424,7 @@
                         ? "Topic"
                         : "Backing thread"}:</span
                     >
-                    <a
-                      class="pointer-events-auto relative z-20 text-accent-text transition-colors hover:text-accent-text"
-                      href={workspaceHref(
-                        rowNav.kind === "topic"
-                          ? `/topics/${encodeURIComponent(rowNav.segment)}`
-                          : `/threads/${encodeURIComponent(rowNav.segment)}`,
-                      )}
-                    >
-                      {rowNav.display}
-                    </a>
+                    <span class="text-[var(--fg-muted)]">{rowNav.display}</span>
                   </span>
                 {:else}
                   <span>
@@ -436,16 +432,7 @@
                     <span class="text-[var(--fg-muted)]">—</span>
                   </span>
                 {/if}
-                <span>
-                  Visual scan updated {formatTimestamp(board.updated_at) || "—"}
-                </span>
-                {#if isFreshnessCurrent(projectionFreshness)}
-                  <span>
-                    Latest derived activity {formatTimestamp(
-                      summary?.latest_activity_at,
-                    ) || "—"}
-                  </span>
-                {:else if projectionFreshness}
+                {#if projectionFreshness && !isFreshnessCurrent(projectionFreshness)}
                   <span>Derived scan details are still catching up</span>
                 {/if}
               </div>
@@ -471,9 +458,16 @@
                 </div>
               {/if}
             </div>
+            <div
+              class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"
+            >
+              <span class="w-14 text-right text-[var(--fg-muted)]"
+                >{formatTimestamp(board.updated_at) || "—"}</span
+              >
+            </div>
           </div>
         </div>
-        <div class="hidden shrink-0 items-center gap-1 px-2 sm:flex">
+        <div class="hidden shrink-0 items-center gap-1 px-1 sm:px-2 sm:flex">
           <ArchiveButton
             archived={isBoardArchived(board)}
             busy={Boolean(archiveBusyId) || Boolean(trashBusyId)}

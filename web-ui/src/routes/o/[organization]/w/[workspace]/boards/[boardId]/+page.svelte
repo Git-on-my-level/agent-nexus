@@ -3,12 +3,11 @@
   import { page } from "$app/stores";
   import BoardFeedStrip from "$lib/components/BoardFeedStrip.svelte";
   import BoardCard from "$lib/components/BoardCard.svelte";
+  import WorkspaceResourceTopRow from "$lib/components/WorkspaceResourceTopRow.svelte";
   import CardDetailModal from "$lib/components/CardDetailModal.svelte";
   import IdsIntegrityDisclosure from "$lib/components/IdsIntegrityDisclosure.svelte";
-  import ArchiveButton from "$lib/components/ArchiveButton.svelte";
   import ResourceShareMenu from "$lib/components/ResourceShareMenu.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
-  import TrashButton from "$lib/components/TrashButton.svelte";
   import {
     actorRegistry,
     lookupActorDisplayName,
@@ -52,6 +51,8 @@
   let doneOpen = $state(false);
   let confirmModal = $state({ open: false, action: "" });
   let boardLifecycleBusy = $state(false);
+  let boardMoreOpen = $state(false);
+  let boardMoreRoot = $state(/** @type {HTMLDivElement | null} */ (null));
   let detailModalCard = $state(null);
 
   let previousBoardId = $state("");
@@ -307,6 +308,39 @@
       boardLifecycleBusy = false;
     }
   }
+
+  function toggleBoardMore() {
+    boardMoreOpen = !boardMoreOpen;
+  }
+  function closeBoardMore() {
+    boardMoreOpen = false;
+  }
+
+  $effect(() => {
+    if (!boardMoreOpen) return;
+    function onDocPointerDown(/** @type {PointerEvent} */ e) {
+      if (
+        boardMoreRoot &&
+        e.target instanceof Node &&
+        !boardMoreRoot.contains(e.target)
+      ) {
+        boardMoreOpen = false;
+      }
+    }
+    function onDocKey(/** @type {KeyboardEvent} */ e) {
+      if (e.key === "Escape") boardMoreOpen = false;
+    }
+    window.document.addEventListener("pointerdown", onDocPointerDown, true);
+    window.document.addEventListener("keydown", onDocKey, true);
+    return () => {
+      window.document.removeEventListener(
+        "pointerdown",
+        onDocPointerDown,
+        true,
+      );
+      window.document.removeEventListener("keydown", onDocKey, true);
+    };
+  });
 </script>
 
 {#if loading}
@@ -367,7 +401,7 @@
 
   {#if board.trashed_at}
     <div
-      class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-meta text-danger-text"
+      class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-meta text-danger-text"
     >
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2 font-semibold">
@@ -395,12 +429,13 @@
     </div>
   {:else if board.archived_at}
     <div
-      class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-meta text-warn-text"
+      class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-meta text-warn-text"
     >
       <p class="min-w-0 flex-1">
         This board was archived on {formatTimestamp(board.archived_at) ||
-          "—"}{#if board.archived_by}
-          by {actorName(board.archived_by)}{/if}.
+          "—"}{#if board.archived_by}{" by "}{actorName(
+            board.archived_by,
+          )}{/if}.
       </p>
       <button
         class="shrink-0 cursor-pointer rounded-md border border-warn/40 bg-warn-soft px-2 py-1 text-micro font-medium text-warn-text hover:bg-warn/25 disabled:opacity-50"
@@ -413,123 +448,167 @@
     </div>
   {/if}
 
+  {#snippet boardDesktop()}
+    <h1 class="min-w-0 text-subtitle font-semibold text-[var(--fg)]">
+      {board.title || board.id}
+    </h1>
+    <div
+      class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-micro text-[var(--fg-muted)]"
+    >
+      {#if boardInspectNav && showBoardContextLink}
+        <span class="text-[var(--fg-muted)]"
+          >{boardInspectNav.kind === "topic" ? "Topic" : "Backing thread"}</span
+        >
+        <a
+          class="text-accent-text transition-colors hover:text-accent-text"
+          href={workspaceHref(
+            boardInspectNav.kind === "topic"
+              ? `/topics/${encodeURIComponent(boardInspectNav.segment)}`
+              : `/threads/${encodeURIComponent(boardInspectNav.segment)}`,
+          )}
+        >
+          {contextLinkLabel}
+        </a>
+        <span class="text-[var(--fg-subtle)]">·</span>
+      {/if}
+      <span>
+        {workspace.board_summary?.card_count ?? workspace.cards?.count ?? 0}
+        cards
+      </span>
+      <span class="text-[var(--fg-subtle)]">·</span>
+      <span>
+        {workspace.board_summary?.resolved_card_count ?? 0} resolved
+      </span>
+      <span class="text-[var(--fg-subtle)]">·</span>
+      <span>
+        {workspace.board_summary?.unresolved_card_count ?? 0} open
+      </span>
+      <span class="text-[var(--fg-subtle)]">·</span>
+      <span>Board updated {formatTimestamp(board.updated_at) || "—"}</span>
+      {#if board.owners?.length > 0}
+        <span class="text-[var(--fg-subtle)]">·</span>
+        <span
+          >Owners {board.owners
+            .map((owner) => actorName(owner))
+            .join(", ")}</span
+        >
+      {/if}
+    </div>
+  {/snippet}
+
   <div class="page-dock-layout page-dock-layout--fixed-mobile-chat">
     <div class="page-dock-scroll">
-      <div class="mb-3">
-        <div class="flex items-center gap-2 text-micro">
-          <a
-            class="text-[var(--fg-muted)] transition-colors hover:text-[var(--fg)]"
-            href={workspaceHref("/boards")}
-          >
-            Boards
-          </a>
-          <span class="text-[var(--fg-subtle)]">/</span>
-          <span class="text-[var(--fg-muted)]">
-            {workspace?.board?.title || boardId}
-          </span>
-        </div>
-
-        <div class="mt-1.5 flex items-center justify-between gap-3">
-          <div class="flex min-w-0 items-center gap-2">
-            <h1 class="truncate text-subtitle font-semibold text-[var(--fg)]">
-              {board.title || board.id}
-            </h1>
-            {#if board.state}
-              <span
-                class="shrink-0 rounded px-1.5 py-0.5 text-micro font-semibold {lifecycleStateColor(
-                  board.state,
-                )}"
-              >
-                {BOARD_STATUS_LABELS[board.state] ?? board.state}
-              </span>
-            {/if}
-            <span
-              class="shrink-0 rounded px-1.5 py-0.5 text-micro font-medium {freshnessStatusTone(
-                boardFreshness?.status,
-              )}"
-              title={`${boardProjectionMessage(boardFreshness)} Generated ${formatTimestamp(workspace.generated_at) || "—"}.`}
+      <div class="mb-3 max-md:mb-2">
+        <WorkspaceResourceTopRow
+          breadcrumbAriaLabel="Breadcrumb and board status"
+          desktopAriaLabel="Board details"
+          desktop={boardDesktop}
+        >
+          {#snippet breadcrumb()}
+            <a
+              class="shrink-0 text-[var(--fg-muted)] transition-colors hover:text-[var(--fg)]"
+              href={workspaceHref("/boards")}>Boards</a
             >
-              {freshnessStatusLabel(boardFreshness?.status)}
-            </span>
-          </div>
-
-          {#if !board.trashed_at}
-            <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
-              <ResourceShareMenu resourceId={board.id} rawRecord={board} />
-              <a
-                class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
-                href={workspaceHref(`/boards/${boardId}/edit`)}
+            <span class="shrink-0 text-[var(--fg-subtle)]">/</span>
+            <div class="flex min-h-0 min-w-0 flex-1 items-center gap-1.5">
+              <span
+                class="min-w-0 shrink truncate text-[var(--fg-muted)]"
+                aria-current="page">{board.title || boardId}</span
               >
-                Settings
-              </a>
+              {#if board.state}
+                <span
+                  class="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-semibold leading-none sm:text-micro {lifecycleStateColor(
+                    board.state,
+                  )}"
+                >
+                  {BOARD_STATUS_LABELS[board.state] ?? board.state}
+                </span>
+              {/if}
+              <span
+                class="hidden shrink-0 rounded px-1.5 py-0.5 text-micro font-medium md:inline {freshnessStatusTone(
+                  boardFreshness?.status,
+                )}"
+                title={`${boardProjectionMessage(boardFreshness)} Generated ${formatTimestamp(workspace.generated_at) || "—"}.`}
+              >
+                {freshnessStatusLabel(boardFreshness?.status)}
+              </span>
+            </div>
+          {/snippet}
+          {#snippet actions()}
+            {#if !board.trashed_at}
+              <ResourceShareMenu resourceId={board.id} rawRecord={board} />
               <a
                 class="rounded-md bg-accent-solid px-2.5 py-1.5 text-micro font-medium text-white transition-colors hover:bg-accent"
                 href={workspaceHref(`/boards/${boardId}/cards/new`)}
               >
                 Add card
               </a>
-              {#if !board.archived_at}
-                <ArchiveButton
-                  busy={boardLifecycleBusy}
-                  size="md"
-                  onarchive={() =>
-                    (confirmModal = { open: true, action: "archive" })}
-                />
-              {/if}
-              <TrashButton
-                busy={boardLifecycleBusy}
-                size="md"
-                ontrash={() => (confirmModal = { open: true, action: "trash" })}
-              />
-            </div>
-          {/if}
-        </div>
-
-        <!-- Single context line -->
-        <div
-          class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-micro text-[var(--fg-muted)]"
-        >
-          {#if boardInspectNav && showBoardContextLink}
-            <span class="text-[var(--fg-muted)]"
-              >{boardInspectNav.kind === "topic"
-                ? "Topic"
-                : "Backing thread"}</span
-            >
-            <a
-              class="text-accent-text transition-colors hover:text-accent-text"
-              href={workspaceHref(
-                boardInspectNav.kind === "topic"
-                  ? `/topics/${encodeURIComponent(boardInspectNav.segment)}`
-                  : `/threads/${encodeURIComponent(boardInspectNav.segment)}`,
-              )}
-            >
-              {contextLinkLabel}
-            </a>
-            <span class="text-[var(--fg-subtle)]">·</span>
-          {/if}
-          <span>
-            {workspace.board_summary?.card_count ?? workspace.cards?.count ?? 0}
-            cards
-          </span>
-          <span class="text-[var(--fg-subtle)]">·</span>
-          <span>
-            {workspace.board_summary?.resolved_card_count ?? 0} resolved
-          </span>
-          <span class="text-[var(--fg-subtle)]">·</span>
-          <span>
-            {workspace.board_summary?.unresolved_card_count ?? 0} open
-          </span>
-          <span class="text-[var(--fg-subtle)]">·</span>
-          <span>Board updated {formatTimestamp(board.updated_at) || "—"}</span>
-          {#if board.owners?.length > 0}
-            <span class="text-[var(--fg-subtle)]">·</span>
-            <span
-              >Owners {board.owners
-                .map((owner) => actorName(owner))
-                .join(", ")}</span
-            >
-          {/if}
-        </div>
+              <div bind:this={boardMoreRoot} class="relative">
+                <button
+                  type="button"
+                  class="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-line bg-transparent text-fg-muted transition-colors hover:bg-panel-hover hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-label="More actions"
+                  aria-haspopup="menu"
+                  aria-expanded={boardMoreOpen}
+                  disabled={boardLifecycleBusy}
+                  onclick={toggleBoardMore}
+                >
+                  <svg
+                    class="h-4 w-4"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <circle cx="12" cy="5" r="1.75" />
+                    <circle cx="12" cy="12" r="1.75" />
+                    <circle cx="12" cy="19" r="1.75" />
+                  </svg>
+                </button>
+                {#if boardMoreOpen}
+                  <div
+                    class="absolute right-0 z-50 mt-1 min-w-[10rem] rounded-md border border-[var(--line)] bg-[var(--panel)] py-1 shadow-lg"
+                    role="menu"
+                  >
+                    <a
+                      role="menuitem"
+                      class="block w-full px-3 py-2 text-left text-micro text-[var(--fg)] hover:bg-[var(--line-subtle)]"
+                      href={workspaceHref(`/boards/${boardId}/edit`)}
+                      onclick={closeBoardMore}
+                    >
+                      Settings
+                    </a>
+                    {#if !board.archived_at}
+                      <button
+                        type="button"
+                        role="menuitem"
+                        class="block w-full px-3 py-2 text-left text-micro text-[var(--fg)] hover:bg-[var(--line-subtle)] disabled:opacity-50"
+                        disabled={boardLifecycleBusy}
+                        onclick={() => {
+                          closeBoardMore();
+                          confirmModal = { open: true, action: "archive" };
+                        }}
+                      >
+                        {boardLifecycleBusy ? "…" : "Archive"}
+                      </button>
+                    {/if}
+                    <button
+                      type="button"
+                      role="menuitem"
+                      class="block w-full px-3 py-2 text-left text-micro text-danger-text hover:bg-[var(--line-subtle)] disabled:opacity-50"
+                      disabled={boardLifecycleBusy}
+                      onclick={() => {
+                        closeBoardMore();
+                        confirmModal = { open: true, action: "trash" };
+                      }}
+                    >
+                      {boardLifecycleBusy ? "…" : "Move to trash"}
+                    </button>
+                  </div>
+                {/if}
+              </div>
+            {/if}
+          {/snippet}
+        </WorkspaceResourceTopRow>
       </div>
 
       <!-- Notification alerts -->

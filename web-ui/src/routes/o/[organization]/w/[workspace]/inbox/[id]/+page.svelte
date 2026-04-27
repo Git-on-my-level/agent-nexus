@@ -204,9 +204,9 @@
   });
 </script>
 
-<div class="mx-auto max-w-3xl space-y-6 px-4 py-6">
+<div class="mx-auto max-w-3xl space-y-6 max-md:space-y-4 px-4 py-4 max-md:py-3">
   <header
-    class="flex items-center justify-between border-b border-[var(--line)] pb-4"
+    class="flex items-center justify-between border-b border-[var(--line)] pb-3 max-md:pb-2"
   >
     <div>
       <h1 class="text-display font-semibold leading-[1.3] text-fg">

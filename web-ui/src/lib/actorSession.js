@@ -187,6 +187,92 @@ export function buildActorCreatePayload({
   };
 }
 
+/**
+ * True when the value is a stable, machine-generated ANX handle (not a person-chosen
+ * username). These should not be shown in UI as the "name" of an actor.
+ */
+export function isSyntheticAnxHandle(raw) {
+  const s = String(raw ?? "").trim();
+  if (!s) {
+    return false;
+  }
+  if (/^external\.[0-9a-f]{8,128}$/i.test(s)) {
+    return true;
+  }
+  if (/^actor_ext_[0-9a-f]{8,128}$/i.test(s)) {
+    return true;
+  }
+  if (/^agent_ext_[0-9a-f]{8,128}$/i.test(s)) {
+    return true;
+  }
+  return false;
+}
+
+function pickBetterActorDisplayLabel(existing, candidate) {
+  const e = String(existing ?? "").trim();
+  const c = String(candidate ?? "").trim();
+  if (!c) {
+    return e;
+  }
+  if (!e) {
+    return c;
+  }
+  if (!isSyntheticAnxHandle(e) && isSyntheticAnxHandle(c)) {
+    return e;
+  }
+  if (isSyntheticAnxHandle(e) && !isSyntheticAnxHandle(c)) {
+    return c;
+  }
+  return e;
+}
+
+/**
+ * Per-principal display label: never prefer synthetic usernames over actor registry names.
+ * External / OIDC users often have usernames like `external.<hash>`; map those to a
+ * human string instead of the handle.
+ */
+function principalDisplayLabelFromAuth(principal) {
+  const u = String(principal?.username ?? "").trim();
+  const authMethod = String(principal?.auth_method ?? "")
+    .trim()
+    .toLowerCase();
+  if (u && !isSyntheticAnxHandle(u)) {
+    return u;
+  }
+  if (
+    authMethod === "external_grant" ||
+    (u && /^external\./i.test(u)) ||
+    (u && (u.startsWith("actor_ext_") || u.startsWith("agent_ext_")))
+  ) {
+    if (u && /^external\./i.test(u)) {
+      return "External user";
+    }
+    if (u && (u.startsWith("actor_ext_") || u.startsWith("agent_ext_"))) {
+      return "Workspace member";
+    }
+  }
+  return u;
+}
+
+function humanizeUnmappedActorIdForUi(id) {
+  const s = String(id ?? "").trim();
+  if (!s) {
+    return "";
+  }
+  if (isReservedSystemActorId(s)) {
+    return SYSTEM_ACTOR_DISPLAY_LABEL;
+  }
+  if (/^external\./i.test(s) || isSyntheticAnxHandle(s)) {
+    if (/^external\./i.test(s)) {
+      return "External user";
+    }
+    if (s.startsWith("actor_ext_") || s.startsWith("agent_ext_")) {
+      return "Workspace member";
+    }
+  }
+  return s;
+}
+
 export function buildActorNameMap(actors, principals = get(principalRegistry)) {
   const map = new Map();
 
@@ -195,33 +281,60 @@ export function buildActorNameMap(actors, principals = get(principalRegistry)) {
     if (!id) {
       continue;
     }
-    const label =
-      String(
-        actor?.display_name ??
-          actor?.displayName ??
-          actor?.username ??
-          actor?.label ??
-          id,
-      ).trim() ||
-      id ||
-      "Unknown actor";
+    const rawLabel = String(
+      actor?.display_name ??
+        actor?.displayName ??
+        actor?.username ??
+        actor?.label ??
+        "",
+    ).trim();
+    let label = rawLabel;
+    if (!label || isSyntheticAnxHandle(label)) {
+      label = !isSyntheticAnxHandle(id) ? id : humanizeUnmappedActorIdForUi(id);
+    }
+    if (!label) {
+      label = "Unknown actor";
+    }
     map.set(id, label);
   }
 
   for (const principal of principals ?? []) {
     const username = String(principal?.username ?? "").trim();
-    if (!username) {
-      continue;
-    }
-
+    const displayFromPrincipal = principalDisplayLabelFromAuth(principal);
     const actorId = String(principal?.actor_id ?? "").trim();
-    if (actorId) {
-      map.set(actorId, username);
+    const agentId = String(principal?.agent_id ?? "").trim();
+
+    function mergePrincipalLabel(existingId) {
+      const existing = map.get(existingId);
+      if (displayFromPrincipal && username && !isSyntheticAnxHandle(username)) {
+        map.set(existingId, displayFromPrincipal);
+        return;
+      }
+      map.set(
+        existingId,
+        pickBetterActorDisplayLabel(existing, displayFromPrincipal),
+      );
     }
 
-    const agentId = String(principal?.agent_id ?? "").trim();
+    if (actorId) {
+      mergePrincipalLabel(actorId);
+    }
     if (agentId) {
-      map.set(agentId, username);
+      mergePrincipalLabel(agentId);
+    }
+    if (username) {
+      const forUsername =
+        isSyntheticAnxHandle(username) &&
+        displayFromPrincipal &&
+        !isSyntheticAnxHandle(displayFromPrincipal)
+          ? displayFromPrincipal
+          : isSyntheticAnxHandle(username)
+            ? displayFromPrincipal || humanizeUnmappedActorIdForUi(username)
+            : displayFromPrincipal || username;
+      map.set(
+        username,
+        pickBetterActorDisplayLabel(map.get(username), forUsername),
+      );
     }
   }
 
@@ -242,7 +355,20 @@ export function lookupActorDisplayName(
 
   const map = buildActorNameMap(actors, principals);
   const key = String(actorId).trim();
-  return map.get(key) ?? map.get(actorId) ?? actorId;
+  const resolved = map.get(key) ?? map.get(actorId);
+  const humanized = humanizeUnmappedActorIdForUi(key);
+  if (resolved && !isSyntheticAnxHandle(resolved)) {
+    return resolved;
+  }
+  if (resolved && isSyntheticAnxHandle(resolved)) {
+    if (humanized && !isSyntheticAnxHandle(humanized)) {
+      return humanized;
+    }
+  }
+  if (humanized && !isSyntheticAnxHandle(humanized)) {
+    return humanized;
+  }
+  return String(resolved || key);
 }
 
 export function getSelectedActorId(workspaceSlug = getCurrentWorkspaceSlug()) {

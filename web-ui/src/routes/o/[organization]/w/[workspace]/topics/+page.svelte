@@ -221,13 +221,11 @@
     }
   }
 
-  function lifecycleStateColor(state) {
-    const styles = {
-      active: "text-ok-text",
-      archived: "text-warn-text",
-      trashed: "text-slate-300",
-    };
-    return styles[state] ?? "text-fg-subtle";
+  function topicStatePillTone(state) {
+    if (state === "active") return "text-ok-text bg-ok-soft";
+    if (state === "archived") return "text-warn-text bg-warn-soft";
+    if (state === "trashed") return "text-slate-300 bg-slate-500/10";
+    return "text-[var(--fg-muted)] bg-[var(--line)]";
   }
 
   function isTopicArchived(topic) {
@@ -290,7 +288,7 @@
   }
 </script>
 
-<div class="mb-4 flex flex-wrap items-start justify-between gap-4">
+<div class="mb-3 flex max-md:mb-2 flex-wrap items-start justify-between gap-4">
   <div class="min-w-0 flex-1">
     <h1 class="text-subtitle font-semibold text-[var(--fg)]">
       {listSurface === "topics" ? "Topics" : "Threads"}
@@ -533,29 +531,37 @@
             href={workspaceHref(`/topics/${encodeURIComponent(topic.id)}`)}
           >
             <div class="min-w-0 flex-1">
-              <div class="flex flex-wrap items-center gap-2">
-                <p class="truncate text-meta font-medium text-[var(--fg)]">
+              <div
+                class="inline-flex max-w-full min-w-0 items-center gap-x-2 gap-y-1"
+              >
+                <p
+                  class="min-w-0 truncate text-meta font-medium text-[var(--fg)]"
+                >
                   {topic.title}
                 </p>
-                {#if isTopicArchived(topic)}
-                  <span
-                    class="shrink-0 rounded bg-warn-soft px-1.5 py-0.5 text-micro font-medium text-warn-text"
-                    >Archived</span
-                  >
-                {/if}
+                <div class="flex shrink-0 items-center gap-2">
+                  {#if topic.state}
+                    <span
+                      class="inline-flex rounded px-1.5 py-0.5 text-micro font-semibold capitalize {topicStatePillTone(
+                        topic.state,
+                      )}">{topic.state}</span
+                    >
+                  {/if}
+                  {#if isTopicArchived(topic)}
+                    <span
+                      class="rounded bg-warn-soft px-1.5 py-0.5 text-micro font-medium text-warn-text"
+                      >Archived</span
+                    >
+                  {/if}
+                </div>
               </div>
               <p class="truncate text-micro text-[var(--fg-muted)]">
                 {topic.current_summary ?? topic.summary ?? ""}
               </p>
             </div>
-            <div class="flex shrink-0 items-center gap-1.5 text-micro">
-              {#if topic.state && topic.state !== "active"}
-                <span
-                  class="font-medium capitalize {lifecycleStateColor(
-                    topic.state,
-                  )}">{topic.state}</span
-                >
-              {/if}
+            <div
+              class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"
+            >
               <span class="w-14 text-right text-[var(--fg-muted)]"
                 >{formatTimestamp(topic.updated_at) || "—"}</span
               >

@@ -12,6 +12,7 @@
   import { formatTimestamp } from "$lib/formatDate";
   import { workspacePath } from "$lib/workspacePaths";
   import ProvenanceBadge from "$lib/components/ProvenanceBadge.svelte";
+  import WorkspaceResourceTopRow from "$lib/components/WorkspaceResourceTopRow.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
   import { buildReviewPayload } from "$lib/reviewUtils";
   import { toTimelineView } from "$lib/timelineUtils";
@@ -448,21 +449,18 @@
   }
 </script>
 
-<nav
-  class="mb-3 flex items-center gap-1.5 text-micro text-[var(--fg-muted)]"
-  aria-label="Breadcrumb"
->
-  <a
-    class="transition-colors hover:text-[var(--fg)]"
-    href={workspaceHref("/artifacts")}>Artifacts</a
-  >
-  <span class="text-[var(--fg-subtle)]">/</span>
-  <span class="truncate text-[var(--fg-muted)]"
-    >{artifact?.summary || artifactId}</span
-  >
-</nav>
-
 {#if loading}
+  <nav
+    class="mb-2 flex min-w-0 items-center gap-1.5 text-micro text-[var(--fg-muted)]"
+    aria-label="Breadcrumb"
+  >
+    <a
+      class="shrink-0 transition-colors hover:text-[var(--fg)]"
+      href={workspaceHref("/artifacts")}>Artifacts</a
+    >
+    <span class="shrink-0 text-[var(--fg-subtle)]">/</span>
+    <span class="min-w-0 truncate text-[var(--fg-muted)]">{artifactId}</span>
+  </nav>
   <div
     class="mt-8 flex items-center justify-center gap-2 text-meta text-[var(--fg-muted)]"
   >
@@ -484,13 +482,24 @@
     Loading...
   </div>
 {:else if loadError}
+  <nav
+    class="mb-2 flex min-w-0 items-center gap-1.5 text-micro text-[var(--fg-muted)]"
+    aria-label="Breadcrumb"
+  >
+    <a
+      class="shrink-0 transition-colors hover:text-[var(--fg)]"
+      href={workspaceHref("/artifacts")}>Artifacts</a
+    >
+    <span class="shrink-0 text-[var(--fg-subtle)]">/</span>
+    <span class="min-w-0 truncate text-[var(--fg-muted)]">{artifactId}</span>
+  </nav>
   <div class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
     {loadError}
   </div>
 {:else if artifact}
   {#if artifact?.trashed_at}
     <div
-      class="trash-banner mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-meta text-danger-text"
+      class="trash-banner mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-meta text-danger-text"
     >
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2 font-semibold">
@@ -520,12 +529,13 @@
     </div>
   {:else if artifact?.archived_at}
     <div
-      class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-meta text-warn-text"
+      class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-meta text-warn-text"
     >
       <p class="min-w-0 flex-1">
         This artifact was archived on {formatTimestamp(artifact.archived_at) ||
-          "—"}{#if artifact.archived_by}
-          by {actorName(artifact.archived_by)}{/if}.
+          "—"}{#if artifact.archived_by}{" by "}{actorName(
+            artifact.archived_by,
+          )}{/if}.
       </p>
       <button
         class="shrink-0 cursor-pointer rounded-md border border-warn/40 bg-warn-soft px-2 py-1 text-micro font-medium text-warn-text hover:bg-warn/25 disabled:opacity-50"
@@ -537,40 +547,67 @@
       </button>
     </div>
   {/if}
+
+  {#snippet artifactDesktop()}
+    <h1 class="min-w-0 text-subtitle font-semibold text-[var(--fg)]">
+      {artifactHeaderTitle}
+    </h1>
+    <p class="mt-0.5 text-meta text-[var(--fg-muted)]">
+      {kindDescription(artifact.kind)}
+    </p>
+  {/snippet}
+
+  <WorkspaceResourceTopRow
+    breadcrumbAriaLabel="Breadcrumb and artifact kind"
+    desktopAriaLabel="Artifact details"
+    desktop={artifactDesktop}
+  >
+    {#snippet breadcrumb()}
+      <a
+        class="shrink-0 transition-colors hover:text-[var(--fg)]"
+        href={workspaceHref("/artifacts")}>Artifacts</a
+      >
+      <span class="shrink-0 text-[var(--fg-subtle)]">/</span>
+      <div class="flex min-h-0 min-w-0 flex-1 items-center gap-1.5">
+        <span
+          class="min-w-0 shrink truncate text-[var(--fg-muted)]"
+          aria-current="page">{artifact?.summary || artifactId}</span
+        >
+        <span
+          class="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium leading-none sm:py-0.5 sm:text-micro {kindColor(
+            artifact.kind,
+          )}">{kindLabel(artifact.kind)}</span
+        >
+      </div>
+    {/snippet}
+    {#snippet actions()}
+      {#if !artifact.trashed_at}
+        {#if !artifact.archived_at}
+          <ArchiveButton
+            busy={lifecycleBusy}
+            size="md"
+            onarchive={() => (confirmModal = { open: true, action: "archive" })}
+          />
+        {/if}
+        <TrashButton
+          busy={lifecycleBusy}
+          size="md"
+          ontrash={() => (confirmModal = { open: true, action: "trash" })}
+        />
+      {/if}
+    {/snippet}
+  </WorkspaceResourceTopRow>
+
   <section
     class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] p-4"
   >
-    <div class="flex items-start justify-between gap-3">
-      <div class="min-w-0 flex-1">
-        <h1 class="text-subtitle font-semibold text-[var(--fg)]">
-          {artifactHeaderTitle}
-        </h1>
-        <p class="mt-0.5 text-meta text-[var(--fg-muted)]">
-          {kindDescription(artifact.kind)}
-        </p>
-      </div>
-      {#if !artifact.trashed_at}
-        <div class="flex shrink-0 items-center gap-1">
-          {#if !artifact.archived_at}
-            <ArchiveButton
-              busy={lifecycleBusy}
-              size="md"
-              onarchive={() =>
-                (confirmModal = { open: true, action: "archive" })}
-            />
-          {/if}
-          <TrashButton
-            busy={lifecycleBusy}
-            size="md"
-            ontrash={() => (confirmModal = { open: true, action: "trash" })}
-          />
-        </div>
-      {/if}
-    </div>
-
-    <div class="mt-2 flex flex-wrap items-center gap-2 text-micro">
-      <span class="rounded px-1.5 py-0.5 font-medium {kindColor(artifact.kind)}"
-        >{kindLabel(artifact.kind)}</span
+    <div
+      class="mt-2 flex flex-wrap items-center gap-2 text-micro max-md:mt-1.5"
+    >
+      <span
+        class="max-md:hidden rounded px-1.5 py-0.5 font-medium {kindColor(
+          artifact.kind,
+        )}">{kindLabel(artifact.kind)}</span
       >
       <span class="text-[var(--fg-muted)]"
         >{formatTimestamp(artifact.created_at) || "—"}</span

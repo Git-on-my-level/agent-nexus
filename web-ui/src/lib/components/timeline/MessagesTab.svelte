@@ -82,6 +82,10 @@
      * of a blank band above the list.
      */
     pinComposerAlignThreadEnd = true,
+    /**
+     * Pin-narrow: space between list and composer (topic; drawers stay flush).
+     */
+    pinComposerComfortGap = false,
   } = $props();
 
   let subjectRefFilterNorm = $derived(String(subjectRefFilter ?? "").trim());
@@ -178,9 +182,9 @@
   /** Scrollport for the message list when `pinComposerNarrow` (mobile dock). */
   let messagesScrollEl = $state(/** @type {HTMLDivElement | null} */ (null));
 
-  /** Scroll the nearest overflow-y scrollport (list or parent rail). */
-  function scrollMessagesToBottom() {
-    if (!browser || !messagesScrollEl) return;
+  /** Nearest vertical scrollport from `messagesScrollEl` (list or parent rail). */
+  function findMessagesScrollport() {
+    if (!browser || !messagesScrollEl) return null;
     for (
       var el = /** @type {HTMLElement | null} */ (messagesScrollEl);
       el;
@@ -191,10 +195,53 @@
         (oy === "auto" || oy === "scroll") &&
         el.scrollHeight > el.clientHeight + 1
       ) {
-        el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-        return;
+        return el;
       }
     }
+    return null;
+  }
+
+  /** Scroll the nearest overflow-y scrollport (list or parent rail). */
+  function scrollMessagesToBottom() {
+    const scrollport = findMessagesScrollport();
+    if (!scrollport) return;
+    scrollport.scrollTo({ top: scrollport.scrollHeight, behavior: "smooth" });
+  }
+
+  /**
+   * After posting, align the new message card to the bottom of the scrollport so
+   * it sits just above the composer (instead of jumping to the global end of a
+   * long flat list when the new bubble is nested under a reply).
+   */
+  function scrollPostedMessageIntoView(eventId) {
+    if (!browser || !messagesScrollEl) return;
+    const id = String(eventId ?? "").trim();
+    if (!id) {
+      scrollMessagesToBottom();
+      return;
+    }
+    const target = document.getElementById(`message-${id}`);
+    const scrollport = findMessagesScrollport();
+    if (!target || !scrollport) {
+      scrollMessagesToBottom();
+      return;
+    }
+    const align = () => {
+      const elRect = target.getBoundingClientRect();
+      const portRect = scrollport.getBoundingClientRect();
+      const delta = elRect.bottom - portRect.bottom;
+      const maxTop = Math.max(
+        0,
+        scrollport.scrollHeight - scrollport.clientHeight,
+      );
+      const nextTop = Math.min(
+        maxTop,
+        Math.max(0, scrollport.scrollTop + delta),
+      );
+      scrollport.scrollTo({ top: nextTop, behavior: "smooth" });
+    };
+    align();
+    requestAnimationFrame(align);
   }
 
   let filteredMentions = $derived(
@@ -581,7 +628,7 @@
       } else {
         payload = { text: trimmed };
       }
-      await onMessagePost(routeScopeForPost, {
+      const postResult = await onMessagePost(routeScopeForPost, {
         type: "message_posted",
         thread_id: threadId,
         thread_ref: `thread:${threadId}`,
@@ -596,9 +643,16 @@
       if (docCom) {
         onPendingDocumentPostConsumed?.();
       }
+      const postedId =
+        postResult &&
+        typeof postResult === "object" &&
+        postResult.event &&
+        postResult.event.id
+          ? String(postResult.event.id)
+          : "";
       await tick();
-      scrollMessagesToBottom();
-      requestAnimationFrame(() => scrollMessagesToBottom());
+      scrollPostedMessageIntoView(postedId);
+      requestAnimationFrame(() => scrollPostedMessageIntoView(postedId));
     } catch (error) {
       postMessageError = `Failed to post: ${error instanceof Error ? error.message : String(error)}`;
     } finally {
@@ -610,6 +664,7 @@
 <div
   class="msgtab-wrap"
   class:msgtab-wrap--pin-narrow={pinComposerNarrow}
+  class:msgtab-wrap--comfort-gap={pinComposerComfortGap}
   class:h-full={pinComposerNarrow}
   class:min-h-0={pinComposerNarrow}
 >
@@ -1029,6 +1084,15 @@
       justify-content: flex-end;
       padding-bottom: 0.75rem;
     }
+    .msgtab-wrap--pin-narrow.msgtab-wrap--comfort-gap .msgtab-messages {
+      padding-top: 1rem;
+      padding-bottom: 1rem;
+    }
+
+    .msgtab-wrap--pin-narrow.msgtab-wrap--comfort-gap .msg-composer {
+      margin-top: 1rem;
+    }
+
     .msgtab-wrap--pin-narrow .msg-composer {
       flex-shrink: 0;
       margin-top: 0;

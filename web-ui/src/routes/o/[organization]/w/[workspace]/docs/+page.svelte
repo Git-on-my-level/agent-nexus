@@ -5,11 +5,6 @@
   import { filterTopLevelDocuments } from "$lib/documentVisibility";
   import { formatTimestamp } from "$lib/formatDate";
   import { workspacePath } from "$lib/workspacePaths";
-  import {
-    lookupActorDisplayName,
-    actorRegistry,
-    principalRegistry,
-  } from "$lib/actorSession";
   import ArchiveButton from "$lib/components/ArchiveButton.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import TrashButton from "$lib/components/TrashButton.svelte";
@@ -48,10 +43,6 @@
   let scopedThreadId = $derived(
     String($page.url.searchParams.get("thread_id") ?? "").trim(),
   );
-  let actorName = $derived((id) =>
-    lookupActorDisplayName(id, $actorRegistry, $principalRegistry),
-  );
-
   let createOpen = $state(false);
   let creating = $state(false);
   let createError = $state("");
@@ -233,7 +224,7 @@
   }
 </script>
 
-<div class="flex items-center justify-between mb-4">
+<div class="mb-3 flex max-md:mb-2 items-center justify-between">
   <div>
     <h1 class="text-subtitle font-semibold text-[var(--fg)]">Docs</h1>
     {#if scopedThreadId}
@@ -439,39 +430,46 @@
 
 {#snippet docRow(doc, showBorderTop)}
   <div
-    class="flex items-start justify-between gap-3 px-4 py-3 transition-colors hover:bg-[var(--line-subtle)] {showBorderTop
+    class="flex items-stretch {showBorderTop
       ? 'border-t border-[var(--line)]'
       : ''}"
   >
-    <a class="min-w-0 flex-1" href={workspaceHref(`/docs/${doc.id}`)}>
-      <div class="flex flex-wrap items-center gap-2">
-        {#if doc.state}
-          <span
-            class="inline-flex rounded px-1.5 py-0.5 text-micro font-semibold {docStateColor(
-              doc.state,
-            )}">{DOC_STATE_LABELS[doc.state] ?? doc.state}</span
-          >
-        {/if}
+    <a
+      class="flex min-w-0 flex-1 items-start gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--line-subtle)] sm:px-4"
+      href={workspaceHref(`/docs/${doc.id}`)}
+    >
+      <div class="min-w-0 flex-1">
+        <div
+          class="inline-flex max-w-full min-w-0 items-center gap-x-2 gap-y-1"
+        >
+          <p class="min-w-0 truncate text-meta font-medium text-[var(--fg)]">
+            {doc.title || doc.id}
+          </p>
+          {#if doc.state}
+            <span
+              class="inline-flex shrink-0 rounded px-1.5 py-0.5 text-micro font-semibold {docStateColor(
+                doc.state,
+              )}">{DOC_STATE_LABELS[doc.state] ?? doc.state}</span
+            >
+          {/if}
+        </div>
+        <p class="mt-0.5 text-micro text-[var(--fg-muted)]">
+          Head v{doc.head_revision_number}
+        </p>
       </div>
-      <p class="mt-1 truncate text-meta font-medium text-[var(--fg)]">
-        {doc.title || doc.id}
-      </p>
-      <p class="text-micro text-[var(--fg-muted)]">
-        Head v{doc.head_revision_number} · Updated {formatTimestamp(
-          doc.updated_at,
-        ) || "—"} by {actorName(doc.updated_by)}
-      </p>
+      <div
+        class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"
+      >
+        <span class="w-14 text-right text-[var(--fg-muted)]"
+          >{formatTimestamp(doc.updated_at) || "—"}</span
+        >
+      </div>
     </a>
     <div
-      class="hidden shrink-0 items-center gap-1 sm:flex"
+      class="hidden shrink-0 items-center gap-1 px-1 sm:px-2"
       role="presentation"
       onclick={(e) => e.stopPropagation()}
     >
-      <span class="mr-1 shrink-0 text-micro text-[var(--fg-muted)]">
-        {doc.head_revision_number} revision{doc.head_revision_number === 1
-          ? ""
-          : "s"}
-      </span>
       <ArchiveButton
         archived={isDocArchived(doc)}
         busy={Boolean(archiveBusyId) || Boolean(trashBusyId)}

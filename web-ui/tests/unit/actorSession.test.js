@@ -110,4 +110,21 @@ describe("actor session / gate logic", () => {
       ]),
     ).toBe("Ops Lead");
   });
+
+  it("does not surface synthetic external handles as display names", () => {
+    const extId =
+      "external.ed7d6ef6e8618d9330f59f88ab647a1c06194cc43b774a2ab78d4d";
+    replacePrincipalRegistry([
+      {
+        agent_id: "agent_ext_abc",
+        actor_id: "actor_ext_def",
+        username: extId,
+        auth_method: "external_grant",
+      },
+    ]);
+    expect(lookupActorDisplayName(extId, [])).toBe("External user");
+    expect(
+      lookupActorDisplayName(extId, [{ id: extId, display_name: "Pat" }]),
+    ).toBe("Pat");
+  });
 });
