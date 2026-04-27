@@ -260,6 +260,7 @@
   <div class="flex w-full min-h-0 flex-col overflow-hidden lg:hidden">
     <DiscussionDrawer
       {threadId}
+      postRouteScopeId={docId}
       {workspaceId}
       {workspaceSlug}
       label="Discussion"

@@ -985,7 +985,7 @@
   -->
   <div
     class="flex flex-col gap-0 lg:flex-row lg:items-start lg:gap-4 {document.thread_id
-      ? 'page-dock-layout page-dock-layout--mobile-only page-dock-layout--doc-discussion'
+      ? 'page-dock-layout page-dock-layout--mobile-only page-dock-layout--fixed-mobile-chat'
       : ''}"
   >
     <div class="min-w-0 flex-1 {document.thread_id ? 'page-dock-scroll' : ''}">

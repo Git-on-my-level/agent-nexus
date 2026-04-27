@@ -75,6 +75,13 @@
      * document, and bottom drawers on mobile).
      */
     pinComposerNarrow = false,
+    /**
+     * When pinned narrow: grow the thread region and push bubbles toward the
+     * composer on short threads (collapsible drawers). Non-collapsible surfaces
+     * (topic Messages) keep this false so messages stay under the tabs instead
+     * of a blank band above the list.
+     */
+    pinComposerAlignThreadEnd = true,
   } = $props();
 
   let subjectRefFilterNorm = $derived(String(subjectRefFilter ?? "").trim());
@@ -168,6 +175,27 @@
   let mentionHighlight = $state(0);
   let mentionSignedIn = $state(false);
   let textareaRef = $state(null);
+  /** Scrollport for the message list when `pinComposerNarrow` (mobile dock). */
+  let messagesScrollEl = $state(/** @type {HTMLDivElement | null} */ (null));
+
+  /** Scroll the nearest overflow-y scrollport (list or parent rail). */
+  function scrollMessagesToBottom() {
+    if (!browser || !messagesScrollEl) return;
+    for (
+      var el = /** @type {HTMLElement | null} */ (messagesScrollEl);
+      el;
+      el = el.parentElement
+    ) {
+      const oy = getComputedStyle(el).overflowY;
+      if (
+        (oy === "auto" || oy === "scroll") &&
+        el.scrollHeight > el.clientHeight + 1
+      ) {
+        el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+        return;
+      }
+    }
+  }
 
   let filteredMentions = $derived(
     filterMentionCandidates(mentionCandidates, mentionQuery).slice(0, 12),
@@ -568,6 +596,9 @@
       if (docCom) {
         onPendingDocumentPostConsumed?.();
       }
+      await tick();
+      scrollMessagesToBottom();
+      requestAnimationFrame(() => scrollMessagesToBottom());
     } catch (error) {
       postMessageError = `Failed to post: ${error instanceof Error ? error.message : String(error)}`;
     } finally {
@@ -582,7 +613,7 @@
   class:h-full={pinComposerNarrow}
   class:min-h-0={pinComposerNarrow}
 >
-  <div class="msgtab-messages flex flex-col gap-3">
+  <div bind:this={messagesScrollEl} class="msgtab-messages flex flex-col gap-3">
     {#if archivedMessageCount > 0 || showSyncStatus}
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div class="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -623,7 +654,11 @@
         No messages in view. Turn on Show archived to see archived messages.
       </p>
     {:else}
-      <div class="flex min-w-0 flex-col gap-3">
+      <div
+        class="msgtab-thread flex min-w-0 flex-col gap-3"
+        class:msgtab-thread--pin={pinComposerNarrow &&
+          pinComposerAlignThreadEnd}
+      >
         {#if lifecycleError}
           <p
             class="rounded bg-danger-soft px-3 py-2 text-meta text-danger-text"
@@ -638,7 +673,11 @@
             {timelineError}
           </p>
         {/if}
-        <div class="flex min-w-0 flex-col gap-3">
+        <div
+          class="flex min-w-0 flex-col gap-3"
+          class:msgtab-thread-items--pin-end={pinComposerNarrow &&
+            pinComposerAlignThreadEnd}
+        >
           {#each messageThreads as message (message.id)}
             <MessageItem
               {message}
@@ -973,6 +1012,22 @@
       overflow-y: scroll;
       padding-left: 0.75rem;
       padding-right: 0.75rem;
+      padding-top: 0.875rem;
+      padding-bottom: 0.75rem;
+      scroll-padding-top: 0.5rem;
+      scroll-padding-bottom: 0.5rem;
+    }
+
+    /* Short threads (collapsible drawers only): grow thread + pin bubbles down. */
+    .msgtab-wrap--pin-narrow .msgtab-thread--pin {
+      flex: 1 0 auto;
+      min-height: 0;
+    }
+
+    .msgtab-wrap--pin-narrow .msgtab-thread-items--pin-end {
+      flex: 1 0 auto;
+      justify-content: flex-end;
+      padding-bottom: 0.75rem;
     }
     .msgtab-wrap--pin-narrow .msg-composer {
       flex-shrink: 0;

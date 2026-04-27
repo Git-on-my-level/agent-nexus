@@ -1080,6 +1080,12 @@
       position: static;
       box-shadow: none;
     }
+
+    .page-dock-layout--topic-messages .page-dock-head {
+      position: static;
+      z-index: auto;
+      background: transparent;
+    }
   }
 
   @media (max-width: 1023px) {
@@ -1093,23 +1099,95 @@
      * scrolling. Without `position: fixed`, sticky + shared ancestry ties the
      * two scrollports together.
      */
-    .page-dock-layout--doc-discussion.page-dock-layout {
+    .page-dock-layout--fixed-mobile-chat.page-dock-layout {
       min-height: 0;
       max-height: none;
+      /**
+       * Expanded chat height on narrow viewports. Overridable inline by
+       * DiscussionDrawer drag-resize; topic layout uses a taller default so the
+       * sheet reaches the section tabs.
+       */
+      --mobile-chat-panel-height: min(58dvh, calc(100dvh - 2.5rem));
     }
 
-    /* Doc body scrolls only in the shell — avoid nested page-dock scrollers. */
-    .page-dock-layout--doc-discussion .page-dock-scroll {
-      overflow: visible;
-      flex: 1 1 auto;
-      min-height: 0;
-      /* Reserve space for the fixed dock (expanded cap + tab bar band). */
-      padding-bottom: calc(
-        min(52dvh, 30rem) + 3.75rem + env(safe-area-inset-bottom, 0px)
+    /*
+     * Topic: leave more room below the sticky header + tabs than 8.75rem so the
+     * dock doesn’t crowd the tab strip; cap height so the sheet doesn’t dominate.
+     */
+    .page-dock-layout--fixed-mobile-chat.page-dock-layout--topic-messages {
+      --mobile-chat-panel-height: min(
+        calc(100dvh - 10.75rem),
+        min(68dvh, calc(100dvh - 2.5rem))
       );
     }
 
-    .page-dock-layout--doc-discussion .page-dock-feed {
+    /**
+     * Topic Messages: the fixed dock sits above in-flow content in paint order.
+     * Elevate + stick the header and section tabs (z-index above the feed’s 15)
+     * so they stay visible and tappable; solid bg avoids chat showing through.
+     */
+    .page-dock-layout--topic-messages .page-dock-head {
+      position: sticky;
+      top: 0;
+      z-index: 18;
+      background: var(--bg);
+      padding-bottom: 0.625rem;
+    }
+
+    /*
+     * Topic Messages: `.page-dock-feed` is `position: fixed`, so it is removed
+     * from the flex layout. A `flex: 1` spacer would otherwise grow to fill the
+     * whole viewport under the tabs — a large empty band between tabs and chat.
+     */
+    .page-dock-layout--fixed-mobile-chat.page-dock-layout--topic-messages
+      .page-dock-scroll {
+      flex: 0 0 auto;
+      flex-grow: 0;
+    }
+
+    /*
+     * Topic: let the dock height follow messages + composer until the cap, so
+     * short threads are not centered in a tall fixed sheet (huge gaps above/below).
+     */
+    .page-dock-layout--fixed-mobile-chat.page-dock-layout--topic-messages
+      .page-dock-feed:has([data-mobile-chat-expanded]) {
+      height: auto;
+      max-height: var(--mobile-chat-panel-height);
+      min-height: 12.5rem;
+    }
+
+    .page-dock-layout--fixed-mobile-chat.page-dock-layout--topic-messages
+      .page-dock-feed:has([data-mobile-chat-expanded])
+      > * {
+      flex: 1 1 auto;
+      height: auto;
+      max-height: 100%;
+      min-height: 0;
+    }
+
+    /* Doc body scrolls only in the shell — avoid nested page-dock scrollers. */
+    .page-dock-layout--fixed-mobile-chat .page-dock-scroll {
+      overflow: visible;
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+
+    /* Reserve scroll extent when the strip is expanded so background content can clear the sheet. */
+    .page-dock-layout--fixed-mobile-chat:has([data-mobile-chat-expanded])
+      .page-dock-scroll {
+      padding-bottom: calc(
+        var(--mobile-chat-panel-height) + 1.25rem +
+          env(safe-area-inset-bottom, 0px)
+      );
+    }
+
+    /* Collapsed strip: smaller inset so pages are not blocked by a huge spacer. */
+    .page-dock-layout--fixed-mobile-chat:not(:has([data-mobile-chat-expanded]))
+      .page-dock-scroll {
+      padding-bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
+    }
+
+    .page-dock-layout--fixed-mobile-chat .page-dock-feed {
       position: fixed;
       left: 0;
       right: 0;
@@ -1129,28 +1207,28 @@
       overflow: hidden;
     }
 
-    .page-dock-layout--doc-discussion
-      .page-dock-feed:not(:has(button[aria-expanded="true"])) {
+    .page-dock-layout--fixed-mobile-chat
+      .page-dock-feed:not(:has([data-mobile-chat-expanded])) {
       max-height: none;
       height: auto;
     }
 
     /* `padding-bottom` for nav is inside this height (border-box). */
-    .page-dock-layout--doc-discussion
-      .page-dock-feed:has(button[aria-expanded="true"]) {
-      height: min(58dvh, calc(100dvh - 2.5rem));
-      max-height: min(58dvh, calc(100dvh - 2.5rem));
+    .page-dock-layout--fixed-mobile-chat
+      .page-dock-feed:has([data-mobile-chat-expanded]) {
+      height: var(--mobile-chat-panel-height);
+      max-height: var(--mobile-chat-panel-height);
     }
 
-    .page-dock-layout--doc-discussion .page-dock-feed > * {
+    .page-dock-layout--fixed-mobile-chat .page-dock-feed > * {
       display: flex;
       min-height: 0;
       flex: 0 1 auto;
       flex-direction: column;
     }
 
-    .page-dock-layout--doc-discussion
-      .page-dock-feed:has(button[aria-expanded="true"])
+    .page-dock-layout--fixed-mobile-chat
+      .page-dock-feed:has([data-mobile-chat-expanded])
       > * {
       flex: 1 1 auto;
       height: 100%;
@@ -1464,7 +1542,7 @@
      * Fixed doc discussion clears the tab bar itself; `page-dock-scroll`
      * padding reserves space for the sheet. Avoid double bottom inset here.
      */
-    .shell-main-scroll:has(.page-dock-layout--doc-discussion) {
+    .shell-main-scroll:has(.page-dock-layout--fixed-mobile-chat) {
       padding-bottom: env(safe-area-inset-bottom, 0px);
     }
   }

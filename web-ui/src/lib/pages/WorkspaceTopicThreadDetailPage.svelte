@@ -16,7 +16,7 @@
   import TopicOverviewTab from "$lib/components/topic-detail/TopicOverviewTab.svelte";
   import TopicBoardsPanel from "$lib/components/topic-detail/TopicBoardsPanel.svelte";
   import TopicDocumentsPanel from "$lib/components/topic-detail/TopicDocumentsPanel.svelte";
-  import MessagesTab from "$lib/components/timeline/MessagesTab.svelte";
+  import DiscussionDrawer from "$lib/components/DiscussionDrawer.svelte";
   import TimelineTab from "$lib/components/timeline/TimelineTab.svelte";
 
   const TOPIC_DETAIL_TABS = [
@@ -59,6 +59,8 @@
   });
 
   let topic = $derived($topicDetailStore.topic);
+
+  let workspaceSlug = $derived(String($page.params.workspace ?? ""));
 
   let topicLoading = $derived($topicDetailStore.topicLoading);
   let topicError = $derived($topicDetailStore.topicError);
@@ -327,7 +329,7 @@
   {@const isMessagesTab = activeTab === "messages"}
   <div
     class={isMessagesTab
-      ? "page-dock-layout page-dock-layout--mobile-only"
+      ? "page-dock-layout page-dock-layout--mobile-only page-dock-layout--fixed-mobile-chat page-dock-layout--topic-messages"
       : ""}
   >
     <div class={isMessagesTab ? "page-dock-head" : "contents"}>
@@ -385,14 +387,20 @@
     {/if}
 
     {#if activeTab === "messages"}
-      <div class="page-dock-body pt-3 lg:pt-3" role="tabpanel" tabindex="0">
-        <MessagesTab
+      <div class="page-dock-scroll flex-1 min-h-0" aria-hidden="true"></div>
+      <div class="page-dock-feed lg:pt-3" role="tabpanel" tabindex="0">
+        <DiscussionDrawer
           threadId={String(topic.id)}
           postRouteScopeId={threadId}
-          onMessagePost={handleMessagePost}
           workspaceId={data?.workspaceId ?? ""}
+          {workspaceSlug}
+          collapsible={false}
+          useParentTimelineContext={true}
+          onMessagePost={handleMessagePost}
           pinComposerNarrow={true}
-          discussionEmptyMessage={`Everything about ${topic.title || "this topic"} lives here. Post a message to start the conversation. Docs and Boards you link to this topic appear in their tabs.`}
+          narrowEdgeToEdge
+          expandFillsParent
+          emptyMessage={`Everything about ${topic.title || "this topic"} lives here. Post a message to start the conversation. Docs and Boards you link to this topic appear in their tabs.`}
         />
       </div>
     {/if}

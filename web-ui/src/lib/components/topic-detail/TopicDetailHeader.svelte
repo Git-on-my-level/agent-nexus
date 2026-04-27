@@ -109,23 +109,56 @@
   });
 </script>
 
-<nav
-  class="mb-3 flex items-center gap-1.5 text-meta text-[var(--fg-muted)]"
-  aria-label="Breadcrumb"
+<div
+  class="mb-1 flex min-w-0 items-center justify-between gap-1.5 sm:gap-2 md:mb-2"
 >
-  <a
-    class="hover:text-[var(--fg)]"
-    href={workspacePath(
-      organizationSlug,
-      workspaceSlug,
-      detailAsTopic ? "/topics" : "/threads",
-    )}>{detailAsTopic ? "Topics" : "Topic (thread view)"}</a
+  <nav
+    class="flex min-w-0 flex-1 items-center gap-1.5 text-meta text-[var(--fg-muted)]"
+    aria-label="Breadcrumb and topic status"
   >
-  <span class="text-[var(--fg-subtle)]">/</span>
-  <span class="truncate text-[var(--fg)]" aria-current="page"
-    >{topic?.title || ""}</span
-  >
-</nav>
+    <a
+      class="shrink-0 hover:text-[var(--fg)]"
+      href={workspacePath(
+        organizationSlug,
+        workspaceSlug,
+        detailAsTopic ? "/topics" : "/threads",
+      )}>{detailAsTopic ? "Topics" : "Topic (thread view)"}</a
+    >
+    <span class="shrink-0 text-[var(--fg-subtle)]">/</span>
+    <span
+      class="min-w-0 flex-1 basis-0 truncate text-[var(--fg)]"
+      aria-current="page">{topic?.title || ""}</span
+    >
+    {#if topic}
+      <span
+        class="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium capitalize leading-none sm:px-2 sm:py-0.5 sm:text-micro {topicLifecycleBadgeClass(
+          topic.state,
+        )}">{BOARD_LIFECYCLE_STATE_LABELS[topic.state] ?? topic.state}</span
+      >
+    {/if}
+  </nav>
+  {#if topic}
+    <div class="flex shrink-0 items-center gap-0.5 sm:gap-1.5">
+      {#if topic?.id}
+        <ResourceShareMenu resourceId={topic.id} rawRecord={topic} />
+      {/if}
+      {#if detailAsTopic && !topic.trashed_at && threadId}
+        {#if !topic.archived_at}
+          <ArchiveButton
+            busy={lifecycleBusy}
+            size="md"
+            onarchive={() => (confirmModal = { open: true, action: "archive" })}
+          />
+        {/if}
+        <TrashButton
+          busy={lifecycleBusy}
+          size="md"
+          ontrash={() => (confirmModal = { open: true, action: "trash" })}
+        />
+      {/if}
+    </div>
+  {/if}
+</div>
 
 {#if topic?.trashed_at}
   <div
@@ -190,66 +223,38 @@
 {/if}
 
 {#if topic}
-  <div class="flex flex-col gap-1.5">
-    <div class="flex flex-wrap items-start justify-between gap-2">
-      <div class="min-w-0 flex-1">
-        <div class="flex min-w-0 flex-wrap items-baseline gap-2">
-          <h1
-            class="min-w-0 flex-1 text-title font-semibold {topic.title
-              ? 'text-[var(--fg)]'
-              : 'text-[var(--fg-subtle)] italic'}"
-          >
-            {topic.title || "Untitled topic"}
-          </h1>
-          <span
-            class="shrink-0 rounded px-2 py-0.5 text-micro font-medium capitalize {topicLifecycleBadgeClass(
-              topic.state,
-            )}">{BOARD_LIFECYCLE_STATE_LABELS[topic.state] ?? topic.state}</span
-          >
-        </div>
-        {#if topicSummary}
-          <p
-            class="mt-1 line-clamp-3 text-[13px] text-[var(--fg-muted)]"
-            title={topicSummary}
-          >
-            {topicSummary}
-          </p>
-        {/if}
-        <p
-          class="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-micro text-[var(--fg-subtle)]"
+  <div
+    class="mt-0 hidden max-w-full flex-col gap-1.5 md:flex"
+    aria-label="Topic details"
+  >
+    <h1
+      class="min-w-0 text-title font-semibold {topic.title
+        ? 'text-[var(--fg)]'
+        : 'text-[var(--fg-subtle)] italic'}"
+    >
+      {topic.title || "Untitled topic"}
+    </h1>
+    {#if topicSummary}
+      <p
+        class="line-clamp-3 text-[13px] text-[var(--fg-muted)]"
+        title={topicSummary}
+      >
+        {topicSummary}
+      </p>
+    {/if}
+    <p
+      class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-micro text-[var(--fg-subtle)]"
+    >
+      <span class="whitespace-nowrap"
+        >Updated {formatTimestamp(topic.updated_at) || "—"}</span
+      >
+      {#if topic.created_by}
+        <span aria-hidden="true">·</span>
+        <span class="min-w-0 whitespace-nowrap"
+          >by {actorName(topic.created_by)}</span
         >
-          <span class="whitespace-nowrap"
-            >Updated {formatTimestamp(topic.updated_at) || "—"}</span
-          >
-          {#if topic.created_by}
-            <span aria-hidden="true">·</span>
-            <span class="whitespace-nowrap"
-              >by {actorName(topic.created_by)}</span
-            >
-          {/if}
-        </p>
-      </div>
-      <div class="flex shrink-0 items-center gap-1.5">
-        {#if topic?.id}
-          <ResourceShareMenu resourceId={topic.id} rawRecord={topic} />
-        {/if}
-        {#if detailAsTopic && !topic.trashed_at && threadId}
-          {#if !topic.archived_at}
-            <ArchiveButton
-              busy={lifecycleBusy}
-              size="md"
-              onarchive={() =>
-                (confirmModal = { open: true, action: "archive" })}
-            />
-          {/if}
-          <TrashButton
-            busy={lifecycleBusy}
-            size="md"
-            ontrash={() => (confirmModal = { open: true, action: "trash" })}
-          />
-        {/if}
-      </div>
-    </div>
+      {/if}
+    </p>
   </div>
 {/if}
 

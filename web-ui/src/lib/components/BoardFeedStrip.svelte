@@ -17,4 +17,6 @@
   label="Board announcements"
   storageKey="board-feed:{threadId}"
   emptyMessage={DISCUSSION_EMPTY}
+  expandFillsParent
+  narrowEdgeToEdge
 />

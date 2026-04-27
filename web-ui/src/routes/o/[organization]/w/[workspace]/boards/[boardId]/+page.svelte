@@ -413,7 +413,7 @@
     </div>
   {/if}
 
-  <div class="page-dock-layout">
+  <div class="page-dock-layout page-dock-layout--fixed-mobile-chat">
     <div class="page-dock-scroll">
       <div class="mb-3">
         <div class="flex items-center gap-2 text-micro">
