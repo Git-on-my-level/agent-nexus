@@ -11,6 +11,7 @@ import {
   topicSearchResultToPickerOption,
   topicSearchResultToBoardRefOption,
   documentSearchPickerSubtitle,
+  boardSearchPickerSubtitle,
 } from "../../src/lib/searchHelpers.js";
 
 vi.mock("../../src/lib/coreClient.js", () => ({
@@ -144,6 +145,22 @@ describe("searchHelpers", () => {
       expect(documentSearchPickerSubtitle({ state: "archived" })).toBe(
         "archived",
       );
+    });
+  });
+
+  describe("boardSearchPickerSubtitle", () => {
+    it("joins state, summary, and timeline", () => {
+      expect(
+        boardSearchPickerSubtitle({
+          state: "active",
+          summary: "Q2 tracking",
+          thread_id: "thread-abc",
+        }),
+      ).toBe("active · Q2 tracking · Timeline thread-abc");
+    });
+
+    it("omits empty parts", () => {
+      expect(boardSearchPickerSubtitle({ state: "archived" })).toBe("archived");
     });
   });
 

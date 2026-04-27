@@ -3353,9 +3353,7 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "if_updated_at",
           "type": "datetime"
-        }
-      ],
-      "optional": [
+        },
         {
           "name": "patch.summary",
           "type": "string"

@@ -3308,9 +3308,7 @@ export const commandRegistry = [
                 {
                     "name": "if_updated_at",
                     "type": "datetime"
-                }
-            ],
-            "optional": [
+                },
                 {
                     "name": "patch.summary",
                     "type": "string"

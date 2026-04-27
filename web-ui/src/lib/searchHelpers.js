@@ -118,6 +118,26 @@ export function boardRecordFromBoardsListRow(row) {
   return row;
 }
 
+/** Subtitle line for board rows in search pickers (state, resource summary, backing thread). */
+export function boardSearchPickerSubtitle(board) {
+  if (!board || typeof board !== "object") {
+    return "";
+  }
+  const parts = [];
+  if (board.state) {
+    parts.push(String(board.state));
+  }
+  const summary = String(board.summary ?? "").trim();
+  if (summary) {
+    parts.push(summary);
+  }
+  const threadId = String(board.thread_id ?? "").trim();
+  if (threadId) {
+    parts.push(`Timeline ${threadId}`);
+  }
+  return parts.join(" · ");
+}
+
 export async function searchBoards(query, limit = 20) {
   const response = await coreClient.listBoards({
     q: query,

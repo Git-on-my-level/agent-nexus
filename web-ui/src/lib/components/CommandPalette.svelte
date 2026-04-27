@@ -5,6 +5,8 @@
     searchDocuments,
     searchBoards,
     searchArtifacts,
+    documentSearchPickerSubtitle,
+    boardSearchPickerSubtitle,
   } from "$lib/searchHelpers";
   import { kindLabel } from "$lib/artifactKinds";
   import { workspacePath } from "$lib/workspacePaths";
@@ -184,12 +186,15 @@
       return parts.join(" · ") || entry.item.id;
     }
     if (entry.type === "doc") {
+      const sub = documentSearchPickerSubtitle(entry.item);
+      if (sub) return sub;
       return entry.item.head_version
         ? `v${entry.item.head_version}`
         : entry.item.id;
     }
     if (entry.type === "board") {
-      return entry.item.id;
+      const sub = boardSearchPickerSubtitle(entry.item);
+      return sub || entry.item.id;
     }
     if (entry.type === "artifact") {
       return kindLabel(entry.item.kind);

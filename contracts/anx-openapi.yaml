@@ -4910,10 +4910,14 @@ components:
 
     DocumentPatchInput:
       type: object
+      description: >
+        Resource-only fields. Today `summary` is the only supported key; core rejects
+        unknown fields and requires `summary` to be present (empty string clears the blurb).
       properties:
         summary:
           type: string
           description: Resource-level blurb for lists and detail (not revision body).
+      required: [summary]
 
     PatchDocumentRequest:
       type: object
