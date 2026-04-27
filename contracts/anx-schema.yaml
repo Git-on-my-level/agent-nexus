@@ -258,6 +258,12 @@ resources:
     fields:
       id: { type: string, required: true }
       title: { type: string, required: true }
+      summary:
+        type: string
+        required: false
+        description: >
+          Optional short blurb for list and detail headers; stored on the document row
+          (distinct from per-revision artifact summary).
       subject_ref: { type: typed_ref, required: true }
       head_revision_ref: { type: typed_ref, required: true }
       state:
@@ -299,6 +305,11 @@ resources:
     fields:
       id: { type: string, required: true }
       title: { type: string, required: true }
+      summary:
+        type: string
+        required: false
+        description: >
+          Optional one-line description for list rows and board headers (operator-facing).
       state:
         type: string
         required: true

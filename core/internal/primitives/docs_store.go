@@ -21,6 +21,7 @@ type documentRow struct {
 	ID              string
 	ThreadID        sql.NullString
 	Title           sql.NullString
+	Summary         string
 	Slug            sql.NullString
 	SupersedesJSON  string
 	RefsJSON        string
@@ -48,7 +49,7 @@ func documentResourceRefEdgeTargets(threadID string, refs []string) []refEdgeTar
 }
 
 func buildListDocumentsQuery(filter DocumentListFilter) (string, []any) {
-	query := `SELECT d.id, d.thread_id, d.title, d.slug, d.supersedes_json,
+	query := `SELECT d.id, d.thread_id, d.title, d.summary, d.slug, d.supersedes_json,
 		d.refs_json, d.provenance_json,
 		d.head_revision_id, d.head_revision_number, d.created_at, d.created_by, d.updated_at, d.updated_by,
 		d.trashed_at, d.trashed_by, d.trash_reason,
@@ -89,8 +90,8 @@ func buildListDocumentsQuery(filter DocumentListFilter) (string, []any) {
 	}
 	if q := strings.TrimSpace(filter.Query); q != "" {
 		searchPattern := "%" + strings.ToLower(q) + "%"
-		conditions = append(conditions, "(LOWER(d.id) LIKE ? OR LOWER(d.title) LIKE ?)")
-		args = append(args, searchPattern, searchPattern)
+		conditions = append(conditions, "(LOWER(d.id) LIKE ? OR LOWER(d.title) LIKE ? OR LOWER(d.summary) LIKE ?)")
+		args = append(args, searchPattern, searchPattern, searchPattern)
 	}
 	if len(conditions) > 0 {
 		query += ` WHERE ` + strings.Join(conditions, ` AND `)
@@ -133,6 +134,7 @@ func (s *Store) ListDocuments(ctx context.Context, filter DocumentListFilter) ([
 			&row.ID,
 			&row.ThreadID,
 			&row.Title,
+			&row.Summary,
 			&row.Slug,
 			&row.SupersedesJSON,
 			&row.RefsJSON,
@@ -221,6 +223,7 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 	if err != nil {
 		return nil, nil, err
 	}
+	docSummary := strings.TrimSpace(anyStringValue(document["summary"]))
 	if _, exists := document["labels"]; exists {
 		return nil, nil, invalidDocumentRequest("document.labels is not supported")
 	}
@@ -365,14 +368,15 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 	if _, err := tx.ExecContext(
 		ctx,
 		`INSERT INTO documents(
-			id, thread_id, title, slug, supersedes_json,
+			id, thread_id, title, summary, slug, supersedes_json,
 			refs_json, provenance_json,
 			head_revision_id, head_revision_number,
 			created_at, created_by, updated_at, updated_by
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		documentID,
 		nullableString(threadID),
 		nullableString(title),
+		docSummary,
 		nullableString(slug),
 		string(supersedesJSON),
 		string(docRefsJSON),
@@ -477,6 +481,7 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		ID:              documentID,
 		ThreadID:        nullableString(threadID),
 		Title:           nullableString(title),
+		Summary:         docSummary,
 		Slug:            nullableString(slug),
 		SupersedesJSON:  string(supersedesJSON),
 		RefsJSON:        string(docRefsJSON),
@@ -523,6 +528,60 @@ func (s *Store) GetDocument(ctx context.Context, documentID string) (map[string]
 	return doc.toMap(), revision, nil
 }
 
+func (s *Store) PatchDocument(ctx context.Context, actorID, documentID string, patch map[string]any, ifUpdatedAt *string) (map[string]any, map[string]any, error) {
+	if s == nil || s.db == nil {
+		return nil, nil, fmt.Errorf("primitives store database is not initialized")
+	}
+	actorID = strings.TrimSpace(actorID)
+	if actorID == "" {
+		return nil, nil, invalidDocumentRequest("actorID is required")
+	}
+	if err := validateDocumentID(documentID); err != nil {
+		return nil, nil, invalidDocumentRequestError(err)
+	}
+	if patch == nil || len(patch) == 0 {
+		return nil, nil, invalidDocumentRequest("patch is required")
+	}
+	for k := range patch {
+		if k != "summary" {
+			return nil, nil, invalidDocumentRequest("unsupported document patch field: " + k)
+		}
+	}
+	if _, ok := patch["summary"]; !ok {
+		return nil, nil, invalidDocumentRequest("patch.summary is required")
+	}
+	documentID = strings.TrimSpace(documentID)
+	doc, err := s.loadDocumentRow(ctx, documentID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := ensureUpdatedAtMatches(doc.UpdatedAt, ifUpdatedAt); err != nil {
+		return nil, nil, err
+	}
+	nextSummary := strings.TrimSpace(anyStringValue(patch["summary"]))
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	result, err := s.db.ExecContext(
+		ctx,
+		`UPDATE documents SET summary = ?, updated_at = ?, updated_by = ? WHERE id = ? AND updated_at = ?`,
+		nextSummary,
+		now,
+		actorID,
+		documentID,
+		doc.UpdatedAt,
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("patch document: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return nil, nil, fmt.Errorf("read patch document rows affected: %w", err)
+	}
+	if affected == 0 {
+		return nil, nil, ErrConflict
+	}
+	return s.GetDocument(ctx, documentID)
+}
+
 func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID string, documentPatch map[string]any, ifBaseRevision string, content any, contentType string, refs []string, revisionProvenance map[string]any) (map[string]any, map[string]any, error) {
 	if s == nil || s.db == nil {
 		return nil, nil, fmt.Errorf("primitives store database is not initialized")
@@ -561,6 +620,7 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 	nextThreadID := nullStringValue(doc.ThreadID)
 	nextTitle := nullStringValue(doc.Title)
 	nextSlug := nullStringValue(doc.Slug)
+	nextSummary := strings.TrimSpace(doc.Summary)
 	nextSupersedes := decodeJSONListOrEmpty(doc.SupersedesJSON)
 	nextDocRefs := decodeJSONListOrEmpty(doc.RefsJSON)
 	nextDocProvJSON := strings.TrimSpace(doc.ProvenanceJSON)
@@ -584,6 +644,9 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		}
 		if value, exists := documentPatch["title"]; exists {
 			nextTitle = strings.TrimSpace(anyStringValue(value))
+		}
+		if value, exists := documentPatch["summary"]; exists {
+			nextSummary = strings.TrimSpace(anyStringValue(value))
 		}
 		if value, exists := documentPatch["slug"]; exists {
 			nextSlug = strings.TrimSpace(anyStringValue(value))
@@ -803,6 +866,7 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		`UPDATE documents SET
 			thread_id = ?,
 			title = ?,
+			summary = ?,
 			slug = ?,
 			supersedes_json = ?,
 			refs_json = ?,
@@ -814,6 +878,7 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		 WHERE id = ? AND head_revision_id = ?`,
 		nullableString(nextThreadID),
 		nullableString(nextTitle),
+		nextSummary,
 		nullableString(nextSlug),
 		string(supersedesJSON),
 		string(docResourceRefsJSON),
@@ -884,6 +949,7 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		ID:              documentID,
 		ThreadID:        nullableString(nextThreadID),
 		Title:           nullableString(nextTitle),
+		Summary:         nextSummary,
 		Slug:            nullableString(nextSlug),
 		SupersedesJSON:  string(supersedesJSON),
 		RefsJSON:        string(docResourceRefsJSON),
@@ -1296,7 +1362,7 @@ func (s *Store) loadDocumentRow(ctx context.Context, documentID string) (documen
 	var row documentRow
 	err := s.db.QueryRowContext(
 		ctx,
-		`SELECT id, thread_id, title, slug, supersedes_json,
+		`SELECT id, thread_id, title, summary, slug, supersedes_json,
 			 refs_json, provenance_json,
 			 head_revision_id, head_revision_number, created_at, created_by, updated_at, updated_by,
 			 trashed_at, trashed_by, trash_reason,
@@ -1307,6 +1373,7 @@ func (s *Store) loadDocumentRow(ctx context.Context, documentID string) (documen
 		&row.ID,
 		&row.ThreadID,
 		&row.Title,
+		&row.Summary,
 		&row.Slug,
 		&row.SupersedesJSON,
 		&row.RefsJSON,
@@ -1483,6 +1550,7 @@ func (r documentRow) toMap() map[string]any {
 	if r.Title.Valid && strings.TrimSpace(r.Title.String) != "" {
 		out["title"] = r.Title.String
 	}
+	out["summary"] = strings.TrimSpace(r.Summary)
 	if r.Slug.Valid && strings.TrimSpace(r.Slug.String) != "" {
 		out["slug"] = r.Slug.String
 	}

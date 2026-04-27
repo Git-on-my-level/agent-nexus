@@ -106,6 +106,7 @@ export declare class AnxClient {
     docsCreate(options?: RequestOptions): Promise<InvokeResult>;
     docsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsList(options?: RequestOptions): Promise<InvokeResult>;
+    docsPatch(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsPurge(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsRestore(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsRevisionsCreate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;

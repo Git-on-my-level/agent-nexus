@@ -527,6 +527,7 @@ type BoardMembership struct {
 type boardRow struct {
 	ID               string
 	Title            string
+	Summary          string
 	OwnersJSON       string
 	ThreadID         string
 	RefsJSON         string
@@ -658,6 +659,7 @@ func (s *Store) CreateBoard(ctx context.Context, actorID string, board map[strin
 	if err != nil {
 		return nil, fmt.Errorf("marshal board column schema: %w", err)
 	}
+	summary := strings.TrimSpace(anyStringValue(board["summary"]))
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -675,11 +677,12 @@ func (s *Store) CreateBoard(ctx context.Context, actorID string, board map[strin
 	_, err = tx.ExecContext(
 		ctx,
 		`INSERT INTO boards(
-			id, title, owners_json, thread_id, refs_json,
+			id, title, summary, owners_json, thread_id, refs_json,
 			column_schema_json, created_at, created_by, updated_at, updated_by
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		boardID,
 		title,
+		summary,
 		string(ownersJSON),
 		threadID,
 		string(refsJSON),
@@ -955,6 +958,10 @@ func (s *Store) UpdateBoard(ctx context.Context, actorID, boardID string, patch 
 			return nil, invalidBoardRequest("board.title must not be empty")
 		}
 	}
+	nextSummary := strings.TrimSpace(currentRow.Summary)
+	if _, exists := patch["summary"]; exists {
+		nextSummary = strings.TrimSpace(anyStringValue(patch["summary"]))
+	}
 	if _, exists := patch["status"]; exists {
 		return nil, invalidBoardRequest("board.status is not writable; use archive/trash lifecycle routes")
 	}
@@ -1028,11 +1035,12 @@ func (s *Store) UpdateBoard(ctx context.Context, actorID, boardID string, patch 
 	}
 
 	query := `UPDATE boards
-		SET title = ?, owners_json = ?, refs_json = ?,
+		SET title = ?, summary = ?, owners_json = ?, refs_json = ?,
 		    column_schema_json = ?, updated_at = ?, updated_by = ?
 		WHERE id = ?`
 	args := []any{
 		nextTitle,
+		nextSummary,
 		string(ownersJSON),
 		string(refsJSON),
 		string(columnSchemaJSON),
@@ -2667,7 +2675,7 @@ func parseBoardCardRowDueAt(card boardCardRow) (time.Time, bool) {
 }
 
 func buildListBoardsQuery(filter BoardListFilter) (string, []any) {
-	query := `SELECT id, title, owners_json, thread_id, refs_json, column_schema_json, created_at, created_by, updated_at, updated_by, archived_at, archived_by, trashed_at, trashed_by, trash_reason
+	query := `SELECT id, title, summary, owners_json, thread_id, refs_json, column_schema_json, created_at, created_by, updated_at, updated_by, archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		FROM boards
 		WHERE 1=1`
 	args := make([]any, 0, 8)
@@ -2708,8 +2716,8 @@ func buildListBoardsQuery(filter BoardListFilter) (string, []any) {
 
 	if q := strings.TrimSpace(filter.Query); q != "" {
 		searchPattern := "%" + strings.ToLower(q) + "%"
-		query += ` AND (LOWER(id) LIKE ? OR LOWER(title) LIKE ?)`
-		args = append(args, searchPattern, searchPattern)
+		query += ` AND (LOWER(id) LIKE ? OR LOWER(title) LIKE ? OR LOWER(summary) LIKE ?)`
+		args = append(args, searchPattern, searchPattern, searchPattern)
 	}
 
 	query += ` ORDER BY updated_at DESC, id ASC`
@@ -3117,13 +3125,14 @@ func loadBoardRow(ctx context.Context, rower queryRower, boardID string) (boardR
 	row := boardRow{}
 	err := rower.QueryRowContext(
 		ctx,
-		`SELECT id, title, owners_json, thread_id, refs_json, column_schema_json, created_at, created_by, updated_at, updated_by, archived_at, archived_by, trashed_at, trashed_by, trash_reason
+		`SELECT id, title, summary, owners_json, thread_id, refs_json, column_schema_json, created_at, created_by, updated_at, updated_by, archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		   FROM boards
 		  WHERE id = ?`,
 		strings.TrimSpace(boardID),
 	).Scan(
 		&row.ID,
 		&row.Title,
+		&row.Summary,
 		&row.OwnersJSON,
 		&row.ThreadID,
 		&row.RefsJSON,
@@ -3152,6 +3161,7 @@ func scanBoardRow(scanner interface{ Scan(dest ...any) error }) (boardRow, error
 	if err := scanner.Scan(
 		&row.ID,
 		&row.Title,
+		&row.Summary,
 		&row.OwnersJSON,
 		&row.ThreadID,
 		&row.RefsJSON,
@@ -3802,6 +3812,7 @@ func (r boardRow) boardToMapWithRefData(typedRefs, cardRefs []string) (map[strin
 	m := map[string]any{
 		"id":            r.ID,
 		"title":         r.Title,
+		"summary":       strings.TrimSpace(r.Summary),
 		"state":         canonicalLifecycleState(r.ArchivedAt, r.TrashedAt),
 		"owners":        decodeJSONListOrEmpty(r.OwnersJSON),
 		"thread_id":     r.ThreadID,

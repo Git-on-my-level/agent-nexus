@@ -1853,6 +1853,10 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "board.provenance.notes",
           "type": "string"
+        },
+        {
+          "name": "board.summary",
+          "type": "string"
         }
       ]
     },
@@ -2019,6 +2023,10 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "patch.provenance.sources",
           "type": "list\u003cstring\u003e"
+        },
+        {
+          "name": "patch.summary",
+          "type": "string"
         },
         {
           "name": "patch.title",
@@ -3138,6 +3146,7 @@ export const commandRegistry: CommandSpec[] = [
       "docs.create",
       "docs.get",
       "docs.list",
+      "docs.patch",
       "docs.purge",
       "docs.restore",
       "docs.revisions.create",
@@ -3216,6 +3225,7 @@ export const commandRegistry: CommandSpec[] = [
       "docs.archive",
       "docs.get",
       "docs.list",
+      "docs.patch",
       "docs.purge",
       "docs.restore",
       "docs.revisions.create",
@@ -3258,6 +3268,7 @@ export const commandRegistry: CommandSpec[] = [
       "docs.archive",
       "docs.create",
       "docs.list",
+      "docs.patch",
       "docs.purge",
       "docs.restore",
       "docs.revisions.create",
@@ -3297,6 +3308,7 @@ export const commandRegistry: CommandSpec[] = [
       "docs.archive",
       "docs.create",
       "docs.get",
+      "docs.patch",
       "docs.purge",
       "docs.restore",
       "docs.revisions.create",
@@ -3307,6 +3319,67 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "go_method": "DocsList",
     "ts_method": "docsList"
+  },
+  {
+    "command_id": "docs.patch",
+    "cli_path": "docs patch",
+    "group": "docs",
+    "method": "PATCH",
+    "path": "/docs/{document_id}",
+    "operation_id": "patchDocument",
+    "summary": "Patch document resource",
+    "why": "Update document resource fields (e.g. summary) without creating a revision.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ document, revision }`.",
+    "error_codes": [
+      "auth_required",
+      "invalid_request",
+      "invalid_token",
+      "not_found",
+      "conflict"
+    ],
+    "concepts": [
+      "docs",
+      "write",
+      "concurrency"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "body_schema": {
+      "required": [
+        {
+          "name": "if_updated_at",
+          "type": "datetime"
+        }
+      ],
+      "optional": [
+        {
+          "name": "patch.summary",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "document_id"
+    ],
+    "adjacent_commands": [
+      "docs.archive",
+      "docs.create",
+      "docs.get",
+      "docs.list",
+      "docs.purge",
+      "docs.restore",
+      "docs.revisions.create",
+      "docs.revisions.get",
+      "docs.revisions.list",
+      "docs.trash",
+      "docs.unarchive"
+    ],
+    "go_method": "DocsPatch",
+    "ts_method": "docsPatch"
   },
   {
     "command_id": "docs.purge",
@@ -3351,6 +3424,7 @@ export const commandRegistry: CommandSpec[] = [
       "docs.create",
       "docs.get",
       "docs.list",
+      "docs.patch",
       "docs.restore",
       "docs.revisions.create",
       "docs.revisions.get",
@@ -3408,6 +3482,7 @@ export const commandRegistry: CommandSpec[] = [
       "docs.create",
       "docs.get",
       "docs.list",
+      "docs.patch",
       "docs.purge",
       "docs.revisions.create",
       "docs.revisions.get",
@@ -3492,6 +3567,7 @@ export const commandRegistry: CommandSpec[] = [
       "docs.create",
       "docs.get",
       "docs.list",
+      "docs.patch",
       "docs.purge",
       "docs.restore",
       "docs.revisions.get",
@@ -3536,6 +3612,7 @@ export const commandRegistry: CommandSpec[] = [
       "docs.create",
       "docs.get",
       "docs.list",
+      "docs.patch",
       "docs.purge",
       "docs.restore",
       "docs.revisions.create",
@@ -3579,6 +3656,7 @@ export const commandRegistry: CommandSpec[] = [
       "docs.create",
       "docs.get",
       "docs.list",
+      "docs.patch",
       "docs.purge",
       "docs.restore",
       "docs.revisions.create",
@@ -3638,6 +3716,7 @@ export const commandRegistry: CommandSpec[] = [
       "docs.create",
       "docs.get",
       "docs.list",
+      "docs.patch",
       "docs.purge",
       "docs.restore",
       "docs.revisions.create",
@@ -3691,6 +3770,7 @@ export const commandRegistry: CommandSpec[] = [
       "docs.create",
       "docs.get",
       "docs.list",
+      "docs.patch",
       "docs.purge",
       "docs.restore",
       "docs.revisions.create",
@@ -6224,6 +6304,10 @@ export class AnxClient {
 
   docsList(options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("docs.list", {}, options);
+  }
+
+  docsPatch(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("docs.patch", pathParams, options);
   }
 
   docsPurge(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {

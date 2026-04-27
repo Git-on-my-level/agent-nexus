@@ -452,6 +452,14 @@
     <h1 class="min-w-0 text-subtitle font-semibold text-[var(--fg)]">
       {board.title || board.id}
     </h1>
+    {#if String(board.summary ?? "").trim()}
+      <p
+        class="line-clamp-3 text-[13px] text-[var(--fg-muted)]"
+        title={String(board.summary).trim()}
+      >
+        {String(board.summary).trim()}
+      </p>
+    {/if}
     <div
       class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-micro text-[var(--fg-muted)]"
     >

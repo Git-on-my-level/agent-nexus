@@ -760,6 +760,13 @@ export function createAnxCoreClient(options = {}) {
       invokeJSON("docs.get", () =>
         generated.docsGet({ document_id: String(documentId) }),
       ),
+    patchDocument: (documentId, payload) =>
+      invokeJSON("docs.patch", () =>
+        generated.docsPatch(
+          { document_id: String(documentId) },
+          { body: withActorId(payload) },
+        ),
+      ),
     getDocumentHistory: (documentId) =>
       invokeJSON("docs.revisions.list", () =>
         generated.docsRevisionsList({ document_id: String(documentId) }),

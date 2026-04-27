@@ -631,6 +631,11 @@ var migrations = []migration{
 		Statements: []string{},
 		AfterApply: applyMigration16DropTopicsTypeColumn,
 	},
+	{
+		Version:    17,
+		Statements: []string{},
+		AfterApply: applyMigration17BoardsDocumentsSummary,
+	},
 }
 
 func sqliteTableExists(ctx context.Context, tx *sql.Tx, name string) (bool, error) {
@@ -1356,6 +1361,30 @@ func applyMigration16DropTopicsTypeColumn(ctx context.Context, tx *sql.Tx) error
 	}
 	if _, err := tx.ExecContext(ctx, `ALTER TABLE topics DROP COLUMN type`); err != nil {
 		return fmt.Errorf("migration 16 drop topics.type: %w", err)
+	}
+	return nil
+}
+
+func applyMigration17BoardsDocumentsSummary(ctx context.Context, tx *sql.Tx) error {
+	for _, table := range []string{"boards", "documents"} {
+		ok, err := sqliteTableExists(ctx, tx, table)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			continue
+		}
+		has, err := sqliteTableHasColumn(ctx, tx, table, "summary")
+		if err != nil {
+			return fmt.Errorf("migration 17 pragma %s.summary: %w", table, err)
+		}
+		if has {
+			continue
+		}
+		q := fmt.Sprintf(`ALTER TABLE %s ADD COLUMN summary TEXT NOT NULL DEFAULT ''`, table)
+		if _, err := tx.ExecContext(ctx, q); err != nil {
+			return fmt.Errorf("migration 17 add %s.summary: %w", table, err)
+		}
 	}
 	return nil
 }

@@ -75,6 +75,26 @@ export async function searchDocuments(query, limit = 20) {
   return filterTopLevelDocuments(response.documents);
 }
 
+/** Subtitle line for document rows in search pickers (state, summary, backing thread). */
+export function documentSearchPickerSubtitle(document) {
+  if (!document || typeof document !== "object") {
+    return "";
+  }
+  const parts = [];
+  if (document.state) {
+    parts.push(String(document.state));
+  }
+  const summary = String(document.summary ?? "").trim();
+  if (summary) {
+    parts.push(summary);
+  }
+  const threadId = String(document.thread_id ?? "").trim();
+  if (threadId) {
+    parts.push(`Timeline ${threadId}`);
+  }
+  return parts.join(" · ");
+}
+
 export async function searchActors(query, limit = 20) {
   const response = await coreClient.listActors({
     q: query,
@@ -84,8 +104,9 @@ export async function searchActors(query, limit = 20) {
 }
 
 /**
- * boards.list returns rows shaped as `{ board, summary }`. Callers that need a
- * flat board record (search palette, pickers) must read the inner `board` map.
+ * boards.list returns rows shaped as `{ board, summary }` where `summary` is list
+ * projection / stats (not `board.summary`). Callers that need a flat board record
+ * (search palette, pickers) must read the inner `board` map.
  */
 export function boardRecordFromBoardsListRow(row) {
   if (!row || typeof row !== "object") {

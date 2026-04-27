@@ -239,6 +239,61 @@ func handleGetDocument(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	})
 }
 
+func handlePatchDocument(w http.ResponseWriter, r *http.Request, opts handlerOptions, documentID string) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	if err := validateDocumentID(documentID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	var req struct {
+		ActorID     string         `json:"actor_id"`
+		Patch       map[string]any `json:"patch"`
+		IfUpdatedAt *string        `json:"if_updated_at"`
+	}
+	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+	if req.Patch == nil || len(req.Patch) == 0 {
+		writeError(w, http.StatusBadRequest, "invalid_request", "patch is required")
+		return
+	}
+	if req.IfUpdatedAt != nil {
+		ifUpdatedAt, ok := normalizeRequiredTimestamp(w, req.IfUpdatedAt, "if_updated_at")
+		if !ok {
+			return
+		}
+		req.IfUpdatedAt = &ifUpdatedAt
+	}
+	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
+	if !ok {
+		return
+	}
+	document, revision, err := opts.primitiveStore.PatchDocument(r.Context(), actorID, documentID, req.Patch, req.IfUpdatedAt)
+	if err != nil {
+		switch {
+		case errors.Is(err, primitives.ErrNotFound):
+			writeError(w, http.StatusNotFound, "not_found", "document not found")
+		case errors.Is(err, primitives.ErrConflict):
+			writeError(w, http.StatusConflict, "conflict", "document has been updated; refresh and retry")
+		case errors.Is(err, primitives.ErrInvalidDocumentRequest):
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		default:
+			writeError(w, http.StatusInternalServerError, "internal_error", "failed to patch document")
+		}
+		return
+	}
+	if threadID := documentBackingThreadID(document); threadID != "" {
+		enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{threadID}, time.Now().UTC())
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"document": document,
+		"revision": revision,
+	})
+}
+
 // handleCreateDocumentRevision serves POST /docs/{document_id}/revisions.
 // It accepts the OpenAPI CreateDocumentRevisionRequest shape (revision + optional if_document_updated_at)
 // and the CLI/docs-update envelope (if_base_revision + content + content_type), matching PATCH /docs/{document_id}.

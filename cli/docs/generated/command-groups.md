@@ -131,12 +131,13 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `docs`
 
-- Commands: `11`
+- Commands: `12`
 - Command IDs:
   - `docs.archive` (`docs archive`)
   - `docs.create` (`docs create`)
   - `docs.get` (`docs get`)
   - `docs.list` (`docs list`)
+  - `docs.patch` (`docs patch`)
   - `docs.purge` (`docs purge`)
   - `docs.restore` (`docs restore`)
   - `docs.revisions.create` (`docs revisions create`)

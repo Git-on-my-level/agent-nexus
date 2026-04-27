@@ -1355,8 +1355,9 @@ const MOCK_DOCUMENTS = [
   {
     id: "product-constitution",
     title: "Product Constitution",
+    summary: "North-star principles and release bar for the product org.",
     slug: "product-constitution",
-    status: "active",
+    state: "active",
     supersedes: [],
     head_revision_id: "rev-pc-3",
     head_revision_number: 3,
@@ -1371,7 +1372,7 @@ const MOCK_DOCUMENTS = [
     id: "incident-response-playbook",
     title: "Incident Response Playbook",
     slug: "incident-response-playbook",
-    status: "active",
+    state: "active",
     supersedes: [],
     head_revision_id: "rev-irp-2",
     head_revision_number: 2,
@@ -1386,7 +1387,7 @@ const MOCK_DOCUMENTS = [
     id: "onboarding-guide-v1",
     title: "Onboarding Guide v1",
     slug: "onboarding-guide-v1",
-    status: "active",
+    state: "active",
     supersedes: [],
     head_revision_id: "rev-og-1",
     head_revision_number: 1,
@@ -1401,7 +1402,7 @@ const MOCK_DOCUMENTS = [
     id: "old-pricing-doc",
     title: "Pricing Strategy (Archived)",
     slug: "old-pricing-doc",
-    status: "active",
+    state: "trashed",
     supersedes: [],
     head_revision_id: "rev-opd-1",
     head_revision_number: 1,
@@ -1617,6 +1618,20 @@ export function mockTopicRefFromThreadId(threadId) {
   return suffix ? `topic:${suffix}` : "";
 }
 
+/**
+ * Derives canonical `topic.state` from explicit `thread.state` or legacy
+ * `thread.status` in narrative fixtures (`paused` / `closed` → `archived`).
+ */
+function topicStateFromThreadFixture(thread) {
+  const explicit = String(thread?.state ?? "").trim();
+  if (explicit) return explicit;
+  const status = String(thread?.status ?? "")
+    .trim()
+    .toLowerCase();
+  if (status === "closed" || status === "paused") return "archived";
+  return "active";
+}
+
 function buildCanonicalTopicSeed(thread) {
   const threadId = String(thread?.id ?? "").trim();
   const boardRefs = boards
@@ -1638,7 +1653,7 @@ function buildCanonicalTopicSeed(thread) {
   return {
     id: threadId,
     thread_id: threadId,
-    state: String(thread?.state ?? "").trim() || "active",
+    state: topicStateFromThreadFixture(thread),
     title: String(thread?.title ?? "").trim(),
     summary: String(thread?.current_summary ?? "").trim(),
     owner_refs: thread?.created_by ? [`actor:${thread.created_by}`] : [],
@@ -1822,7 +1837,9 @@ const boards = [
   {
     id: "board-product-launch",
     title: "Q2 Product Launch",
-    status: "active",
+    summary:
+      "Launch tracking for the Q2 initiative — cards mirror the board columns.",
+    state: "active",
     owners: ["actor-ops-ai"],
     thread_id: "thread-q2-initiative",
     refs: [
@@ -1840,7 +1857,7 @@ const boards = [
   {
     id: "board-supply-crisis",
     title: "Supply Chain Crisis Response",
-    status: "active",
+    state: "active",
     owners: ["actor-ops-ai", "actor-supply-rover"],
     thread_id: "thread-lemon-shortage",
     refs: [
@@ -1862,7 +1879,7 @@ const boards = [
   {
     id: "board-summer-menu",
     title: "Summer Menu Launch",
-    status: "active",
+    state: "active",
     owners: ["actor-flavor-ai", "actor-cashier-bot"],
     thread_id: "thread-summer-menu",
     refs: [
@@ -1951,7 +1968,7 @@ const boardCards = [
     board_id: "board-summer-menu",
     column_key: "done",
     rank: "0002",
-    status: "cancelled",
+    resolution: "canceled",
     summary: "Full historical pricing audit for March (canceled)",
     related_refs: ["thread:thread-pricing-glitch"],
     created_at: new Date(now - 10 * 24 * 60 * 60 * 1000).toISOString(),
@@ -2154,7 +2171,7 @@ export function buildMockTopicWorkspaceFromThreadWorkspace(
     ? {
         id: topicId,
         type: mockThreadTypeToTopicWorkspaceType(thread.type),
-        state: String(thread.state ?? "").trim() || "active",
+        state: topicStateFromThreadFixture(thread),
         title: thread.title,
         summary: String(thread.current_summary ?? ""),
         owner_refs: Array.isArray(thread.owner_refs) ? thread.owner_refs : [],

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  documentLifecycleLabel,
+  documentLifecyclePillClass,
+  documentResourceState,
   filterTopLevelDocuments,
   isLegacyAgentRegistrationDocument,
 } from "../../src/lib/documentVisibility.js";
@@ -28,6 +31,24 @@ describe("documentVisibility", () => {
         labels: ["onboarding"],
       }),
     ).toBe(false);
+  });
+
+  it("prefers state over legacy status for document lifecycle", () => {
+    expect(documentResourceState({ state: "trashed" })).toBe("trashed");
+    expect(documentResourceState({ state: "active", status: "draft" })).toBe(
+      "active",
+    );
+    expect(documentResourceState({ status: "active" })).toBe("active");
+  });
+
+  it("labels canonical document lifecycle states", () => {
+    expect(documentLifecycleLabel("active")).toBe("Active");
+    expect(documentLifecycleLabel("trashed")).toBe("Trashed");
+  });
+
+  it("maps lifecycle states to pill classes", () => {
+    expect(documentLifecyclePillClass("trashed")).toContain("danger");
+    expect(documentLifecyclePillClass("active")).toContain("ok");
   });
 
   it("filters system registration records from top-level docs views", () => {

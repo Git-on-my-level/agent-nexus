@@ -24,8 +24,11 @@
   import { formatTimestamp } from "$lib/formatDate";
   import { boardRecordFromBoardsListRow } from "$lib/searchHelpers";
   import { readEnumSearchParam, withUpdatedSearchParams } from "$lib/urlState";
-
-  const DOC_STATUS_LABELS = { draft: "Draft", active: "Active" };
+  import {
+    documentLifecycleLabel,
+    documentLifecyclePillClass,
+    documentResourceState,
+  } from "$lib/documentVisibility";
   const TRASH_TAB_IDS = ["artifacts", "documents", "topics", "boards", "cards"];
 
   let artifacts = $state([]);
@@ -117,12 +120,6 @@
       noScroll: true,
       keepFocus: true,
     });
-  }
-
-  function docStatusColor(status) {
-    if (status === "active") return "text-ok-text bg-ok-soft";
-    if (status === "draft") return "text-warn-text bg-warn-soft";
-    return "text-[var(--fg-muted)] bg-[var(--panel)]";
   }
 
   function threadLifecycleColor(state) {
@@ -555,17 +552,18 @@
     class="space-y-px rounded-md border border-[var(--line)] bg-[var(--bg-soft)] overflow-hidden"
   >
     {#each documents as doc, i (doc.id)}
+      {@const docState = documentResourceState(doc)}
       <div class="px-4 py-3 {i > 0 ? 'border-t border-[var(--line)]' : ''}">
         <div
           class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between"
         >
           <div class="min-w-0 flex-1">
             <div class="flex flex-wrap items-center gap-2">
-              {#if doc.status}
+              {#if docState}
                 <span
-                  class="inline-flex rounded px-1.5 py-0.5 text-micro font-semibold {docStatusColor(
-                    doc.status,
-                  )}">{DOC_STATUS_LABELS[doc.status] ?? doc.status}</span
+                  class="inline-flex rounded px-1.5 py-0.5 text-micro font-semibold {documentLifecyclePillClass(
+                    docState,
+                  )}">{documentLifecycleLabel(docState)}</span
                 >
               {/if}
               <span class="text-meta font-medium text-[var(--fg)]">

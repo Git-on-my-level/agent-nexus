@@ -63,6 +63,9 @@
     content: "",
     title: "",
   });
+  let summaryDraft = $state("");
+  let summarySaveBusy = $state(false);
+  let summarySaveError = $state("");
   let saving = $state(false);
   let saveError = $state("");
   let loadingSelectedRevisionKey = $state("");
@@ -325,6 +328,8 @@
       const result = await coreClient.getDocument(targetId);
       document = result.document ?? null;
       headRevision = result.revision ?? null;
+      summaryDraft = String(document?.summary ?? "");
+      summarySaveError = "";
       if (!document) {
         loadError = "Document not found.";
       }
@@ -429,6 +434,32 @@
     saveError = "";
     editOpen = true;
     historyOpen = false;
+  }
+
+  async function saveResourceSummary() {
+    if (!documentId || !document?.updated_at || summarySaveBusy) return;
+    summarySaveBusy = true;
+    summarySaveError = "";
+    try {
+      const result = await coreClient.patchDocument(documentId, {
+        patch: { summary: summaryDraft.trim() },
+        if_updated_at: document.updated_at,
+      });
+      document = result.document ?? document;
+      headRevision = result.revision ?? headRevision;
+      summaryDraft = String(document?.summary ?? "");
+    } catch (e) {
+      const status = /** @type {{ status?: number }} */ (e)?.status;
+      if (status === 409) {
+        await loadDocument(documentId);
+        summarySaveError =
+          "Document was updated elsewhere. Reloaded the latest values — review and try again.";
+      } else {
+        summarySaveError = `Failed to save: ${e instanceof Error ? e.message : String(e)}`;
+      }
+    } finally {
+      summarySaveBusy = false;
+    }
   }
 
   function closeEdit() {
@@ -979,6 +1010,14 @@
           class="font-mono text-[var(--fg-muted)]">{document.id}</span
         >{/if}
     </h1>
+    {#if String(document.summary ?? "").trim()}
+      <p
+        class="line-clamp-3 text-[13px] text-[var(--fg-muted)]"
+        title={String(document.summary).trim()}
+      >
+        {String(document.summary).trim()}
+      </p>
+    {/if}
     <div class="mt-1 flex flex-wrap items-center gap-1.5 text-micro">
       {#if document.state}
         <span
@@ -1229,6 +1268,50 @@
               {/if}
             {/snippet}
           </WorkspaceResourceTopRow>
+
+          {#if !document.trashed_at}
+            <div
+              class="mt-3 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] p-3"
+            >
+              <h2
+                class="text-micro font-semibold text-[var(--fg)]"
+                id="doc-resource-summary-label"
+              >
+                Short description
+              </h2>
+              <p
+                class="mb-2 text-[13px] text-[var(--fg-muted)]"
+                id="doc-resource-summary-hint"
+              >
+                Shown on doc lists and in the header. Does not require a new
+                revision.
+              </p>
+              <textarea
+                bind:value={summaryDraft}
+                aria-labelledby="doc-resource-summary-label"
+                aria-describedby="doc-resource-summary-hint"
+                class="w-full resize-y rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-2 text-meta text-[var(--fg)]"
+                placeholder="No description provided."
+                rows="2"
+              ></textarea>
+              <div class="mt-2 flex flex-wrap items-center gap-2">
+                <Button
+                  size="compact"
+                  variant="secondary"
+                  disabled={summarySaveBusy}
+                  onclick={() => void saveResourceSummary()}
+                  type="button"
+                >
+                  {summarySaveBusy ? "Saving…" : "Save description"}
+                </Button>
+                {#if summarySaveError}
+                  <span class="text-micro text-danger-text"
+                    >{summarySaveError}</span
+                  >
+                {/if}
+              </div>
+            </div>
+          {/if}
 
           {#if editOpen}
             <form

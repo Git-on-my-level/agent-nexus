@@ -7,6 +7,7 @@
   let creating = $state(false);
   let createError = $state("");
   let createTitle = $state("");
+  let createSummary = $state("");
 
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
@@ -24,8 +25,13 @@
     }
     creating = true;
     try {
+      const boardPayload = { title, document_refs: [], pinned_refs: [] };
+      const s = createSummary.trim();
+      if (s) {
+        boardPayload.summary = s;
+      }
       const created = await coreClient.createBoard({
-        board: { title, document_refs: [], pinned_refs: [] },
+        board: boardPayload,
       });
       await goto(
         workspacePath(
@@ -74,6 +80,15 @@
         type="text"
         onkeydown={(e) => e.key === "Enter" && submit()}
       />
+    </label>
+    <label class="mt-4 block text-meta font-medium text-[var(--fg)]">
+      Summary
+      <textarea
+        bind:value={createSummary}
+        class="mt-2 w-full resize-y rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2.5 text-meta text-[var(--fg)] focus:border-[var(--accent)] focus:outline-none"
+        placeholder="Optional one-line description for lists and the board header"
+        rows="2"
+      ></textarea>
     </label>
 
     <div class="mt-4 flex gap-2">

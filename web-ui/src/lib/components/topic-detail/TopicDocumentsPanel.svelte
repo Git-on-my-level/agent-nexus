@@ -8,8 +8,11 @@
   import { formatTimestamp } from "$lib/formatDate";
   import { workspacePath } from "$lib/workspacePaths";
   import { topicDetailStore } from "$lib/topicDetailStore";
-
-  const DOC_STATUS_LABELS = { draft: "Draft", active: "Active" };
+  import {
+    documentLifecycleLabel,
+    documentLifecyclePillClass,
+    documentResourceState,
+  } from "$lib/documentVisibility";
 
   let { threadId } = $props();
 
@@ -44,12 +47,6 @@
     }
     return `${base}?revision=${encodeURIComponent(revisionId)}`;
   }
-
-  function statusTone(status) {
-    if (status === "active") return "text-ok-text bg-ok-soft";
-    if (status === "draft") return "text-warn-text bg-warn-soft";
-    return "text-[var(--fg-muted)] bg-[var(--line)]";
-  }
 </script>
 
 <section class="mt-4 rounded-md border border-[var(--line)] bg-[var(--panel)]">
@@ -83,6 +80,7 @@
   {:else}
     <div class="divide-y divide-[var(--line-subtle)]">
       {#each documents as doc}
+        {@const docState = documentResourceState(doc)}
         <a
           class="block px-4 py-3 transition-colors hover:bg-[var(--bg-soft)]"
           href={documentHref(doc)}
@@ -90,11 +88,11 @@
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-center gap-2">
-                {#if doc.status}
+                {#if docState}
                   <span
-                    class={`rounded px-1.5 py-0.5 text-micro font-semibold ${statusTone(doc.status)}`}
+                    class={`rounded px-1.5 py-0.5 text-micro font-semibold ${documentLifecyclePillClass(docState)}`}
                   >
-                    {DOC_STATUS_LABELS[doc.status] ?? doc.status}
+                    {documentLifecycleLabel(docState)}
                   </span>
                 {/if}
                 <span class="text-micro text-[var(--fg-muted)]">

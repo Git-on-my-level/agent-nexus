@@ -34,6 +34,7 @@
     searchDocuments as searchDocumentRecords,
     searchTopics as searchTopicRecords,
     topicSearchResultToPickerOption,
+    documentSearchPickerSubtitle,
   } from "$lib/searchHelpers";
   import { toActorPickerOptions } from "$lib/systemActor.js";
   import { boardCardInspectNav } from "$lib/topicRouteUtils";
@@ -215,12 +216,7 @@
     return documents.map((document) => ({
       id: document.id,
       title: document.title || document.id,
-      subtitle: [
-        document.state,
-        document.thread_id && `Timeline ${document.thread_id}`,
-      ]
-        .filter(Boolean)
-        .join(" · "),
+      subtitle: documentSearchPickerSubtitle(document),
       keywords: [],
     }));
   }

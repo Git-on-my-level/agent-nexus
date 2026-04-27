@@ -13,6 +13,7 @@
   import StateEmpty from "$lib/components/state/StateEmpty.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
+  import WorkspaceResourceListRow from "$lib/components/WorkspaceResourceListRow.svelte";
 
   const DOC_STATE_LABELS = {
     active: "Active",
@@ -49,6 +50,7 @@
 
   let draft = $state({
     title: "",
+    summary: "",
     content: "",
   });
 
@@ -92,6 +94,7 @@
   function resetDraft() {
     draft = {
       title: "",
+      summary: "",
       content: "",
     };
   }
@@ -121,10 +124,14 @@
     createError = "";
 
     try {
+      const docIn = {
+        title: draft.title.trim(),
+      };
+      if (draft.summary.trim()) {
+        docIn.summary = draft.summary.trim();
+      }
       const result = await coreClient.createDocument({
-        document: {
-          title: draft.title.trim(),
-        },
+        document: docIn,
         content: draft.content.trim(),
         content_type: "text",
       });
@@ -374,6 +381,17 @@
       </label>
       <label>
         <span class="text-micro font-medium text-[var(--fg-muted)]"
+          >Summary</span
+        >
+        <textarea
+          bind:value={draft.summary}
+          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-2 text-meta text-[var(--fg)] placeholder:text-[var(--fg-subtle)] resize-y"
+          placeholder="Optional short description for lists and the doc header"
+          rows="2"
+        ></textarea>
+      </label>
+      <label>
+        <span class="text-micro font-medium text-[var(--fg-muted)]"
           >Head content (Markdown) <span class="text-danger-text">*</span></span
         >
         <textarea
@@ -438,13 +456,11 @@
       class="flex min-w-0 flex-1 items-start gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--line-subtle)] sm:px-4"
       href={workspaceHref(`/docs/${doc.id}`)}
     >
-      <div class="min-w-0 flex-1">
-        <div
-          class="inline-flex max-w-full min-w-0 items-center gap-x-2 gap-y-1"
-        >
-          <p class="min-w-0 truncate text-meta font-medium text-[var(--fg)]">
-            {doc.title || doc.id}
-          </p>
+      <WorkspaceResourceListRow
+        title={doc.title || doc.id}
+        description={doc.summary ?? ""}
+      >
+        {#snippet badges()}
           {#if doc.state}
             <span
               class="inline-flex shrink-0 rounded px-1.5 py-0.5 text-micro font-semibold {docStateColor(
@@ -452,11 +468,13 @@
               )}">{DOC_STATE_LABELS[doc.state] ?? doc.state}</span
             >
           {/if}
-        </div>
-        <p class="mt-0.5 text-micro text-[var(--fg-muted)]">
-          Head v{doc.head_revision_number}
-        </p>
-      </div>
+        {/snippet}
+        {#snippet meta()}
+          <p class="mt-0.5 text-micro text-[var(--fg-muted)]">
+            Head v{doc.head_revision_number}
+          </p>
+        {/snippet}
+      </WorkspaceResourceListRow>
       <div
         class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"
       >

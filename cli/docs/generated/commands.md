@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.5.0`
-- Commands: `118`
+- Commands: `119`
 
 ## `actors.create`
 
@@ -748,6 +748,18 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `docs`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Output: Returns `{ documents }`.
+
+## `docs.patch`
+
+- CLI path: `docs patch`
+- HTTP: `PATCH /docs/{document_id}`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Update document resource fields (e.g. summary) without creating a revision.
+- Concepts: `docs`, `write`, `concurrency`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Output: Returns `{ document, revision }`.
 
 ## `docs.purge`
 

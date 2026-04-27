@@ -23,6 +23,7 @@
   import StateEmpty from "$lib/components/state/StateEmpty.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
+  import WorkspaceResourceListRow from "$lib/components/WorkspaceResourceListRow.svelte";
 
   /** Virtual filter: active lifecycle topics (matches dashboard "Open"); distinct from `state` query. */
   const STATUS_OPEN_NOT_CLOSED = "__open__";
@@ -530,35 +531,26 @@
             class="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--line-subtle)]"
             href={workspaceHref(`/topics/${encodeURIComponent(topic.id)}`)}
           >
-            <div class="min-w-0 flex-1">
-              <div
-                class="inline-flex max-w-full min-w-0 items-center gap-x-2 gap-y-1"
-              >
-                <p
-                  class="min-w-0 truncate text-meta font-medium text-[var(--fg)]"
-                >
-                  {topic.title}
-                </p>
-                <div class="flex shrink-0 items-center gap-2">
-                  {#if topic.state}
-                    <span
-                      class="inline-flex rounded px-1.5 py-0.5 text-micro font-semibold capitalize {topicStatePillTone(
-                        topic.state,
-                      )}">{topic.state}</span
-                    >
-                  {/if}
-                  {#if isTopicArchived(topic)}
-                    <span
-                      class="rounded bg-warn-soft px-1.5 py-0.5 text-micro font-medium text-warn-text"
-                      >Archived</span
-                    >
-                  {/if}
-                </div>
-              </div>
-              <p class="truncate text-micro text-[var(--fg-muted)]">
-                {topic.current_summary ?? topic.summary ?? ""}
-              </p>
-            </div>
+            <WorkspaceResourceListRow
+              title={topic.title}
+              description={topic.current_summary ?? topic.summary ?? ""}
+            >
+              {#snippet badges()}
+                {#if topic.state}
+                  <span
+                    class="inline-flex rounded px-1.5 py-0.5 text-micro font-semibold capitalize {topicStatePillTone(
+                      topic.state,
+                    )}">{topic.state}</span
+                  >
+                {/if}
+                {#if isTopicArchived(topic)}
+                  <span
+                    class="rounded bg-warn-soft px-1.5 py-0.5 text-micro font-medium text-warn-text"
+                    >Archived</span
+                  >
+                {/if}
+              {/snippet}
+            </WorkspaceResourceListRow>
             <div
               class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"
             >

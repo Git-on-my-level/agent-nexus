@@ -125,20 +125,22 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `concurrency`
 
-- Commands: `3`
+- Commands: `4`
 - Command IDs:
   - `boards.patch`
   - `cards.patch`
+  - `docs.patch`
   - `topics.patch`
 
 ## `docs`
 
-- Commands: `11`
+- Commands: `12`
 - Command IDs:
   - `docs.archive`
   - `docs.create`
   - `docs.get`
   - `docs.list`
+  - `docs.patch`
   - `docs.purge`
   - `docs.restore`
   - `docs.revisions.create`
@@ -323,7 +325,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `write`
 
-- Commands: `46`
+- Commands: `47`
 - Command IDs:
   - `agent.notifications.dismiss`
   - `agent.notifications.read`
@@ -351,6 +353,7 @@ Generated from `contracts/anx-openapi.yaml`.
   - `cards.trash`
   - `docs.archive`
   - `docs.create`
+  - `docs.patch`
   - `docs.purge`
   - `docs.restore`
   - `docs.revisions.create`

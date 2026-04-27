@@ -10,6 +10,7 @@ import {
   backingThreadIdFromTopicRecord,
   topicSearchResultToPickerOption,
   topicSearchResultToBoardRefOption,
+  documentSearchPickerSubtitle,
 } from "../../src/lib/searchHelpers.js";
 
 vi.mock("../../src/lib/coreClient.js", () => ({
@@ -58,7 +59,7 @@ describe("searchHelpers", () => {
         thread_id: "thr-9",
         title: "Coordination",
         type: "incident",
-        status: "active",
+        state: "active",
       });
       expect(opt.id).toBe("thr-9");
       expect(opt.title).toBe("Coordination");
@@ -73,7 +74,7 @@ describe("searchHelpers", () => {
         thread_id: "d002c2fa-8f5a-4bbe-9c92-4e333e1f75fe",
         title: "Alpha",
         type: "initiative",
-        status: "active",
+        state: "active",
       });
       expect(opt.id).toBe("topic:5e63c3fc-271b-4785-8036-cf06e1ee03b0");
       expect(opt.title).toBe("Alpha");
@@ -125,6 +126,24 @@ describe("searchHelpers", () => {
       const result = await searchTopics("test");
 
       expect(result).toEqual([]);
+    });
+  });
+
+  describe("documentSearchPickerSubtitle", () => {
+    it("joins state, summary, and timeline", () => {
+      expect(
+        documentSearchPickerSubtitle({
+          state: "active",
+          summary: "Hello",
+          thread_id: "t-1",
+        }),
+      ).toBe("active · Hello · Timeline t-1");
+    });
+
+    it("omits empty parts", () => {
+      expect(documentSearchPickerSubtitle({ state: "archived" })).toBe(
+        "archived",
+      );
     });
   });
 
@@ -250,7 +269,7 @@ describe("searchHelpers", () => {
       const inner = {
         id: "bd_abc",
         title: "Summer Menu Launch",
-        status: "active",
+        state: "active",
       };
       coreClient.listBoards.mockResolvedValue({
         boards: [{ board: inner, summary: { card_count: 3 } }],
