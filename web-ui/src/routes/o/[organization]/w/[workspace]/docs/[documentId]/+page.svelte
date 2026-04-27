@@ -65,7 +65,6 @@
   let saving = $state(false);
   let saveError = $state("");
   let loadingSelectedRevisionKey = $state("");
-  let metadataExpanded = $state(false);
   let confirmModal = $state({ open: false, action: "" });
   let docLifecycleBusy = $state(false);
   /**
@@ -584,12 +583,34 @@
   function computeSelectionPillPosition(sel) {
     if (!sel || sel.rangeCount === 0) return null;
     const range = sel.getRangeAt(sel.rangeCount - 1);
-    const rects = range.getClientRects();
-    if (!rects || rects.length === 0) {
-      return null;
-    }
     const forward = isSelectionForward(sel);
-    const anchorRect = forward ? rects[rects.length - 1] : rects[0];
+    const rects = range.getClientRects();
+    /** @type {DOMRect | undefined} */
+    let anchorRect;
+    if (rects && rects.length > 0) {
+      const list = Array.from(rects);
+      const pick = () => {
+        if (forward) {
+          for (let i = list.length - 1; i >= 0; i--) {
+            const r = list[i];
+            if (r.width > 0 || r.height > 0) return r;
+          }
+        } else {
+          for (let i = 0; i < list.length; i++) {
+            const r = list[i];
+            if (r.width > 0 || r.height > 0) return r;
+          }
+        }
+        return forward ? list[list.length - 1] : list[0];
+      };
+      anchorRect = pick();
+    }
+    // Double-click / word selection often appends a 0×0 "caret" rect as the
+    // last client rect; drag selection usually does not. Empty rects also
+    // happen for some engine quirks — getBoundingClientRect() is stable.
+    if (!anchorRect || (anchorRect.width === 0 && anchorRect.height === 0)) {
+      anchorRect = range.getBoundingClientRect();
+    }
     if (!anchorRect || (anchorRect.width === 0 && anchorRect.height === 0)) {
       return null;
     }
@@ -956,8 +977,18 @@
     </div>
   {/if}
 
-  <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-4">
-    <div class="min-w-0 flex-1">
+  <!--
+    Mobile (max-lg): wrap body + discussion drawer in a `page-dock-layout`
+    so the drawer sits inline at the viewport bottom (matching boards / topic).
+    `--mobile-only` falls back to natural flow on desktop where the drawer
+    becomes a side aside.
+  -->
+  <div
+    class="flex flex-col gap-0 lg:flex-row lg:items-start lg:gap-4 {document.thread_id
+      ? 'page-dock-layout page-dock-layout--mobile-only page-dock-layout--doc-discussion'
+      : ''}"
+  >
+    <div class="min-w-0 flex-1 {document.thread_id ? 'page-dock-scroll' : ''}">
       <div class="flex gap-4">
         <div class="min-w-0 flex-1">
           <div class="flex items-start justify-between gap-3">
@@ -1152,69 +1183,16 @@
                 void handleSave();
               }}
             >
-              {#if documentAnchorContext.activeAnchoredCount > 0}
-                <p
-                  class="mb-3 rounded-md border border-warn/25 bg-warn-soft px-3 py-2 text-micro text-warn-text"
-                  role="status"
+              <label class="mb-3 block">
+                <span class="text-micro font-medium text-[var(--fg-muted)]"
+                  >Title</span
                 >
-                  {documentAnchorContext.activeAnchoredCount}
-                  {documentAnchorContext.activeAnchoredCount === 1
-                    ? " comment is"
-                    : " comments are"}
-                  anchored to text in this revision. Removing quoted text will mark
-                  {documentAnchorContext.activeAnchoredCount === 1
-                    ? "it"
-                    : "them"} as “Text removed.”
-                </p>
-              {/if}
-              <div class="mb-3">
-                <button
-                  class="cursor-pointer flex w-full items-center gap-2 text-left"
-                  onclick={() => (metadataExpanded = !metadataExpanded)}
-                  type="button"
-                >
-                  <svg
-                    class="h-3 w-3 text-[var(--fg-muted)] transition-transform {metadataExpanded
-                      ? 'rotate-90'
-                      : ''}"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    stroke-width="2"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M9 5l7 7-7 7"
-                    />
-                  </svg>
-                  <span class="text-micro font-medium text-[var(--fg-muted)]"
-                    >Metadata</span
-                  >
-                </button>
-                {#if !metadataExpanded}
-                  <p
-                    class="mt-1 ml-5 truncate text-micro text-[var(--fg-muted)]"
-                  >
-                    Title: {editDraft.title || "—"}
-                  </p>
-                {/if}
-                {#if metadataExpanded}
-                  <div class="mt-2 ml-5 grid gap-3 sm:grid-cols-2">
-                    <label class="sm:col-span-2">
-                      <span
-                        class="text-micro font-medium text-[var(--fg-muted)]"
-                        >Title</span
-                      >
-                      <input
-                        bind:value={editDraft.title}
-                        class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-meta text-[var(--fg)]"
-                        type="text"
-                      />
-                    </label>
-                  </div>
-                {/if}
-              </div>
+                <input
+                  bind:value={editDraft.title}
+                  class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-meta text-[var(--fg)]"
+                  type="text"
+                />
+              </label>
 
               <label>
                 <span class="text-micro font-medium text-[var(--fg-muted)]"
@@ -1280,29 +1258,31 @@
             </div>
           {/if}
 
-          <div class="mt-3 min-w-0">
-            <div
-              class="min-w-0 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
-            >
-              <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+          {#if !editOpen}
+            <div class="mt-3 min-w-0">
               <div
-                bind:this={docBodyMarkdownRoot}
-                class="js-doc-markdown-body px-4 py-3"
-                role="region"
-                aria-label="Document body"
-                onmouseup={refreshStashedDocSelection}
+                class="min-w-0 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
               >
-                {#if displayedContent}
-                  <MarkdownRenderer
-                    source={displayedContent}
-                    class="text-meta leading-relaxed text-[var(--fg)]"
-                  />
-                {:else}
-                  <p class="text-meta text-[var(--fg-muted)]">(No content)</p>
-                {/if}
+                <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+                <div
+                  bind:this={docBodyMarkdownRoot}
+                  class="js-doc-markdown-body px-4 py-3"
+                  role="region"
+                  aria-label="Document body"
+                  onmouseup={refreshStashedDocSelection}
+                >
+                  {#if displayedContent}
+                    <MarkdownRenderer
+                      source={displayedContent}
+                      class="text-meta leading-relaxed text-[var(--fg)]"
+                    />
+                  {:else}
+                    <p class="text-meta text-[var(--fg-muted)]">(No content)</p>
+                  {/if}
+                </div>
               </div>
             </div>
-          </div>
+          {/if}
 
           <div class="mt-6 border-t border-[var(--line)] pt-4">
             <IdsIntegrityDisclosure
@@ -1433,19 +1413,26 @@
       </div>
     </div>
     {#if document.thread_id}
-      <DocumentDiscussionRail
-        doc={document}
-        {workspaceSlug}
-        workspaceId={data?.workspaceId ?? ""}
-        openSignal={discussionOpenSignal}
-        {pendingDocumentComment}
-        onPendingDocumentPostConsumed={clearDocumentTextComment}
-        onClearPendingDocumentPost={clearDocumentTextComment}
-        currentDocumentContent={displayedContent}
-        onDocumentTextAnchorContextChange={(ctx) => {
-          documentAnchorContext = ctx;
-        }}
-      />
+      <!--
+        On mobile this lives inside `page-dock-feed` (sticky bottom of dock
+        layout). On desktop the rail renders its own `<aside>` and `lg:contents`
+        passes the aside through the flex-row parent unchanged.
+      -->
+      <div class="page-dock-feed lg:contents">
+        <DocumentDiscussionRail
+          doc={document}
+          {workspaceSlug}
+          workspaceId={data?.workspaceId ?? ""}
+          openSignal={discussionOpenSignal}
+          {pendingDocumentComment}
+          onPendingDocumentPostConsumed={clearDocumentTextComment}
+          onClearPendingDocumentPost={clearDocumentTextComment}
+          currentDocumentContent={displayedContent}
+          onDocumentTextAnchorContextChange={(ctx) => {
+            documentAnchorContext = ctx;
+          }}
+        />
+      </div>
     {/if}
   </div>
 

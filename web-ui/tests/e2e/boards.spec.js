@@ -738,12 +738,17 @@ test("board UI supports create/edit and card mutation flows", async ({
     },
   ]);
 
-  await page.getByRole("button", { name: "Add card", exact: true }).click();
+  await page.getByRole("link", { name: "Add card", exact: true }).click();
+  await expect(page).toHaveURL(/\/boards\/[^/]+\/cards\/new$/);
+  await expect(
+    page.getByRole("heading", { name: "Add card", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "More options", exact: true }).click();
   await page
-    .getByRole("textbox", { name: "Board timeline search" })
+    .getByRole("textbox", { name: "Topic or thread search" })
     .fill("Execution Track");
   await page.getByRole("button", { name: /Execution Track/ }).click();
-  await page.getByLabel("Target column").selectOption("ready");
+  await page.getByLabel("Column", { exact: true }).selectOption("ready");
   await page
     .getByRole("textbox", { name: "Document search" })
     .fill("Incident Playbook");
@@ -753,12 +758,14 @@ test("board UI supports create/edit and card mutation flows", async ({
     page.getByRole("button", { name: "Manage Execution Track" }),
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "Add card", exact: true }).click();
+  await page.getByRole("link", { name: "Add card", exact: true }).click();
+  await expect(page).toHaveURL(/\/boards\/[^/]+\/cards\/new$/);
+  await page.getByRole("button", { name: "More options", exact: true }).click();
   await page
-    .getByRole("textbox", { name: "Board timeline search" })
+    .getByRole("textbox", { name: "Topic or thread search" })
     .fill("Review Prep");
   await page.getByRole("button", { name: /Review Prep/ }).click();
-  await page.getByLabel("Target column").selectOption("ready");
+  await page.getByLabel("Column", { exact: true }).selectOption("ready");
   await page.getByRole("button", { name: "Add card", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Manage Review Prep" }),

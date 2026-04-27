@@ -8,6 +8,7 @@
     createTimelineContext,
     setTimelineContext,
   } from "$lib/timelineContext";
+  import DiscussionDrawer from "$lib/components/DiscussionDrawer.svelte";
   import MessagesTab from "$lib/components/timeline/MessagesTab.svelte";
 
   /**
@@ -61,6 +62,13 @@
     if (Number.isFinite(w)) {
       railWidth = Math.min(WIDTH_MAX, Math.max(WIDTH_MIN, w));
     }
+    const mq = window.matchMedia("(min-width: 1024px)");
+    isLg = mq.matches;
+    const onMq = () => {
+      isLg = mq.matches;
+    };
+    mq.addEventListener("change", onMq);
+    return () => mq.removeEventListener("change", onMq);
   });
 
   function persistOpen(next) {
@@ -155,7 +163,11 @@
    * revisit and switch to a shared SSE-backed store.
    */
   const timelineWorkspaceSlug = writable("");
+  /** Feeds the desktop `aside` `MessagesTab` only (`{#if isLg}`). Mobile uses `DiscussionDrawer`'s own context. */
   const timelineApi = createTimelineContext(coreClient);
+
+  /** When false, mobile uses `DiscussionDrawer` only; the desktop aside is not mounted. */
+  let isLg = $state(false);
 
   $effect.pre(() => {
     timelineWorkspaceSlug.set(String(workspaceSlug ?? ""));
@@ -195,8 +207,9 @@
     else if (legacy === "1") railOpen = true;
   });
 
+  /** Desktop rail only: avoids a second `MessagesTab` + load on mobile (drawer owns that view). */
   $effect(() => {
-    if (threadId) {
+    if (threadId && isLg) {
       void timelineApi.loadTimeline(threadId);
     }
   });
@@ -233,128 +246,155 @@
 </script>
 
 {#if threadId && docId}
-  <aside
-    class="w-full border-t border-[var(--line)] bg-[var(--panel)] lg:shrink-0 lg:border-t-0 lg:border-l {railOpen
-      ? 'lg:w-[var(--doc-rail-w)]'
-      : 'lg:w-14'}"
-    style={railOpen ? `--doc-rail-w:${railWidth}px` : undefined}
-  >
-    {#if !railOpen}
-      <!--
-        Per polish §P6: on large screens we use a square icon-only button so
-        narrow rails localize cleanly (no rotated/cramped text). On mobile the
-        rail collapses inline and a full-width text button is far more
-        recognisable than an icon.
-      -->
-      <div
-        class="px-3 py-2 lg:flex lg:h-full lg:min-h-[12rem] lg:items-start lg:justify-center lg:px-0 lg:py-3"
-      >
-        <button
-          type="button"
-          class="w-full text-micro font-medium text-accent-text hover:text-accent-text lg:hidden"
-          onclick={() => persistOpen(true)}
+  <!--
+    Mobile (below lg): shared DiscussionDrawer — consistent chrome with the
+    board page. Each DiscussionDrawer creates its own isolated timelineContext
+    so it doesn't collide with the desktop rail's context below.
+  -->
+  <!--
+    The doc detail page wraps its mobile content in `page-dock-layout` and
+    places this drawer inside `page-dock-feed`, so it pins to the viewport
+    bottom inline (matching boards / topic). No `position: fixed` here — that
+    older pattern produced the disconnected "floating chat bar" feel.
+  -->
+  <div class="flex w-full min-h-0 flex-col overflow-hidden lg:hidden">
+    <DiscussionDrawer
+      {threadId}
+      {workspaceId}
+      {workspaceSlug}
+      label="Discussion"
+      storageKey="doc-discussion:{docId}"
+      emptyMessage={DOC_DISCUSSION_EMPTY}
+      subjectRefFilter={documentRef}
+      extraPostRefs={[documentRef]}
+      archiveLabelKind="resolve"
+      {pendingDocumentComment}
+      {onPendingDocumentPostConsumed}
+      {onClearPendingDocumentPost}
+      {currentDocumentContent}
+      {onDocumentTextAnchorContextChange}
+      {openSignal}
+      expandFillsParent
+      narrowEdgeToEdge
+    />
+  </div>
+
+  <!--
+    Desktop (lg+): resizable side rail. Not mounted on small viewports so we do
+    not keep a second MessagesTab in the tree (the mobile drawer is the sole
+    owner there).
+  -->
+  {#if isLg}
+    <aside
+      class="lg:shrink-0 lg:border-l lg:border-[var(--line)] lg:bg-[var(--panel)] {railOpen
+        ? 'lg:w-[var(--doc-rail-w)]'
+        : 'lg:w-14'}"
+      style={railOpen ? `--doc-rail-w:${railWidth}px` : undefined}
+    >
+      {#if !railOpen}
+        <div
+          class="lg:flex lg:h-full lg:min-h-[12rem] lg:items-start lg:justify-center lg:px-0 lg:py-3"
         >
-          Show discussion
-        </button>
-        <button
-          type="button"
-          class="hidden lg:inline-flex lg:h-8 lg:w-8 lg:cursor-pointer lg:items-center lg:justify-center lg:rounded-full lg:border lg:border-[var(--line)] lg:bg-[var(--panel)] lg:text-[var(--fg-muted)] lg:shadow-sm lg:transition-colors lg:hover:bg-[var(--bg-soft)] lg:hover:text-[var(--fg)]"
-          aria-label="Show discussion"
-          title="Show discussion"
-          onclick={() => persistOpen(true)}
-        >
-          <svg
-            class="h-4 w-4"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
+          <button
+            type="button"
+            class="hidden lg:inline-flex lg:h-8 lg:w-8 lg:cursor-pointer lg:items-center lg:justify-center lg:rounded-full lg:border lg:border-[var(--line)] lg:bg-[var(--panel)] lg:text-[var(--fg-muted)] lg:shadow-sm lg:transition-colors lg:hover:bg-[var(--bg-soft)] lg:hover:text-[var(--fg)]"
+            aria-label="Show discussion"
+            title="Show discussion"
+            onclick={() => persistOpen(true)}
           >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              d="M15 19l-7-7 7-7"
-            />
-          </svg>
-        </button>
-      </div>
-    {:else}
-      <div
-        class="flex max-h-[min(70vh,44rem)] w-full min-w-0 flex-col lg:sticky lg:top-4 lg:max-h-[calc(100vh-5rem)] lg:flex-row"
-      >
-        <!-- Draggable left edge (desktop); width remains railWidth for whole aside. -->
-        <div class="hidden shrink-0 lg:relative lg:block lg:w-3">
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Drag to resize discussion panel"
-            title="Drag to resize"
-            class="group absolute inset-y-0 -left-1 z-[1] flex w-3 cursor-ew-resize touch-none select-none items-stretch pl-0.5 {railResizing
-              ? 'ring-1 ring-[var(--line)]'
-              : ''}"
-            onpointerdown={onResizePointerDown}
-            onpointermove={onResizePointerMove}
-            onpointerup={onResizePointerUp}
-            onpointercancel={onResizePointerUp}
-            onlostpointercapture={() => endRailResize(null)}
-          >
-            <div
-              class="mx-auto h-full w-px bg-[var(--line)] transition-opacity group-hover:opacity-100 {railResizing
-                ? 'bg-accent-text opacity-100'
-                : 'opacity-60'}"
-            ></div>
-          </div>
-        </div>
-        <div class="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div
-            class="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--line)] px-2 py-2 pr-2.5"
-          >
-            <h2 class="min-w-0 text-meta font-medium text-[var(--fg)]">
-              Discussion
-            </h2>
-            <button
-              type="button"
-              class="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[var(--line)] bg-[var(--panel)] text-[var(--fg-muted)] shadow-sm transition-colors hover:bg-[var(--bg-soft)] hover:text-[var(--fg)]"
-              onclick={() => persistOpen(false)}
-              aria-label="Hide discussion"
-              title="Hide discussion"
+            <svg
+              class="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
             >
-              <svg
-                class="h-4 w-4"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M9 5l7 7-7 7"
-                />
-              </svg>
-            </button>
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M15 19l-7-7 7-7"
+              />
+            </svg>
+          </button>
+        </div>
+      {:else}
+        <div
+          class="flex max-h-[min(70vh,44rem)] w-full min-w-0 flex-col lg:sticky lg:top-4 lg:max-h-[calc(100vh-5rem)] lg:flex-row"
+        >
+          <!-- Draggable left edge (desktop only). -->
+          <div class="hidden shrink-0 lg:relative lg:block lg:w-3">
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Drag to resize discussion panel"
+              title="Drag to resize"
+              class="group absolute inset-y-0 -left-1 z-[1] flex w-3 cursor-ew-resize touch-none select-none items-stretch pl-0.5 {railResizing
+                ? 'ring-1 ring-[var(--line)]'
+                : ''}"
+              onpointerdown={onResizePointerDown}
+              onpointermove={onResizePointerMove}
+              onpointerup={onResizePointerUp}
+              onpointercancel={onResizePointerUp}
+              onlostpointercapture={() => endRailResize(null)}
+            >
+              <div
+                class="mx-auto h-full w-px bg-[var(--line)] transition-opacity group-hover:opacity-100 {railResizing
+                  ? 'bg-accent-text opacity-100'
+                  : 'opacity-60'}"
+              ></div>
+            </div>
           </div>
-          <div class="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-            <MessagesTab
-              {threadId}
-              postRouteScopeId={docId}
-              workspaceId={String(workspaceId ?? "")}
-              onMessagePost={handleMessagePost}
-              subjectRefFilter={documentRef}
-              extraPostRefs={[documentRef]}
-              discussionEmptyMessage={DOC_DISCUSSION_EMPTY}
-              {pendingDocumentComment}
-              {onPendingDocumentPostConsumed}
-              {onClearPendingDocumentPost}
-              {currentDocumentContent}
-              archiveLabelKind="resolve"
-              {onDocumentTextAnchorContextChange}
-            />
+          <div class="flex min-h-0 min-w-0 flex-1 flex-col">
+            <div
+              class="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--line)] px-2 py-2 pr-2.5"
+            >
+              <h2 class="min-w-0 text-meta font-medium text-[var(--fg)]">
+                Discussion
+              </h2>
+              <button
+                type="button"
+                class="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[var(--line)] bg-[var(--panel)] text-[var(--fg-muted)] shadow-sm transition-colors hover:bg-[var(--bg-soft)] hover:text-[var(--fg)]"
+                onclick={() => persistOpen(false)}
+                aria-label="Hide discussion"
+                title="Hide discussion"
+              >
+                <svg
+                  class="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M9 5l7 7-7 7"
+                  />
+                </svg>
+              </button>
+            </div>
+            <div class="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+              <MessagesTab
+                {threadId}
+                postRouteScopeId={docId}
+                workspaceId={String(workspaceId ?? "")}
+                onMessagePost={handleMessagePost}
+                subjectRefFilter={documentRef}
+                extraPostRefs={[documentRef]}
+                discussionEmptyMessage={DOC_DISCUSSION_EMPTY}
+                {pendingDocumentComment}
+                {onPendingDocumentPostConsumed}
+                {onClearPendingDocumentPost}
+                {currentDocumentContent}
+                archiveLabelKind="resolve"
+                {onDocumentTextAnchorContextChange}
+              />
+            </div>
           </div>
         </div>
-      </div>
-    {/if}
-  </aside>
+      {/if}
+    </aside>
+  {/if}
 {/if}

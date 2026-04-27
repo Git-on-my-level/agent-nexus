@@ -1,4 +1,8 @@
 import { splitTypedRef } from "$lib/inboxUtils";
+import { resolveRefLink } from "$lib/refLinkModel";
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Canonical backing-thread id for board card rows / create payloads (`thread_id` only).
@@ -167,6 +171,80 @@ export function boardWorkspaceInspectNav(workspace) {
   if (threadId) return { kind: "thread", segment: threadId };
 
   return null;
+}
+
+/**
+ * Human-readable label for the board workspace header link (topic title, thread title,
+ * or ref humanization). Omits values that would duplicate a raw backing-thread UUID.
+ *
+ * @param {Record<string, unknown> | null | undefined} workspace
+ * @param {{ kind: 'topic' | 'thread', segment: string } | null | undefined} boardInspectNav
+ * @param {{ organization?: string, workspace?: string }} [routeParams]
+ * @returns {string}
+ */
+export function boardWorkspaceContextLinkLabel(
+  workspace,
+  boardInspectNav,
+  routeParams = {},
+) {
+  if (!boardInspectNav || typeof boardInspectNav !== "object") return "";
+  const kind = boardInspectNav.kind;
+  const segment = String(boardInspectNav.segment ?? "").trim();
+  if (!segment) return "";
+
+  const org = String(routeParams.organization ?? "").trim();
+  const ws = String(routeParams.workspace ?? "").trim();
+  const resolveOpts = {
+    humanize: true,
+    organizationSlug: org,
+    workspaceSlug: ws,
+  };
+
+  if (kind === "topic") {
+    const pt = workspace?.primary_topic;
+    if (pt && typeof pt === "object") {
+      const id = String(pt.id ?? "").trim();
+      const title = String(pt.title ?? "").trim();
+      if (id && id === segment && title) {
+        return title;
+      }
+    }
+    return String(
+      resolveRefLink(`topic:${segment}`, resolveOpts).primaryLabel ?? "",
+    ).trim();
+  }
+
+  if (kind === "thread") {
+    const bt = workspace?.backing_thread;
+    if (bt && typeof bt === "object") {
+      const id = String(bt.id ?? "").trim();
+      const title = String(bt.title ?? "").trim();
+      if (
+        id &&
+        id === segment &&
+        title &&
+        !(UUID_RE.test(segment) && title === segment)
+      ) {
+        return title;
+      }
+    }
+    return String(
+      resolveRefLink(`thread:${segment}`, resolveOpts).primaryLabel ?? "",
+    ).trim();
+  }
+
+  return "";
+}
+
+/**
+ * When false, omit the topic/thread segment of the board context line (avoids a bare UUID).
+ */
+export function shouldShowBoardWorkspaceContextLink(label, navSegment) {
+  const l = String(label ?? "").trim();
+  const s = String(navSegment ?? "").trim();
+  if (!l || !s) return false;
+  if (l === s && UUID_RE.test(s)) return false;
+  return true;
 }
 
 /**

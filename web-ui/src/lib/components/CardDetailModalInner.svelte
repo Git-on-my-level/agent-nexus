@@ -46,7 +46,7 @@
   import IdsIntegrityDisclosure from "$lib/components/IdsIntegrityDisclosure.svelte";
   import GuidedTypedRefsInput from "$lib/components/GuidedTypedRefsInput.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
-  import MessagesTab from "$lib/components/timeline/MessagesTab.svelte";
+  import DiscussionDrawer from "$lib/components/DiscussionDrawer.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
   import ResourceShareMenu from "$lib/components/ResourceShareMenu.svelte";
   import SearchableEntityPicker from "$lib/components/SearchableEntityPicker.svelte";
@@ -201,7 +201,7 @@
   });
 
   $effect(() => {
-    if (cdmDetailPane !== "messages" && cdmDetailPane !== "timeline") return;
+    if (cdmDetailPane !== "timeline") return;
     if (linkedThreadId) void timelineApi.loadTimeline(linkedThreadId);
   });
 
@@ -223,11 +223,6 @@
         .join(" · "),
       keywords: [],
     }));
-  }
-
-  async function handleMessagePost(tid, event) {
-    await coreClient.createEvent({ event });
-    await timelineApi.refreshTimeline();
   }
 
   function buildCardPatch(m, draft) {
@@ -375,9 +370,7 @@
     }
   }
 
-  function pickDetailPane(
-    /** @type {"overview" | "messages" | "timeline"} */ pane,
-  ) {
+  function pickDetailPane(/** @type {"overview" | "timeline"} */ pane) {
     cdmDetailPane = pane;
   }
 
@@ -594,19 +587,6 @@
           onclick={() => pickDetailPane("overview")}
         >
           Overview
-        </button>
-        <button
-          type="button"
-          role="tab"
-          data-cdm-pane-tab="messages"
-          data-testid="cdm-tab-messages"
-          tabindex={cdmDetailPane === "messages" ? 0 : -1}
-          aria-selected={cdmDetailPane === "messages"}
-          class={`relative inline-flex cursor-pointer border-0 border-b-2 border-transparent bg-transparent px-3 py-2 text-meta font-medium transition-colors ${cdmDetailPane === "messages" ? "border-accent text-[var(--fg)]" : "text-[var(--fg-muted)] hover:text-[var(--fg)]"}`}
-          onpointerdown={() => pickDetailPane("messages")}
-          onclick={() => pickDetailPane("messages")}
-        >
-          Messages
         </button>
         <button
           type="button"
@@ -971,20 +951,6 @@
             </div>
           {/if}
         </div>
-      {:else if cdmDetailPane === "messages"}
-        <div class="px-4 pb-4 pt-3" data-cdm-panel="messages">
-          {#if linkedThreadId}
-            <MessagesTab
-              threadId={linkedThreadId}
-              onMessagePost={handleMessagePost}
-              {workspaceId}
-            />
-          {:else}
-            <p class="text-meta text-[var(--fg-muted)]">
-              This card has no backing thread; messages require a linked thread.
-            </p>
-          {/if}
-        </div>
       {:else if cdmDetailPane === "timeline"}
         <div class="px-4 pb-4 pt-1" data-cdm-panel="timeline">
           {#if linkedThreadId}
@@ -998,6 +964,16 @@
         </div>
       {/if}
     </div>
+
+    {#if linkedThreadId}
+      <DiscussionDrawer
+        threadId={linkedThreadId}
+        {workspaceId}
+        {workspaceSlug}
+        label="Discussion"
+        storageKey={`card-discussion:${cardKey}`}
+      />
+    {/if}
 
     <div
       class="shrink-0 border-t border-[var(--line)] bg-[var(--panel)] px-4 py-3"

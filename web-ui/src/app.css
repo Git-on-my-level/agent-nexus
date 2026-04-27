@@ -999,6 +999,173 @@
     width: min(var(--shell-content-max, 100rem), 100%);
   }
 
+  /**
+   * Page dock layout: the page becomes a single flex column constrained to the
+   * visible viewport so a sticky bottom strip ("dock") stays in the operator's
+   * thumb / mouse reach while the rest scrolls above it. Used by Boards
+   * (announcements feed), Topic Messages (composer), and Doc detail
+   * (discussion drawer) so all three feel the same.
+   *
+   * Variants:
+   *   .page-dock-layout              — constrains on both mobile and desktop
+   *                                    (boards: announcements always pinned)
+   *   .page-dock-layout--mobile-only — constrains on mobile only; on desktop
+   *                                    the page falls back to natural flow
+   *                                    (topic Messages, doc detail — content
+   *                                    can be unbounded on wider screens).
+   */
+  .page-dock-layout {
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100dvh - 5.5rem);
+    max-height: calc(100dvh - 5.5rem);
+  }
+
+  @media (min-width: 1024px) {
+    .page-dock-layout {
+      min-height: calc(100vh - 3.5rem);
+      max-height: calc(100vh - 3.5rem);
+    }
+
+    .page-dock-layout--mobile-only {
+      display: block;
+      min-height: 0;
+      max-height: none;
+    }
+  }
+
+  .page-dock-scroll {
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* "Head" — content above a flex-fill body (e.g. breadcrumbs + tabs above
+     a chat region). Takes its natural height; does not scroll itself. */
+  .page-dock-head {
+    flex: 0 0 auto;
+  }
+
+  /* "Body" — fills the remaining vertical space and lets a child manage its
+     own scrolling + sticky composer (used by MessagesTab pinComposerNarrow). */
+  .page-dock-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .page-dock-feed {
+    flex: 0 0 auto;
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
+    margin-top: auto;
+    box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.12);
+  }
+
+  @media (min-width: 1024px) {
+    .page-dock-layout--mobile-only .page-dock-scroll {
+      overflow: visible;
+      flex: initial;
+    }
+    .page-dock-layout--mobile-only .page-dock-body {
+      display: block;
+      flex: initial;
+      min-height: 0;
+    }
+    .page-dock-layout--mobile-only .page-dock-feed {
+      position: static;
+      box-shadow: none;
+    }
+  }
+
+  @media (max-width: 1023px) {
+    .page-dock-feed .dd-surface {
+      min-height: 0;
+    }
+
+    /**
+     * Doc detail (mobile): pin discussion to the viewport (above the tab bar)
+     * so document scrolling in `shell-main-scroll` is independent from chat
+     * scrolling. Without `position: fixed`, sticky + shared ancestry ties the
+     * two scrollports together.
+     */
+    .page-dock-layout--doc-discussion.page-dock-layout {
+      min-height: 0;
+      max-height: none;
+    }
+
+    /* Doc body scrolls only in the shell — avoid nested page-dock scrollers. */
+    .page-dock-layout--doc-discussion .page-dock-scroll {
+      overflow: visible;
+      flex: 1 1 auto;
+      min-height: 0;
+      /* Reserve space for the fixed dock (expanded cap + tab bar band). */
+      padding-bottom: calc(
+        min(52dvh, 30rem) + 3.75rem + env(safe-area-inset-bottom, 0px)
+      );
+    }
+
+    .page-dock-layout--doc-discussion .page-dock-feed {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 15;
+      width: 100%;
+      max-width: 100%;
+      margin: 0;
+      margin-top: 0;
+      flex: unset;
+      /* Lift panel content above `shell-bottom-nav` (z-index 20). */
+      padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+      box-sizing: border-box;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .page-dock-layout--doc-discussion
+      .page-dock-feed:not(:has(button[aria-expanded="true"])) {
+      max-height: none;
+      height: auto;
+    }
+
+    /* `padding-bottom` for nav is inside this height (border-box). */
+    .page-dock-layout--doc-discussion
+      .page-dock-feed:has(button[aria-expanded="true"]) {
+      height: min(58dvh, calc(100dvh - 2.5rem));
+      max-height: min(58dvh, calc(100dvh - 2.5rem));
+    }
+
+    .page-dock-layout--doc-discussion .page-dock-feed > * {
+      display: flex;
+      min-height: 0;
+      flex: 0 1 auto;
+      flex-direction: column;
+    }
+
+    .page-dock-layout--doc-discussion
+      .page-dock-feed:has(button[aria-expanded="true"])
+      > * {
+      flex: 1 1 auto;
+      height: 100%;
+      max-height: 100%;
+      min-height: 0;
+    }
+  }
+
+  @supports (backdrop-filter: blur(8px)) {
+    .page-dock-feed {
+      background: color-mix(in srgb, var(--panel) 88%, transparent);
+      backdrop-filter: blur(8px);
+    }
+  }
+
   .markdown-rendered h1,
   .markdown-rendered h2,
   .markdown-rendered h3 {
@@ -1285,6 +1452,20 @@
 
     .shell-main-scroll {
       padding: 1.5rem 2rem 2.5rem;
+    }
+  }
+
+  /*
+   * Must follow `.shell-main-scroll` padding shorthands above so doc discussion
+   * stays full-bleed on small *and* sm–lg tablet widths (bottom nav still on).
+   */
+  @media (max-width: 1023px) {
+    /*
+     * Fixed doc discussion clears the tab bar itself; `page-dock-scroll`
+     * padding reserves space for the sheet. Avoid double bottom inset here.
+     */
+    .shell-main-scroll:has(.page-dock-layout--doc-discussion) {
+      padding-bottom: env(safe-area-inset-bottom, 0px);
     }
   }
 }

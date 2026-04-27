@@ -303,85 +303,104 @@
   }
 </script>
 
-<TopicDetailHeader {threadId} {detailAsTopic} />
-
+<!--
+  When the Messages tab is active we wrap the whole page in a `page-dock-layout`
+  (mobile-only) so the composer is pinned to the viewport bottom and the
+  message list scrolls between the sticky tab bar and the sticky composer —
+  the same pattern used by the Boards announcement strip and the doc detail
+  discussion drawer. Other tabs render in normal page flow.
+-->
 {#if topicLoading}
+  <TopicDetailHeader {threadId} {detailAsTopic} />
   <p class="text-[13px] text-[var(--fg-muted)]">Loading...</p>
 {:else if topicError}
+  <TopicDetailHeader {threadId} {detailAsTopic} />
   <p class="rounded-md bg-danger-soft px-3 py-2 text-[13px] text-danger-text">
     {topicError}
   </p>
 {:else if !topic}
+  <TopicDetailHeader {threadId} {detailAsTopic} />
   <p class="text-[13px] text-[var(--fg-muted)]">
     {detailAsTopic ? "Topic not found." : "Thread not found."}
   </p>
 {:else}
+  {@const isMessagesTab = activeTab === "messages"}
   <div
-    class="mt-3 flex gap-0 border-b border-[var(--line)]"
-    aria-label="Topic sections"
-    role="tablist"
+    class={isMessagesTab
+      ? "page-dock-layout page-dock-layout--mobile-only"
+      : ""}
   >
-    {#each [{ id: "messages", label: "Messages" }, { id: "about", label: "About" }, { id: "documents", label: "Docs", badge: documentCount }, { id: "boards", label: "Boards", badge: boardCount }, { id: "timeline", label: "Timeline" }] as tab (tab.id)}
-      <button
-        class={`relative cursor-pointer px-3 py-2 text-[13px] font-medium transition-colors ${activeTab === tab.id ? "text-[var(--fg)]" : "text-[var(--fg-muted)] hover:text-[var(--fg)]"}`}
-        onclick={() => void setActiveTab(tab.id)}
-        type="button"
-        role="tab"
-        aria-selected={activeTab === tab.id}
-        tabindex={activeTab === tab.id ? 0 : -1}
+    <div class={isMessagesTab ? "page-dock-head" : "contents"}>
+      <TopicDetailHeader {threadId} {detailAsTopic} />
+
+      <div
+        class="mt-3 flex gap-0 border-b border-[var(--line)]"
+        aria-label="Topic sections"
+        role="tablist"
       >
-        {tab.label}{#if tab.badge !== undefined && tab.badge > 0}
-          <span class="ml-0.5 tabular-nums text-[var(--fg-muted)]"
-            >({tab.badge})</span
-          >{/if}
-        {#if activeTab === tab.id}
-          <span
-            class="pointer-events-none absolute inset-x-0 -bottom-px h-0.5 bg-accent-solid"
-          ></span>
-        {/if}
-      </button>
-    {/each}
+        {#each [{ id: "messages", label: "Messages" }, { id: "about", label: "About" }, { id: "documents", label: "Docs", badge: documentCount }, { id: "boards", label: "Boards", badge: boardCount }, { id: "timeline", label: "Timeline" }] as tab (tab.id)}
+          <button
+            class={`relative cursor-pointer px-3 py-2 text-[13px] font-medium transition-colors ${activeTab === tab.id ? "text-[var(--fg)]" : "text-[var(--fg-muted)] hover:text-[var(--fg)]"}`}
+            onclick={() => void setActiveTab(tab.id)}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            tabindex={activeTab === tab.id ? 0 : -1}
+          >
+            {tab.label}{#if tab.badge !== undefined && tab.badge > 0}
+              <span class="ml-0.5 tabular-nums text-[var(--fg-muted)]"
+                >({tab.badge})</span
+              >{/if}
+            {#if activeTab === tab.id}
+              <span
+                class="pointer-events-none absolute inset-x-0 -bottom-px h-0.5 bg-accent-solid"
+              ></span>
+            {/if}
+          </button>
+        {/each}
+      </div>
+    </div>
+
+    {#if activeTab === "about"}
+      <div role="tabpanel" tabindex="0">
+        <TopicOverviewTab
+          {threadId}
+          onSave={handleSaveTopic}
+          {conflictWarning}
+          {editNotice}
+        />
+      </div>
+    {/if}
+
+    {#if activeTab === "documents"}
+      <div role="tabpanel" tabindex="0">
+        <TopicDocumentsPanel {threadId} />
+      </div>
+    {/if}
+
+    {#if activeTab === "boards"}
+      <div role="tabpanel" tabindex="0">
+        <TopicBoardsPanel {threadId} />
+      </div>
+    {/if}
+
+    {#if activeTab === "messages"}
+      <div class="page-dock-body pt-3 lg:pt-3" role="tabpanel" tabindex="0">
+        <MessagesTab
+          threadId={String(topic.id)}
+          postRouteScopeId={threadId}
+          onMessagePost={handleMessagePost}
+          workspaceId={data?.workspaceId ?? ""}
+          pinComposerNarrow={true}
+          discussionEmptyMessage={`Everything about ${topic.title || "this topic"} lives here. Post a message to start the conversation. Docs and Boards you link to this topic appear in their tabs.`}
+        />
+      </div>
+    {/if}
+
+    {#if activeTab === "timeline"}
+      <div class="pt-1" role="tabpanel" tabindex="0">
+        <TimelineTab threadId={String(topic.id)} />
+      </div>
+    {/if}
   </div>
-
-  {#if activeTab === "about"}
-    <div role="tabpanel" tabindex="0">
-      <TopicOverviewTab
-        {threadId}
-        onSave={handleSaveTopic}
-        {conflictWarning}
-        {editNotice}
-      />
-    </div>
-  {/if}
-
-  {#if activeTab === "documents"}
-    <div role="tabpanel" tabindex="0">
-      <TopicDocumentsPanel {threadId} />
-    </div>
-  {/if}
-
-  {#if activeTab === "boards"}
-    <div role="tabpanel" tabindex="0">
-      <TopicBoardsPanel {threadId} />
-    </div>
-  {/if}
-
-  <!-- Inset from tab bar matches internal list gap: gap-3 (Messages), gap-1 (Timeline). -->
-  {#if activeTab === "messages"}
-    <div class="pt-3" role="tabpanel" tabindex="0">
-      <MessagesTab
-        threadId={String(topic.id)}
-        postRouteScopeId={threadId}
-        onMessagePost={handleMessagePost}
-        workspaceId={data?.workspaceId ?? ""}
-        discussionEmptyMessage={`Everything about ${topic.title || "this topic"} lives here. Post a message to start the conversation. Docs and Boards you link to this topic appear in their tabs.`}
-      />
-    </div>
-  {/if}
-
-  {#if activeTab === "timeline"}
-    <div class="pt-1" role="tabpanel" tabindex="0">
-      <TimelineTab threadId={String(topic.id)} />
-    </div>
-  {/if}
 {/if}

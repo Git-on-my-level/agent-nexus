@@ -57,7 +57,6 @@
   let createError = $state("");
 
   let draft = $state({
-    id: "",
     title: "",
     content: "",
   });
@@ -101,7 +100,6 @@
 
   function resetDraft() {
     draft = {
-      id: "",
       title: "",
       content: "",
     };
@@ -132,13 +130,10 @@
     createError = "";
 
     try {
-      const docPayload = {
-        title: draft.title.trim(),
-      };
-      if (draft.id.trim()) docPayload.id = draft.id.trim();
-
       const result = await coreClient.createDocument({
-        document: docPayload,
+        document: {
+          title: draft.title.trim(),
+        },
         content: draft.content.trim(),
         content_type: "text",
       });
@@ -374,8 +369,8 @@
       The title is saved together with the first revision. You can edit the body
       and add more revisions afterward.
     </p>
-    <div class="grid gap-3 sm:grid-cols-2">
-      <label class="sm:col-span-2">
+    <div class="grid gap-3">
+      <label>
         <span class="text-micro font-medium text-[var(--fg-muted)]"
           >Title <span class="text-danger-text">*</span></span
         >
@@ -387,17 +382,6 @@
         />
       </label>
       <label>
-        <span class="text-micro font-medium text-[var(--fg-muted)]"
-          >ID (optional)</span
-        >
-        <input
-          bind:value={draft.id}
-          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-meta text-[var(--fg)] placeholder:text-[var(--fg-subtle)]"
-          placeholder="auto-generated if empty"
-          type="text"
-        />
-      </label>
-      <label class="sm:col-span-2">
         <span class="text-micro font-medium text-[var(--fg-muted)]"
           >Head content (Markdown) <span class="text-danger-text">*</span></span
         >

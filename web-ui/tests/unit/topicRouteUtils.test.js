@@ -3,9 +3,11 @@ import { describe, expect, it } from "vitest";
 import {
   boardCardInspectNav,
   boardRowInspectNav,
+  boardWorkspaceContextLinkLabel,
   boardWorkspaceInspectNav,
   inboxTopicRouteSegment,
   resolveBoardCardThreadIdField,
+  shouldShowBoardWorkspaceContextLink,
   topicDetailPathFromRef,
   topicDetailPathFromSubject,
   topicRouteSegmentFromBackingThread,
@@ -199,6 +201,89 @@ describe("topicRouteUtils", () => {
           board: { thread_id: "th-1" },
         }),
       ).toBe("pt-1");
+    });
+  });
+
+  describe("boardWorkspaceContextLinkLabel", () => {
+    it("uses primary topic title when topic id matches nav", () => {
+      expect(
+        boardWorkspaceContextLinkLabel(
+          {
+            primary_topic: {
+              id: "top-1",
+              title: "Summer rollout",
+            },
+          },
+          { kind: "topic", segment: "top-1" },
+          {},
+        ),
+      ).toBe("Summer rollout");
+    });
+
+    it("uses backing thread title when thread id matches nav", () => {
+      expect(
+        boardWorkspaceContextLinkLabel(
+          {
+            backing_thread: {
+              id: "th-1",
+              title: "Ops sync",
+            },
+          },
+          { kind: "thread", segment: "th-1" },
+          {},
+        ),
+      ).toBe("Ops sync");
+    });
+
+    it("humanizes bare thread id when title would echo a uuid", () => {
+      const uuid = "a3f2e1b0-1234-5678-9abc-def012345678";
+      expect(
+        boardWorkspaceContextLinkLabel(
+          {
+            backing_thread: { id: uuid, title: uuid },
+          },
+          { kind: "thread", segment: uuid },
+          {},
+        ),
+      ).toMatch(/^Thread /);
+    });
+
+    it("topic nav without primary_topic uses humanized topic ref (e.g. topic from board refs only)", () => {
+      expect(
+        boardWorkspaceContextLinkLabel(
+          { primary_topic: null, board: { refs: ["topic:from-ref-only"] } },
+          { kind: "topic", segment: "from-ref-only" },
+          {},
+        ),
+      ).toMatch(/^Topic /);
+    });
+
+    it("thread nav without backing_thread payload still humanizes from segment", () => {
+      const uuid = "b4e3f2c1-2345-6789-abcd-ef0123456789";
+      expect(
+        boardWorkspaceContextLinkLabel(
+          { backing_thread: null, board: { thread_id: uuid, refs: [] } },
+          { kind: "thread", segment: uuid },
+          {},
+        ),
+      ).toMatch(/^Thread /);
+    });
+  });
+
+  describe("shouldShowBoardWorkspaceContextLink", () => {
+    it("hides when label is still the raw uuid segment", () => {
+      const uuid = "a3f2e1b0-1234-5678-9abc-def012345678";
+      expect(shouldShowBoardWorkspaceContextLink(uuid, uuid)).toBe(false);
+    });
+
+    it("shows humanized thread labels", () => {
+      const uuid = "a3f2e1b0-1234-5678-9abc-def012345678";
+      expect(
+        shouldShowBoardWorkspaceContextLink(
+          `Thread ${uuid.slice(0, 10)}`,
+          uuid,
+        ),
+      ).toBe(true);
     });
   });
 

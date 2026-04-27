@@ -33,3 +33,4 @@ _ui_working_tree.patch
 
 # Cursor debug-session NDJSON (local only)
 .cursor/debug-*.log
+.gstack/

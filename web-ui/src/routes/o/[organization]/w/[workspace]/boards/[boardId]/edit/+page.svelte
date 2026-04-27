@@ -15,8 +15,8 @@
   } from "$lib/searchHelpers";
   import { toActorPickerOptions } from "$lib/systemActor.js";
   import { workspacePath } from "$lib/workspacePaths";
+  import { boardPrimaryTopicRef } from "$lib/topicRouteUtils";
   import {
-    boardPrimaryTopicRef,
     firstBoardDocumentId,
     joinDelimitedValues,
     parseDelimitedValues,

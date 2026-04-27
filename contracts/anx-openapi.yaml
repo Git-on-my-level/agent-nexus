@@ -5348,6 +5348,7 @@ components:
       properties:
         board: { $ref: '#/components/schemas/Board' }
         primary_topic: { $ref: '#/components/schemas/Topic' }
+        backing_thread: { $ref: '#/components/schemas/Thread' }
         cards:
           type: array
           items: { $ref: '#/components/schemas/BoardWorkspaceCard' }

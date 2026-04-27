@@ -1,11 +1,11 @@
 import { expect, test } from "@playwright/test";
 
 /**
- * Guards card detail modal Messages / Timeline tabs from hanging the UI.
+ * Guards card detail modal Discussion drawer + Timeline tab from hanging the UI.
  * Regression: unbounded mention/timeline refresh storms (e.g. principals fetches)
  * left the main thread wedged when switching tabs.
  */
-test("card detail modal Messages and Timeline tabs render without request storms", async ({
+test("card detail modal Discussion drawer and Timeline tab render without request storms", async ({
   page,
 }) => {
   const pageErrors = [];
@@ -310,15 +310,15 @@ test("card detail modal Messages and Timeline tabs render without request storms
   const tabCount = await dialog
     .locator('[aria-label="Card sections"] [role="tab"]')
     .count();
-  expect(tabCount, "expected 3 section tabs in modal").toBe(3);
+  expect(tabCount, "expected 2 section tabs in modal").toBe(2);
 
   const principalCountBefore = principalsRequestCount;
   const timelineCountBefore = timelineRequestCount;
 
-  await dialog.getByTestId("cdm-tab-messages").click();
+  await dialog.getByRole("button", { name: /^Discussion$/i }).click();
 
   await expect(dialog.getByTestId("cdm-section-tab-val")).toHaveText(
-    "messages",
+    "overview",
     {
       timeout: 5_000,
     },

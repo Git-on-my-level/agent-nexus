@@ -1117,8 +1117,9 @@ func buildBoardWorkspacePayload(ctx context.Context, opts handlerOptions, boardI
 		backingThreadID = boardID
 	}
 
+	var backingThread any
 	if backingThreadID != "" {
-		_, threadErr := opts.primitiveStore.GetThread(ctx, backingThreadID)
+		thread, threadErr := opts.primitiveStore.GetThread(ctx, backingThreadID)
 		if threadErr != nil {
 			if errors.Is(threadErr, primitives.ErrNotFound) {
 				warnings = append(warnings, map[string]any{
@@ -1128,6 +1129,11 @@ func buildBoardWorkspacePayload(ctx context.Context, opts handlerOptions, boardI
 			} else {
 				return nil, threadErr
 			}
+		} else {
+			if thread != nil {
+				primitives.StripThreadPlanningFieldsForAPI(thread)
+			}
+			backingThread = thread
 		}
 	}
 
@@ -1201,6 +1207,7 @@ func buildBoardWorkspacePayload(ctx context.Context, opts handlerOptions, boardI
 		"board_id":                boardID,
 		"board":                   board,
 		"primary_topic":           primaryTopic,
+		"backing_thread":          backingThread,
 		"cards":                   cardSection,
 		"documents":               documentsSection,
 		"inbox":                   inboxSection,
@@ -1208,7 +1215,7 @@ func buildBoardWorkspacePayload(ctx context.Context, opts handlerOptions, boardI
 		"projection_freshness":    freshness,
 		"board_summary_freshness": cloneWorkspaceMap(freshness),
 		"warnings":                map[string]any{"items": warnings, "count": len(warnings)},
-		"section_kinds":           map[string]any{"board": "canonical", "primary_topic": "canonical", "cards": "convenience", "documents": "derived", "inbox": "derived", "board_summary": "derived"},
+		"section_kinds":           map[string]any{"board": "canonical", "primary_topic": "canonical", "backing_thread": "canonical", "cards": "convenience", "documents": "derived", "inbox": "derived", "board_summary": "derived"},
 		"generated_at":            now.Format(time.RFC3339Nano),
 	}, nil
 }

@@ -69,6 +69,12 @@
      * count of non-archived anchors for the new-revision editor safeguard.
      */
     onDocumentTextAnchorContextChange = undefined,
+    /**
+     * On narrow viewports, pin the composer to the bottom: message list
+     * scrolls above while the entry form stays in thumb reach (topic board,
+     * document, and bottom drawers on mobile).
+     */
+    pinComposerNarrow = false,
   } = $props();
 
   let subjectRefFilterNorm = $derived(String(subjectRefFilter ?? "").trim());
@@ -570,94 +576,104 @@
   }
 </script>
 
-<div class="flex flex-col gap-3">
-  {#if archivedMessageCount > 0 || showSyncStatus}
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <div class="flex flex-wrap items-center gap-2 sm:gap-3">
-        {#if archivedMessageCount > 0}
-          <label
-            class="flex items-center gap-1.5 text-micro text-[var(--fg-muted)]"
-          >
-            <input
-              type="checkbox"
-              bind:checked={showArchived}
-              class="accent-[var(--accent)]"
-            />
-            Show archived ({archivedMessageCount})
-          </label>
-        {/if}
-      </div>
-      <div class="min-h-[1rem] text-right" aria-live="polite">
-        {#if showSyncStatus}
-          <p class="text-micro text-[var(--fg-muted)]">Syncing…</p>
-        {/if}
-      </div>
-    </div>
-  {/if}
-  {#if timelineError && !hasAnyNonTrashedMessage}
-    <p class="rounded bg-danger-soft px-3 py-2 text-meta text-danger-text">
-      {timelineError}
-    </p>
-  {:else if timelineLoading && !hasAnyNonTrashedMessage}
-    <p class="text-meta text-[var(--fg-muted)]">Loading messages...</p>
-  {:else if !hasAnyNonTrashedMessage}
-    <p class="py-6 text-center text-meta text-[var(--fg-muted)]">
-      {String(discussionEmptyMessage ?? "").trim()
-        ? String(discussionEmptyMessage)
-        : "No messages yet. Post a message below to start the conversation."}
-    </p>
-  {:else if !hasMessages}
-    <p class="text-meta text-[var(--fg-muted)]">
-      No messages in view. Turn on Show archived to see archived messages.
-    </p>
-  {:else}
-    <div class="flex min-w-0 flex-col gap-3">
-      {#if lifecycleError}
-        <p class="rounded bg-danger-soft px-3 py-2 text-meta text-danger-text">
-          {lifecycleError}
-        </p>
-      {/if}
-      {#if timelineError}
-        <p class="rounded bg-danger-soft px-3 py-2 text-meta text-danger-text">
-          {timelineError}
-        </p>
-      {/if}
-      <div class="flex min-w-0 flex-col gap-3">
-        {#each messageThreads as message (message.id)}
-          <MessageItem
-            {message}
-            {threadId}
-            {actorName}
-            onReply={setReplyTarget}
-            onArchive={openArchiveConfirm}
-            onTrash={openTrashConfirm}
-            onUnarchive={doUnarchive}
-            {lifecycleBusy}
-            {archiveLabelKind}
-            getLiveAnchorStatusForMessage={liveAnchorStatusForMessage}
-          />
-        {/each}
-      </div>
-    </div>
-  {/if}
-</div>
-
-<form
-  class="msg-composer mt-4 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3"
-  onsubmit={(e) => {
-    e.preventDefault();
-    void handlePostMessage();
-  }}
+<div
+  class="msgtab-wrap"
+  class:msgtab-wrap--pin-narrow={pinComposerNarrow}
+  class:h-full={pinComposerNarrow}
+  class:min-h-0={pinComposerNarrow}
 >
-  {#if postMessageError}
-    <p
-      class="mb-2 rounded bg-danger-soft px-3 py-1.5 text-micro text-danger-text"
-    >
-      {postMessageError}
-    </p>
-  {/if}
-  {#if hasPendingDocumentComment}
-    <!--
+  <div class="msgtab-messages flex flex-col gap-3">
+    {#if archivedMessageCount > 0 || showSyncStatus}
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+          {#if archivedMessageCount > 0}
+            <label
+              class="flex items-center gap-1.5 text-micro text-[var(--fg-muted)]"
+            >
+              <input
+                type="checkbox"
+                bind:checked={showArchived}
+                class="accent-[var(--accent)]"
+              />
+              Show archived ({archivedMessageCount})
+            </label>
+          {/if}
+        </div>
+        <div class="min-h-[1rem] text-right" aria-live="polite">
+          {#if showSyncStatus}
+            <p class="text-micro text-[var(--fg-muted)]">Syncing…</p>
+          {/if}
+        </div>
+      </div>
+    {/if}
+    {#if timelineError && !hasAnyNonTrashedMessage}
+      <p class="rounded bg-danger-soft px-3 py-2 text-meta text-danger-text">
+        {timelineError}
+      </p>
+    {:else if timelineLoading && !hasAnyNonTrashedMessage}
+      <p class="text-meta text-[var(--fg-muted)]">Loading messages...</p>
+    {:else if !hasAnyNonTrashedMessage}
+      <p class="py-6 text-center text-meta text-[var(--fg-muted)]">
+        {String(discussionEmptyMessage ?? "").trim()
+          ? String(discussionEmptyMessage)
+          : "No messages yet. Post a message below to start the conversation."}
+      </p>
+    {:else if !hasMessages}
+      <p class="text-meta text-[var(--fg-muted)]">
+        No messages in view. Turn on Show archived to see archived messages.
+      </p>
+    {:else}
+      <div class="flex min-w-0 flex-col gap-3">
+        {#if lifecycleError}
+          <p
+            class="rounded bg-danger-soft px-3 py-2 text-meta text-danger-text"
+          >
+            {lifecycleError}
+          </p>
+        {/if}
+        {#if timelineError}
+          <p
+            class="rounded bg-danger-soft px-3 py-2 text-meta text-danger-text"
+          >
+            {timelineError}
+          </p>
+        {/if}
+        <div class="flex min-w-0 flex-col gap-3">
+          {#each messageThreads as message (message.id)}
+            <MessageItem
+              {message}
+              {threadId}
+              {actorName}
+              onReply={setReplyTarget}
+              onArchive={openArchiveConfirm}
+              onTrash={openTrashConfirm}
+              onUnarchive={doUnarchive}
+              {lifecycleBusy}
+              {archiveLabelKind}
+              getLiveAnchorStatusForMessage={liveAnchorStatusForMessage}
+            />
+          {/each}
+        </div>
+      </div>
+    {/if}
+  </div>
+
+  <form
+    class="msg-composer mt-4 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3"
+    onsubmit={(e) => {
+      e.preventDefault();
+      void handlePostMessage();
+    }}
+  >
+    {#if postMessageError}
+      <p
+        class="mb-2 rounded bg-danger-soft px-3 py-1.5 text-micro text-danger-text"
+      >
+        {postMessageError}
+      </p>
+    {/if}
+    {#if hasPendingDocumentComment}
+      <!--
       Compact "comment on:" chip that lives directly above the textarea.
       We deliberately drop the older "Replying to selected text" heading +
       separate quote box: it doubled visual weight without adding info.
@@ -665,48 +681,11 @@
       text reads as "you are commenting on this" at a glance — closer to
       Google Docs' inline composer than a mini thread reply.
     -->
-    <div
-      class="mb-2 flex items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-1.5"
-    >
-      <svg
-        class="h-3.5 w-3.5 shrink-0 text-[var(--accent)]"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        viewBox="0 0 24 24"
-        aria-hidden="true"
-      >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          d="M8 12h8M8 8h8m-8 8h5m-9 3.5V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-5 3.5Z"
-        />
-      </svg>
-      <span
-        class="min-w-0 flex-1 truncate text-meta italic text-[var(--fg)]"
-        title={pendingSelectedQuote}
-      >
-        {pendingSelectedQuote}
-      </span>
-      {#if pendingIsQuoteOnly}
-        <span
-          class="shrink-0 rounded bg-[var(--line-subtle)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
-          title="Exact position not unique in this revision — comment is anchored by quote."
-        >
-          Quote only
-        </span>
-      {/if}
-      <button
-        type="button"
-        class="shrink-0 cursor-pointer rounded p-0.5 text-[var(--fg-muted)] hover:bg-[var(--panel)] hover:text-[var(--fg)]"
-        onclick={() => {
-          onClearPendingDocumentPost?.();
-        }}
-        title="Clear (Esc)"
-        aria-label="Clear comment selection"
+      <div
+        class="mb-2 flex items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-1.5"
       >
         <svg
-          class="h-3.5 w-3.5"
+          class="h-3.5 w-3.5 shrink-0 text-[var(--accent)]"
           fill="none"
           stroke="currentColor"
           stroke-width="2"
@@ -716,14 +695,51 @@
           <path
             stroke-linecap="round"
             stroke-linejoin="round"
-            d="M6 18 18 6M6 6l12 12"
+            d="M8 12h8M8 8h8m-8 8h5m-9 3.5V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-5 3.5Z"
           />
         </svg>
-      </button>
-    </div>
-  {/if}
-  {#if replyToEventId}
-    <!--
+        <span
+          class="min-w-0 flex-1 truncate text-meta italic text-[var(--fg)]"
+          title={pendingSelectedQuote}
+        >
+          {pendingSelectedQuote}
+        </span>
+        {#if pendingIsQuoteOnly}
+          <span
+            class="shrink-0 rounded bg-[var(--line-subtle)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
+            title="Exact position not unique in this revision — comment is anchored by quote."
+          >
+            Quote only
+          </span>
+        {/if}
+        <button
+          type="button"
+          class="shrink-0 cursor-pointer rounded p-0.5 text-[var(--fg-muted)] hover:bg-[var(--panel)] hover:text-[var(--fg)]"
+          onclick={() => {
+            onClearPendingDocumentPost?.();
+          }}
+          title="Clear (Esc)"
+          aria-label="Clear comment selection"
+        >
+          <svg
+            class="h-3.5 w-3.5"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M6 18 18 6M6 6l12 12"
+            />
+          </svg>
+        </button>
+      </div>
+    {/if}
+    {#if replyToEventId}
+      <!--
       "Replying to" chip lives above the textarea now (same row as the
       pending-comment chip when both are present). Previously this chip
       sat beside the Post button in the footer, which crammed the help
@@ -732,43 +748,11 @@
       here also matches the visual hierarchy of "what you're responding
       to" → composer → action.
     -->
-    <div
-      class="mb-2 flex items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-1.5"
-    >
-      <svg
-        class="h-3.5 w-3.5 shrink-0 text-[var(--accent)]"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        viewBox="0 0 24 24"
-        aria-hidden="true"
-      >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          d="M9 14 4 9l5-5M4 9h11a5 5 0 0 1 5 5v0a5 5 0 0 1-5 5h-3"
-        />
-      </svg>
-      <span class="shrink-0 text-micro text-[var(--fg-muted)]">
-        Replying to
-      </span>
-      <span
-        class="min-w-0 flex-1 truncate text-meta italic text-[var(--fg)]"
-        title={replyTargetMessage?.messageText || "message"}
-      >
-        {replyTargetMessage?.messageText
-          ? replyTargetMessage.messageText.slice(0, 200)
-          : "message"}
-      </span>
-      <button
-        type="button"
-        class="shrink-0 cursor-pointer rounded p-0.5 text-[var(--fg-muted)] hover:bg-[var(--panel)] hover:text-[var(--fg)]"
-        onclick={clearReplyTarget}
-        title="Clear reply"
-        aria-label="Clear reply target"
+      <div
+        class="mb-2 flex items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-1.5"
       >
         <svg
-          class="h-3.5 w-3.5"
+          class="h-3.5 w-3.5 shrink-0 text-[var(--accent)]"
           fill="none"
           stroke="currentColor"
           stroke-width="2"
@@ -778,88 +762,121 @@
           <path
             stroke-linecap="round"
             stroke-linejoin="round"
-            d="M6 18 18 6M6 6l12 12"
+            d="M9 14 4 9l5-5M4 9h11a5 5 0 0 1 5 5v0a5 5 0 0 1-5 5h-3"
           />
         </svg>
-      </button>
-    </div>
-  {/if}
-  <div class="relative">
-    <textarea
-      bind:this={textareaRef}
-      bind:value={messageText}
-      aria-label="Message"
-      class="w-full min-h-[4.25rem] resize-y rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)]"
-      id="message-text"
-      oninput={updateMentionFromTextarea}
-      onclick={updateMentionFromTextarea}
-      onkeyup={updateMentionFromTextarea}
-      onkeydown={handleMessageKeydown}
-      placeholder={hasPendingDocumentComment
-        ? "Add a comment, or @mention an agent…"
-        : "Write a message..."}
-      rows="2"
-    ></textarea>
-    {#if mentionOpen}
-      <div
-        class="absolute bottom-full left-0 right-0 z-20 mb-1 max-h-48 overflow-auto rounded-md border border-[var(--line)] bg-[var(--panel)] py-1"
-        id="message-mention-list"
-        role="listbox"
-        aria-label="Agent handles"
-      >
-        {#if mentionLoading}
-          <p class="px-3 py-2 text-micro text-[var(--fg-muted)]">
-            Loading handles…
-          </p>
-        {:else if mentionCandidates.length === 0}
-          {#if mentionSignedIn}
-            <p class="px-3 py-2 text-micro text-[var(--fg-muted)]">
-              No registered agents are taggable in this workspace. See Access to
-              check registration and presence.
-            </p>
-          {:else}
-            <p class="px-3 py-2 text-micro text-[var(--fg-muted)]">
-              No agent handles in this workspace. Sign in or open Access to
-              manage agents.
-            </p>
-          {/if}
-        {:else if filteredMentions.length === 0}
-          <p class="px-3 py-2 text-micro text-[var(--fg-muted)]">
-            No matching agents.
-          </p>
-        {:else}
-          {#each filteredMentions as row, i (row.handle)}
-            <button
-              type="button"
-              class="flex w-full cursor-pointer items-baseline gap-2 px-3 py-1.5 text-left text-micro hover:bg-[var(--bg-soft)] {i ===
-              mentionHighlight
-                ? 'bg-[var(--bg-soft)]'
-                : ''}"
-              aria-selected={i === mentionHighlight}
-              role="option"
-              onmousedown={(e) => {
-                e.preventDefault();
-                void insertMention(row.handle);
-              }}
-            >
-              <span class="font-medium text-[var(--accent)]">@{row.handle}</span
-              >
-              <span class="truncate text-[var(--fg-muted)]"
-                >{row.displayLabel}</span
-              >
-              <span
-                class="shrink-0 rounded px-1.5 py-0.5 text-micro font-medium {row.presenceClass}"
-                title={row.presenceSummary}
-              >
-                {row.presenceLabel}
-              </span>
-            </button>
-          {/each}
-        {/if}
+        <span class="shrink-0 text-micro text-[var(--fg-muted)]">
+          Replying to
+        </span>
+        <span
+          class="min-w-0 flex-1 truncate text-meta italic text-[var(--fg)]"
+          title={replyTargetMessage?.messageText || "message"}
+        >
+          {replyTargetMessage?.messageText
+            ? replyTargetMessage.messageText.slice(0, 200)
+            : "message"}
+        </span>
+        <button
+          type="button"
+          class="shrink-0 cursor-pointer rounded p-0.5 text-[var(--fg-muted)] hover:bg-[var(--panel)] hover:text-[var(--fg)]"
+          onclick={clearReplyTarget}
+          title="Clear reply"
+          aria-label="Clear reply target"
+        >
+          <svg
+            class="h-3.5 w-3.5"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M6 18 18 6M6 6l12 12"
+            />
+          </svg>
+        </button>
       </div>
     {/if}
-  </div>
-  <!--
+    <div class="relative">
+      <textarea
+        bind:this={textareaRef}
+        bind:value={messageText}
+        aria-label="Message"
+        class="w-full min-h-[4.25rem] resize-y rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)]"
+        id="message-text"
+        oninput={updateMentionFromTextarea}
+        onclick={updateMentionFromTextarea}
+        onkeyup={updateMentionFromTextarea}
+        onkeydown={handleMessageKeydown}
+        placeholder={hasPendingDocumentComment
+          ? "Add a comment, or @mention an agent…"
+          : "Write a message..."}
+        rows="2"
+      ></textarea>
+      {#if mentionOpen}
+        <div
+          class="absolute bottom-full left-0 right-0 z-20 mb-1 max-h-48 overflow-auto rounded-md border border-[var(--line)] bg-[var(--panel)] py-1"
+          id="message-mention-list"
+          role="listbox"
+          aria-label="Agent handles"
+        >
+          {#if mentionLoading}
+            <p class="px-3 py-2 text-micro text-[var(--fg-muted)]">
+              Loading handles…
+            </p>
+          {:else if mentionCandidates.length === 0}
+            {#if mentionSignedIn}
+              <p class="px-3 py-2 text-micro text-[var(--fg-muted)]">
+                No registered agents are taggable in this workspace. See Access
+                to check registration and presence.
+              </p>
+            {:else}
+              <p class="px-3 py-2 text-micro text-[var(--fg-muted)]">
+                No agent handles in this workspace. Sign in or open Access to
+                manage agents.
+              </p>
+            {/if}
+          {:else if filteredMentions.length === 0}
+            <p class="px-3 py-2 text-micro text-[var(--fg-muted)]">
+              No matching agents.
+            </p>
+          {:else}
+            {#each filteredMentions as row, i (row.handle)}
+              <button
+                type="button"
+                class="flex w-full cursor-pointer items-baseline gap-2 px-3 py-1.5 text-left text-micro hover:bg-[var(--bg-soft)] {i ===
+                mentionHighlight
+                  ? 'bg-[var(--bg-soft)]'
+                  : ''}"
+                aria-selected={i === mentionHighlight}
+                role="option"
+                onmousedown={(e) => {
+                  e.preventDefault();
+                  void insertMention(row.handle);
+                }}
+              >
+                <span class="font-medium text-[var(--accent)]"
+                  >@{row.handle}</span
+                >
+                <span class="truncate text-[var(--fg-muted)]"
+                  >{row.displayLabel}</span
+                >
+                <span
+                  class="shrink-0 rounded px-1.5 py-0.5 text-micro font-medium {row.presenceClass}"
+                  title={row.presenceSummary}
+                >
+                  {row.presenceLabel}
+                </span>
+              </button>
+            {/each}
+          {/if}
+        </div>
+      {/if}
+    </div>
+    <!--
     Composer footer. The form sets `container-type: inline-size` (see the
     `<style>` block below), so this row's layout responds to the actual
     composer width rather than the viewport. At narrow widths typical of
@@ -868,38 +885,39 @@
     them side-by-side. This is what fixes the previous "Replying to: …
     Clear Post message" overlap with the @handle help text.
   -->
-  <div class="msg-footer mt-1.5 flex flex-col gap-2">
-    {#if hasPendingDocumentComment}
-      <!--
+    <div class="msg-footer mt-1.5 flex flex-col gap-2">
+      {#if hasPendingDocumentComment}
+        <!--
         On the "comment on selection" path we don't need the @handle
         explainer above the submit button — the operator just wants
         to write a comment. The single-word `@` hint keeps mentions
         discoverable for power users without dominating the composer.
       -->
-      <p class="msg-hint text-micro leading-snug text-[var(--fg-muted)]">
-        Tip: <code class="text-[var(--fg)]">@</code> mentions an agent · Esc clears
-      </p>
-    {:else}
-      <p class="msg-hint text-micro leading-snug text-[var(--fg-muted)]">
-        Mention <code class="text-[var(--fg)]">@handle</code> to tag a
-        <a
-          class="text-accent-text hover:text-accent-text"
-          href={workspacePath(organizationSlug, workspaceSlug, "/access")}
-          >registered agent</a
-        >.
-      </p>
-    {/if}
-    <div class="msg-actions flex shrink-0 items-center justify-end gap-2">
-      <button
-        class="cursor-pointer rounded bg-accent-solid px-3 py-1 text-micro font-medium text-white hover:bg-accent disabled:opacity-50"
-        disabled={!canPost}
-        type="submit"
-      >
-        {postSubmitButtonText}
-      </button>
+        <p class="msg-hint text-micro leading-snug text-[var(--fg-muted)]">
+          Tip: <code class="text-[var(--fg)]">@</code> mentions an agent · Esc clears
+        </p>
+      {:else}
+        <p class="msg-hint text-micro leading-snug text-[var(--fg-muted)]">
+          Mention <code class="text-[var(--fg)]">@handle</code> to tag a
+          <a
+            class="text-accent-text hover:text-accent-text"
+            href={workspacePath(organizationSlug, workspaceSlug, "/access")}
+            >registered agent</a
+          >.
+        </p>
+      {/if}
+      <div class="msg-actions flex shrink-0 items-center justify-end gap-2">
+        <button
+          class="cursor-pointer rounded bg-accent-solid px-3 py-1 text-micro font-medium text-white hover:bg-accent disabled:opacity-50"
+          disabled={!canPost}
+          type="submit"
+        >
+          {postSubmitButtonText}
+        </button>
+      </div>
     </div>
-  </div>
-</form>
+  </form>
+</div>
 
 <ConfirmModal
   open={confirmModal.open}
@@ -933,6 +951,45 @@
     .msg-hint {
       min-width: 0;
       flex: 1 1 0%;
+    }
+  }
+
+  @media (max-width: 1023px) {
+    .msgtab-wrap--pin-narrow {
+      display: flex;
+      min-height: 0;
+      flex: 1 1 auto;
+      flex-direction: column;
+    }
+    .msgtab-wrap--pin-narrow .msgtab-messages {
+      flex: 1 1 auto;
+      min-height: 0;
+      min-width: 0;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior-y: contain;
+      overflow-x: hidden;
+      /* `scroll` establishes a scrollport more reliably than `auto` on iOS when
+         height is resolved from a flex chain. */
+      overflow-y: scroll;
+      padding-left: 0.75rem;
+      padding-right: 0.75rem;
+    }
+    .msgtab-wrap--pin-narrow .msg-composer {
+      flex-shrink: 0;
+      margin-top: 0;
+      border-top: 1px solid var(--line);
+      border-left: none;
+      border-right: none;
+      border-bottom: none;
+      border-bottom-right-radius: 0;
+      border-bottom-left-radius: 0;
+      border-top-left-radius: 0;
+      border-top-right-radius: 0;
+      box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.12);
+      padding-left: 0.75rem;
+      padding-right: 0.75rem;
+      /* Keep controls above the fixed shell bottom nav (see app.css). */
+      padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
     }
   }
 </style>
