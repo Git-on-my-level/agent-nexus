@@ -307,11 +307,10 @@
 </script>
 
 <!--
-  When the Messages tab is active we wrap the whole page in a `page-dock-layout`
-  (mobile-only) so the composer is pinned to the viewport bottom and the
-  message list scrolls between the sticky tab bar and the sticky composer —
-  the same pattern used by the Boards announcement strip and the doc detail
-  discussion drawer. Other tabs render in normal page flow.
+  When the Messages tab is active we wrap the page in `page-dock-layout` so
+  the composer stays pinned to the bottom of the page area (viewport on
+  mobile, topic column on desktop) with the same chrome as boards and docs.
+  Other tabs render in normal page flow.
 -->
 {#if topicLoading}
   <TopicDetailHeader {threadId} {detailAsTopic} />
@@ -330,7 +329,7 @@
   {@const isMessagesTab = activeTab === "messages"}
   <div
     class={isMessagesTab
-      ? "page-dock-layout page-dock-layout--mobile-only page-dock-layout--fixed-mobile-chat page-dock-layout--topic-messages"
+      ? "page-dock-layout page-dock-layout--fixed-mobile-chat page-dock-layout--topic-messages"
       : ""}
   >
     <div class={isMessagesTab ? "page-dock-head" : "contents"}>
@@ -390,17 +389,15 @@
     {#if activeTab === "messages"}
       <div class="page-dock-feed lg:pt-3" role="tabpanel" tabindex="0">
         <DiscussionDrawer
+          layout="primary"
           threadId={String(topic.id)}
           postRouteScopeId={threadId}
           workspaceId={data?.workspaceId ?? ""}
           {workspaceSlug}
-          collapsible={false}
           useParentTimelineContext={true}
           onMessagePost={handleMessagePost}
-          pinComposerNarrow={true}
           pinComposerAlignThreadEnd={true}
           narrowEdgeToEdge
-          expandFillsParent
           emptyMessage={`Everything about ${topic.title || "this topic"} lives here. Post a message to start the conversation. Docs and Boards you link to this topic appear in their tabs.`}
         />
       </div>

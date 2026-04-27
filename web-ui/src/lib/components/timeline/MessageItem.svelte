@@ -6,7 +6,10 @@
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
   import { formatTimestamp } from "$lib/formatDate";
-  import { docCommentBodyHover } from "$lib/stores/docCommentBodyRailSync.js";
+  import {
+    docCommentBodyFocus,
+    docCommentBodyHover,
+  } from "$lib/stores/docCommentBodyRailSync.js";
 
   const MAX_REPLY_DEPTH = 48;
 
@@ -59,6 +62,11 @@
     Boolean(docComment) &&
       Array.isArray($docCommentBodyHover) &&
       $docCommentBodyHover.includes(String(message.id)),
+  );
+  let isBodyDocCommentFocus = $derived(
+    Boolean(docComment) &&
+      Array.isArray($docCommentBodyFocus) &&
+      $docCommentBodyFocus.includes(String(message.id)),
   );
 
   /**
@@ -131,7 +139,7 @@
       isAnchoredComment && depth === 0
         ? "border-[var(--line)] border-l-2 border-l-[var(--accent)]"
         : "border-[var(--line)]",
-      isBodyDocCommentHover
+      isBodyDocCommentHover || isBodyDocCommentFocus
         ? "ring-1 ring-[var(--accent)] ring-offset-1 ring-offset-[var(--bg)]"
         : "",
     ]

@@ -76,6 +76,14 @@
      */
     pinComposerNarrow = false,
     /**
+     * Like `pinComposerNarrow` but active at all viewport widths. Used by the
+     * desktop discussion rail and topic primary layout where the parent gives
+     * us a constrained-height flex column. Layered on top of (and supersedes
+     * for layout purposes) `pinComposerNarrow`; mobile-only safe-area padding
+     * is still keyed off the media query.
+     */
+    pinComposer = false,
+    /**
      * When pinned narrow: grow the thread region and push bubbles toward the
      * composer on short threads (collapsible drawers). Non-collapsible surfaces
      * (topic Messages) keep this false so messages stay under the tabs instead
@@ -87,6 +95,8 @@
      */
     pinComposerComfortGap = false,
   } = $props();
+
+  let pinActive = $derived(pinComposer || pinComposerNarrow);
 
   let subjectRefFilterNorm = $derived(String(subjectRefFilter ?? "").trim());
 
@@ -663,10 +673,11 @@
 
 <div
   class="msgtab-wrap"
-  class:msgtab-wrap--pin-narrow={pinComposerNarrow}
+  class:msgtab-wrap--pin={pinActive}
+  class:msgtab-wrap--pin-narrow={pinComposerNarrow && !pinComposer}
   class:msgtab-wrap--comfort-gap={pinComposerComfortGap}
-  class:h-full={pinComposerNarrow}
-  class:min-h-0={pinComposerNarrow}
+  class:h-full={pinActive}
+  class:min-h-0={pinActive}
 >
   <div bind:this={messagesScrollEl} class="msgtab-messages flex flex-col gap-3">
     {#if archivedMessageCount > 0 || showSyncStatus}
@@ -711,8 +722,7 @@
     {:else}
       <div
         class="msgtab-thread flex min-w-0 flex-col gap-3"
-        class:msgtab-thread--pin={pinComposerNarrow &&
-          pinComposerAlignThreadEnd}
+        class:msgtab-thread--pin={pinActive && pinComposerAlignThreadEnd}
       >
         {#if lifecycleError}
           <p
@@ -730,7 +740,7 @@
         {/if}
         <div
           class="flex min-w-0 flex-col gap-3"
-          class:msgtab-thread-items--pin-end={pinComposerNarrow &&
+          class:msgtab-thread-items--pin-end={pinActive &&
             pinComposerAlignThreadEnd}
         >
           {#each messageThreads as message (message.id)}
@@ -1048,7 +1058,75 @@
     }
   }
 
+  /* `--pin` activates at all widths (rail, primary, board dock when used).
+     `--pin-narrow` keeps the legacy mobile-only behavior for callers that
+     have not migrated. They share the same selectors except where noted. */
+  .msgtab-wrap--pin {
+    display: flex;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+  }
+
+  .msgtab-wrap--pin .msgtab-messages {
+    flex: 1 1 auto;
+    min-height: 0;
+    min-width: 0;
+    overscroll-behavior-y: contain;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding: 0.875rem 0.75rem 0.75rem;
+    scroll-padding-top: 0.5rem;
+    scroll-padding-bottom: 0.5rem;
+  }
+
+  .msgtab-wrap--pin .msgtab-thread--pin {
+    flex: 1 0 auto;
+    min-height: 0;
+  }
+
+  .msgtab-wrap--pin .msgtab-thread-items--pin-end {
+    flex: 1 0 auto;
+    justify-content: flex-end;
+    padding-bottom: 0.75rem;
+  }
+
+  .msgtab-wrap--pin.msgtab-wrap--comfort-gap .msgtab-messages {
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+  }
+
+  .msgtab-wrap--pin.msgtab-wrap--comfort-gap .msg-composer {
+    margin-top: 1rem;
+  }
+
+  .msgtab-wrap--pin .msg-composer {
+    flex-shrink: 0;
+    margin-top: 0;
+    border-top: 1px solid var(--line);
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+    border-radius: 0;
+    box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.06);
+    padding: 0.75rem;
+  }
+
   @media (max-width: 1023px) {
+    .msgtab-wrap--pin .msgtab-messages {
+      -webkit-overflow-scrolling: touch;
+      /* `scroll` establishes a scrollport more reliably than `auto` on iOS when
+         height is resolved from a flex chain. */
+      overflow-y: scroll;
+    }
+
+    .msgtab-wrap--pin .msg-composer {
+      box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.12);
+      /* Keep controls above the fixed shell bottom nav (see app.css). */
+      padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
+    }
+
+    /* Mobile-only legacy callers reuse the same shape as `--pin`. */
     .msgtab-wrap--pin-narrow {
       display: flex;
       min-height: 0;
@@ -1062,23 +1140,15 @@
       -webkit-overflow-scrolling: touch;
       overscroll-behavior-y: contain;
       overflow-x: hidden;
-      /* `scroll` establishes a scrollport more reliably than `auto` on iOS when
-         height is resolved from a flex chain. */
       overflow-y: scroll;
-      padding-left: 0.75rem;
-      padding-right: 0.75rem;
-      padding-top: 0.875rem;
-      padding-bottom: 0.75rem;
+      padding: 0.875rem 0.75rem 0.75rem;
       scroll-padding-top: 0.5rem;
       scroll-padding-bottom: 0.5rem;
     }
-
-    /* Short threads (collapsible drawers only): grow thread + pin bubbles down. */
     .msgtab-wrap--pin-narrow .msgtab-thread--pin {
       flex: 1 0 auto;
       min-height: 0;
     }
-
     .msgtab-wrap--pin-narrow .msgtab-thread-items--pin-end {
       flex: 1 0 auto;
       justify-content: flex-end;
@@ -1088,11 +1158,9 @@
       padding-top: 1rem;
       padding-bottom: 1rem;
     }
-
     .msgtab-wrap--pin-narrow.msgtab-wrap--comfort-gap .msg-composer {
       margin-top: 1rem;
     }
-
     .msgtab-wrap--pin-narrow .msg-composer {
       flex-shrink: 0;
       margin-top: 0;
@@ -1100,15 +1168,9 @@
       border-left: none;
       border-right: none;
       border-bottom: none;
-      border-bottom-right-radius: 0;
-      border-bottom-left-radius: 0;
-      border-top-left-radius: 0;
-      border-top-right-radius: 0;
+      border-radius: 0;
       box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.12);
-      padding-left: 0.75rem;
-      padding-right: 0.75rem;
-      /* Keep controls above the fixed shell bottom nav (see app.css). */
-      padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
+      padding: 0.75rem 0.75rem calc(0.5rem + env(safe-area-inset-bottom, 0px));
     }
   }
 </style>

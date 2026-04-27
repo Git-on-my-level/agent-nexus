@@ -6,7 +6,6 @@
    *   description?: string,
    *   emptyDescription?: string,
    *   badges?: import('svelte').Snippet,
-   *   meta?: import('svelte').Snippet,
    *   titleClass?: string,
    * }}
    */
@@ -15,7 +14,6 @@
     description = "",
     emptyDescription = "No description provided.",
     badges,
-    meta,
     titleClass = "",
   } = $props();
 
@@ -38,7 +36,4 @@
   <p class="truncate text-micro text-[var(--fg-muted)]">
     {text || emptyDescription}
   </p>
-  {#if meta}
-    {@render meta()}
-  {/if}
 </div>

@@ -10,3 +10,12 @@ import { writable } from "svelte/store";
 export const docCommentBodyHover = writable(
   /** @type {string[] | null} */ (null),
 );
+
+/**
+ * Persistent body/rail selection set by clicking a document highlight.
+ * Hover remains transient; focus stays long enough for the operator to see
+ * which rail card the body text opened.
+ */
+export const docCommentBodyFocus = writable(
+  /** @type {string[] | null} */ (null),
+);

@@ -24,7 +24,10 @@
     clearDocumentCommentMarks,
     eventIdsFromDocCommentMark,
   } from "$lib/documentCommentHighlight.js";
-  import { docCommentBodyHover } from "$lib/stores/docCommentBodyRailSync.js";
+  import {
+    docCommentBodyFocus,
+    docCommentBodyHover,
+  } from "$lib/stores/docCommentBodyRailSync.js";
   import { tick } from "svelte";
 
   let { data } = $props();
@@ -63,9 +66,6 @@
     content: "",
     title: "",
   });
-  let summaryDraft = $state("");
-  let summarySaveBusy = $state(false);
-  let summarySaveError = $state("");
   let saving = $state(false);
   let saveError = $state("");
   let loadingSelectedRevisionKey = $state("");
@@ -328,8 +328,6 @@
       const result = await coreClient.getDocument(targetId);
       document = result.document ?? null;
       headRevision = result.revision ?? null;
-      summaryDraft = String(document?.summary ?? "");
-      summarySaveError = "";
       if (!document) {
         loadError = "Document not found.";
       }
@@ -434,32 +432,6 @@
     saveError = "";
     editOpen = true;
     historyOpen = false;
-  }
-
-  async function saveResourceSummary() {
-    if (!documentId || !document?.updated_at || summarySaveBusy) return;
-    summarySaveBusy = true;
-    summarySaveError = "";
-    try {
-      const result = await coreClient.patchDocument(documentId, {
-        patch: { summary: summaryDraft.trim() },
-        if_updated_at: document.updated_at,
-      });
-      document = result.document ?? document;
-      headRevision = result.revision ?? headRevision;
-      summaryDraft = String(document?.summary ?? "");
-    } catch (e) {
-      const status = /** @type {{ status?: number }} */ (e)?.status;
-      if (status === 409) {
-        await loadDocument(documentId);
-        summarySaveError =
-          "Document was updated elsewhere. Reloaded the latest values — review and try again.";
-      } else {
-        summarySaveError = `Failed to save: ${e instanceof Error ? e.message : String(e)}`;
-      }
-    } finally {
-      summarySaveBusy = false;
-    }
   }
 
   function closeEdit() {
@@ -758,7 +730,8 @@
     const root = /** @type {HTMLElement | null} */ (docBodyMarkdownRoot);
     if (!root) return;
     const active = $docCommentBodyHover ?? null;
-    const activeSet = new Set(active ?? []);
+    const focused = $docCommentBodyFocus ?? null;
+    const activeSet = new Set([...(active ?? []), ...(focused ?? [])]);
     const marks = root.querySelectorAll(
       "mark.js-doc-comment-mark[data-event-id]",
     );
@@ -828,6 +801,36 @@
     if (typeof window === "undefined" || !root) {
       return;
     }
+    function onClick(/** @type {MouseEvent} */ e) {
+      const node = e.target;
+      if (!node || !(node instanceof Node)) {
+        return;
+      }
+      const el = node instanceof Element ? node : node.parentElement;
+      if (!el) {
+        return;
+      }
+      const m = el.closest("mark.js-doc-comment-mark[data-event-id]");
+      if (!m) {
+        docCommentBodyFocus.set(null);
+        return;
+      }
+      const ids = eventIdsFromDocCommentMark(m);
+      if (ids.length === 0) {
+        return;
+      }
+      e.preventDefault();
+      docCommentBodyFocus.set(ids);
+      discussionOpenSignal += 1;
+      void tick().then(() => {
+        if (typeof window === "undefined") return;
+        window.requestAnimationFrame(() => {
+          const firstId = ids[0];
+          const target = window.document.getElementById(`message-${firstId}`);
+          target?.scrollIntoView({ block: "center", behavior: "smooth" });
+        });
+      });
+    }
     function onPointerOver(/** @type {PointerEvent} */ e) {
       const node = e.target;
       if (!node || !(node instanceof Node)) {
@@ -848,12 +851,15 @@
     function onPointerLeave() {
       docCommentBodyHover.set(null);
     }
+    root.addEventListener("click", onClick);
     root.addEventListener("pointerover", onPointerOver);
     root.addEventListener("pointerleave", onPointerLeave);
     return () => {
+      root.removeEventListener("click", onClick);
       root.removeEventListener("pointerover", onPointerOver);
       root.removeEventListener("pointerleave", onPointerLeave);
       docCommentBodyHover.set(null);
+      docCommentBodyFocus.set(null);
     };
   });
 
@@ -866,6 +872,7 @@
   $effect(() => {
     void docBodyMarkdownRoot;
     void $docCommentBodyHover;
+    void $docCommentBodyFocus;
     applyDocCommentGlow();
   });
 
@@ -1070,13 +1077,17 @@
     becomes a side aside.
   -->
   <div
-    class="flex flex-col gap-0 lg:flex-row lg:items-start lg:gap-4 {document.thread_id
-      ? 'page-dock-layout page-dock-layout--mobile-only page-dock-layout--fixed-mobile-chat'
+    class="doc-detail-layout flex flex-col gap-0 md:flex-row md:items-start md:gap-0 {document.thread_id
+      ? 'doc-detail-layout--with-rail page-dock-layout page-dock-layout--mobile-only page-dock-layout--fixed-mobile-chat'
       : ''}"
   >
-    <div class="min-w-0 flex-1 {document.thread_id ? 'page-dock-scroll' : ''}">
-      <div class="flex gap-4">
-        <div class="min-w-0 flex-1">
+    <div
+      class="doc-detail-main min-w-0 flex-1 {document.thread_id
+        ? 'page-dock-scroll md:pt-6 md:pb-10'
+        : ''}"
+    >
+      <div class="doc-detail-content-row flex gap-4">
+        <div class="doc-detail-content min-w-0 flex-1">
           <WorkspaceResourceTopRow
             breadcrumbAriaLabel="Breadcrumb and document status"
             desktopAriaLabel="Document details"
@@ -1225,6 +1236,14 @@
                       class="absolute right-0 z-50 mt-1 min-w-[10rem] rounded-md border border-[var(--line)] bg-[var(--panel)] py-1 shadow-lg"
                       role="menu"
                     >
+                      <a
+                        role="menuitem"
+                        class="block w-full px-3 py-2 text-left text-micro text-[var(--fg)] hover:bg-[var(--line-subtle)]"
+                        href={workspaceHref(`/docs/${documentId}/edit`)}
+                        onclick={closeMoreActions}
+                      >
+                        Settings
+                      </a>
                       <button
                         type="button"
                         role="menuitem"
@@ -1268,50 +1287,6 @@
               {/if}
             {/snippet}
           </WorkspaceResourceTopRow>
-
-          {#if !document.trashed_at}
-            <div
-              class="mt-3 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] p-3"
-            >
-              <h2
-                class="text-micro font-semibold text-[var(--fg)]"
-                id="doc-resource-summary-label"
-              >
-                Short description
-              </h2>
-              <p
-                class="mb-2 text-[13px] text-[var(--fg-muted)]"
-                id="doc-resource-summary-hint"
-              >
-                Shown on doc lists and in the header. Does not require a new
-                revision.
-              </p>
-              <textarea
-                bind:value={summaryDraft}
-                aria-labelledby="doc-resource-summary-label"
-                aria-describedby="doc-resource-summary-hint"
-                class="w-full resize-y rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-2 text-meta text-[var(--fg)]"
-                placeholder="No description provided."
-                rows="2"
-              ></textarea>
-              <div class="mt-2 flex flex-wrap items-center gap-2">
-                <Button
-                  size="compact"
-                  variant="secondary"
-                  disabled={summarySaveBusy}
-                  onclick={() => void saveResourceSummary()}
-                  type="button"
-                >
-                  {summarySaveBusy ? "Saving…" : "Save description"}
-                </Button>
-                {#if summarySaveError}
-                  <span class="text-micro text-danger-text"
-                    >{summarySaveError}</span
-                  >
-                {/if}
-              </div>
-            </div>
-          {/if}
 
           {#if editOpen}
             <form
@@ -1556,7 +1531,7 @@
         layout). On desktop the rail renders its own `<aside>` and `lg:contents`
         passes the aside through the flex-row parent unchanged.
       -->
-      <div class="page-dock-feed lg:contents">
+      <div class="page-dock-feed md:contents">
         <DocumentDiscussionRail
           doc={document}
           {workspaceSlug}

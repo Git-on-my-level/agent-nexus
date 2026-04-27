@@ -1012,10 +1012,12 @@
    * Variants:
    *   .page-dock-layout              — constrains on both mobile and desktop
    *                                    (boards: announcements always pinned)
-   *   .page-dock-layout--mobile-only — constrains on mobile only; on desktop
+   *   .page-dock-layout--mobile-only — below `md` uses the dock; from `md` up
    *                                    the page falls back to natural flow
-   *                                    (topic Messages, doc detail — content
-   *                                    can be unbounded on wider screens).
+   *                                    (doc body + right discussion rail).
+   *   .page-dock-layout--board-viewport-chat — from `lg` up, board announcements
+   *                                    use a viewport-fixed bottom sheet (resize
+   *                                    + height persistence via DiscussionDrawer).
    */
   .page-dock-layout {
     display: flex;
@@ -1024,16 +1026,18 @@
     max-height: calc(100dvh - 5.5rem);
   }
 
-  @media (min-width: 1024px) {
-    .page-dock-layout {
-      min-height: calc(100vh - 3.5rem);
-      max-height: calc(100vh - 3.5rem);
-    }
-
+  @media (min-width: 768px) {
     .page-dock-layout--mobile-only {
       display: block;
       min-height: 0;
       max-height: none;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .page-dock-layout {
+      min-height: calc(100vh - 3.5rem);
+      max-height: calc(100vh - 3.5rem);
     }
   }
 
@@ -1069,7 +1073,12 @@
     box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.12);
   }
 
-  @media (min-width: 1024px) {
+  /** DiscussionDrawer `layout="rail"`: width from `--dd-rail-w` (set inline). */
+  .dd-rail {
+    min-width: 0;
+  }
+
+  @media (min-width: 768px) {
     .page-dock-layout--mobile-only .page-dock-scroll {
       overflow: visible;
       flex: initial;
@@ -1083,11 +1092,54 @@
       position: static;
       box-shadow: none;
     }
+  }
 
+  @media (min-width: 1024px) {
+    /**
+     * Topic Messages (desktop): same flex dock as mobile — sticky section tabs,
+     * feed fills the column so DiscussionDrawer `layout="primary"` pins the
+     * composer to the bottom of the page area.
+     */
     .page-dock-layout--topic-messages .page-dock-head {
-      position: static;
-      z-index: auto;
-      background: transparent;
+      position: sticky;
+      top: 0;
+      z-index: 18;
+      background: var(--bg);
+      padding-bottom: 0.625rem;
+    }
+
+    .page-dock-layout--topic-messages .page-dock-feed {
+      flex: 1 1 auto;
+      min-height: 0;
+      margin-top: 0;
+      position: relative;
+      box-shadow: none;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .shell-main-scroll:has(.page-dock-layout--topic-messages) {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow-x: hidden;
+      overflow-y: hidden;
+      /* Flush the message composer to the main column bottom (no shell 2.5rem gap). */
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    .shell-main-scroll:has(.page-dock-layout--topic-messages) > .shell-content {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .page-dock-layout--topic-messages {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: hidden;
     }
   }
 
@@ -1097,20 +1149,32 @@
     }
 
     /**
-     * Doc detail (mobile): pin discussion to the viewport (above the tab bar)
-     * so document scrolling in `shell-main-scroll` is independent from chat
-     * scrolling. Without `position: fixed`, sticky + shared ancestry ties the
-     * two scrollports together.
+     * Doc detail: bottom sheet only below `md` (768px). From `md` up the
+     * discussion is a right rail (`DiscussionDrawer layout="rail"`), so the
+     * fixed dock must not span tablet widths or it collides with `md:flex-row`.
+     * Boards / topic messages keep the fixed dock through `lg` (1023px).
      */
-    .page-dock-layout--fixed-mobile-chat.page-dock-layout {
-      min-height: 0;
-      max-height: none;
-      /**
-       * Expanded chat height on narrow viewports. Overridable inline by
-       * DiscussionDrawer drag-resize; topic layout uses a taller default so the
-       * sheet reaches the section tabs.
-       */
-      --mobile-chat-panel-height: min(58dvh, calc(100dvh - 2.5rem));
+    @media (max-width: 767px) {
+      .page-dock-layout--fixed-mobile-chat.page-dock-layout {
+        min-height: 0;
+        max-height: none;
+        /**
+         * Expanded chat height on narrow viewports. Overridable inline by
+         * DiscussionDrawer drag-resize; topic layout uses a taller default so the
+         * sheet reaches the section tabs.
+         */
+        --mobile-chat-panel-height: min(58dvh, calc(100dvh - 2.5rem));
+      }
+    }
+
+    @media (min-width: 768px) and (max-width: 1023px) {
+      .page-dock-layout--fixed-mobile-chat:not(
+          .page-dock-layout--mobile-only
+        ).page-dock-layout {
+        min-height: 0;
+        max-height: none;
+        --mobile-chat-panel-height: min(58dvh, calc(100dvh - 2.5rem));
+      }
     }
 
     /*
@@ -1218,14 +1282,177 @@
     }
 
     /* Doc body scrolls only in the shell — avoid nested page-dock scrollers. */
-    .page-dock-layout--fixed-mobile-chat .page-dock-scroll {
-      overflow: visible;
-      flex: 1 1 auto;
-      min-height: 0;
+    @media (max-width: 767px) {
+      .page-dock-layout--fixed-mobile-chat .page-dock-scroll {
+        overflow: visible;
+        flex: 1 1 auto;
+        min-height: 0;
+      }
+
+      /* Reserve scroll extent when the strip is expanded so background content can clear the sheet. */
+      .page-dock-layout--fixed-mobile-chat:has([data-mobile-chat-expanded])
+        .page-dock-scroll {
+        padding-bottom: calc(
+          var(--mobile-chat-panel-height) + 1.25rem +
+            env(safe-area-inset-bottom, 0px)
+        );
+      }
+
+      /* Collapsed strip: smaller inset so pages are not blocked by a huge spacer. */
+      .page-dock-layout--fixed-mobile-chat:not(
+          :has([data-mobile-chat-expanded])
+        )
+        .page-dock-scroll {
+        padding-bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
+      }
+
+      .page-dock-layout--fixed-mobile-chat .page-dock-feed {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 15;
+        width: 100%;
+        max-width: 100%;
+        margin: 0;
+        margin-top: 0;
+        flex: unset;
+        /* Lift panel content above `shell-bottom-nav` (z-index 20). */
+        padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+        box-sizing: border-box;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      .page-dock-layout--fixed-mobile-chat
+        .page-dock-feed:not(:has([data-mobile-chat-expanded])) {
+        max-height: none;
+        height: auto;
+      }
+
+      /* `padding-bottom` for nav is inside this height (border-box). */
+      .page-dock-layout--fixed-mobile-chat
+        .page-dock-feed:has([data-mobile-chat-expanded]) {
+        height: var(--mobile-chat-panel-height);
+        max-height: var(--mobile-chat-panel-height);
+      }
+
+      .page-dock-layout--fixed-mobile-chat .page-dock-feed > * {
+        display: flex;
+        min-height: 0;
+        flex: 0 1 auto;
+        flex-direction: column;
+      }
+
+      .page-dock-layout--fixed-mobile-chat
+        .page-dock-feed:has([data-mobile-chat-expanded])
+        > * {
+        flex: 1 1 auto;
+        height: 100%;
+        max-height: 100%;
+        min-height: 0;
+      }
     }
 
-    /* Reserve scroll extent when the strip is expanded so background content can clear the sheet. */
-    .page-dock-layout--fixed-mobile-chat:has([data-mobile-chat-expanded])
+    @media (min-width: 768px) and (max-width: 1023px) {
+      .page-dock-layout--fixed-mobile-chat:not(.page-dock-layout--mobile-only)
+        .page-dock-scroll {
+        overflow: visible;
+        flex: 1 1 auto;
+        min-height: 0;
+      }
+
+      .page-dock-layout--fixed-mobile-chat:not(
+          .page-dock-layout--mobile-only
+        ):has([data-mobile-chat-expanded])
+        .page-dock-scroll {
+        padding-bottom: calc(
+          var(--mobile-chat-panel-height) + 1.25rem +
+            env(safe-area-inset-bottom, 0px)
+        );
+      }
+
+      .page-dock-layout--fixed-mobile-chat:not(
+          .page-dock-layout--mobile-only
+        ):not(:has([data-mobile-chat-expanded]))
+        .page-dock-scroll {
+        padding-bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
+      }
+
+      .page-dock-layout--fixed-mobile-chat:not(.page-dock-layout--mobile-only)
+        .page-dock-feed {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 15;
+        width: 100%;
+        max-width: 100%;
+        margin: 0;
+        margin-top: 0;
+        flex: unset;
+        padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+        box-sizing: border-box;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      .page-dock-layout--fixed-mobile-chat:not(.page-dock-layout--mobile-only)
+        .page-dock-feed:not(:has([data-mobile-chat-expanded])) {
+        max-height: none;
+        height: auto;
+      }
+
+      .page-dock-layout--fixed-mobile-chat:not(.page-dock-layout--mobile-only)
+        .page-dock-feed:has([data-mobile-chat-expanded]) {
+        height: var(--mobile-chat-panel-height);
+        max-height: var(--mobile-chat-panel-height);
+      }
+
+      .page-dock-layout--fixed-mobile-chat:not(.page-dock-layout--mobile-only)
+        .page-dock-feed
+        > * {
+        display: flex;
+        min-height: 0;
+        flex: 0 1 auto;
+        flex-direction: column;
+      }
+
+      .page-dock-layout--fixed-mobile-chat:not(.page-dock-layout--mobile-only)
+        .page-dock-feed:has([data-mobile-chat-expanded])
+        > * {
+        flex: 1 1 auto;
+        height: 100%;
+        max-height: 100%;
+        min-height: 0;
+      }
+    }
+  }
+
+  /**
+   * Board (desktop): same viewport-anchored bottom sheet + drag-resize height
+   * as narrow viewports, inset from the persistent sidebar.
+   */
+  @media (min-width: 1024px) {
+    .page-dock-layout--fixed-mobile-chat.page-dock-layout--board-viewport-chat.page-dock-layout {
+      min-height: 0;
+      max-height: none;
+      --mobile-chat-panel-height: min(40dvh, 22rem);
+    }
+
+    .page-dock-layout--fixed-mobile-chat.page-dock-layout--board-viewport-chat
+      .page-dock-scroll {
+      overflow: visible;
+      flex: none;
+    }
+
+    .page-dock-layout--fixed-mobile-chat.page-dock-layout--board-viewport-chat:has(
+        [data-mobile-chat-expanded]
+      )
       .page-dock-scroll {
       padding-bottom: calc(
         var(--mobile-chat-panel-height) + 1.25rem +
@@ -1233,25 +1460,26 @@
       );
     }
 
-    /* Collapsed strip: smaller inset so pages are not blocked by a huge spacer. */
-    .page-dock-layout--fixed-mobile-chat:not(:has([data-mobile-chat-expanded]))
+    .page-dock-layout--fixed-mobile-chat.page-dock-layout--board-viewport-chat:not(
+        :has([data-mobile-chat-expanded])
+      )
       .page-dock-scroll {
       padding-bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
     }
 
-    .page-dock-layout--fixed-mobile-chat .page-dock-feed {
+    .page-dock-layout--fixed-mobile-chat.page-dock-layout--board-viewport-chat
+      .page-dock-feed {
       position: fixed;
-      left: 0;
+      left: calc(14.5rem + 1px);
       right: 0;
       bottom: 0;
       z-index: 15;
-      width: 100%;
-      max-width: 100%;
+      width: auto;
+      max-width: none;
       margin: 0;
       margin-top: 0;
       flex: unset;
-      /* Lift panel content above `shell-bottom-nav` (z-index 20). */
-      padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+      padding-bottom: env(safe-area-inset-bottom, 0px);
       box-sizing: border-box;
       min-height: 0;
       display: flex;
@@ -1259,27 +1487,28 @@
       overflow: hidden;
     }
 
-    .page-dock-layout--fixed-mobile-chat
+    .page-dock-layout--fixed-mobile-chat.page-dock-layout--board-viewport-chat
       .page-dock-feed:not(:has([data-mobile-chat-expanded])) {
       max-height: none;
       height: auto;
     }
 
-    /* `padding-bottom` for nav is inside this height (border-box). */
-    .page-dock-layout--fixed-mobile-chat
+    .page-dock-layout--fixed-mobile-chat.page-dock-layout--board-viewport-chat
       .page-dock-feed:has([data-mobile-chat-expanded]) {
       height: var(--mobile-chat-panel-height);
       max-height: var(--mobile-chat-panel-height);
     }
 
-    .page-dock-layout--fixed-mobile-chat .page-dock-feed > * {
+    .page-dock-layout--fixed-mobile-chat.page-dock-layout--board-viewport-chat
+      .page-dock-feed
+      > * {
       display: flex;
       min-height: 0;
       flex: 0 1 auto;
       flex-direction: column;
     }
 
-    .page-dock-layout--fixed-mobile-chat
+    .page-dock-layout--fixed-mobile-chat.page-dock-layout--board-viewport-chat
       .page-dock-feed:has([data-mobile-chat-expanded])
       > * {
       flex: 1 1 auto;
@@ -1595,6 +1824,45 @@
 
     .shell-main-scroll {
       padding: 1.5rem 2rem 2.5rem;
+    }
+  }
+
+  /*
+   * Doc detail + right discussion rail (`md`+): the rail is viewport-fixed,
+   * not part of the document column. The content wrapper is therefore full
+   * width and reserves the live rail width from `DiscussionDrawer` so the
+   * document fills everything left of comments without sliding underneath it.
+   */
+  @media (min-width: 768px) {
+    .shell-main-scroll:has(
+      .page-dock-layout--mobile-only.page-dock-layout--fixed-mobile-chat
+    ) {
+      padding-top: 0;
+      padding-right: env(safe-area-inset-right, 0px);
+      padding-bottom: 0;
+    }
+
+    .shell-main-scroll:has(
+        .page-dock-layout--mobile-only.page-dock-layout--fixed-mobile-chat
+      )
+      > .shell-content {
+      width: 100%;
+      max-width: none;
+      margin-inline: 0;
+      padding-right: calc(var(--doc-discussion-rail-w, 360px) + 1rem);
+    }
+
+    .doc-detail-layout--with-rail,
+    .doc-detail-layout--with-rail .doc-detail-main,
+    .doc-detail-layout--with-rail .doc-detail-content-row,
+    .doc-detail-layout--with-rail .doc-detail-content {
+      width: 100%;
+      max-width: none;
+    }
+
+    .doc-detail-layout--with-rail .doc-detail-main,
+    .doc-detail-layout--with-rail .doc-detail-content {
+      flex-basis: 100%;
     }
   }
 

@@ -963,11 +963,14 @@
 
     {#if linkedThreadId}
       <DiscussionDrawer
+        layout="dock"
         threadId={linkedThreadId}
         {workspaceId}
         {workspaceSlug}
         label="Discussion"
         storageKey={`card-discussion:${cardKey}`}
+        expandFillsParent
+        narrowEdgeToEdge
       />
     {/if}
 

@@ -469,11 +469,6 @@
             >
           {/if}
         {/snippet}
-        {#snippet meta()}
-          <p class="mt-0.5 text-micro text-[var(--fg-muted)]">
-            Head v{doc.head_revision_number}
-          </p>
-        {/snippet}
       </WorkspaceResourceListRow>
       <div
         class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"

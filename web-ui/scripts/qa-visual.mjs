@@ -285,6 +285,21 @@ const QA_SCENES = [
     },
   },
   {
+    name: "workspace-doc-detail-comments-rail",
+    path: "/o/local/w/local/docs/doc-launch-checklist",
+    workspaceMode: "workspace-default",
+    localStorage: {
+      "discussion-drawer:doc-discussion:doc-launch-checklist": "1",
+    },
+    waitFor: async (page) => {
+      await page.waitForSelector('h1:has-text("Launch checklist")');
+      await page.waitForSelector("text=Operator-facing launch checklist");
+      await page.waitForSelector("text=Discussion");
+      await page.waitForSelector("text=Check the OAuth callback copy");
+      await page.waitForSelector("text=Keep this wording exact");
+    },
+  },
+  {
     name: "workspace-settings",
     path: "/o/local/w/local/more",
     workspaceMode: "workspace-default",
@@ -446,6 +461,133 @@ function qaBoardListRows(boards) {
       },
     };
   });
+}
+
+function qaHoursAgo(hours) {
+  return new Date(
+    Date.parse(QA_FIXED_NOW_ISO) - hours * 60 * 60 * 1000,
+  ).toISOString();
+}
+
+function qaDocumentDetail(documentId) {
+  const document = QA_DOCUMENTS.find((item) => item.id === documentId);
+  if (!document) return null;
+  const revisionNumber = Number(document.head_revision_number ?? 1) || 1;
+  const revisionId = `rev-${document.id}-${revisionNumber}`;
+  return {
+    document: {
+      ...document,
+      summary:
+        document.summary ??
+        "Operator-facing checklist for launch readiness and rollback review.",
+      subject_ref:
+        document.subject_ref ??
+        (document.thread_id ? `thread:${document.thread_id}` : ""),
+      created_at: document.created_at ?? document.updated_at,
+      created_by: document.created_by ?? document.updated_by,
+    },
+    revision: {
+      revision_id: revisionId,
+      document_id: document.id,
+      revision_number: revisionNumber,
+      content_type: "text",
+      content_hash: `sha256-qa-${document.id}`,
+      revision_hash: `revhash-qa-${document.id}-${revisionNumber}`,
+      created_at: document.updated_at,
+      created_by: document.updated_by,
+      content: [
+        "## Operator-facing launch checklist",
+        "",
+        "Check the OAuth callback copy before the public beta switch flips.",
+        "",
+        "Keep this wording exact for support handoff and incident review.",
+      ].join("\n"),
+    },
+  };
+}
+
+function qaDocumentDetailTimeline(threadId) {
+  const detail = qaDocumentDetail("doc-launch-checklist");
+  const document = detail?.document;
+  const revision = detail?.revision;
+  if (!document || !revision || threadId !== document.thread_id) {
+    return null;
+  }
+  const documentRef = `document:${document.id}`;
+  const revisionRef = `document_revision:${revision.revision_id}`;
+  const baseRefs = [`thread:${threadId}`, documentRef];
+  const commentAnchor = {
+    document_id: document.id,
+    revision_id: revision.revision_id,
+    content_hash: revision.content_hash,
+    selected_text: "Check the OAuth callback copy",
+    context_before: "## Operator-facing launch checklist\n\n",
+    context_after: " before the public beta switch flips.",
+    start_offset: revision.content.indexOf("Check the OAuth callback copy"),
+    end_offset:
+      revision.content.indexOf("Check the OAuth callback copy") +
+      "Check the OAuth callback copy".length,
+    anchor_status: "current",
+  };
+  const events = [
+    {
+      id: "evt-doc-rail-note-1",
+      ts: qaHoursAgo(3),
+      type: "message_posted",
+      actor_id: "actor-zara-ops",
+      thread_id: threadId,
+      refs: baseRefs,
+      summary: "Message: The readiness wording is close.",
+      payload: { text: "The readiness wording is close." },
+    },
+    {
+      id: "evt-doc-rail-note-2",
+      ts: qaHoursAgo(2),
+      type: "message_posted",
+      actor_id: "actor-jordan-human",
+      thread_id: threadId,
+      refs: baseRefs,
+      summary: "Message: Keep support handoff visible in the intro.",
+      payload: { text: "Keep support handoff visible in the intro." },
+    },
+    {
+      id: "evt-doc-rail-anchor-1",
+      ts: qaHoursAgo(1),
+      type: "message_posted",
+      actor_id: "actor-iris-docs",
+      thread_id: threadId,
+      refs: [...baseRefs, revisionRef],
+      summary: "Message: This is the line that needs one more pass.",
+      payload: {
+        kind: "document_text_comment",
+        text: "This is the line that needs one more pass.",
+        document_comment: commentAnchor,
+      },
+    },
+    {
+      id: "evt-doc-rail-note-3",
+      ts: qaHoursAgo(0.5),
+      type: "message_posted",
+      actor_id: "actor-jordan-human",
+      thread_id: threadId,
+      refs: baseRefs,
+      summary: "Message: Keep this wording exact.",
+      payload: { text: "Keep this wording exact." },
+    },
+  ];
+  return {
+    thread: { id: threadId, title: document.title },
+    events,
+    artifacts: {},
+    topics: {},
+    cards: {},
+    documents: {
+      [document.id]: document,
+    },
+    document_revisions: {
+      [revision.revision_id]: revision,
+    },
+  };
 }
 
 function createWorkspaceScenario(mode) {
@@ -1042,6 +1184,49 @@ async function handleWorkspaceApiRoute(
         documents: sliceByLimit(items, url.searchParams),
       }),
     );
+    return;
+  }
+
+  const documentMatch = pathname.match(/^\/docs\/([^/]+)$/);
+  if (documentMatch && request.method() === "GET") {
+    const detail = qaDocumentDetail(decodeURIComponent(documentMatch[1]));
+    if (!detail) {
+      await route.fulfill(
+        jsonResponse(404, { error: { message: "not found" } }),
+      );
+      return;
+    }
+    await route.fulfill(jsonResponse(200, detail));
+    return;
+  }
+
+  const documentRevisionsMatch = pathname.match(/^\/docs\/([^/]+)\/revisions$/);
+  if (documentRevisionsMatch && request.method() === "GET") {
+    const detail = qaDocumentDetail(
+      decodeURIComponent(documentRevisionsMatch[1]),
+    );
+    if (!detail) {
+      await route.fulfill(
+        jsonResponse(404, { error: { message: "not found" } }),
+      );
+      return;
+    }
+    await route.fulfill(jsonResponse(200, { revisions: [detail.revision] }));
+    return;
+  }
+
+  const threadTimelineMatch = pathname.match(/^\/threads\/([^/]+)\/timeline$/);
+  if (threadTimelineMatch && request.method() === "GET") {
+    const timeline = qaDocumentDetailTimeline(
+      decodeURIComponent(threadTimelineMatch[1]),
+    );
+    if (!timeline) {
+      await route.fulfill(
+        jsonResponse(404, { error: { message: "not found" } }),
+      );
+      return;
+    }
+    await route.fulfill(jsonResponse(200, timeline));
     return;
   }
 

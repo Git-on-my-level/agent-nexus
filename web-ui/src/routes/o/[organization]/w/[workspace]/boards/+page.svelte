@@ -10,21 +10,7 @@
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
   import { workspacePath } from "$lib/workspacePaths";
-  import {
-    lookupActorDisplayName,
-    actorRegistry,
-    principalRegistry,
-  } from "$lib/actorSession";
-  import {
-    BOARD_STATUS_LABELS,
-    CANONICAL_BOARD_COLUMNS,
-    boardSummaryCounts,
-    freshnessStatusLabel,
-    freshnessStatusTone,
-    isFreshnessCurrent,
-    parseDelimitedValues,
-  } from "$lib/boardUtils";
-  import { boardRowInspectNav } from "$lib/topicRouteUtils";
+  import { BOARD_STATUS_LABELS, parseDelimitedValues } from "$lib/boardUtils";
   import WorkspaceResourceListRow from "$lib/components/WorkspaceResourceListRow.svelte";
 
   const defaultBoardListFilters = {
@@ -57,10 +43,6 @@
 
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
-  let actorName = $derived((id) =>
-    lookupActorDisplayName(id, $actorRegistry, $principalRegistry),
-  );
-
   function workspaceHref(pathname = "/") {
     return workspacePath(organizationSlug, workspaceSlug, pathname);
   }
@@ -352,10 +334,6 @@
   >
     {#each boards as item, i}
       {@const board = item.board}
-      {@const listStats = item.listStats}
-      {@const counts = boardSummaryCounts(listStats)}
-      {@const projectionFreshness = board?.projection_freshness ?? null}
-      {@const rowNav = boardRowInspectNav(board)}
       <div
         class="flex items-stretch {i > 0
           ? 'border-t border-[var(--line)]'
@@ -392,82 +370,6 @@
                     class="shrink-0 rounded bg-warn-soft px-1.5 py-0.5 text-micro font-medium text-warn-text"
                     >Archived</span
                   >
-                {/if}
-              {/snippet}
-              {#snippet meta()}
-                {#if projectionFreshness || listStats?.has_document_refs || listStats?.has_document_ref}
-                  <div class="mt-1.5 flex flex-wrap items-center gap-2">
-                    {#if projectionFreshness}
-                      <span
-                        class="inline-flex rounded px-1.5 py-0.5 text-micro font-medium {freshnessStatusTone(
-                          projectionFreshness.status,
-                        )}"
-                      >
-                        {freshnessStatusLabel(projectionFreshness.status)}
-                      </span>
-                    {/if}
-                    {#if listStats?.has_document_refs || listStats?.has_document_ref}
-                      <span
-                        class="rounded bg-accent-soft px-1.5 py-0.5 text-micro text-accent-text"
-                      >
-                        Has doc
-                      </span>
-                    {/if}
-                  </div>
-                {/if}
-
-                <div
-                  class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-micro text-[var(--fg-muted)]"
-                >
-                  {#if board.owners?.length > 0}
-                    <span>
-                      Owned by {board.owners
-                        .map((owner) => actorName(owner))
-                        .join(", ")}
-                    </span>
-                  {/if}
-                  {#if rowNav}
-                    <span>
-                      <span class="text-[var(--fg-muted)]"
-                        >{rowNav.kind === "topic"
-                          ? "Topic"
-                          : "Backing thread"}:</span
-                      >
-                      <span class="text-[var(--fg-muted)]"
-                        >{rowNav.display}</span
-                      >
-                    </span>
-                  {:else}
-                    <span>
-                      <span class="text-[var(--fg-muted)]">Context:</span>
-                      <span class="text-[var(--fg-muted)]">—</span>
-                    </span>
-                  {/if}
-                  {#if projectionFreshness && !isFreshnessCurrent(projectionFreshness)}
-                    <span>Derived scan details are still catching up</span>
-                  {/if}
-                </div>
-
-                {#if isFreshnessCurrent(projectionFreshness)}
-                  <div
-                    class="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-micro"
-                  >
-                    {#each CANONICAL_BOARD_COLUMNS as column, ci}
-                      {@const count = counts[column.key]}
-                      <span
-                        class={column.key === "blocked" && count > 0
-                          ? "text-warn-text"
-                          : "text-[var(--fg-muted)]"}
-                      >
-                        <span class="font-medium uppercase">{column.title}</span
-                        >
-                        {count}
-                      </span>
-                      {#if ci < CANONICAL_BOARD_COLUMNS.length - 1}
-                        <span class="text-[var(--line)]">·</span>
-                      {/if}
-                    {/each}
-                  </div>
                 {/if}
               {/snippet}
             </WorkspaceResourceListRow>

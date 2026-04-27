@@ -11,6 +11,7 @@
 </script>
 
 <DiscussionDrawer
+  layout="dock"
   {threadId}
   {workspaceId}
   {workspaceSlug}
