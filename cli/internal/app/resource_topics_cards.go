@@ -46,12 +46,11 @@ func (a *App) runTopicsCommand(ctx context.Context, args []string, cfg config.Re
 	switch sub {
 	case "list":
 		fs := newSilentFlagSet("topics list")
-		var stateFlag, typeFlag, queryFlag, cursorFlag trackedString
+		var stateFlag, queryFlag, cursorFlag trackedString
 		var limitFlag trackedInt
 		var fullIDFlag trackedBool
 		var includeArchived, archivedOnly, includeTrashed, trashedOnly bool
 		fs.Var(&stateFlag, "state", "Filter by lifecycle state (active, archived, trashed)")
-		fs.Var(&typeFlag, "type", "Filter by topic type enum")
 		fs.Var(&queryFlag, "q", "Search topics by id or title substring")
 		fs.Var(&limitFlag, "limit", "Page size (1–1000)")
 		fs.Var(&cursorFlag, "cursor", "Pagination cursor from a previous list response")
@@ -74,7 +73,6 @@ func (a *App) runTopicsCommand(ctx context.Context, args []string, cfg config.Re
 		}
 		query := make([]queryParam, 0, 8)
 		addSingleQuery(&query, "state", stateFlag.value)
-		addSingleQuery(&query, "type", typeFlag.value)
 		addSingleQuery(&query, "q", queryFlag.value)
 		if limitFlag.set {
 			addSingleQuery(&query, "limit", strconv.Itoa(limitFlag.value))

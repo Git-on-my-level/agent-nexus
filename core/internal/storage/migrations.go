@@ -626,6 +626,11 @@ var migrations = []migration{
 		Statements: []string{},
 		AfterApply: applyMigration15DropBoardsDocumentsLabelsJSON,
 	},
+	{
+		Version:    16,
+		Statements: []string{},
+		AfterApply: applyMigration16DropTopicsTypeColumn,
+	},
 }
 
 func sqliteTableExists(ctx context.Context, tx *sql.Tx, name string) (bool, error) {
@@ -1326,6 +1331,31 @@ func applyMigration15DropBoardsDocumentsLabelsJSON(ctx context.Context, tx *sql.
 		if _, err := tx.ExecContext(ctx, q); err != nil {
 			return fmt.Errorf("migration 15 %s: %w", q, err)
 		}
+	}
+	return nil
+}
+
+// applyMigration16DropTopicsTypeColumn removes topic classification; topics are identified by title/summary/refs only.
+func applyMigration16DropTopicsTypeColumn(ctx context.Context, tx *sql.Tx) error {
+	ok, err := sqliteTableExists(ctx, tx, "topics")
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return nil
+	}
+	if _, err := tx.ExecContext(ctx, `DROP INDEX IF EXISTS idx_topics_type_updated_at`); err != nil {
+		return fmt.Errorf("migration 16 drop idx_topics_type_updated_at: %w", err)
+	}
+	has, err := sqliteTableHasColumn(ctx, tx, "topics", "type")
+	if err != nil {
+		return fmt.Errorf("migration 16 pragma topics.type: %w", err)
+	}
+	if !has {
+		return nil
+	}
+	if _, err := tx.ExecContext(ctx, `ALTER TABLE topics DROP COLUMN type`); err != nil {
+		return fmt.Errorf("migration 16 drop topics.type: %w", err)
 	}
 	return nil
 }

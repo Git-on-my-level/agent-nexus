@@ -10,7 +10,6 @@ func TestTopicRowToMapJSONNullBodyDoesNotPanic(t *testing.T) {
 
 	row := topicRow{
 		ID:             "top-1",
-		Type:           sqlNullString("incident"),
 		Title:          sqlNullString("T"),
 		Summary:        sql.NullString{},
 		ExtensionsJSON: "null",
@@ -37,7 +36,6 @@ func TestTopicRowToMapMalformedBodyJSONDegrades(t *testing.T) {
 
 	row := topicRow{
 		ID:             "top-bad-body",
-		Type:           sqlNullString("incident"),
 		Title:          sqlNullString("Still Listed"),
 		Summary:        sql.NullString{},
 		ExtensionsJSON: `not-json`,
@@ -64,7 +62,6 @@ func TestTopicRowToMapJSONNullProvenanceDoesNotPanic(t *testing.T) {
 
 	row := topicRow{
 		ID:             "top-2",
-		Type:           sqlNullString("incident"),
 		Title:          sqlNullString("T"),
 		Summary:        sqlNullString("s"),
 		ExtensionsJSON: `{}`,

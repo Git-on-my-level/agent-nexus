@@ -246,7 +246,6 @@ export const QA_TOPICS = [
   {
     id: "topic-launch-war-room",
     thread_id: "thread-launch-war-room",
-    type: "incident",
     title: "Launch war room",
     current_summary:
       "Production cutover is green except for an auth callback regression in the mobile shell.",
@@ -259,7 +258,6 @@ export const QA_TOPICS = [
   {
     id: "topic-billing-rollout",
     thread_id: "thread-billing-rollout",
-    type: "initiative",
     title: "Billing rollout dry run",
     current_summary:
       "Stripe checkout and portal flows are passing smoke checks against the hosted sandbox.",
@@ -272,7 +270,6 @@ export const QA_TOPICS = [
   {
     id: "topic-docs-refresh",
     thread_id: "thread-docs-refresh",
-    type: "request",
     title: "Docs refresh for onboarding",
     current_summary:
       "Hosted onboarding copy and screenshots need one final pass before the launch checklist closes.",

@@ -142,6 +142,17 @@
   let quoteIsStale = $derived(anchorStatus === "stale");
 
   let actorLine = $derived(actorName(message.actor_id));
+  let actorDisplayLine = $derived.by(() => {
+    const name = actorLine;
+    if (name.length <= 24 || name.includes(" ")) return name;
+    const dotIdx = name.indexOf(".");
+    if (dotIdx > 0 && dotIdx < name.length - 1) {
+      const prefix = name.slice(0, dotIdx);
+      const suffix = name.slice(dotIdx + 1, dotIdx + 9);
+      return `${prefix}.${suffix}…`;
+    }
+    return `${name.slice(0, 20)}…`;
+  });
 
   let contextMenuItems = $derived(
     onTrash && !message.trashed_at
@@ -185,7 +196,7 @@
           class="min-w-0 max-w-full truncate font-mono text-[0.65rem] leading-tight text-[var(--fg-muted)]"
           title={actorLine}
         >
-          {actorLine}
+          {actorDisplayLine}
         </span>
         <CopyButton
           value={actorLine}

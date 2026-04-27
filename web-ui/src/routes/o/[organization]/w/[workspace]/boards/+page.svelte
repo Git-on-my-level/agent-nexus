@@ -1,9 +1,6 @@
 <script>
   import { page } from "$app/stores";
   import { goto } from "$app/navigation";
-  import GuidedTypedRefsInput from "$lib/components/GuidedTypedRefsInput.svelte";
-  import SearchableEntityPicker from "$lib/components/SearchableEntityPicker.svelte";
-  import SearchableMultiEntityPicker from "$lib/components/SearchableMultiEntityPicker.svelte";
   import ArchiveButton from "$lib/components/ArchiveButton.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import TrashButton from "$lib/components/TrashButton.svelte";
@@ -13,13 +10,7 @@
   import StateError from "$lib/components/state/StateError.svelte";
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
-  import {
-    searchDocuments as searchDocumentRecords,
-    searchTopics as searchTopicRecords,
-    topicSearchResultToBoardRefOption,
-  } from "$lib/searchHelpers";
   import { workspacePath } from "$lib/workspacePaths";
-  import { toActorPickerOptions } from "$lib/systemActor.js";
   import {
     lookupActorDisplayName,
     actorRegistry,
@@ -68,46 +59,15 @@
   let showCreateForm = $state(false);
 
   let createTitle = $state("");
-  let createLinkedTopicRef = $state("");
-  let createCustomThreadId = $state("");
-  let createAdvancedThreadOpen = $state(false);
-  let createBoardDocumentId = $state("");
-  let createOwnerIds = $state([]);
-  let createPinnedRefs = $state("");
 
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
   let actorName = $derived((id) =>
     lookupActorDisplayName(id, $actorRegistry, $principalRegistry),
   );
-  let actorOptions = $derived(toActorPickerOptions($actorRegistry));
 
   function workspaceHref(pathname = "/") {
     return workspacePath(organizationSlug, workspaceSlug, pathname);
-  }
-
-  function toDocumentOption(document) {
-    return {
-      id: document.id,
-      title: document.title || document.id,
-      subtitle: [
-        document.state,
-        document.thread_id && `Timeline ${document.thread_id}`,
-      ]
-        .filter(Boolean)
-        .join(" · "),
-      keywords: [],
-    };
-  }
-
-  async function searchTopicLinkOptions(query) {
-    const topics = await searchTopicRecords(query);
-    return topics.map(topicSearchResultToBoardRefOption);
-  }
-
-  async function searchDocumentOptions(query) {
-    const documents = await searchDocumentRecords(query);
-    return documents.map(toDocumentOption);
   }
 
   function sumCardsByColumn(cols) {
@@ -145,12 +105,6 @@
 
   function resetCreateForm() {
     createTitle = "";
-    createLinkedTopicRef = "";
-    createCustomThreadId = "";
-    createAdvancedThreadOpen = false;
-    createBoardDocumentId = "";
-    createOwnerIds = [];
-    createPinnedRefs = "";
   }
 
   function openCreateBoardForm() {
@@ -200,29 +154,11 @@
       return;
     }
 
-    const board = {
-      title,
-    };
-    const customThread = createCustomThreadId.trim();
-    if (customThread) {
-      board.thread_id = customThread;
-    }
-    const owners = [...createOwnerIds];
-    const pinnedRefs = parseDelimitedValues(createPinnedRefs);
-    const linkedTopic = createLinkedTopicRef.trim();
-
-    if (owners.length > 0) board.owners = owners;
-    if (createBoardDocumentId.trim()) {
-      board.document_refs = [`document:${createBoardDocumentId.trim()}`];
-    }
-    if (pinnedRefs.length > 0) board.pinned_refs = pinnedRefs;
-    if (linkedTopic) {
-      board.refs = [linkedTopic];
-    }
-
     creating = true;
     try {
-      const created = await coreClient.createBoard({ board });
+      const created = await coreClient.createBoard({
+        board: { title, document_refs: [], pinned_refs: [] },
+      });
       await loadBoards();
       resetCreateForm();
       showCreateForm = false;
@@ -445,112 +381,40 @@
     class="mb-5 rounded-md border border-[var(--line)] bg-[var(--panel)]"
   >
     <div class="border-b border-[var(--line)] px-4 py-2.5">
-      <h2 class="text-meta font-medium text-[var(--fg)]">Create board</h2>
+      <h2 class="text-meta font-medium text-[var(--fg)]">New board</h2>
+      <p class="mt-0.5 text-micro text-[var(--fg-muted)]">
+        Give it a name — you can link topics, docs, and refs after creation.
+      </p>
     </div>
 
-    <div class="space-y-3 px-4 py-3">
+    <div class="px-4 py-3">
       {#if createError}
         <div
-          class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
+          class="mb-3 rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
         >
           {createError}
         </div>
       {/if}
 
-      <div class="grid gap-3 md:grid-cols-2">
-        <label class="text-micro font-medium text-[var(--fg-muted)]">
-          Board title
-          <input
-            bind:value={createTitle}
-            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)]"
-            placeholder="Q3 launch board"
-            type="text"
-          />
-        </label>
-
-        <SearchableEntityPicker
-          bind:value={createLinkedTopicRef}
-          advancedLabel="Enter a topic ref manually"
-          helperText="Adds a topic reference to the board. The board still gets its own event timeline (server default). This is not the topic’s thread_id."
-          label="Link topic"
-          manualLabel="Topic ref"
-          manualPlaceholder="topic:…"
-          placeholder="Search topics by title or id"
-          searchFn={searchTopicLinkOptions}
+      <label class="block text-micro font-medium text-[var(--fg-muted)]">
+        Board title
+        <input
+          bind:value={createTitle}
+          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)] focus:border-[var(--accent)] focus:outline-none"
+          placeholder="Q3 launch board"
+          type="text"
+          onkeydown={(e) => e.key === "Enter" && submitCreateBoard()}
         />
+      </label>
 
-        <SearchableEntityPicker
-          bind:value={createBoardDocumentId}
-          advancedLabel="Use a manual document ID"
-          helperText="Optional: add a document ref to the board (included in refs)."
-          label="Board document"
-          manualLabel="Document ID"
-          manualPlaceholder="product-constitution"
-          placeholder="Search documents by title, ID, or timeline ID"
-          searchFn={searchDocumentOptions}
-        />
-      </div>
-
-      <details
-        class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
-        bind:open={createAdvancedThreadOpen}
-      >
-        <summary
-          class="cursor-pointer px-3 py-2 text-micro font-medium text-[var(--fg-muted)] hover:text-[var(--fg)]"
-        >
-          Custom board timeline (optional)
-        </summary>
-        <div class="space-y-2 border-t border-[var(--line)] px-3 py-3">
-          <label class="block text-micro font-medium text-[var(--fg-muted)]">
-            Thread ID
-            <input
-              bind:value={createCustomThreadId}
-              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-2 font-mono text-meta text-[var(--fg)]"
-              placeholder="Only if you need a specific unused thread id"
-              type="text"
-            />
-          </label>
-          <p class="text-micro text-[var(--fg-muted)]">
-            Leave empty and the server uses the new board’s id as its backing
-            thread. Set this only for expert or migration cases.
-          </p>
-        </div>
-      </details>
-
-      <div class="grid gap-3 md:grid-cols-2">
-        <SearchableMultiEntityPicker
-          bind:values={createOwnerIds}
-          advancedLabel="Add a manual owner ID"
-          helperText="Owners stay visible on the board list and detail scan surfaces."
-          items={actorOptions}
-          label="Owners"
-          manualLabel="Owner ID"
-          manualPlaceholder="actor-ops-ai"
-          placeholder="Search actors by name, ID, or tags"
-        />
-      </div>
-
-      <div>
-        <p class="text-micro font-medium text-[var(--fg-muted)]">Pinned refs</p>
-        <GuidedTypedRefsInput
-          bind:value={createPinnedRefs}
-          addInputLabel="Add board pinned ref"
-          addInputPlaceholder="thread:thread-q2-initiative"
-          addButtonLabel="Add ref"
-          emptyText="No pinned refs yet."
-          helperText="Pinned refs appear in the board header."
-          textareaAriaLabel="Board pinned refs"
-        />
-      </div>
-
-      <div class="flex flex-wrap gap-2">
+      <div class="mt-3 flex flex-wrap gap-2">
         <button
           class="rounded-md bg-accent-solid px-3 py-1.5 text-micro font-medium text-white transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
           disabled={creating}
           onclick={submitCreateBoard}
           type="button"
         >
-          {creating ? "Creating..." : "Create board"}
+          {creating ? "Creating…" : "Create board"}
         </button>
         <button
           class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-1.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"

@@ -24,7 +24,7 @@ export function topicSearchResultToPickerOption(topic) {
     id,
     title: topic.title || id,
     subtitle: [topic.state].filter(Boolean).join(" · "),
-    keywords: [topic.type].filter(Boolean),
+    keywords: [],
   };
 }
 
@@ -42,7 +42,7 @@ export function topicSearchResultToBoardRefOption(topic) {
       id: "",
       title: String(topic.title ?? "").trim() || "",
       subtitle: "",
-      keywords: [topic.type].filter(Boolean),
+      keywords: [],
     };
   }
   const typedRef = rawId.includes(":") ? rawId : `topic:${rawId}`;
@@ -55,7 +55,7 @@ export function topicSearchResultToBoardRefOption(topic) {
     id: typedRef,
     title: topic.title || typedRef,
     subtitle: subtitleParts.filter(Boolean).join(" · "),
-    keywords: [topic.type].filter(Boolean),
+    keywords: [],
   };
 }
 

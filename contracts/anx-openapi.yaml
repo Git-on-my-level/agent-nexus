@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Agent Nexus HTTP API
-  version: 0.4.0
+  version: 0.5.0
   description: |
     Canonical workspace HTTP contract for Agent Nexus.
 
@@ -109,11 +109,6 @@ paths:
       x-anx-concepts: [topics]
       x-anx-stability: beta
       parameters:
-        - name: type
-          in: query
-          required: false
-          schema: { type: string }
-          description: Filter by topic type enum.
         - name: state
           in: query
           required: false
@@ -4360,9 +4355,6 @@ components:
       type: object
       properties:
         id: { type: string }
-        type:
-          type: string
-          enum: [case, process, relationship, initiative, objective, decision, incident, risk, request, note, other]
         state:
           type: string
           enum: [active, archived, trashed]
@@ -4395,7 +4387,7 @@ components:
         trashed_by: { type: string }
         trash_reason: { type: string }
       required:
-        [id, type, state, title, summary, owner_refs, document_refs, board_refs, related_refs,
+        [id, state, title, summary, owner_refs, document_refs, board_refs, related_refs,
          created_at, created_by, updated_at, updated_by, provenance]
 
     Document:
@@ -4602,9 +4594,6 @@ components:
     TopicWriteInput:
       type: object
       properties:
-        type:
-          type: string
-          enum: [case, process, relationship, initiative, objective, decision, incident, risk, request, note, other]
         title: { type: string }
         summary: { type: string }
         owner_refs:
@@ -4620,14 +4609,11 @@ components:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
         provenance: { $ref: '#/components/schemas/Provenance' }
-      required: [type, title, summary, owner_refs, document_refs, board_refs, related_refs, provenance]
+      required: [title, summary, owner_refs, document_refs, board_refs, related_refs, provenance]
 
     TopicPatchInput:
       type: object
       properties:
-        type:
-          type: string
-          enum: [case, process, relationship, initiative, objective, decision, incident, risk, request, note, other]
         title: { type: string }
         summary: { type: string }
         owner_refs:

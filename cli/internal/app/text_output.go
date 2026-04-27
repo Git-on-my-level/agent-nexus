@@ -380,7 +380,6 @@ func formatTopicRecord(topic map[string]any) string {
 	lines := []string{"Topic " + displayID(topic)}
 	lines = appendScalar(lines, "title", topic, "title")
 	lines = appendScalar(lines, "state", topic, "state")
-	lines = appendScalar(lines, "type", topic, "type")
 	lines = appendScalar(lines, "summary", topic, "summary")
 	lines = appendStringList(lines, "owner_refs", stringList(topic["owner_refs"]))
 	lines = appendScalar(lines, "thread_id", topic, "thread_id")

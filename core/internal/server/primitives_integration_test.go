@@ -2662,7 +2662,6 @@ func TestTopicArchiveLifecycle(t *testing.T) {
 	createResp := postJSONExpectStatus(t, h.baseURL+"/topics", `{
 		"actor_id":"actor-1",
 		"topic":{
-			"type":"incident",
 			"title":"Archive topic",
 			"summary":"s",
 			"owner_refs":[],
@@ -2804,7 +2803,6 @@ func TestListTopicsPaginationIncludesNextCursor(t *testing.T) {
 		createResp := postJSONExpectStatus(t, h.baseURL+"/topics", fmt.Sprintf(`{
 		"actor_id":"actor-1",
 		"topic":{
-			"type":"incident",
 			"title":%q,
 			"summary":"s",
 			"owner_refs":[],
@@ -2878,7 +2876,6 @@ func TestListTopicsSearchQueryMatchesTitleAndSummary(t *testing.T) {
 	createResp := postJSONExpectStatus(t, h.baseURL+"/topics", fmt.Sprintf(`{
 		"actor_id":"actor-1",
 		"topic":{
-			"type":"incident",
 			"title":%q,
 			"summary":%q,
 			"owner_refs":[],
@@ -2933,7 +2930,6 @@ func TestListTopicsSearchMatchesNumericSummaryInBodyJSON(t *testing.T) {
 	createResp := postJSONExpectStatus(t, h.baseURL+"/topics", fmt.Sprintf(`{
 		"actor_id":"actor-1",
 		"topic":{
-			"type":"incident",
 			"title":%q,
 			"summary":"placeholder",
 			"owner_refs":[],
@@ -3002,7 +2998,6 @@ func TestListTopicsSearchSucceedsWhenAnotherRowHasMalformedBodyJSON(t *testing.T
 	createGood := postJSONExpectStatus(t, h.baseURL+"/topics", fmt.Sprintf(`{
 		"actor_id":"actor-1",
 		"topic":{
-			"type":"incident",
 			"title":%q,
 			"summary":"ok",
 			"owner_refs":[],
@@ -3017,7 +3012,6 @@ func TestListTopicsSearchSucceedsWhenAnotherRowHasMalformedBodyJSON(t *testing.T
 	createBad := postJSONExpectStatus(t, h.baseURL+"/topics", `{
 		"actor_id":"actor-1",
 		"topic":{
-			"type":"incident",
 			"title":"WillCorruptBody",
 			"summary":"x",
 			"owner_refs":[],
@@ -3081,7 +3075,6 @@ func TestTopicTrashLifecycle(t *testing.T) {
 	createResp := postJSONExpectStatus(t, h.baseURL+"/topics", `{
 		"actor_id":"actor-1",
 		"topic":{
-			"type":"incident",
 			"title":"Tomb topic",
 			"summary":"s",
 			"owner_refs":[],
@@ -3176,7 +3169,6 @@ func TestTopicRestoreLifecycle(t *testing.T) {
 	createResp := postJSONExpectStatus(t, h.baseURL+"/topics", `{
 		"actor_id":"actor-1",
 		"topic":{
-			"type":"incident",
 			"title":"Restore topic",
 			"summary":"s",
 			"owner_refs":[],
@@ -3230,7 +3222,6 @@ func TestTopicArchiveThenTrash(t *testing.T) {
 	createResp := postJSONExpectStatus(t, h.baseURL+"/topics", `{
 		"actor_id":"actor-1",
 		"topic":{
-			"type":"incident",
 			"title":"Archive trash topic",
 			"summary":"s",
 			"owner_refs":[],
@@ -3628,7 +3619,6 @@ func TestTopicCannotArchiveTrashed(t *testing.T) {
 	createResp := postJSONExpectStatus(t, h.baseURL+"/topics", `{
 		"actor_id":"actor-1",
 		"topic":{
-			"type":"incident",
 			"title":"Cannot archive trashed",
 			"summary":"s",
 			"owner_refs":[],

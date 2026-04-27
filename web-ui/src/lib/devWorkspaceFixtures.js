@@ -1531,27 +1531,6 @@ function deepClone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-function topicTypeFromThreadType(type) {
-  switch (String(type ?? "").trim()) {
-    case "incident":
-      return "incident";
-    case "initiative":
-      return "initiative";
-    case "case":
-      return "decision";
-    case "process":
-      return "objective";
-    case "note":
-      return "note";
-    case "request":
-      return "request";
-    case "risk":
-      return "risk";
-    default:
-      return "other";
-  }
-}
-
 function cardResolutionFromRow(card) {
   const explicit = String(card?.resolution ?? "").trim();
   if (explicit === "done" || explicit === "canceled") {
@@ -1663,7 +1642,6 @@ function buildCanonicalTopicSeed(thread) {
   return {
     id: threadId,
     thread_id: threadId,
-    type: topicTypeFromThreadType(thread?.type),
     state: String(thread?.state ?? "").trim() || "active",
     title: String(thread?.title ?? "").trim(),
     summary: String(thread?.current_summary ?? "").trim(),

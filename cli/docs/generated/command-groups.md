@@ -3,7 +3,7 @@
 Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
-- Contract version: `0.4.0`
+- Contract version: `0.5.0`
 - Groups: `19`
 
 ## `topics`

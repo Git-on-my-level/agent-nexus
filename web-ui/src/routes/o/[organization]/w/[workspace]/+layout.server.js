@@ -1,6 +1,12 @@
+import { dev } from "$app/environment";
 import { env as privateEnv } from "$env/dynamic/private";
 import { error, redirect } from "@sveltejs/kit";
 
+import {
+  createAnxCoreClient,
+  verifyCoreSchemaVersion,
+} from "$lib/anxCoreClient";
+import { WORKSPACE_HEADER_CONSTANTS } from "$lib/compat/workspaceCompat";
 import { sanitizeHostedReturnPath } from "$lib/hosted/launchFlow.js";
 import {
   getAuthAccessCookieName,
@@ -18,7 +24,55 @@ import {
   resolveWorkspaceCatalog,
   resolveWorkspaceInRoute,
 } from "$lib/server/workspaceResolver";
-import { stripWorkspacePath } from "$lib/workspacePaths";
+import {
+  WORKSPACE_HEADER,
+  stripWorkspacePath,
+  workspaceCompositeKey,
+} from "$lib/workspacePaths";
+
+/** Deduplicate handshake checks per workspace in this server process. */
+const schemaCheckPromises = new Map();
+
+/**
+ * In dev, a hosted workspace often resolves to a same-origin `/ws/...` core URL
+ * that is proxied to the control plane. If the workspace runtime (anx-core) is
+ * not running yet, the proxy returns 5xx. Hard-failing SSR makes the app
+ * unusable; we warn instead so the operator can start the stack
+ * (e.g. `make serve` in `controlplane/`).
+ */
+function shouldDegradeCoreSchemaCheckInDev(error) {
+  if (!dev) {
+    return false;
+  }
+  if (String(privateEnv.ANX_UI_SKIP_CORE_SCHEMA_CHECK ?? "").trim() === "1") {
+    return true;
+  }
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  const st =
+    typeof error.coreHttpStatus === "number"
+      ? error.coreHttpStatus
+      : error.cause && typeof error.cause.status === "number"
+        ? error.cause.status
+        : undefined;
+  if (typeof st === "number" && st >= 502 && st <= 504) {
+    return true;
+  }
+  const text = [error.message, error.cause && error.cause.message]
+    .filter(Boolean)
+    .join(" ");
+  if (text.includes("Unable to reach control plane at")) {
+    return true;
+  }
+  if (text.includes("workspace runtime backend is unavailable")) {
+    return true;
+  }
+  if (/ECONNREFUSED|network\s*error|fetch failed/i.test(text)) {
+    return true;
+  }
+  return false;
+}
 
 function isSecureCookieRequest(event) {
   return event.url.protocol === "https:";
@@ -151,15 +205,55 @@ export async function load(event) {
     prefetchedResolved: resolved,
   });
 
+  const workOrg = resolved.workspace.organizationSlug;
+  const workSlug = resolved.workspace.slug;
+  const coreBaseUrl = String(resolved.workspace.coreBaseUrl ?? "").trim();
+
+  let coreSchemaCheckWarning = "";
+
+  if (workSlug && coreBaseUrl && event.url.searchParams.get("qa") !== "1") {
+    const cacheKey = workspaceCompositeKey(workOrg, workSlug);
+    if (!schemaCheckPromises.has(cacheKey)) {
+      const client = createAnxCoreClient({
+        baseUrl: coreBaseUrl,
+        fetchFn: event.fetch,
+        requestContextHeadersProvider: () => ({
+          [WORKSPACE_HEADER]: workSlug,
+          [WORKSPACE_HEADER_CONSTANTS.ORGANIZATION_HEADER]: workOrg,
+        }),
+      });
+      const promise = verifyCoreSchemaVersion(client)
+        .then(() => "")
+        .catch((error) => {
+          schemaCheckPromises.delete(cacheKey);
+          if (shouldDegradeCoreSchemaCheckInDev(error)) {
+            logServerEvent("workspace.layout.schema_check_degraded", {
+              org: workOrg,
+              slug: workSlug,
+            });
+            return error instanceof Error
+              ? error.message
+              : String(error);
+          }
+          throw error;
+        });
+      schemaCheckPromises.set(cacheKey, promise);
+    }
+    coreSchemaCheckWarning = await schemaCheckPromises.get(cacheKey);
+  }
+
   return {
     ...toPublicWorkspaceCatalog(catalog),
     workspace: {
-      organizationSlug: resolved.workspace.organizationSlug,
-      slug: resolved.workspace.slug,
+      organizationSlug: workOrg,
+      slug: workSlug,
       label: resolved.workspace.label,
       description: resolved.workspace.description,
-      coreBaseUrl: String(resolved.workspace.coreBaseUrl ?? "").trim(),
+      coreBaseUrl,
       workspaceId,
     },
+    ...(coreSchemaCheckWarning
+      ? { coreSchemaCheckWarning }
+      : {}),
   };
 }

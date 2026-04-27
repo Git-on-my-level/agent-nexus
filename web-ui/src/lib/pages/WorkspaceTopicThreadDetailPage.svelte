@@ -86,27 +86,10 @@
   const STREAM_RECONNECT_DELAY_MS = 1_500;
   const RECONCILE_INTERVAL_MS = 120_000;
 
-  const TOPIC_TYPES = new Set([
-    "initiative",
-    "objective",
-    "decision",
-    "incident",
-    "risk",
-    "request",
-    "note",
-    "other",
-  ]);
-
   function topicIdFromTopic(topicRow) {
     const ref = String(topicRow?.topic_ref ?? "").trim();
     const match = /^topic:(.+)$/.exec(ref);
     return match ? match[1].trim() : "";
-  }
-
-  function threadTypeToTopicType(type) {
-    const t = String(type ?? "").trim();
-    if (TOPIC_TYPES.has(t)) return t;
-    return "other";
   }
 
   /** Maps overview edits to canonical TopicPatchInput fields. */
@@ -115,9 +98,6 @@
     if (topicEditPatch.title !== undefined) out.title = topicEditPatch.title;
     if (topicEditPatch.summary !== undefined)
       out.summary = topicEditPatch.summary;
-    if (topicEditPatch.type !== undefined) {
-      out.type = threadTypeToTopicType(topicEditPatch.type);
-    }
     return out;
   }
 
@@ -350,7 +330,7 @@
         aria-selected={activeTab === tab.id}
         tabindex={activeTab === tab.id ? 0 : -1}
       >
-        {tab.label}{#if tab.badge !== undefined}
+        {tab.label}{#if tab.badge !== undefined && tab.badge > 0}
           <span class="ml-0.5 tabular-nums text-[var(--fg-muted)]"
             >({tab.badge})</span
           >{/if}

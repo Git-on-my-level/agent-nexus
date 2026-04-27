@@ -21,7 +21,6 @@ func TestTopicWorkspaceResolvesBoardsCardsAndDocsViaRefEdges(t *testing.T) {
 	createTopicResp := postJSONExpectStatus(t, h.baseURL+"/topics", `{
 		"actor_id":"actor-1",
 		"topic":{
-			"type":"initiative",
 			"title":"Launch topic",
 			"summary":"Coordinate launch work",
 			"owner_refs":["actor:actor-1"],

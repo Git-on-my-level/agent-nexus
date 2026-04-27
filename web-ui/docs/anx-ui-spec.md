@@ -95,7 +95,7 @@ The primary navigation unit is the **topic**, with boards and cards for executio
 
 A topic detail view presents two complementary layers:
 
-**Workspace (current state):** The operator-facing topic record plus related cards, boards, documents, and inbox context from projection endpoints where applicable — title, type, summary, lifecycle state, linked refs, card progress, and linked evidence. This is the "what's true right now" view. Editable in place only where the schema allows it (topics via title/type/summary patches; cards via their canonical patch and move APIs).
+**Workspace (current state):** The operator-facing topic record plus related cards, boards, documents, and inbox context from projection endpoints where applicable — title, summary, lifecycle state, linked refs, card progress, and linked evidence. This is the "what's true right now" view. Editable in place only where the schema allows it (topics via title/summary patches; cards via their canonical patch and move APIs).
 
 **Timeline (audit trail):** A time-ordered, append-only sequence of all events on the topic's backing thread. Each timeline entry shows type, timestamp, actor, summary, and refs (rendered as navigable typed-ref links). The timeline includes messages, receipt submission, reviews, decisions, exceptions, acknowledgments, and topic/card lifecycle updates.
 
@@ -145,9 +145,9 @@ A dedicated surface showing items that need operator attention.
 
 A filterable list of topics (the UI may still expose thread-indexed routes for inspection; the operator-facing noun is **topic**).
 
-**Filters:** type, lifecycle `state` (`active`, `archived`, `trashed`), archive/trash visibility flags, and search (`q`).
+**Filters:** lifecycle `state` (`active`, `archived`, `trashed`), archive/trash visibility flags, and search (`q`).
 
-Each row shows: title, type, lifecycle state, summary, and last activity timestamp.
+Each row shows: title, lifecycle state, summary, and last activity timestamp.
 
 ### 3.3 Topic detail
 
@@ -155,7 +155,7 @@ The primary working surface. Combines the workspace-style current-state view and
 
 **Must support:**
 
-- Viewing and editing topic current-state fields that remain canonical: title, type, and summary. Topic lifecycle state is derived from archive/trash timestamps and is changed through dedicated archive/trash/restore actions, not a mutable state patch.
+- Viewing and editing topic current-state fields that remain canonical: title and summary. Topic lifecycle state is derived from archive/trash timestamps and is changed through dedicated archive/trash/restore actions, not a mutable state patch.
 - Viewing and editing card current-state fields through the card contract: title, summary, column, risk, assignees, related refs, document ref, and terminal resolution where evidence rules allow it.
 - Viewing linked evidence and packet outcomes with restricted transition enforcement where the schema requires it.
 - Viewing the full timeline with navigable typed-ref links.

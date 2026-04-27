@@ -1833,11 +1833,9 @@ Inputs:
   - body `topic.related_refs` (list<any>)
   - body `topic.summary` (string)
   - body `topic.title` (string)
-  - body `topic.type` (string)
   Optional:
   - body `topic.provenance.by_field` (object)
   - body `topic.provenance.notes` (string)
-  Enum values: topic.type: case, decision, incident, initiative, note, objective, other, process, relationship, request, risk
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1877,8 +1875,6 @@ Inputs:
   - body `patch.related_refs` (list<any>)
   - body `patch.summary` (string)
   - body `patch.title` (string)
-  - body `patch.type` (string)
-  Enum values: patch.type: case, decision, incident, initiative, note, objective, other, process, relationship, request, risk
 
 Global flags:
   Global flags can appear before or after the command path.

@@ -14,10 +14,6 @@
     parseTopicListSearchParams,
   } from "$lib/topicFilters";
   import { workspacePath } from "$lib/workspacePaths";
-  import {
-    CANONICAL_TOPIC_TYPE_LABELS,
-    CANONICAL_TOPIC_TYPES,
-  } from "$lib/topicTypeGlyph.js";
   import { buildTopicCreatePayloadFromDraft } from "$lib/topicCreatePayload";
   import ArchiveButton from "$lib/components/ArchiveButton.svelte";
   import CompactFilterBar from "$lib/components/CompactFilterBar.svelte";
@@ -27,7 +23,6 @@
   import StateEmpty from "$lib/components/state/StateEmpty.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
-  import TopicTypeGlyph from "$lib/components/TopicTypeGlyph.svelte";
 
   /** Virtual filter: active lifecycle topics (matches dashboard "Open"); distinct from `state` query. */
   const STATUS_OPEN_NOT_CLOSED = "__open__";
@@ -69,7 +64,6 @@
   let topicDraft = $state({
     title: "",
     summary: "",
-    type: "other",
   });
 
   function workspaceHref(pathname = "/") {
@@ -179,7 +173,6 @@
     topicDraft = {
       title: "",
       summary: "",
-      type: "other",
     };
   }
 
@@ -478,8 +471,8 @@
         {createError}
       </div>
     {/if}
-    <div class="grid gap-3 sm:grid-cols-2">
-      <label class="text-micro sm:col-span-2">
+    <div class="grid gap-3">
+      <label class="text-micro">
         <span class="font-medium text-[var(--fg-muted)]">Title</span>
         <input
           bind:value={topicDraft.title}
@@ -490,17 +483,6 @@
         />
       </label>
       <label class="text-micro">
-        <span class="font-medium text-[var(--fg-muted)]">Type</span>
-        <select
-          bind:value={topicDraft.type}
-          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-2 text-meta transition-colors focus:bg-[var(--panel)]"
-        >
-          {#each CANONICAL_TOPIC_TYPES as t}<option value={t}
-              >{CANONICAL_TOPIC_TYPE_LABELS[t]}</option
-            >{/each}
-        </select>
-      </label>
-      <label class="text-micro sm:col-span-2">
         <span class="font-medium text-[var(--fg-muted)]">Summary</span>
         <textarea
           bind:value={topicDraft.summary}
@@ -550,7 +532,6 @@
             class="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--line-subtle)]"
             href={workspaceHref(`/topics/${encodeURIComponent(topic.id)}`)}
           >
-            <TopicTypeGlyph type={topic.type} class="shrink-0" />
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-center gap-2">
                 <p class="truncate text-meta font-medium text-[var(--fg)]">

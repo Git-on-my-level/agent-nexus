@@ -24,6 +24,7 @@
     searchDocuments as searchDocumentRecords,
     searchTopics as searchTopicRecords,
     topicSearchResultToPickerOption,
+    topicSearchResultToBoardRefOption,
   } from "$lib/searchHelpers";
   import { toActorPickerOptions } from "$lib/systemActor.js";
   import { workspacePath } from "$lib/workspacePaths";
@@ -32,6 +33,7 @@
     formatInboxItemBoardPanelResourceLine,
   } from "$lib/inboxUtils";
   import {
+    boardPrimaryTopicRef,
     boardWorkspaceInspectNav,
     warningInspectNav,
   } from "$lib/topicRouteUtils";
@@ -71,6 +73,7 @@
   let detailModalCard = $state(null);
 
   let boardTitle = $state("");
+  let boardLinkedTopicRef = $state("");
   let boardDocumentId = $state("");
   let boardOwners = $state([]);
   let boardPinnedRefs = $state("");
@@ -124,6 +127,11 @@
     return threads.map(topicSearchResultToPickerOption);
   }
 
+  async function searchTopicLinkOptions(query) {
+    const topics = await searchTopicRecords(query);
+    return topics.map(topicSearchResultToBoardRefOption);
+  }
+
   async function searchDocumentOptions(query) {
     const documents = await searchDocumentRecords(query);
     return documents.map(toDocumentOption);
@@ -131,6 +139,7 @@
 
   function syncBoardDrafts(board) {
     boardTitle = board?.title ?? "";
+    boardLinkedTopicRef = boardPrimaryTopicRef(board);
     boardDocumentId = firstBoardDocumentId(board);
     boardOwners = [...(board?.owners ?? [])];
     boardPinnedRefs = joinDelimitedValues(board?.pinned_refs ?? []);
@@ -237,8 +246,10 @@
     }
 
     const docId = boardDocumentId.trim();
+    const linkedTopic = boardLinkedTopicRef.trim();
     const patch = {
       title,
+      primary_topic_ref: linkedTopic || null,
       document_refs: docId ? [`document:${docId}`] : [],
       owners: [...boardOwners],
       pinned_refs: parseDelimitedValues(boardPinnedRefs),
@@ -765,6 +776,17 @@
               type="text"
             />
           </label>
+
+          <SearchableEntityPicker
+            bind:value={boardLinkedTopicRef}
+            advancedLabel="Enter a topic ref manually"
+            helperText="Links this board to a topic for navigation and scan context."
+            label="Linked topic"
+            manualLabel="Topic ref"
+            manualPlaceholder="topic:…"
+            placeholder="Search topics by title or id"
+            searchFn={searchTopicLinkOptions}
+          />
 
           <SearchableEntityPicker
             bind:value={boardDocumentId}

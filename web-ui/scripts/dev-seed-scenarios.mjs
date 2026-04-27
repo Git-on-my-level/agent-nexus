@@ -114,7 +114,6 @@ function mapThreadToTopic(thread) {
   return {
     id: thread.id,
     thread_id: thread.id,
-    type: normalizeTopicType(thread.type),
     title: thread.title,
     state,
     summary: String(thread.current_summary ?? thread.title ?? "").trim(),
@@ -128,17 +127,4 @@ function mapThreadToTopic(thread) {
     updated_by: thread.updated_by,
     created_by: thread.updated_by,
   };
-}
-
-function normalizeTopicType(type) {
-  switch (String(type ?? "").trim()) {
-    case "initiative":
-      return "initiative";
-    case "case":
-      return "incident";
-    case "process":
-      return "other";
-    default:
-      return "other";
-  }
 }

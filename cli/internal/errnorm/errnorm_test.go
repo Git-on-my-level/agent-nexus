@@ -153,12 +153,12 @@ func TestEnrichPatchRiskMustBeOneOf(t *testing.T) {
 	}
 }
 
-func TestEnrichSchemaStrictEnumWrappedTopicType(t *testing.T) {
+func TestEnrichSchemaStrictEnumWrappedBoardColumnKey(t *testing.T) {
 	t.Parallel()
 
-	msg := `topic.type: invalid value "nope" for strict enum topic_type (allowed: case, process, relationship, initiative, objective, decision, incident, risk, request, note, other)`
+	msg := `invalid value "nope" for strict enum board_column_key (allowed: backlog, ready, in_progress, blocked, review, done)`
 	err := FromHTTPFailure(400, []byte(fmt.Sprintf(`{"error":{"code":"invalid_request","message":%q,"recoverable":true,"hint":"x"}}`, msg)))
-	if !strings.Contains(err.Hint, "topic_type") || !strings.Contains(err.Hint, "anx topics patch --help") {
+	if !strings.Contains(err.Hint, "board_column_key") || !strings.Contains(err.Hint, "anx cards move --help") {
 		t.Fatalf("unexpected hint: %q", err.Hint)
 	}
 }

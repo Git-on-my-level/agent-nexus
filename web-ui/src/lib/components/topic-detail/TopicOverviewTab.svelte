@@ -6,7 +6,6 @@
   import RefLink from "$lib/components/RefLink.svelte";
   import { splitTypedRef } from "$lib/inboxUtils";
   import { buildTopicPatch } from "$lib/topicPatch";
-  import { topicTypeSelectOptions } from "$lib/topicTypeGlyph.js";
 
   let { threadId, onSave, conflictWarning = "", editNotice = "" } = $props();
 
@@ -47,8 +46,6 @@
   let savingEdit = $state(false);
   let editError = $state("");
 
-  let topicTypeOptions = $derived(topicTypeSelectOptions(editDraft?.type));
-
   let topicRefGroups = $derived.by(() => {
     if (!topic) return [];
     const groups = [
@@ -75,7 +72,6 @@
   function toEditDraft(thread) {
     return {
       title: thread.title ?? "",
-      type: thread.type ?? "other",
       summary: thread.summary ?? thread.current_summary ?? "",
     };
   }
@@ -96,7 +92,6 @@
   function buildDraftSnapshotFromEdit() {
     return {
       title: editDraft.title.trim(),
-      type: editDraft.type,
       summary: editDraft.summary.trim(),
     };
   }
@@ -149,23 +144,30 @@
       </button>
     </div>
 
-    <div
-      class="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 py-2.5 text-micro text-[var(--fg-muted)]"
-    >
-      <span class="capitalize text-[var(--fg)]">{topic.type}</span>
-      {#if topic.state}
-        <span aria-hidden="true">·</span>
+    {#if !editOpen}
+      <div class="divide-y divide-[var(--line-subtle)]">
+        {#if topic.summary || topic.current_summary}
+          {@const summary = String(topic.summary ?? topic.current_summary ?? "").trim()}
+          {#if summary}
+            <div class="px-4 py-3">
+              <p class="text-micro text-[var(--fg-muted)]">Description</p>
+              <p class="mt-0.5 text-meta text-[var(--fg)] whitespace-pre-wrap">{summary}</p>
+            </div>
+          {/if}
+        {/if}
+        {#if topic.state}
+          <div class="px-4 py-3 text-micro">
+            <span class="text-[var(--fg-muted)]">State: </span><span class="capitalize text-[var(--fg)]">{topic.state}</span>
+          </div>
+        {/if}
+      </div>
+    {:else if topic.state}
+      <div
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 py-2.5 text-micro text-[var(--fg-muted)]"
+      >
         <span class="capitalize text-[var(--fg)]">State: {topic.state}</span>
-      {/if}
-    </div>
-
-    <!--
-      Per polish §P3: the topic header already shows a `line-clamp-2` summary
-      preview with the full text in the `title` attribute. Repeating the same
-      body here read as a bug for short summaries; long ones now belong to a
-      future "expand summary" affordance in the header rather than a duplicate
-      block.
-    -->
+      </div>
+    {/if}
 
     {#if (topic.next_actions ?? []).length > 0}
       <div class="border-t border-[var(--line-subtle)] px-4 py-3">
@@ -224,9 +226,9 @@
         >
           {editError}
         </p>{/if}
-      <div class="grid gap-3 sm:grid-cols-2">
+      <div class="grid gap-3">
         <label
-          class="text-micro font-medium text-[var(--fg-muted)] sm:col-span-2"
+          class="text-micro font-medium text-[var(--fg-muted)]"
           >Title <input
             bind:value={editDraft.title}
             class="mt-1 w-full rounded border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta text-[var(--fg)]"
@@ -234,17 +236,8 @@
             type="text"
           /></label
         >
-        <label class="text-micro font-medium text-[var(--fg-muted)]"
-          >Type <select
-            bind:value={editDraft.type}
-            class="mt-1 w-full rounded border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-1.5 text-meta text-[var(--fg)]"
-            >{#each topicTypeOptions as opt (opt.value)}<option
-                value={opt.value}>{opt.label}</option
-              >{/each}</select
-          ></label
-        >
         <label
-          class="text-micro font-medium text-[var(--fg-muted)] sm:col-span-2"
+          class="text-micro font-medium text-[var(--fg-muted)]"
           >Summary <textarea
             bind:value={editDraft.summary}
             class="mt-1 w-full rounded border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta text-[var(--fg)]"

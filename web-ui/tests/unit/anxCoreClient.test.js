@@ -113,7 +113,7 @@ describe("anxCoreClient error messaging", () => {
         if (String(url).endsWith("/meta/handshake")) {
           return new Response(
             JSON.stringify({
-              schema_version: "0.3.0",
+              schema_version: "0.5.0",
               command_registry_digest: expectedDigest,
               core_version: "test",
               api_version: "0.2",
@@ -133,7 +133,7 @@ describe("anxCoreClient error messaging", () => {
     });
 
     await expect(verifyCoreSchemaVersion(client)).resolves.toMatchObject({
-      schema_version: "0.3.0",
+      schema_version: "0.5.0",
     });
   });
 
@@ -167,7 +167,7 @@ describe("anxCoreClient error messaging", () => {
         if (String(url).endsWith("/version")) {
           return new Response(
             JSON.stringify({
-              schema_version: "0.3.0",
+              schema_version: "0.5.0",
               command_registry_digest: expectedDigest,
             }),
             {
@@ -185,7 +185,7 @@ describe("anxCoreClient error messaging", () => {
     });
 
     await expect(verifyCoreSchemaVersion(client)).resolves.toMatchObject({
-      schema_version: "0.3.0",
+      schema_version: "0.5.0",
     });
   });
 
@@ -214,7 +214,7 @@ describe("anxCoreClient error messaging", () => {
         if (String(url).endsWith("/meta/handshake")) {
           return new Response(
             JSON.stringify({
-              schema_version: "0.3.0",
+              schema_version: "0.5.0",
               command_registry_digest: "stale-core-digest",
               core_version: "test",
               api_version: "0.2",

@@ -5363,7 +5363,7 @@ func TestCreateCommandsDefaultEmptyListFields(t *testing.T) {
 				json.Unmarshal(body, &receivedBody)
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusCreated)
-				_, _ = w.Write([]byte(`{"topic":{"id":"t1","type":"case","state":"active","title":"T","summary":"S","owner_refs":[],"document_refs":[],"board_refs":[],"related_refs":[],"provenance":{"sources":[]}}}`))
+				_, _ = w.Write([]byte(`{"topic":{"id":"t1","state":"active","title":"T","summary":"S","owner_refs":[],"document_refs":[],"board_refs":[],"related_refs":[],"provenance":{"sources":[]}}}`))
 				return
 			}
 			http.NotFound(w, r)
@@ -5372,7 +5372,7 @@ func TestCreateCommandsDefaultEmptyListFields(t *testing.T) {
 
 		home := t.TempDir()
 		env := map[string]string{}
-		input := `{"topic":{"type":"case","title":"T","summary":"S","provenance":{"sources":[]}}}`
+		input := `{"topic":{"title":"T","summary":"S","owner_refs":[],"document_refs":[],"board_refs":[],"related_refs":[],"provenance":{"sources":[]}}}`
 		result := runCLIForTest(t, home, env, strings.NewReader(input), []string{"--json", "--base-url", server.URL, "topics", "create"})
 		assertEnvelopeOK(t, result)
 
@@ -5497,7 +5497,7 @@ func TestCreateCommandsDefaultEmptyListFields(t *testing.T) {
 
 		home := t.TempDir()
 		env := map[string]string{}
-		input := `{"topic":{"type":"case","title":"T","summary":"S","owner_refs":["actor:x"],"document_refs":[],"board_refs":["board:y"],"related_refs":[],"provenance":{"sources":[]}}}`
+		input := `{"topic":{"title":"T","summary":"S","owner_refs":["actor:x"],"document_refs":[],"board_refs":["board:y"],"related_refs":[],"provenance":{"sources":[]}}}`
 		result := runCLIForTest(t, home, env, strings.NewReader(input), []string{"--json", "--base-url", server.URL, "topics", "create"})
 		assertEnvelopeOK(t, result)
 

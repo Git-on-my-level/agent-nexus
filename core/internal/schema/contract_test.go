@@ -11,16 +11,12 @@ func TestLoadExtractsCoreSchemaRules(t *testing.T) {
 
 	contract := loadContract(t)
 
-	if contract.Version != "0.4.0" {
+	if contract.Version != "0.5.0" {
 		t.Fatalf("unexpected schema version: got %q", contract.Version)
 	}
 
-	topicTypeEnum, ok := contract.Enums["topic_type"]
-	if !ok {
-		t.Fatal("topic_type enum was not loaded")
-	}
-	if topicTypeEnum.Policy != EnumPolicyStrict {
-		t.Fatalf("unexpected topic_type policy: got %q", topicTypeEnum.Policy)
+	if _, ok := contract.Enums["topic_type"]; ok {
+		t.Fatal("topic_type enum should not be present")
 	}
 
 	eventType, ok := contract.Enums["event_type"]

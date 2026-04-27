@@ -129,7 +129,27 @@ function createTopicDetailStore() {
       if (asTopic) {
         workspace = await coreClient.getTopicWorkspace(threadId, {});
         const primaryThread = primaryThreadFromTopicWorkspace(workspace);
-        topic = primaryThread;
+        // Merge Topic metadata (title, summary, owner_refs, etc.) with the Thread id so
+        // downstream components get topic-level fields AND the correct thread id for SSE/messages.
+        const topicMeta = workspace?.topic ?? {};
+        const topicMetaId = String(topicMeta.id ?? "").trim();
+        if (primaryThread) {
+          topic = {
+            ...topicMeta,
+            id: primaryThread.id,
+            topic_ref:
+              primaryThread.topic_ref ??
+              (topicMetaId ? `topic:${topicMetaId}` : ""),
+          };
+        } else {
+          topic = topicMetaId
+            ? {
+                ...topicMeta,
+                topic_ref:
+                  topicMeta.topic_ref ?? `topic:${topicMetaId}`,
+              }
+            : null;
+        }
         documents = Array.isArray(workspace?.documents)
           ? workspace.documents
           : [];

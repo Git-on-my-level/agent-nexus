@@ -138,7 +138,6 @@ func newAuthIntegrationEnv(t *testing.T, options authIntegrationOptions) authInt
 
 func authTestMinimalTopic(title string) map[string]any {
 	return map[string]any{
-		"type":          "initiative",
 		"title":         title,
 		"summary":       "auth integration topic",
 		"owner_refs":    []any{},

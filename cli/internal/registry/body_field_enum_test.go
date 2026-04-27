@@ -5,15 +5,12 @@ import (
 	"testing"
 )
 
-func TestBodyFieldEnumTopicsPatchType(t *testing.T) {
+func TestBodyFieldEnumTopicsPatchNoTopicTypeEnum(t *testing.T) {
 	t.Parallel()
 
-	vals, ok := BodyFieldEnum("topics patch", "patch.type")
-	if !ok || len(vals) == 0 {
-		t.Fatalf("expected patch.type enums, got ok=%v vals=%#v", ok, vals)
-	}
-	if !slices.Contains(vals, "incident") || !slices.Contains(vals, "initiative") {
-		t.Fatalf("unexpected values: %#v", vals)
+	_, ok := BodyFieldEnum("topics patch", "patch.type")
+	if ok {
+		t.Fatal("patch.type should not be a registered enum on topics patch")
 	}
 }
 

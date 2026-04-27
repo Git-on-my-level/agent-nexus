@@ -208,7 +208,6 @@ func TestInboxAcknowledgmentResolvesTopicSubjectRefToBackingThread(t *testing.T)
 	createTopicResp := postJSONExpectStatus(t, h.baseURL+"/topics", `{
 		"actor_id":"actor-1",
 		"topic":{
-			"type":"initiative",
 			"title":"Ack subject topic",
 			"summary":"Topic for ack resolution",
 			"owner_refs":["actor:actor-1"],

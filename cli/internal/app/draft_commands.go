@@ -587,7 +587,6 @@ func validateDraftTopicCreate(body map[string]any) []string {
 		return out
 	}
 	requiredFields := []string{
-		"type",
 		"title",
 		"summary",
 		"owner_refs",
@@ -623,7 +622,6 @@ func validateDraftTopicPatch(body map[string]any) []string {
 
 func validateTopicFields(topic map[string]any, createMode bool, path string, out *[]string) {
 	stringFields := map[string]bool{
-		"type":    true,
 		"title":   true,
 		"summary": true,
 	}
@@ -633,7 +631,7 @@ func validateTopicFields(topic map[string]any, createMode bool, path string, out
 		case "status", "state":
 			*out = append(*out, full+" is not supported on write; lifecycle state is derived from archive/trash timestamps")
 			continue
-		case "type", "title", "summary":
+		case "title", "summary":
 			text, ok := raw.(string)
 			if !ok {
 				*out = append(*out, full+" must be a string")

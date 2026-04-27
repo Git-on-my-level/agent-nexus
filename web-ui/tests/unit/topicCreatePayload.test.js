@@ -9,20 +9,20 @@ describe("topicCreatePayload", () => {
       summary: "",
     });
     expect(payload.topic).toMatchObject({
-      type: "other",
       title: "X",
       summary: "No summary provided.",
     });
+    expect(payload.topic.type).toBeUndefined();
     expect(payload.topic.status).toBeUndefined();
     expect(payload.topic.state).toBeUndefined();
   });
 
-  it("buildTopicCreatePayloadFromDraft uses draft type", () => {
+  it("buildTopicCreatePayloadFromDraft ignores legacy type on draft", () => {
     const payload = buildTopicCreatePayloadFromDraft({
       title: "T",
       summary: "S",
       type: "incident",
     });
-    expect(payload.topic.type).toBe("incident");
+    expect(payload.topic.type).toBeUndefined();
   });
 });

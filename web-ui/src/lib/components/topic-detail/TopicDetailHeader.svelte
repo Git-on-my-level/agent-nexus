@@ -11,7 +11,6 @@
   import Button from "$lib/components/Button.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import ResourceShareMenu from "$lib/components/ResourceShareMenu.svelte";
-  import TopicTypeGlyph from "$lib/components/TopicTypeGlyph.svelte";
   import TrashButton from "$lib/components/TrashButton.svelte";
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
@@ -191,37 +190,39 @@
 {/if}
 
 {#if topic}
-  <div class="flex flex-col gap-2">
-    <div class="flex flex-wrap items-start justify-between gap-3">
-      <div class="flex min-w-0 flex-1 items-start gap-2">
-        <TopicTypeGlyph type={topic.type} class="mt-0.5" />
-        <div class="min-w-0 flex-1">
-          <div class="flex min-w-0 flex-wrap items-center gap-2">
-            <h1
-              class="min-w-0 flex-1 truncate text-title font-semibold text-[var(--fg)]"
-            >
-              {topic.title}
-            </h1>
-            <span
-              class="shrink-0 rounded px-2 py-0.5 text-micro font-medium capitalize {topicLifecycleBadgeClass(
-                topic.state,
-              )}"
-              >{BOARD_LIFECYCLE_STATE_LABELS[topic.state] ?? topic.state}</span
-            >
-          </div>
-          {#if topicSummary}
-            <p
-              class="mt-1 line-clamp-2 text-meta text-[var(--fg-muted)]"
-              title={topicSummary}
-            >
-              {topicSummary}
-            </p>
-          {/if}
+  <div class="flex flex-col gap-1.5">
+    <div class="flex flex-wrap items-start justify-between gap-2">
+      <div class="min-w-0 flex-1">
+        <div class="flex min-w-0 flex-wrap items-baseline gap-2">
+          <h1
+            class="min-w-0 flex-1 text-title font-semibold {topic.title ? 'text-[var(--fg)]' : 'text-[var(--fg-subtle)] italic'}"
+          >
+            {topic.title || "Untitled topic"}
+          </h1>
+          <span
+            class="shrink-0 rounded px-2 py-0.5 text-micro font-medium capitalize {topicLifecycleBadgeClass(
+              topic.state,
+            )}"
+            >{BOARD_LIFECYCLE_STATE_LABELS[topic.state] ?? topic.state}</span
+          >
         </div>
+        {#if topicSummary}
+          <p
+            class="mt-1 line-clamp-3 text-[13px] text-[var(--fg-muted)]"
+            title={topicSummary}
+          >
+            {topicSummary}
+          </p>
+        {/if}
+        <p class="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-micro text-[var(--fg-subtle)]">
+          <span class="whitespace-nowrap">Updated {formatTimestamp(topic.updated_at) || "—"}</span>
+          {#if topic.created_by}
+            <span aria-hidden="true">·</span>
+            <span class="whitespace-nowrap">by {actorName(topic.created_by)}</span>
+          {/if}
+        </p>
       </div>
-      <div
-        class="flex shrink-0 flex-wrap items-center justify-end gap-2 text-micro"
-      >
+      <div class="flex shrink-0 items-center gap-1.5">
         {#if topic?.id}
           <ResourceShareMenu resourceId={topic.id} rawRecord={topic} />
         {/if}
@@ -242,19 +243,6 @@
         {/if}
       </div>
     </div>
-    <p
-      class="flex flex-wrap items-center gap-x-2 gap-y-1 text-meta text-[var(--fg-muted)]"
-    >
-      <span class="whitespace-nowrap"
-        >Updated {formatTimestamp(topic.updated_at) || "—"}</span
-      >
-      {#if topic.created_by}
-        <span class="text-[var(--fg-subtle)]" aria-hidden="true">·</span>
-        <span class="min-w-0 whitespace-nowrap"
-          >by {actorName(topic.created_by)}</span
-        >
-      {/if}
-    </p>
   </div>
 {/if}
 

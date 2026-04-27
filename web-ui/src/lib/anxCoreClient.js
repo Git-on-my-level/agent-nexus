@@ -1038,9 +1038,16 @@ export async function verifyCoreSchemaVersion(
     version = await getHandshakeOrVersion(client);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    throw new Error(
+    const wrapped = new Error(
       `Unable to verify anx-core schema version at ${target}: ${reason}`,
     );
+    if (error instanceof Error) {
+      wrapped.cause = error;
+      if (typeof error.status === "number") {
+        wrapped.coreHttpStatus = error.status;
+      }
+    }
+    throw wrapped;
   }
 
   if (

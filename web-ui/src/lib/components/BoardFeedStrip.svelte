@@ -97,8 +97,8 @@
   let previewLines = $derived.by(() => {
     const list = [...boardMessageEvents];
     list.sort((a, b) => eventTimeMs(a) - eventTimeMs(b));
-    const newest = list.slice(-3).reverse();
-    return newest.map((e) => truncate(messageBodyPreview(e), 90));
+    const lastThree = list.slice(-3);
+    return lastThree.map((e) => truncate(messageBodyPreview(e), 90));
   });
 
   async function handleMessagePost(routeScopeId, event) {

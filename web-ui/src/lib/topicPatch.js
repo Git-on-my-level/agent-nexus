@@ -1,4 +1,4 @@
-const EDITABLE_FIELDS = ["title", "type", "summary"];
+const EDITABLE_FIELDS = ["title", "summary"];
 
 function normalizeScalar(value) {
   return value ?? "";

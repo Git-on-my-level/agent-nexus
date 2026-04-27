@@ -6,6 +6,9 @@ set -euo pipefail
 # empty workspace coreBaseUrl and returns HTTP 500 on /local.
 # When ANX_CONTROL_BASE_URL is set, cores are resolved from control-plane-backed
 # workspace metadata; do not impose a static default that masks resolver behavior.
+# If the CP workspace proxy returns 502 (anx-core runtime not up), dev mode shows
+# a banner instead of hard-failing SSR. To skip verification entirely: set
+# ANX_UI_SKIP_CORE_SCHEMA_CHECK=1 (server-side private env).
 if [[ -z "${ANX_CORE_BASE_URL:-}" && -z "${ANX_CONTROL_BASE_URL:-}" ]]; then
 	export ANX_CORE_BASE_URL="http://127.0.0.1:8000"
 fi

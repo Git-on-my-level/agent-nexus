@@ -72,7 +72,6 @@ type ThreadListFilter struct {
 }
 
 type TopicListFilter struct {
-	Type            string
 	State           string
 	Query           string
 	Limit           *int

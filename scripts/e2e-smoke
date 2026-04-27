@@ -331,7 +331,7 @@ if [[ "$NEEDS_REFRESH_AFTER" != "false" ]]; then
 fi
 
 # Typed command flow: topic -> board -> cards -> packets.
-printf '{"topic":{"id":"topic-smoke-main","type":"initiative","status":"active","title":"Smoke coordination topic","summary":"Smoke workflow in progress","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":["topic:topic-smoke-main"],"provenance":{"sources":["actor_statement:smoke"]}}}\n' \
+printf '{"topic":{"id":"topic-smoke-main","title":"Smoke coordination topic","summary":"Smoke workflow in progress","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":["topic:topic-smoke-main"],"provenance":{"sources":["actor_statement:smoke"]}}}\n' \
   | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" topics create >"$TMP_DIR/topic-create.json"
 MAIN_TOPIC_ID="$(json_get "$TMP_DIR/topic-create.json" 'data.topic.id' || true)"
 if [[ -z "$MAIN_TOPIC_ID" ]]; then
@@ -356,7 +356,7 @@ THREAD_ID="$MAIN_TOPIC_THREAD_ID"
 
 # Board smoke: create a board, add/reorder/move/archive cards, and verify the
 # canonical workspace through both core and the UI proxy.
-printf '{"topic":{"id":"topic-smoke-board-a","type":"initiative","status":"active","title":"Smoke board card A","summary":"board card A","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":["topic:topic-smoke-board-a"],"provenance":{"sources":["actor_statement:smoke"]}}}\n' \
+printf '{"topic":{"id":"topic-smoke-board-a","title":"Smoke board card A","summary":"board card A","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":["topic:topic-smoke-board-a"],"provenance":{"sources":["actor_statement:smoke"]}}}\n' \
   | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" topics create >"$TMP_DIR/board-topic-a-create.json"
 BOARD_TOPIC_A_ID="$(json_get "$TMP_DIR/board-topic-a-create.json" 'data.topic.id' || true)"
 if [[ -z "$BOARD_TOPIC_A_ID" ]]; then
@@ -377,7 +377,7 @@ if [[ -z "$BOARD_TOPIC_A_ID" ]]; then
   exit 1
 fi
 
-printf '{"topic":{"id":"topic-smoke-board-b","type":"initiative","status":"active","title":"Smoke board card B","summary":"board card B","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":["topic:topic-smoke-board-b"],"provenance":{"sources":["actor_statement:smoke"]}}}\n' \
+printf '{"topic":{"id":"topic-smoke-board-b","title":"Smoke board card B","summary":"board card B","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":["topic:topic-smoke-board-b"],"provenance":{"sources":["actor_statement:smoke"]}}}\n' \
   | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" topics create >"$TMP_DIR/board-topic-b-create.json"
 BOARD_TOPIC_B_ID="$(json_get "$TMP_DIR/board-topic-b-create.json" 'data.topic.id' || true)"
 if [[ -z "$BOARD_TOPIC_B_ID" ]]; then
@@ -573,7 +573,7 @@ node -e 'const fs=require("fs"); const data=JSON.parse(fs.readFileSync(process.a
 }
 
 # Trash lane (operational lifecycle, spec §3.6) — topics support trash; default topic list hides trashed rows.
-printf '{"topic":{"id":"topic-smoke-trash","type":"other","status":"active","title":"Smoke trashed topic","summary":"Disposed after smoke","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":["topic:topic-smoke-trash"],"provenance":{"sources":["actor_statement:smoke"]}}}\n' \
+printf '{"topic":{"id":"topic-smoke-trash","title":"Smoke trashed topic","summary":"Disposed after smoke","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":["topic:topic-smoke-trash"],"provenance":{"sources":["actor_statement:smoke"]}}}\n' \
   | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" topics create >"$TMP_DIR/trash-topic-create.json"
 printf '{"reason":"e2e-smoke trash lane assertion"}\n' \
   | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" topics trash --topic-id topic-smoke-trash >"$TMP_DIR/topic-trash.json"

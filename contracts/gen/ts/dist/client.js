@@ -5392,23 +5392,6 @@ export const commandRegistry = [
                 {
                     "name": "topic.title",
                     "type": "string"
-                },
-                {
-                    "name": "topic.type",
-                    "type": "string",
-                    "enum_values": [
-                        "case",
-                        "decision",
-                        "incident",
-                        "initiative",
-                        "note",
-                        "objective",
-                        "other",
-                        "process",
-                        "relationship",
-                        "request",
-                        "risk"
-                    ]
                 }
             ],
             "optional": [
@@ -5585,23 +5568,6 @@ export const commandRegistry = [
                 {
                     "name": "patch.title",
                     "type": "string"
-                },
-                {
-                    "name": "patch.type",
-                    "type": "string",
-                    "enum_values": [
-                        "case",
-                        "decision",
-                        "incident",
-                        "initiative",
-                        "note",
-                        "objective",
-                        "other",
-                        "process",
-                        "relationship",
-                        "request",
-                        "risk"
-                    ]
                 }
             ]
         },

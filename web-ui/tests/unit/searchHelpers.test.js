@@ -62,7 +62,7 @@ describe("searchHelpers", () => {
       });
       expect(opt.id).toBe("thr-9");
       expect(opt.title).toBe("Coordination");
-      expect(opt.keywords).toContain("incident");
+      expect(opt.keywords).toEqual([]);
     });
   });
 

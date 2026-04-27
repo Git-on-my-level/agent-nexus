@@ -281,7 +281,6 @@ anx-core MUST enforce these restrictions at the API level — reject the write i
 The following MAY be updated without receipts:
 - `topic.summary`
 - `topic.title`
-- `topic.type`
 
 ### 8.4 Lifecycle state
 - Topic, board, document, and card lifecycle state is derived from

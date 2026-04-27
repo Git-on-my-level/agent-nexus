@@ -38,7 +38,6 @@ test("trash page restores archived topics, boards, cards, documents, and artifac
       id: "topic-trash-1",
       title: "Archived topic",
       summary: "Archived topic summary",
-      type: "initiative",
       thread_id: "topic-trash-1",
       owner_refs: [],
       board_refs: [],

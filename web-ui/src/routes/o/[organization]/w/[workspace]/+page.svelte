@@ -9,7 +9,6 @@
     principalRegistry,
   } from "$lib/actorSession";
   import RefLink from "$lib/components/RefLink.svelte";
-  import TopicTypeGlyph from "$lib/components/TopicTypeGlyph.svelte";
   import { coreClient } from "$lib/coreClient";
   import { parseTimestampMs } from "$lib/dateUtils";
   import { eventTypeDotClass, toTimelineView } from "$lib/timelineUtils";
@@ -617,7 +616,6 @@
                 class="flex min-w-0 items-center gap-2.5 rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2.5 transition-colors hover:bg-[var(--line-subtle)]"
                 href={workspaceHref(`/topics/${encodeURIComponent(topic.id)}`)}
               >
-                <TopicTypeGlyph type={topic.type} class="shrink-0" />
                 <div class="min-w-0 flex-1">
                   <p class="truncate text-meta font-medium text-[var(--fg)]">
                     {topic.title}

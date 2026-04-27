@@ -169,7 +169,7 @@ The runner:
 ## Typed Command Smoke
 
 ```bash
-printf '{"topic":{"title":"Incident #42","type":"incident","summary":"Investigate #42","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":[],"provenance":{"sources":["actor_statement:example"]}}}\n' | anx --agent agent-a topics create
+printf '{"topic":{"title":"Incident #42","summary":"Investigate #42","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":[],"provenance":{"sources":["actor_statement:example"]}}}\n' | anx --agent agent-a topics create
 anx --agent agent-a topics list --state active
 
 anx --agent agent-a events stream --max-events 1
@@ -203,7 +203,7 @@ read-only backing-thread timeline or `threads workspace` diagnostic projection.
 Draft/commit flow:
 
 ```bash
-printf '%s\n' '{"topic":{"title":"Drafted incident","type":"incident","summary":"Staged via draft","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":[],"provenance":{"sources":["actor_statement:example"]}}}' | anx --agent agent-a draft create --command topics.create
+printf '%s\n' '{"topic":{"title":"Drafted incident","summary":"Staged via draft","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":[],"provenance":{"sources":["actor_statement:example"]}}}' | anx --agent agent-a draft create --command topics.create
 anx --agent agent-a draft list
 anx --agent agent-a draft commit <draft-id>
 anx --agent agent-a draft discard <draft-id>

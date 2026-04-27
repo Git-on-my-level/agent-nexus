@@ -1,6 +1,6 @@
 {
   "openapi_version": "3.1.0",
-  "contract_version": "0.4.0",
+  "contract_version": "0.5.0",
   "generated_by": "core/cmd/contract-gen",
   "concept_count": 31,
   "concepts": [
@@ -4550,23 +4550,6 @@
               {
                 "name": "patch.title",
                 "type": "string"
-              },
-              {
-                "name": "patch.type",
-                "type": "string",
-                "enum_values": [
-                  "case",
-                  "decision",
-                  "incident",
-                  "initiative",
-                  "note",
-                  "objective",
-                  "other",
-                  "process",
-                  "relationship",
-                  "request",
-                  "risk"
-                ]
               }
             ]
           },
@@ -8132,23 +8115,6 @@
               {
                 "name": "topic.title",
                 "type": "string"
-              },
-              {
-                "name": "topic.type",
-                "type": "string",
-                "enum_values": [
-                  "case",
-                  "decision",
-                  "incident",
-                  "initiative",
-                  "note",
-                  "objective",
-                  "other",
-                  "process",
-                  "relationship",
-                  "request",
-                  "risk"
-                ]
               }
             ],
             "optional": [
@@ -8325,23 +8291,6 @@
               {
                 "name": "patch.title",
                 "type": "string"
-              },
-              {
-                "name": "patch.type",
-                "type": "string",
-                "enum_values": [
-                  "case",
-                  "decision",
-                  "incident",
-                  "initiative",
-                  "note",
-                  "objective",
-                  "other",
-                  "process",
-                  "relationship",
-                  "request",
-                  "risk"
-                ]
               }
             ]
           },
@@ -11569,23 +11518,6 @@
               {
                 "name": "topic.title",
                 "type": "string"
-              },
-              {
-                "name": "topic.type",
-                "type": "string",
-                "enum_values": [
-                  "case",
-                  "decision",
-                  "incident",
-                  "initiative",
-                  "note",
-                  "objective",
-                  "other",
-                  "process",
-                  "relationship",
-                  "request",
-                  "risk"
-                ]
               }
             ],
             "optional": [
@@ -11684,23 +11616,6 @@
               {
                 "name": "patch.title",
                 "type": "string"
-              },
-              {
-                "name": "patch.type",
-                "type": "string",
-                "enum_values": [
-                  "case",
-                  "decision",
-                  "incident",
-                  "initiative",
-                  "note",
-                  "objective",
-                  "other",
-                  "process",
-                  "relationship",
-                  "request",
-                  "risk"
-                ]
               }
             ]
           },

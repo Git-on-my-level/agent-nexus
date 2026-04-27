@@ -33,13 +33,6 @@ func handleListTopics(w http.ResponseWriter, r *http.Request, opts handlerOption
 	}
 
 	query := r.URL.Query()
-	topicType := strings.TrimSpace(query.Get("type"))
-	if topicType != "" && opts.contract != nil {
-		if err := schema.ValidateEnum(opts.contract, "topic_type", topicType); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
-			return
-		}
-	}
 	state := strings.TrimSpace(query.Get("state"))
 	if state != "" {
 		switch state {
@@ -62,7 +55,6 @@ func handleListTopics(w http.ResponseWriter, r *http.Request, opts handlerOption
 	}
 
 	topics, nextCursor, err := opts.primitiveStore.ListTopics(r.Context(), primitives.TopicListFilter{
-		Type:            topicType,
 		State:           state,
 		Query:           strings.TrimSpace(query.Get("q")),
 		Limit:           limitFilter,
@@ -659,21 +651,9 @@ func validateTopicWriteInput(contract *schema.Contract, topic map[string]any, cr
 	}
 
 	if createMode {
-		for _, field := range []string{"type", "title", "summary", "owner_refs", "document_refs", "board_refs", "related_refs", "provenance"} {
+		for _, field := range []string{"title", "summary", "owner_refs", "document_refs", "board_refs", "related_refs", "provenance"} {
 			if _, exists := topic[field]; !exists {
 				return fmt.Errorf("topic.%s is required", field)
-			}
-		}
-	}
-
-	if rawType, exists := topic["type"]; exists || createMode {
-		topicType := strings.TrimSpace(anyString(rawType))
-		if topicType == "" && createMode {
-			return fmt.Errorf("topic.type is required")
-		}
-		if topicType != "" {
-			if err := schema.ValidateEnum(contract, "topic_type", topicType); err != nil {
-				return fmt.Errorf("topic.type: %w", err)
 			}
 		}
 	}

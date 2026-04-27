@@ -361,8 +361,7 @@ func enrichAgentRevoked() (string, map[string]any) {
 }
 
 // enrichSchemaStrictEnum handles core/schema.ValidateEnum errors, e.g.
-// invalid value "x" for strict enum topic_type (allowed: ...).
-// Core may wrap as `topic.type: invalid value ...`.
+// invalid value "x" for strict enum priority (allowed: ...).
 func enrichSchemaStrictEnum(msg string) (string, map[string]any) {
 	idx := strings.Index(msg, "invalid value ")
 	if idx < 0 {
@@ -392,8 +391,6 @@ func enrichSchemaStrictEnum(msg string) (string, map[string]any) {
 
 func cliHelpForSchemaEnum(enumName string) string {
 	switch enumName {
-	case "topic_type":
-		return "anx topics patch --help"
 	case "board_column_key":
 		return "anx cards move --help"
 	default:
@@ -433,8 +430,6 @@ func enrichMustBeOneOfField(msg string) (string, map[string]any) {
 			return compactMustBeOneOfHint("status", vals, "anx agent notifications read --help")
 		}
 		return "", nil
-	case "patch.type":
-		return enumHintFromRegistry("patch.type", "topics patch", "patch.type", "anx topics patch --help")
 	default:
 		return "", nil
 	}

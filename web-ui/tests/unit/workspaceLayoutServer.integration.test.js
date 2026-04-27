@@ -17,6 +17,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const envState = vi.hoisted(() => ({}));
 
+const anxCoreClientIntegrationMocks = vi.hoisted(() => ({
+  createAnxCoreClient: vi.fn(() => ({})),
+  verifyCoreSchemaVersion: vi.fn().mockResolvedValue({
+    schema_version: "0.5.0",
+    command_registry_digest: "integration-test",
+  }),
+}));
+
+vi.mock("$lib/anxCoreClient", () => ({
+  createAnxCoreClient: anxCoreClientIntegrationMocks.createAnxCoreClient,
+  verifyCoreSchemaVersion: anxCoreClientIntegrationMocks.verifyCoreSchemaVersion,
+}));
+
 vi.mock("$env/dynamic/private", () => ({
   env: envState,
 }));

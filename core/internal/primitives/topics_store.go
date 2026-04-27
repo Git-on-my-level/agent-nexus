@@ -23,7 +23,6 @@ type TopicPatchResult struct {
 
 type topicRow struct {
 	ID             string
-	Type           sql.NullString
 	Title          sql.NullString
 	Summary        sql.NullString
 	ThreadID       sql.NullString
@@ -262,11 +261,6 @@ func (r topicRow) toMap(buckets topicRefBuckets) (map[string]any, error) {
 
 	out := map[string]any{}
 	out["id"] = r.ID
-	typ := ""
-	if r.Type.Valid {
-		typ = r.Type.String
-	}
-	out["type"] = typ
 	title := ""
 	if r.Title.Valid {
 		title = r.Title.String
@@ -340,7 +334,6 @@ func (s *Store) ListTopics(ctx context.Context, filter TopicListFilter) ([]map[s
 		var row topicRow
 		if err := rows.Scan(
 			&row.ID,
-			&row.Type,
 			&row.Title,
 			&row.Summary,
 			&row.ThreadID,
@@ -460,7 +453,6 @@ func (s *Store) CreateTopic(ctx context.Context, actorID string, topic map[strin
 	topicTargets := combineTopicRefTargets(topicBody, primaryThreadID)
 	threadTargets := typedRefEdgeTargets(refEdgeTypeRef, []string{"topic:" + topicID})
 
-	topicType := strings.TrimSpace(anyStringValue(topicBody["type"]))
 	title := strings.TrimSpace(anyStringValue(topicBody["title"]))
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -472,12 +464,11 @@ func (s *Store) CreateTopic(ctx context.Context, actorID string, topic map[strin
 	if _, err := tx.ExecContext(
 		ctx,
 		`INSERT INTO topics(
-			id, title, type, thread_id, summary, extensions_json, provenance_json,
+			id, title, thread_id, summary, extensions_json, provenance_json,
 			created_at, created_by, updated_at, updated_by
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		topicID,
 		title,
-		topicType,
 		primaryThreadID,
 		topicSummaryCol,
 		topicExtensionsJSON,
@@ -659,7 +650,6 @@ func (s *Store) PatchTopic(ctx context.Context, actorID string, topicID string, 
 	}
 	sort.Strings(changedFields)
 
-	nextTopicType := strings.TrimSpace(anyStringValue(nextBody["type"]))
 	nextTitle := strings.TrimSpace(anyStringValue(nextBody["title"]))
 	nextSummary := strings.TrimSpace(anyStringValue(nextBody["summary"]))
 	nextBackingThreadID := strings.TrimSpace(anyStringValue(nextBody["thread_id"]))
@@ -701,11 +691,10 @@ func (s *Store) PatchTopic(ctx context.Context, actorID string, topicID string, 
 	defer func() { _ = tx.Rollback() }()
 
 	updateQuery := `UPDATE topics
-			SET title = ?, type = ?, thread_id = ?, summary = ?, extensions_json = ?, provenance_json = ?, updated_at = ?, updated_by = ?
+			SET title = ?, thread_id = ?, summary = ?, extensions_json = ?, provenance_json = ?, updated_at = ?, updated_by = ?
 		  WHERE id = ?`
 	updateArgs := []any{
 		nextTitle,
-		nextTopicType,
 		nextBackingThreadID,
 		nextSummary,
 		topicExtensionsJSON,
@@ -767,7 +756,6 @@ func (s *Store) PatchTopic(ctx context.Context, actorID string, topicID string, 
 	}
 
 	nextBody["id"] = topicID
-	nextBody["type"] = nextTopicType
 	delete(nextBody, "status")
 	nextBody["title"] = nextTitle
 	nextBody["summary"] = nextSummary
@@ -813,11 +801,11 @@ func (s *Store) getTopicRow(ctx context.Context, topicID string) (topicRow, erro
 	row := topicRow{}
 	err := s.db.QueryRowContext(
 		ctx,
-		`SELECT id, type, title, summary, thread_id, extensions_json, provenance_json,
+		`SELECT id, title, summary, thread_id, extensions_json, provenance_json,
 			created_at, created_by, updated_at, updated_by, archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		 FROM topics WHERE id = ?`,
 		topicID,
-	).Scan(&row.ID, &row.Type, &row.Title, &row.Summary, &row.ThreadID, &row.ExtensionsJSON, &row.ProvenanceJSON,
+	).Scan(&row.ID, &row.Title, &row.Summary, &row.ThreadID, &row.ExtensionsJSON, &row.ProvenanceJSON,
 		&row.CreatedAt, &row.CreatedBy, &row.UpdatedAt, &row.UpdatedBy, &row.ArchivedAt, &row.ArchivedBy, &row.TrashedAt, &row.TrashedBy, &row.TrashReason)
 	if errors.Is(err, sql.ErrNoRows) {
 		return topicRow{}, ErrNotFound
@@ -1078,7 +1066,7 @@ func topicLifecycleEventType(action string) string {
 }
 
 func buildListTopicsQuery(filter TopicListFilter) (string, []any) {
-	query := `SELECT id, type, title, summary, thread_id, extensions_json, provenance_json, created_at, created_by, updated_at, updated_by, archived_at, archived_by, trashed_at, trashed_by, trash_reason
+	query := `SELECT id, title, summary, thread_id, extensions_json, provenance_json, created_at, created_by, updated_at, updated_by, archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		FROM topics
 		WHERE 1=1`
 	args := make([]any, 0, 8)
@@ -1105,10 +1093,6 @@ func buildListTopicsQuery(filter TopicListFilter) (string, []any) {
 		} else if !filter.IncludeArchived {
 			query += ` AND archived_at IS NULL`
 		}
-	}
-	if topicType := strings.TrimSpace(filter.Type); topicType != "" {
-		query += ` AND type = ?`
-		args = append(args, topicType)
 	}
 	if q := strings.TrimSpace(filter.Query); q != "" {
 		pattern := "%" + strings.ToLower(q) + "%"
@@ -1157,10 +1141,8 @@ func normalizeTopicInput(topic map[string]any, createMode bool) (map[string]any,
 		return nil, ErrInvalidTopicRequest
 	}
 
-	topicType := strings.TrimSpace(anyStringValue(out["type"]))
-	if topicType != "" && !isTopicType(topicType) {
-		return nil, ErrInvalidTopicRequest
-	}
+	// Legacy clients may still send topic.type; it is not stored.
+	delete(out, "type")
 	delete(out, "status")
 
 	for _, field := range []string{"owner_refs", "document_refs", "board_refs", "related_refs"} {
@@ -1241,15 +1223,6 @@ func extractTopicRefs(raw any) ([]string, error) {
 		return nil, err
 	}
 	return uniqueNormalizedStrings(refs), nil
-}
-
-func isTopicType(value string) bool {
-	switch strings.TrimSpace(value) {
-	case "case", "process", "relationship", "initiative", "objective", "decision", "incident", "risk", "request", "note", "other":
-		return true
-	default:
-		return false
-	}
 }
 
 func reflectDeepEqual(left, right any) bool {

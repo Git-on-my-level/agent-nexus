@@ -10,6 +10,26 @@ const workspaceResolverMocks = vi.hoisted(() => ({
   resolveWorkspaceCatalog: vi.fn(),
 }));
 
+const anxCoreClientMocks = vi.hoisted(() => ({
+  createAnxCoreClient: vi.fn(() => ({})),
+  verifyCoreSchemaVersion: vi.fn(() =>
+    Promise.resolve({
+      schema_version: "0.5.0",
+      command_registry_digest: "test-digest",
+    }),
+  ),
+}));
+
+vi.mock("$app/environment", async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, dev: false };
+});
+
+vi.mock("$lib/anxCoreClient", () => ({
+  createAnxCoreClient: anxCoreClientMocks.createAnxCoreClient,
+  verifyCoreSchemaVersion: anxCoreClientMocks.verifyCoreSchemaVersion,
+}));
+
 vi.mock("$lib/server/workspaceResolver", async (importOriginal) => {
   const actual = await importOriginal();
   return {
@@ -25,10 +45,12 @@ function createEvent({
   pathname = "/o/my-org/w/my-ws/login",
   cookies = {},
   outOfWorkspace = mockLocalProvider(),
+  fetchFn = vi.fn(),
 } = {}) {
   return {
     params: { organization: "my-org", workspace: "my-ws" },
     url: new URL(`https://ui.example.test${pathname}`),
+    fetch: fetchFn,
     cookies: {
       get: vi.fn((name) => cookies[name]),
       set: vi.fn(),
@@ -146,6 +168,7 @@ describe("workspace +layout.server.js", () => {
     const result = await load(event);
 
     expect(result.workspace.slug).toBe("my-ws");
+    expect(anxCoreClientMocks.verifyCoreSchemaVersion).toHaveBeenCalled();
     expect(workspaceResolverMocks.resolveWorkspaceCatalog).toHaveBeenCalledWith(
       event,
       { prefetchedResolved: resolvedWorkspace },
