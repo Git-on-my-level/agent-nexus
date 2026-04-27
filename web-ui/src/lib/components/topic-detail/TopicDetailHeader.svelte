@@ -195,15 +195,16 @@
       <div class="min-w-0 flex-1">
         <div class="flex min-w-0 flex-wrap items-baseline gap-2">
           <h1
-            class="min-w-0 flex-1 text-title font-semibold {topic.title ? 'text-[var(--fg)]' : 'text-[var(--fg-subtle)] italic'}"
+            class="min-w-0 flex-1 text-title font-semibold {topic.title
+              ? 'text-[var(--fg)]'
+              : 'text-[var(--fg-subtle)] italic'}"
           >
             {topic.title || "Untitled topic"}
           </h1>
           <span
             class="shrink-0 rounded px-2 py-0.5 text-micro font-medium capitalize {topicLifecycleBadgeClass(
               topic.state,
-            )}"
-            >{BOARD_LIFECYCLE_STATE_LABELS[topic.state] ?? topic.state}</span
+            )}">{BOARD_LIFECYCLE_STATE_LABELS[topic.state] ?? topic.state}</span
           >
         </div>
         {#if topicSummary}
@@ -214,11 +215,17 @@
             {topicSummary}
           </p>
         {/if}
-        <p class="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-micro text-[var(--fg-subtle)]">
-          <span class="whitespace-nowrap">Updated {formatTimestamp(topic.updated_at) || "—"}</span>
+        <p
+          class="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-micro text-[var(--fg-subtle)]"
+        >
+          <span class="whitespace-nowrap"
+            >Updated {formatTimestamp(topic.updated_at) || "—"}</span
+          >
           {#if topic.created_by}
             <span aria-hidden="true">·</span>
-            <span class="whitespace-nowrap">by {actorName(topic.created_by)}</span>
+            <span class="whitespace-nowrap"
+              >by {actorName(topic.created_by)}</span
+            >
           {/if}
         </p>
       </div>

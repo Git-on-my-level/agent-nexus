@@ -4,14 +4,14 @@
   import BoardFeedStrip from "$lib/components/BoardFeedStrip.svelte";
   import BoardCard from "$lib/components/BoardCard.svelte";
   import CardDetailModal from "$lib/components/CardDetailModal.svelte";
+  import GuidedTypedRefsInput from "$lib/components/GuidedTypedRefsInput.svelte";
+  import SearchableEntityPicker from "$lib/components/SearchableEntityPicker.svelte";
+  import SearchableMultiEntityPicker from "$lib/components/SearchableMultiEntityPicker.svelte";
   import IdsIntegrityDisclosure from "$lib/components/IdsIntegrityDisclosure.svelte";
   import ArchiveButton from "$lib/components/ArchiveButton.svelte";
   import ResourceShareMenu from "$lib/components/ResourceShareMenu.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import TrashButton from "$lib/components/TrashButton.svelte";
-  import GuidedTypedRefsInput from "$lib/components/GuidedTypedRefsInput.svelte";
-  import SearchableEntityPicker from "$lib/components/SearchableEntityPicker.svelte";
-  import SearchableMultiEntityPicker from "$lib/components/SearchableMultiEntityPicker.svelte";
   import {
     actorRegistry,
     lookupActorDisplayName,
@@ -24,7 +24,6 @@
     searchDocuments as searchDocumentRecords,
     searchTopics as searchTopicRecords,
     topicSearchResultToPickerOption,
-    topicSearchResultToBoardRefOption,
   } from "$lib/searchHelpers";
   import { toActorPickerOptions } from "$lib/systemActor.js";
   import { workspacePath } from "$lib/workspacePaths";
@@ -33,7 +32,6 @@
     formatInboxItemBoardPanelResourceLine,
   } from "$lib/inboxUtils";
   import {
-    boardPrimaryTopicRef,
     boardWorkspaceInspectNav,
     warningInspectNav,
   } from "$lib/topicRouteUtils";
@@ -44,12 +42,9 @@
     boardBackingThreadId,
     boardCardStableId,
     boardColumnTitle,
-    firstBoardDocumentId,
     freshnessStatusLabel,
     freshnessStatusTone,
     groupBoardWorkspaceCards,
-    joinDelimitedValues,
-    parseDelimitedValues,
   } from "$lib/boardUtils";
   import { withUpdatedSearchParams } from "$lib/urlState";
 
@@ -62,21 +57,14 @@
   let mutationError = $state("");
   let conflictWarning = $state("");
 
-  let showBoardEditForm = $state(false);
   let showAddCardForm = $state(false);
-  let updatingBoard = $state(false);
+  let showAddCardAdvanced = $state(false);
   let addingCard = $state(false);
   let backlogOpen = $state(false);
   let doneOpen = $state(false);
   let confirmModal = $state({ open: false, action: "" });
   let boardLifecycleBusy = $state(false);
   let detailModalCard = $state(null);
-
-  let boardTitle = $state("");
-  let boardLinkedTopicRef = $state("");
-  let boardDocumentId = $state("");
-  let boardOwners = $state([]);
-  let boardPinnedRefs = $state("");
 
   let addCardTitle = $state("");
   let addCardSummary = $state("");
@@ -108,8 +96,14 @@
     return workspacePath(organizationSlug, workspaceSlug, pathname);
   }
 
-  function toDocumentOption(document) {
-    return {
+  async function searchThreadOptions(query) {
+    const threads = await searchTopicRecords(query);
+    return threads.map(topicSearchResultToPickerOption);
+  }
+
+  async function searchDocumentOptions(query) {
+    const documents = await searchDocumentRecords(query);
+    return documents.map((document) => ({
       id: document.id,
       title: document.title || document.id,
       subtitle: [
@@ -119,30 +113,7 @@
         .filter(Boolean)
         .join(" · "),
       keywords: [],
-    };
-  }
-
-  async function searchThreadOptions(query) {
-    const threads = await searchTopicRecords(query);
-    return threads.map(topicSearchResultToPickerOption);
-  }
-
-  async function searchTopicLinkOptions(query) {
-    const topics = await searchTopicRecords(query);
-    return topics.map(topicSearchResultToBoardRefOption);
-  }
-
-  async function searchDocumentOptions(query) {
-    const documents = await searchDocumentRecords(query);
-    return documents.map(toDocumentOption);
-  }
-
-  function syncBoardDrafts(board) {
-    boardTitle = board?.title ?? "";
-    boardLinkedTopicRef = boardPrimaryTopicRef(board);
-    boardDocumentId = firstBoardDocumentId(board);
-    boardOwners = [...(board?.owners ?? [])];
-    boardPinnedRefs = joinDelimitedValues(board?.pinned_refs ?? []);
+    }));
   }
 
   function openCardDetailModal(cardItem) {
@@ -155,13 +126,6 @@
   function closeCardDetailModal() {
     detailModalCard = null;
     replaceState(withUpdatedSearchParams($page.url, { card: "" }), {});
-  }
-
-  function openBoardEditForm() {
-    if (!workspace?.board) return;
-    syncBoardDrafts(workspace.board);
-    mutationError = "";
-    showBoardEditForm = !showBoardEditForm;
   }
 
   function openAddCardForm() {
@@ -178,6 +142,7 @@
     addCardDueAt = "";
     addCardDefinitionOfDone = "";
     mutationError = "";
+    showAddCardAdvanced = false;
     showAddCardForm = !showAddCardForm;
   }
 
@@ -186,7 +151,6 @@
     error = "";
     try {
       workspace = await coreClient.getBoardWorkspace(boardId);
-      syncBoardDrafts(workspace?.board);
     } catch (e) {
       error = `Failed to load board: ${e instanceof Error ? e.message : String(e)}`;
       workspace = null;
@@ -222,7 +186,6 @@
       await action();
       await loadWorkspace();
 
-      if (options.closeBoardEdit) showBoardEditForm = false;
       if (options.closeAddCard) showAddCardForm = false;
 
       mutationNotice = successMessage;
@@ -234,38 +197,6 @@
 
       mutationError = formatMutationError("Board write failed", e);
     }
-  }
-
-  async function submitBoardUpdate() {
-    if (!workspace?.board) return;
-
-    const title = boardTitle.trim();
-    if (!title) {
-      mutationError = "Board title is required.";
-      return;
-    }
-
-    const docId = boardDocumentId.trim();
-    const linkedTopic = boardLinkedTopicRef.trim();
-    const patch = {
-      title,
-      primary_topic_ref: linkedTopic || null,
-      document_refs: docId ? [`document:${docId}`] : [],
-      owners: [...boardOwners],
-      pinned_refs: parseDelimitedValues(boardPinnedRefs),
-    };
-
-    updatingBoard = true;
-    await runBoardMutation(
-      () =>
-        coreClient.updateBoard(boardId, {
-          if_updated_at: workspace.board.updated_at,
-          patch,
-        }),
-      "Board updated.",
-      { closeBoardEdit: true },
-    );
-    updatingBoard = false;
   }
 
   async function submitAddCard() {
@@ -654,13 +585,12 @@
       {#if !board.trashed_at}
         <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
           <ResourceShareMenu resourceId={board.id} rawRecord={board} />
-          <button
+          <a
             class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
-            onclick={openBoardEditForm}
-            type="button"
+            href={workspaceHref(`/boards/${boardId}/edit`)}
           >
-            {showBoardEditForm ? "Close" : "Edit"}
-          </button>
+            Settings
+          </a>
           <button
             class="rounded-md bg-accent-solid px-2.5 py-1.5 text-micro font-medium text-white transition-colors hover:bg-accent"
             onclick={openAddCardForm}
@@ -755,115 +685,6 @@
     </div>
   {/if}
 
-  <!-- Board edit form (collapsible) -->
-  {#if showBoardEditForm}
-    <section
-      class="mb-4 rounded-md border border-[var(--line)] bg-[var(--panel)]"
-    >
-      <div class="border-b border-[var(--line)] px-4 py-2.5">
-        <h2 class="text-meta font-medium text-[var(--fg)]">
-          Edit board metadata
-        </h2>
-      </div>
-
-      <div class="space-y-3 px-4 py-3">
-        <div class="grid gap-3 md:grid-cols-2">
-          <label class="text-micro font-medium text-[var(--fg-muted)]">
-            Board title
-            <input
-              bind:value={boardTitle}
-              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-meta text-[var(--fg)]"
-              type="text"
-            />
-          </label>
-
-          <SearchableEntityPicker
-            bind:value={boardLinkedTopicRef}
-            advancedLabel="Enter a topic ref manually"
-            helperText="Links this board to a topic for navigation and scan context."
-            label="Linked topic"
-            manualLabel="Topic ref"
-            manualPlaceholder="topic:…"
-            placeholder="Search topics by title or id"
-            searchFn={searchTopicLinkOptions}
-          />
-
-          <SearchableEntityPicker
-            bind:value={boardDocumentId}
-            advancedLabel="Use a manual document ID"
-            helperText="Optional: add or replace the board document ref surfaced in board refs."
-            label="Board document"
-            manualLabel="Document ID"
-            manualPlaceholder="incident-response-playbook"
-            placeholder="Search documents by title, ID, or timeline ID"
-            searchFn={searchDocumentOptions}
-          />
-
-          <div
-            class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-micro text-[var(--fg-muted)]"
-          >
-            Board thread is fixed after creation (append-only event timeline).
-            <div class="mt-1 text-[var(--fg)]">
-              {backingThread?.title || backingThreadId}
-            </div>
-            <div class="mt-1 text-micro text-[var(--fg-muted)]">
-              {backingThreadId}
-            </div>
-          </div>
-        </div>
-
-        <div class="grid gap-3 md:grid-cols-2">
-          <SearchableMultiEntityPicker
-            bind:values={boardOwners}
-            advancedLabel="Add a manual owner ID"
-            helperText="Owners are canonical board metadata and stay visible across board list and detail views."
-            items={actorOptions}
-            label="Owners"
-            manualLabel="Owner ID"
-            manualPlaceholder="actor-ops-ai"
-            placeholder="Search actors by name, ID, or tags"
-          />
-        </div>
-
-        <div>
-          <p class="text-micro font-medium text-[var(--fg-muted)]">
-            Pinned refs
-          </p>
-          <GuidedTypedRefsInput
-            bind:value={boardPinnedRefs}
-            addInputLabel="Add board pinned ref"
-            addInputPlaceholder="thread:board-q2-initiative"
-            addButtonLabel="Add ref"
-            emptyText="No pinned refs yet."
-            helperText="These refs are shown at the top of the board."
-            textareaAriaLabel="Board pinned refs"
-          />
-        </div>
-
-        <div class="flex flex-wrap gap-2">
-          <button
-            class="rounded-md bg-accent-solid px-3 py-1.5 text-micro font-medium text-white transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={updatingBoard}
-            onclick={submitBoardUpdate}
-            type="button"
-          >
-            {updatingBoard ? "Saving..." : "Save board"}
-          </button>
-          <button
-            class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-1.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
-            onclick={() => {
-              showBoardEditForm = false;
-              mutationError = "";
-            }}
-            type="button"
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    </section>
-  {/if}
-
   <!-- Add card form (collapsible) -->
   {#if showAddCardForm}
     <section
@@ -874,21 +695,26 @@
       </div>
 
       <div class="space-y-3 px-4 py-3">
-        <div class="grid gap-3 md:grid-cols-2">
-          <label class="text-micro font-medium text-[var(--fg-muted)]">
-            Card title
+        <div class="flex gap-2">
+          <label
+            class="min-w-0 flex-1 text-micro font-medium text-[var(--fg-muted)]"
+          >
+            <span class="sr-only">Card title</span>
             <input
               bind:value={addCardTitle}
-              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-meta text-[var(--fg)]"
+              class="w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)] focus:border-[var(--accent)] focus:outline-none"
+              placeholder="Card title"
               type="text"
+              onkeydown={(e) =>
+                e.key === "Enter" && !showAddCardAdvanced && submitAddCard()}
             />
           </label>
 
-          <label class="text-micro font-medium text-[var(--fg-muted)]">
-            Target column
+          <label class="shrink-0 text-micro font-medium text-[var(--fg-muted)]">
+            <span class="sr-only">Column</span>
             <select
               bind:value={addCardColumnKey}
-              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-meta text-[var(--fg)]"
+              class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)] focus:border-[var(--accent)] focus:outline-none"
             >
               {#each board.column_schema as column (column.key)}
                 <option value={column.key}>
@@ -898,129 +724,148 @@
               {/each}
             </select>
           </label>
-
-          <label
-            class="text-micro font-medium text-[var(--fg-muted)] md:col-span-2"
-          >
-            Summary
-            <textarea
-              bind:value={addCardSummary}
-              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-meta text-[var(--fg)]"
-              rows="3"
-            ></textarea>
-          </label>
-
-          <SearchableEntityPicker
-            bind:value={addCardThreadId}
-            advancedLabel="Use a manual thread ID"
-            disabledIds={[backingThreadId].filter(Boolean)}
-            helperText="Optional: pick a topic (binds its backing thread) or paste a thread ID. Add further typed refs in Related refs."
-            label="Topic or backing thread"
-            manualLabel="Thread ID"
-            manualPlaceholder="thread-onboarding"
-            placeholder="Search topics by title or ID"
-            searchFn={searchThreadOptions}
-          />
-
-          <SearchableEntityPicker
-            bind:value={addCardDocumentId}
-            advancedLabel="Use a manual document ID"
-            helperText="Optional: surface one canonical doc lineage directly on the card."
-            label="Document"
-            manualLabel="Document ID"
-            manualPlaceholder="onboarding-guide-v1"
-            placeholder="Search documents by title, ID, or timeline ID"
-            searchFn={searchDocumentOptions}
-          />
-
-          <SearchableMultiEntityPicker
-            bind:values={addCardAssignees}
-            advancedLabel="Add a manual assignee ID"
-            helperText="Optional assignees for the card."
-            items={actorOptions}
-            label="Assignees"
-            manualLabel="Assignee ID"
-            manualPlaceholder="actor-ops-ai"
-            placeholder="Search actors by name, ID, or tags"
-          />
-
-          <label class="text-micro font-medium text-[var(--fg-muted)]">
-            Risk
-            <select
-              bind:value={addCardRisk}
-              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-meta text-[var(--fg)]"
-            >
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-              <option value="critical">Critical</option>
-            </select>
-          </label>
-
-          <label class="text-micro font-medium text-[var(--fg-muted)]">
-            Resolution
-            <select
-              bind:value={addCardResolution}
-              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-meta text-[var(--fg)]"
-            >
-              <option value="">Open</option>
-              <option value="done">Done</option>
-              <option value="canceled">Canceled</option>
-            </select>
-          </label>
-
-          <label class="text-micro font-medium text-[var(--fg-muted)]">
-            Due date
-            <input
-              bind:value={addCardDueAt}
-              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-meta text-[var(--fg)]"
-              type="datetime-local"
-            />
-          </label>
-
-          <label
-            class="text-micro font-medium text-[var(--fg-muted)] md:col-span-2"
-          >
-            Definition of done
-            <textarea
-              bind:value={addCardDefinitionOfDone}
-              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-meta text-[var(--fg)]"
-              rows="3"
-            ></textarea>
-          </label>
-
-          <div class="md:col-span-2">
-            <p class="text-micro font-medium text-[var(--fg-muted)]">
-              Related refs
-            </p>
-            <GuidedTypedRefsInput
-              bind:value={addCardRelatedRefs}
-              {boardId}
-              addInputLabel="Add related ref"
-              addInputPlaceholder="topic:summer-menu-rollout"
-              addButtonLabel="Add ref"
-              emptyText="No related refs yet."
-              helperText="Optional typed refs (topic:, document:, board:, thread:, …)."
-              textareaAriaLabel="Card related refs"
-            />
-          </div>
-
-          <div class="md:col-span-2">
-            <p class="text-micro font-medium text-[var(--fg-muted)]">
-              Resolution evidence
-            </p>
-            <GuidedTypedRefsInput
-              bind:value={addCardResolutionRefs}
-              {boardId}
-              addInputLabel="Add resolution ref"
-              addInputPlaceholder="artifact:receipt-123"
-              addButtonLabel="Add ref"
-              emptyText="No resolution evidence yet."
-              helperText="Optional typed refs that evidence the card's resolution."
-              textareaAriaLabel="Card resolution refs"
-            />
-          </div>
         </div>
+
+        <button
+          type="button"
+          class="flex items-center gap-1.5 text-micro text-[var(--fg-muted)] transition-colors hover:text-[var(--fg)]"
+          onclick={() => (showAddCardAdvanced = !showAddCardAdvanced)}
+        >
+          <svg
+            class="h-3.5 w-3.5 transition-transform {showAddCardAdvanced
+              ? 'rotate-90'
+              : ''}"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M9 5l7 7-7 7"
+            />
+          </svg>
+          {showAddCardAdvanced ? "Fewer options" : "More options"}
+        </button>
+
+        {#if showAddCardAdvanced}
+          <div
+            class="space-y-3 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] p-3"
+          >
+            <div class="grid gap-3 md:grid-cols-2">
+              <label
+                class="text-micro font-medium text-[var(--fg-muted)] md:col-span-2"
+              >
+                Summary
+                <textarea
+                  bind:value={addCardSummary}
+                  class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-meta text-[var(--fg)]"
+                  rows="3"
+                ></textarea>
+              </label>
+
+              <SearchableEntityPicker
+                bind:value={addCardThreadId}
+                advancedLabel="Use a manual thread ID"
+                disabledIds={[backingThreadId].filter(Boolean)}
+                helperText="Optional: pick a topic or paste a thread ID."
+                label="Topic or thread"
+                manualLabel="Thread ID"
+                manualPlaceholder="thread-onboarding"
+                placeholder="Search topics by title or ID"
+                searchFn={searchThreadOptions}
+              />
+
+              <SearchableEntityPicker
+                bind:value={addCardDocumentId}
+                advancedLabel="Use a manual document ID"
+                helperText="Optional: surface a doc lineage on the card."
+                label="Document"
+                manualLabel="Document ID"
+                manualPlaceholder="onboarding-guide-v1"
+                placeholder="Search documents by title, ID, or timeline ID"
+                searchFn={searchDocumentOptions}
+              />
+
+              <SearchableMultiEntityPicker
+                bind:values={addCardAssignees}
+                advancedLabel="Add a manual assignee ID"
+                helperText="Optional assignees for the card."
+                items={actorOptions}
+                label="Assignees"
+                manualLabel="Assignee ID"
+                manualPlaceholder="actor-ops-ai"
+                placeholder="Search actors by name, ID, or tags"
+              />
+
+              <label class="text-micro font-medium text-[var(--fg-muted)]">
+                Risk
+                <select
+                  bind:value={addCardRisk}
+                  class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-meta text-[var(--fg)]"
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="critical">Critical</option>
+                </select>
+              </label>
+
+              <label class="text-micro font-medium text-[var(--fg-muted)]">
+                Due date
+                <input
+                  bind:value={addCardDueAt}
+                  class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-meta text-[var(--fg)]"
+                  type="datetime-local"
+                />
+              </label>
+
+              <label
+                class="text-micro font-medium text-[var(--fg-muted)] md:col-span-2"
+              >
+                Definition of done
+                <textarea
+                  bind:value={addCardDefinitionOfDone}
+                  class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-meta text-[var(--fg)]"
+                  rows="3"
+                ></textarea>
+              </label>
+
+              <div class="md:col-span-2">
+                <p class="text-micro font-medium text-[var(--fg-muted)]">
+                  Related refs
+                </p>
+                <GuidedTypedRefsInput
+                  bind:value={addCardRelatedRefs}
+                  {boardId}
+                  addInputLabel="Add related ref"
+                  addInputPlaceholder="topic:summer-menu-rollout"
+                  addButtonLabel="Add ref"
+                  emptyText="No related refs yet."
+                  helperText="Optional typed refs (topic:, document:, board:, thread:, …)."
+                  textareaAriaLabel="Card related refs"
+                />
+              </div>
+
+              <div class="md:col-span-2">
+                <p class="text-micro font-medium text-[var(--fg-muted)]">
+                  Resolution evidence
+                </p>
+                <GuidedTypedRefsInput
+                  bind:value={addCardResolutionRefs}
+                  {boardId}
+                  addInputLabel="Add resolution ref"
+                  addInputPlaceholder="artifact:receipt-123"
+                  addButtonLabel="Add ref"
+                  emptyText="No resolution evidence yet."
+                  helperText="Optional typed refs that evidence the card's resolution."
+                  textareaAriaLabel="Card resolution refs"
+                />
+              </div>
+            </div>
+          </div>
+        {/if}
 
         <div class="flex flex-wrap gap-2">
           <button

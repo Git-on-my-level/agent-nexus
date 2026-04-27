@@ -231,9 +231,7 @@ export async function load(event) {
               org: workOrg,
               slug: workSlug,
             });
-            return error instanceof Error
-              ? error.message
-              : String(error);
+            return error instanceof Error ? error.message : String(error);
           }
           throw error;
         });
@@ -252,8 +250,6 @@ export async function load(event) {
       coreBaseUrl,
       workspaceId,
     },
-    ...(coreSchemaCheckWarning
-      ? { coreSchemaCheckWarning }
-      : {}),
+    ...(coreSchemaCheckWarning ? { coreSchemaCheckWarning } : {}),
   };
 }

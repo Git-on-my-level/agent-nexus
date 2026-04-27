@@ -145,8 +145,7 @@ function createTopicDetailStore() {
           topic = topicMetaId
             ? {
                 ...topicMeta,
-                topic_ref:
-                  topicMeta.topic_ref ?? `topic:${topicMetaId}`,
+                topic_ref: topicMeta.topic_ref ?? `topic:${topicMetaId}`,
               }
             : null;
         }

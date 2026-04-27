@@ -147,17 +147,23 @@
     {#if !editOpen}
       <div class="divide-y divide-[var(--line-subtle)]">
         {#if topic.summary || topic.current_summary}
-          {@const summary = String(topic.summary ?? topic.current_summary ?? "").trim()}
+          {@const summary = String(
+            topic.summary ?? topic.current_summary ?? "",
+          ).trim()}
           {#if summary}
             <div class="px-4 py-3">
               <p class="text-micro text-[var(--fg-muted)]">Description</p>
-              <p class="mt-0.5 text-meta text-[var(--fg)] whitespace-pre-wrap">{summary}</p>
+              <p class="mt-0.5 text-meta text-[var(--fg)] whitespace-pre-wrap">
+                {summary}
+              </p>
             </div>
           {/if}
         {/if}
         {#if topic.state}
           <div class="px-4 py-3 text-micro">
-            <span class="text-[var(--fg-muted)]">State: </span><span class="capitalize text-[var(--fg)]">{topic.state}</span>
+            <span class="text-[var(--fg-muted)]">State: </span><span
+              class="capitalize text-[var(--fg)]">{topic.state}</span
+            >
           </div>
         {/if}
       </div>
@@ -227,8 +233,7 @@
           {editError}
         </p>{/if}
       <div class="grid gap-3">
-        <label
-          class="text-micro font-medium text-[var(--fg-muted)]"
+        <label class="text-micro font-medium text-[var(--fg-muted)]"
           >Title <input
             bind:value={editDraft.title}
             class="mt-1 w-full rounded border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta text-[var(--fg)]"
@@ -236,8 +241,7 @@
             type="text"
           /></label
         >
-        <label
-          class="text-micro font-medium text-[var(--fg-muted)]"
+        <label class="text-micro font-medium text-[var(--fg-muted)]"
           >Summary <textarea
             bind:value={editDraft.summary}
             class="mt-1 w-full rounded border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta text-[var(--fg)]"

@@ -23,7 +23,6 @@ test("trash page restores archived topics, boards, cards, documents, and artifac
       title: "Archived document",
       thread_id: "topic-trash-1",
       state: "active",
-      labels: [],
       created_at: "2026-03-01T08:00:00.000Z",
       created_by: actorId,
       updated_at: "2026-03-01T08:00:00.000Z",
@@ -57,7 +56,6 @@ test("trash page restores archived topics, boards, cards, documents, and artifac
       board: {
         id: "board-trash-1",
         title: "Archived board",
-        labels: [],
         owners: [actorId],
         thread_id: "topic-trash-1",
         refs: [

@@ -241,7 +241,6 @@ test("thread detail separates messages from timeline and nests replies", async (
             status: "active",
             updated_at: "2026-03-04T00:30:00.000Z",
             updated_by: actorId,
-            labels: ["ops"],
             head_revision_id: "rev-onboarding-runbook-2",
             head_revision_number: 2,
             head_revision: {
@@ -334,7 +333,6 @@ test("thread detail separates messages from timeline and nests replies", async (
             status: "active",
             updated_at: "2026-03-04T00:30:00.000Z",
             updated_by: actorId,
-            labels: ["ops"],
             head_revision_id: "rev-onboarding-runbook-2",
             head_revision_number: 2,
             head_revision: {

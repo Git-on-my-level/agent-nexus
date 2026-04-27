@@ -109,13 +109,6 @@
                     {doc.head_revision.content_type}
                   </span>
                 {/if}
-                {#each (doc.labels ?? []).slice(0, 3) as label}
-                  <span
-                    class="rounded bg-[var(--line)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
-                  >
-                    {label}
-                  </span>
-                {/each}
               </div>
               <p class="mt-1 truncate text-meta font-medium text-[var(--fg)]">
                 {doc.title || doc.id}

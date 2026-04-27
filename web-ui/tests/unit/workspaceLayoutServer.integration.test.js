@@ -27,7 +27,8 @@ const anxCoreClientIntegrationMocks = vi.hoisted(() => ({
 
 vi.mock("$lib/anxCoreClient", () => ({
   createAnxCoreClient: anxCoreClientIntegrationMocks.createAnxCoreClient,
-  verifyCoreSchemaVersion: anxCoreClientIntegrationMocks.verifyCoreSchemaVersion,
+  verifyCoreSchemaVersion:
+    anxCoreClientIntegrationMocks.verifyCoreSchemaVersion,
 }));
 
 vi.mock("$env/dynamic/private", () => ({

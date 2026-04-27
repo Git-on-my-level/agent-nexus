@@ -126,6 +126,7 @@
   let backingThreadId = $derived(String(board?.thread_id ?? "").trim());
 
   let editOpen = $state(false);
+  let editAdvanced = $state(false);
   let savingCard = $state(false);
   let saveError = $state("");
   let editTitle = $state("");
@@ -220,7 +221,7 @@
       ]
         .filter(Boolean)
         .join(" · "),
-      keywords: document.labels ?? [],
+      keywords: [],
     }));
   }
 
@@ -358,6 +359,7 @@
   function beginEdit() {
     syncCardDraftsFromItem(cardItem);
     saveError = "";
+    editAdvanced = false;
     editOpen = true;
   }
 
@@ -637,128 +639,167 @@
                   {saveError}
                 </p>
               {/if}
-              <div class="grid gap-3 md:grid-cols-2">
-                <label class="text-micro font-medium text-[var(--fg-muted)]">
-                  Card title
-                  <input
-                    bind:value={editTitle}
-                    class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-meta text-[var(--fg)]"
-                    type="text"
-                  />
-                </label>
-                <label
-                  class="text-micro font-medium text-[var(--fg-muted)] md:col-span-2"
-                >
-                  Summary
-                  <textarea
-                    bind:value={editSummary}
-                    class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-meta text-[var(--fg)]"
-                    rows="4"
-                  ></textarea>
-                </label>
-                <SearchableEntityPicker
-                  bind:value={editThreadId}
-                  advancedLabel="Use a manual thread ID"
-                  disabledIds={[backingThreadId].filter(Boolean)}
-                  helperText="Optional: pick a topic or paste a thread ID. Further refs go in Related refs."
-                  label="Topic or backing thread"
-                  manualLabel="Thread ID"
-                  manualPlaceholder="thread-onboarding"
-                  placeholder="Search topics by title or ID"
-                  searchFn={searchThreadOptions}
+              <label
+                class="block text-micro font-medium text-[var(--fg-muted)]"
+              >
+                Title
+                <input
+                  bind:value={editTitle}
+                  class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)] focus:border-[var(--accent)] focus:outline-none"
+                  type="text"
                 />
-                <SearchableEntityPicker
-                  bind:value={editDocumentId}
-                  advancedLabel="Use a manual document ID"
-                  helperText="Optional document lineage on the card."
-                  label="Document"
-                  manualLabel="Document ID"
-                  manualPlaceholder="onboarding-guide-v1"
-                  placeholder="Search documents by title, ID, or timeline ID"
-                  searchFn={searchDocumentOptions}
-                />
-                <SearchableMultiEntityPicker
-                  bind:values={editAssignees}
-                  advancedLabel="Add a manual assignee ID"
-                  helperText="Optional assignees."
-                  items={actorOptions}
-                  label="Assignees"
-                  manualLabel="Assignee ID"
-                  manualPlaceholder="actor-ops-ai"
-                  placeholder="Search actors by name, ID, or tags"
-                />
-                <label class="text-micro font-medium text-[var(--fg-muted)]">
-                  Risk
-                  <select
-                    bind:value={editRisk}
-                    class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-meta text-[var(--fg)]"
-                  >
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                    <option value="critical">Critical</option>
-                  </select>
-                </label>
+              </label>
+
+              <label
+                class="block text-micro font-medium text-[var(--fg-muted)]"
+              >
+                Summary
+                <textarea
+                  bind:value={editSummary}
+                  class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-meta text-[var(--fg)] focus:border-[var(--accent)] focus:outline-none"
+                  rows="3"
+                ></textarea>
+              </label>
+
+              <div class="flex flex-wrap gap-3">
                 <label class="text-micro font-medium text-[var(--fg-muted)]">
                   Resolution
                   <select
                     bind:value={editResolution}
-                    class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-meta text-[var(--fg)]"
+                    class="mt-1 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-meta text-[var(--fg)]"
                   >
                     <option value="">Open</option>
                     <option value="done">Done</option>
                     <option value="canceled">Canceled</option>
                   </select>
                 </label>
+
                 <label class="text-micro font-medium text-[var(--fg-muted)]">
                   Due date
                   <input
                     bind:value={editDueAt}
-                    class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-meta text-[var(--fg)]"
+                    class="mt-1 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-meta text-[var(--fg)]"
                     type="datetime-local"
                   />
                 </label>
-                <label
-                  class="text-micro font-medium text-[var(--fg-muted)] md:col-span-2"
-                >
-                  Definition of done
-                  <textarea
-                    bind:value={editDefinitionOfDone}
-                    class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-meta text-[var(--fg)]"
-                    rows="3"
-                  ></textarea>
-                </label>
-                <div class="md:col-span-2">
-                  <p class="text-micro font-medium text-[var(--fg-muted)]">
-                    Related refs
-                  </p>
-                  <GuidedTypedRefsInput
-                    bind:value={editRelatedRefs}
-                    {boardId}
-                    addInputLabel="Add related ref"
-                    addInputPlaceholder="topic:summer-menu-rollout"
-                    addButtonLabel="Add ref"
-                    emptyText="No related refs yet."
-                    helperText="Typed refs (topic:, document:, thread:, …)."
-                    textareaAriaLabel="Card related refs"
-                  />
-                </div>
-                <div class="md:col-span-2">
-                  <p class="text-micro font-medium text-[var(--fg-muted)]">
-                    Resolution evidence
-                  </p>
-                  <GuidedTypedRefsInput
-                    bind:value={editResolutionRefs}
-                    {boardId}
-                    addInputLabel="Add resolution ref"
-                    addInputPlaceholder="artifact:receipt-123"
-                    addButtonLabel="Add ref"
-                    emptyText="No resolution evidence yet."
-                    helperText="Refs that evidence resolution."
-                    textareaAriaLabel="Card resolution refs"
-                  />
-                </div>
               </div>
+
+              <button
+                type="button"
+                class="flex items-center gap-1.5 text-micro text-[var(--fg-muted)] transition-colors hover:text-[var(--fg)]"
+                onclick={() => (editAdvanced = !editAdvanced)}
+              >
+                <svg
+                  class="h-3.5 w-3.5 transition-transform {editAdvanced
+                    ? 'rotate-90'
+                    : ''}"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M9 5l7 7-7 7"
+                  />
+                </svg>
+                {editAdvanced ? "Fewer options" : "More options"}
+              </button>
+
+              {#if editAdvanced}
+                <div
+                  class="space-y-3 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] p-3"
+                >
+                  <div class="grid gap-3 md:grid-cols-2">
+                    <SearchableEntityPicker
+                      bind:value={editThreadId}
+                      advancedLabel="Use a manual thread ID"
+                      disabledIds={[backingThreadId].filter(Boolean)}
+                      helperText="Optional: pick a topic or paste a thread ID."
+                      label="Topic or thread"
+                      manualLabel="Thread ID"
+                      manualPlaceholder="thread-onboarding"
+                      placeholder="Search topics by title or ID"
+                      searchFn={searchThreadOptions}
+                    />
+                    <SearchableEntityPicker
+                      bind:value={editDocumentId}
+                      advancedLabel="Use a manual document ID"
+                      helperText="Optional document lineage on the card."
+                      label="Document"
+                      manualLabel="Document ID"
+                      manualPlaceholder="onboarding-guide-v1"
+                      placeholder="Search documents by title, ID, or timeline ID"
+                      searchFn={searchDocumentOptions}
+                    />
+                    <SearchableMultiEntityPicker
+                      bind:values={editAssignees}
+                      advancedLabel="Add a manual assignee ID"
+                      helperText="Optional assignees."
+                      items={actorOptions}
+                      label="Assignees"
+                      manualLabel="Assignee ID"
+                      manualPlaceholder="actor-ops-ai"
+                      placeholder="Search actors by name, ID, or tags"
+                    />
+                    <label
+                      class="text-micro font-medium text-[var(--fg-muted)]"
+                    >
+                      Risk
+                      <select
+                        bind:value={editRisk}
+                        class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-meta text-[var(--fg)]"
+                      >
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="critical">Critical</option>
+                      </select>
+                    </label>
+                    <label
+                      class="text-micro font-medium text-[var(--fg-muted)] md:col-span-2"
+                    >
+                      Definition of done
+                      <textarea
+                        bind:value={editDefinitionOfDone}
+                        class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-meta text-[var(--fg)]"
+                        rows="3"
+                      ></textarea>
+                    </label>
+                    <div class="md:col-span-2">
+                      <p class="text-micro font-medium text-[var(--fg-muted)]">
+                        Related refs
+                      </p>
+                      <GuidedTypedRefsInput
+                        bind:value={editRelatedRefs}
+                        {boardId}
+                        addInputLabel="Add related ref"
+                        addInputPlaceholder="topic:summer-menu-rollout"
+                        addButtonLabel="Add ref"
+                        emptyText="No related refs yet."
+                        helperText="Typed refs (topic:, document:, thread:, …)."
+                        textareaAriaLabel="Card related refs"
+                      />
+                    </div>
+                    <div class="md:col-span-2">
+                      <p class="text-micro font-medium text-[var(--fg-muted)]">
+                        Resolution evidence
+                      </p>
+                      <GuidedTypedRefsInput
+                        bind:value={editResolutionRefs}
+                        {boardId}
+                        addInputLabel="Add resolution ref"
+                        addInputPlaceholder="artifact:receipt-123"
+                        addButtonLabel="Add ref"
+                        emptyText="No resolution evidence yet."
+                        helperText="Refs that evidence resolution."
+                        textareaAriaLabel="Card resolution refs"
+                      />
+                    </div>
+                  </div>
+                </div>
+              {/if}
             </div>
           {:else}
             <div class="space-y-4 text-meta text-[var(--fg)]">

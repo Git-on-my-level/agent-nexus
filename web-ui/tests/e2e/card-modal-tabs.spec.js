@@ -29,7 +29,6 @@ test("card detail modal Messages and Timeline tabs render without request storms
     id: boardId,
     title: "Modal Tabs Board",
     status: "active",
-    labels: [],
     owners: [actorId],
     thread_id: backingThreadId,
     refs: [`thread:${backingThreadId}`],

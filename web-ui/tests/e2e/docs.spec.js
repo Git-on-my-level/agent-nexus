@@ -19,7 +19,6 @@ test("create document flow — POST /docs and navigate to new document", async (
     id: "new-test-doc",
     title: "New Test Document",
     status: "draft",
-    labels: ["ops"],
     thread_id: "thread-docs",
     head_revision_id: "rev-new-1",
     head_revision_number: 1,
@@ -126,9 +125,6 @@ test("create document flow — POST /docs and navigate to new document", async (
   await page
     .getByPlaceholder("Document title", { exact: true })
     .fill("New Test Document");
-  await page.getByPlaceholder("e.g. ops, runbook").fill("ops");
-  await page.getByLabel("Thread linkage search").fill("Operations Thread");
-  await page.getByRole("button", { name: /Operations Thread/ }).click();
   await page
     .locator("textarea")
     .fill("# New Test Document\n\nThis is created from the E2E test.");
@@ -140,9 +136,6 @@ test("create document flow — POST /docs and navigate to new document", async (
     actor_id: actorId,
     document: {
       title: "New Test Document",
-      status: "draft",
-      labels: ["ops"],
-      thread_id: "thread-docs",
     },
   });
   await expect(page).toHaveURL(/\/o\/local\/w\/local\/docs\/new-test-doc$/);
@@ -178,7 +171,6 @@ test("update document flow — PATCH /docs/:id creates a new revision", async ({
     id: "updatable-doc",
     title: "Updatable Document",
     status: "active",
-    labels: ["ops"],
     thread_id: "thread-ops",
     head_revision_id: baseRevisionId,
     head_revision_number: 1,
@@ -302,8 +294,6 @@ test("update document flow — PATCH /docs/:id creates a new revision", async ({
     page.getByRole("button", { name: "Save revision" }),
   ).toBeVisible();
 
-  await page.getByLabel("Thread linkage search").fill("Policy Thread");
-  await page.getByRole("button", { name: /Policy Thread/ }).click();
   // The single textarea in the revision form (pre-filled with head content).
   await page.locator("textarea").fill("Revised content from E2E test.");
 
@@ -313,9 +303,6 @@ test("update document flow — PATCH /docs/:id creates a new revision", async ({
   expect(updatePayload).toMatchObject({
     actor_id: actorId,
     if_base_revision: baseRevisionId,
-    document: {
-      thread_id: "thread-policy",
-    },
   });
 
   await expect(page.getByText("Revised content from E2E test.")).toBeVisible();
@@ -335,7 +322,6 @@ test("structured/binary content type — New revision button is hidden, CLI hint
     id: "structured-doc",
     title: "Structured Document",
     status: "active",
-    labels: [],
     head_revision_id: "rev-struct-1",
     head_revision_number: 1,
     updated_at: "2026-03-08T10:00:00Z",
@@ -418,7 +404,6 @@ test("update document conflict — 409 response shows error", async ({
     id: "conflict-doc",
     title: "Conflict Document",
     status: "active",
-    labels: [],
     head_revision_id: "rev-conflict-1",
     head_revision_number: 1,
     updated_at: "2026-03-08T10:00:00Z",
@@ -529,7 +514,6 @@ test("documents list redirects through the default workspace and loads revision 
       id: "product-constitution",
       title: "Product Constitution",
       status: "active",
-      labels: ["governance", "product"],
       head_revision_id: "rev-pc-3",
       head_revision_number: 3,
       updated_at: "2026-03-08T14:30:00Z",
@@ -539,7 +523,6 @@ test("documents list redirects through the default workspace and loads revision 
       id: "incident-response-playbook",
       title: "Incident Response Playbook",
       status: "active",
-      labels: ["ops", "runbook"],
       head_revision_id: "rev-irp-2",
       head_revision_number: 2,
       updated_at: "2026-03-05T11:00:00Z",

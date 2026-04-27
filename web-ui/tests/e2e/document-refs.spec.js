@@ -14,7 +14,6 @@ test("document typed refs navigate from overview chips, timeline refs, and recei
     id: documentId,
     title: "Product Constitution",
     status: "active",
-    labels: ["governance", "product"],
     head_revision_id: "rev-pc-3",
     head_revision_number: 3,
     thread_id: threadId,

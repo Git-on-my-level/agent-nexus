@@ -61,7 +61,6 @@
   let editDraft = $state({
     content: "",
     title: "",
-    labels: "",
   });
   let saving = $state(false);
   let saveError = $state("");
@@ -426,7 +425,6 @@
     editDraft = {
       content: headRevision?.content ?? "",
       title: document?.title ?? "",
-      labels: (document?.labels ?? []).join(", "),
     };
     saveError = "";
     editOpen = true;
@@ -453,22 +451,12 @@
     saveError = "";
 
     try {
-      const labels = editDraft.labels
-        .split(",")
-        .map((l) => l.trim())
-        .filter(Boolean);
-
       const docPatch = {};
       if (
         editDraft.title.trim() &&
         editDraft.title.trim() !== document?.title
       ) {
         docPatch.title = editDraft.title.trim();
-      }
-      const labelsChanged =
-        JSON.stringify(labels) !== JSON.stringify(document?.labels ?? []);
-      if (labelsChanged) {
-        docPatch.labels = labels;
       }
       const result = await coreClient.updateDocument(documentId, {
         content: editDraft.content.trim(),
@@ -995,13 +983,9 @@
                     }[document.state] ?? document.state}</span
                   >
                 {/if}
-                {#each document.labels ?? [] as label}
-                  <span
-                    class="rounded bg-[var(--line)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
-                    >{label}</span
-                  >
-                {/each}
-                <span class="text-[var(--fg-subtle)]">·</span>
+                {#if document.state}
+                  <span class="text-[var(--fg-subtle)]">·</span>
+                {/if}
                 <span class="text-[var(--fg-muted)]"
                   >v{displayedRevision?.revision_number ?? "\u2014"}</span
                 >
@@ -1212,8 +1196,7 @@
                   <p
                     class="mt-1 ml-5 truncate text-micro text-[var(--fg-muted)]"
                   >
-                    Title: {editDraft.title || "—"} · Labels: {editDraft.labels ||
-                      "none"}
+                    Title: {editDraft.title || "—"}
                   </p>
                 {/if}
                 {#if metadataExpanded}
@@ -1226,18 +1209,6 @@
                       <input
                         bind:value={editDraft.title}
                         class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-meta text-[var(--fg)]"
-                        type="text"
-                      />
-                    </label>
-                    <label>
-                      <span
-                        class="text-micro font-medium text-[var(--fg-muted)]"
-                        >Labels (comma-separated)</span
-                      >
-                      <input
-                        bind:value={editDraft.labels}
-                        class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-meta text-[var(--fg)] placeholder:text-[var(--fg-subtle)]"
-                        placeholder="ops, runbook"
                         type="text"
                       />
                     </label>

@@ -1,6 +1,5 @@
 <script>
   import { page } from "$app/stores";
-  import { goto } from "$app/navigation";
   import ArchiveButton from "$lib/components/ArchiveButton.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import TrashButton from "$lib/components/TrashButton.svelte";
@@ -54,11 +53,6 @@
   let archiveBusyId = $state("");
   let confirmModal = $state({ open: false, action: "", entityId: "" });
   let trashBusyId = $state("");
-  let creating = $state(false);
-  let createError = $state("");
-  let showCreateForm = $state(false);
-
-  let createTitle = $state("");
 
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
@@ -103,25 +97,6 @@
     };
   }
 
-  function resetCreateForm() {
-    createTitle = "";
-  }
-
-  function openCreateBoardForm() {
-    createError = "";
-    resetCreateForm();
-    showCreateForm = true;
-  }
-
-  function toggleCreateBoardForm() {
-    createError = "";
-    const next = !showCreateForm;
-    showCreateForm = next;
-    if (next) {
-      resetCreateForm();
-    }
-  }
-
   async function loadBoards(isRetry = false) {
     loading = true;
     error = "";
@@ -142,31 +117,6 @@
     } finally {
       loading = false;
       retrying = false;
-    }
-  }
-
-  async function submitCreateBoard() {
-    createError = "";
-
-    const title = createTitle.trim();
-    if (!title) {
-      createError = "Title is required.";
-      return;
-    }
-
-    creating = true;
-    try {
-      const created = await coreClient.createBoard({
-        board: { title, document_refs: [], pinned_refs: [] },
-      });
-      await loadBoards();
-      resetCreateForm();
-      showCreateForm = false;
-      await goto(workspaceHref(`/boards/${created.board.id}`));
-    } catch (e) {
-      createError = `Failed to create board: ${e instanceof Error ? e.message : String(e)}`;
-    } finally {
-      creating = false;
     }
   }
 
@@ -290,13 +240,12 @@
       </svg>
       {hasActiveFilters ? "Filtered" : "Filters"}
     </button>
-    <button
+    <a
       class="rounded-md bg-accent-solid px-3 py-1.5 text-micro font-medium text-white transition-colors hover:bg-accent"
-      onclick={toggleCreateBoardForm}
-      type="button"
+      href={workspaceHref("/boards/new")}
     >
-      {showCreateForm ? "Hide create form" : "Create board"}
-    </button>
+      New board
+    </a>
   </div>
 </div>
 
@@ -376,69 +325,14 @@
   />
 {/if}
 
-{#if showCreateForm}
-  <section
-    class="mb-5 rounded-md border border-[var(--line)] bg-[var(--panel)]"
-  >
-    <div class="border-b border-[var(--line)] px-4 py-2.5">
-      <h2 class="text-meta font-medium text-[var(--fg)]">New board</h2>
-      <p class="mt-0.5 text-micro text-[var(--fg-muted)]">
-        Give it a name — you can link topics, docs, and refs after creation.
-      </p>
-    </div>
-
-    <div class="px-4 py-3">
-      {#if createError}
-        <div
-          class="mb-3 rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
-        >
-          {createError}
-        </div>
-      {/if}
-
-      <label class="block text-micro font-medium text-[var(--fg-muted)]">
-        Board title
-        <input
-          bind:value={createTitle}
-          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)] focus:border-[var(--accent)] focus:outline-none"
-          placeholder="Q3 launch board"
-          type="text"
-          onkeydown={(e) => e.key === "Enter" && submitCreateBoard()}
-        />
-      </label>
-
-      <div class="mt-3 flex flex-wrap gap-2">
-        <button
-          class="rounded-md bg-accent-solid px-3 py-1.5 text-micro font-medium text-white transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-          disabled={creating}
-          onclick={submitCreateBoard}
-          type="button"
-        >
-          {creating ? "Creating…" : "Create board"}
-        </button>
-        <button
-          class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-1.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
-          onclick={() => {
-            showCreateForm = false;
-            createError = "";
-          }}
-          type="button"
-        >
-          Cancel
-        </button>
-      </div>
-    </div>
-  </section>
-{/if}
-
 {#if loading && boards.length === 0}
   <Skeleton rows={8} />
 {:else if boards.length === 0 && !error}
   <StateEmpty
     title="No boards yet"
     helper="Boards group cards into columns so the team can see what's planned, in flight, and done at a glance."
-    actionLabel="Create board"
-    onclick={openCreateBoardForm}
+    actionLabel="New board"
+    actionHref={workspaceHref("/boards/new")}
   />
 {:else}
   <div

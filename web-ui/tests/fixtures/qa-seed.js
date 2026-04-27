@@ -287,7 +287,6 @@ export const QA_BOARDS = [
     title: "Launch control",
     status: "active",
     thread_id: "thread-launch-war-room",
-    labels: ["launch", "ops"],
     owners: ["actor-zara-ops", "actor-jordan-human"],
     refs: ["thread:thread-launch-war-room", "document:doc-launch-checklist"],
     document_refs: ["document:doc-launch-checklist"],
@@ -313,7 +312,6 @@ export const QA_BOARDS = [
     title: "Billing hardening",
     status: "paused",
     thread_id: "thread-billing-rollout",
-    labels: ["billing", "qa"],
     owners: ["actor-jordan-human"],
     refs: ["thread:thread-billing-rollout", "document:doc-billing-runbook"],
     document_refs: ["document:doc-billing-runbook"],
@@ -339,7 +337,6 @@ export const QA_BOARDS = [
     title: "Docs polish",
     status: "active",
     thread_id: "thread-docs-refresh",
-    labels: ["docs"],
     owners: ["actor-iris-docs"],
     refs: ["thread:thread-docs-refresh", "document:doc-onboarding-playbook"],
     document_refs: ["document:doc-onboarding-playbook"],
@@ -366,7 +363,6 @@ export const QA_DOCUMENTS = [
   {
     id: "doc-launch-checklist",
     title: "Launch checklist",
-    labels: ["launch", "ops"],
     state: "active",
     thread_id: "thread-launch-war-room",
     head_revision_number: 7,
@@ -376,7 +372,6 @@ export const QA_DOCUMENTS = [
   {
     id: "doc-billing-runbook",
     title: "Billing runbook",
-    labels: ["billing", "runbook"],
     state: "active",
     thread_id: "thread-billing-rollout",
     head_revision_number: 4,
@@ -386,7 +381,6 @@ export const QA_DOCUMENTS = [
   {
     id: "doc-onboarding-playbook",
     title: "Onboarding playbook",
-    labels: ["docs", "onboarding"],
     state: "active",
     thread_id: "thread-docs-refresh",
     head_revision_number: 9,

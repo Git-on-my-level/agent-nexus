@@ -1,5 +1,4 @@
 <script>
-  import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
   import { coreClient } from "$lib/coreClient";
@@ -19,7 +18,6 @@
   import StateEmpty from "$lib/components/state/StateEmpty.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
-  import { parseDelimitedValues } from "$lib/boardUtils";
 
   const DOC_STATE_LABELS = {
     active: "Active",
@@ -28,7 +26,6 @@
   };
 
   const defaultDocListFilters = {
-    labels: "",
     showArchived: false,
   };
 
@@ -41,7 +38,7 @@
   let docFiltersApplied = $state({ ...defaultDocListFilters });
   let hasActiveFilters = $derived.by(() => {
     const f = docFiltersApplied;
-    return f.showArchived || Boolean(f.labels.trim());
+    return f.showArchived;
   });
   let archiveBusyId = $state("");
   let confirmModal = $state({ open: false, action: "", entityId: "" });
@@ -55,41 +52,6 @@
     lookupActorDisplayName(id, $actorRegistry, $principalRegistry),
   );
 
-  let groupByLabel = $state(
-    browser && localStorage.getItem("anx-docs-group-by-label") === "true",
-  );
-  let collapsedGroups = $state(new Set());
-
-  let groupedDocs = $derived.by(() => {
-    if (!groupByLabel) return null;
-    /** @type {Record<string, typeof documents>} */
-    const groups = {};
-    for (const doc of documents) {
-      const label = (doc.labels ?? [])[0] || "__ungrouped__";
-      if (!groups[label]) groups[label] = [];
-      groups[label].push(doc);
-    }
-    return Object.entries(groups).sort(([a], [b]) => {
-      if (a === "__ungrouped__") return 1;
-      if (b === "__ungrouped__") return -1;
-      return a.localeCompare(b);
-    });
-  });
-
-  function toggleGrouping() {
-    groupByLabel = !groupByLabel;
-    collapsedGroups = new Set();
-    if (browser)
-      localStorage.setItem("anx-docs-group-by-label", String(groupByLabel));
-  }
-
-  function toggleGroup(label) {
-    const next = new Set(collapsedGroups);
-    if (next.has(label)) next.delete(label);
-    else next.add(label);
-    collapsedGroups = next;
-  }
-
   let createOpen = $state(false);
   let creating = $state(false);
   let createError = $state("");
@@ -97,7 +59,6 @@
   let draft = $state({
     id: "",
     title: "",
-    labels: "",
     content: "",
   });
 
@@ -128,8 +89,6 @@
       const threadFromUrl = String(scopedThreadId ?? "").trim();
       if (threadFromUrl) filters.thread_id = threadFromUrl;
       if (f.showArchived) filters.include_archived = "true";
-      const labels = parseDelimitedValues(f.labels);
-      if (labels.length > 0) filters.label = labels;
       const data = await coreClient.listDocuments(filters);
       documents = filterTopLevelDocuments(data.documents);
     } catch (e) {
@@ -144,7 +103,6 @@
     draft = {
       id: "",
       title: "",
-      labels: "",
       content: "",
     };
   }
@@ -174,14 +132,8 @@
     createError = "";
 
     try {
-      const labels = draft.labels
-        .split(",")
-        .map((l) => l.trim())
-        .filter(Boolean);
-
       const docPayload = {
         title: draft.title.trim(),
-        labels,
       };
       if (draft.id.trim()) docPayload.id = draft.id.trim();
 
@@ -326,30 +278,6 @@
       {hasActiveFilters ? "Filtered" : "Filters"}
     </button>
     <button
-      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-micro font-medium transition-colors {groupByLabel
-        ? 'bg-[var(--accent-solid)] text-white'
-        : 'bg-[var(--panel)] text-[var(--fg-muted)] hover:bg-[var(--line)]'}"
-      onclick={toggleGrouping}
-      type="button"
-      title="Group by label"
-      aria-label="Group by label"
-      aria-pressed={groupByLabel}
-    >
-      <svg
-        class="h-3.5 w-3.5"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-        stroke-width="2"
-      >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          d="M3 7h4m0 0V3m0 4L3 3m18 4h-4m0 0V3m0 4l4-4M3 17h4m0 0v4m0-4L3 21m18-4h-4m0 0v4m0-4l4 4"
-        />
-      </svg>
-    </button>
-    <button
       class="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-[var(--panel)] px-3 py-1.5 text-micro font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line)] disabled:cursor-not-allowed disabled:opacity-50"
       disabled={Boolean(scopedThreadId)}
       onclick={toggleCreate}
@@ -382,17 +310,6 @@
   <CompactFilterBar testId="docs-filter-panel">
     {#snippet children()}
       <div class="grid gap-3">
-        <label class="text-micro">
-          <span class="font-medium text-[var(--fg-muted)]"
-            >Labels (comma-separated, any match)</span
-          >
-          <input
-            bind:value={docFiltersDraft.labels}
-            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
-            placeholder="ops, runbook"
-            type="text"
-          />
-        </label>
         <label
           class="inline-flex cursor-pointer items-center gap-1.5 text-micro text-[var(--fg-muted)]"
         >
@@ -454,8 +371,8 @@
   >
     <h2 class="mb-3 text-meta font-semibold text-[var(--fg)]">New document</h2>
     <p class="mb-3 text-micro text-[var(--fg-muted)]">
-      Title and labels are saved together with the first revision. You can edit
-      the body and add more revisions afterward.
+      The title is saved together with the first revision. You can edit the body
+      and add more revisions afterward.
     </p>
     <div class="grid gap-3 sm:grid-cols-2">
       <label class="sm:col-span-2">
@@ -477,17 +394,6 @@
           bind:value={draft.id}
           class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-meta text-[var(--fg)] placeholder:text-[var(--fg-subtle)]"
           placeholder="auto-generated if empty"
-          type="text"
-        />
-      </label>
-      <label>
-        <span class="text-micro font-medium text-[var(--fg-muted)]"
-          >Labels (comma-separated)</span
-        >
-        <input
-          bind:value={draft.labels}
-          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-meta text-[var(--fg)] placeholder:text-[var(--fg-subtle)]"
-          placeholder="e.g. ops, runbook"
           type="text"
         />
       </label>
@@ -562,12 +468,6 @@
             )}">{DOC_STATE_LABELS[doc.state] ?? doc.state}</span
           >
         {/if}
-        {#each (doc.labels ?? []).slice(0, 3) as label}
-          <span
-            class="rounded bg-[var(--line)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
-            >{label}</span
-          >
-        {/each}
       </div>
       <p class="mt-1 truncate text-meta font-medium text-[var(--fg)]">
         {doc.title || doc.id}
@@ -613,62 +513,13 @@
 {/snippet}
 
 {#if !loading && documents.length > 0}
-  {#if groupByLabel && groupedDocs}
-    <div class="space-y-2">
-      {#each groupedDocs as [label, docs]}
-        {@const collapsed = collapsedGroups.has(label)}
-        {@const displayLabel =
-          label === "__ungrouped__"
-            ? "Ungrouped"
-            : label.charAt(0).toUpperCase() + label.slice(1)}
-        <div
-          class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] overflow-hidden"
-        >
-          <button
-            class="cursor-pointer flex w-full items-center gap-2 px-4 py-2 text-left transition-colors hover:bg-[var(--line-subtle)]"
-            onclick={() => toggleGroup(label)}
-            type="button"
-          >
-            <svg
-              class="h-3 w-3 text-[var(--fg-muted)] transition-transform {collapsed
-                ? ''
-                : 'rotate-90'}"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M9 5l7 7-7 7"
-              />
-            </svg>
-            <span class="text-micro font-medium text-[var(--fg)]"
-              >{displayLabel}</span
-            >
-            <span
-              class="rounded bg-[var(--line)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
-              >{docs.length}</span
-            >
-          </button>
-          {#if !collapsed}
-            {#each docs as doc, i}
-              {@render docRow(doc, i > 0)}
-            {/each}
-          {/if}
-        </div>
-      {/each}
-    </div>
-  {:else}
-    <div
-      class="space-y-px rounded-md border border-[var(--line)] bg-[var(--bg-soft)] overflow-hidden"
-    >
-      {#each documents as doc, i}
-        {@render docRow(doc, i > 0)}
-      {/each}
-    </div>
-  {/if}
+  <div
+    class="space-y-px rounded-md border border-[var(--line)] bg-[var(--bg-soft)] overflow-hidden"
+  >
+    {#each documents as doc, i}
+      {@render docRow(doc, i > 0)}
+    {/each}
+  </div>
 {/if}
 
 <ConfirmModal
