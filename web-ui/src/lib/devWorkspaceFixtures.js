@@ -1371,6 +1371,8 @@ const MOCK_DOCUMENTS = [
   {
     id: "incident-response-playbook",
     title: "Incident Response Playbook",
+    summary:
+      "When pricing or POS misbehaves: detect, fix, and notify the right people.",
     slug: "incident-response-playbook",
     state: "active",
     supersedes: [],
@@ -1650,13 +1652,16 @@ function buildCanonicalTopicSeed(thread) {
       : []),
   ].filter(Boolean);
 
+  const ownerActor = String(
+    thread?.created_by ?? thread?.updated_by ?? "",
+  ).trim();
   return {
     id: threadId,
     thread_id: threadId,
     state: topicStateFromThreadFixture(thread),
     title: String(thread?.title ?? "").trim(),
     summary: String(thread?.current_summary ?? "").trim(),
-    owner_refs: thread?.created_by ? [`actor:${thread.created_by}`] : [],
+    owner_refs: ownerActor ? [`actor:${ownerActor}`] : [],
     board_refs: boardRefs,
     document_refs: documentRefs,
     related_refs: [...new Set(relatedRefs)],

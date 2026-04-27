@@ -354,8 +354,7 @@
       {@const board = item.board}
       {@const listStats = item.listStats}
       {@const counts = boardSummaryCounts(listStats)}
-      {@const projectionFreshness =
-        item.projection_freshness ?? board?.projection_freshness ?? null}
+      {@const projectionFreshness = board?.projection_freshness ?? null}
       {@const rowNav = boardRowInspectNav(board)}
       <div
         class="flex items-stretch {i > 0

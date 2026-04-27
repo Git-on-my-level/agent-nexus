@@ -495,7 +495,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Why: Scan durable coordination boards and lightweight summaries.
 - Concepts: `boards`
 - Error codes: `auth_required`, `invalid_token`
-- Output: Returns `{ boards, summaries }`.
+- Output: Returns `{ boards, next_cursor? }` (each `boards[]` item is `{ board, summary }` with `summary` a `BoardSummary` projection, not the board's text blurb).
 
 ## `boards.patch`
 

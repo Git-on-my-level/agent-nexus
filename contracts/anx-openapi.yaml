@@ -1192,7 +1192,7 @@ paths:
       x-anx-why: Scan durable coordination boards and lightweight summaries.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ boards, summaries }`."
+      x-anx-output-envelope: "Returns `{ boards, next_cursor? }` (each `boards[]` item is `{ board, summary }` with `summary` a `BoardSummary` projection, not the board's text blurb)."
       x-anx-error-codes: [auth_required, invalid_token]
       x-anx-concepts: [boards]
       x-anx-stability: beta
@@ -5384,18 +5384,22 @@ components:
 
     BoardsResponse:
       type: object
+      description: >
+        Each list row matches `BoardResponse` (`board` map plus a `summary` object that is a
+        `BoardSummary` projection for list/operator context — not the `board.summary` optional
+        string blurb on the resource).
       properties:
         boards:
           type: array
-          items: { $ref: '#/components/schemas/Board' }
-        summaries:
-          type: object
-          additionalProperties:
-            $ref: '#/components/schemas/BoardSummary'
-      required: [boards, summaries]
+          items: { $ref: '#/components/schemas/BoardResponse' }
+        next_cursor: { type: string }
+      required: [boards]
 
     BoardResponse:
       type: object
+      description: >
+        `summary` is a `BoardSummary` projection (card counts, activity, document presence).
+        It is not the same as the board resource's optional one-line `summary` string.
       properties:
         board: { $ref: '#/components/schemas/Board' }
         summary: { $ref: '#/components/schemas/BoardSummary' }

@@ -1891,7 +1891,7 @@ export const commandRegistry = [
         "streaming": {
             "mode": "none"
         },
-        "output_envelope": "Returns `{ boards, summaries }`.",
+        "output_envelope": "Returns `{ boards, next_cursor? }` (each `boards[]` item is `{ board, summary }` with `summary` a `BoardSummary` projection, not the board's text blurb).",
         "error_codes": [
             "auth_required",
             "invalid_token"

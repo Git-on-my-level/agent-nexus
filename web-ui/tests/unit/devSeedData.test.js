@@ -17,6 +17,9 @@ describe("dev seed fixtures", () => {
       thread_id: "thread-lemon-shortage",
       state: "active",
     });
+    expect(
+      seed.topics.find((t) => t.id === "thread-lemon-shortage")?.owner_refs,
+    ).toEqual(["actor:actor-supply-rover"]);
     const maintenance = seed.topics.find(
       (t) => t.id === "thread-squeezebot-maintenance",
     );
