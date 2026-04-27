@@ -65,7 +65,8 @@ func refreshDerivedTopicProjection(ctx context.Context, opts handlerOptions, thr
 	}
 	collaboration := buildThreadWorkspaceCollaborationSummary(map[string]any{"recent_events": recentEvents})
 
-	rawKeyArtifacts, _ := extractStringSlice(thread["key_artifacts"])
+	// Artifact count follows durable documents for the thread, not thread body `key_artifacts` (dumb threads).
+	artifactCount := len(documents)
 	pendingDecisions := 0
 	for _, item := range inboxItems {
 		if item.Category == "action_needed" {
@@ -98,7 +99,7 @@ func refreshDerivedTopicProjection(ctx context.Context, opts handlerOptions, thr
 		"recommendation_count":       workspaceIntValue(collaboration["recommendation_count"]),
 		"decision_request_count":     workspaceIntValue(collaboration["decision_request_count"]),
 		"decision_count":             workspaceIntValue(collaboration["decision_count"]),
-		"artifact_count":             len(rawKeyArtifacts),
+		"artifact_count":             artifactCount,
 		"open_work_item_count":       workItemSummary.OpenCount,
 		"at_risk_work_item_count":    workItemSummary.AtRiskCount,
 		"due_soon_work_item_count":   workItemSummary.DueSoonCount,
@@ -126,7 +127,7 @@ func refreshDerivedTopicProjection(ctx context.Context, opts handlerOptions, thr
 		RecommendationCount:    workspaceIntValue(collaboration["recommendation_count"]),
 		DecisionRequestCount:   workspaceIntValue(collaboration["decision_request_count"]),
 		DecisionCount:          workspaceIntValue(collaboration["decision_count"]),
-		ArtifactCount:          len(rawKeyArtifacts),
+		ArtifactCount:          artifactCount,
 		OpenCardCount:          workItemSummary.OpenCount,
 		DocumentCount:          len(documents),
 		GeneratedAt:            generatedAt,
@@ -330,20 +331,12 @@ func resolvedInboxRiskHorizon(opts handlerOptions) time.Duration {
 }
 
 func threadFreshnessWindowStart(ctx context.Context, opts handlerOptions, threadID string, now time.Time) (time.Time, bool) {
-	if opts.primitiveStore == nil {
-		return time.Time{}, false
-	}
-	thread, err := opts.primitiveStore.GetThread(ctx, threadID)
-	if err != nil {
-		return time.Time{}, false
-	}
-	cadence, _ := thread["cadence"].(string)
-	nextCheckInText, _ := thread["next_check_in_at"].(string)
-	nextCheckInAt, err := time.Parse(time.RFC3339, strings.TrimSpace(nextCheckInText))
-	if err != nil {
-		return time.Time{}, false
-	}
-	return cadenceWindowStart(cadence, now, nextCheckInAt)
+	_ = ctx
+	_ = opts
+	_ = threadID
+	_ = now
+	// Card "staleness" windows were tied to thread cadence JSON; dumb threads do not define that.
+	return time.Time{}, false
 }
 func formatOptionalTime(value time.Time) string {
 	if value.IsZero() {

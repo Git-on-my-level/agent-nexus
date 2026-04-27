@@ -1,6 +1,6 @@
 {
   "openapi_version": "3.1.0",
-  "contract_version": "0.3.0",
+  "contract_version": "0.4.0",
   "generated_by": "core/cmd/contract-gen",
   "concept_count": 31,
   "concepts": [
@@ -1771,7 +1771,7 @@
           "path": "/boards/{board_id}/archive",
           "operation_id": "archiveBoard",
           "summary": "Archive board",
-          "why": "Soft-archive a board (orthogonal to business status; clears default list visibility).",
+          "why": "Soft-archive a board and derive its lifecycle state from archived_at.",
           "input_mode": "json-body",
           "streaming": {
             "mode": "none"
@@ -2180,15 +2180,6 @@
                 "type": "list\u003cstring\u003e"
               },
               {
-                "name": "board.status",
-                "type": "string",
-                "enum_values": [
-                  "active",
-                  "closed",
-                  "paused"
-                ]
-              },
-              {
                 "name": "board.title",
                 "type": "string"
               }
@@ -2371,15 +2362,6 @@
               {
                 "name": "patch.provenance.sources",
                 "type": "list\u003cstring\u003e"
-              },
-              {
-                "name": "patch.status",
-                "type": "string",
-                "enum_values": [
-                  "active",
-                  "closed",
-                  "paused"
-                ]
               },
               {
                 "name": "patch.title",
@@ -4350,15 +4332,6 @@
                 "type": "list\u003cstring\u003e"
               },
               {
-                "name": "patch.status",
-                "type": "string",
-                "enum_values": [
-                  "active",
-                  "closed",
-                  "paused"
-                ]
-              },
-              {
                 "name": "patch.title",
                 "type": "string"
               }
@@ -4569,19 +4542,6 @@
               {
                 "name": "patch.related_refs",
                 "type": "list\u003cany\u003e"
-              },
-              {
-                "name": "patch.status",
-                "type": "string",
-                "enum_values": [
-                  "active",
-                  "archived",
-                  "blocked",
-                  "closed",
-                  "paused",
-                  "proposed",
-                  "resolved"
-                ]
               },
               {
                 "name": "patch.summary",
@@ -5381,8 +5341,8 @@
                   "decision_made",
                   "decision_needed",
                   "document_created",
+                  "document_restored",
                   "document_revised",
-                  "document_revision_created",
                   "document_trashed",
                   "exception_raised",
                   "inbox_item_acknowledged",
@@ -5393,7 +5353,6 @@
                   "topic_archived",
                   "topic_created",
                   "topic_restored",
-                  "topic_status_changed",
                   "topic_trashed",
                   "topic_updated"
                 ],
@@ -8074,7 +8033,7 @@
           "path": "/topics/{topic_id}/archive",
           "operation_id": "archiveTopic",
           "summary": "Archive topic",
-          "why": "Soft-archive a topic (orthogonal to business status; clears default list visibility).",
+          "why": "Soft-archive a topic and derive its lifecycle state from archived_at.",
           "input_mode": "json-body",
           "streaming": {
             "mode": "none"
@@ -8165,19 +8124,6 @@
               {
                 "name": "topic.related_refs",
                 "type": "list\u003cany\u003e"
-              },
-              {
-                "name": "topic.status",
-                "type": "string",
-                "enum_values": [
-                  "active",
-                  "archived",
-                  "blocked",
-                  "closed",
-                  "paused",
-                  "proposed",
-                  "resolved"
-                ]
               },
               {
                 "name": "topic.summary",
@@ -8371,19 +8317,6 @@
               {
                 "name": "patch.related_refs",
                 "type": "list\u003cany\u003e"
-              },
-              {
-                "name": "patch.status",
-                "type": "string",
-                "enum_values": [
-                  "active",
-                  "archived",
-                  "blocked",
-                  "closed",
-                  "paused",
-                  "proposed",
-                  "resolved"
-                ]
               },
               {
                 "name": "patch.summary",
@@ -9262,7 +9195,7 @@
           "path": "/boards/{board_id}/archive",
           "operation_id": "archiveBoard",
           "summary": "Archive board",
-          "why": "Soft-archive a board (orthogonal to business status; clears default list visibility).",
+          "why": "Soft-archive a board and derive its lifecycle state from archived_at.",
           "input_mode": "json-body",
           "streaming": {
             "mode": "none"
@@ -9578,15 +9511,6 @@
                 "type": "list\u003cstring\u003e"
               },
               {
-                "name": "board.status",
-                "type": "string",
-                "enum_values": [
-                  "active",
-                  "closed",
-                  "paused"
-                ]
-              },
-              {
                 "name": "board.title",
                 "type": "string"
               }
@@ -9683,15 +9607,6 @@
               {
                 "name": "patch.provenance.sources",
                 "type": "list\u003cstring\u003e"
-              },
-              {
-                "name": "patch.status",
-                "type": "string",
-                "enum_values": [
-                  "active",
-                  "closed",
-                  "paused"
-                ]
               },
               {
                 "name": "patch.title",
@@ -11126,8 +11041,8 @@
                   "decision_made",
                   "decision_needed",
                   "document_created",
+                  "document_restored",
                   "document_revised",
-                  "document_revision_created",
                   "document_trashed",
                   "exception_raised",
                   "inbox_item_acknowledged",
@@ -11138,7 +11053,6 @@
                   "topic_archived",
                   "topic_created",
                   "topic_restored",
-                  "topic_status_changed",
                   "topic_trashed",
                   "topic_updated"
                 ],
@@ -11556,7 +11470,7 @@
           "path": "/topics/{topic_id}/archive",
           "operation_id": "archiveTopic",
           "summary": "Archive topic",
-          "why": "Soft-archive a topic (orthogonal to business status; clears default list visibility).",
+          "why": "Soft-archive a topic and derive its lifecycle state from archived_at.",
           "input_mode": "json-body",
           "streaming": {
             "mode": "none"
@@ -11647,19 +11561,6 @@
               {
                 "name": "topic.related_refs",
                 "type": "list\u003cany\u003e"
-              },
-              {
-                "name": "topic.status",
-                "type": "string",
-                "enum_values": [
-                  "active",
-                  "archived",
-                  "blocked",
-                  "closed",
-                  "paused",
-                  "proposed",
-                  "resolved"
-                ]
               },
               {
                 "name": "topic.summary",
@@ -11775,19 +11676,6 @@
               {
                 "name": "patch.related_refs",
                 "type": "list\u003cany\u003e"
-              },
-              {
-                "name": "patch.status",
-                "type": "string",
-                "enum_values": [
-                  "active",
-                  "archived",
-                  "blocked",
-                  "closed",
-                  "paused",
-                  "proposed",
-                  "resolved"
-                ]
               },
               {
                 "name": "patch.summary",

@@ -39,7 +39,6 @@ test("trash page restores archived topics, boards, cards, documents, and artifac
       title: "Archived topic",
       summary: "Archived topic summary",
       type: "initiative",
-      status: "archived",
       thread_id: "topic-trash-1",
       owner_refs: [],
       board_refs: [],
@@ -59,7 +58,6 @@ test("trash page restores archived topics, boards, cards, documents, and artifac
       board: {
         id: "board-trash-1",
         title: "Archived board",
-        status: "archived",
         labels: [],
         owners: [actorId],
         thread_id: "topic-trash-1",
@@ -150,7 +148,6 @@ test("trash page restores archived topics, boards, cards, documents, and artifac
     }
 
     Object.assign(wrapper.board, {
-      status: "active",
       archived_at: null,
       archived_by: null,
       trashed_at: null,
@@ -244,10 +241,7 @@ test("trash page restores archived topics, boards, cards, documents, and artifac
       contentType: "application/json",
       body: JSON.stringify({
         topics: topics.filter(
-          (topic) =>
-            Boolean(topic.archived_at) ||
-            Boolean(topic.trashed_at) ||
-            String(topic.status ?? "").trim() === "archived",
+          (topic) => Boolean(topic.archived_at) || Boolean(topic.trashed_at),
         ),
       }),
     });
@@ -255,7 +249,7 @@ test("trash page restores archived topics, boards, cards, documents, and artifac
 
   await page.route(/\/topics\/[^/?]+\/restore$/, async (route) => {
     const topicId = route.request().url().split("/").at(-2) ?? "";
-    const restored = restoreById(topics, topicId, { status: "active" });
+    const restored = restoreById(topics, topicId, {});
     await route.fulfill({
       status: restored ? 200 : 404,
       contentType: "application/json",
@@ -502,10 +496,7 @@ test("trash page purges a card after confirmation (human principal)", async ({
       contentType: "application/json",
       body: JSON.stringify({
         cards: cards.filter(
-          (card) =>
-            Boolean(card?.archived_at) ||
-            Boolean(card?.trashed_at) ||
-            String(card?.status ?? "").trim() === "archived",
+          (card) => Boolean(card?.archived_at) || Boolean(card?.trashed_at),
         ),
       }),
     });

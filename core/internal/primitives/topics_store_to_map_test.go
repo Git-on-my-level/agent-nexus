@@ -11,16 +11,16 @@ func TestTopicRowToMapJSONNullBodyDoesNotPanic(t *testing.T) {
 	row := topicRow{
 		ID:             "top-1",
 		Type:           sqlNullString("incident"),
-		Status:         sqlNullString("active"),
 		Title:          sqlNullString("T"),
-		BodyJSON:       "null",
+		Summary:        sql.NullString{},
+		ExtensionsJSON: "null",
 		ProvenanceJSON: "{}",
 		CreatedAt:      "2026-01-01T00:00:00Z",
 		CreatedBy:      "actor-1",
 		UpdatedAt:      "2026-01-01T00:00:00Z",
 		UpdatedBy:      "actor-1",
 	}
-	out, err := row.toMap()
+	out, err := row.toMap(emptyTopicRefBuckets())
 	if err != nil {
 		t.Fatalf("toMap: %v", err)
 	}
@@ -38,16 +38,16 @@ func TestTopicRowToMapMalformedBodyJSONDegrades(t *testing.T) {
 	row := topicRow{
 		ID:             "top-bad-body",
 		Type:           sqlNullString("incident"),
-		Status:         sqlNullString("active"),
 		Title:          sqlNullString("Still Listed"),
-		BodyJSON:       `not-json`,
+		Summary:        sql.NullString{},
+		ExtensionsJSON: `not-json`,
 		ProvenanceJSON: "{}",
 		CreatedAt:      "2026-01-01T00:00:00Z",
 		CreatedBy:      "actor-1",
 		UpdatedAt:      "2026-01-01T00:00:00Z",
 		UpdatedBy:      "actor-1",
 	}
-	out, err := row.toMap()
+	out, err := row.toMap(emptyTopicRefBuckets())
 	if err != nil {
 		t.Fatalf("toMap: %v", err)
 	}
@@ -65,21 +65,24 @@ func TestTopicRowToMapJSONNullProvenanceDoesNotPanic(t *testing.T) {
 	row := topicRow{
 		ID:             "top-2",
 		Type:           sqlNullString("incident"),
-		Status:         sqlNullString("active"),
 		Title:          sqlNullString("T"),
-		BodyJSON:       `{"summary":"s"}`,
+		Summary:        sqlNullString("s"),
+		ExtensionsJSON: `{}`,
 		ProvenanceJSON: "null",
 		CreatedAt:      "2026-01-01T00:00:00Z",
 		CreatedBy:      "actor-1",
 		UpdatedAt:      "2026-01-01T00:00:00Z",
 		UpdatedBy:      "actor-1",
 	}
-	out, err := row.toMap()
+	out, err := row.toMap(emptyTopicRefBuckets())
 	if err != nil {
 		t.Fatalf("toMap: %v", err)
 	}
 	if _, ok := out["provenance"].(map[string]any); !ok {
 		t.Fatalf("provenance: got %#v", out["provenance"])
+	}
+	if out["summary"] != "s" {
+		t.Fatalf("summary: got %#v", out["summary"])
 	}
 }
 

@@ -3,8 +3,13 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
 )
 
 const createMigrationsTableSQL = `
@@ -582,6 +587,775 @@ var migrations = []migration{
 			`CREATE INDEX IF NOT EXISTS idx_consumed_grant_jtis_consumed_at ON consumed_grant_jtis (consumed_at);`,
 		},
 	},
+	{
+		Version: 9,
+		Statements: []string{
+			`DROP INDEX IF EXISTS idx_topics_status_updated_at;`,
+			`DROP INDEX IF EXISTS idx_threads_status_updated_at;`,
+			`DROP INDEX IF EXISTS idx_boards_status_updated_at;`,
+		},
+		AfterApply: applyMigration9LegacyStatusCleanup,
+	},
+	{
+		Version:    10,
+		Statements: []string{},
+		AfterApply: applyMigration10DropThreadFilterColumns,
+	},
+	{
+		Version:    11,
+		Statements: []string{},
+		AfterApply: applyMigration11CardsSummaryAndDropPriority,
+	},
+	{
+		Version:    12,
+		Statements: []string{},
+		AfterApply: applyMigration12TopicsSummaryExtensionsJSON,
+	},
+	{
+		Version:    13,
+		Statements: []string{},
+		AfterApply: applyMigration13DropEventsBodyJSON,
+	},
+	{
+		Version:    14,
+		Statements: []string{},
+		AfterApply: applyMigration14ClearDerivedInboxForCanonicalCategories,
+	},
+	{
+		Version:    15,
+		Statements: []string{},
+		AfterApply: applyMigration15DropBoardsDocumentsLabelsJSON,
+	},
+}
+
+func sqliteTableExists(ctx context.Context, tx *sql.Tx, name string) (bool, error) {
+	var n int
+	err := tx.QueryRowContext(ctx, `SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = ?`, name).Scan(&n)
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
+func sqliteTableHasColumn(ctx context.Context, tx *sql.Tx, table, column string) (bool, error) {
+	var n int
+	err := tx.QueryRowContext(ctx, `SELECT COUNT(1) FROM pragma_table_info(?) WHERE name = ?`, table, column).Scan(&n)
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
+func applyMigration12TopicsSummaryExtensionsJSON(ctx context.Context, tx *sql.Tx) error {
+	ok, err := sqliteTableExists(ctx, tx, "topics")
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return nil
+	}
+	hasBody, err := sqliteTableHasColumn(ctx, tx, "topics", "body_json")
+	if err != nil {
+		return fmt.Errorf("migration 12 pragma topics.body_json: %w", err)
+	}
+	hasExt, err := sqliteTableHasColumn(ctx, tx, "topics", "extensions_json")
+	if err != nil {
+		return fmt.Errorf("migration 12 pragma topics.extensions_json: %w", err)
+	}
+	if hasBody && !hasExt {
+		if _, err := tx.ExecContext(ctx, `ALTER TABLE topics RENAME COLUMN body_json TO extensions_json`); err != nil {
+			return fmt.Errorf("migration 12 rename body_json: %w", err)
+		}
+		hasExt = true
+	} else if !hasExt {
+		if _, err := tx.ExecContext(ctx, `ALTER TABLE topics ADD COLUMN extensions_json TEXT NOT NULL DEFAULT '{}'`); err != nil {
+			return fmt.Errorf("migration 12 add extensions_json: %w", err)
+		}
+		hasExt = true
+	}
+	hasSummary, err := sqliteTableHasColumn(ctx, tx, "topics", "summary")
+	if err != nil {
+		return fmt.Errorf("migration 12 pragma topics.summary: %w", err)
+	}
+	if !hasSummary {
+		if _, err := tx.ExecContext(ctx, `ALTER TABLE topics ADD COLUMN summary TEXT`); err != nil {
+			return fmt.Errorf("migration 12 add summary: %w", err)
+		}
+	}
+
+	rows, err := tx.QueryContext(ctx, `SELECT id, type, title, thread_id, extensions_json FROM topics`)
+	if err != nil {
+		return fmt.Errorf("migration 12 scan topics: %w", err)
+	}
+	defer rows.Close()
+
+	type row struct {
+		id, ext string
+		typ     sql.NullString
+		title   sql.NullString
+		thread  sql.NullString
+	}
+	var batch []row
+	for rows.Next() {
+		var r row
+		if err := rows.Scan(&r.id, &r.typ, &r.title, &r.thread, &r.ext); err != nil {
+			return fmt.Errorf("migration 12 scan row: %w", err)
+		}
+		batch = append(batch, r)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("migration 12 rows: %w", err)
+	}
+
+	for _, r := range batch {
+		extObj := map[string]any{}
+		if strings.TrimSpace(r.ext) != "" {
+			if err := json.Unmarshal([]byte(r.ext), &extObj); err != nil || extObj == nil {
+				extObj = map[string]any{}
+			}
+		}
+		migration12CoerceLegacyTopicExt(extObj)
+
+		nextType := strings.TrimSpace(r.typ.String)
+		if nextType == "" {
+			nextType = strings.TrimSpace(migration12StringFromAny(extObj["type"]))
+		}
+		nextTitle := strings.TrimSpace(r.title.String)
+		if nextTitle == "" {
+			nextTitle = strings.TrimSpace(migration12StringFromAny(extObj["title"]))
+		}
+		nextThread := strings.TrimSpace(r.thread.String)
+		if nextThread == "" {
+			nextThread = strings.TrimSpace(migration12StringFromAny(extObj["thread_id"]))
+		}
+
+		summary := strings.TrimSpace(migration12StringFromAny(extObj["summary"]))
+		if summary == "" && nextTitle != "" {
+			summary = nextTitle
+		}
+
+		hasRefLists := migration12ExtHasRefLists(extObj)
+		if hasRefLists {
+			targets := migration12CombineTopicRefTargets(extObj, nextThread)
+			if err := migration12ReplaceTopicRefEdges(ctx, tx, r.id, targets); err != nil {
+				return err
+			}
+		} else if err := migration12AnnotateTopicRefMetadata(ctx, tx, r.id, nextThread); err != nil {
+			return err
+		}
+
+		for _, k := range migration12TopicKeysPromotedFromExt() {
+			delete(extObj, k)
+		}
+		extBytes, err := json.Marshal(extObj)
+		if err != nil {
+			return fmt.Errorf("migration 12 marshal extensions for %s: %w", r.id, err)
+		}
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE topics SET type = ?, title = ?, thread_id = ?, summary = ?, extensions_json = ? WHERE id = ?`,
+			nextType, nextTitle, nextThread, summary, string(extBytes), r.id,
+		); err != nil {
+			return fmt.Errorf("migration 12 update topic %s: %w", r.id, err)
+		}
+	}
+	return nil
+}
+
+func applyMigration13DropEventsBodyJSON(ctx context.Context, tx *sql.Tx) error {
+	ok, err := sqliteTableExists(ctx, tx, "events")
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return nil
+	}
+	hasBody, err := sqliteTableHasColumn(ctx, tx, "events", "body_json")
+	if err != nil {
+		return fmt.Errorf("migration 13 pragma events.body_json: %w", err)
+	}
+	if !hasBody {
+		return nil
+	}
+
+	rows, err := tx.QueryContext(ctx, `SELECT id, refs_json, payload_json, body_json FROM events`)
+	if err != nil {
+		return fmt.Errorf("migration 13 select events: %w", err)
+	}
+	defer rows.Close()
+
+	type rowData struct {
+		id, refsJSON, payloadJSON string
+		bodyJSON                  sql.NullString
+	}
+	var batch []rowData
+	for rows.Next() {
+		var r rowData
+		if err := rows.Scan(&r.id, &r.refsJSON, &r.payloadJSON, &r.bodyJSON); err != nil {
+			return fmt.Errorf("migration 13 scan: %w", err)
+		}
+		batch = append(batch, r)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("migration 13 rows: %w", err)
+	}
+
+	for _, r := range batch {
+		newRefs := r.refsJSON
+		newPayload := r.payloadJSON
+
+		bodyStr := ""
+		if r.bodyJSON.Valid {
+			bodyStr = strings.TrimSpace(r.bodyJSON.String)
+		}
+		if bodyStr != "" && bodyStr != "{}" {
+			var body map[string]any
+			if err := json.Unmarshal([]byte(bodyStr), &body); err != nil || body == nil {
+				body = map[string]any{}
+			}
+			if raw, ok := body["refs"]; ok {
+				if b, err := json.Marshal(raw); err == nil {
+					newRefs = string(b)
+				}
+			}
+			wrapper := migration13EventPayloadWrapperFromBodyMap(body)
+			b, err := json.Marshal(wrapper)
+			if err != nil {
+				return fmt.Errorf("migration 13 marshal payload for %s: %w", r.id, err)
+			}
+			newPayload = string(b)
+		} else {
+			var pl map[string]any
+			if err := json.Unmarshal([]byte(strings.TrimSpace(r.payloadJSON)), &pl); err != nil || pl == nil {
+				pl = map[string]any{}
+			}
+			if _, has := pl["payload"]; !has {
+				wrap := map[string]any{"payload": pl}
+				b, err := json.Marshal(wrap)
+				if err != nil {
+					return fmt.Errorf("migration 13 wrap payload for %s: %w", r.id, err)
+				}
+				newPayload = string(b)
+			}
+		}
+
+		if newRefs != r.refsJSON || newPayload != r.payloadJSON {
+			if _, err := tx.ExecContext(ctx, `UPDATE events SET refs_json = ?, payload_json = ? WHERE id = ?`, newRefs, newPayload, r.id); err != nil {
+				return fmt.Errorf("migration 13 update event %s: %w", r.id, err)
+			}
+		}
+	}
+
+	if _, err := tx.ExecContext(ctx, `ALTER TABLE events DROP COLUMN body_json`); err != nil {
+		return fmt.Errorf("migration 13 drop body_json: %w", err)
+	}
+	return nil
+}
+
+// migration13EventPayloadWrapperFromBodyMap matches primitives.EventPayloadWrapperFromBodyMap (duplicated
+// here to avoid an import cycle: this package is imported by internal primitives tests).
+func migration13EventPayloadWrapperFromBodyMap(body map[string]any) map[string]any {
+	if body == nil {
+		return map[string]any{"payload": map[string]any{}}
+	}
+	wrapper := map[string]any{}
+	if raw, ok := body["payload"]; ok && raw != nil {
+		p, ok := raw.(map[string]any)
+		if !ok {
+			wrapper["payload"] = map[string]any{}
+		} else {
+			inner := make(map[string]any, len(p))
+			for k, v := range p {
+				inner[k] = v
+			}
+			wrapper["payload"] = inner
+		}
+	} else {
+		wrapper["payload"] = map[string]any{}
+	}
+	envelope := map[string]struct{}{
+		"id": {}, "type": {}, "ts": {}, "actor_id": {}, "thread_id": {}, "refs": {}, "payload": {},
+	}
+	for k, v := range body {
+		if _, skip := envelope[k]; skip {
+			continue
+		}
+		switch k {
+		case "archived_at", "archived_by", "trashed_at", "trashed_by", "trash_reason":
+			continue
+		}
+		wrapper[k] = v
+	}
+	return wrapper
+}
+
+func migration12TopicKeysPromotedFromExt() []string {
+	return []string{
+		"id", "type", "title", "summary", "thread_id", "thread_ref", "primary_thread_ref", "primary_thread_id",
+		"owner_refs", "document_refs", "board_refs", "related_refs",
+		"status", "provenance",
+		"created_at", "created_by", "updated_at", "updated_by", "state",
+		"archived_at", "archived_by", "trashed_at", "trashed_by", "trash_reason",
+	}
+}
+
+func migration12StringFromAny(v any) string {
+	if v == nil {
+		return ""
+	}
+	if s, ok := v.(string); ok {
+		return strings.TrimSpace(s)
+	}
+	return strings.TrimSpace(fmt.Sprint(v))
+}
+
+func migration12CoerceLegacyTopicExt(ext map[string]any) {
+	legacyRef := "primary" + "_thread_ref"
+	legacyID := "primary" + "_thread_id"
+	if v, ok := ext[legacyRef]; ok && v != nil {
+		refStr := migration12StringFromAny(v)
+		if refStr != "" {
+			if prefix, id, okRef := migration12SplitTypedRef(refStr); okRef && prefix == "thread" && strings.TrimSpace(id) != "" {
+				if _, has := ext["thread_id"]; !has || migration12StringFromAny(ext["thread_id"]) == "" {
+					ext["thread_id"] = strings.TrimSpace(id)
+				}
+			}
+		}
+		delete(ext, legacyRef)
+	}
+	if v, ok := ext[legacyID]; ok && v != nil {
+		id := migration12StringFromAny(v)
+		if id != "" {
+			if _, has := ext["thread_id"]; !has || migration12StringFromAny(ext["thread_id"]) == "" {
+				ext["thread_id"] = id
+			}
+		}
+		delete(ext, legacyID)
+	}
+	if raw, exists := ext["thread_ref"]; exists && raw != nil {
+		refStr := migration12StringFromAny(raw)
+		if refStr != "" {
+			if prefix, id, okRef := migration12SplitTypedRef(refStr); okRef && prefix == "thread" && strings.TrimSpace(id) != "" {
+				if _, has := ext["thread_id"]; !has || migration12StringFromAny(ext["thread_id"]) == "" {
+					ext["thread_id"] = strings.TrimSpace(id)
+				}
+			}
+		}
+		delete(ext, "thread_ref")
+	}
+}
+
+func migration12SplitTypedRef(raw string) (prefix, id string, ok bool) {
+	raw = strings.TrimSpace(raw)
+	i := strings.IndexByte(raw, ':')
+	if i <= 0 || i == len(raw)-1 {
+		return "", "", false
+	}
+	return raw[:i], raw[i+1:], true
+}
+
+func migration12ExtHasRefLists(ext map[string]any) bool {
+	for _, field := range []string{"owner_refs", "document_refs", "board_refs", "related_refs"} {
+		raw, ok := ext[field]
+		if !ok || raw == nil {
+			continue
+		}
+		switch sl := raw.(type) {
+		case []any:
+			if len(sl) > 0 {
+				return true
+			}
+		case []string:
+			if len(sl) > 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+type migration12RefTarget struct {
+	TargetType   string
+	TargetID     string
+	EdgeType     string
+	MetadataJSON string
+}
+
+func migration12TopicRefMetaJSON(field string) string {
+	b, err := json.Marshal(map[string]string{"topic_ref_field": field})
+	if err != nil {
+		return `{"topic_ref_field":"related_refs"}`
+	}
+	return string(b)
+}
+
+func migration12CombineTopicRefTargets(ext map[string]any, primaryThreadID string) []migration12RefTarget {
+	targets := make([]migration12RefTarget, 0, 8)
+	for _, field := range []string{"owner_refs", "document_refs", "board_refs", "related_refs"} {
+		for _, t := range migration12TypedRefEdgeTargets("ref", migration12StringSliceFromAny(ext[field])) {
+			t.MetadataJSON = migration12TopicRefMetaJSON(field)
+			targets = append(targets, t)
+		}
+	}
+	if strings.TrimSpace(primaryThreadID) != "" {
+		targets = append(targets, migration12RefTarget{
+			TargetType:   "thread",
+			TargetID:     strings.TrimSpace(primaryThreadID),
+			EdgeType:     "ref",
+			MetadataJSON: `{"topic_ref_field":"_primary_thread"}`,
+		})
+	}
+	return targets
+}
+
+func migration12StringSliceFromAny(raw any) []string {
+	if raw == nil {
+		return nil
+	}
+	switch sl := raw.(type) {
+	case []string:
+		out := make([]string, 0, len(sl))
+		for _, s := range sl {
+			s = strings.TrimSpace(s)
+			if s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	case []any:
+		out := make([]string, 0, len(sl))
+		for _, v := range sl {
+			s := migration12StringFromAny(v)
+			if s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func migration12TypedRefEdgeTargets(edgeType string, refs []string) []migration12RefTarget {
+	if len(refs) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(refs))
+	targets := make([]migration12RefTarget, 0, len(refs))
+	for _, raw := range refs {
+		prefix, id, ok := migration12SplitTypedRef(raw)
+		if !ok {
+			continue
+		}
+		key := edgeType + "\x00" + prefix + "\x00" + id
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		targets = append(targets, migration12RefTarget{
+			TargetType: prefix,
+			TargetID:   id,
+			EdgeType:   edgeType,
+		})
+	}
+	return targets
+}
+
+func migration12ReplaceTopicRefEdges(ctx context.Context, tx *sql.Tx, topicID string, targets []migration12RefTarget) error {
+	topicID = strings.TrimSpace(topicID)
+	if topicID == "" {
+		return fmt.Errorf("migration 12 ref edges: empty topic id")
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM ref_edges WHERE source_type = ? AND source_id = ?`, "topic", topicID); err != nil {
+		return fmt.Errorf("migration 12 clear ref edges for topic %s: %w", topicID, err)
+	}
+	if len(targets) == 0 {
+		return nil
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	seen := make(map[string]struct{}, len(targets))
+	for _, target := range targets {
+		targetType := strings.TrimSpace(target.TargetType)
+		targetID := strings.TrimSpace(target.TargetID)
+		edgeType := strings.TrimSpace(target.EdgeType)
+		if targetType == "" || targetID == "" || edgeType == "" {
+			continue
+		}
+		key := edgeType + "\x00" + targetType + "\x00" + targetID
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		meta := strings.TrimSpace(target.MetadataJSON)
+		if meta == "" {
+			meta = "{}"
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO ref_edges(id, source_type, source_id, target_type, target_id, edge_type, created_at, metadata_json)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			uuid.NewString(), "topic", topicID, targetType, targetID, edgeType, now, meta,
+		); err != nil {
+			return fmt.Errorf("migration 12 insert ref edge for topic %s: %w", topicID, err)
+		}
+	}
+	return nil
+}
+
+func migration12AnnotateTopicRefMetadata(ctx context.Context, tx *sql.Tx, topicID, primaryThreadID string) error {
+	topicID = strings.TrimSpace(topicID)
+	if topicID == "" {
+		return nil
+	}
+	rows, err := tx.QueryContext(ctx,
+		`SELECT target_type, target_id, metadata_json FROM ref_edges WHERE source_type = 'topic' AND source_id = ?`,
+		topicID,
+	)
+	if err != nil {
+		return fmt.Errorf("migration 12 list ref edges %s: %w", topicID, err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var targetType, targetID, meta string
+		if err := rows.Scan(&targetType, &targetID, &meta); err != nil {
+			return fmt.Errorf("migration 12 scan ref edge: %w", err)
+		}
+		field := migration12TopicRefFieldFromStoredMeta(meta, targetType, targetID, primaryThreadID)
+		if field == "_primary_thread" {
+			continue
+		}
+		newMeta := migration12TopicRefMetaJSON(field)
+		if strings.TrimSpace(meta) == newMeta {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE ref_edges SET metadata_json = ? WHERE source_type = 'topic' AND source_id = ? AND target_type = ? AND target_id = ? AND edge_type = 'ref'`,
+			newMeta, topicID, targetType, targetID,
+		); err != nil {
+			return fmt.Errorf("migration 12 annotate ref edge: %w", err)
+		}
+	}
+	return rows.Err()
+}
+
+func migration12TopicRefFieldFromStoredMeta(metaJSON, targetType, targetID, primaryThreadID string) string {
+	metaJSON = strings.TrimSpace(metaJSON)
+	if metaJSON != "" && metaJSON != "{}" {
+		var m map[string]any
+		if json.Unmarshal([]byte(metaJSON), &m) == nil {
+			if s, ok := m["topic_ref_field"].(string); ok && strings.TrimSpace(s) != "" {
+				return strings.TrimSpace(s)
+			}
+		}
+	}
+	tt := strings.TrimSpace(targetType)
+	tid := strings.TrimSpace(targetID)
+	if tt == "thread" && tid == strings.TrimSpace(primaryThreadID) {
+		return "_primary_thread"
+	}
+	switch tt {
+	case "actor":
+		return "owner_refs"
+	case "document":
+		return "document_refs"
+	case "board":
+		return "board_refs"
+	default:
+		return "related_refs"
+	}
+}
+
+func applyMigration11CardsSummaryAndDropPriority(ctx context.Context, tx *sql.Tx) error {
+	for _, table := range []string{"cards", "card_versions"} {
+		ok, err := sqliteTableExists(ctx, tx, table)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			continue
+		}
+		hasPriority, err := sqliteTableHasColumn(ctx, tx, table, "priority")
+		if err != nil {
+			return fmt.Errorf("migration 11 pragma %s.priority: %w", table, err)
+		}
+		if hasPriority {
+			q := fmt.Sprintf("ALTER TABLE %s DROP COLUMN priority;", table)
+			if _, err := tx.ExecContext(ctx, q); err != nil {
+				return fmt.Errorf("migration 11 %s: %w", q, err)
+			}
+		}
+		hasBodyMarkdown, err := sqliteTableHasColumn(ctx, tx, table, "body_markdown")
+		if err != nil {
+			return fmt.Errorf("migration 11 pragma %s.body_markdown: %w", table, err)
+		}
+		if hasBodyMarkdown {
+			q := fmt.Sprintf("ALTER TABLE %s RENAME COLUMN body_markdown TO summary;", table)
+			if _, err := tx.ExecContext(ctx, q); err != nil {
+				return fmt.Errorf("migration 11 %s: %w", q, err)
+			}
+		}
+	}
+	return nil
+}
+
+func applyMigration10DropThreadFilterColumns(ctx context.Context, tx *sql.Tx) error {
+	ok, err := sqliteTableExists(ctx, tx, "threads")
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return nil
+	}
+	stmts := []string{
+		`DROP INDEX IF EXISTS idx_threads_priority_updated_at;`,
+		`DROP INDEX IF EXISTS idx_threads_cadence_preset_updated_at;`,
+		`ALTER TABLE threads DROP COLUMN filter_priority;`,
+		`ALTER TABLE threads DROP COLUMN filter_owner;`,
+		`ALTER TABLE threads DROP COLUMN filter_due_at;`,
+		`ALTER TABLE threads DROP COLUMN filter_cadence;`,
+		`ALTER TABLE threads DROP COLUMN filter_cadence_preset;`,
+		`ALTER TABLE threads DROP COLUMN filter_tags_json;`,
+	}
+	for _, s := range stmts {
+		if _, err := tx.ExecContext(ctx, s); err != nil {
+			return fmt.Errorf("migration 10: %w", err)
+		}
+	}
+	return nil
+}
+
+func applyMigration9LegacyStatusCleanup(ctx context.Context, tx *sql.Tx) error {
+	execIfTable := func(table, stmt string) error {
+		ok, err := sqliteTableExists(ctx, tx, table)
+		if err != nil || !ok {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, stmt)
+		return err
+	}
+	stmts := []struct {
+		table string
+		sql   string
+	}{
+		{"topics", `UPDATE topics
+			    SET archived_at = COALESCE(NULLIF(archived_at, ''), updated_at, created_at),
+			        archived_by = COALESCE(NULLIF(archived_by, ''), updated_by, created_by)
+			  WHERE status = 'archived'
+			    AND COALESCE(NULLIF(archived_at, ''), '') = ''
+			    AND COALESCE(NULLIF(trashed_at, ''), '') = '';`},
+		{"boards", `UPDATE boards
+			    SET archived_at = COALESCE(NULLIF(archived_at, ''), updated_at, created_at),
+			        archived_by = COALESCE(NULLIF(archived_by, ''), updated_by, created_by)
+			  WHERE status IN ('paused', 'closed')
+			    AND COALESCE(NULLIF(archived_at, ''), '') = ''
+			    AND COALESCE(NULLIF(trashed_at, ''), '') = '';`},
+		{"threads", `UPDATE threads
+			    SET archived_at = COALESCE(NULLIF(archived_at, ''), updated_at),
+			        archived_by = COALESCE(NULLIF(archived_by, ''), updated_by)
+			  WHERE filter_status = 'archived'
+			    AND COALESCE(NULLIF(archived_at, ''), '') = ''
+			    AND COALESCE(NULLIF(trashed_at, ''), '') = '';`},
+		{"cards", `UPDATE cards
+			    SET column_key = 'done',
+			        resolution = CASE WHEN COALESCE(NULLIF(resolution, ''), '') = '' THEN 'done' ELSE resolution END
+			  WHERE status = 'done' AND column_key != 'done';`},
+		{"cards", `UPDATE cards
+			    SET column_key = 'done',
+			        resolution = CASE WHEN COALESCE(NULLIF(resolution, ''), '') = '' THEN 'canceled' ELSE resolution END
+			  WHERE status = 'cancelled' AND column_key != 'done';`},
+		{"cards", `UPDATE cards SET column_key = 'in_progress' WHERE status = 'in_progress' AND column_key = 'backlog';`},
+		{"cards", `UPDATE cards SET column_key = 'ready' WHERE status = 'todo' AND column_key = 'backlog';`},
+		{"card_versions", `UPDATE card_versions
+			    SET column_key = 'done',
+			        resolution = CASE WHEN COALESCE(NULLIF(resolution, ''), '') = '' THEN 'done' ELSE resolution END
+			  WHERE status = 'done' AND column_key != 'done';`},
+		{"card_versions", `UPDATE card_versions
+			    SET column_key = 'done',
+			        resolution = CASE WHEN COALESCE(NULLIF(resolution, ''), '') = '' THEN 'canceled' ELSE resolution END
+			  WHERE status = 'cancelled' AND column_key != 'done';`},
+		{"card_versions", `UPDATE card_versions SET column_key = 'in_progress' WHERE status = 'in_progress' AND column_key = 'backlog';`},
+		{"card_versions", `UPDATE card_versions SET column_key = 'ready' WHERE status = 'todo' AND column_key = 'backlog';`},
+	}
+	for _, s := range stmts {
+		if err := execIfTable(s.table, s.sql); err != nil {
+			return fmt.Errorf("migration 9 exec on %s: %w", s.table, err)
+		}
+	}
+	for _, d := range []struct {
+		table, column string
+	}{
+		{"topics", "status"},
+		{"boards", "status"},
+		{"threads", "filter_status"},
+		{"cards", "status"},
+		{"card_versions", "status"},
+	} {
+		ok, err := sqliteTableExists(ctx, tx, d.table)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			continue
+		}
+		q := fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s;", d.table, d.column)
+		if _, err := tx.ExecContext(ctx, q); err != nil {
+			return fmt.Errorf("migration 9 %s: %w", q, err)
+		}
+	}
+	return nil
+}
+
+// applyMigration15DropBoardsDocumentsLabelsJSON removes labels_json from boards and documents
+// (launch schema simplification; no indexes referenced this column). actors.tags_json is kept:
+// it is used by the actors store and auth for identity/credential metadata, not for board/doc labeling.
+func applyMigration15DropBoardsDocumentsLabelsJSON(ctx context.Context, tx *sql.Tx) error {
+	for _, table := range []string{"boards", "documents"} {
+		ok, err := sqliteTableExists(ctx, tx, table)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			continue
+		}
+		has, err := sqliteTableHasColumn(ctx, tx, table, "labels_json")
+		if err != nil {
+			return fmt.Errorf("migration 15 pragma %s.labels_json: %w", table, err)
+		}
+		if !has {
+			continue
+		}
+		q := fmt.Sprintf("ALTER TABLE %s DROP COLUMN labels_json;", table)
+		if _, err := tx.ExecContext(ctx, q); err != nil {
+			return fmt.Errorf("migration 15 %s: %w", q, err)
+		}
+	}
+	return nil
+}
+
+// applyMigration14ClearDerivedInboxForCanonicalCategories removes materialized inbox rows so
+// projections can rebuild with enums.inbox_category values and slimmer per-row data_json.
+func applyMigration14ClearDerivedInboxForCanonicalCategories(ctx context.Context, tx *sql.Tx) error {
+	ok, err := sqliteTableExists(ctx, tx, "derived_inbox_items")
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return nil
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM derived_inbox_items`); err != nil {
+		return fmt.Errorf("migration 14 clear derived_inbox_items: %w", err)
+	}
+	threadsOK, err := sqliteTableExists(ctx, tx, "threads")
+	if err != nil {
+		return err
+	}
+	if !threadsOK {
+		return nil
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT OR REPLACE INTO derived_topic_dirty_queue (thread_id, dirty_at)
+		SELECT id, strftime('%Y-%m-%dT%H:%M:%fZ', 'now') FROM threads`); err != nil {
+		return fmt.Errorf("migration 14 queue derived topic rebuild: %w", err)
+	}
+	return nil
 }
 
 func applyMigrations(ctx context.Context, db *sql.DB) error {

@@ -69,13 +69,10 @@ func TestListEventsAfterUsesChronologicalTimestampOrdering(t *testing.T) {
 			"refs":      []string{"thread:thread-1"},
 			"payload":   map[string]any{"text": eventID},
 		}
-		bodyJSON, err := json.Marshal(body)
+		wrapper := primitives.EventPayloadWrapperFromBodyMap(body)
+		payloadCol, err := json.Marshal(wrapper)
 		if err != nil {
-			t.Fatalf("marshal event body: %v", err)
-		}
-		payloadJSON, err := json.Marshal(body["payload"])
-		if err != nil {
-			t.Fatalf("marshal event payload: %v", err)
+			t.Fatalf("marshal event payload column: %v", err)
 		}
 		refsJSON, err := json.Marshal(body["refs"])
 		if err != nil {
@@ -83,16 +80,15 @@ func TestListEventsAfterUsesChronologicalTimestampOrdering(t *testing.T) {
 		}
 		if _, err := workspace.DB().ExecContext(
 			context.Background(),
-			`INSERT INTO events(id, type, ts, actor_id, thread_id, refs_json, payload_json, body_json, created_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+			`INSERT INTO events(id, type, ts, actor_id, thread_id, refs_json, payload_json, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
 			eventID,
 			"message_posted",
 			ts,
 			"actor-1",
 			"thread-1",
 			string(refsJSON),
-			string(payloadJSON),
-			string(bodyJSON),
+			string(payloadCol),
 		); err != nil {
 			t.Fatalf("insert raw event: %v", err)
 		}
@@ -1176,16 +1172,15 @@ func TestListRecentEventsByThreadLimitAndOrder(t *testing.T) {
 		t.Helper()
 		_, err := workspace.DB().ExecContext(
 			context.Background(),
-			`INSERT INTO events(id, type, ts, actor_id, thread_id, refs_json, payload_json, body_json, created_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+			`INSERT INTO events(id, type, ts, actor_id, thread_id, refs_json, payload_json, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
 			id,
 			eventType,
 			ts,
 			"actor-1",
 			threadID,
 			`["thread:`+threadID+`"]`,
-			`{}`,
-			`{}`,
+			`{"payload":{}}`,
 		)
 		if err != nil {
 			t.Fatalf("insert event %s: %v", id, err)

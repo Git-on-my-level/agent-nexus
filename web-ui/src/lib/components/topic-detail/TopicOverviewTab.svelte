@@ -1,30 +1,11 @@
 <script>
   import { topicDetailStore } from "$lib/topicDetailStore";
-  import {
-    formatTimestamp,
-    isoToDatetimeLocal,
-    datetimeLocalToIso,
-  } from "$lib/formatDate";
   import IdsIntegrityDisclosure from "$lib/components/IdsIntegrityDisclosure.svelte";
   import Button from "$lib/components/Button.svelte";
   import ProvenanceBadge from "$lib/components/ProvenanceBadge.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
   import { splitTypedRef } from "$lib/inboxUtils";
-  import {
-    buildTopicPatch,
-    describeCron,
-    parseListInput,
-    serializeListInput,
-  } from "$lib/topicPatch";
-  import {
-    TOPIC_SCHEDULE_PRESETS,
-    TOPIC_SCHEDULE_PRESET_LABELS,
-    cadencePresetFromValue,
-    cadenceToRequestValue,
-    isLikelyCronExpression,
-    validateCadenceSelection,
-  } from "$lib/topicFilters";
-  import { parseRef } from "$lib/typedRefs";
+  import { buildTopicPatch } from "$lib/topicPatch";
   import { topicTypeSelectOptions } from "$lib/topicTypeGlyph.js";
 
   let { threadId, onSave, conflictWarning = "", editNotice = "" } = $props();
@@ -68,30 +49,34 @@
 
   let topicTypeOptions = $derived(topicTypeSelectOptions(editDraft?.type));
 
-  function normalizeKeyArtifactRef(rawValue) {
-    const normalized = String(rawValue ?? "").trim();
-    if (!normalized) return "";
-    const parsed = parseRef(normalized);
-    if (parsed.prefix && parsed.value) return normalized;
-    return `artifact:${normalized}`;
-  }
+  let topicRefGroups = $derived.by(() => {
+    if (!topic) return [];
+    const groups = [
+      { label: "Owners", refs: topic.owner_refs },
+      { label: "Documents", refs: topic.document_refs },
+      { label: "Boards", refs: topic.board_refs },
+      { label: "Related refs", refs: topic.related_refs },
+    ];
+
+    return groups
+      .map(({ label, refs }) => ({
+        label,
+        refs: Array.isArray(refs)
+          ? [
+              ...new Set(
+                refs.map((ref) => String(ref ?? "").trim()).filter(Boolean),
+              ),
+            ]
+          : [],
+      }))
+      .filter((group) => group.refs.length > 0);
+  });
 
   function toEditDraft(thread) {
-    const cadenceValue = thread.cadence ?? "reactive";
-    const cadencePreset = cadencePresetFromValue(cadenceValue);
     return {
       title: thread.title ?? "",
       type: thread.type ?? "other",
-      status: thread.status ?? "active",
-      priority: thread.priority ?? "p2",
-      cadencePreset,
-      cadenceCron:
-        cadencePreset === "custom" && isLikelyCronExpression(cadenceValue)
-          ? cadenceValue
-          : "",
-      next_check_in_at: isoToDatetimeLocal(thread.next_check_in_at ?? ""),
-      current_summary: thread.current_summary ?? "",
-      tagsInput: serializeListInput(thread.tags ?? []),
+      summary: thread.summary ?? thread.current_summary ?? "",
     };
   }
 
@@ -112,18 +97,7 @@
     return {
       title: editDraft.title.trim(),
       type: editDraft.type,
-      status: editDraft.status,
-      priority: editDraft.priority,
-      cadence: cadenceToRequestValue({
-        preset: editDraft.cadencePreset,
-        customCron: editDraft.cadenceCron,
-        fallbackCadence: topic?.cadence ?? "",
-      }),
-      next_check_in_at: editDraft.next_check_in_at
-        ? datetimeLocalToIso(editDraft.next_check_in_at)
-        : null,
-      tags: parseListInput(editDraft.tagsInput),
-      current_summary: editDraft.current_summary.trim(),
+      summary: editDraft.summary.trim(),
     };
   }
 
@@ -132,16 +106,6 @@
     savingEdit = true;
     editError = "";
     try {
-      const cadenceError = validateCadenceSelection({
-        preset: editDraft.cadencePreset,
-        customCron: editDraft.cadenceCron,
-        fallbackCadence: topic.cadence,
-        allowLegacyCustom: true,
-      });
-      if (cadenceError) {
-        editError = cadenceError;
-        return;
-      }
       const patch = buildTopicPatch(topic, buildDraftSnapshotFromEdit());
       if (Object.keys(patch).length === 0) {
         editNotice = "No changes to save.";
@@ -185,30 +149,13 @@
       </button>
     </div>
 
-    <!--
-      Per polish §P4 the Details strip only carries fields that are NOT already
-      in the topic header. Priority, cadence, updated/by, and staleness all
-      live in the header meta line (`TopicDetailHeader.svelte`); duplicating
-      them here just bulks the panel.
-    -->
     <div
       class="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 py-2.5 text-micro text-[var(--fg-muted)]"
     >
       <span class="capitalize text-[var(--fg)]">{topic.type}</span>
-      {#if topic.next_check_in_at}
+      {#if topic.state}
         <span aria-hidden="true">·</span>
-        <span>next check-in {formatTimestamp(topic.next_check_in_at)}</span>
-      {/if}
-      {#if (topic.tags ?? []).length > 0}
-        <span aria-hidden="true">·</span>
-        <span class="flex flex-wrap items-center gap-1.5">
-          {#each topic.tags ?? [] as tag}
-            <span
-              class="rounded bg-[var(--line)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
-              >{tag}</span
-            >
-          {/each}
-        </span>
+        <span class="capitalize text-[var(--fg)]">State: {topic.state}</span>
       {/if}
     </div>
 
@@ -224,22 +171,28 @@
       <div class="border-t border-[var(--line-subtle)] px-4 py-3">
         <p class="text-micro text-[var(--fg-muted)]">Next actions</p>
         <ul class="mt-1 list-inside list-disc text-meta text-[var(--fg)]">
-          {#each topic.next_actions ?? [] as action}<li>
+          {#each topic.next_actions ?? [] as action (action)}<li>
               {action}
             </li>{/each}
         </ul>
       </div>
     {/if}
 
-    {#if (topic.key_artifacts ?? []).length > 0}
+    {#if topicRefGroups.length > 0}
       <div class="border-t border-[var(--line-subtle)] px-4 py-3">
-        <p class="text-micro text-[var(--fg-muted)]">Key artifacts</p>
-        <div class="mt-1 flex flex-wrap gap-2 text-meta">
-          {#each topic.key_artifacts ?? [] as artifactId}
-            <RefLink
-              refValue={normalizeKeyArtifactRef(artifactId)}
-              {threadId}
-            />
+        <p class="text-micro text-[var(--fg-muted)]">Canonical refs</p>
+        <div class="mt-1 space-y-2 text-meta">
+          {#each topicRefGroups as group (group.label)}
+            <div class="flex flex-wrap items-baseline gap-2">
+              <span class="text-micro text-[var(--fg-muted)]"
+                >{group.label}</span
+              >
+              <div class="flex flex-wrap gap-2">
+                {#each group.refs as ref (ref)}
+                  <RefLink refValue={ref} {threadId} />
+                {/each}
+              </div>
+            </div>
           {/each}
         </div>
       </div>
@@ -290,74 +243,10 @@
               >{/each}</select
           ></label
         >
-        <label class="text-micro font-medium text-[var(--fg-muted)]"
-          >Status <select
-            bind:value={editDraft.status}
-            class="mt-1 w-full rounded border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-1.5 text-meta text-[var(--fg)]"
-            ><option value="proposed">Proposed</option><option value="active"
-              >Active</option
-            ><option value="paused">Paused</option><option value="blocked"
-              >Blocked</option
-            ><option value="resolved">Resolved</option><option value="closed"
-              >Closed</option
-            ></select
-          ></label
-        >
-        <label class="text-micro font-medium text-[var(--fg-muted)]"
-          >Priority <select
-            bind:value={editDraft.priority}
-            class="mt-1 w-full rounded border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-1.5 text-meta text-[var(--fg)]"
-            ><option value="p0">Critical (P0)</option><option value="p1"
-              >High (P1)</option
-            ><option value="p2">Medium (P2)</option><option value="p3"
-              >Low (P3)</option
-            ></select
-          ></label
-        >
-        <label class="text-micro font-medium text-[var(--fg-muted)]"
-          >Schedule <select
-            bind:value={editDraft.cadencePreset}
-            class="mt-1 w-full rounded border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-1.5 text-meta text-[var(--fg)]"
-            >{#each TOPIC_SCHEDULE_PRESETS as cadence}
-              <option value={cadence}
-                >{TOPIC_SCHEDULE_PRESET_LABELS[cadence]}</option
-              >
-            {/each}</select
-          ></label
-        >
-        {#if editDraft.cadencePreset === "custom"}
-          <label class="text-micro font-medium text-[var(--fg-muted)]"
-            >Cron expression <input
-              bind:value={editDraft.cadenceCron}
-              class="mt-1 w-full rounded border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta text-[var(--fg)]"
-              placeholder="0 9 * * *"
-              type="text"
-            />{#if describeCron(editDraft.cadenceCron)}<span
-                class="mt-1 block text-micro text-[var(--fg-muted)]"
-                >{describeCron(editDraft.cadenceCron)}</span
-              >{/if}<span class="mt-0.5 block text-micro text-[var(--fg-muted)]"
-              >Five cron fields, server timezone.</span
-            ></label
-          >
-        {/if}
-        <label class="text-micro font-medium text-[var(--fg-muted)]"
-          >Next check-in <input
-            bind:value={editDraft.next_check_in_at}
-            class="mt-1 w-full rounded border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-1.5 text-meta text-[var(--fg)]"
-            type="datetime-local"
-          /></label
-        >
-        <label class="text-micro font-medium text-[var(--fg-muted)]"
-          >Tags (one per line) <textarea
-            bind:value={editDraft.tagsInput}
-            class="mt-1 w-full rounded border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta text-[var(--fg)]"
-            rows="2"
-          ></textarea></label
-        >
         <label
           class="text-micro font-medium text-[var(--fg-muted)] sm:col-span-2"
           >Summary <textarea
-            bind:value={editDraft.current_summary}
+            bind:value={editDraft.summary}
             class="mt-1 w-full rounded border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta text-[var(--fg)]"
             rows="2"
           ></textarea></label

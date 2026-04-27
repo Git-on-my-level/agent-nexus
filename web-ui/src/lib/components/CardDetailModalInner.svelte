@@ -22,7 +22,6 @@
     cardResolutionTone,
     dueDateDisplay,
     isOverdue,
-    resolvePriorityBadge,
   } from "$lib/cardDisplayUtils";
   import { coreClient } from "$lib/coreClient";
   import {
@@ -37,7 +36,6 @@
     topicSearchResultToPickerOption,
   } from "$lib/searchHelpers";
   import { toActorPickerOptions } from "$lib/systemActor.js";
-  import { getPriorityLabel } from "$lib/topicFilters";
   import { boardCardInspectNav } from "$lib/topicRouteUtils";
   import {
     createTimelineContext,
@@ -100,10 +98,6 @@
   let headerTitle = $derived(boardCardHeaderTitle(membership, thread));
   let cardResolution = $derived(String(membership?.resolution ?? "").trim());
   let summaryText = $derived(String(membership?.summary ?? "").trim());
-
-  let priorityBadge = $derived(
-    resolvePriorityBadge(thread?.priority, getPriorityLabel),
-  );
 
   let assigneeRefs = $derived(
     Array.isArray(membership?.assignee_refs) ? membership.assignee_refs : [],
@@ -525,13 +519,6 @@
             >
               {cardResolutionLabel(cardResolution)}
             </span>
-            {#if priorityBadge}
-              <span
-                class="rounded-md px-1.5 py-0.5 text-micro font-medium {priorityBadge.class}"
-              >
-                {priorityBadge.label}
-              </span>
-            {/if}
             {#if membership?.due_at}
               <span
                 class="rounded-md px-1.5 py-0.5 text-micro {isOverdue(
@@ -547,7 +534,7 @@
           {#if assigneeNames.length > 0}
             <div class="mt-2 flex flex-wrap items-center gap-1">
               <span class="text-micro text-[var(--fg-muted)]">Assigned</span>
-              {#each assigneeNames as name}
+              {#each assigneeNames as name (name)}
                 <span
                   class="max-w-[10rem] truncate rounded-md bg-[var(--line)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
                   title={name}
@@ -677,7 +664,7 @@
                   label="Topic or backing thread"
                   manualLabel="Thread ID"
                   manualPlaceholder="thread-onboarding"
-                  placeholder="Search topics by title, ID, or tags"
+                  placeholder="Search topics by title or ID"
                   searchFn={searchThreadOptions}
                 />
                 <SearchableEntityPicker
@@ -798,7 +785,7 @@
                     Definition of done
                   </h3>
                   <ul class="list-inside list-disc space-y-1 text-micro">
-                    {#each dodItems as line}
+                    {#each dodItems as line (line)}
                       <li>{line}</li>
                     {/each}
                   </ul>
@@ -813,7 +800,7 @@
                     Related refs
                   </h3>
                   <ul class="space-y-1">
-                    {#each dedupedRelatedRefs as ref}
+                    {#each dedupedRelatedRefs as ref (ref)}
                       <li class="text-micro">
                         <RefLink
                           refValue={ref}
@@ -836,7 +823,7 @@
                     Resolution refs
                   </h3>
                   <ul class="space-y-1">
-                    {#each resolutionRefsList as ref}
+                    {#each resolutionRefsList as ref (ref)}
                       <li class="text-micro">
                         <RefLink
                           refValue={ref}
@@ -861,7 +848,7 @@
                   </span>
                   {#if cardFreshness}
                     <span class="flex items-center gap-1.5">
-                      <span class="text-[var(--fg-muted)]">Freshness</span>
+                      <span class="text-[var(--fg-muted)]">Projection</span>
                       <span
                         class="rounded-md px-1.5 py-0.5 font-medium {freshnessStatusTone(
                           cardFreshness.status,
@@ -885,17 +872,10 @@
                       </span>
                     </span>
                   {/if}
-                  {#if derivedSummary?.stale}
-                    <span
-                      class="rounded-md bg-warn-soft px-1.5 py-0.5 font-medium text-warn-text"
-                    >
-                      Stale
-                    </span>
-                  {/if}
                 </div>
                 {#if nonZeroDerivedCounts.length > 0}
                   <div class="flex flex-wrap gap-1.5">
-                    {#each nonZeroDerivedCounts as { label, count }}
+                    {#each nonZeroDerivedCounts as { label, count } (label)}
                       <span
                         class="rounded-md bg-[var(--line)] px-1.5 py-0.5 text-micro"
                       >
@@ -999,7 +979,7 @@
             aria-label="Column"
             class="min-w-0 flex-1 cursor-pointer rounded-r-md border-0 bg-transparent px-2 py-1.5 pr-7 text-meta text-[var(--fg)] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[var(--accent)]"
           >
-            {#each board?.column_schema ?? [] as column}
+            {#each board?.column_schema ?? [] as column (column.key)}
               <option value={column.key}>
                 {column.title ||
                   boardColumnTitle(column.key, board?.column_schema ?? [])}

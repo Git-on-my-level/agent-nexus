@@ -27,7 +27,6 @@ describe("anxCoreClient error messaging", () => {
       buildTopicCreatePayloadFromDraft({
         title: "x",
         summary: "",
-        status: "active",
       }),
     );
 

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"agent-nexus-cli/internal/config"
@@ -44,8 +45,73 @@ func (a *App) runTopicsCommand(ctx context.Context, args []string, cfg config.Re
 	sub := topicsSubcommandSpec.normalize(args[0])
 	switch sub {
 	case "list":
-		result, err := a.invokeTypedJSON(ctx, cfg, "topics list", "topics.list", nil, nil, nil)
-		return result, "topics list", err
+		fs := newSilentFlagSet("topics list")
+		var stateFlag, typeFlag, queryFlag, cursorFlag trackedString
+		var limitFlag trackedInt
+		var fullIDFlag trackedBool
+		var includeArchived, archivedOnly, includeTrashed, trashedOnly bool
+		fs.Var(&stateFlag, "state", "Filter by lifecycle state (active, archived, trashed)")
+		fs.Var(&typeFlag, "type", "Filter by topic type enum")
+		fs.Var(&queryFlag, "q", "Search topics by id or title substring")
+		fs.Var(&limitFlag, "limit", "Page size (1–1000)")
+		fs.Var(&cursorFlag, "cursor", "Pagination cursor from a previous list response")
+		fs.Var(&fullIDFlag, "full-id", "Render full topic ids in default text output (non-JSON)")
+		fs.BoolVar(&includeArchived, "include-archived", false, "Include archived topics")
+		fs.BoolVar(&archivedOnly, "archived-only", false, "Show only archived topics")
+		fs.BoolVar(&includeTrashed, "include-trashed", false, "Include trashed topics")
+		fs.BoolVar(&trashedOnly, "trashed-only", false, "Show only trashed topics")
+		if err := fs.Parse(args[1:]); err != nil {
+			return nil, "topics list", errnorm.Usage("invalid_flags", err.Error())
+		}
+		if err := validateLifecycleFilterFlags(includeArchived, archivedOnly, includeTrashed, trashedOnly); err != nil {
+			return nil, "topics list", err
+		}
+		if len(fs.Args()) > 0 {
+			return nil, "topics list", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx topics list`")
+		}
+		if limitFlag.set && (limitFlag.value < 1 || limitFlag.value > 1000) {
+			return nil, "topics list", errnorm.Usage("invalid_request", "limit must be between 1 and 1000")
+		}
+		query := make([]queryParam, 0, 8)
+		addSingleQuery(&query, "state", stateFlag.value)
+		addSingleQuery(&query, "type", typeFlag.value)
+		addSingleQuery(&query, "q", queryFlag.value)
+		if limitFlag.set {
+			addSingleQuery(&query, "limit", strconv.Itoa(limitFlag.value))
+		}
+		addSingleQuery(&query, "cursor", cursorFlag.value)
+		if includeArchived {
+			query = append(query, queryParam{name: "include_archived", values: []string{"true"}})
+		}
+		if archivedOnly {
+			query = append(query, queryParam{name: "archived_only", values: []string{"true"}})
+		}
+		if includeTrashed {
+			query = append(query, queryParam{name: "include_trashed", values: []string{"true"}})
+		}
+		if trashedOnly {
+			query = append(query, queryParam{name: "trashed_only", values: []string{"true"}})
+		}
+		result, err := a.invokeTypedJSON(ctx, cfg, "topics list", "topics.list", nil, query, nil)
+		if err != nil {
+			return nil, "topics list", err
+		}
+		if fullIDFlag.set && fullIDFlag.value {
+			data := asMap(result.Data)
+			body := asMap(data["body"])
+			if body != nil {
+				body["full_id"] = true
+				result.Text = formatTypedCommandText(
+					"topics.list",
+					intValue(data["status_code"]),
+					headerValues(data["headers"]),
+					body,
+					cfg.Verbose,
+					cfg.Headers,
+				)
+			}
+		}
+		return result, "topics list", nil
 	case "get":
 		id, err := parseIDArg(args[1:], "topic-id", "topic id")
 		if err != nil {
@@ -139,7 +205,35 @@ func (a *App) runCardsCommand(ctx context.Context, args []string, cfg config.Res
 	sub := cardsSubcommandSpec.normalize(args[0])
 	switch sub {
 	case "list":
-		result, err := a.invokeTypedJSON(ctx, cfg, "cards list", "cards.list", nil, nil, nil)
+		fs := newSilentFlagSet("cards list")
+		var includeArchived, archivedOnly, includeTrashed, trashedOnly bool
+		fs.BoolVar(&includeArchived, "include-archived", false, "Include archived cards")
+		fs.BoolVar(&archivedOnly, "archived-only", false, "Show only archived cards")
+		fs.BoolVar(&includeTrashed, "include-trashed", false, "Include trashed cards")
+		fs.BoolVar(&trashedOnly, "trashed-only", false, "Show only trashed cards")
+		if err := fs.Parse(args[1:]); err != nil {
+			return nil, "cards list", errnorm.Usage("invalid_flags", err.Error())
+		}
+		if err := validateLifecycleFilterFlags(includeArchived, archivedOnly, includeTrashed, trashedOnly); err != nil {
+			return nil, "cards list", err
+		}
+		if len(fs.Args()) > 0 {
+			return nil, "cards list", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx cards list`")
+		}
+		query := make([]queryParam, 0, 4)
+		if includeArchived {
+			query = append(query, queryParam{name: "include_archived", values: []string{"true"}})
+		}
+		if archivedOnly {
+			query = append(query, queryParam{name: "archived_only", values: []string{"true"}})
+		}
+		if includeTrashed {
+			query = append(query, queryParam{name: "include_trashed", values: []string{"true"}})
+		}
+		if trashedOnly {
+			query = append(query, queryParam{name: "trashed_only", values: []string{"true"}})
+		}
+		result, err := a.invokeTypedJSON(ctx, cfg, "cards list", "cards.list", nil, query, nil)
 		return result, "cards list", err
 	case "create":
 		body, err := a.parseJSONBodyInput(args[1:], "cards create")

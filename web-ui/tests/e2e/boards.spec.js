@@ -177,11 +177,6 @@ function buildWorkspace(
             latest_activity_at:
               threads.find((thread) => thread.id === card.thread_id)
                 ?.updated_at ?? card.updated_at,
-            stale:
-              threads.find((thread) => thread.id === card.thread_id)
-                ?.staleness === "stale" ||
-              threads.find((thread) => thread.id === card.thread_id)
-                ?.staleness === "very-stale",
           },
           freshness: freshnessThreads.find(
             (item) => item.thread_id === card.thread_id,
@@ -246,8 +241,7 @@ test("board UI supports create/edit and card mutation flows", async ({
       id: "board-created",
       type: "process",
       title: "Launch Control timeline",
-      status: "active",
-      priority: "p1",
+      state: "active",
       updated_at: "2026-03-05T00:00:00.000Z",
       updated_by: actorId,
       open_cards: [],
@@ -256,8 +250,7 @@ test("board UI supports create/edit and card mutation flows", async ({
       id: "thread-primary",
       type: "process",
       title: "Primary Coordination Thread",
-      status: "active",
-      priority: "p1",
+      state: "active",
       updated_at: "2026-03-06T08:00:00.000Z",
       updated_by: actorId,
       open_cards: ["card-primary"],
@@ -266,8 +259,7 @@ test("board UI supports create/edit and card mutation flows", async ({
       id: "thread-execution",
       type: "process",
       title: "Execution Track",
-      status: "active",
-      priority: "p2",
+      state: "active",
       updated_at: "2026-03-05T06:00:00.000Z",
       updated_by: actorId,
       open_cards: ["card-execution"],
@@ -276,12 +268,10 @@ test("board UI supports create/edit and card mutation flows", async ({
       id: "thread-review",
       type: "process",
       title: "Review Prep",
-      status: "active",
-      priority: "p2",
+      state: "active",
       updated_at: "2026-03-05T07:00:00.000Z",
       updated_by: actorId,
       open_cards: [],
-      staleness: "stale",
     },
   ];
   const topicSearchRecords = threads
@@ -291,7 +281,7 @@ test("board UI supports create/edit and card mutation flows", async ({
       thread_id: th.id,
       title: th.title,
       type: th.type,
-      status: th.status,
+      state: th.state ?? "active",
       summary: "",
       owner_refs: [],
       document_refs: [],
@@ -306,7 +296,7 @@ test("board UI supports create/edit and card mutation flows", async ({
       thread_id: "thread-primary",
       updated_at: "2026-03-04T00:00:00.000Z",
       updated_by: actorId,
-      status: "active",
+      state: "active",
       labels: [],
       head_revision_id: "rev-doc-runbook-1",
       head_revision_number: 1,
@@ -317,7 +307,7 @@ test("board UI supports create/edit and card mutation flows", async ({
       thread_id: "thread-execution",
       updated_at: "2026-03-04T00:00:00.000Z",
       updated_by: actorId,
-      status: "active",
+      state: "active",
       labels: [],
       head_revision_id: "rev-doc-playbook-1",
       head_revision_number: 1,
@@ -444,8 +434,7 @@ test("board UI supports create/edit and card mutation flows", async ({
     board = {
       id: "board-created",
       title: payload.board.title,
-      status: payload.board.status,
-      labels: payload.board.labels ?? [],
+      state: "active",
       owners: payload.board.owners ?? [actorId],
       thread_id: effectiveThreadId,
       refs: [
@@ -696,7 +685,6 @@ test("board UI supports create/edit and card mutation flows", async ({
     page.getByRole("button", { name: "Hide create form" }),
   ).toBeVisible();
   await page.getByLabel("Board title").fill("Launch Control");
-  await page.getByLabel("Status").selectOption("paused");
   await page.getByLabel("Link topic search").fill("Primary Coordination");
   await page
     .getByRole("button", { name: /Primary Coordination Thread/ })
@@ -709,7 +697,7 @@ test("board UI supports create/edit and card mutation flows", async ({
   await expect(
     page.getByRole("heading", { name: "Launch Control" }),
   ).toBeVisible();
-  await expect(page.getByText("Paused", { exact: true })).toBeVisible();
+  await expect(page.getByText("Active", { exact: true })).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Workspace docs" }),
   ).toBeVisible();
@@ -723,7 +711,6 @@ test("board UI supports create/edit and card mutation flows", async ({
       actor_id: actorId,
       board: {
         title: "Launch Control",
-        status: "paused",
         document_refs: ["document:doc-runbook"],
         refs: ["topic:topic-primary"],
       },
@@ -732,7 +719,6 @@ test("board UI supports create/edit and card mutation flows", async ({
 
   await page.getByRole("button", { name: "Edit" }).click();
   await page.getByLabel("Board title").fill("Launch Control v2");
-  await page.getByLabel("Status").selectOption("closed");
   await page.getByLabel("Board document search").fill("Incident Playbook");
   await page.getByRole("button", { name: /Incident Playbook/ }).click();
   await page.getByRole("button", { name: "Save board" }).click();
@@ -740,16 +726,14 @@ test("board UI supports create/edit and card mutation flows", async ({
   await expect(
     page.getByRole("heading", { name: "Launch Control v2" }),
   ).toBeVisible();
-  await expect(page.getByText("Closed", { exact: true })).toBeVisible();
+  await expect(page.getByText("Active", { exact: true })).toBeVisible();
   expect(boardPatchPayloads).toEqual([
     {
       actor_id: actorId,
       if_updated_at: "2026-03-05T00:00:00.000Z",
       patch: {
         title: "Launch Control v2",
-        status: "closed",
         document_refs: ["document:doc-playbook"],
-        labels: [],
         owners: [actorId],
         pinned_refs: [],
       },
@@ -911,8 +895,7 @@ test("board detail shows pending freshness and hides derived card counts until r
       id: "thread-primary",
       type: "process",
       title: "Primary Coordination Thread",
-      status: "active",
-      priority: "p1",
+      state: "active",
       updated_at: "2026-03-04T00:00:00.000Z",
       updated_by: actorId,
       open_cards: ["card-primary"],
@@ -921,8 +904,7 @@ test("board detail shows pending freshness and hides derived card counts until r
       id: "thread-execution",
       type: "process",
       title: "Execution Track",
-      status: "active",
-      priority: "p2",
+      state: "active",
       updated_at: "2026-03-04T01:00:00.000Z",
       updated_by: actorId,
       open_cards: ["card-execution"],
@@ -935,7 +917,7 @@ test("board detail shows pending freshness and hides derived card counts until r
       thread_id: "thread-primary",
       updated_at: "2026-03-04T00:00:00.000Z",
       updated_by: actorId,
-      status: "active",
+      state: "active",
       labels: [],
       head_revision_id: "rev-doc-runbook-1",
       head_revision_number: 1,
@@ -944,8 +926,7 @@ test("board detail shows pending freshness and hides derived card counts until r
   const board = {
     id: "board-pending",
     title: "Pending Board",
-    status: "active",
-    labels: [],
+    state: "active",
     owners: [actorId],
     thread_id: "thread-primary",
     refs: [
@@ -1040,8 +1021,7 @@ test("board edit conflict reloads latest state and allows retry", async ({
       id: "thread-primary",
       type: "process",
       title: "Primary Coordination Thread",
-      status: "active",
-      priority: "p1",
+      state: "active",
       updated_at: "2026-03-04T00:00:00.000Z",
       updated_by: actorId,
       open_cards: [],
@@ -1053,7 +1033,7 @@ test("board edit conflict reloads latest state and allows retry", async ({
       title: "Launch Runbook",
       updated_at: "2026-03-04T00:00:00.000Z",
       updated_by: actorId,
-      status: "active",
+      state: "active",
       labels: [],
       head_revision_id: "rev-doc-runbook-1",
       head_revision_number: 1,
@@ -1063,8 +1043,7 @@ test("board edit conflict reloads latest state and allows retry", async ({
   let board = {
     id: "board-conflict",
     title: "Conflict Board",
-    status: "active",
-    labels: [],
+    state: "active",
     owners: [actorId],
     thread_id: "thread-primary",
     refs: [
@@ -1193,9 +1172,7 @@ test("board edit conflict reloads latest state and allows retry", async ({
       if_updated_at: "2026-03-04T00:00:00.000Z",
       patch: {
         title: "Conflict Board Edited",
-        status: "active",
         document_refs: ["document:doc-runbook"],
-        labels: [],
         owners: [actorId],
         pinned_refs: [],
       },
@@ -1205,9 +1182,7 @@ test("board edit conflict reloads latest state and allows retry", async ({
       if_updated_at: "2026-03-04T02:00:00.000Z",
       patch: {
         title: "Recovered Board Title",
-        status: "active",
         document_refs: ["document:doc-runbook"],
-        labels: [],
         owners: [actorId],
         pinned_refs: [],
       },

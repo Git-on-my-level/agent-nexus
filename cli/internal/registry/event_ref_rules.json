@@ -1,9 +1,9 @@
 {
   "openapi_version": "3.1.0",
-  "contract_version": "0.3.0",
+  "contract_version": "0.4.0",
   "generated_by": "core/cmd/contract-gen",
   "event_type_open_enum": true,
-  "rule_count": 26,
+  "rule_count": 31,
   "rules": {
     "agent_notification_dismissed": {
       "refs_must_include": [
@@ -34,6 +34,12 @@
       ],
       "payload_must_include": [
         "column_key"
+      ]
+    },
+    "board_card_trashed": {
+      "refs_must_include": [
+        "board:\u003cboard_id\u003e",
+        "card:\u003ccard_id\u003e"
       ]
     },
     "board_created": {
@@ -76,6 +82,12 @@
         "resolution"
       ]
     },
+    "card_trashed": {
+      "refs_must_include": [
+        "card:\u003ccard_id\u003e",
+        "board:\u003cboard_id\u003e"
+      ]
+    },
     "card_updated": {
       "refs_must_include": [
         "card:\u003ccard_id\u003e",
@@ -97,6 +109,11 @@
         "document:\u003cdocument_id\u003e",
         "document_revision:\u003crevision_id\u003e",
         "artifact:\u003cartifact_id\u003e"
+      ]
+    },
+    "document_restored": {
+      "refs_must_include": [
+        "document:\u003cdocument_id\u003e"
       ]
     },
     "document_revised": {
@@ -148,18 +165,24 @@
         "subject_ref"
       ]
     },
+    "topic_archived": {
+      "refs_must_include": [
+        "topic:\u003ctopic_id\u003e"
+      ]
+    },
     "topic_created": {
       "refs_must_include": [
         "topic:\u003ctopic_id\u003e"
       ]
     },
-    "topic_status_changed": {
+    "topic_restored": {
       "refs_must_include": [
         "topic:\u003ctopic_id\u003e"
-      ],
-      "payload_must_include": [
-        "from_status",
-        "to_status"
+      ]
+    },
+    "topic_trashed": {
+      "refs_must_include": [
+        "topic:\u003ctopic_id\u003e"
       ]
     },
     "topic_updated": {

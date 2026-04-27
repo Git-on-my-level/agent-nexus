@@ -35,7 +35,7 @@ Each row lists **owner** (code area), **reason** (why the shim exists), **remova
 | Surface | Owner | Reason | Removal gate | References |
 |--------|-------|--------|--------------|------------|
 | `coerceLegacyTopicPersistedBody` and legacy topic body keys | Core primitives | Historical topic JSON used `thread_ref` / split primary thread fields instead of `thread_id` | All persisted topic bodies use canonical `thread_id` (or migration job completes) | `core/internal/primitives/topics_store.go` (`coerceLegacyTopicPersistedBody`, strip helpers) |
-| Legacy cadence preset strings (`daily`, `weekly`, …) on threads | Core + contract | Pre-cron schedule vocabulary | Stored snapshots migrated; contract may tighten | Same as **Schema and data** (cadence row); `core/internal/server/threads_handlers.go` (`threadMatchesTagsAndCadence`, cadence query filters) |
+| Legacy thread filter vocabulary in docs | Core + docs | Historical thread-era filter terms still appear in old docs and examples | Docs/UI now use `state`, `q`, and archive/trash lifecycle only; remove once references and snapshots are fully migrated | `core/internal/server/threads_handlers.go` (`ListThreads` filters), `web-ui/docs/http-api.md`, `web-ui/docs/anx-ui-spec.md` |
 
 ## Core: board HTTP (deprecated request fields)
 
@@ -53,7 +53,7 @@ Each row lists **owner** (code area), **reason** (why the shim exists), **remova
 
 | Surface | Owner | Reason | Removal gate | References |
 |--------|-------|--------|--------------|------------|
-| Legacy cadence preset strings (`daily`, `weekly`, …) | Contract + core | Interim bridge before cron-only cadence | Stored snapshots migrated; contract may tighten | `anx-schema.yaml` / thread cadence; integration tests under `core/internal/server/*_integration_test.go` |
+| Legacy cadence preset strings (`daily`, `weekly`, …) | Contract + core | Interim bridge before cron-only cadence | Stored snapshots migrated; contract may tighten; docs should describe lifecycle using `state`/`q` plus archive/trash, not cadence filters | `anx-schema.yaml` / thread cadence; integration tests under `core/internal/server/*_integration_test.go` |
 | Bridge TOML `[router]` section | Bridge / ops | Replaced by core-embedded router | Already ignored; remove docs references when safe | Bridge adapter docs |
 
 ## Process

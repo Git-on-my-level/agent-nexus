@@ -91,15 +91,6 @@ func mergeAddBoardCardRaw(raw map[string]any) (addBoardCardMerged, error) {
 
 	pick := func(key string) any { return firstPresentBoardCardValue(raw, cardObj, key) }
 
-	if hasBoardCardField(raw, cardObj, "summary") && (hasBoardCardField(raw, cardObj, "body") || hasBoardCardField(raw, cardObj, "body_markdown")) {
-		return m, errors.New(mixedBoardCardAliasError("summary", "body", "body_markdown"))
-	}
-	if hasBoardCardField(raw, cardObj, "body") {
-		return m, errors.New("body is not supported; use summary")
-	}
-	if hasBoardCardField(raw, cardObj, "body_markdown") {
-		return m, errors.New("body_markdown is not supported; use summary")
-	}
 	if hasBoardCardField(raw, cardObj, "assignee") {
 		return m, errors.New("assignee is not supported; use assignee_refs")
 	}
@@ -114,12 +105,6 @@ func mergeAddBoardCardRaw(raw map[string]any) (addBoardCardMerged, error) {
 	}
 	if hasBoardCardField(raw, cardObj, "refs") {
 		return m, errors.New("refs is not supported; use related_refs and topic_ref")
-	}
-	if hasBoardCardField(raw, cardObj, "priority") {
-		return m, errors.New("priority is not supported in the canonical card model")
-	}
-	if hasBoardCardField(raw, cardObj, "status") {
-		return m, errors.New("status is not supported on card create; column_key and resolution define lifecycle")
 	}
 
 	m.CardID = strings.TrimSpace(anyString(pick("card_id")))
@@ -291,20 +276,6 @@ func rejectMixedBoardCardPatchAliases(w http.ResponseWriter, patch map[string]an
 	if patch == nil {
 		return false
 	}
-	if _, hasSummary := patch["summary"]; hasSummary {
-		if _, hasBody := patch["body"]; hasBody {
-			writeError(w, http.StatusBadRequest, "invalid_request", mixedBoardCardAliasError("patch.summary", "patch.body"))
-			return true
-		}
-		if _, hasBodyMarkdown := patch["body_markdown"]; hasBodyMarkdown {
-			writeError(w, http.StatusBadRequest, "invalid_request", mixedBoardCardAliasError("patch.summary", "patch.body_markdown"))
-			return true
-		}
-	}
-	if _, hasBody := patch["body"]; hasBody {
-		writeError(w, http.StatusBadRequest, "invalid_request", "patch.body is not supported; use patch.summary")
-		return true
-	}
 	if _, hasAssignee := patch["assignee"]; hasAssignee {
 		writeError(w, http.StatusBadRequest, "invalid_request", "patch.assignee is not supported; use patch.assignee_refs")
 		return true
@@ -327,18 +298,6 @@ func rejectMixedBoardCardPatchAliases(w http.ResponseWriter, patch map[string]an
 	}
 	if _, hasRefs := patch["refs"]; hasRefs {
 		writeError(w, http.StatusBadRequest, "invalid_request", "patch.refs is not supported; use patch.related_refs and patch.topic_ref")
-		return true
-	}
-	if _, hasPriority := patch["priority"]; hasPriority {
-		writeError(w, http.StatusBadRequest, "invalid_request", "patch.priority is not supported in the canonical card model")
-		return true
-	}
-	if _, hasStatus := patch["status"]; hasStatus {
-		writeError(w, http.StatusBadRequest, "invalid_request", "patch.status is not supported; use the move endpoint and patch.resolution")
-		return true
-	}
-	if _, hasBodyMarkdown := patch["body_markdown"]; hasBodyMarkdown {
-		writeError(w, http.StatusBadRequest, "invalid_request", "patch.body_markdown is not supported; use patch.summary")
 		return true
 	}
 	return false
@@ -397,7 +356,7 @@ func decodeMoveCardHTTPPayload(w http.ResponseWriter, r *http.Request, dst any) 
 	return true
 }
 
-func addBoardCardStoreInput(m addBoardCardMerged, createStatus string) primitives.AddBoardCardInput {
+func addBoardCardStoreInput(m addBoardCardMerged) primitives.AddBoardCardInput {
 	return primitives.AddBoardCardInput{
 		CardID:           m.CardID,
 		Title:            m.Title,
@@ -406,7 +365,6 @@ func addBoardCardStoreInput(m addBoardCardMerged, createStatus string) primitive
 		DueAt:            m.DueAt,
 		DefinitionOfDone: m.DefinitionOfDone,
 		Assignee:         m.Assignee,
-		Status:           createStatus,
 		ColumnKey:        m.ColumnKey,
 		BeforeCardID:     m.BeforeCardID,
 		AfterCardID:      m.AfterCardID,

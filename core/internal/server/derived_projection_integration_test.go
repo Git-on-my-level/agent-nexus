@@ -86,7 +86,7 @@ func TestRefreshDerivedTopicProjectionBasicFlow(t *testing.T) {
 
 	postJSONExpectStatus(t, h.baseURL+"/docs", `{
 		"actor_id":"actor-1",
-		"document":{"id":"proj-doc-1","thread_id":"`+threadID+`","title":"Projection doc","labels":["ops"]},
+		"document":{"id":"proj-doc-1","thread_id":"`+threadID+`","title":"Projection doc"},
 		"refs":["thread:`+threadID+`"],
 		"content":"initial text",
 		"content_type":"text"
@@ -160,8 +160,8 @@ func TestEnsureDerivedTopicProjectionRefreshesExpiredTimeSensitiveState(t *testi
 	if err != nil {
 		t.Fatalf("loadTopicProjectionState: %v", err)
 	}
-	if !refreshedState.Projection.Stale {
-		t.Fatalf("expected expired projection to refresh stale=true after next_check_in_at, got %#v", refreshedState.Projection)
+	if refreshedState.Projection.Stale {
+		t.Fatalf("expected projection to stay non-stale (cadence no longer drives staleness), got %#v", refreshedState.Projection)
 	}
 }
 

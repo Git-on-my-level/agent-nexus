@@ -11,7 +11,13 @@ const authSessionMocks = vi.hoisted(() => ({
   refreshWorkspaceAuthSession: vi.fn(async () => null),
   clearWorkspaceAuthSession: vi.fn(),
   ensureWorkspaceAccessTokenForCoreProxy: vi.fn(
-    async ({ event, organizationSlug, workspaceSlug, coreBaseUrl, session }) => {
+    async ({
+      event,
+      organizationSlug,
+      workspaceSlug,
+      coreBaseUrl,
+      session,
+    }) => {
       const s =
         session ??
         authSessionMocks.getWorkspaceAuthSession(

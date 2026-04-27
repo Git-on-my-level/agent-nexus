@@ -531,18 +531,9 @@ func validateDraftDocsUpdate(body map[string]any) []string {
 
 func validateThreadFields(thread map[string]any, createMode bool, path string, out *[]string) {
 	stringFields := map[string]bool{
-		"title":           true,
-		"type":            true,
-		"status":          true,
-		"priority":        true,
-		"cadence":         true,
-		"current_summary": true,
-	}
-	datetimeFields := map[string]bool{
-		"next_check_in_at": true,
+		"title": true,
 	}
 	stringListFields := map[string]bool{
-		"tags":         true,
 		"next_actions": true,
 	}
 	typedRefListFields := map[string]bool{
@@ -551,6 +542,11 @@ func validateThreadFields(thread map[string]any, createMode bool, path string, o
 
 	for field, raw := range thread {
 		full := path + "." + field
+		switch field {
+		case "status", "type", "priority", "cadence", "next_check_in_at", "current_summary", "tags":
+			*out = append(*out, full+" is not supported; lifecycle state is derived from archive/trash timestamps")
+			continue
+		}
 		switch {
 		case stringFields[field]:
 			text, ok := raw.(string)
@@ -560,18 +556,6 @@ func validateThreadFields(thread map[string]any, createMode bool, path string, o
 			}
 			if createMode && strings.TrimSpace(text) == "" {
 				*out = append(*out, full+" must be non-empty")
-			}
-		case datetimeFields[field]:
-			if raw == nil {
-				continue
-			}
-			text, ok := raw.(string)
-			if !ok {
-				*out = append(*out, full+" must be an RFC3339 datetime string")
-				continue
-			}
-			if _, err := time.Parse(time.RFC3339, text); err != nil {
-				*out = append(*out, full+" must be an RFC3339 datetime string")
 			}
 		case stringListFields[field]:
 			if _, ok := asStringList(raw); !ok {
@@ -604,7 +588,6 @@ func validateDraftTopicCreate(body map[string]any) []string {
 	}
 	requiredFields := []string{
 		"type",
-		"status",
 		"title",
 		"summary",
 		"owner_refs",
@@ -641,14 +624,16 @@ func validateDraftTopicPatch(body map[string]any) []string {
 func validateTopicFields(topic map[string]any, createMode bool, path string, out *[]string) {
 	stringFields := map[string]bool{
 		"type":    true,
-		"status":  true,
 		"title":   true,
 		"summary": true,
 	}
 	for field, raw := range topic {
 		full := path + "." + field
 		switch field {
-		case "type", "status", "title", "summary":
+		case "status", "state":
+			*out = append(*out, full+" is not supported on write; lifecycle state is derived from archive/trash timestamps")
+			continue
+		case "type", "title", "summary":
 			text, ok := raw.(string)
 			if !ok {
 				*out = append(*out, full+" must be a string")

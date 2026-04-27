@@ -13,10 +13,8 @@
   import {
     cardResolutionLabel,
     cardResolutionTone,
-    resolvePriorityBadge,
   } from "$lib/cardDisplayUtils";
   import { formatTimestamp } from "$lib/formatDate";
-  import { getPriorityLabel } from "$lib/topicFilters";
 
   /**
    * @typedef {object} BoardCardProps
@@ -53,10 +51,6 @@
     return d.getTime() < Date.now();
   });
 
-  const priorityBadge = $derived(
-    resolvePriorityBadge(thread?.priority, getPriorityLabel),
-  );
-
   const assigneeNames = $derived.by(() => {
     const actors = $actorRegistry;
     const principals = $principalRegistry;
@@ -84,10 +78,6 @@
         return "bg-fg-muted";
       case "paused":
         return "bg-warn-text";
-      case "stale":
-        return "bg-accent-text";
-      case "very-stale":
-        return "bg-danger-text";
       default:
         return "bg-accent-solid";
     }
@@ -101,10 +91,6 @@
         return "text-[var(--fg-muted)]";
       case "paused":
         return "text-warn-text";
-      case "stale":
-        return "text-accent-text";
-      case "very-stale":
-        return "text-danger-text";
       default:
         return "text-[var(--fg)]";
     }
@@ -112,11 +98,9 @@
 
   function getThreadStatus(t) {
     if (!t) return "unknown";
-    if (t.status === "done") return "done";
-    if (t.status === "canceled") return "canceled";
-    if (t.status === "paused") return "paused";
-    if (t.staleness === "stale") return "stale";
-    if (t.staleness === "very-stale") return "very-stale";
+    const life = String(t.state ?? "").trim();
+    if (life === "archived") return "paused";
+    if (life === "trashed") return "canceled";
     return "active";
   }
 
@@ -128,9 +112,6 @@
     if (resolution === "superseded") return "paused";
     if (t) return getThreadStatus(t);
     if (String(m?.column_key ?? "").trim() === "done") return "done";
-    const s = String(m?.status ?? "").trim();
-    if (s === "done") return "done";
-    if (s === "cancelled") return "canceled";
     return "active";
   }
 
@@ -181,16 +162,8 @@
             {cardResolutionLabel(cardResolution)}
           </span>
 
-          {#if priorityBadge}
-            <span
-              class="rounded-md px-1 py-0.5 text-micro font-medium {priorityBadge.class}"
-            >
-              {priorityBadge.label}
-            </span>
-          {/if}
-
           {#if assigneeVisible.length > 0}
-            {#each assigneeVisible as name}
+            {#each assigneeVisible as name (name)}
               <span
                 class="max-w-[7rem] truncate rounded-md bg-[var(--line)] px-1 py-0.5 text-micro text-[var(--fg-muted)]"
                 title={name}

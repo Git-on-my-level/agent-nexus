@@ -111,10 +111,7 @@ const threads = [
     type: "incident",
     title: "Emergency: Lemon Supply Disruption",
     status: "active",
-    priority: "p0",
-    tags: ["supply-chain", "incident", "critical"],
     key_artifacts: ["artifact-supplier-sla"],
-    cadence: "daily",
     current_summary:
       "Primary lemon supplier CitrusBot Farm went offline 18 hours ago. " +
       "Current inventory: 12 lemons (~2 hours of capacity at reduced batch rate). " +
@@ -126,7 +123,6 @@ const threads = [
       "File SLA breach report with CitrusBot Farm after supply is stable",
     ],
     open_cards: ["card-emergency-restock", "card-sla-review"],
-    next_check_in_at: new Date(now - 3 * 60 * 60 * 1000).toISOString(),
     updated_at: new Date(now - 45 * 60 * 1000).toISOString(),
     updated_by: "actor-supply-rover",
     provenance: {
@@ -138,10 +134,7 @@ const threads = [
     type: "process",
     title: "Summer Flavor Expansion: Lavender & Mango Chili Lines",
     status: "active",
-    priority: "p1",
-    tags: ["menu", "product", "q2"],
     key_artifacts: ["artifact-summer-menu-draft", "artifact-tasting-log"],
-    cadence: "weekly",
     current_summary:
       "FlavorMind finalized recipes for Lavender Lemonade (9.1/10) and Mango Chili " +
       "Lemonade (9.3/10). Both approved by QA sensor array. Lavender syrup supplier " +
@@ -153,7 +146,6 @@ const threads = [
       "SupplyRover to add lavender syrup to inventory system on delivery",
     ],
     open_cards: ["thread-summer-menu"],
-    next_check_in_at: new Date(now + 2 * 24 * 60 * 60 * 1000).toISOString(),
     updated_at: new Date(now - 3 * 60 * 60 * 1000).toISOString(),
     updated_by: "actor-flavor-ai",
     provenance: {
@@ -165,10 +157,7 @@ const threads = [
     type: "incident",
     title: "SqueezeBot 3000 — Pitcher Arm Recalibration",
     status: "paused",
-    priority: "p1",
-    tags: ["hardware", "incident", "ops"],
     key_artifacts: ["artifact-maintenance-log"],
-    cadence: "daily",
     current_summary:
       "SqueezeBot's left pitcher arm is over-torquing by 12%, causing seed " +
       "contamination in ~14% of squeeze cycles (threshold: <5%). Running at 80% duty " +
@@ -180,7 +169,6 @@ const threads = [
       "FlavorMind QA scan to validate seed contamination rate <1% post-repair",
     ],
     open_cards: ["thread-squeezebot-maintenance"],
-    next_check_in_at: new Date(now + 1 * 24 * 60 * 60 * 1000).toISOString(),
     updated_at: new Date(now - 2 * 60 * 60 * 1000).toISOString(),
     updated_by: "actor-squeeze-bot",
     provenance: {
@@ -193,10 +181,7 @@ const threads = [
     type: "process",
     title: "Daily Ops — Stand #1 (Corner of Maple & 5th)",
     status: "active",
-    priority: "p2",
-    tags: ["ops", "daily", "stand-1"],
     key_artifacts: [],
-    cadence: "daily",
     current_summary:
       "Today's sales: 34 cups, $51.00 gross (+12% vs. yesterday). Classic Lemonade " +
       "sold out at 14:30; restocked with emergency half-batch. Till-E flagged two " +
@@ -207,7 +192,6 @@ const threads = [
       "Monitor POS API response times — escalate if delays recur tomorrow",
     ],
     open_cards: [],
-    next_check_in_at: new Date(now + 18 * 60 * 60 * 1000).toISOString(),
     updated_at: new Date(now - 30 * 60 * 1000).toISOString(),
     updated_by: "actor-cashier-bot",
     provenance: {
@@ -219,13 +203,10 @@ const threads = [
     type: "case",
     title: "Resolved: Till-E Pricing Glitch — 3 Customers Overcharged",
     status: "closed",
-    priority: "p3",
-    tags: ["pos", "incident", "billing", "resolved"],
     key_artifacts: [
       "artifact-pricing-evidence",
       "artifact-review-pricing-accept",
     ],
-    cadence: "reactive",
     current_summary:
       "Till-E applied the wrong price tier on 3 transactions during the March 3rd " +
       "peak hour, overcharging customers by $0.50–$1.00 each. Root cause: a stale " +
@@ -234,7 +215,6 @@ const threads = [
       "Incident closed.",
     next_actions: [],
     open_cards: [],
-    next_check_in_at: null,
     updated_at: new Date(
       now - 7 * 24 * 60 * 60 * 1000 + 1 * 60 * 60 * 1000,
     ).toISOString(),
@@ -248,10 +228,7 @@ const threads = [
     type: "initiative",
     title: "Q2 Initiative: Open Stand #2 at Riverside Park",
     status: "active",
-    priority: "p2",
-    tags: ["growth", "q2", "initiative"],
     key_artifacts: [],
-    cadence: "monthly",
     current_summary:
       "Initiative to open a second lemonade stand at Riverside Park by June 1. " +
       "Site survey approved. Awaiting city permit (filed March 1, 3–6 week window). " +
@@ -263,7 +240,6 @@ const threads = [
       "SupplyRover to confirm SqueezeBot 2000 delivery and setup checklist",
     ],
     open_cards: ["card-q2-permit", "card-q2-menu"],
-    next_check_in_at: new Date(now + 25 * 24 * 60 * 60 * 1000).toISOString(),
     updated_at: new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString(),
     updated_by: "actor-ops-ai",
     provenance: {
@@ -275,10 +251,7 @@ const threads = [
     type: "process",
     title: "Agent onboarding and continuity",
     status: "active",
-    priority: "p2",
-    tags: ["onboarding", "ops", "q2"],
     key_artifacts: [],
-    cadence: "weekly",
     current_summary:
       "Runbook and checklist for bringing new agents (FlavorMind, Till-E, SupplyRover) " +
       "online. Onboarding guide v1 in use. Next: document handoff steps for SqueezeBot 2000 " +
@@ -288,7 +261,6 @@ const threads = [
       "Schedule knowledge-transfer session before Riverside go-live",
     ],
     open_cards: [],
-    next_check_in_at: new Date(now + 5 * 24 * 60 * 60 * 1000).toISOString(),
     updated_at: new Date(now - 5 * 24 * 60 * 60 * 1000).toISOString(),
     updated_by: "actor-ops-ai",
     provenance: {
@@ -343,7 +315,7 @@ const events = [
     thread_id: "thread-lemon-shortage",
     refs: ["thread:thread-lemon-shortage"],
     summary: "Priority raised to P0.",
-    payload: { changed_fields: ["priority", "current_summary"] },
+    payload: { changed_fields: ["current_summary"] },
     provenance: { sources: ["actor_statement:evt-supply-003"] },
   },
   {
@@ -1559,21 +1531,6 @@ function deepClone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-function topicStatusFromThreadStatus(status) {
-  switch (String(status ?? "").trim()) {
-    case "active":
-      return "active";
-    case "paused":
-    case "blocked":
-      return "paused";
-    case "closed":
-    case "archived":
-      return "closed";
-    default:
-      return "active";
-  }
-}
-
 function topicTypeFromThreadType(type) {
   switch (String(type ?? "").trim()) {
     case "incident":
@@ -1595,21 +1552,6 @@ function topicTypeFromThreadType(type) {
   }
 }
 
-function cardRiskFromThreadPriority(priority) {
-  switch (String(priority ?? "").trim()) {
-    case "p0":
-      return "critical";
-    case "p1":
-      return "high";
-    case "p2":
-      return "medium";
-    case "p3":
-      return "low";
-    default:
-      return "medium";
-  }
-}
-
 function cardResolutionFromRow(card) {
   const explicit = String(card?.resolution ?? "").trim();
   if (explicit === "done" || explicit === "canceled") {
@@ -1621,14 +1563,6 @@ function cardResolutionFromRow(card) {
   if (explicit === "unresolved" || explicit === "superseded" || !explicit) {
     // Open card — canonical contract uses null
     return null;
-  }
-
-  const status = String(card?.status ?? "").trim();
-  if (status === "done") {
-    return "done";
-  }
-  if (status === "cancelled" || status === "archived") {
-    return "canceled";
   }
 
   return null;
@@ -1730,7 +1664,7 @@ function buildCanonicalTopicSeed(thread) {
     id: threadId,
     thread_id: threadId,
     type: topicTypeFromThreadType(thread?.type),
-    status: topicStatusFromThreadStatus(thread?.status),
+    state: String(thread?.state ?? "").trim() || "active",
     title: String(thread?.title ?? "").trim(),
     summary: String(thread?.current_summary ?? "").trim(),
     owner_refs: thread?.created_by ? [`actor:${thread.created_by}`] : [],
@@ -1821,7 +1755,7 @@ function buildCanonicalCardSeed(card) {
     column_key: String(card?.column_key ?? "backlog").trim() || "backlog",
     rank: String(card?.rank ?? "0000").trim() || "0000",
     assignee_refs: deepClone(resolvedAssigneeRefs),
-    risk: cardRiskFromThreadPriority(thread?.priority),
+    risk: String(card?.risk ?? "").trim() || "medium",
     resolution: cardResolutionFromRow(card),
     resolution_refs: Array.isArray(card?.resolution_refs)
       ? deepClone(card.resolution_refs)
@@ -2122,7 +2056,6 @@ function cloneBoard(board) {
 
   return {
     ...board,
-    labels: [...(board.labels ?? [])],
     owners: [...(board.owners ?? [])],
     refs: [...(board.refs ?? [])],
     pinned_refs: [...(board.pinned_refs ?? [])],
@@ -2149,15 +2082,6 @@ function mockThreadTypeToTopicWorkspaceType(type) {
   const t = String(type ?? "").trim();
   if (MOCK_TOPIC_WORKSPACE_THREAD_TYPES.has(t)) return t;
   return "other";
-}
-
-/** Map thread-shaped status strings to topic workspace `active | paused | closed`. */
-function mockThreadStatusToTopicWorkspaceStatus(status) {
-  const s = String(status ?? "").trim();
-  if (s === "blocked") return "paused";
-  if (s === "resolved") return "closed";
-  if (s === "active" || s === "paused" || s === "closed") return s;
-  return "active";
 }
 
 /**
@@ -2214,7 +2138,7 @@ export function buildMockTopicWorkspaceFromThreadWorkspace(
     boardsOut.push({
       id: bid,
       title: ob.title ?? canonicalBoard?.title,
-      status: ob.status ?? canonicalBoard?.status,
+      state: ob.state ?? canonicalBoard?.state,
       refs,
       primary_topic_ref:
         topicRefStr && !refs.some((r) => String(r).trim() === topicRefStr)
@@ -2236,7 +2160,7 @@ export function buildMockTopicWorkspaceFromThreadWorkspace(
       boardsOut.push({
         id: bid,
         title: b?.title ?? canonicalBoard?.title,
-        status: b?.status ?? canonicalBoard?.status,
+        state: b?.state ?? canonicalBoard?.state,
         ...(refs.length ? { refs } : {}),
       });
     }
@@ -2259,7 +2183,7 @@ export function buildMockTopicWorkspaceFromThreadWorkspace(
     ? {
         id: topicId,
         type: mockThreadTypeToTopicWorkspaceType(thread.type),
-        status: mockThreadStatusToTopicWorkspaceStatus(thread.status),
+        state: String(thread.state ?? "").trim() || "active",
         title: thread.title,
         summary: String(thread.current_summary ?? ""),
         owner_refs: Array.isArray(thread.owner_refs) ? thread.owner_refs : [],

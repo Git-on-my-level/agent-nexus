@@ -38,8 +38,7 @@
 
   const defaultBoardListFilters = {
     showArchived: false,
-    status: "",
-    labels: "",
+    state: "",
     owners: "",
     q: "",
   };
@@ -56,8 +55,7 @@
     const f = boardFiltersApplied;
     return (
       f.showArchived ||
-      Boolean(f.status) ||
-      Boolean(f.labels.trim()) ||
+      Boolean(f.state) ||
       Boolean(f.owners.trim()) ||
       Boolean(f.q.trim())
     );
@@ -70,12 +68,10 @@
   let showCreateForm = $state(false);
 
   let createTitle = $state("");
-  let createStatus = $state("active");
   let createLinkedTopicRef = $state("");
   let createCustomThreadId = $state("");
   let createAdvancedThreadOpen = $state(false);
   let createBoardDocumentId = $state("");
-  let createLabels = $state("");
   let createOwnerIds = $state([]);
   let createPinnedRefs = $state("");
 
@@ -100,7 +96,7 @@
       ]
         .filter(Boolean)
         .join(" · "),
-      keywords: document.labels ?? [],
+      keywords: [],
     };
   }
 
@@ -149,12 +145,10 @@
 
   function resetCreateForm() {
     createTitle = "";
-    createStatus = "active";
     createLinkedTopicRef = "";
     createCustomThreadId = "";
     createAdvancedThreadOpen = false;
     createBoardDocumentId = "";
-    createLabels = "";
     createOwnerIds = [];
     createPinnedRefs = "";
   }
@@ -182,9 +176,7 @@
       const f = boardFiltersApplied;
       const filters = {};
       if (f.showArchived) filters.include_archived = "true";
-      if (f.status) filters.status = f.status;
-      const labels = parseDelimitedValues(f.labels);
-      if (labels.length > 0) filters.label = labels;
+      if (f.state) filters.state = f.state;
       const owners = parseDelimitedValues(f.owners);
       if (owners.length > 0) filters.owner = owners;
       const q = f.q.trim();
@@ -210,18 +202,15 @@
 
     const board = {
       title,
-      status: createStatus,
     };
     const customThread = createCustomThreadId.trim();
     if (customThread) {
       board.thread_id = customThread;
     }
-    const labels = parseDelimitedValues(createLabels);
     const owners = [...createOwnerIds];
     const pinnedRefs = parseDelimitedValues(createPinnedRefs);
     const linkedTopic = createLinkedTopicRef.trim();
 
-    if (labels.length > 0) board.labels = labels;
     if (owners.length > 0) board.owners = owners;
     if (createBoardDocumentId.trim()) {
       board.document_refs = [`document:${createBoardDocumentId.trim()}`];
@@ -245,10 +234,10 @@
     }
   }
 
-  function statusColor(status) {
-    if (status === "active") return "text-ok-text bg-ok-soft";
-    if (status === "paused") return "text-warn-text bg-warn-soft";
-    if (status === "closed") return "text-slate-300 bg-slate-500/10";
+  function lifecycleStateColor(state) {
+    if (state === "active") return "text-ok-text bg-ok-soft";
+    if (state === "archived") return "text-warn-text bg-warn-soft";
+    if (state === "trashed") return "text-slate-300 bg-slate-500/10";
     return "text-[var(--fg-muted)] bg-[var(--line)]";
   }
 
@@ -380,9 +369,9 @@
     {#snippet children()}
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <label class="text-micro">
-          <span class="font-medium text-[var(--fg-muted)]">Status</span>
+          <span class="font-medium text-[var(--fg-muted)]">State</span>
           <select
-            bind:value={boardFiltersDraft.status}
+            bind:value={boardFiltersDraft.state}
             class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
           >
             <option value="">All</option>
@@ -397,17 +386,6 @@
             bind:value={boardFiltersDraft.q}
             class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
             placeholder="Title or board id"
-            type="text"
-          />
-        </label>
-        <label class="text-micro sm:col-span-2 lg:col-span-1">
-          <span class="font-medium text-[var(--fg-muted)]"
-            >Labels (comma-separated)</span
-          >
-          <input
-            bind:value={boardFiltersDraft.labels}
-            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
-            placeholder="product, launch"
             type="text"
           />
         </label>
@@ -490,18 +468,6 @@
           />
         </label>
 
-        <label class="text-micro font-medium text-[var(--fg-muted)]">
-          Status
-          <select
-            bind:value={createStatus}
-            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)]"
-          >
-            {#each Object.entries(BOARD_STATUS_LABELS) as [value, label]}
-              <option {value}>{label}</option>
-            {/each}
-          </select>
-        </label>
-
         <SearchableEntityPicker
           bind:value={createLinkedTopicRef}
           advancedLabel="Enter a topic ref manually"
@@ -552,16 +518,6 @@
       </details>
 
       <div class="grid gap-3 md:grid-cols-2">
-        <label class="text-micro font-medium text-[var(--fg-muted)]">
-          Labels
-          <textarea
-            bind:value={createLabels}
-            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)]"
-            placeholder="product, launch"
-            rows="3"
-          ></textarea>
-        </label>
-
         <SearchableMultiEntityPicker
           bind:values={createOwnerIds}
           advancedLabel="Add a manual owner ID"
@@ -649,13 +605,13 @@
           >
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-center gap-2">
-                {#if board.status}
+                {#if board.state}
                   <span
-                    class="inline-flex rounded px-1.5 py-0.5 text-micro font-semibold {statusColor(
-                      board.status,
+                    class="inline-flex rounded px-1.5 py-0.5 text-micro font-semibold {lifecycleStateColor(
+                      board.state,
                     )}"
                   >
-                    {BOARD_STATUS_LABELS[board.status] ?? board.status}
+                    {BOARD_STATUS_LABELS[board.state] ?? board.state}
                   </span>
                 {/if}
                 {#if isBoardArchived(board)}
@@ -680,13 +636,6 @@
                     Has doc
                   </span>
                 {/if}
-                {#each (board.labels ?? []).slice(0, 3) as label}
-                  <span
-                    class="rounded bg-[var(--line)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
-                  >
-                    {label}
-                  </span>
-                {/each}
               </div>
 
               <span

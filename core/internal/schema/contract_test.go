@@ -11,16 +11,16 @@ func TestLoadExtractsCoreSchemaRules(t *testing.T) {
 
 	contract := loadContract(t)
 
-	if contract.Version != "0.3.0" {
+	if contract.Version != "0.4.0" {
 		t.Fatalf("unexpected schema version: got %q", contract.Version)
 	}
 
-	threadStatus, ok := contract.Enums["thread_status"]
+	topicTypeEnum, ok := contract.Enums["topic_type"]
 	if !ok {
-		t.Fatal("thread_status enum was not loaded")
+		t.Fatal("topic_type enum was not loaded")
 	}
-	if threadStatus.Policy != EnumPolicyStrict {
-		t.Fatalf("unexpected thread_status policy: got %q", threadStatus.Policy)
+	if topicTypeEnum.Policy != EnumPolicyStrict {
+		t.Fatalf("unexpected topic_type policy: got %q", topicTypeEnum.Policy)
 	}
 
 	eventType, ok := contract.Enums["event_type"]
@@ -105,6 +105,14 @@ func TestLoadExtractsCoreSchemaRules(t *testing.T) {
 	}
 	if topicRef.Required {
 		t.Fatal("expected thread.topic_ref to be optional")
+	}
+
+	title, ok := threadSchema.Fields["title"]
+	if !ok {
+		t.Fatal("thread.title field was not loaded")
+	}
+	if title.Required {
+		t.Fatal("expected thread.title to be optional")
 	}
 }
 

@@ -138,9 +138,7 @@
 <div bind:this={rootEl} class="relative inline-flex shrink-0">
   <span class="sr-only" aria-live="polite">{liveStatus}</span>
   {#if hasMenuItems}
-    <div
-      class="inline-flex rounded-md border border-line bg-transparent"
-    >
+    <div class="inline-flex rounded-md border border-line bg-transparent">
       <button
         type="button"
         class="inline-flex h-7 min-w-0 max-w-[10rem] shrink items-center justify-center rounded-l-md border-0 bg-transparent px-3 text-micro font-normal text-fg transition-colors hover:bg-panel-hover"

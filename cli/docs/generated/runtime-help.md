@@ -257,7 +257,7 @@ draft
 
 Inbox categories:
 - `action_needed`: A human must decide, take direct action, or own the next step (includes prior decision and intervention queue signals).
-- `risk_exception`: Exceptions, stale cadence, or at-risk work items that need follow-up.
+- `risk_exception`: Exceptions or at-risk work items that need follow-up.
 - `attention`: Review or lighter operator focus (for example document attention).
 
 For the fuller operating model, read `anx meta doc agent-guide`.
@@ -1245,8 +1245,8 @@ Commands:
 
 Primary operator coordination:
   topics workspace        Load the topic workspace (cards, docs, backing threads, inbox).
-  topics list / topics get   Discover and resolve topic ids.
-  Tip: start with `anx topics workspace --topic-id <topic-id>` for triage; use `anx topics list` to find ids. Add `--full-id` for copy/paste ids.
+  topics list / topics get   Discover and resolve topic ids (`--state`, `--q`, pagination, archive/trash visibility flags).
+  Tip: start with `anx topics workspace --topic-id <topic-id>` for triage; use `anx topics list --json` for `id` / `short_id` in JSON, or `--full-id` for full ids in default text.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1302,7 +1302,7 @@ Read-only backing-thread diagnostics (tooling):
   threads workspace       Diagnostic workspace projection (context + inbox + related-thread review).
   threads inspect          Smaller diagnostic bundle (context + inbox).
   threads timeline         Backing thread timeline and expansions.
-  Tip: prefer `anx topics workspace` for normal operator coordination. Use `anx threads workspace` when you need the backing-thread projection or related-thread review; use `--status/--tag/--type initiative` to discover one thread. For a minimal `{thread}` read, use `anx threads get` (contract: `threads.inspect`). Add `--full-id` for copy/paste ids.
+  Tip: prefer `anx topics workspace` for normal operator coordination. Use `anx threads workspace --full-id` when you need the backing-thread projection with full ids in default text; use `--state active` to discover backing threads by lifecycle state. For a minimal `{thread}` read, use `anx threads get` (contract: `threads.inspect`).
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1507,7 +1507,6 @@ Use this group to refresh or inspect derived views that are computed from canoni
 
 Core commands:
   derived rebuild     Rebuild derived state from the canonical records.
-  derived status      Inspect the current derived maintenance state.
 
 Tip: derived commands are operational helpers, not the source of truth.
 ```
@@ -1832,14 +1831,13 @@ Inputs:
   - body `topic.owner_refs` (list<any>)
   - body `topic.provenance.sources` (list<string>)
   - body `topic.related_refs` (list<any>)
-  - body `topic.status` (string)
   - body `topic.summary` (string)
   - body `topic.title` (string)
   - body `topic.type` (string)
   Optional:
   - body `topic.provenance.by_field` (object)
   - body `topic.provenance.notes` (string)
-  Enum values: topic.status: active, archived, blocked, closed, paused, proposed, resolved; topic.type: case, decision, incident, initiative, note, objective, other, process, relationship, request, risk
+  Enum values: topic.type: case, decision, incident, initiative, note, objective, other, process, relationship, request, risk
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1877,11 +1875,10 @@ Inputs:
   - body `patch.provenance.notes` (string)
   - body `patch.provenance.sources` (list<string>)
   - body `patch.related_refs` (list<any>)
-  - body `patch.status` (string)
   - body `patch.summary` (string)
   - body `patch.title` (string)
   - body `patch.type` (string)
-  Enum values: patch.status: active, archived, blocked, closed, paused, proposed, resolved; patch.type: case, decision, incident, initiative, note, objective, other, process, relationship, request, risk
+  Enum values: patch.type: case, decision, incident, initiative, note, objective, other, process, relationship, request, risk
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1957,7 +1954,7 @@ Generated Help: topics archive
 - HTTP: `POST /topics/{topic_id}/archive`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Soft-archive a topic (orthogonal to business status; clears default list visibility).
+- Why: Soft-archive a topic and derive its lifecycle state from archived_at.
 - Output: Returns `{ topic }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `topics`, `write`
@@ -2693,13 +2690,11 @@ Inputs:
   - body `board.document_refs` (list<any>)
   - body `board.pinned_refs` (list<any>)
   - body `board.provenance.sources` (list<string>)
-  - body `board.status` (string)
   - body `board.title` (string)
   Optional:
   - body `board.primary_topic_ref` (string)
   - body `board.provenance.by_field` (object)
   - body `board.provenance.notes` (string)
-  Enum values: board.status: active, closed, paused
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2747,7 +2742,7 @@ Generated Help: boards archive
 - HTTP: `POST /boards/{board_id}/archive`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Soft-archive a board (orthogonal to business status; clears default list visibility).
+- Why: Soft-archive a board and derive its lifecycle state from archived_at.
 - Output: Returns `{ board }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `boards`, `write`
@@ -3327,7 +3322,7 @@ Inputs:
   - body `event.provenance.by_field` (object)
   - body `event.provenance.notes` (string)
   - body `event.thread_ref` (string)
-  Enum values: event.type (open): agent_notification_dismissed, agent_notification_read, board_card_added, board_card_archived, board_card_moved, board_card_trashed, board_created, board_updated, card_archived, card_created, card_moved, card_resolved, card_trashed, card_updated, decision_made, decision_needed, document_created, document_revised, document_revision_created, document_trashed, exception_raised, inbox_item_acknowledged, intervention_needed, message_posted, receipt_added, review_completed, topic_archived, topic_created, topic_restored, topic_status_changed, topic_trashed, topic_updated
+  Enum values: event.type (open): agent_notification_dismissed, agent_notification_read, board_card_added, board_card_archived, board_card_moved, board_card_trashed, board_created, board_updated, card_archived, card_created, card_moved, card_resolved, card_trashed, card_updated, decision_made, decision_needed, document_created, document_restored, document_revised, document_trashed, exception_raised, inbox_item_acknowledged, intervention_needed, message_posted, receipt_added, review_completed, topic_archived, topic_created, topic_restored, topic_trashed, topic_updated
 
 Common authoring types:
   Communication: direct communication or important non-structured information
@@ -3338,7 +3333,7 @@ Common authoring types:
   Interventions: single clear path exists, but a human must act to complete it
   - `intervention_needed`
   Topics and documents: durable subject and document lifecycle signals
-  - `topic_created`, `topic_updated`, `topic_status_changed`
+  - `topic_created`, `topic_updated`, `topic_archived`, `topic_trashed`
   - `document_created`, `document_revised`, `document_trashed`
   Boards and cards: workflow placement and movement
   - `board_created`, `board_updated`
@@ -3558,7 +3553,7 @@ View scoping:
 
 Inbox categories:
   - `action_needed`: A human must decide, take direct action, or own the next step (includes prior decision and intervention queue signals).
-  - `risk_exception`: Exceptions, stale cadence, or at-risk work items that need follow-up.
+  - `risk_exception`: Exceptions or at-risk work items that need follow-up.
   - `attention`: Review or lighter operator focus (for example document attention).
 
 Global flags:
@@ -4235,16 +4230,11 @@ Local Help: threads inspect
 - JSON body: `thread`, `context`, `collaboration`, `inbox`
 - Examples:
   - `anx threads inspect --thread-id <thread-id>`
-  - `anx threads inspect --status active --type initiative --full-id`
+  - `anx threads inspect --state active --full-id`
 
 Flags:
   --thread-id <thread-id>      Thread id to inspect.
-  --status <status>            Discover one thread by status.
-  --priority <priority>        Discover one thread by priority.
-  --stale <bool>               Discover one thread by stale state.
-  --tag <tag>                  Repeatable discovery tag filter.
-  --cadence <cadence>          Repeatable discovery cadence filter.
-  --type <thread-type>         Local discovery filter after `threads list`.
+  --state <state>              Discover one thread by lifecycle state (active, archived, trashed).
   --max-events <n>             Maximum recent context events to include.
   --include-artifact-content   Include artifact content previews from the underlying read-only thread views.
   --full-id                    Render full event and inbox ids in default text output (non-JSON).
@@ -4269,16 +4259,11 @@ Local Help: threads workspace
 - JSON body: `thread`, `context`, `collaboration`, `inbox`, `pending_decisions`, `related_threads`, `related_recommendations`, `related_decisions`, `follow_up`
 - Examples:
   - `anx threads workspace --thread-id <thread-id> --full-id`
-  - `anx threads workspace --status active --type initiative --full-summary`
+  - `anx threads workspace --state active --full-summary`
 
 Flags:
   --thread-id <thread-id>      Thread id to inspect.
-  --status <status>            Discover one thread by status.
-  --priority <priority>        Discover one thread by priority.
-  --stale <bool>               Discover one thread by stale state.
-  --tag <tag>                  Repeatable discovery tag filter.
-  --cadence <cadence>          Repeatable discovery cadence filter.
-  --type <thread-type>         Local discovery filter after `threads list`.
+  --state <state>              Discover one thread by lifecycle state (active, archived, trashed).
   --max-events <n>             Maximum recent context events to include.
   --include-artifact-content   Include artifact content previews from the underlying read-only thread views.
   --full-summary               Show full recommendation/decision summaries in default text output (non-JSON).
@@ -4304,16 +4289,11 @@ Local Help: threads recommendations
 - JSON body: `thread`, `recommendations`, `decision_requests`, `decisions`, `pending_decisions`, `related_threads`, `related_recommendations`, `related_decision_requests`, `related_decisions`, `warnings`, `follow_up`
 - Examples:
   - `anx threads recommendations --thread-id <thread-id>`
-  - `anx threads recommendations --status active --type initiative --full-summary`
+  - `anx threads recommendations --state active --full-summary`
 
 Flags:
   --thread-id <thread-id>      Thread id to inspect.
-  --status <status>            Discover one thread by status.
-  --priority <priority>        Discover one thread by priority.
-  --stale <bool>               Discover one thread by stale state.
-  --tag <tag>                  Repeatable discovery tag filter.
-  --cadence <cadence>          Repeatable discovery cadence filter.
-  --type <thread-type>         Local discovery filter after `threads list`.
+  --state <state>              Discover one thread by lifecycle state (active, archived, trashed).
   --max-events <n>             Maximum recent context events to include.
   --include-artifact-content   Include artifact content previews from the underlying read-only thread views.
   --include-related-event-content Hydrate related review items with full `events.get` payloads.

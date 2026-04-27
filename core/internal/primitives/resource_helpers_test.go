@@ -125,7 +125,6 @@ func TestSharedResourceWritesIndexRefEdges(t *testing.T) {
 		Title:            "Edge card",
 		ParentThreadID:   cardThreadID,
 		PinnedDocumentID: stringPointer(documentID),
-		Status:           "todo",
 	})
 	if err != nil {
 		t.Fatalf("create board card: %v", err)
@@ -248,16 +247,9 @@ func createPrimitiveTestThread(t *testing.T, ctx context.Context, store *Store, 
 	t.Helper()
 
 	result, err := store.CreateThread(ctx, "actor-1", map[string]any{
-		"title":           title,
-		"type":            "incident",
-		"status":          "active",
-		"priority":        "p1",
-		"tags":            []string{},
-		"cadence":         "reactive",
-		"current_summary": title,
-		"next_actions":    []string{},
-		"key_artifacts":   []string{},
-		"provenance":      map[string]any{"sources": []string{"inferred"}},
+		"title":      title,
+		"type":       "incident",
+		"provenance": map[string]any{"sources": []string{"inferred"}},
 	})
 	if err != nil {
 		t.Fatalf("create thread %q: %v", title, err)
@@ -324,7 +316,6 @@ func TestRefEdgesStoreTypedRefRoundTrip(t *testing.T) {
 		CardID:         "card-rt-1",
 		Title:          "RoundTrip Card",
 		ParentThreadID: threadID,
-		Status:         "todo",
 	})
 	if err != nil {
 		t.Fatalf("create card: %v", err)

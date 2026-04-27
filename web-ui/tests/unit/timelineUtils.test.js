@@ -35,14 +35,14 @@ describe("timeline utils", () => {
         type: "thread_updated",
         refs: ["event:evt-z", "thread:thread-1", "document:doc-1"],
         payload: {
-          changed_fields: ["status", "current_summary"],
+          changed_fields: ["state", "summary"],
         },
       },
       { threadId: "thread-1" },
     );
 
     expect(view.isKnownType).toBe(true);
-    expect(view.changedFields).toEqual(["Status", "Summary"]);
+    expect(view.changedFields).toEqual(["Lifecycle state", "Summary"]);
     expect(view.resolvedRefs[0]).toMatchObject({
       kind: "event",
       href: "",

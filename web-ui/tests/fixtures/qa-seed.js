@@ -17,10 +17,6 @@ function daysAgo(days) {
   return atOffsetMs(-days * 24 * 60 * 60 * 1000);
 }
 
-function hoursFromNow(hours) {
-  return atOffsetMs(hours * 60 * 60 * 1000);
-}
-
 export const QA_HOSTED_ACCOUNT = {
   id: "acct_qa_jordan",
   email: "jordan@agentnexus.dev",
@@ -256,13 +252,9 @@ export const QA_TOPICS = [
       "Production cutover is green except for an auth callback regression in the mobile shell.",
     summary:
       "Production cutover is green except for an auth callback regression in the mobile shell.",
-    status: "active",
-    priority: "p0",
-    cadence: "daily",
-    tags: ["launch", "incident", "critical"],
+    state: "active",
     updated_at: hoursAgo(1.5),
     updated_by: "actor-zara-ops",
-    next_check_in_at: hoursAgo(2),
   },
   {
     id: "topic-billing-rollout",
@@ -273,13 +265,9 @@ export const QA_TOPICS = [
       "Stripe checkout and portal flows are passing smoke checks against the hosted sandbox.",
     summary:
       "Stripe checkout and portal flows are passing smoke checks against the hosted sandbox.",
-    status: "active",
-    priority: "p1",
-    cadence: "weekly",
-    tags: ["billing", "launch"],
+    state: "active",
     updated_at: hoursAgo(5),
     updated_by: "actor-jordan-human",
-    next_check_in_at: hoursFromNow(20),
   },
   {
     id: "topic-docs-refresh",
@@ -290,13 +278,9 @@ export const QA_TOPICS = [
       "Hosted onboarding copy and screenshots need one final pass before the launch checklist closes.",
     summary:
       "Hosted onboarding copy and screenshots need one final pass before the launch checklist closes.",
-    status: "paused",
-    priority: "p2",
-    cadence: "weekly",
-    tags: ["docs", "onboarding"],
+    state: "paused",
     updated_at: hoursAgo(18),
     updated_by: "actor-iris-docs",
-    next_check_in_at: hoursFromNow(36),
   },
 ];
 

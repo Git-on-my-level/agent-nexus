@@ -179,8 +179,8 @@
   function resultSubtitle(entry) {
     if (entry.type === "topic") {
       const parts = [];
-      if (entry.item.status) parts.push(entry.item.status);
-      if (entry.item.priority) parts.push(entry.item.priority);
+      const life = String(entry.item.state ?? "").trim();
+      if (life) parts.push(life);
       return parts.join(" · ") || entry.item.id;
     }
     if (entry.type === "doc") {
@@ -195,6 +195,11 @@
       return kindLabel(entry.item.kind);
     }
     return "";
+  }
+
+  function resultKey(entry, index) {
+    if (entry.type === "header") return `header:${entry.label}`;
+    return `${entry.type}:${entry.item?.id ?? index}`;
   }
 
   const typeIcons = {
@@ -262,7 +267,7 @@
           </div>
         {/if}
 
-        {#each flatResults as entry, i}
+        {#each flatResults as entry, i (resultKey(entry, i))}
           {#if entry.type === "header"}
             <div class="cmd-group-header">{entry.label}</div>
           {:else}

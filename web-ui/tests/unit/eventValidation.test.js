@@ -70,16 +70,17 @@ describe("event validation", () => {
     expect(error).toContain('"card:<id>" typed ref');
   });
 
-  it("enforces topic status transition payload refs", () => {
+  it("enforces board_card_moved payload fields", () => {
     const error = validateEventCreatePayload(
       validBaseEvent({
-        type: "topic_status_changed",
-        refs: ["topic:topic_1"],
-        payload: { from_status: "active" },
+        type: "board_card_moved",
+        refs: ["board:board_1", "card:card_1"],
+        payload: {},
       }),
     );
 
-    expect(error).toContain("event.payload.to_status is required");
+    expect(error).toContain("event.payload.column_key is required");
+    expect(error).toContain("board_card_moved");
   });
 
   it("keeps unknown event types open", () => {

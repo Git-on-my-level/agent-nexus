@@ -28,51 +28,6 @@ export function cardResolutionTone(resolution) {
   }
 }
 
-export function priorityBadgeClasses(priority) {
-  switch (String(priority ?? "").trim()) {
-    case "p0":
-      return "text-red-400 bg-red-500/10";
-    case "p1":
-      return "text-amber-400 bg-amber-500/10";
-    case "p2":
-      return "text-blue-400 bg-blue-500/10";
-    default:
-      return "text-[var(--fg-muted)] bg-[var(--line)]";
-  }
-}
-
-/**
- * Priority chip for board cards / card detail (non-p0–p3 uses `getPriorityLabelFn`).
- * @param {string} threadPriorityRaw - e.g. thread?.priority
- * @param {(raw: string) => string} getPriorityLabelFn
- * @returns {{ label: string, class: string } | null}
- */
-export function resolvePriorityBadge(threadPriorityRaw, getPriorityLabelFn) {
-  const p = String(threadPriorityRaw ?? "")
-    .trim()
-    .toLowerCase();
-  if (!p) return null;
-  let label;
-  switch (p) {
-    case "p0":
-      label = "P0";
-      break;
-    case "p1":
-      label = "P1";
-      break;
-    case "p2":
-      label = "P2";
-      break;
-    case "p3":
-      label = "P3";
-      break;
-    default:
-      label = getPriorityLabelFn(threadPriorityRaw);
-      break;
-  }
-  return { label, class: priorityBadgeClasses(p) };
-}
-
 export function dueDateDisplay(dueAt) {
   const raw = String(dueAt ?? "").trim();
   if (!raw) return "";

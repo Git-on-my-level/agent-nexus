@@ -4,7 +4,6 @@ import {
   getInboxCategoryLabel,
   normalizeInboxCategory,
 } from "./inboxUtils";
-import { computeStaleness } from "./topicFilters";
 
 function compareByTimestampDesc(leftValue, rightValue) {
   const leftTs = parseTimestampMs(leftValue);
@@ -47,33 +46,19 @@ export function buildInboxCategorySummary(items = []) {
 
 export function buildTopicHealthSummary(topics = []) {
   let openCount = 0;
-  let staleCount = 0;
-  let highPriorityCount = 0;
 
   for (const topic of topics) {
-    const status = String(topic?.status ?? "");
-    const isOpen =
-      status !== "closed" && status !== "resolved" && status !== "archived";
+    const state = String(topic?.state ?? "").trim();
+    const isOpen = state === "active";
 
     if (isOpen) {
       openCount += 1;
-
-      if (computeStaleness(topic).stale) {
-        staleCount += 1;
-      }
-
-      const priority = String(topic?.priority ?? "");
-      if (priority === "p0" || priority === "p1") {
-        highPriorityCount += 1;
-      }
     }
   }
 
   return {
     totalCount: topics.length,
     openCount,
-    staleCount,
-    highPriorityCount,
   };
 }
 
@@ -145,37 +130,13 @@ function countRefPredecessorDepth(artifact, byId) {
 }
 
 export function topicHealthSentence(summary) {
-  const { openCount, staleCount, highPriorityCount } = summary;
+  const { openCount } = summary;
 
   if (openCount === 0) {
     return "No open topics.";
   }
 
-  if (staleCount === 0 && highPriorityCount === 0) {
-    return openCount === 1
-      ? "1 open topic is on track."
-      : `All ${openCount} open topics are on track.`;
-  }
-
-  if (staleCount > 0 && highPriorityCount === 0) {
-    return staleCount === 1
-      ? "1 topic may need a check-in."
-      : `${staleCount} topics may need a check-in.`;
-  }
-
-  if (highPriorityCount > 0 && staleCount === 0) {
-    return highPriorityCount === 1
-      ? "1 high-priority topic needs attention."
-      : `${highPriorityCount} high-priority topics need attention.`;
-  }
-
-  const stalePart =
-    staleCount === 1 ? "1 stale topic" : `${staleCount} stale topics`;
-  const highPart =
-    highPriorityCount === 1
-      ? "1 high-priority topic"
-      : `${highPriorityCount} high-priority topics`;
-  return `${stalePart} and ${highPart} need attention.`;
+  return openCount === 1 ? "1 active topic." : `${openCount} active topics.`;
 }
 
 export function inboxSummarySentence(categorySummary) {

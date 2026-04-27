@@ -111,6 +111,8 @@ func buildThreadContextPayload(ctx context.Context, opts handlerOptions, threadI
 		return nil, err
 	}
 
+	primitives.StripThreadPlanningFieldsForAPI(thread)
+
 	return map[string]any{
 		"thread":        thread,
 		"recent_events": recentEvents,

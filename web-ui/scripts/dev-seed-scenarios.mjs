@@ -106,12 +106,17 @@ function getKidsLemonadeStandSeedForWebUi() {
 }
 
 function mapThreadToTopic(thread) {
+  const life = String(thread.state ?? "").trim();
+  const state =
+    life === "active" || life === "archived" || life === "trashed"
+      ? life
+      : "active";
   return {
     id: thread.id,
     thread_id: thread.id,
     type: normalizeTopicType(thread.type),
     title: thread.title,
-    status: thread.status,
+    state,
     summary: String(thread.current_summary ?? thread.title ?? "").trim(),
     owner_refs: thread.updated_by ? [`actor:${thread.updated_by}`] : [],
     board_refs: [],

@@ -499,7 +499,6 @@ test("inbox thread context shows subject link for decisions", async ({
           id: threadId,
           title: "Customer Onboarding Workflow",
           status: "active",
-          priority: "p1",
           current_summary: "Escalation review in progress.",
         },
       }),

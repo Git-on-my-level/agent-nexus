@@ -22,7 +22,6 @@
   import { devActorMode } from "$lib/workspaceContext";
   import { kindColor, kindLabel } from "$lib/artifactKinds";
   import { formatTimestamp } from "$lib/formatDate";
-  import { getPriorityLabel } from "$lib/topicFilters";
   import { boardRecordFromBoardsListRow } from "$lib/searchHelpers";
   import { readEnumSearchParam, withUpdatedSearchParams } from "$lib/urlState";
 
@@ -86,9 +85,9 @@
       actor.tags.some((t) => String(t).toLowerCase() === "human")
     );
   });
-  let actorName = $derived((id) =>
-    lookupActorDisplayName(id, $actorRegistry, $principalRegistry),
-  );
+  function actorName(id) {
+    return lookupActorDisplayName(id, $actorRegistry, $principalRegistry);
+  }
 
   function itemBusyKey(type, id) {
     return `${type}:${String(id ?? "").trim()}`;
@@ -126,17 +125,13 @@
     return "text-[var(--fg-muted)] bg-[var(--panel)]";
   }
 
-  function threadStatusColor(status) {
+  function threadLifecycleColor(state) {
     const styles = {
       active: "text-ok-text",
-      blocked: "text-warn-text",
-      resolved: "text-sky-400",
-      archived: "text-slate-300",
-      paused: "text-warn-text",
-      closed: "text-slate-300",
-      proposed: "text-[var(--fg-muted)]",
+      archived: "text-warn-text",
+      trashed: "text-danger-text",
     };
-    return styles[status] ?? "text-fg-subtle";
+    return styles[state] ?? "text-[var(--fg-muted)]";
   }
 
   async function loadTrash() {
@@ -164,7 +159,8 @@
         (topic) =>
           Boolean(topic?.archived_at) ||
           Boolean(topic?.trashed_at) ||
-          String(topic?.status ?? "").trim() === "archived",
+          String(topic?.state ?? "").trim() === "archived" ||
+          String(topic?.state ?? "").trim() === "trashed",
       );
       boards = (boardResult.boards ?? []).map(boardRecordFromBoardsListRow);
       const cardById = new Map();
@@ -177,10 +173,7 @@
         if (id) cardById.set(id, c);
       }
       cards = [...cardById.values()].filter(
-        (card) =>
-          Boolean(card?.archived_at) ||
-          Boolean(card?.trashed_at) ||
-          String(card?.status ?? "").trim() === "archived",
+        (card) => Boolean(card?.archived_at) || Boolean(card?.trashed_at),
       );
     } catch (e) {
       error = `Failed to load trash: ${e instanceof Error ? e.message : String(e)}`;
@@ -421,7 +414,7 @@
 </div>
 
 <div class="mb-4 flex gap-0 border-b border-[var(--line)]" role="tablist">
-  {#each tabs as tab}
+  {#each tabs as tab (tab.id)}
     <button
       class="cursor-pointer px-3 py-2 text-meta font-medium transition-colors {activeTab ===
       tab.id
@@ -482,7 +475,7 @@
   <div
     class="space-y-px rounded-md border border-[var(--line)] bg-[var(--bg-soft)] overflow-hidden"
   >
-    {#each artifacts as artifact, i}
+    {#each artifacts as artifact, i (artifact.id)}
       <div class="px-4 py-3 {i > 0 ? 'border-t border-[var(--line)]' : ''}">
         <div
           class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between"
@@ -561,7 +554,7 @@
   <div
     class="space-y-px rounded-md border border-[var(--line)] bg-[var(--bg-soft)] overflow-hidden"
   >
-    {#each documents as doc, i}
+    {#each documents as doc, i (doc.id)}
       <div class="px-4 py-3 {i > 0 ? 'border-t border-[var(--line)]' : ''}">
         <div
           class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between"
@@ -634,7 +627,7 @@
   <div
     class="space-y-px rounded-md border border-[var(--line)] bg-[var(--bg-soft)] overflow-hidden"
   >
-    {#each threads as thread, i}
+    {#each threads as thread, i (thread.id)}
       <div class="px-4 py-3 {i > 0 ? 'border-t border-[var(--line)]' : ''}">
         <div
           class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between"
@@ -644,17 +637,11 @@
               <span class="text-meta font-medium text-[var(--fg)]">
                 {String(thread?.title ?? "").trim() || thread.id}
               </span>
-              {#if thread.status}
+              {#if thread.state}
                 <span
-                  class="rounded bg-[var(--panel)] px-1.5 py-0.5 text-micro font-medium capitalize {threadStatusColor(
-                    thread.status,
-                  )}">{thread.status}</span
-                >
-              {/if}
-              {#if thread.priority}
-                <span
-                  class="rounded bg-[var(--panel)] px-1.5 py-0.5 text-micro font-medium text-[var(--fg-muted)]"
-                  >{getPriorityLabel(thread.priority)}</span
+                  class="rounded bg-[var(--panel)] px-1.5 py-0.5 text-micro font-medium capitalize {threadLifecycleColor(
+                    thread.state,
+                  )}">{BOARD_STATUS_LABELS[thread.state] ?? thread.state}</span
                 >
               {/if}
             </div>
@@ -708,7 +695,7 @@
   <div
     class="space-y-px rounded-md border border-[var(--line)] bg-[var(--bg-soft)] overflow-hidden"
   >
-    {#each boards as board, i}
+    {#each boards as board, i (board.id)}
       <div class="px-4 py-3 {i > 0 ? 'border-t border-[var(--line)]' : ''}">
         <div
           class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between"
@@ -718,10 +705,10 @@
               <span class="text-meta font-medium text-[var(--fg)]">
                 {String(board?.title ?? "").trim() || board.id}
               </span>
-              {#if board.status}
+              {#if board.state}
                 <span
                   class="rounded bg-[var(--panel)] px-1.5 py-0.5 text-micro font-medium text-[var(--fg-muted)]"
-                  >{BOARD_STATUS_LABELS[board.status] ?? board.status}</span
+                  >{BOARD_STATUS_LABELS[board.state] ?? board.state}</span
                 >
               {/if}
             </div>
@@ -780,7 +767,7 @@
   <div
     class="space-y-px rounded-md border border-[var(--line)] bg-[var(--bg-soft)] overflow-hidden"
   >
-    {#each cards as card, i}
+    {#each cards as card, i (card.id)}
       <div class="px-4 py-3 {i > 0 ? 'border-t border-[var(--line)]' : ''}">
         <div
           class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between"
@@ -857,7 +844,7 @@
                 </span>
               {/if}
               {#if Array.isArray(card.related_refs)}
-                {#each card.related_refs as refValue}
+                {#each card.related_refs as refValue (refValue)}
                   <RefLink {refValue} threadId={card.thread_id} />
                 {/each}
               {/if}

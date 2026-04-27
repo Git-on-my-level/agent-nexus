@@ -29,12 +29,12 @@ describe("launchFlow helpers", () => {
 
   it("reads launch continuation params from search params", () => {
     const params = new URLSearchParams(
-      "workspace=Acme-Prod&workspace_id=ws_123&return_to=%2Fthreads%3Ftag%3Dhot",
+      "workspace=Acme-Prod&workspace_id=ws_123&return_to=%2Ftopics%3Ftag%3Dhot",
     );
     expect(readHostedLaunchParams(params)).toEqual({
       workspaceSlug: "acme-prod",
       workspaceId: "ws_123",
-      returnPath: "/threads?tag=hot",
+      returnPath: "/topics?tag=hot",
       hasContinuation: true,
     });
   });
@@ -44,10 +44,10 @@ describe("launchFlow helpers", () => {
       buildHostedSignInPath({
         workspaceSlug: "Acme Prod",
         workspaceId: "ws_123",
-        returnPath: "/threads",
+        returnPath: "/topics",
       }),
     ).toBe(
-      "/hosted/signin?workspace=acme-prod&workspace_id=ws_123&return_path=%2Fthreads",
+      "/hosted/signin?workspace=acme-prod&workspace_id=ws_123&return_path=%2Ftopics",
     );
 
     expect(

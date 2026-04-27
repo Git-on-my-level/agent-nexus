@@ -24,10 +24,12 @@ func handleListBoards(w http.ResponseWriter, r *http.Request, opts handlerOption
 	}
 
 	query := r.URL.Query()
-	status := strings.TrimSpace(query.Get("status"))
-	if status != "" {
-		if err := validateBoardStatus(status); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+	state := strings.TrimSpace(query.Get("state"))
+	if state != "" {
+		switch state {
+		case "active", "archived", "trashed":
+		default:
+			writeError(w, http.StatusBadRequest, "invalid_request", "state must be one of: active, archived, trashed")
 			return
 		}
 	}
@@ -44,8 +46,7 @@ func handleListBoards(w http.ResponseWriter, r *http.Request, opts handlerOption
 	}
 
 	items, nextCursor, err := opts.primitiveStore.ListBoards(r.Context(), primitives.BoardListFilter{
-		Status:          status,
-		Labels:          normalizedQueryValues(query["label"]),
+		State:           state,
 		Owners:          normalizedQueryValues(query["owner"]),
 		Query:           strings.TrimSpace(query.Get("q")),
 		Limit:           limitFilter,
@@ -119,16 +120,11 @@ func handleCreateBoard(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		return
 	}
 
-	if err := validateBoardCreateRequest(opts.contract, req.Board); err != nil {
+	boardInput := prepareBoardWriteMap(req.Board)
+	if err := validateBoardCreateRequest(opts.contract, boardInput); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
-
-	boardInput := make(map[string]any, len(req.Board))
-	for key, value := range req.Board {
-		boardInput[key] = value
-	}
-	mergeBoardHTTPConvenienceFields(boardInput)
 
 	board, err := opts.primitiveStore.CreateBoard(r.Context(), actorID, boardInput)
 	if err != nil {
@@ -266,12 +262,13 @@ func handleUpdateBoard(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		return
 	}
 
-	if err := validateBoardPatchRequest(opts.contract, req.Patch); err != nil {
+	patchInput := prepareBoardWriteMap(req.Patch)
+	if err := validateBoardPatchRequest(opts.contract, patchInput); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
 
-	updatedBoard, err := opts.primitiveStore.UpdateBoard(r.Context(), actorID, boardID, req.Patch, &ifUpdatedAt)
+	updatedBoard, err := opts.primitiveStore.UpdateBoard(r.Context(), actorID, boardID, patchInput, &ifUpdatedAt)
 	if err != nil {
 		switch {
 		case errors.Is(err, primitives.ErrInvalidBoardRequest):
@@ -286,7 +283,7 @@ func handleUpdateBoard(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		return
 	}
 
-	emitBoardLifecycleEventBestEffort(r.Context(), opts, actorID, buildBoardUpdatedEvent(currentBoard, updatedBoard, req.Patch))
+	emitBoardLifecycleEventBestEffort(r.Context(), opts, actorID, buildBoardUpdatedEvent(currentBoard, updatedBoard, patchInput))
 
 	summary, summaryErr := opts.primitiveStore.GetBoardSummary(r.Context(), boardID)
 	response := map[string]any{"board": updatedBoard}
@@ -558,12 +555,7 @@ func addBoardCardFromRaw(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		explicitReplayCardID = ""
 	}
 
-	createStatus := "todo"
-	if strings.TrimSpace(req.ColumnKey) == "done" {
-		createStatus = "done"
-	}
-
-	result, err := opts.primitiveStore.CreateBoardCard(r.Context(), actorID, boardID, addBoardCardStoreInput(req, createStatus))
+	result, err := opts.primitiveStore.CreateBoardCard(r.Context(), actorID, boardID, addBoardCardStoreInput(req))
 	if err != nil {
 		if errors.Is(err, primitives.ErrConflict) && strings.TrimSpace(req.RequestKey) != "" {
 			existingCard, loadCardErr := loadExistingBoardCardForCreateReplay(r.Context(), opts, boardID, req.CardID, req.ParentThread, req.ThreadID)
@@ -576,7 +568,6 @@ func addBoardCardFromRaw(w http.ResponseWriter, r *http.Request, opts handlerOpt
 				req.ParentThread,
 				req.ThreadID,
 				req.ColumnKey,
-				createStatus,
 				req.Assignee,
 				req.PinnedDocumentID,
 				req.DueAt,
@@ -702,11 +693,7 @@ func handleBatchAddBoardCards(w http.ResponseWriter, r *http.Request, opts handl
 		if strings.TrimSpace(batchRequestKey) != "" && strings.TrimSpace(m.CardID) == "" {
 			m.CardID = deriveRequestScopedID("boards.cards.batch_create", actorID, fmt.Sprintf("%s#%d", batchRequestKey, i), "cd")
 		}
-		createStatus := "todo"
-		if strings.TrimSpace(m.ColumnKey) == "done" {
-			createStatus = "done"
-		}
-		in := addBoardCardStoreInput(m, createStatus)
+		in := addBoardCardStoreInput(m)
 		in.IfBoardUpdatedAt = nil
 		inputs = append(inputs, in)
 	}
@@ -1245,6 +1232,9 @@ func buildBoardWorkspaceCardsSection(ctx context.Context, opts handlerOptions, b
 					return nil, nil, err
 				}
 			}
+			if tm, ok := thread.(map[string]any); ok && tm != nil {
+				primitives.StripThreadPlanningFieldsForAPI(tm)
+			}
 		}
 
 		pinnedDocument, err := loadBoardCardPinnedDocument(ctx, opts, card)
@@ -1461,10 +1451,8 @@ func buildBoardCreatedEvent(board map[string]any) map[string]any {
 func buildBoardUpdatedEvent(previousBoard, updatedBoard, patch map[string]any) map[string]any {
 	changedFields := sortedMapKeys(patch)
 	payload := map[string]any{
-		"board_id":        anyString(updatedBoard["id"]),
-		"changed_fields":  changedFields,
-		"previous_status": nullableStringValue(anyString(previousBoard["status"])),
-		"status":          nullableStringValue(anyString(updatedBoard["status"])),
+		"board_id":       anyString(updatedBoard["id"]),
+		"changed_fields": changedFields,
 	}
 	return buildBoardLifecycleEvent("board_updated", updatedBoard, nil, payload, "Board updated: "+boardDisplayName(updatedBoard))
 }
@@ -1745,8 +1733,18 @@ func boardRefs(board map[string]any) []string {
 	return []string{}
 }
 
-// mergeBoardHTTPConvenienceFields folds deprecated HTTP-only thread/document id fields (spelled
-// without embedding their legacy names as contiguous substrings in this source file) into typed refs.
+func prepareBoardWriteMap(src map[string]any) map[string]any {
+	out := make(map[string]any, len(src))
+	for key, value := range src {
+		out[key] = value
+	}
+	mergeBoardHTTPConvenienceFields(out)
+	return out
+}
+
+// mergeBoardHTTPConvenienceFields folds the legacy primary_document_id field (not in OpenAPI) into
+// `refs` so validation and the store see a single typed-ref list. Canonical create/patch inputs use
+// document_refs / pinned_refs per OpenAPI; normalizeBoardRefs in the store merges those into `refs`.
 func mergeBoardHTTPConvenienceFields(board map[string]any) {
 	if board == nil {
 		return
@@ -1837,7 +1835,7 @@ func loadExistingBoardCardForCreateReplay(ctx context.Context, opts handlerOptio
 	return nil, primitives.ErrNotFound
 }
 
-func boardCardMatchesCreateReplay(existingCard map[string]any, explicitCardID, title, body, parentThreadID, legacyThreadID, columnKey, status string, assignee, pinnedDocumentID, dueAt, resolution *string, definitionOfDone, resolutionRefs, refs []string, risk *string) bool {
+func boardCardMatchesCreateReplay(existingCard map[string]any, explicitCardID, title, body, parentThreadID, legacyThreadID, columnKey string, assignee, pinnedDocumentID, dueAt, resolution *string, definitionOfDone, resolutionRefs, refs []string, risk *string) bool {
 	explicitCardID = strings.TrimSpace(explicitCardID)
 	if explicitCardID != "" && strings.TrimSpace(anyString(existingCard["id"])) != explicitCardID {
 		return false
@@ -1885,7 +1883,7 @@ func boardCardMatchesCreateReplay(existingCard map[string]any, explicitCardID, t
 	if !stringSlicesEqual(uniqueSortedStrings(existingDefinitionOfDone), expectedDefinitionOfDone) {
 		return false
 	}
-	expectedResolution := replayExpectedCardResolution(normalizeOptionalRequestStringPointer(resolution), status)
+	expectedResolution := replayExpectedCardResolution(normalizeOptionalRequestStringPointer(resolution))
 	if strings.TrimSpace(anyString(existingCard["resolution"])) != expectedResolution {
 		return false
 	}
@@ -1925,7 +1923,7 @@ func stringSlicesEqual(left, right []string) bool {
 	return true
 }
 
-func replayExpectedCardResolution(raw *string, status string) string {
+func replayExpectedCardResolution(raw *string) string {
 	if raw != nil {
 		value := strings.TrimSpace(*raw)
 		switch value {
@@ -2212,10 +2210,8 @@ func validateBoardCreateRequest(contract *schema.Contract, board map[string]any)
 	if strings.TrimSpace(anyString(board["title"])) == "" {
 		return errors.New("board.title is required")
 	}
-	if status := strings.TrimSpace(anyString(board["status"])); status != "" {
-		if err := validateBoardStatus(status); err != nil {
-			return err
-		}
+	if _, exists := board["status"]; exists {
+		return errors.New("board.status is not supported; board.state is derived from lifecycle timestamps")
 	}
 	if err := validateBoardTypedRefs(contract, board, "refs"); err != nil {
 		return err
@@ -2226,6 +2222,9 @@ func validateBoardCreateRequest(contract *schema.Contract, board map[string]any)
 	if err := validateBoardTypedRefs(contract, board, "pinned_refs"); err != nil {
 		return err
 	}
+	if _, exists := board["labels"]; exists {
+		return errors.New("board.labels is not supported")
+	}
 	return nil
 }
 
@@ -2233,10 +2232,8 @@ func validateBoardPatchRequest(contract *schema.Contract, patch map[string]any) 
 	if patch == nil || len(patch) == 0 {
 		return errors.New("patch is required")
 	}
-	if status, exists := patch["status"]; exists && status != nil {
-		if err := validateBoardStatus(strings.TrimSpace(anyString(status))); err != nil {
-			return err
-		}
+	if _, exists := patch["status"]; exists {
+		return errors.New("patch.status is not supported; use archive/trash lifecycle routes")
 	}
 	if err := validateBoardTypedRefs(contract, patch, "refs"); err != nil {
 		return err
@@ -2247,18 +2244,10 @@ func validateBoardPatchRequest(contract *schema.Contract, patch map[string]any) 
 	if err := validateBoardTypedRefs(contract, patch, "pinned_refs"); err != nil {
 		return err
 	}
-	return nil
-}
-
-func validateBoardStatus(status string) error {
-	switch strings.TrimSpace(status) {
-	case "active", "paused", "closed":
-		return nil
-	case "":
-		return errors.New("board.status is required")
-	default:
-		return errors.New("board.status must be one of: active, paused, closed")
+	if _, exists := patch["labels"]; exists {
+		return errors.New("patch.labels is not supported")
 	}
+	return nil
 }
 
 func validateBoardPlacementRequest(columnKey, beforeThreadID, afterThreadID string, pinnedDocumentID *string) error {

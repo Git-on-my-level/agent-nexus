@@ -10,7 +10,7 @@ The UI targets a **dark-first, compact, information-dense** aesthetic inspired b
 **Core principles:**
 - Compact over spacious — tighter padding, smaller type, less vertical waste.
 - Flat over layered — single-level cards with dividers, not nested card stacks.
-- Monochromatic over colorful — semantic colors only for status/urgency, never decoration.
+- Monochromatic over colorful — semantic colors only for lifecycle/urgency, never decoration.
 - Readable over flashy — contrast ratios must pass WCAG AA on dark backgrounds.
 - Linkable over hidden — operator-visible view state that changes which records
   or panels are shown SHOULD default to route/query state when practical, so
@@ -38,7 +38,7 @@ Measured contrast ratios for each text token on the two primary surfaces:
 **Rules:**
 
 1. **All readable text uses `gray-500` minimum.** Labels, timestamps, metadata, badge text, secondary copy, empty-state messages, placeholder-text-that-should-be-read — all must use `text-gray-500` / `text-[var(--ui-text-muted)]` or brighter.
-2. **`gray-400` is decorative/disabled only.** Use it for disabled controls, non-essential separators (e.g. `·` dot dividers), priority-dot fills, and text the operator is *not* expected to read. Never pair `text-gray-400` with `text-[11px]` — the combination is unreadable.
+2. **`gray-400` is decorative/disabled only.** Use it for disabled controls, non-essential separators (e.g. `·` dot dividers), and text the operator is *not* expected to read. Never pair `text-gray-400` with `text-[11px]` — the combination is unreadable.
 3. **Test on `gray-100` (the worse case).** If text passes contrast on `gray-100`, it will also pass on the darker `gray-50`.
 
 ## Color System
@@ -136,29 +136,21 @@ Artifact kind badges use a fixed color assignment from `src/lib/artifactKinds.js
 | `log`      | `text-teal-400 bg-teal-500/10`            |
 | `evidence` | `text-[var(--ui-text-muted)] bg-[var(--ui-border)]` |
 
-### Status Colors
+### Lifecycle Colors
 
-Topic, board, and document status badges follow this mapping:
+Topic, board, and document lifecycle badges follow this mapping:
 
-| Status    | Text                | Background          |
-|-----------|---------------------|---------------------|
-| `active`  | `text-emerald-400`  | `bg-emerald-500/10` |
-| `paused`  | `text-amber-400`    | `bg-amber-500/10`   |
-| `closed`  | `text-slate-300`    | `bg-slate-500/10`   |
-| `draft`   | `text-amber-400`    | `bg-amber-500/10`   |
-| Archived  | `text-amber-400`    | `bg-amber-500/15`   |
-| Stale     | `text-red-400`      | `bg-red-500/10`     |
+| State      | Text                | Background          |
+|------------|---------------------|---------------------|
+| `active`   | `text-emerald-400`  | `bg-emerald-500/10` |
+| `archived` | `text-amber-400`    | `bg-amber-500/10`   |
+| `trashed`  | `text-slate-300`    | `bg-slate-500/10`   |
 
-### Priority Colors
+### Risk and Projection
 
-Topic priority dots and text labels follow this mapping:
+Card risk is informational, not decorative. If a risk value is surfaced, keep the label neutral unless the UI is deliberately emphasizing a warning or escalation path.
 
-| Priority | Dot class         | Text class        |
-|----------|-------------------|-------------------|
-| `p0`     | `bg-red-500`      | `text-red-400`    |
-| `p1`     | `bg-amber-400`    | `text-amber-400`  |
-| `p2`     | `bg-blue-400`     | `text-blue-400`   |
-| `p3`     | `bg-gray-400`     | `text-gray-500`   |
+Projection freshness badges use the existing `Current`, `Pending refresh`, `Refresh error`, and `Not materialized` tones. Do not repurpose them as lifecycle or priority signals.
 
 ### Provenance Colors
 
@@ -174,9 +166,9 @@ Provenance indicators (rendered by `ProvenanceBadge`) use dots only — no badge
 
 1. **Semantic only.** Color communicates status, urgency, or category. Never use color for decoration or to make a surface "more interesting."
 2. **Zero = muted.** Counts and metrics at zero always render in muted or default text (`text-gray-500` / `text-[var(--ui-text-muted)]`). Color appears only when there is a live signal. This applies to column count badges on board views, urgency tally cards, and category counts — all must be neutral gray when zero.
-3. **User-defined tags stay neutral.** Labels and tags entered by operators (board labels, topic tags, document tags) always use `bg-[var(--ui-border)] text-[var(--ui-text-muted)]` regardless of their string content — never infer semantic color from tag names.
+3. **Free-form labels stay neutral.** Any custom chip or label that is not a canonical lifecycle or risk signal always uses `bg-[var(--ui-border)] text-[var(--ui-text-muted)]` regardless of its string content.
 4. **Background tints are optional emphasis.** Use `color/5` or `color/10` background tints on urgency/status cards only when the count is non-zero and the tint adds meaningful emphasis. Do not tint containers that hold zero-count data.
-5. **Status badges ≠ user tags.** Status indicators (`Active`, `Paused`, `Closed`) use semantic color per the Status Colors table. User-defined tags use neutral gray. When they appear side-by-side (e.g. board list rows), place status first, then tags, with a small gap (`gap-1.5`) so the semantic distinction is clear.
+5. **Lifecycle badges ≠ free-form labels.** Lifecycle indicators (`Active`, `Archived`, `Trashed`) use semantic color per the Lifecycle Colors table. Free-form labels stay neutral. When they appear side-by-side (e.g. board list rows), place lifecycle first, then labels, with a small gap (`gap-1.5`) so the distinction is clear.
 
 ## Typography
 

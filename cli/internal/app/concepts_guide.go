@@ -80,7 +80,7 @@ var conceptsGuidePrimitives = []conceptsPrimitive{
 
 var inboxCategoryReference = []namedDescription{
 	{Name: "action_needed", Description: "A human must decide, take direct action, or own the next step (includes prior decision and intervention queue signals)."},
-	{Name: "risk_exception", Description: "Exceptions, stale cadence, or at-risk work items that need follow-up."},
+	{Name: "risk_exception", Description: "Exceptions or at-risk work items that need follow-up."},
 	{Name: "attention", Description: "Review or lighter operator focus (for example document attention)."},
 }
 

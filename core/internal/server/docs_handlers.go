@@ -48,15 +48,9 @@ func handleListDocuments(w http.ResponseWriter, r *http.Request, opts handlerOpt
 	includeArchived := strings.TrimSpace(query.Get("include_archived")) == "true"
 	archivedOnly := strings.TrimSpace(query.Get("archived_only")) == "true"
 	threadID := strings.TrimSpace(query.Get("thread_id"))
-	labelQuery := normalizedQueryValues(query["label"])
-	tagQuery := normalizedQueryValues(query["tag"])
-	docLabels := make([]string, 0, len(labelQuery)+len(tagQuery))
-	docLabels = append(docLabels, labelQuery...)
-	docLabels = append(docLabels, tagQuery...)
 	documents, nextCursor, err := opts.primitiveStore.ListDocuments(r.Context(), primitives.DocumentListFilter{
 		ThreadID:        threadID,
 		State:           state,
-		Labels:          docLabels,
 		IncludeTrashed:  includeTrashed,
 		TrashedOnly:     trashedOnly,
 		IncludeArchived: includeArchived,
@@ -114,6 +108,10 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 	}
 	if err := validateDocumentContentType(req.ContentType); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	if _, has := req.Document["labels"]; has {
+		writeError(w, http.StatusBadRequest, "invalid_request", "document.labels is not supported")
 		return
 	}
 	if docID := firstNonEmptyString(req.Document["document_id"], req.Document["id"]); docID != "" {
@@ -405,6 +403,10 @@ func handleUpdateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 		return
 	}
 	if req.Document != nil {
+		if _, has := req.Document["labels"]; has {
+			writeError(w, http.StatusBadRequest, "invalid_request", "document.labels is not supported")
+			return
+		}
 		if _, has := req.Document["refs"]; has {
 			docRefs, derr := optionalRefs(req.Document["refs"])
 			if derr != nil {

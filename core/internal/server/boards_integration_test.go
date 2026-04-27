@@ -61,7 +61,6 @@ func TestBoardsWorkspaceAndThreadWorkspaceMemberships(t *testing.T) {
 		"actor_id":"actor-1",
 		"board":{
 			"title":"Ops Board",
-			"labels":["ops","planning"],
 			"owners":["actor-1"],
 			"refs":["thread:`+primaryThreadID+`","document:`+primaryDocumentID+`"],
 			"pinned_refs":["thread:`+primaryThreadID+`"]
@@ -106,7 +105,7 @@ func TestBoardsWorkspaceAndThreadWorkspaceMemberships(t *testing.T) {
 		t.Fatalf("unexpected card document_ref, got %#v", addCardPayload.Card["document_ref"])
 	}
 
-	listResp, err := http.Get(h.baseURL + "/boards?status=active&label=ops&owner=actor-1")
+	listResp, err := http.Get(h.baseURL + "/boards?state=active&q=Ops&owner=actor-1")
 	if err != nil {
 		t.Fatalf("GET /boards: %v", err)
 	}
@@ -332,7 +331,6 @@ func TestBoardCardWriteEdgeRejectsMixedAliases(t *testing.T) {
 		"actor_id":"actor-1",
 		"board":{
 			"title":"Ops Board",
-			"labels":["ops"],
 			"owners":["actor-1"],
 			"refs":["thread:`+primaryThreadID+`"]
 		}
@@ -353,7 +351,8 @@ func TestBoardCardWriteEdgeRejectsMixedAliases(t *testing.T) {
 		"if_board_updated_at":"`+boardUpdatedAt+`",
 		"title":"Member card",
 		"summary":"Canonical summary",
-		"body":"Legacy body",
+		"document_ref":"document:doc-1",
+		"pinned_document_id":"doc-1",
 		"column_key":"ready"
 	}`, http.StatusBadRequest)
 	defer mixedCreateResp.Body.Close()
@@ -460,7 +459,7 @@ func TestBoardLifecycleEventsAndConflictValidation(t *testing.T) {
 	conflictBoardResp := patchJSONExpectStatus(t, h.baseURL+"/boards/"+boardID, `{
 		"actor_id":"actor-1",
 		"if_updated_at":"`+initialBoardUpdatedAt+`",
-		"patch":{"status":"paused"}
+		"patch":{"title":"Stale title attempt"}
 	}`, http.StatusConflict)
 	conflictBoardResp.Body.Close()
 
@@ -1705,7 +1704,6 @@ func TestPostCardsGlobalAndRefEdgesForwardLookup(t *testing.T) {
 		"actor_id":"actor-1",
 		"board":{
 			"title":"Global POST Board",
-			"status":"active",
 			"document_refs":["document:`+memberDocumentID+`"],
 			"pinned_refs":["thread:`+memberThreadID+`"],
 			"provenance":{"sources":["test:boards-global-card"]}
@@ -1786,7 +1784,7 @@ func createBoardDocumentViaHTTP(t *testing.T, h primitivesTestHarness, threadID,
 
 	resp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
 		"actor_id":"actor-1",
-		"document":{"thread_id":"`+threadID+`","title":"`+title+`","labels":["boards"]},
+		"document":{"thread_id":"`+threadID+`","title":"`+title+`"},
 		"refs":["thread:`+threadID+`"],
 		"content":"# `+title+`",
 		"content_type":"text"

@@ -59,7 +59,7 @@ test("renders a dashboard on workspace root and routes into inbox", async ({
   await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Topic health" }),
+    page.getByRole("heading", { name: "Recent topics" }),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Recent Docs" }),

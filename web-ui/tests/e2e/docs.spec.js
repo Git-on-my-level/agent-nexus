@@ -12,9 +12,7 @@ test("create document flow — POST /docs and navigate to new document", async (
       id: "thread-docs",
       title: "Operations Thread",
       status: "active",
-      priority: "p1",
       type: "process",
-      tags: ["ops"],
     },
   ];
   const createdDoc = {
@@ -166,17 +164,13 @@ test("update document flow — PATCH /docs/:id creates a new revision", async ({
       id: "thread-ops",
       title: "Operations Thread",
       status: "active",
-      priority: "p1",
       type: "process",
-      tags: ["ops"],
     },
     {
       id: "thread-policy",
       title: "Policy Thread",
       status: "active",
-      priority: "p2",
       type: "process",
-      tags: ["policy"],
     },
   ];
 
@@ -527,9 +521,7 @@ test("documents list redirects through the default workspace and loads revision 
       id: "thread-governance",
       title: "Governance Thread",
       status: "active",
-      priority: "p1",
       type: "initiative",
-      tags: ["governance"],
     },
   ];
   const documents = [

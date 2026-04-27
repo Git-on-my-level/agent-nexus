@@ -71,9 +71,7 @@
   let detailModalCard = $state(null);
 
   let boardTitle = $state("");
-  let boardStatus = $state("active");
   let boardDocumentId = $state("");
-  let boardLabels = $state("");
   let boardOwners = $state([]);
   let boardPinnedRefs = $state("");
 
@@ -95,9 +93,9 @@
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
   let boardId = $derived($page.params.boardId);
-  let actorName = $derived((id) =>
-    lookupActorDisplayName(id, $actorRegistry, $principalRegistry),
-  );
+  function actorName(id) {
+    return lookupActorDisplayName(id, $actorRegistry, $principalRegistry);
+  }
   let enrichedInboxItems = $derived(
     (workspace?.inbox?.items ?? []).map((item) => enrichInboxItem(item)),
   );
@@ -117,7 +115,7 @@
       ]
         .filter(Boolean)
         .join(" · "),
-      keywords: document.labels ?? [],
+      keywords: [],
     };
   }
 
@@ -133,9 +131,7 @@
 
   function syncBoardDrafts(board) {
     boardTitle = board?.title ?? "";
-    boardStatus = board?.status ?? "active";
     boardDocumentId = firstBoardDocumentId(board);
-    boardLabels = joinDelimitedValues(board?.labels ?? []);
     boardOwners = [...(board?.owners ?? [])];
     boardPinnedRefs = joinDelimitedValues(board?.pinned_refs ?? []);
   }
@@ -243,9 +239,7 @@
     const docId = boardDocumentId.trim();
     const patch = {
       title,
-      status: boardStatus,
       document_refs: docId ? [`document:${docId}`] : [],
-      labels: parseDelimitedValues(boardLabels),
       owners: [...boardOwners],
       pinned_refs: parseDelimitedValues(boardPinnedRefs),
     };
@@ -386,10 +380,10 @@
     closeCardDetailModal();
   }
 
-  function statusColor(status) {
-    if (status === "active") return "text-ok-text bg-ok-soft";
-    if (status === "paused") return "text-warn-text bg-warn-soft";
-    if (status === "closed") return "text-slate-300 bg-slate-500/10";
+  function lifecycleStateColor(state) {
+    if (state === "active") return "text-ok-text bg-ok-soft";
+    if (state === "archived") return "text-warn-text bg-warn-soft";
+    if (state === "trashed") return "text-slate-300 bg-slate-500/10";
     return "text-[var(--fg-muted)] bg-[var(--line)]";
   }
 
@@ -627,13 +621,13 @@
         <h1 class="truncate text-subtitle font-semibold text-[var(--fg)]">
           {board.title || board.id}
         </h1>
-        {#if board.status}
+        {#if board.state}
           <span
-            class="shrink-0 rounded px-1.5 py-0.5 text-micro font-semibold {statusColor(
-              board.status,
+            class="shrink-0 rounded px-1.5 py-0.5 text-micro font-semibold {lifecycleStateColor(
+              board.state,
             )}"
           >
-            {BOARD_STATUS_LABELS[board.status] ?? board.status}
+            {BOARD_STATUS_LABELS[board.state] ?? board.state}
           </span>
         {/if}
         <span
@@ -772,18 +766,6 @@
             />
           </label>
 
-          <label class="text-micro font-medium text-[var(--fg-muted)]">
-            Status
-            <select
-              bind:value={boardStatus}
-              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-meta text-[var(--fg)]"
-            >
-              {#each Object.entries(BOARD_STATUS_LABELS) as [value, label]}
-                <option {value}>{label}</option>
-              {/each}
-            </select>
-          </label>
-
           <SearchableEntityPicker
             bind:value={boardDocumentId}
             advancedLabel="Use a manual document ID"
@@ -809,15 +791,6 @@
         </div>
 
         <div class="grid gap-3 md:grid-cols-2">
-          <label class="text-micro font-medium text-[var(--fg-muted)]">
-            Labels
-            <textarea
-              bind:value={boardLabels}
-              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-meta text-[var(--fg)]"
-              rows="3"
-            ></textarea>
-          </label>
-
           <SearchableMultiEntityPicker
             bind:values={boardOwners}
             advancedLabel="Add a manual owner ID"
@@ -895,7 +868,7 @@
               bind:value={addCardColumnKey}
               class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-meta text-[var(--fg)]"
             >
-              {#each board.column_schema as column}
+              {#each board.column_schema as column (column.key)}
                 <option value={column.key}>
                   {column.title ||
                     boardColumnTitle(column.key, board.column_schema)}
@@ -923,7 +896,7 @@
             label="Topic or backing thread"
             manualLabel="Thread ID"
             manualPlaceholder="thread-onboarding"
-            placeholder="Search topics by title, ID, or tags"
+            placeholder="Search topics by title or ID"
             searchFn={searchThreadOptions}
           />
 
@@ -1110,7 +1083,7 @@
             {#if backlogCards.length === 0}
               <p class="text-micro text-[var(--fg-muted)]">No cards</p>
             {:else}
-              {#each backlogCards as cardItem}
+              {#each backlogCards as cardItem (boardCardStableId(cardItem.membership))}
                 {@render renderCard(cardItem)}
               {/each}
             {/if}
@@ -1119,7 +1092,7 @@
       </div>
 
       <div class="flex gap-3 overflow-x-auto pb-4">
-        {#each activeColumns as column}
+        {#each activeColumns as column (column.key)}
           {@const cards = cardsByColumn[column.key] ?? []}
           {@const isBlocked = column.key === "blocked"}
           <div
@@ -1155,7 +1128,7 @@
                   No cards
                 </div>
               {:else}
-                {#each cards as cardItem}
+                {#each cards as cardItem (boardCardStableId(cardItem.membership))}
                   {@render renderCard(cardItem)}
                 {/each}
               {/if}
@@ -1193,7 +1166,7 @@
             {#if doneCards.length === 0}
               <p class="text-micro text-[var(--fg-muted)]">No cards</p>
             {:else}
-              {#each doneCards as cardItem}
+              {#each doneCards as cardItem (boardCardStableId(cardItem.membership))}
                 {@render renderCard(cardItem)}
               {/each}
             {/if}
@@ -1215,7 +1188,7 @@
           </p>
         {:else}
           <div class="space-y-2">
-            {#each workspace.documents.items.slice(0, BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT) as document}
+            {#each workspace.documents.items.slice(0, BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT) as document (document.id)}
               <a
                 class="block rounded border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-micro transition-colors hover:border-[var(--line-strong)]"
                 href={workspaceHref(`/docs/${encodeURIComponent(document.id)}`)}
@@ -1256,7 +1229,7 @@
           </p>
         {:else}
           <div class="space-y-2">
-            {#each enrichedInboxItems.slice(0, BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT) as item}
+            {#each enrichedInboxItems.slice(0, BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT) as item (item.id)}
               {@const inboxResourceLine =
                 formatInboxItemBoardPanelResourceLine(item)}
               <div
@@ -1310,7 +1283,7 @@
     >
       <h2 class="text-meta font-medium text-warn-text">Warnings</h2>
       <div class="mt-2 space-y-1.5">
-        {#each boardWarnings as warning}
+        {#each boardWarnings as warning (`${warning.thread_id ?? ""}:${warning.message ?? ""}`)}
           <div class="text-micro text-warn-text">
             {warning.message || "Workspace warning"}
             {#if warning.topic_id || warning.thread_id}

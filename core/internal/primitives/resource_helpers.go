@@ -26,6 +26,8 @@ type refEdgeTarget struct {
 	TargetType string
 	TargetID   string
 	EdgeType   string
+	// MetadataJSON is optional JSON object for the ref_edges.metadata_json column; empty means "{}".
+	MetadataJSON string
 }
 
 type lifecycleFields struct {
@@ -109,19 +111,39 @@ func appendRefEdgeTarget(targets []refEdgeTarget, edgeType, targetType, targetID
 }
 
 func replaceRefEdges(ctx context.Context, exec eventExec, sourceType, sourceID string, targets []refEdgeTarget) error {
+	return replaceRefEdgesSelective(ctx, exec, sourceType, sourceID, nil, targets)
+}
+
+// replaceRefEdgesSelective deletes ref_edges for source matching deleteEdgeTypes, then inserts targets.
+// When deleteEdgeTypes is nil or empty, all edges for that source are removed (same as legacy replaceRefEdges).
+func replaceRefEdgesSelective(ctx context.Context, exec eventExec, sourceType, sourceID string, deleteEdgeTypes []string, targets []refEdgeTarget) error {
 	sourceType = strings.TrimSpace(sourceType)
 	sourceID = strings.TrimSpace(sourceID)
 	if sourceType == "" || sourceID == "" {
 		return fmt.Errorf("ref edge source is required")
 	}
 
-	if _, err := exec.ExecContext(
-		ctx,
-		`DELETE FROM ref_edges WHERE source_type = ? AND source_id = ?`,
-		sourceType,
-		sourceID,
-	); err != nil {
-		return fmt.Errorf("clear ref edges for %s %s: %w", sourceType, sourceID, err)
+	if len(deleteEdgeTypes) == 0 {
+		if _, err := exec.ExecContext(
+			ctx,
+			`DELETE FROM ref_edges WHERE source_type = ? AND source_id = ?`,
+			sourceType,
+			sourceID,
+		); err != nil {
+			return fmt.Errorf("clear ref edges for %s %s: %w", sourceType, sourceID, err)
+		}
+	} else {
+		placeholders := strings.Repeat("?,", len(deleteEdgeTypes))
+		placeholders = placeholders[:len(placeholders)-1]
+		args := make([]any, 0, 2+len(deleteEdgeTypes))
+		args = append(args, sourceType, sourceID)
+		for _, et := range deleteEdgeTypes {
+			args = append(args, strings.TrimSpace(et))
+		}
+		q := `DELETE FROM ref_edges WHERE source_type = ? AND source_id = ? AND edge_type IN (` + placeholders + `)`
+		if _, err := exec.ExecContext(ctx, q, args...); err != nil {
+			return fmt.Errorf("clear ref edges for %s %s (types %v): %w", sourceType, sourceID, deleteEdgeTypes, err)
+		}
 	}
 
 	if len(targets) == 0 {
@@ -143,10 +165,14 @@ func replaceRefEdges(ctx context.Context, exec eventExec, sourceType, sourceID s
 		}
 		seen[key] = struct{}{}
 
+		meta := strings.TrimSpace(target.MetadataJSON)
+		if meta == "" {
+			meta = "{}"
+		}
 		if _, err := exec.ExecContext(
 			ctx,
 			`INSERT INTO ref_edges(id, source_type, source_id, target_type, target_id, edge_type, created_at, metadata_json)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, '{}')`,
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 			uuid.NewString(),
 			sourceType,
 			sourceID,
@@ -154,6 +180,7 @@ func replaceRefEdges(ctx context.Context, exec eventExec, sourceType, sourceID s
 			targetID,
 			edgeType,
 			now,
+			meta,
 		); err != nil {
 			if isUniqueViolation(err) {
 				continue

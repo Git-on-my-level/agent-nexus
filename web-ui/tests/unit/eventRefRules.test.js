@@ -72,14 +72,14 @@ describe("eventRefRules", () => {
       expect(result.error).toContain("valid typed refs");
     });
 
-    it("rejects missing topic_status_changed payload fields", () => {
+    it("rejects board_card_moved payloads missing column_key", () => {
       const result = validateEventRefRule(
-        "topic_status_changed",
-        ["topic:topic-1"],
-        { from_status: "active" },
+        "board_card_moved",
+        ["board:board-1", "card:card-1"],
+        {},
       );
       expect(result.valid).toBe(false);
-      expect(result.error).toContain("event.payload.to_status");
+      expect(result.error).toContain("event.payload.column_key");
     });
 
     it("requires board refs for card_moved", () => {

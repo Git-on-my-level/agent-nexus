@@ -5,20 +5,12 @@
 # first-class resources. Threads remain backing infrastructure for evidence,
 # sequencing, and timeline inspection.
 
-version: "0.3.0"
+version: "0.4.0"
 
 enums:
   topic_type:
     enum_policy: strict
     values: [case, process, relationship, initiative, objective, decision, incident, risk, request, note, other]
-
-  topic_status:
-    enum_policy: strict
-    values: [proposed, active, paused, blocked, resolved, closed, archived]
-
-  thread_status:
-    enum_policy: strict
-    values: [active, archived]
 
   priority:
     enum_policy: strict
@@ -51,10 +43,6 @@ enums:
     enum_policy: strict
     values: [unread, read, dismissed]
 
-  board_status:
-    enum_policy: strict
-    values: [active, paused, closed]
-
   board_column_key:
     enum_policy: strict
     values: [backlog, ready, in_progress, blocked, review, done]
@@ -66,7 +54,6 @@ enums:
     values:
       - topic_created
       - topic_updated
-      - topic_status_changed
       - topic_archived
       - topic_restored
       - topic_trashed
@@ -78,8 +65,8 @@ enums:
       - decision_made
       - document_created
       - document_revised
-      - document_revision_created
       - document_trashed
+      - document_restored
       - board_created
       - board_updated
       - board_card_added
@@ -183,10 +170,13 @@ primitives:
     fields:
       id: { type: string, required: true }
       topic_ref: { type: typed_ref, required: false }
-      title: { type: string, required: true }
-      status: { type: string, required: true, ref: enums.thread_status }
-      priority: { type: string, required: true, ref: enums.priority }
-      tags: { type: "list<string>", required: true }
+      title: { type: string, required: false }
+      state:
+        type: string
+        required: true
+        description: >
+          Canonical lifecycle state. Values are `active`, `archived`, or `trashed`.
+          Derived from `trashed_at` / `archived_at` (same precedence as document.state).
       latest_event_at: { type: datetime, required: false }
       created_at: { type: datetime, required: true }
       created_by: { type: string, required: true }
@@ -232,13 +222,21 @@ resources:
   topic:
     description: >
       First-class durable work subject. Topics are the canonical place to track
-      status, intent, and linked evidence for organizational work.
+      lifecycle state, intent, and linked evidence for organizational work.
     fields:
       id: { type: string, required: true }
       type: { type: string, required: true, ref: enums.topic_type }
-      status: { type: string, required: true, ref: enums.topic_status }
+      state:
+        type: string
+        required: true
+        description: >
+          Canonical lifecycle state (`active`, `archived`, or `trashed`). Derived from
+          `trashed_at` / `archived_at` like document.state.
       title: { type: string, required: true }
-      summary: { type: string, required: true }
+      summary:
+        type: string
+        required: true
+        description: "Short description; stored in the workspace `topics.summary` column (not in topic JSON extensions)."
       owner_refs: { type: "list<typed_ref>", required: true }
       thread_id: { type: string, required: false, description: "Backing thread id for topic timeline and events." }
       document_refs: { type: "list<typed_ref>", required: true }
@@ -249,6 +247,11 @@ resources:
       updated_at: { type: datetime, required: true }
       updated_by: { type: string, required: true }
       provenance: { type: object, required: true, ref: provenance }
+      archived_at: { type: datetime, required: false }
+      archived_by: { type: string, required: false }
+      trashed_at: { type: datetime, required: false }
+      trashed_by: { type: string, required: false }
+      trash_reason: { type: string, required: false }
 
   document:
     description: >
@@ -301,7 +304,12 @@ resources:
     fields:
       id: { type: string, required: true }
       title: { type: string, required: true }
-      status: { type: string, required: true, ref: enums.board_status }
+      state:
+        type: string
+        required: true
+        description: >
+          Canonical lifecycle state (`active`, `archived`, or `trashed`). Derived from
+          `trashed_at` / `archived_at` like document.state.
       primary_topic_ref: { type: typed_ref, required: false }
       thread_id: { type: string, required: false, description: "Backing thread id for board timeline and events." }
       document_refs: { type: "list<typed_ref>", required: true }
@@ -312,6 +320,11 @@ resources:
       updated_at: { type: datetime, required: true }
       updated_by: { type: string, required: true }
       provenance: { type: object, required: true, ref: provenance }
+      archived_at: { type: datetime, required: false }
+      archived_by: { type: string, required: false }
+      trashed_at: { type: datetime, required: false }
+      trashed_by: { type: string, required: false }
+      trash_reason: { type: string, required: false }
 
   card:
     description: >
@@ -389,9 +402,14 @@ reference_conventions:
     topic_updated:
       refs_must_include: ["topic:<topic_id>"]
 
-    topic_status_changed:
+    topic_archived:
       refs_must_include: ["topic:<topic_id>"]
-      payload_must_include: ["from_status", "to_status"]
+
+    topic_restored:
+      refs_must_include: ["topic:<topic_id>"]
+
+    topic_trashed:
+      refs_must_include: ["topic:<topic_id>"]
 
     message_posted:
       thread_id: "required as thread_ref when the message belongs to a backing thread"
@@ -413,6 +431,9 @@ reference_conventions:
     document_trashed:
       refs_must_include: ["document:<document_id>"]
 
+    document_restored:
+      refs_must_include: ["document:<document_id>"]
+
     board_created:
       refs_must_include: ["board:<board_id>"]
 
@@ -429,6 +450,9 @@ reference_conventions:
     board_card_archived:
       refs_must_include: ["board:<board_id>", "card:<card_id>"]
 
+    board_card_trashed:
+      refs_must_include: ["board:<board_id>", "card:<card_id>"]
+
     card_created:
       refs_must_include: ["card:<card_id>", "board:<board_id>"]
 
@@ -440,6 +464,9 @@ reference_conventions:
       payload_must_include: ["column_key"]
 
     card_archived:
+      refs_must_include: ["card:<card_id>", "board:<board_id>"]
+
+    card_trashed:
       refs_must_include: ["card:<card_id>", "board:<board_id>"]
 
     card_resolved:
@@ -484,11 +511,15 @@ derived:
 
   board_card_summary:
     fields:
-      related_topic_count: { type: integer, required: true }
+      decision_request_count: { type: integer, required: true }
+      decision_count: { type: integer, required: true }
+      recommendation_count: { type: integer, required: true }
       document_count: { type: integer, required: true }
       inbox_count: { type: integer, required: true }
       latest_activity_at: { type: datetime, required: false }
       stale: { type: boolean, required: true }
+      risk_state: { type: string, required: false }
+      due_at: { type: datetime, required: false }
 
   projection_freshness:
     description: Derived freshness metadata for projection-backed scan surfaces.
@@ -541,14 +572,13 @@ lifecycle_rules:
 grounding_rules:
   restricted_fields:
     description: >
-      Evidence-backed mutations require explicit provenance and refs. For topic
-      status, the restricted case is the terminal `resolved` transition; other
-      topic status changes remain interpretive by default unless the contract
-      later states otherwise.
+      Evidence-backed mutations require explicit provenance and refs. Topic,
+      board, document, and card lifecycle state is derived from archive/trash
+      timestamps; card resolution remains the restricted terminal work-state
+      mutation.
     fields:
       - "card.resolution -> done"
       - "card.resolution -> canceled"
-      - "topic.status -> resolved"
       - "any shipped/sent/deployed assertion"
 
   interpretive_fields:
@@ -575,8 +605,7 @@ operational:
 
 staleness:
   rule: >
-    A topic is stale when no linked thread, document, or card activity has been
-    observed inside its expected operating window.
-  on_stale:
-    - "Emit exception_raised with subtype stale_topic"
-    - "Surface a derived inbox item in category risk_exception (subtype stale_topic identifies the exception shape)"
+    Launch threads do not carry cadence or next-check-in semantics in JSON, so the
+    core does not infer staleness from backing-thread bodies. Operators may still
+    record `exception_raised` with subtype `stale_topic` manually; derived inbox
+    treats that like other risk exceptions.

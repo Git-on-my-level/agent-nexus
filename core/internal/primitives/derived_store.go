@@ -133,7 +133,8 @@ func insertDerivedInboxItem(ctx context.Context, exec eventExec, threadID string
 	if item.TriggerAt == "" {
 		return fmt.Errorf("derived inbox item trigger_at is required")
 	}
-	dataJSON, sourceHash, err := marshalDerivedJSON(item.Data, item.SourceHash)
+	persistedData := stripInboxDataForStore(item)
+	dataJSON, sourceHash, err := marshalDerivedJSON(persistedData, item.SourceHash)
 	if err != nil {
 		return fmt.Errorf("marshal derived inbox item %s: %w", item.ID, err)
 	}
@@ -203,8 +204,7 @@ func (s *Store) ListDerivedInboxItems(ctx context.Context, filter DerivedInboxLi
 		if leftOrder != rightOrder {
 			return leftOrder < rightOrder
 		}
-		if (left.Category == "risk_exception" || left.Category == "work_item_risk") &&
-			(right.Category == "risk_exception" || right.Category == "work_item_risk") &&
+		if left.Category == "risk_exception" && right.Category == "risk_exception" &&
 			left.HasDueAt && right.HasDueAt && left.DueAt != right.DueAt {
 			return left.DueAt < right.DueAt
 		}
@@ -275,6 +275,7 @@ func scanDerivedInboxItem(row scanDerivedInboxItemRower) (DerivedInboxItem, erro
 	if err := json.Unmarshal([]byte(dataJSON), &item.Data); err != nil {
 		return DerivedInboxItem{}, fmt.Errorf("decode derived inbox item %s: %w", item.ID, err)
 	}
+	rehydrateDerivedInboxDataFromColumns(&item)
 	return item, nil
 }
 
@@ -287,7 +288,8 @@ func (s *Store) PutDerivedTopicProjection(ctx context.Context, projection Derive
 		return fmt.Errorf("derived thread projection thread_id is required")
 	}
 
-	dataJSON, sourceHash, err := marshalDerivedJSON(projection.Data, projection.SourceHash)
+	persistedData := stripTopicProjectionDataForStore(projection)
+	dataJSON, sourceHash, err := marshalDerivedJSON(persistedData, projection.SourceHash)
 	if err != nil {
 		return fmt.Errorf("marshal derived thread projection %s: %w", projection.ThreadID, err)
 	}
@@ -560,6 +562,7 @@ func scanDerivedTopicProjection(row scanDerivedInboxItemRower) (DerivedTopicProj
 	if err := json.Unmarshal([]byte(dataJSON), &projection.Data); err != nil {
 		return DerivedTopicProjection{}, fmt.Errorf("decode derived thread projection %s: %w", projection.ThreadID, err)
 	}
+	rehydrateTopicProjectionDataFromColumns(&projection)
 	return projection, nil
 }
 
@@ -588,15 +591,130 @@ func boolToInt(value bool) int {
 
 func derivedInboxCategoryOrder(category string) int {
 	switch strings.TrimSpace(category) {
-	case "action_needed", "decision_needed":
+	case "action_needed":
 		return 0
-	case "risk_exception", "intervention_needed", "stale_topic", "work_item_risk":
+	case "risk_exception":
 		return 1
-	case "attention", "document_attention":
+	case "attention":
 		return 2
 	default:
 		return 99
 	}
+}
+
+// stripInboxDataForStore removes fields mirrored by derived_inbox_items columns from persisted JSON.
+func stripInboxDataForStore(item DerivedInboxItem) map[string]any {
+	var src map[string]any
+	if item.Data != nil {
+		src = item.Data
+	} else {
+		src = map[string]any{}
+	}
+	out := make(map[string]any, len(src))
+	for k, v := range src {
+		out[k] = v
+	}
+	delete(out, "id")
+	delete(out, "thread_id")
+	delete(out, "category")
+	delete(out, "trigger_at")
+	delete(out, "source_event_time")
+	delete(out, "generated_at")
+	if item.SourceEventID != "" {
+		delete(out, "source_event_id")
+	}
+	if item.SourceCardID != "" {
+		delete(out, "card_id")
+	}
+	if item.HasDueAt {
+		delete(out, "due_at")
+	}
+	return out
+}
+
+func rehydrateDerivedInboxDataFromColumns(item *DerivedInboxItem) {
+	if item == nil {
+		return
+	}
+	if item.Data == nil {
+		item.Data = map[string]any{}
+	}
+	d := item.Data
+	d["id"] = item.ID
+	d["thread_id"] = item.ThreadID
+	d["category"] = item.Category
+	if item.TriggerAt != "" {
+		d["trigger_at"] = item.TriggerAt
+		if _, ok := d["source_event_time"]; !ok {
+			d["source_event_time"] = item.TriggerAt
+		}
+	}
+	if se := strings.TrimSpace(item.SourceEventID); se != "" {
+		d["source_event_id"] = se
+	}
+	if sc := strings.TrimSpace(item.SourceCardID); sc != "" {
+		d["card_id"] = sc
+	}
+	if item.HasDueAt && item.DueAt != "" {
+		d["due_at"] = item.DueAt
+	}
+	if gen := strings.TrimSpace(item.GeneratedAt); gen != "" {
+		d["generated_at"] = gen
+	}
+}
+
+// stripTopicProjectionDataForStore removes fields mirrored by derived_topic_views columns from persisted JSON.
+func stripTopicProjectionDataForStore(p DerivedTopicProjection) map[string]any {
+	var src map[string]any
+	if p.Data != nil {
+		src = p.Data
+	} else {
+		src = map[string]any{}
+	}
+	out := make(map[string]any, len(src))
+	for k, v := range src {
+		out[k] = v
+	}
+	delete(out, "thread_id")
+	delete(out, "stale")
+	delete(out, "last_activity_at")
+	delete(out, "latest_stale_exception_at")
+	delete(out, "inbox_count")
+	delete(out, "pending_decision_count")
+	delete(out, "recommendation_count")
+	delete(out, "decision_request_count")
+	delete(out, "decision_count")
+	delete(out, "artifact_count")
+	delete(out, "open_card_count")
+	delete(out, "document_count")
+	delete(out, "generated_at")
+	return out
+}
+
+func rehydrateTopicProjectionDataFromColumns(p *DerivedTopicProjection) {
+	if p == nil {
+		return
+	}
+	if p.Data == nil {
+		p.Data = map[string]any{}
+	}
+	d := p.Data
+	d["thread_id"] = p.ThreadID
+	d["stale"] = p.Stale
+	d["last_activity_at"] = p.LastActivityAt
+	d["latest_stale_exception_at"] = p.LatestStaleExceptionAt
+	d["inbox_count"] = p.InboxCount
+	d["pending_decision_count"] = p.PendingDecisionCount
+	d["recommendation_count"] = p.RecommendationCount
+	d["decision_request_count"] = p.DecisionRequestCount
+	d["decision_count"] = p.DecisionCount
+	d["artifact_count"] = p.ArtifactCount
+	d["open_card_count"] = p.OpenCardCount
+	if _, ok := d["open_work_item_count"]; !ok {
+		d["open_work_item_count"] = p.OpenCardCount
+	}
+	d["document_count"] = p.DocumentCount
+	d["generated_at"] = p.GeneratedAt
 }
 
 func firstNonEmptyDerivedString(values ...string) string {

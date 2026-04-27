@@ -4,7 +4,6 @@ import {
   boardOwnsTopicId,
   resolveBoardCardThreadIdField,
 } from "./topicRouteUtils.js";
-import { computeStaleness } from "./topicFilters";
 import { get, writable } from "svelte/store";
 
 function primaryThreadFromTopicWorkspace(workspace) {
@@ -30,7 +29,7 @@ function deriveBoardPanelsFromTopicWorkspace(workspace, topicId) {
     .map((b) => ({
       id: b.id,
       title: b.title,
-      status: b.status,
+      state: b.state,
       card_count: cards.filter((c) => String(c?.board_id) === String(b.id))
         .length,
       updated_at: b.updated_at,
@@ -349,12 +348,6 @@ function createTopicDetailStore() {
     });
   }
 
-  function getStaleness(topic) {
-    const value = topic ?? get(store).topic;
-    if (!value) return null;
-    return computeStaleness(value);
-  }
-
   function reset() {
     detailAsTopic = false;
     queuedRefreshFlags = null;
@@ -374,7 +367,6 @@ function createTopicDetailStore() {
     setTopic,
     setDocuments,
     setTimeline,
-    getStaleness,
     reset,
   };
 }

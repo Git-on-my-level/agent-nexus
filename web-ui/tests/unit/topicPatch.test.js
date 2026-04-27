@@ -10,36 +10,50 @@ describe("topic patch builder", () => {
   it("includes only changed scalar fields", () => {
     const original = {
       title: "Original title",
-      status: "active",
-      priority: "p1",
+      summary: "Original summary",
       open_cards: ["card-1"],
     };
     const draft = {
       ...original,
       title: "Updated title",
+      summary: "Updated summary",
       open_cards: ["card-2"],
     };
 
     expect(buildTopicPatch(original, draft)).toEqual({
       title: "Updated title",
+      summary: "Updated summary",
     });
   });
 
-  it("replaces list fields wholesale when changed and omits untouched lists", () => {
+  it("uses summary and ignores legacy current_summary alias", () => {
+    expect(
+      buildTopicPatch(
+        { summary: "Old", current_summary: "Legacy old" },
+        { summary: "New", current_summary: "Legacy new" },
+      ),
+    ).toEqual({ summary: "New" });
+  });
+
+  it("ignores removed topic fields", () => {
     const original = {
       tags: ["ops", "customer"],
+      priority: "p1",
+      cadence: "weekly",
+      next_check_in_at: "2026-03-05T00:00:00.000Z",
       next_actions: ["Do A"],
       key_artifacts: ["artifact:a"],
     };
     const draft = {
       tags: ["ops", "customer", "legal"],
+      priority: "p0",
+      cadence: "daily",
+      next_check_in_at: null,
       next_actions: ["Do A"],
       key_artifacts: ["artifact:b", "artifact:c"],
     };
 
-    expect(buildTopicPatch(original, draft)).toEqual({
-      tags: ["ops", "customer", "legal"],
-    });
+    expect(buildTopicPatch(original, draft)).toEqual({});
   });
 });
 

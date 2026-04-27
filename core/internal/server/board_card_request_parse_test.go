@@ -54,43 +54,12 @@ func TestParseAddBoardCardJSONRejectsMixedAliases(t *testing.T) {
 		raw  map[string]any
 	}{
 		{
-			name: "summary with legacy body",
-			raw: map[string]any{
-				"title":   "Card title",
-				"summary": "Canonical summary",
-				"body":    "Legacy body",
-			},
-		},
-		{
-			name: "legacy body markdown",
-			raw: map[string]any{
-				"title":         "Card title",
-				"body_markdown": "Legacy body",
-			},
-		},
-		{
 			name: "assignee refs with legacy assignee",
 			raw: map[string]any{
 				"title":         "Card title",
 				"summary":       "Canonical summary",
 				"assignee_refs": []any{"actor:alice"},
 				"assignee":      "alice",
-			},
-		},
-		{
-			name: "legacy priority",
-			raw: map[string]any{
-				"title":    "Card title",
-				"summary":  "Canonical summary",
-				"priority": "high",
-			},
-		},
-		{
-			name: "legacy status only",
-			raw: map[string]any{
-				"title":   "Card title",
-				"summary": "Canonical summary",
-				"status":  "todo",
 			},
 		},
 		{

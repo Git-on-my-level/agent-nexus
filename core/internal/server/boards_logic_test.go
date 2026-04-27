@@ -108,7 +108,6 @@ func TestBoardCardMatchesCreateReplayRejectsCanonicalFieldMismatches(t *testing.
 			"thread-1",
 			"",
 			"ready",
-			"todo",
 			ptr("actor-1"),
 			ptr("doc-1"),
 			dueAt,
@@ -163,7 +162,6 @@ func TestBoardCardMatchesCreateReplayRejectsCanonicalFieldMismatches(t *testing.
 			"thread-1",
 			"",
 			"ready",
-			"todo",
 			ptr("actor-1"),
 			ptr("doc-1"),
 			ptr("2026-04-06T00:00:00Z"),
@@ -193,7 +191,6 @@ func TestBoardCardMatchesCreateReplayRejectsCanonicalFieldMismatches(t *testing.
 			"thread-1",
 			"",
 			"ready",
-			"todo",
 			ptr("actor-1"),
 			ptr("doc-1"),
 			ptr("2026-04-06T00:00:00Z"),
@@ -218,6 +215,30 @@ func TestValidateBoardCardCreateRejectsLegacyThreadFields(t *testing.T) {
 	}
 	if err := validateBoardCardCreateRequest("", "", "", "ready", "", "", "thr-1", "", nil); err == nil || !strings.Contains(err.Error(), "before_thread_id") {
 		t.Fatalf("expected before_thread_id rejection, got %v", err)
+	}
+}
+
+func TestBuildBoardUpdatedEventOmitsBoardStatusFields(t *testing.T) {
+	t.Parallel()
+
+	event := buildBoardUpdatedEvent(
+		map[string]any{"id": "board-1", "title": "Old"},
+		map[string]any{"id": "board-1", "title": "New"},
+		map[string]any{"title": "New"},
+	)
+
+	payload, ok := event["payload"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing payload: %#v", event["payload"])
+	}
+	if _, exists := payload["previous_status"]; exists {
+		t.Fatalf("expected previous_status to be omitted, got %#v", payload)
+	}
+	if _, exists := payload["status"]; exists {
+		t.Fatalf("expected status to be omitted, got %#v", payload)
+	}
+	if got := anyString(payload["board_id"]); got != "board-1" {
+		t.Fatalf("unexpected board_id: %q", got)
 	}
 }
 
@@ -248,7 +269,6 @@ func TestBoardCardMatchesCreateReplayDerivesParentFromRefs(t *testing.T) {
 		"",
 		"",
 		"ready",
-		"",
 		nil,
 		nil,
 		nil,
@@ -270,35 +290,10 @@ func TestParseBoardCardPatchInputRejectsMixedAliases(t *testing.T) {
 		patch map[string]any
 	}{
 		{
-			name: "summary with body",
-			patch: map[string]any{
-				"summary": "Canonical summary",
-				"body":    "Legacy body",
-			},
-		},
-		{
-			name: "body markdown alias",
-			patch: map[string]any{
-				"body_markdown": "Legacy body",
-			},
-		},
-		{
-			name: "status alias",
-			patch: map[string]any{
-				"status": "todo",
-			},
-		},
-		{
 			name: "assignee refs with assignee",
 			patch: map[string]any{
 				"assignee_refs": []any{"actor:alice"},
 				"assignee":      "alice",
-			},
-		},
-		{
-			name: "priority alias",
-			patch: map[string]any{
-				"priority": "high",
 			},
 		},
 		{
@@ -367,4 +362,43 @@ func TestParseBoardCardPatchInputAcceptsCanonicalFields(t *testing.T) {
 	if len(changedFields) != 5 {
 		t.Fatalf("unexpected changed fields: %#v", changedFields)
 	}
+}
+
+func TestPrepareBoardWriteMapFoldsLegacyPrimaryDocumentID(t *testing.T) {
+	t.Parallel()
+
+	t.Run("merges into refs and strips alias", func(t *testing.T) {
+		t.Parallel()
+		out := prepareBoardWriteMap(map[string]any{
+			"title":               "B",
+			"primary_document_id": "doc-7",
+			"refs":                []any{"thread:t1"},
+		})
+		if _, ok := out["primary_document_id"]; ok {
+			t.Fatal("expected primary_document_id removed")
+		}
+		refs, err := extractStringSlice(out["refs"])
+		if err != nil {
+			t.Fatalf("refs: %v", err)
+		}
+		refs = uniqueSortedStrings(refs)
+		want := []string{"document:doc-7", "thread:t1"}
+		if len(refs) != len(want) {
+			t.Fatalf("refs: got %#v want %#v", refs, want)
+		}
+		for i := range want {
+			if refs[i] != want[i] {
+				t.Fatalf("refs: got %#v want %#v", refs, want)
+			}
+		}
+	})
+
+	t.Run("shallow copy does not mutate source map keys for merge", func(t *testing.T) {
+		t.Parallel()
+		src := map[string]any{"refs": []any{"thread:t1"}, "primary_document_id": "doc-2"}
+		_ = prepareBoardWriteMap(src)
+		if _, gone := src["primary_document_id"]; !gone {
+			t.Fatal("expected source map to still have primary_document_id (prepare copies first)")
+		}
+	})
 }

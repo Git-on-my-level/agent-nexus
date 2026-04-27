@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strconv"
 	"testing"
 
@@ -239,7 +240,7 @@ func TestThreadListPaginationLimitParameter(t *testing.T) {
 	}
 }
 
-func TestThreadListPaginationWithStaleFilter(t *testing.T) {
+func TestThreadListPaginationWithCursor(t *testing.T) {
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -250,19 +251,18 @@ func TestThreadListPaginationWithStaleFilter(t *testing.T) {
 	}
 
 	integrationPatchThread(t, h, "actor-1", "thread-a", map[string]any{"title": "Thread A refreshed"}, nil)
-	postJSONExpectStatus(t, h.baseURL+"/derived/rebuild", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
 
-	var staleIDs []string
+	var collected []string
 	cursor := ""
-	for {
-		url := h.baseURL + "/threads?stale=true&limit=1"
+	for page := 0; page < 10; page++ {
+		reqURL := h.baseURL + "/threads?state=active&limit=1"
 		if cursor != "" {
-			url += "&cursor=" + cursor
+			reqURL += "&cursor=" + url.QueryEscape(cursor)
 		}
 
-		resp, err := http.Get(url)
+		resp, err := http.Get(reqURL)
 		if err != nil {
-			t.Fatalf("GET /threads?stale=true: %v", err)
+			t.Fatalf("GET /threads with cursor: %v", err)
 		}
 
 		var payload struct {
@@ -271,39 +271,26 @@ func TestThreadListPaginationWithStaleFilter(t *testing.T) {
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 			resp.Body.Close()
-			t.Fatalf("decode stale thread page: %v", err)
+			t.Fatalf("decode thread page: %v", err)
 		}
 		resp.Body.Close()
 
-		if len(payload.Threads) == 0 {
-			t.Fatalf("expected stale-filtered page to contain results before cursor exhaustion, cursor=%q", cursor)
+		if len(payload.Threads) != 1 {
+			t.Fatalf("page %d: expected 1 thread with limit=1, got %d", page, len(payload.Threads))
 		}
-
-		for _, thread := range payload.Threads {
-			id, ok := thread["id"].(string)
-			if !ok {
-				t.Fatalf("thread id is not a string: %#v", thread["id"])
-			}
-			stale, ok := thread["stale"].(bool)
-			if !ok || !stale {
-				t.Fatalf("expected stale=true thread payload, got %#v", thread)
-			}
-			staleIDs = append(staleIDs, id)
+		id, ok := payload.Threads[0]["id"].(string)
+		if !ok || id == "" {
+			t.Fatalf("thread id missing: %#v", payload.Threads[0])
 		}
-
+		collected = append(collected, id)
 		if payload.NextCursor == "" {
 			break
 		}
 		cursor = payload.NextCursor
 	}
 
-	if len(staleIDs) != 2 {
-		t.Fatalf("expected 2 stale threads across paginated results, got %d (%v)", len(staleIDs), staleIDs)
-	}
-	for _, id := range staleIDs {
-		if id == "thread-a" {
-			t.Fatalf("did not expect refreshed thread in stale-filtered results: %v", staleIDs)
-		}
+	if len(collected) != 3 {
+		t.Fatalf("expected 3 pages for 3 threads, got %d (%v)", len(collected), collected)
 	}
 }
 

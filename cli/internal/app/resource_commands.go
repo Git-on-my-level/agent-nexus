@@ -1,8 +1,10 @@
 // Package app implements CLI commands. Large pieces live in adjacent files:
 // resource_transport.go (invokeTypedJSON, headers, commandSpecByID),
+// resource_topics_cards.go (topics and cards list wiring),
 // text_output.go (default non-JSON summaries for typed commands),
 // resource_streaming.go (tail stream loop),
-// event_reference_preflight.go (embedded contract rules for events create).
+// event_reference_preflight.go (embedded contract rules for events create),
+// draft_commands.go (local command drafts).
 package app
 
 import (
@@ -137,7 +139,6 @@ type queryParam struct {
 type threadContextSelection struct {
 	threadIDs              []string
 	discoveryQuery         []queryParam
-	discoveryType          string
 	maxEventsSet           bool
 	maxEvents              int
 	includeArtifactContent bool
@@ -247,14 +248,6 @@ var knownEventTypeGuidance = []eventTypeGuidance{
 		Group: "Topics And Documents",
 		Constraints: []string{
 			`event.refs must include "topic:<topic_id>".`,
-		},
-	},
-	{
-		Type:  "topic_status_changed",
-		Group: "Topics And Documents",
-		Constraints: []string{
-			`event.refs must include "topic:<topic_id>".`,
-			`event.payload must include "from_status" and "to_status".`,
 		},
 	},
 	{
@@ -466,18 +459,13 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 	switch sub {
 	case "list":
 		fs := newSilentFlagSet("threads list")
-		var statusFlag, priorityFlag, staleFlag, queryFlag, cursorFlag trackedString
+		var stateFlag, queryFlag, cursorFlag trackedString
 		var limitFlag trackedInt
-		var tagsFlag, cadenceFlag trackedStrings
 		var includeArchived, archivedOnly, includeTrashed, trashedOnly bool
-		fs.Var(&statusFlag, "status", "Filter by status")
-		fs.Var(&priorityFlag, "priority", "Filter by priority")
-		fs.Var(&staleFlag, "stale", "Filter by stale state (true/false)")
+		fs.Var(&stateFlag, "state", "Filter by lifecycle state (active, archived, trashed)")
 		fs.Var(&queryFlag, "q", "Search by thread id or title")
 		fs.Var(&limitFlag, "limit", "Limit the number of returned threads")
 		fs.Var(&cursorFlag, "cursor", "Pagination cursor from a previous list response")
-		fs.Var(&tagsFlag, "tag", "Filter by tag (repeatable)")
-		fs.Var(&cadenceFlag, "cadence", "Filter by cadence (repeatable)")
 		fs.BoolVar(&includeArchived, "include-archived", false, "Include archived threads")
 		fs.BoolVar(&archivedOnly, "archived-only", false, "Show only archived threads")
 		fs.BoolVar(&includeTrashed, "include-trashed", false, "Include trashed threads")
@@ -495,16 +483,12 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 			return nil, "threads list", errnorm.Usage("invalid_request", "limit must be between 1 and 1000")
 		}
 		query := make([]queryParam, 0, 8)
-		addSingleQuery(&query, "status", statusFlag.value)
-		addSingleQuery(&query, "priority", priorityFlag.value)
-		addSingleQuery(&query, "stale", staleFlag.value)
+		addSingleQuery(&query, "state", stateFlag.value)
 		addSingleQuery(&query, "q", queryFlag.value)
 		if limitFlag.set {
 			addSingleQuery(&query, "limit", strconv.Itoa(limitFlag.value))
 		}
 		addSingleQuery(&query, "cursor", cursorFlag.value)
-		addMultiQuery(&query, "tag", tagsFlag.values)
-		addMultiQuery(&query, "cadence", cadenceFlag.values)
 		if includeArchived {
 			query = append(query, queryParam{name: "include_archived", values: []string{"true"}})
 		}
@@ -634,18 +618,12 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 func parseThreadContextSelectionArgs(args []string, commandName string) (threadContextSelection, error) {
 	fs := newSilentFlagSet(commandName)
 	var threadIDFlags trackedStrings
-	var statusFlag, priorityFlag, staleFlag, typeFlag trackedString
-	var tagsFlag, cadenceFlag trackedStrings
+	var stateFlag trackedString
 	var maxEventsFlag trackedInt
 	var includeArtifactContentFlag trackedBool
 	var fullIDFlag trackedBool
 	fs.Var(&threadIDFlags, "thread-id", "Thread id (repeatable)")
-	fs.Var(&statusFlag, "status", "Discover threads by status")
-	fs.Var(&priorityFlag, "priority", "Discover threads by priority")
-	fs.Var(&staleFlag, "stale", "Discover threads by stale state (true/false)")
-	fs.Var(&tagsFlag, "tag", "Discover threads by tag (repeatable)")
-	fs.Var(&cadenceFlag, "cadence", "Discover threads by cadence (repeatable)")
-	fs.Var(&typeFlag, "type", "Discover threads by type (local filter after list)")
+	fs.Var(&stateFlag, "state", "Discover threads by lifecycle state (active, archived, trashed)")
 	fs.Var(&maxEventsFlag, "max-events", "Maximum recent events to include")
 	fs.Var(&includeArtifactContentFlag, "include-artifact-content", "Include key artifact content previews")
 	fs.Var(&fullIDFlag, "full-id", "Render full ids in default text output (non-JSON)")
@@ -659,12 +637,8 @@ func parseThreadContextSelectionArgs(args []string, commandName string) (threadC
 	threadIDs = append(threadIDs, positionals...)
 	threadIDs = normalizeIDFilters(threadIDs)
 
-	discoveryQuery := make([]queryParam, 0, 5)
-	addSingleQuery(&discoveryQuery, "status", statusFlag.value)
-	addSingleQuery(&discoveryQuery, "priority", priorityFlag.value)
-	addSingleQuery(&discoveryQuery, "stale", staleFlag.value)
-	addMultiQuery(&discoveryQuery, "tag", tagsFlag.values)
-	addMultiQuery(&discoveryQuery, "cadence", cadenceFlag.values)
+	discoveryQuery := make([]queryParam, 0, 2)
+	addSingleQuery(&discoveryQuery, "state", stateFlag.value)
 
 	if maxEventsFlag.set && maxEventsFlag.value < 0 {
 		return threadContextSelection{}, errnorm.Usage("invalid_request", "--max-events must be >= 0")
@@ -673,7 +647,6 @@ func parseThreadContextSelectionArgs(args []string, commandName string) (threadC
 	return threadContextSelection{
 		threadIDs:              threadIDs,
 		discoveryQuery:         discoveryQuery,
-		discoveryType:          strings.TrimSpace(typeFlag.value),
 		maxEventsSet:           maxEventsFlag.set,
 		maxEvents:              maxEventsFlag.value,
 		includeArtifactContent: includeArtifactContentFlag.set && includeArtifactContentFlag.value,
@@ -684,20 +657,14 @@ func parseThreadContextSelectionArgs(args []string, commandName string) (threadC
 func parseThreadRecommendationsArgs(args []string) (threadRecommendationsSelection, error) {
 	fs := newSilentFlagSet("threads recommendations")
 	var threadIDFlags trackedStrings
-	var statusFlag, priorityFlag, staleFlag, typeFlag trackedString
-	var tagsFlag, cadenceFlag trackedStrings
+	var stateFlag trackedString
 	var maxEventsFlag trackedInt
 	var includeArtifactContentFlag trackedBool
 	var includeRelatedEventContentFlag trackedBool
 	var fullIDFlag, fullSummaryFlag trackedBool
 
 	fs.Var(&threadIDFlags, "thread-id", "Thread id (repeatable)")
-	fs.Var(&statusFlag, "status", "Discover threads by status")
-	fs.Var(&priorityFlag, "priority", "Discover threads by priority")
-	fs.Var(&staleFlag, "stale", "Discover threads by stale state (true/false)")
-	fs.Var(&tagsFlag, "tag", "Discover threads by tag (repeatable)")
-	fs.Var(&cadenceFlag, "cadence", "Discover threads by cadence (repeatable)")
-	fs.Var(&typeFlag, "type", "Discover threads by type (local filter after list)")
+	fs.Var(&stateFlag, "state", "Discover threads by lifecycle state (active, archived, trashed)")
 	fs.Var(&maxEventsFlag, "max-events", "Maximum recent events to include")
 	fs.Var(&includeArtifactContentFlag, "include-artifact-content", "Include key artifact content previews")
 	fs.Var(&includeRelatedEventContentFlag, "include-related-event-content", "Hydrate related review items with full events.get payloads")
@@ -713,12 +680,8 @@ func parseThreadRecommendationsArgs(args []string) (threadRecommendationsSelecti
 	threadIDs = append(threadIDs, positionals...)
 	threadIDs = normalizeIDFilters(threadIDs)
 
-	discoveryQuery := make([]queryParam, 0, 5)
-	addSingleQuery(&discoveryQuery, "status", statusFlag.value)
-	addSingleQuery(&discoveryQuery, "priority", priorityFlag.value)
-	addSingleQuery(&discoveryQuery, "stale", staleFlag.value)
-	addMultiQuery(&discoveryQuery, "tag", tagsFlag.values)
-	addMultiQuery(&discoveryQuery, "cadence", cadenceFlag.values)
+	discoveryQuery := make([]queryParam, 0, 2)
+	addSingleQuery(&discoveryQuery, "state", stateFlag.value)
 
 	if maxEventsFlag.set && maxEventsFlag.value < 0 {
 		return threadRecommendationsSelection{}, errnorm.Usage("invalid_request", "--max-events must be >= 0")
@@ -728,7 +691,6 @@ func parseThreadRecommendationsArgs(args []string) (threadRecommendationsSelecti
 		threadContextSelection: threadContextSelection{
 			threadIDs:              threadIDs,
 			discoveryQuery:         discoveryQuery,
-			discoveryType:          strings.TrimSpace(typeFlag.value),
 			maxEventsSet:           maxEventsFlag.set,
 			maxEvents:              maxEventsFlag.value,
 			includeArtifactContent: includeArtifactContentFlag.set && includeArtifactContentFlag.value,
@@ -740,7 +702,7 @@ func parseThreadRecommendationsArgs(args []string) (threadRecommendationsSelecti
 }
 
 func (a *App) resolveThreadContextSelection(ctx context.Context, cfg config.Resolved, commandName string, selection threadContextSelection, allowMultiple bool) ([]string, error) {
-	hasDiscoveryFilters := len(selection.discoveryQuery) > 0 || selection.discoveryType != ""
+	hasDiscoveryFilters := len(selection.discoveryQuery) > 0
 	if len(selection.threadIDs) > 0 && hasDiscoveryFilters {
 		return nil, errnorm.Usage("invalid_request", mixedThreadSelectionMessage(commandName))
 	}
@@ -750,14 +712,14 @@ func (a *App) resolveThreadContextSelection(ctx context.Context, cfg config.Reso
 		if !hasDiscoveryFilters {
 			return nil, errnorm.Usage(
 				"invalid_request",
-				"thread id is required (provide --thread-id <thread-id>) or use discovery filters (--status/--priority/--stale/--tag/--cadence/--type)",
+				"thread id is required (provide --thread-id <thread-id>) or use discovery filters (--state)",
 			)
 		}
 		listResult, err := a.invokeTypedJSON(ctx, cfg, "threads list", "threads.list", nil, selection.discoveryQuery, nil)
 		if err != nil {
 			return nil, err
 		}
-		threadIDs = threadIDsFromThreadsList(listResult, selection.discoveryType)
+		threadIDs = threadIDsFromThreadsList(listResult)
 		if len(threadIDs) == 0 {
 			return nil, errnorm.Usage(
 				"invalid_request",
@@ -784,8 +746,8 @@ func (a *App) resolveThreadContextSelection(ctx context.Context, cfg config.Reso
 }
 
 func mixedThreadSelectionMessage(commandName string) string {
-	base := "--thread-id cannot be combined with discovery filters (--status/--priority/--stale/--tag/--cadence/--type). Choose one mode."
-	discoveryExample := "anx threads inspect --status active"
+	base := "--thread-id cannot be combined with discovery filters (--state). Choose one mode."
+	discoveryExample := "anx threads inspect --state active"
 	switch strings.TrimSpace(commandName) {
 	case "threads context":
 		return base + " For one thread, use `anx threads inspect --thread-id <thread-id>` or `anx threads workspace --thread-id <thread-id>` for backing-thread diagnostics. Prefer `anx topics workspace --topic-id <topic-id>` for primary coordination when you have a topic id. For discovery, remove `--thread-id` and use `" + discoveryExample + "`."
@@ -1486,15 +1448,14 @@ func (a *App) runBoardsCommand(ctx context.Context, args []string, cfg config.Re
 	switch sub {
 	case "list":
 		fs := newSilentFlagSet("boards list")
-		var statusFlag, queryFlag, cursorFlag trackedString
+		var stateFlag, queryFlag, cursorFlag trackedString
 		var limitFlag trackedInt
-		var labelFlag, ownerFlag trackedStrings
+		var ownerFlag trackedStrings
 		var includeArchived, archivedOnly, includeTrashed, trashedOnly bool
-		fs.Var(&statusFlag, "status", "Filter by board status")
+		fs.Var(&stateFlag, "state", "Filter by lifecycle state (active, archived, trashed)")
 		fs.Var(&queryFlag, "q", "Search by board id or title")
 		fs.Var(&limitFlag, "limit", "Limit the number of returned boards")
 		fs.Var(&cursorFlag, "cursor", "Pagination cursor from a previous list response")
-		fs.Var(&labelFlag, "label", "Filter by label (repeatable)")
 		fs.Var(&ownerFlag, "owner", "Filter by owner actor id (repeatable)")
 		fs.BoolVar(&includeArchived, "include-archived", false, "Include archived boards")
 		fs.BoolVar(&archivedOnly, "archived-only", false, "Show only archived boards")
@@ -1513,13 +1474,12 @@ func (a *App) runBoardsCommand(ctx context.Context, args []string, cfg config.Re
 			return nil, "boards list", errnorm.Usage("invalid_request", "limit must be between 1 and 1000")
 		}
 		query := make([]queryParam, 0, 6)
-		addSingleQuery(&query, "status", statusFlag.value)
+		addSingleQuery(&query, "state", stateFlag.value)
 		addSingleQuery(&query, "q", queryFlag.value)
 		if limitFlag.set {
 			addSingleQuery(&query, "limit", strconv.Itoa(limitFlag.value))
 		}
 		addSingleQuery(&query, "cursor", cursorFlag.value)
-		addMultiQuery(&query, "label", labelFlag.values)
 		addMultiQuery(&query, "owner", ownerFlag.values)
 		if includeArchived {
 			query = append(query, queryParam{name: "include_archived", values: []string{"true"}})
@@ -2688,11 +2648,11 @@ func (a *App) runDocsCommentsCommand(ctx context.Context, args []string, cfg con
 	}
 
 	outBody := map[string]any{
-		"document":  document,
+		"document":    document,
 		"document_id": wantDocID,
-		"thread_id":  threadID,
-		"comments":   commentRows,
-		"returned":   len(commentRows),
+		"thread_id":   threadID,
+		"comments":    commentRows,
+		"returned":    len(commentRows),
 	}
 	if includeArchived {
 		outBody["include_archived"] = true
@@ -3154,7 +3114,10 @@ func (a *App) runInboxList(ctx context.Context, args []string, cfg config.Resolv
 		}
 		threadIDs = resolvedThreadIDs
 	}
-	typeFilters := normalizeInboxListTypeFilters(normalizeStringFilters(typeFlags.values))
+	typeFilters, err := normalizeInboxListTypeFilters(normalizeStringFilters(typeFlags.values))
+	if err != nil {
+		return nil, err
+	}
 
 	result, err := a.invokeTypedJSON(ctx, cfg, "inbox list", "inbox.list", nil, nil, nil)
 	if err != nil {
@@ -3545,25 +3508,25 @@ func (a *App) parseBoardCardBoardScopedTarget(args []string, commandName string)
 func (a *App) parseBoardCardCreateInput(ctx context.Context, args []string, cfg config.Resolved, commandName string) (string, any, error) {
 	fs := newSilentFlagSet(commandName)
 	var boardIDFlag, cardIDFlag trackedString
-	var titleFlag, bodyFlag trackedString
+	var titleFlag, summaryFlag trackedString
 	var actorIDFlag, requestKeyFlag, ifBoardUpdatedAtFlag, fromFileFlag trackedString
-	var columnFlag, assigneeFlag, priorityFlag, statusFlag trackedString
+	var columnFlag, resolutionFlag trackedString
+	var assigneeRefFlags trackedStrings
 	var beforeCardIDFlag, afterCardIDFlag trackedString
-	var pinnedDocumentIDFlag trackedString
+	var documentRefFlag trackedString
 	fs.Var(&boardIDFlag, "board-id", "Board id")
 	fs.Var(&cardIDFlag, "card-id", "Card id")
 	fs.Var(&titleFlag, "title", "Card title")
-	fs.Var(&bodyFlag, "body", "Card body markdown")
+	fs.Var(&summaryFlag, "summary", "Card summary")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
 	fs.Var(&requestKeyFlag, "request-key", "Request key")
 	fs.Var(&ifBoardUpdatedAtFlag, "if-board-updated-at", "Board updated_at concurrency token")
 	fs.Var(&columnFlag, "column", "Target board column key")
 	fs.Var(&beforeCardIDFlag, "before-card-id", "Place before this card id in the target column")
 	fs.Var(&afterCardIDFlag, "after-card-id", "Place after this card id in the target column")
-	fs.Var(&assigneeFlag, "assignee", "Assignee actor reference")
-	fs.Var(&priorityFlag, "priority", "Priority")
-	fs.Var(&statusFlag, "status", "Card status")
-	fs.Var(&pinnedDocumentIDFlag, "pinned-document-id", "Pinned document id")
+	fs.Var(&assigneeRefFlags, "assignee-ref", "Assignee actor typed reference (repeatable)")
+	fs.Var(&resolutionFlag, "resolution", "Terminal resolution when column is done (done or canceled)")
+	fs.Var(&documentRefFlag, "document-ref", "Document typed reference")
 	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
 	if err := fs.Parse(args); err != nil {
 		return "", nil, errnorm.Usage("invalid_flags", err.Error())
@@ -3584,13 +3547,13 @@ func (a *App) parseBoardCardCreateInput(ctx context.Context, args []string, cfg 
 		return "", nil, err
 	}
 
-	skipStdin := hasAnyBoardMutationFieldFlags(cardIDFlag, titleFlag, bodyFlag, actorIDFlag, requestKeyFlag, ifBoardUpdatedAtFlag, columnFlag, beforeCardIDFlag, afterCardIDFlag, assigneeFlag, priorityFlag, statusFlag, pinnedDocumentIDFlag)
+	skipStdin := hasAnyBoardMutationFieldFlags(cardIDFlag, titleFlag, summaryFlag, actorIDFlag, requestKeyFlag, ifBoardUpdatedAtFlag, columnFlag, beforeCardIDFlag, afterCardIDFlag, assigneeRefFlags, resolutionFlag, documentRefFlag)
 	payload, err := a.readBoardCardBodyInput(fromFileFlag.value, skipStdin)
 	if err != nil {
 		return "", nil, err
 	}
 	if len(payload) > 0 {
-		if hasAnyBoardMutationFieldFlags(cardIDFlag, titleFlag, bodyFlag, actorIDFlag, requestKeyFlag, ifBoardUpdatedAtFlag, columnFlag, beforeCardIDFlag, afterCardIDFlag, assigneeFlag, priorityFlag, statusFlag, pinnedDocumentIDFlag) {
+		if hasAnyBoardMutationFieldFlags(cardIDFlag, titleFlag, summaryFlag, actorIDFlag, requestKeyFlag, ifBoardUpdatedAtFlag, columnFlag, beforeCardIDFlag, afterCardIDFlag, assigneeRefFlags, resolutionFlag, documentRefFlag) {
 			return "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("field flags cannot be combined with JSON body input for `anx %s`", commandName))
 		}
 		body, err := decodeJSONPayload(payload)
@@ -3645,8 +3608,8 @@ func (a *App) parseBoardCardCreateInput(ctx context.Context, args []string, cfg 
 	if title := strings.TrimSpace(titleFlag.value); title != "" {
 		body["title"] = title
 	}
-	if bodyText := strings.TrimSpace(bodyFlag.value); bodyText != "" {
-		body["body"] = bodyText
+	if summary := strings.TrimSpace(summaryFlag.value); summary != "" {
+		body["summary"] = summary
 	}
 	if column := strings.TrimSpace(columnFlag.value); column != "" {
 		body["column_key"] = column
@@ -3669,17 +3632,14 @@ func (a *App) parseBoardCardCreateInput(ctx context.Context, args []string, cfg 
 		}
 		body["after_card_id"] = resolved
 	}
-	if assignee := strings.TrimSpace(assigneeFlag.value); assignee != "" {
-		body["assignee"] = assignee
+	if assigneeRefs := normalizeStringFilters(assigneeRefFlags.values); len(assigneeRefs) > 0 {
+		body["assignee_refs"] = assigneeRefs
 	}
-	if priority := strings.TrimSpace(priorityFlag.value); priority != "" {
-		body["priority"] = priority
+	if resolution := strings.TrimSpace(resolutionFlag.value); resolution != "" {
+		body["resolution"] = resolution
 	}
-	if status := strings.TrimSpace(statusFlag.value); status != "" {
-		body["status"] = status
-	}
-	if pinnedDocumentID := strings.TrimSpace(pinnedDocumentIDFlag.value); pinnedDocumentID != "" {
-		body["pinned_document_id"] = pinnedDocumentID
+	if documentRef := strings.TrimSpace(documentRefFlag.value); documentRef != "" {
+		body["document_ref"] = documentRef
 	}
 	return resolvedBoardID, body, nil
 }
@@ -3755,22 +3715,22 @@ func (a *App) parseBoardBatchCardCreateInput(ctx context.Context, args []string,
 func (a *App) parseBoardCardUpdateInput(ctx context.Context, args []string, cfg config.Resolved, commandName string) (map[string]string, any, error) {
 	fs := newSilentFlagSet(commandName)
 	var cardIDFlag trackedString
-	var titleFlag, bodyFlag trackedString
+	var titleFlag, summaryFlag trackedString
 	var actorIDFlag, ifUpdatedAtFlag, fromFileFlag trackedString
-	var assigneeFlag, priorityFlag, statusFlag trackedString
-	var pinnedDocumentIDFlag trackedString
-	var clearPinnedDocumentFlag trackedBool
+	var assigneeRefFlags trackedStrings
+	var resolutionFlag trackedString
+	var documentRefFlag trackedString
+	var clearDocumentRefFlag trackedBool
 	fs.Var(&cardIDFlag, "card-id", "Card id")
 	fs.Var(&titleFlag, "title", "Card title")
-	fs.Var(&bodyFlag, "body", "Card body markdown")
+	fs.Var(&summaryFlag, "summary", "Card summary")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
 	fs.Var(&ifUpdatedAtFlag, "if-updated-at", "Card updated_at concurrency token")
-	fs.Var(&assigneeFlag, "assignee", "Assignee actor reference")
-	fs.Var(&priorityFlag, "priority", "Priority")
-	fs.Var(&statusFlag, "status", "Card status")
-	fs.Var(&pinnedDocumentIDFlag, "pinned-document-id", "Pinned document id")
+	fs.Var(&assigneeRefFlags, "assignee-ref", "Assignee actor typed reference (repeatable)")
+	fs.Var(&resolutionFlag, "resolution", "Terminal resolution (done or canceled); card must already be in the done column (use `anx cards move` to change columns)")
+	fs.Var(&documentRefFlag, "document-ref", "Document typed reference")
 	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
-	fs.Var(&clearPinnedDocumentFlag, "clear-pinned-document", "Clear the pinned document id")
+	fs.Var(&clearDocumentRefFlag, "clear-document-ref", "Clear the document ref")
 	if err := fs.Parse(args); err != nil {
 		return nil, nil, errnorm.Usage("invalid_flags", err.Error())
 	}
@@ -3787,13 +3747,13 @@ func (a *App) parseBoardCardUpdateInput(ctx context.Context, args []string, cfg 
 		return nil, nil, err
 	}
 
-	skipStdin := hasAnyBoardMutationFieldFlags(titleFlag, bodyFlag, actorIDFlag, ifUpdatedAtFlag, assigneeFlag, priorityFlag, statusFlag, pinnedDocumentIDFlag, clearPinnedDocumentFlag)
+	skipStdin := hasAnyBoardMutationFieldFlags(titleFlag, summaryFlag, actorIDFlag, ifUpdatedAtFlag, assigneeRefFlags, resolutionFlag, documentRefFlag, clearDocumentRefFlag)
 	payload, err := a.readBoardCardBodyInput(fromFileFlag.value, skipStdin)
 	if err != nil {
 		return nil, nil, err
 	}
 	if len(payload) > 0 {
-		if hasAnyBoardMutationFieldFlags(titleFlag, bodyFlag, actorIDFlag, ifUpdatedAtFlag, assigneeFlag, priorityFlag, statusFlag, pinnedDocumentIDFlag, clearPinnedDocumentFlag) {
+		if hasAnyBoardMutationFieldFlags(titleFlag, summaryFlag, actorIDFlag, ifUpdatedAtFlag, assigneeRefFlags, resolutionFlag, documentRefFlag, clearDocumentRefFlag) {
 			return nil, nil, errnorm.Usage("invalid_args", fmt.Sprintf("field flags cannot be combined with JSON body input for `anx %s`", commandName))
 		}
 		body, err := decodeJSONPayload(payload)
@@ -3815,25 +3775,22 @@ func (a *App) parseBoardCardUpdateInput(ctx context.Context, args []string, cfg 
 	if title := strings.TrimSpace(titleFlag.value); title != "" {
 		patch["title"] = title
 	}
-	if bodyText := strings.TrimSpace(bodyFlag.value); bodyText != "" {
-		patch["body"] = bodyText
+	if summary := strings.TrimSpace(summaryFlag.value); summary != "" {
+		patch["summary"] = summary
 	}
-	if assignee := strings.TrimSpace(assigneeFlag.value); assignee != "" {
-		patch["assignee"] = assignee
+	if assigneeRefs := normalizeStringFilters(assigneeRefFlags.values); len(assigneeRefs) > 0 {
+		patch["assignee_refs"] = assigneeRefs
 	}
-	if priority := strings.TrimSpace(priorityFlag.value); priority != "" {
-		patch["priority"] = priority
+	if resolution := strings.TrimSpace(resolutionFlag.value); resolution != "" {
+		patch["resolution"] = resolution
 	}
-	if status := strings.TrimSpace(statusFlag.value); status != "" {
-		patch["status"] = status
-	}
-	if clearPinnedDocumentFlag.set && clearPinnedDocumentFlag.value {
-		if strings.TrimSpace(pinnedDocumentIDFlag.value) != "" {
-			return nil, nil, errnorm.Usage("invalid_request", fmt.Sprintf("--pinned-document-id and --clear-pinned-document cannot be combined for `anx %s`", commandName))
+	if clearDocumentRefFlag.set && clearDocumentRefFlag.value {
+		if strings.TrimSpace(documentRefFlag.value) != "" {
+			return nil, nil, errnorm.Usage("invalid_request", fmt.Sprintf("--document-ref and --clear-document-ref cannot be combined for `anx %s`", commandName))
 		}
-		patch["pinned_document_id"] = nil
-	} else if pinnedDocumentID := strings.TrimSpace(pinnedDocumentIDFlag.value); pinnedDocumentID != "" {
-		patch["pinned_document_id"] = pinnedDocumentID
+		patch["document_ref"] = nil
+	} else if documentRef := strings.TrimSpace(documentRefFlag.value); documentRef != "" {
+		patch["document_ref"] = documentRef
 	}
 	body := map[string]any{
 		"patch": patch,
@@ -4101,6 +4058,10 @@ func hasAnyBoardMutationFieldFlags(values ...any) bool {
 		switch typed := value.(type) {
 		case trackedString:
 			if strings.TrimSpace(typed.value) != "" {
+				return true
+			}
+		case trackedStrings:
+			if len(normalizeStringFilters(typed.values)) > 0 {
 				return true
 			}
 		case trackedBool:
@@ -4797,6 +4758,8 @@ func enrichListBodyWithShortIDs(commandID string, body any) (any, bool) {
 	switch strings.TrimSpace(commandID) {
 	case "threads.list":
 		return body, addShortIDToListField(typedBody, "threads")
+	case "topics.list":
+		return body, addShortIDToListField(typedBody, "topics")
 	case "artifacts.list":
 		return body, addShortIDToListField(typedBody, "artifacts")
 	case "boards.list":
@@ -5270,34 +5233,28 @@ func normalizeIDFilters(rawIDs []string) []string {
 	return out
 }
 
-// normalizeInboxCategoryForCLIFilter maps legacy inbox category/type strings onto the
-// canonical contract enum so `inbox list --type` stays usable after API normalization.
-// Mirrors core normalizeInboxCategoryForContract.
-func normalizeInboxCategoryForCLIFilter(category string) string {
+// canonicalInboxCategoryForCLIFilter reports inbox categories accepted by the CLI.
+func canonicalInboxCategoryForCLIFilter(category string) (string, bool) {
 	category = strings.TrimSpace(category)
 	switch category {
 	case "action_needed", "risk_exception", "attention":
-		return category
-	case "decision_needed":
-		return "action_needed"
-	case "intervention_needed", "stale_topic", "work_item_risk", "risk_review":
-		return "risk_exception"
-	case "document_attention":
-		return "attention"
+		return category, true
 	default:
-		return category
+		return category, false
 	}
 }
 
-func normalizeInboxListTypeFilters(types []string) []string {
+func normalizeInboxListTypeFilters(types []string) ([]string, error) {
 	if len(types) == 0 {
-		return nil
+		return nil, nil
 	}
 	out := make([]string, 0, len(types))
 	seen := make(map[string]struct{}, len(types))
+	invalid := make([]string, 0)
 	for _, inboxType := range types {
-		canon := normalizeInboxCategoryForCLIFilter(inboxType)
-		if canon == "" {
+		canon, ok := canonicalInboxCategoryForCLIFilter(inboxType)
+		if !ok {
+			invalid = append(invalid, strings.TrimSpace(inboxType))
 			continue
 		}
 		if _, ok := seen[canon]; ok {
@@ -5306,7 +5263,22 @@ func normalizeInboxListTypeFilters(types []string) []string {
 		seen[canon] = struct{}{}
 		out = append(out, canon)
 	}
-	return out
+	if len(invalid) > 0 {
+		quoted := make([]string, 0, len(invalid))
+		for _, value := range invalid {
+			if value == "" {
+				continue
+			}
+			quoted = append(quoted, fmt.Sprintf("%q", value))
+		}
+		if len(quoted) > 0 {
+			return nil, errnorm.Usage(
+				"invalid_flags",
+				fmt.Sprintf("legacy inbox type/category aliases are no longer supported: %s; use action_needed, risk_exception, or attention", strings.Join(quoted, ", ")),
+			)
+		}
+	}
+	return out, nil
 }
 
 func filteredInboxItems(items []any, threadIDs []string, types []string) []any {
@@ -5327,7 +5299,7 @@ func filteredInboxItems(items []any, threadIDs []string, types []string) []any {
 		if inboxType == "" {
 			continue
 		}
-		typeFilter[normalizeInboxCategoryForCLIFilter(inboxType)] = struct{}{}
+		typeFilter[inboxType] = struct{}{}
 	}
 
 	filtered := make([]any, 0, len(items))
@@ -5343,7 +5315,10 @@ func filteredInboxItems(items []any, threadIDs []string, types []string) []any {
 			}
 		}
 		if len(typeFilter) > 0 {
-			canon := normalizeInboxCategoryForCLIFilter(inboxItemType(item))
+			canon, ok := canonicalInboxCategoryForCLIFilter(inboxItemType(item))
+			if !ok {
+				continue
+			}
 			if _, ok := typeFilter[canon]; !ok {
 				continue
 			}
@@ -5681,7 +5656,7 @@ func addThreadContextCollaborationSummary(body map[string]any) bool {
 	return true
 }
 
-func threadIDsFromThreadsList(result *commandResult, typeFilter string) []string {
+func threadIDsFromThreadsList(result *commandResult) []string {
 	if result == nil {
 		return nil
 	}
@@ -5694,14 +5669,10 @@ func threadIDsFromThreadsList(result *commandResult, typeFilter string) []string
 	if len(items) == 0 {
 		return nil
 	}
-	typeFilter = strings.TrimSpace(typeFilter)
 	out := make([]string, 0, len(items))
 	for _, raw := range items {
 		thread := asMap(raw)
 		if thread == nil {
-			continue
-		}
-		if typeFilter != "" && strings.TrimSpace(anyString(thread["type"])) != typeFilter {
 			continue
 		}
 		threadID := strings.TrimSpace(anyString(thread["id"]))

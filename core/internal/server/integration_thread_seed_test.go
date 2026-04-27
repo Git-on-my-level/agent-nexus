@@ -67,17 +67,13 @@ func integrationPatchThreadWithStore(t *testing.T, store PrimitiveStore, maintai
 // paginationTestThread matches the historical integration thread shape used by list/cursor tests.
 func paginationTestThread(id, title string) map[string]any {
 	return map[string]any{
-		"id":               id,
-		"title":            title,
-		"type":             "incident",
-		"status":           "active",
-		"priority":         "p1",
-		"tags":             []any{},
-		"cadence":          "daily",
-		"next_check_in_at": "2020-01-01T00:00:00Z",
-		"current_summary":  "Summary",
-		"next_actions":     []any{},
-		"key_artifacts":    []any{},
-		"provenance":       map[string]any{"sources": []any{"inferred"}},
+		"id":              id,
+		"title":           title,
+		"type":            "incident",
+		"status":          "active",
+		"current_summary": "Summary",
+		"next_actions":    []any{},
+		"key_artifacts":   []any{},
+		"provenance":      map[string]any{"sources": []any{"inferred"}},
 	}
 }

@@ -1160,17 +1160,16 @@
                               getInboxSubjectLabel(item)}
                           </h4>
                           <span
-                            class="shrink-0 rounded-md border border-[var(--line)] px-1.5 py-0.5 text-micro font-medium capitalize {subject?.status ===
+                            class="shrink-0 rounded-md border border-[var(--line)] px-1.5 py-0.5 text-micro font-medium capitalize {subject?.state ===
                             'active'
                               ? 'text-ok-text'
-                              : subject?.status === 'blocked' ||
-                                  subject?.status === 'paused'
+                              : subject?.state === 'archived'
                                 ? 'text-warn-text'
-                                : subject?.status === 'archived'
-                                  ? 'text-[var(--fg-muted)]'
+                                : subject?.state === 'trashed'
+                                  ? 'text-danger-text'
                                   : 'text-[var(--fg-muted)]'}"
                           >
-                            {subject?.status ?? "unknown"}
+                            {subject?.state ?? "unknown"}
                           </span>
                           {#if subject?.type}
                             <span

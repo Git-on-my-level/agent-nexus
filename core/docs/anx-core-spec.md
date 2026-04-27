@@ -54,13 +54,13 @@ anx-core does **not**:
 ### 2.2 Schema authority
 - `anx-schema.yaml` is the authoritative field/type definition shared between anx-core and Agent Nexus web UI.
 - anx-core MUST enforce schema constraints on writes where specified (restricted transitions, required fields, packet validation, typed ref format).
-- **Strict enums** (e.g., `topic_status`, `card_resolution`): anx-core MUST reject unknown values.
+- **Strict enums** (e.g., `lifecycle_state`, `card_resolution`): anx-core MUST reject unknown values.
 - **Open enums** (e.g., `event_type`, `artifact_kind`): anx-core MUST accept and store unknown values.
 - Unknown fields on any object MUST be preserved and round-tripped.
 
 ### 2.3 Mutable resource update semantics
 - Topic and card updates use **patch/merge** semantics: only specified fields are updated; unspecified fields (including unknown fields) are preserved unchanged.
-- **List-valued fields** (e.g., `tags`, `key_artifacts`, `links`) are **replaced wholesale** when present in a patch. Absence means no change.
+- **List-valued fields** (e.g., `owner_refs`, `document_refs`, `related_refs`) are **replaced wholesale** when present in a patch. Absence means no change.
 - This prevents older clients from accidentally erasing fields they don't know about.
 
 ---
@@ -78,7 +78,7 @@ A durable record that something happened or that an actor claims something happe
 
 **Fields:** per `anx-schema.yaml` → `primitives.event`
 
-**v0 event types:** `topic_created`, `topic_updated`, `topic_status_changed`, `topic_archived`, `topic_restored`, `topic_trashed`, `message_posted`, `receipt_added`, `review_completed`, `decision_needed`, `intervention_needed`, `decision_made`, `document_created`, `document_revised`, `document_revision_created`, `document_trashed`, `board_created`, `board_updated`, `board_card_added`, `board_card_moved`, `board_card_archived`, `board_card_trashed`, `card_created`, `card_updated`, `card_moved`, `card_archived`, `card_trashed`, `card_resolved`, `exception_raised`, `inbox_item_acknowledged`, `agent_notification_read`, `agent_notification_dismissed`
+**v0 event types:** `topic_created`, `topic_updated`, `topic_archived`, `topic_restored`, `topic_trashed`, `message_posted`, `receipt_added`, `review_completed`, `decision_needed`, `intervention_needed`, `decision_made`, `document_created`, `document_revised`, `document_revision_created`, `document_trashed`, `board_created`, `board_updated`, `board_card_added`, `board_card_moved`, `board_card_archived`, `board_card_trashed`, `card_created`, `card_updated`, `card_moved`, `card_archived`, `card_trashed`, `card_resolved`, `exception_raised`, `inbox_item_acknowledged`, `agent_notification_read`, `agent_notification_dismissed`
 
 ### 3.2 Mutable resources (topic/card/board/document)
 Topics, cards, boards, and documents are mutable current-state records.
@@ -212,7 +212,7 @@ All workspace data routes require authenticated principals. Writes require an
 
 ### 7.1 Read / query
 - Get topic by ID
-- List topics (filters: type, status, archive/trash state, search)
+- List topics (filters: type, derived lifecycle state, archive/trash visibility, search)
 - Get topic timeline (events + referenced artifacts/cards/documents/threads, ordered by time)
 - Get topic workspace
 - Get card by ID
@@ -227,7 +227,7 @@ All workspace data routes require authenticated principals. Writes require an
 ### 7.2 Write / mutate
 - Register actor
 - Create topic → emits `topic_created` event with `topic:<topic_id>` in refs
-- Update topic fields (patch/merge) → emits `topic_updated` or `topic_status_changed` event as applicable
+- Update topic fields (patch/merge) → emits `topic_updated`; archive/trash/restore emit dedicated lifecycle events
 - Create card → emits `card_created` event with `card:<card_id>` and `board:<board_id>` in refs
 - Update card (patch/merge) → emits `card_updated` event
 - Move card → emits `card_moved` event
@@ -280,13 +280,16 @@ anx-core MUST enforce these restrictions at the API level — reject the write i
 ### 8.3 Interpretive fields
 The following MAY be updated without receipts:
 - `topic.summary`
-- `topic.status` in general, except the terminal `resolved` transition called
-  out below
+- `topic.title`
+- `topic.type`
 
-### 8.4 Evidence-backed topic resolution
-- `topic.status -> resolved` is the evidence-backed terminal case for topic
-  status and MUST be treated as a restricted transition even though other topic
-  status changes remain interpretive by default.
+### 8.4 Lifecycle state
+- Topic, board, document, and card lifecycle state is derived from
+  `archived_at` / `trashed_at` timestamps.
+- Archive, trash, and restore are explicit lifecycle operations that emit
+  dedicated events. Clients MUST NOT patch a mutable topic or board status.
+- Card work progress is represented by `column_key` plus nullable
+  `resolution`, not by a separate status enum.
 
 These fields SHOULD include provenance indicating who updated them and on what basis.
 
@@ -294,25 +297,20 @@ These fields SHOULD include provenance indicating who updated them and on what b
 
 ## 9. Staleness
 
-Topics define work freshness; staleness is evaluated against topic activity and linked evidence.
+Launch threads are timeline anchors only: backing-thread JSON does not carry
+cadence or next-check-in semantics for core inference.
 
-- `reactive`: no scheduled check-ins - the topic wakes on inbound events only.
-- `cron` (5-field expression): the topic is stale when `now > next_check_in_at` and no receipt or decision event has occurred since the previous expected cron run.
-
-When staleness is detected by background maintenance or a deterministic derived
-rebuild, anx-core MUST:
-- Emit an `exception_raised` event with subtype `stale_topic`.
-- Surface the topic as an inbox item with category `risk_exception` (the exception subtype remains `stale_topic` on the event).
+The core does **not** auto-emit `exception_raised` / `stale_topic` from derived
+rebuild or projection maintenance. Operators may still append an
+`exception_raised` event with subtype `stale_topic` explicitly; derived inbox then
+surfaces `risk_exception` like other exception-backed items.
 
 Read handlers MUST NOT mint stale-topic exceptions as a side effect of GET
 requests.
 
-Staleness computation SHOULD run on a regular interval (implementation-defined)
-or be triggerable on demand.
-
 Derived projection refresh SHOULD run asynchronously from a durable dirty queue.
-Operational health SHOULD expose queue depth/lag and last successful stale-scan
-time so operators can distinguish normal eventual consistency from maintenance
+Operational health SHOULD expose queue depth/lag and last successful maintenance
+tick so operators can distinguish normal eventual consistency from maintenance
 failure.
 
 ---
@@ -328,7 +326,7 @@ Key rules:
 - All thread-scoped events MUST set `thread_id`.
 - Each event type has required and optional refs (see schema for full list).
 - All packet artifacts MUST include `subject_ref` plus the required packet-kind refs in `artifact.refs`; the subject can be a topic, thread, card, board, or document as allowed by the packet schema and core resolver.
-- `topic_updated`, `topic_status_changed`, `card_updated`, `card_moved`, and `card_resolved` events SHOULD include `changed_fields` or equivalent change details in their payload when applicable.
+- `topic_updated`, `card_updated`, `card_moved`, and `card_resolved` events SHOULD include `changed_fields` or equivalent change details in their payload when applicable.
 - `card.resolution -> done` MUST include either `artifact:<receipt_id>` or `event:<decision_event_id>` in refs (matching the restricted transition rule).
 
 anx-core SHOULD validate required refs on event creation and reject events missing them.

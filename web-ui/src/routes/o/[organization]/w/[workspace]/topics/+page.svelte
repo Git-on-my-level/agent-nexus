@@ -5,23 +5,19 @@
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
   import {
-    TOPIC_SCHEDULE_PRESETS,
-    TOPIC_SCHEDULE_PRESET_LABELS,
-    TOPIC_PRIORITIES,
-    TOPIC_PRIORITY_LABELS,
     TOPIC_STATUSES,
+    applyBackingThreadListClientFilters,
     applyTopicListClientFilters,
     buildThreadFilterQueryParamsFromThreadListState,
     buildTopicListApiQueryParams,
     buildTopicListSearchString,
-    computeStaleness,
-    formatCadenceLabel,
-    getPriorityLabel,
     parseTopicListSearchParams,
-    validateCadenceSelection,
   } from "$lib/topicFilters";
   import { workspacePath } from "$lib/workspacePaths";
-  import { describeCron } from "$lib/topicPatch";
+  import {
+    CANONICAL_TOPIC_TYPE_LABELS,
+    CANONICAL_TOPIC_TYPES,
+  } from "$lib/topicTypeGlyph.js";
   import { buildTopicCreatePayloadFromDraft } from "$lib/topicCreatePayload";
   import ArchiveButton from "$lib/components/ArchiveButton.svelte";
   import CompactFilterBar from "$lib/components/CompactFilterBar.svelte";
@@ -33,19 +29,13 @@
   import RefLink from "$lib/components/RefLink.svelte";
   import TopicTypeGlyph from "$lib/components/TopicTypeGlyph.svelte";
 
-  /** Virtual filter: non-closed topics (matches dashboard "Open"); distinct from status=active|paused. */
+  /** Virtual filter: active lifecycle topics (matches dashboard "Open"); distinct from `state` query. */
   const STATUS_OPEN_NOT_CLOSED = "__open__";
-  /** Virtual filter: P0 and P1 (matches dashboard "High priority"); distinct from single priority. */
-  const PRIORITY_HIGH_TIER = "__high_tier__";
 
   const defaultFilters = {
-    status: "",
-    priority: "",
-    cadence: "",
-    staleness: "all",
-    tagInput: "",
+    state: "",
+    q: "",
     openOnly: false,
-    highPriorityTier: false,
   };
 
   let filters = $state({ ...defaultFilters });
@@ -73,17 +63,13 @@
   let backingThreads = $state([]);
 
   let filteredBackingThreads = $derived(
-    applyTopicListClientFilters(backingThreads, filters),
+    applyBackingThreadListClientFilters(backingThreads, filters),
   );
 
   let topicDraft = $state({
     title: "",
     summary: "",
-    status: "active",
-    priority: "p2",
-    cadencePreset: "weekly",
-    cadenceCron: "",
-    tagsInput: "",
+    type: "other",
   });
 
   function workspaceHref(pathname = "/") {
@@ -193,25 +179,13 @@
     topicDraft = {
       title: "",
       summary: "",
-      status: "active",
-      priority: "p2",
-      cadencePreset: "weekly",
-      cadenceCron: "",
-      tagsInput: "",
+      type: "other",
     };
   }
 
   async function createTopic() {
     if (!topicDraft.title.trim()) {
       createError = "Topic title is required.";
-      return;
-    }
-    const cadenceError = validateCadenceSelection({
-      preset: topicDraft.cadencePreset,
-      customCron: topicDraft.cadenceCron,
-    });
-    if (cadenceError) {
-      createError = cadenceError;
       return;
     }
 
@@ -238,62 +212,29 @@
   }
 
   let hasActiveFilters = $derived(
-    filters.status !== "" ||
-      filters.priority !== "" ||
-      filters.cadence !== "" ||
-      filters.staleness !== "all" ||
-      filters.tagInput.trim() !== "" ||
-      filters.openOnly ||
-      filters.highPriorityTier,
+    filters.state !== "" || filters.openOnly || filters.q.trim() !== "",
   );
 
   function statusFilterSelectValue() {
     if (filters.openOnly) return STATUS_OPEN_NOT_CLOSED;
-    return filters.status;
+    return filters.state;
   }
 
   function onStatusFilterChange(value) {
     if (value === STATUS_OPEN_NOT_CLOSED) {
-      filters = { ...filters, openOnly: true, status: "" };
+      filters = { ...filters, openOnly: true, state: "" };
     } else {
-      filters = { ...filters, openOnly: false, status: value };
+      filters = { ...filters, openOnly: false, state: value };
     }
   }
 
-  function priorityFilterSelectValue() {
-    if (filters.highPriorityTier) return PRIORITY_HIGH_TIER;
-    return filters.priority;
-  }
-
-  function onPriorityFilterChange(value) {
-    if (value === PRIORITY_HIGH_TIER) {
-      filters = { ...filters, highPriorityTier: true, priority: "" };
-    } else {
-      filters = { ...filters, highPriorityTier: false, priority: value };
-    }
-  }
-
-  function priorityDot(priority) {
-    const colors = {
-      p0: "bg-danger",
-      p1: "bg-warn-text",
-      p2: "bg-blue-400",
-      p3: "bg-line-strong",
-    };
-    return colors[priority] ?? "bg-line-strong";
-  }
-
-  function statusColor(status) {
+  function lifecycleStateColor(state) {
     const styles = {
       active: "text-ok-text",
-      paused: "text-warn-text",
-      closed: "text-slate-300",
-      blocked: "text-warn-text",
-      resolved: "text-slate-300",
-      proposed: "text-[var(--fg-muted)]",
-      archived: "text-slate-300",
+      archived: "text-warn-text",
+      trashed: "text-slate-300",
     };
-    return styles[status] ?? "text-fg-subtle";
+    return styles[state] ?? "text-fg-subtle";
   }
 
   function isTopicArchived(topic) {
@@ -479,9 +420,9 @@
 {#if (listSurface === "topics" || listSurface === "threads") && filtersOpen}
   <CompactFilterBar testId="topics-filter-panel">
     {#snippet children()}
-      <div class="grid gap-3 sm:grid-cols-5">
+      <div class="grid gap-3 sm:grid-cols-2">
         <label class="text-micro">
-          <span class="font-medium text-[var(--fg-muted)]">Status</span>
+          <span class="font-medium text-[var(--fg-muted)]">State</span>
           <select
             class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
             onchange={(event) =>
@@ -495,51 +436,14 @@
               >{/each}
           </select>
         </label>
-        <label class="text-micro">
-          <span class="font-medium text-[var(--fg-muted)]">Priority</span>
-          <select
-            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
-            onchange={(event) =>
-              onPriorityFilterChange(event.currentTarget.value)}
-            value={priorityFilterSelectValue()}
-          >
-            <option value="">All</option>
-            <option value={PRIORITY_HIGH_TIER}>High (P0 &amp; P1)</option>
-            {#each TOPIC_PRIORITIES as priority}<option value={priority}
-                >{TOPIC_PRIORITY_LABELS[priority]}</option
-              >{/each}
-          </select>
-        </label>
-        <label class="text-micro">
-          <span class="font-medium text-[var(--fg-muted)]">Cadence</span>
-          <select
-            bind:value={filters.cadence}
-            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
-          >
-            <option value="">All</option>
-            {#each TOPIC_SCHEDULE_PRESETS as cadence}<option value={cadence}
-                >{TOPIC_SCHEDULE_PRESET_LABELS[cadence]}</option
-              >{/each}
-          </select>
-        </label>
-        <label class="text-micro">
-          <span class="font-medium text-[var(--fg-muted)]">Staleness</span>
-          <select
-            bind:value={filters.staleness}
-            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
-          >
-            <option value="all">All</option>
-            <option value="stale">Stale</option>
-            <option value="fresh">Fresh</option>
-          </select>
-        </label>
-        <label class="text-micro">
-          <span class="font-medium text-[var(--fg-muted)]">Tags</span>
+        <label class="text-micro sm:col-span-1">
+          <span class="font-medium text-[var(--fg-muted)]">Search</span>
           <input
-            bind:value={filters.tagInput}
+            bind:value={filters.q}
             class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
-            placeholder="ops, customer"
-            type="text"
+            placeholder="Title or id…"
+            type="search"
+            autocomplete="off"
           />
         </label>
       </div>
@@ -586,63 +490,15 @@
         />
       </label>
       <label class="text-micro">
-        <span class="font-medium text-[var(--fg-muted)]">Status</span>
+        <span class="font-medium text-[var(--fg-muted)]">Type</span>
         <select
-          bind:value={topicDraft.status}
+          bind:value={topicDraft.type}
           class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-2 text-meta transition-colors focus:bg-[var(--panel)]"
         >
-          {#each TOPIC_STATUSES as status}<option value={status}
-              >{status[0].toUpperCase() + status.slice(1)}</option
+          {#each CANONICAL_TOPIC_TYPES as t}<option value={t}
+              >{CANONICAL_TOPIC_TYPE_LABELS[t]}</option
             >{/each}
         </select>
-      </label>
-      <label class="text-micro">
-        <span class="font-medium text-[var(--fg-muted)]">Priority</span>
-        <select
-          bind:value={topicDraft.priority}
-          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-2 text-meta transition-colors focus:bg-[var(--panel)]"
-        >
-          {#each TOPIC_PRIORITIES as priority}<option value={priority}
-              >{TOPIC_PRIORITY_LABELS[priority]}</option
-            >{/each}
-        </select>
-      </label>
-      <label class="text-micro">
-        <span class="font-medium text-[var(--fg-muted)]">Schedule</span>
-        <select
-          bind:value={topicDraft.cadencePreset}
-          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-2 text-meta transition-colors focus:bg-[var(--panel)]"
-        >
-          {#each TOPIC_SCHEDULE_PRESETS as cadence}<option value={cadence}
-              >{TOPIC_SCHEDULE_PRESET_LABELS[cadence]}</option
-            >{/each}
-        </select>
-      </label>
-      {#if topicDraft.cadencePreset === "custom"}
-        <label class="text-micro">
-          <span class="font-medium text-[var(--fg-muted)]">Cron expression</span
-          >
-          <input
-            bind:value={topicDraft.cadenceCron}
-            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta transition-colors focus:bg-[var(--panel)]"
-            placeholder="0 9 * * *"
-            type="text"
-          />
-          {#if describeCron(topicDraft.cadenceCron)}
-            <span class="mt-1 block text-micro text-[var(--fg-muted)]">
-              {describeCron(topicDraft.cadenceCron)}
-            </span>
-          {/if}
-        </label>
-      {/if}
-      <label class="text-micro">
-        <span class="font-medium text-[var(--fg-muted)]">Tags</span>
-        <input
-          bind:value={topicDraft.tagsInput}
-          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta transition-colors focus:bg-[var(--panel)]"
-          placeholder="ops, customer"
-          type="text"
-        />
       </label>
       <label class="text-micro sm:col-span-2">
         <span class="font-medium text-[var(--fg-muted)]">Summary</span>
@@ -685,7 +541,6 @@
       class="space-y-px overflow-hidden rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
     >
       {#each topics as topic, i}
-        {@const staleness = computeStaleness(topic)}
         <div
           class="flex items-stretch {i > 0
             ? 'border-t border-[var(--line)]'
@@ -695,12 +550,6 @@
             class="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--line-subtle)]"
             href={workspaceHref(`/topics/${encodeURIComponent(topic.id)}`)}
           >
-            <span
-              class="flex h-2 w-2 shrink-0 rounded-full {priorityDot(
-                topic.priority,
-              )}"
-              title={getPriorityLabel(topic.priority)}
-            ></span>
             <TopicTypeGlyph type={topic.type} class="shrink-0" />
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-center gap-2">
@@ -719,29 +568,11 @@
               </p>
             </div>
             <div class="flex shrink-0 items-center gap-1.5 text-micro">
-              {#if topic.status && topic.status !== "active"}
-                <span class="font-medium capitalize {statusColor(topic.status)}"
-                  >{topic.status}</span
-                >
-              {/if}
-              <span
-                class="hidden rounded border border-[var(--line)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)] sm:inline"
-                >{formatCadenceLabel(topic.cadence, {
-                  includeExpression: false,
-                })}</span
-              >
-              {#if (topic.tags ?? []).length > 0}
+              {#if topic.state && topic.state !== "active"}
                 <span
-                  class="hidden rounded bg-[var(--panel)] px-1.5 py-0.5 text-[var(--fg-muted)] sm:inline"
-                  >{topic.tags[0]}{topic.tags.length > 1
-                    ? ` +${topic.tags.length - 1}`
-                    : ""}</span
-                >
-              {/if}
-              {#if staleness.stale}
-                <span
-                  class="rounded bg-danger-soft px-1.5 py-0.5 font-medium text-danger-text"
-                  >Stale</span
+                  class="font-medium capitalize {lifecycleStateColor(
+                    topic.state,
+                  )}">{topic.state}</span
                 >
               {/if}
               <span class="w-14 text-right text-[var(--fg-muted)]"
@@ -807,7 +638,7 @@
             <p class="truncate text-meta font-medium text-[var(--fg)]">
               {thread.title || thread.id}
             </p>
-            {#if thread.status === "archived"}
+            {#if thread.state === "archived"}
               <span
                 class="shrink-0 rounded bg-warn-soft px-1.5 py-0.5 text-micro font-medium text-warn-text"
                 >Archived</span

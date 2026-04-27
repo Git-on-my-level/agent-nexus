@@ -116,7 +116,6 @@ func TestApplyExecuteSubstitutesRefs(t *testing.T) {
 					"thread": map[string]any{
 						"title":           "Imported root",
 						"type":            "other",
-						"status":          "active",
 						"priority":        "p2",
 						"tags":            []string{"import"},
 						"cadence":         "reactive",
@@ -207,7 +206,6 @@ func TestApplyExecuteDropsRefsForPendingBinaryArtifacts(t *testing.T) {
 					"thread": map[string]any{
 						"title":           "Imported root",
 						"type":            "other",
-						"status":          "active",
 						"priority":        "p2",
 						"tags":            []string{"import"},
 						"cadence":         "reactive",

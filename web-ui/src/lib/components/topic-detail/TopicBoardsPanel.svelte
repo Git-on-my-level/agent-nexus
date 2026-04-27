@@ -13,10 +13,10 @@
 
   let hasAny = $derived(ownedBoards.length > 0 || boardMemberships.length > 0);
 
-  function statusTone(status) {
-    if (status === "active") return "text-ok-text bg-ok-soft";
-    if (status === "paused") return "text-warn-text bg-warn-soft";
-    if (status === "closed") return "text-[var(--fg-muted)] bg-[var(--line)]";
+  function lifecycleStateTone(state) {
+    if (state === "active") return "text-ok-text bg-ok-soft";
+    if (state === "archived") return "text-warn-text bg-warn-soft";
+    if (state === "trashed") return "text-slate-300 bg-slate-500/10";
     return "text-[var(--fg-muted)] bg-[var(--line)]";
   }
 
@@ -88,13 +88,13 @@
                 <span class="truncate text-meta font-medium text-[var(--fg)]">
                   {board.title || board.id}
                 </span>
-                {#if board.status}
+                {#if board.state}
                   <span
-                    class="shrink-0 rounded px-1.5 py-0.5 text-micro font-semibold {statusTone(
-                      board.status,
+                    class="shrink-0 rounded px-1.5 py-0.5 text-micro font-semibold {lifecycleStateTone(
+                      board.state,
                     )}"
                   >
-                    {BOARD_STATUS_LABELS[board.status] ?? board.status}
+                    {BOARD_STATUS_LABELS[board.state] ?? board.state}
                   </span>
                 {/if}
               </div>
@@ -119,8 +119,8 @@
             {@const boardId = membership?.board?.id ?? membership?.board_id}
             {@const boardTitle =
               membership?.board?.title ?? membership?.board_title ?? boardId}
-            {@const boardStatus =
-              membership?.board?.status ?? membership?.board_status}
+            {@const boardState =
+              membership?.board?.state ?? membership?.board_state}
             {@const columnKey =
               membership?.card?.column_key ?? membership?.column_key}
             {@const pinnedDocumentId = documentIdFromCardRef(
@@ -148,13 +148,13 @@
                     >
                       {boardTitle}
                     </span>
-                    {#if boardStatus}
+                    {#if boardState}
                       <span
-                        class="shrink-0 rounded px-1.5 py-0.5 text-micro font-semibold {statusTone(
-                          boardStatus,
+                        class="shrink-0 rounded px-1.5 py-0.5 text-micro font-semibold {lifecycleStateTone(
+                          boardState,
                         )}"
                       >
-                        {BOARD_STATUS_LABELS[boardStatus] ?? boardStatus}
+                        {BOARD_STATUS_LABELS[boardState] ?? boardState}
                       </span>
                     {/if}
                     {#if columnKey}

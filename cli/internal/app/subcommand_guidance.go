@@ -140,7 +140,7 @@ var provenanceSubcommandSpec = subcommandSpec{
 var threadsSubcommandSpec = subcommandSpec{
 	command:  "threads",
 	valid:    []string{"list", "get", "timeline", "context", "inspect", "workspace", "review", "recommendations"},
-	examples: []string{"anx topics workspace --topic-id <topic-id>", "anx threads list --status active", "anx threads workspace --status active --type initiative --full-id"},
+	examples: []string{"anx topics workspace --topic-id <topic-id>", "anx threads list --state active", "anx threads workspace --state active --full-id"},
 	aliases: map[string]string{
 		"ls": "list",
 	},
@@ -159,7 +159,7 @@ var artifactsSubcommandSpec = subcommandSpec{
 var boardsSubcommandSpec = subcommandSpec{
 	command:  "boards",
 	valid:    []string{"list", "create", "get", "update", "workspace", "archive", "unarchive", "trash", "restore", "purge", "cards"},
-	examples: []string{"anx boards list --status active", "anx boards workspace --board-id <board-id>", "anx boards get --board-id <board-id> --json", "anx boards cards create --board-id <board-id> --title \"Buy groceries\" --column backlog"},
+	examples: []string{"anx boards list --state active", "anx boards workspace --board-id <board-id>", "anx boards get --board-id <board-id> --json", "anx boards cards create --board-id <board-id> --title \"Buy groceries\" --column backlog"},
 	aliases: map[string]string{
 		"ls":   "list",
 		"show": "get",
@@ -169,7 +169,7 @@ var boardsSubcommandSpec = subcommandSpec{
 var boardsCardsSubcommandSpec = subcommandSpec{
 	command:  "boards cards",
 	valid:    []string{"list", "create", "create-batch", "get", "update", "move", "archive"},
-	examples: []string{"anx boards cards list --board-id <board-id>", "anx boards cards create --board-id <board-id> --title \"Buy groceries\" --column backlog", "anx boards get --board-id <board-id> --json   # copy board.updated_at for the next command", "anx boards cards create-batch --board-id <board-id> --from-file batch.json", "anx boards cards create-batch <board-id> --from-file batch.json --request-key my-run-1 --if-board-updated-at \"<board-updated-at>\"", "anx boards cards update --card-id <card-id> --if-updated-at <card-updated-at> --status done"},
+	examples: []string{"anx boards cards list --board-id <board-id>", "anx boards cards create --board-id <board-id> --title \"Buy groceries\" --column backlog", "anx boards get --board-id <board-id> --json   # copy board.updated_at for the next command", "anx boards cards create-batch --board-id <board-id> --from-file batch.json", "anx boards cards create-batch <board-id> --from-file batch.json --request-key my-run-1 --if-board-updated-at \"<board-updated-at>\"", "anx boards cards update --card-id <card-id> --if-updated-at <card-updated-at> --resolution done"},
 	aliases: map[string]string{
 		"ls":     "list",
 		"add":    "create",

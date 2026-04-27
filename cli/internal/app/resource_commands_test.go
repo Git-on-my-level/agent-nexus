@@ -440,21 +440,19 @@ func TestInboxListSupportsClientSideThreadAndTypeFilters(t *testing.T) {
 	}
 }
 
-func TestInboxListTypeFilterAcceptsLegacyCategoryAliases(t *testing.T) {
+func TestInboxListTypeFilterRejectsLegacyCategoryAliases(t *testing.T) {
 	t.Parallel()
 
-	const matchingID = "inbox:action_needed:thread_1234567890:none:event_1234567890"
+	var (
+		requestCount int
+		mu           sync.Mutex
+	)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || r.URL.Path != "/inbox" {
-			http.NotFound(w, r)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"items":[
-			{"id":"` + matchingID + `","thread_id":"thread_1234567890","category":"action_needed","summary":"needs approval"},
-			{"id":"inbox:risk_exception:thread_1234567890:none:event_other","thread_id":"thread_1234567890","category":"risk_exception","summary":"risk"}
-		]}`))
+		mu.Lock()
+		requestCount++
+		mu.Unlock()
+		http.NotFound(w, r)
 	}))
 	defer server.Close()
 
@@ -466,19 +464,19 @@ func TestInboxListTypeFilterAcceptsLegacyCategoryAliases(t *testing.T) {
 		"--thread-id", "thread_1234567890",
 		"--type", "decision_needed",
 	})
-	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
-	types := stringList(data["types"])
-	if len(types) != 1 || types[0] != "action_needed" {
-		t.Fatalf("expected normalized types in response, got %#v", data)
+	payload := assertEnvelopeError(t, raw)
+	errObj, _ := payload["error"].(map[string]any)
+	if errObj == nil || anyStringValue(errObj["code"]) != "invalid_flags" {
+		t.Fatalf("expected invalid_flags error, got %#v", payload)
 	}
-	items, _ := data["items"].([]any)
-	if len(items) != 1 {
-		t.Fatalf("expected one filtered inbox item, got %#v", data)
+	if got := anyStringValue(errObj["message"]); !strings.Contains(got, "legacy inbox type/category aliases are no longer supported") || !strings.Contains(got, "decision_needed") {
+		t.Fatalf("expected legacy alias rejection message, got %q", got)
 	}
-	item, _ := items[0].(map[string]any)
-	if got := anyStringValue(item["id"]); got != matchingID {
-		t.Fatalf("expected matching inbox item %q, got %#v", matchingID, data)
+	mu.Lock()
+	gotRequests := requestCount
+	mu.Unlock()
+	if gotRequests != 0 {
+		t.Fatalf("expected no inbox request when validation fails, got %d", gotRequests)
 	}
 }
 
@@ -1572,7 +1570,7 @@ func TestCommitmentsCommandsAreRemoved(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
-	raw := runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{"patch":{"status":"done"}}`), []string{
+	raw := runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{"patch":{"resolution":"done"}}`), []string{
 		"--json",
 		"commitments", "patch",
 		"--commitment-id", "commitment_1",
@@ -2181,34 +2179,31 @@ func TestBoardCommands(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/boards":
-			if got := r.URL.Query().Get("status"); got != "active" {
-				t.Fatalf("expected status query active, got %q", got)
-			}
-			if got := r.URL.Query()["label"]; len(got) != 1 || got[0] != "ops" {
-				t.Fatalf("expected label query [ops], got %#v", got)
+			if got := r.URL.Query().Get("state"); got != "active" {
+				t.Fatalf("expected state query active, got %q", got)
 			}
 			if got := r.URL.Query()["owner"]; len(got) != 1 || got[0] != "actor_1" {
 				t.Fatalf("expected owner query [actor_1], got %#v", got)
 			}
-			_, _ = w.Write([]byte(`{"boards":[{"board":{"id":"` + boardID + `","title":"Launch","status":"active"},"summary":{"card_count":1,"cards_by_column":{"backlog":1,"ready":0,"in_progress":0,"blocked":0,"review":0,"done":0},"unresolved_card_count":1,"document_count":1,"latest_activity_at":"` + updatedAt + `","has_document_refs":true}}]}`))
+			_, _ = w.Write([]byte(`{"boards":[{"board":{"id":"` + boardID + `","title":"Launch","state":"active"},"summary":{"card_count":1,"cards_by_column":{"backlog":1,"ready":0,"in_progress":0,"blocked":0,"review":0,"done":0},"unresolved_card_count":1,"document_count":1,"latest_activity_at":"` + updatedAt + `","has_document_refs":true}}]}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/boards":
 			body, _ := io.ReadAll(r.Body)
 			if !bytes.Contains(body, []byte(`"title":"Launch"`)) {
 				t.Fatalf("unexpected boards create body: %s", string(body))
 			}
 			w.WriteHeader(http.StatusCreated)
-			_, _ = w.Write([]byte(`{"board":{"id":"` + boardID + `","title":"Launch","status":"active","updated_at":"` + updatedAt + `"}}`))
+			_, _ = w.Write([]byte(`{"board":{"id":"` + boardID + `","title":"Launch","state":"active","updated_at":"` + updatedAt + `"}}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/boards/"+boardID:
-			_, _ = w.Write([]byte(`{"board":{"id":"` + boardID + `","title":"Launch","status":"active","updated_at":"` + updatedAt + `"}}`))
+			_, _ = w.Write([]byte(`{"board":{"id":"` + boardID + `","title":"Launch","state":"active","updated_at":"` + updatedAt + `"}}`))
 		case r.Method == http.MethodPatch && r.URL.Path == "/boards/"+boardID:
 			body, _ := io.ReadAll(r.Body)
 			if !bytes.Contains(body, []byte(`"if_updated_at":"`+updatedAt+`"`)) {
 				t.Fatalf("unexpected boards update body: %s", string(body))
 			}
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"board":{"id":"` + boardID + `","title":"Launch Updated","status":"active","updated_at":"` + nextUpdatedAt + `"}}`))
+			_, _ = w.Write([]byte(`{"board":{"id":"` + boardID + `","title":"Launch Updated","state":"active","updated_at":"` + nextUpdatedAt + `"}}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/boards/"+boardID+"/workspace":
-			_, _ = w.Write([]byte(`{"board_id":"` + boardID + `","board":{"id":"` + boardID + `","title":"Launch","status":"active","updated_at":"` + updatedAt + `"},"cards":{"items":[{"card":{"board_id":"` + boardID + `","thread_id":"` + cardThreadID + `","column_key":"backlog","rank":"a"},"thread":{"id":"` + cardThreadID + `","title":"Card"},"summary":{"related_topic_count":1,"decision_request_count":0,"decision_count":0,"recommendation_count":0,"document_count":1,"inbox_count":0,"latest_activity_at":"` + updatedAt + `","stale":false},"pinned_document":null}],"count":1},"documents":{"items":[],"count":0},"inbox":{"items":[],"count":0},"board_summary":{"card_count":1,"cards_by_column":{"backlog":1,"ready":0,"in_progress":0,"blocked":0,"review":0,"done":0},"unresolved_card_count":1,"document_count":1,"latest_activity_at":"` + updatedAt + `","has_document_refs":true},"warnings":{"items":[],"count":0},"section_kinds":{"board":"canonical","cards":"canonical","documents":"derived","topics":"derived","inbox":"derived","warnings":"derived"},"generated_at":"` + updatedAt + `"}`))
+			_, _ = w.Write([]byte(`{"board_id":"` + boardID + `","board":{"id":"` + boardID + `","title":"Launch","state":"active","updated_at":"` + updatedAt + `"},"cards":{"items":[{"card":{"board_id":"` + boardID + `","thread_id":"` + cardThreadID + `","column_key":"backlog","rank":"a"},"thread":{"id":"` + cardThreadID + `","title":"Card"},"summary":{"related_topic_count":1,"decision_request_count":0,"decision_count":0,"recommendation_count":0,"document_count":1,"inbox_count":0,"latest_activity_at":"` + updatedAt + `","stale":false},"pinned_document":null}],"count":1},"documents":{"items":[],"count":0},"inbox":{"items":[],"count":0},"board_summary":{"card_count":1,"cards_by_column":{"backlog":1,"ready":0,"in_progress":0,"blocked":0,"review":0,"done":0},"unresolved_card_count":1,"document_count":1,"latest_activity_at":"` + updatedAt + `","has_document_refs":true},"warnings":{"items":[],"count":0},"section_kinds":{"board":"canonical","cards":"canonical","documents":"derived","topics":"derived","inbox":"derived","warnings":"derived"},"generated_at":"` + updatedAt + `"}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/boards/"+boardID+"/cards":
 			_, _ = w.Write([]byte(`{"board_id":"` + boardID + `","cards":[{"id":"` + cardID + `","board_id":"` + boardID + `","thread_id":"` + cardThreadID + `","parent_thread":"` + cardThreadID + `","title":"Launch task","body":"","version":1,"column_key":"backlog","rank":"a","assignee":null,"priority":null,"status":"todo","pinned_document_id":null,"created_at":"` + updatedAt + `","created_by":"actor_1","updated_at":"` + updatedAt + `","updated_by":"actor_1","provenance":{"sources":["inferred"]}}]}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/boards/"+boardID+"/cards":
@@ -2222,10 +2217,13 @@ func TestBoardCommands(t *testing.T) {
 			if got := anyStringValue(payload["request_key"]); got != "req-1" {
 				t.Fatalf("expected create request_key req-1, got %#v", payload)
 			}
+			if got := anyStringValue(payload["document_ref"]); got != "document:doc_1" {
+				t.Fatalf("expected create document_ref document:doc_1, got %#v", payload)
+			}
 			w.WriteHeader(http.StatusCreated)
 			_, _ = w.Write([]byte(`{"board":{"id":"` + boardID + `","updated_at":"` + nextUpdatedAt + `"},"card":{"id":"` + cardID + `","board_id":"` + boardID + `","thread_id":"` + cardThreadID + `","parent_thread":"` + cardThreadID + `","title":"Launch task","body":"","version":1,"column_key":"backlog","rank":"a","assignee":null,"priority":null,"status":"todo","pinned_document_id":"doc_1","created_at":"` + updatedAt + `","created_by":"actor_1","updated_at":"` + nextUpdatedAt + `","updated_by":"actor_1","provenance":{"sources":["inferred"]}}}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/boards/"+boardID+"/cards/"+cardID:
-			_, _ = w.Write([]byte(`{"card":{"id":"` + cardID + `","board_id":"` + boardID + `","thread_id":"` + cardThreadID + `","parent_thread":"` + cardThreadID + `","title":"Launch task","body":"Investigate blockers","version":2,"column_key":"backlog","rank":"a","assignee":"actor_1","priority":"high","status":"in_progress","pinned_document_id":"doc_1","created_at":"` + updatedAt + `","created_by":"actor_1","updated_at":"` + nextUpdatedAt + `","updated_by":"actor_1","provenance":{"sources":["inferred"]},"history":[{"id":"` + cardID + `","version":1,"title":"Launch task","body":"","parent_thread":"` + cardThreadID + `","thread_id":"` + cardThreadID + `","pinned_document_id":"doc_1","assignee":null,"priority":null,"status":"todo","created_at":"` + updatedAt + `","created_by":"actor_1","provenance":{"sources":["inferred"]}},{"id":"` + cardID + `","version":2,"title":"Launch task","body":"Investigate blockers","parent_thread":"` + cardThreadID + `","thread_id":"` + cardThreadID + `","pinned_document_id":"doc_1","assignee":"actor_1","priority":"high","status":"in_progress","created_at":"` + nextUpdatedAt + `","created_by":"actor_1","provenance":{"sources":["inferred"]}}]}}`))
+			_, _ = w.Write([]byte(`{"card":{"id":"` + cardID + `","board_id":"` + boardID + `","thread_id":"` + cardThreadID + `","parent_thread":"` + cardThreadID + `","title":"Launch task","summary":"","version":2,"column_key":"done","rank":"a","assignee":"actor_1","priority":"high","resolution":"","pinned_document_id":"doc_1","created_at":"` + updatedAt + `","created_by":"actor_1","updated_at":"` + nextUpdatedAt + `","updated_by":"actor_1","provenance":{"sources":["inferred"]}}}`))
 		case r.Method == http.MethodPatch && r.URL.Path == "/cards/"+cardID:
 			var payload map[string]any
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
@@ -2235,10 +2233,10 @@ func TestBoardCommands(t *testing.T) {
 				t.Fatalf("expected card update concurrency token %q, got %#v", updatedAt, payload)
 			}
 			patch, _ := payload["patch"].(map[string]any)
-			if got := anyStringValue(patch["status"]); got != "done" {
-				t.Fatalf("expected status done, got %#v", payload)
+			if got := anyStringValue(patch["resolution"]); got != "done" {
+				t.Fatalf("expected resolution done, got %#v", payload)
 			}
-			_, _ = w.Write([]byte(`{"card":{"id":"` + cardID + `","board_id":"` + boardID + `","thread_id":"` + cardThreadID + `","parent_thread":"` + cardThreadID + `","title":"Launch task","body":"","version":2,"column_key":"backlog","rank":"a","assignee":null,"priority":null,"status":"done","pinned_document_id":"doc_1","created_at":"` + updatedAt + `","created_by":"actor_1","updated_at":"` + nextUpdatedAt + `","updated_by":"actor_1","provenance":{"sources":["inferred"]}}}`))
+			_, _ = w.Write([]byte(`{"card":{"id":"` + cardID + `","board_id":"` + boardID + `","thread_id":"` + cardThreadID + `","parent_thread":"` + cardThreadID + `","title":"Launch task","summary":"","version":2,"column_key":"done","rank":"a","assignee":null,"priority":null,"resolution":"done","pinned_document_id":"doc_1","created_at":"` + updatedAt + `","created_by":"actor_1","updated_at":"` + nextUpdatedAt + `","updated_by":"actor_1","provenance":{"sources":["inferred"]}}}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/cards/"+cardID+"/move":
 			var payload map[string]any
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
@@ -2269,8 +2267,8 @@ func TestBoardCommands(t *testing.T) {
 	home := t.TempDir()
 	env := map[string]string{}
 
-	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "boards", "list", "--status", "active", "--label", "ops", "--owner", "actor_1"}))
-	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"board":{"title":"Launch","thread_id":"thread_primary_1","status":"active"}}`), []string{"--json", "--base-url", server.URL, "boards", "create"}))
+	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "boards", "list", "--state", "active", "--owner", "actor_1"}))
+	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"board":{"title":"Launch","thread_id":"thread_primary_1","state":"active"}}`), []string{"--json", "--base-url", server.URL, "boards", "create"}))
 
 	getPayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "boards", "get", "--board-id", boardID}))
 	if got := anyStringValue(getPayload["command_id"]); got != "boards.get" {
@@ -2292,7 +2290,7 @@ func TestBoardCommands(t *testing.T) {
 		t.Fatalf("expected boards.cards.list command_id, got %#v", cardsListPayload)
 	}
 
-	createPayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "boards", "cards", "create", "--board-id", boardID, "--column", "backlog", "--request-key", "req-1", "--pinned-document-id", "doc_1"}))
+	createPayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "boards", "cards", "create", "--board-id", boardID, "--column", "backlog", "--request-key", "req-1", "--document-ref", "document:doc_1"}))
 	if got := anyStringValue(createPayload["command_id"]); got != "boards.cards.create" {
 		t.Fatalf("expected boards.cards.create command_id, got %#v", createPayload)
 	}
@@ -2302,7 +2300,7 @@ func TestBoardCommands(t *testing.T) {
 		t.Fatalf("expected boards.cards.get command_id, got %#v", getCardPayload)
 	}
 
-	updateCardPayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "boards", "cards", "update", "--card-id", cardID, "--if-updated-at", updatedAt, "--status", "done"}))
+	updateCardPayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "boards", "cards", "update", "--card-id", cardID, "--if-updated-at", updatedAt, "--resolution", "done"}))
 	if got := anyStringValue(updateCardPayload["command_id"]); got != "boards.cards.update" {
 		t.Fatalf("expected boards.cards.update command_id, got %#v", updateCardPayload)
 	}
@@ -2328,12 +2326,12 @@ func TestBoardsListAddsNestedShortIDAndWorkspaceResolvesShortBoardID(t *testing.
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/boards":
-			_, _ = w.Write([]byte(`{"boards":[{"board":{"id":"` + canonicalID + `","title":"Ops Board","status":"active"},"summary":{"card_count":0,"cards_by_column":{"backlog":0,"ready":0,"in_progress":0,"blocked":0,"review":0,"done":0},"unresolved_card_count":0,"document_count":0,"latest_activity_at":null,"has_document_refs":false}}]}`))
+			_, _ = w.Write([]byte(`{"boards":[{"board":{"id":"` + canonicalID + `","title":"Ops Board","state":"active"},"summary":{"card_count":0,"cards_by_column":{"backlog":0,"ready":0,"in_progress":0,"blocked":0,"review":0,"done":0},"unresolved_card_count":0,"document_count":0,"latest_activity_at":null,"has_document_refs":false}}]}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/boards/"+prefixID+"/workspace":
 			w.WriteHeader(http.StatusNotFound)
 			_, _ = w.Write([]byte(`{"error":{"code":"not_found","message":"board not found"}}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/boards/"+canonicalID+"/workspace":
-			_, _ = w.Write([]byte(`{"board_id":"` + canonicalID + `","board":{"id":"` + canonicalID + `","title":"Ops Board","status":"active"},"cards":{"items":[],"count":0},"documents":{"items":[],"count":0},"inbox":{"items":[],"count":0},"board_summary":{"card_count":0,"cards_by_column":{"backlog":0,"ready":0,"in_progress":0,"blocked":0,"review":0,"done":0},"unresolved_card_count":0,"document_count":0,"latest_activity_at":null,"has_document_refs":false},"warnings":{"items":[],"count":0},"section_kinds":{"board":"canonical","cards":"canonical","documents":"derived","topics":"derived","inbox":"derived","warnings":"derived"},"generated_at":"2026-03-08T00:00:00Z"}`))
+			_, _ = w.Write([]byte(`{"board_id":"` + canonicalID + `","board":{"id":"` + canonicalID + `","title":"Ops Board","state":"active"},"cards":{"items":[],"count":0},"documents":{"items":[],"count":0},"inbox":{"items":[],"count":0},"board_summary":{"card_count":0,"cards_by_column":{"backlog":0,"ready":0,"in_progress":0,"blocked":0,"review":0,"done":0},"unresolved_card_count":0,"document_count":0,"latest_activity_at":null,"has_document_refs":false},"warnings":{"items":[],"count":0},"section_kinds":{"board":"canonical","cards":"canonical","documents":"derived","topics":"derived","inbox":"derived","warnings":"derived"},"generated_at":"2026-03-08T00:00:00Z"}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -2409,7 +2407,7 @@ func TestBoardCardMutationsResolveShortThreadIDsInBodies(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/boards":
-			_, _ = w.Write([]byte(`{"boards":[{"board":{"id":"` + canonicalBoardID + `","title":"Ops Board","status":"active"},"summary":{"card_count":0,"cards_by_column":{"backlog":0,"ready":0,"in_progress":0,"blocked":0,"review":0,"done":0},"unresolved_card_count":0,"document_count":0,"latest_activity_at":null,"has_document_refs":false}}]}`))
+			_, _ = w.Write([]byte(`{"boards":[{"board":{"id":"` + canonicalBoardID + `","title":"Ops Board","state":"active"},"summary":{"card_count":0,"cards_by_column":{"backlog":0,"ready":0,"in_progress":0,"blocked":0,"review":0,"done":0},"unresolved_card_count":0,"document_count":0,"latest_activity_at":null,"has_document_refs":false}}]}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/threads":
 			_, _ = w.Write([]byte(`{"threads":[{"id":"` + canonicalCardThreadID + `","title":"Execution Track"},{"id":"` + canonicalAnchorThreadID + `","title":"Review Anchor"}]}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/boards/"+canonicalBoardID+"/cards":
@@ -2482,7 +2480,7 @@ func TestBoardCardMoveResolvesShortAfterCardID(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/boards":
-			_, _ = w.Write([]byte(`{"boards":[{"board":{"id":"` + canonicalBoardID + `","title":"Ops Board","status":"active"},"summary":{"card_count":0,"cards_by_column":{"backlog":0,"ready":0,"in_progress":0,"blocked":0,"review":0,"done":0},"unresolved_card_count":0,"document_count":0,"latest_activity_at":null,"has_document_refs":false}}]}`))
+			_, _ = w.Write([]byte(`{"boards":[{"board":{"id":"` + canonicalBoardID + `","title":"Ops Board","state":"active"},"summary":{"card_count":0,"cards_by_column":{"backlog":0,"ready":0,"in_progress":0,"blocked":0,"review":0,"done":0},"unresolved_card_count":0,"document_count":0,"latest_activity_at":null,"has_document_refs":false}}]}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/boards/"+canonicalBoardID+"/cards":
 			_, _ = w.Write([]byte(`{"board_id":"` + canonicalBoardID + `","cards":[
 				{"id":"` + movingCardID + `","board_id":"` + canonicalBoardID + `","column_key":"ready","rank":"a","title":"Moving","body":"","version":1,"parent_thread":null,"thread_id":null,"pinned_document_id":null,"assignee":null,"priority":null,"status":"todo","created_at":"` + updatedAt + `","created_by":"actor_1","updated_at":"` + updatedAt + `","updated_by":"actor_1","provenance":{"sources":["inferred"]}},
@@ -2530,7 +2528,7 @@ func TestBoardCardMoveResolvesShortAfterCardIDFromFile(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/boards":
-			_, _ = w.Write([]byte(`{"boards":[{"board":{"id":"` + canonicalBoardID + `","title":"Ops Board","status":"active"},"summary":{"card_count":0,"cards_by_column":{"backlog":0,"ready":0,"in_progress":0,"blocked":0,"review":0,"done":0},"unresolved_card_count":0,"document_count":0,"latest_activity_at":null,"has_document_refs":false}}]}`))
+			_, _ = w.Write([]byte(`{"boards":[{"board":{"id":"` + canonicalBoardID + `","title":"Ops Board","state":"active"},"summary":{"card_count":0,"cards_by_column":{"backlog":0,"ready":0,"in_progress":0,"blocked":0,"review":0,"done":0},"unresolved_card_count":0,"document_count":0,"latest_activity_at":null,"has_document_refs":false}}]}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/boards/"+canonicalBoardID+"/cards":
 			_, _ = w.Write([]byte(`{"board_id":"` + canonicalBoardID + `","cards":[
 				{"id":"` + movingCardID + `","board_id":"` + canonicalBoardID + `","column_key":"ready","rank":"a","title":"Moving","body":"","version":1,"parent_thread":null,"thread_id":null,"pinned_document_id":null,"assignee":null,"priority":null,"status":"todo","created_at":"` + updatedAt + `","created_by":"actor_1","updated_at":"` + updatedAt + `","updated_by":"actor_1","provenance":{"sources":["inferred"]}},
@@ -2590,10 +2588,10 @@ func TestBoardCardUpdateAndMoveAllowJSONBodyWithoutConcurrencyFlags(t *testing.T
 				t.Fatalf("expected update concurrency token %q, got %#v", updatedAt, payload)
 			}
 			patch, _ := payload["patch"].(map[string]any)
-			if got := anyStringValue(patch["status"]); got != "done" {
-				t.Fatalf("expected update patch status done, got %#v", payload)
+			if got := anyStringValue(patch["resolution"]); got != "done" {
+				t.Fatalf("expected update patch resolution done, got %#v", payload)
 			}
-			_, _ = w.Write([]byte(`{"board":{"id":"` + canonicalBoardID + `","updated_at":"` + updatedAt + `"},"card":{"id":"` + canonicalCardID + `","board_id":"` + canonicalBoardID + `","status":"done"}}`))
+			_, _ = w.Write([]byte(`{"board":{"id":"` + canonicalBoardID + `","updated_at":"` + updatedAt + `"},"card":{"id":"` + canonicalCardID + `","board_id":"` + canonicalBoardID + `","column_key":"done","resolution":"done"}}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/cards/"+canonicalCardID+"/move":
 			var payload map[string]any
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
@@ -2614,7 +2612,7 @@ func TestBoardCardUpdateAndMoveAllowJSONBodyWithoutConcurrencyFlags(t *testing.T
 
 	home := t.TempDir()
 	updateFile := filepath.Join(home, "board-card-update.json")
-	if err := os.WriteFile(updateFile, []byte(`{"if_board_updated_at":"`+updatedAt+`","patch":{"status":"done"}}`), 0o600); err != nil {
+	if err := os.WriteFile(updateFile, []byte(`{"if_board_updated_at":"`+updatedAt+`","patch":{"resolution":"done"}}`), 0o600); err != nil {
 		t.Fatalf("write update file: %v", err)
 	}
 	moveFile := filepath.Join(home, "board-card-move.json")
@@ -2648,7 +2646,7 @@ func TestThreadsContextRejectsMixedSelectionModesWithActionableGuidance(t *testi
 		"--json",
 		"threads", "context",
 		"--thread-id", "thread_1",
-		"--status", "active",
+		"--state", "active",
 	})
 	payload := assertEnvelopeError(t, raw)
 	errObj, _ := payload["error"].(map[string]any)
@@ -2656,7 +2654,7 @@ func TestThreadsContextRejectsMixedSelectionModesWithActionableGuidance(t *testi
 		t.Fatalf("unexpected error payload: %#v", payload)
 	}
 	message := anyStringValue(errObj["message"])
-	if !strings.Contains(message, "--thread-id cannot be combined with discovery filters") || !strings.Contains(message, "anx threads workspace --thread-id <thread-id>") || !strings.Contains(message, "anx threads inspect --thread-id <thread-id>") || !strings.Contains(message, "anx topics workspace") || !strings.Contains(message, "anx threads inspect --status active") {
+	if !strings.Contains(message, "--thread-id cannot be combined with discovery filters") || !strings.Contains(message, "anx threads workspace --thread-id <thread-id>") || !strings.Contains(message, "anx threads inspect --thread-id <thread-id>") || !strings.Contains(message, "anx topics workspace") || !strings.Contains(message, "anx threads inspect --state active") {
 		t.Fatalf("expected actionable threads context guidance, got %#v", payload)
 	}
 }
@@ -2669,7 +2667,7 @@ func TestThreadsContextAggregatesAcrossMultipleThreads(t *testing.T) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_1/context":
 			_, _ = w.Write([]byte(`{
-				"thread":{"id":"thread_1","title":"Pilot Rescue","status":"active"},
+				"thread":{"id":"thread_1","title":"Pilot Rescue","state":"active"},
 				"recent_events":[
 					{"id":"event_actor_1","type":"actor_statement","summary":"support recommends Friday launch","created_at":"2026-03-06T10:00:00Z"},
 					{"id":"event_need_1","type":"decision_needed","summary":"pick launch day","created_at":"2026-03-06T10:01:00Z"}
@@ -2679,7 +2677,7 @@ func TestThreadsContextAggregatesAcrossMultipleThreads(t *testing.T) {
 			}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_2/context":
 			_, _ = w.Write([]byte(`{
-				"thread":{"id":"thread_2","title":"Delivery Readiness","status":"active"},
+				"thread":{"id":"thread_2","title":"Delivery Readiness","state":"active"},
 				"recent_events":[
 					{"id":"event_actor_2","type":"actor_statement","summary":"delivery recommends staged rollout","created_at":"2026-03-06T10:05:00Z"},
 					{"id":"event_done_2","type":"decision_made","summary":"ship Friday scope","created_at":"2026-03-06T10:10:00Z"}
@@ -2735,7 +2733,7 @@ func TestThreadsContextAggregatesAcrossMultipleThreads(t *testing.T) {
 	}
 }
 
-func TestThreadsContextDiscoversByFiltersAndType(t *testing.T) {
+func TestThreadsContextDiscoversByState(t *testing.T) {
 	t.Parallel()
 
 	var mu sync.Mutex
@@ -2745,16 +2743,16 @@ func TestThreadsContextDiscoversByFiltersAndType(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/threads":
-			if got := r.URL.Query().Get("status"); got != "active" {
-				t.Fatalf("expected status=active, got %q", got)
+			if got := r.URL.Query().Get("state"); got != "active" {
+				t.Fatalf("expected state=active, got %q", got)
 			}
-			if got := r.URL.Query().Get("tag"); got != "pilot" {
-				t.Fatalf("expected tag=pilot, got %q", got)
+			if tags := r.URL.Query()["tag"]; len(tags) > 0 {
+				t.Fatalf("unexpected tag query param: %q", tags)
 			}
 			_, _ = w.Write([]byte(`{"threads":[
-				{"id":"thread_init_1","type":"initiative","status":"active"},
-				{"id":"thread_case_1","type":"case","status":"active"},
-				{"id":"thread_init_2","type":"initiative","status":"active"}
+				{"id":"thread_init_1","type":"initiative","state":"active"},
+				{"id":"thread_case_1","type":"case","state":"active"},
+				{"id":"thread_init_2","type":"initiative","state":"active"}
 			]}`))
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/context"):
 			mu.Lock()
@@ -2763,6 +2761,8 @@ func TestThreadsContextDiscoversByFiltersAndType(t *testing.T) {
 			switch r.URL.Path {
 			case "/threads/thread_init_1/context":
 				_, _ = w.Write([]byte(`{"thread":{"id":"thread_init_1","type":"initiative"},"recent_events":[],"key_artifacts":[],"open_cards":[]}`))
+			case "/threads/thread_case_1/context":
+				_, _ = w.Write([]byte(`{"thread":{"id":"thread_case_1","type":"case"},"recent_events":[],"key_artifacts":[],"open_cards":[]}`))
 			case "/threads/thread_init_2/context":
 				_, _ = w.Write([]byte(`{"thread":{"id":"thread_init_2","type":"initiative"},"recent_events":[],"key_artifacts":[],"open_cards":[]}`))
 			default:
@@ -2779,22 +2779,20 @@ func TestThreadsContextDiscoversByFiltersAndType(t *testing.T) {
 		"--json",
 		"--base-url", server.URL,
 		"threads", "context",
-		"--status", "active",
-		"--tag", "pilot",
-		"--type", "initiative",
+		"--state", "active",
 	})
 	payload := assertEnvelopeOK(t, raw)
 	data, _ := payload["data"].(map[string]any)
 	threadIDs := stringList(data["thread_ids"])
-	if len(threadIDs) != 2 || threadIDs[0] != "thread_init_1" || threadIDs[1] != "thread_init_2" {
-		t.Fatalf("expected initiative thread_ids [thread_init_1 thread_init_2], got %#v", data)
+	if len(threadIDs) != 3 || threadIDs[0] != "thread_init_1" || threadIDs[1] != "thread_case_1" || threadIDs[2] != "thread_init_2" {
+		t.Fatalf("expected active thread_ids [thread_init_1 thread_case_1 thread_init_2], got %#v", data)
 	}
 
 	mu.Lock()
 	gotRequests := append([]string(nil), contextRequests...)
 	mu.Unlock()
-	if len(gotRequests) != 2 {
-		t.Fatalf("expected exactly 2 context requests, got %v", gotRequests)
+	if len(gotRequests) != 3 {
+		t.Fatalf("expected exactly 3 context requests, got %v", gotRequests)
 	}
 }
 
@@ -2868,7 +2866,7 @@ func TestThreadsInspectBuildsCoordinationView(t *testing.T) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_1/context":
 			_, _ = w.Write([]byte(`{
-				"thread":{"id":"thread_1","title":"Pilot Rescue","status":"active","type":"initiative"},
+				"thread":{"id":"thread_1","title":"Pilot Rescue","state":"active","type":"initiative"},
 				"recent_events":[
 					{"id":"` + eventID + `","thread_id":"thread_1","type":"actor_statement","summary":"ship Friday rescue scope"},
 					{"id":"event_need_1","thread_id":"thread_1","type":"decision_needed","summary":"approve launch date"}
@@ -2948,8 +2946,8 @@ func TestThreadsInspectDiscoveryRequiresSingleThread(t *testing.T) {
 		case r.Method == http.MethodGet && r.URL.Path == "/threads":
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"threads":[
-				{"id":"thread_init_1","type":"initiative","status":"active"},
-				{"id":"thread_init_2","type":"initiative","status":"active"}
+				{"id":"thread_init_1","type":"initiative","state":"active"},
+				{"id":"thread_init_2","type":"initiative","state":"active"}
 			]}`))
 		default:
 			http.NotFound(w, r)
@@ -2962,8 +2960,7 @@ func TestThreadsInspectDiscoveryRequiresSingleThread(t *testing.T) {
 		"--json",
 		"--base-url", server.URL,
 		"threads", "inspect",
-		"--status", "active",
-		"--type", "initiative",
+		"--state", "active",
 	})
 	payload := assertEnvelopeError(t, raw)
 	errObj, _ := payload["error"].(map[string]any)
@@ -2984,7 +2981,7 @@ func TestThreadsInspectRejectsMixedSelectionModes(t *testing.T) {
 		"--json",
 		"threads", "inspect",
 		"--thread-id", "thread_1",
-		"--status", "active",
+		"--state", "active",
 	})
 	payload := assertEnvelopeError(t, raw)
 	errObj, _ := payload["error"].(map[string]any)
@@ -2992,7 +2989,7 @@ func TestThreadsInspectRejectsMixedSelectionModes(t *testing.T) {
 		t.Fatalf("unexpected error payload: %#v", payload)
 	}
 	message := anyStringValue(errObj["message"])
-	if !strings.Contains(message, "--thread-id cannot be combined with discovery filters") || !strings.Contains(message, "anx threads inspect --thread-id <thread-id>") || !strings.Contains(message, "anx threads inspect --status active") {
+	if !strings.Contains(message, "--thread-id cannot be combined with discovery filters") || !strings.Contains(message, "anx threads inspect --thread-id <thread-id>") || !strings.Contains(message, "anx threads inspect --state active") {
 		t.Fatalf("expected shared-selection validation message, got %#v", payload)
 	}
 }
@@ -3010,7 +3007,7 @@ func TestThreadsRecommendationsBuildsFocusedReview(t *testing.T) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_1/context":
 			_, _ = w.Write([]byte(`{
-				"thread":{"id":"thread_1","title":"Pilot Rescue","status":"active","type":"initiative"},
+				"thread":{"id":"thread_1","title":"Pilot Rescue","state":"active","type":"initiative"},
 				"recent_events":[
 					{"id":"` + recommendationID + `","thread_id":"thread_1","type":"actor_statement","actor_id":"agent-pm","created_at":"2026-03-07T12:00:00Z","summary":"Ship Friday rescue scope","provenance":{"sources":["seed:pilot-rescue"]}},
 					{"id":"` + decisionNeededID + `","thread_id":"thread_1","type":"decision_needed","actor_id":"agent-lead","created_at":"2026-03-07T12:02:00Z","summary":"Need approval on launch date"},
@@ -3105,7 +3102,7 @@ func TestThreadsRecommendationsIncludesRelatedThreadReview(t *testing.T) {
 		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_main/workspace":
 			_, _ = w.Write([]byte(`{
 				"thread_id":"thread_main",
-				"thread":{"id":"thread_main","title":"Main Pilot Rescue","status":"active","type":"initiative"},
+				"thread":{"id":"thread_main","title":"Main Pilot Rescue","state":"active","type":"initiative"},
 				"context":{
 					"recent_events":[
 						{"id":"event_main_1","thread_id":"thread_main","type":"actor_statement","summary":"Main recommendation","refs":["thread:thread_related"]}
@@ -3133,14 +3130,14 @@ func TestThreadsRecommendationsIncludesRelatedThreadReview(t *testing.T) {
 				"related_threads":{
 					"count":1,
 					"items":[
-						{"thread":{"id":"thread_related","title":"Related Feedback Thread","status":"active","type":"case"},"match_reason":"thread_ref"}
+						{"thread":{"id":"thread_related","title":"Related Feedback Thread","state":"active","type":"case"},"match_reason":"thread_ref"}
 					]
 				},
 				"related_recommendations":{
 					"count":1,
 					"items":[
 						{
-							"thread":{"id":"thread_related","title":"Related Feedback Thread","status":"active","type":"case"},
+							"thread":{"id":"thread_related","title":"Related Feedback Thread","state":"active","type":"case"},
 							"event":{
 								"id":"event_related_1",
 								"thread_id":"thread_related",
@@ -3174,7 +3171,7 @@ func TestThreadsRecommendationsIncludesRelatedThreadReview(t *testing.T) {
 			}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_main/context":
 			_, _ = w.Write([]byte(`{
-				"thread":{"id":"thread_main","title":"Main Pilot Rescue","status":"active","type":"initiative"},
+				"thread":{"id":"thread_main","title":"Main Pilot Rescue","state":"active","type":"initiative"},
 					"recent_events":[
 						{"id":"event_main_1","thread_id":"thread_main","type":"actor_statement","actor_id":"agent-main","created_at":"2026-03-07T12:00:00Z","summary":"Main recommendation","refs":["thread:thread_related"]}
 					],
@@ -3185,7 +3182,7 @@ func TestThreadsRecommendationsIncludesRelatedThreadReview(t *testing.T) {
 				}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_related/context":
 			_, _ = w.Write([]byte(`{
-				"thread":{"id":"thread_related","title":"Related Feedback Thread","status":"active","type":"case"},
+				"thread":{"id":"thread_related","title":"Related Feedback Thread","state":"active","type":"case"},
 				"recent_events":[
 					{"id":"event_related_1","thread_id":"thread_related","type":"actor_statement","actor_id":"agent-related","created_at":"2026-03-07T12:05:00Z","summary":"Related recommendation"}
 				],
@@ -3330,7 +3327,7 @@ func TestThreadsRecommendationsSkipsMissingRelatedThreadsWithWarnings(t *testing
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_main/context":
 			_, _ = w.Write([]byte(`{
-				"thread":{"id":"thread_main","title":"Main Pilot Rescue","status":"active","type":"initiative"},
+				"thread":{"id":"thread_main","title":"Main Pilot Rescue","state":"active","type":"initiative"},
 				"recent_events":[
 					{"id":"event_main_1","thread_id":"thread_main","type":"actor_statement","summary":"Main recommendation","refs":["thread:thread_missing","thread:thread_related"]}
 				],
@@ -3339,7 +3336,7 @@ func TestThreadsRecommendationsSkipsMissingRelatedThreadsWithWarnings(t *testing
 			}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_related/context":
 			_, _ = w.Write([]byte(`{
-				"thread":{"id":"thread_related","title":"Related Feedback Thread","status":"active","type":"case"},
+				"thread":{"id":"thread_related","title":"Related Feedback Thread","state":"active","type":"case"},
 				"recent_events":[
 					{"id":"event_related_1","thread_id":"thread_related","type":"actor_statement","summary":"Related recommendation"}
 				],
@@ -3407,7 +3404,7 @@ func TestThreadsRecommendationsCanHydrateRelatedEventContent(t *testing.T) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_main/context":
 			_, _ = w.Write([]byte(`{
-				"thread":{"id":"thread_main","title":"Main Pilot Rescue","status":"active","type":"initiative"},
+				"thread":{"id":"thread_main","title":"Main Pilot Rescue","state":"active","type":"initiative"},
 				"recent_events":[
 					{"id":"event_main_1","thread_id":"thread_main","type":"actor_statement","summary":"Main recommendation","refs":["thread:thread_related"]}
 				],
@@ -3416,7 +3413,7 @@ func TestThreadsRecommendationsCanHydrateRelatedEventContent(t *testing.T) {
 			}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_related/context":
 			_, _ = w.Write([]byte(`{
-				"thread":{"id":"thread_related","title":"Related Feedback Thread","status":"active","type":"case"},
+				"thread":{"id":"thread_related","title":"Related Feedback Thread","state":"active","type":"case"},
 				"recent_events":[
 					{"id":"event_related_1","thread_id":"thread_related","type":"actor_statement","actor_id":"agent-related","created_at":"2026-03-07T12:05:00Z","summary":"Related recommendation"}
 				],
@@ -3478,7 +3475,7 @@ func TestThreadsWorkspaceCanHydrateRelatedEventContent(t *testing.T) {
 		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_main/workspace":
 			_, _ = w.Write([]byte(`{
 				"thread_id":"thread_main",
-				"thread":{"id":"thread_main","title":"Main Pilot Rescue","status":"active","type":"initiative"},
+				"thread":{"id":"thread_main","title":"Main Pilot Rescue","state":"active","type":"initiative"},
 				"context":{
 					"recent_events":[
 						{"id":"event_main_1","thread_id":"thread_main","type":"actor_statement","summary":"Main recommendation","refs":["thread:thread_related"]}
@@ -3506,14 +3503,14 @@ func TestThreadsWorkspaceCanHydrateRelatedEventContent(t *testing.T) {
 				"related_threads":{
 					"count":1,
 					"items":[
-						{"thread":{"id":"thread_related","title":"Related Feedback Thread","status":"active","type":"case"},"match_reason":"thread_ref"}
+						{"thread":{"id":"thread_related","title":"Related Feedback Thread","state":"active","type":"case"},"match_reason":"thread_ref"}
 					]
 				},
 				"related_recommendations":{
 					"count":1,
 					"items":[
 						{
-							"thread":{"id":"thread_related","title":"Related Feedback Thread","status":"active","type":"case"},
+							"thread":{"id":"thread_related","title":"Related Feedback Thread","state":"active","type":"case"},
 							"event":{
 								"id":"event_related_1",
 								"thread_id":"thread_related",
@@ -3547,7 +3544,7 @@ func TestThreadsWorkspaceCanHydrateRelatedEventContent(t *testing.T) {
 			}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_main/context":
 			_, _ = w.Write([]byte(`{
-				"thread":{"id":"thread_main","title":"Main Pilot Rescue","status":"active","type":"initiative"},
+				"thread":{"id":"thread_main","title":"Main Pilot Rescue","state":"active","type":"initiative"},
 				"recent_events":[
 					{"id":"event_main_1","thread_id":"thread_main","type":"actor_statement","summary":"Main recommendation","refs":["thread:thread_related"]}
 				],
@@ -3556,7 +3553,7 @@ func TestThreadsWorkspaceCanHydrateRelatedEventContent(t *testing.T) {
 			}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_related/context":
 			_, _ = w.Write([]byte(`{
-				"thread":{"id":"thread_related","title":"Related Feedback Thread","status":"active","type":"case"},
+				"thread":{"id":"thread_related","title":"Related Feedback Thread","state":"active","type":"case"},
 				"recent_events":[
 					{"id":"event_related_1","thread_id":"thread_related","type":"actor_statement","summary":"Related recommendation"}
 				],
@@ -3614,7 +3611,7 @@ func TestThreadsRecommendationsWarnsWhenRelatedEventHydrationFails(t *testing.T)
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_main/context":
 			_, _ = w.Write([]byte(`{
-				"thread":{"id":"thread_main","title":"Main Pilot Rescue","status":"active","type":"initiative"},
+				"thread":{"id":"thread_main","title":"Main Pilot Rescue","state":"active","type":"initiative"},
 				"recent_events":[
 					{"id":"event_main_1","thread_id":"thread_main","type":"actor_statement","summary":"Main recommendation","refs":["thread:thread_related"]}
 				],
@@ -3623,7 +3620,7 @@ func TestThreadsRecommendationsWarnsWhenRelatedEventHydrationFails(t *testing.T)
 			}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_related/context":
 			_, _ = w.Write([]byte(`{
-				"thread":{"id":"thread_related","title":"Related Feedback Thread","status":"active","type":"case"},
+				"thread":{"id":"thread_related","title":"Related Feedback Thread","state":"active","type":"case"},
 				"recent_events":[
 					{"id":"event_related_1","thread_id":"thread_related","type":"actor_statement","summary":"Related recommendation"}
 				],
@@ -3676,7 +3673,7 @@ func TestThreadsRecommendationsFullSummaryToggle(t *testing.T) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_1/context":
 			_, _ = w.Write([]byte(`{
-				"thread":{"id":"thread_1","title":"Pilot Rescue","status":"active","type":"initiative"},
+				"thread":{"id":"thread_1","title":"Pilot Rescue","state":"active","type":"initiative"},
 				"recent_events":[
 					{"id":"event_rec_1","thread_id":"thread_1","type":"actor_statement","actor_id":"agent-pm","created_at":"2026-03-07T12:00:00Z","summary":"` + longSummary + `"}
 				],
@@ -3721,7 +3718,7 @@ func TestThreadsRecommendationsCountsPendingDecisionsInTotalWhenRecentWindowExcl
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_1/context":
 			_, _ = w.Write([]byte(`{
-				"thread":{"id":"thread_1","title":"Pilot Rescue","status":"active","type":"initiative"},
+				"thread":{"id":"thread_1","title":"Pilot Rescue","state":"active","type":"initiative"},
 				"recent_events":[
 					{"id":"event_noise_1","thread_id":"thread_1","type":"status_changed","created_at":"2026-03-07T12:06:00Z","summary":"status moved to active"}
 				],
@@ -3769,7 +3766,7 @@ func TestThreadsRecommendationsSelectionValidation(t *testing.T) {
 		"--json",
 		"threads", "recommendations",
 		"--thread-id", "thread_1",
-		"--status", "active",
+		"--state", "active",
 	}))
 	if got := anyStringValue(mixedSelection["command"]); got != "threads recommendations" {
 		t.Fatalf("expected threads recommendations error command, got %#v", mixedSelection)
@@ -3782,7 +3779,7 @@ func TestThreadsRecommendationsSelectionValidation(t *testing.T) {
 		t.Fatalf("expected invalid_request for mixed selection, got %#v", mixedSelection)
 	}
 	message := anyStringValue(mixedErr["message"])
-	if !strings.Contains(message, "--thread-id cannot be combined with discovery filters") || !strings.Contains(message, "anx threads recommendations --thread-id <thread-id>") || !strings.Contains(message, "anx threads inspect --status active") {
+	if !strings.Contains(message, "--thread-id cannot be combined with discovery filters") || !strings.Contains(message, "anx threads recommendations --thread-id <thread-id>") || !strings.Contains(message, "anx threads inspect --state active") {
 		t.Fatalf("expected mixed selection guidance, got %#v", mixedSelection)
 	}
 
@@ -3823,8 +3820,8 @@ func TestThreadsRecommendationsDiscoveryErrors(t *testing.T) {
 		{
 			name: "multiple matches",
 			threadsJSON: `{"threads":[
-				{"id":"thread_init_1","type":"initiative","status":"active"},
-				{"id":"thread_init_2","type":"initiative","status":"active"}
+				{"id":"thread_init_1","type":"initiative","state":"active"},
+				{"id":"thread_init_2","type":"initiative","state":"active"}
 			]}`,
 			wantMessageSub: "threads recommendations requires exactly one thread",
 		},
@@ -3850,8 +3847,7 @@ func TestThreadsRecommendationsDiscoveryErrors(t *testing.T) {
 				"--json",
 				"--base-url", server.URL,
 				"threads", "recommendations",
-				"--status", "active",
-				"--type", "initiative",
+				"--state", "active",
 			}))
 			if got := anyStringValue(payload["command"]); got != "threads recommendations" {
 				t.Fatalf("expected threads recommendations error command, got %#v", payload)
@@ -3880,7 +3876,7 @@ func TestThreadsContextTextOutputIsPayloadFirst(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{
-			"thread":{"id":"thread_1","title":"Pilot Rescue","status":"active","priority":"p1","current_summary":"Need a launch decision today."},
+			"thread":{"id":"thread_1","title":"Pilot Rescue","state":"active","priority":"p1","current_summary":"Need a launch decision today."},
 			"recent_events":[
 				{"id":"event_1","type":"decision_needed","summary":"Need support and delivery recommendations"},
 				{"id":"event_2","type":"decision_made","summary":"Ship the Friday rescue scope"}
@@ -4189,7 +4185,7 @@ func TestThreadsListIncludesShortID(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"threads":[{"id":"` + canonicalID + `","title":"Alpha","status":"active"}]}`))
+		_, _ = w.Write([]byte(`{"threads":[{"id":"` + canonicalID + `","title":"Alpha","state":"active"}]}`))
 	}))
 	defer server.Close()
 
@@ -4801,7 +4797,7 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 			_, _ = w.Write([]byte(`{
 				"boards":[
 					{
-						"board":{"id":"board_1234567890abcdef","title":"Machine Board","status":"active"},
+						"board":{"id":"board_1234567890abcdef","title":"Machine Board","state":"active"},
 						"summary":{
 							"card_count":1,
 							"cards_by_column":{"backlog":0,"ready":0,"in_progress":1,"blocked":0,"review":0,"done":0},
@@ -4817,7 +4813,7 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{
 				"board_id":"board_1234567890abcdef",
-				"board":{"id":"board_1234567890abcdef","title":"Machine Board","status":"active","updated_at":"2026-03-07T00:03:00Z"},
+				"board":{"id":"board_1234567890abcdef","title":"Machine Board","state":"active","updated_at":"2026-03-07T00:03:00Z"},
 				"cards":{
 					"items":[
 						{
@@ -5277,8 +5273,8 @@ func TestFilterEventsByLifecycleState(t *testing.T) {
 }
 
 func Example_anxThreadsList() {
-	fmt.Println("anx threads list --status active")
-	// Output: anx threads list --status active
+	fmt.Println("anx threads list --state active")
+	// Output: anx threads list --state active
 }
 
 func writeAgentProfile(t *testing.T, home string, agent string, profileJSON string) {
@@ -5367,7 +5363,7 @@ func TestCreateCommandsDefaultEmptyListFields(t *testing.T) {
 				json.Unmarshal(body, &receivedBody)
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusCreated)
-				_, _ = w.Write([]byte(`{"topic":{"id":"t1","type":"case","status":"active","title":"T","summary":"S","owner_refs":[],"document_refs":[],"board_refs":[],"related_refs":[],"provenance":{"sources":[]}}}`))
+				_, _ = w.Write([]byte(`{"topic":{"id":"t1","type":"case","state":"active","title":"T","summary":"S","owner_refs":[],"document_refs":[],"board_refs":[],"related_refs":[],"provenance":{"sources":[]}}}`))
 				return
 			}
 			http.NotFound(w, r)
@@ -5376,7 +5372,7 @@ func TestCreateCommandsDefaultEmptyListFields(t *testing.T) {
 
 		home := t.TempDir()
 		env := map[string]string{}
-		input := `{"topic":{"type":"case","status":"active","title":"T","summary":"S","provenance":{"sources":[]}}}`
+		input := `{"topic":{"type":"case","title":"T","summary":"S","provenance":{"sources":[]}}}`
 		result := runCLIForTest(t, home, env, strings.NewReader(input), []string{"--json", "--base-url", server.URL, "topics", "create"})
 		assertEnvelopeOK(t, result)
 
@@ -5398,7 +5394,7 @@ func TestCreateCommandsDefaultEmptyListFields(t *testing.T) {
 				json.Unmarshal(body, &receivedBody)
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusCreated)
-				_, _ = w.Write([]byte(`{"board":{"id":"b1","title":"B","status":"active","document_refs":[],"pinned_refs":[],"provenance":{"sources":[]}}}`))
+				_, _ = w.Write([]byte(`{"board":{"id":"b1","title":"B","state":"active","document_refs":[],"pinned_refs":[],"provenance":{"sources":[]}}}`))
 				return
 			}
 			http.NotFound(w, r)
@@ -5407,7 +5403,7 @@ func TestCreateCommandsDefaultEmptyListFields(t *testing.T) {
 
 		home := t.TempDir()
 		env := map[string]string{}
-		input := `{"board":{"title":"B","status":"active","provenance":{"sources":[]}}}`
+		input := `{"board":{"title":"B","provenance":{"sources":[]}}}`
 		result := runCLIForTest(t, home, env, strings.NewReader(input), []string{"--json", "--base-url", server.URL, "boards", "create"})
 		assertEnvelopeOK(t, result)
 
@@ -5501,7 +5497,7 @@ func TestCreateCommandsDefaultEmptyListFields(t *testing.T) {
 
 		home := t.TempDir()
 		env := map[string]string{}
-		input := `{"topic":{"type":"case","status":"active","title":"T","summary":"S","owner_refs":["actor:x"],"document_refs":[],"board_refs":["board:y"],"related_refs":[],"provenance":{"sources":[]}}}`
+		input := `{"topic":{"type":"case","title":"T","summary":"S","owner_refs":["actor:x"],"document_refs":[],"board_refs":["board:y"],"related_refs":[],"provenance":{"sources":[]}}}`
 		result := runCLIForTest(t, home, env, strings.NewReader(input), []string{"--json", "--base-url", server.URL, "topics", "create"})
 		assertEnvelopeOK(t, result)
 

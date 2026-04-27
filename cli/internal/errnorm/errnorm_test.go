@@ -153,24 +153,12 @@ func TestEnrichPatchRiskMustBeOneOf(t *testing.T) {
 	}
 }
 
-func TestEnrichBoardStatusMustBeOneOf(t *testing.T) {
+func TestEnrichSchemaStrictEnumWrappedTopicType(t *testing.T) {
 	t.Parallel()
 
-	err := FromHTTPFailure(400, []byte(`{"error":{"code":"invalid_request","message":"board.status must be one of: active, paused, closed","recoverable":true,"hint":"x"}}`))
-	if !strings.Contains(err.Hint, "board.status") {
-		t.Fatalf("unexpected hint: %q", err.Hint)
-	}
-	if !strings.Contains(err.Hint, "anx help") || !strings.Contains(err.Hint, "boards update") {
-		t.Fatalf("expected anx help discovery for boards update, got %q", err.Hint)
-	}
-}
-
-func TestEnrichSchemaStrictEnumWrappedTopicStatus(t *testing.T) {
-	t.Parallel()
-
-	msg := `topic.status: invalid value "nope" for strict enum topic_status (allowed: active, archived, blocked, closed, paused, proposed, resolved)`
+	msg := `topic.type: invalid value "nope" for strict enum topic_type (allowed: case, process, relationship, initiative, objective, decision, incident, risk, request, note, other)`
 	err := FromHTTPFailure(400, []byte(fmt.Sprintf(`{"error":{"code":"invalid_request","message":%q,"recoverable":true,"hint":"x"}}`, msg)))
-	if !strings.Contains(err.Hint, "topic_status") || !strings.Contains(err.Hint, "anx topics patch --help") {
+	if !strings.Contains(err.Hint, "topic_type") || !strings.Contains(err.Hint, "anx topics patch --help") {
 		t.Fatalf("unexpected hint: %q", err.Hint)
 	}
 }
@@ -227,6 +215,14 @@ func TestEnrichPatchStatusNotSupported(t *testing.T) {
 	err := FromHTTPFailure(400, []byte(`{"error":{"code":"invalid_request","message":"patch.status is not supported; use the move endpoint and patch.resolution","recoverable":true}}`))
 	if !strings.Contains(err.Hint, "cards move") {
 		t.Fatalf("unexpected hint: %q", err.Hint)
+	}
+
+	errBoard := FromHTTPFailure(400, []byte(`{"error":{"code":"invalid_request","message":"patch.status is not supported; use archive/trash lifecycle routes","recoverable":true,"hint":"x"}}`))
+	if errBoard == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(errBoard.Message, "patch.status") {
+		t.Fatalf("unexpected message: %q", errBoard.Message)
 	}
 }
 

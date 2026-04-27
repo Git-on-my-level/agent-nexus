@@ -212,9 +212,6 @@ func enrichInvalidRequestByMessage(msg string) (string, map[string]any) {
 	case "board.title is required":
 		return "Board create requires `board.title`. See `anx boards create --help`.",
 			map[string]any{"kind": "missing_required_field", "field": "board.title", "help_cli": "anx boards create --help"}
-	case "board.status is required":
-		return "Board update requires `board.status`. Allowed values are in the boards update (PATCH board) contract — locate that topic via `anx help`.",
-			map[string]any{"kind": "missing_required_field", "field": "board.status", "help_cli": "anx help"}
 	case "limit must be between 1 and 1000":
 		return "List `limit` must be between 1 and 1000. Adjust `--limit` (or the JSON `limit` field) and retry.",
 			map[string]any{"kind": "invalid_pagination", "field": "limit", "min": 1, "max": 1000}
@@ -364,8 +361,8 @@ func enrichAgentRevoked() (string, map[string]any) {
 }
 
 // enrichSchemaStrictEnum handles core/schema.ValidateEnum errors, e.g.
-// invalid value "x" for strict enum topic_status (allowed: a, b, c).
-// Core may wrap as `topic.status: invalid value ...`.
+// invalid value "x" for strict enum topic_type (allowed: ...).
+// Core may wrap as `topic.type: invalid value ...`.
 func enrichSchemaStrictEnum(msg string) (string, map[string]any) {
 	idx := strings.Index(msg, "invalid value ")
 	if idx < 0 {
@@ -384,32 +381,19 @@ func enrichSchemaStrictEnum(msg string) (string, map[string]any) {
 	if help == "" {
 		return "", nil
 	}
-	var hint string
 	recovery := map[string]any{
 		"kind":        "invalid_enum",
 		"schema_enum": enumName,
 		"help_cli":    help,
 	}
-	if enumName == "board_status" {
-		hint = fmt.Sprintf("This value is not allowed for strict schema enum %q; allowed values are listed in the error message above. For board updates, run `anx help` and locate the boards update (PATCH board) topic.", enumName)
-		recovery["help_cli"] = "anx help"
-		recovery["command_topic"] = "boards update"
-	} else {
-		hint = fmt.Sprintf("This value is not allowed for strict schema enum %q; allowed values are listed in the error message above. See `%s` for the relevant request fields.", enumName, help)
-	}
+	hint := fmt.Sprintf("This value is not allowed for strict schema enum %q; allowed values are listed in the error message above. See `%s` for the relevant request fields.", enumName, help)
 	return hint, recovery
 }
 
 func cliHelpForSchemaEnum(enumName string) string {
 	switch enumName {
-	case "topic_status":
-		return "anx topics patch --help"
 	case "topic_type":
 		return "anx topics patch --help"
-	case "thread_status":
-		return "anx threads workspace --help"
-	case "board_status":
-		return "anx help"
 	case "board_column_key":
 		return "anx cards move --help"
 	default:
@@ -437,27 +421,8 @@ func enrichMustBeOneOfField(msg string) (string, map[string]any) {
 		return enumHintFromRegistry("patch.risk", "cards patch", "patch.risk", "anx cards patch --help")
 	case "risk":
 		return enumHintFromRegistry("risk", "cards patch", "patch.risk", "anx cards patch --help")
-	case "board.status":
-		// Registry uses cli_path "boards patch"; the CLI user command is `boards update`, which does not accept `--help` — use `anx help` discovery.
-		vals, ok := registry.BodyFieldEnum("boards patch", "patch.status")
-		if !ok {
-			return "", nil
-		}
-		joined := strings.Join(vals, ", ")
-		hint := fmt.Sprintf("The board.status value is not allowed. Use one of: %s. For the boards update JSON body, run `anx help` and locate the boards update (PATCH board) topic.", joined)
-		return hint, map[string]any{
-			"kind":              "invalid_enum",
-			"field":             "board.status",
-			"valid_enum_values": vals,
-			"help_cli":          "anx help",
-			"command_topic":     "boards update",
-		}
 	case "resolution":
 		return enumHintFromRegistry("resolution", "cards patch", "patch.resolution", "anx cards patch --help")
-	case "card.status":
-		// boards_store.go canonical card.status values (not all appear in commands.json).
-		vals := []string{"todo", "in_progress", "done", "cancelled"}
-		return compactMustBeOneOfHint("card.status", vals, "anx cards patch --help")
 	case "content_type":
 		vals := []string{"binary", "structured", "text"}
 		return compactMustBeOneOfHint("content_type", vals, "anx docs create --help")

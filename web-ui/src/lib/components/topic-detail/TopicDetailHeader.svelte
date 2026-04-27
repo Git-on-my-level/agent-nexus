@@ -16,27 +16,27 @@
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
   import { topicDetailStore } from "$lib/topicDetailStore";
-  import { formatCadenceLabel, getPriorityLabel } from "$lib/topicFilters";
+  import { BOARD_LIFECYCLE_STATE_LABELS } from "$lib/boardUtils";
   import { workspacePath } from "$lib/workspacePaths";
 
-  function topicStatusBadgeClass(status) {
-    // Tone scale follows status semantics rather than ad-hoc Tailwind palette
-    // (per polish §N6) so themes can recolor via CSS tokens.
-    if (status === "active") return "bg-ok-soft text-ok-text";
-    if (status === "paused" || status === "blocked")
-      return "bg-warn-soft text-warn-text";
+  function topicLifecycleBadgeClass(state) {
+    if (state === "active") return "bg-ok-soft text-ok-text";
+    if (state === "archived") return "bg-warn-soft text-warn-text";
+    if (state === "trashed") return "bg-[var(--line)] text-[var(--fg-muted)]";
     return "bg-[var(--line)] text-[var(--fg-muted)]";
   }
 
   let { threadId = "", detailAsTopic = true } = $props();
 
   let topic = $derived($topicDetailStore.topic);
-  let staleness = $derived(topicDetailStore.getStaleness(topic));
+  let topicSummary = $derived(
+    String(topic?.summary ?? topic?.current_summary ?? "").trim(),
+  );
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
-  let actorName = $derived((id) =>
-    lookupActorDisplayName(id, $actorRegistry, $principalRegistry),
-  );
+  function actorName(id) {
+    return lookupActorDisplayName(id, $actorRegistry, $principalRegistry);
+  }
 
   let confirmModal = $state({ open: false, action: "" });
   let lifecycleBusy = $state(false);
@@ -203,17 +203,18 @@
               {topic.title}
             </h1>
             <span
-              class="shrink-0 rounded px-2 py-0.5 text-micro font-medium capitalize {topicStatusBadgeClass(
-                topic.status,
-              )}">{topic.status}</span
+              class="shrink-0 rounded px-2 py-0.5 text-micro font-medium capitalize {topicLifecycleBadgeClass(
+                topic.state,
+              )}"
+              >{BOARD_LIFECYCLE_STATE_LABELS[topic.state] ?? topic.state}</span
             >
           </div>
-          {#if String(topic.current_summary ?? "").trim()}
+          {#if topicSummary}
             <p
               class="mt-1 line-clamp-2 text-meta text-[var(--fg-muted)]"
-              title={String(topic.current_summary).trim()}
+              title={topicSummary}
             >
-              {String(topic.current_summary).trim()}
+              {topicSummary}
             </p>
           {/if}
         </div>
@@ -244,12 +245,6 @@
     <p
       class="flex flex-wrap items-center gap-x-2 gap-y-1 text-meta text-[var(--fg-muted)]"
     >
-      <span class="whitespace-nowrap">{getPriorityLabel(topic.priority)}</span>
-      <span class="text-[var(--fg-subtle)]" aria-hidden="true">·</span>
-      <span class="whitespace-nowrap"
-        >{formatCadenceLabel(topic.cadence, { includeExpression: false })}</span
-      >
-      <span class="text-[var(--fg-subtle)]" aria-hidden="true">·</span>
       <span class="whitespace-nowrap"
         >Updated {formatTimestamp(topic.updated_at) || "—"}</span
       >
@@ -258,16 +253,6 @@
         <span class="min-w-0 whitespace-nowrap"
           >by {actorName(topic.created_by)}</span
         >
-      {/if}
-      {#if staleness}
-        <span class="text-[var(--fg-subtle)]" aria-hidden="true">·</span>
-        <span
-          class="whitespace-nowrap rounded px-1.5 py-0.5 text-micro font-medium {staleness.stale
-            ? 'bg-rose-500/10 text-rose-400'
-            : 'bg-ok-soft text-ok-text'}"
-        >
-          {staleness.label}
-        </span>
       {/if}
     </p>
   </div>

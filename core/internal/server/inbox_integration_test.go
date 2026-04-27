@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
-	"strings"
 	"testing"
 	"time"
 )
@@ -210,7 +209,6 @@ func TestInboxAcknowledgmentResolvesTopicSubjectRefToBackingThread(t *testing.T)
 		"actor_id":"actor-1",
 		"topic":{
 			"type":"initiative",
-			"status":"active",
 			"title":"Ack subject topic",
 			"summary":"Topic for ack resolution",
 			"owner_refs":["actor:actor-1"],
@@ -353,14 +351,14 @@ func TestInboxAcknowledgmentResolvesCardSubjectRefViaCardRelatedThread(t *testin
 	}
 }
 
-func TestLegacyRiskReviewAckStillSuppressesWorkItemRiskAfterRebuild(t *testing.T) {
+func TestRiskExceptionAckSuppressesWorkItemRiskAfterRebuild(t *testing.T) {
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
 	threadID := integrationSeedThread(t, h, "actor-1", map[string]any{
-		"title":            "Legacy risk ack thread",
+		"title":            "Risk ack work item thread",
 		"type":             "incident",
 		"status":           "active",
 		"priority":         "p1",
@@ -394,7 +392,7 @@ func TestLegacyRiskReviewAckStillSuppressesWorkItemRiskAfterRebuild(t *testing.T
 	cardResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
 		"actor_id":"actor-1",
 		"if_board_updated_at":"`+boardUpdatedAt+`",
-		"title":"Legacy-acked work item",
+		"title":"Acked work item",
 		"related_refs":["thread:`+threadID+`"],
 		"column_key":"ready",
 		"due_at":"`+dueSoon+`"
@@ -419,9 +417,8 @@ func TestLegacyRiskReviewAckStillSuppressesWorkItemRiskAfterRebuild(t *testing.T
 		t.Fatalf("expected risk_exception inbox item, got %#v", itemsWithRisk)
 	}
 	canonicalRiskID := asString(riskItem["id"])
-	legacyRiskID := makeInboxItemID("risk_review", threadID, cardID, "")
 
-	postJSONExpectStatus(t, h.baseURL+"/inbox/"+url.PathEscape(legacyRiskID)+"/acknowledge", `{
+	postJSONExpectStatus(t, h.baseURL+"/inbox/"+url.PathEscape(canonicalRiskID)+"/acknowledge", `{
 		"actor_id":"actor-1",
 		"subject_ref":"thread:`+threadID+`"
 	}`, http.StatusCreated).Body.Close()
@@ -432,7 +429,7 @@ func TestLegacyRiskReviewAckStillSuppressesWorkItemRiskAfterRebuild(t *testing.T
 	if _, exists := findInboxItem(itemsAfterAckAndRebuild, func(item map[string]any) bool {
 		return asString(item["id"]) == canonicalRiskID || (asString(item["category"]) == "risk_exception" && asString(item["card_id"]) == cardID)
 	}); exists {
-		t.Fatalf("expected legacy risk_review ack to suppress canonical risk_exception item after rebuild, got %#v", itemsAfterAckAndRebuild)
+		t.Fatalf("expected risk_exception ack to suppress work item after rebuild, got %#v", itemsAfterAckAndRebuild)
 	}
 }
 
@@ -813,6 +810,20 @@ func TestInboxCustomRiskHorizonRetainsStaleExceptions(t *testing.T) {
 		"provenance":       map[string]any{"sources": []any{"inferred"}},
 	})
 
+	postJSONExpectStatus(t, h.baseURL+"/events", `{
+		"actor_id":"actor-1",
+		"event":{
+			"type":"exception_raised",
+			"thread_id":"`+threadID+`",
+			"refs":["thread:`+threadID+`"],
+			"summary":"thread is stale",
+			"payload":{"subtype":"stale_topic"},
+			"provenance":{"sources":["manual"]}
+		}
+	}`, http.StatusCreated).Body.Close()
+
+	postJSONExpectStatus(t, h.baseURL+"/derived/rebuild", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
+
 	resp, err := http.Get(h.baseURL + "/inbox?risk_horizon_days=30")
 	if err != nil {
 		t.Fatalf("GET /inbox?risk_horizon_days=30: %v", err)
@@ -858,29 +869,6 @@ func TestInboxCustomRiskHorizonRetainsStaleExceptions(t *testing.T) {
 	}
 	if got := asString(detailPayload.Item["id"]); got != inboxItemID {
 		t.Fatalf("expected stale inbox item id %q, got %q payload=%#v", inboxItemID, got, detailPayload)
-	}
-
-	parts := strings.SplitN(inboxItemID, ":", 5)
-	if len(parts) != 5 || parts[0] != "inbox" {
-		t.Fatalf("unexpected inbox id shape %q", inboxItemID)
-	}
-	legacyID := strings.Join([]string{parts[0], "intervention_needed", parts[2], parts[3], parts[4]}, ":")
-	legacyDetailResp, err := http.Get(h.baseURL + "/inbox/" + url.PathEscape(legacyID) + "?risk_horizon_days=30")
-	if err != nil {
-		t.Fatalf("GET /inbox/{legacy-id}?risk_horizon_days=30: %v", err)
-	}
-	defer legacyDetailResp.Body.Close()
-	if legacyDetailResp.StatusCode != http.StatusOK {
-		t.Fatalf("unexpected GET /inbox/{legacy-id}?risk_horizon_days=30 status: %d", legacyDetailResp.StatusCode)
-	}
-	var legacyDetail struct {
-		Item map[string]any `json:"item"`
-	}
-	if err := json.NewDecoder(legacyDetailResp.Body).Decode(&legacyDetail); err != nil {
-		t.Fatalf("decode legacy-id inbox item response: %v", err)
-	}
-	if got := asString(legacyDetail.Item["id"]); got != inboxItemID {
-		t.Fatalf("expected legacy id lookup to return canonical id %q, got %q", inboxItemID, got)
 	}
 }
 

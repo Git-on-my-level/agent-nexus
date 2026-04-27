@@ -8,7 +8,7 @@
         "board": {
           "id": "board_1234567890abcdef",
           "short_id": "board_1234",
-          "status": "active",
+          "state": "active",
           "title": "Machine Board"
         },
         "summary": {

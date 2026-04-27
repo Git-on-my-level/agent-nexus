@@ -1,22 +1,6 @@
-import { normalizeStringList, stringListsEqual } from "./listUtils.js";
+const EDITABLE_FIELDS = ["title", "type", "summary"];
 
-const LIST_FIELDS = new Set(["tags"]);
-const EDITABLE_FIELDS = [
-  "title",
-  "type",
-  "status",
-  "priority",
-  "cadence",
-  "next_check_in_at",
-  "tags",
-  "current_summary",
-];
-
-function normalizeScalar(key, value) {
-  if (key === "next_check_in_at") {
-    return value ? String(value) : null;
-  }
-
+function normalizeScalar(value) {
   return value ?? "";
 }
 
@@ -27,18 +11,8 @@ export function buildTopicPatch(original = {}, draft = {}) {
     const originalValue = original[field];
     const draftValue = draft[field];
 
-    if (LIST_FIELDS.has(field)) {
-      const normalizedOriginal = normalizeStringList(originalValue);
-      const normalizedDraft = normalizeStringList(draftValue);
-
-      if (!stringListsEqual(normalizedOriginal, normalizedDraft)) {
-        patch[field] = normalizedDraft;
-      }
-      continue;
-    }
-
-    const normalizedOriginal = normalizeScalar(field, originalValue);
-    const normalizedDraft = normalizeScalar(field, draftValue);
+    const normalizedOriginal = normalizeScalar(originalValue);
+    const normalizedDraft = normalizeScalar(draftValue);
 
     if (normalizedOriginal !== normalizedDraft) {
       patch[field] = normalizedDraft;

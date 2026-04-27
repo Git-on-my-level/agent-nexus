@@ -196,6 +196,7 @@ func handleGetCardTimeline(w http.ResponseWriter, r *http.Request, opts handlerO
 			writeError(w, http.StatusInternalServerError, "internal_error", "failed to load related threads")
 			return
 		}
+		primitives.StripThreadPlanningFieldsForAPI(thread)
 		threads = append(threads, thread)
 	}
 	threads = dedupeAndSortResourceMaps(threads)

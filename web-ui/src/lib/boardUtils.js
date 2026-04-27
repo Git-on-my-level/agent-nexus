@@ -1,8 +1,12 @@
-export const BOARD_STATUS_LABELS = {
+/** Lifecycle `state` on boards/topics/threads (API v0.4+). */
+export const BOARD_LIFECYCLE_STATE_LABELS = {
   active: "Active",
-  paused: "Paused",
-  closed: "Closed",
+  archived: "Archived",
+  trashed: "Trashed",
 };
+
+/** @deprecated Use BOARD_LIFECYCLE_STATE_LABELS */
+export const BOARD_STATUS_LABELS = BOARD_LIFECYCLE_STATE_LABELS;
 
 export const CANONICAL_BOARD_COLUMNS = [
   { key: "backlog", title: "Backlog" },
@@ -202,26 +206,6 @@ export function cardStatusTagColor(status) {
       return "text-gray-500 bg-gray-500/10";
     case "paused":
       return "text-amber-400 bg-amber-400/10";
-    default:
-      return "text-[var(--fg-muted)] bg-[var(--line)]";
-  }
-}
-
-export function cardPriorityTagColor(priority) {
-  switch (
-    String(priority ?? "")
-      .trim()
-      .toLowerCase()
-  ) {
-    case "critical":
-    case "urgent":
-      return "text-red-400 bg-red-500/10";
-    case "high":
-      return "text-orange-400 bg-orange-500/10";
-    case "medium":
-      return "text-amber-300 bg-amber-500/10";
-    case "low":
-      return "text-blue-400 bg-blue-500/10";
     default:
       return "text-[var(--fg-muted)] bg-[var(--line)]";
   }

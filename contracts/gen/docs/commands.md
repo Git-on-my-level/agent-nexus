@@ -3,7 +3,7 @@
 Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
-- Contract version: `0.3.0`
+- Contract version: `0.4.0`
 - Commands: `118`
 
 ## `actors.create`
@@ -408,7 +408,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `json-body`
-- Why: Soft-archive a board (orthogonal to business status; clears default list visibility).
+- Why: Soft-archive a board and derive its lifecycle state from archived_at.
 - Concepts: `boards`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ board }`.
@@ -1298,7 +1298,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `json-body`
-- Why: Soft-archive a topic (orthogonal to business status; clears default list visibility).
+- Why: Soft-archive a topic and derive its lifecycle state from archived_at.
 - Concepts: `topics`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ topic }`.

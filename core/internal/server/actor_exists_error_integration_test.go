@@ -62,9 +62,10 @@ func TestActorRegistryExistsQueryErrorReturns500(t *testing.T) {
 	boardResp := postJSONExpectStatusWithAuth(t, serverURL+"/boards", map[string]any{
 		"actor_id": actorID,
 		"board": map[string]any{
-			"title":  "exists error probe",
-			"labels": []any{"test"},
-			"refs":   []any{},
+			"title":         "exists error probe",
+			"document_refs": []any{},
+			"pinned_refs":   []any{},
+			"provenance":    map[string]any{"sources": []any{"inferred"}},
 		},
 	}, token, http.StatusInternalServerError)
 	defer boardResp.Body.Close()
@@ -136,9 +137,10 @@ func TestWorkspaceHumanGrantActorRowAllowsExplicitActorIDOnWrites(t *testing.T) 
 	boardResp := postJSONExpectStatusWithAuth(t, serverURL+"/boards", map[string]any{
 		"actor_id": actorID,
 		"board": map[string]any{
-			"title":  "grant actor row board",
-			"labels": []any{"e2e"},
-			"refs":   []any{},
+			"title":         "grant actor row board",
+			"document_refs": []any{},
+			"pinned_refs":   []any{},
+			"provenance":    map[string]any{"sources": []any{"inferred"}},
 		},
 	}, token, http.StatusCreated)
 	boardResp.Body.Close()

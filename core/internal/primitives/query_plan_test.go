@@ -23,18 +23,14 @@ func TestWorkspaceListQueriesUseIndexedPlans(t *testing.T) {
 	store := NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
 
 	threadResult, err := store.CreateThread(ctx, "actor-1", map[string]any{
-		"id":               "thread-plan-1",
-		"title":            "Plan thread",
-		"type":             "initiative",
-		"status":           "active",
-		"priority":         "p1",
-		"tags":             []string{"ops", "backend"},
-		"cadence":          "daily",
-		"next_check_in_at": "2026-03-20T00:00:00Z",
-		"current_summary":  "summary",
-		"next_actions":     []string{"step-1"},
-		"key_artifacts":    []string{},
-		"provenance":       map[string]any{"sources": []string{"inferred"}},
+		"id":              "thread-plan-1",
+		"title":           "Plan thread",
+		"type":            "initiative",
+		"status":          "active",
+		"current_summary": "summary",
+		"next_actions":    []string{"step-1"},
+		"key_artifacts":   []string{},
+		"provenance":      map[string]any{"sources": []string{"inferred"}},
 	})
 	if err != nil {
 		t.Fatalf("create thread: %v", err)
@@ -57,9 +53,11 @@ func TestWorkspaceListQueriesUseIndexedPlans(t *testing.T) {
 		t.Fatalf("create document: %v", err)
 	}
 
-	threadQuery, threadArgs := buildListThreadsQuery(ThreadListFilter{Status: "active"})
+	threadQuery, threadArgs := buildListThreadsQuery(ThreadListFilter{State: "active"})
 	threadPlan := explainQueryPlan(t, workspace.DB(), threadQuery, threadArgs...)
-	assertPlanUsesIndex(t, "threads", threadPlan, "idx_threads_status_updated_at")
+	if !strings.Contains(threadPlan, "idx_threads_updated_at") && !strings.Contains(threadPlan, "idx_threads_trashed_at") {
+		t.Fatalf("threads query plan did not use an expected threads index:\n%s", threadPlan)
+	}
 
 	cardsQuery := `SELECT id FROM cards WHERE parent_thread_id = ? AND archived_at IS NULL`
 	cardsPlan := explainQueryPlan(t, workspace.DB(), cardsQuery, threadID)
@@ -77,24 +75,26 @@ func TestWorkspaceListQueriesUseIndexedPlans(t *testing.T) {
 	assertPlanUsesIndex(t, "documents", documentPlan, "idx_documents_thread_trashed_updated_at")
 }
 
-func TestBuildListThreadsQueryAddsWhereBeforeOptionalAndFilters(t *testing.T) {
+func TestBuildListThreadsQueryAddsWhereBeforeQFilter(t *testing.T) {
 	t.Parallel()
 
-	stale := true
 	query, args := buildListThreadsQuery(ThreadListFilter{
 		IncludeArchived: true,
 		IncludeTrashed:  true,
-		Tag:             "ops",
-		Cadences:        []string{"daily"},
 		Query:           "plan",
-		Stale:           &stale,
 	})
 
-	if !strings.Contains(query, "FROM threads LEFT JOIN derived_topic_views ON derived_topic_views.thread_id = threads.id WHERE EXISTS") {
-		t.Fatalf("expected optional filters to start a WHERE clause, got query:\n%s", query)
+	if !strings.Contains(query, "FROM threads WHERE") {
+		t.Fatalf("expected WHERE clause, got query:\n%s", query)
 	}
-	if strings.Contains(query, "FROM threads LEFT JOIN derived_topic_views ON derived_topic_views.thread_id = threads.id AND") {
-		t.Fatalf("query appended AND without WHERE:\n%s", query)
+	if strings.Contains(query, "derived_topic_views") {
+		t.Fatalf("list threads should not join derived_topic_views, got query:\n%s", query)
+	}
+	if !strings.Contains(query, "threads.thread_id") || !strings.Contains(query, "json_extract(body_json, '$.subject_ref')") {
+		t.Fatalf("expected backing-thread search fields in query, got:\n%s", query)
+	}
+	if !strings.Contains(query, "json_extract(body_json, '$.title')") {
+		t.Fatalf("expected title in thread search, got:\n%s", query)
 	}
 	if len(args) != 5 {
 		t.Fatalf("expected 5 query args, got %d (%#v)", len(args), args)

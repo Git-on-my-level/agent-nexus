@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestStalenessRebuildEmitsSingleStaleExceptionAndInboxException(t *testing.T) {
+func TestStalenessRebuildDoesNotEmitCadenceBasedExceptions(t *testing.T) {
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -28,51 +28,21 @@ func TestStalenessRebuildEmitsSingleStaleExceptionAndInboxException(t *testing.T
 
 	postJSONExpectStatus(t, h.baseURL+"/derived/rebuild", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
 
-	staleCount := countStaleThreadExceptions(t, h.baseURL, threadID)
-	if staleCount != 1 {
-		t.Fatalf("expected exactly one stale_topic exception after first rebuild, got %d", staleCount)
+	if count := countStaleThreadExceptions(t, h.baseURL, threadID); count != 0 {
+		t.Fatalf("expected no inferred stale_topic exceptions, got %d", count)
 	}
-	staleEvent := findStaleThreadExceptionEvent(t, h.baseURL, threadID)
-	if staleEvent == nil {
-		t.Fatal("expected stale_topic exception event in timeline")
+	if threadListedAsStale(t, h.baseURL, threadID) {
+		t.Fatalf("expected thread not listed stale (no cadence inference), thread=%s", threadID)
 	}
-	assertInferredProvenance(t, staleEvent)
-
 	items := getInboxItems(t, h.baseURL)
 	if _, ok := findInboxItem(items, func(item map[string]any) bool {
 		return asString(item["category"]) == "risk_exception" && asString(item["thread_id"]) == threadID
-	}); !ok {
-		t.Fatalf("expected stale exception inbox item, got %#v", items)
-	}
-
-	postJSONExpectStatus(t, h.baseURL+"/derived/rebuild", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
-
-	staleCountAgain := countStaleThreadExceptions(t, h.baseURL, threadID)
-	if staleCountAgain != 1 {
-		t.Fatalf("expected idempotent stale exception emission, got %d", staleCountAgain)
-	}
-
-	postJSONExpectStatus(t, h.baseURL+"/events", `{
-		"actor_id":"actor-1",
-		"event":{
-			"type":"decision_made",
-			"thread_id":"`+threadID+`",
-			"refs":["thread:`+threadID+`"],
-			"summary":"decision made",
-			"payload":{"outcome":"resolved"},
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated).Body.Close()
-
-	itemsAfterDecision := getInboxItems(t, h.baseURL)
-	if _, ok := findInboxItem(itemsAfterDecision, func(item map[string]any) bool {
-		return asString(item["category"]) == "risk_exception" && asString(item["thread_id"]) == threadID
 	}); ok {
-		t.Fatalf("expected stale exception inbox item to be suppressed after new decision activity, got %#v", itemsAfterDecision)
+		t.Fatalf("expected no risk_exception inbox item from cadence staleness, got %#v", items)
 	}
 }
 
-func TestStalenessClearsAfterActorStatementAndDocumentActivity(t *testing.T) {
+func TestStalenessActorStatementAndDocumentActivityKeepsThreadNotStale(t *testing.T) {
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -93,8 +63,8 @@ func TestStalenessClearsAfterActorStatementAndDocumentActivity(t *testing.T) {
 	})
 
 	postJSONExpectStatus(t, h.baseURL+"/derived/rebuild", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
-	if !threadListedAsStale(t, h.baseURL, threadID) {
-		t.Fatalf("expected thread %s to be stale after rebuild", threadID)
+	if threadListedAsStale(t, h.baseURL, threadID) {
+		t.Fatalf("expected thread %s not stale after rebuild", threadID)
 	}
 
 	postJSONExpectStatus(t, h.baseURL+"/events", `{
@@ -110,20 +80,14 @@ func TestStalenessClearsAfterActorStatementAndDocumentActivity(t *testing.T) {
 	}`, http.StatusCreated).Body.Close()
 
 	if threadListedAsStale(t, h.baseURL, threadID) {
-		t.Fatalf("expected actor_statement activity to clear stale thread %s", threadID)
-	}
-	itemsAfterStatement := getInboxItems(t, h.baseURL)
-	if _, ok := findInboxItem(itemsAfterStatement, func(item map[string]any) bool {
-		return asString(item["category"]) == "risk_exception" && asString(item["thread_id"]) == threadID
-	}); ok {
-		t.Fatalf("expected stale exception inbox item to be suppressed after actor_statement, got %#v", itemsAfterStatement)
+		t.Fatalf("unexpected stale flag after actor_statement for thread %s", threadID)
 	}
 
 	postJSONExpectStatus(t, h.baseURL+"/derived/rebuild", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
 
 	docCreateResp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
 		"actor_id":"actor-1",
-		"document":{"id":"stale-doc-1","thread_id":"`+threadID+`","title":"Runbook","labels":["ops"]},
+		"document":{"id":"stale-doc-1","thread_id":"`+threadID+`","title":"Runbook"},
 		"refs":["thread:`+threadID+`"],
 		"content":"initial text",
 		"content_type":"text"
@@ -153,13 +117,7 @@ func TestStalenessClearsAfterActorStatementAndDocumentActivity(t *testing.T) {
 	}`, http.StatusCreated).Body.Close()
 
 	if threadListedAsStale(t, h.baseURL, threadID) {
-		t.Fatalf("expected document update activity to clear stale thread %s", threadID)
-	}
-	itemsAfterDoc := getInboxItems(t, h.baseURL)
-	if _, ok := findInboxItem(itemsAfterDoc, func(item map[string]any) bool {
-		return asString(item["category"]) == "risk_exception" && asString(item["thread_id"]) == threadID
-	}); ok {
-		t.Fatalf("expected stale exception inbox item to stay suppressed after document update, got %#v", itemsAfterDoc)
+		t.Fatalf("unexpected stale after document update for thread %s", threadID)
 	}
 }
 
@@ -211,7 +169,7 @@ func TestStalenessRebuildTreatsRecentCardActivityAsFresh(t *testing.T) {
 	postJSONExpectStatus(t, h.baseURL+"/derived/rebuild", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
 
 	if threadListedAsStale(t, h.baseURL, threadID) {
-		t.Fatalf("expected recent card activity to keep thread %s fresh", threadID)
+		t.Fatalf("expected thread %s not stale after card activity", threadID)
 	}
 	items := getInboxItems(t, h.baseURL)
 	if _, ok := findInboxItem(items, func(item map[string]any) bool {
@@ -224,25 +182,27 @@ func TestStalenessRebuildTreatsRecentCardActivityAsFresh(t *testing.T) {
 func threadListedAsStale(t *testing.T, baseURL string, threadID string) bool {
 	t.Helper()
 
-	resp, err := http.Get(baseURL + "/threads?stale=true")
+	resp, err := http.Get(baseURL + "/threads?state=active&limit=1000")
 	if err != nil {
-		t.Fatalf("GET /threads?stale=true: %v", err)
+		t.Fatalf("GET /threads: %v", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("unexpected stale thread list status: %d", resp.StatusCode)
+		t.Fatalf("unexpected thread list status: %d", resp.StatusCode)
 	}
 
 	var payload struct {
 		Threads []map[string]any `json:"threads"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		t.Fatalf("decode stale thread list: %v", err)
+		t.Fatalf("decode thread list: %v", err)
 	}
 	for _, thread := range payload.Threads {
-		if asString(thread["id"]) == threadID {
-			return true
+		if asString(thread["id"]) != threadID {
+			continue
 		}
+		stale, _ := thread["stale"].(bool)
+		return stale
 	}
 	return false
 }

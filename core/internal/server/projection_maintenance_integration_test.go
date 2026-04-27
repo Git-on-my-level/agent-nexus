@@ -143,22 +143,16 @@ func TestProjectionMaintainerEmitsStaleExceptionsAndRefreshesInbox(t *testing.T)
 	stepNow := time.Date(2026, 3, 18, 10, 0, 0, 0, time.UTC)
 	h.step(t, stepNow)
 
-	if count := countStaleThreadExceptions(t, h.baseURL, threadID); count != 1 {
-		t.Fatalf("expected one stale exception after maintainer step, got %d", count)
+	if count := countStaleThreadExceptions(t, h.baseURL, threadID); count != 0 {
+		t.Fatalf("expected no inferred stale_topic exceptions after maintainer step, got %d", count)
 	}
-	if !threadListedAsStale(t, h.baseURL, threadID) {
-		t.Fatalf("expected thread %s to be stale after maintainer step", threadID)
-	}
-	items := getInboxItems(t, h.baseURL)
-	if _, ok := findInboxItem(items, func(item map[string]any) bool {
-		return asString(item["category"]) == "risk_exception" && asString(item["thread_id"]) == threadID
-	}); !ok {
-		t.Fatalf("expected stale exception inbox item after worker step, got %#v", items)
+	if threadListedAsStale(t, h.baseURL, threadID) {
+		t.Fatalf("expected thread %s not listed stale (no cadence inference)", threadID)
 	}
 
 	h.step(t, stepNow.Add(2*time.Second))
-	if count := countStaleThreadExceptions(t, h.baseURL, threadID); count != 1 {
-		t.Fatalf("expected maintainer step to avoid duplicate stale exceptions, got %d", count)
+	if count := countStaleThreadExceptions(t, h.baseURL, threadID); count != 0 {
+		t.Fatalf("expected still no inferred stale exceptions after second step, got %d", count)
 	}
 }
 
@@ -184,6 +178,20 @@ func TestProjectionMaintainerSuppressesStaleInboxAfterNewActivity(t *testing.T) 
 
 	staleNow := time.Date(2026, 3, 18, 10, 0, 0, 0, time.UTC)
 	h.step(t, staleNow)
+
+	postJSONExpectStatus(t, h.baseURL+"/events", `{
+		"actor_id":"actor-1",
+		"event":{
+			"type":"exception_raised",
+			"thread_id":"`+threadID+`",
+			"refs":["thread:`+threadID+`"],
+			"summary":"thread is stale",
+			"payload":{"subtype":"stale_topic"},
+			"provenance":{"sources":["manual"]}
+		}
+	}`, http.StatusCreated).Body.Close()
+
+	h.step(t, staleNow.Add(2*time.Second))
 
 	postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-1",
@@ -379,11 +387,11 @@ func TestManualModeDerivedRebuildClearsPendingProjectionWork(t *testing.T) {
 		t.Fatalf("expected explicit rebuild to clear queued projection work, got %#v", after)
 	}
 
-	if count := countStaleThreadExceptions(t, h.baseURL, threadID); count != 1 {
-		t.Fatalf("expected rebuild to emit exactly one stale exception, got %d", count)
+	if count := countStaleThreadExceptions(t, h.baseURL, threadID); count != 0 {
+		t.Fatalf("expected rebuild not to infer stale_topic exceptions, got %d", count)
 	}
-	if !threadListedAsStale(t, h.baseURL, threadID) {
-		t.Fatalf("expected explicit rebuild to refresh stale projection for thread %s", threadID)
+	if threadListedAsStale(t, h.baseURL, threadID) {
+		t.Fatalf("expected thread %s not listed stale after explicit rebuild", threadID)
 	}
 }
 

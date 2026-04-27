@@ -7,7 +7,7 @@ func TestValidateEnumRejectsUnknownStrictValue(t *testing.T) {
 
 	contract := loadContract(t)
 
-	err := ValidateEnum(contract, "thread_status", "not_a_real_status")
+	err := ValidateEnum(contract, "topic_type", "not_a_real_topic_type")
 	if err == nil {
 		t.Fatal("expected strict enum error")
 	}

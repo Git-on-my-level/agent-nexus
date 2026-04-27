@@ -113,15 +113,10 @@
   function topicEditPatchToTopicPatch(topicEditPatch) {
     const out = {};
     if (topicEditPatch.title !== undefined) out.title = topicEditPatch.title;
-    if (topicEditPatch.current_summary !== undefined) {
-      out.summary = topicEditPatch.current_summary;
-    }
+    if (topicEditPatch.summary !== undefined)
+      out.summary = topicEditPatch.summary;
     if (topicEditPatch.type !== undefined) {
       out.type = threadTypeToTopicType(topicEditPatch.type);
-    }
-    if (topicEditPatch.status !== undefined) {
-      const s = String(topicEditPatch.status ?? "").trim();
-      if (s) out.status = s;
     }
     return out;
   }
@@ -346,7 +341,7 @@
     aria-label="Topic sections"
     role="tablist"
   >
-    {#each [{ id: "messages", label: "Messages" }, { id: "about", label: "About" }, { id: "documents", label: "Docs", badge: documentCount }, { id: "boards", label: "Boards", badge: boardCount }, { id: "timeline", label: "Timeline" }] as tab}
+    {#each [{ id: "messages", label: "Messages" }, { id: "about", label: "About" }, { id: "documents", label: "Docs", badge: documentCount }, { id: "boards", label: "Boards", badge: boardCount }, { id: "timeline", label: "Timeline" }] as tab (tab.id)}
       <button
         class={`relative cursor-pointer px-3 py-2 text-[13px] font-medium transition-colors ${activeTab === tab.id ? "text-[var(--fg)]" : "text-[var(--fg-muted)] hover:text-[var(--fg)]"}`}
         onclick={() => void setActiveTab(tab.id)}

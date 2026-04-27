@@ -16,7 +16,7 @@ describe("dev seed fixtures", () => {
       id: "thread-lemon-shortage",
       thread_id: "thread-lemon-shortage",
       type: "incident",
-      status: "active",
+      state: "active",
     });
     expect(seed.boards[0]).toMatchObject({
       id: "board-product-launch",

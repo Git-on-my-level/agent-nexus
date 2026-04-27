@@ -32,7 +32,6 @@ func TestBoardStoreCreateUpdateAndListSummaries(t *testing.T) {
 
 	board, err := store.CreateBoard(ctx, "actor-1", map[string]any{
 		"title":         "Operations Board",
-		"labels":        []string{"ops", "infra"},
 		"owners":        []string{"actor-1"},
 		"document_refs": []string{"document:" + primaryDocumentID},
 		"pinned_refs":   []string{"thread:" + primaryThreadID},
@@ -42,8 +41,8 @@ func TestBoardStoreCreateUpdateAndListSummaries(t *testing.T) {
 	}
 
 	boardID := board["id"].(string)
-	if board["status"] != "active" {
-		t.Fatalf("expected default board status active, got %#v", board["status"])
+	if board["state"] != "active" {
+		t.Fatalf("expected default board state active, got %#v", board["state"])
 	}
 	columnSchema, ok := board["column_schema"].([]map[string]any)
 	if !ok || len(columnSchema) != 6 {
@@ -70,9 +69,9 @@ func TestBoardStoreCreateUpdateAndListSummaries(t *testing.T) {
 	putBoardTestProjection(t, ctx, store, cardThreadB, "2099-01-03T00:00:00Z", 1, 0)
 
 	listed, _, err := store.ListBoards(ctx, primitives.BoardListFilter{
-		Status: "active",
-		Label:  "ops",
-		Owner:  "actor-1",
+		State: "active",
+		Query: "Operations",
+		Owner: "actor-1",
 	})
 	if err != nil {
 		t.Fatalf("list boards: %v", err)
@@ -108,15 +107,13 @@ func TestBoardStoreCreateUpdateAndListSummaries(t *testing.T) {
 	initialUpdatedAt := listed[0].Board["updated_at"].(string)
 	updated, err := store.UpdateBoard(ctx, "actor-3", boardID, map[string]any{
 		"title":  "Operations Board Updated",
-		"status": "paused",
-		"labels": []string{"ops", "platform"},
 		"owners": []string{"actor-3"},
 		"refs":   []string{"thread:" + cardThreadA},
 	}, &initialUpdatedAt)
 	if err != nil {
 		t.Fatalf("update board: %v", err)
 	}
-	if updated["title"] != "Operations Board Updated" || updated["status"] != "paused" {
+	if updated["title"] != "Operations Board Updated" {
 		t.Fatalf("unexpected updated board: %#v", updated)
 	}
 	if _, exists := updated["document_refs"]; exists {
@@ -129,6 +126,20 @@ func TestBoardStoreCreateUpdateAndListSummaries(t *testing.T) {
 	}
 	if loaded["updated_by"] != "actor-3" {
 		t.Fatalf("expected updated_by actor-3, got %#v", loaded["updated_by"])
+	}
+	cardsAfterBoardPatch, err := store.ListBoardCards(ctx, boardID)
+	if err != nil {
+		t.Fatalf("list board cards after board patch: %v", err)
+	}
+	if len(cardsAfterBoardPatch) != 2 {
+		t.Fatalf("expected board patch to preserve 2 cards, got %d", len(cardsAfterBoardPatch))
+	}
+	cardRefs, ok := loaded["card_refs"].([]string)
+	if !ok {
+		t.Fatalf("expected card_refs []string on board, got %T", loaded["card_refs"])
+	}
+	if len(cardRefs) != 2 {
+		t.Fatalf("expected 2 card_refs, got %#v", cardRefs)
 	}
 }
 
@@ -271,9 +282,9 @@ func TestBoardStoreCardOrderingAndMutations(t *testing.T) {
 	if updatedCard.Board["updated_by"] != "actor-5" {
 		t.Fatalf("expected board updated_by actor-5 after card update, got %#v", updatedCard.Board["updated_by"])
 	}
-	statusDone := "done"
+	newTitle := "stale token title"
 	if _, err := store.UpdateBoardCard(ctx, "actor-stale", boardID, cardThreadA, primitives.UpdateBoardCardInput{
-		Status:           &statusDone,
+		Title:            &newTitle,
 		IfBoardUpdatedAt: &updateUpdatedAt,
 	}); !errors.Is(err, primitives.ErrConflict) {
 		t.Fatalf("expected stale card update ErrConflict, got %v", err)
@@ -507,10 +518,10 @@ func TestBoardStoreRejectsArchivedCardMutations(t *testing.T) {
 		t.Fatalf("archive board card: %v", err)
 	}
 	archivedUpdatedAt := archived.Board["updated_at"].(string)
-	statusDone := "done"
+	titleTry := "mutate archived"
 
 	if _, err := store.UpdateBoardCard(ctx, "actor-4", boardID, cardThreadID, primitives.UpdateBoardCardInput{
-		Status:           &statusDone,
+		Title:            &titleTry,
 		IfBoardUpdatedAt: &archivedUpdatedAt,
 	}); !errors.Is(err, primitives.ErrInvalidBoardRequest) {
 		t.Fatalf("expected archived card update ErrInvalidBoardRequest, got %v", err)
@@ -904,16 +915,9 @@ func createBoardTestThread(t *testing.T, ctx context.Context, store *primitives.
 	t.Helper()
 
 	result, err := store.CreateThread(ctx, "actor-1", map[string]any{
-		"title":           title,
-		"type":            "incident",
-		"status":          "active",
-		"priority":        "p1",
-		"tags":            []string{},
-		"cadence":         "reactive",
-		"current_summary": title,
-		"next_actions":    []string{},
-		"key_artifacts":   []string{},
-		"provenance":      map[string]any{"sources": []string{"inferred"}},
+		"title":      title,
+		"type":       "incident",
+		"provenance": map[string]any{"sources": []string{"inferred"}},
 	})
 	if err != nil {
 		t.Fatalf("create board test thread %q: %v", title, err)
@@ -1018,6 +1022,27 @@ func parentThreadIDFromMembershipCard(card map[string]any) string {
 		return strings.TrimSpace(strings.TrimPrefix(ref, "thread:"))
 	}
 	return ""
+}
+
+func TestBoardCardIsOpenWorkItem(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		columnKey  string
+		resolution string
+		wantOpen   bool
+	}{
+		{"in_progress", "", true},
+		{"done", "", true},
+		{"done", "done", false},
+		{"done", "canceled", false},
+		{"done", "completed", false},
+		{"backlog", "unresolved", true},
+	}
+	for _, tc := range cases {
+		if got := primitives.BoardCardIsOpenWorkItem(tc.columnKey, tc.resolution); got != tc.wantOpen {
+			t.Fatalf("column_key=%q resolution=%q: got open=%v want open=%v", tc.columnKey, tc.resolution, got, tc.wantOpen)
+		}
+	}
 }
 
 func pointerString(value string) *string {

@@ -1383,7 +1383,7 @@ export const commandRegistry = [
         "path": "/boards/{board_id}/archive",
         "operation_id": "archiveBoard",
         "summary": "Archive board",
-        "why": "Soft-archive a board (orthogonal to business status; clears default list visibility).",
+        "why": "Soft-archive a board and derive its lifecycle state from archived_at.",
         "input_mode": "json-body",
         "streaming": {
             "mode": "none"
@@ -1792,15 +1792,6 @@ export const commandRegistry = [
                     "type": "list\u003cstring\u003e"
                 },
                 {
-                    "name": "board.status",
-                    "type": "string",
-                    "enum_values": [
-                        "active",
-                        "closed",
-                        "paused"
-                    ]
-                },
-                {
                     "name": "board.title",
                     "type": "string"
                 }
@@ -1983,15 +1974,6 @@ export const commandRegistry = [
                 {
                     "name": "patch.provenance.sources",
                     "type": "list\u003cstring\u003e"
-                },
-                {
-                    "name": "patch.status",
-                    "type": "string",
-                    "enum_values": [
-                        "active",
-                        "closed",
-                        "paused"
-                    ]
                 },
                 {
                     "name": "patch.title",
@@ -3788,8 +3770,8 @@ export const commandRegistry = [
                         "decision_made",
                         "decision_needed",
                         "document_created",
+                        "document_restored",
                         "document_revised",
-                        "document_revision_created",
                         "document_trashed",
                         "exception_raised",
                         "inbox_item_acknowledged",
@@ -3800,7 +3782,6 @@ export const commandRegistry = [
                         "topic_archived",
                         "topic_created",
                         "topic_restored",
-                        "topic_status_changed",
                         "topic_trashed",
                         "topic_updated"
                     ],
@@ -5312,7 +5293,7 @@ export const commandRegistry = [
         "path": "/topics/{topic_id}/archive",
         "operation_id": "archiveTopic",
         "summary": "Archive topic",
-        "why": "Soft-archive a topic (orthogonal to business status; clears default list visibility).",
+        "why": "Soft-archive a topic and derive its lifecycle state from archived_at.",
         "input_mode": "json-body",
         "streaming": {
             "mode": "none"
@@ -5403,19 +5384,6 @@ export const commandRegistry = [
                 {
                     "name": "topic.related_refs",
                     "type": "list\u003cany\u003e"
-                },
-                {
-                    "name": "topic.status",
-                    "type": "string",
-                    "enum_values": [
-                        "active",
-                        "archived",
-                        "blocked",
-                        "closed",
-                        "paused",
-                        "proposed",
-                        "resolved"
-                    ]
                 },
                 {
                     "name": "topic.summary",
@@ -5609,19 +5577,6 @@ export const commandRegistry = [
                 {
                     "name": "patch.related_refs",
                     "type": "list\u003cany\u003e"
-                },
-                {
-                    "name": "patch.status",
-                    "type": "string",
-                    "enum_values": [
-                        "active",
-                        "archived",
-                        "blocked",
-                        "closed",
-                        "paused",
-                        "proposed",
-                        "resolved"
-                    ]
                 },
                 {
                     "name": "patch.summary",

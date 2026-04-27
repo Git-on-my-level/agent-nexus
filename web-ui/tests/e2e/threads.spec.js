@@ -1,35 +1,19 @@
 import { expect, test } from "@playwright/test";
 
 function filterTopicsByQuery(allTopics, url) {
-  const status = url.searchParams.get("status");
-  const priority = url.searchParams.get("priority");
-  const cadence = url.searchParams.get("cadence");
-  const stale = url.searchParams.get("stale");
-  const tags = url.searchParams.getAll("tag");
+  const state = url.searchParams.get("state");
+  const q = (url.searchParams.get("q") ?? "").trim().toLowerCase();
 
   return allTopics.filter((topic) => {
-    if (status && topic.status !== status) {
+    if (state && topic.state !== state) {
       return false;
     }
 
-    if (priority && topic.priority !== priority) {
-      return false;
-    }
-
-    if (cadence && topic.cadence !== cadence) {
-      return false;
-    }
-
-    if (tags.length > 0 && !tags.every((tag) => topic.tags.includes(tag))) {
-      return false;
-    }
-
-    if (stale === "true" && !topic.stale) {
-      return false;
-    }
-
-    if (stale === "false" && topic.stale) {
-      return false;
+    if (q) {
+      const hay = `${topic.id} ${topic.title}`.toLowerCase();
+      if (!hay.includes(q)) {
+        return false;
+      }
     }
 
     return true;
@@ -46,27 +30,19 @@ test("topics list filters and create flow use GET/POST /topics", async ({
     {
       id: "thread-onboarding",
       title: "Customer Onboarding Workflow",
-      status: "active",
-      priority: "p1",
-      cadence: "weekly",
-      tags: ["ops", "customer"],
+      state: "active",
       summary: "Onboarding policy review pending.",
       current_summary: "Onboarding policy review pending.",
       updated_at: "2026-03-03T11:00:00.000Z",
-      stale: true,
       provenance: { sources: ["actor_statement:event-1"] },
     },
     {
       id: "thread-incident-42",
       title: "Incident Follow-up",
-      status: "blocked",
-      priority: "p0",
-      cadence: "daily",
-      tags: ["incident"],
+      state: "active",
       summary: "Postmortem still in progress.",
       current_summary: "Postmortem still in progress.",
       updated_at: "2026-03-03T12:00:00.000Z",
-      stale: false,
       provenance: { sources: ["actor_statement:event-2"] },
     },
   ];
@@ -113,7 +89,6 @@ test("topics list filters and create flow use GET/POST /topics", async ({
         id: `topic-new-${createCount}`,
         type: "other",
         updated_at: "2026-03-04T00:00:00.000Z",
-        stale: false,
         provenance: { sources: ["actor_statement:ui"] },
         owner_refs: [],
         document_refs: [],
@@ -146,7 +121,7 @@ test("topics list filters and create flow use GET/POST /topics", async ({
   ).toBeVisible();
 
   await page.getByRole("button", { name: "Filters" }).click();
-  await page.getByLabel("Status").selectOption("active");
+  await page.getByLabel("Search").fill("Onboarding");
   await page.getByRole("button", { name: "Apply" }).click();
 
   await expect
@@ -155,9 +130,9 @@ test("topics list filters and create flow use GET/POST /topics", async ({
       if (!latest) {
         return "";
       }
-      return new URL(latest).searchParams.get("status") ?? "";
+      return new URL(latest).searchParams.get("q") ?? "";
     })
-    .toBe("active");
+    .toBe("Onboarding");
 
   await expect(
     page.getByText("Incident Follow-up", { exact: true }),

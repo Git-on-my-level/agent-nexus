@@ -22,7 +22,6 @@ type documentRow struct {
 	ThreadID        sql.NullString
 	Title           sql.NullString
 	Slug            sql.NullString
-	LabelsJSON      string
 	SupersedesJSON  string
 	RefsJSON        string
 	ProvenanceJSON  string
@@ -49,7 +48,7 @@ func documentResourceRefEdgeTargets(threadID string, refs []string) []refEdgeTar
 }
 
 func buildListDocumentsQuery(filter DocumentListFilter) (string, []any) {
-	query := `SELECT d.id, d.thread_id, d.title, d.slug, d.labels_json, d.supersedes_json,
+	query := `SELECT d.id, d.thread_id, d.title, d.slug, d.supersedes_json,
 		d.refs_json, d.provenance_json,
 		d.head_revision_id, d.head_revision_number, d.created_at, d.created_by, d.updated_at, d.updated_by,
 		d.trashed_at, d.trashed_by, d.trash_reason,
@@ -87,16 +86,6 @@ func buildListDocumentsQuery(filter DocumentListFilter) (string, []any) {
 		} else if !filter.IncludeArchived {
 			conditions = append(conditions, "d.archived_at IS NULL")
 		}
-	}
-	labelFilters := uniqueNormalizedStrings(filter.Labels)
-	if len(labelFilters) > 0 {
-		// Match boards list: json_each on labels_json with exact value match (OR across requested labels).
-		parts := make([]string, 0, len(labelFilters))
-		for _, label := range labelFilters {
-			parts = append(parts, "EXISTS (SELECT 1 FROM json_each(d.labels_json) WHERE value = ?)")
-			args = append(args, label)
-		}
-		conditions = append(conditions, "("+strings.Join(parts, " OR ")+")")
 	}
 	if q := strings.TrimSpace(filter.Query); q != "" {
 		searchPattern := "%" + strings.ToLower(q) + "%"
@@ -145,7 +134,6 @@ func (s *Store) ListDocuments(ctx context.Context, filter DocumentListFilter) ([
 			&row.ThreadID,
 			&row.Title,
 			&row.Slug,
-			&row.LabelsJSON,
 			&row.SupersedesJSON,
 			&row.RefsJSON,
 			&row.ProvenanceJSON,
@@ -233,9 +221,8 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 	if err != nil {
 		return nil, nil, err
 	}
-	labels, err := optionalStringListField(document, "labels")
-	if err != nil {
-		return nil, nil, invalidDocumentRequestError(err)
+	if _, exists := document["labels"]; exists {
+		return nil, nil, invalidDocumentRequest("document.labels is not supported")
 	}
 	supersedes, err := optionalStringListField(document, "supersedes")
 	if err != nil {
@@ -330,10 +317,6 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 	if err != nil {
 		return nil, nil, fmt.Errorf("marshal document artifact metadata: %w", err)
 	}
-	labelsJSON, err := json.Marshal(labels)
-	if err != nil {
-		return nil, nil, fmt.Errorf("marshal document labels: %w", err)
-	}
 	supersedesJSON, err := json.Marshal(supersedes)
 	if err != nil {
 		return nil, nil, fmt.Errorf("marshal document supersedes: %w", err)
@@ -382,16 +365,15 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 	if _, err := tx.ExecContext(
 		ctx,
 		`INSERT INTO documents(
-			id, thread_id, title, slug, labels_json, supersedes_json,
+			id, thread_id, title, slug, supersedes_json,
 			refs_json, provenance_json,
 			head_revision_id, head_revision_number,
 			created_at, created_by, updated_at, updated_by
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		documentID,
 		nullableString(threadID),
 		nullableString(title),
 		nullableString(slug),
-		string(labelsJSON),
 		string(supersedesJSON),
 		string(docRefsJSON),
 		docProvJSON,
@@ -496,7 +478,6 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		ThreadID:        nullableString(threadID),
 		Title:           nullableString(title),
 		Slug:            nullableString(slug),
-		LabelsJSON:      string(labelsJSON),
 		SupersedesJSON:  string(supersedesJSON),
 		RefsJSON:        string(docRefsJSON),
 		ProvenanceJSON:  docProvJSON,
@@ -580,7 +561,6 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 	nextThreadID := nullStringValue(doc.ThreadID)
 	nextTitle := nullStringValue(doc.Title)
 	nextSlug := nullStringValue(doc.Slug)
-	nextLabels := decodeJSONListOrEmpty(doc.LabelsJSON)
 	nextSupersedes := decodeJSONListOrEmpty(doc.SupersedesJSON)
 	nextDocRefs := decodeJSONListOrEmpty(doc.RefsJSON)
 	nextDocProvJSON := strings.TrimSpace(doc.ProvenanceJSON)
@@ -614,12 +594,8 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		if _, exists := documentPatch["state"]; exists {
 			return nil, nil, invalidDocumentRequest("document.state is not writable in revision updates; use archive/trash/restore lifecycle endpoints")
 		}
-		if value, exists := documentPatch["labels"]; exists {
-			parsed, parseErr := normalizeStringSlice(value)
-			if parseErr != nil {
-				return nil, nil, invalidDocumentRequest("document.labels must be a list of strings")
-			}
-			nextLabels = parsed
+		if _, exists := documentPatch["labels"]; exists {
+			return nil, nil, invalidDocumentRequest("document.labels is not supported")
 		}
 		if value, exists := documentPatch["supersedes"]; exists {
 			parsed, parseErr := normalizeStringSlice(value)
@@ -721,10 +697,6 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 	if err != nil {
 		return nil, nil, fmt.Errorf("marshal document artifact metadata: %w", err)
 	}
-	labelsJSON, err := json.Marshal(nextLabels)
-	if err != nil {
-		return nil, nil, fmt.Errorf("marshal document labels: %w", err)
-	}
 	supersedesJSON, err := json.Marshal(nextSupersedes)
 	if err != nil {
 		return nil, nil, fmt.Errorf("marshal document supersedes: %w", err)
@@ -802,7 +774,7 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 	}
 
 	lifecycleEvent, err := prepareEventForInsert(actorID, buildDocumentLifecycleEvent(
-		"document_updated",
+		"document_revised",
 		nextThreadID,
 		documentID,
 		revisionID,
@@ -832,7 +804,6 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 			thread_id = ?,
 			title = ?,
 			slug = ?,
-			labels_json = ?,
 			supersedes_json = ?,
 			refs_json = ?,
 			provenance_json = ?,
@@ -844,7 +815,6 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		nullableString(nextThreadID),
 		nullableString(nextTitle),
 		nullableString(nextSlug),
-		string(labelsJSON),
 		string(supersedesJSON),
 		string(docResourceRefsJSON),
 		nextDocProvJSON,
@@ -915,7 +885,6 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		ThreadID:        nullableString(nextThreadID),
 		Title:           nullableString(nextTitle),
 		Slug:            nullableString(nextSlug),
-		LabelsJSON:      string(labelsJSON),
 		SupersedesJSON:  string(supersedesJSON),
 		RefsJSON:        string(docResourceRefsJSON),
 		ProvenanceJSON:  nextDocProvJSON,
@@ -1327,7 +1296,7 @@ func (s *Store) loadDocumentRow(ctx context.Context, documentID string) (documen
 	var row documentRow
 	err := s.db.QueryRowContext(
 		ctx,
-		`SELECT id, thread_id, title, slug, labels_json, supersedes_json,
+		`SELECT id, thread_id, title, slug, supersedes_json,
 			 refs_json, provenance_json,
 			 head_revision_id, head_revision_number, created_at, created_by, updated_at, updated_by,
 			 trashed_at, trashed_by, trash_reason,
@@ -1339,7 +1308,6 @@ func (s *Store) loadDocumentRow(ctx context.Context, documentID string) (documen
 		&row.ThreadID,
 		&row.Title,
 		&row.Slug,
-		&row.LabelsJSON,
 		&row.SupersedesJSON,
 		&row.RefsJSON,
 		&row.ProvenanceJSON,
@@ -1476,11 +1444,10 @@ func (s *Store) loadDocumentRevision(ctx context.Context, documentID string, rev
 }
 
 func (r documentRow) toMap() map[string]any {
-	state := canonicalDocumentState(r.ArchivedAt, r.TrashedAt)
+	state := canonicalLifecycleState(r.ArchivedAt, r.TrashedAt)
 	out := map[string]any{
 		"id":                   r.ID,
 		"state":                state,
-		"labels":               decodeJSONListOrEmpty(r.LabelsJSON),
 		"supersedes":           decodeJSONListOrEmpty(r.SupersedesJSON),
 		"head_revision_id":     r.HeadRevisionID,
 		"head_revision_ref":    "document_revision:" + r.HeadRevisionID,
@@ -1548,16 +1515,6 @@ func (r documentRow) toMap() map[string]any {
 	return out
 }
 
-func canonicalDocumentState(archivedAt, trashedAt sql.NullString) string {
-	if trashedAt.Valid && strings.TrimSpace(trashedAt.String) != "" {
-		return "trashed"
-	}
-	if archivedAt.Valid && strings.TrimSpace(archivedAt.String) != "" {
-		return "archived"
-	}
-	return "active"
-}
-
 func canonicalDocumentSubjectRef(threadID string) string {
 	threadID = strings.TrimSpace(threadID)
 	if threadID == "" {
@@ -1620,7 +1577,7 @@ func buildDocumentLifecycleEvent(eventType, threadID, documentID, revisionID, ar
 
 	summary := map[string]string{
 		"document_created":  "Document created",
-		"document_updated":  "Document updated",
+		"document_revised":  "Document revised",
 		"document_trashed":  "Document trashed",
 		"document_restored": "Document restored",
 	}[eventType]
@@ -1663,24 +1620,16 @@ func ensureDocumentBackingThreadTx(ctx context.Context, tx *sql.Tx, actorID, doc
 		if marshalErr != nil {
 			return "", fmt.Errorf("marshal document backing thread: %w", marshalErr)
 		}
-		filterColumns := threadFilterColumnsForKind("thread", body)
 		if _, execErr := tx.ExecContext(
 			ctx,
-			`INSERT INTO threads(id, kind, thread_id, updated_at, updated_by, body_json, provenance_json, filter_status, filter_priority, filter_owner, filter_due_at, filter_cadence, filter_cadence_preset, filter_tags_json)
-			 VALUES (?, 'thread', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			`INSERT INTO threads(id, kind, thread_id, updated_at, updated_by, body_json, provenance_json)
+			 VALUES (?, 'thread', ?, ?, ?, ?, ?)`,
 			threadID,
 			threadID,
 			updatedAt,
 			actorID,
 			string(bodyJSON),
 			inferredProvenanceJSON(),
-			nullableString(filterColumns.Status),
-			nullableString(filterColumns.Priority),
-			nil,
-			nil,
-			nullableString(filterColumns.Cadence),
-			nullableString(filterColumns.CadencePreset),
-			filterColumns.TagsJSON,
 		); execErr != nil {
 			if isUniqueViolation(execErr) {
 				return "", ErrConflict
@@ -1711,7 +1660,7 @@ func ensureDocumentBackingThreadTx(ctx context.Context, tx *sql.Tx, actorID, doc
 	}
 	existingBody := cloneMap(threadBody)
 	threadBody = buildDocumentBackingThreadBody(documentID, threadID, title)
-	for _, key := range []string{"current_summary", "key_artifacts", "tags", "cadence", "next_check_in_at", "status", "priority"} {
+	for _, key := range []string{"current_summary", "key_artifacts"} {
 		if value, exists := existingBody[key]; exists && value != nil {
 			threadBody[key] = value
 		}
@@ -1726,25 +1675,16 @@ func ensureDocumentBackingThreadTx(ctx context.Context, tx *sql.Tx, actorID, doc
 	if err != nil {
 		return "", fmt.Errorf("marshal document backing thread provenance: %w", err)
 	}
-	filterColumns := threadFilterColumnsForKind("thread", threadBody)
 	if _, err := tx.ExecContext(
 		ctx,
 		`UPDATE threads
-		    SET thread_id = ?, updated_at = ?, updated_by = ?, body_json = ?, provenance_json = ?,
-		        filter_status = ?, filter_priority = ?, filter_owner = ?, filter_due_at = ?, filter_cadence = ?, filter_cadence_preset = ?, filter_tags_json = ?
+		    SET thread_id = ?, updated_at = ?, updated_by = ?, body_json = ?, provenance_json = ?
 		  WHERE id = ?`,
 		threadID,
 		updatedAt,
 		actorID,
 		string(bodyJSON),
 		string(provenanceJSON),
-		nullableString(filterColumns.Status),
-		nullableString(filterColumns.Priority),
-		nil,
-		nil,
-		nullableString(filterColumns.Cadence),
-		nullableString(filterColumns.CadencePreset),
-		filterColumns.TagsJSON,
 		threadID,
 	); err != nil {
 		return "", fmt.Errorf("update document backing thread: %w", err)
@@ -1794,24 +1734,15 @@ func clearDocumentBackingThreadSubjectTx(ctx context.Context, tx *sql.Tx, actorI
 	if err != nil {
 		return fmt.Errorf("marshal cleared document backing thread provenance: %w", err)
 	}
-	filterColumns := threadFilterColumnsForKind("thread", threadBody)
 	if _, err := tx.ExecContext(
 		ctx,
 		`UPDATE threads
-		    SET updated_at = ?, updated_by = ?, body_json = ?, provenance_json = ?,
-		        filter_status = ?, filter_priority = ?, filter_owner = ?, filter_due_at = ?, filter_cadence = ?, filter_cadence_preset = ?, filter_tags_json = ?
+		    SET updated_at = ?, updated_by = ?, body_json = ?, provenance_json = ?
 		  WHERE id = ?`,
 		updatedAt,
 		actorID,
 		string(bodyJSON),
 		string(provenanceJSON),
-		nullableString(filterColumns.Status),
-		nullableString(filterColumns.Priority),
-		nil,
-		nil,
-		nullableString(filterColumns.Cadence),
-		nullableString(filterColumns.CadencePreset),
-		filterColumns.TagsJSON,
 		threadID,
 	); err != nil {
 		return fmt.Errorf("clear document backing thread subject: %w", err)
@@ -1824,9 +1755,6 @@ func buildDocumentBackingThreadBody(documentID, threadID, title string) map[stri
 		"id":          strings.TrimSpace(threadID),
 		"subject_ref": "document:" + strings.TrimSpace(documentID),
 		"title":       documentBackingThreadTitle(documentID, title),
-		"status":      "active",
-		"priority":    "p2",
-		"tags":        []string{},
 		"provenance":  map[string]any{"sources": []string{"inferred"}},
 	}
 }

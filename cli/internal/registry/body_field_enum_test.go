@@ -5,14 +5,14 @@ import (
 	"testing"
 )
 
-func TestBodyFieldEnumBoardsPatchStatus(t *testing.T) {
+func TestBodyFieldEnumTopicsPatchType(t *testing.T) {
 	t.Parallel()
 
-	vals, ok := BodyFieldEnum("boards patch", "patch.status")
+	vals, ok := BodyFieldEnum("topics patch", "patch.type")
 	if !ok || len(vals) == 0 {
-		t.Fatalf("expected patch.status enums, got ok=%v vals=%#v", ok, vals)
+		t.Fatalf("expected patch.type enums, got ok=%v vals=%#v", ok, vals)
 	}
-	if !slices.Contains(vals, "active") || !slices.Contains(vals, "paused") {
+	if !slices.Contains(vals, "incident") || !slices.Contains(vals, "initiative") {
 		t.Fatalf("unexpected values: %#v", vals)
 	}
 }

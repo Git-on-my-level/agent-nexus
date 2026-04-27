@@ -79,7 +79,6 @@ test("card detail modal Messages and Timeline tabs render without request storms
       type: "process",
       title: "Card Thread",
       status: "active",
-      priority: "p2",
       updated_at: "2026-03-05T06:00:00.000Z",
       updated_by: actorId,
       open_cards: [],
@@ -89,7 +88,6 @@ test("card detail modal Messages and Timeline tabs render without request storms
       type: "process",
       title: "Board Backing",
       status: "active",
-      priority: "p1",
       updated_at: "2026-03-05T06:00:00.000Z",
       updated_by: actorId,
       open_cards: [],
@@ -137,7 +135,6 @@ test("card detail modal Messages and Timeline tabs render without request storms
               document_count: 0,
               inbox_count: 0,
               latest_activity_at: cardThread?.updated_at ?? card.updated_at,
-              stale: false,
             },
             freshness: freshnessThreads.find(
               (x) => x.thread_id === cardThreadId,

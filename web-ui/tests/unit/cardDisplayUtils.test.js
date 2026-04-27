@@ -1,22 +1,17 @@
 import { describe, expect, it } from "vitest";
 
-import { resolvePriorityBadge } from "../../src/lib/cardDisplayUtils.js";
-import { getPriorityLabel } from "../../src/lib/topicFilters.js";
+import { dueDateDisplay, isOverdue } from "../../src/lib/cardDisplayUtils.js";
 
 describe("cardDisplayUtils", () => {
-  describe("resolvePriorityBadge", () => {
-    it("returns null for empty priority", () => {
-      expect(resolvePriorityBadge("", getPriorityLabel)).toBe(null);
-    });
+  it("formats due dates and ignores empty values", () => {
+    expect(dueDateDisplay("")).toBe("");
+    expect(dueDateDisplay("not-a-date")).toBe("");
+    expect(dueDateDisplay("2026-03-05T00:00:00.000Z")).toContain("2026");
+  });
 
-    it("maps p0–p3 to fixed labels", () => {
-      expect(resolvePriorityBadge("p0", getPriorityLabel)?.label).toBe("P0");
-      expect(resolvePriorityBadge("p3", getPriorityLabel)?.label).toBe("P3");
-    });
-
-    it("delegates other values to getPriorityLabel", () => {
-      const b = resolvePriorityBadge("high", getPriorityLabel);
-      expect(b?.label).toBe(getPriorityLabel("high"));
-    });
+  it("detects overdue due dates", () => {
+    expect(isOverdue("")).toBe(false);
+    expect(isOverdue("2999-01-01T00:00:00.000Z")).toBe(false);
+    expect(isOverdue("2000-01-01T00:00:00.000Z")).toBe(true);
   });
 });

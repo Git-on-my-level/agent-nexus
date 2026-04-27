@@ -23,8 +23,8 @@ export function topicSearchResultToPickerOption(topic) {
   return {
     id,
     title: topic.title || id,
-    subtitle: [topic.status, topic.priority].filter(Boolean).join(" · "),
-    keywords: [topic.type, ...(topic.tags ?? [])],
+    subtitle: [topic.state].filter(Boolean).join(" · "),
+    keywords: [topic.type].filter(Boolean),
   };
 }
 
@@ -42,12 +42,12 @@ export function topicSearchResultToBoardRefOption(topic) {
       id: "",
       title: String(topic.title ?? "").trim() || "",
       subtitle: "",
-      keywords: [topic.type, ...(topic.tags ?? [])],
+      keywords: [topic.type].filter(Boolean),
     };
   }
   const typedRef = rawId.includes(":") ? rawId : `topic:${rawId}`;
   const timeline = backingThreadIdFromTopicRecord(topic);
-  const subtitleParts = [topic.status, topic.priority];
+  const subtitleParts = [topic.state];
   if (timeline) {
     subtitleParts.push(`Timeline ${timeline}`);
   }
@@ -55,7 +55,7 @@ export function topicSearchResultToBoardRefOption(topic) {
     id: typedRef,
     title: topic.title || typedRef,
     subtitle: subtitleParts.filter(Boolean).join(" · "),
-    keywords: [topic.type, ...(topic.tags ?? [])],
+    keywords: [topic.type].filter(Boolean),
   };
 }
 

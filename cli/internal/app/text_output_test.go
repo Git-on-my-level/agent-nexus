@@ -86,6 +86,32 @@ func TestFormatBoardsList_TextScanStripsBoardPrefix(t *testing.T) {
 	}
 }
 
+func TestRenderBoardCardItem_UsesRiskExceptionBadge(t *testing.T) {
+	t.Parallel()
+	cardWrapper := map[string]any{
+		"thread": map[string]any{
+			"id":    "thread_123",
+			"title": "Machine-facing consistency",
+		},
+		"summary": map[string]any{
+			"related_topic_count":    1,
+			"decision_request_count": 1,
+			"decision_count":         0,
+			"recommendation_count":   1,
+			"document_count":         1,
+			"inbox_count":            1,
+			"stale":                  true,
+		},
+	}
+	got := renderBoardCardItem(cardWrapper)
+	if strings.Contains(got, "STALE") {
+		t.Fatalf("expected stale badge to be renamed, got %q", got)
+	}
+	if !strings.Contains(got, "risk_exception") {
+		t.Fatalf("expected risk_exception badge, got %q", got)
+	}
+}
+
 func TestFormatNamedList_ThreadsScanStripsThreadPrefix(t *testing.T) {
 	t.Parallel()
 	body := map[string]any{

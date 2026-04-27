@@ -117,16 +117,11 @@ var localHelperTopics = []localHelperTopic{
 		Composition: "Resolves one thread by id or discovery filters, loads read-only thread projections, then filters inbox items client-side by `thread_id`. Prefer `topics workspace` for primary operator coordination when you have a topic id.",
 		Examples: []string{
 			"anx threads inspect --thread-id <thread-id>",
-			"anx threads inspect --status active --type initiative --full-id",
+			"anx threads inspect --state active --full-id",
 		},
 		Flags: []localHelperFlag{
 			{Name: "--thread-id <thread-id>", Description: "Thread id to inspect."},
-			{Name: "--status <status>", Description: "Discover one thread by status."},
-			{Name: "--priority <priority>", Description: "Discover one thread by priority."},
-			{Name: "--stale <bool>", Description: "Discover one thread by stale state."},
-			{Name: "--tag <tag>", Description: "Repeatable discovery tag filter."},
-			{Name: "--cadence <cadence>", Description: "Repeatable discovery cadence filter."},
-			{Name: "--type <thread-type>", Description: "Local discovery filter after `threads list`."},
+			{Name: "--state <state>", Description: "Discover one thread by lifecycle state (active, archived, trashed)."},
 			{Name: "--max-events <n>", Description: "Maximum recent context events to include."},
 			{Name: "--include-artifact-content", Description: "Include artifact content previews from the underlying read-only thread views."},
 			{Name: "--full-id", Description: "Render full event and inbox ids in default text output (non-JSON)."},
@@ -139,16 +134,11 @@ var localHelperTopics = []localHelperTopic{
 		Composition: "Resolves one thread by id or discovery filters, loads read-only thread projections, adds thread-scoped inbox items, and follows related thread refs for diagnostic review. Prefer `topics workspace` for normal operator coordination.",
 		Examples: []string{
 			"anx threads workspace --thread-id <thread-id> --full-id",
-			"anx threads workspace --status active --type initiative --full-summary",
+			"anx threads workspace --state active --full-summary",
 		},
 		Flags: []localHelperFlag{
 			{Name: "--thread-id <thread-id>", Description: "Thread id to inspect."},
-			{Name: "--status <status>", Description: "Discover one thread by status."},
-			{Name: "--priority <priority>", Description: "Discover one thread by priority."},
-			{Name: "--stale <bool>", Description: "Discover one thread by stale state."},
-			{Name: "--tag <tag>", Description: "Repeatable discovery tag filter."},
-			{Name: "--cadence <cadence>", Description: "Repeatable discovery cadence filter."},
-			{Name: "--type <thread-type>", Description: "Local discovery filter after `threads list`."},
+			{Name: "--state <state>", Description: "Discover one thread by lifecycle state (active, archived, trashed)."},
 			{Name: "--max-events <n>", Description: "Maximum recent context events to include."},
 			{Name: "--include-artifact-content", Description: "Include artifact content previews from the underlying read-only thread views."},
 			{Name: "--full-summary", Description: "Show full recommendation/decision summaries in default text output (non-JSON)."},
@@ -162,16 +152,11 @@ var localHelperTopics = []localHelperTopic{
 		Composition: "Loads the read-only thread context, inbox, and related-thread review context to highlight recommendation signals and follow-up hints without changing state. Prefer `topics workspace` for the main coordination read when a topic exists.",
 		Examples: []string{
 			"anx threads recommendations --thread-id <thread-id>",
-			"anx threads recommendations --status active --type initiative --full-summary",
+			"anx threads recommendations --state active --full-summary",
 		},
 		Flags: []localHelperFlag{
 			{Name: "--thread-id <thread-id>", Description: "Thread id to inspect."},
-			{Name: "--status <status>", Description: "Discover one thread by status."},
-			{Name: "--priority <priority>", Description: "Discover one thread by priority."},
-			{Name: "--stale <bool>", Description: "Discover one thread by stale state."},
-			{Name: "--tag <tag>", Description: "Repeatable discovery tag filter."},
-			{Name: "--cadence <cadence>", Description: "Repeatable discovery cadence filter."},
-			{Name: "--type <thread-type>", Description: "Local discovery filter after `threads list`."},
+			{Name: "--state <state>", Description: "Discover one thread by lifecycle state (active, archived, trashed)."},
 			{Name: "--max-events <n>", Description: "Maximum recent context events to include."},
 			{Name: "--include-artifact-content", Description: "Include artifact content previews from the underlying read-only thread views."},
 			{Name: "--include-related-event-content", Description: "Hydrate related review items with full `events.get` payloads."},
@@ -414,7 +399,6 @@ Use this group to refresh or inspect derived views that are computed from canoni
 
 Core commands:
   derived rebuild     Rebuild derived state from the canonical records.
-  derived status      Inspect the current derived maintenance state.
 
 Tip: derived commands are operational helpers, not the source of truth.`) + "\n", true
 	}
@@ -565,15 +549,15 @@ func localGroupHelpSupplement(topic string) string {
 	case "topics":
 		return strings.TrimSpace(`Primary operator coordination:
   topics workspace        Load the topic workspace (cards, docs, backing threads, inbox).
-  topics list / topics get   Discover and resolve topic ids.
-  Tip: start with ` + "`anx topics workspace --topic-id <topic-id>`" + ` for triage; use ` + "`anx topics list`" + ` to find ids. Add ` + "`--full-id`" + ` for copy/paste ids.`)
+  topics list / topics get   Discover and resolve topic ids (` + "`--state`" + `, ` + "`--q`" + `, pagination, archive/trash visibility flags).
+  Tip: start with ` + "`anx topics workspace --topic-id <topic-id>`" + ` for triage; use ` + "`anx topics list --json`" + ` for ` + "`id`" + ` / ` + "`short_id`" + ` in JSON, or ` + "`--full-id`" + ` for full ids in default text.`)
 	case "threads":
 		return strings.TrimSpace(`Read-only backing-thread diagnostics (tooling):
   threads recommendations   Recommendation-focused review for one backing thread.
   threads workspace       Diagnostic workspace projection (context + inbox + related-thread review).
   threads inspect          Smaller diagnostic bundle (context + inbox).
   threads timeline         Backing thread timeline and expansions.
-  Tip: prefer ` + "`anx topics workspace`" + ` for normal operator coordination. Use ` + "`anx threads workspace`" + ` when you need the backing-thread projection or related-thread review; use ` + "`--status/--tag/--type initiative`" + ` to discover one thread. For a minimal ` + "`{thread}`" + ` read, use ` + "`anx threads get`" + ` (contract: ` + "`threads.inspect`" + `). Add ` + "`--full-id`" + ` for copy/paste ids.`)
+  Tip: prefer ` + "`anx topics workspace`" + ` for normal operator coordination. Use ` + "`anx threads workspace --full-id`" + ` when you need the backing-thread projection with full ids in default text; use ` + "`--state active`" + ` to discover backing threads by lifecycle state. For a minimal ` + "`{thread}`" + ` read, use ` + "`anx threads get`" + ` (contract: ` + "`threads.inspect`" + `).`)
 	case "events":
 		return strings.TrimSpace(`Local inspection helpers:
   events list              List timeline events with thread/type/actor filters, id mode, and preview summaries.
@@ -872,7 +856,7 @@ func formatCommandSpecificHelpBlock(cmd registry.Command) string {
   Interventions: single clear path exists, but a human must act to complete it
   - ` + "`intervention_needed`" + `
   Topics and documents: durable subject and document lifecycle signals
-  - ` + "`topic_created`" + `, ` + "`topic_updated`" + `, ` + "`topic_status_changed`" + `
+  - ` + "`topic_created`" + `, ` + "`topic_updated`" + `, ` + "`topic_archived`" + `, ` + "`topic_trashed`" + `
   - ` + "`document_created`" + `, ` + "`document_revised`" + `, ` + "`document_trashed`" + `
   Boards and cards: workflow placement and movement
   - ` + "`board_created`" + `, ` + "`board_updated`" + `
@@ -904,7 +888,7 @@ Note: by default, archived and trashed events are excluded from the timeline out
 
 Inbox categories:
   - ` + "`action_needed`" + `: A human must decide, take direct action, or own the next step (includes prior decision and intervention queue signals).
-  - ` + "`risk_exception`" + `: Exceptions, stale cadence, or at-risk work items that need follow-up.
+  - ` + "`risk_exception`" + `: Exceptions or at-risk work items that need follow-up.
   - ` + "`attention`" + `: Review or lighter operator focus (for example document attention).`)
 	case "inbox.acknowledge":
 		return strings.TrimSpace(`CLI flags (` + "`inbox acknowledge`" + ` / ` + "`inbox ack`" + `):

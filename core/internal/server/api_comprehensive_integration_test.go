@@ -17,20 +17,16 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
 	threadID := integrationSeedThread(t, h, "actor-1", map[string]any{
-		"title":            "Comprehensive thread",
-		"type":             "incident",
-		"status":           "active",
-		"priority":         "p1",
-		"tags":             []any{"ops", "backend"},
-		"cadence":          "daily",
-		"next_check_in_at": "2030-01-01T00:00:00Z",
-		"current_summary":  "Investigating issue",
-		"next_actions":     []any{"triage"},
-		"key_artifacts":    []any{},
-		"provenance":       map[string]any{"sources": []any{"inferred"}},
-		"custom_unknown":   "preserve_me",
+		"title":           "Comprehensive thread",
+		"type":            "incident",
+		"status":          "active",
+		"current_summary": "Investigating issue",
+		"next_actions":    []any{"triage"},
+		"key_artifacts":   []any{},
+		"provenance":      map[string]any{"sources": []any{"inferred"}},
+		"custom_unknown":  "preserve_me",
 	})
-	integrationPatchThread(t, h, "actor-1", threadID, map[string]any{"tags": []any{"backend"}}, nil)
+	integrationPatchThread(t, h, "actor-1", threadID, map[string]any{"title": "Comprehensive thread (patched)"}, nil)
 
 	getThreadResp, err := http.Get(h.baseURL + "/threads/" + threadID)
 	if err != nil {
@@ -49,18 +45,17 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 	if loadedThread.Thread["custom_unknown"] != "preserve_me" {
 		t.Fatalf("expected unknown field preserved, got %#v", loadedThread.Thread["custom_unknown"])
 	}
-	tagsRaw, _ := loadedThread.Thread["tags"].([]any)
-	tags := anyListToSortedStrings(tagsRaw)
-	if len(tags) != 1 || tags[0] != "backend" {
-		t.Fatalf("expected list replacement for tags, got %#v", loadedThread.Thread["tags"])
+	if _, has := loadedThread.Thread["tags"]; has {
+		t.Fatalf("expected dumb threads to omit tags in HTTP response, got %#v", loadedThread.Thread["tags"])
+	}
+	if asString(loadedThread.Thread["title"]) != "Comprehensive thread (patched)" {
+		t.Fatalf("unexpected thread title: %#v", loadedThread.Thread["title"])
 	}
 
 	integrationSeedThread(t, h, "actor-1", map[string]any{
 		"title":            "Stale thread",
 		"type":             "incident",
 		"status":           "active",
-		"priority":         "p2",
-		"tags":             []any{"ops"},
 		"cadence":          "daily",
 		"next_check_in_at": "2020-01-01T00:00:00Z",
 		"current_summary":  "Needs update",
@@ -280,17 +275,13 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 	// PrimitiveStore accepts opaque thread bodies; strict enum checks live at HTTP ingress.
 	// Keep a lightweight invariant check that the store still rejects missing actor context.
 	_, ctErr := h.primitiveStore.CreateThread(context.Background(), "", map[string]any{
-		"title":            "Invalid actor",
-		"type":             "incident",
-		"status":           "active",
-		"priority":         "p1",
-		"tags":             []any{},
-		"cadence":          "daily",
-		"next_check_in_at": "2030-01-01T00:00:00Z",
-		"current_summary":  "summary",
-		"next_actions":     []any{},
-		"key_artifacts":    []any{},
-		"provenance":       map[string]any{"sources": []any{"inferred"}},
+		"title":           "Invalid actor",
+		"type":            "incident",
+		"status":          "active",
+		"current_summary": "summary",
+		"next_actions":    []any{},
+		"key_artifacts":   []any{},
+		"provenance":      map[string]any{"sources": []any{"inferred"}},
 	})
 	if ctErr == nil {
 		t.Fatal("expected CreateThread to reject empty actor id")

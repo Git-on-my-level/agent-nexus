@@ -39,13 +39,13 @@ func TestDerivedRebuildIdempotentAndInboxStable(t *testing.T) {
 	if eventsAfterSecond != eventsAfterFirst {
 		t.Fatalf("expected second rebuild to be idempotent on event count, got first=%d second=%d", eventsAfterFirst, eventsAfterSecond)
 	}
-	if delta := eventsAfterFirst - eventsBefore; delta > 1 {
-		t.Fatalf("expected at most one event added across rebuild calls, got delta=%d", delta)
+	if delta := eventsAfterFirst - eventsBefore; delta != 0 {
+		t.Fatalf("expected rebuild not to append inferred events, got delta=%d", delta)
 	}
 
 	staleCount := countStaleThreadExceptions(t, h.baseURL, threadID)
-	if staleCount > 1 {
-		t.Fatalf("expected at most one stale_topic exception, got %d", staleCount)
+	if staleCount != 0 {
+		t.Fatalf("expected no inferred stale_topic exceptions, got %d", staleCount)
 	}
 
 	itemsAfterSecond := normalizeInboxItems(getInboxItems(t, h.baseURL))

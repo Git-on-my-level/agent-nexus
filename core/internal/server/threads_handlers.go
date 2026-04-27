@@ -11,7 +11,6 @@ import (
 	"unicode/utf8"
 
 	"agent-nexus-core/internal/primitives"
-	"agent-nexus-core/internal/schedule"
 	"agent-nexus-core/internal/schema"
 )
 
@@ -38,6 +37,7 @@ func handleGetThread(w http.ResponseWriter, r *http.Request, opts handlerOptions
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load thread")
 		return
 	}
+	primitives.StripThreadPlanningFieldsForAPI(thread)
 
 	writeJSON(w, http.StatusOK, map[string]any{"thread": thread})
 }
@@ -49,18 +49,6 @@ func handleListThreads(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	}
 
 	query := r.URL.Query()
-	tagsFilter := normalizedQueryValues(query["tag"])
-	cadenceFilter := normalizedQueryValues(query["cadence"])
-	var staleFilter *bool
-	staleRaw := strings.TrimSpace(query.Get("stale"))
-	if staleRaw != "" {
-		parsed, err := strconv.ParseBool(staleRaw)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "stale must be true or false")
-			return
-		}
-		staleFilter = &parsed
-	}
 
 	var limitFilter *int
 	limitRaw := strings.TrimSpace(query.Get("limit"))
@@ -73,12 +61,18 @@ func handleListThreads(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		limitFilter = &parsed
 	}
 
+	state := strings.TrimSpace(query.Get("state"))
+	if state != "" {
+		switch state {
+		case "active", "archived", "trashed":
+		default:
+			writeError(w, http.StatusBadRequest, "invalid_request", "state must be one of: active, archived, trashed")
+			return
+		}
+	}
+
 	threads, nextCursor, err := opts.primitiveStore.ListThreads(r.Context(), primitives.ThreadListFilter{
-		Status:          strings.TrimSpace(query.Get("status")),
-		Priority:        strings.TrimSpace(query.Get("priority")),
-		Tags:            tagsFilter,
-		Cadences:        cadenceFilter,
-		Stale:           staleFilter,
+		State:           state,
 		Query:           strings.TrimSpace(query.Get("q")),
 		Limit:           limitFilter,
 		Cursor:          strings.TrimSpace(query.Get("cursor")),
@@ -106,19 +100,13 @@ func handleListThreads(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		return
 	}
 
-	withStale := make([]map[string]any, 0, len(threads))
 	for _, thread := range threads {
 		threadID, _ := thread["id"].(string)
 		state := states[threadID]
-		stale := state.Projection.Stale
-		thread["stale"] = stale
+		thread["stale"] = state.Projection.Stale
 		thread["projection_freshness"] = cloneWorkspaceMap(state.Freshness)
-		if staleFilter != nil && stale != *staleFilter {
-			continue
-		}
-		withStale = append(withStale, thread)
+		primitives.StripThreadPlanningFieldsForAPI(thread)
 	}
-	threads = withStale
 
 	response := map[string]any{"threads": threads}
 	if nextCursor != "" {
@@ -131,7 +119,6 @@ func normalizedQueryValues(raw []string) []string {
 	if len(raw) == 0 {
 		return nil
 	}
-
 	out := make([]string, 0, len(raw))
 	seen := make(map[string]struct{}, len(raw))
 	for _, value := range raw {
@@ -146,45 +133,6 @@ func normalizedQueryValues(raw []string) []string {
 		out = append(out, value)
 	}
 	return out
-}
-
-func threadMatchesTagsAndCadence(thread map[string]any, tags []string, cadences []string) bool {
-	if len(tags) > 0 {
-		threadTags, err := extractStringSlice(thread["tags"])
-		if err != nil {
-			return false
-		}
-		for _, wantedTag := range tags {
-			if !containsStringValue(threadTags, wantedTag) {
-				return false
-			}
-		}
-	}
-
-	if len(cadences) > 0 {
-		threadCadence, _ := thread["cadence"].(string)
-		matchedCadence := false
-		for _, cadenceFilter := range cadences {
-			if schedule.CadenceMatchesFilter(threadCadence, cadenceFilter) {
-				matchedCadence = true
-				break
-			}
-		}
-		if !matchedCadence {
-			return false
-		}
-	}
-
-	return true
-}
-
-func containsStringValue(values []string, expected string) bool {
-	for _, value := range values {
-		if value == expected {
-			return true
-		}
-	}
-	return false
 }
 
 type threadTimelineExpansion struct {

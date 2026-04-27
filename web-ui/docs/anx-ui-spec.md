@@ -57,7 +57,7 @@ Agent Nexus web UI does **not**:
 ### 1.6 Topic and card patch semantics
 
 - Agent Nexus web UI MUST use **patch/merge** semantics when updating topics and cards: send only changed fields.
-- **List-valued fields** (e.g., `tags`, `key_artifacts`, `links`) are **replaced wholesale** when present in a patch. Absence means no change.
+- **List-valued fields** (e.g., `owner_refs`, `document_refs`, `board_refs`, `related_refs`, `card_refs`, `assignee_refs`, `resolution_refs`) are **replaced wholesale** when present in a patch. Absence means no change.
 - This ensures unknown fields (added by newer clients or agents) are preserved.
 - Agent Nexus web UI MUST NOT write to core-maintained fields.
 
@@ -95,7 +95,7 @@ The primary navigation unit is the **topic**, with boards and cards for executio
 
 A topic detail view presents two complementary layers:
 
-**Workspace (current state):** The operator-facing topic record plus related cards, boards, documents, and inbox context from projection endpoints where applicable — title, status, priority, schedule (`cadence`), summary, next actions, and linked evidence. This is the "what's true right now" view. Editable in place only where the schema allows it (topics and cards via their canonical patch APIs).
+**Workspace (current state):** The operator-facing topic record plus related cards, boards, documents, and inbox context from projection endpoints where applicable — title, type, summary, lifecycle state, linked refs, card progress, and linked evidence. This is the "what's true right now" view. Editable in place only where the schema allows it (topics via title/type/summary patches; cards via their canonical patch and move APIs).
 
 **Timeline (audit trail):** A time-ordered, append-only sequence of all events on the topic's backing thread. Each timeline entry shows type, timestamp, actor, summary, and refs (rendered as navigable typed-ref links). The timeline includes messages, receipt submission, reviews, decisions, exceptions, acknowledgments, and topic/card lifecycle updates.
 
@@ -107,7 +107,7 @@ Mutable topic and card fields are interpretive and versioned through events. The
 - Different event types SHOULD be visually distinguishable (icons, colors, or labels).
 - Typed refs in event entries SHOULD render as navigable links (artifact refs open artifact detail, `topic:` / `card:` refs open topic or card detail, URL refs open externally).
 - Artifact-typed events (receipts, reviews) SHOULD be expandable inline or navigable to the artifact detail. The UI uses event `refs` (per reference conventions) to locate the linked artifacts.
-- `topic_updated`, `topic_status_changed`, `card_updated`, and related lifecycle events SHOULD display `changed_fields` (or equivalent change details) from the event payload when available.
+- `topic_updated`, topic lifecycle events (`topic_archived`, `topic_trashed`, `topic_restored`, etc.), `card_updated`, and related lifecycle events SHOULD display `changed_fields` (or equivalent change details) from the event payload when available.
 - Unknown event types MUST render without breaking the timeline.
 
 ### 2.4 URL-backed view state
@@ -145,12 +145,9 @@ A dedicated surface showing items that need operator attention.
 
 A filterable list of topics (the UI may still expose thread-indexed routes for inspection; the operator-facing noun is **topic**).
 
-**Filters:** status, priority, tags, cadence preset/staleness.
+**Filters:** type, lifecycle `state` (`active`, `archived`, `trashed`), archive/trash visibility flags, and search (`q`).
 
-Cadence filter presets are `Reactive`, `Daily`, `Weekly`, `Monthly`, and `Custom`.
-Storage is `reactive` or cron; preset filters map cron values to these categories.
-
-Each row shows: title, status, priority, cadence indicator, staleness indicator, last activity timestamp.
+Each row shows: title, type, lifecycle state, summary, and last activity timestamp.
 
 ### 3.3 Topic detail
 
@@ -158,10 +155,11 @@ The primary working surface. Combines the workspace-style current-state view and
 
 **Must support:**
 
-- Viewing and editing topic and card current-state fields: title, status, priority, type, cadence schedule (preset or custom cron), next check-in, tags, current summary, next actions (within schema and core-maintained rules).
+- Viewing and editing topic current-state fields that remain canonical: title, type, and summary. Topic lifecycle state is derived from archive/trash timestamps and is changed through dedicated archive/trash/restore actions, not a mutable state patch.
+- Viewing and editing card current-state fields through the card contract: title, summary, column, risk, assignees, related refs, document ref, and terminal resolution where evidence rules allow it.
 - Viewing linked evidence and packet outcomes with restricted transition enforcement where the schema requires it.
 - Viewing the full timeline with navigable typed-ref links.
-- Linking artifacts to the topic/thread context (adds typed refs to `key_artifacts` where the schema allows).
+- Linking artifacts and documents through typed refs where the schema allows.
 - Posting messages (creates `message_posted` events on the backing thread).
 
 ### 3.4 Receipts and reviews from boards (no thread detail Work tab)
@@ -189,7 +187,7 @@ Boards and docs are first-class operator surfaces, but they remain grounded in c
 **Boards:**
 
 - The UI MUST present boards as canonical organizing layers over work, not disposable kanban widgets.
-- Board detail MUST distinguish canonical board facts (board metadata, card membership, backing thread/doc refs) from derived scan data (counts, inbox aggregates, freshness badges).
+- Board detail MUST distinguish canonical board facts (board metadata, card membership, backing thread/doc refs) from derived scan data (counts, inbox aggregates, projection freshness badges).
 - When board projections are pending, missing, or errored, the UI MUST keep canonical board membership visible while clearly downgrading trust in derived summaries.
 - Primary board workflows (create board, edit board metadata, add card, update pinned document) SHOULD use searchable pickers backed by canonical list endpoints. Manual raw-ID entry MAY exist only as an advanced escape hatch.
 

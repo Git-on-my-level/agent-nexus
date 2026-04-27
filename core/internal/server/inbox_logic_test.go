@@ -33,21 +33,21 @@ func TestMakeInboxItemIDDefaultsNone(t *testing.T) {
 	}
 }
 
-func TestLatestInboxAcknowledgmentsMapsLegacyRiskReviewIDs(t *testing.T) {
+func TestLatestInboxAcknowledgmentsMatchesInboxIDRef(t *testing.T) {
 	t.Parallel()
 
+	canonicalID := makeInboxItemID("risk_exception", "thread-1", "card-1", "")
 	ackedAt := latestInboxAcknowledgments([]map[string]any{
 		{
 			"type": "inbox_item_acknowledged",
 			"ts":   "2026-04-05T00:00:00Z",
-			"refs": []any{"inbox:" + makeInboxItemID("risk_review", "thread-1", "card-1", "")},
+			"refs": []any{"inbox:" + canonicalID},
 		},
 	})
 
-	canonicalID := makeInboxItemID("risk_exception", "thread-1", "card-1", "")
 	acked, ok := ackedAt[canonicalID]
 	if !ok {
-		t.Fatalf("expected canonical risk_exception id %q to be ack-suppressed, got %#v", canonicalID, ackedAt)
+		t.Fatalf("expected id %q to be ack-suppressed, got %#v", canonicalID, ackedAt)
 	}
 	if !acked.Equal(time.Date(2026, 4, 5, 0, 0, 0, 0, time.UTC)) {
 		t.Fatalf("unexpected acknowledgment time: %#v", acked)
@@ -142,28 +142,24 @@ func TestDeriveWorkItemRiskInboxItemContractFields(t *testing.T) {
 	}
 }
 
-func TestPayloadFromDerivedInboxItemBackfillsLegacyShape(t *testing.T) {
+func TestPayloadFromDerivedInboxItemUsesColumnCategory(t *testing.T) {
 	t.Parallel()
 
 	item := primitives.DerivedInboxItem{
-		ID:            "inbox:work_item_risk:thr-1:card-9:none",
+		ID:            "inbox:risk_exception:thr-1:card-9:none",
 		ThreadID:      "thr-1",
-		Category:      "work_item_risk",
+		Category:      "risk_exception",
 		SourceCardID:  "card-9",
 		TriggerAt:     "2026-04-05T00:00:00Z",
 		SourceEventID: "",
 		Data: map[string]any{
-			"id":        "inbox:work_item_risk:thr-1:card-9:none",
-			"category":  "work_item_risk",
-			"thread_id": "thr-1",
-			"card_id":   "card-9",
-			"board_id":  "brd-9",
-			"title":     "Legacy row",
+			"board_id": "brd-9",
+			"title":    "Card risk",
 		},
 	}
 	out := payloadFromDerivedInboxItem(item)
 	if got := out["category"]; got != "risk_exception" {
-		t.Fatalf("category: got %#v want risk_exception (legacy row normalized for contract)", got)
+		t.Fatalf("category: got %#v want risk_exception", got)
 	}
 	if got := out["subject_ref"]; got != "card:card-9" {
 		t.Fatalf("subject_ref: got %#v", got)
@@ -177,25 +173,21 @@ func TestPayloadFromDerivedInboxItemBackfillsLegacyShape(t *testing.T) {
 	}
 
 	evItem := primitives.DerivedInboxItem{
-		ID:            "inbox:decision_needed:thr-x:none:evt-old",
+		ID:            "inbox:action_needed:thr-x:none:evt-old",
 		ThreadID:      "thr-x",
-		Category:      "decision_needed",
+		Category:      "action_needed",
 		SourceEventID: "evt-old",
 		TriggerAt:     "2026-04-05T01:00:00Z",
 		Data: map[string]any{
-			"id":              "inbox:decision_needed:thr-x:none:evt-old",
-			"category":        "decision_needed",
-			"thread_id":       "thr-x",
-			"source_event_id": "evt-old",
-			"title":           "Old",
+			"title": "Old",
 		},
 	}
 	out2 := payloadFromDerivedInboxItem(evItem)
 	if got := out2["category"]; got != "action_needed" {
-		t.Fatalf("category: got %#v want action_needed (legacy row normalized for contract)", got)
+		t.Fatalf("category: got %#v want action_needed", got)
 	}
 	if got := out2["subject_ref"]; got != "thread:thr-x" {
-		t.Fatalf("event legacy subject_ref: got %#v", got)
+		t.Fatalf("event subject_ref: got %#v", got)
 	}
 	if got := out2["source_event_ref"]; got != "event:evt-old" {
 		t.Fatalf("source_event_ref: got %#v", got)

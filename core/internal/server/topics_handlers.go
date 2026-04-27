@@ -40,10 +40,12 @@ func handleListTopics(w http.ResponseWriter, r *http.Request, opts handlerOption
 			return
 		}
 	}
-	status := strings.TrimSpace(query.Get("status"))
-	if status != "" && opts.contract != nil {
-		if err := schema.ValidateEnum(opts.contract, "topic_status", status); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+	state := strings.TrimSpace(query.Get("state"))
+	if state != "" {
+		switch state {
+		case "active", "archived", "trashed":
+		default:
+			writeError(w, http.StatusBadRequest, "invalid_request", "state must be one of: active, archived, trashed")
 			return
 		}
 	}
@@ -61,7 +63,7 @@ func handleListTopics(w http.ResponseWriter, r *http.Request, opts handlerOption
 
 	topics, nextCursor, err := opts.primitiveStore.ListTopics(r.Context(), primitives.TopicListFilter{
 		Type:            topicType,
-		Status:          status,
+		State:           state,
 		Query:           strings.TrimSpace(query.Get("q")),
 		Limit:           limitFilter,
 		Cursor:          strings.TrimSpace(query.Get("cursor")),
@@ -570,12 +572,18 @@ func buildTopicResourceBundle(ctx context.Context, opts handlerOptions, topic ma
 		inbox = append(inbox, payloadFromDerivedInboxItem(item))
 	}
 
+	primitives.StripThreadPlanningFieldsForAPI(primaryThread)
+	for i := range threads {
+		primitives.StripThreadPlanningFieldsForAPI(threads[i])
+	}
+	threads = dedupeAndSortResourceMaps(threads)
+
 	return topicResourceBundle{
 		PrimaryThread:       primaryThread,
 		Boards:              dedupeAndSortResourceMaps(boards),
 		Cards:               dedupeAndSortResourceMaps(cards),
 		Documents:           dedupeAndSortResourceMaps(documents),
-		Threads:             dedupeAndSortResourceMaps(threads),
+		Threads:             threads,
 		ProjectionFreshness: cloneWorkspaceMap(projectionState.Freshness),
 		Inbox:               inbox,
 	}, nil
@@ -651,7 +659,7 @@ func validateTopicWriteInput(contract *schema.Contract, topic map[string]any, cr
 	}
 
 	if createMode {
-		for _, field := range []string{"type", "status", "title", "summary", "owner_refs", "document_refs", "board_refs", "related_refs", "provenance"} {
+		for _, field := range []string{"type", "title", "summary", "owner_refs", "document_refs", "board_refs", "related_refs", "provenance"} {
 			if _, exists := topic[field]; !exists {
 				return fmt.Errorf("topic.%s is required", field)
 			}
@@ -670,16 +678,8 @@ func validateTopicWriteInput(contract *schema.Contract, topic map[string]any, cr
 		}
 	}
 
-	if rawStatus, exists := topic["status"]; exists || createMode {
-		topicStatus := strings.TrimSpace(anyString(rawStatus))
-		if topicStatus == "" && createMode {
-			return fmt.Errorf("topic.status is required")
-		}
-		if topicStatus != "" {
-			if err := schema.ValidateEnum(contract, "topic_status", topicStatus); err != nil {
-				return fmt.Errorf("topic.status: %w", err)
-			}
-		}
+	if _, exists := topic["status"]; exists {
+		return fmt.Errorf("topic.status is not supported; topic.state is derived from lifecycle timestamps")
 	}
 
 	if rawTitle, exists := topic["title"]; exists || createMode {

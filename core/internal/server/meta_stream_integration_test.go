@@ -342,7 +342,7 @@ func TestEventsStreamEmitsDocumentLifecycleEventsForThread(t *testing.T) {
 	third := awaitSSEEvent(t, reader, 2*time.Second)
 
 	events := []sseEvent{first, second, third}
-	expectedTypes := []string{"document_created", "document_updated", "document_trashed"}
+	expectedTypes := []string{"document_created", "document_revised", "document_trashed"}
 	for index, expectedType := range expectedTypes {
 		eventPayload, _ := events[index].Data["event"].(map[string]any)
 		if asString(eventPayload["type"]) != expectedType {

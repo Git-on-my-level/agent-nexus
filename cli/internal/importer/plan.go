@@ -284,36 +284,7 @@ func classify(item InventoryRecord) (label string, reason string, confidence flo
 	return "review_bundle", "unclassified", 0.60
 }
 
-func chooseThreadType(clusterName string, members []InventoryRecord) string {
-	parts := []string{strings.ToLower(clusterName)}
-	for _, member := range firstN(members, 5) {
-		parts = append(parts, strings.ToLower(member.TitleHint))
-	}
-	text := strings.Join(parts, " ")
-	switch {
-	case strings.Contains(text, "incident") || strings.Contains(text, "outage") || strings.Contains(text, "sev") || strings.Contains(text, "bugfix"):
-		return "incident"
-	case strings.Contains(text, "project") || strings.Contains(text, "initiative") || strings.Contains(text, "roadmap") || strings.Contains(text, "launch") || strings.Contains(text, "plan"):
-		return "initiative"
-	case strings.Contains(text, "process") || strings.Contains(text, "runbook") || strings.Contains(text, "workflow") || strings.Contains(text, "ops"):
-		return "process"
-	case strings.Contains(text, "customer") || strings.Contains(text, "partner") || strings.Contains(text, "vendor") || strings.Contains(text, "relationship"):
-		return "relationship"
-	default:
-		return "other"
-	}
-}
-
 func buildCollectorThread(clusterName string, members []InventoryRecord, sourceName string) PlanObject {
-	tagCandidates := []string{"import", slugify(sourceName)}
-	firstPart := clusterName
-	if idx := strings.Index(clusterName, ":"); idx >= 0 {
-		firstPart = clusterName[idx+1:]
-	}
-	if firstPart != "" && firstPart != "root" {
-		tagCandidates = append(tagCandidates, slugify(firstPart))
-	}
-	tags := uniqueSortedStrings(tagCandidates)
 	return PlanObject{
 		Key:        "thread_" + slugify(clusterName),
 		Kind:       "thread",
@@ -322,18 +293,7 @@ func buildCollectorThread(clusterName string, members []InventoryRecord, sourceN
 		Reason:     "collector-thread-for-discoverability",
 		Create: map[string]any{
 			"thread": map[string]any{
-				"title":           fmt.Sprintf("Collector thread — %s", clusterName),
-				"type":            chooseThreadType(clusterName, members),
-				"status":          "active",
-				"priority":        "p2",
-				"tags":            tags,
-				"cadence":         "reactive",
-				"current_summary": fmt.Sprintf("Imported material cluster for %s. Use this thread as the context anchor for related docs and artifacts.", clusterName),
-				"next_actions": []string{
-					"review imported materials",
-					"promote high-value docs and artifacts",
-					"defer ambiguous or noisy material",
-				},
+				"title":         fmt.Sprintf("Collector thread — %s", clusterName),
 				"key_artifacts": []string{},
 				"provenance": map[string]any{
 					"sources": []string{"import_plan:" + slugify(sourceName)},

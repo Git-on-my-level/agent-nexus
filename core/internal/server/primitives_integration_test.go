@@ -435,7 +435,7 @@ func TestDocumentsLifecycleRoundTrip(t *testing.T) {
 
 	createResp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
 		"actor_id":"actor-1",
-		"document":{"id":"doc-1","title":"Constitution","labels":["governance"]},
+		"document":{"id":"doc-1","title":"Constitution"},
 		"refs":["thread:thread-docs"],
 		"content":"initial text",
 		"content_type":"text"
@@ -811,7 +811,7 @@ func TestDocumentCreateRequestKeyReplaysSingleWrite(t *testing.T) {
 	body := `{
 		"actor_id":"actor-1",
 		"request_key":"replay-doc",
-		"document":{"thread_id":"thread-docs","title":"Replay-safe doc","labels":["governance"]},
+		"document":{"thread_id":"thread-docs","title":"Replay-safe doc"},
 		"refs":["thread:thread-docs"],
 		"content":"initial text",
 		"content_type":"text"
@@ -1251,7 +1251,7 @@ func TestDocumentsInvalidInputReturnsInvalidRequest(t *testing.T) {
 
 	createInvalidResp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
 		"actor_id":"actor-1",
-		"document":{"id":"doc-invalid-create","labels":["ok",1]},
+		"document":{"id":"doc-invalid-create","labels":["ok"]},
 		"content":"invalid",
 		"content_type":"text"
 	}`, http.StatusBadRequest)
@@ -2663,7 +2663,6 @@ func TestTopicArchiveLifecycle(t *testing.T) {
 		"actor_id":"actor-1",
 		"topic":{
 			"type":"incident",
-			"status":"active",
 			"title":"Archive topic",
 			"summary":"s",
 			"owner_refs":[],
@@ -2806,7 +2805,6 @@ func TestListTopicsPaginationIncludesNextCursor(t *testing.T) {
 		"actor_id":"actor-1",
 		"topic":{
 			"type":"incident",
-			"status":"active",
 			"title":%q,
 			"summary":"s",
 			"owner_refs":[],
@@ -2881,7 +2879,6 @@ func TestListTopicsSearchQueryMatchesTitleAndSummary(t *testing.T) {
 		"actor_id":"actor-1",
 		"topic":{
 			"type":"incident",
-			"status":"active",
 			"title":%q,
 			"summary":%q,
 			"owner_refs":[],
@@ -2937,7 +2934,6 @@ func TestListTopicsSearchMatchesNumericSummaryInBodyJSON(t *testing.T) {
 		"actor_id":"actor-1",
 		"topic":{
 			"type":"incident",
-			"status":"active",
 			"title":%q,
 			"summary":"placeholder",
 			"owner_refs":[],
@@ -2960,10 +2956,10 @@ func TestListTopicsSearchMatchesNumericSummaryInBodyJSON(t *testing.T) {
 	}
 
 	if _, err := h.workspace.DB().ExecContext(context.Background(),
-		`UPDATE topics SET body_json = json_set(body_json, '$.summary', ?) WHERE id = ?`,
-		numericSummary, topicID,
+		`UPDATE topics SET summary = ? WHERE id = ?`,
+		fmt.Sprint(numericSummary), topicID,
 	); err != nil {
-		t.Fatalf("patch body_json summary to numeric: %v", err)
+		t.Fatalf("patch topics.summary to numeric string: %v", err)
 	}
 
 	listResp, err := http.Get(h.baseURL + "/topics?q=" + url.QueryEscape("92344"))
@@ -3007,7 +3003,6 @@ func TestListTopicsSearchSucceedsWhenAnotherRowHasMalformedBodyJSON(t *testing.T
 		"actor_id":"actor-1",
 		"topic":{
 			"type":"incident",
-			"status":"active",
 			"title":%q,
 			"summary":"ok",
 			"owner_refs":[],
@@ -3023,7 +3018,6 @@ func TestListTopicsSearchSucceedsWhenAnotherRowHasMalformedBodyJSON(t *testing.T
 		"actor_id":"actor-1",
 		"topic":{
 			"type":"incident",
-			"status":"active",
 			"title":"WillCorruptBody",
 			"summary":"x",
 			"owner_refs":[],
@@ -3045,10 +3039,10 @@ func TestListTopicsSearchSucceedsWhenAnotherRowHasMalformedBodyJSON(t *testing.T
 		t.Fatal("expected bad topic id")
 	}
 	if _, err := h.workspace.DB().ExecContext(context.Background(),
-		`UPDATE topics SET body_json = ? WHERE id = ?`,
+		`UPDATE topics SET extensions_json = ? WHERE id = ?`,
 		"not-valid-json{", badID,
 	); err != nil {
-		t.Fatalf("corrupt body_json: %v", err)
+		t.Fatalf("corrupt extensions_json: %v", err)
 	}
 
 	listResp, err := http.Get(h.baseURL + "/topics?q=" + url.QueryEscape("Healthy"))
@@ -3088,7 +3082,6 @@ func TestTopicTrashLifecycle(t *testing.T) {
 		"actor_id":"actor-1",
 		"topic":{
 			"type":"incident",
-			"status":"active",
 			"title":"Tomb topic",
 			"summary":"s",
 			"owner_refs":[],
@@ -3184,7 +3177,6 @@ func TestTopicRestoreLifecycle(t *testing.T) {
 		"actor_id":"actor-1",
 		"topic":{
 			"type":"incident",
-			"status":"active",
 			"title":"Restore topic",
 			"summary":"s",
 			"owner_refs":[],
@@ -3239,7 +3231,6 @@ func TestTopicArchiveThenTrash(t *testing.T) {
 		"actor_id":"actor-1",
 		"topic":{
 			"type":"incident",
-			"status":"active",
 			"title":"Archive trash topic",
 			"summary":"s",
 			"owner_refs":[],
@@ -3638,7 +3629,6 @@ func TestTopicCannotArchiveTrashed(t *testing.T) {
 		"actor_id":"actor-1",
 		"topic":{
 			"type":"incident",
-			"status":"active",
 			"title":"Cannot archive trashed",
 			"summary":"s",
 			"owner_refs":[],

@@ -29,29 +29,36 @@ describe("dashboard summaries", () => {
     const summary = buildTopicHealthSummary([
       {
         id: "thread-a",
-        status: "active",
-        priority: "p0",
-        next_check_in_at: "2020-01-01T00:00:00.000Z",
+        state: "active",
       },
       {
         id: "thread-b",
-        status: "active",
-        priority: "p2",
-        next_check_in_at: "2999-01-01T00:00:00.000Z",
+        state: "active",
       },
       {
         id: "thread-c",
-        status: "closed",
-        priority: "p1",
-        next_check_in_at: "2020-01-01T00:00:00.000Z",
+        state: "archived",
       },
     ]);
 
     expect(summary).toEqual({
       totalCount: 3,
       openCount: 2,
-      staleCount: 1,
-      highPriorityCount: 1,
+    });
+  });
+
+  it("does not treat topics without state as open", () => {
+    expect(
+      buildTopicHealthSummary([
+        {
+          id: "thread-x",
+          archived_at: null,
+          trashed_at: null,
+        },
+      ]),
+    ).toEqual({
+      totalCount: 1,
+      openCount: 0,
     });
   });
 

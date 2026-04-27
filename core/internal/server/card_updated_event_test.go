@@ -13,7 +13,6 @@ func TestBuildCardLifecycleEventsPreferCanonicalFields(t *testing.T) {
 		"id":            "c1",
 		"thread_id":     "card-thread",
 		"column_key":    "ready",
-		"status":        "todo",
 		"assignee_refs": []any{"actor:alice"},
 		"document_ref":  "document:doc-1",
 		"related_refs":  []any{"thread:thr-1", "topic:t1"},

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"net/url"
 	"sort"
 	"strings"
 	"testing"
@@ -24,18 +23,14 @@ func TestThreadsCreatePatchListAndTimeline(t *testing.T) {
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
 	threadID := integrationSeedThread(t, h, "actor-1", map[string]any{
-		"title":            "Incident thread",
-		"type":             "incident",
-		"status":           "active",
-		"priority":         "p1",
-		"tags":             []any{"ops", "backend"},
-		"cadence":          "daily",
-		"next_check_in_at": "2020-01-01T00:00:00Z",
-		"current_summary":  "Investigating issue",
-		"next_actions":     []any{"triage"},
-		"key_artifacts":    []any{"artifact:seed"},
-		"provenance":       map[string]any{"sources": []any{"inferred"}},
-		"custom_unknown":   "preserve_me",
+		"title":           "Incident thread",
+		"type":            "incident",
+		"status":          "active",
+		"current_summary": "Investigating issue",
+		"next_actions":    []any{"triage"},
+		"key_artifacts":   []any{"artifact:seed"},
+		"provenance":      map[string]any{"sources": []any{"inferred"}},
+		"custom_unknown":  "preserve_me",
 	})
 
 	createdThread, err := h.primitiveStore.GetThread(context.Background(), threadID)
@@ -51,14 +46,12 @@ func TestThreadsCreatePatchListAndTimeline(t *testing.T) {
 
 	patchedThread := integrationPatchThread(t, h, "actor-1", threadID, map[string]any{
 		"title": "Incident thread (updated)",
-		"tags":  []any{"backend"},
 	}, nil)
 	if patchedThread["title"] != "Incident thread (updated)" {
 		t.Fatalf("unexpected patched title: %#v", patchedThread["title"])
 	}
-	tags, ok := patchedThread["tags"].([]any)
-	if !ok || len(tags) != 1 || tags[0] != "backend" {
-		t.Fatalf("unexpected patched tags: %#v", patchedThread["tags"])
+	if _, hasTags := patchedThread["tags"]; hasTags {
+		t.Fatalf("expected dumb threads to omit tags in API output, got %#v", patchedThread["tags"])
 	}
 
 	getResp, err := http.Get(h.baseURL + "/threads/" + threadID)
@@ -80,7 +73,7 @@ func TestThreadsCreatePatchListAndTimeline(t *testing.T) {
 		t.Fatalf("expected custom unknown field preserved, got %#v", loaded.Thread["custom_unknown"])
 	}
 
-	listFilteredResp, err := http.Get(h.baseURL + "/threads?status=active&priority=p1&tag=backend")
+	listFilteredResp, err := http.Get(h.baseURL + "/threads?state=active&q=incident")
 	if err != nil {
 		t.Fatalf("GET /threads filtered: %v", err)
 	}
@@ -99,28 +92,7 @@ func TestThreadsCreatePatchListAndTimeline(t *testing.T) {
 		t.Fatalf("expected exactly one filtered thread, got %d", len(listedFiltered.Threads))
 	}
 	if stale, ok := listedFiltered.Threads[0]["stale"].(bool); !ok || stale {
-		t.Fatalf("expected filtered thread to include stale=false after thread activity, got %#v", listedFiltered.Threads[0]["stale"])
-	}
-
-	staleResp, err := http.Get(h.baseURL + "/threads?stale=true")
-	if err != nil {
-		t.Fatalf("GET /threads?stale=true: %v", err)
-	}
-	defer staleResp.Body.Close()
-	if staleResp.StatusCode != http.StatusOK {
-		t.Fatalf("unexpected stale list status: got %d", staleResp.StatusCode)
-	}
-
-	var staleListed struct {
-		Threads []map[string]any `json:"threads"`
-	}
-	if err := json.NewDecoder(staleResp.Body).Decode(&staleListed); err != nil {
-		t.Fatalf("decode stale list response: %v", err)
-	}
-	for _, thread := range staleListed.Threads {
-		if asString(thread["id"]) == threadID {
-			t.Fatalf("did not expect patched thread %s in stale list after thread activity: %#v", threadID, staleListed.Threads)
-		}
+		t.Fatalf("expected list response to include stale=false after thread activity, got %#v", listedFiltered.Threads[0]["stale"])
 	}
 
 	timelineResp, err := http.Get(h.baseURL + "/threads/" + threadID + "/timeline")
@@ -162,8 +134,8 @@ func TestThreadsCreatePatchListAndTimeline(t *testing.T) {
 		t.Fatalf("changed_fields missing: %#v", payload)
 	}
 	gotFields := anyListToSortedStrings(changedFields)
-	wantFields := []string{"tags", "title"}
-	if len(gotFields) != len(wantFields) || gotFields[0] != wantFields[0] || gotFields[1] != wantFields[1] {
+	wantFields := []string{"title"}
+	if len(gotFields) != len(wantFields) || gotFields[0] != wantFields[0] {
 		t.Fatalf("unexpected changed_fields: got %#v want %#v", gotFields, wantFields)
 	}
 }
@@ -175,17 +147,13 @@ func TestPatchThreadIfUpdatedAtOptimisticLocking(t *testing.T) {
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
 	threadID := integrationSeedThread(t, h, "actor-1", map[string]any{
-		"title":            "Locking thread",
-		"type":             "incident",
-		"status":           "active",
-		"priority":         "p1",
-		"tags":             []any{"ops"},
-		"cadence":          "daily",
-		"next_check_in_at": "2026-03-05T00:00:00Z",
-		"current_summary":  "initial",
-		"next_actions":     []any{"step-1"},
-		"key_artifacts":    []any{},
-		"provenance":       map[string]any{"sources": []any{"inferred"}},
+		"title":           "Locking thread",
+		"type":            "incident",
+		"status":          "active",
+		"current_summary": "initial",
+		"next_actions":    []any{"step-1"},
+		"key_artifacts":   []any{},
+		"provenance":      map[string]any{"sources": []any{"inferred"}},
 	})
 	createdThread, err := h.primitiveStore.GetThread(context.Background(), threadID)
 	if err != nil {
@@ -267,18 +235,14 @@ func TestPatchThreadProvenanceRoundTrip(t *testing.T) {
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
 	threadID := integrationSeedThread(t, h, "actor-1", map[string]any{
-		"title":            "Provenance roundtrip thread",
-		"type":             "incident",
-		"status":           "active",
-		"priority":         "p1",
-		"tags":             []any{"ops"},
-		"cadence":          "daily",
-		"next_check_in_at": "2026-03-05T00:00:00Z",
-		"current_summary":  "initial",
-		"next_actions":     []any{"step-1"},
-		"key_artifacts":    []any{},
-		"provenance":       map[string]any{"sources": []any{"actor_statement:event-create"}, "notes": "created"},
-		"custom_unknown":   "persist_me",
+		"title":           "Provenance roundtrip thread",
+		"type":            "incident",
+		"status":          "active",
+		"current_summary": "initial",
+		"next_actions":    []any{"step-1"},
+		"key_artifacts":   []any{},
+		"provenance":      map[string]any{"sources": []any{"actor_statement:event-create"}, "notes": "created"},
+		"custom_unknown":  "persist_me",
 	})
 
 	patchedThread := integrationPatchThread(t, h, "actor-1", threadID, map[string]any{
@@ -335,40 +299,30 @@ func TestPatchThreadProvenanceRoundTrip(t *testing.T) {
 	}
 }
 
-func TestListThreadsCadenceAndMultiTagFilters(t *testing.T) {
+func TestListThreadsStateAndSearch(t *testing.T) {
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
-	createThread := func(title string, cadence string, tags []string) string {
-		t.Helper()
-		tagAny := make([]any, len(tags))
-		for i, tag := range tags {
-			tagAny[i] = tag
-		}
-		return integrationSeedThread(t, h, "actor-1", map[string]any{
-			"title":            title,
-			"type":             "incident",
-			"status":           "active",
-			"priority":         "p1",
-			"tags":             tagAny,
-			"cadence":          cadence,
-			"next_check_in_at": "2026-03-05T00:00:00Z",
-			"current_summary":  "summary",
-			"next_actions":     []any{"step-1"},
-			"key_artifacts":    []any{},
-			"provenance":       map[string]any{"sources": []any{"inferred"}},
-		})
-	}
-
-	threadDailyOpsBackend := createThread("daily ops backend", "daily", []string{"ops", "backend"})
-	threadCronDailyOps := createThread("cron daily ops", "0 9 * * *", []string{"ops", "backend", "cron"})
-	threadWeeklyOps := createThread("weekly ops", "weekly", []string{"ops"})
-	threadWeeklyBackend := createThread("weekly backend", "weekly", []string{"backend"})
-	threadReactiveOpsBackend := createThread("reactive ops backend", "reactive", []string{"ops", "backend", "infra"})
-	threadLegacyCustom := createThread("legacy custom cadence", "custom", []string{"ops", "legacy-custom"})
-	threadCustomCron := createThread("custom cron cadence", "*/15 * * * *", []string{"ops", "custom-cron"})
+	alpha := integrationSeedThread(t, h, "actor-1", map[string]any{
+		"title":           "alpha unique title",
+		"type":            "incident",
+		"status":          "active",
+		"current_summary": "s",
+		"next_actions":    []any{},
+		"key_artifacts":   []any{},
+		"provenance":      map[string]any{"sources": []any{"inferred"}},
+	})
+	beta := integrationSeedThread(t, h, "actor-1", map[string]any{
+		"title":           "beta other",
+		"type":            "incident",
+		"status":          "active",
+		"current_summary": "s",
+		"next_actions":    []any{},
+		"key_artifacts":   []any{},
+		"provenance":      map[string]any{"sources": []any{"inferred"}},
+	})
 
 	listIDs := func(rawURL string) []string {
 		t.Helper()
@@ -380,113 +334,43 @@ func TestListThreadsCadenceAndMultiTagFilters(t *testing.T) {
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("unexpected status for %s: %d", rawURL, resp.StatusCode)
 		}
-
 		var payload struct {
 			Threads []map[string]any `json:"threads"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-			t.Fatalf("decode list threads response for %s: %v", rawURL, err)
+			t.Fatalf("decode list threads response: %v", err)
 		}
-
 		ids := make([]string, 0, len(payload.Threads))
 		for _, thread := range payload.Threads {
-			threadID, _ := thread["id"].(string)
-			if threadID != "" {
-				ids = append(ids, threadID)
+			if id, _ := thread["id"].(string); id != "" {
+				ids = append(ids, id)
 			}
 		}
 		sort.Strings(ids)
 		return ids
 	}
 
-	assertIDs := func(got []string, want []string, context string) {
-		t.Helper()
-		sort.Strings(want)
-		if len(got) != len(want) {
-			t.Fatalf("%s: unexpected result count got=%d want=%d ids=%#v", context, len(got), len(want), got)
-		}
-		for idx := range want {
-			if got[idx] != want[idx] {
-				t.Fatalf("%s: unexpected IDs got=%#v want=%#v", context, got, want)
-			}
+	all := listIDs(h.baseURL + "/threads?state=active")
+	if !containsStringSlice(all, alpha) || !containsStringSlice(all, beta) {
+		t.Fatalf("expected state=active list to include both threads, got %#v", all)
+	}
+	search := listIDs(h.baseURL + "/threads?state=active&q=alpha")
+	if len(search) != 1 || search[0] != alpha {
+		t.Fatalf("expected q=alpha to return one thread, got %#v", search)
+	}
+}
+
+func containsStringSlice(haystack []string, needle string) bool {
+	for _, s := range haystack {
+		if s == needle {
+			return true
 		}
 	}
-
-	assertIDs(
-		listIDs(h.baseURL+"/threads?tag=backend"),
-		[]string{threadCronDailyOps, threadDailyOpsBackend, threadReactiveOpsBackend, threadWeeklyBackend},
-		"single tag filter",
-	)
-
-	assertIDs(
-		listIDs(h.baseURL+"/threads?include_archived=true&include_trashed=true&tag=backend"),
-		[]string{threadCronDailyOps, threadDailyOpsBackend, threadReactiveOpsBackend, threadWeeklyBackend},
-		"tag filter with include_archived/include_trashed",
-	)
-
-	assertIDs(
-		listIDs(h.baseURL+"/threads?tag=ops&tag=backend"),
-		[]string{threadCronDailyOps, threadDailyOpsBackend, threadReactiveOpsBackend},
-		"multi tag AND filter",
-	)
-
-	assertIDs(
-		listIDs(h.baseURL+"/threads?cadence=weekly"),
-		[]string{threadWeeklyBackend, threadWeeklyOps},
-		"single cadence filter",
-	)
-
-	assertIDs(
-		listIDs(h.baseURL+"/threads?cadence=daily&cadence=weekly"),
-		[]string{threadCronDailyOps, threadDailyOpsBackend, threadWeeklyBackend, threadWeeklyOps},
-		"multi cadence filter",
-	)
-
-	assertIDs(
-		listIDs(h.baseURL+"/threads?cadence=weekly&tag=backend"),
-		[]string{threadWeeklyBackend},
-		"cadence plus tag filter",
-	)
-
-	assertIDs(
-		listIDs(h.baseURL+"/threads?cadence="+url.QueryEscape("0 9 * * *")),
-		[]string{threadCronDailyOps, threadDailyOpsBackend},
-		"canonical daily cron cadence filter",
-	)
-
-	assertIDs(
-		listIDs(h.baseURL+"/threads?cadence=custom"),
-		[]string{threadCustomCron, threadLegacyCustom},
-		"custom cadence preset filter",
-	)
-
-	assertIDs(
-		listIDs(h.baseURL+"/threads?cadence="+url.QueryEscape("*/15 * * * *")),
-		[]string{threadCustomCron},
-		"exact custom cron cadence filter",
-	)
+	return false
 }
 
 func TestThreadCadenceValidationSupportsCronAndRejectsInvalidValue(t *testing.T) {
 	t.Parallel()
-
-	h := newPrimitivesTestServer(t)
-	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
-
-	integrationSeedThread(t, h, "actor-1", map[string]any{
-		"title":            "cron-valid-thread",
-		"type":             "incident",
-		"status":           "active",
-		"priority":         "p1",
-		"tags":             []any{"ops"},
-		"cadence":          "0 9 * * *",
-		"next_check_in_at": "2026-03-05T00:00:00Z",
-		"current_summary":  "summary",
-		"next_actions":     []any{"step-1"},
-		"key_artifacts":    []any{},
-		"provenance":       map[string]any{"sources": []any{"inferred"}},
-	})
-
 	if err := schedule.ValidateCadence("every-day"); err == nil {
 		t.Fatal("expected invalid cadence to be rejected")
 	}
@@ -499,17 +383,13 @@ func TestThreadTimelineIncludesReferencedObjectsAndOmitsMissingRefs(t *testing.T
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
 	threadID := integrationSeedThread(t, h, "actor-1", map[string]any{
-		"title":            "Timeline expansion thread",
-		"type":             "incident",
-		"status":           "active",
-		"priority":         "p1",
-		"tags":             []any{"ops", "timeline"},
-		"cadence":          "daily",
-		"next_check_in_at": "2026-03-05T00:00:00Z",
-		"current_summary":  "summary",
-		"next_actions":     []any{"triage"},
-		"key_artifacts":    []any{},
-		"provenance":       map[string]any{"sources": []any{"inferred"}},
+		"title":           "Timeline expansion thread",
+		"type":            "incident",
+		"status":          "active",
+		"current_summary": "summary",
+		"next_actions":    []any{"triage"},
+		"key_artifacts":   []any{},
+		"provenance":      map[string]any{"sources": []any{"inferred"}},
 	})
 
 	const artifactID = "timeline-artifact-1"
@@ -586,17 +466,13 @@ func TestThreadTimelineIncludesDocumentLifecycleEventsAndExpansions(t *testing.T
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
 	threadID := integrationSeedThread(t, h, "actor-1", map[string]any{
-		"title":            "Document lifecycle thread",
-		"type":             "incident",
-		"status":           "active",
-		"priority":         "p1",
-		"tags":             []any{"docs"},
-		"cadence":          "daily",
-		"next_check_in_at": "2030-01-01T00:00:00Z",
-		"current_summary":  "Track document lifecycle",
-		"next_actions":     []any{"Verify timeline output"},
-		"key_artifacts":    []any{},
-		"provenance":       map[string]any{"sources": []any{"inferred"}},
+		"title":           "Document lifecycle thread",
+		"type":            "incident",
+		"status":          "active",
+		"current_summary": "Track document lifecycle",
+		"next_actions":    []any{"Verify timeline output"},
+		"key_artifacts":   []any{},
+		"provenance":      map[string]any{"sources": []any{"inferred"}},
 	})
 
 	createDocResp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
@@ -673,7 +549,7 @@ func TestThreadTimelineIncludesDocumentLifecycleEventsAndExpansions(t *testing.T
 		switch asString(event["type"]) {
 		case "document_created":
 			createdEvent = event
-		case "document_updated":
+		case "document_revised":
 			updatedEvent = event
 		case "document_trashed":
 			trashedEvent = event
@@ -712,17 +588,13 @@ func TestThreadContextBundlesRecentEventsArtifactsAndOpenCards(t *testing.T) {
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
 	threadID := integrationSeedThread(t, h, "actor-1", map[string]any{
-		"title":            "Context bundle thread",
-		"type":             "incident",
-		"status":           "active",
-		"priority":         "p1",
-		"tags":             []any{"ops", "context"},
-		"cadence":          "daily",
-		"next_check_in_at": "2026-03-05T00:00:00Z",
-		"current_summary":  "summary",
-		"next_actions":     []any{"triage"},
-		"key_artifacts":    []any{"artifact:ctx-artifact-1"},
-		"provenance":       map[string]any{"sources": []any{"inferred"}},
+		"title":           "Context bundle thread",
+		"type":            "incident",
+		"status":          "active",
+		"current_summary": "summary",
+		"next_actions":    []any{"triage"},
+		"key_artifacts":   []any{"artifact:ctx-artifact-1"},
+		"provenance":      map[string]any{"sources": []any{"inferred"}},
 	})
 
 	contentBody := strings.Repeat("A", 620)
@@ -741,7 +613,7 @@ func TestThreadContextBundlesRecentEventsArtifactsAndOpenCards(t *testing.T) {
 
 	createDocumentResp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
 		"actor_id":"actor-1",
-		"document":{"id":"ctx-doc-1","thread_id":"`+threadID+`","title":"Context runbook","labels":["ops"]},
+		"document":{"id":"ctx-doc-1","thread_id":"`+threadID+`","title":"Context runbook"},
 		"content":"# Context runbook",
 		"content_type":"text"
 	}`, http.StatusCreated)
@@ -882,18 +754,14 @@ func TestThreadContextRejectsInvalidQueryParams(t *testing.T) {
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 	integrationSeedThread(t, h, "actor-1", map[string]any{
-		"id":               "thread-1",
-		"title":            "Invalid query params thread",
-		"type":             "incident",
-		"status":           "active",
-		"priority":         "p1",
-		"tags":             []any{"ops"},
-		"cadence":          "daily",
-		"next_check_in_at": "2026-03-05T00:00:00Z",
-		"current_summary":  "summary",
-		"next_actions":     []any{"triage"},
-		"key_artifacts":    []any{},
-		"provenance":       map[string]any{"sources": []any{"inferred"}},
+		"id":              "thread-1",
+		"title":           "Invalid query params thread",
+		"type":            "incident",
+		"status":          "active",
+		"current_summary": "summary",
+		"next_actions":    []any{"triage"},
+		"key_artifacts":   []any{},
+		"provenance":      map[string]any{"sources": []any{"inferred"}},
 	})
 
 	resp, err := http.Get(h.baseURL + "/threads/thread-1/context?max_events=abc")
@@ -922,31 +790,23 @@ func TestThreadWorkspaceBundlesCanonicalAndDerivedSections(t *testing.T) {
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
 	rootThreadID := integrationSeedThread(t, h, "actor-1", map[string]any{
-		"title":            "Workspace root",
-		"type":             "initiative",
-		"status":           "active",
-		"priority":         "p1",
-		"tags":             []any{"ops", "workspace"},
-		"cadence":          "daily",
-		"next_check_in_at": "2026-03-05T00:00:00Z",
-		"current_summary":  "summary",
-		"next_actions":     []any{"triage"},
-		"key_artifacts":    []any{"artifact:workspace-artifact-1"},
-		"provenance":       map[string]any{"sources": []any{"inferred"}},
+		"title":           "Workspace root",
+		"type":            "initiative",
+		"status":          "active",
+		"current_summary": "summary",
+		"next_actions":    []any{"triage"},
+		"key_artifacts":   []any{"artifact:workspace-artifact-1"},
+		"provenance":      map[string]any{"sources": []any{"inferred"}},
 	})
 
 	relatedThreadID := integrationSeedThread(t, h, "actor-1", map[string]any{
-		"title":            "Workspace related",
-		"type":             "case",
-		"status":           "active",
-		"priority":         "p2",
-		"tags":             []any{"ops", "related"},
-		"cadence":          "weekly",
-		"next_check_in_at": "2026-03-06T00:00:00Z",
-		"current_summary":  "related summary",
-		"next_actions":     []any{"follow-up"},
-		"key_artifacts":    []any{},
-		"provenance":       map[string]any{"sources": []any{"inferred"}},
+		"title":           "Workspace related",
+		"type":            "case",
+		"status":          "active",
+		"current_summary": "related summary",
+		"next_actions":    []any{"follow-up"},
+		"key_artifacts":   []any{},
+		"provenance":      map[string]any{"sources": []any{"inferred"}},
 	})
 
 	postJSONExpectStatus(t, h.baseURL+"/artifacts", `{
@@ -963,7 +823,7 @@ func TestThreadWorkspaceBundlesCanonicalAndDerivedSections(t *testing.T) {
 
 	postJSONExpectStatus(t, h.baseURL+"/docs", `{
 		"actor_id":"actor-1",
-		"document":{"id":"workspace-doc-1","thread_id":"`+rootThreadID+`","title":"Workspace runbook","labels":["ops"]},
+		"document":{"id":"workspace-doc-1","thread_id":"`+rootThreadID+`","title":"Workspace runbook"},
 		"refs":["thread:`+rootThreadID+`"],
 		"content":"# Workspace runbook",
 		"content_type":"text"

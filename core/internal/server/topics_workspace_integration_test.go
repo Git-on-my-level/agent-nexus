@@ -22,7 +22,6 @@ func TestTopicWorkspaceResolvesBoardsCardsAndDocsViaRefEdges(t *testing.T) {
 		"actor_id":"actor-1",
 		"topic":{
 			"type":"initiative",
-			"status":"active",
 			"title":"Launch topic",
 			"summary":"Coordinate launch work",
 			"owner_refs":["actor:actor-1"],

@@ -373,12 +373,20 @@ if [[ "$STALE_INBOX_COUNT" -ne 1 ]]; then
   exit 1
 fi
 
+# Thread list no longer supports ?stale=; staleness is a per-row projection field.
 STALE_THREADS_RESPONSE=$(curl -sS \
   -H "authorization: Bearer $AGENT1_TOKEN" \
-  "$CORE_BASE_URL/threads?stale=true")
-STALE_THREAD_MATCHES="$(json_count_key_value "$STALE_THREADS_RESPONSE" id "$STALE_THREAD_ID")"
-if [[ "$STALE_THREAD_MATCHES" -lt 1 ]]; then
-  echo "expected stale thread to appear in stale thread listing" >&2
+  "$CORE_BASE_URL/threads?state=active&limit=1000")
+if ! printf '%s' "$STALE_THREADS_RESPONSE" | python3 -c "
+import json, sys
+want = sys.argv[1]
+data = json.load(sys.stdin)
+for t in data.get('threads') or []:
+    if str(t.get('id', '')) == want and t.get('stale') is True:
+        sys.exit(0)
+sys.exit(1)
+" "$STALE_THREAD_ID"; then
+  echo "expected stale thread $STALE_THREAD_ID with stale=true in /threads listing" >&2
   echo "response: $STALE_THREADS_RESPONSE" >&2
   exit 1
 fi

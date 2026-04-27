@@ -347,7 +347,7 @@ func formatThreadWorkspace(body any) string {
 func renderTopicListItem(item map[string]any, listID string) string {
 	return compactSummary(
 		listID,
-		firstNonEmpty(anyString(item["status"]), anyString(item["type"])),
+		firstNonEmpty(anyString(item["state"]), anyString(item["type"])),
 		firstNonEmpty(anyString(item["title"]), anyString(item["summary"])),
 	)
 }
@@ -379,7 +379,7 @@ func formatTopicRecord(topic map[string]any) string {
 	}
 	lines := []string{"Topic " + displayID(topic)}
 	lines = appendScalar(lines, "title", topic, "title")
-	lines = appendScalar(lines, "status", topic, "status")
+	lines = appendScalar(lines, "state", topic, "state")
 	lines = appendScalar(lines, "type", topic, "type")
 	lines = appendScalar(lines, "summary", topic, "summary")
 	lines = appendStringList(lines, "owner_refs", stringList(topic["owner_refs"]))
@@ -521,16 +521,9 @@ func formatThreadRecord(thread map[string]any) string {
 	}
 	lines := []string{"Thread " + displayID(thread)}
 	lines = appendScalar(lines, "title", thread, "title")
-	lines = appendScalar(lines, "status", thread, "status")
-	lines = appendScalar(lines, "type", thread, "type")
-	lines = appendScalar(lines, "priority", thread, "priority")
-	lines = appendScalar(lines, "owner", thread, "owner")
-	lines = appendScalar(lines, "cadence", thread, "cadence")
-	lines = appendScalar(lines, "stale", thread, "stale")
+	lines = appendScalar(lines, "state", thread, "state")
+	lines = appendScalar(lines, "topic_ref", thread, "topic_ref")
 	lines = appendScalar(lines, "updated_at", thread, "updated_at")
-	lines = appendScalar(lines, "summary", thread, "current_summary")
-	lines = appendStringList(lines, "tags", stringList(thread["tags"]))
-	lines = appendStringList(lines, "next_actions", stringList(thread["next_actions"]))
 	lines = appendStringList(lines, "key_artifacts", stringList(thread["key_artifacts"]))
 	lines = appendStringList(lines, "open_cards", stringList(thread["open_cards"]))
 	if trashedAt := anyString(thread["trashed_at"]); trashedAt != "" {
@@ -910,7 +903,7 @@ func formatNamedList(body any, field string, label string, kind string, render f
 }
 
 func renderThreadListItem(item map[string]any, listID string) string {
-	return compactSummary(listID, firstNonEmpty(anyString(item["status"]), anyString(item["priority"])), firstNonEmpty(anyString(item["title"]), anyString(item["current_summary"])))
+	return compactSummary(listID, anyString(item["state"]), anyString(item["title"]))
 }
 
 func renderOpenCardListItem(item map[string]any) string {
@@ -918,7 +911,7 @@ func renderOpenCardListItem(item map[string]any) string {
 }
 
 func renderOpenCardListItemWithMode(item map[string]any, fullID bool) string {
-	return compactSummary(displayCompactIDWithMode(item, fullID), firstNonEmpty(anyString(item["status"]), anyString(item["owner"])), firstNonEmpty(anyString(item["title"]), anyString(item["summary"])))
+	return compactSummary(displayCompactIDWithMode(item, fullID), firstNonEmpty(anyString(item["column_key"]), anyString(item["resolution"])), firstNonEmpty(anyString(item["title"]), anyString(item["summary"])))
 }
 
 func renderArtifactListItem(item map[string]any, listID string) string {
@@ -1475,13 +1468,13 @@ func formatBoardsList(body any) string {
 
 func renderBoardListItem(board map[string]any, summary map[string]any, listID string) string {
 	title := anyString(board["title"])
-	status := anyString(board["status"])
+	state := anyString(board["state"])
 	cardCount := intValue(summary["card_count"])
 	unresolved := intValue(summary["unresolved_card_count"])
 	docCount := intValue(summary["document_count"])
 	return compactSummary(
 		listID,
-		status,
+		state,
 		title,
 		fmt.Sprintf("cards=%d", cardCount),
 		fmt.Sprintf("unresolved_cards=%d", unresolved),
@@ -1495,7 +1488,7 @@ func formatBoardRecord(board map[string]any) string {
 	}
 	lines := []string{"Board " + displayID(board)}
 	lines = appendScalar(lines, "title", board, "title")
-	lines = appendScalar(lines, "status", board, "status")
+	lines = appendScalar(lines, "state", board, "state")
 	lines = appendScalar(lines, "thread_id", board, "thread_id")
 	lines = appendStringList(lines, "document_refs", stringList(board["document_refs"]))
 	lines = appendStringList(lines, "labels", stringList(board["labels"]))
@@ -1526,7 +1519,7 @@ func formatBoardWorkspace(body any) string {
 
 	lines = append(lines, "Board "+displayID(board))
 	lines = appendScalar(lines, "title", board, "title")
-	lines = appendScalar(lines, "status", board, "status")
+	lines = appendScalar(lines, "state", board, "state")
 	lines = appendStringList(lines, "document_refs", stringList(board["document_refs"]))
 
 	if primaryTopic != nil {
@@ -1635,7 +1628,7 @@ func renderBoardCardItem(cardWrapper map[string]any) string {
 			badges = append(badges, fmt.Sprintf("inbox=%d", inbox))
 		}
 		if stale {
-			badges = append(badges, "STALE")
+			badges = append(badges, "risk_exception")
 		}
 	}
 
@@ -1673,7 +1666,7 @@ func renderBoardCardListItem(card map[string]any) string {
 	threadID := anyString(card["thread_id"])
 	columnKey := anyString(card["column_key"])
 	rank := anyString(card["rank"])
-	pinnedDocID := anyString(card["pinned_document_id"])
+	documentRef := firstNonEmpty(anyString(card["document_ref"]), anyString(card["pinned_document_id"]))
 	cardID := strings.TrimSpace(anyString(card["id"]))
 	title := strings.TrimSpace(anyString(card["title"]))
 
@@ -1694,8 +1687,8 @@ func renderBoardCardListItem(card map[string]any) string {
 	if rank != "" {
 		parts = append(parts, "rank="+rank)
 	}
-	if pinnedDocID != "" {
-		parts = append(parts, "pinned="+pinnedDocID)
+	if documentRef != "" {
+		parts = append(parts, "document="+documentRef)
 	}
 	return strings.Join(parts, " :: ")
 }
@@ -1739,8 +1732,8 @@ func formatBoardCardBoardAndCardSummary(body any, headline string) string {
 		}
 		lines = append(lines, "  column: "+anyString(card["column_key"]))
 		lines = append(lines, "  rank: "+anyString(card["rank"]))
-		if pinnedDocID := anyString(card["pinned_document_id"]); pinnedDocID != "" {
-			lines = append(lines, "  pinned_document: "+pinnedDocID)
+		if documentRef := firstNonEmpty(anyString(card["document_ref"]), anyString(card["pinned_document_id"])); documentRef != "" {
+			lines = append(lines, "  document_ref: "+documentRef)
 		}
 	}
 	return strings.Join(lines, "\n")
