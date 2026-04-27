@@ -39,6 +39,8 @@ const schemaCheckPromises = new Map();
  * not running yet, the proxy returns 5xx. Hard-failing SSR makes the app
  * unusable; we warn instead so the operator can start the stack
  * (e.g. `make serve` in `controlplane/`).
+ * Also: when the UI's embedded command registry is newer than the running core's
+ * `/meta/handshake` digest, degrade to a visible warning and rebuild/restart core.
  */
 function shouldDegradeCoreSchemaCheckInDev(error) {
   if (!dev) {
@@ -69,6 +71,11 @@ function shouldDegradeCoreSchemaCheckInDev(error) {
     return true;
   }
   if (/ECONNREFUSED|network\s*error|fetch failed/i.test(text)) {
+    return true;
+  }
+  // UI and core built from different contract revisions: core is older (or stale binary).
+  // In dev, warn on the page instead of hard-failing SSR; rebuild/restart anx-core to clear.
+  if (text.includes("anx-core contract mismatch")) {
     return true;
   }
   return false;

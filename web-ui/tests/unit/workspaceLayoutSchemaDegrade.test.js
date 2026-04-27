@@ -84,4 +84,43 @@ describe("workspace +layout.server.js core schema (dev degradation)", () => {
     expect(result.coreSchemaCheckWarning).toBeTruthy();
     expect(String(result.coreSchemaCheckWarning)).toContain("502");
   });
+
+  it("returns coreSchemaCheckWarning in dev when command registry digest mismatches", async () => {
+    const e = new Error(
+      "anx-core contract mismatch at http://127.0.0.1:1: expected command registry digest aaa, received bbb.",
+    );
+    anxCoreClientMocks.verifyCoreSchemaVersion.mockRejectedValue(e);
+
+    workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
+      error: null,
+      outOfWorkspaceUnauthenticated: false,
+      workspace: {
+        organizationSlug: "my-org",
+        slug: "my-ws",
+        label: "My WS",
+        description: "",
+        coreBaseUrl: "http://localhost:5173/ws/my-org/my-ws",
+      },
+    });
+
+    const event = {
+      params: { organization: "my-org", workspace: "my-ws" },
+      url: new URL("https://ui.example.test/o/my-org/w/my-ws/docs"),
+      fetch: vi.fn(),
+      cookies: {
+        get: vi.fn((name) =>
+          name === "anx_ui_session_my-org__my-ws" ? "refresh" : "",
+        ),
+        set: vi.fn(),
+        delete: vi.fn(),
+      },
+      locals: { outOfWorkspace: mockLocalProvider() },
+    };
+
+    const result = await load(event);
+    expect(result.coreSchemaCheckWarning).toBeTruthy();
+    expect(String(result.coreSchemaCheckWarning)).toContain(
+      "contract mismatch",
+    );
+  });
 });
