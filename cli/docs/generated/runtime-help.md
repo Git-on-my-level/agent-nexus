@@ -2651,7 +2651,7 @@ Generated Help: boards list
 - Stability: `beta`
 - Input mode: `none`
 - Why: Scan durable coordination boards and lightweight summaries.
-- Output: Returns `{ boards, summaries }`.
+- Output: Returns `{ boards, next_cursor? }` (each `boards[]` item is `{ board, summary }` with `summary` a `BoardSummary` projection, not the board's text blurb).
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `boards`
 - Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
@@ -2691,6 +2691,7 @@ Inputs:
   - body `board.primary_topic_ref` (string)
   - body `board.provenance.by_field` (object)
   - body `board.provenance.notes` (string)
+  - body `board.summary` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3035,7 +3036,7 @@ Generated Help: docs list
 - Output: Returns `{ documents }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `docs`
-- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs purge`, `docs restore`, `docs revisions create`, `docs revisions get`, `docs revisions list`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs patch`, `docs purge`, `docs restore`, `docs revisions create`, `docs revisions get`, `docs revisions list`, `docs trash`, `docs unarchive`
 
 
 Global flags:
@@ -3060,7 +3061,7 @@ Generated Help: docs create
 - Output: Returns `{ document, revision }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `docs`, `write`
-- Adjacent commands: `docs archive`, `docs get`, `docs list`, `docs purge`, `docs restore`, `docs revisions create`, `docs revisions get`, `docs revisions list`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs get`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revisions create`, `docs revisions get`, `docs revisions list`, `docs trash`, `docs unarchive`
 
 Inputs:
   Required:
@@ -3096,7 +3097,7 @@ Generated Help: docs get
 - Output: Returns `{ document, revision }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `docs`
-- Adjacent commands: `docs archive`, `docs create`, `docs list`, `docs purge`, `docs restore`, `docs revisions create`, `docs revisions get`, `docs revisions list`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs create`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revisions create`, `docs revisions get`, `docs revisions list`, `docs trash`, `docs unarchive`
 
 Inputs:
   Required:
@@ -3124,7 +3125,7 @@ Generated Help: docs trash
 - Output: Returns `{ document, revision }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `docs`, `write`
-- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs list`, `docs purge`, `docs restore`, `docs revisions create`, `docs revisions get`, `docs revisions list`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revisions create`, `docs revisions get`, `docs revisions list`, `docs unarchive`
 
 Inputs:
   Required:
@@ -3155,7 +3156,7 @@ Generated Help: docs archive
 - Output: Returns `{ document, revision }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `docs`, `write`
-- Adjacent commands: `docs create`, `docs get`, `docs list`, `docs purge`, `docs restore`, `docs revisions create`, `docs revisions get`, `docs revisions list`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs create`, `docs get`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revisions create`, `docs revisions get`, `docs revisions list`, `docs trash`, `docs unarchive`
 
 Inputs:
   Required:
@@ -3185,7 +3186,7 @@ Generated Help: docs unarchive
 - Output: Returns `{ document, revision }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `docs`, `write`
-- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs list`, `docs purge`, `docs restore`, `docs revisions create`, `docs revisions get`, `docs revisions list`, `docs trash`
+- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revisions create`, `docs revisions get`, `docs revisions list`, `docs trash`
 
 Inputs:
   Required:
@@ -3215,7 +3216,7 @@ Generated Help: docs restore
 - Output: Returns `{ document, revision }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `docs`, `write`
-- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs list`, `docs purge`, `docs revisions create`, `docs revisions get`, `docs revisions list`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs list`, `docs patch`, `docs purge`, `docs revisions create`, `docs revisions get`, `docs revisions list`, `docs trash`, `docs unarchive`
 
 Inputs:
   Required:
@@ -3246,7 +3247,7 @@ Generated Help: docs purge
 - Output: Returns `{ purged, document_id }`.
 - Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `docs`, `write`
-- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs list`, `docs restore`, `docs revisions create`, `docs revisions get`, `docs revisions list`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs list`, `docs patch`, `docs restore`, `docs revisions create`, `docs revisions get`, `docs revisions list`, `docs trash`, `docs unarchive`
 
 Inputs:
   Required:
