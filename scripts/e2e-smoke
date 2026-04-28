@@ -164,7 +164,7 @@ run_cli_json() {
 }
 
 board_create_attempt() {
-  printf '{"board":{"id":"%s","title":"Smoke Board","status":"active","labels":["smoke","board"],"owners":["%s"],"primary_topic_ref":"topic:%s","thread_id":"%s","document_refs":["document:%s"],"pinned_refs":["document:%s"],"provenance":{"sources":["actor_statement:smoke"]}}}\n' \
+  printf '{"board":{"id":"%s","title":"Smoke Board","owners":["%s"],"primary_topic_ref":"topic:%s","thread_id":"%s","document_refs":["document:%s"],"pinned_refs":["document:%s"],"provenance":{"sources":["actor_statement:smoke"]}}}\n' \
     "$BOARD_ID" "$USERNAME" "$MAIN_TOPIC_ID" "$BOARD_ID" "$PRIMARY_DOC_ID" "$PRIMARY_DOC_ID" \
     | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" boards create >"$TMP_DIR/board-create.json"
 }
@@ -396,10 +396,10 @@ fi
 PRIMARY_DOC_ID="doc-smoke-board-primary"
 CARD_DOC_ID="doc-smoke-board-card"
 
-printf '{"document":{"id":"%s","title":"Smoke Board Primary Doc","labels":["smoke","board"]},"refs":["topic:%s","thread:%s"],"content":"Primary board document","content_type":"text"}\n' "$PRIMARY_DOC_ID" "$MAIN_TOPIC_ID" "$THREAD_ID" \
+printf '{"document":{"id":"%s","title":"Smoke Board Primary Doc"},"refs":["topic:%s","thread:%s"],"content":"Primary board document","content_type":"text"}\n' "$PRIMARY_DOC_ID" "$MAIN_TOPIC_ID" "$THREAD_ID" \
   | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" docs create >"$TMP_DIR/board-primary-doc-create.json"
 
-printf '{"document":{"id":"%s","title":"Smoke Board Card Doc","labels":["smoke","board"]},"refs":["topic:%s","thread:%s"],"content":"Pinned card document","content_type":"text"}\n' "$CARD_DOC_ID" "$BOARD_TOPIC_A_ID" "$BOARD_THREAD_A_ID" \
+printf '{"document":{"id":"%s","title":"Smoke Board Card Doc"},"refs":["topic:%s","thread:%s"],"content":"Pinned card document","content_type":"text"}\n' "$CARD_DOC_ID" "$BOARD_TOPIC_A_ID" "$BOARD_THREAD_A_ID" \
   | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" docs create >"$TMP_DIR/board-card-doc-create.json"
 
 BOARD_ID="board-smoke"
@@ -491,8 +491,8 @@ if [[ -z "$BOARD_UPDATED_AT" ]]; then
   exit 1
 fi
 
-printf '{"column_key":"review","if_board_updated_at":"%s"}\n' "$BOARD_UPDATED_AT" \
-  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" cards move --card-id "$BOARD_CARD_B_ID" >"$TMP_DIR/board-card-b-move.json"
+HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" cards move \
+  --card-id "$BOARD_CARD_B_ID" --column review --if-board-updated-at "$BOARD_UPDATED_AT" >"$TMP_DIR/board-card-b-move.json"
 BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-card-b-move.json" 'data.board.updated_at' || true)"
 if [[ -z "$BOARD_UPDATED_AT" ]]; then
   BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-card-b-move.json" 'data.body.board.updated_at' || true)"
@@ -551,7 +551,9 @@ fi
 
 # Spec §3.5 / §3.6: terminal resolution is explicit (canceled + resolution_refs), distinct from board flow alone.
 printf '{"column_key":"done","resolution":"canceled","resolution_refs":["event:%s"],"if_board_updated_at":"%s"}\n' "$CANCEL_EVENT_ID" "$BOARD_UPDATED_AT" \
-  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" cards move --card-id "$BOARD_CARD_A_ID" >"$TMP_DIR/board-card-a-cancel.json"
+  >"$TMP_DIR/card-a-cancel-move.json"
+HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" cards move \
+  --card-id "$BOARD_CARD_A_ID" --from-file "$TMP_DIR/card-a-cancel-move.json" >"$TMP_DIR/board-card-a-cancel.json"
 
 run_cli_json "$TMP_DIR/board-after-terminal.json" boards get --board-id "$BOARD_ID"
 BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-after-terminal.json" 'data.board.updated_at' || true)"
