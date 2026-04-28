@@ -579,13 +579,13 @@ printf '{"topic":{"id":"topic-smoke-trash","title":"Smoke trashed topic","summar
   | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" topics create >"$TMP_DIR/trash-topic-create.json"
 printf '{"reason":"e2e-smoke trash lane assertion"}\n' \
   | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" topics trash --topic-id topic-smoke-trash >"$TMP_DIR/topic-trash.json"
-curl -fsS -H "Authorization: Bearer $ACCESS_TOKEN" "${CORE_BASE_URL}/topics?trashed_only=true" >"$TMP_DIR/topics-trashed-only.json"
+curl -fsS -H "Authorization: Bearer $ACCESS_TOKEN" "${CORE_BASE_URL}/topics?state=trashed" >"$TMP_DIR/topics-trashed-only.json"
 assert_contains "$TMP_DIR/topics-trashed-only.json" 'topic-smoke-trash'
 
 # Card trash lane (archive / archived_only inventory).
 printf '{"if_board_updated_at":"%s"}\n' "$BOARD_UPDATED_AT" \
   | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" cards archive --card-id "$BOARD_CARD_B_ID" >"$TMP_DIR/board-card-b-archive.json"
-curl -fsS -H "Authorization: Bearer $ACCESS_TOKEN" "${CORE_BASE_URL}/cards?archived_only=true" >"$TMP_DIR/cards-archived-only.json"
+curl -fsS -H "Authorization: Bearer $ACCESS_TOKEN" "${CORE_BASE_URL}/cards?state=archived" >"$TMP_DIR/cards-archived-only.json"
 assert_contains "$TMP_DIR/cards-archived-only.json" "\"${BOARD_CARD_B_ID}\""
 
 printf '{"event":{"type":"message_posted","thread_id":"%s","summary":"smoke stream event","refs":["thread:%s"],"payload":{"body":"hello"},"provenance":{"sources":["actor_statement:smoke"]}}}\n' "$THREAD_ID" "$THREAD_ID" \
