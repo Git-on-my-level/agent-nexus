@@ -537,7 +537,7 @@ func TestInboxListIncludesViewingAsAndCategoryReference(t *testing.T) {
 	if !strings.Contains(textOut, "viewing_as: profile=agent-a :: username=agent.alpha :: actor_id=actor_123") {
 		t.Fatalf("expected viewing_as summary in default text output, got:\n%s", textOut)
 	}
-	if !strings.Contains(textOut, "category_reference:") || !strings.Contains(textOut, "action_needed: A human must decide") {
+	if !strings.Contains(textOut, "category_reference:") || !strings.Contains(textOut, "action_needed: A responsible actor must decide") {
 		t.Fatalf("expected category reference in default text output, got:\n%s", textOut)
 	}
 }
@@ -913,8 +913,8 @@ func TestDocsCommands(t *testing.T) {
 			_, _ = w.Write([]byte(`{"document":{"id":"doc_1","head_revision_id":"rev_1"},"revision":{"revision_id":"rev_1","revision_number":1,"content":"initial","content_type":"text"}}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/docs/doc_1/revisions":
 			body, _ := io.ReadAll(r.Body)
-			if !bytes.Contains(body, []byte(`"if_base_revision":"rev_1"`)) || !bytes.Contains(body, []byte(`"body_markdown"`)) {
-				t.Fatalf("unexpected docs update body: %s", string(body))
+			if !bytes.Contains(body, []byte(`"if_base_revision":"rev_1"`)) || !bytes.Contains(body, []byte(`"content":"next"`)) || !bytes.Contains(body, []byte(`"content_type":"text"`)) {
+				t.Fatalf("unexpected docs revise body: %s", string(body))
 			}
 			_, _ = w.Write([]byte(`{"document":{"id":"doc_1","head_revision_id":"rev_2"},"revision":{"revision_id":"rev_2","revision_number":2}}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/docs/doc_1/revisions":
@@ -933,14 +933,14 @@ func TestDocsCommands(t *testing.T) {
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "list", "--thread-id", "thread_docs_1", "--include-trashed"}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"document":{"id":"doc_1"},"content":"initial","content_type":"text"}`), []string{"--json", "--base-url", server.URL, "docs", "create"}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "get", "--document-id", "doc_1"}))
-	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"actor_id":"actor_test","if_base_revision":"rev_1","content":"next","content_type":"text"}`), []string{"--json", "--base-url", server.URL, "docs", "update", "--document-id", "doc_1"}))
-	docsUpdatePayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"actor_id":"actor_test","if_base_revision":"rev_1","content":"next","content_type":"text"}`), []string{"--json", "--base-url", server.URL, "docs", "propose-update", "--document-id", "doc_1"}))
-	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "apply", "--proposal-id", proposalIDFromEnvelope(t, docsUpdatePayload)}))
+	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"actor_id":"actor_test","if_base_revision":"rev_1","content":"next","content_type":"text"}`), []string{"--json", "--base-url", server.URL, "docs", "revise", "--apply", "--document-id", "doc_1"}))
+	docsRevisionPayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"actor_id":"actor_test","if_base_revision":"rev_1","content":"next","content_type":"text"}`), []string{"--json", "--base-url", server.URL, "docs", "revise", "--document-id", "doc_1"}))
+	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "revise", "--apply", "--proposal-id", proposalIDFromEnvelope(t, docsRevisionPayload)}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "history", "--document-id", "doc_1"}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "revision", "get", "--document-id", "doc_1", "--revision-id", "rev_1"}))
 }
 
-func TestDocsUpdateInjectsActorIDFromProfile(t *testing.T) {
+func TestDocsReviseInjectsActorIDFromProfile(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -956,7 +956,7 @@ func TestDocsUpdateInjectsActorIDFromProfile(t *testing.T) {
 		body, _ := io.ReadAll(r.Body)
 		var payload map[string]any
 		if err := json.Unmarshal(body, &payload); err != nil {
-			t.Fatalf("decode docs update body: %v body=%s", err, string(body))
+			t.Fatalf("decode docs revise body: %v body=%s", err, string(body))
 		}
 		if got := strings.TrimSpace(anyStringValue(payload["actor_id"])); got != "actor-profile-docs" {
 			t.Fatalf("expected actor_id from profile, got %q body=%s", got, string(body))
@@ -973,13 +973,13 @@ func TestDocsUpdateInjectsActorIDFromProfile(t *testing.T) {
 		"--json",
 		"--base-url", server.URL,
 		"--agent", "agent-docs",
-		"docs", "update",
+		"docs", "revise", "--apply",
 		"--document-id", "doc_1",
 	})
 	assertEnvelopeOK(t, raw)
 }
 
-func TestDocsUpdateRequiresActiveActorIdentity(t *testing.T) {
+func TestDocsReviseRequiresActiveActorIdentity(t *testing.T) {
 	t.Parallel()
 
 	var mu sync.Mutex
@@ -996,7 +996,7 @@ func TestDocsUpdateRequiresActiveActorIdentity(t *testing.T) {
 	raw := runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{"if_base_revision":"rev_1","content":"next","content_type":"text"}`), []string{
 		"--json",
 		"--base-url", server.URL,
-		"docs", "update",
+		"docs", "revise", "--apply",
 		"--document-id", "doc_1",
 	})
 	payload := assertEnvelopeError(t, raw)
@@ -1020,11 +1020,11 @@ func TestDocsUpdateRequiresActiveActorIdentity(t *testing.T) {
 	}
 }
 
-func TestProductManagerFlowRegisterThenDocsUpdate(t *testing.T) {
+func TestProductManagerFlowRegisterThenDocsRevise(t *testing.T) {
 	t.Parallel()
 
 	var mu sync.Mutex
-	docsUpdateCalls := 0
+	docsRevisionCalls := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
@@ -1060,13 +1060,13 @@ func TestProductManagerFlowRegisterThenDocsUpdate(t *testing.T) {
 			body, _ := io.ReadAll(r.Body)
 			var payload map[string]any
 			if err := json.Unmarshal(body, &payload); err != nil {
-				t.Fatalf("decode docs update body: %v body=%s", err, string(body))
+				t.Fatalf("decode docs revise body: %v body=%s", err, string(body))
 			}
 			if got := strings.TrimSpace(anyStringValue(payload["actor_id"])); got != "actor-product-manager" {
 				t.Fatalf("expected actor_id from registered profile, got %q body=%s", got, string(body))
 			}
 			mu.Lock()
-			docsUpdateCalls++
+			docsRevisionCalls++
 			mu.Unlock()
 			_, _ = w.Write([]byte(`{"document":{"id":"northwave-pilot-rescue-brief","head_revision_id":"rev_2"},"revision":{"revision_id":"rev_2","revision_number":2}}`))
 			return
@@ -1091,15 +1091,15 @@ func TestProductManagerFlowRegisterThenDocsUpdate(t *testing.T) {
 		"--json",
 		"--base-url", server.URL,
 		"--agent", "agent-product-manager",
-		"docs", "update",
+		"docs", "revise", "--apply",
 		"--document-id", "northwave-pilot-rescue-brief",
 	}))
 
 	mu.Lock()
-	gotCalls := docsUpdateCalls
+	gotCalls := docsRevisionCalls
 	mu.Unlock()
 	if gotCalls != 1 {
-		t.Fatalf("expected one docs update request, got %d", gotCalls)
+		t.Fatalf("expected one docs revise request, got %d", gotCalls)
 	}
 }
 
@@ -1248,25 +1248,6 @@ func TestDocsCommentsCommand(t *testing.T) {
 	}
 }
 
-func TestDocsValidateUpdateRequiresBaseRevision(t *testing.T) {
-	t.Parallel()
-
-	home := t.TempDir()
-	raw := runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{"content":"next","content_type":"text"}`), []string{
-		"--json",
-		"docs", "validate-update",
-		"--document-id", "doc_1",
-	})
-	payload := assertEnvelopeError(t, raw)
-	errObj, _ := payload["error"].(map[string]any)
-	if errObj == nil || anyStringValue(errObj["code"]) != "invalid_request" {
-		t.Fatalf("unexpected error payload: %#v", payload)
-	}
-	if message := anyStringValue(errObj["message"]); !strings.Contains(message, "if_base_revision") {
-		t.Fatalf("expected if_base_revision guidance, got %q payload=%#v", message, payload)
-	}
-}
-
 func TestDocsCreateDryRunValidatesPayloadBeforeSuccess(t *testing.T) {
 	t.Parallel()
 
@@ -1305,58 +1286,58 @@ func TestDocsCreateDryRunValidatesPayloadBeforeSuccess(t *testing.T) {
 	}
 }
 
-func TestDocsValidateUpdateWithContentFile(t *testing.T) {
+func TestDocsCreateFromFlagsAndContentFile(t *testing.T) {
 	t.Parallel()
 
+	var gotBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/docs" {
+			http.NotFound(w, r)
+			return
+		}
+		body, _ := io.ReadAll(r.Body)
+		if err := json.Unmarshal(body, &gotBody); err != nil {
+			t.Fatalf("decode docs create body: %v body=%s", err, string(body))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"document":{"id":"doc_1","head_revision_id":"rev_1"},"revision":{"revision_id":"rev_1","revision_number":1}}`))
+	}))
+	defer server.Close()
+
 	home := t.TempDir()
-	updateFile := filepath.Join(home, "doc-update.json")
-	contentFile := filepath.Join(home, "doc-content.md")
-	if err := os.WriteFile(updateFile, []byte(`{"if_base_revision":"rev_1","content_type":"text"}`), 0o600); err != nil {
-		t.Fatalf("write update file: %v", err)
-	}
-	content := "line 1\nline 2\n"
-	if err := os.WriteFile(contentFile, []byte(content), 0o600); err != nil {
+	contentFile := filepath.Join(home, "runbook.md")
+	if err := os.WriteFile(contentFile, []byte("# Runbook\n\nDurable context.\n"), 0o600); err != nil {
 		t.Fatalf("write content file: %v", err)
 	}
 
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
-		"docs", "validate-update",
-		"--document-id", "doc_1",
-		"--from-file", updateFile,
+		"--base-url", server.URL,
+		"docs", "create",
+		"--topic", "topic_1",
+		"--title", "Runbook",
+		"--summary", "Durable context",
 		"--content-file", contentFile,
 	})
-	payload := assertEnvelopeOK(t, raw)
-	if got := anyStringValue(payload["command"]); got != "docs validate-update" {
-		t.Fatalf("unexpected command label: %#v", payload)
+	assertEnvelopeOK(t, raw)
+
+	document, _ := gotBody["document"].(map[string]any)
+	if got := anyStringValue(document["title"]); got != "Runbook" {
+		t.Fatalf("expected title from flags, got %q body=%#v", got, gotBody)
 	}
-	data, _ := payload["data"].(map[string]any)
-	body, _ := data["body"].(map[string]any)
-	if got := anyStringValue(body["content"]); got != strings.TrimSpace(content) {
-		t.Fatalf("expected content from file in validation payload, got %q payload=%#v", got, payload)
+	if got := anyStringValue(document["subject_ref"]); got != "topic:topic_1" {
+		t.Fatalf("expected subject_ref topic:topic_1, got %q body=%#v", got, gotBody)
+	}
+	if got := anyStringValue(gotBody["content_type"]); got != "text" {
+		t.Fatalf("expected content_type=text, got %q body=%#v", got, gotBody)
+	}
+	if got := anyStringValue(gotBody["content"]); !strings.Contains(got, "Durable context.") {
+		t.Fatalf("expected content from file, got %q body=%#v", got, gotBody)
 	}
 }
 
-func TestDocsValidateUpdateRejectsNullContent(t *testing.T) {
-	t.Parallel()
-
-	home := t.TempDir()
-	raw := runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{"if_base_revision":"rev_1","content":null,"content_type":"text"}`), []string{
-		"--json",
-		"docs", "validate-update",
-		"--document-id", "doc_1",
-	})
-	payload := assertEnvelopeError(t, raw)
-	errObj, _ := payload["error"].(map[string]any)
-	if errObj == nil || anyStringValue(errObj["code"]) != "invalid_request" {
-		t.Fatalf("unexpected error payload: %#v", payload)
-	}
-	if message := anyStringValue(errObj["message"]); !strings.Contains(message, "content is required") {
-		t.Fatalf("expected content validation guidance, got %q payload=%#v", message, payload)
-	}
-}
-
-func TestDocsUpdateRejectsNullContentBeforeHTTP(t *testing.T) {
+func TestDocsReviseRejectsNullContentBeforeHTTP(t *testing.T) {
 	t.Parallel()
 
 	var mu sync.Mutex
@@ -1370,10 +1351,12 @@ func TestDocsUpdateRejectsNullContentBeforeHTTP(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-docs-null-content", `{"agent":"agent-docs-null-content","actor_id":"actor-docs-null-content","access_token":"token-docs","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 	raw := runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{"if_base_revision":"rev_1","content":null,"content_type":"text"}`), []string{
 		"--json",
 		"--base-url", server.URL,
-		"docs", "update",
+		"--agent", "agent-docs-null-content",
+		"docs", "revise", "--apply",
 		"--document-id", "doc_1",
 	})
 	payload := assertEnvelopeError(t, raw)
@@ -1393,7 +1376,7 @@ func TestDocsUpdateRejectsNullContentBeforeHTTP(t *testing.T) {
 	}
 }
 
-func TestDocsProposeUpdateWithContentFileUsesFetchedDocumentState(t *testing.T) {
+func TestDocsReviseWithContentFileUsesFetchedDocumentState(t *testing.T) {
 	t.Parallel()
 
 	var mu sync.Mutex
@@ -1432,7 +1415,7 @@ func TestDocsProposeUpdateWithContentFileUsesFetchedDocumentState(t *testing.T) 
 		"--json",
 		"--base-url", server.URL,
 		"--agent", "agent-docs-content-file",
-		"docs", "propose-update",
+		"docs", "revise",
 		"--document-id", "doc_1",
 		"--from-file", updateFile,
 		"--content-file", contentFile,
@@ -1443,9 +1426,8 @@ func TestDocsProposeUpdateWithContentFileUsesFetchedDocumentState(t *testing.T) 
 		t.Fatalf("expected path /docs/doc_1/revisions, got %q payload=%#v", got, payload)
 	}
 	body, _ := data["body"].(map[string]any)
-	revision, _ := body["revision"].(map[string]any)
-	if got := anyStringValue(revision["body_markdown"]); got != strings.TrimSpace(content) {
-		t.Fatalf("expected content-file override in proposal revision.body_markdown, got %q payload=%#v", got, payload)
+	if got := anyStringValue(body["content"]); got != strings.TrimSpace(content) {
+		t.Fatalf("expected content-file override in proposal content, got %q payload=%#v", got, payload)
 	}
 	diff, _ := data["diff"].(map[string]any)
 	if diffText := anyStringValue(diff["text"]); !strings.Contains(diffText, "line 1") {
@@ -1464,7 +1446,47 @@ func TestDocsProposeUpdateWithContentFileUsesFetchedDocumentState(t *testing.T) 
 	}
 }
 
-func TestDocsProposeUpdatePreservesStructuredContentInDiff(t *testing.T) {
+func TestDocsReviseWithOnlyContentFileDiscoversBaseRevision(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/docs/doc_1":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"document":{"id":"doc_1","head_revision_id":"rev_1"},"revision":{"revision_id":"rev_1","revision_number":1,"content":"old content","content_type":"text"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	contentFile := filepath.Join(home, "doc-content.md")
+	if err := os.WriteFile(contentFile, []byte("new content\n"), 0o600); err != nil {
+		t.Fatalf("write content file: %v", err)
+	}
+	writeAgentProfile(t, home, "agent-docs-content-only", `{"agent":"agent-docs-content-only","actor_id":"actor-docs-content-only","access_token":"token-docs","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"--agent", "agent-docs-content-only",
+		"docs", "revise",
+		"--document-id", "doc_1",
+		"--content-file", contentFile,
+	})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+	body, _ := data["body"].(map[string]any)
+	if got := anyStringValue(body["if_base_revision"]); got != "rev_1" {
+		t.Fatalf("expected discovered base revision, got %q payload=%#v", got, payload)
+	}
+	if got := anyStringValue(body["content"]); got != "new content" {
+		t.Fatalf("expected content-file markdown, got %q payload=%#v", got, payload)
+	}
+}
+
+func TestDocsRevisePreservesStructuredContentInDiff(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1497,7 +1519,7 @@ func TestDocsProposeUpdatePreservesStructuredContentInDiff(t *testing.T) {
 		"--json",
 		"--base-url", server.URL,
 		"--agent", "agent-docs-structured",
-		"docs", "propose-update",
+		"docs", "revise",
 		"--document-id", "doc_structured",
 	})
 	payload := assertEnvelopeOK(t, raw)
@@ -1520,7 +1542,7 @@ func TestDocsProposeUpdatePreservesStructuredContentInDiff(t *testing.T) {
 	}
 }
 
-func TestDocsProposeUpdateTextDiffFallsBackWhenRevisionContentEmpty(t *testing.T) {
+func TestDocsReviseTextDiffFallsBackWhenRevisionContentEmpty(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1554,7 +1576,7 @@ func TestDocsProposeUpdateTextDiffFallsBackWhenRevisionContentEmpty(t *testing.T
 		"--json",
 		"--base-url", server.URL,
 		"--agent", "agent-docs-text-fallback",
-		"docs", "propose-update",
+		"docs", "revise",
 		"--document-id", "doc_text_fallback",
 	})
 	payload := assertEnvelopeOK(t, raw)
@@ -1615,13 +1637,13 @@ func TestEventsExplainListMode(t *testing.T) {
 	if !strings.Contains(raw, "Communication: Direct communication or important non-structured information.") {
 		t.Fatalf("expected communication group in explain output, got %q", raw)
 	}
-	if !strings.Contains(raw, "Interventions: Single clear path exists, but a human must act to complete it.") {
+	if !strings.Contains(raw, "Interventions: Single clear path exists, but a responsible actor must complete it.") {
 		t.Fatalf("expected interventions group in explain output, got %q", raw)
 	}
 	if !strings.Contains(raw, "- message_posted: Use for direct communication that belongs on a backing thread; prefer topic/card/board surfaces as the primary operator nouns.") {
 		t.Fatalf("expected message_posted communication guidance in explain output, got %q", raw)
 	}
-	if !strings.Contains(raw, "- intervention_needed: Use when the next step is clear but a human must perform it.") {
+	if !strings.Contains(raw, "- intervention_needed: Use when the next step is clear but a responsible actor must perform it.") {
 		t.Fatalf("expected intervention_needed guidance in explain output, got %q", raw)
 	}
 	if !strings.Contains(raw, "- review_completed: prefer `anx reviews create`") {
@@ -2163,6 +2185,311 @@ func TestCardsTimelineDispatchesToAPI(t *testing.T) {
 	}
 }
 
+func TestCardsFileFirstWorkflowCommands(t *testing.T) {
+	t.Parallel()
+
+	const (
+		boardID      = "board_cards_workflow_123456"
+		cardID       = "card_cards_workflow_123456"
+		cardUpdated  = "2026-04-20T00:00:00Z"
+		boardUpdated = "2026-04-20T00:05:00Z"
+		profileActor = "actor_cards_profile"
+	)
+
+	var createSeen, reviseSeen, assignSeen, moveSeen, resolveSeen, reopenSeen bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/cards":
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode cards create body: %v", err)
+			}
+			if got := anyStringValue(payload["board_id"]); got != boardID {
+				t.Fatalf("expected board_id %q, got %#v", boardID, payload)
+			}
+			if got := anyStringValue(payload["actor_id"]); got != profileActor {
+				t.Fatalf("expected profile actor_id %q, got %#v", profileActor, payload)
+			}
+			card, _ := payload["card"].(map[string]any)
+			if got := anyStringValue(card["title"]); got != "Implement login" {
+				t.Fatalf("expected create title, got %#v", payload)
+			}
+			if got := anyStringValue(card["summary"]); got != "Card body from disk" {
+				t.Fatalf("expected create summary from file, got %#v", payload)
+			}
+			if got := anyStringValue(card["topic_ref"]); got != "topic:topic_cards_123" {
+				t.Fatalf("expected normalized topic ref, got %#v", payload)
+			}
+			createSeen = true
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"card":{"id":"` + cardID + `","board_id":"` + boardID + `","title":"Implement login","summary":"Card body from disk\n","column_key":"backlog","updated_at":"` + cardUpdated + `"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/cards/"+cardID:
+			_, _ = w.Write([]byte(`{"card":{"id":"` + cardID + `","board_id":"` + boardID + `","title":"Implement login","summary":"Old body","column_key":"backlog","updated_at":"` + cardUpdated + `"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/boards/"+boardID:
+			_, _ = w.Write([]byte(`{"board":{"id":"` + boardID + `","updated_at":"` + boardUpdated + `"}}`))
+		case r.Method == http.MethodPatch && r.URL.Path == "/cards/"+cardID:
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode cards patch body: %v", err)
+			}
+			if got := anyStringValue(payload["if_updated_at"]); got != cardUpdated {
+				t.Fatalf("expected discovered card token %q, got %#v", cardUpdated, payload)
+			}
+			if got := anyStringValue(payload["actor_id"]); got != profileActor {
+				t.Fatalf("expected profile actor_id %q, got %#v", profileActor, payload)
+			}
+			patch, _ := payload["patch"].(map[string]any)
+			switch {
+			case anyStringValue(patch["summary"]) == "Revised card body":
+				reviseSeen = true
+			case len(asSlice(patch["assignee_refs"])) == 1 && anyStringValue(asSlice(patch["assignee_refs"])[0]) == "actor:actor_owner":
+				assignSeen = true
+			default:
+				t.Fatalf("unexpected cards patch payload %#v", payload)
+			}
+			_, _ = w.Write([]byte(`{"card":{"id":"` + cardID + `","board_id":"` + boardID + `","updated_at":"2026-04-20T00:10:00Z"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/cards/"+cardID+"/move":
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode cards move body: %v", err)
+			}
+			if got := anyStringValue(payload["if_board_updated_at"]); got != boardUpdated {
+				t.Fatalf("expected discovered board token %q, got %#v", boardUpdated, payload)
+			}
+			if got := anyStringValue(payload["actor_id"]); got != profileActor {
+				t.Fatalf("expected profile actor_id %q, got %#v", profileActor, payload)
+			}
+			switch anyStringValue(payload["column_key"]) {
+			case "review":
+				moveSeen = true
+			case "done":
+				if got := anyStringValue(payload["resolution"]); got != "done" {
+					t.Fatalf("expected done resolution, got %#v", payload)
+				}
+				refs := asSlice(payload["resolution_refs"])
+				if len(refs) != 1 || anyStringValue(refs[0]) != "event:event_done" {
+					t.Fatalf("expected resolution evidence, got %#v", payload)
+				}
+				resolveSeen = true
+			case "ready":
+				reopenSeen = true
+			default:
+				t.Fatalf("unexpected move payload %#v", payload)
+			}
+			_, _ = w.Write([]byte(`{"board":{"id":"` + boardID + `","updated_at":"2026-04-20T00:15:00Z"},"card":{"id":"` + cardID + `","board_id":"` + boardID + `"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-cards", `{"agent":"agent-cards","actor_id":"`+profileActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	cardFile := filepath.Join(home, "card.md")
+	if err := os.WriteFile(cardFile, []byte("Card body from disk\n"), 0o600); err != nil {
+		t.Fatalf("write card file: %v", err)
+	}
+	revisedFile := filepath.Join(home, "card-revised.md")
+	if err := os.WriteFile(revisedFile, []byte("Revised card body\n"), 0o600); err != nil {
+		t.Fatalf("write revised card file: %v", err)
+	}
+
+	createPayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
+		"--json", "--base-url", server.URL, "--agent", "agent-cards",
+		"cards", "create", "--board", boardID, "--topic", "topic_cards_123", "--title", "Implement login", "--content-file", cardFile,
+	}))
+	if got := anyStringValue(createPayload["command_id"]); got != "cards.create" {
+		t.Fatalf("expected cards.create command_id, got %#v", createPayload)
+	}
+
+	revisePayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
+		"--json", "--base-url", server.URL, "--agent", "agent-cards",
+		"cards", "revise", "--card", cardID, "--content-file", revisedFile,
+	}))
+	if got := anyStringValue(revisePayload["command"]); got != "cards revise" {
+		t.Fatalf("expected cards revise command, got %#v", revisePayload)
+	}
+	if got := anyStringValue(revisePayload["command_id"]); got != "cards.patch" {
+		t.Fatalf("expected cards.patch command_id, got %#v", revisePayload)
+	}
+
+	assignPayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
+		"--json", "--base-url", server.URL, "--agent", "agent-cards",
+		"cards", "assign", "--card", cardID, "--assignee-ref", "actor:actor_owner",
+	}))
+	if got := anyStringValue(assignPayload["command"]); got != "cards assign" {
+		t.Fatalf("expected cards assign command, got %#v", assignPayload)
+	}
+
+	movePayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
+		"--json", "--base-url", server.URL, "--agent", "agent-cards",
+		"cards", "move", "--card", cardID, "--column", "review",
+	}))
+	if got := anyStringValue(movePayload["command"]); got != "cards move" {
+		t.Fatalf("expected cards move command, got %#v", movePayload)
+	}
+
+	resolvePayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
+		"--json", "--base-url", server.URL, "--agent", "agent-cards",
+		"cards", "resolve", "--card", cardID, "--resolution-ref", "event:event_done",
+	}))
+	if got := anyStringValue(resolvePayload["command"]); got != "cards resolve" {
+		t.Fatalf("expected cards resolve command, got %#v", resolvePayload)
+	}
+	if got := anyStringValue(resolvePayload["command_id"]); got != "cards.move" {
+		t.Fatalf("expected cards.move command_id, got %#v", resolvePayload)
+	}
+
+	reopenPayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
+		"--json", "--base-url", server.URL, "--agent", "agent-cards",
+		"cards", "reopen", "--card", cardID,
+	}))
+	if got := anyStringValue(reopenPayload["command"]); got != "cards reopen" {
+		t.Fatalf("expected cards reopen command, got %#v", reopenPayload)
+	}
+
+	for name, seen := range map[string]bool{
+		"create":  createSeen,
+		"revise":  reviseSeen,
+		"assign":  assignSeen,
+		"move":    moveSeen,
+		"resolve": resolveSeen,
+		"reopen":  reopenSeen,
+	} {
+		if !seen {
+			t.Fatalf("expected %s request to be observed", name)
+		}
+	}
+}
+
+func TestTopicsBoardsNoJSONAndDiscussWorkflow(t *testing.T) {
+	t.Parallel()
+
+	const (
+		topicID      = "topic_cli_model_123456"
+		topicThread  = "thread_topic_cli_model_123456"
+		boardID      = "board_cli_model_123456"
+		profileActor = "actor_cli_model_profile"
+	)
+
+	var topicCreateSeen, boardCreateSeen, discussSeen bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/topics":
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode topics create body: %v", err)
+			}
+			topic, _ := payload["topic"].(map[string]any)
+			if got := anyStringValue(topic["title"]); got != "CLI ergonomics" {
+				t.Fatalf("expected topic title, got %#v", payload)
+			}
+			if got := anyStringValue(topic["summary"]); got != "Coordinate CLI work" {
+				t.Fatalf("expected topic summary, got %#v", payload)
+			}
+			if refs := asSlice(topic["related_refs"]); len(refs) != 1 || anyStringValue(refs[0]) != "document:doc_model" {
+				t.Fatalf("expected topic related ref, got %#v", payload)
+			}
+			topicCreateSeen = true
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"topic":{"id":"` + topicID + `","thread_id":"` + topicThread + `","title":"CLI ergonomics","summary":"Coordinate CLI work"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/boards":
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode boards create body: %v", err)
+			}
+			board, _ := payload["board"].(map[string]any)
+			if got := anyStringValue(board["title"]); got != "CLI board" {
+				t.Fatalf("expected board title, got %#v", payload)
+			}
+			if got := anyStringValue(board["primary_topic_ref"]); got != "topic:"+topicID {
+				t.Fatalf("expected primary topic ref, got %#v", payload)
+			}
+			boardCreateSeen = true
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"board":{"id":"` + boardID + `","title":"CLI board","primary_topic_ref":"topic:` + topicID + `"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/topics/"+topicID:
+			_, _ = w.Write([]byte(`{"topic":{"id":"` + topicID + `","thread_id":"` + topicThread + `","title":"CLI ergonomics"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/events":
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode topics discuss event body: %v", err)
+			}
+			event, _ := payload["event"].(map[string]any)
+			if got := anyStringValue(event["type"]); got != "message_posted" {
+				t.Fatalf("expected message_posted, got %#v", payload)
+			}
+			if got := anyStringValue(event["actor_id"]); got != profileActor {
+				t.Fatalf("expected profile actor_id, got %#v", payload)
+			}
+			if got := anyStringValue(event["thread_id"]); got != topicThread {
+				t.Fatalf("expected topic backing thread, got %#v", payload)
+			}
+			payloadMap, _ := event["payload"].(map[string]any)
+			if got := anyStringValue(payloadMap["text"]); got != "Discussion from disk" {
+				t.Fatalf("expected message file content, got %#v", payload)
+			}
+			discussSeen = true
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"event":{"id":"event_discuss_1","type":"message_posted","thread_id":"` + topicThread + `"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-model", `{"agent":"agent-model","actor_id":"`+profileActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	messageFile := filepath.Join(home, "message.md")
+	if err := os.WriteFile(messageFile, []byte("Discussion from disk\n"), 0o600); err != nil {
+		t.Fatalf("write message file: %v", err)
+	}
+
+	dryRun := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
+		"--json", "--base-url", server.URL, "--agent", "agent-model",
+		"topics", "create", "--title", "Preview", "--summary", "Preview summary", "--dry-run",
+	}))
+	data, _ := dryRun["data"].(map[string]any)
+	if got, _ := data["dry_run"].(bool); !got {
+		t.Fatalf("expected topics create dry_run data, got %#v", dryRun)
+	}
+
+	topicPayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
+		"--json", "--base-url", server.URL, "--agent", "agent-model",
+		"topics", "create", "--title", "CLI ergonomics", "--summary", "Coordinate CLI work", "--ref", "document:doc_model",
+	}))
+	if got := anyStringValue(topicPayload["command_id"]); got != "topics.create" {
+		t.Fatalf("expected topics.create command_id, got %#v", topicPayload)
+	}
+
+	boardPayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
+		"--json", "--base-url", server.URL, "--agent", "agent-model",
+		"boards", "create", "--topic", topicID, "--title", "CLI board", "--summary", "Active work",
+	}))
+	if got := anyStringValue(boardPayload["command_id"]); got != "boards.create" {
+		t.Fatalf("expected boards.create command_id, got %#v", boardPayload)
+	}
+
+	discussPayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
+		"--json", "--base-url", server.URL, "--agent", "agent-model",
+		"topics", "discuss", "--topic", topicID, "--message-file", messageFile, "--actor-id", profileActor,
+	}))
+	if got := anyStringValue(discussPayload["command"]); got != "topics discuss" {
+		t.Fatalf("expected topics discuss command, got %#v", discussPayload)
+	}
+	if got := anyStringValue(discussPayload["command_id"]); got != "events.create" {
+		t.Fatalf("expected events.create command_id, got %#v", discussPayload)
+	}
+
+	for name, seen := range map[string]bool{"topic_create": topicCreateSeen, "board_create": boardCreateSeen, "discuss": discussSeen} {
+		if !seen {
+			t.Fatalf("expected %s request to be observed", name)
+		}
+	}
+}
+
 func TestBoardCommands(t *testing.T) {
 	t.Parallel()
 
@@ -2198,7 +2525,7 @@ func TestBoardCommands(t *testing.T) {
 		case r.Method == http.MethodPatch && r.URL.Path == "/boards/"+boardID:
 			body, _ := io.ReadAll(r.Body)
 			if !bytes.Contains(body, []byte(`"if_updated_at":"`+updatedAt+`"`)) {
-				t.Fatalf("unexpected boards update body: %s", string(body))
+				t.Fatalf("unexpected boards patch body: %s", string(body))
 			}
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{"board":{"id":"` + boardID + `","title":"Launch Updated","state":"active","updated_at":"` + nextUpdatedAt + `"}}`))
@@ -2227,7 +2554,7 @@ func TestBoardCommands(t *testing.T) {
 		case r.Method == http.MethodPatch && r.URL.Path == "/cards/"+cardID:
 			var payload map[string]any
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-				t.Fatalf("decode boards cards update body: %v", err)
+				t.Fatalf("decode boards cards patch body: %v", err)
 			}
 			if got := anyStringValue(payload["if_updated_at"]); got != updatedAt {
 				t.Fatalf("expected card update concurrency token %q, got %#v", updatedAt, payload)
@@ -2275,7 +2602,7 @@ func TestBoardCommands(t *testing.T) {
 		t.Fatalf("expected boards.get command_id, got %#v", getPayload)
 	}
 
-	updatePayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"if_updated_at":"`+updatedAt+`","patch":{"title":"Launch Updated"}}`), []string{"--json", "--base-url", server.URL, "boards", "update", "--board-id", boardID}))
+	updatePayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"if_updated_at":"`+updatedAt+`","patch":{"title":"Launch Updated"}}`), []string{"--json", "--base-url", server.URL, "boards", "patch", "--board-id", boardID}))
 	if got := anyStringValue(updatePayload["command_id"]); got != "boards.patch" {
 		t.Fatalf("expected boards.patch command_id, got %#v", updatePayload)
 	}
@@ -2300,9 +2627,9 @@ func TestBoardCommands(t *testing.T) {
 		t.Fatalf("expected boards.cards.get command_id, got %#v", getCardPayload)
 	}
 
-	updateCardPayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "boards", "cards", "update", "--card-id", cardID, "--if-updated-at", updatedAt, "--resolution", "done"}))
-	if got := anyStringValue(updateCardPayload["command_id"]); got != "boards.cards.update" {
-		t.Fatalf("expected boards.cards.update command_id, got %#v", updateCardPayload)
+	updateCardPayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "boards", "cards", "patch", "--card-id", cardID, "--if-updated-at", updatedAt, "--resolution", "done"}))
+	if got := anyStringValue(updateCardPayload["command_id"]); got != "boards.cards.patch" {
+		t.Fatalf("expected boards.cards.patch command_id, got %#v", updateCardPayload)
 	}
 
 	movePayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "boards", "cards", "move", "--board-id", boardID, "--card-id", cardID, "--if-board-updated-at", updatedAt, "--column", "review", "--after-card-id", peerCardID}))
@@ -2623,7 +2950,7 @@ func TestBoardCardUpdateAndMoveAllowJSONBodyWithoutConcurrencyFlags(t *testing.T
 	assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
 		"--base-url", server.URL,
-		"boards", "cards", "update",
+		"boards", "cards", "patch",
 		"--card-id", canonicalCardID,
 		"--from-file", updateFile,
 	}))

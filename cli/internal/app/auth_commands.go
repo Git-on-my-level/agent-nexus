@@ -570,11 +570,11 @@ func (a *App) runAuthRegister(ctx context.Context, service *authcli.Service, arg
 		authWakeRoutingHint(registered.Profile.Username),
 	}, "\n")
 	data := map[string]any{
-		"profile":      registered.Profile,
-		"registered":   registered.Agent,
-		"active_key":   registered.Key,
-		"profile_path": cfg.ProfilePath,
-		"hint_config_use": fmt.Sprintf("anx config use %s", agentName),
+		"profile":           registered.Profile,
+		"registered":        registered.Agent,
+		"active_key":        registered.Key,
+		"profile_path":      cfg.ProfilePath,
+		"hint_config_use":   fmt.Sprintf("anx config use %s", agentName),
 		"hint_auth_default": fmt.Sprintf("anx auth default %s", agentName),
 	}
 	return &commandResult{Text: text, Data: data}, nil

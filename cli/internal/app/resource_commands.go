@@ -173,7 +173,7 @@ var eventTypeGroupOrder = []string{
 var eventTypeGroupDescriptions = map[string]string{
 	"Communication":        "Direct communication or important non-structured information.",
 	"Decisions":            "Request or record decisions tied to a topic.",
-	"Interventions":        "Single clear path exists, but a human must act to complete it.",
+	"Interventions":        "Single clear path exists, but a responsible actor must complete it.",
 	"Topics And Documents": "Durable work-subject and document lifecycle signals.",
 	"Boards And Cards":     "Board and card workflow signals.",
 	"Exceptions":           "Surface problems, risks, or escalations.",
@@ -222,7 +222,7 @@ var knownEventTypeGuidance = []eventTypeGuidance{
 	{
 		Type:    "intervention_needed",
 		Group:   "Interventions",
-		Summary: "Use when the next step is clear but a human must perform it.",
+		Summary: "Use when the next step is clear but a responsible actor must perform it.",
 		Constraints: []string{
 			`event.refs must include "topic:<topic_id>".`,
 			`event.refs may include "artifact:<related_id>".`,
@@ -1496,12 +1496,15 @@ func (a *App) runBoardsCommand(ctx context.Context, args []string, cfg config.Re
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "boards list", "boards.list", nil, query, nil)
 		return result, "boards list", callErr
 	case "create":
-		body, err := a.parseJSONBodyInput(args[1:], "boards create")
+		body, dryRun, err := a.parseBoardCreateInput(args[1:], cfg, "boards create")
 		if err != nil {
 			return nil, "boards create", err
 		}
 		if bodyMap, ok := body.(map[string]any); ok {
 			ensureEmptyListDefaults(bodyMap, "board", []string{"document_refs", "pinned_refs"})
+		}
+		if dryRun {
+			return dryRunResult("boards create", "boards.create", nil, nil, body), "boards create", nil
 		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "boards create", "boards.create", nil, nil, body)
 		return result, "boards create", callErr
@@ -1522,15 +1525,18 @@ func (a *App) runBoardsCommand(ctx context.Context, args []string, cfg config.Re
 			nil,
 		)
 		return result, "boards get", callErr
-	case "update":
-		id, body, err := a.parseIDAndBodyInput(args[1:], "board-id", "board id", "boards update")
+	case "patch":
+		id, body, dryRun, err := a.parseIDAndBodyInputWithOptions(args[1:], "board-id", "board id", "boards patch", jsonBodyInputOptions{allowDryRun: true})
 		if err != nil {
-			return nil, "boards update", err
+			return nil, "boards patch", err
+		}
+		if dryRun {
+			return dryRunResult("boards patch", "boards.patch", map[string]string{"board_id": id}, nil, body), "boards patch", nil
 		}
 		result, callErr := a.invokeTypedJSONWithIDResolution(
 			ctx,
 			cfg,
-			"boards update",
+			"boards patch",
 			"boards.patch",
 			"board_id",
 			id,
@@ -1538,7 +1544,7 @@ func (a *App) runBoardsCommand(ctx context.Context, args []string, cfg config.Re
 			nil,
 			body,
 		)
-		return result, "boards update", callErr
+		return result, "boards patch", callErr
 	case "workspace":
 		id, err := parseIDArg(args[1:], "board-id", "board id")
 		if err != nil {
@@ -1847,14 +1853,14 @@ func (a *App) runBoardCardsCommand(ctx context.Context, args []string, cfg confi
 		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "boards cards get", "boards.cards.get", map[string]string{"board_id": resolvedBoard, "card_id": resolvedCard}, nil, nil)
 		return result, "boards cards get", callErr
-	case "update":
-		pathParams, body, err := a.parseBoardCardUpdateInput(ctx, args[1:], cfg, "boards cards update")
+	case "patch":
+		pathParams, body, err := a.parseBoardCardUpdateInput(ctx, args[1:], cfg, "boards cards patch")
 		if err != nil {
-			return nil, "boards cards update", err
+			return nil, "boards cards patch", err
 		}
 		rawCardID := strings.TrimSpace(pathParams["card_id"])
-		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "boards cards update", "cards.patch", "card_id", rawCardID, cardIDLookupSpec, nil, body)
-		return result, "boards cards update", callErr
+		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "boards cards patch", "cards.patch", "card_id", rawCardID, cardIDLookupSpec, nil, body)
+		return result, "boards cards patch", callErr
 	case "move":
 		boardID, identifier, body, err := a.parseBoardCardMoveInput(ctx, args[1:], cfg, "boards cards move")
 		if err != nil {
@@ -1942,10 +1948,7 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "docs list", "docs.list", nil, query, nil)
 		return result, "docs list", callErr
 	case "create":
-		body, dryRun, err := a.parseJSONBodyInputWithOptions(args[1:], "docs create", jsonBodyInputOptions{
-			allowContentFile: true,
-			allowDryRun:      true,
-		})
+		body, dryRun, err := a.parseDocsCreateInput(args[1:], cfg)
 		if err != nil {
 			return nil, "docs create", err
 		}
@@ -1980,26 +1983,9 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 	case "comments":
 		result, callErr := a.runDocsCommentsCommand(ctx, args[1:], cfg)
 		return result, "docs comments", callErr
-	case "update":
-		result, callErr := a.runDocsUpdateCommand(ctx, args[1:], cfg)
-		return result, "docs update", callErr
-	case "propose-update":
-		result, callErr := a.runDocsProposeUpdateCommand(ctx, args[1:], cfg)
-		return result, "docs propose-update", callErr
-	case "apply":
-		result, callErr := a.runDocsApplyCommand(ctx, args[1:], cfg)
-		return result, "docs apply", callErr
-	case "validate-update":
-		id, body, _, err := a.parseIDAndBodyInputWithOptions(args[1:], "document-id", "document id", "docs validate-update", jsonBodyInputOptions{
-			allowContentFile: true,
-		})
-		if err != nil {
-			return nil, "docs validate-update", err
-		}
-		if err := validateDocsUpdateBody(body, "docs validate-update"); err != nil {
-			return nil, "docs validate-update", err
-		}
-		return validationResult("docs validate-update", "docs.revisions.create", map[string]string{"document_id": id}, nil, body), "docs validate-update", nil
+	case "revise":
+		result, callErr := a.runDocsReviseCommand(ctx, args[1:], cfg)
+		return result, "docs revise", callErr
 	case "history":
 		id, err := parseIDArg(args[1:], "document-id", "document id")
 		if err != nil {
@@ -2697,15 +2683,6 @@ func (a *App) runDocsCommentsCommand(ctx context.Context, args []string, cfg con
 	return result, nil
 }
 
-func (a *App) runDocsUpdateCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
-	id, body, err := a.parseDocsUpdateInput(args, "docs update", cfg)
-	if err != nil {
-		return nil, err
-	}
-	wireBody := normalizeDocsRevisionRequestForContract(body)
-	return a.invokeTypedJSONWithIDResolution(ctx, cfg, "docs update", "docs.revisions.create", "document_id", id, documentIDLookupSpec, nil, wireBody)
-}
-
 func filterDocumentTextCommentEvents(events []any, wantDocID string) []any {
 	wantRef := "document:" + strings.TrimSpace(wantDocID)
 	out := make([]any, 0, len(events))
@@ -3378,11 +3355,198 @@ func (a *App) runInboxStream(ctx context.Context, args []string, cfg config.Reso
 type jsonBodyInputOptions struct {
 	allowDryRun      bool
 	allowContentFile bool
+	allowContentOnly bool
 }
 
 func (a *App) parseJSONBodyInput(args []string, commandName string) (any, error) {
 	body, _, err := a.parseJSONBodyInputWithOptions(args, commandName, jsonBodyInputOptions{})
 	return body, err
+}
+
+func (a *App) parseDocsCreateInput(args []string, cfg config.Resolved) (any, bool, error) {
+	fs := newSilentFlagSet("docs create")
+	var fromFileFlag, contentFileFlag trackedString
+	var titleFlag, summaryFlag, topicFlag, subjectFlag, actorIDFlag trackedString
+	var dryRunFlag trackedBool
+	var refFlags trackedStrings
+	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
+	fs.Var(&contentFileFlag, "content-file", "Load document content from a local file")
+	fs.Var(&titleFlag, "title", "Document title")
+	fs.Var(&summaryFlag, "summary", "Document summary")
+	fs.Var(&topicFlag, "topic", "Topic id or topic:<id> ref to anchor the document")
+	fs.Var(&subjectFlag, "subject-ref", "Explicit typed subject ref")
+	fs.Var(&actorIDFlag, "actor-id", "Actor id")
+	fs.Var(&refFlags, "ref", "Additional typed ref (repeatable)")
+	fs.Var(&dryRunFlag, "dry-run", "Validate and render request without sending the mutation")
+	if err := fs.Parse(args); err != nil {
+		return nil, false, errnorm.Usage("invalid_flags", err.Error())
+	}
+	if len(fs.Args()) > 0 {
+		return nil, false, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx docs create`")
+	}
+
+	payload, err := a.readBodyInput(strings.TrimSpace(fromFileFlag.value))
+	if err != nil {
+		return nil, false, err
+	}
+	var body any
+	if len(payload) > 0 {
+		body, err = decodeJSONPayload(payload)
+		if err != nil {
+			return nil, false, err
+		}
+	} else {
+		body = docsCreateBodyFromFlags(titleFlag.value, summaryFlag.value, topicFlag.value, subjectFlag.value, refFlags.values)
+	}
+	body, err = a.applyContentFileOverride(body, strings.TrimSpace(contentFileFlag.value), "docs create")
+	if err != nil {
+		return nil, false, err
+	}
+	if bodyMap, ok := body.(map[string]any); ok {
+		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
+		if err != nil {
+			return nil, false, err
+		}
+		if actorID != "" {
+			bodyMap["actor_id"] = actorID
+		}
+		if err := finalizeOptionalMutationBodyActorID(bodyMap, cfg); err != nil {
+			return nil, false, err
+		}
+	}
+	return body, dryRunFlag.set && dryRunFlag.value, nil
+}
+
+func docsCreateBodyFromFlags(title string, summary string, topic string, subject string, refs []string) map[string]any {
+	title = strings.TrimSpace(title)
+	summary = strings.TrimSpace(summary)
+	topicRef := normalizeTypedRefFlag(topic, "topic")
+	subjectRef := strings.TrimSpace(subject)
+	if subjectRef == "" {
+		subjectRef = topicRef
+	}
+	refSet := make([]string, 0, len(refs)+1)
+	if topicRef != "" {
+		refSet = append(refSet, topicRef)
+	}
+	for _, ref := range refs {
+		ref = strings.TrimSpace(ref)
+		if ref != "" {
+			refSet = append(refSet, ref)
+		}
+	}
+	document := map[string]any{
+		"title":       title,
+		"subject_ref": subjectRef,
+		"refs":        uniqueStrings(refSet),
+		"provenance":  map[string]any{"sources": []any{"actor_statement:anx-cli"}},
+	}
+	if summary != "" {
+		document["summary"] = summary
+	}
+	return map[string]any{
+		"document":     document,
+		"content_type": "text",
+	}
+}
+
+func (a *App) parseBoardCreateInput(args []string, cfg config.Resolved, commandName string) (any, bool, error) {
+	fs := newSilentFlagSet(commandName)
+	var fromFileFlag, titleFlag, summaryFlag, topicFlag, actorIDFlag trackedString
+	var documentRefFlags, pinnedRefFlags trackedStrings
+	var dryRunFlag trackedBool
+	fs.Var(&fromFileFlag, "from-file", "Advanced JSON request body from file")
+	fs.Var(&titleFlag, "title", "Board title")
+	fs.Var(&summaryFlag, "summary", "Board summary")
+	fs.Var(&topicFlag, "topic", "Primary topic id; plain ids are normalized to topic:<id>")
+	fs.Var(&actorIDFlag, "actor-id", "Actor id")
+	fs.Var(&documentRefFlags, "document-ref", "Linked document typed ref, repeatable")
+	fs.Var(&pinnedRefFlags, "ref", "Pinned/related typed ref, repeatable")
+	fs.Var(&dryRunFlag, "dry-run", "Validate and render request without sending the mutation")
+	if err := fs.Parse(args); err != nil {
+		return nil, false, errnorm.Usage("invalid_flags", err.Error())
+	}
+	if len(fs.Args()) > 0 {
+		return nil, false, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
+	}
+	fieldFlagsSet := strings.TrimSpace(titleFlag.value) != "" ||
+		strings.TrimSpace(summaryFlag.value) != "" ||
+		strings.TrimSpace(topicFlag.value) != "" ||
+		strings.TrimSpace(actorIDFlag.value) != "" ||
+		len(documentRefFlags.values) > 0 ||
+		len(pinnedRefFlags.values) > 0
+	if strings.TrimSpace(fromFileFlag.value) != "" || !fieldFlagsSet {
+		if fieldFlagsSet {
+			return nil, false, errnorm.Usage("invalid_args", fmt.Sprintf("field flags cannot be combined with JSON body input for `anx %s`", commandName))
+		}
+		body, dryRun, err := a.parseJSONBodyInputWithOptions(args, commandName, jsonBodyInputOptions{allowDryRun: true})
+		if err != nil {
+			return nil, false, err
+		}
+		if bodyMap, ok := body.(map[string]any); ok {
+			if err := finalizeOptionalMutationBodyActorID(bodyMap, cfg); err != nil {
+				return nil, false, err
+			}
+		}
+		return body, dryRun, nil
+	}
+	title := strings.TrimSpace(titleFlag.value)
+	if title == "" {
+		return nil, false, errnorm.Usage("invalid_request", "`--title` is required for `anx boards create`")
+	}
+	board := map[string]any{
+		"title":         title,
+		"document_refs": normalizedStringsOrEmpty(documentRefFlags.values),
+		"pinned_refs":   normalizedStringsOrEmpty(pinnedRefFlags.values),
+		"provenance":    map[string]any{"sources": []any{"actor_statement:anx-cli"}},
+	}
+	if summary := strings.TrimSpace(summaryFlag.value); summary != "" {
+		board["summary"] = summary
+	}
+	if topicRef := normalizeTypedRefFlag(topicFlag.value, "topic"); topicRef != "" {
+		board["primary_topic_ref"] = topicRef
+		board["pinned_refs"] = uniqueStrings(append(stringList(board["pinned_refs"]), topicRef))
+	}
+	body := map[string]any{"board": board}
+	actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
+	if err != nil {
+		return nil, false, err
+	}
+	if actorID != "" {
+		body["actor_id"] = actorID
+	}
+	if err := finalizeOptionalMutationBodyActorID(body, cfg); err != nil {
+		return nil, false, err
+	}
+	return body, dryRunFlag.set && dryRunFlag.value, nil
+}
+
+func normalizeTypedRefFlag(value string, defaultPrefix string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if strings.Contains(value, ":") {
+		return value
+	}
+	return strings.TrimSpace(defaultPrefix) + ":" + value
+}
+
+func uniqueStrings(values []string) []any {
+	seen := make(map[string]struct{}, len(values))
+	out := make([]any, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
 }
 
 func (a *App) parseJSONBodyInputWithOptions(args []string, commandName string, options jsonBodyInputOptions) (any, bool, error) {
@@ -3407,6 +3571,14 @@ func (a *App) parseJSONBodyInputWithOptions(args []string, commandName string, o
 		return nil, false, err
 	}
 	if len(payload) == 0 {
+		if options.allowContentOnly && strings.TrimSpace(contentFileFlag.value) != "" {
+			body := map[string]any{"content_type": "text"}
+			rawBody, err := a.applyContentFileOverride(body, strings.TrimSpace(contentFileFlag.value), commandName)
+			if err != nil {
+				return nil, false, err
+			}
+			return rawBody, dryRunFlag.set && dryRunFlag.value, nil
+		}
 		return nil, false, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body is required for `anx %s` (provide stdin or --from-file)", commandName))
 	}
 	body, err := decodeJSONPayload(payload)
@@ -3459,6 +3631,14 @@ func (a *App) parseIDAndBodyInputWithOptions(args []string, idFlag string, idLab
 		return "", nil, false, err
 	}
 	if len(payload) == 0 {
+		if options.allowContentOnly && strings.TrimSpace(contentFileFlag.value) != "" {
+			body := map[string]any{"content_type": "text"}
+			rawBody, err := a.applyContentFileOverride(body, strings.TrimSpace(contentFileFlag.value), commandName)
+			if err != nil {
+				return "", nil, false, err
+			}
+			return id, rawBody, dryRunFlag.set && dryRunFlag.value, nil
+		}
 		return "", nil, false, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body is required for `anx %s` (provide stdin or --from-file)", commandName))
 	}
 	body, err := decodeJSONPayload(payload)
@@ -5930,14 +6110,10 @@ func validateDocsCreateBody(body any, commandName string) error {
 	return nil
 }
 
-func validateDocsUpdateBody(body any, commandName string) error {
+func validateDocsRevisionBody(body any, commandName string) error {
 	payload, ok := body.(map[string]any)
 	if !ok {
 		return errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object", commandName))
-	}
-
-	if rev, ok := payload["revision"].(map[string]any); ok && len(rev) > 0 {
-		return validateContractDocsRevisionCreateBody(payload, commandName)
 	}
 
 	issues := make([]string, 0, 8)
@@ -5971,87 +6147,6 @@ func validateDocsUpdateBody(body any, commandName string) error {
 	return nil
 }
 
-func validateContractDocsRevisionCreateBody(payload map[string]any, commandName string) error {
-	issues := make([]string, 0, 8)
-	rev, ok := payload["revision"].(map[string]any)
-	if !ok || len(rev) == 0 {
-		issues = append(issues, "revision must be a non-empty object")
-	} else {
-		if strings.TrimSpace(anyString(rev["body_markdown"])) == "" {
-			issues = append(issues, "revision.body_markdown is required")
-		}
-		provenance, ok := rev["provenance"].(map[string]any)
-		if !ok || provenance == nil {
-			issues = append(issues, "revision.provenance is required")
-		} else {
-			validateProvenance(provenance, "revision.provenance", &issues)
-		}
-		if _, has := rev["refs"]; !has {
-			issues = append(issues, "revision.refs is required")
-		} else if _, ok := asStringList(rev["refs"]); !ok {
-			issues = append(issues, "revision.refs must be a list of strings")
-		} else {
-			validateTypedRefs(stringList(rev["refs"]), "revision.refs", &issues)
-		}
-	}
-	appendDocsCommonValidationIssues(payload, &issues)
-	if len(issues) > 0 {
-		return errnorm.Usage("invalid_request", fmt.Sprintf("docs.revisions.create payload failed local validation: %s", strings.Join(issues, "; ")))
-	}
-	return nil
-}
-
-func normalizeDocsRevisionRequestForContract(body map[string]any) map[string]any {
-	if body == nil {
-		return body
-	}
-	if rev, ok := body["revision"].(map[string]any); ok && len(rev) > 0 {
-		return body
-	}
-	contentType := strings.TrimSpace(anyString(body["content_type"]))
-	if contentType != "text" {
-		return body
-	}
-	baseRevision := strings.TrimSpace(anyString(body["if_base_revision"]))
-	if baseRevision == "" {
-		return body
-	}
-	content := body["content"]
-	bodyMD, _ := content.(string)
-	if strings.TrimSpace(bodyMD) == "" && content != nil {
-		bodyMD = anyString(content)
-	}
-	provenance, _ := body["provenance"].(map[string]any)
-	if provenance == nil {
-		provenance = map[string]any{"sources": []any{}}
-	}
-	refs := body["refs"]
-	if refs == nil {
-		refs = []any{}
-	}
-	rev := map[string]any{
-		"body_markdown": strings.TrimSpace(bodyMD),
-		"provenance":    provenance,
-		"refs":          refs,
-	}
-	if doc, ok := body["document"].(map[string]any); ok {
-		if title := strings.TrimSpace(anyString(doc["title"])); title != "" {
-			rev["summary"] = title
-		}
-	}
-	out := map[string]any{
-		"revision":         rev,
-		"if_base_revision": baseRevision,
-	}
-	if id := strings.TrimSpace(anyString(body["actor_id"])); id != "" {
-		out["actor_id"] = id
-	}
-	if raw := strings.TrimSpace(anyString(body["if_document_updated_at"])); raw != "" {
-		out["if_document_updated_at"] = raw
-	}
-	return out
-}
-
 func appendDocsCommonValidationIssues(payload map[string]any, issues *[]string) {
 	if rawDocument, hasDocument := payload["document"]; hasDocument {
 		if _, ok := rawDocument.(map[string]any); !ok {
@@ -6079,10 +6174,10 @@ func appendDocsCommonValidationIssues(payload map[string]any, issues *[]string) 
 	}
 }
 
-func ensureDocsUpdateActorIdentity(body any, cfg config.Resolved) (any, error) {
+func ensureDocsRevisionActorIdentity(body any, cfg config.Resolved) (any, error) {
 	payload, ok := body.(map[string]any)
 	if !ok {
-		return nil, errnorm.Usage("invalid_request", "JSON body for `anx docs revisions create` must be an object")
+		return nil, errnorm.Usage("invalid_request", "JSON body for `anx docs revise` must be an object")
 	}
 
 	if actorID := strings.TrimSpace(anyString(payload["actor_id"])); actorID != "" {

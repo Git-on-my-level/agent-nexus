@@ -22,45 +22,38 @@ type namedDescription struct {
 var conceptsGuidePrimitives = []conceptsPrimitive{
 	{
 		Name:        "topics",
-		UseWhen:     "You need the durable work subject itself with ownership, summary, related refs, and provenance — including the primary operator coordination read.",
-		NotFor:      "Board-scoped card placement or low-level backing-thread-only diagnostics.",
-		Examples:    []string{"initiatives", "incidents", "cases", "deliverables"},
+		UseWhen:     "You need a topic-centered discussion and coordination surface for a project, incident, decision, recurring process, or durable work subject.",
+		NotFor:      "Tracking active work status across columns or storing long-term reference material.",
+		Examples:    []string{"project discussion", "incident coordination", "decision thread", "recurring process"},
 		RelatedRead: []string{"anx topics list", "anx topics get", "anx topics workspace"},
 	},
 	{
-		Name:        "threads",
-		UseWhen:     "You need read-only backing-thread diagnostics: timelines, raw thread records, or thread-scoped projection bundles for troubleshooting.",
-		NotFor:      "Primary operator triage when a topic exists — use topics workspace instead.",
-		Examples:    []string{"backing thread timeline", "diagnostic workspace projection", "compatibility inspection"},
-		RelatedRead: []string{"anx threads list", "anx threads inspect", "anx threads workspace"},
+		Name:        "boards",
+		UseWhen:     "You need active work tracking with workflow columns, cards, ownership, ordering, and movement.",
+		NotFor:      "Free-form discussion or durable institutional knowledge.",
+		Examples:    []string{"triage board", "release board", "initiative tracking board"},
+		RelatedRead: []string{"anx boards list", "anx boards workspace", "anx boards cards list"},
+	},
+	{
+		Name:        "docs",
+		UseWhen:     "You need long-term relevant context or institutional knowledge that should be written, revised, read, and referenced as a document.",
+		NotFor:      "Ephemeral discussion or active-work status movement.",
+		Examples:    []string{"specs", "runbooks", "briefs", "decision records"},
+		RelatedRead: []string{"anx docs list", "anx docs get", "anx docs content"},
 	},
 	{
 		Name:        "cards",
-		UseWhen:     "You need board-scoped planning items with column, rank, assignee, and move/update operations.",
-		NotFor:      "The durable subject record or append-only event history.",
-		Examples:    []string{"board cards", "tracked cards", "workflow cards"},
+		UseWhen:     "You need one board-scoped tracked work item with column, rank, assignee, and move/update operations.",
+		NotFor:      "The broader topic discussion, durable knowledge, or append-only event history.",
+		Examples:    []string{"implementation task", "review item", "follow-up", "blocked work"},
 		RelatedRead: []string{"anx cards list", "anx cards get", "anx cards move"},
 	},
 	{
 		Name:        "events",
 		UseWhen:     "You need immutable facts, observations, decisions, or updates in an auditable sequence. Decision lifecycle events (`decision_needed`, `intervention_needed`, `decision_made`) must include `thread:<thread_id>` in refs; optional `topic:` refs are cross-links only, not a substitute for the thread anchor.",
-		NotFor:      "Replacing the current durable state of a work object.",
+		NotFor:      "Replacing the current durable state of a Topic, Board, Card, or Doc.",
 		Examples:    []string{"decision_needed", "decision_made", "message_posted", "exception_raised"},
 		RelatedRead: []string{"anx events list", "anx events explain", "anx threads timeline"},
-	},
-	{
-		Name:        "docs",
-		UseWhen:     "You need long-lived narrative knowledge that should be revised, read, and referenced as a document.",
-		NotFor:      "Ephemeral chat-like updates or board membership.",
-		Examples:    []string{"plans", "notes", "decision records", "runbooks"},
-		RelatedRead: []string{"anx docs list", "anx docs get", "anx docs content"},
-	},
-	{
-		Name:        "boards",
-		UseWhen:     "You need a coordination view across multiple work items with explicit workflow columns and ordering.",
-		NotFor:      "Being the source of truth for the work itself.",
-		Examples:    []string{"triage board", "release board", "initiative tracking board"},
-		RelatedRead: []string{"anx boards list", "anx boards workspace", "anx boards cards list"},
 	},
 	{
 		Name:        "inbox",
@@ -73,13 +66,20 @@ var conceptsGuidePrimitives = []conceptsPrimitive{
 		Name:        "draft",
 		UseWhen:     "You want to stage a mutation locally, inspect it, then apply it explicitly.",
 		NotFor:      "Read paths or append-only event authoring.",
-		Examples:    []string{"reviewable thread patches", "reviewable doc updates"},
+		Examples:    []string{"reviewable JSON writes", "document revisions without a typed proposal helper"},
 		RelatedRead: []string{"anx draft create", "anx draft list", "anx draft commit"},
+	},
+	{
+		Name:        "threads",
+		UseWhen:     "You need read-only backing-thread diagnostics: timelines, raw thread records, or thread-scoped projection bundles for troubleshooting.",
+		NotFor:      "Primary coordination when a Topic exists; use topics workspace instead.",
+		Examples:    []string{"backing timeline", "diagnostic projection", "low-level inspection"},
+		RelatedRead: []string{"anx threads list", "anx threads inspect", "anx threads workspace"},
 	},
 }
 
 var inboxCategoryReference = []namedDescription{
-	{Name: "action_needed", Description: "A human must decide, take direct action, or own the next step (includes prior decision and intervention queue signals)."},
+	{Name: "action_needed", Description: "A responsible actor must decide, take direct action, or own the next step (includes prior decision and intervention queue signals)."},
 	{Name: "risk_exception", Description: "Exceptions or at-risk work items that need follow-up."},
 	{Name: "attention", Description: "Review or lighter operator focus (for example document attention)."},
 }
@@ -125,15 +125,14 @@ func conceptsGuideData() map[string]any {
 
 func conceptsSelectionRules() []string {
 	return []string{
+		"Use topics for discussion and coordination around a topic, project, incident, decision, or recurring process.",
+		"Use boards for active work tracking with columns, cards, ownership, and movement.",
+		"Use docs for durable context and institutional knowledge that should remain relevant over time.",
+		"Use cards for individual board-scoped work items.",
 		"Use events for immutable facts.",
-		"For decision lifecycle events, always include `thread:<thread_id>` in refs; do not rely on `topic:` alone or `topic:<thread_id>` as a thread substitute.",
-		"Use topics for durable work subjects and primary operator coordination (`topics workspace`).",
-		"Use cards for board-scoped planning and movement.",
-		"Use threads for read-only backing-thread diagnostics and timeline inspection — not as the default coordination surface.",
-		"Use docs for narrative knowledge that should be revised over time.",
-		"Use boards for cross-object workflow views, not source-of-truth content.",
 		"Use inbox for current attention signals from the active CLI identity's perspective.",
 		"Use draft when you want a local review checkpoint before a write.",
+		"Use threads for read-only backing-thread diagnostics and timeline inspection, not as the default coordination surface.",
 	}
 }
 

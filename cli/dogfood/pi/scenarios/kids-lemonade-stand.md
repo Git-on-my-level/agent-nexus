@@ -56,5 +56,5 @@ Required end-state artifacts in the working directory:
 - `reply-template.json` updated with a real reply you actually send
 - `event-template.json` updated with the final actor_statement you actually send
 - `result.md`
-- if you update a document, `doc-update-template.json` updated with the revision you actually send
+- if you revise a document, `doc-revision-template.json` updated with the revision you actually send
 - if you create the board, `board-template.json` reflects the board payload you actually used

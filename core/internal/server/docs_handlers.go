@@ -296,7 +296,7 @@ func handlePatchDocument(w http.ResponseWriter, r *http.Request, opts handlerOpt
 
 // handleCreateDocumentRevision serves POST /docs/{document_id}/revisions.
 // It accepts the OpenAPI CreateDocumentRevisionRequest shape (revision + optional if_document_updated_at)
-// and the CLI/docs-update envelope (if_base_revision + content + content_type), matching PATCH /docs/{document_id}.
+// and the CLI docs revise envelope (if_base_revision + content + content_type), matching PATCH /docs/{document_id}.
 func handleCreateDocumentRevision(w http.ResponseWriter, r *http.Request, opts handlerOptions, documentID string) {
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")

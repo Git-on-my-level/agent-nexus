@@ -35,12 +35,12 @@ var machineCommandIdentityByPath = map[string]machineCommandIdentity{
 		Command:   "threads recommendations",
 		CommandID: "threads.recommendations",
 	},
-	"docs propose-update": {
-		Command:   "docs propose-update",
+	"docs revise": {
+		Command:   "docs revise",
 		CommandID: "docs.revisions.create.propose",
 	},
-	"docs apply": {
-		Command:   "docs apply",
+	"docs revise apply": {
+		Command:   "docs revise",
 		CommandID: "docs.revisions.create.apply",
 	},
 	"docs history": {
@@ -51,7 +51,11 @@ var machineCommandIdentityByPath = map[string]machineCommandIdentity{
 		Command:   "docs revision get",
 		CommandID: "docs.revisions.get",
 	},
-	"boards update": {Command: "boards update", CommandID: "boards.patch"},
+	"topics discuss": {Command: "topics discuss", CommandID: "events.create"},
+	"cards revise":   {Command: "cards revise", CommandID: "cards.patch"},
+	"cards assign":   {Command: "cards assign", CommandID: "cards.patch"},
+	"cards resolve":  {Command: "cards resolve", CommandID: "cards.move"},
+	"cards reopen":   {Command: "cards reopen", CommandID: "cards.move"},
 }
 
 func resolveMachineCommandIdentity(command string) machineCommandIdentity {

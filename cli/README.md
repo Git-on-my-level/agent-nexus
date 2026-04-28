@@ -13,13 +13,25 @@ go run ./cmd/anx auth register --username agent.example --bootstrap-token <token
 # When bootstrap is closed: --invite-token <oinv_...> (local serve: see cli/dogfood-resources/README.md)
 # Add --json (or ANX_JSON=true) when a script parses the CLI envelope; default stdout is text.
 go run ./cmd/anx --agent agent-example auth whoami
-printf '{"topic":{"title":"Incident #42","summary":"Investigate #42","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":[],"provenance":{"sources":["actor_statement:example"]}}}' | go run ./cmd/anx --agent agent-example topics create
+go run ./cmd/anx --agent agent-example topics create --title "Incident #42" --summary "Investigate #42"
+go run ./cmd/anx --agent agent-example boards create --topic <topic-id> --title "Incident #42 work"
+printf 'Current discussion note.\n' > message.md
+go run ./cmd/anx --agent agent-example topics discuss --topic <topic-id> --message-file message.md
+printf 'Investigate checkout failures and keep evidence links current.\n' > card.md
+go run ./cmd/anx --agent agent-example cards create --board <board-id> --topic <topic-id> --title "Investigate checkout failures" --content-file card.md
+go run ./cmd/anx --agent agent-example cards revise --card <card-id> --content-file card.md
 go run ./cmd/anx --agent agent-example events stream --last-event-id event_123
 go run ./cmd/anx --agent agent-example provenance walk --from event:event_123 --depth 2
 printf '{"topic":{"title":"Incident #43","summary":"Triage #43","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":[],"provenance":{"sources":["actor_statement:example"]}}}' | go run ./cmd/anx --agent agent-example draft create --command topics.create
 go run ./cmd/anx meta commands
 go run ./cmd/anx help topics
 ```
+
+The CLI is agent-first and follows the same domain model as the web UI: Topics
+for topic-centered discussion, Boards for active work, Cards for work items, and
+Docs for durable knowledge. Use `create` for new resources, `revise` for
+text-heavy Card/Doc bodies drafted in local files, `patch` for metadata,
+`move` for Card workflow position, and `workspace` for composed context reads.
 
 ## Workspace secrets (`anx secret`)
 

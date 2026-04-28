@@ -1578,53 +1578,15 @@ export const commandRegistry: CommandSpec[] = [
     "body_schema": {
       "required": [
         {
-          "name": "card.assignee_refs",
-          "type": "list\u003cany\u003e"
-        },
-        {
-          "name": "card.column_key",
-          "type": "string",
-          "enum_values": [
-            "backlog",
-            "blocked",
-            "done",
-            "in_progress",
-            "ready",
-            "review"
-          ]
-        },
-        {
-          "name": "card.provenance.sources",
-          "type": "list\u003cstring\u003e"
-        },
-        {
-          "name": "card.related_refs",
-          "type": "list\u003cany\u003e"
-        },
-        {
-          "name": "card.resolution_refs",
-          "type": "list\u003cany\u003e"
-        },
-        {
-          "name": "card.risk",
-          "type": "string",
-          "enum_values": [
-            "critical",
-            "high",
-            "low",
-            "medium"
-          ]
-        },
-        {
-          "name": "card.summary",
-          "type": "string"
-        },
-        {
           "name": "card.title",
           "type": "string"
         }
       ],
       "optional": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        },
         {
           "name": "board_id",
           "type": "string"
@@ -1638,8 +1600,24 @@ export const commandRegistry: CommandSpec[] = [
           "type": "string"
         },
         {
+          "name": "card.assignee_refs",
+          "type": "list\u003cany\u003e"
+        },
+        {
           "name": "card.before_card_id",
           "type": "string"
+        },
+        {
+          "name": "card.column_key",
+          "type": "string",
+          "enum_values": [
+            "backlog",
+            "blocked",
+            "done",
+            "in_progress",
+            "ready",
+            "review"
+          ]
         },
         {
           "name": "card.definition_of_done",
@@ -1666,6 +1644,14 @@ export const commandRegistry: CommandSpec[] = [
           "type": "string"
         },
         {
+          "name": "card.provenance.sources",
+          "type": "list\u003cstring\u003e"
+        },
+        {
+          "name": "card.related_refs",
+          "type": "list\u003cany\u003e"
+        },
+        {
           "name": "card.resolution",
           "type": "string",
           "enum_values": [
@@ -1674,12 +1660,34 @@ export const commandRegistry: CommandSpec[] = [
           ]
         },
         {
+          "name": "card.resolution_refs",
+          "type": "list\u003cany\u003e"
+        },
+        {
+          "name": "card.risk",
+          "type": "string",
+          "enum_values": [
+            "critical",
+            "high",
+            "low",
+            "medium"
+          ]
+        },
+        {
+          "name": "card.summary",
+          "type": "string"
+        },
+        {
           "name": "card.topic_ref",
           "type": "string"
         },
         {
           "name": "if_board_updated_at",
           "type": "datetime"
+        },
+        {
+          "name": "request_key",
+          "type": "string"
         }
       ]
     },
@@ -2419,53 +2427,15 @@ export const commandRegistry: CommandSpec[] = [
     "body_schema": {
       "required": [
         {
-          "name": "card.assignee_refs",
-          "type": "list\u003cany\u003e"
-        },
-        {
-          "name": "card.column_key",
-          "type": "string",
-          "enum_values": [
-            "backlog",
-            "blocked",
-            "done",
-            "in_progress",
-            "ready",
-            "review"
-          ]
-        },
-        {
-          "name": "card.provenance.sources",
-          "type": "list\u003cstring\u003e"
-        },
-        {
-          "name": "card.related_refs",
-          "type": "list\u003cany\u003e"
-        },
-        {
-          "name": "card.resolution_refs",
-          "type": "list\u003cany\u003e"
-        },
-        {
-          "name": "card.risk",
-          "type": "string",
-          "enum_values": [
-            "critical",
-            "high",
-            "low",
-            "medium"
-          ]
-        },
-        {
-          "name": "card.summary",
-          "type": "string"
-        },
-        {
           "name": "card.title",
           "type": "string"
         }
       ],
       "optional": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        },
         {
           "name": "board_id",
           "type": "string"
@@ -2479,8 +2449,24 @@ export const commandRegistry: CommandSpec[] = [
           "type": "string"
         },
         {
+          "name": "card.assignee_refs",
+          "type": "list\u003cany\u003e"
+        },
+        {
           "name": "card.before_card_id",
           "type": "string"
+        },
+        {
+          "name": "card.column_key",
+          "type": "string",
+          "enum_values": [
+            "backlog",
+            "blocked",
+            "done",
+            "in_progress",
+            "ready",
+            "review"
+          ]
         },
         {
           "name": "card.definition_of_done",
@@ -2507,6 +2493,14 @@ export const commandRegistry: CommandSpec[] = [
           "type": "string"
         },
         {
+          "name": "card.provenance.sources",
+          "type": "list\u003cstring\u003e"
+        },
+        {
+          "name": "card.related_refs",
+          "type": "list\u003cany\u003e"
+        },
+        {
           "name": "card.resolution",
           "type": "string",
           "enum_values": [
@@ -2515,12 +2509,34 @@ export const commandRegistry: CommandSpec[] = [
           ]
         },
         {
+          "name": "card.resolution_refs",
+          "type": "list\u003cany\u003e"
+        },
+        {
+          "name": "card.risk",
+          "type": "string",
+          "enum_values": [
+            "critical",
+            "high",
+            "low",
+            "medium"
+          ]
+        },
+        {
+          "name": "card.summary",
+          "type": "string"
+        },
+        {
           "name": "card.topic_ref",
           "type": "string"
         },
         {
           "name": "if_board_updated_at",
           "type": "datetime"
+        },
+        {
+          "name": "request_key",
+          "type": "string"
         }
       ]
     },
@@ -2779,6 +2795,10 @@ export const commandRegistry: CommandSpec[] = [
         }
       ],
       "optional": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        },
         {
           "name": "patch.assignee_refs",
           "type": "list\u003cany\u003e"
@@ -3145,13 +3165,13 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "docs.create",
       "docs.get",
+      "docs.revisions.list",
       "docs.list",
       "docs.patch",
       "docs.purge",
       "docs.restore",
       "docs.revisions.create",
       "docs.revisions.get",
-      "docs.revisions.list",
       "docs.trash",
       "docs.unarchive"
     ],
@@ -3186,7 +3206,34 @@ export const commandRegistry: CommandSpec[] = [
     "body_schema": {
       "required": [
         {
-          "name": "document.body_markdown",
+          "name": "content",
+          "type": "any"
+        },
+        {
+          "name": "content_type",
+          "type": "string",
+          "enum_values": [
+            "binary",
+            "structured",
+            "text"
+          ]
+        },
+        {
+          "name": "document.title",
+          "type": "string"
+        }
+      ],
+      "optional": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        },
+        {
+          "name": "document.provenance.by_field",
+          "type": "object"
+        },
+        {
+          "name": "document.provenance.notes",
           "type": "string"
         },
         {
@@ -3202,21 +3249,15 @@ export const commandRegistry: CommandSpec[] = [
           "type": "string"
         },
         {
-          "name": "document.title",
-          "type": "string"
-        }
-      ],
-      "optional": [
-        {
-          "name": "document.provenance.by_field",
-          "type": "object"
-        },
-        {
-          "name": "document.provenance.notes",
-          "type": "string"
-        },
-        {
           "name": "document.summary",
+          "type": "string"
+        },
+        {
+          "name": "refs",
+          "type": "list\u003cany\u003e"
+        },
+        {
+          "name": "request_key",
           "type": "string"
         }
       ]
@@ -3224,13 +3265,13 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "docs.archive",
       "docs.get",
+      "docs.revisions.list",
       "docs.list",
       "docs.patch",
       "docs.purge",
       "docs.restore",
       "docs.revisions.create",
       "docs.revisions.get",
-      "docs.revisions.list",
       "docs.trash",
       "docs.unarchive"
     ],
@@ -3267,13 +3308,13 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "docs.archive",
       "docs.create",
+      "docs.revisions.list",
       "docs.list",
       "docs.patch",
       "docs.purge",
       "docs.restore",
       "docs.revisions.create",
       "docs.revisions.get",
-      "docs.revisions.list",
       "docs.trash",
       "docs.unarchive"
     ],
@@ -3308,12 +3349,12 @@ export const commandRegistry: CommandSpec[] = [
       "docs.archive",
       "docs.create",
       "docs.get",
+      "docs.revisions.list",
       "docs.patch",
       "docs.purge",
       "docs.restore",
       "docs.revisions.create",
       "docs.revisions.get",
-      "docs.revisions.list",
       "docs.trash",
       "docs.unarchive"
     ],
@@ -3367,12 +3408,12 @@ export const commandRegistry: CommandSpec[] = [
       "docs.archive",
       "docs.create",
       "docs.get",
+      "docs.revisions.list",
       "docs.list",
       "docs.purge",
       "docs.restore",
       "docs.revisions.create",
       "docs.revisions.get",
-      "docs.revisions.list",
       "docs.trash",
       "docs.unarchive"
     ],
@@ -3421,12 +3462,12 @@ export const commandRegistry: CommandSpec[] = [
       "docs.archive",
       "docs.create",
       "docs.get",
+      "docs.revisions.list",
       "docs.list",
       "docs.patch",
       "docs.restore",
       "docs.revisions.create",
       "docs.revisions.get",
-      "docs.revisions.list",
       "docs.trash",
       "docs.unarchive"
     ],
@@ -3479,12 +3520,12 @@ export const commandRegistry: CommandSpec[] = [
       "docs.archive",
       "docs.create",
       "docs.get",
+      "docs.revisions.list",
       "docs.list",
       "docs.patch",
       "docs.purge",
       "docs.revisions.create",
       "docs.revisions.get",
-      "docs.revisions.list",
       "docs.trash",
       "docs.unarchive"
     ],
@@ -3493,7 +3534,7 @@ export const commandRegistry: CommandSpec[] = [
   },
   {
     "command_id": "docs.revisions.create",
-    "cli_path": "docs revisions create",
+    "cli_path": "docs revise",
     "group": "docs",
     "method": "POST",
     "path": "/docs/{document_id}/revisions",
@@ -3522,38 +3563,47 @@ export const commandRegistry: CommandSpec[] = [
     "body_schema": {
       "required": [
         {
-          "name": "revision.body_markdown",
+          "name": "content",
+          "type": "any"
+        },
+        {
+          "name": "content_type",
+          "type": "string",
+          "enum_values": [
+            "binary",
+            "structured",
+            "text"
+          ]
+        },
+        {
+          "name": "if_base_revision",
           "type": "string"
-        },
-        {
-          "name": "revision.provenance.sources",
-          "type": "list\u003cstring\u003e"
-        },
-        {
-          "name": "revision.refs",
-          "type": "list\u003cany\u003e"
         }
       ],
       "optional": [
         {
-          "name": "if_base_revision",
+          "name": "actor_id",
           "type": "string"
         },
         {
-          "name": "if_document_updated_at",
-          "type": "datetime"
-        },
-        {
-          "name": "revision.provenance.by_field",
+          "name": "document",
           "type": "object"
         },
         {
-          "name": "revision.provenance.notes",
+          "name": "provenance.by_field",
+          "type": "object"
+        },
+        {
+          "name": "provenance.notes",
           "type": "string"
         },
         {
-          "name": "revision.summary",
-          "type": "string"
+          "name": "provenance.sources",
+          "type": "list\u003cstring\u003e"
+        },
+        {
+          "name": "refs",
+          "type": "list\u003cany\u003e"
         }
       ]
     },
@@ -3564,12 +3614,12 @@ export const commandRegistry: CommandSpec[] = [
       "docs.archive",
       "docs.create",
       "docs.get",
+      "docs.revisions.list",
       "docs.list",
       "docs.patch",
       "docs.purge",
       "docs.restore",
       "docs.revisions.get",
-      "docs.revisions.list",
       "docs.trash",
       "docs.unarchive"
     ],
@@ -3578,7 +3628,7 @@ export const commandRegistry: CommandSpec[] = [
   },
   {
     "command_id": "docs.revisions.get",
-    "cli_path": "docs revisions get",
+    "cli_path": "docs revision get",
     "group": "docs",
     "method": "GET",
     "path": "/docs/{document_id}/revisions/{revision_id}",
@@ -3609,12 +3659,12 @@ export const commandRegistry: CommandSpec[] = [
       "docs.archive",
       "docs.create",
       "docs.get",
+      "docs.revisions.list",
       "docs.list",
       "docs.patch",
       "docs.purge",
       "docs.restore",
       "docs.revisions.create",
-      "docs.revisions.list",
       "docs.trash",
       "docs.unarchive"
     ],
@@ -3623,7 +3673,7 @@ export const commandRegistry: CommandSpec[] = [
   },
   {
     "command_id": "docs.revisions.list",
-    "cli_path": "docs revisions list",
+    "cli_path": "docs history",
     "group": "docs",
     "method": "GET",
     "path": "/docs/{document_id}/revisions",
@@ -3713,13 +3763,13 @@ export const commandRegistry: CommandSpec[] = [
       "docs.archive",
       "docs.create",
       "docs.get",
+      "docs.revisions.list",
       "docs.list",
       "docs.patch",
       "docs.purge",
       "docs.restore",
       "docs.revisions.create",
       "docs.revisions.get",
-      "docs.revisions.list",
       "docs.unarchive"
     ],
     "go_method": "DocsTrash",
@@ -3767,13 +3817,13 @@ export const commandRegistry: CommandSpec[] = [
       "docs.archive",
       "docs.create",
       "docs.get",
+      "docs.revisions.list",
       "docs.list",
       "docs.patch",
       "docs.purge",
       "docs.restore",
       "docs.revisions.create",
       "docs.revisions.get",
-      "docs.revisions.list",
       "docs.trash"
     ],
     "go_method": "DocsUnarchive",

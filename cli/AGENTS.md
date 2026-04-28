@@ -24,6 +24,26 @@ The CLI is **for agents and automation** (LLM tooling, CI, scripts, integrations
 - Provide dual output modes: concise **text by default** (direct consumption, including LLM tool output) and strict **`--json` envelopes** for programmatic use (scripts, services, `jq`).
 - Normalize transport and API errors into stable local behavior that orchestrators can reason about.
 
+## Domain Model And Verbs
+
+The CLI should teach the same workspace model as the web UI:
+
+- **Topics** are for topic-centered discussion and current context around a project, incident, decision, or recurring process.
+- **Boards** are for active work tracking: status, ownership, columns, ordering, and movement.
+- **Cards** are the work items on Boards. Their summary/body is text-heavy agent work, so `cards create` and `cards revise` should prefer local files via `--content-file`.
+- **Docs** are durable context and institutional knowledge. `docs create` and `docs revise` should also prefer local files via `--content-file`.
+
+Use the smallest domain verb that says what is happening:
+
+- `create` creates durable resources.
+- `revise` changes text-heavy content bodies from local files, currently Docs and Cards.
+- `patch` changes resource metadata fields.
+- `move` changes Card workflow position or column.
+- `assign`, `resolve`, and `reopen` are Card workflow verbs with domain meaning.
+- `workspace` is the composed read for an agent that needs the useful surrounding context.
+
+Do not add compatibility aliases for new CLI surfaces. If an old command path conflicts with this model, prefer a clean replacement and update help, generated metadata, tests, and this guide together.
+
 ## Output And Runtime Invariants
 
 - Non-interactive by default.

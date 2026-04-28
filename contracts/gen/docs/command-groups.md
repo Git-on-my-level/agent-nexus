@@ -140,9 +140,9 @@ Generated from `contracts/anx-openapi.yaml`.
   - `docs.patch` (`docs patch`)
   - `docs.purge` (`docs purge`)
   - `docs.restore` (`docs restore`)
-  - `docs.revisions.create` (`docs revisions create`)
-  - `docs.revisions.get` (`docs revisions get`)
-  - `docs.revisions.list` (`docs revisions list`)
+  - `docs.revisions.create` (`docs revise`)
+  - `docs.revisions.get` (`docs revision get`)
+  - `docs.revisions.list` (`docs history`)
   - `docs.trash` (`docs trash`)
   - `docs.unarchive` (`docs unarchive`)
 

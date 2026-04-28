@@ -488,6 +488,32 @@ func TestRootUsageAuthNotDuplicatedInGeneratedGroups(t *testing.T) {
 	}
 }
 
+func TestRootUsageLeadsWithTopicsBoardsDocsDomainModel(t *testing.T) {
+	t.Parallel()
+
+	text := New().rootUsageText()
+	domainIdx := strings.Index(text, "Domain model:")
+	coreIdx := strings.Index(text, "Core Commands:")
+	if domainIdx < 0 || coreIdx < 0 || domainIdx > coreIdx {
+		t.Fatalf("expected domain model before command lists; output:\n%s", text)
+	}
+	genIdx := strings.Index(text, "Generated Command Groups:")
+	if genIdx < 0 {
+		t.Fatalf("expected Generated Command Groups section; output:\n%s", text)
+	}
+	generated := text[genIdx:]
+	topicsIdx := strings.Index(generated, "\n  topics")
+	boardsIdx := strings.Index(generated, "\n  boards")
+	docsIdx := strings.Index(generated, "\n  docs")
+	threadsIdx := strings.Index(generated, "\n  threads")
+	if topicsIdx < 0 || boardsIdx < 0 || docsIdx < 0 || threadsIdx < 0 {
+		t.Fatalf("expected topics/boards/docs/threads generated rows; output:\n%s", text)
+	}
+	if !(topicsIdx < boardsIdx && boardsIdx < docsIdx && docsIdx < threadsIdx) {
+		t.Fatalf("expected topics, boards, docs before threads; output:\n%s", text)
+	}
+}
+
 func TestHelpResolvesRuntimeAliasesThreadsGetInboxAck(t *testing.T) {
 	t.Parallel()
 
@@ -525,7 +551,7 @@ func TestHelpResolvesRuntimeAliasesThreadsGetInboxAck(t *testing.T) {
 	}
 }
 
-func TestRunDocsHelpMentionsLocalValidateUpdate(t *testing.T) {
+func TestRunDocsHelpMentionsCanonicalRevise(t *testing.T) {
 	t.Parallel()
 
 	stdout := &bytes.Buffer{}
@@ -545,20 +571,34 @@ func TestRunDocsHelpMentionsLocalValidateUpdate(t *testing.T) {
 		t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
 	output := stdout.String()
-	if !strings.Contains(output, "docs validate-update") {
-		t.Fatalf("expected local docs validate-update helper output=%s", output)
-	}
 	if !strings.Contains(output, "docs content") {
 		t.Fatalf("expected docs content helper output=%s", output)
 	}
-	if !strings.Contains(output, "docs propose-update") || !strings.Contains(output, "docs apply") {
-		t.Fatalf("expected docs proposal/apply helpers output=%s", output)
+	if !strings.Contains(output, "docs revise") {
+		t.Fatalf("expected docs revise helper output=%s", output)
 	}
-	if strings.Contains(output, "docs update") {
-		t.Fatalf("unexpected legacy docs update guidance output=%s", output)
+	for _, legacy := range []string{"docs update", "docs propose-update", "docs apply", "docs validate-update"} {
+		if strings.Contains(output, legacy) {
+			t.Fatalf("unexpected legacy docs command %q in output=%s", legacy, output)
+		}
 	}
 	if !strings.Contains(output, "--content-file <path>") {
 		t.Fatalf("expected content-file hint output=%s", output)
+	}
+}
+
+func TestDocsCreateHelpUsesFileFirstLocalHelp(t *testing.T) {
+	t.Parallel()
+
+	output := runHelpCommand(t, "help", "docs", "create")
+	if !strings.Contains(output, "Local Help: docs create") {
+		t.Fatalf("expected local docs create help, got output=%s", output)
+	}
+	if !strings.Contains(output, "--topic <topic-id>") || !strings.Contains(output, "--content-file <path>") {
+		t.Fatalf("expected file-first docs create flags output=%s", output)
+	}
+	if strings.Contains(output, "document.body_markdown") {
+		t.Fatalf("unexpected stale body_markdown help output=%s", output)
 	}
 }
 
@@ -624,7 +664,7 @@ func TestRunDraftHelpTopic(t *testing.T) {
 	if !strings.Contains(output, "Draft staging") {
 		t.Fatalf("expected draft header output=%s", output)
 	}
-	if !strings.Contains(output, "docs propose-update") {
+	if !strings.Contains(output, "docs revise") {
 		t.Fatalf("expected proposal-flow guidance output=%s", output)
 	}
 	if strings.Contains(output, "threads propose-patch") {
@@ -896,11 +936,13 @@ func TestRunGeneratedHelpResolvesDerivedDocsAndArtifactCommands(t *testing.T) {
 	if !strings.Contains(docsGroup, "docs list") {
 		t.Fatalf("expected docs list in docs group help output=%s", docsGroup)
 	}
-	if !strings.Contains(docsGroup, "docs apply") {
-		t.Fatalf("expected docs apply in docs group help output=%s", docsGroup)
+	if !strings.Contains(docsGroup, "docs revise") {
+		t.Fatalf("expected docs revise in docs group help output=%s", docsGroup)
 	}
-	if strings.Contains(docsGroup, "docs update") {
-		t.Fatalf("unexpected legacy docs update in docs group help output=%s", docsGroup)
+	for _, legacy := range []string{"docs update", "docs propose-update", "docs apply", "docs validate-update"} {
+		if strings.Contains(docsGroup, legacy) {
+			t.Fatalf("unexpected legacy docs command %q in output=%s", legacy, docsGroup)
+		}
 	}
 
 	docsList := runHelpCommand(t, "help", "docs", "list")
@@ -911,12 +953,12 @@ func TestRunGeneratedHelpResolvesDerivedDocsAndArtifactCommands(t *testing.T) {
 		t.Fatalf("expected docs.list command metadata output=%s", docsList)
 	}
 
-	docsApply := runHelpCommand(t, "help", "docs", "apply")
-	if !strings.Contains(docsApply, "Local Help: docs apply") {
-		t.Fatalf("expected docs apply exact generated help output=%s", docsApply)
+	docsRevise := runHelpCommand(t, "help", "docs", "revise")
+	if !strings.Contains(docsRevise, "Local Help: docs revise") {
+		t.Fatalf("expected docs revise local help output=%s", docsRevise)
 	}
-	if !strings.Contains(docsApply, "Apply a previously staged document update proposal.") {
-		t.Fatalf("expected docs apply command metadata output=%s", docsApply)
+	if !strings.Contains(docsRevise, "--apply") || !strings.Contains(docsRevise, "--proposal-id") {
+		t.Fatalf("expected docs revise apply/proposal flags output=%s", docsRevise)
 	}
 
 	artifactInspect := runHelpCommand(t, "help", "artifacts", "inspect")

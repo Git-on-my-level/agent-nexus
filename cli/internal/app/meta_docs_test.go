@@ -29,8 +29,8 @@ func TestRunMetaDocsPrintsBundledRuntimeReference(t *testing.T) {
 	if !strings.Contains(output, "## `wake-routing`") {
 		t.Fatalf("expected wake-routing topic in runtime docs output=%s", output)
 	}
-	if !strings.Contains(output, "## `docs apply`") {
-		t.Fatalf("expected docs apply topic in runtime docs output=%s", output)
+	if !strings.Contains(output, "## `docs revise`") {
+		t.Fatalf("expected docs revise topic in runtime docs output=%s", output)
 	}
 	if !strings.Contains(output, "## `threads workspace`") {
 		t.Fatalf("expected local helper topic in runtime docs output=%s", output)

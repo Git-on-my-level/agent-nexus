@@ -158,31 +158,20 @@ var artifactsSubcommandSpec = subcommandSpec{
 
 var boardsSubcommandSpec = subcommandSpec{
 	command:  "boards",
-	valid:    []string{"list", "create", "get", "update", "workspace", "archive", "unarchive", "trash", "restore", "purge", "cards"},
-	examples: []string{"anx boards list --state active", "anx boards workspace --board-id <board-id>", "anx boards get --board-id <board-id> --json", "anx boards cards create --board-id <board-id> --title \"Buy groceries\" --column backlog"},
-	aliases: map[string]string{
-		"ls":   "list",
-		"show": "get",
-	},
+	valid:    []string{"list", "create", "get", "patch", "workspace", "archive", "unarchive", "trash", "restore", "purge", "cards"},
+	examples: []string{"anx boards list --state active", "anx boards create --topic <topic-id> --title \"Launch\"", "anx boards workspace --board-id <board-id>", "anx boards patch --board-id <board-id> --from-file board-patch.json", "anx cards create --board <board-id> --title \"Buy groceries\" --content-file card.md"},
 }
 
 var boardsCardsSubcommandSpec = subcommandSpec{
 	command:  "boards cards",
-	valid:    []string{"list", "create", "create-batch", "get", "update", "move", "archive"},
-	examples: []string{"anx boards cards list --board-id <board-id>", "anx boards cards create --board-id <board-id> --title \"Buy groceries\" --column backlog", "anx boards get --board-id <board-id> --json   # copy board.updated_at for the next command", "anx boards cards create-batch --board-id <board-id> --from-file batch.json", "anx boards cards create-batch <board-id> --from-file batch.json --request-key my-run-1 --if-board-updated-at \"<board-updated-at>\"", "anx boards cards update --card-id <card-id> --if-updated-at <card-updated-at> --resolution done"},
-	aliases: map[string]string{
-		"ls":     "list",
-		"add":    "create",
-		"batch":  "create-batch",
-		"remove": "archive",
-		"show":   "get",
-	},
+	valid:    []string{"list", "create", "create-batch", "get", "patch", "move", "archive"},
+	examples: []string{"anx cards create --board <board-id> --title \"Buy groceries\" --content-file card.md", "anx cards move --card <card-id> --column review", "anx cards resolve --card <card-id> --resolution-ref event:<event-id>", "anx boards cards list --board-id <board-id>", "anx boards cards create-batch --board-id <board-id> --from-file batch.json"},
 }
 
 var docsSubcommandSpec = subcommandSpec{
 	command:  "docs",
-	valid:    []string{"list", "create", "get", "content", "comments", "history", "revision", "trash", "archive", "unarchive", "restore", "purge"},
-	examples: []string{"anx docs list --thread-id <thread-id>", "anx docs content --document-id <document-id>", "anx docs comments --document-id <document-id>", "anx docs apply --proposal-id <proposal-id>"},
+	valid:    []string{"list", "create", "revise", "get", "content", "comments", "history", "revision", "trash", "archive", "unarchive", "restore", "purge"},
+	examples: []string{"anx docs create --topic <topic-id> --title \"Runbook\" --content-file runbook.md", "anx docs revise --document-id <document-id> --content-file runbook.md", "anx docs revise --apply --proposal-id <proposal-id>", "anx docs content --document-id <document-id>"},
 	aliases: map[string]string{
 		"ls":   "list",
 		"read": "content",

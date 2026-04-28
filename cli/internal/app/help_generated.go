@@ -29,14 +29,14 @@ type localHelperTopic struct {
 
 var runtimeGeneratedTopics = []runtimeHelpTopic{
 	{Path: "auth", Description: "Register, inspect, and manage auth state"},
-	{Path: "topics", Description: "Manage durable work subjects"},
-	{Path: "cards", Description: "Manage board-scoped cards"},
+	{Path: "topics", Description: "Discuss and coordinate around a topic, project, incident, or decision"},
+	{Path: "boards", Description: "Track active work with boards, columns, and cards"},
+	{Path: "docs", Description: "Create and revise durable context and institutional knowledge"},
+	{Path: "cards", Description: "Manage board-scoped work cards"},
 	{Path: "threads", Description: "Read-only backing-thread inspection (tooling and diagnostics)"},
-	{Path: "artifacts", Description: "Manage artifact resources and content"},
-	{Path: "boards", Description: "Manage board resources and ordered cards"},
-	{Path: "docs", Description: "Manage long-lived docs and revisions"},
 	{Path: "events", Description: "Manage events and event streams"},
 	{Path: "inbox", Description: "List/get/ack/stream inbox items"},
+	{Path: "artifacts", Description: "Manage artifact resources and content"},
 	{Path: "receipts", Description: "Create receipt packets (subject_ref must be card:<card_id>)"},
 	{Path: "reviews", Description: "Create review packets (subject_ref + receipt_ref; subject_ref must be card:<card_id>)"},
 	{Path: "derived", Description: "Run derived-view maintenance actions"},
@@ -46,6 +46,193 @@ var runtimeGeneratedTopics = []runtimeHelpTopic{
 var runtimeGeneratedPacketResources = []string{"receipts", "reviews"}
 
 var localHelperTopics = []localHelperTopic{
+	{
+		Path:        "topics create",
+		Summary:     "Create a topic from plain flags, or from advanced JSON.",
+		JSONShape:   "Either flags building `{ topic }`, or advanced JSON body `{ topic }` from stdin/--from-file.",
+		Composition: "Builds the `topics.create` request. Use Topics for discussion and current context around a project, incident, decision, or recurring process.",
+		Examples: []string{
+			"anx topics create --title \"Launch\" --summary \"Coordinate launch work\"",
+			"anx topics create --title \"Incident 42\" --summary \"Triage checkout failures\" --owner-ref actor:<actor-id>",
+			"cat topic.json | anx topics create",
+		},
+		Flags: []localHelperFlag{
+			{Name: "--title <text>", Description: "Topic title."},
+			{Name: "--summary <text>", Description: "Topic summary."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--owner-ref <typed-ref>", Description: "Owner typed ref, repeatable."},
+			{Name: "--document-ref <typed-ref>", Description: "Linked document typed ref, repeatable."},
+			{Name: "--board-ref <typed-ref>", Description: "Linked board typed ref, repeatable."},
+			{Name: "--ref <typed-ref>", Description: "Additional related typed ref, repeatable."},
+			{Name: "--from-file <path>", Description: "Advanced JSON request body from file."},
+			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
+		},
+	},
+	{
+		Path:        "topics discuss",
+		Summary:     "Post a topic-centered discussion message from a local text file.",
+		JSONShape:   "Builds an `events.create` body with `event.type=message_posted`, topic/thread refs, and payload text.",
+		Composition: "Fetches the Topic to discover its backing thread, then writes a visible `message_posted` event to that thread. Use this for discussion; use Boards/Cards for active work and Docs for durable knowledge.",
+		Examples: []string{
+			"anx topics discuss --topic <topic-id> --message-file message.md",
+			"anx topics discuss --topic <topic-id> --message-file message.md --summary \"Decision context\"",
+		},
+		Flags: []localHelperFlag{
+			{Name: "--topic <topic-id>", Description: "Topic id or unique prefix to discuss."},
+			{Name: "--message-file <path>", Description: "Load discussion message text from a local file."},
+			{Name: "--summary <text>", Description: "Optional short event summary."},
+			{Name: "--ref <typed-ref>", Description: "Additional typed ref, repeatable."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
+		},
+	},
+	{
+		Path:        "boards create",
+		Summary:     "Create an active-work Board from flags, optionally tied to a Topic.",
+		JSONShape:   "Either flags building `{ board }`, or advanced JSON body `{ board }` from stdin/--from-file.",
+		Composition: "Builds the `boards.create` request. Use Boards for active work tracking, ownership, columns, and Card movement.",
+		Examples: []string{
+			"anx boards create --topic <topic-id> --title \"Launch board\"",
+			"anx boards create --title \"Launch board\" --summary \"Active launch work\" --document-ref document:<doc-id>",
+			"cat board.json | anx boards create",
+		},
+		Flags: []localHelperFlag{
+			{Name: "--title <text>", Description: "Board title."},
+			{Name: "--summary <text>", Description: "Optional board summary."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--topic <topic-id>", Description: "Primary topic id; plain ids are normalized to topic:<id>."},
+			{Name: "--document-ref <typed-ref>", Description: "Linked document typed ref, repeatable."},
+			{Name: "--ref <typed-ref>", Description: "Pinned/related typed ref, repeatable."},
+			{Name: "--from-file <path>", Description: "Advanced JSON request body from file."},
+			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
+		},
+	},
+	{
+		Path:        "docs create",
+		Summary:     "Create a durable document lineage, with a file-first text-doc path for agents.",
+		JSONShape:   "Either flags plus `--content-file`, or advanced JSON body `{ document, content, content_type }` from stdin/--from-file.",
+		Composition: "Builds the same `docs.create` request as the generated command. For ordinary text docs, prefer flags so agents can draft Markdown locally without hand-authoring JSON.",
+		Examples: []string{
+			"anx docs create --topic <topic-id> --title \"Runbook\" --content-file runbook.md",
+			"anx docs create --subject-ref topic:<topic-id> --title \"Runbook\" --summary \"Durable context\" --content-file runbook.md",
+			"cat doc-create.json | anx docs create",
+		},
+		Flags: []localHelperFlag{
+			{Name: "--topic <topic-id>", Description: "Anchor the document to a topic; plain ids are normalized to topic:<id>."},
+			{Name: "--subject-ref <typed-ref>", Description: "Explicit document subject ref when not using --topic."},
+			{Name: "--title <text>", Description: "Document title for flag-built text docs."},
+			{Name: "--summary <text>", Description: "Optional document summary for list/detail headers."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--ref <typed-ref>", Description: "Additional typed ref (repeatable)."},
+			{Name: "--content-file <path>", Description: "Load Markdown/text content from a local file."},
+			{Name: "--from-file <path>", Description: "Advanced JSON request body from file."},
+			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
+		},
+	},
+	{
+		Path:        "cards create",
+		Summary:     "Create a board work card from flags plus a local prose file, or from advanced JSON.",
+		JSONShape:   "Either flags plus `--content-file`, or advanced JSON body `{ board_id, card }` from stdin/--from-file.",
+		Composition: "Builds the `cards.create` request. For normal agent work, draft the card summary/body locally and pass `--content-file` so the CLI can fill the stable Card envelope.",
+		Examples: []string{
+			"anx cards create --board <board-id> --topic <topic-id> --title \"Implement login\" --content-file card.md",
+			"anx cards create --board <board-id> --title \"Implement login\" --content-file card.md --assignee-ref actor:<actor-id>",
+			"cat card-create.json | anx cards create",
+		},
+		Flags: []localHelperFlag{
+			{Name: "--board <board-id>", Description: "Board id for the new work card."},
+			{Name: "--title <text>", Description: "Card title."},
+			{Name: "--content-file <path>", Description: "Load card summary/body text from a local file."},
+			{Name: "--topic <topic-id>", Description: "Related topic id; plain ids are normalized to topic:<id>."},
+			{Name: "--column <key>", Description: "Initial board column; defaults to backlog."},
+			{Name: "--assignee-ref <typed-ref>", Description: "Assignee actor ref, repeatable."},
+			{Name: "--document-ref <typed-ref>", Description: "Pinned document ref for the card."},
+			{Name: "--ref <typed-ref>", Description: "Additional related typed ref, repeatable."},
+			{Name: "--done <text>", Description: "Definition-of-done checklist item, repeatable."},
+			{Name: "--from-file <path>", Description: "Advanced JSON request body from file."},
+		},
+	},
+	{
+		Path:        "cards revise",
+		Summary:     "Revise a card title and/or summary/body from local files without hand-authoring patch JSON.",
+		JSONShape:   "`{ patch, if_updated_at, actor_id? }`; discovers `if_updated_at` from `cards get` when omitted.",
+		Composition: "Fetches the card when needed for optimistic concurrency, then sends `cards.patch` with `summary` from `--content-file` and optional `title`.",
+		Examples: []string{
+			"anx cards revise --card <card-id> --content-file card.md",
+			"anx cards revise --card <card-id> --title \"Updated title\" --content-file card.md",
+			"anx cards revise --card <card-id> --from-file card-patch.json",
+		},
+		Flags: []localHelperFlag{
+			{Name: "--card <card-id>", Description: "Card id or unique prefix to revise."},
+			{Name: "--content-file <path>", Description: "Load revised card summary/body text from a local file."},
+			{Name: "--title <text>", Description: "Optional revised card title."},
+			{Name: "--if-updated-at <timestamp>", Description: "Card optimistic concurrency token; discovered when omitted."},
+			{Name: "--from-file <path>", Description: "Advanced JSON patch request body from file."},
+		},
+	},
+	{
+		Path:        "cards move",
+		Summary:     "Move a card to another board column using Card workflow language.",
+		JSONShape:   "`{ column_key, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.",
+		Composition: "Fetches the card and parent board when needed for optimistic concurrency, then sends `cards.move`.",
+		Examples: []string{
+			"anx cards move --card <card-id> --column review",
+			"anx cards move --card <card-id> --column blocked --if-board-updated-at <updated-at>",
+		},
+		Flags: []localHelperFlag{
+			{Name: "--card <card-id>", Description: "Card id or unique prefix to move."},
+			{Name: "--column <key>", Description: "Target board column."},
+			{Name: "--if-board-updated-at <timestamp>", Description: "Board optimistic concurrency token; discovered when omitted."},
+			{Name: "--from-file <path>", Description: "Advanced JSON move request body from file."},
+		},
+	},
+	{
+		Path:        "cards assign",
+		Summary:     "Replace card assignees with explicit actor refs, or clear them.",
+		JSONShape:   "`{ patch: { assignee_refs }, if_updated_at, actor_id? }`; discovers `if_updated_at` from `cards get` when omitted.",
+		Composition: "Builds a focused `cards.patch` request for the Card ownership field.",
+		Examples: []string{
+			"anx cards assign --card <card-id> --assignee-ref actor:<actor-id>",
+			"anx cards assign --card <card-id> --clear",
+		},
+		Flags: []localHelperFlag{
+			{Name: "--card <card-id>", Description: "Card id or unique prefix to assign."},
+			{Name: "--assignee-ref <typed-ref>", Description: "Assignee actor typed ref, repeatable."},
+			{Name: "--clear", Description: "Clear all assignees."},
+			{Name: "--if-updated-at <timestamp>", Description: "Card optimistic concurrency token; discovered when omitted."},
+		},
+	},
+	{
+		Path:        "cards resolve",
+		Summary:     "Resolve a card into the done column with evidence refs.",
+		JSONShape:   "`{ column_key: \"done\", resolution, resolution_refs, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.",
+		Composition: "Builds a focused `cards.move` request that both moves and records terminal resolution evidence.",
+		Examples: []string{
+			"anx cards resolve --card <card-id> --resolution-ref event:<event-id>",
+			"anx cards resolve --card <card-id> --resolution canceled --resolution-ref artifact:<artifact-id>",
+		},
+		Flags: []localHelperFlag{
+			{Name: "--card <card-id>", Description: "Card id or unique prefix to resolve."},
+			{Name: "--resolution-ref <typed-ref>", Description: "Evidence event/artifact typed ref, repeatable."},
+			{Name: "--resolution <value>", Description: "Resolution value, default done."},
+			{Name: "--if-board-updated-at <timestamp>", Description: "Board optimistic concurrency token; discovered when omitted."},
+		},
+	},
+	{
+		Path:        "cards reopen",
+		Summary:     "Move a resolved card back into active workflow.",
+		JSONShape:   "`{ column_key, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.",
+		Composition: "Builds a focused `cards.move` request. The default reopened column is `ready`.",
+		Examples: []string{
+			"anx cards reopen --card <card-id>",
+			"anx cards reopen --card <card-id> --column backlog",
+		},
+		Flags: []localHelperFlag{
+			{Name: "--card <card-id>", Description: "Card id or unique prefix to reopen."},
+			{Name: "--column <key>", Description: "Target reopened column; defaults to ready."},
+			{Name: "--if-board-updated-at <timestamp>", Description: "Board optimistic concurrency token; discovered when omitted."},
+		},
+	},
 	{
 		Path:        "events list",
 		Summary:     "Compose backing-thread timeline reads with client-side thread/type/actor filters and preview summaries.",
@@ -190,18 +377,25 @@ var localHelperTopics = []localHelperTopic{
 		},
 	},
 	{
-		Path:        "docs propose-update",
-		Summary:     "Stage a document update proposal locally and show the content diff before applying it.",
-		JSONShape:   "`proposal_id`, `target_command_id`, `path`, `body`, `diff`, `apply_command`",
-		Composition: "Fetches the current document revision with `docs get`, computes a local diff against the proposed update, and persists a proposal file instead of sending the update immediately.",
+		Path:        "docs revise",
+		Summary:     "Revise a durable document from a local file or JSON body; stages a diff proposal by default.",
+		JSONShape:   "Proposal mode returns `proposal_id`, `target_command_id`, `path`, `body`, `diff`, `apply_command`; `--apply` sends the revision immediately or applies a staged proposal.",
+		Composition: "Fetches the current document revision, discovers the base revision when omitted, computes a local diff, and stages a proposal. Add `--apply` to direct-write the revision; use `--apply --proposal-id <id>` to apply a staged proposal.",
 		Examples: []string{
-			"anx docs propose-update --document-id <document-id> --content-file <path>",
-			"cat update.json | anx docs propose-update --document-id <document-id>",
+			"anx docs revise --document-id <document-id> --content-file notes.md",
+			"anx docs revise --apply --proposal-id <proposal-id>",
+			"anx docs revise --apply --document-id <document-id> --content-file notes.md",
+			"cat revision.json | anx docs revise --document-id <document-id>",
 		},
 		Flags: []localHelperFlag{
-			{Name: "--document-id <document-id>", Description: "Document id to update."},
-			{Name: "--content-file <path>", Description: "Load multiline content from a file into the JSON payload."},
-			{Name: "--from-file <path>", Description: "Load the full JSON update body from a file."},
+			{Name: "--document-id <document-id>", Description: "Document id to revise."},
+			{Name: "--document <document-id>", Description: "Same as --document-id."},
+			{Name: "--content-file <path>", Description: "Load revised Markdown/text content from a local file."},
+			{Name: "--from-file <path>", Description: "Advanced JSON revision body from a file."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--apply", Description: "Apply immediately, or apply a staged proposal when combined with --proposal-id."},
+			{Name: "--proposal-id <proposal-id>", Description: "Staged proposal id to apply; must be combined with --apply."},
+			{Name: "--propose", Description: "Stage a proposal (default; included for explicitness)."},
 		},
 	},
 	{
@@ -234,34 +428,6 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--trashed-only", Description: "Show only trashed message events."},
 		},
 	},
-	{
-		Path:        "docs validate-update",
-		Summary:     "Validate a `docs.revisions.create` payload locally from stdin or file without sending the mutation.",
-		JSONShape:   "`command`, `command_id`, `path_params`, `query`, `body`, `valid`",
-		Composition: "Parses the same body accepted by `docs.revisions.create`, expands `--content-file` when present, and returns a validation preview envelope without contacting core.",
-		Examples: []string{
-			`cat update.json | anx docs validate-update --document-id <document-id>`,
-			`anx docs validate-update --document-id <document-id> --content-file body.md`,
-		},
-		Flags: []localHelperFlag{
-			{Name: "--document-id <document-id>", Description: "Document id to validate against."},
-			{Name: "--content-file <path>", Description: "Load multiline content from a file into the JSON payload."},
-			{Name: "--from-file <path>", Description: "Load the full JSON update body from a file."},
-		},
-	},
-	{
-		Path:        "docs apply",
-		Summary:     "Apply a previously staged document update proposal.",
-		JSONShape:   "`proposal_id`, `target_command_id`, `applied`, `kept`, `result`",
-		Composition: "Loads the local proposal by exact id or unique prefix, validates it again, then sends the underlying `docs.revisions.create` request.",
-		Examples: []string{
-			"anx docs apply --proposal-id <proposal-id>",
-			"anx docs apply <proposal-id-prefix>",
-		},
-		Flags: []localHelperFlag{
-			{Name: "--proposal-id <proposal-id>", Description: "Proposal id or unique prefix to apply."},
-		},
-	},
 }
 
 func isHelpToken(value string) bool {
@@ -277,6 +443,12 @@ func isHelpToken(value string) bool {
 func (a *App) rootUsageText() string {
 	var b strings.Builder
 	b.WriteString(strings.TrimSpace(`anx - Agent Nexus CLI
+
+Domain model:
+  topics   Discuss and coordinate around a topic.
+  boards   Track active work with columns and cards.
+  docs     Maintain durable context and institutional knowledge.
+  threads  Inspect backing timelines only when diagnosing low-level state.
 
 Usage:
   anx [global flags] <command>
@@ -548,9 +720,11 @@ func localGroupHelpSupplement(topic string) string {
 	switch strings.TrimSpace(topic) {
 	case "topics":
 		return strings.TrimSpace(`Primary operator coordination:
+  topics create           Create a topic from plain flags or advanced JSON.
+  topics discuss          Post a topic-centered discussion message from ` + "`--message-file`" + `.
   topics workspace        Load the topic workspace (cards, docs, backing threads, inbox).
   topics list / topics get   Discover and resolve topic ids (` + "`--state`" + `, ` + "`--q`" + `, pagination, archive/trash visibility flags).
-  Tip: start with ` + "`anx topics workspace --topic-id <topic-id>`" + ` for triage; use ` + "`anx topics list --json`" + ` for ` + "`id`" + ` / ` + "`short_id`" + ` in JSON, or ` + "`--full-id`" + ` for full ids in default text.`)
+  Tip: use Topics for discussion/current context; use Boards for active work and Docs for durable knowledge. Start triage with ` + "`anx topics workspace --topic-id <topic-id>`" + `.`)
 	case "threads":
 		return strings.TrimSpace(`Read-only backing-thread diagnostics (tooling):
   threads recommendations   Recommendation-focused review for one backing thread.
@@ -573,10 +747,9 @@ func localGroupHelpSupplement(topic string) string {
   docs content             Show current document content with revision metadata.
   docs comments          List anchored document text comments on the backing thread timeline.
   Mutation flow:
-  docs propose-update      Stage an update proposal and inspect its diff before applying it.
-  docs apply               Apply a staged document update proposal.
-  docs validate-update     Validate a docs.revisions.create payload from stdin/--from-file.
-  Tip: add ` + "`--content-file <path>`" + ` to avoid hand-escaping multiline content. The proposal flow stages ` + "`docs.revisions.create`" + `.`)
+  docs create              Create durable context from flags plus ` + "`--content-file`" + `, or from advanced JSON.
+  docs revise              Revise from ` + "`--content-file`" + `; stages a diff proposal by default, or direct-writes with ` + "`--apply`" + `.
+  Tip: agents should draft Markdown locally and pass ` + "`--content-file <path>`" + `. ` + "`docs revise --document-id <id> --content-file <path>`" + ` discovers the base revision and returns an apply command for the staged proposal.`)
 	case "meta":
 		return strings.TrimSpace(`Shipped reference docs:
   meta docs               Print the bundled Markdown runtime reference.
@@ -584,12 +757,26 @@ func localGroupHelpSupplement(topic string) string {
   meta skill              Render a bundled editor-specific skill file, for example ` + "`anx meta skill cursor`" + `.
   Tip: use ` + "`anx help meta`" + ` for the short runtime surface, ` + "`anx meta docs`" + ` for the full shipped reference, and ` + "`anx meta skill cursor --write-dir ~/.cursor/skills/anx-cli-onboard`" + ` to export a Cursor skill.`)
 	case "boards":
-		return strings.TrimSpace(`Batch card creation:
+		return strings.TrimSpace(`Active work tracking:
+  boards create           Create a Board from flags, optionally tied to ` + "`--topic`" + `.
+  boards patch            Patch Board metadata from JSON; use ` + "`--dry-run`" + ` to preview.
+  boards workspace        Inspect board context, cards, documents, and inbox.
+
+Batch card creation:
   boards cards create-batch   POST body via stdin or ` + "`--from-file`" + `; profile supplies ` + "`actor_id`" + ` when omitted. See ` + "`anx help boards cards create-batch`" + `.
 
 Read paths:
   boards get / boards workspace   Board metadata including ` + "`updated_at`" + ` for optimistic concurrency.
   boards cards list               Existing cards and refs before adding more.`)
+	case "cards":
+		return strings.TrimSpace(`Agent-facing Card workflow:
+  cards create             Create a board work card from flags plus ` + "`--content-file`" + `.
+  cards revise             Revise card title/body from ` + "`--content-file`" + `; discovers ` + "`if_updated_at`" + ` when omitted.
+  cards move               Move workflow column; discovers the parent board concurrency token when omitted.
+  cards assign             Replace or clear assignees.
+  cards resolve            Move to done with resolution evidence refs.
+  cards reopen             Move a resolved card back to active workflow.
+  Tip: use ` + "`boards workspace`" + ` to inspect the board around cards. Use raw JSON ` + "`cards patch`" + ` only for metadata fields not covered by a domain verb.`)
 	case "auth":
 		return strings.TrimSpace(`Local auth lifecycle helpers:
   auth whoami             Validate the active profile against the server and show resolved identity.
@@ -853,7 +1040,7 @@ func formatCommandSpecificHelpBlock(cmd registry.Command) string {
   Decisions: request or record decisions tied to a topic
   - ` + "`decision_needed`" + `
   - ` + "`decision_made`" + `
-  Interventions: single clear path exists, but a human must act to complete it
+  Interventions: single clear path exists, but a responsible actor must complete it
   - ` + "`intervention_needed`" + `
   Topics and documents: durable subject and document lifecycle signals
   - ` + "`topic_created`" + `, ` + "`topic_updated`" + `, ` + "`topic_archived`" + `, ` + "`topic_trashed`" + `
@@ -887,7 +1074,7 @@ Note: by default, archived and trashed events are excluded from the timeline out
   - Switch perspective with ` + "`--agent <profile>`" + ` or ` + "`ANX_AGENT`" + ` before reading or acting.
 
 Inbox categories:
-  - ` + "`action_needed`" + `: A human must decide, take direct action, or own the next step (includes prior decision and intervention queue signals).
+  - ` + "`action_needed`" + `: A responsible actor must decide, take direct action, or own the next step (includes prior decision and intervention queue signals).
   - ` + "`risk_exception`" + `: Exceptions or at-risk work items that need follow-up.
   - ` + "`attention`" + `: Review or lighter operator focus (for example document attention).`)
 	case "inbox.acknowledge":
@@ -953,16 +1140,16 @@ func runtimeGeneratedHelpSpecs() []subcommandSpec {
 		},
 		authInvitesSubcommandSpec,
 		authBootstrapSubcommandSpec,
-		threadsSubcommandSpec,
 		topicsSubcommandSpec,
-		cardsSubcommandSpec,
-		artifactsSubcommandSpec,
 		boardsSubcommandSpec,
 		boardsCardsSubcommandSpec,
 		docsSubcommandSpec,
 		docsRevisionSubcommandSpec,
+		cardsSubcommandSpec,
+		threadsSubcommandSpec,
 		eventsSubcommandSpec,
 		inboxSubcommandSpec,
+		artifactsSubcommandSpec,
 		derivedSubcommandSpec,
 		{
 			command:  "meta",
@@ -1061,7 +1248,6 @@ func mapRuntimePathToRegistryPath(path string) string {
 	}
 	path = strings.Join(parts, " ")
 	rewrites := map[string]string{
-		"topics update":     "topics patch",
 		"events tail":       "events stream",
 		"inbox tail":        "inbox stream",
 		"inbox ack":         "inbox acknowledge",

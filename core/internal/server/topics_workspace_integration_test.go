@@ -121,6 +121,99 @@ func TestTopicWorkspaceResolvesBoardsCardsAndDocsViaRefEdges(t *testing.T) {
 	}
 }
 
+func TestTopicWorkspaceResolvesResourcesThatPointAtTopic(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	createTopicResp := postJSONExpectStatus(t, h.baseURL+"/topics", `{
+		"actor_id":"actor-1",
+		"topic":{
+			"title":"Reverse linked topic",
+			"summary":"Coordinate reverse refs",
+			"owner_refs":["actor:actor-1"],
+			"document_refs":[],
+			"board_refs":[],
+			"related_refs":[],
+			"provenance":{"sources":["seed:topic-workspace"]}
+		}
+	}`, http.StatusCreated)
+	defer createTopicResp.Body.Close()
+	var createdTopic struct {
+		Topic map[string]any `json:"topic"`
+	}
+	if err := json.NewDecoder(createTopicResp.Body).Decode(&createdTopic); err != nil {
+		t.Fatalf("decode create topic response: %v", err)
+	}
+	topicID := asString(createdTopic.Topic["id"])
+	if topicID == "" {
+		t.Fatalf("expected topic id, got %#v", createdTopic.Topic)
+	}
+
+	docThreadID := createBoardThreadViaHTTP(t, h, "Reverse linked doc thread")
+	documentID := createBoardDocumentViaHTTP(t, h, docThreadID, "Reverse linked doc")
+
+	createBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
+		"actor_id":"actor-1",
+		"board":{
+			"title":"Reverse linked board",
+			"primary_topic_ref":"topic:`+topicID+`",
+			"document_refs":["document:`+documentID+`"]
+		}
+	}`, http.StatusCreated)
+	defer createBoardResp.Body.Close()
+	var createdBoard struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(createBoardResp.Body).Decode(&createdBoard); err != nil {
+		t.Fatalf("decode create board response: %v", err)
+	}
+	boardID := asString(createdBoard.Board["id"])
+	boardUpdatedAt := asString(createdBoard.Board["updated_at"])
+
+	addCardResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+boardUpdatedAt+`",
+		"title":"Reverse linked card",
+		"topic_ref":"topic:`+topicID+`",
+		"column_key":"ready"
+	}`, http.StatusCreated)
+	defer addCardResp.Body.Close()
+	var createdCard struct {
+		Card map[string]any `json:"card"`
+	}
+	if err := json.NewDecoder(addCardResp.Body).Decode(&createdCard); err != nil {
+		t.Fatalf("decode add card response: %v", err)
+	}
+	cardID := asString(createdCard.Card["id"])
+
+	contract, err := schema.Load(filepath.Join("..", "..", "..", "contracts", "anx-schema.yaml"))
+	if err != nil {
+		t.Fatalf("load schema contract: %v", err)
+	}
+	opts := handlerOptions{
+		primitiveStore: primitives.NewStore(h.workspace.DB(), blob.NewFilesystemBackend(h.workspace.Layout().ArtifactContentDir), h.workspace.Layout().ArtifactContentDir),
+		contract:       contract,
+	}
+	workspace, err := buildTopicWorkspacePayload(context.Background(), opts, topicID)
+	if err != nil {
+		t.Fatalf("buildTopicWorkspacePayload: %v", err)
+	}
+	boards, _ := workspace["boards"].([]map[string]any)
+	cards, _ := workspace["cards"].([]map[string]any)
+	documents, _ := workspace["documents"].([]map[string]any)
+	if !containsResourceID(boards, boardID) {
+		t.Fatalf("expected reverse-linked board %q in workspace, got %#v", boardID, boards)
+	}
+	if !containsResourceID(cards, cardID) {
+		t.Fatalf("expected reverse-linked card %q in workspace, got %#v", cardID, cards)
+	}
+	if !containsResourceID(documents, documentID) {
+		t.Fatalf("expected board document %q in workspace, got %#v", documentID, documents)
+	}
+}
+
 func asStringFromTypedRef(ref string) string {
 	if ref == "" {
 		return ""

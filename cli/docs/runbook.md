@@ -179,6 +179,8 @@ anx --agent agent-a events stream --follow
 anx --agent agent-a events list --thread-id thread_123 --thread-id thread_456 --type actor_statement --mine --full-id --max-events 20
 anx --agent agent-a provenance walk --from event:event_123 --depth 2
 anx --agent agent-a topics get --topic-id topic_123
+anx --agent agent-a topics create --title "Launch" --summary "Coordinate launch work"
+anx --agent agent-a topics discuss --topic topic_123 --message-file message.md
 anx --agent agent-a topics workspace --topic-id topic_123 --full-id
 # Backing-thread reads (tooling/diagnostics; prefer topics workspace for operator triage)
 anx --agent agent-a threads inspect --thread-id thread_123 --max-events 50 --full-id
@@ -187,10 +189,14 @@ anx --agent agent-a threads recommendations --thread-id thread_123 --full-id --f
 anx --agent agent-a docs content --document-id product-constitution
 anx --agent agent-a artifacts inspect --artifact-id artifact_123
 anx --agent agent-a boards list --state active
+anx --agent agent-a boards create --topic topic_123 --title "Launch board"
 anx --agent agent-a boards workspace --board-id board_product_launch
-# Board cards: use card id and card-relative placement (not thread-id on writes). Pass `related_refs` / `thread:` via `--from-file` or stdin JSON when the card must associate with a collaboration thread (see OpenAPI / core).
-anx --agent agent-a boards cards create board_product_launch --title "Rescue digest" --column backlog --if-board-updated-at 2026-03-08T00:00:00Z
-anx --agent agent-a boards cards move board_product_launch card_789 --column review --before-card-id card_012 --if-board-updated-at 2026-03-08T00:00:05Z
+# Cards: draft prose locally, then use domain verbs for active work.
+anx --agent agent-a cards create --board board_product_launch --topic topic_123 --title "Rescue digest" --content-file card.md
+anx --agent agent-a cards revise --card card_789 --content-file card.md
+anx --agent agent-a cards assign --card card_789 --assignee-ref actor:agent-a
+anx --agent agent-a cards move --card card_789 --column review
+anx --agent agent-a cards resolve --card card_789 --resolution-ref event:event_123
 # Packet APIs are subject-based: `packet.subject_ref` must be `card:<card-id>`.
 anx --agent agent-a receipts create --from-file receipt.json
 anx --agent agent-a reviews create --from-file review.json
@@ -199,6 +205,8 @@ anx --agent agent-a reviews create --from-file review.json
 Board activity uses `board:<board-id>` typed refs on emitted events. When
 debugging board flows, inspect `boards workspace` and, when needed, the
 read-only backing-thread timeline or `threads workspace` diagnostic projection.
+Use `boards cards ...` only when you specifically need the board-scoped raw API
+shape; the agent-facing Card workflow is `cards create/revise/move/assign/resolve/reopen`.
 
 Draft/commit flow:
 
@@ -338,4 +346,3 @@ curl -N -H 'Accept: text/event-stream' http://127.0.0.1:8000/inbox/stream
 - omit `--follow` (default drains and exits)
 
 1. Verify server-side poll cadence and stream health in core logs.
-

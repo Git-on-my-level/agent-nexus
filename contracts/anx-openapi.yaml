@@ -1092,7 +1092,7 @@ paths:
       tags: [docs]
       x-anx-surface: canonical
       x-anx-command-id: docs.revisions.list
-      x-anx-cli-path: docs revisions list
+      x-anx-cli-path: docs history
       x-anx-why: Enumerate immutable revisions for one document lineage.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
@@ -1119,7 +1119,7 @@ paths:
       tags: [docs]
       x-anx-surface: canonical
       x-anx-command-id: docs.revisions.create
-      x-anx-cli-path: docs revisions create
+      x-anx-cli-path: docs revise
       x-anx-why: Append a new immutable revision and advance the document head.
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
@@ -1158,7 +1158,7 @@ paths:
       tags: [docs]
       x-anx-surface: canonical
       x-anx-command-id: docs.revisions.get
-      x-anx-cli-path: docs revisions get
+      x-anx-cli-path: docs revision get
       x-anx-why: Resolve one immutable document revision.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
@@ -4681,23 +4681,20 @@ components:
           type: string
           description: Optional resource-level blurb (list/detail); distinct from revision content.
         subject_ref: { $ref: '#/components/schemas/TypedRef' }
-        body_markdown: { type: string }
         refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
         provenance: { $ref: '#/components/schemas/Provenance' }
-      required: [title, subject_ref, body_markdown, refs, provenance]
+      required: [title]
 
     DocumentRevisionCreateInput:
       type: object
       properties:
-        body_markdown: { type: string }
         summary: { type: string }
         refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
         provenance: { $ref: '#/components/schemas/Provenance' }
-      required: [body_markdown, refs, provenance]
 
     BoardCreateInput:
       type: object
@@ -4773,8 +4770,7 @@ components:
           type: array
           items: { type: string }
         provenance: { $ref: '#/components/schemas/Provenance' }
-      required:
-        [title, summary, column_key, assignee_refs, risk, resolution_refs, related_refs, provenance]
+      required: [title]
 
     CardPatchInput:
       type: object
@@ -4905,8 +4901,17 @@ components:
     CreateDocumentRequest:
       type: object
       properties:
+        actor_id: { type: string }
+        request_key: { type: string }
         document: { $ref: '#/components/schemas/DocumentCreateInput' }
-      required: [document]
+        content: {}
+        content_type:
+          type: string
+          enum: [text, structured, binary]
+        refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+      required: [document, content, content_type]
 
     DocumentPatchInput:
       type: object
@@ -4931,17 +4936,23 @@ components:
     CreateDocumentRevisionRequest:
       type: object
       properties:
-        revision: { $ref: '#/components/schemas/DocumentRevisionCreateInput' }
-        if_document_updated_at:
-          type: string
-          format: date-time
         if_base_revision:
           type: string
-          description: >
-            Optional base revision id for optimistic concurrency (must match the document head
-            when appending from the current tip). When omitted with the nested `revision` envelope,
-            the server defaults to the document head revision.
-      required: [revision]
+          description: Base revision id for optimistic concurrency; must match the document head when appending from the current tip.
+        actor_id: { type: string }
+        document:
+          type: object
+          additionalProperties: true
+          description: Optional document metadata patch to apply with this revision.
+        content: {}
+        content_type:
+          type: string
+          enum: [text, structured, binary]
+        refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        provenance: { $ref: '#/components/schemas/Provenance' }
+      required: [if_base_revision, content, content_type]
 
     CreateBoardRequest:
       type: object
@@ -4961,6 +4972,8 @@ components:
     CreateCardRequest:
       type: object
       properties:
+        actor_id: { type: string }
+        request_key: { type: string }
         board_id:
           type: string
           description: >
@@ -5054,6 +5067,7 @@ components:
     PatchCardRequest:
       type: object
       properties:
+        actor_id: { type: string }
         patch: { $ref: '#/components/schemas/CardPatchInput' }
         if_updated_at:
           type: string

@@ -189,7 +189,7 @@ func enrichInvalidRequestByMessage(msg string) (string, map[string]any) {
 		return "The JSON body must include a top-level `patch` object for this operation. Pipe JSON to stdin or use `--from-file`; see the command help for the expected keys.",
 			map[string]any{"kind": "missing_required_field", "field": "patch"}
 	case "board is required":
-		return "The JSON body must include a `board` object (board create / update). See `anx boards create --help` or locate boards update under `anx help`.",
+		return "The JSON body must include a `board` object. See `anx boards create --help`.",
 			map[string]any{"kind": "missing_required_field", "field": "board", "help_cli": "anx boards create --help"}
 	case "topic is required":
 		return "The JSON body must include a `topic` object. See `anx topics create --help`.",
@@ -198,7 +198,7 @@ func enrichInvalidRequestByMessage(msg string) (string, map[string]any) {
 		return "The JSON body must include a `document` object. See `anx docs create --help`.",
 			map[string]any{"kind": "missing_required_field", "field": "document", "help_cli": "anx docs create --help"}
 	case "content is required":
-		return "The JSON body must include `content` for this document operation. See `anx docs create --help` or `anx docs revision --help` as appropriate.",
+		return "The JSON body must include `content` for this document operation. See `anx docs create --help` or `anx docs revise --help` as appropriate.",
 			map[string]any{"kind": "missing_required_field", "field": "content", "help_cli": "anx docs create --help"}
 	case "artifact is required":
 		return "The JSON body must include an `artifact` object. See `anx help` for artifact create / packet topics.",

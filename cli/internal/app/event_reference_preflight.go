@@ -10,8 +10,8 @@ import (
 )
 
 var (
-	embeddedEventRefRulesReg registry.EventRefRulesRegistry
-	embeddedEventRefRulesErr error
+	embeddedEventRefRulesReg  registry.EventRefRulesRegistry
+	embeddedEventRefRulesErr  error
 	embeddedEventRefRulesOnce sync.Once
 )
 

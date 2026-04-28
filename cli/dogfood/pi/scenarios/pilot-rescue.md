@@ -39,4 +39,4 @@ Important collaboration rule:
 Required end-state artifacts in the working directory:
 - `event-template.json` updated with the final event body you actually send
 - `result.md`
-- if you are the product role, `doc-update-template.json` updated with the document revision you actually send
+- if you are the product role, `doc-revision-template.json` updated with the document revision you actually send

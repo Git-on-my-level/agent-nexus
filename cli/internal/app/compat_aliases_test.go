@@ -19,7 +19,6 @@ func TestApplyCommandShapeCompatibilityAliasNoLegacyShapes(t *testing.T) {
 	}{
 		{name: "packets receipts create", args: []string{"packets", "receipts", "create", "--from-file", "payload.json"}},
 		{name: "artifacts content get", args: []string{"artifacts", "content", "get", "--artifact-id", "artifact_123"}},
-		{name: "topics update", args: []string{"topics", "update", "--topic-id", "topic_123"}},
 	}
 
 	for _, tt := range tests {

@@ -871,7 +871,7 @@ const chapterEvents = {
           "Theo (backoffice kid) posted 2 messages and created 1 card for kitchen prep - confirmed pitcher two at 11:45, 28 cups available, ice under protection, mint test possible",
           "Replied directly to both Ruby and Theo in-thread to close the loop on decisions",
           "Updated kid-boss-lemonade-plan through 3 revisions: draft -> in-progress -> final plan locked",
-          "Used propose-update + apply workflow for document updates, reviewed diff each time",
+          "Used the docs revise proposal workflow for document revisions, reviewed diff each time",
           "All plot threads resolved: soccer crowd prep, cookie counter-strategy, mint special verdict",
         ],
         follow_ups: [

@@ -708,7 +708,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "write"},
-		Adjacent:   []string{"docs.create", "docs.get", "docs.list", "docs.patch", "docs.purge", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.revisions.list", "docs.trash", "docs.unarchive"},
+		Adjacent:   []string{"docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.trash", "docs.unarchive"},
 	},
 	{
 		CommandID: "docs.create",
@@ -719,7 +719,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"docs", "write"},
-		Adjacent:  []string{"docs.archive", "docs.get", "docs.list", "docs.patch", "docs.purge", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.revisions.list", "docs.trash", "docs.unarchive"},
+		Adjacent:  []string{"docs.archive", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.trash", "docs.unarchive"},
 	},
 	{
 		CommandID:  "docs.get",
@@ -731,7 +731,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"docs"},
-		Adjacent:   []string{"docs.archive", "docs.create", "docs.list", "docs.patch", "docs.purge", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.revisions.list", "docs.trash", "docs.unarchive"},
+		Adjacent:   []string{"docs.archive", "docs.create", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.trash", "docs.unarchive"},
 	},
 	{
 		CommandID: "docs.list",
@@ -742,7 +742,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"docs"},
-		Adjacent:  []string{"docs.archive", "docs.create", "docs.get", "docs.patch", "docs.purge", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.revisions.list", "docs.trash", "docs.unarchive"},
+		Adjacent:  []string{"docs.archive", "docs.create", "docs.get", "docs.revisions.list", "docs.patch", "docs.purge", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.trash", "docs.unarchive"},
 	},
 	{
 		CommandID:  "docs.patch",
@@ -754,7 +754,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "write", "concurrency"},
-		Adjacent:   []string{"docs.archive", "docs.create", "docs.get", "docs.list", "docs.purge", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.revisions.list", "docs.trash", "docs.unarchive"},
+		Adjacent:   []string{"docs.archive", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.purge", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.trash", "docs.unarchive"},
 	},
 	{
 		CommandID:  "docs.purge",
@@ -766,7 +766,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "write"},
-		Adjacent:   []string{"docs.archive", "docs.create", "docs.get", "docs.list", "docs.patch", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.revisions.list", "docs.trash", "docs.unarchive"},
+		Adjacent:   []string{"docs.archive", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.trash", "docs.unarchive"},
 	},
 	{
 		CommandID:  "docs.restore",
@@ -778,11 +778,11 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "write"},
-		Adjacent:   []string{"docs.archive", "docs.create", "docs.get", "docs.list", "docs.patch", "docs.purge", "docs.revisions.create", "docs.revisions.get", "docs.revisions.list", "docs.trash", "docs.unarchive"},
+		Adjacent:   []string{"docs.archive", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.revisions.create", "docs.revisions.get", "docs.trash", "docs.unarchive"},
 	},
 	{
 		CommandID:  "docs.revisions.create",
-		CLIPath:    "docs revisions create",
+		CLIPath:    "docs revise",
 		Group:      "docs",
 		Method:     "POST",
 		Path:       "/docs/{document_id}/revisions",
@@ -790,11 +790,11 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "revisions", "write"},
-		Adjacent:   []string{"docs.archive", "docs.create", "docs.get", "docs.list", "docs.patch", "docs.purge", "docs.restore", "docs.revisions.get", "docs.revisions.list", "docs.trash", "docs.unarchive"},
+		Adjacent:   []string{"docs.archive", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.restore", "docs.revisions.get", "docs.trash", "docs.unarchive"},
 	},
 	{
 		CommandID:  "docs.revisions.get",
-		CLIPath:    "docs revisions get",
+		CLIPath:    "docs revision get",
 		Group:      "docs",
 		Method:     "GET",
 		Path:       "/docs/{document_id}/revisions/{revision_id}",
@@ -802,11 +802,11 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "revisions"},
-		Adjacent:   []string{"docs.archive", "docs.create", "docs.get", "docs.list", "docs.patch", "docs.purge", "docs.restore", "docs.revisions.create", "docs.revisions.list", "docs.trash", "docs.unarchive"},
+		Adjacent:   []string{"docs.archive", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.restore", "docs.revisions.create", "docs.trash", "docs.unarchive"},
 	},
 	{
 		CommandID:  "docs.revisions.list",
-		CLIPath:    "docs revisions list",
+		CLIPath:    "docs history",
 		Group:      "docs",
 		Method:     "GET",
 		Path:       "/docs/{document_id}/revisions",
@@ -826,7 +826,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "write"},
-		Adjacent:   []string{"docs.archive", "docs.create", "docs.get", "docs.list", "docs.patch", "docs.purge", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.revisions.list", "docs.unarchive"},
+		Adjacent:   []string{"docs.archive", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.unarchive"},
 	},
 	{
 		CommandID:  "docs.unarchive",
@@ -838,7 +838,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "write"},
-		Adjacent:   []string{"docs.archive", "docs.create", "docs.get", "docs.list", "docs.patch", "docs.purge", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.revisions.list", "docs.trash"},
+		Adjacent:   []string{"docs.archive", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.trash"},
 	},
 	{
 		CommandID:  "events.archive",

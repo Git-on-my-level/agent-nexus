@@ -108,8 +108,8 @@ Scenario command-shape guidance:
 - use `anx threads recommendations --thread-id <thread-id>` for recommendation/decision review
 - add `--include-related-event-content --verbose` when you need full related-thread recommendation content in one command
 - use `anx cards get --card-id <card-id>` when a card listed in workspace needs full detail
-- document proposals are a two-step flow: `anx docs propose-update ...` then `anx docs apply --proposal-id <proposal-id>`
-- use `anx docs update ...` only when you want to write the new revision immediately without staging a proposal
+- document revisions use one command: `anx docs revise --document-id <document-id> --content-file <path>` stages a diff proposal by default, and the returned apply command uses `anx docs revise --apply --proposal-id <proposal-id>`
+- use `anx docs revise --apply --document-id <document-id> --content-file <path>` only when you want to write the new revision immediately without staging a proposal
 - use `anx events validate --from-file <path>` when you want a local payload check before `anx events create`
 - use `anx events create --from-file <path> --dry-run` when you want the exact create request preview without sending it
 - use `message_posted` for visible thread chat and replies, then use `actor_statement` for the higher-signal role summary

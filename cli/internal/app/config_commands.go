@@ -122,16 +122,16 @@ func redactedConfigShowData(cfg config.Resolved) map[string]any {
 		sources[k] = v
 	}
 	out := map[string]any{
-		"base_url":              cfg.BaseURL,
-		"agent":                 cfg.Agent,
-		"timeout":               cfg.Timeout.String(),
-		"json":                  cfg.JSON,
-		"no_color":              cfg.NoColor,
-		"verbose":               cfg.Verbose,
-		"headers":               cfg.Headers,
-		"profile_path":          cfg.ProfilePath,
-		"sources":               sources,
-		"access_token_redacted": strings.TrimSpace(cfg.AccessToken) != "",
+		"base_url":               cfg.BaseURL,
+		"agent":                  cfg.Agent,
+		"timeout":                cfg.Timeout.String(),
+		"json":                   cfg.JSON,
+		"no_color":               cfg.NoColor,
+		"verbose":                cfg.Verbose,
+		"headers":                cfg.Headers,
+		"profile_path":           cfg.ProfilePath,
+		"sources":                sources,
+		"access_token_redacted":  strings.TrimSpace(cfg.AccessToken) != "",
 		"refresh_token_redacted": strings.TrimSpace(cfg.RefreshToken) != "",
 	}
 	if strings.TrimSpace(cfg.AccessToken) != "" {

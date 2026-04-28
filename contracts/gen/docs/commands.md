@@ -787,7 +787,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `docs.revisions.create`
 
-- CLI path: `docs revisions create`
+- CLI path: `docs revise`
 - HTTP: `POST /docs/{document_id}/revisions`
 - Stability: `beta`
 - Surface: `canonical`
@@ -799,7 +799,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `docs.revisions.get`
 
-- CLI path: `docs revisions get`
+- CLI path: `docs revision get`
 - HTTP: `GET /docs/{document_id}/revisions/{revision_id}`
 - Stability: `beta`
 - Surface: `canonical`
@@ -811,7 +811,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `docs.revisions.list`
 
-- CLI path: `docs revisions list`
+- CLI path: `docs history`
 - HTTP: `GET /docs/{document_id}/revisions`
 - Stability: `beta`
 - Surface: `canonical`

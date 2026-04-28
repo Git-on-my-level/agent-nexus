@@ -13,26 +13,16 @@ import (
 var topicsSubcommandSpec = subcommandSpec{
 	command: "topics",
 	valid: []string{
-		"list", "get", "create", "patch", "timeline", "workspace",
+		"list", "get", "create", "patch", "discuss", "timeline", "workspace",
 		"archive", "unarchive", "trash", "restore",
 	},
-	examples: []string{"anx topics list", "anx topics create --from-file topic.json", "anx topics workspace --topic-id <topic-id>", "anx topics archive --topic-id <topic-id>"},
-	aliases: map[string]string{
-		"ls":     "list",
-		"show":   "get",
-		"update": "patch",
-	},
+	examples: []string{"anx topics list", "anx topics create --title \"Launch\" --summary \"Coordinate launch work\"", "anx topics discuss --topic <topic-id> --message-file message.md", "anx topics workspace --topic-id <topic-id>", "anx topics archive --topic-id <topic-id>"},
 }
 
 var cardsSubcommandSpec = subcommandSpec{
 	command:  "cards",
-	valid:    []string{"list", "get", "create", "patch", "move", "archive", "trash", "purge", "restore", "timeline"},
-	examples: []string{"anx cards list", "anx cards create --from-file card.json", "anx cards get --card-id <card-id>", "anx cards timeline --card-id <card-id>", "anx cards move --card-id <card-id> --from-file move.json", "anx cards archive --card-id <card-id>", "anx cards trash --card-id <card-id> --from-file trash.json"},
-	aliases: map[string]string{
-		"ls":     "list",
-		"show":   "get",
-		"update": "patch",
-	},
+	valid:    []string{"list", "get", "create", "revise", "patch", "move", "assign", "resolve", "reopen", "archive", "trash", "purge", "restore", "timeline"},
+	examples: []string{"anx cards list", "anx cards create --board <board-id> --title \"Implement login\" --content-file card.md", "anx cards revise --card <card-id> --content-file card.md", "anx cards assign --card <card-id> --assignee-ref actor:<actor-id>", "anx cards resolve --card <card-id> --resolution-ref event:<event-id>", "anx cards move --card-id <card-id> --column review", "anx cards get --card-id <card-id>"},
 }
 
 func (a *App) runTopicsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
@@ -118,22 +108,41 @@ func (a *App) runTopicsCommand(ctx context.Context, args []string, cfg config.Re
 		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "topics get", "topics.get", "topic_id", id, topicIDLookupSpec, nil, nil)
 		return result, "topics get", callErr
 	case "create":
-		body, err := a.parseJSONBodyInput(args[1:], "topics create")
+		body, dryRun, err := a.parseTopicCreateInput(args[1:], cfg, "topics create")
 		if err != nil {
 			return nil, "topics create", err
 		}
 		if bodyMap, ok := body.(map[string]any); ok {
 			ensureEmptyListDefaults(bodyMap, "topic", []string{"owner_refs", "document_refs", "board_refs", "related_refs"})
 		}
+		if dryRun {
+			return dryRunResult("topics create", "topics.create", nil, nil, body), "topics create", nil
+		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "topics create", "topics.create", nil, nil, body)
 		return result, "topics create", callErr
 	case "patch":
-		id, body, err := a.parseIDAndBodyInput(args[1:], "topic-id", "topic id", "topics patch")
+		id, body, dryRun, err := a.parseIDAndBodyInputWithOptions(args[1:], "topic-id", "topic id", "topics patch", jsonBodyInputOptions{allowDryRun: true})
 		if err != nil {
 			return nil, "topics patch", err
 		}
+		if dryRun {
+			return dryRunResult("topics patch", "topics.patch", map[string]string{"topic_id": id}, nil, body), "topics patch", nil
+		}
 		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "topics patch", "topics.patch", "topic_id", id, topicIDLookupSpec, nil, body)
 		return result, "topics patch", callErr
+	case "discuss":
+		body, dryRun, err := a.parseTopicDiscussInput(ctx, args[1:], cfg, "topics discuss")
+		if err != nil {
+			return nil, "topics discuss", err
+		}
+		if err := validateEventsCreateInput(body, "topics discuss"); err != nil {
+			return nil, "topics discuss", err
+		}
+		if dryRun {
+			return dryRunResult("topics discuss", "events.create", nil, nil, body), "topics discuss", nil
+		}
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "topics discuss", "events.create", nil, nil, body)
+		return result, "topics discuss", callErr
 	case "timeline":
 		id, err := parseIDArg(args[1:], "topic-id", "topic id")
 		if err != nil {
@@ -234,19 +243,14 @@ func (a *App) runCardsCommand(ctx context.Context, args []string, cfg config.Res
 		result, err := a.invokeTypedJSON(ctx, cfg, "cards list", "cards.list", nil, query, nil)
 		return result, "cards list", err
 	case "create":
-		body, err := a.parseJSONBodyInput(args[1:], "cards create")
+		body, dryRun, err := a.parseCardCreateInput(args[1:], cfg, "cards create")
 		if err != nil {
 			return nil, "cards create", err
 		}
-		bodyMap, ok := body.(map[string]any)
-		if !ok {
-			return nil, "cards create", errnorm.Usage("invalid_request", "JSON body for `anx cards create` must be an object")
+		if dryRun {
+			return dryRunResult("cards create", "cards.create", nil, nil, body), "cards create", nil
 		}
-		ensureEmptyListDefaults(bodyMap, "card", []string{"assignee_refs", "resolution_refs", "related_refs"})
-		if err := finalizeOptionalMutationBodyActorID(bodyMap, cfg); err != nil {
-			return nil, "cards create", err
-		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "cards create", "cards.create", nil, nil, bodyMap)
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "cards create", "cards.create", nil, nil, body)
 		return result, "cards create", callErr
 	case "get":
 		id, err := parseIDArg(args[1:], "card-id", "card id")
@@ -269,20 +273,41 @@ func (a *App) runCardsCommand(ctx context.Context, args []string, cfg config.Res
 		}
 		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "cards patch", "cards.patch", "card_id", id, cardIDLookupSpec, nil, body)
 		return result, "cards patch", callErr
-	case "move":
-		id, bodyAny, err := a.parseIDAndBodyInput(args[1:], "card-id", "card id", "cards move")
+	case "revise":
+		id, body, err := a.parseCardReviseInput(ctx, args[1:], cfg, "cards revise")
 		if err != nil {
-			return nil, "cards move", err
+			return nil, "cards revise", err
 		}
-		body, ok := bodyAny.(map[string]any)
-		if !ok {
-			return nil, "cards move", errnorm.Usage("invalid_request", "JSON body for `anx cards move` must be an object")
-		}
-		if err := finalizeOptionalMutationBodyActorID(body, cfg); err != nil {
+		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "cards revise", "cards.patch", "card_id", id, cardIDLookupSpec, nil, body)
+		return result, "cards revise", callErr
+	case "move":
+		id, body, err := a.parseCardMoveInput(ctx, args[1:], cfg, "cards move")
+		if err != nil {
 			return nil, "cards move", err
 		}
 		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "cards move", "cards.move", "card_id", id, cardIDLookupSpec, nil, body)
 		return result, "cards move", callErr
+	case "assign":
+		id, body, err := a.parseCardAssignInput(ctx, args[1:], cfg, "cards assign")
+		if err != nil {
+			return nil, "cards assign", err
+		}
+		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "cards assign", "cards.patch", "card_id", id, cardIDLookupSpec, nil, body)
+		return result, "cards assign", callErr
+	case "resolve":
+		id, body, err := a.parseCardResolveInput(ctx, args[1:], cfg, "cards resolve")
+		if err != nil {
+			return nil, "cards resolve", err
+		}
+		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "cards resolve", "cards.move", "card_id", id, cardIDLookupSpec, nil, body)
+		return result, "cards resolve", callErr
+	case "reopen":
+		id, body, err := a.parseCardReopenInput(ctx, args[1:], cfg, "cards reopen")
+		if err != nil {
+			return nil, "cards reopen", err
+		}
+		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "cards reopen", "cards.move", "card_id", id, cardIDLookupSpec, nil, body)
+		return result, "cards reopen", callErr
 	case "archive":
 		id, body, err := a.parseCardIDAndOptionalJSONBody(args[1:], "cards archive")
 		if err != nil {
@@ -330,6 +355,642 @@ func (a *App) runCardsCommand(ctx context.Context, args []string, cfg config.Res
 	default:
 		return nil, "cards", cardsSubcommandSpec.unknownError(args[0])
 	}
+}
+
+func (a *App) parseTopicCreateInput(args []string, cfg config.Resolved, commandName string) (any, bool, error) {
+	fs := newSilentFlagSet(commandName)
+	var fromFileFlag, titleFlag, summaryFlag, actorIDFlag trackedString
+	var ownerRefFlags, documentRefFlags, boardRefFlags, relatedRefFlags trackedStrings
+	var dryRunFlag trackedBool
+	fs.Var(&fromFileFlag, "from-file", "Advanced JSON request body from file")
+	fs.Var(&titleFlag, "title", "Topic title")
+	fs.Var(&summaryFlag, "summary", "Topic summary")
+	fs.Var(&actorIDFlag, "actor-id", "Actor id")
+	fs.Var(&ownerRefFlags, "owner-ref", "Owner typed ref, repeatable")
+	fs.Var(&documentRefFlags, "document-ref", "Linked document typed ref, repeatable")
+	fs.Var(&boardRefFlags, "board-ref", "Linked board typed ref, repeatable")
+	fs.Var(&relatedRefFlags, "ref", "Additional related typed ref, repeatable")
+	fs.Var(&dryRunFlag, "dry-run", "Validate and render request without sending the mutation")
+	if err := fs.Parse(args); err != nil {
+		return nil, false, errnorm.Usage("invalid_flags", err.Error())
+	}
+	if len(fs.Args()) > 0 {
+		return nil, false, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
+	}
+	fieldFlagsSet := strings.TrimSpace(titleFlag.value) != "" ||
+		strings.TrimSpace(summaryFlag.value) != "" ||
+		len(ownerRefFlags.values) > 0 ||
+		len(documentRefFlags.values) > 0 ||
+		len(boardRefFlags.values) > 0 ||
+		len(relatedRefFlags.values) > 0 ||
+		strings.TrimSpace(actorIDFlag.value) != ""
+	if strings.TrimSpace(fromFileFlag.value) != "" || !fieldFlagsSet {
+		if fieldFlagsSet {
+			return nil, false, errnorm.Usage("invalid_args", fmt.Sprintf("field flags cannot be combined with JSON body input for `anx %s`", commandName))
+		}
+		body, _, err := a.parseJSONBodyInputWithOptions(args, commandName, jsonBodyInputOptions{allowDryRun: true})
+		if err != nil {
+			return nil, false, err
+		}
+		if bodyMap, ok := body.(map[string]any); ok {
+			if err := finalizeOptionalMutationBodyActorID(bodyMap, cfg); err != nil {
+				return nil, false, err
+			}
+		}
+		return body, dryRunFlag.set && dryRunFlag.value, nil
+	}
+	title := strings.TrimSpace(titleFlag.value)
+	if title == "" {
+		return nil, false, errnorm.Usage("invalid_request", "`--title` is required for `anx topics create`")
+	}
+	summary := strings.TrimSpace(summaryFlag.value)
+	if summary == "" {
+		return nil, false, errnorm.Usage("invalid_request", "`--summary` is required for `anx topics create`")
+	}
+	body := map[string]any{
+		"topic": map[string]any{
+			"title":         title,
+			"summary":       summary,
+			"owner_refs":    normalizedStringsOrEmpty(ownerRefFlags.values),
+			"document_refs": normalizedStringsOrEmpty(documentRefFlags.values),
+			"board_refs":    normalizedStringsOrEmpty(boardRefFlags.values),
+			"related_refs":  normalizedStringsOrEmpty(relatedRefFlags.values),
+			"provenance":    map[string]any{"sources": []any{"actor_statement:anx-cli"}},
+		},
+	}
+	actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
+	if err != nil {
+		return nil, false, err
+	}
+	if actorID != "" {
+		body["actor_id"] = actorID
+	}
+	if err := finalizeOptionalMutationBodyActorID(body, cfg); err != nil {
+		return nil, false, err
+	}
+	return body, dryRunFlag.set && dryRunFlag.value, nil
+}
+
+func (a *App) parseTopicDiscussInput(ctx context.Context, args []string, cfg config.Resolved, commandName string) (map[string]any, bool, error) {
+	fs := newSilentFlagSet(commandName)
+	var topicFlag, messageFileFlag, summaryFlag, actorIDFlag trackedString
+	var refFlags trackedStrings
+	var dryRunFlag trackedBool
+	fs.Var(&topicFlag, "topic", "Topic id to discuss")
+	fs.Var(&topicFlag, "topic-id", "Topic id to discuss")
+	fs.Var(&messageFileFlag, "message-file", "Load the discussion message text from a local file")
+	fs.Var(&summaryFlag, "summary", "Optional short event summary")
+	fs.Var(&actorIDFlag, "actor-id", "Actor id")
+	fs.Var(&refFlags, "ref", "Additional typed ref to attach to the message, repeatable")
+	fs.Var(&dryRunFlag, "dry-run", "Validate and render request without sending the mutation")
+	if err := fs.Parse(args); err != nil {
+		return nil, false, errnorm.Usage("invalid_flags", err.Error())
+	}
+	positionals := fs.Args()
+	topicID := strings.TrimSpace(topicFlag.value)
+	if topicID == "" && len(positionals) > 0 {
+		topicID = strings.TrimSpace(positionals[0])
+		positionals = positionals[1:]
+	}
+	if len(positionals) > 0 {
+		return nil, false, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
+	}
+	if err := validateID(topicID, "topic id"); err != nil {
+		return nil, false, err
+	}
+	message, err := a.readTextFlagFile(messageFileFlag.value, commandName, "--message-file")
+	if err != nil {
+		return nil, false, err
+	}
+	topic, err := a.fetchTopicBody(ctx, cfg, topicID)
+	if err != nil {
+		return nil, false, err
+	}
+	threadID := strings.TrimSpace(anyString(topic["thread_id"]))
+	if threadID == "" {
+		return nil, false, errnorm.Usage("invalid_request", "topic response did not include thread_id for discussion")
+	}
+	actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
+	if err != nil {
+		return nil, false, err
+	}
+	if actorID == "" {
+		actorID = strings.TrimSpace(cfg.ActorID)
+	}
+	if actorID == "" {
+		return nil, false, errnorm.Usage("invalid_request", "`anx topics discuss` requires an actor_id; pass --actor-id or use a profile with actor_id")
+	}
+	refs := append([]string{"topic:" + topicID, "thread:" + threadID}, normalizedStringsOrEmpty(refFlags.values)...)
+	event := map[string]any{
+		"type":       "message_posted",
+		"actor_id":   actorID,
+		"thread_id":  threadID,
+		"thread_ref": "thread:" + threadID,
+		"refs":       uniqueStrings(refs),
+		"summary":    firstNonEmpty(strings.TrimSpace(summaryFlag.value), truncatePreview(message)),
+		"payload": map[string]any{
+			"kind": "topic_discussion_message",
+			"text": message,
+		},
+		"provenance": map[string]any{"sources": []any{"actor_statement:anx-cli"}},
+	}
+	return map[string]any{"actor_id": actorID, "event": event}, dryRunFlag.set && dryRunFlag.value, nil
+}
+
+func (a *App) parseCardCreateInput(args []string, cfg config.Resolved, commandName string) (map[string]any, bool, error) {
+	fs := newSilentFlagSet(commandName)
+	var boardFlag, titleFlag, contentFileFlag, fromFileFlag trackedString
+	var actorIDFlag, requestKeyFlag, ifBoardUpdatedAtFlag trackedString
+	var columnFlag, topicFlag, documentRefFlag, riskFlag, dueAtFlag trackedString
+	var beforeCardIDFlag, afterCardIDFlag trackedString
+	var assigneeRefFlags, relatedRefFlags, doneFlags trackedStrings
+	var dryRunFlag trackedBool
+	fs.Var(&boardFlag, "board", "Board id for the new card")
+	fs.Var(&boardFlag, "board-id", "Board id for the new card")
+	fs.Var(&titleFlag, "title", "Card title")
+	fs.Var(&contentFileFlag, "content-file", "Load card summary/body text from a local file")
+	fs.Var(&fromFileFlag, "from-file", "Advanced JSON request body from file")
+	fs.Var(&actorIDFlag, "actor-id", "Actor id")
+	fs.Var(&requestKeyFlag, "request-key", "Request key for idempotency")
+	fs.Var(&ifBoardUpdatedAtFlag, "if-board-updated-at", "Board updated_at concurrency token")
+	fs.Var(&columnFlag, "column", "Initial board column key")
+	fs.Var(&topicFlag, "topic", "Related topic id; plain ids are normalized to topic:<id>")
+	fs.Var(&documentRefFlag, "document-ref", "Pinned document typed ref")
+	fs.Var(&riskFlag, "risk", "Risk level: low, medium, high, critical")
+	fs.Var(&dueAtFlag, "due-at", "Due timestamp")
+	fs.Var(&beforeCardIDFlag, "before-card-id", "Place before this card id")
+	fs.Var(&afterCardIDFlag, "after-card-id", "Place after this card id")
+	fs.Var(&assigneeRefFlags, "assignee-ref", "Assignee actor typed reference (repeatable)")
+	fs.Var(&relatedRefFlags, "ref", "Additional related typed ref (repeatable)")
+	fs.Var(&doneFlags, "done", "Definition-of-done checklist item (repeatable)")
+	fs.Var(&dryRunFlag, "dry-run", "Validate and render request without sending the mutation")
+	if err := fs.Parse(args); err != nil {
+		return nil, false, errnorm.Usage("invalid_flags", err.Error())
+	}
+	if len(fs.Args()) > 0 {
+		return nil, false, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
+	}
+	fieldFlagsSet := strings.TrimSpace(boardFlag.value) != "" ||
+		strings.TrimSpace(titleFlag.value) != "" ||
+		strings.TrimSpace(contentFileFlag.value) != "" ||
+		strings.TrimSpace(actorIDFlag.value) != "" ||
+		strings.TrimSpace(requestKeyFlag.value) != "" ||
+		strings.TrimSpace(ifBoardUpdatedAtFlag.value) != "" ||
+		strings.TrimSpace(columnFlag.value) != "" ||
+		strings.TrimSpace(topicFlag.value) != "" ||
+		strings.TrimSpace(documentRefFlag.value) != "" ||
+		strings.TrimSpace(riskFlag.value) != "" ||
+		strings.TrimSpace(dueAtFlag.value) != "" ||
+		strings.TrimSpace(beforeCardIDFlag.value) != "" ||
+		strings.TrimSpace(afterCardIDFlag.value) != "" ||
+		len(assigneeRefFlags.values) > 0 ||
+		len(relatedRefFlags.values) > 0 ||
+		len(doneFlags.values) > 0
+	if strings.TrimSpace(fromFileFlag.value) != "" || (!fieldFlagsSet && strings.TrimSpace(contentFileFlag.value) == "") {
+		if fieldFlagsSet {
+			return nil, false, errnorm.Usage("invalid_args", fmt.Sprintf("field flags cannot be combined with JSON body input for `anx %s`", commandName))
+		}
+		body, dryRun, err := a.parseJSONBodyInputWithOptions(args, commandName, jsonBodyInputOptions{allowDryRun: true})
+		if err != nil {
+			return nil, false, err
+		}
+		bodyMap, ok := body.(map[string]any)
+		if !ok {
+			return nil, false, errnorm.Usage("invalid_request", "JSON body for `anx cards create` must be an object")
+		}
+		ensureEmptyListDefaults(bodyMap, "card", []string{"assignee_refs", "resolution_refs", "related_refs"})
+		if err := finalizeOptionalMutationBodyActorID(bodyMap, cfg); err != nil {
+			return nil, false, err
+		}
+		return bodyMap, dryRun, nil
+	}
+	if err := validatePlacementFlags(beforeCardIDFlag.value, afterCardIDFlag.value, commandName); err != nil {
+		return nil, false, err
+	}
+	boardID := strings.TrimSpace(boardFlag.value)
+	if err := validateID(boardID, "board id"); err != nil {
+		return nil, false, err
+	}
+	title := strings.TrimSpace(titleFlag.value)
+	if title == "" {
+		return nil, false, errnorm.Usage("invalid_request", "`--title` is required for `anx cards create`")
+	}
+	content, err := a.readTextFlagFile(contentFileFlag.value, commandName, "--content-file")
+	if err != nil {
+		return nil, false, err
+	}
+	card := map[string]any{
+		"title":           title,
+		"summary":         content,
+		"column_key":      firstNonEmpty(strings.TrimSpace(columnFlag.value), "backlog"),
+		"assignee_refs":   normalizedStringsOrEmpty(assigneeRefFlags.values),
+		"resolution_refs": []any{},
+		"related_refs":    normalizedStringsOrEmpty(relatedRefFlags.values),
+		"risk":            firstNonEmpty(strings.TrimSpace(riskFlag.value), "low"),
+		"provenance":      map[string]any{"sources": []any{"inferred"}},
+	}
+	if topicRef := normalizeTopicFlagRef(topicFlag.value); topicRef != "" {
+		card["topic_ref"] = topicRef
+	}
+	if documentRef := strings.TrimSpace(documentRefFlag.value); documentRef != "" {
+		card["document_ref"] = documentRef
+	}
+	if dueAt := strings.TrimSpace(dueAtFlag.value); dueAt != "" {
+		card["due_at"] = dueAt
+	}
+	if done := normalizeStringFilters(doneFlags.values); len(done) > 0 {
+		card["definition_of_done"] = done
+	}
+	if beforeCardID := strings.TrimSpace(beforeCardIDFlag.value); beforeCardID != "" {
+		card["before_card_id"] = beforeCardID
+	}
+	if afterCardID := strings.TrimSpace(afterCardIDFlag.value); afterCardID != "" {
+		card["after_card_id"] = afterCardID
+	}
+	body := map[string]any{
+		"board_id": boardID,
+		"card":     card,
+	}
+	if requestKey := strings.TrimSpace(requestKeyFlag.value); requestKey != "" {
+		body["request_key"] = requestKey
+	}
+	if ifBoardUpdatedAt := strings.TrimSpace(ifBoardUpdatedAtFlag.value); ifBoardUpdatedAt != "" {
+		body["if_board_updated_at"] = ifBoardUpdatedAt
+	}
+	actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
+	if err != nil {
+		return nil, false, err
+	}
+	if actorID != "" {
+		body["actor_id"] = actorID
+	}
+	if err := finalizeOptionalMutationBodyActorID(body, cfg); err != nil {
+		return nil, false, err
+	}
+	return body, dryRunFlag.set && dryRunFlag.value, nil
+}
+
+func (a *App) parseCardReviseInput(ctx context.Context, args []string, cfg config.Resolved, commandName string) (string, map[string]any, error) {
+	fs := newSilentFlagSet(commandName)
+	var cardIDFlag, contentFileFlag, titleFlag, ifUpdatedAtFlag, actorIDFlag, fromFileFlag trackedString
+	fs.Var(&cardIDFlag, "card", "Card id")
+	fs.Var(&cardIDFlag, "card-id", "Card id")
+	fs.Var(&contentFileFlag, "content-file", "Load revised card summary/body text from a local file")
+	fs.Var(&titleFlag, "title", "Optional revised card title")
+	fs.Var(&ifUpdatedAtFlag, "if-updated-at", "Card updated_at concurrency token; discovered from cards get when omitted")
+	fs.Var(&actorIDFlag, "actor-id", "Actor id")
+	fs.Var(&fromFileFlag, "from-file", "Advanced JSON patch request body from file")
+	if err := fs.Parse(args); err != nil {
+		return "", nil, errnorm.Usage("invalid_flags", err.Error())
+	}
+	positionals := fs.Args()
+	cardID := strings.TrimSpace(cardIDFlag.value)
+	if cardID == "" && len(positionals) > 0 {
+		cardID = strings.TrimSpace(positionals[0])
+		positionals = positionals[1:]
+	}
+	if len(positionals) > 0 {
+		return "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
+	}
+	if err := validateID(cardID, "card id"); err != nil {
+		return "", nil, err
+	}
+	fieldFlagsSet := strings.TrimSpace(contentFileFlag.value) != "" || strings.TrimSpace(titleFlag.value) != "" || strings.TrimSpace(ifUpdatedAtFlag.value) != "" || strings.TrimSpace(actorIDFlag.value) != ""
+	if strings.TrimSpace(fromFileFlag.value) != "" {
+		if fieldFlagsSet {
+			return "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("field flags cannot be combined with JSON body input for `anx %s`", commandName))
+		}
+		_, bodyAny, err := a.parseIDAndBodyInput(append([]string{"--card-id", cardID, "--from-file", fromFileFlag.value}, []string{}...), "card-id", "card id", commandName)
+		if err != nil {
+			return "", nil, err
+		}
+		bodyMap, ok := bodyAny.(map[string]any)
+		if !ok {
+			return "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object", commandName))
+		}
+		if err := a.ensureCardPatchConcurrency(ctx, cfg, cardID, bodyMap); err != nil {
+			return "", nil, err
+		}
+		return cardID, bodyMap, nil
+	}
+	patch := map[string]any{}
+	if contentFile := strings.TrimSpace(contentFileFlag.value); contentFile != "" {
+		content, err := a.readTextFlagFile(contentFile, commandName, "--content-file")
+		if err != nil {
+			return "", nil, err
+		}
+		patch["summary"] = content
+	}
+	if title := strings.TrimSpace(titleFlag.value); title != "" {
+		patch["title"] = title
+	}
+	if len(patch) == 0 {
+		return "", nil, errnorm.Usage("invalid_request", "`anx cards revise` requires --content-file, --title, or --from-file")
+	}
+	body := map[string]any{"patch": patch}
+	if ifUpdatedAt := strings.TrimSpace(ifUpdatedAtFlag.value); ifUpdatedAt != "" {
+		body["if_updated_at"] = ifUpdatedAt
+	}
+	actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
+	if err != nil {
+		return "", nil, err
+	}
+	if actorID != "" {
+		body["actor_id"] = actorID
+	}
+	if err := a.ensureCardPatchConcurrency(ctx, cfg, cardID, body); err != nil {
+		return "", nil, err
+	}
+	return cardID, body, nil
+}
+
+func (a *App) parseCardAssignInput(ctx context.Context, args []string, cfg config.Resolved, commandName string) (string, map[string]any, error) {
+	fs := newSilentFlagSet(commandName)
+	var cardIDFlag, ifUpdatedAtFlag, actorIDFlag trackedString
+	var assigneeRefFlags trackedStrings
+	var clearFlag trackedBool
+	fs.Var(&cardIDFlag, "card", "Card id")
+	fs.Var(&cardIDFlag, "card-id", "Card id")
+	fs.Var(&assigneeRefFlags, "assignee-ref", "Assignee actor typed reference (repeatable)")
+	fs.Var(&ifUpdatedAtFlag, "if-updated-at", "Card updated_at concurrency token; discovered from cards get when omitted")
+	fs.Var(&actorIDFlag, "actor-id", "Actor id")
+	fs.Var(&clearFlag, "clear", "Clear assignees")
+	if err := fs.Parse(args); err != nil {
+		return "", nil, errnorm.Usage("invalid_flags", err.Error())
+	}
+	cardID, err := parseCardIDFromFlagOrPositionals(cardIDFlag.value, fs.Args(), commandName)
+	if err != nil {
+		return "", nil, err
+	}
+	if clearFlag.value && len(assigneeRefFlags.values) > 0 {
+		return "", nil, errnorm.Usage("invalid_request", "--clear cannot be combined with --assignee-ref")
+	}
+	assignees := normalizedStringsOrEmpty(assigneeRefFlags.values)
+	if !clearFlag.value && len(assignees) == 0 {
+		return "", nil, errnorm.Usage("invalid_request", "`anx cards assign` requires --assignee-ref or --clear")
+	}
+	body := map[string]any{"patch": map[string]any{"assignee_refs": assignees}}
+	if ifUpdatedAt := strings.TrimSpace(ifUpdatedAtFlag.value); ifUpdatedAt != "" {
+		body["if_updated_at"] = ifUpdatedAt
+	}
+	actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
+	if err != nil {
+		return "", nil, err
+	}
+	if actorID != "" {
+		body["actor_id"] = actorID
+	}
+	if err := a.ensureCardPatchConcurrency(ctx, cfg, cardID, body); err != nil {
+		return "", nil, err
+	}
+	return cardID, body, nil
+}
+
+func (a *App) parseCardMoveInput(ctx context.Context, args []string, cfg config.Resolved, commandName string) (string, map[string]any, error) {
+	fs := newSilentFlagSet(commandName)
+	var cardIDFlag, columnFlag, ifBoardUpdatedAtFlag, actorIDFlag, fromFileFlag trackedString
+	fs.Var(&cardIDFlag, "card", "Card id")
+	fs.Var(&cardIDFlag, "card-id", "Card id")
+	fs.Var(&columnFlag, "column", "Target board column key")
+	fs.Var(&ifBoardUpdatedAtFlag, "if-board-updated-at", "Board updated_at concurrency token; discovered when omitted")
+	fs.Var(&actorIDFlag, "actor-id", "Actor id")
+	fs.Var(&fromFileFlag, "from-file", "Advanced JSON move request body from file")
+	if err := fs.Parse(args); err != nil {
+		return "", nil, errnorm.Usage("invalid_flags", err.Error())
+	}
+	cardID, err := parseCardIDFromFlagOrPositionals(cardIDFlag.value, fs.Args(), commandName)
+	if err != nil {
+		return "", nil, err
+	}
+	if strings.TrimSpace(fromFileFlag.value) != "" {
+		if strings.TrimSpace(columnFlag.value) != "" || strings.TrimSpace(ifBoardUpdatedAtFlag.value) != "" || strings.TrimSpace(actorIDFlag.value) != "" {
+			return "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("field flags cannot be combined with JSON body input for `anx %s`", commandName))
+		}
+		_, bodyAny, err := a.parseIDAndBodyInput(append([]string{"--card-id", cardID, "--from-file", fromFileFlag.value}, []string{}...), "card-id", "card id", commandName)
+		if err != nil {
+			return "", nil, err
+		}
+		bodyMap, ok := bodyAny.(map[string]any)
+		if !ok {
+			return "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object", commandName))
+		}
+		if err := a.ensureCardMoveConcurrency(ctx, cfg, cardID, bodyMap); err != nil {
+			return "", nil, err
+		}
+		return cardID, bodyMap, nil
+	}
+	column := strings.TrimSpace(columnFlag.value)
+	if column == "" {
+		return "", nil, errnorm.Usage("invalid_request", "`--column` is required for `anx cards move`")
+	}
+	body := map[string]any{"column_key": column}
+	if ifBoardUpdatedAt := strings.TrimSpace(ifBoardUpdatedAtFlag.value); ifBoardUpdatedAt != "" {
+		body["if_board_updated_at"] = ifBoardUpdatedAt
+	}
+	actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
+	if err != nil {
+		return "", nil, err
+	}
+	if actorID != "" {
+		body["actor_id"] = actorID
+	}
+	if err := a.ensureCardMoveConcurrency(ctx, cfg, cardID, body); err != nil {
+		return "", nil, err
+	}
+	return cardID, body, nil
+}
+
+func (a *App) parseCardResolveInput(ctx context.Context, args []string, cfg config.Resolved, commandName string) (string, map[string]any, error) {
+	fs := newSilentFlagSet(commandName)
+	var cardIDFlag, resolutionFlag, ifBoardUpdatedAtFlag, actorIDFlag trackedString
+	var resolutionRefFlags trackedStrings
+	fs.Var(&cardIDFlag, "card", "Card id")
+	fs.Var(&cardIDFlag, "card-id", "Card id")
+	fs.Var(&resolutionFlag, "resolution", "Resolution value: done or canceled")
+	fs.Var(&resolutionRefFlags, "resolution-ref", "Evidence event/artifact typed ref (repeatable)")
+	fs.Var(&ifBoardUpdatedAtFlag, "if-board-updated-at", "Board updated_at concurrency token; discovered when omitted")
+	fs.Var(&actorIDFlag, "actor-id", "Actor id")
+	if err := fs.Parse(args); err != nil {
+		return "", nil, errnorm.Usage("invalid_flags", err.Error())
+	}
+	cardID, err := parseCardIDFromFlagOrPositionals(cardIDFlag.value, fs.Args(), commandName)
+	if err != nil {
+		return "", nil, err
+	}
+	resolution := firstNonEmpty(strings.TrimSpace(resolutionFlag.value), "done")
+	refs := normalizeStringFilters(resolutionRefFlags.values)
+	if len(refs) == 0 {
+		return "", nil, errnorm.Usage("invalid_request", "`anx cards resolve` requires at least one --resolution-ref")
+	}
+	body := map[string]any{
+		"column_key":      "done",
+		"resolution":      resolution,
+		"resolution_refs": refs,
+	}
+	if ifBoardUpdatedAt := strings.TrimSpace(ifBoardUpdatedAtFlag.value); ifBoardUpdatedAt != "" {
+		body["if_board_updated_at"] = ifBoardUpdatedAt
+	}
+	actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
+	if err != nil {
+		return "", nil, err
+	}
+	if actorID != "" {
+		body["actor_id"] = actorID
+	}
+	if err := a.ensureCardMoveConcurrency(ctx, cfg, cardID, body); err != nil {
+		return "", nil, err
+	}
+	return cardID, body, nil
+}
+
+func (a *App) parseCardReopenInput(ctx context.Context, args []string, cfg config.Resolved, commandName string) (string, map[string]any, error) {
+	fs := newSilentFlagSet(commandName)
+	var cardIDFlag, columnFlag, ifBoardUpdatedAtFlag, actorIDFlag trackedString
+	fs.Var(&cardIDFlag, "card", "Card id")
+	fs.Var(&cardIDFlag, "card-id", "Card id")
+	fs.Var(&columnFlag, "column", "Target reopened column; defaults to ready")
+	fs.Var(&ifBoardUpdatedAtFlag, "if-board-updated-at", "Board updated_at concurrency token; discovered when omitted")
+	fs.Var(&actorIDFlag, "actor-id", "Actor id")
+	if err := fs.Parse(args); err != nil {
+		return "", nil, errnorm.Usage("invalid_flags", err.Error())
+	}
+	cardID, err := parseCardIDFromFlagOrPositionals(cardIDFlag.value, fs.Args(), commandName)
+	if err != nil {
+		return "", nil, err
+	}
+	body := map[string]any{
+		"column_key": firstNonEmpty(strings.TrimSpace(columnFlag.value), "ready"),
+	}
+	if ifBoardUpdatedAt := strings.TrimSpace(ifBoardUpdatedAtFlag.value); ifBoardUpdatedAt != "" {
+		body["if_board_updated_at"] = ifBoardUpdatedAt
+	}
+	actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
+	if err != nil {
+		return "", nil, err
+	}
+	if actorID != "" {
+		body["actor_id"] = actorID
+	}
+	if err := a.ensureCardMoveConcurrency(ctx, cfg, cardID, body); err != nil {
+		return "", nil, err
+	}
+	return cardID, body, nil
+}
+
+func parseCardIDFromFlagOrPositionals(raw string, positionals []string, commandName string) (string, error) {
+	cardID := strings.TrimSpace(raw)
+	if cardID == "" && len(positionals) > 0 {
+		cardID = strings.TrimSpace(positionals[0])
+		positionals = positionals[1:]
+	}
+	if len(positionals) > 0 {
+		return "", errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
+	}
+	if err := validateID(cardID, "card id"); err != nil {
+		return "", err
+	}
+	return cardID, nil
+}
+
+func normalizeTopicFlagRef(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if strings.Contains(raw, ":") {
+		return raw
+	}
+	return "topic:" + raw
+}
+
+func normalizedStringsOrEmpty(values []string) []string {
+	normalized := normalizeStringFilters(values)
+	if normalized == nil {
+		return []string{}
+	}
+	return normalized
+}
+
+func (a *App) readTextFlagFile(path string, commandName string, flagName string) (string, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "", errnorm.Usage("invalid_request", fmt.Sprintf("`%s` is required for `anx %s`", flagName, commandName))
+	}
+	content, err := a.readRawFile(path)
+	if err != nil {
+		return "", err
+	}
+	return string(content), nil
+}
+
+func (a *App) ensureCardPatchConcurrency(ctx context.Context, cfg config.Resolved, cardID string, body map[string]any) error {
+	if strings.TrimSpace(anyString(body["if_updated_at"])) != "" {
+		return finalizeOptionalMutationBodyActorID(body, cfg)
+	}
+	card, err := a.fetchCardBody(ctx, cfg, cardID)
+	if err != nil {
+		return err
+	}
+	if updatedAt := strings.TrimSpace(anyString(card["updated_at"])); updatedAt != "" {
+		body["if_updated_at"] = updatedAt
+	}
+	if strings.TrimSpace(anyString(body["if_updated_at"])) == "" {
+		return errnorm.Usage("invalid_request", "`if_updated_at` is required; run `anx cards get --card-id "+cardID+"` and retry with --if-updated-at <updated_at>")
+	}
+	return finalizeOptionalMutationBodyActorID(body, cfg)
+}
+
+func (a *App) ensureCardMoveConcurrency(ctx context.Context, cfg config.Resolved, cardID string, body map[string]any) error {
+	if strings.TrimSpace(anyString(body["if_board_updated_at"])) != "" {
+		return finalizeOptionalMutationBodyActorID(body, cfg)
+	}
+	card, err := a.fetchCardBody(ctx, cfg, cardID)
+	if err != nil {
+		return err
+	}
+	boardID := strings.TrimSpace(anyString(card["board_id"]))
+	if boardID == "" {
+		return errnorm.Usage("invalid_request", "`if_board_updated_at` is required because the card response did not include board_id")
+	}
+	boardResult, err := a.invokeTypedJSONWithIDResolution(ctx, cfg, "boards get", "boards.get", "board_id", boardID, boardIDLookupSpec, nil, nil)
+	if err != nil {
+		return err
+	}
+	boardBody := extractNestedMap(asMap(boardResult.Data), "body")
+	board := extractNestedMap(boardBody, "board")
+	if updatedAt := strings.TrimSpace(anyString(board["updated_at"])); updatedAt != "" {
+		body["if_board_updated_at"] = updatedAt
+	}
+	if strings.TrimSpace(anyString(body["if_board_updated_at"])) == "" {
+		return errnorm.Usage("invalid_request", "`if_board_updated_at` is required; run `anx boards get --board-id "+boardID+"` and retry with --if-board-updated-at <updated_at>")
+	}
+	return finalizeOptionalMutationBodyActorID(body, cfg)
+}
+
+func (a *App) fetchCardBody(ctx context.Context, cfg config.Resolved, cardID string) (map[string]any, error) {
+	result, err := a.invokeTypedJSONWithIDResolution(ctx, cfg, "cards get", "cards.get", "card_id", cardID, cardIDLookupSpec, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	body := extractNestedMap(asMap(result.Data), "body")
+	card := extractNestedMap(body, "card")
+	if len(card) == 0 {
+		return nil, errnorm.Usage("invalid_request", "cards get response did not include card metadata")
+	}
+	return card, nil
+}
+
+func (a *App) fetchTopicBody(ctx context.Context, cfg config.Resolved, topicID string) (map[string]any, error) {
+	result, err := a.invokeTypedJSONWithIDResolution(ctx, cfg, "topics get", "topics.get", "topic_id", topicID, topicIDLookupSpec, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	body := extractNestedMap(asMap(result.Data), "body")
+	topic := extractNestedMap(body, "topic")
+	if len(topic) == 0 {
+		return nil, errnorm.Usage("invalid_request", "topics get response did not include topic metadata")
+	}
+	return topic, nil
 }
 
 func (a *App) normalizeTopicMutationBody(ctx context.Context, cfg config.Resolved, commandID string, body map[string]any) error {

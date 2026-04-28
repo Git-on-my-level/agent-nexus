@@ -49,7 +49,7 @@ export const scenarioConfigs = {
         eventSummary: "Support recommendation: customer-critical fixes for Friday pilot rescue",
         eventThreadKeys: ["main", "feedback"],
         eventIncludeDocument: false,
-        requireDocsUpdate: false,
+        requireDocsRevision: false,
       },
       {
         name: "delivery-engineer",
@@ -67,7 +67,7 @@ export const scenarioConfigs = {
         eventSummary: "Delivery recommendation: minimum safe Friday scope for pilot rescue",
         eventThreadKeys: ["main", "delivery"],
         eventIncludeDocument: false,
-        requireDocsUpdate: false,
+        requireDocsRevision: false,
       },
       {
         name: "project-manager",
@@ -85,7 +85,7 @@ export const scenarioConfigs = {
         eventSummary: "Project manager recommendation: Friday pilot gate and ownership plan",
         eventThreadKeys: ["main", "delivery"],
         eventIncludeDocument: false,
-        requireDocsUpdate: false,
+        requireDocsRevision: false,
       },
       {
         name: "product-manager",
@@ -103,7 +103,7 @@ export const scenarioConfigs = {
         eventSummary: "Product decision: final NorthWave pilot rescue recommendation",
         eventThreadKeys: ["main", "feedback", "delivery"],
         eventIncludeDocument: true,
-        requireDocsUpdate: true,
+        requireDocsRevision: true,
       },
     ],
   },
@@ -169,7 +169,7 @@ export const scenarioConfigs = {
         eventSummary: "Boss kid plan: today's lemonade stand game plan and helpful reminders",
         eventThreadKeys: ["main", "sales", "backoffice"],
         eventIncludeDocument: true,
-        requireDocsUpdate: true,
+        requireDocsRevision: true,
       },
       {
         name: "sales-kid",
@@ -193,7 +193,7 @@ export const scenarioConfigs = {
         eventSummary: "Sales kid update: sidewalk pitch ideas and what customers are liking",
         eventThreadKeys: ["main", "sales"],
         eventIncludeDocument: true,
-        requireDocsUpdate: true,
+        requireDocsRevision: true,
       },
       {
         name: "backoffice-kid",
@@ -217,7 +217,7 @@ export const scenarioConfigs = {
         eventSummary: "Backoffice kid update: prep timing, supply stash, and kitchen needs",
         eventThreadKeys: ["main", "backoffice"],
         eventIncludeDocument: true,
-        requireDocsUpdate: true,
+        requireDocsRevision: true,
       },
     ],
   },
@@ -506,9 +506,9 @@ Read workflow state:
 - List cards: \`anx cards list\`
 - Read one card: \`anx cards get --card-id <card-id>\`
 - Read a seeded scenario document: \`anx docs get --document-id <document-id>\`
-- Stage a document revision update: \`anx docs propose-update --document-id <document-id> --from-file doc-update-template.json\`
-- Apply a staged document update: \`anx docs apply --proposal-id <proposal-id>\`
-- Update a document immediately (no proposal): \`anx docs update --document-id <document-id> --from-file doc-update-template.json\`
+- Stage a document revision: \`anx docs revise --document-id <document-id> --from-file doc-revision-template.json\`
+- Apply a staged document revision: \`anx docs revise --apply --proposal-id <proposal-id>\`
+- Revise a document immediately (no proposal): \`anx docs revise --apply --document-id <document-id> --from-file doc-revision-template.json\`
 
 Write workflow state:
 - Topics are the primary mutable coordination resource; \`anx threads patch\`, \`anx threads apply\`, and other thread mutation commands are not supported.
@@ -516,8 +516,9 @@ Write workflow state:
 - Reply to a message thread item: \`anx events create --from-file reply-template.json\`
 - Update a topic in one step: \`anx topics patch --topic-id <topic-id> --from-file topic-patch.json\`
 - Create a shared board from stdin: \`cat board-template.json | anx boards create --json\`
-- Create a new card on a board from stdin: \`cat card-template.json | anx cards create --json\`
-- For card-level changes, use \`anx cards patch --card-id <card-id> --from-file card-patch.json\` (see \`anx help cards patch\`).
+- Create a new card from local prose: \`anx cards create --board <board-id> --topic <topic-id> --title "Concrete task" --content-file card.md --ref thread:<role-thread-id>\`
+- Revise a card from local prose: \`anx cards revise --card <card-id> --content-file card-revision.md\`
+- Assign, move, or resolve cards with domain verbs: \`anx cards assign\`, \`anx cards move\`, \`anx cards resolve\`.
 - Validate an event before sending it: \`anx events validate --from-file event-template.json\`
 - Dry-run an event create without sending it: \`anx events create --from-file event-template.json --dry-run\`
 - Edit \`event-template.json\` in place, then create the event: \`anx events create --from-file event-template.json\`
@@ -1057,7 +1058,24 @@ export function cardPatchTemplate(role, targets, cardState) {
 `;
 }
 
-function docUpdateTemplate(targets, config, role) {
+function cardContentTemplate(role, targets) {
+  const threadID = targets.primaryThread?.id ?? targets.mainThread.id;
+  return `Replace this with the concrete task this agent is taking on.
+
+Keep the task tied to role thread ${threadID}.
+Include current evidence, next action, and any blocker.
+`;
+}
+
+function cardRevisionContentTemplate(role, targets) {
+  const threadID = targets.primaryThread?.id ?? targets.mainThread.id;
+  return `Replace this with the updated card status for role thread ${threadID}.
+
+Summarize what changed, what is still blocked, and the next action.
+`;
+}
+
+function docRevisionTemplate(targets, config, role) {
   const primaryDocument = targets.primaryDocument;
   const primaryDocumentKey = role.primaryDocumentKey ?? "primary";
   const templateContent =
@@ -1158,20 +1176,21 @@ function targetsGuide(role, targets) {
     `- list current visible messages with: anx events list --thread-id ${targets.mainThread.id} --type message_posted --max-events 10 --full-id`,
     "- reply by adding `event:<message_event_id>` to `reply-template.json` refs before creating it",
   );
-  if (role.requireDocsUpdate) {
+  if (role.requireDocsRevision) {
     lines.push(
       `Primary document to update: ${targets.primaryDocument?.id ?? ""}`,
       `Read it first: anx docs get --document-id ${targets.primaryDocument?.id ?? ""}`,
-      `Stage it: anx docs propose-update --document-id ${targets.primaryDocument?.id ?? ""} --from-file doc-update-template.json`,
-      `Then apply it: anx docs apply --proposal-id <proposal-id>`,
-      `Or write immediately: anx docs update --document-id ${targets.primaryDocument?.id ?? ""} --from-file doc-update-template.json`,
+      `Stage it: anx docs revise --document-id ${targets.primaryDocument?.id ?? ""} --from-file doc-revision-template.json`,
+      `Then apply it: anx docs revise --apply --proposal-id <proposal-id>`,
+      `Or write immediately: anx docs revise --apply --document-id ${targets.primaryDocument?.id ?? ""} --from-file doc-revision-template.json`,
     );
   }
   lines.push(
     "",
     "Board/task checklist:",
     "- the boss kid should create the shared board early from `board-template.json`",
-    "- create or update one role-specific task card from `card-template.json` after the board exists",
+    "- create one role-specific task card from `card.md` after the board exists",
+    "- revise an existing role-specific card from `card-revision.md`",
     "- keep your card tied to your primary role thread instead of forcing every card onto the shared main thread",
     "- if you want multiple cards on one board, they need different parent-thread context; do not mindlessly clone the same thread refs",
   );
@@ -1663,11 +1682,11 @@ Environment:
 - Reply template for the main thread: ./reply-template.json
 - Event template: ./event-template.json
 - Board template: ./board-template.json
-- Card template: ./card-template.json
-${existingRoleCard ? `- Existing role card: ${existingRoleCard.id} (update template: ./card-patch-template.json)\n` : ""}
+- Card body template: ./card.md
+${existingRoleCard ? `- Existing role card: ${existingRoleCard.id} (revise with ./card-revision.md)\n` : ""}
 ${primaryThreadHasOwnTemplates ? "- Primary-thread message template: ./primary-thread-message-template.json\n- Primary-thread reply template: ./primary-thread-reply-template.json" : ""}
 ${continuationFiles.join("\n")}
-- Document update template (if present): ./doc-update-template.json
+- Document revision template (if present): ./doc-revision-template.json
 - Result template: ./result-template.md
 `;
   writeFile(path.join(workspaceDir, "AGENTS.md"), agentsContent);
@@ -1698,21 +1717,21 @@ ${continuationFiles.join("\n")}
   }
   writeFile(path.join(workspaceDir, "event-template.json"), eventTemplate(role, targets));
   writeFile(path.join(workspaceDir, "board-template.json"), boardTemplate(scenarioConfig, role, targets));
-  writeFile(path.join(workspaceDir, "card-template.json"), cardTemplate(role, targets, { boardID: knownBoardID }));
+  writeFile(path.join(workspaceDir, "card.md"), cardContentTemplate(role, targets));
   if (existingRoleCard) {
-    writeFile(path.join(workspaceDir, "card-patch-template.json"), cardPatchTemplate(role, targets, existingRoleCard));
+    writeFile(path.join(workspaceDir, "card-revision.md"), cardRevisionContentTemplate(role, targets));
   }
-  if (role.requireDocsUpdate) {
-    writeFile(path.join(workspaceDir, "doc-update-template.json"), docUpdateTemplate(targets, scenarioConfig, role));
+  if (role.requireDocsRevision) {
+    writeFile(path.join(workspaceDir, "doc-revision-template.json"), docRevisionTemplate(targets, scenarioConfig, role));
   }
   writeFile(path.join(workspaceDir, "result-template.md"), resultTemplate());
 
   const continuationPrompt = chapterStateGuide
     ? `Read CHAPTER.md and CHAPTER_STATE.md first. Continue the existing scenario state from ${chapterID}. Do not recreate the board, docs, cards, or identities that already exist unless the chapter explicitly tells you to do so. Prefer adding new messages, new replies, card moves or updates, and new document revisions over creating duplicate resources.`
     : "";
-  const prompt = role.requireDocsUpdate
-    ? `Read SCENARIO.md, COMMANDS.md, TARGETS.md, and ROLE_CONTEXT.md. ${continuationPrompt} Execute your role with the real anx CLI. Use message-template.json for a kickoff message on the main thread, use reply-template.json for at least one reply to another kid's message, and use message_posted rather than actor_statement for those conversational updates.${primaryThreadHasOwnTemplates ? " Also use primary-thread-message-template.json for at least one role-thread update when the chapter asks for richer thread activity." : ""} If you are the boss kid, create the shared board early from board-template.json only if it does not already exist, add at most one coordination card from card-template.json if you do not already own one, and make the board visible to the others. ${existingRoleCard ? `If your role card ${existingRoleCard.id} already exists, update it with card-patch-template.json via \`anx cards patch --card-id ${existingRoleCard.id} --from-file card-patch-template.json\` instead of creating a duplicate.` : "If you need a new card, keep it tied to its intended role thread instead of attaching everything to the shared main thread."} Update doc-update-template.json in place, stage the document update with \`anx docs propose-update\`, inspect the diff, apply it with \`anx docs apply\`, then post your final actor_statement from event-template.json. Use \`anx events list --thread-id ${targets.mainThread.id} --type message_posted --max-events 10 --full-id\` to find reply targets. Write result.md and then give a short final summary.`
-    : `Read SCENARIO.md, COMMANDS.md, TARGETS.md, and ROLE_CONTEXT.md. ${continuationPrompt} Execute your role with the real anx CLI. Use message-template.json for a kickoff message on the main thread, use reply-template.json for at least one reply to another kid's message, and create or inspect board work when the scenario asks for it.${primaryThreadHasOwnTemplates ? " Also use primary-thread-message-template.json for at least one role-thread update when the chapter asks for richer thread activity." : ""} ${existingRoleCard ? `Your role card ${existingRoleCard.id} already exists, so update it with card-patch-template.json via \`anx cards patch --card-id ${existingRoleCard.id} --from-file card-patch-template.json\` instead of creating a duplicate.` : "Create one role-specific task card from card-template.json after the board exists, and keep that card tied to your primary role thread rather than the shared main thread."} Use \`anx events list --thread-id ${targets.mainThread.id} --type message_posted --max-events 10 --full-id\` to find reply targets. After the conversational work is done, edit event-template.json in place, create the final actor_statement from that file, write result.md, and then give a short final summary.`;
+  const prompt = role.requireDocsRevision
+    ? `Read SCENARIO.md, COMMANDS.md, TARGETS.md, and ROLE_CONTEXT.md. ${continuationPrompt} Execute your role with the real anx CLI. Use message-template.json for a kickoff message on the main thread, use reply-template.json for at least one reply to another kid's message, and use message_posted rather than actor_statement for those conversational updates.${primaryThreadHasOwnTemplates ? " Also use primary-thread-message-template.json for at least one role-thread update when the chapter asks for richer thread activity." : ""} If you are the boss kid, create the shared board early from board-template.json only if it does not already exist, add at most one coordination card from card.md with \`anx cards create --content-file\` if you do not already own one, and make the board visible to the others. ${existingRoleCard ? `If your role card ${existingRoleCard.id} already exists, revise it with card-revision.md via \`anx cards revise --card ${existingRoleCard.id} --content-file card-revision.md\` instead of creating a duplicate.` : "If you need a new card, keep it tied to its intended role thread instead of attaching everything to the shared main thread."} Revise doc-revision-template.json in place, stage the document revision with \`anx docs revise\`, inspect the diff, apply it with the returned \`anx docs revise --apply --proposal-id <proposal-id>\`, then post your final actor_statement from event-template.json. Use \`anx events list --thread-id ${targets.mainThread.id} --type message_posted --max-events 10 --full-id\` to find reply targets. Write result.md and then give a short final summary.`
+    : `Read SCENARIO.md, COMMANDS.md, TARGETS.md, and ROLE_CONTEXT.md. ${continuationPrompt} Execute your role with the real anx CLI. Use message-template.json for a kickoff message on the main thread, use reply-template.json for at least one reply to another kid's message, and create or inspect board work when the scenario asks for it.${primaryThreadHasOwnTemplates ? " Also use primary-thread-message-template.json for at least one role-thread update when the chapter asks for richer thread activity." : ""} ${existingRoleCard ? `Your role card ${existingRoleCard.id} already exists, so revise it with card-revision.md via \`anx cards revise --card ${existingRoleCard.id} --content-file card-revision.md\` instead of creating a duplicate.` : "Create one role-specific task card from card.md with `anx cards create --content-file` after the board exists, and keep that card tied to your primary role thread rather than the shared main thread."} Use \`anx events list --thread-id ${targets.mainThread.id} --type message_posted --max-events 10 --full-id\` to find reply targets. After the conversational work is done, edit event-template.json in place, create the final actor_statement from that file, write result.md, and then give a short final summary.`;
 
   const piArgs = [
     "--print",

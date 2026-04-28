@@ -471,7 +471,7 @@ func validateDraftBody(commandID string, body map[string]any) []string {
 		"topics.patch":            validateDraftTopicPatch,
 		"cards.patch":             validateDraftCardPatch,
 		"cards.move":              validateDraftCardMove,
-		"docs.revisions.create":   validateDraftDocsUpdate,
+		"docs.revisions.create":   validateDraftDocsRevision,
 		"events.create":           validateDraftEventCreate,
 		"artifacts.create":        validateDraftArtifactCreate,
 		"inbox.acknowledge":       validateDraftInboxAck,
@@ -521,9 +521,9 @@ func draftCommandSpecByID(commandID string) (contractsclient.CommandSpec, bool) 
 	}, true
 }
 
-func validateDraftDocsUpdate(body map[string]any) []string {
+func validateDraftDocsRevision(body map[string]any) []string {
 	out := make([]string, 0)
-	if err := validateDocsUpdateBody(body, "docs revisions create"); err != nil {
+	if err := validateDocsRevisionBody(body, "docs revise"); err != nil {
 		out = append(out, err.Error())
 	}
 	return out
@@ -1261,7 +1261,7 @@ Use `+"`anx draft`"+` when you want a local checkpoint before sending a write to
 Choose the right path:
 
 - Use direct commands when the mutation is small and you are ready to apply it now.
-- Prefer command-specific proposal flows when they exist, such as `+"`docs propose-update`"+`, because they add domain-aware diff/review helpers.
+- Prefer command-specific proposal flows when they exist, such as `+"`docs revise`"+`, because they add domain-aware diff/review helpers.
 - Use `+"`draft`"+` for lower-level commands, generic JSON bodies, or cases where you want to stage the exact request before commit.
 
 Standard workflow

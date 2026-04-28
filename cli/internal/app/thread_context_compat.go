@@ -101,14 +101,14 @@ func (a *App) runThreadsContextCommand(ctx context.Context, args []string, cfg c
 	}
 
 	aggregateBody := map[string]any{
-		"thread_ids":       resolvedThreadIDs,
-		"thread_count":     len(resolvedThreadIDs),
-		"threads":          uniqueMapsByID(threadRecords),
-		"contexts":         contexts,
-		"recent_events":    uniqueMapsByID(recentEvents),
-		"key_artifacts":    uniqueContextArtifactItems(keyArtifacts),
-		"open_cards": uniqueMapsByID(openCards),
-		"documents":        uniqueMapsByID(documents),
+		"thread_ids":         resolvedThreadIDs,
+		"thread_count":       len(resolvedThreadIDs),
+		"threads":            uniqueMapsByID(threadRecords),
+		"contexts":           contexts,
+		"recent_events":      uniqueMapsByID(recentEvents),
+		"key_artifacts":      uniqueContextArtifactItems(keyArtifacts),
+		"open_cards":         uniqueMapsByID(openCards),
+		"documents":          uniqueMapsByID(documents),
 		"contexts_generated": true,
 		"full_id":            selection.fullID,
 	}

@@ -449,10 +449,34 @@ func buildTopicResourceBundle(ctx context.Context, opts handlerOptions, topic ma
 	if err != nil {
 		return topicResourceBundle{}, err
 	}
+	reverseRefEdges, err := opts.primitiveStore.ListRefEdgesByTarget(ctx, "topic:"+anyString(topic["id"]), "ref")
+	if err != nil {
+		return topicResourceBundle{}, err
+	}
 
 	boardIDs := collectTopicRefEdgeTargetIDs(refEdges, "board")
 	documentIDs := collectTopicRefEdgeTargetIDs(refEdges, "document")
 	threadIDs := append([]string{primaryThreadID}, collectTopicRefEdgeTargetIDs(refEdges, "thread")...)
+	reverseIDs := collectTopicReverseRefEdgeSourceIDs(reverseRefEdges)
+	boardIDs = append(boardIDs, reverseIDs.Boards...)
+	documentIDs = append(documentIDs, reverseIDs.Documents...)
+	threadIDs = append(threadIDs, reverseIDs.Threads...)
+	for _, cardID := range reverseIDs.Cards {
+		card, cardErr := opts.primitiveStore.GetBoardCard(ctx, "", cardID)
+		if cardErr == nil {
+			if boardID := strings.TrimSpace(anyString(card["board_id"])); boardID != "" {
+				boardIDs = append(boardIDs, boardID)
+			}
+			if threadID := strings.TrimSpace(anyString(card["thread_id"])); threadID != "" {
+				threadIDs = append(threadIDs, threadID)
+			}
+			if pinnedDocumentID := pinnedDocumentIDFromCard(card); pinnedDocumentID != "" {
+				documentIDs = append(documentIDs, pinnedDocumentID)
+			}
+		} else if !errors.Is(cardErr, primitives.ErrNotFound) {
+			return topicResourceBundle{}, cardErr
+		}
+	}
 
 	boardMemberships, err := opts.primitiveStore.ListBoardMembershipsByThread(ctx, primaryThreadID)
 	if err != nil {
@@ -596,6 +620,41 @@ func collectTopicRefEdgeTargetIDs(edges []primitives.RefEdge, targetType string)
 		}
 	}
 	return uniqueTopicIDs(out)
+}
+
+type topicReverseRefSourceIDs struct {
+	Boards    []string
+	Cards     []string
+	Documents []string
+	Threads   []string
+}
+
+func collectTopicReverseRefEdgeSourceIDs(edges []primitives.RefEdge) topicReverseRefSourceIDs {
+	var out topicReverseRefSourceIDs
+	for _, edge := range edges {
+		if strings.TrimSpace(edge.Relation) != "ref" {
+			continue
+		}
+		prefix, id, ok := splitTypedRefFromEdge(edge.SourceRef)
+		if !ok {
+			continue
+		}
+		switch strings.TrimSpace(prefix) {
+		case "board":
+			out.Boards = append(out.Boards, id)
+		case "card":
+			out.Cards = append(out.Cards, id)
+		case "document":
+			out.Documents = append(out.Documents, id)
+		case "thread":
+			out.Threads = append(out.Threads, id)
+		}
+	}
+	out.Boards = uniqueTopicIDs(out.Boards)
+	out.Cards = uniqueTopicIDs(out.Cards)
+	out.Documents = uniqueTopicIDs(out.Documents)
+	out.Threads = uniqueTopicIDs(out.Threads)
+	return out
 }
 
 func splitTypedRefFromEdge(ref string) (string, string, bool) {

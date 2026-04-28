@@ -24,14 +24,14 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `bridge` (manual): CLI-managed bridge bootstrap helpers for installing, templating, and checking `anx-agent-bridge`.
 - `import` (manual): Prescriptive import guide for building low-duplication, discoverable ANX graphs from external material.
 - `auth` (group): Register, inspect, and manage auth state
-- `topics` (group): Manage durable work subjects
-- `cards` (group): Manage board-scoped cards
+- `topics` (group): Discuss and coordinate around a topic, project, incident, or decision
+- `boards` (group): Track active work with boards, columns, and cards
+- `docs` (group): Create and revise durable context and institutional knowledge
+- `cards` (group): Manage board-scoped work cards
 - `threads` (group): Read-only backing-thread inspection (tooling and diagnostics)
-- `artifacts` (group): Manage artifact resources and content
-- `boards` (group): Manage board resources and ordered cards
-- `docs` (group): Manage long-lived docs and revisions
 - `events` (group): Manage events and event streams
 - `inbox` (group): List/get/ack/stream inbox items
+- `artifacts` (group): Manage artifact resources and content
 - `receipts` (group): Create receipt packets (subject_ref must be card:<card_id>)
 - `reviews` (group): Create review packets (subject_ref + receipt_ref; subject_ref must be card:<card_id>)
 - `derived` (group): Run derived-view maintenance actions
@@ -40,13 +40,8 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `auth invites create` (command): Create invite token
 - `auth invites revoke` (command): Revoke invite
 - `auth bootstrap status` (command): Bootstrap registration availability
-- `threads list` (command): List backing threads
-- `threads get` (command): Inspect backing thread
-- `threads timeline` (command): Get backing thread timeline
-- `threads context` (command): Get backing thread coordination context
 - `topics list` (command): List topics
 - `topics get` (command): Get topic
-- `topics create` (command): Create topic
 - `topics patch` (command): Patch topic
 - `topics timeline` (command): Get topic timeline
 - `topics workspace` (command): Get topic workspace (primary operator coordination read)
@@ -54,27 +49,9 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `topics unarchive` (command): Unarchive topic
 - `topics trash` (command): Move topic to trash
 - `topics restore` (command): Restore topic from trash
-- `cards list` (command): List cards
-- `cards get` (command): Get card
-- `cards create` (command): Create card (global path)
-- `cards patch` (command): Patch card
-- `cards move` (command): Move card
-- `cards archive` (command): Archive card
-- `cards trash` (command): Move card to trash
-- `cards purge` (command): Permanently delete archived or trashed card
-- `cards restore` (command): Restore archived or trashed card
-- `cards timeline` (command): Get card timeline
-- `artifacts list` (command): List artifacts
-- `artifacts get` (command): Get artifact metadata
-- `artifacts create` (command): Create artifact
-- `artifacts archive` (command): Archive artifact
-- `artifacts unarchive` (command): Unarchive artifact
-- `artifacts trash` (command): Move artifact to trash
-- `artifacts restore` (command): Restore artifact from trash
-- `artifacts purge` (command): Permanently delete trashed artifact
 - `boards list` (command): List boards
-- `boards create` (command): Create board
 - `boards get` (command): Get board
+- `boards patch` (command): Patch board
 - `boards archive` (command): Archive board
 - `boards unarchive` (command): Unarchive board
 - `boards trash` (command): Move board to trash
@@ -85,13 +62,27 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `boards cards create-batch` (command): Batch create cards on board
 - `boards cards get` (command): Get board-scoped card
 - `docs list` (command): List documents
-- `docs create` (command): Create document
 - `docs get` (command): Get document
+- `docs history` (command): List document revisions
+- `docs revision` (group): Nested generated help topic.
 - `docs trash` (command): Move document to trash
 - `docs archive` (command): Archive document
 - `docs unarchive` (command): Unarchive document
 - `docs restore` (command): Restore document from trash
 - `docs purge` (command): Permanently delete trashed document
+- `docs revision get` (command): Get document revision
+- `cards list` (command): List cards
+- `cards get` (command): Get card
+- `cards patch` (command): Patch card
+- `cards archive` (command): Archive card
+- `cards trash` (command): Move card to trash
+- `cards purge` (command): Permanently delete archived or trashed card
+- `cards restore` (command): Restore archived or trashed card
+- `cards timeline` (command): Get card timeline
+- `threads list` (command): List backing threads
+- `threads get` (command): Inspect backing thread
+- `threads timeline` (command): Get backing thread timeline
+- `threads context` (command): Get backing thread coordination context
 - `events get` (command): Get event by id
 - `events create` (command): Create event
 - `events stream` (command): Stream events (SSE)
@@ -106,6 +97,14 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `inbox ack` (command): Acknowledge inbox item
 - `inbox stream` (command): Stream inbox items (SSE)
 - `inbox tail` (command): Stream inbox items (SSE)
+- `artifacts list` (command): List artifacts
+- `artifacts get` (command): Get artifact metadata
+- `artifacts create` (command): Create artifact
+- `artifacts archive` (command): Archive artifact
+- `artifacts unarchive` (command): Unarchive artifact
+- `artifacts trash` (command): Move artifact to trash
+- `artifacts restore` (command): Restore artifact from trash
+- `artifacts purge` (command): Permanently delete trashed artifact
 - `derived rebuild` (command): Rebuild derived projections
 - `meta commands` (command): List command registry metadata
 - `meta command` (command): Get one command metadata entry
@@ -119,6 +118,16 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `secret get --reveal` (command): Reveal secret value
 - `secret exec` (command): Reveal multiple secrets by name
 - `secret update` (command): Update secret value
+- `topics create` (local-helper): Create a topic from plain flags, or from advanced JSON.
+- `topics discuss` (local-helper): Post a topic-centered discussion message from a local text file.
+- `boards create` (local-helper): Create an active-work Board from flags, optionally tied to a Topic.
+- `docs create` (local-helper): Create a durable document lineage, with a file-first text-doc path for agents.
+- `cards create` (local-helper): Create a board work card from flags plus a local prose file, or from advanced JSON.
+- `cards revise` (local-helper): Revise a card title and/or summary/body from local files without hand-authoring patch JSON.
+- `cards move` (local-helper): Move a card to another board column using Card workflow language.
+- `cards assign` (local-helper): Replace card assignees with explicit actor refs, or clear them.
+- `cards resolve` (local-helper): Resolve a card into the done column with evidence refs.
+- `cards reopen` (local-helper): Move a resolved card back into active workflow.
 - `events list` (local-helper): Compose backing-thread timeline reads with client-side thread/type/actor filters and preview summaries.
 - `events validate` (local-helper): Validate an `events create` payload locally from stdin or `--from-file` without sending it.
 - `events explain` (local-helper): Explain known event-type conventions, required refs, and validation hints, including when `message_posted` targets a backing-thread message stream.
@@ -128,11 +137,9 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `threads recommendations` (local-helper): Compose a diagnostic recommendation-oriented review of one backing thread with related follow-up context.
 - `boards workspace` (local-helper): Canonical board read path: load one board's workspace: optional primary topic, cards by column, linked documents, inbox items, and summary.
 - `boards cards list` (local-helper): List all cards on a board in canonical column order without hydrating thread details.
-- `docs propose-update` (local-helper): Stage a document update proposal locally and show the content diff before applying it.
+- `docs revise` (local-helper): Revise a durable document from a local file or JSON body; stages a diff proposal by default.
 - `docs content` (local-helper): Show the current document content together with authoritative head revision metadata.
 - `docs comments` (local-helper): List line-level document text comments from the document backing thread timeline.
-- `docs validate-update` (local-helper): Validate a `docs.revisions.create` payload locally from stdin or file without sending the mutation.
-- `docs apply` (local-helper): Apply a previously staged document update proposal.
 - `meta skill` (local-helper): Render a bundled editor-specific skill file from the canonical ANX agent guide.
 - `bridge install` (local-helper): Install `anx-agent-bridge` into a dedicated Python 3.11+ virtualenv and expose a PATH wrapper.
 - `bridge import-auth` (local-helper): Copy an existing `anx` profile and key into bridge auth state for one bridge config.
@@ -197,51 +204,44 @@ ANX concepts guide
 Use this command when you need to decide which primitive fits the use case before you start issuing writes.
 
 Selection rules:
+- Use topics for discussion and coordination around a topic, project, incident, decision, or recurring process.
+- Use boards for active work tracking with columns, cards, ownership, and movement.
+- Use docs for durable context and institutional knowledge that should remain relevant over time.
+- Use cards for individual board-scoped work items.
 - Use events for immutable facts.
-- For decision lifecycle events, always include `thread:<thread_id>` in refs; do not rely on `topic:` alone or `topic:<thread_id>` as a thread substitute.
-- Use topics for durable work subjects and primary operator coordination (`topics workspace`).
-- Use cards for board-scoped planning and movement.
-- Use threads for read-only backing-thread diagnostics and timeline inspection — not as the default coordination surface.
-- Use docs for narrative knowledge that should be revised over time.
-- Use boards for cross-object workflow views, not source-of-truth content.
 - Use inbox for current attention signals from the active CLI identity's perspective.
 - Use draft when you want a local review checkpoint before a write.
+- Use threads for read-only backing-thread diagnostics and timeline inspection, not as the default coordination surface.
 
 topics
-- Use when: You need the durable work subject itself with ownership, summary, related refs, and provenance — including the primary operator coordination read.
-- Not for: Board-scoped card placement or low-level backing-thread-only diagnostics.
-- Examples: initiatives, incidents, cases, deliverables
+- Use when: You need a topic-centered discussion and coordination surface for a project, incident, decision, recurring process, or durable work subject.
+- Not for: Tracking active work status across columns or storing long-term reference material.
+- Examples: project discussion, incident coordination, decision thread, recurring process
 - Read next: anx topics list ; anx topics get ; anx topics workspace
 
-threads
-- Use when: You need read-only backing-thread diagnostics: timelines, raw thread records, or thread-scoped projection bundles for troubleshooting.
-- Not for: Primary operator triage when a topic exists — use topics workspace instead.
-- Examples: backing thread timeline, diagnostic workspace projection, compatibility inspection
-- Read next: anx threads list ; anx threads inspect ; anx threads workspace
+boards
+- Use when: You need active work tracking with workflow columns, cards, ownership, ordering, and movement.
+- Not for: Free-form discussion or durable institutional knowledge.
+- Examples: triage board, release board, initiative tracking board
+- Read next: anx boards list ; anx boards workspace ; anx boards cards list
+
+docs
+- Use when: You need long-term relevant context or institutional knowledge that should be written, revised, read, and referenced as a document.
+- Not for: Ephemeral discussion or active-work status movement.
+- Examples: specs, runbooks, briefs, decision records
+- Read next: anx docs list ; anx docs get ; anx docs content
 
 cards
-- Use when: You need board-scoped planning items with column, rank, assignee, and move/update operations.
-- Not for: The durable subject record or append-only event history.
-- Examples: board cards, tracked cards, workflow cards
+- Use when: You need one board-scoped tracked work item with column, rank, assignee, and move/update operations.
+- Not for: The broader topic discussion, durable knowledge, or append-only event history.
+- Examples: implementation task, review item, follow-up, blocked work
 - Read next: anx cards list ; anx cards get ; anx cards move
 
 events
 - Use when: You need immutable facts, observations, decisions, or updates in an auditable sequence. Decision lifecycle events (`decision_needed`, `intervention_needed`, `decision_made`) must include `thread:<thread_id>` in refs; optional `topic:` refs are cross-links only, not a substitute for the thread anchor.
-- Not for: Replacing the current durable state of a work object.
+- Not for: Replacing the current durable state of a Topic, Board, Card, or Doc.
 - Examples: decision_needed, decision_made, message_posted, exception_raised
 - Read next: anx events list ; anx events explain ; anx threads timeline
-
-docs
-- Use when: You need long-lived narrative knowledge that should be revised, read, and referenced as a document.
-- Not for: Ephemeral chat-like updates or board membership.
-- Examples: plans, notes, decision records, runbooks
-- Read next: anx docs list ; anx docs get ; anx docs content
-
-boards
-- Use when: You need a coordination view across multiple work items with explicit workflow columns and ordering.
-- Not for: Being the source of truth for the work itself.
-- Examples: triage board, release board, initiative tracking board
-- Read next: anx boards list ; anx boards workspace ; anx boards cards list
 
 inbox
 - Use when: You need the derived queue of what currently needs attention from the active actor's perspective.
@@ -252,11 +252,17 @@ inbox
 draft
 - Use when: You want to stage a mutation locally, inspect it, then apply it explicitly.
 - Not for: Read paths or append-only event authoring.
-- Examples: reviewable thread patches, reviewable doc updates
+- Examples: reviewable JSON writes, document revisions without a typed proposal helper
 - Read next: anx draft create ; anx draft list ; anx draft commit
 
+threads
+- Use when: You need read-only backing-thread diagnostics: timelines, raw thread records, or thread-scoped projection bundles for troubleshooting.
+- Not for: Primary coordination when a Topic exists; use topics workspace instead.
+- Examples: backing timeline, diagnostic projection, low-level inspection
+- Read next: anx threads list ; anx threads inspect ; anx threads workspace
+
 Inbox categories:
-- `action_needed`: A human must decide, take direct action, or own the next step (includes prior decision and intervention queue signals).
+- `action_needed`: A responsible actor must decide, take direct action, or own the next step (includes prior decision and intervention queue signals).
 - `risk_exception`: Exceptions or at-risk work items that need follow-up.
 - `attention`: Review or lighter operator focus (for example document attention).
 
@@ -793,7 +799,7 @@ Use `anx draft` when you want a local checkpoint before sending a write to core.
 Choose the right path:
 
 - Use direct commands when the mutation is small and you are ready to apply it now.
-- Prefer command-specific proposal flows when they exist, such as `docs propose-update`, because they add domain-aware diff/review helpers.
+- Prefer command-specific proposal flows when they exist, such as `docs revise`, because they add domain-aware diff/review helpers.
 - Use `draft` for lower-level commands, generic JSON bodies, or cases where you want to stage the exact request before commit.
 
 Standard workflow
@@ -1226,7 +1232,7 @@ Core commands:
 
 ## `topics`
 
-Manage durable work subjects
+Discuss and coordinate around a topic, project, incident, or decision
 
 ```text
 Generated Help: topics
@@ -1244,9 +1250,11 @@ Commands:
   topics workspace         Get topic workspace (primary operator coordination read)
 
 Primary operator coordination:
+  topics create           Create a topic from plain flags or advanced JSON.
+  topics discuss          Post a topic-centered discussion message from `--message-file`.
   topics workspace        Load the topic workspace (cards, docs, backing threads, inbox).
   topics list / topics get   Discover and resolve topic ids (`--state`, `--q`, pagination, archive/trash visibility flags).
-  Tip: start with `anx topics workspace --topic-id <topic-id>` for triage; use `anx topics list --json` for `id` / `short_id` in JSON, or `--full-id` for full ids in default text.
+  Tip: use Topics for discussion/current context; use Boards for active work and Docs for durable knowledge. Start triage with `anx topics workspace --topic-id <topic-id>`.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1256,9 +1264,83 @@ Global flags:
 Tip: `anx help <command path>` for full command-level generated details.
 ```
 
+## `boards`
+
+Track active work with boards, columns, and cards
+
+```text
+Generated Help: boards
+
+Commands:
+  boards archive           Archive board
+  boards create            Create board
+  boards get               Get board
+  boards list              List boards
+  boards patch             Patch board
+  boards purge             Permanently delete trashed board
+  boards restore           Restore board from trash
+  boards trash             Move board to trash
+  boards unarchive         Unarchive board
+  boards workspace         Get board workspace view
+
+Active work tracking:
+  boards create           Create a Board from flags, optionally tied to `--topic`.
+  boards patch            Patch Board metadata from JSON; use `--dry-run` to preview.
+  boards workspace        Inspect board context, cards, documents, and inbox.
+
+Batch card creation:
+  boards cards create-batch   POST body via stdin or `--from-file`; profile supplies `actor_id` when omitted. See `anx help boards cards create-batch`.
+
+Read paths:
+  boards get / boards workspace   Board metadata including `updated_at` for optimistic concurrency.
+  boards cards list               Existing cards and refs before adding more.
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx boards ... ; anx --json boards ... ; anx boards ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+
+Tip: `anx help <command path>` for full command-level generated details.
+```
+
+## `docs`
+
+Create and revise durable context and institutional knowledge
+
+```text
+Generated Help: docs
+
+Commands:
+  docs archive             Archive document
+  docs create              Create document
+  docs get                 Get document
+  docs history             List document revisions
+  docs list                List documents
+  docs purge               Permanently delete trashed document
+  docs restore             Restore document from trash
+  docs revise              Create document revision
+  docs trash               Move document to trash
+  docs unarchive           Unarchive document
+
+Local inspection helpers:
+  docs content             Show current document content with revision metadata.
+  docs comments          List anchored document text comments on the backing thread timeline.
+  Mutation flow:
+  docs create              Create durable context from flags plus `--content-file`, or from advanced JSON.
+  docs revise              Revise from `--content-file`; stages a diff proposal by default, or direct-writes with `--apply`.
+  Tip: agents should draft Markdown locally and pass `--content-file <path>`. `docs revise --document-id <id> --content-file <path>` discovers the base revision and returns an apply command for the staged proposal.
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx docs ... ; anx --json docs ... ; anx docs ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+
+Tip: `anx help <command path>` for full command-level generated details.
+```
+
 ## `cards`
 
-Manage board-scoped cards
+Manage board-scoped work cards
 
 ```text
 Generated Help: cards
@@ -1274,6 +1356,15 @@ Commands:
   cards restore            Restore archived or trashed card
   cards timeline           Get card timeline
   cards trash              Move card to trash
+
+Agent-facing Card workflow:
+  cards create             Create a board work card from flags plus `--content-file`.
+  cards revise             Revise card title/body from `--content-file`; discovers `if_updated_at` when omitted.
+  cards move               Move workflow column; discovers the parent board concurrency token when omitted.
+  cards assign             Replace or clear assignees.
+  cards resolve            Move to done with resolution evidence refs.
+  cards reopen             Move a resolved card back to active workflow.
+  Tip: use `boards workspace` to inspect the board around cards. Use raw JSON `cards patch` only for metadata fields not covered by a domain verb.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1307,101 +1398,6 @@ Read-only backing-thread diagnostics (tooling):
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx threads ... ; anx --json threads ... ; anx threads ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-
-Tip: `anx help <command path>` for full command-level generated details.
-```
-
-## `artifacts`
-
-Manage artifact resources and content
-
-```text
-Generated Help: artifacts
-
-Commands:
-  artifacts archive        Archive artifact
-  artifacts create         Create artifact
-  artifacts get            Get artifact metadata
-  artifacts list           List artifacts
-  artifacts purge          Permanently delete trashed artifact
-  artifacts restore        Restore artifact from trash
-  artifacts trash          Move artifact to trash
-  artifacts unarchive      Unarchive artifact
-
-Local inspection helper:
-  artifacts inspect        Fetch artifact metadata and content in one call.
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx artifacts ... ; anx --json artifacts ... ; anx artifacts ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-
-Tip: `anx help <command path>` for full command-level generated details.
-```
-
-## `boards`
-
-Manage board resources and ordered cards
-
-```text
-Generated Help: boards
-
-Commands:
-  boards archive           Archive board
-  boards create            Create board
-  boards get               Get board
-  boards list              List boards
-  boards purge             Permanently delete trashed board
-  boards restore           Restore board from trash
-  boards trash             Move board to trash
-  boards unarchive         Unarchive board
-  boards workspace         Get board workspace view
-
-Batch card creation:
-  boards cards create-batch   POST body via stdin or `--from-file`; profile supplies `actor_id` when omitted. See `anx help boards cards create-batch`.
-
-Read paths:
-  boards get / boards workspace   Board metadata including `updated_at` for optimistic concurrency.
-  boards cards list               Existing cards and refs before adding more.
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx boards ... ; anx --json boards ... ; anx boards ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-
-Tip: `anx help <command path>` for full command-level generated details.
-```
-
-## `docs`
-
-Manage long-lived docs and revisions
-
-```text
-Generated Help: docs
-
-Commands:
-  docs archive             Archive document
-  docs create              Create document
-  docs get                 Get document
-  docs list                List documents
-  docs purge               Permanently delete trashed document
-  docs restore             Restore document from trash
-  docs trash               Move document to trash
-  docs unarchive           Unarchive document
-
-Local inspection helpers:
-  docs content             Show current document content with revision metadata.
-  docs comments          List anchored document text comments on the backing thread timeline.
-  Mutation flow:
-  docs propose-update      Stage an update proposal and inspect its diff before applying it.
-  docs apply               Apply a staged document update proposal.
-  docs validate-update     Validate a docs.revisions.create payload from stdin/--from-file.
-  Tip: add `--content-file <path>` to avoid hand-escaping multiline content. The proposal flow stages `docs.revisions.create`.
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx docs ... ; anx --json docs ... ; anx docs ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
@@ -1455,6 +1451,34 @@ Commands:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx inbox ... ; anx --json inbox ... ; anx inbox ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+
+Tip: `anx help <command path>` for full command-level generated details.
+```
+
+## `artifacts`
+
+Manage artifact resources and content
+
+```text
+Generated Help: artifacts
+
+Commands:
+  artifacts archive        Archive artifact
+  artifacts create         Create artifact
+  artifacts get            Get artifact metadata
+  artifacts list           List artifacts
+  artifacts purge          Permanently delete trashed artifact
+  artifacts restore        Restore artifact from trash
+  artifacts trash          Move artifact to trash
+  artifacts unarchive      Unarchive artifact
+
+Local inspection helper:
+  artifacts inspect        Fetch artifact metadata and content in one call.
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx artifacts ... ; anx --json artifacts ... ; anx artifacts ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
@@ -1635,123 +1659,6 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
-## `threads list`
-
-List backing threads
-
-```text
-Generated Help: threads list
-
-- Command ID: `threads.list`
-- CLI path: `threads list`
-- HTTP: `GET /threads`
-- Stability: `beta`
-- Input mode: `none`
-- Why: Inspect backing infrastructure threads without making them the primary planning noun.
-- Output: Returns `{ threads }`.
-- Error codes: `auth_required`, `invalid_token`
-- Concepts: `threads`, `inspection`
-- Adjacent commands: `threads context`, `threads inspect`, `threads timeline`, `threads workspace`
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx threads list ... ; anx --json threads list ... ; anx threads list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `threads get`
-
-Inspect backing thread
-
-```text
-Generated Help: threads get
-
-- Command ID: `threads.inspect`
-- CLI path: `threads inspect`
-- HTTP: `GET /threads/{thread_id}`
-- Stability: `beta`
-- Input mode: `none`
-- Why: Resolve one backing thread for low-level inspection and diagnostics.
-- Output: Returns `{ thread }`.
-- Error codes: `auth_required`, `invalid_token`, `not_found`
-- Concepts: `threads`, `inspection`
-- Adjacent commands: `threads context`, `threads list`, `threads timeline`, `threads workspace`
-
-Inputs:
-  Required:
-  - path `thread_id`
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx threads get ... ; anx --json threads get ... ; anx threads get ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `threads timeline`
-
-Get backing thread timeline
-
-```text
-Generated Help: threads timeline
-
-- Command ID: `threads.timeline`
-- CLI path: `threads timeline`
-- HTTP: `GET /threads/{thread_id}/timeline`
-- Stability: `beta`
-- Input mode: `none`
-- Why: Retrieve event history plus typed-ref expansions for one backing thread.
-- Output: Returns `{ thread, events, artifacts, topics, cards, documents }`.
-- Error codes: `auth_required`, `invalid_token`, `not_found`
-- Concepts: `threads`, `timeline`
-- Adjacent commands: `threads context`, `threads inspect`, `threads list`, `threads workspace`
-
-Inputs:
-  Required:
-  - path `thread_id`
-
-Local CLI flags:
-  --include-archived        Include archived events in the timeline.
-  --archived-only           Show only archived events.
-  --include-trashed      Include trashed events in the timeline.
-  --trashed-only         Show only trashed events in the timeline.
-
-Note: by default, archived and trashed events are excluded from the timeline output.
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx threads timeline ... ; anx --json threads timeline ... ; anx threads timeline ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `threads context`
-
-Get backing thread coordination context
-
-```text
-Generated Help: threads context
-
-- Command ID: `threads.context`
-- CLI path: `threads context`
-- HTTP: `GET /threads/{thread_id}/context`
-- Stability: `beta`
-- Input mode: `none`
-- Why: Load a compact coordination bundle (thread, recent events, key artifacts, cards, documents) for inspection and triage.
-- Output: Returns `{ thread, recent_events, key_artifacts, open_cards, documents }` plus forward-compatible fields.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
-- Concepts: `threads`, `inspection`
-- Adjacent commands: `threads inspect`, `threads list`, `threads timeline`, `threads workspace`
-
-Inputs:
-  Required:
-  - path `thread_id`
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx threads context ... ; anx --json threads context ... ; anx threads context ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
 ## `topics list`
 
 List topics
@@ -1802,44 +1709,6 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx topics get ... ; anx --json topics get ... ; anx topics get ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `topics create`
-
-Create topic
-
-```text
-Generated Help: topics create
-
-- Command ID: `topics.create`
-- CLI path: `topics create`
-- HTTP: `POST /topics`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Create a first-class durable topic before attaching cards, docs, or packets.
-- Output: Returns `{ topic }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`
-- Concepts: `topics`, `write`
-- Agent notes: Replay-safe when the same request key and body are reused.
-- Adjacent commands: `topics archive`, `topics get`, `topics list`, `topics patch`, `topics restore`, `topics timeline`, `topics trash`, `topics unarchive`, `topics workspace`
-
-Inputs:
-  Required:
-  - body `topic.board_refs` (list<any>)
-  - body `topic.document_refs` (list<any>)
-  - body `topic.owner_refs` (list<any>)
-  - body `topic.provenance.sources` (list<string>)
-  - body `topic.related_refs` (list<any>)
-  - body `topic.summary` (string)
-  - body `topic.title` (string)
-  Optional:
-  - body `topic.provenance.by_field` (object)
-  - body `topic.provenance.notes` (string)
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx topics create ... ; anx --json topics create ... ; anx topics create ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2059,6 +1928,672 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
+## `boards list`
+
+List boards
+
+```text
+Generated Help: boards list
+
+- Command ID: `boards.list`
+- CLI path: `boards list`
+- HTTP: `GET /boards`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Scan durable coordination boards and lightweight summaries.
+- Output: Returns `{ boards, next_cursor? }` (each `boards[]` item is `{ board, summary }` with `summary` a `BoardSummary` projection, not the board's text blurb).
+- Error codes: `auth_required`, `invalid_token`
+- Concepts: `boards`
+- Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx boards list ... ; anx --json boards list ... ; anx boards list ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `boards get`
+
+Get board
+
+```text
+Generated Help: boards get
+
+- Command ID: `boards.get`
+- CLI path: `boards get`
+- HTTP: `GET /boards/{board_id}`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Resolve canonical board state and summary.
+- Output: Returns `{ board, summary }`.
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Concepts: `boards`
+- Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
+
+Inputs:
+  Required:
+  - path `board_id`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx boards get ... ; anx --json boards get ... ; anx boards get ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `boards patch`
+
+Patch board
+
+```text
+Generated Help: boards patch
+
+- Command ID: `boards.patch`
+- CLI path: `boards patch`
+- HTTP: `PATCH /boards/{board_id}`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Update board metadata with optimistic concurrency.
+- Output: Returns `{ board }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `boards`, `write`, `concurrency`
+- Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
+
+Inputs:
+  Required:
+  - path `board_id`
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
+  Optional:
+  - body `patch.document_refs` (list<any>)
+  - body `patch.pinned_refs` (list<any>)
+  - body `patch.primary_topic_ref` (string)
+  - body `patch.provenance.by_field` (object)
+  - body `patch.provenance.notes` (string)
+  - body `patch.provenance.sources` (list<string>)
+  - body `patch.summary` (string)
+  - body `patch.title` (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx boards patch ... ; anx --json boards patch ... ; anx boards patch ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `boards archive`
+
+Archive board
+
+```text
+Generated Help: boards archive
+
+- Command ID: `boards.archive`
+- CLI path: `boards archive`
+- HTTP: `POST /boards/{board_id}/archive`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Soft-archive a board and derive its lifecycle state from archived_at.
+- Output: Returns `{ board }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `boards`, `write`
+- Adjacent commands: `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
+
+Inputs:
+  Required:
+  - path `board_id`
+  Optional:
+  - body `actor_id` (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx boards archive ... ; anx --json boards archive ... ; anx boards archive ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `boards unarchive`
+
+Unarchive board
+
+```text
+Generated Help: boards unarchive
+
+- Command ID: `boards.unarchive`
+- CLI path: `boards unarchive`
+- HTTP: `POST /boards/{board_id}/unarchive`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Clear archived_at on a board (restore default list visibility).
+- Output: Returns `{ board }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `boards`, `write`
+- Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards workspace`
+
+Inputs:
+  Required:
+  - path `board_id`
+  Optional:
+  - body `actor_id` (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx boards unarchive ... ; anx --json boards unarchive ... ; anx boards unarchive ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `boards trash`
+
+Move board to trash
+
+```text
+Generated Help: boards trash
+
+- Command ID: `boards.trash`
+- CLI path: `boards trash`
+- HTTP: `POST /boards/{board_id}/trash`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Move board to trash with an explicit operator reason.
+- Output: Returns `{ board }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `boards`, `write`
+- Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards unarchive`, `boards workspace`
+
+Inputs:
+  Required:
+  - path `board_id`
+  - body `reason` (string)
+  Optional:
+  - body `actor_id` (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx boards trash ... ; anx --json boards trash ... ; anx boards trash ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `boards restore`
+
+Restore board from trash
+
+```text
+Generated Help: boards restore
+
+- Command ID: `boards.restore`
+- CLI path: `boards restore`
+- HTTP: `POST /boards/{board_id}/restore`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Clear trash lifecycle fields on a board after an explicit restore action.
+- Output: Returns `{ board }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `boards`, `write`
+- Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards trash`, `boards unarchive`, `boards workspace`
+
+Inputs:
+  Required:
+  - path `board_id`
+  Optional:
+  - body `actor_id` (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx boards restore ... ; anx --json boards restore ... ; anx boards restore ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `boards purge`
+
+Permanently delete trashed board
+
+```text
+Generated Help: boards purge
+
+- Command ID: `boards.purge`
+- CLI path: `boards purge`
+- HTTP: `POST /boards/{board_id}/purge`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Permanently delete a trashed board (human-gated).
+- Output: Returns `{ purged, board_id }`.
+- Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `boards`, `write`
+- Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
+
+Inputs:
+  Required:
+  - path `board_id`
+  Optional:
+  - body `actor_id` (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx boards purge ... ; anx --json boards purge ... ; anx boards purge ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `boards cards`
+
+Nested generated help topic.
+
+```text
+Generated Help: boards cards
+
+Commands:
+  boards cards create      Create card on board
+  boards cards create-batch Batch create cards on board
+  boards cards get         Get board-scoped card
+  boards cards list        List board cards
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx boards cards ... ; anx --json boards cards ... ; anx boards cards ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+
+Tip: `anx help <command path>` for full command-level generated details.
+```
+
+## `boards cards create`
+
+Create card on board
+
+```text
+Generated Help: boards cards create
+
+- Command ID: `boards.cards.create`
+- CLI path: `boards cards create`
+- HTTP: `POST /boards/{board_id}/cards`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Create a first-class card and attach it to a board.
+- Output: Returns `{ card }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `boards`, `cards`, `write`
+- Adjacent commands: `boards archive`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
+
+Inputs:
+  Required:
+  - path `board_id`
+  - body `card.title` (string)
+  Optional:
+  - body `actor_id` (string)
+  - body `board_id` (string)
+  - body `board_ref` (any)
+  - body `card.after_card_id` (string)
+  - body `card.assignee_refs` (list<any>)
+  - body `card.before_card_id` (string)
+  - body `card.column_key` (string)
+  - body `card.definition_of_done` (list<string>)
+  - body `card.document_ref` (string)
+  - body `card.due_at` (datetime)
+  - body `card.id` (string)
+  - body `card.provenance.by_field` (object)
+  - body `card.provenance.notes` (string)
+  - body `card.provenance.sources` (list<string>)
+  - body `card.related_refs` (list<any>)
+  - body `card.resolution` (string)
+  - body `card.resolution_refs` (list<any>)
+  - body `card.risk` (string)
+  - body `card.summary` (string)
+  - body `card.topic_ref` (string)
+  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get --board-id <board-id>`, `anx boards workspace --board-id <board-id>`, or the latest board mutation response.
+  - body `request_key` (string)
+  Enum values: card.column_key: backlog, blocked, done, in_progress, ready, review; card.resolution: canceled, done; card.risk: critical, high, low, medium
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx boards cards create ... ; anx --json boards cards create ... ; anx boards cards create ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `boards cards create-batch`
+
+Batch create cards on board
+
+```text
+Generated Help: boards cards create-batch
+
+- Command ID: `boards.cards.batch_add`
+- CLI path: `boards cards create-batch`
+- HTTP: `POST /boards/{board_id}/cards/batch`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Create multiple cards in one transaction using a single board concurrency token.
+- Output: Returns `{ board, cards }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `boards`, `cards`, `write`
+- Adjacent commands: `boards archive`, `boards cards create`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
+
+Inputs:
+  Required:
+  - path `board_id`
+  - body `items` (list<any>)
+  Optional:
+  - body `actor_id` (string): Defaults from the active CLI profile when omitted. Non-empty `--actor-id` overrides `actor_id` in the JSON body.
+  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get --board-id <board-id>`, `anx boards workspace --board-id <board-id>`, or the latest board mutation response. You may pass `--if-board-updated-at` instead of embedding it in JSON.
+  - body `request_key` (string): Idempotency key for the whole batch. Non-empty `--request-key` overrides `request_key` in the JSON body.
+
+CLI input:
+  - Provide a JSON object on stdin or via `--from-file`; it must include `items` (array of card create payloads).
+  - Board id: `--board-id <id>` or a single positional `<board-id>` before flags (no other positionals).
+  - `actor_id` defaults from the active profile when omitted from JSON; `--actor-id` sets or overrides it.
+  - `--request-key` and `--if-board-updated-at`, when non-empty, override the same keys in the JSON body.
+
+Agent tip: run `anx boards get --board-id <board-id> --json` (or `boards workspace`) first, copy `board.updated_at` into `if_board_updated_at`, or pass `--if-board-updated-at` from that value. Each item's `related_refs` must reference source threads not already backing another card on this board, or the server returns `conflict`.
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx boards cards create-batch ... ; anx --json boards cards create-batch ... ; anx boards cards create-batch ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `boards cards get`
+
+Get board-scoped card
+
+```text
+Generated Help: boards cards get
+
+- Command ID: `boards.cards.get`
+- CLI path: `boards cards get`
+- HTTP: `GET /boards/{board_id}/cards/{card_id}`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Resolve a card through its board membership context.
+- Output: Returns `{ card }`.
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Concepts: `boards`, `cards`
+- Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
+
+Inputs:
+  Required:
+  - path `board_id`
+  - path `card_id`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx boards cards get ... ; anx --json boards cards get ... ; anx boards cards get ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `docs list`
+
+List documents
+
+```text
+Generated Help: docs list
+
+- Command ID: `docs.list`
+- CLI path: `docs list`
+- HTTP: `GET /docs`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Scan canonical document lineages.
+- Output: Returns `{ documents }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Concepts: `docs`
+- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs history`, `docs patch`, `docs purge`, `docs restore`, `docs revise`, `docs revision get`, `docs trash`, `docs unarchive`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx docs list ... ; anx --json docs list ... ; anx docs list ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `docs get`
+
+Get document
+
+```text
+Generated Help: docs get
+
+- Command ID: `docs.get`
+- CLI path: `docs get`
+- HTTP: `GET /docs/{document_id}`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Resolve a document lineage and its current head revision.
+- Output: Returns `{ document, revision }`.
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Concepts: `docs`
+- Adjacent commands: `docs archive`, `docs create`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revise`, `docs revision get`, `docs trash`, `docs unarchive`
+
+Inputs:
+  Required:
+  - path `document_id`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx docs get ... ; anx --json docs get ... ; anx docs get ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `docs history`
+
+List document revisions
+
+```text
+Generated Help: docs history
+
+- Command ID: `docs.revisions.list`
+- CLI path: `docs history`
+- HTTP: `GET /docs/{document_id}/revisions`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Enumerate immutable revisions for one document lineage.
+- Output: Returns `{ document_id, revisions }`.
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Concepts: `docs`, `revisions`
+- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revise`, `docs revision get`, `docs trash`, `docs unarchive`
+
+Inputs:
+  Required:
+  - path `document_id`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx docs history ... ; anx --json docs history ... ; anx docs history ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `docs revision`
+
+Nested generated help topic.
+
+```text
+Generated Help: docs revision
+
+Commands:
+  docs revision get        Get document revision
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx docs revision ... ; anx --json docs revision ... ; anx docs revision ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+
+Tip: `anx help <command path>` for full command-level generated details.
+```
+
+## `docs trash`
+
+Move document to trash
+
+```text
+Generated Help: docs trash
+
+- Command ID: `docs.trash`
+- CLI path: `docs trash`
+- HTTP: `POST /docs/{document_id}/trash`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Move a document lineage to trash with an explicit operator reason.
+- Output: Returns `{ document, revision }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `docs`, `write`
+- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revise`, `docs revision get`, `docs unarchive`
+
+Inputs:
+  Required:
+  - path `document_id`
+  - body `reason` (string)
+  Optional:
+  - body `actor_id` (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx docs trash ... ; anx --json docs trash ... ; anx docs trash ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `docs archive`
+
+Archive document
+
+```text
+Generated Help: docs archive
+
+- Command ID: `docs.archive`
+- CLI path: `docs archive`
+- HTTP: `POST /docs/{document_id}/archive`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Soft-archive a document lineage (orthogonal to head revision content).
+- Output: Returns `{ document, revision }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `docs`, `write`
+- Adjacent commands: `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revise`, `docs revision get`, `docs trash`, `docs unarchive`
+
+Inputs:
+  Required:
+  - path `document_id`
+  Optional:
+  - body `actor_id` (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx docs archive ... ; anx --json docs archive ... ; anx docs archive ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `docs unarchive`
+
+Unarchive document
+
+```text
+Generated Help: docs unarchive
+
+- Command ID: `docs.unarchive`
+- CLI path: `docs unarchive`
+- HTTP: `POST /docs/{document_id}/unarchive`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Clear archived_at on a document so it returns to default visibility.
+- Output: Returns `{ document, revision }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `docs`, `write`
+- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revise`, `docs revision get`, `docs trash`
+
+Inputs:
+  Required:
+  - path `document_id`
+  Optional:
+  - body `actor_id` (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx docs unarchive ... ; anx --json docs unarchive ... ; anx docs unarchive ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `docs restore`
+
+Restore document from trash
+
+```text
+Generated Help: docs restore
+
+- Command ID: `docs.restore`
+- CLI path: `docs restore`
+- HTTP: `POST /docs/{document_id}/restore`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Clear trash state on a document after an explicit restore action.
+- Output: Returns `{ document, revision }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `docs`, `write`
+- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs revise`, `docs revision get`, `docs trash`, `docs unarchive`
+
+Inputs:
+  Required:
+  - path `document_id`
+  Optional:
+  - body `actor_id` (string)
+  - body `reason` (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx docs restore ... ; anx --json docs restore ... ; anx docs restore ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `docs purge`
+
+Permanently delete trashed document
+
+```text
+Generated Help: docs purge
+
+- Command ID: `docs.purge`
+- CLI path: `docs purge`
+- HTTP: `POST /docs/{document_id}/purge`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Permanently delete a trashed document (human-gated).
+- Output: Returns `{ purged, document_id }`.
+- Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `docs`, `write`
+- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs restore`, `docs revise`, `docs revision get`, `docs trash`, `docs unarchive`
+
+Inputs:
+  Required:
+  - path `document_id`
+  Optional:
+  - body `actor_id` (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx docs purge ... ; anx --json docs purge ... ; anx docs purge ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `docs revision get`
+
+Get document revision
+
+```text
+Generated Help: docs revision get
+
+- Command ID: `docs.revisions.get`
+- CLI path: `docs revision get`
+- HTTP: `GET /docs/{document_id}/revisions/{revision_id}`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Resolve one immutable document revision.
+- Output: Returns `{ document_id, revision }`.
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Concepts: `docs`, `revisions`
+- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revise`, `docs trash`, `docs unarchive`
+
+Inputs:
+  Required:
+  - path `document_id`
+  - path `revision_id`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx docs revision get ... ; anx --json docs revision get ... ; anx docs revision get ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
 ## `cards list`
 
 List cards
@@ -2112,56 +2647,6 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
-## `cards create`
-
-Create card (global path)
-
-```text
-Generated Help: cards create
-
-- Command ID: `cards.create`
-- CLI path: `cards create`
-- HTTP: `POST /cards`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Create a card with the same body as POST /boards/{board_id}/cards, but supply board_id or board_ref here instead of a path segment. Interoperable with board-scoped create.
-- Output: Returns `{ board, card }` (same as board-scoped create).
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
-- Concepts: `cards`, `boards`, `write`
-- Adjacent commands: `cards archive`, `cards get`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards timeline`, `cards trash`
-
-Inputs:
-  Required:
-  - body `card.assignee_refs` (list<any>)
-  - body `card.column_key` (string)
-  - body `card.provenance.sources` (list<string>)
-  - body `card.related_refs` (list<any>)
-  - body `card.resolution_refs` (list<any>)
-  - body `card.risk` (string)
-  - body `card.summary` (string)
-  - body `card.title` (string)
-  Optional:
-  - body `board_id` (string)
-  - body `board_ref` (any)
-  - body `card.after_card_id` (string)
-  - body `card.before_card_id` (string)
-  - body `card.definition_of_done` (list<string>)
-  - body `card.document_ref` (string)
-  - body `card.due_at` (datetime)
-  - body `card.id` (string)
-  - body `card.provenance.by_field` (object)
-  - body `card.provenance.notes` (string)
-  - body `card.resolution` (string)
-  - body `card.topic_ref` (string)
-  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get --board-id <board-id>`, `anx boards workspace --board-id <board-id>`, or the latest board mutation response.
-  Enum values: card.column_key: backlog, blocked, done, in_progress, ready, review; card.resolution: canceled, done; card.risk: critical, high, low, medium
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx cards create ... ; anx --json cards create ... ; anx cards create ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
 ## `cards patch`
 
 Patch card
@@ -2185,6 +2670,7 @@ Inputs:
   - path `card_id`
   - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
   Optional:
+  - body `actor_id` (string)
   - body `patch.assignee_refs` (list<any>)
   - body `patch.definition_of_done` (list<string>)
   - body `patch.document_ref` (string)
@@ -2204,49 +2690,6 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards patch ... ; anx --json cards patch ... ; anx cards patch ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `cards move`
-
-Move card
-
-```text
-Generated Help: cards move
-
-- Command ID: `cards.move`
-- CLI path: `cards move`
-- HTTP: `POST /cards/{card_id}/move`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Reposition a card within a board column using the card's first-class identity.
-- Output: Returns `{ card }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
-- Concepts: `cards`, `boards`, `write`
-- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards list`, `cards patch`, `cards purge`, `cards restore`, `cards timeline`, `cards trash`
-
-Inputs:
-  Required:
-  - path `card_id`
-  - body `column_key` (string)
-  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get --board-id <board-id>`, `anx boards workspace --board-id <board-id>`, or the latest board mutation response.
-  Optional:
-  - body `actor_id` (string)
-  - body `after_card_id` (string)
-  - body `before_card_id` (string)
-  - body `move.after_card_id` (string)
-  - body `move.before_card_id` (string)
-  - body `move.column_key` (string)
-  - body `move.if_board_updated_at` (datetime)
-  - body `move.resolution` (string)
-  - body `move.resolution_refs` (list<any>)
-  - body `resolution` (string)
-  - body `resolution_refs` (list<any>)
-  Enum values: column_key: backlog, blocked, done, in_progress, ready, review; move.column_key: backlog, blocked, done, in_progress, ready, review; move.resolution: canceled, done; resolution: canceled, done
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx cards move ... ; anx --json cards move ... ; anx cards move ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2399,6 +2842,583 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards timeline ... ; anx --json cards timeline ... ; anx cards timeline ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `threads list`
+
+List backing threads
+
+```text
+Generated Help: threads list
+
+- Command ID: `threads.list`
+- CLI path: `threads list`
+- HTTP: `GET /threads`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Inspect backing infrastructure threads without making them the primary planning noun.
+- Output: Returns `{ threads }`.
+- Error codes: `auth_required`, `invalid_token`
+- Concepts: `threads`, `inspection`
+- Adjacent commands: `threads context`, `threads inspect`, `threads timeline`, `threads workspace`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx threads list ... ; anx --json threads list ... ; anx threads list ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `threads get`
+
+Inspect backing thread
+
+```text
+Generated Help: threads get
+
+- Command ID: `threads.inspect`
+- CLI path: `threads inspect`
+- HTTP: `GET /threads/{thread_id}`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Resolve one backing thread for low-level inspection and diagnostics.
+- Output: Returns `{ thread }`.
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Concepts: `threads`, `inspection`
+- Adjacent commands: `threads context`, `threads list`, `threads timeline`, `threads workspace`
+
+Inputs:
+  Required:
+  - path `thread_id`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx threads get ... ; anx --json threads get ... ; anx threads get ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `threads timeline`
+
+Get backing thread timeline
+
+```text
+Generated Help: threads timeline
+
+- Command ID: `threads.timeline`
+- CLI path: `threads timeline`
+- HTTP: `GET /threads/{thread_id}/timeline`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Retrieve event history plus typed-ref expansions for one backing thread.
+- Output: Returns `{ thread, events, artifacts, topics, cards, documents }`.
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Concepts: `threads`, `timeline`
+- Adjacent commands: `threads context`, `threads inspect`, `threads list`, `threads workspace`
+
+Inputs:
+  Required:
+  - path `thread_id`
+
+Local CLI flags:
+  --include-archived        Include archived events in the timeline.
+  --archived-only           Show only archived events.
+  --include-trashed      Include trashed events in the timeline.
+  --trashed-only         Show only trashed events in the timeline.
+
+Note: by default, archived and trashed events are excluded from the timeline output.
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx threads timeline ... ; anx --json threads timeline ... ; anx threads timeline ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `threads context`
+
+Get backing thread coordination context
+
+```text
+Generated Help: threads context
+
+- Command ID: `threads.context`
+- CLI path: `threads context`
+- HTTP: `GET /threads/{thread_id}/context`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Load a compact coordination bundle (thread, recent events, key artifacts, cards, documents) for inspection and triage.
+- Output: Returns `{ thread, recent_events, key_artifacts, open_cards, documents }` plus forward-compatible fields.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Concepts: `threads`, `inspection`
+- Adjacent commands: `threads inspect`, `threads list`, `threads timeline`, `threads workspace`
+
+Inputs:
+  Required:
+  - path `thread_id`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx threads context ... ; anx --json threads context ... ; anx threads context ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `events get`
+
+Get event by id
+
+```text
+Generated Help: events get
+
+- Command ID: `events.get`
+- CLI path: `events get`
+- HTTP: `GET /events/{event_id}`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Fetch one append-only event record by stable id.
+- Output: Returns `{ event }`.
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Concepts: `events`
+- Adjacent commands: `events archive`, `events create`, `events list`, `events restore`, `events stream`, `events trash`, `events unarchive`
+
+Inputs:
+  Required:
+  - path `event_id`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx events get ... ; anx --json events get ... ; anx events get ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `events create`
+
+Create event
+
+```text
+Generated Help: events create
+
+- Command ID: `events.create`
+- CLI path: `events create`
+- HTTP: `POST /events`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Append an event that links first-class resources and evidence through typed refs.
+- Output: Returns `{ event }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Concepts: `events`, `write`
+- Adjacent commands: `events archive`, `events get`, `events list`, `events restore`, `events stream`, `events trash`, `events unarchive`
+
+Inputs:
+  Required:
+  - body `event.actor_id` (string)
+  - body `event.provenance.sources` (list<string>)
+  - body `event.refs` (list<any>)
+  - body `event.summary` (string)
+  - body `event.type` (string)
+  Optional:
+  - body `event.payload` (object)
+  - body `event.provenance.by_field` (object)
+  - body `event.provenance.notes` (string)
+  - body `event.thread_ref` (string)
+  Enum values: event.type (open): agent_notification_dismissed, agent_notification_read, board_card_added, board_card_archived, board_card_moved, board_card_trashed, board_created, board_updated, card_archived, card_created, card_moved, card_resolved, card_trashed, card_updated, decision_made, decision_needed, document_created, document_restored, document_revised, document_trashed, exception_raised, inbox_item_acknowledged, intervention_needed, message_posted, receipt_added, review_completed, topic_archived, topic_created, topic_restored, topic_trashed, topic_updated
+
+Common authoring types:
+  Communication: direct communication or important non-structured information
+  - `message_posted`
+  Decisions: request or record decisions tied to a topic
+  - `decision_needed`
+  - `decision_made`
+  Interventions: single clear path exists, but a responsible actor must complete it
+  - `intervention_needed`
+  Topics and documents: durable subject and document lifecycle signals
+  - `topic_created`, `topic_updated`, `topic_archived`, `topic_trashed`
+  - `document_created`, `document_revised`, `document_trashed`
+  Boards and cards: workflow placement and movement
+  - `board_created`, `board_updated`
+  - `card_created`, `card_updated`, `card_moved`, `card_resolved`
+  Exceptions: surface problems, risks, or escalations
+  - `exception_raised`
+
+Usually emitted by higher-level commands:
+  - `receipt_added`: prefer `anx receipts create`
+  - `review_completed`: prefer `anx reviews create`
+  - `inbox_item_acknowledged`: prefer `anx inbox ack`
+
+Local CLI notes:
+  - Common open `event.type` values include `actor_statement`; the enum list above is illustrative, not exhaustive.
+  - Use `--dry-run` with `--from-file` to validate and preview the request without sending the mutation.
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx events create ... ; anx --json events create ... ; anx events create ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `events stream`
+
+Stream events (SSE)
+
+```text
+Generated Help: events stream
+
+- Command ID: `events.stream`
+- CLI path: `events stream`
+- HTTP: `GET /events/stream`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Long-lived SSE feed of workspace events with optional thread/type filters and Last-Event-ID resume.
+- Output: Each SSE message is `event: …` with JSON data `{ "event": <event> }` (see core/docs/http-api.md).
+- Error codes: `auth_required`, `invalid_token`
+- Concepts: `events`
+- Adjacent commands: `events archive`, `events create`, `events get`, `events list`, `events restore`, `events trash`, `events unarchive`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx events stream ... ; anx --json events stream ... ; anx events stream ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `events tail`
+
+Stream events (SSE)
+
+```text
+Generated Help: events tail
+
+- Command ID: `events.stream`
+- CLI path: `events stream`
+- HTTP: `GET /events/stream`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Long-lived SSE feed of workspace events with optional thread/type filters and Last-Event-ID resume.
+- Output: Each SSE message is `event: …` with JSON data `{ "event": <event> }` (see core/docs/http-api.md).
+- Error codes: `auth_required`, `invalid_token`
+- Concepts: `events`
+- Adjacent commands: `events archive`, `events create`, `events get`, `events list`, `events restore`, `events trash`, `events unarchive`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx events tail ... ; anx --json events tail ... ; anx events tail ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `events archive`
+
+Archive event
+
+```text
+Generated Help: events archive
+
+- Command ID: `events.archive`
+- CLI path: `events archive`
+- HTTP: `POST /events/{event_id}/archive`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Set archived_at on an append-only event record for filtered views.
+- Output: Returns `{ event }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `events`, `write`
+- Adjacent commands: `events create`, `events get`, `events list`, `events restore`, `events stream`, `events trash`, `events unarchive`
+
+Inputs:
+  Required:
+  - path `event_id`
+  Optional:
+  - body `actor_id` (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx events archive ... ; anx --json events archive ... ; anx events archive ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `events unarchive`
+
+Unarchive event
+
+```text
+Generated Help: events unarchive
+
+- Command ID: `events.unarchive`
+- CLI path: `events unarchive`
+- HTTP: `POST /events/{event_id}/unarchive`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Clear archived_at on an event.
+- Output: Returns `{ event }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `events`, `write`
+- Adjacent commands: `events archive`, `events create`, `events get`, `events list`, `events restore`, `events stream`, `events trash`
+
+Inputs:
+  Required:
+  - path `event_id`
+  Optional:
+  - body `actor_id` (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx events unarchive ... ; anx --json events unarchive ... ; anx events unarchive ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `events trash`
+
+Move event to trash
+
+```text
+Generated Help: events trash
+
+- Command ID: `events.trash`
+- CLI path: `events trash`
+- HTTP: `POST /events/{event_id}/trash`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Move event to trash with an explicit operator reason.
+- Output: Returns `{ event }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Concepts: `events`, `write`
+- Adjacent commands: `events archive`, `events create`, `events get`, `events list`, `events restore`, `events stream`, `events unarchive`
+
+Inputs:
+  Required:
+  - path `event_id`
+  - body `reason` (string)
+  Optional:
+  - body `actor_id` (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx events trash ... ; anx --json events trash ... ; anx events trash ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `events restore`
+
+Restore event from trash
+
+```text
+Generated Help: events restore
+
+- Command ID: `events.restore`
+- CLI path: `events restore`
+- HTTP: `POST /events/{event_id}/restore`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Clear trash state on an event after an explicit restore action.
+- Output: Returns `{ event }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `events`, `write`
+- Adjacent commands: `events archive`, `events create`, `events get`, `events list`, `events stream`, `events trash`, `events unarchive`
+
+Inputs:
+  Required:
+  - path `event_id`
+  Optional:
+  - body `actor_id` (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx events restore ... ; anx --json events restore ... ; anx events restore ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `inbox list`
+
+List inbox items
+
+```text
+Generated Help: inbox list
+
+- Command ID: `inbox.list`
+- CLI path: `inbox list`
+- HTTP: `GET /inbox`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Load the derived operator inbox generated from refs and canonical events.
+- Output: Returns `{ items }`.
+- Error codes: `auth_required`, `invalid_token`
+- Concepts: `inbox`
+- Adjacent commands: `inbox acknowledge`, `inbox get`, `inbox stream`
+
+
+View scoping:
+  - `inbox list` is read from the active CLI identity's perspective.
+  - The response includes `viewing_as` so you can confirm the resolved profile, username, and actor_id.
+  - Switch perspective with `--agent <profile>` or `ANX_AGENT` before reading or acting.
+
+Inbox categories:
+  - `action_needed`: A responsible actor must decide, take direct action, or own the next step (includes prior decision and intervention queue signals).
+  - `risk_exception`: Exceptions or at-risk work items that need follow-up.
+  - `attention`: Review or lighter operator focus (for example document attention).
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx inbox list ... ; anx --json inbox list ... ; anx inbox list ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `inbox get`
+
+Get one inbox item
+
+```text
+Generated Help: inbox get
+
+- Command ID: `inbox.get`
+- CLI path: `inbox get`
+- HTTP: `GET /inbox/{inbox_id}`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Side-effect free read of one materialized inbox row.
+- Output: Returns `{ item, generated_at, projection_freshness }`.
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Concepts: `inbox`
+- Adjacent commands: `inbox acknowledge`, `inbox list`, `inbox stream`
+
+Inputs:
+  Required:
+  - path `inbox_id`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx inbox get ... ; anx --json inbox get ... ; anx inbox get ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `inbox acknowledge`
+
+Acknowledge inbox item
+
+```text
+Generated Help: inbox acknowledge
+
+- Command ID: `inbox.acknowledge`
+- CLI path: `inbox acknowledge`
+- HTTP: `POST /inbox/{inbox_id}/acknowledge`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Suppress or clear a derived inbox item via a durable acknowledgment event.
+- Output: Returns `{ event }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Concepts: `inbox`, `write`
+- Adjacent commands: `inbox get`, `inbox list`, `inbox stream`
+
+Inputs:
+  Required:
+  - path `inbox_id`
+  - body `subject_ref` (string)
+  Optional:
+  - body `actor_id` (string)
+  - body `inbox_item_id` (string)
+  - body `note` (string)
+  - body `refs` (list<any>)
+
+CLI flags (`inbox acknowledge` / `inbox ack`):
+  --inbox-item-id <id>   Inbox item id or list alias (see `inbox list`).
+  --subject-ref <ref>    Typed subject ref; omitted ids may be resolved from `inbox list`.
+  --actor-id <id>        Actor id (`me` uses the active profile's actor when configured).
+  --from-file <path>     JSON body file (API request shape).
+  Positional: inbox item id when not given via `--inbox-item-id`.
+  Otherwise: JSON object on stdin (`inbox_item_id`, `subject_ref`, optional fields).
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx inbox acknowledge ... ; anx --json inbox acknowledge ... ; anx inbox acknowledge ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `inbox ack`
+
+Acknowledge inbox item
+
+```text
+Generated Help: inbox ack
+
+- Command ID: `inbox.acknowledge`
+- CLI path: `inbox acknowledge`
+- HTTP: `POST /inbox/{inbox_id}/acknowledge`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Suppress or clear a derived inbox item via a durable acknowledgment event.
+- Output: Returns `{ event }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Concepts: `inbox`, `write`
+- Adjacent commands: `inbox get`, `inbox list`, `inbox stream`
+
+Inputs:
+  Required:
+  - path `inbox_id`
+  - body `subject_ref` (string)
+  Optional:
+  - body `actor_id` (string)
+  - body `inbox_item_id` (string)
+  - body `note` (string)
+  - body `refs` (list<any>)
+
+CLI flags (`inbox acknowledge` / `inbox ack`):
+  --inbox-item-id <id>   Inbox item id or list alias (see `inbox list`).
+  --subject-ref <ref>    Typed subject ref; omitted ids may be resolved from `inbox list`.
+  --actor-id <id>        Actor id (`me` uses the active profile's actor when configured).
+  --from-file <path>     JSON body file (API request shape).
+  Positional: inbox item id when not given via `--inbox-item-id`.
+  Otherwise: JSON object on stdin (`inbox_item_id`, `subject_ref`, optional fields).
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx inbox ack ... ; anx --json inbox ack ... ; anx inbox ack ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `inbox stream`
+
+Stream inbox items (SSE)
+
+```text
+Generated Help: inbox stream
+
+- Command ID: `inbox.stream`
+- CLI path: `inbox stream`
+- HTTP: `GET /inbox/stream`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Server-sent events feed of inbox projection updates.
+- Output: SSE `inbox_item` events with JSON payloads.
+- Error codes: `auth_required`, `invalid_token`
+- Concepts: `inbox`
+- Adjacent commands: `inbox acknowledge`, `inbox get`, `inbox list`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx inbox stream ... ; anx --json inbox stream ... ; anx inbox stream ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `inbox tail`
+
+Stream inbox items (SSE)
+
+```text
+Generated Help: inbox tail
+
+- Command ID: `inbox.stream`
+- CLI path: `inbox stream`
+- HTTP: `GET /inbox/stream`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Server-sent events feed of inbox projection updates.
+- Output: SSE `inbox_item` events with JSON payloads.
+- Error codes: `auth_required`, `invalid_token`
+- Concepts: `inbox`
+- Adjacent commands: `inbox acknowledge`, `inbox get`, `inbox list`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx inbox tail ... ; anx --json inbox tail ... ; anx inbox tail ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2635,1089 +3655,6 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx artifacts purge ... ; anx --json artifacts purge ... ; anx artifacts purge ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `boards list`
-
-List boards
-
-```text
-Generated Help: boards list
-
-- Command ID: `boards.list`
-- CLI path: `boards list`
-- HTTP: `GET /boards`
-- Stability: `beta`
-- Input mode: `none`
-- Why: Scan durable coordination boards and lightweight summaries.
-- Output: Returns `{ boards, next_cursor? }` (each `boards[]` item is `{ board, summary }` with `summary` a `BoardSummary` projection, not the board's text blurb).
-- Error codes: `auth_required`, `invalid_token`
-- Concepts: `boards`
-- Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx boards list ... ; anx --json boards list ... ; anx boards list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `boards create`
-
-Create board
-
-```text
-Generated Help: boards create
-
-- Command ID: `boards.create`
-- CLI path: `boards create`
-- HTTP: `POST /boards`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Create a durable board over topics and cards.
-- Output: Returns `{ board }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`
-- Concepts: `boards`, `write`
-- Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
-
-Inputs:
-  Required:
-  - body `board.document_refs` (list<any>)
-  - body `board.pinned_refs` (list<any>)
-  - body `board.provenance.sources` (list<string>)
-  - body `board.title` (string)
-  Optional:
-  - body `board.primary_topic_ref` (string)
-  - body `board.provenance.by_field` (object)
-  - body `board.provenance.notes` (string)
-  - body `board.summary` (string)
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx boards create ... ; anx --json boards create ... ; anx boards create ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `boards get`
-
-Get board
-
-```text
-Generated Help: boards get
-
-- Command ID: `boards.get`
-- CLI path: `boards get`
-- HTTP: `GET /boards/{board_id}`
-- Stability: `beta`
-- Input mode: `none`
-- Why: Resolve canonical board state and summary.
-- Output: Returns `{ board, summary }`.
-- Error codes: `auth_required`, `invalid_token`, `not_found`
-- Concepts: `boards`
-- Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
-
-Inputs:
-  Required:
-  - path `board_id`
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx boards get ... ; anx --json boards get ... ; anx boards get ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `boards archive`
-
-Archive board
-
-```text
-Generated Help: boards archive
-
-- Command ID: `boards.archive`
-- CLI path: `boards archive`
-- HTTP: `POST /boards/{board_id}/archive`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Soft-archive a board and derive its lifecycle state from archived_at.
-- Output: Returns `{ board }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
-- Concepts: `boards`, `write`
-- Adjacent commands: `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
-
-Inputs:
-  Required:
-  - path `board_id`
-  Optional:
-  - body `actor_id` (string)
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx boards archive ... ; anx --json boards archive ... ; anx boards archive ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `boards unarchive`
-
-Unarchive board
-
-```text
-Generated Help: boards unarchive
-
-- Command ID: `boards.unarchive`
-- CLI path: `boards unarchive`
-- HTTP: `POST /boards/{board_id}/unarchive`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Clear archived_at on a board (restore default list visibility).
-- Output: Returns `{ board }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
-- Concepts: `boards`, `write`
-- Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards workspace`
-
-Inputs:
-  Required:
-  - path `board_id`
-  Optional:
-  - body `actor_id` (string)
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx boards unarchive ... ; anx --json boards unarchive ... ; anx boards unarchive ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `boards trash`
-
-Move board to trash
-
-```text
-Generated Help: boards trash
-
-- Command ID: `boards.trash`
-- CLI path: `boards trash`
-- HTTP: `POST /boards/{board_id}/trash`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Move board to trash with an explicit operator reason.
-- Output: Returns `{ board }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
-- Concepts: `boards`, `write`
-- Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards unarchive`, `boards workspace`
-
-Inputs:
-  Required:
-  - path `board_id`
-  - body `reason` (string)
-  Optional:
-  - body `actor_id` (string)
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx boards trash ... ; anx --json boards trash ... ; anx boards trash ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `boards restore`
-
-Restore board from trash
-
-```text
-Generated Help: boards restore
-
-- Command ID: `boards.restore`
-- CLI path: `boards restore`
-- HTTP: `POST /boards/{board_id}/restore`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Clear trash lifecycle fields on a board after an explicit restore action.
-- Output: Returns `{ board }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
-- Concepts: `boards`, `write`
-- Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards trash`, `boards unarchive`, `boards workspace`
-
-Inputs:
-  Required:
-  - path `board_id`
-  Optional:
-  - body `actor_id` (string)
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx boards restore ... ; anx --json boards restore ... ; anx boards restore ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `boards purge`
-
-Permanently delete trashed board
-
-```text
-Generated Help: boards purge
-
-- Command ID: `boards.purge`
-- CLI path: `boards purge`
-- HTTP: `POST /boards/{board_id}/purge`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Permanently delete a trashed board (human-gated).
-- Output: Returns `{ purged, board_id }`.
-- Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
-- Concepts: `boards`, `write`
-- Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
-
-Inputs:
-  Required:
-  - path `board_id`
-  Optional:
-  - body `actor_id` (string)
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx boards purge ... ; anx --json boards purge ... ; anx boards purge ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `boards cards`
-
-Nested generated help topic.
-
-```text
-Generated Help: boards cards
-
-Commands:
-  boards cards create      Create card on board
-  boards cards create-batch Batch create cards on board
-  boards cards get         Get board-scoped card
-  boards cards list        List board cards
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx boards cards ... ; anx --json boards cards ... ; anx boards cards ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-
-Tip: `anx help <command path>` for full command-level generated details.
-```
-
-## `boards cards create`
-
-Create card on board
-
-```text
-Generated Help: boards cards create
-
-- Command ID: `boards.cards.create`
-- CLI path: `boards cards create`
-- HTTP: `POST /boards/{board_id}/cards`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Create a first-class card and attach it to a board.
-- Output: Returns `{ card }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
-- Concepts: `boards`, `cards`, `write`
-- Adjacent commands: `boards archive`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
-
-Inputs:
-  Required:
-  - path `board_id`
-  - body `card.assignee_refs` (list<any>)
-  - body `card.column_key` (string)
-  - body `card.provenance.sources` (list<string>)
-  - body `card.related_refs` (list<any>)
-  - body `card.resolution_refs` (list<any>)
-  - body `card.risk` (string)
-  - body `card.summary` (string)
-  - body `card.title` (string)
-  Optional:
-  - body `board_id` (string)
-  - body `board_ref` (any)
-  - body `card.after_card_id` (string)
-  - body `card.before_card_id` (string)
-  - body `card.definition_of_done` (list<string>)
-  - body `card.document_ref` (string)
-  - body `card.due_at` (datetime)
-  - body `card.id` (string)
-  - body `card.provenance.by_field` (object)
-  - body `card.provenance.notes` (string)
-  - body `card.resolution` (string)
-  - body `card.topic_ref` (string)
-  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get --board-id <board-id>`, `anx boards workspace --board-id <board-id>`, or the latest board mutation response.
-  Enum values: card.column_key: backlog, blocked, done, in_progress, ready, review; card.resolution: canceled, done; card.risk: critical, high, low, medium
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx boards cards create ... ; anx --json boards cards create ... ; anx boards cards create ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `boards cards create-batch`
-
-Batch create cards on board
-
-```text
-Generated Help: boards cards create-batch
-
-- Command ID: `boards.cards.batch_add`
-- CLI path: `boards cards create-batch`
-- HTTP: `POST /boards/{board_id}/cards/batch`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Create multiple cards in one transaction using a single board concurrency token.
-- Output: Returns `{ board, cards }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
-- Concepts: `boards`, `cards`, `write`
-- Adjacent commands: `boards archive`, `boards cards create`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
-
-Inputs:
-  Required:
-  - path `board_id`
-  - body `items` (list<any>)
-  Optional:
-  - body `actor_id` (string): Defaults from the active CLI profile when omitted. Non-empty `--actor-id` overrides `actor_id` in the JSON body.
-  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get --board-id <board-id>`, `anx boards workspace --board-id <board-id>`, or the latest board mutation response. You may pass `--if-board-updated-at` instead of embedding it in JSON.
-  - body `request_key` (string): Idempotency key for the whole batch. Non-empty `--request-key` overrides `request_key` in the JSON body.
-
-CLI input:
-  - Provide a JSON object on stdin or via `--from-file`; it must include `items` (array of card create payloads).
-  - Board id: `--board-id <id>` or a single positional `<board-id>` before flags (no other positionals).
-  - `actor_id` defaults from the active profile when omitted from JSON; `--actor-id` sets or overrides it.
-  - `--request-key` and `--if-board-updated-at`, when non-empty, override the same keys in the JSON body.
-
-Agent tip: run `anx boards get --board-id <board-id> --json` (or `boards workspace`) first, copy `board.updated_at` into `if_board_updated_at`, or pass `--if-board-updated-at` from that value. Each item's `related_refs` must reference source threads not already backing another card on this board, or the server returns `conflict`.
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx boards cards create-batch ... ; anx --json boards cards create-batch ... ; anx boards cards create-batch ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `boards cards get`
-
-Get board-scoped card
-
-```text
-Generated Help: boards cards get
-
-- Command ID: `boards.cards.get`
-- CLI path: `boards cards get`
-- HTTP: `GET /boards/{board_id}/cards/{card_id}`
-- Stability: `beta`
-- Input mode: `none`
-- Why: Resolve a card through its board membership context.
-- Output: Returns `{ card }`.
-- Error codes: `auth_required`, `invalid_token`, `not_found`
-- Concepts: `boards`, `cards`
-- Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
-
-Inputs:
-  Required:
-  - path `board_id`
-  - path `card_id`
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx boards cards get ... ; anx --json boards cards get ... ; anx boards cards get ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `docs list`
-
-List documents
-
-```text
-Generated Help: docs list
-
-- Command ID: `docs.list`
-- CLI path: `docs list`
-- HTTP: `GET /docs`
-- Stability: `beta`
-- Input mode: `none`
-- Why: Scan canonical document lineages.
-- Output: Returns `{ documents }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`
-- Concepts: `docs`
-- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs patch`, `docs purge`, `docs restore`, `docs revisions create`, `docs revisions get`, `docs revisions list`, `docs trash`, `docs unarchive`
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx docs list ... ; anx --json docs list ... ; anx docs list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `docs create`
-
-Create document
-
-```text
-Generated Help: docs create
-
-- Command ID: `docs.create`
-- CLI path: `docs create`
-- HTTP: `POST /docs`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Create a canonical document lineage anchored to a typed subject ref.
-- Output: Returns `{ document, revision }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`
-- Concepts: `docs`, `write`
-- Adjacent commands: `docs archive`, `docs get`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revisions create`, `docs revisions get`, `docs revisions list`, `docs trash`, `docs unarchive`
-
-Inputs:
-  Required:
-  - body `document.body_markdown` (string)
-  - body `document.provenance.sources` (list<string>)
-  - body `document.refs` (list<any>)
-  - body `document.subject_ref` (string)
-  - body `document.title` (string)
-  Optional:
-  - body `document.provenance.by_field` (object)
-  - body `document.provenance.notes` (string)
-  - body `document.summary` (string)
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx docs create ... ; anx --json docs create ... ; anx docs create ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `docs get`
-
-Get document
-
-```text
-Generated Help: docs get
-
-- Command ID: `docs.get`
-- CLI path: `docs get`
-- HTTP: `GET /docs/{document_id}`
-- Stability: `beta`
-- Input mode: `none`
-- Why: Resolve a document lineage and its current head revision.
-- Output: Returns `{ document, revision }`.
-- Error codes: `auth_required`, `invalid_token`, `not_found`
-- Concepts: `docs`
-- Adjacent commands: `docs archive`, `docs create`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revisions create`, `docs revisions get`, `docs revisions list`, `docs trash`, `docs unarchive`
-
-Inputs:
-  Required:
-  - path `document_id`
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx docs get ... ; anx --json docs get ... ; anx docs get ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `docs trash`
-
-Move document to trash
-
-```text
-Generated Help: docs trash
-
-- Command ID: `docs.trash`
-- CLI path: `docs trash`
-- HTTP: `POST /docs/{document_id}/trash`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Move a document lineage to trash with an explicit operator reason.
-- Output: Returns `{ document, revision }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
-- Concepts: `docs`, `write`
-- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revisions create`, `docs revisions get`, `docs revisions list`, `docs unarchive`
-
-Inputs:
-  Required:
-  - path `document_id`
-  - body `reason` (string)
-  Optional:
-  - body `actor_id` (string)
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx docs trash ... ; anx --json docs trash ... ; anx docs trash ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `docs archive`
-
-Archive document
-
-```text
-Generated Help: docs archive
-
-- Command ID: `docs.archive`
-- CLI path: `docs archive`
-- HTTP: `POST /docs/{document_id}/archive`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Soft-archive a document lineage (orthogonal to head revision content).
-- Output: Returns `{ document, revision }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
-- Concepts: `docs`, `write`
-- Adjacent commands: `docs create`, `docs get`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revisions create`, `docs revisions get`, `docs revisions list`, `docs trash`, `docs unarchive`
-
-Inputs:
-  Required:
-  - path `document_id`
-  Optional:
-  - body `actor_id` (string)
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx docs archive ... ; anx --json docs archive ... ; anx docs archive ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `docs unarchive`
-
-Unarchive document
-
-```text
-Generated Help: docs unarchive
-
-- Command ID: `docs.unarchive`
-- CLI path: `docs unarchive`
-- HTTP: `POST /docs/{document_id}/unarchive`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Clear archived_at on a document so it returns to default visibility.
-- Output: Returns `{ document, revision }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
-- Concepts: `docs`, `write`
-- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revisions create`, `docs revisions get`, `docs revisions list`, `docs trash`
-
-Inputs:
-  Required:
-  - path `document_id`
-  Optional:
-  - body `actor_id` (string)
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx docs unarchive ... ; anx --json docs unarchive ... ; anx docs unarchive ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `docs restore`
-
-Restore document from trash
-
-```text
-Generated Help: docs restore
-
-- Command ID: `docs.restore`
-- CLI path: `docs restore`
-- HTTP: `POST /docs/{document_id}/restore`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Clear trash state on a document after an explicit restore action.
-- Output: Returns `{ document, revision }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
-- Concepts: `docs`, `write`
-- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs list`, `docs patch`, `docs purge`, `docs revisions create`, `docs revisions get`, `docs revisions list`, `docs trash`, `docs unarchive`
-
-Inputs:
-  Required:
-  - path `document_id`
-  Optional:
-  - body `actor_id` (string)
-  - body `reason` (string)
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx docs restore ... ; anx --json docs restore ... ; anx docs restore ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `docs purge`
-
-Permanently delete trashed document
-
-```text
-Generated Help: docs purge
-
-- Command ID: `docs.purge`
-- CLI path: `docs purge`
-- HTTP: `POST /docs/{document_id}/purge`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Permanently delete a trashed document (human-gated).
-- Output: Returns `{ purged, document_id }`.
-- Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
-- Concepts: `docs`, `write`
-- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs list`, `docs patch`, `docs restore`, `docs revisions create`, `docs revisions get`, `docs revisions list`, `docs trash`, `docs unarchive`
-
-Inputs:
-  Required:
-  - path `document_id`
-  Optional:
-  - body `actor_id` (string)
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx docs purge ... ; anx --json docs purge ... ; anx docs purge ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `events get`
-
-Get event by id
-
-```text
-Generated Help: events get
-
-- Command ID: `events.get`
-- CLI path: `events get`
-- HTTP: `GET /events/{event_id}`
-- Stability: `beta`
-- Input mode: `none`
-- Why: Fetch one append-only event record by stable id.
-- Output: Returns `{ event }`.
-- Error codes: `auth_required`, `invalid_token`, `not_found`
-- Concepts: `events`
-- Adjacent commands: `events archive`, `events create`, `events list`, `events restore`, `events stream`, `events trash`, `events unarchive`
-
-Inputs:
-  Required:
-  - path `event_id`
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx events get ... ; anx --json events get ... ; anx events get ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `events create`
-
-Create event
-
-```text
-Generated Help: events create
-
-- Command ID: `events.create`
-- CLI path: `events create`
-- HTTP: `POST /events`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Append an event that links first-class resources and evidence through typed refs.
-- Output: Returns `{ event }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`
-- Concepts: `events`, `write`
-- Adjacent commands: `events archive`, `events get`, `events list`, `events restore`, `events stream`, `events trash`, `events unarchive`
-
-Inputs:
-  Required:
-  - body `event.actor_id` (string)
-  - body `event.provenance.sources` (list<string>)
-  - body `event.refs` (list<any>)
-  - body `event.summary` (string)
-  - body `event.type` (string)
-  Optional:
-  - body `event.payload` (object)
-  - body `event.provenance.by_field` (object)
-  - body `event.provenance.notes` (string)
-  - body `event.thread_ref` (string)
-  Enum values: event.type (open): agent_notification_dismissed, agent_notification_read, board_card_added, board_card_archived, board_card_moved, board_card_trashed, board_created, board_updated, card_archived, card_created, card_moved, card_resolved, card_trashed, card_updated, decision_made, decision_needed, document_created, document_restored, document_revised, document_trashed, exception_raised, inbox_item_acknowledged, intervention_needed, message_posted, receipt_added, review_completed, topic_archived, topic_created, topic_restored, topic_trashed, topic_updated
-
-Common authoring types:
-  Communication: direct communication or important non-structured information
-  - `message_posted`
-  Decisions: request or record decisions tied to a topic
-  - `decision_needed`
-  - `decision_made`
-  Interventions: single clear path exists, but a human must act to complete it
-  - `intervention_needed`
-  Topics and documents: durable subject and document lifecycle signals
-  - `topic_created`, `topic_updated`, `topic_archived`, `topic_trashed`
-  - `document_created`, `document_revised`, `document_trashed`
-  Boards and cards: workflow placement and movement
-  - `board_created`, `board_updated`
-  - `card_created`, `card_updated`, `card_moved`, `card_resolved`
-  Exceptions: surface problems, risks, or escalations
-  - `exception_raised`
-
-Usually emitted by higher-level commands:
-  - `receipt_added`: prefer `anx receipts create`
-  - `review_completed`: prefer `anx reviews create`
-  - `inbox_item_acknowledged`: prefer `anx inbox ack`
-
-Local CLI notes:
-  - Common open `event.type` values include `actor_statement`; the enum list above is illustrative, not exhaustive.
-  - Use `--dry-run` with `--from-file` to validate and preview the request without sending the mutation.
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx events create ... ; anx --json events create ... ; anx events create ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `events stream`
-
-Stream events (SSE)
-
-```text
-Generated Help: events stream
-
-- Command ID: `events.stream`
-- CLI path: `events stream`
-- HTTP: `GET /events/stream`
-- Stability: `beta`
-- Input mode: `none`
-- Why: Long-lived SSE feed of workspace events with optional thread/type filters and Last-Event-ID resume.
-- Output: Each SSE message is `event: …` with JSON data `{ "event": <event> }` (see core/docs/http-api.md).
-- Error codes: `auth_required`, `invalid_token`
-- Concepts: `events`
-- Adjacent commands: `events archive`, `events create`, `events get`, `events list`, `events restore`, `events trash`, `events unarchive`
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx events stream ... ; anx --json events stream ... ; anx events stream ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `events tail`
-
-Stream events (SSE)
-
-```text
-Generated Help: events tail
-
-- Command ID: `events.stream`
-- CLI path: `events stream`
-- HTTP: `GET /events/stream`
-- Stability: `beta`
-- Input mode: `none`
-- Why: Long-lived SSE feed of workspace events with optional thread/type filters and Last-Event-ID resume.
-- Output: Each SSE message is `event: …` with JSON data `{ "event": <event> }` (see core/docs/http-api.md).
-- Error codes: `auth_required`, `invalid_token`
-- Concepts: `events`
-- Adjacent commands: `events archive`, `events create`, `events get`, `events list`, `events restore`, `events trash`, `events unarchive`
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx events tail ... ; anx --json events tail ... ; anx events tail ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `events archive`
-
-Archive event
-
-```text
-Generated Help: events archive
-
-- Command ID: `events.archive`
-- CLI path: `events archive`
-- HTTP: `POST /events/{event_id}/archive`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Set archived_at on an append-only event record for filtered views.
-- Output: Returns `{ event }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
-- Concepts: `events`, `write`
-- Adjacent commands: `events create`, `events get`, `events list`, `events restore`, `events stream`, `events trash`, `events unarchive`
-
-Inputs:
-  Required:
-  - path `event_id`
-  Optional:
-  - body `actor_id` (string)
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx events archive ... ; anx --json events archive ... ; anx events archive ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `events unarchive`
-
-Unarchive event
-
-```text
-Generated Help: events unarchive
-
-- Command ID: `events.unarchive`
-- CLI path: `events unarchive`
-- HTTP: `POST /events/{event_id}/unarchive`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Clear archived_at on an event.
-- Output: Returns `{ event }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
-- Concepts: `events`, `write`
-- Adjacent commands: `events archive`, `events create`, `events get`, `events list`, `events restore`, `events stream`, `events trash`
-
-Inputs:
-  Required:
-  - path `event_id`
-  Optional:
-  - body `actor_id` (string)
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx events unarchive ... ; anx --json events unarchive ... ; anx events unarchive ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `events trash`
-
-Move event to trash
-
-```text
-Generated Help: events trash
-
-- Command ID: `events.trash`
-- CLI path: `events trash`
-- HTTP: `POST /events/{event_id}/trash`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Move event to trash with an explicit operator reason.
-- Output: Returns `{ event }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
-- Concepts: `events`, `write`
-- Adjacent commands: `events archive`, `events create`, `events get`, `events list`, `events restore`, `events stream`, `events unarchive`
-
-Inputs:
-  Required:
-  - path `event_id`
-  - body `reason` (string)
-  Optional:
-  - body `actor_id` (string)
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx events trash ... ; anx --json events trash ... ; anx events trash ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `events restore`
-
-Restore event from trash
-
-```text
-Generated Help: events restore
-
-- Command ID: `events.restore`
-- CLI path: `events restore`
-- HTTP: `POST /events/{event_id}/restore`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Clear trash state on an event after an explicit restore action.
-- Output: Returns `{ event }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
-- Concepts: `events`, `write`
-- Adjacent commands: `events archive`, `events create`, `events get`, `events list`, `events stream`, `events trash`, `events unarchive`
-
-Inputs:
-  Required:
-  - path `event_id`
-  Optional:
-  - body `actor_id` (string)
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx events restore ... ; anx --json events restore ... ; anx events restore ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `inbox list`
-
-List inbox items
-
-```text
-Generated Help: inbox list
-
-- Command ID: `inbox.list`
-- CLI path: `inbox list`
-- HTTP: `GET /inbox`
-- Stability: `beta`
-- Input mode: `none`
-- Why: Load the derived operator inbox generated from refs and canonical events.
-- Output: Returns `{ items }`.
-- Error codes: `auth_required`, `invalid_token`
-- Concepts: `inbox`
-- Adjacent commands: `inbox acknowledge`, `inbox get`, `inbox stream`
-
-
-View scoping:
-  - `inbox list` is read from the active CLI identity's perspective.
-  - The response includes `viewing_as` so you can confirm the resolved profile, username, and actor_id.
-  - Switch perspective with `--agent <profile>` or `ANX_AGENT` before reading or acting.
-
-Inbox categories:
-  - `action_needed`: A human must decide, take direct action, or own the next step (includes prior decision and intervention queue signals).
-  - `risk_exception`: Exceptions or at-risk work items that need follow-up.
-  - `attention`: Review or lighter operator focus (for example document attention).
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx inbox list ... ; anx --json inbox list ... ; anx inbox list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `inbox get`
-
-Get one inbox item
-
-```text
-Generated Help: inbox get
-
-- Command ID: `inbox.get`
-- CLI path: `inbox get`
-- HTTP: `GET /inbox/{inbox_id}`
-- Stability: `beta`
-- Input mode: `none`
-- Why: Side-effect free read of one materialized inbox row.
-- Output: Returns `{ item, generated_at, projection_freshness }`.
-- Error codes: `auth_required`, `invalid_token`, `not_found`
-- Concepts: `inbox`
-- Adjacent commands: `inbox acknowledge`, `inbox list`, `inbox stream`
-
-Inputs:
-  Required:
-  - path `inbox_id`
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx inbox get ... ; anx --json inbox get ... ; anx inbox get ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `inbox acknowledge`
-
-Acknowledge inbox item
-
-```text
-Generated Help: inbox acknowledge
-
-- Command ID: `inbox.acknowledge`
-- CLI path: `inbox acknowledge`
-- HTTP: `POST /inbox/{inbox_id}/acknowledge`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Suppress or clear a derived inbox item via a durable acknowledgment event.
-- Output: Returns `{ event }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
-- Concepts: `inbox`, `write`
-- Adjacent commands: `inbox get`, `inbox list`, `inbox stream`
-
-Inputs:
-  Required:
-  - path `inbox_id`
-  - body `subject_ref` (string)
-  Optional:
-  - body `actor_id` (string)
-  - body `inbox_item_id` (string)
-  - body `note` (string)
-  - body `refs` (list<any>)
-
-CLI flags (`inbox acknowledge` / `inbox ack`):
-  --inbox-item-id <id>   Inbox item id or list alias (see `inbox list`).
-  --subject-ref <ref>    Typed subject ref; omitted ids may be resolved from `inbox list`.
-  --actor-id <id>        Actor id (`me` uses the active profile's actor when configured).
-  --from-file <path>     JSON body file (API request shape).
-  Positional: inbox item id when not given via `--inbox-item-id`.
-  Otherwise: JSON object on stdin (`inbox_item_id`, `subject_ref`, optional fields).
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx inbox acknowledge ... ; anx --json inbox acknowledge ... ; anx inbox acknowledge ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `inbox ack`
-
-Acknowledge inbox item
-
-```text
-Generated Help: inbox ack
-
-- Command ID: `inbox.acknowledge`
-- CLI path: `inbox acknowledge`
-- HTTP: `POST /inbox/{inbox_id}/acknowledge`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Suppress or clear a derived inbox item via a durable acknowledgment event.
-- Output: Returns `{ event }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
-- Concepts: `inbox`, `write`
-- Adjacent commands: `inbox get`, `inbox list`, `inbox stream`
-
-Inputs:
-  Required:
-  - path `inbox_id`
-  - body `subject_ref` (string)
-  Optional:
-  - body `actor_id` (string)
-  - body `inbox_item_id` (string)
-  - body `note` (string)
-  - body `refs` (list<any>)
-
-CLI flags (`inbox acknowledge` / `inbox ack`):
-  --inbox-item-id <id>   Inbox item id or list alias (see `inbox list`).
-  --subject-ref <ref>    Typed subject ref; omitted ids may be resolved from `inbox list`.
-  --actor-id <id>        Actor id (`me` uses the active profile's actor when configured).
-  --from-file <path>     JSON body file (API request shape).
-  Positional: inbox item id when not given via `--inbox-item-id`.
-  Otherwise: JSON object on stdin (`inbox_item_id`, `subject_ref`, optional fields).
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx inbox ack ... ; anx --json inbox ack ... ; anx inbox ack ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `inbox stream`
-
-Stream inbox items (SSE)
-
-```text
-Generated Help: inbox stream
-
-- Command ID: `inbox.stream`
-- CLI path: `inbox stream`
-- HTTP: `GET /inbox/stream`
-- Stability: `beta`
-- Input mode: `none`
-- Why: Server-sent events feed of inbox projection updates.
-- Output: SSE `inbox_item` events with JSON payloads.
-- Error codes: `auth_required`, `invalid_token`
-- Concepts: `inbox`
-- Adjacent commands: `inbox acknowledge`, `inbox get`, `inbox list`
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx inbox stream ... ; anx --json inbox stream ... ; anx inbox stream ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `inbox tail`
-
-Stream inbox items (SSE)
-
-```text
-Generated Help: inbox tail
-
-- Command ID: `inbox.stream`
-- CLI path: `inbox stream`
-- HTTP: `GET /inbox/stream`
-- Stability: `beta`
-- Input mode: `none`
-- Why: Server-sent events feed of inbox projection updates.
-- Output: SSE `inbox_item` events with JSON payloads.
-- Error codes: `auth_required`, `invalid_token`
-- Concepts: `inbox`
-- Adjacent commands: `inbox acknowledge`, `inbox get`, `inbox list`
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx inbox tail ... ; anx --json inbox tail ... ; anx inbox tail ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4102,6 +4039,313 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
+## `topics create`
+
+Create a topic from plain flags, or from advanced JSON.
+
+```text
+Local Help: topics create
+
+- Kind: `local helper`
+- Summary: Create a topic from plain flags, or from advanced JSON.
+- Composition: Builds the `topics.create` request. Use Topics for discussion and current context around a project, incident, decision, or recurring process.
+- JSON body: Either flags building `{ topic }`, or advanced JSON body `{ topic }` from stdin/--from-file.
+- Examples:
+  - `anx topics create --title "Launch" --summary "Coordinate launch work"`
+  - `anx topics create --title "Incident 42" --summary "Triage checkout failures" --owner-ref actor:<actor-id>`
+  - `cat topic.json | anx topics create`
+
+Flags:
+  --title <text>               Topic title.
+  --summary <text>             Topic summary.
+  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --owner-ref <typed-ref>      Owner typed ref, repeatable.
+  --document-ref <typed-ref>   Linked document typed ref, repeatable.
+  --board-ref <typed-ref>      Linked board typed ref, repeatable.
+  --ref <typed-ref>            Additional related typed ref, repeatable.
+  --from-file <path>           Advanced JSON request body from file.
+  --dry-run                    Validate and render the request without sending it.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx topics create ... ; anx --json topics create ... ; anx topics create ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `topics discuss`
+
+Post a topic-centered discussion message from a local text file.
+
+```text
+Local Help: topics discuss
+
+- Kind: `local helper`
+- Summary: Post a topic-centered discussion message from a local text file.
+- Composition: Fetches the Topic to discover its backing thread, then writes a visible `message_posted` event to that thread. Use this for discussion; use Boards/Cards for active work and Docs for durable knowledge.
+- JSON body: Builds an `events.create` body with `event.type=message_posted`, topic/thread refs, and payload text.
+- Examples:
+  - `anx topics discuss --topic <topic-id> --message-file message.md`
+  - `anx topics discuss --topic <topic-id> --message-file message.md --summary "Decision context"`
+
+Flags:
+  --topic <topic-id>           Topic id or unique prefix to discuss.
+  --message-file <path>        Load discussion message text from a local file.
+  --summary <text>             Optional short event summary.
+  --ref <typed-ref>            Additional typed ref, repeatable.
+  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --dry-run                    Validate and render the request without sending it.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx topics discuss ... ; anx --json topics discuss ... ; anx topics discuss ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `boards create`
+
+Create an active-work Board from flags, optionally tied to a Topic.
+
+```text
+Local Help: boards create
+
+- Kind: `local helper`
+- Summary: Create an active-work Board from flags, optionally tied to a Topic.
+- Composition: Builds the `boards.create` request. Use Boards for active work tracking, ownership, columns, and Card movement.
+- JSON body: Either flags building `{ board }`, or advanced JSON body `{ board }` from stdin/--from-file.
+- Examples:
+  - `anx boards create --topic <topic-id> --title "Launch board"`
+  - `anx boards create --title "Launch board" --summary "Active launch work" --document-ref document:<doc-id>`
+  - `cat board.json | anx boards create`
+
+Flags:
+  --title <text>               Board title.
+  --summary <text>             Optional board summary.
+  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --topic <topic-id>           Primary topic id; plain ids are normalized to topic:<id>.
+  --document-ref <typed-ref>   Linked document typed ref, repeatable.
+  --ref <typed-ref>            Pinned/related typed ref, repeatable.
+  --from-file <path>           Advanced JSON request body from file.
+  --dry-run                    Validate and render the request without sending it.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx boards create ... ; anx --json boards create ... ; anx boards create ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `docs create`
+
+Create a durable document lineage, with a file-first text-doc path for agents.
+
+```text
+Local Help: docs create
+
+- Kind: `local helper`
+- Summary: Create a durable document lineage, with a file-first text-doc path for agents.
+- Composition: Builds the same `docs.create` request as the generated command. For ordinary text docs, prefer flags so agents can draft Markdown locally without hand-authoring JSON.
+- JSON body: Either flags plus `--content-file`, or advanced JSON body `{ document, content, content_type }` from stdin/--from-file.
+- Examples:
+  - `anx docs create --topic <topic-id> --title "Runbook" --content-file runbook.md`
+  - `anx docs create --subject-ref topic:<topic-id> --title "Runbook" --summary "Durable context" --content-file runbook.md`
+  - `cat doc-create.json | anx docs create`
+
+Flags:
+  --topic <topic-id>           Anchor the document to a topic; plain ids are normalized to topic:<id>.
+  --subject-ref <typed-ref>    Explicit document subject ref when not using --topic.
+  --title <text>               Document title for flag-built text docs.
+  --summary <text>             Optional document summary for list/detail headers.
+  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --ref <typed-ref>            Additional typed ref (repeatable).
+  --content-file <path>        Load Markdown/text content from a local file.
+  --from-file <path>           Advanced JSON request body from file.
+  --dry-run                    Validate and render the request without sending it.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx docs create ... ; anx --json docs create ... ; anx docs create ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `cards create`
+
+Create a board work card from flags plus a local prose file, or from advanced JSON.
+
+```text
+Local Help: cards create
+
+- Kind: `local helper`
+- Summary: Create a board work card from flags plus a local prose file, or from advanced JSON.
+- Composition: Builds the `cards.create` request. For normal agent work, draft the card summary/body locally and pass `--content-file` so the CLI can fill the stable Card envelope.
+- JSON body: Either flags plus `--content-file`, or advanced JSON body `{ board_id, card }` from stdin/--from-file.
+- Examples:
+  - `anx cards create --board <board-id> --topic <topic-id> --title "Implement login" --content-file card.md`
+  - `anx cards create --board <board-id> --title "Implement login" --content-file card.md --assignee-ref actor:<actor-id>`
+  - `cat card-create.json | anx cards create`
+
+Flags:
+  --board <board-id>           Board id for the new work card.
+  --title <text>               Card title.
+  --content-file <path>        Load card summary/body text from a local file.
+  --topic <topic-id>           Related topic id; plain ids are normalized to topic:<id>.
+  --column <key>               Initial board column; defaults to backlog.
+  --assignee-ref <typed-ref>   Assignee actor ref, repeatable.
+  --document-ref <typed-ref>   Pinned document ref for the card.
+  --ref <typed-ref>            Additional related typed ref, repeatable.
+  --done <text>                Definition-of-done checklist item, repeatable.
+  --from-file <path>           Advanced JSON request body from file.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx cards create ... ; anx --json cards create ... ; anx cards create ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `cards revise`
+
+Revise a card title and/or summary/body from local files without hand-authoring patch JSON.
+
+```text
+Local Help: cards revise
+
+- Kind: `local helper`
+- Summary: Revise a card title and/or summary/body from local files without hand-authoring patch JSON.
+- Composition: Fetches the card when needed for optimistic concurrency, then sends `cards.patch` with `summary` from `--content-file` and optional `title`.
+- JSON body: `{ patch, if_updated_at, actor_id? }`; discovers `if_updated_at` from `cards get` when omitted.
+- Examples:
+  - `anx cards revise --card <card-id> --content-file card.md`
+  - `anx cards revise --card <card-id> --title "Updated title" --content-file card.md`
+  - `anx cards revise --card <card-id> --from-file card-patch.json`
+
+Flags:
+  --card <card-id>             Card id or unique prefix to revise.
+  --content-file <path>        Load revised card summary/body text from a local file.
+  --title <text>               Optional revised card title.
+  --if-updated-at <timestamp>  Card optimistic concurrency token; discovered when omitted.
+  --from-file <path>           Advanced JSON patch request body from file.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx cards revise ... ; anx --json cards revise ... ; anx cards revise ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `cards move`
+
+Move a card to another board column using Card workflow language.
+
+```text
+Local Help: cards move
+
+- Kind: `local helper`
+- Summary: Move a card to another board column using Card workflow language.
+- Composition: Fetches the card and parent board when needed for optimistic concurrency, then sends `cards.move`.
+- JSON body: `{ column_key, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.
+- Examples:
+  - `anx cards move --card <card-id> --column review`
+  - `anx cards move --card <card-id> --column blocked --if-board-updated-at <updated-at>`
+
+Flags:
+  --card <card-id>             Card id or unique prefix to move.
+  --column <key>               Target board column.
+  --if-board-updated-at <timestamp> Board optimistic concurrency token; discovered when omitted.
+  --from-file <path>           Advanced JSON move request body from file.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx cards move ... ; anx --json cards move ... ; anx cards move ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `cards assign`
+
+Replace card assignees with explicit actor refs, or clear them.
+
+```text
+Local Help: cards assign
+
+- Kind: `local helper`
+- Summary: Replace card assignees with explicit actor refs, or clear them.
+- Composition: Builds a focused `cards.patch` request for the Card ownership field.
+- JSON body: `{ patch: { assignee_refs }, if_updated_at, actor_id? }`; discovers `if_updated_at` from `cards get` when omitted.
+- Examples:
+  - `anx cards assign --card <card-id> --assignee-ref actor:<actor-id>`
+  - `anx cards assign --card <card-id> --clear`
+
+Flags:
+  --card <card-id>             Card id or unique prefix to assign.
+  --assignee-ref <typed-ref>   Assignee actor typed ref, repeatable.
+  --clear                      Clear all assignees.
+  --if-updated-at <timestamp>  Card optimistic concurrency token; discovered when omitted.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx cards assign ... ; anx --json cards assign ... ; anx cards assign ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `cards resolve`
+
+Resolve a card into the done column with evidence refs.
+
+```text
+Local Help: cards resolve
+
+- Kind: `local helper`
+- Summary: Resolve a card into the done column with evidence refs.
+- Composition: Builds a focused `cards.move` request that both moves and records terminal resolution evidence.
+- JSON body: `{ column_key: "done", resolution, resolution_refs, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.
+- Examples:
+  - `anx cards resolve --card <card-id> --resolution-ref event:<event-id>`
+  - `anx cards resolve --card <card-id> --resolution canceled --resolution-ref artifact:<artifact-id>`
+
+Flags:
+  --card <card-id>             Card id or unique prefix to resolve.
+  --resolution-ref <typed-ref> Evidence event/artifact typed ref, repeatable.
+  --resolution <value>         Resolution value, default done.
+  --if-board-updated-at <timestamp> Board optimistic concurrency token; discovered when omitted.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx cards resolve ... ; anx --json cards resolve ... ; anx cards resolve ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `cards reopen`
+
+Move a resolved card back into active workflow.
+
+```text
+Local Help: cards reopen
+
+- Kind: `local helper`
+- Summary: Move a resolved card back into active workflow.
+- Composition: Builds a focused `cards.move` request. The default reopened column is `ready`.
+- JSON body: `{ column_key, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.
+- Examples:
+  - `anx cards reopen --card <card-id>`
+  - `anx cards reopen --card <card-id> --column backlog`
+
+Flags:
+  --card <card-id>             Card id or unique prefix to reopen.
+  --column <key>               Target reopened column; defaults to ready.
+  --if-board-updated-at <timestamp> Board optimistic concurrency token; discovered when omitted.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx cards reopen ... ; anx --json cards reopen ... ; anx cards reopen ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
 ## `events list`
 
 Compose backing-thread timeline reads with client-side thread/type/actor filters and preview summaries.
@@ -4353,30 +4597,37 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
-## `docs propose-update`
+## `docs revise`
 
-Stage a document update proposal locally and show the content diff before applying it.
+Revise a durable document from a local file or JSON body; stages a diff proposal by default.
 
 ```text
-Local Help: docs propose-update
+Local Help: docs revise
 
 - Kind: `local helper`
-- Summary: Stage a document update proposal locally and show the content diff before applying it.
-- Composition: Fetches the current document revision with `docs get`, computes a local diff against the proposed update, and persists a proposal file instead of sending the update immediately.
-- JSON body: `proposal_id`, `target_command_id`, `path`, `body`, `diff`, `apply_command`
+- Summary: Revise a durable document from a local file or JSON body; stages a diff proposal by default.
+- Composition: Fetches the current document revision, discovers the base revision when omitted, computes a local diff, and stages a proposal. Add `--apply` to direct-write the revision; use `--apply --proposal-id <id>` to apply a staged proposal.
+- JSON body: Proposal mode returns `proposal_id`, `target_command_id`, `path`, `body`, `diff`, `apply_command`; `--apply` sends the revision immediately or applies a staged proposal.
 - Examples:
-  - `anx docs propose-update --document-id <document-id> --content-file <path>`
-  - `cat update.json | anx docs propose-update --document-id <document-id>`
+  - `anx docs revise --document-id <document-id> --content-file notes.md`
+  - `anx docs revise --apply --proposal-id <proposal-id>`
+  - `anx docs revise --apply --document-id <document-id> --content-file notes.md`
+  - `cat revision.json | anx docs revise --document-id <document-id>`
 
 Flags:
-  --document-id <document-id>  Document id to update.
-  --content-file <path>        Load multiline content from a file into the JSON payload.
-  --from-file <path>           Load the full JSON update body from a file.
+  --document-id <document-id>  Document id to revise.
+  --document <document-id>     Same as --document-id.
+  --content-file <path>        Load revised Markdown/text content from a local file.
+  --from-file <path>           Advanced JSON revision body from a file.
+  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --apply                      Apply immediately, or apply a staged proposal when combined with --proposal-id.
+  --proposal-id <proposal-id>  Staged proposal id to apply; must be combined with --apply.
+  --propose                    Stage a proposal (default; included for explicitness).
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx docs propose-update ... ; anx --json docs propose-update ... ; anx docs propose-update ... --json (last two: JSON envelope on stdout)
+  Examples: anx docs revise ... ; anx --json docs revise ... ; anx docs revise ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4431,58 +4682,6 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs comments ... ; anx --json docs comments ... ; anx docs comments ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `docs validate-update`
-
-Validate a `docs.revisions.create` payload locally from stdin or file without sending the mutation.
-
-```text
-Local Help: docs validate-update
-
-- Kind: `local helper`
-- Summary: Validate a `docs.revisions.create` payload locally from stdin or file without sending the mutation.
-- Composition: Parses the same body accepted by `docs.revisions.create`, expands `--content-file` when present, and returns a validation preview envelope without contacting core.
-- JSON body: `command`, `command_id`, `path_params`, `query`, `body`, `valid`
-- Examples:
-  - `cat update.json | anx docs validate-update --document-id <document-id>`
-  - `anx docs validate-update --document-id <document-id> --content-file body.md`
-
-Flags:
-  --document-id <document-id>  Document id to validate against.
-  --content-file <path>        Load multiline content from a file into the JSON payload.
-  --from-file <path>           Load the full JSON update body from a file.
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx docs validate-update ... ; anx --json docs validate-update ... ; anx docs validate-update ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `docs apply`
-
-Apply a previously staged document update proposal.
-
-```text
-Local Help: docs apply
-
-- Kind: `local helper`
-- Summary: Apply a previously staged document update proposal.
-- Composition: Loads the local proposal by exact id or unique prefix, validates it again, then sends the underlying `docs.revisions.create` request.
-- JSON body: `proposal_id`, `target_command_id`, `applied`, `kept`, `result`
-- Examples:
-  - `anx docs apply --proposal-id <proposal-id>`
-  - `anx docs apply <proposal-id-prefix>`
-
-Flags:
-  --proposal-id <proposal-id>  Proposal id or unique prefix to apply.
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx docs apply ... ; anx --json docs apply ... ; anx docs apply ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
