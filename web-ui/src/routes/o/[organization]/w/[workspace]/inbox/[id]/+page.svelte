@@ -9,6 +9,7 @@
   import Skeleton from "$lib/components/state/Skeleton.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
   import { coreClient } from "$lib/coreClient";
+  import { searchActors } from "$lib/searchHelpers";
   import { workspacePath } from "$lib/workspacePaths";
 
   let organizationSlug = $derived($page.params.organization);
@@ -25,6 +26,12 @@
   let submitting = $state(false);
   let submitError = $state("");
   let autosaveInterval = null;
+  let notifyTargetQuery = $state("");
+  let notifyTargetResults = $state([]);
+  let notifyTargetSelected = $state(null);
+  let notifyTargetSearchTimer = null;
+  let notifyTargetSearchSeq = 0;
+  let notifyTargetMenuOpen = $state(false);
 
   const KIND_LABELS = {
     ask: "Ask",
@@ -39,9 +46,6 @@
           .filter(Boolean)
       : [],
   );
-  let recommendedProposal = $derived(proposalStrings[0] ?? "");
-  let alternativeProposals = $derived(proposalStrings.slice(1));
-
   function workspaceHref(pathname = "/") {
     return workspacePath(organizationSlug, workspaceSlug, pathname);
   }
@@ -76,6 +80,67 @@
 
   function applyPreset(text) {
     responseDraft = text;
+  }
+
+  function notifyTargetLabel() {
+    if (notifyTargetSelected) {
+      return notifyTargetSelected.display_name || notifyTargetSelected.id || "";
+    }
+    const actorID = String(notifyTargetActorID ?? "").trim();
+    const agentID = String(notifyTargetAgentID ?? "").trim();
+    return actorID || agentID || "";
+  }
+
+  function chooseNotifyTarget(actor) {
+    notifyTargetSelected = actor;
+    notifyTargetActorID = String(actor?.id ?? "");
+    notifyTargetAgentID = "";
+    notifyTargetQuery = "";
+    notifyTargetResults = [];
+    notifyTargetMenuOpen = false;
+  }
+
+  function clearNotifyTarget() {
+    notifyTargetSelected = null;
+    notifyTargetActorID = "";
+    notifyTargetAgentID = "";
+    notifyTargetQuery = "";
+    notifyTargetResults = [];
+  }
+
+  function handleNotifyTargetInput(event) {
+    const value = event.currentTarget.value;
+    notifyTargetQuery = value;
+    notifyTargetMenuOpen = true;
+    if (notifyTargetSearchTimer) {
+      clearTimeout(notifyTargetSearchTimer);
+      notifyTargetSearchTimer = null;
+    }
+    const needle = value.trim();
+    if (!needle) {
+      notifyTargetResults = [];
+      return;
+    }
+    const seq = ++notifyTargetSearchSeq;
+    notifyTargetSearchTimer = setTimeout(async () => {
+      try {
+        const results = await searchActors(needle, 8);
+        if (seq !== notifyTargetSearchSeq) return;
+        notifyTargetResults = Array.isArray(results) ? results : [];
+      } catch {
+        if (seq !== notifyTargetSearchSeq) return;
+        notifyTargetResults = [];
+      }
+    }, 200);
+  }
+
+  function notifyDescription() {
+    if (notifyMode === "none") return "No one will be notified";
+    if (notifyMode === "target") {
+      const label = notifyTargetLabel();
+      return label ? `Notify ${label}` : "Notify someone else";
+    }
+    return `Notify ${requesterLabel()}`;
   }
 
   function handleTextareaKeydown(event) {
@@ -173,26 +238,15 @@
   });
 </script>
 
-<div class="mx-auto max-w-3xl space-y-6 px-4 py-4 max-md:space-y-4 max-md:py-3">
-  <header
-    class="flex items-center justify-between border-b border-[var(--line)] pb-3 max-md:pb-2"
-  >
-    <div>
-      <h1 class="text-display font-semibold leading-[1.3] text-fg">
-        Respond to {kindLabel()}
-      </h1>
-      <p class="mt-2 text-body text-fg">
-        Record a freeform response and notify the requesting agent when
-        possible.
-      </p>
-    </div>
+<div class="mx-auto max-w-3xl space-y-4 px-4 py-4 max-md:py-3">
+  <div class="flex items-center justify-between">
     <a
-      class="rounded border border-[var(--line)] px-3 py-2 text-meta text-fg-muted hover:bg-[var(--bg-soft)]"
+      class="text-meta text-fg-muted hover:text-fg"
       href={workspaceHref("/inbox")}
     >
-      Back to inbox
+      ← Back to inbox
     </a>
-  </header>
+  </div>
 
   {#if loading}
     <div class="rounded border border-[var(--line)] bg-[var(--bg-soft)] p-4">
@@ -205,105 +259,58 @@
       retrying={loading}
     />
   {:else if item}
-    <section class="space-y-4">
-      <div class="rounded border border-[var(--line)] bg-[var(--bg-soft)] p-4">
-        <div class="flex flex-wrap items-center gap-2">
+    <section class="space-y-5">
+      <header class="space-y-2">
+        <div class="flex flex-wrap items-center gap-2 text-micro">
           <span
-            class="rounded border border-[var(--line)] bg-[var(--panel)] px-2 py-1 text-micro font-semibold uppercase tracking-wide text-fg-muted"
+            class="rounded border border-[var(--line)] bg-[var(--panel)] px-2 py-0.5 font-semibold uppercase tracking-wide text-fg-muted"
           >
             {kindLabel(item)}
           </span>
           {#if item.severity}
             <span
-              class="rounded border border-danger/30 bg-danger-soft px-2 py-1 text-micro font-semibold uppercase tracking-wide text-danger-text"
+              class="rounded border border-danger/30 bg-danger-soft px-2 py-0.5 font-semibold uppercase tracking-wide text-danger-text"
             >
               {item.severity}
             </span>
           {/if}
+          <span class="text-fg-muted">
+            from <span class="font-mono text-mono text-fg"
+              >{requesterLabel(item)}</span
+            >
+          </span>
         </div>
-        <h2 class="mt-3 text-subtitle font-semibold text-fg">
+        <h1 class="text-subtitle font-semibold leading-tight text-fg">
           {item.title}
-        </h2>
+        </h1>
         {#if item.body}
-          <p class="mt-3 whitespace-pre-wrap text-body text-fg">{item.body}</p>
+          <p class="whitespace-pre-wrap text-meta text-fg">{item.body}</p>
         {/if}
-        <div class="mt-3 text-meta text-fg-muted">
-          Requested by <span class="font-mono text-mono text-fg"
-            >{requesterLabel(item)}</span
-          >
-        </div>
-        <div class="mt-3 flex flex-wrap items-center gap-2 text-meta">
-          {#if item.subject_ref}
-            <RefLink
-              refValue={item.subject_ref}
-              threadId={item.thread_id}
-              humanize
-            />
-          {/if}
-          {#each Array.isArray(item.related_refs) ? item.related_refs.slice(0, 4) : [] as refValue}
-            <RefLink {refValue} threadId={item.thread_id} humanize />
-          {/each}
-        </div>
-      </div>
+        {#if item.subject_ref || (Array.isArray(item.related_refs) && item.related_refs.length > 0)}
+          <div class="flex flex-wrap items-center gap-2 text-micro">
+            {#if item.subject_ref}
+              <RefLink
+                refValue={item.subject_ref}
+                threadId={item.thread_id}
+                humanize
+              />
+            {/if}
+            {#each Array.isArray(item.related_refs) ? item.related_refs.slice(0, 4) : [] as refValue}
+              <RefLink {refValue} threadId={item.thread_id} humanize />
+            {/each}
+          </div>
+        {/if}
+      </header>
 
       <form
-        class="rounded border border-[var(--line)] bg-[var(--bg-soft)] p-4"
+        class="space-y-4"
         onsubmit={(event) => {
           event.preventDefault();
           void submitResponse();
         }}
       >
-        <div
-          class="rounded border border-[var(--line)] bg-[var(--panel)] px-3 py-2 text-meta text-fg"
-        >
-          <div class="font-semibold">Notification target</div>
-          <p class="mt-1 text-fg-muted">
-            {notificationStatus().message ??
-              "Original requester will be notified when resolvable."}
-          </p>
-          <label class="mt-3 flex items-start gap-2">
-            <input
-              type="radio"
-              bind:group={notifyMode}
-              value="original"
-              disabled={notificationStatus().resolvable === false}
-            />
-            <span>Notify original requester</span>
-          </label>
-          <label class="mt-2 flex items-start gap-2">
-            <input type="radio" bind:group={notifyMode} value="none" />
-            <span>Record without notification</span>
-          </label>
-          <label class="mt-2 flex items-start gap-2">
-            <input type="radio" bind:group={notifyMode} value="target" />
-            <span>Notify replacement target</span>
-          </label>
-          {#if notifyMode === "target"}
-            <div
-              class="mt-3 grid gap-3 border-t border-[var(--line)] pt-3 sm:grid-cols-2"
-            >
-              <label class="block text-meta text-fg-muted">
-                Actor ID
-                <input
-                  class="mt-1 w-full rounded border border-[var(--line)] bg-[var(--panel)] px-3 py-2 font-mono text-mono text-fg outline-none focus:ring-2 focus:ring-[var(--accent)]"
-                  bind:value={notifyTargetActorID}
-                  placeholder="actor-..."
-                />
-              </label>
-              <label class="block text-meta text-fg-muted">
-                Agent ID
-                <input
-                  class="mt-1 w-full rounded border border-[var(--line)] bg-[var(--panel)] px-3 py-2 font-mono text-mono text-fg outline-none focus:ring-2 focus:ring-[var(--accent)]"
-                  bind:value={notifyTargetAgentID}
-                  placeholder="agent-..."
-                />
-              </label>
-            </div>
-          {/if}
-        </div>
-
         {#if itemKind(item) === "review"}
-          <div class="mt-4 flex flex-wrap gap-2">
+          <div class="flex flex-wrap gap-2">
             <button
               class="rounded border border-[var(--line)] bg-[var(--panel)] px-3 py-1.5 text-meta font-semibold text-fg hover:bg-[var(--bg-soft)] disabled:opacity-50"
               type="button"
@@ -323,71 +330,179 @@
           </div>
         {/if}
 
-        {#if recommendedProposal}
-          <div
-            class="mt-4 rounded border-2 border-[var(--accent)] bg-[var(--panel)] px-3 py-3"
-          >
+        {#if proposalStrings.length > 0}
+          <div class="space-y-2">
             <div
-              class="text-micro font-semibold uppercase tracking-wide text-[var(--accent)]"
+              class="text-micro font-medium uppercase tracking-wide text-fg-muted"
             >
-              Recommended response
+              Suggested responses
             </div>
-            <p class="mt-2 whitespace-pre-wrap text-body text-fg">
-              {recommendedProposal}
-            </p>
-            <button
-              class="mt-3 rounded border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-meta text-fg hover:bg-[var(--line)]"
-              type="button"
-              onclick={() => applyPreset(recommendedProposal)}
-            >
-              Use recommended text
-            </button>
-          </div>
-        {/if}
-
-        {#if alternativeProposals.length > 0}
-          <div class="mt-4">
-            <div class="text-meta font-medium text-fg-muted">
-              Other suggestions from the requester
-            </div>
-            <div class="mt-2 flex flex-wrap gap-2">
-              {#each alternativeProposals as alt (alt)}
+            <div class="space-y-2">
+              {#each proposalStrings as proposal, index (proposal)}
+                {@const isRecommended = index === 0}
+                {@const isSelected = responseDraft.trim() === proposal.trim()}
                 <button
-                  class="max-w-full rounded border border-[var(--line)] bg-[var(--panel)] px-3 py-1.5 text-left text-meta text-fg hover:bg-[var(--bg-soft)]"
-                  title={alt}
+                  class="group block w-full rounded border bg-[var(--panel)] px-3 py-2 text-left text-meta text-fg transition hover:bg-[var(--bg-soft)] {isSelected
+                    ? 'border-[var(--accent)] ring-1 ring-[var(--accent)] bg-[var(--accent)]/5'
+                    : 'border-[var(--line)]'}"
                   type="button"
-                  onclick={() => applyPreset(alt)}
+                  onclick={() => applyPreset(proposal)}
                 >
-                  <span class="line-clamp-3">{alt}</span>
+                  <span
+                    class="flex w-full flex-col items-start gap-1.5 text-left"
+                  >
+                    {#if isRecommended}
+                      <span
+                        class="shrink-0 rounded border border-[var(--accent)]/40 bg-[var(--accent)]/15 px-2 py-0.5 text-micro font-semibold uppercase tracking-wide text-[var(--accent)]"
+                      >
+                        Recommended
+                      </span>
+                    {/if}
+                    <span class="w-full whitespace-pre-wrap">{proposal}</span>
+                  </span>
                 </button>
               {/each}
             </div>
           </div>
         {/if}
 
-        <label
-          class="mt-4 block text-meta text-fg-muted"
-          for="human-response-input">Response</label
+        <div>
+          <label
+            class="block text-micro font-medium uppercase tracking-wide text-fg-muted"
+            for="human-response-input">Your response</label
+          >
+          <textarea
+            id="human-response-input"
+            class="mt-2 min-h-[200px] w-full rounded border border-[var(--line)] bg-[var(--panel)] px-3 py-2 text-meta text-[var(--fg)] outline-none placeholder:text-[var(--fg-muted)] focus:ring-2 focus:ring-[var(--accent)]"
+            bind:value={responseDraft}
+            onkeydown={handleTextareaKeydown}
+            placeholder="Write the response the agent should rely on."
+          ></textarea>
+        </div>
+
+        <div
+          class="rounded border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta"
         >
-        <textarea
-          id="human-response-input"
-          class="mt-2 min-h-[200px] w-full rounded border border-[var(--line)] bg-[var(--panel)] px-4 py-3 text-body text-[var(--fg)] outline-none placeholder:text-[var(--fg-muted)] focus:ring-2 focus:ring-[var(--accent)]"
-          bind:value={responseDraft}
-          onkeydown={handleTextareaKeydown}
-          placeholder="Write the response the agent should rely on."
-        ></textarea>
+          <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <span class="text-fg-muted">{notifyDescription()}</span>
+            <div class="ml-auto flex flex-wrap items-center gap-1">
+              <button
+                class="rounded px-2 py-1 text-micro font-medium {notifyMode ===
+                'original'
+                  ? 'bg-[var(--accent)]/15 text-[var(--accent)]'
+                  : 'text-fg-muted hover:text-fg'}"
+                type="button"
+                disabled={notificationStatus().resolvable === false}
+                onclick={() => {
+                  notifyMode = "original";
+                  clearNotifyTarget();
+                }}
+              >
+                Original requester
+              </button>
+              <button
+                class="rounded px-2 py-1 text-micro font-medium {notifyMode ===
+                'target'
+                  ? 'bg-[var(--accent)]/15 text-[var(--accent)]'
+                  : 'text-fg-muted hover:text-fg'}"
+                type="button"
+                onclick={() => {
+                  notifyMode = "target";
+                  notifyTargetMenuOpen = true;
+                }}
+              >
+                Someone else
+              </button>
+              <button
+                class="rounded px-2 py-1 text-micro font-medium {notifyMode ===
+                'none'
+                  ? 'bg-[var(--accent)]/15 text-[var(--accent)]'
+                  : 'text-fg-muted hover:text-fg'}"
+                type="button"
+                onclick={() => {
+                  notifyMode = "none";
+                  clearNotifyTarget();
+                }}
+              >
+                No one
+              </button>
+            </div>
+          </div>
+          {#if notifyMode === "target"}
+            <div class="relative mt-2">
+              {#if notifyTargetSelected}
+                <div
+                  class="flex items-center gap-2 rounded border border-[var(--line)] bg-[var(--panel)] px-2 py-1.5"
+                >
+                  <span
+                    class="inline-flex items-center gap-1.5 rounded bg-[var(--accent)]/15 px-2 py-0.5 text-micro text-[var(--accent)]"
+                  >
+                    @{notifyTargetSelected.display_name ||
+                      notifyTargetSelected.id}
+                  </span>
+                  <button
+                    class="ml-auto text-micro text-fg-muted hover:text-fg"
+                    type="button"
+                    onclick={clearNotifyTarget}
+                  >
+                    Clear
+                  </button>
+                </div>
+              {:else}
+                <input
+                  class="w-full rounded border border-[var(--line)] bg-[var(--panel)] px-2 py-1.5 text-meta text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-[var(--accent)]"
+                  type="text"
+                  placeholder="Search people or agents…"
+                  value={notifyTargetQuery}
+                  oninput={handleNotifyTargetInput}
+                  onfocus={() => (notifyTargetMenuOpen = true)}
+                />
+                {#if notifyTargetMenuOpen && notifyTargetResults.length > 0}
+                  <div
+                    class="absolute left-0 right-0 top-full z-10 mt-1 max-h-56 overflow-y-auto rounded border border-[var(--line)] bg-[var(--panel)] shadow-lg"
+                  >
+                    {#each notifyTargetResults as actor (actor.id)}
+                      <button
+                        class="flex w-full items-center gap-2 px-3 py-2 text-left text-meta hover:bg-[var(--bg-soft)]"
+                        type="button"
+                        onclick={() => chooseNotifyTarget(actor)}
+                      >
+                        <span
+                          class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--accent)]/15 text-micro font-semibold text-[var(--accent)]"
+                        >
+                          {(actor.display_name || actor.id || "?")
+                            .slice(0, 1)
+                            .toUpperCase()}
+                        </span>
+                        <span class="min-w-0 flex-1">
+                          <span class="block truncate text-fg"
+                            >{actor.display_name || actor.id}</span
+                          >
+                          <span
+                            class="block truncate font-mono text-micro text-fg-muted"
+                            >{actor.id}</span
+                          >
+                        </span>
+                      </button>
+                    {/each}
+                  </div>
+                {/if}
+              {/if}
+            </div>
+          {/if}
+        </div>
 
         {#if submitError}
           <div
-            class="mt-4 rounded border border-danger/40 bg-danger-soft px-3 py-2 text-meta text-danger-text"
+            class="rounded border border-danger/40 bg-danger-soft px-3 py-2 text-meta text-danger-text"
             role="alert"
           >
             {submitError}
           </div>
         {/if}
 
-        <div class="mt-4 flex items-center justify-between gap-3">
-          <p class="text-meta text-fg-muted">Cmd+Enter submits</p>
+        <div class="flex items-center justify-between gap-3">
+          <p class="text-meta text-fg-muted">⌘+Enter to submit</p>
           <Button type="submit" variant="primary" disabled={submitting}>
             {submitting ? "Sending..." : "Send response"}
           </Button>

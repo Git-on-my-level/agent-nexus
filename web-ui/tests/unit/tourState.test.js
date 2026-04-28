@@ -42,14 +42,4 @@ describe("tourState", () => {
     expect(isWorkspaceTourSeen("ws1")).toBe(true);
     expect(lsMock._store["workspaceTourSeen.ws1"]).toBe("1");
   });
-
-  it("inbox kind seen key and mark", async () => {
-    const lsMock = mockLocalStorage();
-    const { isInboxKindSeen, markInboxKindSeen, inboxKindSeenKey } =
-      await importWithLocalStorage(lsMock);
-    expect(inboxKindSeenKey("ask")).toBe("inboxKindSeen.ask");
-    expect(isInboxKindSeen("ask")).toBe(false);
-    markInboxKindSeen("ask");
-    expect(isInboxKindSeen("ask")).toBe(true);
-  });
 });

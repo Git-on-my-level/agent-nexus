@@ -537,6 +537,11 @@ export const QA_INBOX_POPULATED = [
     ],
     asking_agent_id: "agent-release-orchestrator",
     source_event_time: hoursAgo(10),
+    response_proposals: [
+      "Hold rollback until next monitoring sweep; ship only if SLO breaches in two consecutive intervals.",
+      "Ship rollback immediately; auth regressions exceed the downside of waiting one more telemetry pass.",
+      "Split rollout: rollback mobile OAuth first, keep desktop on current build until green board checks.",
+    ],
   },
   {
     id: "inbox-tag-billing",
@@ -577,6 +582,11 @@ export const QA_INBOX_POPULATED = [
     ],
     asking_agent_id: "agent-billing-watch",
     source_event_time: hoursAgo(1),
+    response_proposals: [
+      "Pause rollout until Legal posts approved terms wording; rerun dry-run with updated copy snapshot.",
+      "Proceed dry-run with bold ‘draft’ watermark and block production traffic until Legal signs.",
+      "Narrow rollout to sandbox orgs only until counsel signs billing terms canonical version.",
+    ],
   },
 ];
 
@@ -585,6 +595,7 @@ export const QA_ASK_ITEM = {
   kind: "ask",
   category: "action_needed",
   title: "Approve auth callback rollback window",
+  body: "Can we hold the mobile auth callback rollback until the next monitoring sweep, or should I ship the rollback immediately?",
   query_text:
     "Can we hold the mobile auth callback rollback until the next monitoring sweep, or should I ship the rollback immediately?",
   subject_ref: "thread:thread-launch-war-room",
@@ -596,6 +607,11 @@ export const QA_ASK_ITEM = {
   asking_agent_id: "agent-release-orchestrator",
   coverage_hint: "partial",
   source_event_time: hoursAgo(10),
+  response_proposals: [
+    "Hold rollback until next monitoring sweep; ship only if SLO breaches in two consecutive intervals.",
+    "Ship rollback immediately; auth regressions exceed the downside of waiting one more telemetry pass.",
+    "Split rollout: rollback mobile OAuth first, keep desktop on current build until green board checks.",
+  ],
 };
 
 export function filterByQuery(items, query, fields) {

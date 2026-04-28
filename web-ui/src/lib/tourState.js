@@ -65,27 +65,3 @@ export const replayTourSignal = writable(0);
 export function replayWorkspaceTour() {
   replayTourSignal.update((n) => n + 1);
 }
-
-/** @param {string} kind */
-export function inboxKindSeenKey(kind) {
-  return `inboxKindSeen.${kind}`;
-}
-
-/**
- * @param {string} kind
- * @returns {boolean}
- */
-export function isInboxKindSeen(kind) {
-  if (typeof localStorage === "undefined") return true;
-  const k = String(kind ?? "").trim() || "unknown";
-  return localStorage.getItem(inboxKindSeenKey(k)) === "1";
-}
-
-/**
- * @param {string} kind
- */
-export function markInboxKindSeen(kind) {
-  if (typeof localStorage === "undefined") return;
-  const k = String(kind ?? "").trim() || "unknown";
-  localStorage.setItem(inboxKindSeenKey(k), "1");
-}

@@ -31,7 +31,6 @@
     summarizeInboxUrgency,
   } from "$lib/inboxUtils";
   import { inboxTopicRouteSegment } from "$lib/topicRouteUtils";
-  import InboxKindNote from "$lib/components/onboarding/InboxKindNote.svelte";
 
   /** Delay before inbox mutations hit core; allows Undo before the request runs. */
   const PENDING_INBOX_ACTION_MS = 5000;
@@ -216,17 +215,6 @@
 
   onMount(() => {
     void loadInbox();
-  });
-
-  let kindNoteItemIds = $derived.by(() => {
-    const first = new Map();
-    for (const item of filteredItems) {
-      const key = String(item?.kind ?? "unknown");
-      if (!first.has(key)) {
-        first.set(key, item.id);
-      }
-    }
-    return new Set(first.values());
   });
 
   async function loadInbox(isRetry = false) {
@@ -877,9 +865,6 @@
 
         <div class="space-y-1.5">
           {#each group.items as item}
-            {#if kindNoteItemIds.has(item.id)}
-              <InboxKindNote kind={item.kind} />
-            {/if}
             <article
               class="rounded-md border border-[var(--line)] border-l-[3px] bg-[var(--bg-soft)] px-3 py-2.5 transition-colors hover:bg-[var(--panel)] {urgencyBorderClass(
                 item.urgency_level,
