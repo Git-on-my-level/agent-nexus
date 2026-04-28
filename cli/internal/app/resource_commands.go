@@ -329,7 +329,7 @@ var knownEventTypeGuidance = []eventTypeGuidance{
 		PreferredCommand: "anx human ask|review|escalate",
 		Constraints: []string{
 			`event.refs must include "thread:<thread_id>".`,
-			`event.payload must include "kind", "title", "subject_ref", and "requester_actor_id".`,
+			`event.payload must include "kind", "title", "subject_ref", "requester_actor_id", and ordered "response_proposals" (1–6 strings, first is recommended).`,
 		},
 	},
 	{

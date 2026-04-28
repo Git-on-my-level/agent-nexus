@@ -4553,6 +4553,17 @@ components:
         kind:
           type: string
           description: Open classifier; v1 known values are ask, review, and escalate.
+        response_proposals:
+          type: array
+          description: >
+            Ordered agent-provided response suggestions; index 0 is the recommended response
+            (highlighted in the respond UI). Min 1, max 6 strings of max length 240 after
+            server normalization (trim, drop empty, exact dedupe).
+          minItems: 1
+          maxItems: 6
+          items:
+            type: string
+            maxLength: 240
         thread_id:
           type: string
           description: Backing thread id for the inbox item and response correlation.
@@ -4571,7 +4582,7 @@ components:
         notification_target_status:
           type: object
           additionalProperties: true
-      required: [id, kind, subject_ref, title, related_refs]
+      required: [id, kind, subject_ref, title, related_refs, response_proposals]
 
     TopicWriteInput:
       type: object

@@ -139,6 +139,7 @@ A dedicated surface showing items that need operator attention.
 
 - Navigate to the relevant topic, board, card, thread, or artifact.
 - Respond to an item → emits a `human_attention_responded` event with `inbox:<inbox_item_id>` in refs. Responded items are suppressed from the inbox unless a new human attention request is created.
+- The respond surface shows agent-authored **`response_proposals`** from the backing `human_attention_requested` event: the first entry is the **recommended** response (highlighted); additional entries are optional fill-ins for the freeform response text. **`review`** items also expose local **Approve** / **Reject** actions that submit fixed response text without using those chips.
 - Record a decision (creates a `decision_made` event with notes and typed refs). The write is anchored on the inbox item's backing **thread** (`thread_id` / `thread:` in event refs). The operator may have arrived via a **topic** route, but durable decision lifecycle events still attach to the backing thread; topic refs are optional context when present, not the anchor.
 
 ### 3.2 Topic list

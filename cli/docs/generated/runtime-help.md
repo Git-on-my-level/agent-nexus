@@ -244,7 +244,7 @@ events
 
 inbox
 - Use when: A human operator needs to inspect the human attention queue.
-- Not for: Agent coordination; agents should create attention items with `anx human ask`, `anx human review`, or `anx human escalate`.
+- Not for: Agent coordination; agents should create attention items with `anx human ask|review|escalate`, each emitting `human_attention_requested` with required ordered `response_proposals` (CLI: `--recommended-response`, optional repeatable `--proposal`, or `--from-file` Markdown with YAML frontmatter).
 - Examples: asks, reviews, escalations
 - Read next: anx human ask ; anx human review ; anx human escalate
 

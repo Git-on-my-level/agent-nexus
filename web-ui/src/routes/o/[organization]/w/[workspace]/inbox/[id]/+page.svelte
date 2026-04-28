@@ -32,15 +32,15 @@
     escalate: "Escalation",
   };
 
-  const RESPONSE_PRESETS = {
-    ask: ["Use this direction:", "I need more context:", "Do not proceed yet."],
-    review: ["Approved.", "Rejected.", "Request changes:"],
-    escalate: [
-      "Acknowledged. Investigating now.",
-      "Not an issue.",
-      "Pause and wait for follow-up.",
-    ],
-  };
+  let proposalStrings = $derived(
+    Array.isArray(item?.response_proposals)
+      ? item.response_proposals
+          .map((s) => String(s ?? "").trim())
+          .filter(Boolean)
+      : [],
+  );
+  let recommendedProposal = $derived(proposalStrings[0] ?? "");
+  let alternativeProposals = $derived(proposalStrings.slice(1));
 
   function workspaceHref(pathname = "/") {
     return workspacePath(organizationSlug, workspaceSlug, pathname);
@@ -114,10 +114,10 @@
     }
   }
 
-  async function submitResponse() {
+  async function submitResponseWithText(responseText) {
     if (!item || submitting) return;
-    const responseText = String(responseDraft ?? "").trim();
-    if (!responseText) {
+    const text = String(responseText ?? "").trim();
+    if (!text) {
       submitError = "Response text is required.";
       return;
     }
@@ -132,7 +132,7 @@
     submitting = true;
     try {
       await coreClient.respondInboxItem(inboxItemID, {
-        response_text: responseText,
+        response_text: text,
         notify_mode: notifyMode,
         notify_target_actor_id:
           notifyMode === "target" && targetActorID ? targetActorID : undefined,
@@ -154,6 +154,10 @@
     } finally {
       submitting = false;
     }
+  }
+
+  async function submitResponse() {
+    await submitResponseWithText(responseDraft);
   }
 
   onMount(() => {
@@ -298,17 +302,68 @@
           {/if}
         </div>
 
-        <div class="mt-4 flex flex-wrap gap-2">
-          {#each RESPONSE_PRESETS[itemKind(item)] ?? [] as preset}
+        {#if itemKind(item) === "review"}
+          <div class="mt-4 flex flex-wrap gap-2">
             <button
-              class="rounded border border-[var(--line)] bg-[var(--panel)] px-3 py-1.5 text-meta text-fg hover:bg-[var(--bg-soft)]"
+              class="rounded border border-[var(--line)] bg-[var(--panel)] px-3 py-1.5 text-meta font-semibold text-fg hover:bg-[var(--bg-soft)] disabled:opacity-50"
               type="button"
-              onclick={() => applyPreset(preset)}
+              disabled={submitting}
+              onclick={() => void submitResponseWithText("Approved.")}
             >
-              {preset}
+              Approve
             </button>
-          {/each}
-        </div>
+            <button
+              class="rounded border border-[var(--line)] bg-[var(--panel)] px-3 py-1.5 text-meta font-semibold text-fg hover:bg-[var(--bg-soft)] disabled:opacity-50"
+              type="button"
+              disabled={submitting}
+              onclick={() => void submitResponseWithText("Rejected.")}
+            >
+              Reject
+            </button>
+          </div>
+        {/if}
+
+        {#if recommendedProposal}
+          <div
+            class="mt-4 rounded border-2 border-[var(--accent)] bg-[var(--panel)] px-3 py-3"
+          >
+            <div
+              class="text-micro font-semibold uppercase tracking-wide text-[var(--accent)]"
+            >
+              Recommended response
+            </div>
+            <p class="mt-2 whitespace-pre-wrap text-body text-fg">
+              {recommendedProposal}
+            </p>
+            <button
+              class="mt-3 rounded border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-meta text-fg hover:bg-[var(--line)]"
+              type="button"
+              onclick={() => applyPreset(recommendedProposal)}
+            >
+              Use recommended text
+            </button>
+          </div>
+        {/if}
+
+        {#if alternativeProposals.length > 0}
+          <div class="mt-4">
+            <div class="text-meta font-medium text-fg-muted">
+              Other suggestions from the requester
+            </div>
+            <div class="mt-2 flex flex-wrap gap-2">
+              {#each alternativeProposals as alt (alt)}
+                <button
+                  class="max-w-full rounded border border-[var(--line)] bg-[var(--panel)] px-3 py-1.5 text-left text-meta text-fg hover:bg-[var(--bg-soft)]"
+                  title={alt}
+                  type="button"
+                  onclick={() => applyPreset(alt)}
+                >
+                  <span class="line-clamp-3">{alt}</span>
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/if}
 
         <label
           class="mt-4 block text-meta text-fg-muted"

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -48,6 +49,10 @@ func TestHumanAttentionDerivationAndResponseSuppressesItem(t *testing.T) {
 	}
 	if got := asString(item["body"]); got != "I found conflicting dates." {
 		t.Fatalf("expected item body, got %#v", item)
+	}
+	rp, ok := item["response_proposals"].([]any)
+	if !ok || len(rp) < 1 {
+		t.Fatalf("expected response_proposals on inbox item, got %#v", item["response_proposals"])
 	}
 	if got := asString(item["requester_agent_id"]); got != "agent-a" {
 		t.Fatalf("expected requester_agent_id, got %#v", item)
@@ -182,6 +187,7 @@ func createHumanAttentionEvent(t *testing.T, baseURL, threadID, kind, title, sub
 		"subject_ref":        subjectRef,
 		"related_refs":       relatedRefs,
 		"requester_actor_id": "actor-1",
+		"response_proposals": []any{"Recommended response.", "Alternative suggestion."},
 	}
 	for key, value := range extra {
 		payload[key] = value
@@ -241,6 +247,92 @@ func findInboxItem(items []map[string]any, predicate func(map[string]any) bool) 
 		}
 	}
 	return nil, false
+}
+
+func TestHumanAttentionRequestedRejectsInvalidResponseProposals(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+	threadID := integrationSeedThread(t, h, "actor-1", map[string]any{
+		"title":           "Proposal validation thread",
+		"type":            "incident",
+		"status":          "active",
+		"priority":        "p1",
+		"tags":            []any{},
+		"cadence":         "daily",
+		"current_summary": "summary",
+		"next_actions":    []any{},
+		"key_artifacts":   []any{},
+		"provenance":      map[string]any{"sources": []any{"inferred"}},
+	})
+
+	basePayload := map[string]any{
+		"kind":               "ask",
+		"title":              "Question",
+		"subject_ref":        "thread:" + threadID,
+		"related_refs":       []any{},
+		"requester_actor_id": "actor-1",
+	}
+
+	postBad := func(payload map[string]any) {
+		t.Helper()
+		refs := []any{"thread:" + threadID, "thread:" + threadID}
+		body := map[string]any{
+			"actor_id": "actor-1",
+			"event": map[string]any{
+				"type":       "human_attention_requested",
+				"thread_id":  threadID,
+				"refs":       refs,
+				"summary":    "Question",
+				"payload":    payload,
+				"provenance": map[string]any{"sources": []any{"inferred"}},
+			},
+		}
+		raw, err := json.Marshal(body)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		resp := postJSONExpectStatus(t, h.baseURL+"/events", string(raw), http.StatusBadRequest)
+		defer resp.Body.Close()
+		assertErrorCode(t, resp, "invalid_request")
+	}
+
+	t.Run("missing", func(t *testing.T) {
+		postBad(basePayload)
+	})
+	t.Run("empty_after_trim", func(t *testing.T) {
+		p := map[string]any{}
+		for k, v := range basePayload {
+			p[k] = v
+		}
+		p["response_proposals"] = []any{"", "  "}
+		postBad(p)
+	})
+	t.Run("too_many", func(t *testing.T) {
+		p := map[string]any{}
+		for k, v := range basePayload {
+			p[k] = v
+		}
+		p["response_proposals"] = []any{"a", "b", "c", "d", "e", "f", "g"}
+		postBad(p)
+	})
+	t.Run("too_long", func(t *testing.T) {
+		p := map[string]any{}
+		for k, v := range basePayload {
+			p[k] = v
+		}
+		p["response_proposals"] = []any{strings.Repeat("x", 241)}
+		postBad(p)
+	})
+	t.Run("non_string", func(t *testing.T) {
+		p := map[string]any{}
+		for k, v := range basePayload {
+			p[k] = v
+		}
+		p["response_proposals"] = []any{"ok", 99}
+		postBad(p)
+	})
 }
 
 func asString(value any) string {

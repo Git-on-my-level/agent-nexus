@@ -211,6 +211,8 @@ func TestHumanAskCommandCreatesHumanAttentionRequestedEvent(t *testing.T) {
 		"--subject-ref", "topic:launch",
 		"--ref", "artifact:receipt_1",
 		"--coverage-hint", "thin - 0 decisions",
+		"--recommended-response", "Ship Friday with a rollback plan ready.",
+		"--proposal", "Delay until Monday for extra QA.",
 	})
 	payload := assertEnvelopeOK(t, raw)
 	if got := anyStringValue(payload["command"]); got != "human ask" {
@@ -251,6 +253,13 @@ func TestHumanAskCommandCreatesHumanAttentionRequestedEvent(t *testing.T) {
 	}
 	if got := strings.TrimSpace(anyStringValue(eventPayload["requester_agent_id"])); got != "agent-a" {
 		t.Fatalf("expected requester_agent_id agent-a, got %#v", eventPayload)
+	}
+	rawProposals, _ := eventPayload["response_proposals"].([]any)
+	if len(rawProposals) != 2 {
+		t.Fatalf("expected two response_proposals, got %#v", eventPayload["response_proposals"])
+	}
+	if got := strings.TrimSpace(anyStringValue(rawProposals[0])); got != "Ship Friday with a rollback plan ready." {
+		t.Fatalf("expected recommended proposal first, got %#v", rawProposals[0])
 	}
 }
 

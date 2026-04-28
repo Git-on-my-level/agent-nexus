@@ -652,6 +652,12 @@ func deriveHumanAttentionInboxItem(event map[string]any) (derivedInboxItem, bool
 		data["coverage_hint"] = coverageHint
 	}
 
+	proposals, err := NormalizeHumanAttentionResponseProposals(payload["response_proposals"])
+	if err != nil {
+		return derivedInboxItem{}, false
+	}
+	data["response_proposals"] = HumanAttentionResponseProposalsToAnySlice(proposals)
+
 	return derivedInboxItem{
 		Data:      data,
 		Category:  kind,

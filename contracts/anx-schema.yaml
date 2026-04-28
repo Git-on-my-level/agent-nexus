@@ -486,7 +486,7 @@ reference_conventions:
 
     human_attention_requested:
       refs_must_include: ["thread:<thread_id>"]
-      payload_must_include: ["kind", "title", "subject_ref", "requester_actor_id"]
+      payload_must_include: ["kind", "title", "subject_ref", "requester_actor_id", "response_proposals"]
 
     human_attention_responded:
       refs_must_include: ["inbox:<inbox_item_id>"]
@@ -535,6 +535,14 @@ derived:
     fields:
       id: { type: string, required: true }
       kind: { type: string, required: true, description: "Open classifier; v1 known values are ask, review, and escalate." }
+      response_proposals:
+        type: "list<string>"
+        required: true
+        description: >
+          Ordered response suggestions from the requesting agent. Minimum 1 and maximum 6
+          entries after trimming, dropping empty strings, and exact-string deduplication
+          (first occurrence wins). Each entry is at most 240 Unicode characters. The first
+          entry is the recommended response for operator UI.
       thread_id: { type: string, required: false, description: "Backing thread id for the inbox item and response correlation." }
       subject_ref: { type: typed_ref, required: true }
       request_event_ref: { type: typed_ref, required: false }

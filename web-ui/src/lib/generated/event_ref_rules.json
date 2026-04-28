@@ -141,7 +141,8 @@
         "kind",
         "title",
         "subject_ref",
-        "requester_actor_id"
+        "requester_actor_id",
+        "response_proposals"
       ]
     },
     "human_attention_responded": {

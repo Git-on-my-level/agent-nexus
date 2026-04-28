@@ -48,6 +48,7 @@ func TestDeriveHumanAttentionInboxItemContractFields(t *testing.T) {
 			"related_refs":       []any{"document:doc-2"},
 			"requester_actor_id": "actor-agent",
 			"requester_agent_id": "agent-a",
+			"response_proposals": []any{"Approved as written.", "Request changes to section 2."},
 		},
 	}
 	item, ok := deriveHumanAttentionInboxItem(event)
@@ -66,6 +67,10 @@ func TestDeriveHumanAttentionInboxItemContractFields(t *testing.T) {
 	}
 	if got := item.Category; got != "review" {
 		t.Fatalf("category/kind: got %#v want review", got)
+	}
+	props, err := extractStringSlice(item.Data["response_proposals"])
+	if err != nil || len(props) != 2 || props[0] != "Approved as written." {
+		t.Fatalf("response_proposals: %#v err=%v", item.Data["response_proposals"], err)
 	}
 }
 

@@ -955,11 +955,15 @@ const events = [
     payload: {
       kind: "review",
       title: "Review onboarding checklist sections",
-      body:
-        "Jordan — please confirm POS + inventory subsections are accurate before we onboard SqueezeBot 2000.",
+      body: "Jordan — please confirm POS + inventory subsections are accurate before we onboard SqueezeBot 2000.",
       subject_ref: "document:onboarding-guide-v1",
       requester_actor_id: "actor-flavor-ai",
       requester_label: "FlavorMind",
+      response_proposals: [
+        "Confirmed — POS and inventory match production; proceed with handoff.",
+        "Request updates: POS section needs one more screenshot.",
+        "Pause handoff until inventory subsection lists backup supplier.",
+      ],
     },
     provenance: { sources: ["seed:human-inbox"] },
   },
@@ -975,8 +979,7 @@ const events = [
     ],
     summary: "Jordan acknowledged onboarding checklist review.",
     payload: {
-      inbox_item_id:
-        "inbox:review:thread-onboarding:none:evt-human-attn-004",
+      inbox_item_id: "inbox:review:thread-onboarding:none:evt-human-attn-004",
       kind: "review",
       response_text:
         "Confirmed — POS and inventory steps match production. Proceed with handoff template.",
@@ -991,18 +994,19 @@ const events = [
     type: "human_attention_requested",
     actor_id: "actor-supply-rover",
     thread_id: "thread-lemon-shortage",
-    refs: [
-      "thread:thread-lemon-shortage",
-      "artifact:artifact-supplier-sla",
-    ],
+    refs: ["thread:thread-lemon-shortage", "artifact:artifact-supplier-sla"],
     summary: "Human sign-off: authorize LocalGrove emergency order",
     payload: {
       kind: "review",
       title: "Authorize LocalGrove 100-unit order",
-      body:
-        "Pricing looks good vs CitrusFresh. Need human approval to place the PO while CitrusBot is offline.",
+      body: "Pricing looks good vs CitrusFresh. Need human approval to place the PO while CitrusBot is offline.",
       subject_ref: "artifact:artifact-supplier-sla",
       requester_actor_id: "actor-supply-rover",
+      response_proposals: [
+        "Approved — place the LocalGrove PO now.",
+        "Rejected — wait for CitrusFresh counter-offer.",
+        "Approved up to 80 units only; hold the rest.",
+      ],
     },
     provenance: { sources: ["seed:human-inbox"] },
   },
@@ -1017,10 +1021,14 @@ const events = [
     payload: {
       kind: "ask",
       title: "Confirm double-batch prep window",
-      body:
-        "Till-E suggests pre-opening double batch 06:30–07:00 — confirm with Jordan before we lock SqueezeBot timing.",
+      body: "Till-E suggests pre-opening double batch 06:30–07:00 — confirm with Jordan before we lock SqueezeBot timing.",
       subject_ref: "thread:thread-daily-ops",
       requester_actor_id: "actor-cashier-bot",
+      response_proposals: [
+        "Use 06:30–07:00 double batch as proposed.",
+        "Shift to 06:00–06:45 only; lighter traffic expected.",
+        "Do not double-batch; single batch until labor confirms.",
+      ],
     },
     provenance: { sources: ["seed:human-inbox"] },
   },
@@ -1035,10 +1043,14 @@ const events = [
     payload: {
       kind: "escalate",
       title: "Allergen labelling for Lavender line",
-      body:
-        "Regulatory guidance on dried lavender garnish wording is ambiguous — need human decision before launch.",
+      body: "Regulatory guidance on dried lavender garnish wording is ambiguous — need human decision before launch.",
       subject_ref: "artifact:artifact-summer-menu-draft",
       requester_actor_id: "actor-ops-ai",
+      response_proposals: [
+        "Label dried lavender garnish as advisory only; proceed with summer menu.",
+        "Remove lavender garnish from the launch menu until legal signs off.",
+        "Pause summer menu launch pending explicit regulatory citation.",
+      ],
     },
     provenance: { sources: ["seed:human-inbox"] },
   },
@@ -1053,8 +1065,7 @@ const events = [
     refs: ["thread:thread-daily-ops", "event:evt-ops-101"],
     summary: "Re: EOD — aligning on double-batch suggestion",
     payload: {
-      text:
-        "@Till-E Agree on double batch tomorrow. Jordan: see separate human attention item for time window sign-off.",
+      text: "@Till-E Agree on double batch tomorrow. Jordan: see separate human attention item for time window sign-off.",
     },
     provenance: { sources: ["actor_statement:evt-ops-101-reply"] },
   },

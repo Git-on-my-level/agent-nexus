@@ -76,6 +76,12 @@ func validatePreflightEventRefRule(eventType string, event map[string]any, refs 
 	if err := validatePreflightConditionalRefRules(eventType, payload, refs, rule.ConditionalRefs); err != nil {
 		return err
 	}
+
+	if eventType == humanAttentionRequestedEventType {
+		if err := validatePreflightHumanAttentionResponseProposals(payload); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
