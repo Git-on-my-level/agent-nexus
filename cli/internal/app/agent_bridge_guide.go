@@ -52,12 +52,18 @@ Config generation
 
 Generate minimal configs from the CLI:
 
-  anx bridge init-config --kind subprocess --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py
-  anx bridge init-config --kind python-plugin --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --plugin-module my_bridge --plugin-factory build_adapter
+  anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py
+  anx bridge init-config --kind python-plugin --output ./bridge.toml --agent-home ./.anx --workspace-id <workspace-id> --workspace-id <workspace-id-2> --handle <handle> --plugin-module my_bridge --plugin-factory build_adapter
 
 You own the adapter implementation. ANX does not ship or maintain integrations for specific third-party agents.
 
-These templates intentionally default the agent lifecycle to:
+This scaffolds an explicit agent home:
+
+- <<tick>>.anx/agent.toml<<tick>> anchors identity and auth state
+- <<tick>>.anx/wake.toml<<tick>> owns workspace wake subscriptions
+- <<tick>>bridge.toml<<tick>> owns adapter/runtime behavior
+
+These templates intentionally default the bridge lifecycle to:
 
 - <<tick>>status = "pending"<<tick>>
 - <<tick>>checkin_interval_seconds = 60<<tick>>
@@ -80,30 +86,28 @@ First-time agent-host path
 
   anx bridge install
 
-2. Render the agent config and implement the adapter (see <<tick>>anx-agent-bridge adapter contract --config ./agent.toml<<tick>>):
+2. Render the bridge runtime config and agent home, then implement the adapter (see <<tick>>anx-agent-bridge adapter contract --config ./bridge.toml<<tick>>):
 
-  anx bridge init-config --kind subprocess --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py
+  anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py
 
-3. If a matching <<tick>>anx<<tick>> profile already exists for the target principal, import it into the bridge config:
+3. If a matching <<tick>>anx<<tick>> profile already exists for the target principal, import it into the agent home:
 
-  anx bridge import-auth --config ./agent.toml --from-profile <agent>
-
-  This also syncs the default local <<tick>>[anx].base_url<<tick>> in the bridge config to the imported profile when they differ.
+  anx bridge import-auth --config ./bridge.toml --from-profile <agent>
 
 4. Register the target bridge principal and write the initial pending registration when auth does not already exist:
 
-  anx-agent-bridge auth register --config ./agent.toml --invite-token <token> --apply-registration
+  anx-agent-bridge auth register --config ./bridge.toml --invite-token <token> --apply-registration
 
 5. Start the managed bridge daemon from the main CLI:
 
-  anx bridge start --config ./agent.toml
+  anx bridge start --config ./bridge.toml
 
 6. Confirm the process and readiness state before expecting immediate delivery:
 
-  anx bridge status --config ./agent.toml
-  anx bridge doctor --config ./agent.toml
+  anx bridge status --config ./bridge.toml
+  anx bridge doctor --config ./bridge.toml
 
-  Use <<tick>>anx bridge logs --config ./agent.toml<<tick>> when you need the recent daemon output, and <<tick>>anx bridge restart --config ./agent.toml<<tick>> if you change config or recover from a stale process.
+  Use <<tick>>anx bridge logs --config ./bridge.toml<<tick>> when you need the recent daemon output, and <<tick>>anx bridge restart --config ./bridge.toml<<tick>> if you change config or recover from a stale process.
 
   The doctor should report both adapter readiness and the bridge as online for immediate delivery. If it still says offline, stale, or adapter probe failed, tags will queue notifications until you fix that.
 
@@ -121,7 +125,7 @@ First-time agent-host path
 
   anx notifications list --status unread
   anx notifications dismiss --wakeup-id <wakeup-id>
-  anx-agent-bridge notifications list --config ./agent.toml --status unread
+  anx-agent-bridge notifications list --config ./bridge.toml --status unread
 
 10. If the bridge is online but tagged delivery still fails, hand off to the workspace operator to inspect the embedded wake-routing sidecar in <<tick>>anx-core<<tick>>.
 
@@ -137,7 +141,7 @@ Troubleshooting
 - <<tick>>anx-agent-bridge: command not found<<tick>>:
   - run <<tick>>anx bridge install<<tick>> or add the managed wrapper directory to PATH
 - bridge doctor says the bridge is offline:
-  - the bridge has not checked in yet or is no longer refreshing; start or restart <<tick>>anx bridge start --config ./agent.toml<<tick>> and verify the config points at the right workspace
+  - the bridge has not checked in yet or is no longer refreshing; start or restart <<tick>>anx bridge start --config ./bridge.toml<<tick>> and verify <<tick>>.anx/wake.toml<<tick>> points at the right workspace set
 - wake request is durable but never claimed:
   - the bridge is offline, the embedded wake-routing sidecar in <<tick>>anx-core<<tick>> is unhealthy, or <<tick>>workspace_id<<tick>> is wrong
 - principal exists but wake still fails:
@@ -147,6 +151,6 @@ Related docs
 
   anx help bridge
   anx meta doc wake-routing
-  anx bridge doctor --config ./agent.toml`)
+  anx bridge doctor --config ./bridge.toml`)
 	return strings.ReplaceAll(guide, tickToken, "`")
 }

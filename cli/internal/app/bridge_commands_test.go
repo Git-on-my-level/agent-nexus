@@ -35,7 +35,7 @@ func TestRenderBridgeSubprocessTemplateUsesPendingLifecycle(t *testing.T) {
 	rendered, handle, err := renderBridgeConfigTemplate(bridgeTemplateParams{
 		Kind:              "subprocess",
 		BaseURL:           "https://anx.example",
-		WorkspaceID:       "ws_main",
+		WorkspaceIDs:      []string{"ws_main"},
 		WorkspaceName:     "Main",
 		Handle:            "myagent",
 		AdapterEntrypoint: "./adapter.py",
@@ -49,8 +49,8 @@ func TestRenderBridgeSubprocessTemplateUsesPendingLifecycle(t *testing.T) {
 	if !strings.Contains(rendered, `status = "pending"`) || !strings.Contains(rendered, "checkin_ttl_seconds = 300") {
 		t.Fatalf("expected pending lifecycle fields output=%s", rendered)
 	}
-	if !strings.Contains(rendered, `workspace_bindings = ["ws_main"]`) {
-		t.Fatalf("expected workspace binding output=%s", rendered)
+	if !strings.Contains(rendered, `agent_home = ".anx"`) {
+		t.Fatalf("expected agent home output=%s", rendered)
 	}
 	if !strings.Contains(rendered, `adapter_kind = "subprocess"`) || !strings.Contains(rendered, `kind = "subprocess"`) {
 		t.Fatalf("expected subprocess adapter kind output=%s", rendered)
@@ -64,7 +64,7 @@ func TestRenderBridgePythonPluginTemplate(t *testing.T) {
 	rendered, handle, err := renderBridgeConfigTemplate(bridgeTemplateParams{
 		Kind:          "python_plugin",
 		BaseURL:       "https://anx.example",
-		WorkspaceID:   "ws_main",
+		WorkspaceIDs:  []string{"ws_main"},
 		WorkspaceName: "Main",
 		Handle:        "myagent",
 		PluginModule:  "my_bridge_adapter",
@@ -101,8 +101,8 @@ func TestDefaultBridgeInstallRefMatchesCLIVersion(t *testing.T) {
 
 func TestLoadBridgeManagedConfigDetectsAgentConfig(t *testing.T) {
 	dir := t.TempDir()
-	configPath := filepath.Join(dir, "agent.toml")
-	if err := os.WriteFile(configPath, []byte("[agent]\nhandle = \"hermes\"\n"), 0o600); err != nil {
+	configPath := filepath.Join(dir, "bridge.toml")
+	if err := os.WriteFile(configPath, []byte("agent_home = \".anx\"\n"), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	cfg, err := loadBridgeManagedConfig(configPath)
@@ -119,8 +119,8 @@ func TestLoadBridgeManagedConfigDetectsAgentConfig(t *testing.T) {
 
 func TestLoadBridgeManagedConfigDetectsAgentConfigWithHeaderComment(t *testing.T) {
 	dir := t.TempDir()
-	configPath := filepath.Join(dir, "agent.toml")
-	if err := os.WriteFile(configPath, []byte("[agent] # prod\nhandle = \"hermes\"\n"), 0o600); err != nil {
+	configPath := filepath.Join(dir, "bridge.toml")
+	if err := os.WriteFile(configPath, []byte("agent_home = \".anx\" # prod\n"), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	cfg, err := loadBridgeManagedConfig(configPath)
@@ -134,8 +134,8 @@ func TestLoadBridgeManagedConfigDetectsAgentConfigWithHeaderComment(t *testing.T
 
 func TestBridgeStartPersistsManagedRuntimeState(t *testing.T) {
 	home := t.TempDir()
-	configPath := filepath.Join(t.TempDir(), "agent.toml")
-	if err := os.WriteFile(configPath, []byte("[agent]\nhandle = \"hermes\"\n"), 0o600); err != nil {
+	configPath := filepath.Join(t.TempDir(), "bridge.toml")
+	if err := os.WriteFile(configPath, []byte("agent_home = \".anx\"\n"), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	binDir := filepath.Join(home, ".local", "bin")
@@ -184,8 +184,8 @@ func TestBridgeStartPersistsManagedRuntimeState(t *testing.T) {
 
 func TestBridgeStatusReportsNotManaged(t *testing.T) {
 	home := t.TempDir()
-	configPath := filepath.Join(t.TempDir(), "agent.toml")
-	if err := os.WriteFile(configPath, []byte("[agent]\nhandle = \"hermes\"\n"), 0o600); err != nil {
+	configPath := filepath.Join(t.TempDir(), "bridge.toml")
+	if err := os.WriteFile(configPath, []byte("agent_home = \".anx\"\n"), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	app := New()
@@ -232,10 +232,8 @@ func TestBridgeManagedRuntimeRunningRejectsPIDReuse(t *testing.T) {
 
 func TestBridgeImportAuthCopiesExistingProfileIntoBridgeState(t *testing.T) {
 	home := t.TempDir()
-	configPath := filepath.Join(t.TempDir(), "agent.toml")
-	if err := os.WriteFile(configPath, []byte("[auth]\nstate_path = \".state/bridge-auth.json\"\n\n[agent]\nhandle = \"hermes\"\n"), 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	configDir := t.TempDir()
+	configPath := writeBridgeAgentHomeFixture(t, configDir, "hermes")
 
 	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -272,7 +270,7 @@ func TestBridgeImportAuthCopiesExistingProfileIntoBridgeState(t *testing.T) {
 		t.Fatalf("unexpected output: %s", result.Text)
 	}
 
-	statePath := filepath.Join(filepath.Dir(configPath), ".state", "bridge-auth.json")
+	statePath := filepath.Join(configDir, ".anx", "profiles", "default.json")
 	content, err := os.ReadFile(statePath)
 	if err != nil {
 		t.Fatalf("read bridge auth state: %v", err)
@@ -421,8 +419,16 @@ func TestLoadBridgeConfigDetailsExpandsAuthStatePath(t *testing.T) {
 	bridgeUserHomeDir = func() (string, error) { return home, nil }
 	t.Setenv("BRIDGE_AUTH_SUBDIR", "custom-auth")
 
-	configPath := filepath.Join(t.TempDir(), "agent.toml")
-	if err := os.WriteFile(configPath, []byte("[auth]\nstate_path = \"~/$BRIDGE_AUTH_SUBDIR/bridge-auth.json\"\n\n[agent]\nhandle = \"hermes\"\n"), 0o600); err != nil {
+	configDir := t.TempDir()
+	agentHome := filepath.Join(configDir, ".anx")
+	if err := os.MkdirAll(agentHome, 0o700); err != nil {
+		t.Fatalf("mkdir agent home: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(agentHome, "agent.toml"), []byte("[identity]\nbase_url = \"https://anx.example\"\nhandle = \"hermes\"\n\n[auth]\nstate_path = \"~/$BRIDGE_AUTH_SUBDIR/bridge-auth.json\"\n"), 0o600); err != nil {
+		t.Fatalf("write agent manifest: %v", err)
+	}
+	configPath := filepath.Join(configDir, "bridge.toml")
+	if err := os.WriteFile(configPath, []byte("agent_home = \".anx\"\n"), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
@@ -515,25 +521,46 @@ func TestBridgeInitConfigPythonPluginWritesModule(t *testing.T) {
 	}
 }
 
-func TestBridgeImportAuthUpdatesBaseURLFromProfile(t *testing.T) {
-	home := t.TempDir()
-	configDir := t.TempDir()
-	configPath := filepath.Join(configDir, "agent.toml")
-	if err := os.WriteFile(configPath, []byte("[anx]\nbase_url = \"http://127.0.0.1:8000\"\nworkspace_id = \"ws_main\"\nworkspace_name = \"Main\"\n\n[auth]\nstate_path = \".state/bridge-auth.json\"\n\n[agent]\nhandle = \"hermes\"\n"), 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
+func writeBridgeAgentHomeFixture(t *testing.T, configDir string, handle string) string {
+	t.Helper()
+	agentHome := filepath.Join(configDir, ".anx")
+	if err := os.MkdirAll(agentHome, 0o700); err != nil {
+		t.Fatalf("mkdir agent home: %v", err)
 	}
+	manifest := `schema_version = 1
 
-	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatalf("generate key: %v", err)
+[identity]
+base_url = "http://127.0.0.1:8000"
+handle = "` + handle + `"
+agent_id = ""
+actor_id = ""
+key_id = ""
+
+[auth]
+state_path = "profiles/default.json"
+`
+	if err := os.WriteFile(filepath.Join(agentHome, "agent.toml"), []byte(manifest), 0o600); err != nil {
+		t.Fatalf("write agent.toml: %v", err)
 	}
-	keyPath := filepath.Join(home, ".config", "anx", "keys", "agent-a.ed25519")
+	if err := os.WriteFile(filepath.Join(agentHome, "wake.toml"), []byte("schema_version = 1\n\n[[workspaces]]\nid = \"ws_main\"\nname = \"Main\"\nenabled = true\n"), 0o600); err != nil {
+		t.Fatalf("write wake.toml: %v", err)
+	}
+	configPath := filepath.Join(configDir, "bridge.toml")
+	if err := os.WriteFile(configPath, []byte("agent_home = \".anx\"\nwake_config = \"wake.toml\"\n\n[adapter]\nkind = \"subprocess\"\ncommand = [\"python3\", \"./adapter.py\"]\n"), 0o600); err != nil {
+		t.Fatalf("write bridge config: %v", err)
+	}
+	return configPath
+}
+
+func saveBridgeImportProfile(t *testing.T, home string, agentName string, privateKey ed25519.PrivateKey) string {
+	t.Helper()
+	keyPath := filepath.Join(home, ".config", "anx", "keys", agentName+".ed25519")
 	if err := profile.SavePrivateKey(keyPath, privateKey); err != nil {
 		t.Fatalf("save private key: %v", err)
 	}
-	profilePath := filepath.Join(home, ".config", "anx", "profiles", "agent-a.json")
+	profilePath := filepath.Join(home, ".config", "anx", "profiles", agentName+".json")
 	if err := profile.Save(profilePath, profile.Profile{
-		Agent:                "agent-a",
+		Agent:                agentName,
 		BaseURL:              "http://127.0.0.1:8002",
 		Username:             "hermes",
 		AgentID:              "agent_123",
@@ -547,6 +574,18 @@ func TestBridgeImportAuthUpdatesBaseURLFromProfile(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("save profile: %v", err)
 	}
+	return profilePath
+}
+
+func TestBridgeImportAuthUpdatesAgentHomeIdentityFromProfile(t *testing.T) {
+	home := t.TempDir()
+	configDir := t.TempDir()
+	configPath := writeBridgeAgentHomeFixture(t, configDir, "hermes")
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	profilePath := saveBridgeImportProfile(t, home, "agent-a", privateKey)
 
 	app := New()
 	app.UserHomeDir = func() (string, error) { return home, nil }
@@ -554,126 +593,51 @@ func TestBridgeImportAuthUpdatesBaseURLFromProfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("runBridgeImportAuth: %v", err)
 	}
-	if !strings.Contains(result.Text, "Base URL updated: http://127.0.0.1:8002") {
-		t.Fatalf("expected base URL update message, output=%s", result.Text)
+	if !strings.Contains(result.Text, "Agent manifest identity updated") {
+		t.Fatalf("expected agent manifest update message, output=%s", result.Text)
 	}
 
-	updated, err := os.ReadFile(configPath)
+	updated, err := os.ReadFile(filepath.Join(configDir, ".anx", "agent.toml"))
 	if err != nil {
-		t.Fatalf("read updated config: %v", err)
+		t.Fatalf("read updated manifest: %v", err)
 	}
-	if !strings.Contains(string(updated), `base_url = "http://127.0.0.1:8002"`) {
-		t.Fatalf("expected updated base_url in config, content=%s", updated)
+	publicKey := privateKey.Public().(ed25519.PublicKey)
+	expectedFingerprint := bridgePublicKeyFingerprint(publicKey)
+	if !strings.Contains(string(updated), `agent_id = "agent_123"`) ||
+		!strings.Contains(string(updated), `actor_id = "actor_123"`) ||
+		!strings.Contains(string(updated), `public_key_fingerprint = "`+expectedFingerprint+`"`) {
+		t.Fatalf("expected updated identity in manifest, content=%s", updated)
+	}
+	wakeConfig, err := os.ReadFile(filepath.Join(configDir, ".anx", "wake.toml"))
+	if err != nil {
+		t.Fatalf("read wake config: %v", err)
+	}
+	if !strings.Contains(string(wakeConfig), `base_url = "http://127.0.0.1:8002"`) {
+		t.Fatalf("expected imported profile base_url in wake config, content=%s", wakeConfig)
+	}
+	authState, err := os.ReadFile(filepath.Join(configDir, ".anx", "profiles", "default.json"))
+	if err != nil {
+		t.Fatalf("read auth state: %v", err)
+	}
+	if !strings.Contains(string(authState), `"agent_id": "agent_123"`) {
+		t.Fatalf("expected bridge auth state written, content=%s", authState)
 	}
 }
 
-func TestBridgeImportAuthInsertsMissingBaseURLFromProfile(t *testing.T) {
+func TestBridgeImportAuthRejectsHandleMismatch(t *testing.T) {
 	home := t.TempDir()
 	configDir := t.TempDir()
-	configPath := filepath.Join(configDir, "agent.toml")
-	if err := os.WriteFile(configPath, []byte("[anx]\nworkspace_id = \"ws_main\"\nworkspace_name = \"Main\"\n\n[auth]\nstate_path = \".state/bridge-auth.json\"\n\n[agent]\nhandle = \"hermes\"\n"), 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-
+	configPath := writeBridgeAgentHomeFixture(t, configDir, "other")
 	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
-	keyPath := filepath.Join(home, ".config", "anx", "keys", "agent-missing-base-url.ed25519")
-	if err := profile.SavePrivateKey(keyPath, privateKey); err != nil {
-		t.Fatalf("save private key: %v", err)
-	}
-	profilePath := filepath.Join(home, ".config", "anx", "profiles", "agent-missing-base-url.json")
-	if err := profile.Save(profilePath, profile.Profile{
-		Agent:                "agent-missing-base-url",
-		BaseURL:              "http://127.0.0.1:8002",
-		Username:             "hermes",
-		AgentID:              "agent_789",
-		ActorID:              "actor_789",
-		KeyID:                "key_789",
-		PrivateKeyPath:       keyPath,
-		AccessToken:          "access-token",
-		RefreshToken:         "refresh-token",
-		TokenType:            "Bearer",
-		AccessTokenExpiresAt: "2099-01-01T00:00:00Z",
-	}); err != nil {
-		t.Fatalf("save profile: %v", err)
-	}
-
+	profilePath := saveBridgeImportProfile(t, home, "agent-b", privateKey)
 	app := New()
 	app.UserHomeDir = func() (string, error) { return home, nil }
-	result, err := app.runBridgeImportAuth([]string{"--config", configPath, "--from-profile", "agent-missing-base-url"}, config.Resolved{Agent: "agent-missing-base-url", ProfilePath: profilePath})
-	if err != nil {
-		t.Fatalf("runBridgeImportAuth: %v", err)
-	}
-	if !strings.Contains(result.Text, "Base URL updated: http://127.0.0.1:8002") {
-		t.Fatalf("expected base URL insert message, output=%s", result.Text)
-	}
-
-	updated, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Fatalf("read updated config: %v", err)
-	}
-	content := string(updated)
-	if !strings.Contains(content, "[anx]\nworkspace_id = \"ws_main\"\nworkspace_name = \"Main\"") ||
-		!strings.Contains(content, "\nbase_url = \"http://127.0.0.1:8002\"\n[auth]") &&
-			!strings.Contains(content, "\n\nbase_url = \"http://127.0.0.1:8002\"\n[auth]") {
-		t.Fatalf("expected inserted base_url in anx section, content=%s", content)
-	}
-}
-
-func TestBridgeImportAuthDoesNotOverrideExplicitBaseURL(t *testing.T) {
-	home := t.TempDir()
-	configDir := t.TempDir()
-	configPath := filepath.Join(configDir, "agent.toml")
-	if err := os.WriteFile(configPath, []byte("[anx]\nbase_url = \"http://192.168.1.100:8000\"\nworkspace_id = \"ws_main\"\nworkspace_name = \"Main\"\n\n[auth]\nstate_path = \".state/bridge-auth.json\"\n\n[agent]\nhandle = \"hermes\"\n"), 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-
-	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatalf("generate key: %v", err)
-	}
-	keyPath := filepath.Join(home, ".config", "anx", "keys", "agent-b.ed25519")
-	if err := profile.SavePrivateKey(keyPath, privateKey); err != nil {
-		t.Fatalf("save private key: %v", err)
-	}
-	profilePath := filepath.Join(home, ".config", "anx", "profiles", "agent-b.json")
-	if err := profile.Save(profilePath, profile.Profile{
-		Agent:                "agent-b",
-		BaseURL:              "http://127.0.0.1:8002",
-		Username:             "hermes",
-		AgentID:              "agent_456",
-		ActorID:              "actor_456",
-		KeyID:                "key_456",
-		PrivateKeyPath:       keyPath,
-		AccessToken:          "access-token",
-		RefreshToken:         "refresh-token",
-		TokenType:            "Bearer",
-		AccessTokenExpiresAt: "2099-01-01T00:00:00Z",
-	}); err != nil {
-		t.Fatalf("save profile: %v", err)
-	}
-
-	app := New()
-	app.UserHomeDir = func() (string, error) { return home, nil }
-	result, err := app.runBridgeImportAuth([]string{"--config", configPath, "--from-profile", "agent-b"}, config.Resolved{Agent: "agent-b", ProfilePath: profilePath})
-	if err != nil {
-		t.Fatalf("runBridgeImportAuth: %v", err)
-	}
-	if strings.Contains(result.Text, "Base URL updated") {
-		t.Fatalf("expected no base URL update when config already has explicit base_url, output=%s", result.Text)
-	}
-	if !strings.Contains(result.Text, "WARNING: config [anx].base_url") {
-		t.Fatalf("expected mismatch warning when config base_url differs from profile, output=%s", result.Text)
-	}
-
-	updated, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Fatalf("read updated config: %v", err)
-	}
-	if !strings.Contains(string(updated), `base_url = "http://192.168.1.100:8000"`) {
-		t.Fatalf("expected original base_url preserved in config, content=%s", updated)
+	_, err = app.runBridgeImportAuth([]string{"--config", configPath, "--from-profile", "agent-b"}, config.Resolved{Agent: "agent-b", ProfilePath: profilePath})
+	if err == nil {
+		t.Fatal("expected handle mismatch error")
 	}
 }
 
@@ -716,6 +680,67 @@ cwd_default = "/path"
 		!strings.Contains(result, "\nbase_url = \"http://127.0.0.1:8002\"\n[adapter]") &&
 			!strings.Contains(result, "\n\nbase_url = \"http://127.0.0.1:8002\"\n[adapter]") {
 		t.Fatalf("expected missing key inserted before next section, got=%s", result)
+	}
+}
+
+func TestBridgeReplaceConfigValueReplacesEmptyString(t *testing.T) {
+	input := `[identity]
+base_url = "https://anx.example"
+agent_id = ""
+actor_id = ""
+
+[auth]
+state_path = "profiles/default.json"
+`
+	result, changed := bridgeReplaceConfigValue(input, "identity", "agent_id", "agent_123")
+	if !changed {
+		t.Fatal("expected empty value replacement to report a change")
+	}
+	if !strings.Contains(result, `agent_id = "agent_123"`) {
+		t.Fatalf("expected empty agent_id to be replaced, got=%s", result)
+	}
+	if strings.Count(result, "agent_id") != 1 {
+		t.Fatalf("expected one agent_id assignment, got=%s", result)
+	}
+}
+
+func TestBridgeReplaceConfigValueDoesNotGrowTrailingBlankLines(t *testing.T) {
+	input := "[identity]\nagent_id = \"\"\nactor_id = \"\"\n"
+	once, changed := bridgeReplaceConfigValue(input, "identity", "agent_id", "agent_123")
+	if !changed {
+		t.Fatal("expected first replacement")
+	}
+	twice, changed := bridgeReplaceConfigValue(once, "identity", "actor_id", "actor_123")
+	if !changed {
+		t.Fatal("expected second replacement")
+	}
+	if strings.HasSuffix(twice, "\n\n") {
+		t.Fatalf("expected single trailing newline, got=%q", twice)
+	}
+}
+
+func TestBridgeReplaceWorkspaceBaseURLUpdatesEveryWorkspace(t *testing.T) {
+	input := `schema_version = 1
+
+[[workspaces]]
+id = "ws_main"
+name = "Main"
+base_url = "http://127.0.0.1:8000"
+enabled = true
+
+[[workspaces]]
+id = "ws_ops"
+enabled = true
+`
+	result, changed := bridgeReplaceWorkspaceBaseURL(input, "https://anx.example")
+	if !changed {
+		t.Fatal("expected workspace base_url replacement to report a change")
+	}
+	if strings.Count(result, `base_url = "https://anx.example"`) != 2 {
+		t.Fatalf("expected each workspace to have updated base_url, got=%s", result)
+	}
+	if !strings.Contains(result, `id = "ws_ops"`) {
+		t.Fatalf("expected missing base_url inserted in second workspace, got=%s", result)
 	}
 }
 

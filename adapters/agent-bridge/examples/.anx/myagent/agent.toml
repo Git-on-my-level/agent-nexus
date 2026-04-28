@@ -1,0 +1,18 @@
+schema_version = 1
+agent_home_id = "agenthome_myagent_example"
+profile = "default"
+
+[identity]
+base_url = "https://anx.example"
+handle = "myagent"
+agent_id = ""
+actor_id = ""
+key_id = ""
+public_key_fingerprint = ""
+verify_ssl = true
+
+[auth]
+state_path = "profiles/default.json"
+
+[wake]
+config_path = "wake.toml"

@@ -116,7 +116,7 @@ anx bridge start --config examples/subprocess.toml
 Import existing `anx` auth into a bridge config:
 
 ```bash
-anx bridge import-auth --config ./agent.toml --from-profile agent-a
+anx bridge import-auth --config ./bridge.toml --from-profile agent-a
 ```
 
 Discover durable workspace ids from an existing registration:
@@ -131,10 +131,11 @@ See `examples/subprocess.toml`.
 
 Minimum config contract:
 
-- `[anx] base_url`, `workspace_id`, `workspace_name`
-- Optional `[anx] workspace_url`, `verify_ssl`
-- `[auth] state_path` optional; defaults under `.state/`
-- `bridge run` requires `[agent]` with `handle`, `state_dir`, `workspace_bindings`, and registration fields as in the example
+- top-level `agent_home`, pointing at a directory with `agent.toml`
+- `agent.toml` `[identity]` with `base_url`, `handle`, and imported identity pins (`agent_id`, `actor_id`, `key_id`, `public_key_fingerprint`)
+- `agent.toml` `[auth] state_path` optional; defaults to `profiles/default.json`
+- `wake.toml` with one or more `[[workspaces]]` entries; this is the local wake subscription source
+- bridge `[runtime] state_dir` optional; defaults under the agent home
 - **Subprocess:** `[adapter] kind = "subprocess"`, `command` (argv array), optional `cwd`, `env`, `timeout_seconds`, `doctor_timeout_seconds`, `doctor_command`
 
 ### JSON contract (subprocess)
@@ -143,7 +144,7 @@ Minimum config contract:
 
 - `mode`: `dispatch` | `doctor`
 - `dispatch`: includes `wake_packet`, `prompt_text`, `session_key`, `existing_native_session_id`, `adapter` (opaque copy of `[adapter]` table)
-- `doctor`: includes `handle`, `workspace_id`, `adapter`
+- `doctor`: includes `handle`, the current `workspace_id`, and `adapter`
 
 **Response stdout** (`schema_version` `anx-bridge-adapter-response/v1`):
 
@@ -154,12 +155,12 @@ Minimum config contract:
 
 1. `anx bridge install` and `anx-agent-bridge --version`
 2. Note the deployment `workspace_id`
-3. `anx bridge init-config --kind subprocess --output ./agent.toml --workspace-id <id> --handle <handle> --adapter-entrypoint ./adapter.py`
-4. Implement `./adapter.py` (or change `[adapter].command` to any executable). Validate with `anx-agent-bridge adapter contract --config ./agent.toml`
-5. `anx bridge import-auth --config ./agent.toml --from-profile <agent>` when auth exists
+3. `anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --workspace-id <id> --handle <handle> --adapter-entrypoint ./adapter.py`
+4. Implement `./adapter.py` (or change `[adapter].command` to any executable). Validate with `anx-agent-bridge adapter contract --config ./bridge.toml`
+5. `anx bridge import-auth --config ./bridge.toml --from-profile <agent>` when auth exists
 6. `anx-agent-bridge auth register ... --apply-registration` when auth does not exist
-7. `anx bridge start --config ./agent.toml`
-8. `anx bridge doctor --config ./agent.toml`
+7. `anx bridge start --config ./bridge.toml`
+8. `anx bridge doctor --config ./bridge.toml`
 
 ## File layout
 

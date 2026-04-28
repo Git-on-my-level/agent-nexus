@@ -1,0 +1,7 @@
+schema_version = 1
+
+[[workspaces]]
+id = "ws_main"
+name = "Main"
+base_url = "https://anx.example"
+enabled = true

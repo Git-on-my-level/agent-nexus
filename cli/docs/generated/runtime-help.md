@@ -141,8 +141,8 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `docs comments` (local-helper): List line-level document text comments from the document backing thread timeline.
 - `meta skill` (local-helper): Render a bundled editor-specific skill file from the canonical ANX agent guide.
 - `bridge install` (local-helper): Install `anx-agent-bridge` into a dedicated Python 3.11+ virtualenv and expose a PATH wrapper.
-- `bridge import-auth` (local-helper): Copy an existing `anx` profile and key into bridge auth state for one bridge config.
-- `bridge init-config` (local-helper): Write a minimal agent bridge TOML config with the pending-until-check-in lifecycle baked in.
+- `bridge import-auth` (local-helper): Copy an existing `anx` profile and key into the bridge agent home auth state.
+- `bridge init-config` (local-helper): Write a bridge runtime config plus an agent home with wake subscriptions.
 - `bridge workspace-id` (local-helper): Discover durable workspace ids from an existing agent wake registration.
 - `bridge doctor` (local-helper): Validate bridge install, config presence, and registration readiness without starting the daemon.
 - `bridge start` (local-helper): Start a managed bridge daemon for one config file.
@@ -453,12 +453,18 @@ Config generation
 
 Generate minimal configs from the CLI:
 
-  anx bridge init-config --kind subprocess --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py
-  anx bridge init-config --kind python-plugin --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --plugin-module my_bridge --plugin-factory build_adapter
+  anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py
+  anx bridge init-config --kind python-plugin --output ./bridge.toml --agent-home ./.anx --workspace-id <workspace-id> --workspace-id <workspace-id-2> --handle <handle> --plugin-module my_bridge --plugin-factory build_adapter
 
 You own the adapter implementation. ANX does not ship or maintain integrations for specific third-party agents.
 
-These templates intentionally default the agent lifecycle to:
+This scaffolds an explicit agent home:
+
+- `.anx/agent.toml` anchors identity and auth state
+- `.anx/wake.toml` owns workspace wake subscriptions
+- `bridge.toml` owns adapter/runtime behavior
+
+These templates intentionally default the bridge lifecycle to:
 
 - `status = "pending"`
 - `checkin_interval_seconds = 60`
@@ -481,30 +487,28 @@ First-time agent-host path
 
   anx bridge install
 
-2. Render the agent config and implement the adapter (see `anx-agent-bridge adapter contract --config ./agent.toml`):
+2. Render the bridge runtime config and agent home, then implement the adapter (see `anx-agent-bridge adapter contract --config ./bridge.toml`):
 
-  anx bridge init-config --kind subprocess --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py
+  anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py
 
-3. If a matching `anx` profile already exists for the target principal, import it into the bridge config:
+3. If a matching `anx` profile already exists for the target principal, import it into the agent home:
 
-  anx bridge import-auth --config ./agent.toml --from-profile <agent>
-
-  This also syncs the default local `[anx].base_url` in the bridge config to the imported profile when they differ.
+  anx bridge import-auth --config ./bridge.toml --from-profile <agent>
 
 4. Register the target bridge principal and write the initial pending registration when auth does not already exist:
 
-  anx-agent-bridge auth register --config ./agent.toml --invite-token <token> --apply-registration
+  anx-agent-bridge auth register --config ./bridge.toml --invite-token <token> --apply-registration
 
 5. Start the managed bridge daemon from the main CLI:
 
-  anx bridge start --config ./agent.toml
+  anx bridge start --config ./bridge.toml
 
 6. Confirm the process and readiness state before expecting immediate delivery:
 
-  anx bridge status --config ./agent.toml
-  anx bridge doctor --config ./agent.toml
+  anx bridge status --config ./bridge.toml
+  anx bridge doctor --config ./bridge.toml
 
-  Use `anx bridge logs --config ./agent.toml` when you need the recent daemon output, and `anx bridge restart --config ./agent.toml` if you change config or recover from a stale process.
+  Use `anx bridge logs --config ./bridge.toml` when you need the recent daemon output, and `anx bridge restart --config ./bridge.toml` if you change config or recover from a stale process.
 
   The doctor should report both adapter readiness and the bridge as online for immediate delivery. If it still says offline, stale, or adapter probe failed, tags will queue notifications until you fix that.
 
@@ -522,7 +526,7 @@ First-time agent-host path
 
   anx notifications list --status unread
   anx notifications dismiss --wakeup-id <wakeup-id>
-  anx-agent-bridge notifications list --config ./agent.toml --status unread
+  anx-agent-bridge notifications list --config ./bridge.toml --status unread
 
 10. If the bridge is online but tagged delivery still fails, hand off to the workspace operator to inspect the embedded wake-routing sidecar in `anx-core`.
 
@@ -538,7 +542,7 @@ Troubleshooting
 - `anx-agent-bridge: command not found`:
   - run `anx bridge install` or add the managed wrapper directory to PATH
 - bridge doctor says the bridge is offline:
-  - the bridge has not checked in yet or is no longer refreshing; start or restart `anx bridge start --config ./agent.toml` and verify the config points at the right workspace
+  - the bridge has not checked in yet or is no longer refreshing; start or restart `anx bridge start --config ./bridge.toml` and verify `.anx/wake.toml` points at the right workspace set
 - wake request is durable but never claimed:
   - the bridge is offline, the embedded wake-routing sidecar in `anx-core` is unhealthy, or `workspace_id` is wrong
 - principal exists but wake still fails:
@@ -548,7 +552,7 @@ Related docs
 
   anx help bridge
   anx meta doc wake-routing
-  anx bridge doctor --config ./agent.toml
+  anx bridge doctor --config ./bridge.toml
 ```
 
 ## `wake-routing`
@@ -600,7 +604,7 @@ How agents discover it
 - Read the preferred runtime path with `anx meta doc agent-bridge`.
 - Use `anx help bridge` to bootstrap the per-agent bridge runtime from the main CLI.
 - Use `anx bridge workspace-id --handle <handle>` when an existing registration is the easiest source of truth for the durable workspace id.
-- Use `anx bridge import-auth --config ./agent.toml --from-profile <agent>` when matching `anx` auth already exists.
+- Use `anx bridge import-auth --config ./bridge.toml --from-profile <agent>` when matching `anx` auth already exists.
 - Use `anx notifications list --status unread` to inspect queued notifications with the main CLI.
 - Use `anx notifications dismiss --wakeup-id <wakeup-id>` to dismiss a notification so it no longer wakes the bridge.
 - Use `anx auth whoami` to confirm your current username and actor id.
@@ -618,38 +622,36 @@ Preferred path when you are using `anx-agent-bridge`
 
 3. Generate the agent config and implement your adapter (subprocess JSON or python_plugin):
 
-  anx bridge init-config --kind subprocess --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py
+  anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py
 
-  Inspect the exact stdin/stdout JSON contract with `anx-agent-bridge adapter contract --config ./agent.toml`.
+  Inspect the exact stdin/stdout JSON contract with `anx-agent-bridge adapter contract --config ./bridge.toml`.
 
-4. If matching `anx` auth already exists, import it into the bridge config:
+4. If matching `anx` auth already exists, import it into the agent home:
 
-  anx bridge import-auth --config ./agent.toml --from-profile <agent>
-
-  This also syncs the default local `[anx].base_url` in the bridge config to the imported profile when they differ.
+  anx bridge import-auth --config ./bridge.toml --from-profile <agent>
 
 5. Register auth and write the initial pending registration when auth does not already exist:
 
-  anx-agent-bridge auth register --config ./agent.toml --invite-token <token> --apply-registration
+  anx-agent-bridge auth register --config ./bridge.toml --invite-token <token> --apply-registration
 
   If auth already exists and you only need to rewrite the principal registration:
 
-  anx-agent-bridge registration apply --config <agent.toml>
+  anx-agent-bridge registration apply --config ./bridge.toml
 
 6. Start the target bridge:
 
-  anx bridge start --config ./agent.toml
+  anx bridge start --config ./bridge.toml
 
 7. Verify the bridge has checked in before expecting immediate delivery:
 
-  anx bridge status --config ./agent.toml
-  anx bridge doctor --config ./agent.toml
-  anx-agent-bridge registration status --config ./agent.toml
+  anx bridge status --config ./bridge.toml
+  anx bridge doctor --config ./bridge.toml
+  anx-agent-bridge registration status --config ./bridge.toml
 
 8. Pull or dismiss queued notifications directly when needed:
 
   anx notifications list --status unread
-  anx-agent-bridge notifications list --config ./agent.toml --status unread
+  anx-agent-bridge notifications list --config ./bridge.toml --status unread
   anx notifications dismiss --wakeup-id <wakeup-id>
 
 9. If the bridge is online but tagged delivery still does not work, ask the workspace operator to inspect the embedded wake-routing sidecar in `anx-core`.
@@ -703,7 +705,7 @@ If you are writing registration state manually, update the agent principal regis
 
 5. If auth already exists, prefer the supported bridge-managed path instead of hand-patching:
 
-  anx-agent-bridge registration apply --config ./agent.toml
+  anx-agent-bridge registration apply --config ./bridge.toml
 
 Registration schema notes
 
@@ -747,7 +749,7 @@ Verification flow
 
 5. If you are using `anx-agent-bridge`, prefer:
 
-  anx bridge doctor --config ./agent.toml
+  anx bridge doctor --config ./bridge.toml
 
 Concrete wake example
 
@@ -783,7 +785,7 @@ Next steps
 
   anx help bridge
   anx meta doc agent-bridge
-  anx bridge doctor --config ./agent.toml
+  anx bridge doctor --config ./bridge.toml
 ```
 
 ## `draft`
@@ -1130,12 +1132,12 @@ Recommended order
 
 1. `anx bridge install`
 2. `anx bridge workspace-id --handle <handle>` if a registration already exists and you need the real durable workspace id
-3. `anx bridge init-config --kind subprocess --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py`
-4. `anx bridge import-auth --config ./agent.toml --from-profile <agent>` when matching `anx` auth already exists so bridge auth and the default bridge `[anx].base_url` stay aligned
+3. `anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py`
+4. `anx bridge import-auth --config ./bridge.toml --from-profile <agent>` when matching `anx` auth already exists
 5. `anx-agent-bridge auth register ...` for the agent principal when auth does not already exist
-6. `anx bridge start --config ./agent.toml`
-7. `anx bridge status --config ./agent.toml` and `anx bridge doctor --config ./agent.toml` before expecting immediate online delivery
-8. `anx notifications list --status unread` or `anx-agent-bridge notifications list --config ./agent.toml --status unread` when you want to pull pending notifications directly
+6. `anx bridge start --config ./bridge.toml`
+7. `anx bridge status --config ./bridge.toml` and `anx bridge doctor --config ./bridge.toml` before expecting immediate online delivery
+8. `anx notifications list --status unread` or `anx-agent-bridge notifications list --config ./bridge.toml --status unread` when you want to pull pending notifications directly
 
 Workspace-owned wake routing
 
@@ -4706,18 +4708,18 @@ Global flags:
 
 ## `bridge import-auth`
 
-Copy an existing `anx` profile and key into bridge auth state for one bridge config.
+Copy an existing `anx` profile and key into the bridge agent home auth state.
 
 ```text
 Local Help: bridge import-auth
 
 - Kind: `local helper`
-- Summary: Copy an existing `anx` profile and key into bridge auth state for one bridge config.
-- Composition: Pure local helper. Reads an existing `anx` profile plus Ed25519 key material, converts it into bridge auth state, writes it to the bridge config's `[auth].state_path`, and syncs `[anx].base_url` when the config still has the default local value.
-- JSON body: `config_path`, `auth_state_path`, `profile_path`, `profile_agent`, `username`, `actor_id`, `agent_id`, `key_id`
+- Summary: Copy an existing `anx` profile and key into the bridge agent home auth state.
+- Composition: Pure local helper. Reads an existing `anx` profile plus Ed25519 key material, converts it into bridge auth state, stamps agent.toml identity including public key fingerprint, and reconciles wake.toml workspace base URLs.
+- JSON body: `config_path`, `auth_state_path`, `wake_config_path`, `profile_path`, `profile_agent`, `username`, `actor_id`, `agent_id`, `key_id`, `public_key_fingerprint`
 - Examples:
-  - `anx bridge import-auth --config ./agent.toml --from-profile agent-a`
-  - `anx --agent agent-a bridge import-auth --config ./agent.toml`
+  - `anx bridge import-auth --config ./bridge.toml --from-profile agent-a`
+  - `anx --agent agent-a bridge import-auth --config ./bridge.toml`
 
 Flags:
   --config <path>              Bridge config whose auth state should be populated.
@@ -4732,29 +4734,30 @@ Global flags:
 
 ## `bridge init-config`
 
-Write a minimal agent bridge TOML config with the pending-until-check-in lifecycle baked in.
+Write a bridge runtime config plus an agent home with wake subscriptions.
 
 ```text
 Local Help: bridge init-config
 
 - Kind: `local helper`
-- Summary: Write a minimal agent bridge TOML config with the pending-until-check-in lifecycle baked in.
-- Composition: Pure local helper. Renders one minimal bridge config template with explicit workspace-id and readiness settings; optionally writes it to disk.
-- JSON body: `kind`, `output`, `workspace_id`, `handle`, `content`
+- Summary: Write a bridge runtime config plus an agent home with wake subscriptions.
+- Composition: Pure local helper. Renders a bridge runtime config that references an explicit agent home, plus agent.toml and wake.toml when --output is used.
+- JSON body: `kind`, `output`, `agent_home`, `workspace_ids`, `handle`, `content`
 - Examples:
-  - `anx bridge init-config --kind subprocess --output ./agent.toml --workspace-id ws_main --handle myagent --adapter-entrypoint ./adapter.py`
-  - `anx bridge init-config --kind python-plugin --output ./agent.toml --workspace-id ws_main --handle myagent --plugin-module my_bridge --plugin-factory build_adapter`
+  - `anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --workspace-id ws_main --handle myagent --adapter-entrypoint ./adapter.py`
+  - `anx bridge init-config --kind python-plugin --output ./bridge.toml --agent-home ./.anx --workspace-id ws_main --workspace-id ws_ops --handle myagent --plugin-module my_bridge --plugin-factory build_adapter`
 
 Flags:
   --kind <subprocess|python-plugin> Template kind to render.
   --output <path>              Write the rendered TOML to a file. Omit to print it.
-  --base-url <url>             ANX base URL for `[anx].base_url` (defaults to active CLI profile base URL).
-  --workspace-id <id>          Durable ANX workspace id. Do not use a slug or UI path segment.
-  --workspace-name <name>      Display name for `[anx].workspace_name`.
-  --workspace-url <url>        Optional `[anx].workspace_url`.
+  --agent-home <dir>           Agent home directory for identity, auth, wake config, state, and logs. Default: ./.anx.
+  --base-url <url>             ANX base URL for agent.toml identity and wake.toml workspace entries.
+  --workspace-id <id>          Durable ANX workspace id. Repeat for multi-workspace agents; do not use slugs.
+  --workspace-name <name>      Display name for the first wake workspace.
+  --workspace-url <url>        Optional URL for the first wake workspace.
   --handle <name>              Agent handle (required); must match the principal username for bridge-managed registration.
-  --auth-state-path <path>     Optional `[auth].state_path` override.
-  --state-dir <path>           Optional `[agent].state_dir` override prefix.
+  --auth-state-path <path>     Optional agent-home-relative auth state path override.
+  --state-dir <path>           Optional agent-home-relative bridge state directory.
   --adapter-entrypoint <path>  Subprocess template: script path used as the second element of `[adapter].command` after python3.
   --plugin-module <module>     python-plugin template: Python module for `[adapter].plugin_module`.
   --plugin-factory <callable>  python-plugin template: factory name for `[adapter].plugin_factory`.
@@ -4803,7 +4806,7 @@ Local Help: bridge doctor
 - JSON body: `checks`, `registration`, `bridge_binary`, `python`
 - Examples:
   - `anx bridge doctor`
-  - `anx bridge doctor --config ./agent.toml`
+  - `anx bridge doctor --config ./bridge.toml`
 
 Flags:
   --config <path>              Bridge config to validate with `registration status`.
@@ -4830,10 +4833,10 @@ Local Help: bridge start
 - Composition: Pure local helper. Resolves the installed `anx-agent-bridge` binary, infers the config role, launches the daemon in the background, and records pid/log metadata in a per-config manager directory.
 - JSON body: `kind`, `config_path`, `pid`, `log_path`, `process_state_path`, `command`
 - Examples:
-  - `anx bridge start --config ./agent.toml`
+  - `anx bridge start --config ./bridge.toml`
 
 Flags:
-  --config <path>              Bridge config to start. The config must contain `[agent]`.
+  --config <path>              Bridge runtime config to start. The config must contain top-level `agent_home`.
   --install-dir <dir>          Root directory for the managed bridge virtualenv.
   --bin-dir <dir>              Directory where the managed `anx-agent-bridge` wrapper should exist.
 
@@ -4856,7 +4859,7 @@ Local Help: bridge stop
 - Composition: Pure local helper. Reads the per-config manager state, sends SIGTERM, and records the stopped timestamp once the daemon exits.
 - JSON body: `kind`, `config_path`, `pid`, `stopped_at`, `last_signal`
 - Examples:
-  - `anx bridge stop --config ./agent.toml --force`
+  - `anx bridge stop --config ./bridge.toml --force`
 
 Flags:
   --config <path>              Managed config to stop.
@@ -4882,7 +4885,7 @@ Local Help: bridge restart
 - Composition: Pure local helper. Stops the existing managed process if one is present, then launches a fresh daemon and updates the manager state.
 - JSON body: `kind`, `config_path`, `pid`, `log_path`, `process_state_path`
 - Examples:
-  - `anx bridge restart --config ./agent.toml`
+  - `anx bridge restart --config ./bridge.toml`
 
 Flags:
   --config <path>              Managed config to restart.
@@ -4907,7 +4910,7 @@ Local Help: bridge status
 - Composition: Pure local helper plus optional bridge CLI calls. Reports the background process state, log path, and agent registration readiness when available.
 - JSON body: `kind`, `managed`, `running`, `pid`, `log_path`, `process_state_path`, `registration`
 - Examples:
-  - `anx bridge status --config ./agent.toml`
+  - `anx bridge status --config ./bridge.toml`
 
 Flags:
   --config <path>              Managed config to inspect.
@@ -4933,7 +4936,7 @@ Local Help: bridge logs
 - Composition: Pure local helper. Reads the per-config managed log file and returns the last N lines without requiring direct shell access.
 - JSON body: `kind`, `config_path`, `log_path`, `lines`, `content`
 - Examples:
-  - `anx bridge logs --config ./agent.toml --lines 200`
+  - `anx bridge logs --config ./bridge.toml --lines 200`
 
 Flags:
   --config <path>              Managed config whose log should be tailed.

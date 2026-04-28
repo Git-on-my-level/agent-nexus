@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import hashlib
 import json
 from dataclasses import asdict
+from pathlib import Path
 
 from . import __version__
 from .auth import AuthManager
@@ -27,6 +30,72 @@ def build_client(config: LoadedConfig, auth: AuthManager | None = None) -> ANXCl
     return ANXClient(config.anx.base_url, verify_ssl=config.anx.verify_ssl, auth_manager=auth)
 
 
+def validate_auth_identity(config: LoadedConfig, auth: AuthManager) -> None:
+    state = auth.require_state()
+    if state.username != config.agent.handle:
+        raise ValueError(
+            f"auth username {state.username!r} does not match agent home identity.handle {config.agent.handle!r}"
+        )
+    expected = {
+        "agent_id": config.expected_agent_id,
+        "actor_id": config.expected_actor_id,
+        "key_id": config.expected_key_id,
+        "public_key_fingerprint": config.expected_public_key_fingerprint,
+    }
+    actual = {
+        "agent_id": state.agent_id,
+        "actor_id": state.actor_id,
+        "key_id": state.key_id,
+        "public_key_fingerprint": public_key_fingerprint(state.public_key_b64),
+    }
+    mismatches = [
+        f"{key}: expected {want!r}, auth has {actual[key]!r}"
+        for key, want in expected.items()
+        if want and want != actual[key]
+    ]
+    if mismatches:
+        raise ValueError("auth state does not match agent home identity (" + "; ".join(mismatches) + ")")
+
+
+def public_key_fingerprint(public_key_b64: str) -> str:
+    raw = base64.b64decode(public_key_b64)
+    return "sha256:" + hashlib.sha256(raw).hexdigest()
+
+
+def stamp_agent_manifest_identity(config: LoadedConfig, *, agent_id: str, actor_id: str, key_id: str, public_key_b64: str) -> None:
+    path = config.agent_manifest_path
+    text = path.read_text(encoding="utf-8")
+    replacements = {
+        "agent_id": agent_id,
+        "actor_id": actor_id,
+        "key_id": key_id,
+        "public_key_fingerprint": public_key_fingerprint(public_key_b64),
+    }
+    updated = text
+    for key, value in replacements.items():
+        if not value:
+            continue
+        updated = replace_toml_string(updated, "identity", key, value)
+    path.write_text(updated, encoding="utf-8")
+
+
+def replace_toml_string(content: str, section: str, key: str, value: str) -> str:
+    lines = content.splitlines()
+    current_section = ""
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            current_section = stripped.strip("[]").strip()
+            continue
+        if current_section != section or "=" not in line:
+            continue
+        name = line.split("=", 1)[0].strip()
+        if name == key:
+            lines[index] = f'{key} = {json.dumps(value)}'
+            return "\n".join(lines) + "\n"
+    raise ValueError(f"{Path('agent.toml')} is missing [{section}].{key}")
+
+
 def build_adapter(config: LoadedConfig):
     if config.agent is None:
         raise ValueError("bridge adapter requires [agent] in config")
@@ -37,7 +106,14 @@ def build_adapter(config: LoadedConfig):
         command = config.adapter.get_list("command")
         if not command:
             raise ValueError("subprocess adapter requires [adapter].command as a non-empty string array")
-        cwd = config.adapter.get_str("cwd", "") or None
+        cwd = config.adapter.get_str("cwd", "")
+        if cwd:
+            cwd_path = Path(cwd).expanduser()
+            if not cwd_path.is_absolute():
+                cwd_path = (config.config_dir / cwd_path).resolve()
+            cwd = str(cwd_path)
+        else:
+            cwd = str(config.config_dir)
         env_raw = config.adapter.raw.get("env")
         env_str: dict[str, str] | None = None
         if isinstance(env_raw, dict):
@@ -77,6 +153,13 @@ def cmd_auth_register(args: argparse.Namespace) -> int:
         if not username:
             raise ValueError("--username is required when config has no [agent] section")
         state = auth.register(client, username=username, bootstrap_token=args.bootstrap_token, invite_token=args.invite_token)
+        stamp_agent_manifest_identity(
+            config,
+            agent_id=state.agent_id,
+            actor_id=state.actor_id,
+            key_id=state.key_id,
+            public_key_b64=state.public_key_b64,
+        )
         result = {
             "username": state.username,
             "agent_id": state.agent_id,
@@ -85,6 +168,7 @@ def cmd_auth_register(args: argparse.Namespace) -> int:
             "auth_state_path": str(config.auth_state_path),
         }
         if args.apply_registration and config.agent is not None:
+            validate_auth_identity(config, auth)
             reg_result = apply_registration(config, auth, build_client(config, auth))
             result["registration_agent_id"] = reg_result.agent_id
         print(json.dumps(result, indent=2))
@@ -98,6 +182,7 @@ def cmd_auth_whoami(args: argparse.Namespace) -> int:
     auth = AuthManager(config.auth_state_path)
     client = build_client(config, auth)
     try:
+        validate_auth_identity(config, auth)
         payload = auth.whoami(client)
         print(json.dumps(payload, indent=2))
         return 0
@@ -110,6 +195,7 @@ def cmd_registration_apply(args: argparse.Namespace) -> int:
     auth = AuthManager(config.auth_state_path)
     client = build_client(config, auth)
     try:
+        validate_auth_identity(config, auth)
         result = apply_registration(config, auth, client)
         print(json.dumps(asdict(result), indent=2))
         return 0
@@ -122,6 +208,7 @@ def cmd_registration_status(args: argparse.Namespace) -> int:
     auth = AuthManager(config.auth_state_path)
     client = build_client(config, auth)
     try:
+        validate_auth_identity(config, auth)
         result = registration_status(config, auth, client)
         print(json.dumps(asdict(result), indent=2))
         return 0
@@ -134,6 +221,7 @@ def cmd_bridge_run(args: argparse.Namespace) -> int:
     if config.agent is None:
         raise ValueError("bridge run requires an [agent] section")
     auth = AuthManager(config.auth_state_path)
+    validate_auth_identity(config, auth)
     client = build_client(config, auth)
     state_path = config.agent.state_dir / "bridge-state.json"
     state = JSONStateStore(state_path, ensure_bridge_identity=True)
@@ -148,6 +236,7 @@ def cmd_bridge_doctor(args: argparse.Namespace) -> int:
     if config.agent is None:
         raise ValueError("bridge doctor requires an [agent] section")
     auth = AuthManager(config.auth_state_path)
+    validate_auth_identity(config, auth)
     client = build_client(config, auth)
     state_path = config.agent.state_dir / "bridge-state.json"
     state = JSONStateStore(state_path, ensure_bridge_identity=True)
@@ -155,7 +244,7 @@ def cmd_bridge_doctor(args: argparse.Namespace) -> int:
     bridge = AgentBridge(config, auth, client, state, adapter)
     result = {
         "handle": config.agent.handle,
-        "workspace_id": config.anx.workspace_id,
+        "workspace_ids": config.workspace_ids,
         "bridge_instance_id": state.bridge_instance_id,
         "adapter": bridge.doctor(),
     }
@@ -212,6 +301,7 @@ def cmd_notifications_list(args: argparse.Namespace) -> int:
     auth = AuthManager(config.auth_state_path)
     client = build_client(config, auth)
     try:
+        validate_auth_identity(config, auth)
         statuses = [str(item).strip() for item in (args.status or []) if str(item).strip()]
         payload = client.list_agent_notifications(statuses=statuses or None, order=args.order)
         print(json.dumps({"items": payload}, indent=2))
@@ -225,6 +315,7 @@ def cmd_notifications_read(args: argparse.Namespace) -> int:
     auth = AuthManager(config.auth_state_path)
     client = build_client(config, auth)
     try:
+        validate_auth_identity(config, auth)
         payload = client.mark_agent_notification_read(args.wakeup_id)
         print(json.dumps(payload, indent=2))
         return 0
@@ -237,6 +328,7 @@ def cmd_notifications_dismiss(args: argparse.Namespace) -> int:
     auth = AuthManager(config.auth_state_path)
     client = build_client(config, auth)
     try:
+        validate_auth_identity(config, auth)
         payload = client.dismiss_agent_notification(args.wakeup_id)
         print(json.dumps(payload, indent=2))
         return 0

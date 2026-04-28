@@ -453,6 +453,7 @@ def test_bridge_checkin_upserts_active_registration():
     assert checkin_event["provenance"] == {"sources": ["inferred"]}
     assert checkin_payload["bridge_instance_id"] == "bridge-test"
     assert checkin_payload["workspace_id"] == "ws_main"
+    assert checkin_payload["workspace_ids"] == ["ws_main"]
     assert checkin_payload["proof_signature_b64"] != ""
 
 

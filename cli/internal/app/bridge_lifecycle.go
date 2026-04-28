@@ -34,10 +34,10 @@ func init() {
 			JSONShape:   "`kind`, `config_path`, `pid`, `log_path`, `process_state_path`, `command`",
 			Composition: "Pure local helper. Resolves the installed `anx-agent-bridge` binary, infers the config role, launches the daemon in the background, and records pid/log metadata in a per-config manager directory.",
 			Examples: []string{
-				"anx bridge start --config ./agent.toml",
+				"anx bridge start --config ./bridge.toml",
 			},
 			Flags: []localHelperFlag{
-				{Name: "--config <path>", Description: "Bridge config to start. The config must contain `[agent]`."},
+				{Name: "--config <path>", Description: "Bridge runtime config to start. The config must contain top-level `agent_home`."},
 				{Name: "--install-dir <dir>", Description: "Root directory for the managed bridge virtualenv."},
 				{Name: "--bin-dir <dir>", Description: "Directory where the managed `anx-agent-bridge` wrapper should exist."},
 			},
@@ -48,7 +48,7 @@ func init() {
 			JSONShape:   "`kind`, `config_path`, `pid`, `stopped_at`, `last_signal`",
 			Composition: "Pure local helper. Reads the per-config manager state, sends SIGTERM, and records the stopped timestamp once the daemon exits.",
 			Examples: []string{
-				"anx bridge stop --config ./agent.toml --force",
+				"anx bridge stop --config ./bridge.toml --force",
 			},
 			Flags: []localHelperFlag{
 				{Name: "--config <path>", Description: "Managed config to stop."},
@@ -62,7 +62,7 @@ func init() {
 			JSONShape:   "`kind`, `config_path`, `pid`, `log_path`, `process_state_path`",
 			Composition: "Pure local helper. Stops the existing managed process if one is present, then launches a fresh daemon and updates the manager state.",
 			Examples: []string{
-				"anx bridge restart --config ./agent.toml",
+				"anx bridge restart --config ./bridge.toml",
 			},
 			Flags: []localHelperFlag{
 				{Name: "--config <path>", Description: "Managed config to restart."},
@@ -75,7 +75,7 @@ func init() {
 			JSONShape:   "`kind`, `managed`, `running`, `pid`, `log_path`, `process_state_path`, `registration`",
 			Composition: "Pure local helper plus optional bridge CLI calls. Reports the background process state, log path, and agent registration readiness when available.",
 			Examples: []string{
-				"anx bridge status --config ./agent.toml",
+				"anx bridge status --config ./bridge.toml",
 			},
 			Flags: []localHelperFlag{
 				{Name: "--config <path>", Description: "Managed config to inspect."},
@@ -89,7 +89,7 @@ func init() {
 			JSONShape:   "`kind`, `config_path`, `log_path`, `lines`, `content`",
 			Composition: "Pure local helper. Reads the per-config managed log file and returns the last N lines without requiring direct shell access.",
 			Examples: []string{
-				"anx bridge logs --config ./agent.toml --lines 200",
+				"anx bridge logs --config ./bridge.toml --lines 200",
 			},
 			Flags: []localHelperFlag{
 				{Name: "--config <path>", Description: "Managed config whose log should be tailed."},
@@ -511,11 +511,28 @@ func loadBridgeManagedConfig(configPath string) (bridgeManagedConfig, error) {
 }
 
 func inferBridgeRuntimeKind(content string, configPath string) (runtimeKind string, runCommand string, displayName string, err error) {
-	hasAgent := bridgeConfigHasSection(content, "agent")
-	if hasAgent {
+	if strings.TrimSpace(bridgeConfigStringValue(content, "", "agent_home")) != "" || bridgeConfigHasTopLevelKey(content, "agent_home") {
 		return "agent", "bridge", filepath.Base(configPath), nil
 	}
-	return "", "", "", errnorm.Usage("invalid_request", "bridge config must contain an [agent] section")
+	return "", "", "", errnorm.Usage("invalid_request", "bridge config must contain top-level agent_home")
+}
+
+func bridgeConfigHasTopLevelKey(content string, key string) bool {
+	currentSection := ""
+	for _, line := range strings.Split(content, "\n") {
+		if matches := bridgeSectionHeaderPattern.FindStringSubmatch(line); len(matches) == 2 {
+			currentSection = matches[1]
+			continue
+		}
+		if currentSection != "" {
+			continue
+		}
+		name, _, ok := parseBridgeConfigAssignment(line)
+		if ok && name == key {
+			return true
+		}
+	}
+	return false
 }
 
 func bridgeConfigHasSection(content string, section string) bool {

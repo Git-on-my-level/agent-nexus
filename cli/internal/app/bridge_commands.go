@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -77,12 +79,12 @@ func init() {
 		},
 		localHelperTopic{
 			Path:        "bridge import-auth",
-			Summary:     "Copy an existing `anx` profile and key into bridge auth state for one bridge config.",
-			JSONShape:   "`config_path`, `auth_state_path`, `profile_path`, `profile_agent`, `username`, `actor_id`, `agent_id`, `key_id`",
-			Composition: "Pure local helper. Reads an existing `anx` profile plus Ed25519 key material, converts it into bridge auth state, writes it to the bridge config's `[auth].state_path`, and syncs `[anx].base_url` when the config still has the default local value.",
+			Summary:     "Copy an existing `anx` profile and key into the bridge agent home auth state.",
+			JSONShape:   "`config_path`, `auth_state_path`, `wake_config_path`, `profile_path`, `profile_agent`, `username`, `actor_id`, `agent_id`, `key_id`, `public_key_fingerprint`",
+			Composition: "Pure local helper. Reads an existing `anx` profile plus Ed25519 key material, converts it into bridge auth state, stamps agent.toml identity including public key fingerprint, and reconciles wake.toml workspace base URLs.",
 			Examples: []string{
-				"anx bridge import-auth --config ./agent.toml --from-profile agent-a",
-				"anx --agent agent-a bridge import-auth --config ./agent.toml",
+				"anx bridge import-auth --config ./bridge.toml --from-profile agent-a",
+				"anx --agent agent-a bridge import-auth --config ./bridge.toml",
 			},
 			Flags: []localHelperFlag{
 				{Name: "--config <path>", Description: "Bridge config whose auth state should be populated."},
@@ -91,23 +93,24 @@ func init() {
 		},
 		localHelperTopic{
 			Path:        "bridge init-config",
-			Summary:     "Write a minimal agent bridge TOML config with the pending-until-check-in lifecycle baked in.",
-			JSONShape:   "`kind`, `output`, `workspace_id`, `handle`, `content`",
-			Composition: "Pure local helper. Renders one minimal bridge config template with explicit workspace-id and readiness settings; optionally writes it to disk.",
+			Summary:     "Write a bridge runtime config plus an agent home with wake subscriptions.",
+			JSONShape:   "`kind`, `output`, `agent_home`, `workspace_ids`, `handle`, `content`",
+			Composition: "Pure local helper. Renders a bridge runtime config that references an explicit agent home, plus agent.toml and wake.toml when --output is used.",
 			Examples: []string{
-				"anx bridge init-config --kind subprocess --output ./agent.toml --workspace-id ws_main --handle myagent --adapter-entrypoint ./adapter.py",
-				"anx bridge init-config --kind python-plugin --output ./agent.toml --workspace-id ws_main --handle myagent --plugin-module my_bridge --plugin-factory build_adapter",
+				"anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --workspace-id ws_main --handle myagent --adapter-entrypoint ./adapter.py",
+				"anx bridge init-config --kind python-plugin --output ./bridge.toml --agent-home ./.anx --workspace-id ws_main --workspace-id ws_ops --handle myagent --plugin-module my_bridge --plugin-factory build_adapter",
 			},
 			Flags: []localHelperFlag{
 				{Name: "--kind <subprocess|python-plugin>", Description: "Template kind to render."},
 				{Name: "--output <path>", Description: "Write the rendered TOML to a file. Omit to print it."},
-				{Name: "--base-url <url>", Description: "ANX base URL for `[anx].base_url` (defaults to active CLI profile base URL)."},
-				{Name: "--workspace-id <id>", Description: "Durable ANX workspace id. Do not use a slug or UI path segment."},
-				{Name: "--workspace-name <name>", Description: "Display name for `[anx].workspace_name`."},
-				{Name: "--workspace-url <url>", Description: "Optional `[anx].workspace_url`."},
+				{Name: "--agent-home <dir>", Description: "Agent home directory for identity, auth, wake config, state, and logs. Default: ./.anx."},
+				{Name: "--base-url <url>", Description: "ANX base URL for agent.toml identity and wake.toml workspace entries."},
+				{Name: "--workspace-id <id>", Description: "Durable ANX workspace id. Repeat for multi-workspace agents; do not use slugs."},
+				{Name: "--workspace-name <name>", Description: "Display name for the first wake workspace."},
+				{Name: "--workspace-url <url>", Description: "Optional URL for the first wake workspace."},
 				{Name: "--handle <name>", Description: "Agent handle (required); must match the principal username for bridge-managed registration."},
-				{Name: "--auth-state-path <path>", Description: "Optional `[auth].state_path` override."},
-				{Name: "--state-dir <path>", Description: "Optional `[agent].state_dir` override prefix."},
+				{Name: "--auth-state-path <path>", Description: "Optional agent-home-relative auth state path override."},
+				{Name: "--state-dir <path>", Description: "Optional agent-home-relative bridge state directory."},
 				{Name: "--adapter-entrypoint <path>", Description: "Subprocess template: script path used as the second element of `[adapter].command` after python3."},
 				{Name: "--plugin-module <module>", Description: "python-plugin template: Python module for `[adapter].plugin_module`."},
 				{Name: "--plugin-factory <callable>", Description: "python-plugin template: factory name for `[adapter].plugin_factory`."},
@@ -132,7 +135,7 @@ func init() {
 			Composition: "Pure local helper plus optional bridge CLI calls. Probes Python, the managed install, and `registration status` for a supplied config.",
 			Examples: []string{
 				"anx bridge doctor",
-				"anx bridge doctor --config ./agent.toml",
+				"anx bridge doctor --config ./bridge.toml",
 			},
 			Flags: []localHelperFlag{
 				{Name: "--config <path>", Description: "Bridge config to validate with `registration status`."},
@@ -218,12 +221,12 @@ Recommended order
 
 1. `+"`anx bridge install`"+`
 2. `+"`anx bridge workspace-id --handle <handle>`"+` if a registration already exists and you need the real durable workspace id
-3. `+"`anx bridge init-config --kind subprocess --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py`"+`
-4. `+"`anx bridge import-auth --config ./agent.toml --from-profile <agent>`"+` when matching `+"`anx`"+` auth already exists so bridge auth and the default bridge `+"`[anx].base_url`"+` stay aligned
+3. `+"`anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py`"+`
+4. `+"`anx bridge import-auth --config ./bridge.toml --from-profile <agent>`"+` when matching `+"`anx`"+` auth already exists
 5. `+"`anx-agent-bridge auth register ...`"+` for the agent principal when auth does not already exist
-6. `+"`anx bridge start --config ./agent.toml`"+`
-7. `+"`anx bridge status --config ./agent.toml`"+` and `+"`anx bridge doctor --config ./agent.toml`"+` before expecting immediate online delivery
-8. `+"`anx notifications list --status unread`"+` or `+"`anx-agent-bridge notifications list --config ./agent.toml --status unread`"+` when you want to pull pending notifications directly
+6. `+"`anx bridge start --config ./bridge.toml`"+`
+7. `+"`anx bridge status --config ./bridge.toml`"+` and `+"`anx bridge doctor --config ./bridge.toml`"+` before expecting immediate online delivery
+8. `+"`anx notifications list --status unread`"+` or `+"`anx-agent-bridge notifications list --config ./bridge.toml --status unread`"+` when you want to pull pending notifications directly
 
 Workspace-owned wake routing
 
@@ -326,9 +329,9 @@ func (a *App) runBridgeInstall(ctx context.Context, args []string) (*commandResu
 		"Python: " + pythonRuntime.Command + " (" + pythonRuntime.Version + ")",
 		"Installed ref: " + ref,
 		"Version: " + strings.TrimSpace(versionOut),
-		"Next step: anx bridge init-config --kind subprocess --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py",
+		"Next step: anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py",
 		"Alternative: --kind python-plugin with --plugin-module and --plugin-factory for in-process Python adapters.",
-		"Next step: anx bridge doctor --config ./agent.toml once the bridge has checked in",
+		"Next step: anx bridge doctor --config ./bridge.toml once the bridge has checked in",
 	}
 	if !bridgePathContains(a.Getenv, binDir) {
 		lines = append(lines, "PATH note: add "+binDir+" to PATH to run `anx-agent-bridge` directly.")
@@ -426,49 +429,41 @@ func (a *App) runBridgeImportAuth(args []string, cfg config.Resolved) (*commandR
 		return nil, err
 	}
 
-	profileBaseURL := strings.TrimSpace(prof.BaseURL)
-	var baseURLUpdated bool
-	var baseURLWarning string
-	if profileBaseURL != "" {
-		configBaseURL := strings.TrimSpace(configDetails.BaseURL)
-		if configBaseURL == "" || configBaseURL == "http://127.0.0.1:8000" {
-			if profileBaseURL != configBaseURL {
-				updated, err := bridgeUpdateConfigBaseURL(configDetails.ConfigPath, profileBaseURL)
-				if err != nil {
-					return nil, errnorm.Wrap(errnorm.KindLocal, "bridge_config_base_url_failed", "failed to update [anx].base_url in bridge config", err)
-				}
-				baseURLUpdated = updated
-			}
-		} else if profileBaseURL != configBaseURL {
-			baseURLWarning = fmt.Sprintf("WARNING: config [anx].base_url (%s) differs from imported profile base_url (%s); leaving config unchanged.", configBaseURL, profileBaseURL)
-		}
+	if err := bridgeUpdateAgentManifestIdentity(configDetails.AgentManifestPath, prof, publicKey); err != nil {
+		return nil, err
+	}
+	wakeUpdated, err := bridgeUpdateWakeConfigBaseURL(configDetails.WakeConfigPath, prof.BaseURL)
+	if err != nil {
+		return nil, err
 	}
 
 	lines := []string{
 		"Bridge auth imported.",
 		"Config: " + configDetails.ConfigPath,
+		"Agent home: " + configDetails.AgentHome,
 		"Auth state: " + configDetails.AuthStatePath,
 		"Source profile: " + profilePath,
 		"Username: " + username,
 		"Actor ID: " + strings.TrimSpace(prof.ActorID),
 	}
-	if baseURLUpdated {
-		lines = append(lines, "Base URL updated: "+profileBaseURL)
-	}
-	if baseURLWarning != "" {
-		lines = append(lines, baseURLWarning)
+	lines = append(lines, "Agent manifest identity updated: "+configDetails.AgentManifestPath)
+	if wakeUpdated {
+		lines = append(lines, "Wake config base URLs updated: "+configDetails.WakeConfigPath)
 	}
 	return &commandResult{
 		Text: strings.Join(lines, "\n"),
 		Data: map[string]any{
-			"config_path":     configDetails.ConfigPath,
-			"auth_state_path": configDetails.AuthStatePath,
-			"profile_path":    profilePath,
-			"profile_agent":   profileAgent,
-			"username":        username,
-			"actor_id":        strings.TrimSpace(prof.ActorID),
-			"agent_id":        strings.TrimSpace(prof.AgentID),
-			"key_id":          strings.TrimSpace(prof.KeyID),
+			"config_path":            configDetails.ConfigPath,
+			"agent_home":             configDetails.AgentHome,
+			"auth_state_path":        configDetails.AuthStatePath,
+			"wake_config_path":       configDetails.WakeConfigPath,
+			"profile_path":           profilePath,
+			"profile_agent":          profileAgent,
+			"username":               username,
+			"actor_id":               strings.TrimSpace(prof.ActorID),
+			"agent_id":               strings.TrimSpace(prof.AgentID),
+			"key_id":                 strings.TrimSpace(prof.KeyID),
+			"public_key_fingerprint": bridgePublicKeyFingerprint(publicKey),
 		},
 	}, nil
 }
@@ -477,8 +472,9 @@ func (a *App) runBridgeInitConfig(args []string, cfg config.Resolved) (*commandR
 	fs := newSilentFlagSet("bridge init-config")
 	var kindFlag trackedString
 	var outputFlag trackedString
+	var agentHomeFlag trackedString
 	var baseURLFlag trackedString
-	var workspaceIDFlag trackedString
+	var workspaceIDFlags trackedStrings
 	var workspaceNameFlag trackedString
 	var workspaceURLFlag trackedString
 	var handleFlag trackedString
@@ -489,8 +485,9 @@ func (a *App) runBridgeInitConfig(args []string, cfg config.Resolved) (*commandR
 	var pluginFactoryFlag trackedString
 	fs.Var(&kindFlag, "kind", "Template kind: subprocess or python-plugin")
 	fs.Var(&outputFlag, "output", "Write the rendered TOML to a file")
+	fs.Var(&agentHomeFlag, "agent-home", "Directory for this local agent identity")
 	fs.Var(&baseURLFlag, "base-url", "ANX base URL")
-	fs.Var(&workspaceIDFlag, "workspace-id", "Durable ANX workspace id")
+	fs.Var(&workspaceIDFlags, "workspace-id", "Durable ANX workspace id; repeat for multi-workspace agents")
 	fs.Var(&workspaceNameFlag, "workspace-name", "Display name for the workspace")
 	fs.Var(&workspaceURLFlag, "workspace-url", "Workspace URL shown in listings")
 	fs.Var(&handleFlag, "handle", "Agent handle for bridge templates")
@@ -510,9 +507,9 @@ func (a *App) runBridgeInitConfig(args []string, cfg config.Resolved) (*commandR
 	if baseURL == "" {
 		baseURL = cfg.BaseURL
 	}
-	workspaceID := strings.TrimSpace(workspaceIDFlag.value)
-	if workspaceID == "" {
-		return nil, errnorm.Usage("invalid_request", "--workspace-id is required; use the durable workspace id, not a slug")
+	workspaceIDs := uniqueNonEmptyStrings(workspaceIDFlags.values)
+	if len(workspaceIDs) == 0 {
+		return nil, errnorm.Usage("invalid_request", "at least one --workspace-id is required; use durable workspace ids, not slugs")
 	}
 	workspaceName := strings.TrimSpace(workspaceNameFlag.value)
 	if workspaceName == "" {
@@ -531,10 +528,15 @@ func (a *App) runBridgeInitConfig(args []string, cfg config.Resolved) (*commandR
 		}
 	}
 
+	agentHome := strings.TrimSpace(agentHomeFlag.value)
+	if agentHome == "" {
+		agentHome = ".anx"
+	}
 	rendered, handle, err := renderBridgeConfigTemplate(bridgeTemplateParams{
 		Kind:              kind,
+		AgentHome:         agentHome,
 		BaseURL:           baseURL,
-		WorkspaceID:       workspaceID,
+		WorkspaceIDs:      workspaceIDs,
 		WorkspaceName:     workspaceName,
 		WorkspaceURL:      strings.TrimSpace(workspaceURLFlag.value),
 		Handle:            handle,
@@ -553,10 +555,43 @@ func (a *App) runBridgeInitConfig(args []string, cfg config.Resolved) (*commandR
 		if err := bridgeWriteConfig(outputPath, rendered); err != nil {
 			return nil, err
 		}
+		outputAbs, err := filepath.Abs(outputPath)
+		if err != nil {
+			return nil, errnorm.Wrap(errnorm.KindLocal, "bridge_config_resolve_failed", "failed to resolve bridge config path", err)
+		}
+		agentHomePath, err := expandBridgePath(filepath.Dir(outputAbs), agentHome)
+		if err != nil {
+			return nil, err
+		}
+		agentManifest, wakeConfig := renderAgentHomeFiles(bridgeTemplateParams{
+			Kind:              kind,
+			AgentHome:         agentHome,
+			BaseURL:           baseURL,
+			WorkspaceIDs:      workspaceIDs,
+			WorkspaceName:     workspaceName,
+			WorkspaceURL:      strings.TrimSpace(workspaceURLFlag.value),
+			Handle:            handle,
+			AuthStatePath:     strings.TrimSpace(authStateFlag.value),
+			StateDir:          strings.TrimSpace(stateDirFlag.value),
+			AdapterEntrypoint: strings.TrimSpace(adapterEntryFlag.value),
+			PluginModule:      strings.TrimSpace(pluginModuleFlag.value),
+			PluginFactory:     strings.TrimSpace(pluginFactoryFlag.value),
+		})
+		if err := bridgeMkdirAll(agentHomePath, 0o700); err != nil {
+			return nil, errnorm.Wrap(errnorm.KindLocal, "agent_home_create_failed", "failed to create agent home", err)
+		}
+		if err := bridgeWriteFile(filepath.Join(agentHomePath, "agent.toml"), []byte(agentManifest), 0o600); err != nil {
+			return nil, errnorm.Wrap(errnorm.KindLocal, "agent_home_write_failed", "failed to write agent.toml", err)
+		}
+		if err := bridgeWriteFile(filepath.Join(agentHomePath, "wake.toml"), []byte(wakeConfig), 0o600); err != nil {
+			return nil, errnorm.Wrap(errnorm.KindLocal, "agent_home_write_failed", "failed to write wake.toml", err)
+		}
 		textLines := []string{
 			"Bridge config written.",
 			"Kind: " + kind,
 			"Path: " + outputPath,
+			"Agent home: " + agentHomePath,
+			"Wake config: " + filepath.Join(agentHomePath, "wake.toml"),
 			"Lifecycle: registrations stay pending until the bridge checks in.",
 			"Next: implement your adapter (subprocess JSON or python_plugin), then `anx-agent-bridge adapter contract --config " + outputPath + "`.",
 		}
@@ -565,11 +600,12 @@ func (a *App) runBridgeInitConfig(args []string, cfg config.Resolved) (*commandR
 	return &commandResult{
 		Text: text,
 		Data: map[string]any{
-			"kind":         kind,
-			"output":       outputPath,
-			"workspace_id": workspaceID,
-			"handle":       handle,
-			"content":      rendered,
+			"kind":          kind,
+			"output":        outputPath,
+			"agent_home":    agentHome,
+			"workspace_ids": workspaceIDs,
+			"handle":        handle,
+			"content":       rendered,
 		},
 	}, nil
 }
@@ -665,7 +701,11 @@ func (a *App) runBridgeWorkspaceID(ctx context.Context, args []string, cfg confi
 		lines = append(lines, "- "+workspaceID)
 	}
 	if handle != "" {
-		lines = append(lines, "Next step: anx bridge init-config --kind subprocess --output ./agent.toml --workspace-id "+workspaceIDs[0]+" --handle "+handle+" --adapter-entrypoint ./adapter.py")
+		repeated := make([]string, 0, len(workspaceIDs))
+		for _, workspaceID := range workspaceIDs {
+			repeated = append(repeated, "--workspace-id "+workspaceID)
+		}
+		lines = append(lines, "Next step: anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx "+strings.Join(repeated, " ")+" --handle "+handle+" --adapter-entrypoint ./adapter.py")
 		lines = append(lines, "Or: --kind python-plugin --plugin-module <mod> --plugin-factory <callable> for an in-process Python adapter.")
 	}
 	return &commandResult{
@@ -874,8 +914,9 @@ func (a *App) runBridgeDoctor(ctx context.Context, args []string) (*commandResul
 
 type bridgeTemplateParams struct {
 	Kind              string
+	AgentHome         string
 	BaseURL           string
-	WorkspaceID       string
+	WorkspaceIDs      []string
 	WorkspaceName     string
 	WorkspaceURL      string
 	Handle            string
@@ -902,80 +943,124 @@ func normalizeBridgeInitConfigKind(kind string) string {
 }
 
 func renderBridgeConfigTemplate(params bridgeTemplateParams) (string, string, error) {
-	baseURL := firstNonEmptyString(params.BaseURL, "http://127.0.0.1:8000")
-	workspaceName := firstNonEmptyString(params.WorkspaceName, "Main")
-	workspaceURL := strings.TrimSpace(params.WorkspaceURL)
+	agentHome := firstNonEmptyString(params.AgentHome, ".anx")
 	kind := normalizeBridgeInitConfigKind(params.Kind)
 	switch kind {
 	case "subprocess":
 		handle := firstNonEmptyString(params.Handle, "<handle>")
-		authState := firstNonEmptyString(params.AuthStatePath, ".state/"+handle+"-auth.json")
-		stateDir := firstNonEmptyString(params.StateDir, ".state/"+handle)
+		stateDir := firstNonEmptyString(params.StateDir, "run/"+handle)
 		entry := firstNonEmptyString(params.AdapterEntrypoint, "./adapter.py")
 		return strings.TrimSpace(fmt.Sprintf(`
-[anx]
-base_url = %q
-workspace_id = %q
-workspace_name = %q
-workspace_url = %q
-verify_ssl = true
+agent_home = %q
+wake_config = "wake.toml"
 
-[auth]
-state_path = %q
-
-[agent]
-handle = %q
+[bridge]
 driver_kind = "custom"
 adapter_kind = "subprocess"
-state_dir = %q
-workspace_bindings = [%q]
 resume_policy = "resume_or_create"
 status = "pending"
 checkin_interval_seconds = 60
 checkin_ttl_seconds = 300
+
+[runtime]
+state_dir = %q
 
 [adapter]
 kind = "subprocess"
 command = ["python3", %q]
 timeout_seconds = 600
 doctor_timeout_seconds = 60
-`, baseURL, params.WorkspaceID, workspaceName, workspaceURL, authState, handle, stateDir, params.WorkspaceID, entry)) + "\n", handle, nil
+`, agentHome, stateDir, entry)) + "\n", handle, nil
 	case "python_plugin":
 		handle := firstNonEmptyString(params.Handle, "<handle>")
-		authState := firstNonEmptyString(params.AuthStatePath, ".state/"+handle+"-auth.json")
-		stateDir := firstNonEmptyString(params.StateDir, ".state/"+handle)
+		stateDir := firstNonEmptyString(params.StateDir, "run/"+handle)
 		mod := strings.TrimSpace(params.PluginModule)
 		fac := strings.TrimSpace(params.PluginFactory)
 		return strings.TrimSpace(fmt.Sprintf(`
-[anx]
-base_url = %q
-workspace_id = %q
-workspace_name = %q
-workspace_url = %q
-verify_ssl = true
+agent_home = %q
+wake_config = "wake.toml"
 
-[auth]
-state_path = %q
-
-[agent]
-handle = %q
+[bridge]
 driver_kind = "custom"
 adapter_kind = "python_plugin"
-state_dir = %q
-workspace_bindings = [%q]
 resume_policy = "resume_or_create"
 status = "pending"
 checkin_interval_seconds = 60
 checkin_ttl_seconds = 300
 
+[runtime]
+state_dir = %q
+
 [adapter]
 kind = "python_plugin"
 plugin_module = %q
 plugin_factory = %q
-`, baseURL, params.WorkspaceID, workspaceName, workspaceURL, authState, handle, stateDir, params.WorkspaceID, mod, fac)) + "\n", handle, nil
+`, agentHome, stateDir, mod, fac)) + "\n", handle, nil
 	default:
 		return "", "", errnorm.Usage("invalid_request", "unknown bridge config kind; use subprocess or python-plugin")
 	}
+}
+
+func renderAgentHomeFiles(params bridgeTemplateParams) (agentManifest string, wakeConfig string) {
+	baseURL := firstNonEmptyString(params.BaseURL, "http://127.0.0.1:8000")
+	handle := firstNonEmptyString(params.Handle, "<handle>")
+	authState := firstNonEmptyString(params.AuthStatePath, "profiles/default.json")
+	workspaceName := firstNonEmptyString(params.WorkspaceName, "Main")
+	workspaceURL := strings.TrimSpace(params.WorkspaceURL)
+	var wake strings.Builder
+	wake.WriteString("schema_version = 1\n\n")
+	for i, workspaceID := range uniqueNonEmptyStrings(params.WorkspaceIDs) {
+		name := workspaceName
+		if i > 0 {
+			name = workspaceID
+		}
+		wake.WriteString("[[workspaces]]\n")
+		wake.WriteString("id = " + strconv.Quote(workspaceID) + "\n")
+		wake.WriteString("name = " + strconv.Quote(name) + "\n")
+		wake.WriteString("base_url = " + strconv.Quote(baseURL) + "\n")
+		if workspaceURL != "" && i == 0 {
+			wake.WriteString("url = " + strconv.Quote(workspaceURL) + "\n")
+		}
+		wake.WriteString("enabled = true\n\n")
+	}
+	manifest := strings.TrimSpace(fmt.Sprintf(`
+schema_version = 1
+agent_home_id = %q
+profile = "default"
+
+[identity]
+base_url = %q
+handle = %q
+agent_id = ""
+actor_id = ""
+key_id = ""
+public_key_fingerprint = ""
+verify_ssl = true
+
+[auth]
+state_path = %q
+
+[wake]
+config_path = "wake.toml"
+`, "agenthome_"+shortBridgeHash(handle+"|"+baseURL), baseURL, handle, authState)) + "\n"
+	return manifest, strings.TrimSpace(wake.String()) + "\n"
+}
+
+func uniqueNonEmptyStrings(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := map[string]struct{}{}
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		out = append(out, trimmed)
+	}
+	return out
 }
 
 func firstNonEmptyString(values ...string) string {
@@ -1152,10 +1237,13 @@ func bridgePathContains(getenv func(string) string, dir string) bool {
 }
 
 type bridgeConfigDetails struct {
-	ConfigPath    string
-	AuthStatePath string
-	AgentHandle   string
-	BaseURL       string
+	ConfigPath        string
+	AgentHome         string
+	AgentManifestPath string
+	WakeConfigPath    string
+	AuthStatePath     string
+	AgentHandle       string
+	BaseURL           string
 }
 
 func loadBridgeConfigDetails(configPath string) (bridgeConfigDetails, error) {
@@ -1171,30 +1259,62 @@ func loadBridgeConfigDetails(configPath string) (bridgeConfigDetails, error) {
 	if err := toml.Unmarshal(content, &root); err != nil {
 		return bridgeConfigDetails{}, errnorm.Wrap(errnorm.KindLocal, "bridge_config_toml_invalid", "bridge config is not valid TOML", err)
 	}
+	agentHomeRaw := strings.TrimSpace(bridgeTomlString(root["agent_home"]))
+	if agentHomeRaw == "" {
+		return bridgeConfigDetails{}, errnorm.Local("bridge_config_invalid", "bridge config requires top-level agent_home")
+	}
+	agentHome, err := expandBridgePath(filepath.Dir(absPath), agentHomeRaw)
+	if err != nil {
+		return bridgeConfigDetails{}, err
+	}
+	agentManifestPath := filepath.Join(agentHome, "agent.toml")
+	manifestContent, err := bridgeReadFile(agentManifestPath)
+	if err != nil {
+		return bridgeConfigDetails{}, errnorm.Wrap(errnorm.KindLocal, "agent_manifest_read_failed", "failed to read agent home agent.toml", err)
+	}
+	var manifest map[string]any
+	if err := toml.Unmarshal(manifestContent, &manifest); err != nil {
+		return bridgeConfigDetails{}, errnorm.Wrap(errnorm.KindLocal, "agent_manifest_toml_invalid", "agent.toml is not valid TOML", err)
+	}
 	authStatePath := ""
-	if authSec := bridgeTomlTable(root, "auth"); authSec != nil {
+	wakeConfigPath := ""
+	if authSec := bridgeTomlTable(manifest, "auth"); authSec != nil {
 		authStatePath = strings.TrimSpace(bridgeTomlString(authSec["state_path"]))
 	}
-	if authStatePath == "" {
-		authStatePath = ".state/auth.json"
+	if wakeSec := bridgeTomlTable(manifest, "wake"); wakeSec != nil {
+		wakeConfigPath = strings.TrimSpace(bridgeTomlString(wakeSec["config_path"]))
 	}
-	authStatePath, err = expandBridgePath(filepath.Dir(absPath), authStatePath)
+	if authStatePath == "" {
+		authStatePath = "profiles/default.json"
+	}
+	authStatePath, err = expandBridgePath(agentHome, authStatePath)
+	if err != nil {
+		return bridgeConfigDetails{}, err
+	}
+	if topWakeConfigPath := strings.TrimSpace(bridgeTomlString(root["wake_config"])); topWakeConfigPath != "" {
+		wakeConfigPath = topWakeConfigPath
+	}
+	if wakeConfigPath == "" {
+		wakeConfigPath = "wake.toml"
+	}
+	wakeConfigPath, err = expandBridgePath(agentHome, wakeConfigPath)
 	if err != nil {
 		return bridgeConfigDetails{}, err
 	}
 	agentHandle := ""
-	if agentSec := bridgeTomlTable(root, "agent"); agentSec != nil {
-		agentHandle = strings.TrimSpace(bridgeTomlString(agentSec["handle"]))
-	}
 	baseURL := ""
-	if anxSec := bridgeTomlTable(root, "anx"); anxSec != nil {
-		baseURL = strings.TrimSpace(bridgeTomlString(anxSec["base_url"]))
+	if identitySec := bridgeTomlTable(manifest, "identity"); identitySec != nil {
+		agentHandle = strings.TrimSpace(bridgeTomlString(identitySec["handle"]))
+		baseURL = strings.TrimSpace(bridgeTomlString(identitySec["base_url"]))
 	}
 	return bridgeConfigDetails{
-		ConfigPath:    absPath,
-		AuthStatePath: authStatePath,
-		AgentHandle:   agentHandle,
-		BaseURL:       baseURL,
+		ConfigPath:        absPath,
+		AgentHome:         agentHome,
+		AgentManifestPath: agentManifestPath,
+		WakeConfigPath:    wakeConfigPath,
+		AuthStatePath:     authStatePath,
+		AgentHandle:       agentHandle,
+		BaseURL:           baseURL,
 	}, nil
 }
 
@@ -1273,7 +1393,7 @@ func parseBridgeConfigAssignment(line string) (string, string, bool) {
 			rawValue = unquoted
 		}
 	}
-	if name == "" || rawValue == "" {
+	if name == "" {
 		return "", "", false
 	}
 	return name, rawValue, true
@@ -1316,19 +1436,96 @@ func writeBridgeJSONFile(path string, payload map[string]any) error {
 	return nil
 }
 
-func bridgeUpdateConfigBaseURL(configPath string, newBaseURL string) (bool, error) {
-	content, err := bridgeReadFile(configPath)
+func bridgeUpdateAgentManifestIdentity(agentManifestPath string, prof profile.Profile, publicKey ed25519.PublicKey) error {
+	content, err := bridgeReadFile(agentManifestPath)
 	if err != nil {
-		return false, fmt.Errorf("read config for base_url update: %w", err)
+		return errnorm.Wrap(errnorm.KindLocal, "agent_manifest_read_failed", "failed to read agent home agent.toml", err)
 	}
-	updated, changed := bridgeReplaceConfigValue(string(content), "anx", "base_url", newBaseURL)
-	if !changed {
+	updated := string(content)
+	for _, item := range []struct {
+		Key   string
+		Value string
+	}{
+		{Key: "base_url", Value: strings.TrimSpace(prof.BaseURL)},
+		{Key: "agent_id", Value: strings.TrimSpace(prof.AgentID)},
+		{Key: "actor_id", Value: strings.TrimSpace(prof.ActorID)},
+		{Key: "key_id", Value: strings.TrimSpace(prof.KeyID)},
+		{Key: "public_key_fingerprint", Value: bridgePublicKeyFingerprint(publicKey)},
+	} {
+		if item.Value == "" {
+			continue
+		}
+		var changed bool
+		updated, changed = bridgeReplaceConfigValue(updated, "identity", item.Key, item.Value)
+		if !changed {
+			return errnorm.Local("agent_manifest_update_failed", "agent.toml is missing [identity]."+item.Key)
+		}
+	}
+	if err := bridgeWriteFile(agentManifestPath, []byte(updated), 0o600); err != nil {
+		return errnorm.Wrap(errnorm.KindLocal, "agent_manifest_write_failed", "failed to update agent home identity", err)
+	}
+	return nil
+}
+
+func bridgePublicKeyFingerprint(publicKey ed25519.PublicKey) string {
+	sum := sha256.Sum256(publicKey)
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+func bridgeUpdateWakeConfigBaseURL(wakeConfigPath string, newBaseURL string) (bool, error) {
+	newBaseURL = strings.TrimSpace(newBaseURL)
+	if newBaseURL == "" {
 		return false, nil
 	}
-	if err := bridgeWriteFile(configPath, []byte(updated), 0o600); err != nil {
-		return false, fmt.Errorf("write config with updated base_url: %w", err)
+	content, err := bridgeReadFile(wakeConfigPath)
+	if err != nil {
+		return false, errnorm.Wrap(errnorm.KindLocal, "wake_config_read_failed", "failed to read wake.toml", err)
 	}
-	return true, nil
+	updated, changed := bridgeReplaceWorkspaceBaseURL(string(content), newBaseURL)
+	if changed {
+		if err := bridgeWriteFile(wakeConfigPath, []byte(updated), 0o600); err != nil {
+			return false, errnorm.Wrap(errnorm.KindLocal, "wake_config_write_failed", "failed to update wake.toml base URLs", err)
+		}
+	}
+	return changed, nil
+}
+
+func bridgeReplaceWorkspaceBaseURL(content string, newBaseURL string) (string, bool) {
+	var buf strings.Builder
+	inWorkspace := false
+	wroteBaseURL := false
+	changed := false
+	flushWorkspaceBaseURL := func() {
+		if inWorkspace && !wroteBaseURL {
+			buf.WriteString("base_url = " + strconv.Quote(newBaseURL) + "\n")
+			changed = true
+		}
+	}
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+			flushWorkspaceBaseURL()
+			inWorkspace = trimmed == "[[workspaces]]"
+			wroteBaseURL = false
+			buf.WriteString(line + "\n")
+			continue
+		}
+		if inWorkspace {
+			name, _, ok := parseBridgeConfigAssignment(line)
+			if ok && name == "base_url" {
+				replacement := "base_url = " + strconv.Quote(newBaseURL)
+				buf.WriteString(replacement + "\n")
+				wroteBaseURL = true
+				if strings.TrimSpace(line) != replacement {
+					changed = true
+				}
+				continue
+			}
+		}
+		buf.WriteString(line + "\n")
+	}
+	flushWorkspaceBaseURL()
+	return strings.TrimRight(buf.String(), "\n") + "\n", changed
 }
 
 func bridgeReplaceConfigValue(content string, section string, key string, newValue string) (string, bool) {
@@ -1368,5 +1565,5 @@ func bridgeReplaceConfigValue(content string, section string, key string, newVal
 		}
 		written = true
 	}
-	return buf.String(), written
+	return strings.TrimRight(buf.String(), "\n") + "\n", written
 }

@@ -92,7 +92,7 @@ func TestRunMetaDocPrintsAgentBridgeMarkdown(t *testing.T) {
 	if !strings.Contains(output, "anx-agent-bridge --version") {
 		t.Fatalf("expected install verification guidance output=%s", output)
 	}
-	if !strings.Contains(output, "anx bridge init-config") || !strings.Contains(output, "anx bridge doctor --config ./agent.toml") {
+	if !strings.Contains(output, "anx bridge init-config") || !strings.Contains(output, "anx bridge doctor --config ./bridge.toml") {
 		t.Fatalf("expected first-run bootstrap guidance output=%s", output)
 	}
 	if strings.Contains(output, "router.toml") {
@@ -122,7 +122,7 @@ func TestRunMetaDocPrintsWakeRoutingMarkdown(t *testing.T) {
 	if !strings.Contains(output, "agent-registration/v1") {
 		t.Fatalf("expected registration schema version output=%s", output)
 	}
-	if !strings.Contains(output, "anx-agent-bridge registration apply --config <agent.toml>") {
+	if !strings.Contains(output, "anx-agent-bridge registration apply --config ./bridge.toml") {
 		t.Fatalf("expected bridge registration shortcut output=%s", output)
 	}
 	if !strings.Contains(output, "workspace records") || !strings.Contains(output, "ws_main") {

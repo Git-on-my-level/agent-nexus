@@ -125,16 +125,21 @@ class AgentBridgeCheckin:
     bridge_instance_id: str
     checked_in_at: str
     expires_at: str
+    workspace_ids: list[str] = field(default_factory=list)
     proof_signature_b64: str = ""
     version: str = BRIDGE_CHECKIN_VERSION
     updated_at: str = field(default_factory=utc_now_iso)
 
     def to_content(self) -> dict[str, Any]:
+        workspace_ids = [item for item in self.workspace_ids if item]
+        if self.workspace_id and self.workspace_id not in workspace_ids:
+            workspace_ids.insert(0, self.workspace_id)
         return {
             "version": self.version,
             "handle": self.handle,
             "actor_id": self.actor_id,
             "workspace_id": self.workspace_id,
+            "workspace_ids": workspace_ids,
             "bridge_instance_id": self.bridge_instance_id,
             "checked_in_at": self.checked_in_at,
             "expires_at": self.expires_at,
@@ -144,10 +149,15 @@ class AgentBridgeCheckin:
 
     @classmethod
     def from_content(cls, content: dict[str, Any]) -> "AgentBridgeCheckin":
+        workspace_ids = [str(item).strip() for item in (content.get("workspace_ids") or []) if str(item).strip()]
+        workspace_id = str(content.get("workspace_id", "")).strip()
+        if workspace_id and workspace_id not in workspace_ids:
+            workspace_ids.insert(0, workspace_id)
         return cls(
             handle=str(content.get("handle", "")).strip(),
             actor_id=str(content.get("actor_id", "")).strip(),
-            workspace_id=str(content.get("workspace_id", "")).strip(),
+            workspace_id=workspace_id,
+            workspace_ids=workspace_ids,
             bridge_instance_id=str(content.get("bridge_instance_id", "")).strip(),
             checked_in_at=str(content.get("checked_in_at", "")).strip(),
             expires_at=str(content.get("expires_at", "")).strip(),
@@ -157,7 +167,8 @@ class AgentBridgeCheckin:
         )
 
     def is_ready_for_workspace(self, workspace_id: str) -> bool:
-        if self.workspace_id != workspace_id.strip():
+        wid = workspace_id.strip()
+        if wid not in self.workspace_ids and self.workspace_id != wid:
             return False
         if not self.bridge_instance_id:
             return False

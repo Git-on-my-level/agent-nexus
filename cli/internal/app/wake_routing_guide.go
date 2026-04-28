@@ -48,7 +48,7 @@ How agents discover it
 - Read the preferred runtime path with <<tick>>anx meta doc agent-bridge<<tick>>.
 - Use <<tick>>anx help bridge<<tick>> to bootstrap the per-agent bridge runtime from the main CLI.
 - Use <<tick>>anx bridge workspace-id --handle <handle><<tick>> when an existing registration is the easiest source of truth for the durable workspace id.
-- Use <<tick>>anx bridge import-auth --config ./agent.toml --from-profile <agent><<tick>> when matching <<tick>>anx<<tick>> auth already exists.
+- Use <<tick>>anx bridge import-auth --config ./bridge.toml --from-profile <agent><<tick>> when matching <<tick>>anx<<tick>> auth already exists.
 - Use <<tick>>anx notifications list --status unread<<tick>> to inspect queued notifications with the main CLI.
 - Use <<tick>>anx notifications dismiss --wakeup-id <wakeup-id><<tick>> to dismiss a notification so it no longer wakes the bridge.
 - Use <<tick>>anx auth whoami<<tick>> to confirm your current username and actor id.
@@ -66,38 +66,36 @@ Preferred path when you are using <<tick>>anx-agent-bridge<<tick>>
 
 3. Generate the agent config and implement your adapter (subprocess JSON or python_plugin):
 
-  anx bridge init-config --kind subprocess --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py
+  anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py
 
-  Inspect the exact stdin/stdout JSON contract with <<tick>>anx-agent-bridge adapter contract --config ./agent.toml<<tick>>.
+  Inspect the exact stdin/stdout JSON contract with <<tick>>anx-agent-bridge adapter contract --config ./bridge.toml<<tick>>.
 
-4. If matching <<tick>>anx<<tick>> auth already exists, import it into the bridge config:
+4. If matching <<tick>>anx<<tick>> auth already exists, import it into the agent home:
 
-  anx bridge import-auth --config ./agent.toml --from-profile <agent>
-
-  This also syncs the default local <<tick>>[anx].base_url<<tick>> in the bridge config to the imported profile when they differ.
+  anx bridge import-auth --config ./bridge.toml --from-profile <agent>
 
 5. Register auth and write the initial pending registration when auth does not already exist:
 
-  anx-agent-bridge auth register --config ./agent.toml --invite-token <token> --apply-registration
+  anx-agent-bridge auth register --config ./bridge.toml --invite-token <token> --apply-registration
 
   If auth already exists and you only need to rewrite the principal registration:
 
-  anx-agent-bridge registration apply --config <agent.toml>
+  anx-agent-bridge registration apply --config ./bridge.toml
 
 6. Start the target bridge:
 
-  anx bridge start --config ./agent.toml
+  anx bridge start --config ./bridge.toml
 
 7. Verify the bridge has checked in before expecting immediate delivery:
 
-  anx bridge status --config ./agent.toml
-  anx bridge doctor --config ./agent.toml
-  anx-agent-bridge registration status --config ./agent.toml
+  anx bridge status --config ./bridge.toml
+  anx bridge doctor --config ./bridge.toml
+  anx-agent-bridge registration status --config ./bridge.toml
 
 8. Pull or dismiss queued notifications directly when needed:
 
   anx notifications list --status unread
-  anx-agent-bridge notifications list --config ./agent.toml --status unread
+  anx-agent-bridge notifications list --config ./bridge.toml --status unread
   anx notifications dismiss --wakeup-id <wakeup-id>
 
 9. If the bridge is online but tagged delivery still does not work, ask the workspace operator to inspect the embedded wake-routing sidecar in <<tick>>anx-core<<tick>>.
@@ -151,7 +149,7 @@ If you are writing registration state manually, update the agent principal regis
 
 5. If auth already exists, prefer the supported bridge-managed path instead of hand-patching:
 
-  anx-agent-bridge registration apply --config ./agent.toml
+  anx-agent-bridge registration apply --config ./bridge.toml
 
 Registration schema notes
 
@@ -195,7 +193,7 @@ Verification flow
 
 5. If you are using <<tick>>anx-agent-bridge<<tick>>, prefer:
 
-  anx bridge doctor --config ./agent.toml
+  anx bridge doctor --config ./bridge.toml
 
 Concrete wake example
 
@@ -231,6 +229,6 @@ Next steps
 
   anx help bridge
   anx meta doc agent-bridge
-  anx bridge doctor --config ./agent.toml`)
+  anx bridge doctor --config ./bridge.toml`)
 	return strings.ReplaceAll(guide, tickToken, "`")
 }

@@ -113,17 +113,18 @@ def generate_bridge_proof_keypair() -> tuple[str, str]:
 def bridge_checkin_proof_message(
     handle: str,
     actor_id: str,
-    workspace_id: str,
+    workspace_ids: list[str],
     bridge_instance_id: str,
     checked_in_at: str,
     expires_at: str,
 ) -> bytes:
+    normalized_workspace_ids = [str(item).strip() for item in workspace_ids if str(item).strip()]
     return stable_json_dumps(
         {
             "v": "agent-bridge-checkin-proof/v1",
             "handle": handle,
             "actor_id": actor_id,
-            "workspace_id": workspace_id,
+            "workspace_ids": normalized_workspace_ids,
             "bridge_instance_id": bridge_instance_id,
             "checked_in_at": checked_in_at,
             "expires_at": expires_at,
@@ -135,7 +136,7 @@ def sign_bridge_checkin(
     private_key_b64: str,
     handle: str,
     actor_id: str,
-    workspace_id: str,
+    workspace_ids: list[str],
     bridge_instance_id: str,
     checked_in_at: str,
     expires_at: str,
@@ -144,7 +145,7 @@ def sign_bridge_checkin(
     if not isinstance(private_key, ec.EllipticCurvePrivateKey):
         raise ValueError("bridge proof private key is not an EC key")
     signature = private_key.sign(
-        bridge_checkin_proof_message(handle, actor_id, workspace_id, bridge_instance_id, checked_in_at, expires_at),
+        bridge_checkin_proof_message(handle, actor_id, workspace_ids, bridge_instance_id, checked_in_at, expires_at),
         ec.ECDSA(hashes.SHA256()),
     )
     return base64.b64encode(signature).decode("ascii")
@@ -155,7 +156,7 @@ def verify_bridge_checkin_signature(
     signature_b64: str,
     handle: str,
     actor_id: str,
-    workspace_id: str,
+    workspace_ids: list[str],
     bridge_instance_id: str,
     checked_in_at: str,
     expires_at: str,
@@ -166,7 +167,7 @@ def verify_bridge_checkin_signature(
             return False
         public_key.verify(
             base64.b64decode(signature_b64),
-            bridge_checkin_proof_message(handle, actor_id, workspace_id, bridge_instance_id, checked_in_at, expires_at),
+            bridge_checkin_proof_message(handle, actor_id, workspace_ids, bridge_instance_id, checked_in_at, expires_at),
             ec.ECDSA(hashes.SHA256()),
         )
         return True

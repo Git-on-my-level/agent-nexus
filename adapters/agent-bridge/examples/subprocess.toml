@@ -1,21 +1,16 @@
-[anx]
-base_url = "https://anx.example"
-workspace_id = "ws_main"
-workspace_name = "Main"
+agent_home = ".anx/myagent"
+wake_config = "wake.toml"
 
-[auth]
-state_path = ".state/myagent-auth.json"
-
-[agent]
-handle = "myagent"
+[bridge]
 driver_kind = "custom"
 adapter_kind = "subprocess"
-state_dir = ".state/myagent"
-workspace_bindings = ["ws_main"]
 resume_policy = "resume_or_create"
 status = "pending"
 checkin_interval_seconds = 60
 checkin_ttl_seconds = 300
+
+[runtime]
+state_dir = "run/myagent"
 
 [adapter]
 kind = "subprocess"

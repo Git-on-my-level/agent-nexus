@@ -36,7 +36,7 @@ class RegistrationStatusResult:
     handle: str
     actor_id: str
     registration_status: str
-    workspace_id: str
+    workspace_ids: list[str]
     workspace_bound: bool
     bridge_checkin_event_id: str
     bridge_checked_in_at: str
@@ -58,10 +58,12 @@ def publish_bridge_checkin(
     if config.agent is None:
         raise ValueError("bridge check-in requires an [agent] section in config")
     state = auth.require_state()
+    workspace_ids = config.workspace_ids
     checkin = AgentBridgeCheckin(
         handle=config.agent.handle,
         actor_id=state.actor_id,
         workspace_id=config.anx.workspace_id,
+        workspace_ids=workspace_ids,
         bridge_instance_id=bridge_instance_id,
         checked_in_at=checked_in_at,
         expires_at=expires_at,
@@ -127,7 +129,7 @@ def apply_registration(
         adapter_kind=config.agent.adapter_kind,
         resume_policy=config.agent.resume_policy,
         status=registration_status,
-        workspace_bindings=[WorkspaceBinding(workspace_id=item) for item in config.agent.workspace_bindings],
+        workspace_bindings=[WorkspaceBinding(workspace_id=item) for item in config.workspace_ids],
         bridge_instance_id=bridge_instance_id,
         bridge_signing_public_key_spki_b64=bridge_signing_public_key_spki_b64,
         bridge_checked_in_at=resolved_checked_in_at,
@@ -143,7 +145,7 @@ def apply_registration(
         handle=config.agent.handle,
         created_or_updated="updated" if payload is not None else "unknown",
         registration_status=registration.status,
-        wakeable=registration.supports_workspace(config.anx.workspace_id) and registration.bridge_is_ready(),
+        wakeable=all(registration.supports_workspace(item) for item in config.workspace_ids) and registration.bridge_is_ready(),
         bridge_checkin_event_id=registration.bridge_checkin_event_id,
         bridge_checked_in_at=registration.bridge_checked_in_at,
         bridge_expires_at=registration.bridge_expires_at,
@@ -164,7 +166,7 @@ def registration_status(config: LoadedConfig, auth: AuthManager, client: ANXClie
             handle=config.agent.handle,
             actor_id=state.actor_id,
             registration_status="missing",
-            workspace_id=config.anx.workspace_id,
+            workspace_ids=config.workspace_ids,
             workspace_bound=False,
             bridge_checkin_event_id="",
             bridge_checked_in_at="",
@@ -189,9 +191,10 @@ def registration_status(config: LoadedConfig, auth: AuthManager, client: ANXClie
                 checkin = AgentBridgeCheckin.from_content(payload)
     if registration.actor_id != state.actor_id:
         blockers.append("registration actor does not match current auth actor")
-    workspace_bound = registration.supports_workspace(config.anx.workspace_id)
+    workspace_bound = all(registration.supports_workspace(item) for item in config.workspace_ids)
     if not workspace_bound:
-        blockers.append(f"registration is not enabled for workspace {config.anx.workspace_id}")
+        missing = [item for item in config.workspace_ids if not registration.supports_workspace(item)]
+        blockers.append(f"registration is not enabled for workspace(s): {', '.join(missing)}")
     signature_valid = False
     if checkin is not None and registration.bridge_signing_public_key_spki_b64:
         signature_valid = verify_bridge_checkin_signature(
@@ -199,7 +202,7 @@ def registration_status(config: LoadedConfig, auth: AuthManager, client: ANXClie
             checkin.proof_signature_b64,
             checkin.handle,
             checkin.actor_id,
-            checkin.workspace_id,
+            checkin.workspace_ids,
             checkin.bridge_instance_id,
             checkin.checked_in_at,
             checkin.expires_at,
@@ -221,14 +224,14 @@ def registration_status(config: LoadedConfig, auth: AuthManager, client: ANXClie
         blockers.append("bridge check-in actor does not match current auth actor")
     elif not signature_valid:
         blockers.append("bridge check-in signature is invalid")
-    elif not checkin.is_ready_for_workspace(config.anx.workspace_id):
+    elif not all(checkin.is_ready_for_workspace(item) for item in config.workspace_ids):
         blockers.append("bridge check-in is stale")
     return RegistrationStatusResult(
         agent_id=state.agent_id,
         handle=config.agent.handle,
         actor_id=state.actor_id,
         registration_status=registration.status,
-        workspace_id=config.anx.workspace_id,
+        workspace_ids=config.workspace_ids,
         workspace_bound=workspace_bound,
         bridge_checkin_event_id=checkin_event_id,
         bridge_checked_in_at=checkin.checked_in_at if checkin is not None else registration.bridge_checked_in_at,
@@ -242,6 +245,6 @@ def registration_status(config: LoadedConfig, auth: AuthManager, client: ANXClie
         and (not checkin.handle or checkin.handle == config.agent.handle)
         and checkin.actor_id == state.actor_id
         and signature_valid
-        and checkin.is_ready_for_workspace(config.anx.workspace_id),
+        and all(checkin.is_ready_for_workspace(item) for item in config.workspace_ids),
         blockers=blockers,
     )

@@ -1,10 +1,12 @@
 import argparse
+from pathlib import Path
 
 import pytest
 
 from anx_agent_bridge import __version__
 from anx_agent_bridge import cli as cli_module
-from anx_agent_bridge.cli import build_parser
+from anx_agent_bridge.cli import build_adapter, build_parser
+from anx_agent_bridge.config import ANXConfig, AdapterConfig, AgentConfig, LoadedConfig
 from anx_agent_bridge.registry import RegistrationStatusResult
 
 
@@ -37,6 +39,56 @@ def test_bridge_doctor_subcommand_is_available():
     assert args.command == "bridge"
     assert args.bridge_command == "doctor"
     assert args.config == "agent.toml"
+
+
+def test_public_key_fingerprint_is_stable():
+    assert (
+        cli_module.public_key_fingerprint("AQI=")
+        == "sha256:a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222"
+    )
+
+
+def test_validate_auth_identity_rejects_public_key_fingerprint_mismatch():
+    config = argparse.Namespace(
+        agent=argparse.Namespace(handle="hermes"),
+        expected_agent_id="agent-hermes",
+        expected_actor_id="actor-1",
+        expected_key_id="key-1",
+        expected_public_key_fingerprint="sha256:wrong",
+    )
+
+    class DummyAuth:
+        def require_state(self):
+            return argparse.Namespace(
+                username="hermes",
+                agent_id="agent-hermes",
+                actor_id="actor-1",
+                key_id="key-1",
+                public_key_b64="AQI=",
+            )
+
+    with pytest.raises(ValueError, match="public_key_fingerprint"):
+        cli_module.validate_auth_identity(config, DummyAuth())
+
+
+def test_build_adapter_defaults_cwd_to_config_dir(tmp_path: Path):
+    config = LoadedConfig(
+        anx=ANXConfig(base_url="https://anx.example", workspace_id="ws_main", workspace_name="Main"),
+        agent=AgentConfig(
+            handle="hermes",
+            driver_kind="custom",
+            adapter_kind="subprocess",
+            state_dir=tmp_path / "state",
+        ),
+        adapter=AdapterConfig(raw={"kind": "subprocess", "command": ["python3", "./adapter.py"]}),
+        auth_state_path=tmp_path / "auth.json",
+        config_path=tmp_path / "bridge.toml",
+        config_dir=tmp_path,
+    )
+
+    adapter = build_adapter(config)
+
+    assert adapter.cwd == str(tmp_path)
 
 
 def test_adapter_contract_subcommand_is_available():
@@ -76,14 +128,25 @@ def test_router_subcommand_is_not_available():
 
 def test_cmd_registration_status_serializes_slots_dataclass(monkeypatch, capsys):
     closed = {"value": False}
-    config = argparse.Namespace(auth_state_path="state.json")
+    config = argparse.Namespace(
+        auth_state_path="state.json",
+        agent=argparse.Namespace(handle="hermes"),
+        expected_agent_id="",
+        expected_actor_id="",
+        expected_key_id="",
+        expected_public_key_fingerprint="",
+    )
+
+    class DummyAuth:
+        def require_state(self):
+            return argparse.Namespace(username="hermes", agent_id="agent-hermes", actor_id="actor-1", key_id="key-1", public_key_b64="AQI=")
 
     class DummyClient:
         def close(self):
             closed["value"] = True
 
     monkeypatch.setattr(cli_module, "load_config", lambda _path: config)
-    monkeypatch.setattr(cli_module, "AuthManager", lambda _path: object())
+    monkeypatch.setattr(cli_module, "AuthManager", lambda _path: DummyAuth())
     monkeypatch.setattr(cli_module, "build_client", lambda _config, _auth: DummyClient())
     monkeypatch.setattr(
         cli_module,
@@ -93,7 +156,7 @@ def test_cmd_registration_status_serializes_slots_dataclass(monkeypatch, capsys)
             handle="hermes",
             actor_id="actor-1",
             registration_status="active",
-            workspace_id="ws_main",
+            workspace_ids=["ws_main"],
             workspace_bound=True,
             bridge_checkin_event_id="event-1",
             bridge_checked_in_at="2026-03-29T00:00:00Z",
@@ -114,7 +177,18 @@ def test_cmd_registration_status_serializes_slots_dataclass(monkeypatch, capsys)
 
 def test_cmd_notifications_list_serializes_payload(monkeypatch, capsys):
     closed = {"value": False}
-    config = argparse.Namespace(auth_state_path="state.json")
+    config = argparse.Namespace(
+        auth_state_path="state.json",
+        agent=argparse.Namespace(handle="hermes"),
+        expected_agent_id="",
+        expected_actor_id="",
+        expected_key_id="",
+        expected_public_key_fingerprint="",
+    )
+
+    class DummyAuth:
+        def require_state(self):
+            return argparse.Namespace(username="hermes", agent_id="agent-hermes", actor_id="actor-1", key_id="key-1", public_key_b64="AQI=")
 
     class DummyClient:
         def list_agent_notifications(self, *, statuses=None, order="desc"):
@@ -126,7 +200,7 @@ def test_cmd_notifications_list_serializes_payload(monkeypatch, capsys):
             closed["value"] = True
 
     monkeypatch.setattr(cli_module, "load_config", lambda _path: config)
-    monkeypatch.setattr(cli_module, "AuthManager", lambda _path: object())
+    monkeypatch.setattr(cli_module, "AuthManager", lambda _path: DummyAuth())
     monkeypatch.setattr(cli_module, "build_client", lambda _config, _auth: DummyClient())
 
     result = cli_module.cmd_notifications_list(

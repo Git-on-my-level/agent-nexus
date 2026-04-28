@@ -34,13 +34,47 @@ func Discover(homeDir string) ([]Config, error) {
 		if err != nil {
 			return nil, fmt.Errorf("read bridge config %s: %w", path, err)
 		}
-		baseURL := configStringValue(string(content), "anx", "base_url")
+		baseURL := bridgeConfigBaseURL(path, string(content))
 		if strings.TrimSpace(baseURL) == "" {
 			continue
 		}
 		configs = append(configs, Config{Path: path, BaseURL: strings.TrimSpace(baseURL)})
 	}
 	return configs, nil
+}
+
+func bridgeConfigBaseURL(configPath string, content string) string {
+	if baseURL := strings.TrimSpace(configStringValue(content, "anx", "base_url")); baseURL != "" {
+		return baseURL
+	}
+	agentHome := strings.TrimSpace(configStringValue(content, "", "agent_home"))
+	if agentHome == "" {
+		return ""
+	}
+	agentHomePath := expandConfigPath(filepath.Dir(configPath), agentHome)
+	manifestPath := filepath.Join(agentHomePath, "agent.toml")
+	manifestContent, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(configStringValue(string(manifestContent), "identity", "base_url"))
+}
+
+func expandConfigPath(baseDir string, raw string) string {
+	value := os.ExpandEnv(strings.TrimSpace(raw))
+	if value == "~" || strings.HasPrefix(value, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			if value == "~" {
+				value = home
+			} else {
+				value = filepath.Join(home, strings.TrimPrefix(value, "~/"))
+			}
+		}
+	}
+	if !filepath.IsAbs(value) {
+		value = filepath.Join(baseDir, value)
+	}
+	return filepath.Clean(value)
 }
 
 func discoverConfigPaths(rootDir string) ([]string, error) {

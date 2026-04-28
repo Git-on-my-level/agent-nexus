@@ -24,17 +24,18 @@ type WorkspaceBinding = auth.AgentRegistrationWorkspaceBinding
 type AgentRegistration = auth.AgentRegistration
 
 type AgentBridgeCheckin struct {
-	Handle            string `json:"handle"`
-	ActorID           string `json:"actor_id"`
-	WorkspaceID       string `json:"workspace_id"`
-	BridgeInstanceID  string `json:"bridge_instance_id"`
-	CheckedInAt       string `json:"checked_in_at"`
-	ExpiresAt         string `json:"expires_at"`
-	ProofSignatureB64 string `json:"proof_signature_b64"`
+	Handle            string   `json:"handle"`
+	ActorID           string   `json:"actor_id"`
+	WorkspaceID       string   `json:"workspace_id"`
+	WorkspaceIDs      []string `json:"workspace_ids"`
+	BridgeInstanceID  string   `json:"bridge_instance_id"`
+	CheckedInAt       string   `json:"checked_in_at"`
+	ExpiresAt         string   `json:"expires_at"`
+	ProofSignatureB64 string   `json:"proof_signature_b64"`
 }
 
 func (c AgentBridgeCheckin) ReadyForWorkspace(workspaceID string, now time.Time) bool {
-	if c.WorkspaceID != workspaceID {
+	if !stringSliceContains(c.effectiveWorkspaceIDs(), workspaceID) {
 		return false
 	}
 	expiresAt, ok := parseUTCISO(c.ExpiresAt)
@@ -42,6 +43,41 @@ func (c AgentBridgeCheckin) ReadyForWorkspace(workspaceID string, now time.Time)
 		return false
 	}
 	return !expiresAt.Before(now.UTC())
+}
+
+func (c AgentBridgeCheckin) effectiveWorkspaceIDs() []string {
+	out := make([]string, 0, len(c.WorkspaceIDs)+1)
+	seen := map[string]struct{}{}
+	for _, workspaceID := range c.WorkspaceIDs {
+		trimmed := strings.TrimSpace(workspaceID)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		out = append(out, trimmed)
+	}
+	if trimmed := strings.TrimSpace(c.WorkspaceID); trimmed != "" {
+		if _, ok := seen[trimmed]; !ok {
+			out = append([]string{trimmed}, out...)
+		}
+	}
+	return out
+}
+
+func stringSliceContains(values []string, target string) bool {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return false
+	}
+	for _, value := range values {
+		if strings.TrimSpace(value) == target {
+			return true
+		}
+	}
+	return false
 }
 
 func WakeupRequestKey(workspaceID string, threadID string, messageEventID string, actorID string) string {
@@ -58,32 +94,17 @@ func sha256Text(parts ...string) string {
 }
 
 func bridgeProofMessage(checkin AgentBridgeCheckin) []byte {
-	values := []struct {
-		Key   string
-		Value string
-	}{
-		{Key: "actor_id", Value: checkin.ActorID},
-		{Key: "bridge_instance_id", Value: checkin.BridgeInstanceID},
-		{Key: "checked_in_at", Value: checkin.CheckedInAt},
-		{Key: "expires_at", Value: checkin.ExpiresAt},
-		{Key: "handle", Value: checkin.Handle},
-		{Key: "v", Value: "agent-bridge-checkin-proof/v1"},
-		{Key: "workspace_id", Value: checkin.WorkspaceID},
+	payload := map[string]any{
+		"actor_id":           checkin.ActorID,
+		"bridge_instance_id": checkin.BridgeInstanceID,
+		"checked_in_at":      checkin.CheckedInAt,
+		"expires_at":         checkin.ExpiresAt,
+		"handle":             checkin.Handle,
+		"v":                  "agent-bridge-checkin-proof/v1",
+		"workspace_ids":      checkin.effectiveWorkspaceIDs(),
 	}
-	var builder strings.Builder
-	builder.WriteByte('{')
-	for i, item := range values {
-		if i > 0 {
-			builder.WriteByte(',')
-		}
-		keyJSON, _ := json.Marshal(item.Key)
-		valueJSON, _ := json.Marshal(item.Value)
-		builder.Write(keyJSON)
-		builder.WriteByte(':')
-		builder.Write(valueJSON)
-	}
-	builder.WriteByte('}')
-	return []byte(builder.String())
+	encoded, _ := json.Marshal(payload)
+	return encoded
 }
 
 func VerifyBridgeCheckinSignature(publicKeyB64 string, checkin AgentBridgeCheckin) bool {

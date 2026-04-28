@@ -99,7 +99,7 @@ class AgentBridge:
             self.state.bridge_signing_private_key_pkcs8_b64,
             self.handle,
             self.auth.require_state().actor_id,
-            self.config.anx.workspace_id,
+            self.config.workspace_ids,
             self.state.bridge_instance_id,
             checked_in_at,
             expires_at,
