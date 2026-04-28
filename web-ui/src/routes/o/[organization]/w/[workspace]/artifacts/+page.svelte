@@ -189,16 +189,6 @@
 <div class="mb-3 flex max-md:mb-2 items-center justify-between">
   <h1 class="text-subtitle font-semibold text-[var(--fg)]">Artifacts</h1>
   <div class="flex items-center gap-3">
-    <label
-      class="inline-flex cursor-pointer items-center gap-1.5 text-micro text-[var(--fg-muted)]"
-    >
-      <input
-        bind:checked={showArchived}
-        class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--line)] bg-[var(--bg)] text-[var(--accent-hover)] focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-0"
-        type="checkbox"
-      />
-      Show archived
-    </label>
     <button
       class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)]"
       onclick={() => (filtersOpen = !filtersOpen)}
@@ -274,6 +264,17 @@
             />
           </label>
         </div>
+        <label
+          class="mt-3 inline-flex cursor-pointer items-center gap-1.5 text-micro text-[var(--fg-muted)]"
+        >
+          <input
+            bind:checked={showArchived}
+            class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--line)] bg-[var(--bg)] text-[var(--accent-hover)] focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-0"
+            type="checkbox"
+            data-testid="artifacts-show-archived"
+          />
+          Show archived
+        </label>
         <div class="mt-3 flex gap-1.5">
           <button
             class="cursor-pointer rounded-md bg-[var(--panel)] px-3 py-1.5 text-micro font-medium text-[var(--fg)] hover:bg-[var(--line)]"

@@ -15,15 +15,16 @@
   } from "$lib/topicFilters";
   import { workspacePath } from "$lib/workspacePaths";
   import { buildTopicCreatePayloadFromDraft } from "$lib/topicCreatePayload";
-  import ArchiveButton from "$lib/components/ArchiveButton.svelte";
   import CompactFilterBar from "$lib/components/CompactFilterBar.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
-  import TrashButton from "$lib/components/TrashButton.svelte";
   import Skeleton from "$lib/components/state/Skeleton.svelte";
   import StateEmpty from "$lib/components/state/StateEmpty.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
   import WorkspaceResourceListRow from "$lib/components/WorkspaceResourceListRow.svelte";
+  import WorkspaceListBulkToolbar from "$lib/components/WorkspaceListBulkToolbar.svelte";
+  import LeadingSelectionGlyph from "$lib/components/LeadingSelectionGlyph.svelte";
+  import Button from "$lib/components/Button.svelte";
 
   /** Virtual filter: active lifecycle topics (matches dashboard "Open"); distinct from `state` query. */
   const STATUS_OPEN_NOT_CLOSED = "__open__";
@@ -45,8 +46,20 @@
   let filtersOpen = $state(false);
   let showArchived = $state(false);
   let archiveBusyId = $state("");
-  let confirmModal = $state({ open: false, action: "", entityId: "" });
+  /** @type {{ open: boolean, action: string, entityId: string, bulkIds: string[] | null }} */
+  let confirmModal = $state({
+    open: false,
+    action: "",
+    entityId: "",
+    bulkIds: null,
+  });
   let trashBusyId = $state("");
+  let bulkBusy = $state(false);
+  /** @type {Set<string>} */
+  let selectedTopicIds = $state(new Set());
+  let topicSelectMode = $state(false);
+  /** @type {number | null} */
+  let topicSelectionAnchorIndex = $state(null);
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
 
@@ -145,6 +158,141 @@
     await loadTopicsFromState(filters);
   }
 
+  $effect(() => {
+    if (listSurface !== "topics") {
+      selectedTopicIds = new Set();
+      topicSelectMode = false;
+      topicSelectionAnchorIndex = null;
+    }
+  });
+
+  $effect(() => {
+    if (listSurface !== "topics") return;
+    topics;
+    const valid = new Set(
+      topics.map((t) => String(t?.id ?? "").trim()).filter(Boolean),
+    );
+    const next = new Set([...selectedTopicIds].filter((id) => valid.has(id)));
+    if (next.size !== selectedTopicIds.size) {
+      selectedTopicIds = next;
+    }
+  });
+
+  let allTopicsVisibleSelected = $derived(
+    listSurface === "topics" &&
+      topics.length > 0 &&
+      topics.every((t) => selectedTopicIds.has(t.id)),
+  );
+  let selectedTopics = $derived(
+    listSurface === "topics"
+      ? topics.filter((t) => selectedTopicIds.has(t.id))
+      : [],
+  );
+
+  let bulkTopicsCanArchive = $derived(
+    selectedTopics.some((t) => !isTopicArchived(t) && !isTopicTrashed(t)),
+  );
+  let bulkTopicsCanUnarchive = $derived(
+    selectedTopics.some((t) => isTopicArchived(t) && !isTopicTrashed(t)),
+  );
+  let bulkTopicsCanTrash = $derived(
+    selectedTopics.some((t) => !isTopicTrashed(t)),
+  );
+
+  function selectAllVisibleTopics() {
+    selectedTopicIds = new Set(topics.map((t) => t.id).filter(Boolean));
+  }
+
+  function clearTopicSelection() {
+    selectedTopicIds = new Set();
+  }
+
+  function toggleTopicSelectMode() {
+    topicSelectMode = !topicSelectMode;
+    if (!topicSelectMode) {
+      clearTopicSelection();
+      topicSelectionAnchorIndex = null;
+    }
+  }
+
+  function applyTopicRangeFromIndices(fromIndex, toIndex) {
+    const lo = Math.min(fromIndex, toIndex);
+    const hi = Math.max(fromIndex, toIndex);
+    const next = new Set(selectedTopicIds);
+    for (let i = lo; i <= hi; i++) {
+      const t = topics[i];
+      if (t?.id) next.add(t.id);
+    }
+    selectedTopicIds = next;
+  }
+
+  /** @param {MouseEvent} e */
+  function handleTopicRowClick(topic, index, e) {
+    if (!topicSelectMode || bulkBusy) return;
+    const href = workspaceHref(`/topics/${encodeURIComponent(topic.id)}`);
+    const ce = /** @type {MouseEvent & { detail?: number }} */ (e);
+    if ((ce.detail ?? 1) >= 2) {
+      void goto(href);
+      return;
+    }
+    if (e.shiftKey && topicSelectionAnchorIndex !== null) {
+      applyTopicRangeFromIndices(topicSelectionAnchorIndex, index);
+      return;
+    }
+    const id = topic.id;
+    const next = new Set(selectedTopicIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    selectedTopicIds = next;
+    topicSelectionAnchorIndex = index;
+  }
+
+  /** @param {KeyboardEvent} e */
+  function topicRowKeydown(topic, index, e) {
+    if (!topicSelectMode || bulkBusy) return;
+    if (e.key !== " " && e.key !== "Enter") return;
+    e.preventDefault();
+    if (e.shiftKey && topicSelectionAnchorIndex !== null) {
+      applyTopicRangeFromIndices(topicSelectionAnchorIndex, index);
+      return;
+    }
+    const id = topic.id;
+    const next = new Set(selectedTopicIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    selectedTopicIds = next;
+    topicSelectionAnchorIndex = index;
+  }
+
+  $effect(() => {
+    if (!topicSelectMode || listSurface !== "topics") return;
+    /** @param {KeyboardEvent} ev */
+    function onTopicKey(ev) {
+      if (ev.key !== "Escape") return;
+      topicSelectMode = false;
+      clearTopicSelection();
+      topicSelectionAnchorIndex = null;
+    }
+    document.addEventListener("keydown", onTopicKey);
+    return () => document.removeEventListener("keydown", onTopicKey);
+  });
+
+  function topicIdsForBulkArchive() {
+    return selectedTopics
+      .filter((t) => !isTopicArchived(t) && !isTopicTrashed(t))
+      .map((t) => t.id);
+  }
+
+  function topicIdsForBulkUnarchive() {
+    return selectedTopics
+      .filter((t) => isTopicArchived(t) && !isTopicTrashed(t))
+      .map((t) => t.id);
+  }
+
+  function topicIdsForBulkTrash() {
+    return selectedTopics.filter((t) => !isTopicTrashed(t)).map((t) => t.id);
+  }
+
   async function applyFilters() {
     const qs = buildTopicListSearchString(filters);
     const path =
@@ -206,7 +354,10 @@
   }
 
   let hasActiveFilters = $derived(
-    filters.state !== "" || filters.openOnly || filters.q.trim() !== "",
+    showArchived ||
+      filters.state !== "" ||
+      filters.openOnly ||
+      filters.q.trim() !== "",
   );
 
   function statusFilterSelectValue() {
@@ -234,9 +385,13 @@
     return typeof at === "string" ? at.trim() !== "" : Boolean(at);
   }
 
+  function isTopicTrashed(topic) {
+    return topic?.state === "trashed";
+  }
+
   async function archiveTopicRow(topicId) {
     const id = String(topicId ?? "").trim();
-    if (!id || archiveBusyId) return;
+    if (!id || archiveBusyId || bulkBusy) return;
     archiveBusyId = id;
     error = "";
     try {
@@ -249,29 +404,14 @@
     }
   }
 
-  async function unarchiveTopicRow(topicId) {
-    const id = String(topicId ?? "").trim();
-    if (!id || archiveBusyId) return;
-    archiveBusyId = id;
-    error = "";
-    try {
-      await coreClient.unarchiveTopic(id, {});
-      await loadTopics();
-    } catch (e) {
-      error = `Unarchive failed: ${e instanceof Error ? e.message : String(e)}`;
-    } finally {
-      archiveBusyId = "";
-    }
-  }
-
   async function trashTopicRow(topicId) {
     const id = String(topicId ?? "").trim();
-    if (!id || trashBusyId) return;
+    if (!id || trashBusyId || bulkBusy) return;
     trashBusyId = id;
     error = "";
     try {
       await coreClient.trashTopic(id, {});
-      confirmModal = { open: false, action: "", entityId: "" };
+      confirmModal = { open: false, action: "", entityId: "", bulkIds: null };
       await loadTopics();
     } catch (e) {
       error = `Trash failed: ${e instanceof Error ? e.message : String(e)}`;
@@ -280,13 +420,106 @@
     }
   }
 
+  async function bulkArchiveTopics(ids) {
+    const list = ids.filter(Boolean);
+    if (!list.length || bulkBusy) return;
+    bulkBusy = true;
+    error = "";
+    try {
+      for (const id of list) {
+        await coreClient.archiveTopic(id, {});
+      }
+      clearTopicSelection();
+      confirmModal = { open: false, action: "", entityId: "", bulkIds: null };
+      await loadTopics();
+    } catch (e) {
+      error = `Archive failed: ${e instanceof Error ? e.message : String(e)}`;
+    } finally {
+      bulkBusy = false;
+    }
+  }
+
+  async function bulkUnarchiveTopics(ids) {
+    const list = ids.filter(Boolean);
+    if (!list.length || bulkBusy) return;
+    bulkBusy = true;
+    error = "";
+    try {
+      for (const id of list) {
+        await coreClient.unarchiveTopic(id, {});
+      }
+      clearTopicSelection();
+      await loadTopics();
+    } catch (e) {
+      error = `Unarchive failed: ${e instanceof Error ? e.message : String(e)}`;
+    } finally {
+      bulkBusy = false;
+    }
+  }
+
+  async function bulkTrashTopics(ids) {
+    const list = ids.filter(Boolean);
+    if (!list.length || bulkBusy) return;
+    bulkBusy = true;
+    error = "";
+    try {
+      for (const id of list) {
+        await coreClient.trashTopic(id, {});
+      }
+      clearTopicSelection();
+      confirmModal = { open: false, action: "", entityId: "", bulkIds: null };
+      await loadTopics();
+    } catch (e) {
+      error = `Trash failed: ${e instanceof Error ? e.message : String(e)}`;
+    } finally {
+      bulkBusy = false;
+    }
+  }
+
   function handleConfirm() {
+    const bulkIds = confirmModal.bulkIds;
     const id = confirmModal.entityId;
     const action = confirmModal.action;
-    confirmModal = { open: false, action: "", entityId: "" };
+    confirmModal = { open: false, action: "", entityId: "", bulkIds: null };
+    if (bulkIds && bulkIds.length > 0) {
+      if (action === "archive") void bulkArchiveTopics(bulkIds);
+      else if (action === "trash") void bulkTrashTopics(bulkIds);
+      return;
+    }
     if (action === "archive") void archiveTopicRow(id);
     else if (action === "trash") void trashTopicRow(id);
   }
+
+  let topicConfirmBulkCount = $derived(confirmModal.bulkIds?.length ?? 0);
+  let topicConfirmIsBulk = $derived(topicConfirmBulkCount > 0);
+
+  let topicConfirmModalTitle = $derived.by(() => {
+    if (confirmModal.action === "trash") {
+      return topicConfirmIsBulk
+        ? `Move ${topicConfirmBulkCount} topics to trash`
+        : "Move to trash";
+    }
+    return topicConfirmIsBulk
+      ? `Archive ${topicConfirmBulkCount} topics`
+      : "Archive topic";
+  });
+
+  let topicConfirmModalMessage = $derived.by(() => {
+    if (confirmModal.action === "trash") {
+      return topicConfirmIsBulk
+        ? `These topics (${topicConfirmBulkCount}) will be moved to trash. You can restore them later.`
+        : "This topic will be moved to trash. You can restore it later.";
+    }
+    return topicConfirmIsBulk
+      ? `These topics (${topicConfirmBulkCount}) will be hidden from default views. You can unarchive them later.`
+      : "This topic will be hidden from default views. You can unarchive it later.";
+  });
+
+  let topicConfirmModalBusy = $derived(
+    confirmModal.action === "trash"
+      ? Boolean(trashBusyId) || (topicConfirmIsBulk && bulkBusy)
+      : Boolean(archiveBusyId) || (topicConfirmIsBulk && bulkBusy),
+  );
 </script>
 
 <div class="mb-3 flex max-md:mb-2 flex-wrap items-start justify-between gap-4">
@@ -310,18 +543,20 @@
   </div>
   <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-1.5">
     {#if listSurface === "topics"}
-      <label
-        class="inline-flex cursor-pointer items-center gap-1.5 text-micro text-[var(--fg-muted)]"
-      >
-        <input
-          bind:checked={showArchived}
-          class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--line)] bg-[var(--bg)] text-[var(--accent-hover)] focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-0"
-          type="checkbox"
-        />
-        Show archived
-      </label>
       <button
-        class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-micro font-medium transition-colors {hasActiveFilters
+        class="cursor-pointer inline-flex h-7 items-center gap-1.5 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] {topics.length ===
+          0 && !loading
+          ? 'pointer-events-none opacity-50'
+          : ''}"
+        onclick={toggleTopicSelectMode}
+        disabled={topics.length === 0 && !loading}
+        type="button"
+        aria-pressed={topicSelectMode}
+      >
+        {topicSelectMode ? "Done" : "Select"}
+      </button>
+      <button
+        class="cursor-pointer inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-micro font-medium transition-colors {hasActiveFilters
           ? 'border-[var(--accent)]/40 bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/15'
           : 'border-[var(--line)] bg-[var(--bg-soft)] text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]'}"
         onclick={() => (filtersOpen = !filtersOpen)}
@@ -344,7 +579,7 @@
         {hasActiveFilters ? "Filtered" : "Filters"}
       </button>
       <button
-        class="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-[var(--panel)] px-3 py-1.5 text-micro font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line)]"
+        class="cursor-pointer inline-flex h-7 items-center gap-1.5 rounded-md bg-[var(--panel)] px-3 text-micro font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line)]"
         onclick={() => (createOpen = !createOpen)}
         type="button"
       >
@@ -367,7 +602,7 @@
       </button>
     {:else}
       <button
-        class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-micro font-medium transition-colors {hasActiveFilters
+        class="cursor-pointer inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-micro font-medium transition-colors {hasActiveFilters
           ? 'border-[var(--accent)]/40 bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/15'
           : 'border-[var(--line)] bg-[var(--bg-soft)] text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]'}"
         onclick={() => (filtersOpen = !filtersOpen)}
@@ -389,10 +624,14 @@
         </svg>
         {hasActiveFilters ? "Filtered" : "Filters"}
       </button>
-      <a
-        class="rounded-md bg-[var(--panel)] px-3 py-1.5 text-micro font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line)]"
-        href={workspaceHref("/topics")}>Open topics</a
+      <Button
+        variant="secondary"
+        size="compact"
+        class="rounded-md font-medium bg-[var(--panel)] hover:bg-[var(--line)]"
+        href={workspaceHref("/topics")}
       >
+        Open topics
+      </Button>
     {/if}
   </div>
 </div>
@@ -439,6 +678,19 @@
           />
         </label>
       </div>
+      {#if listSurface === "topics"}
+        <label
+          class="mt-3 inline-flex cursor-pointer items-center gap-1.5 text-micro text-[var(--fg-muted)]"
+        >
+          <input
+            bind:checked={showArchived}
+            class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--line)] bg-[var(--bg)] text-[var(--accent-hover)] focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-0"
+            type="checkbox"
+            data-testid="topics-show-archived"
+          />
+          Show archived
+        </label>
+      {/if}
       <div class="mt-3 flex gap-1.5">
         <button
           class="cursor-pointer rounded-md bg-[var(--panel)] px-3 py-1.5 text-micro font-medium text-[var(--fg)] hover:bg-[var(--line)]"
@@ -518,12 +770,62 @@
       onclick={hasActiveFilters ? resetFilters : undefined}
     />
   {:else}
-    <div
-      class="space-y-px overflow-hidden rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
-    >
-      {#each topics as topic, i}
+    {#snippet topicRow(topic, index, showBorderTop)}
+      {@const selected = selectedTopicIds.has(topic.id)}
+      {#if topicSelectMode}
         <div
-          class="flex items-stretch {i > 0
+          aria-label={`${selected ? "Deselect" : "Select"} ${topic.title || topic.id}`}
+          aria-pressed={selected}
+          class="flex cursor-pointer items-stretch outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-soft)] {showBorderTop
+            ? 'border-t border-[var(--line)]'
+            : ''} {selected
+            ? 'border-l-[3px] border-l-[var(--accent)] bg-[var(--accent)]/10'
+            : 'border-l-[3px] border-l-transparent hover:bg-[var(--line-subtle)]'}"
+          onclick={(e) => handleTopicRowClick(topic, index, e)}
+          onkeydown={(e) => topicRowKeydown(topic, index, e)}
+          role="button"
+          tabindex="0"
+        >
+          <div
+            class="flex shrink-0 items-center self-stretch pr-1 pl-2 sm:pl-3"
+          >
+            <LeadingSelectionGlyph {selected} />
+          </div>
+          <div
+            class="pointer-events-none flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5"
+          >
+            <WorkspaceResourceListRow
+              title={topic.title}
+              description={topic.current_summary ?? topic.summary ?? ""}
+            >
+              {#snippet badges()}
+                {#if topic.state}
+                  <span
+                    class="inline-flex rounded px-1.5 py-0.5 text-micro font-semibold capitalize {topicStatePillTone(
+                      topic.state,
+                    )}">{topic.state}</span
+                  >
+                {/if}
+                {#if isTopicArchived(topic) && topic.state !== "archived"}
+                  <span
+                    class="rounded bg-warn-soft px-1.5 py-0.5 text-micro font-medium text-warn-text"
+                    >Archived</span
+                  >
+                {/if}
+              {/snippet}
+            </WorkspaceResourceListRow>
+            <div
+              class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"
+            >
+              <span class="w-14 text-right text-[var(--fg-muted)]"
+                >{formatTimestamp(topic.updated_at) || "—"}</span
+              >
+            </div>
+          </div>
+        </div>
+      {:else}
+        <div
+          class="flex items-stretch {showBorderTop
             ? 'border-t border-[var(--line)]'
             : ''}"
         >
@@ -543,7 +845,7 @@
                     )}">{topic.state}</span
                   >
                 {/if}
-                {#if isTopicArchived(topic)}
+                {#if isTopicArchived(topic) && topic.state !== "archived"}
                   <span
                     class="rounded bg-warn-soft px-1.5 py-0.5 text-micro font-medium text-warn-text"
                     >Archived</span
@@ -559,29 +861,49 @@
               >
             </div>
           </a>
-          <div class="hidden shrink-0 items-center gap-1 px-2 sm:flex">
-            <ArchiveButton
-              archived={isTopicArchived(topic)}
-              busy={Boolean(archiveBusyId) || Boolean(trashBusyId)}
-              onarchive={() =>
-                void (confirmModal = {
-                  open: true,
-                  action: "archive",
-                  entityId: topic.id,
-                })}
-              onunarchive={() => void unarchiveTopicRow(topic.id)}
-            />
-            <TrashButton
-              busy={Boolean(trashBusyId) || Boolean(archiveBusyId)}
-              ontrash={() =>
-                (confirmModal = {
-                  open: true,
-                  action: "trash",
-                  entityId: topic.id,
-                })}
-            />
-          </div>
         </div>
+      {/if}
+    {/snippet}
+    {#if topicSelectMode}
+      <WorkspaceListBulkToolbar
+        allVisibleSelected={allTopicsVisibleSelected}
+        busy={bulkBusy}
+        canArchive={bulkTopicsCanArchive}
+        canTrash={bulkTopicsCanTrash}
+        canUnarchive={bulkTopicsCanUnarchive}
+        onArchive={() => {
+          const ids = topicIdsForBulkArchive();
+          if (!ids.length) return;
+          confirmModal = {
+            open: true,
+            action: "archive",
+            entityId: "",
+            bulkIds: ids,
+          };
+        }}
+        onClear={clearTopicSelection}
+        onDeselectAll={clearTopicSelection}
+        onSelectAll={selectAllVisibleTopics}
+        onTrash={() => {
+          const ids = topicIdsForBulkTrash();
+          if (!ids.length) return;
+          confirmModal = {
+            open: true,
+            action: "trash",
+            entityId: "",
+            bulkIds: ids,
+          };
+        }}
+        onUnarchive={() => void bulkUnarchiveTopics(topicIdsForBulkUnarchive())}
+        selectionChromeActive={true}
+        selectedCount={selectedTopicIds.size}
+      />
+    {/if}
+    <div
+      class="space-y-px overflow-hidden rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
+    >
+      {#each topics as topic, i}
+        {@render topicRow(topic, i, i > 0)}
       {/each}
     </div>
   {/if}
@@ -658,16 +980,13 @@
 {#if listSurface === "topics"}
   <ConfirmModal
     open={confirmModal.open}
-    title={confirmModal.action === "trash" ? "Move to trash" : "Archive topic"}
-    message={confirmModal.action === "trash"
-      ? "This topic will be moved to trash. You can restore it later."
-      : "This topic will be hidden from default views. You can unarchive it later."}
+    title={topicConfirmModalTitle}
+    message={topicConfirmModalMessage}
     confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
     variant={confirmModal.action === "trash" ? "danger" : "warning"}
-    busy={confirmModal.action === "trash"
-      ? Boolean(trashBusyId)
-      : Boolean(archiveBusyId)}
+    busy={topicConfirmModalBusy}
     onconfirm={handleConfirm}
-    oncancel={() => (confirmModal = { open: false, action: "", entityId: "" })}
+    oncancel={() =>
+      (confirmModal = { open: false, action: "", entityId: "", bulkIds: null })}
   />
 {/if}

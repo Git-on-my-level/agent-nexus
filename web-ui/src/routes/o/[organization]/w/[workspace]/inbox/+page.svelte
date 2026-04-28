@@ -630,7 +630,7 @@
   </div>
   <div class="flex items-center gap-2">
     <button
-      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-micro font-medium transition-colors {hasActiveFilters
+      class="cursor-pointer inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-micro font-medium transition-colors {hasActiveFilters
         ? 'border-[var(--accent)]/40 bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/15'
         : 'border-[var(--line)] bg-[var(--bg-soft)] text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]'}"
       onclick={() => (filtersOpen = !filtersOpen)}
@@ -653,7 +653,7 @@
       {hasActiveFilters ? "Filtered" : "Filter"}
     </button>
     <span
-      class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-meta font-semibold tabular-nums {totalItems >
+      class="inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-micro font-semibold tabular-nums leading-none {totalItems >
       0
         ? 'bg-[var(--accent)]/10 text-[var(--accent)]'
         : 'bg-[var(--panel)] text-[var(--fg-muted)]'}"

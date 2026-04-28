@@ -5,15 +5,15 @@
   import { filterTopLevelDocuments } from "$lib/documentVisibility";
   import { formatTimestamp } from "$lib/formatDate";
   import { workspacePath } from "$lib/workspacePaths";
-  import ArchiveButton from "$lib/components/ArchiveButton.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
-  import TrashButton from "$lib/components/TrashButton.svelte";
   import CompactFilterBar from "$lib/components/CompactFilterBar.svelte";
   import Skeleton from "$lib/components/state/Skeleton.svelte";
   import StateEmpty from "$lib/components/state/StateEmpty.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
   import WorkspaceResourceListRow from "$lib/components/WorkspaceResourceListRow.svelte";
+  import WorkspaceListBulkToolbar from "$lib/components/WorkspaceListBulkToolbar.svelte";
+  import LeadingSelectionGlyph from "$lib/components/LeadingSelectionGlyph.svelte";
 
   const DOC_STATE_LABELS = {
     active: "Active",
@@ -37,8 +37,20 @@
     return f.showArchived;
   });
   let archiveBusyId = $state("");
-  let confirmModal = $state({ open: false, action: "", entityId: "" });
+  /** @type {{ open: boolean, action: string, entityId: string, bulkIds: string[] | null }} */
+  let confirmModal = $state({
+    open: false,
+    action: "",
+    entityId: "",
+    bulkIds: null,
+  });
   let trashBusyId = $state("");
+  let bulkBusy = $state(false);
+  /** @type {Set<string>} */
+  let selectedIds = $state(new Set());
+  let selectMode = $state(false);
+  /** @type {number | null} */
+  let selectionAnchorIndex = $state(null);
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
   let scopedThreadId = $derived(
@@ -69,6 +81,108 @@
     if (workspaceSlug) {
       void loadDocuments();
     }
+  });
+
+  $effect(() => {
+    documents;
+    const valid = new Set(
+      documents.map((d) => String(d?.id ?? "").trim()).filter(Boolean),
+    );
+    const next = new Set([...selectedIds].filter((id) => valid.has(id)));
+    if (next.size !== selectedIds.size) {
+      selectedIds = next;
+    }
+  });
+
+  let allVisibleSelected = $derived(
+    documents.length > 0 && documents.every((d) => selectedIds.has(d.id)),
+  );
+  let selectedDocs = $derived(documents.filter((d) => selectedIds.has(d.id)));
+
+  let bulkCanArchive = $derived(
+    selectedDocs.some((d) => !isDocArchived(d) && !isDocTrashed(d)),
+  );
+  let bulkCanUnarchive = $derived(
+    selectedDocs.some((d) => isDocArchived(d) && !isDocTrashed(d)),
+  );
+  let bulkCanTrash = $derived(selectedDocs.some((d) => !isDocTrashed(d)));
+
+  function selectAllVisibleDocs() {
+    selectedIds = new Set(documents.map((d) => d.id).filter(Boolean));
+  }
+
+  function clearDocSelection() {
+    selectedIds = new Set();
+  }
+
+  function toggleSelectMode() {
+    selectMode = !selectMode;
+    if (!selectMode) {
+      clearDocSelection();
+      selectionAnchorIndex = null;
+    }
+  }
+
+  function applyDocRangeFromIndices(fromIndex, toIndex) {
+    const lo = Math.min(fromIndex, toIndex);
+    const hi = Math.max(fromIndex, toIndex);
+    const next = new Set(selectedIds);
+    for (let i = lo; i <= hi; i++) {
+      const d = documents[i];
+      if (d?.id) next.add(d.id);
+    }
+    selectedIds = next;
+  }
+
+  /** @param {MouseEvent} e */
+  function handleDocRowClick(doc, index, e) {
+    if (!selectMode || bulkBusy) return;
+    const href = workspaceHref(`/docs/${doc.id}`);
+    const ce = /** @type {MouseEvent & { detail?: number }} */ (e);
+    if ((ce.detail ?? 1) >= 2) {
+      void goto(href);
+      return;
+    }
+    if (e.shiftKey && selectionAnchorIndex !== null) {
+      applyDocRangeFromIndices(selectionAnchorIndex, index);
+      return;
+    }
+    const id = doc.id;
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    selectedIds = next;
+    selectionAnchorIndex = index;
+  }
+
+  /** @param {KeyboardEvent} e */
+  function docRowKeydown(doc, index, e) {
+    if (!selectMode || bulkBusy) return;
+    if (e.key !== " " && e.key !== "Enter") return;
+    e.preventDefault();
+    if (e.shiftKey && selectionAnchorIndex !== null) {
+      applyDocRangeFromIndices(selectionAnchorIndex, index);
+      return;
+    }
+    const id = doc.id;
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    selectedIds = next;
+    selectionAnchorIndex = index;
+  }
+
+  $effect(() => {
+    if (!selectMode) return;
+    /** @param {KeyboardEvent} ev */
+    function onDocKey(ev) {
+      if (ev.key !== "Escape") return;
+      selectMode = false;
+      clearDocSelection();
+      selectionAnchorIndex = null;
+    }
+    document.addEventListener("keydown", onDocKey);
+    return () => document.removeEventListener("keydown", onDocKey);
   });
 
   async function loadDocuments(isRetry = false) {
@@ -176,9 +290,31 @@
     return typeof at === "string" ? at.trim() !== "" : Boolean(at);
   }
 
+  function isDocTrashed(doc) {
+    if (doc?.state === "trashed") return true;
+    const t = doc?.trashed_at;
+    return typeof t === "string" ? t.trim() !== "" : Boolean(t);
+  }
+
+  function idsForBulkArchive() {
+    return selectedDocs
+      .filter((d) => !isDocArchived(d) && !isDocTrashed(d))
+      .map((d) => d.id);
+  }
+
+  function idsForBulkUnarchive() {
+    return selectedDocs
+      .filter((d) => isDocArchived(d) && !isDocTrashed(d))
+      .map((d) => d.id);
+  }
+
+  function idsForBulkTrash() {
+    return selectedDocs.filter((d) => !isDocTrashed(d)).map((d) => d.id);
+  }
+
   async function archiveDocument(docId) {
     const id = String(docId ?? "").trim();
-    if (!id || archiveBusyId) return;
+    if (!id || archiveBusyId || bulkBusy) return;
     archiveBusyId = id;
     error = "";
     try {
@@ -191,29 +327,14 @@
     }
   }
 
-  async function unarchiveDocument(docId) {
-    const id = String(docId ?? "").trim();
-    if (!id || archiveBusyId) return;
-    archiveBusyId = id;
-    error = "";
-    try {
-      await coreClient.unarchiveDocument(id, {});
-      await loadDocuments();
-    } catch (e) {
-      error = `Unarchive failed: ${e instanceof Error ? e.message : String(e)}`;
-    } finally {
-      archiveBusyId = "";
-    }
-  }
-
   async function trashDocument(docId) {
     const id = String(docId ?? "").trim();
-    if (!id || trashBusyId) return;
+    if (!id || trashBusyId || bulkBusy) return;
     trashBusyId = id;
     error = "";
     try {
       await coreClient.trashDocument(id, {});
-      confirmModal = { open: false, action: "", entityId: "" };
+      confirmModal = { open: false, action: "", entityId: "", bulkIds: null };
       await loadDocuments();
     } catch (e) {
       error = `Trash failed: ${e instanceof Error ? e.message : String(e)}`;
@@ -222,13 +343,106 @@
     }
   }
 
+  async function bulkArchiveDocuments(ids) {
+    const list = ids.filter(Boolean);
+    if (!list.length || bulkBusy) return;
+    bulkBusy = true;
+    error = "";
+    try {
+      for (const id of list) {
+        await coreClient.archiveDocument(id, {});
+      }
+      clearDocSelection();
+      confirmModal = { open: false, action: "", entityId: "", bulkIds: null };
+      await loadDocuments();
+    } catch (e) {
+      error = `Archive failed: ${e instanceof Error ? e.message : String(e)}`;
+    } finally {
+      bulkBusy = false;
+    }
+  }
+
+  async function bulkUnarchiveDocuments(ids) {
+    const list = ids.filter(Boolean);
+    if (!list.length || bulkBusy) return;
+    bulkBusy = true;
+    error = "";
+    try {
+      for (const id of list) {
+        await coreClient.unarchiveDocument(id, {});
+      }
+      clearDocSelection();
+      await loadDocuments();
+    } catch (e) {
+      error = `Unarchive failed: ${e instanceof Error ? e.message : String(e)}`;
+    } finally {
+      bulkBusy = false;
+    }
+  }
+
+  async function bulkTrashDocuments(ids) {
+    const list = ids.filter(Boolean);
+    if (!list.length || bulkBusy) return;
+    bulkBusy = true;
+    error = "";
+    try {
+      for (const id of list) {
+        await coreClient.trashDocument(id, {});
+      }
+      clearDocSelection();
+      confirmModal = { open: false, action: "", entityId: "", bulkIds: null };
+      await loadDocuments();
+    } catch (e) {
+      error = `Trash failed: ${e instanceof Error ? e.message : String(e)}`;
+    } finally {
+      bulkBusy = false;
+    }
+  }
+
   function handleConfirm() {
+    const bulkIds = confirmModal.bulkIds;
     const id = confirmModal.entityId;
     const action = confirmModal.action;
-    confirmModal = { open: false, action: "", entityId: "" };
+    confirmModal = { open: false, action: "", entityId: "", bulkIds: null };
+    if (bulkIds && bulkIds.length > 0) {
+      if (action === "archive") void bulkArchiveDocuments(bulkIds);
+      else if (action === "trash") void bulkTrashDocuments(bulkIds);
+      return;
+    }
     if (action === "archive") void archiveDocument(id);
     else if (action === "trash") void trashDocument(id);
   }
+
+  let confirmBulkCount = $derived(confirmModal.bulkIds?.length ?? 0);
+  let confirmIsBulk = $derived(confirmBulkCount > 0);
+
+  let confirmModalTitle = $derived.by(() => {
+    if (confirmModal.action === "trash") {
+      return confirmIsBulk
+        ? `Move ${confirmBulkCount} documents to trash`
+        : "Move to trash";
+    }
+    return confirmIsBulk
+      ? `Archive ${confirmBulkCount} documents`
+      : "Archive document";
+  });
+
+  let confirmModalMessage = $derived.by(() => {
+    if (confirmModal.action === "trash") {
+      return confirmIsBulk
+        ? `These documents (${confirmBulkCount}) will be moved to trash. You can restore them later.`
+        : "This document will be moved to trash. You can restore it later.";
+    }
+    return confirmIsBulk
+      ? `These documents (${confirmBulkCount}) will be hidden from default views. You can unarchive them later.`
+      : "This document will be hidden from default views. You can unarchive it later.";
+  });
+
+  let confirmModalBusy = $derived(
+    confirmModal.action === "trash"
+      ? Boolean(trashBusyId) || (confirmIsBulk && bulkBusy)
+      : Boolean(archiveBusyId) || (confirmIsBulk && bulkBusy),
+  );
 </script>
 
 <div class="mb-3 flex max-md:mb-2 items-center justify-between">
@@ -242,6 +456,18 @@
     {/if}
   </div>
   <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-1.5">
+    <button
+      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] {!documents.length &&
+      !loading
+        ? 'opacity-50 pointer-events-none'
+        : ''}"
+      onclick={toggleSelectMode}
+      disabled={!documents.length && !loading}
+      type="button"
+      aria-pressed={selectMode}
+    >
+      {selectMode ? "Done" : "Select"}
+    </button>
     <button
       class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-micro font-medium transition-colors {hasActiveFilters
         ? 'border-[var(--accent)]/40 bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/15'
@@ -446,88 +672,140 @@
   />
 {/if}
 
-{#snippet docRow(doc, showBorderTop)}
-  <div
-    class="flex items-stretch {showBorderTop
-      ? 'border-t border-[var(--line)]'
-      : ''}"
-  >
-    <a
-      class="flex min-w-0 flex-1 items-start gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--line-subtle)] sm:px-4"
-      href={workspaceHref(`/docs/${doc.id}`)}
-    >
-      <WorkspaceResourceListRow
-        title={doc.title || doc.id}
-        description={doc.summary ?? ""}
-      >
-        {#snippet badges()}
-          {#if doc.state}
-            <span
-              class="inline-flex shrink-0 rounded px-1.5 py-0.5 text-micro font-semibold {docStateColor(
-                doc.state,
-              )}">{DOC_STATE_LABELS[doc.state] ?? doc.state}</span
-            >
-          {/if}
-        {/snippet}
-      </WorkspaceResourceListRow>
-      <div
-        class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"
-      >
-        <span class="w-14 text-right text-[var(--fg-muted)]"
-          >{formatTimestamp(doc.updated_at) || "—"}</span
-        >
-      </div>
-    </a>
+{#snippet docRow(doc, index, showBorderTop)}
+  {@const selected = selectedIds.has(doc.id)}
+  {#if selectMode}
     <div
-      class="hidden shrink-0 items-center gap-1 px-1 sm:px-2"
-      role="presentation"
-      onclick={(e) => e.stopPropagation()}
+      aria-label={`${selected ? "Deselect" : "Select"} ${doc.title || doc.id}`}
+      aria-pressed={selected}
+      class="flex cursor-pointer items-stretch outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-soft)] {showBorderTop
+        ? 'border-t border-[var(--line)]'
+        : ''} {selected
+        ? 'border-l-[3px] border-l-[var(--accent)] bg-[var(--accent)]/10'
+        : 'border-l-[3px] border-l-transparent hover:bg-[var(--line-subtle)]'}"
+      onclick={(e) => handleDocRowClick(doc, index, e)}
+      onkeydown={(e) => docRowKeydown(doc, index, e)}
+      role="button"
+      tabindex="0"
     >
-      <ArchiveButton
-        archived={isDocArchived(doc)}
-        busy={Boolean(archiveBusyId) || Boolean(trashBusyId)}
-        onarchive={() =>
-          (confirmModal = {
-            open: true,
-            action: "archive",
-            entityId: doc.id,
-          })}
-        onunarchive={() => void unarchiveDocument(doc.id)}
-      />
-      <TrashButton
-        busy={Boolean(trashBusyId) || Boolean(archiveBusyId)}
-        ontrash={() =>
-          (confirmModal = {
-            open: true,
-            action: "trash",
-            entityId: doc.id,
-          })}
-      />
+      <div class="flex shrink-0 items-center self-stretch pl-2 sm:pl-3">
+        <LeadingSelectionGlyph {selected} />
+      </div>
+      <div
+        class="pointer-events-none flex min-w-0 flex-1 items-start gap-3 px-3 py-2.5 sm:px-4"
+      >
+        <WorkspaceResourceListRow
+          title={doc.title || doc.id}
+          description={doc.summary ?? ""}
+        >
+          {#snippet badges()}
+            {#if doc.state}
+              <span
+                class="inline-flex shrink-0 rounded px-1.5 py-0.5 text-micro font-semibold {docStateColor(
+                  doc.state,
+                )}">{DOC_STATE_LABELS[doc.state] ?? doc.state}</span
+              >
+            {/if}
+          {/snippet}
+        </WorkspaceResourceListRow>
+        <div
+          class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"
+        >
+          <span class="w-14 text-right text-[var(--fg-muted)]"
+            >{formatTimestamp(doc.updated_at) || "—"}</span
+          >
+        </div>
+      </div>
     </div>
-  </div>
+  {:else}
+    <div
+      class="flex items-stretch {showBorderTop
+        ? 'border-t border-[var(--line)]'
+        : ''}"
+    >
+      <a
+        class="flex min-w-0 flex-1 items-start gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--line-subtle)] sm:px-4"
+        href={workspaceHref(`/docs/${doc.id}`)}
+      >
+        <WorkspaceResourceListRow
+          title={doc.title || doc.id}
+          description={doc.summary ?? ""}
+        >
+          {#snippet badges()}
+            {#if doc.state}
+              <span
+                class="inline-flex shrink-0 rounded px-1.5 py-0.5 text-micro font-semibold {docStateColor(
+                  doc.state,
+                )}">{DOC_STATE_LABELS[doc.state] ?? doc.state}</span
+              >
+            {/if}
+          {/snippet}
+        </WorkspaceResourceListRow>
+        <div
+          class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"
+        >
+          <span class="w-14 text-right text-[var(--fg-muted)]"
+            >{formatTimestamp(doc.updated_at) || "—"}</span
+          >
+        </div>
+      </a>
+    </div>
+  {/if}
 {/snippet}
 
 {#if !loading && documents.length > 0}
+  {#if selectMode}
+    <WorkspaceListBulkToolbar
+      {allVisibleSelected}
+      busy={bulkBusy}
+      canArchive={bulkCanArchive}
+      canTrash={bulkCanTrash}
+      canUnarchive={bulkCanUnarchive}
+      onArchive={() => {
+        const ids = idsForBulkArchive();
+        if (!ids.length) return;
+        confirmModal = {
+          open: true,
+          action: "archive",
+          entityId: "",
+          bulkIds: ids,
+        };
+      }}
+      onClear={clearDocSelection}
+      onDeselectAll={clearDocSelection}
+      onSelectAll={selectAllVisibleDocs}
+      onTrash={() => {
+        const ids = idsForBulkTrash();
+        if (!ids.length) return;
+        confirmModal = {
+          open: true,
+          action: "trash",
+          entityId: "",
+          bulkIds: ids,
+        };
+      }}
+      onUnarchive={() => void bulkUnarchiveDocuments(idsForBulkUnarchive())}
+      selectionChromeActive={true}
+      selectedCount={selectedIds.size}
+    />
+  {/if}
   <div
     class="space-y-px rounded-md border border-[var(--line)] bg-[var(--bg-soft)] overflow-hidden"
   >
     {#each documents as doc, i}
-      {@render docRow(doc, i > 0)}
+      {@render docRow(doc, i, i > 0)}
     {/each}
   </div>
 {/if}
 
 <ConfirmModal
   open={confirmModal.open}
-  title={confirmModal.action === "trash" ? "Move to trash" : "Archive document"}
-  message={confirmModal.action === "trash"
-    ? "This document will be moved to trash. You can restore it later."
-    : "This document will be hidden from default views. You can unarchive it later."}
+  title={confirmModalTitle}
+  message={confirmModalMessage}
   confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
   variant={confirmModal.action === "trash" ? "danger" : "warning"}
-  busy={confirmModal.action === "trash"
-    ? Boolean(trashBusyId)
-    : Boolean(archiveBusyId)}
+  busy={confirmModalBusy}
   onconfirm={handleConfirm}
-  oncancel={() => (confirmModal = { open: false, action: "", entityId: "" })}
+  oncancel={() =>
+    (confirmModal = { open: false, action: "", entityId: "", bulkIds: null })}
 />

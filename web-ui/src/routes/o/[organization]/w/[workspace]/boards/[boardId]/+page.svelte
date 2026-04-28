@@ -7,6 +7,7 @@
   import CardDetailModal from "$lib/components/CardDetailModal.svelte";
   import IdsIntegrityDisclosure from "$lib/components/IdsIntegrityDisclosure.svelte";
   import ResourceShareMenu from "$lib/components/ResourceShareMenu.svelte";
+  import Button from "$lib/components/Button.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import {
     actorRegistry,
@@ -547,12 +548,14 @@
           {#snippet actions()}
             {#if !board.trashed_at}
               <ResourceShareMenu resourceId={board.id} rawRecord={board} />
-              <a
-                class="rounded-md bg-accent-solid px-2.5 py-1.5 text-micro font-medium text-white transition-colors hover:bg-accent"
+              <Button
+                variant="primary"
+                size="compact"
+                class="rounded-md"
                 href={workspaceHref(`/boards/${boardId}/cards/new`)}
               >
                 Add card
-              </a>
+              </Button>
               <div bind:this={boardMoreRoot} class="relative">
                 <button
                   type="button"

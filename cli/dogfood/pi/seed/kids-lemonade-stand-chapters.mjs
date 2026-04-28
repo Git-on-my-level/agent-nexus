@@ -566,6 +566,8 @@ const chapterBoardStates = {
         id: "0cfdd886-64dd-4d08-9ded-551605254d71",
         board_id: "991a7ede-c737-4040-b44a-ca225a20b496",
         column_key: "done",
+        resolution: "done",
+        resolution_refs: ["artifact:artifact-prep-checklist"],
         summary: "Boss kid coordination: lock the halftime combo after Ruby and Theo reply in-thread",
         title: "Boss kid coordination: lock the halftime combo after Ruby and Theo reply in-thread",
         related_refs: [
@@ -604,6 +606,8 @@ const chapterBoardStates = {
         id: "3d051f3d-3dcc-4e8e-9ccd-6b5f1c524195",
         board_id: "991a7ede-c737-4040-b44a-ca225a20b496",
         column_key: "done",
+        resolution: "done",
+        resolution_refs: ["artifact:artifact-sales-scoreboard"],
         summary: "Sales combo pitch: launch Halftime Happy Combo without overselling mint",
         title: "Sales combo pitch: launch Halftime Happy Combo without overselling mint",
         related_refs: [

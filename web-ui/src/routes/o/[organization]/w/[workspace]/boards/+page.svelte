@@ -1,8 +1,7 @@
 <script>
+  import { goto } from "$app/navigation";
   import { page } from "$app/stores";
-  import ArchiveButton from "$lib/components/ArchiveButton.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
-  import TrashButton from "$lib/components/TrashButton.svelte";
   import CompactFilterBar from "$lib/components/CompactFilterBar.svelte";
   import Skeleton from "$lib/components/state/Skeleton.svelte";
   import StateEmpty from "$lib/components/state/StateEmpty.svelte";
@@ -12,6 +11,9 @@
   import { workspacePath } from "$lib/workspacePaths";
   import { BOARD_STATUS_LABELS, parseDelimitedValues } from "$lib/boardUtils";
   import WorkspaceResourceListRow from "$lib/components/WorkspaceResourceListRow.svelte";
+  import WorkspaceListBulkToolbar from "$lib/components/WorkspaceListBulkToolbar.svelte";
+  import LeadingSelectionGlyph from "$lib/components/LeadingSelectionGlyph.svelte";
+  import Button from "$lib/components/Button.svelte";
 
   const defaultBoardListFilters = {
     showArchived: false,
@@ -38,8 +40,20 @@
     );
   });
   let archiveBusyId = $state("");
-  let confirmModal = $state({ open: false, action: "", entityId: "" });
+  /** @type {{ open: boolean, action: string, entityId: string, bulkIds: string[] | null }} */
+  let confirmModal = $state({
+    open: false,
+    action: "",
+    entityId: "",
+    bulkIds: null,
+  });
   let trashBusyId = $state("");
+  let bulkBusy = $state(false);
+  /** @type {Set<string>} */
+  let selectedBoardIds = $state(new Set());
+  let boardSelectMode = $state(false);
+  /** @type {number | null} */
+  let boardSelectionAnchorIndex = $state(null);
 
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
@@ -128,14 +142,153 @@
     }
   });
 
+  $effect(() => {
+    boards;
+    const valid = new Set(
+      boards.map((row) => String(row?.board?.id ?? "").trim()).filter(Boolean),
+    );
+    const next = new Set([...selectedBoardIds].filter((id) => valid.has(id)));
+    if (next.size !== selectedBoardIds.size) {
+      selectedBoardIds = next;
+    }
+  });
+
+  let allBoardsVisibleSelected = $derived(
+    boards.length > 0 &&
+      boards.every((row) => selectedBoardIds.has(row.board.id)),
+  );
+  let selectedBoardRows = $derived(
+    boards.filter((row) => selectedBoardIds.has(row.board.id)),
+  );
+
+  let bulkBoardsCanArchive = $derived(
+    selectedBoardRows.some(
+      (row) => !isBoardArchived(row.board) && !isBoardTrashed(row.board),
+    ),
+  );
+  let bulkBoardsCanUnarchive = $derived(
+    selectedBoardRows.some(
+      (row) => isBoardArchived(row.board) && !isBoardTrashed(row.board),
+    ),
+  );
+  let bulkBoardsCanTrash = $derived(
+    selectedBoardRows.some((row) => !isBoardTrashed(row.board)),
+  );
+
+  function selectAllVisibleBoards() {
+    selectedBoardIds = new Set(
+      boards.map((row) => row.board.id).filter(Boolean),
+    );
+  }
+
+  function clearBoardSelection() {
+    selectedBoardIds = new Set();
+  }
+
+  function toggleBoardSelectMode() {
+    boardSelectMode = !boardSelectMode;
+    if (!boardSelectMode) {
+      clearBoardSelection();
+      boardSelectionAnchorIndex = null;
+    }
+  }
+
+  function applyBoardRangeFromIndices(fromIndex, toIndex) {
+    const lo = Math.min(fromIndex, toIndex);
+    const hi = Math.max(fromIndex, toIndex);
+    const next = new Set(selectedBoardIds);
+    for (let i = lo; i <= hi; i++) {
+      const b = boards[i]?.board;
+      if (b?.id) next.add(b.id);
+    }
+    selectedBoardIds = next;
+  }
+
+  /** @param {{ board: { id: string } }} item */
+  function handleBoardRowClick(item, index, e) {
+    if (!boardSelectMode || bulkBusy) return;
+    const board = item.board;
+    const href = workspaceHref(`/boards/${board.id}`);
+    const ce = /** @type {MouseEvent & { detail?: number }} */ (e);
+    if ((ce.detail ?? 1) >= 2) {
+      void goto(href);
+      return;
+    }
+    if (e.shiftKey && boardSelectionAnchorIndex !== null) {
+      applyBoardRangeFromIndices(boardSelectionAnchorIndex, index);
+      return;
+    }
+    const id = board.id;
+    const next = new Set(selectedBoardIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    selectedBoardIds = next;
+    boardSelectionAnchorIndex = index;
+  }
+
+  /** @param {{ board: { id: string } }} item */
+  function boardRowKeydown(item, index, e) {
+    if (!boardSelectMode || bulkBusy) return;
+    if (e.key !== " " && e.key !== "Enter") return;
+    e.preventDefault();
+    const board = item.board;
+    if (e.shiftKey && boardSelectionAnchorIndex !== null) {
+      applyBoardRangeFromIndices(boardSelectionAnchorIndex, index);
+      return;
+    }
+    const id = board.id;
+    const next = new Set(selectedBoardIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    selectedBoardIds = next;
+    boardSelectionAnchorIndex = index;
+  }
+
+  $effect(() => {
+    if (!boardSelectMode) return;
+    /** @param {KeyboardEvent} ev */
+    function onBoardKey(ev) {
+      if (ev.key !== "Escape") return;
+      boardSelectMode = false;
+      clearBoardSelection();
+      boardSelectionAnchorIndex = null;
+    }
+    document.addEventListener("keydown", onBoardKey);
+    return () => document.removeEventListener("keydown", onBoardKey);
+  });
+
+  function boardIdsForBulkArchive() {
+    return selectedBoardRows
+      .filter(
+        (row) => !isBoardArchived(row.board) && !isBoardTrashed(row.board),
+      )
+      .map((row) => row.board.id);
+  }
+
+  function boardIdsForBulkUnarchive() {
+    return selectedBoardRows
+      .filter((row) => isBoardArchived(row.board) && !isBoardTrashed(row.board))
+      .map((row) => row.board.id);
+  }
+
+  function boardIdsForBulkTrash() {
+    return selectedBoardRows
+      .filter((row) => !isBoardTrashed(row.board))
+      .map((row) => row.board.id);
+  }
+
   function isBoardArchived(board) {
     const at = board?.archived_at;
     return typeof at === "string" ? at.trim() !== "" : Boolean(at);
   }
 
+  function isBoardTrashed(board) {
+    return board?.state === "trashed";
+  }
+
   async function archiveBoard(boardId) {
     const id = String(boardId ?? "").trim();
-    if (!id || archiveBusyId) return;
+    if (!id || archiveBusyId || bulkBusy) return;
     archiveBusyId = id;
     error = "";
     try {
@@ -148,29 +301,14 @@
     }
   }
 
-  async function unarchiveBoard(boardId) {
-    const id = String(boardId ?? "").trim();
-    if (!id || archiveBusyId) return;
-    archiveBusyId = id;
-    error = "";
-    try {
-      await coreClient.unarchiveBoard(id, {});
-      await loadBoards();
-    } catch (e) {
-      error = `Unarchive failed: ${e instanceof Error ? e.message : String(e)}`;
-    } finally {
-      archiveBusyId = "";
-    }
-  }
-
   async function trashBoard(boardId) {
     const id = String(boardId ?? "").trim();
-    if (!id || trashBusyId) return;
+    if (!id || trashBusyId || bulkBusy) return;
     trashBusyId = id;
     error = "";
     try {
       await coreClient.trashBoard(id, {});
-      confirmModal = { open: false, action: "", entityId: "" };
+      confirmModal = { open: false, action: "", entityId: "", bulkIds: null };
       await loadBoards();
     } catch (e) {
       error = `Trash failed: ${e instanceof Error ? e.message : String(e)}`;
@@ -179,13 +317,106 @@
     }
   }
 
+  async function bulkArchiveBoards(ids) {
+    const list = ids.filter(Boolean);
+    if (!list.length || bulkBusy) return;
+    bulkBusy = true;
+    error = "";
+    try {
+      for (const id of list) {
+        await coreClient.archiveBoard(id, {});
+      }
+      clearBoardSelection();
+      confirmModal = { open: false, action: "", entityId: "", bulkIds: null };
+      await loadBoards();
+    } catch (e) {
+      error = `Archive failed: ${e instanceof Error ? e.message : String(e)}`;
+    } finally {
+      bulkBusy = false;
+    }
+  }
+
+  async function bulkUnarchiveBoards(ids) {
+    const list = ids.filter(Boolean);
+    if (!list.length || bulkBusy) return;
+    bulkBusy = true;
+    error = "";
+    try {
+      for (const id of list) {
+        await coreClient.unarchiveBoard(id, {});
+      }
+      clearBoardSelection();
+      await loadBoards();
+    } catch (e) {
+      error = `Unarchive failed: ${e instanceof Error ? e.message : String(e)}`;
+    } finally {
+      bulkBusy = false;
+    }
+  }
+
+  async function bulkTrashBoards(ids) {
+    const list = ids.filter(Boolean);
+    if (!list.length || bulkBusy) return;
+    bulkBusy = true;
+    error = "";
+    try {
+      for (const id of list) {
+        await coreClient.trashBoard(id, {});
+      }
+      clearBoardSelection();
+      confirmModal = { open: false, action: "", entityId: "", bulkIds: null };
+      await loadBoards();
+    } catch (e) {
+      error = `Trash failed: ${e instanceof Error ? e.message : String(e)}`;
+    } finally {
+      bulkBusy = false;
+    }
+  }
+
   function handleConfirm() {
+    const bulkIds = confirmModal.bulkIds;
     const id = confirmModal.entityId;
     const action = confirmModal.action;
-    confirmModal = { open: false, action: "", entityId: "" };
+    confirmModal = { open: false, action: "", entityId: "", bulkIds: null };
+    if (bulkIds && bulkIds.length > 0) {
+      if (action === "archive") void bulkArchiveBoards(bulkIds);
+      else if (action === "trash") void bulkTrashBoards(bulkIds);
+      return;
+    }
     if (action === "archive") void archiveBoard(id);
     else if (action === "trash") void trashBoard(id);
   }
+
+  let boardConfirmBulkCount = $derived(confirmModal.bulkIds?.length ?? 0);
+  let boardConfirmIsBulk = $derived(boardConfirmBulkCount > 0);
+
+  let boardConfirmModalTitle = $derived.by(() => {
+    if (confirmModal.action === "trash") {
+      return boardConfirmIsBulk
+        ? `Move ${boardConfirmBulkCount} boards to trash`
+        : "Move to trash";
+    }
+    return boardConfirmIsBulk
+      ? `Archive ${boardConfirmBulkCount} boards`
+      : "Archive board";
+  });
+
+  let boardConfirmModalMessage = $derived.by(() => {
+    if (confirmModal.action === "trash") {
+      return boardConfirmIsBulk
+        ? `These boards (${boardConfirmBulkCount}) will be moved to trash. You can restore them later.`
+        : "This board will be moved to trash. You can restore it later.";
+    }
+    return boardConfirmIsBulk
+      ? `These boards (${boardConfirmBulkCount}) will be hidden from default views. You can unarchive them later.`
+      : "This board will be hidden from default views. You can unarchive it later.";
+  });
+
+  let boardConfirmModalBusy = $derived(
+    confirmModal.action === "trash"
+      ? Boolean(trashBusyId) || (boardConfirmIsBulk && bulkBusy)
+      : Boolean(archiveBusyId) || (boardConfirmIsBulk && bulkBusy),
+  );
 
   function applyBoardFilters() {
     boardFiltersApplied = { ...boardFiltersDraft };
@@ -207,7 +438,19 @@
 
   <div class="flex flex-wrap items-center gap-3">
     <button
-      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-micro font-medium transition-colors {hasActiveFilters
+      class="cursor-pointer inline-flex h-7 items-center gap-1.5 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] {boards.length ===
+        0 && !loading
+        ? 'pointer-events-none opacity-50'
+        : ''}"
+      onclick={toggleBoardSelectMode}
+      disabled={boards.length === 0 && !loading}
+      type="button"
+      aria-pressed={boardSelectMode}
+    >
+      {boardSelectMode ? "Done" : "Select"}
+    </button>
+    <button
+      class="cursor-pointer inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-micro font-medium transition-colors {hasActiveFilters
         ? 'border-[var(--accent)]/40 bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/15'
         : 'border-[var(--line)] bg-[var(--bg-soft)] text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]'}"
       onclick={() => {
@@ -234,12 +477,14 @@
       </svg>
       {hasActiveFilters ? "Filtered" : "Filters"}
     </button>
-    <a
-      class="rounded-md bg-accent-solid px-3 py-1.5 text-micro font-medium text-white transition-colors hover:bg-accent"
+    <Button
+      variant="primary"
+      size="compact"
+      class="rounded-md"
       href={workspaceHref("/boards/new")}
     >
       New board
-    </a>
+    </Button>
   </div>
 </div>
 
@@ -329,13 +574,63 @@
     actionHref={workspaceHref("/boards/new")}
   />
 {:else}
-  <div
-    class="space-y-px overflow-hidden rounded-md border border-[var(--line)] bg-[var(--panel)]"
-  >
-    {#each boards as item, i}
-      {@const board = item.board}
+  {#snippet boardRow(item, index, showBorderTop)}
+    {@const board = item.board}
+    {@const selected = selectedBoardIds.has(board.id)}
+    {#if boardSelectMode}
       <div
-        class="flex items-stretch {i > 0
+        aria-label={`${selected ? "Deselect" : "Select"} ${board.title || board.id}`}
+        aria-pressed={selected}
+        class="flex cursor-pointer items-stretch outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--panel)] {showBorderTop
+          ? 'border-t border-[var(--line)]'
+          : ''} {selected
+          ? 'border-l-[3px] border-l-[var(--accent)] bg-[var(--accent)]/10'
+          : 'border-l-[3px] border-l-transparent hover:bg-[var(--line-subtle)]'}"
+        onclick={(e) => handleBoardRowClick(item, index, e)}
+        onkeydown={(e) => boardRowKeydown(item, index, e)}
+        role="button"
+        tabindex="0"
+      >
+        <div class="flex shrink-0 items-center self-stretch pl-2 sm:pl-3">
+          <LeadingSelectionGlyph {selected} />
+        </div>
+        <div
+          class="pointer-events-none flex min-w-0 flex-1 items-start justify-between gap-3 px-3 py-2.5 sm:px-4"
+        >
+          <WorkspaceResourceListRow
+            title={board.title || board.id}
+            description={board.summary ?? ""}
+          >
+            {#snippet badges()}
+              {#if board.state}
+                <span
+                  class="inline-flex shrink-0 rounded px-1.5 py-0.5 text-micro font-semibold {lifecycleStateColor(
+                    board.state,
+                  )}"
+                >
+                  {BOARD_STATUS_LABELS[board.state] ?? board.state}
+                </span>
+              {/if}
+              {#if isBoardArchived(board) && board.state !== "archived"}
+                <span
+                  class="shrink-0 rounded bg-warn-soft px-1.5 py-0.5 text-micro font-medium text-warn-text"
+                  >Archived</span
+                >
+              {/if}
+            {/snippet}
+          </WorkspaceResourceListRow>
+          <div
+            class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"
+          >
+            <span class="w-14 text-right text-[var(--fg-muted)]"
+              >{formatTimestamp(board.updated_at) || "—"}</span
+            >
+          </div>
+        </div>
+      </div>
+    {:else}
+      <div
+        class="flex items-stretch {showBorderTop
           ? 'border-t border-[var(--line)]'
           : ''}"
       >
@@ -365,7 +660,7 @@
                     {BOARD_STATUS_LABELS[board.state] ?? board.state}
                   </span>
                 {/if}
-                {#if isBoardArchived(board)}
+                {#if isBoardArchived(board) && board.state !== "archived"}
                   <span
                     class="shrink-0 rounded bg-warn-soft px-1.5 py-0.5 text-micro font-medium text-warn-text"
                     >Archived</span
@@ -382,51 +677,61 @@
             </div>
           </div>
         </div>
-        <div class="hidden shrink-0 items-center gap-1 px-1 sm:px-2 sm:flex">
-          <ArchiveButton
-            archived={isBoardArchived(board)}
-            busy={Boolean(archiveBusyId) || Boolean(trashBusyId)}
-            onarchive={(event) => {
-              event.stopPropagation();
-              confirmModal = {
-                open: true,
-                action: "archive",
-                entityId: board.id,
-              };
-            }}
-            onunarchive={(event) => {
-              event.stopPropagation();
-              void unarchiveBoard(board.id);
-            }}
-          />
-          <TrashButton
-            busy={Boolean(trashBusyId) || Boolean(archiveBusyId)}
-            ontrash={(event) => {
-              event.stopPropagation();
-              confirmModal = {
-                open: true,
-                action: "trash",
-                entityId: board.id,
-              };
-            }}
-          />
-        </div>
       </div>
+    {/if}
+  {/snippet}
+  {#if boardSelectMode}
+    <WorkspaceListBulkToolbar
+      allVisibleSelected={allBoardsVisibleSelected}
+      busy={bulkBusy}
+      canArchive={bulkBoardsCanArchive}
+      canTrash={bulkBoardsCanTrash}
+      canUnarchive={bulkBoardsCanUnarchive}
+      onArchive={() => {
+        const ids = boardIdsForBulkArchive();
+        if (!ids.length) return;
+        confirmModal = {
+          open: true,
+          action: "archive",
+          entityId: "",
+          bulkIds: ids,
+        };
+      }}
+      onClear={clearBoardSelection}
+      onDeselectAll={clearBoardSelection}
+      onSelectAll={selectAllVisibleBoards}
+      onTrash={() => {
+        const ids = boardIdsForBulkTrash();
+        if (!ids.length) return;
+        confirmModal = {
+          open: true,
+          action: "trash",
+          entityId: "",
+          bulkIds: ids,
+        };
+      }}
+      onUnarchive={() => void bulkUnarchiveBoards(boardIdsForBulkUnarchive())}
+      selectionChromeActive={true}
+      selectedCount={selectedBoardIds.size}
+    />
+  {/if}
+  <div
+    class="space-y-px overflow-hidden rounded-md border border-[var(--line)] bg-[var(--panel)]"
+  >
+    {#each boards as item, i}
+      {@render boardRow(item, i, i > 0)}
     {/each}
   </div>
 {/if}
 
 <ConfirmModal
   open={confirmModal.open}
-  title={confirmModal.action === "trash" ? "Move to trash" : "Archive board"}
-  message={confirmModal.action === "trash"
-    ? "This board will be moved to trash. You can restore it later."
-    : "This board will be hidden from default views. You can unarchive it later."}
+  title={boardConfirmModalTitle}
+  message={boardConfirmModalMessage}
   confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
   variant={confirmModal.action === "trash" ? "danger" : "warning"}
-  busy={confirmModal.action === "trash"
-    ? Boolean(trashBusyId)
-    : Boolean(archiveBusyId)}
+  busy={boardConfirmModalBusy}
   onconfirm={handleConfirm}
-  oncancel={() => (confirmModal = { open: false, action: "", entityId: "" })}
+  oncancel={() =>
+    (confirmModal = { open: false, action: "", entityId: "", bulkIds: null })}
 />
