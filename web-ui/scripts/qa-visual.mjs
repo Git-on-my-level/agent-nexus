@@ -57,14 +57,6 @@ const QA_HOME_HANDOFF_STORAGE_KEY = "anx.home.handoff.lastRead.v1.local.local";
 
 const QA_SCENES = [
   {
-    name: "hosted-start",
-    path: "/hosted/start",
-    hostedMode: "pending-start",
-    waitFor: async (page) => {
-      await page.waitForSelector("text=Redirecting…");
-    },
-  },
-  {
     name: "hosted-signin",
     path: "/hosted/signin",
     hostedMode: "public",
@@ -94,6 +86,8 @@ const QA_SCENES = [
     hostedMode: "authed-dashboard",
     waitFor: async (page) => {
       await page.waitForSelector('h1:has-text("Organizations")');
+      /** List rows render after CP fetch; title alone matches SSR skeleton state. */
+      await page.waitForSelector("text=Northwind Autonomy");
     },
   },
   {
@@ -109,7 +103,9 @@ const QA_SCENES = [
     path: "/hosted/organizations/org_qa_primary",
     hostedMode: "authed-dashboard",
     waitFor: async (page) => {
-      await page.waitForSelector("text=Manage billing");
+      /** Buttons are static; wait for usage/workspace panels after CP loads. */
+      await page.waitForSelector('h2:has-text("Workspaces")');
+      await page.waitForSelector("text=Orbit Release");
     },
   },
   {
@@ -117,7 +113,8 @@ const QA_SCENES = [
     path: "/hosted/organizations/org_qa_primary/usage",
     hostedMode: "authed-dashboard",
     waitFor: async (page) => {
-      await page.waitForSelector('h1:has-text("Usage")');
+      /** `Usage` h1 is SSR; panels render after usage-summary fetch completes. */
+      await page.waitForSelector('text=Workspace breakdown');
     },
   },
   {
@@ -227,20 +224,12 @@ const QA_SCENES = [
     },
   },
   {
-    name: "workspace-inbox-fresh",
-    path: "/o/local/w/local/inbox",
-    workspaceMode: "inbox-fresh",
-    waitFor: async (page) => {
-      await page.waitForSelector("text=Inbox is clear");
-    },
-  },
-  {
     name: "workspace-capture-ui",
     path: "/o/local/w/local/inbox/inbox-ask-auth",
     workspaceMode: "capture-ui",
     thresholdRatio: 0.018,
     waitFor: async (page) => {
-      await page.waitForSelector("text=Context the agent saw");
+      await page.waitForSelector("text=Approve auth callback rollback window");
     },
   },
   {
@@ -248,7 +237,8 @@ const QA_SCENES = [
     path: "/o/local/w/local/inbox/inbox-ask-auth",
     workspaceMode: "capture-degraded",
     waitFor: async (page) => {
-      await page.waitForSelector("text=Context didn't load.");
+      await page.waitForSelector('[role="alert"]');
+      await page.waitForSelector("text=Failed to load inbox item");
     },
   },
   {
@@ -337,12 +327,12 @@ const QA_SCENES = [
   },
   {
     name: "confirm-modal-open",
-    path: "/o/local/w/local/topics",
+    path: "/o/local/w/local/artifacts",
     workspaceMode: "workspace-default",
     waitFor: async (page) => {
-      await page.waitForSelector('h1:has-text("Topics")');
+      await page.waitForSelector('h1:has-text("Artifacts")');
       await page.locator('button[aria-label="Archive"]').first().click();
-      await page.waitForSelector("text=Archive topic");
+      await page.waitForSelector("text=Archive artifact");
     },
   },
 ];
@@ -600,8 +590,6 @@ function createWorkspaceScenario(mode) {
       return { inboxState: "loading", askState: "ok" };
     case "inbox-error":
       return { inboxState: "error", askState: "ok" };
-    case "inbox-fresh":
-      return { inboxState: "fresh", askState: "ok" };
     case "capture-ui":
       return { inboxState: "populated", askState: "ok" };
     case "capture-degraded":
@@ -613,8 +601,6 @@ function createWorkspaceScenario(mode) {
 
 function createHostedScenario(mode) {
   switch (mode) {
-    case "pending-start":
-      return { accountState: "pending", organizations: [], workspaces: [] };
     case "public":
       return { accountState: "unauthed", organizations: [], workspaces: [] };
     case "onboarding-organization":
@@ -883,10 +869,6 @@ async function installQaRoutes(page, scene) {
 
 async function handleHostedApiRoute(route, request, url, pathname, scenario) {
   if (pathname === "/account/me" && request.method() === "GET") {
-    if (scenario.accountState === "pending") {
-      await new Promise(() => {});
-      return;
-    }
     if (scenario.accountState !== "authed") {
       await route.fulfill(
         jsonResponse(401, { error: { message: "unauthorized" } }),

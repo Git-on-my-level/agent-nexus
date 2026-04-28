@@ -267,6 +267,36 @@ const threads = [
       sources: ["actor_statement:evt-onboard-001"],
     },
   },
+  {
+    id: "thread-seed-archive-demo",
+    type: "note",
+    title: "Archived: farmers market pop-up (one-day trial)",
+    status: "active",
+    seed_topic_lifecycle: "archive",
+    key_artifacts: [],
+    current_summary:
+      "One-off stall last season. Wrapped successfully; archived for bookkeeping only.",
+    next_actions: [],
+    open_cards: [],
+    updated_at: new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_by: "actor-ops-ai",
+    provenance: { sources: ["seed:lifecycle-demo"] },
+  },
+  {
+    id: "thread-seed-trash-demo",
+    type: "note",
+    title: "Trashed: empty duplicate thread",
+    status: "active",
+    seed_topic_lifecycle: "trash",
+    key_artifacts: [],
+    current_summary:
+      "Created accidentally during a UI rehearsal. Trash to verify purge flows locally.",
+    next_actions: [],
+    open_cards: [],
+    updated_at: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_by: "actor-ops-ai",
+    provenance: { sources: ["seed:lifecycle-demo"] },
+  },
 ];
 
 const events = [
@@ -592,9 +622,11 @@ const events = [
     refs: ["thread:thread-pricing-glitch", "inbox:inbox-price-exception"],
     summary: "OpsAI recorded a human response for the pricing exception.",
     payload: {
+      kind: "review",
       inbox_item_id: "inbox-price-exception",
       response_text:
         "Investigate the pricing exception and prepare refund options.",
+      responding_actor_id: "actor-ops-ai",
       notify_mode: "original",
     },
     provenance: { sources: ["actor_statement:evt-price-002"] },
@@ -723,9 +755,11 @@ const events = [
     summary:
       "OpsAI recorded a human response after the refund decision was made.",
     payload: {
+      kind: "ask",
       inbox_item_id:
         "inbox:action_needed:thread-pricing-glitch:none:evt-price-003",
       response_text: "Refunds approved; proceed with the cache fix.",
+      responding_actor_id: "actor-ops-ai",
       notify_mode: "original",
     },
     provenance: { sources: ["actor_statement:evt-price-008b"] },
@@ -903,6 +937,167 @@ const events = [
         "handoff steps. Till-E and FlavorMind were onboarded using this runbook.",
     },
     provenance: { sources: ["actor_statement:evt-onboard-001"] },
+  },
+
+  // ── Human inbox queue (explicit human_attention_requested drives /inbox) ──
+  {
+    id: "evt-human-attn-004",
+    ts: new Date(now - 4 * 60 * 60 * 1000).toISOString(),
+    type: "human_attention_requested",
+    actor_id: "actor-flavor-ai",
+    thread_id: "thread-onboarding",
+    refs: [
+      "thread:thread-onboarding",
+      "document:onboarding-guide-v1",
+      "topic:onboarding",
+    ],
+    summary: "Human review: onboarding checklist before Riverside handoff",
+    payload: {
+      kind: "review",
+      title: "Review onboarding checklist sections",
+      body:
+        "Jordan — please confirm POS + inventory subsections are accurate before we onboard SqueezeBot 2000.",
+      subject_ref: "document:onboarding-guide-v1",
+      requester_actor_id: "actor-flavor-ai",
+      requester_label: "FlavorMind",
+    },
+    provenance: { sources: ["seed:human-inbox"] },
+  },
+  {
+    id: "evt-human-attn-004-done",
+    ts: new Date(now - 3 * 60 * 60 * 1000 + 50 * 60 * 1000).toISOString(),
+    type: "human_attention_responded",
+    actor_id: "actor-dev-human-operator",
+    thread_id: "thread-onboarding",
+    refs: [
+      "thread:thread-onboarding",
+      "inbox:inbox:review:thread-onboarding:none:evt-human-attn-004",
+    ],
+    summary: "Jordan acknowledged onboarding checklist review.",
+    payload: {
+      inbox_item_id:
+        "inbox:review:thread-onboarding:none:evt-human-attn-004",
+      kind: "review",
+      response_text:
+        "Confirmed — POS and inventory steps match production. Proceed with handoff template.",
+      responding_actor_id: "actor-dev-human-operator",
+      notify_mode: "original",
+    },
+    provenance: { sources: ["seed:human-inbox"] },
+  },
+  {
+    id: "evt-human-attn-001",
+    ts: new Date(now - 3 * 60 * 60 * 1000).toISOString(),
+    type: "human_attention_requested",
+    actor_id: "actor-supply-rover",
+    thread_id: "thread-lemon-shortage",
+    refs: [
+      "thread:thread-lemon-shortage",
+      "artifact:artifact-supplier-sla",
+    ],
+    summary: "Human sign-off: authorize LocalGrove emergency order",
+    payload: {
+      kind: "review",
+      title: "Authorize LocalGrove 100-unit order",
+      body:
+        "Pricing looks good vs CitrusFresh. Need human approval to place the PO while CitrusBot is offline.",
+      subject_ref: "artifact:artifact-supplier-sla",
+      requester_actor_id: "actor-supply-rover",
+    },
+    provenance: { sources: ["seed:human-inbox"] },
+  },
+  {
+    id: "evt-human-attn-002",
+    ts: new Date(now - 2 * 60 * 60 * 1000 + 30 * 60 * 1000).toISOString(),
+    type: "human_attention_requested",
+    actor_id: "actor-cashier-bot",
+    thread_id: "thread-daily-ops",
+    refs: ["thread:thread-daily-ops"],
+    summary: "Human input: double-batch schedule for tomorrow morning rush",
+    payload: {
+      kind: "ask",
+      title: "Confirm double-batch prep window",
+      body:
+        "Till-E suggests pre-opening double batch 06:30–07:00 — confirm with Jordan before we lock SqueezeBot timing.",
+      subject_ref: "thread:thread-daily-ops",
+      requester_actor_id: "actor-cashier-bot",
+    },
+    provenance: { sources: ["seed:human-inbox"] },
+  },
+  {
+    id: "evt-human-attn-003",
+    ts: new Date(now - 1 * 60 * 60 * 1000).toISOString(),
+    type: "human_attention_requested",
+    actor_id: "actor-ops-ai",
+    thread_id: "thread-summer-menu",
+    refs: ["thread:thread-summer-menu", "artifact:artifact-summer-menu-draft"],
+    summary: "Escalation: botanical garnish allergen labelling",
+    payload: {
+      kind: "escalate",
+      title: "Allergen labelling for Lavender line",
+      body:
+        "Regulatory guidance on dried lavender garnish wording is ambiguous — need human decision before launch.",
+      subject_ref: "artifact:artifact-summer-menu-draft",
+      requester_actor_id: "actor-ops-ai",
+    },
+    provenance: { sources: ["seed:human-inbox"] },
+  },
+
+  // ── Replies & extra thread activity (parent event in refs) ──
+  {
+    id: "evt-ops-101-reply",
+    ts: new Date(now - 20 * 60 * 1000).toISOString(),
+    type: "message_posted",
+    actor_id: "actor-ops-ai",
+    thread_id: "thread-daily-ops",
+    refs: ["thread:thread-daily-ops", "event:evt-ops-101"],
+    summary: "Re: EOD — aligning on double-batch suggestion",
+    payload: {
+      text:
+        "@Till-E Agree on double batch tomorrow. Jordan: see separate human attention item for time window sign-off.",
+    },
+    provenance: { sources: ["actor_statement:evt-ops-101-reply"] },
+  },
+  {
+    id: "evt-q2-001-reply",
+    ts: new Date(now - 13 * 24 * 60 * 60 * 1000).toISOString(),
+    type: "message_posted",
+    actor_id: "actor-flavor-ai",
+    thread_id: "thread-q2-initiative",
+    refs: ["thread:thread-q2-initiative", "event:evt-q2-001"],
+    summary: "Re: Q2 initiative — draft park menu themes",
+    payload: {
+      text:
+        "Leaning into citrus + herb profiles for Riverside (less sugar forward than Stand #1). " +
+        "Will post a one-pager after first recipe pass.",
+    },
+    provenance: { sources: ["actor_statement:evt-q2-001-reply"] },
+  },
+  {
+    id: "evt-seed-archive-001",
+    ts: new Date(now - 29 * 24 * 60 * 60 * 1000).toISOString(),
+    type: "message_posted",
+    actor_id: "actor-ops-ai",
+    thread_id: "thread-seed-archive-demo",
+    refs: ["thread:thread-seed-archive-demo"],
+    summary: "Archived topic seed message",
+    payload: {
+      text: "Pop-up numbers looked good; archiving the thread for seasonal reporting.",
+    },
+    provenance: { sources: ["seed:lifecycle-demo"] },
+  },
+  {
+    id: "evt-seed-trash-001",
+    ts: new Date(now - 3 * 24 * 60 * 60 * 1000).toISOString(),
+    type: "message_posted",
+    actor_id: "actor-ops-ai",
+    thread_id: "thread-seed-trash-demo",
+    refs: ["thread:thread-seed-trash-demo"],
+    summary: "Trashed topic seed message",
+    payload: {
+      text: "Ignore — duplicate. Will move to trash locally.",
+    },
+    provenance: { sources: ["seed:lifecycle-demo"] },
   },
 ];
 
@@ -1632,6 +1827,9 @@ export function mockTopicRefFromThreadId(threadId) {
  * `thread.status` in narrative fixtures (`paused` / `closed` → `archived`).
  */
 function topicStateFromThreadFixture(thread) {
+  const seedLife = String(thread?.seed_topic_lifecycle ?? "").trim();
+  if (seedLife === "archive") return "archived";
+  if (seedLife === "trash") return "trashed";
   const explicit = String(thread?.state ?? "").trim();
   if (explicit) return explicit;
   const status = String(thread?.status ?? "")
@@ -1662,9 +1860,10 @@ function buildCanonicalTopicSeed(thread) {
   const ownerActor = String(
     thread?.created_by ?? thread?.updated_by ?? "",
   ).trim();
-  return {
+  const topic = {
     id: threadId,
     thread_id: threadId,
+    type: String(thread?.type ?? "other").trim() || "other",
     state: topicStateFromThreadFixture(thread),
     title: String(thread?.title ?? "").trim(),
     summary: String(thread?.current_summary ?? "").trim(),
@@ -1678,6 +1877,11 @@ function buildCanonicalTopicSeed(thread) {
     updated_by: thread?.updated_by ?? thread?.created_by ?? "unknown",
     provenance: deepClone(thread?.provenance ?? { sources: [] }),
   };
+  const st = String(thread?.seed_topic_lifecycle ?? "").trim();
+  if (st === "archive" || st === "trash") {
+    topic.dev_seed_topic_lifecycle = st;
+  }
+  return topic;
 }
 
 function normalizeCardRefList(value) {
@@ -1906,6 +2110,42 @@ const boards = [
     updated_at: new Date(now - 3 * 24 * 60 * 60 * 1000).toISOString(),
     updated_by: "actor-flavor-ai",
   },
+  {
+    id: "board-seed-archive",
+    title: "Archived: prior season promo board",
+    dev_seed_board_lifecycle: "archive",
+    state: "active",
+    owners: ["actor-cashier-bot"],
+    thread_id: "thread-daily-ops",
+    refs: [
+      "thread:thread-daily-ops",
+      mockTopicRefFromThreadId("thread-daily-ops"),
+    ],
+    column_schema: canonicalColumnSchema,
+    pinned_refs: [],
+    created_at: new Date(now - 40 * 24 * 60 * 60 * 1000).toISOString(),
+    created_by: "actor-cashier-bot",
+    updated_at: new Date(now - 10 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_by: "actor-cashier-bot",
+  },
+  {
+    id: "board-seed-trash",
+    title: "[Trashed] Duplicate board (import accident)",
+    dev_seed_board_lifecycle: "trash",
+    state: "active",
+    owners: ["actor-ops-ai"],
+    thread_id: "thread-summer-menu",
+    refs: [
+      "thread:thread-summer-menu",
+      mockTopicRefFromThreadId("thread-summer-menu"),
+    ],
+    column_schema: canonicalColumnSchema,
+    pinned_refs: [],
+    created_at: new Date(now - 6 * 24 * 60 * 60 * 1000).toISOString(),
+    created_by: "actor-flavor-ai",
+    updated_at: new Date(now - 1 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_by: "actor-ops-ai",
+  },
 ];
 
 const boardCards = [
@@ -2051,6 +2291,31 @@ const boardCards = [
     created_by: "actor-ops-ai",
     updated_at: new Date(now - 14 * 24 * 60 * 60 * 1000).toISOString(),
     updated_by: "actor-ops-ai",
+  },
+  {
+    board_id: "board-seed-archive",
+    thread_id: "thread-q2-initiative",
+    column_key: "review",
+    rank: "0001",
+    summary: "Stale initiative card archived with retired board",
+    related_refs: ["thread:thread-q2-initiative"],
+    created_at: new Date(now - 20 * 24 * 60 * 60 * 1000).toISOString(),
+    created_by: "actor-ops-ai",
+    updated_at: new Date(now - 12 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_by: "actor-ops-ai",
+  },
+  {
+    board_id: "board-seed-trash",
+    thread_id: "thread-squeezebot-maintenance",
+    column_key: "blocked",
+    rank: "0001",
+    summary: "Orphan checklist — board will be deleted from trash",
+    related_refs: ["thread:thread-squeezebot-maintenance"],
+    risk: "high",
+    created_at: new Date(now - 4 * 24 * 60 * 60 * 1000).toISOString(),
+    created_by: "actor-squeeze-bot",
+    updated_at: new Date(now - 4 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_by: "actor-squeeze-bot",
   },
 ];
 

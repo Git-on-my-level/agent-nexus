@@ -114,15 +114,25 @@ export const QA_HOSTED_BILLING_SUMMARY = {
       artifacts_remaining: 124616,
       storage_gb_remaining: 17.6,
     },
-    workspaces: QA_HOSTED_WORKSPACES.map((workspace, index) => ({
-      workspace_id: workspace.id,
-      workspace_slug: workspace.slug,
-      workspace_name: workspace.display_name,
-      artifact_count: [164, 102, 118][index] ?? 0,
-      storage_gb: [3.2, 1.5, 2.7][index] ?? 0,
-      last_active_at:
-        [hoursAgo(2), hoursAgo(8), hoursAgo(1)][index] ?? hoursAgo(1),
-    })),
+    workspaces: QA_HOSTED_WORKSPACES.map((workspace, index) => {
+      const artifactCounts = [164, 102, 118];
+      const storageGbs = [4, 2, 3];
+      const monthlyLaunches = [42, 38, 38];
+      const gb = storageGbs[index] ?? 0;
+      return {
+        id: workspace.id,
+        slug: workspace.slug,
+        display_name: workspace.display_name,
+        artifact_count: artifactCounts[index] ?? 0,
+        storage_gb: gb,
+        storage_bytes: gb * 1024 ** 3,
+        monthly_launch_count: monthlyLaunches[index] ?? 0,
+        last_active_at:
+          [hoursAgo(2), hoursAgo(8), hoursAgo(1)][index] ?? hoursAgo(1),
+        summary_stale: false,
+        summary_generated_at: hoursAgo(1),
+      };
+    }),
   },
   configuration: {
     provider: "stripe",

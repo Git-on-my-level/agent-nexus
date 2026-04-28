@@ -108,6 +108,7 @@ async function main() {
     await seedTopics();
     await seedDocuments();
     await seedBoards();
+    await applySeedTopicAndBoardLifecycle();
     await seedPackets();
     await seedArtifacts();
     // Register seeded agent principals before posting mention-heavy events so
@@ -363,6 +364,70 @@ async function seedActors() {
   }
 }
 
+async function applySeedTopicAndBoardLifecycle() {
+  const sourceTopics = Array.isArray(seed.topics) ? seed.topics : [];
+  for (const sourceTopic of sourceTopics) {
+    const life = String(sourceTopic.dev_seed_topic_lifecycle ?? "").trim();
+    if (life !== "archive" && life !== "trash") {
+      continue;
+    }
+    const sourceTopicId = String(sourceTopic.id ?? "").trim();
+    const newId = topicIdMap.get(sourceTopicId) ?? sourceTopicId;
+    const actorId = pickActorId(
+      sourceTopic.updated_by ?? sourceTopic.created_by,
+    );
+    if (life === "archive") {
+      await requestRetryOnServerError(
+        "POST",
+        `/topics/${encodeURIComponent(newId)}/archive`,
+        { actor_id: actorId },
+      );
+    } else {
+      await requestRetryOnServerError(
+        "POST",
+        `/topics/${encodeURIComponent(newId)}/trash`,
+        {
+          actor_id: actorId,
+          reason:
+            sourceTopic.trash_reason ??
+            "Dev seed: topic marked trashed for local trash coverage.",
+        },
+      );
+    }
+  }
+
+  const sourceBoards = Array.isArray(seed.boards) ? seed.boards : [];
+  for (const sourceBoard of sourceBoards) {
+    const life = String(sourceBoard.dev_seed_board_lifecycle ?? "").trim();
+    if (life !== "archive" && life !== "trash") {
+      continue;
+    }
+    const sourceBoardId = String(sourceBoard.id ?? "").trim();
+    const newId = boardIdMap.get(sourceBoardId) ?? sourceBoardId;
+    const actorId = pickActorId(
+      sourceBoard.updated_by ?? sourceBoard.created_by,
+    );
+    if (life === "archive") {
+      await requestRetryOnServerError(
+        "POST",
+        `/boards/${encodeURIComponent(newId)}/archive`,
+        { actor_id: actorId },
+      );
+    } else {
+      await requestRetryOnServerError(
+        "POST",
+        `/boards/${encodeURIComponent(newId)}/trash`,
+        {
+          actor_id: actorId,
+          reason:
+            sourceBoard.trash_reason ??
+            "Dev seed: board marked trashed for local trash coverage.",
+        },
+      );
+    }
+  }
+}
+
 async function seedTopics() {
   const sourceTopics = Array.isArray(seed.topics) ? seed.topics : [];
 
@@ -372,9 +437,8 @@ async function seedTopics() {
     );
     const topicPayload = {
       id: sourceTopic.id,
-      type: sourceTopic.type,
+      type: sourceTopic.type ?? "other",
       title: sourceTopic.title,
-      status: sourceTopic.status,
       summary:
         sourceTopic.summary ?? sourceTopic.current_summary ?? sourceTopic.title,
       owner_refs: mapRefs(

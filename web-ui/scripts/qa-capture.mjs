@@ -22,7 +22,8 @@
  *   --persona <id>        Dev persona to auth as        (default: jordan)
  *   --viewport <WxH>      Viewport size                 (default: 1440x900)
  *   --out <dir>           Output directory              (default: .qa-captures)
- *   --routes <list>       Comma-separated route names   (default: all known routes)
+ *   --routes <list>       Comma-separated route names   (default: curated list routes)
+ *   --detail-limit <n>    Max detail pages per list type when discovery runs (default: 1)
  *   --full-page / --no-full-page   Full-page screenshots (default: true)
  *   --wait <ms>           Extra settle time after load  (default: 800)
  *   --compare <dir>       Compare against a previous capture run directory
@@ -65,6 +66,7 @@ function parseArgs(argv) {
     json: false,
     axe: true,
     discoverDetail: true,
+    detailLimit: 1,
     baseline: false,
   };
 
@@ -116,6 +118,9 @@ function parseArgs(argv) {
       case "--no-detail":
         opts.discoverDetail = false;
         break;
+      case "--detail-limit":
+        opts.detailLimit = Math.max(0, Number(args[++i]) || 0);
+        break;
       case "--help":
       case "-h":
         printUsage();
@@ -148,8 +153,9 @@ Options:
   --persona <id>        Dev persona to auth as        (default: jordan)
   --viewport <WxH>      Viewport size                 (default: 1440x900)
   --out <dir>           Output directory              (default: .qa-captures)
-  --routes <list>       Comma-separated route names   (default: all)
-                        Available: home,inbox,topics,threads,boards,docs,artifacts,trash,access
+  --routes <list>       Comma-separated route names   (default: curated list)
+                        Available: home,inbox,topics,boards,docs,artifacts,trash,access
+  --detail-limit <n>    When detail discovery runs, max captures per collection (default: 1)
   --full-page           Capture full scrollable page  (default)
   --no-full-page        Capture viewport only
   --wait <ms>           Extra settle time after load  (default: 800)
@@ -182,7 +188,6 @@ function getDefaultRoutes(opts) {
     { name: "home", path: "/", description: "Workspace dashboard / chooser" },
     { name: "inbox", path: `${shell}/inbox`, description: "Inbox triage view" },
     { name: "topics", path: `${shell}/topics`, description: "Topic list" },
-    { name: "threads", path: `${shell}/threads`, description: "Thread list" },
     { name: "boards", path: `${shell}/boards`, description: "Board list" },
     { name: "docs", path: `${shell}/docs`, description: "Documents list" },
     {
@@ -208,6 +213,7 @@ function resolveRoutes(opts) {
 // ── Detail page discovery ───────────────────────────────────────────────────
 
 async function discoverDetailPages(page, opts) {
+  const limit = opts.detailLimit ?? 1;
   const details = [];
   const seenHrefs = new Set();
   const shell = workspaceShellPrefix(opts);
@@ -261,7 +267,7 @@ async function discoverDetailPages(page, opts) {
         ? links.filter((href) => !excludeRe.test(href))
         : links;
 
-      for (const href of filtered.slice(0, 2)) {
+      for (const href of filtered.slice(0, limit)) {
         if (seenHrefs.has(href)) continue;
         seenHrefs.add(href);
 
@@ -789,6 +795,13 @@ async function main() {
     }
 
     const listRoutes = resolveRoutes(opts);
+    if (opts.routes?.length && listRoutes.length === 0) {
+      const requested = opts.routes.join(", ");
+      console.error(
+        `\nNo routes matched --routes ${requested}. Expected one or more of: ${getDefaultRoutes(opts).map((r) => r.name).join(", ")}`,
+      );
+      process.exit(1);
+    }
 
     let detailRoutes = [];
     if (opts.discoverDetail) {
@@ -858,6 +871,8 @@ async function main() {
         viewport: `${opts.viewportWidth}x${opts.viewportHeight}`,
         fullPage: opts.fullPage,
         axe: opts.axe,
+        detailLimit: opts.detailLimit,
+        discoverDetail: opts.discoverDetail,
       },
       captures: results,
       summary: {

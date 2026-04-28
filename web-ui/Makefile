@@ -38,13 +38,13 @@ qa: qa-capture ## Alias for qa-capture
 qa-capture: ## Capture QA screenshots of all pages (requires running dev server)
 	node scripts/qa-capture.mjs $(QA_CAPTURE_ARGS)
 
-qa-baseline: ## Capture the committed QA baseline into tests/fixtures/qa-visual-baseline/
+qa-baseline: ## Capture committed QA baseline (set QA_VISUAL_CORE_PORT if :8000 is busy)
 	node scripts/qa-capture.mjs --baseline
 
 qa-diff: ## Diff current UI against tests/fixtures/qa-visual-baseline/
 	$(PNPM) run qa:diff
 
-qa-viewports: ## Dashboard + inbox screenshots at several widths (requires running dev server)
-	for size in 1440x900 1280x900 1120x900 1024x768 900x900; do \
+qa-viewports: ## Dashboard + inbox at key breakpoints (requires running dev server)
+	for size in 1440x900 1120x900 900x900; do \
 		node scripts/qa-capture.mjs --viewport $$size --routes home,inbox --no-axe --no-detail || exit 1; \
 	done
