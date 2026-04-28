@@ -5,14 +5,12 @@
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
   import {
-    TOPIC_STATUSES,
-    applyBackingThreadListClientFilters,
-    applyTopicListClientFilters,
     buildThreadFilterQueryParamsFromThreadListState,
     buildTopicListApiQueryParams,
     buildTopicListSearchString,
     parseTopicListSearchParams,
   } from "$lib/topicFilters";
+  import { BOARD_LIFECYCLE_STATE_LABELS } from "$lib/boardUtils";
   import { workspacePath } from "$lib/workspacePaths";
   import { buildTopicCreatePayloadFromDraft } from "$lib/topicCreatePayload";
   import CompactFilterBar from "$lib/components/CompactFilterBar.svelte";
@@ -26,13 +24,9 @@
   import LeadingSelectionGlyph from "$lib/components/LeadingSelectionGlyph.svelte";
   import Button from "$lib/components/Button.svelte";
 
-  /** Virtual filter: active lifecycle topics (matches dashboard "Open"); distinct from `state` query. */
-  const STATUS_OPEN_NOT_CLOSED = "__open__";
-
   const defaultFilters = {
-    state: "",
+    state: "active",
     q: "",
-    openOnly: false,
   };
 
   let filters = $state({ ...defaultFilters });
@@ -70,10 +64,6 @@
   });
 
   let backingThreads = $state([]);
-
-  let filteredBackingThreads = $derived(
-    applyBackingThreadListClientFilters(backingThreads, filters),
-  );
 
   let topicDraft = $state({
     title: "",
@@ -141,9 +131,7 @@
         includeArchived: showArchived,
       });
       const response = await coreClient.listTopics(query);
-      let list = response.topics ?? [];
-      list = applyTopicListClientFilters(list, state);
-      topics = list;
+      topics = response.topics ?? [];
     } catch (loadError) {
       const reason =
         loadError instanceof Error ? loadError.message : String(loadError);
@@ -354,24 +342,8 @@
   }
 
   let hasActiveFilters = $derived(
-    showArchived ||
-      filters.state !== "" ||
-      filters.openOnly ||
-      filters.q.trim() !== "",
+    showArchived || filters.state !== "active" || filters.q.trim() !== "",
   );
-
-  function statusFilterSelectValue() {
-    if (filters.openOnly) return STATUS_OPEN_NOT_CLOSED;
-    return filters.state;
-  }
-
-  function onStatusFilterChange(value) {
-    if (value === STATUS_OPEN_NOT_CLOSED) {
-      filters = { ...filters, openOnly: true, state: "" };
-    } else {
-      filters = { ...filters, openOnly: false, state: value };
-    }
-  }
 
   function topicStatePillTone(state) {
     if (state === "active") return "text-ok-text bg-ok-soft";
@@ -656,15 +628,11 @@
           <span class="font-medium text-[var(--fg-muted)]">State</span>
           <select
             class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
-            onchange={(event) =>
-              onStatusFilterChange(event.currentTarget.value)}
-            value={statusFilterSelectValue()}
+            bind:value={filters.state}
           >
-            <option value="">All</option>
-            <option value={STATUS_OPEN_NOT_CLOSED}>Open (not closed)</option>
-            {#each TOPIC_STATUSES as status}<option value={status}
-                >{status[0].toUpperCase() + status.slice(1)}</option
-              >{/each}
+            {#each Object.entries(BOARD_LIFECYCLE_STATE_LABELS) as [value, label]}
+              <option {value}>{label}</option>
+            {/each}
           </select>
         </label>
         <label class="text-micro sm:col-span-1">
@@ -914,7 +882,7 @@
     title="No threads returned"
     helper="Backing threads are append-only timelines. Not every thread is a topic."
   />
-{:else if filteredBackingThreads.length === 0}
+{:else if backingThreads.length === 0}
   <StateEmpty
     title="No threads match the current filters"
     actionLabel={hasActiveFilters ? "Clear filters" : ""}
@@ -924,7 +892,7 @@
   <div
     class="space-y-px overflow-hidden rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
   >
-    {#each filteredBackingThreads as thread, i}
+    {#each backingThreads as thread, i}
       {@const topicSeg = topicSegmentFromTypedRef(thread.topic_ref)}
       <div
         class="flex items-stretch {i > 0

@@ -17,7 +17,7 @@
 
   const defaultBoardListFilters = {
     showArchived: false,
-    state: "",
+    state: "active",
     owners: "",
     q: "",
   };
@@ -34,7 +34,7 @@
     const f = boardFiltersApplied;
     return (
       f.showArchived ||
-      Boolean(f.state) ||
+      f.state !== "active" ||
       Boolean(f.owners.trim()) ||
       Boolean(f.q.trim())
     );
@@ -113,7 +113,11 @@
       const f = boardFiltersApplied;
       const filters = {};
       if (f.showArchived) filters.include_archived = "true";
-      if (f.state) filters.state = f.state;
+      /* Omit state when active + include_archived so the server honors archived rows (explicit state=active would not). */
+      const lifecycle = String(f.state ?? "").trim() || "active";
+      if (!(f.showArchived && lifecycle === "active")) {
+        filters.state = lifecycle;
+      }
       const owners = parseDelimitedValues(f.owners);
       if (owners.length > 0) filters.owner = owners;
       const q = f.q.trim();
@@ -498,7 +502,6 @@
             bind:value={boardFiltersDraft.state}
             class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
           >
-            <option value="">All</option>
             {#each Object.entries(BOARD_STATUS_LABELS) as [value, label]}
               <option {value}>{label}</option>
             {/each}

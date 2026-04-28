@@ -27,7 +27,10 @@ const HOME_INCLUDED_EVENT_TYPES = new Set([
   "message_posted",
 ]);
 
-const HOME_EXCLUDED_EVENT_TYPES = new Set(["inbox_item_acknowledged"]);
+const HOME_EXCLUDED_EVENT_TYPES = new Set([
+  "human_attention_requested",
+  "human_attention_responded",
+]);
 
 /**
  * Prefix order for choosing a single “primary” typed ref on Home (timeline row

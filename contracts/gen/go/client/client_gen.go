@@ -934,18 +934,6 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:   []string{"events.archive", "events.create", "events.get", "events.list", "events.restore", "events.stream", "events.trash"},
 	},
 	{
-		CommandID:  "inbox.acknowledge",
-		CLIPath:    "inbox acknowledge",
-		Group:      "inbox",
-		Method:     "POST",
-		Path:       "/inbox/{inbox_id}/acknowledge",
-		PathParams: []string{"inbox_id"},
-		InputMode:  "json-body",
-		Stability:  "beta",
-		Concepts:   []string{"inbox", "write"},
-		Adjacent:   []string{"inbox.get", "inbox.list", "inbox.stream"},
-	},
-	{
 		CommandID:  "inbox.get",
 		CLIPath:    "inbox get",
 		Group:      "inbox",
@@ -955,7 +943,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"inbox"},
-		Adjacent:   []string{"inbox.acknowledge", "inbox.list", "inbox.stream"},
+		Adjacent:   []string{"inbox.list", "inbox.respond", "inbox.stream"},
 	},
 	{
 		CommandID: "inbox.list",
@@ -966,7 +954,19 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"inbox"},
-		Adjacent:  []string{"inbox.acknowledge", "inbox.get", "inbox.stream"},
+		Adjacent:  []string{"inbox.get", "inbox.respond", "inbox.stream"},
+	},
+	{
+		CommandID:  "inbox.respond",
+		CLIPath:    "inbox respond",
+		Group:      "inbox",
+		Method:     "POST",
+		Path:       "/inbox/{inbox_id}/respond",
+		PathParams: []string{"inbox_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"inbox", "write"},
+		Adjacent:   []string{"inbox.get", "inbox.list", "inbox.stream"},
 	},
 	{
 		CommandID: "inbox.stream",
@@ -977,7 +977,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"inbox"},
-		Adjacent:  []string{"inbox.acknowledge", "inbox.get", "inbox.list"},
+		Adjacent:  []string{"inbox.get", "inbox.list", "inbox.respond"},
 	},
 	{
 		CommandID:  "meta.commands.get",
@@ -1831,16 +1831,16 @@ func (c *Client) EventsUnarchive(ctx context.Context, pathParams map[string]stri
 	return c.Invoke(ctx, "events.unarchive", pathParams, opts)
 }
 
-func (c *Client) InboxAcknowledge(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
-	return c.Invoke(ctx, "inbox.acknowledge", pathParams, opts)
-}
-
 func (c *Client) InboxGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "inbox.get", pathParams, opts)
 }
 
 func (c *Client) InboxList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "inbox.list", nil, opts)
+}
+
+func (c *Client) InboxRespond(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "inbox.respond", pathParams, opts)
 }
 
 func (c *Client) InboxStream(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {

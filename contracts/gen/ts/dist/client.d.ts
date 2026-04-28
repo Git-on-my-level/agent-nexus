@@ -122,9 +122,9 @@ export declare class AnxClient {
     eventsStream(options?: RequestOptions): Promise<InvokeResult>;
     eventsTrash(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     eventsUnarchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
-    inboxAcknowledge(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     inboxGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     inboxList(options?: RequestOptions): Promise<InvokeResult>;
+    inboxRespond(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     inboxStream(options?: RequestOptions): Promise<InvokeResult>;
     metaCommandsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     metaCommandsList(options?: RequestOptions): Promise<InvokeResult>;

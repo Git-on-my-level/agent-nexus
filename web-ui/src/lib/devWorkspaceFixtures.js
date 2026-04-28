@@ -586,12 +586,17 @@ const events = [
   {
     id: "evt-price-002",
     ts: new Date(now - 10 * 24 * 60 * 60 * 1000 + 30 * 60 * 1000).toISOString(),
-    type: "inbox_item_acknowledged",
+    type: "human_attention_responded",
     actor_id: "actor-ops-ai",
     thread_id: "thread-pricing-glitch",
     refs: ["thread:thread-pricing-glitch", "inbox:inbox-price-exception"],
-    summary: "OpsAI acknowledged pricing exception inbox item.",
-    payload: { inbox_item_id: "inbox-price-exception" },
+    summary: "OpsAI recorded a human response for the pricing exception.",
+    payload: {
+      inbox_item_id: "inbox-price-exception",
+      response_text:
+        "Investigate the pricing exception and prepare refund options.",
+      notify_mode: "original",
+    },
     provenance: { sources: ["actor_statement:evt-price-002"] },
   },
   {
@@ -708,7 +713,7 @@ const events = [
     ts: new Date(
       now - 9 * 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000 + 5 * 60 * 1000,
     ).toISOString(),
-    type: "inbox_item_acknowledged",
+    type: "human_attention_responded",
     actor_id: "actor-ops-ai",
     thread_id: "thread-pricing-glitch",
     refs: [
@@ -716,10 +721,12 @@ const events = [
       "inbox:inbox:action_needed:thread-pricing-glitch:none:evt-price-003",
     ],
     summary:
-      "OpsAI acknowledged decision inbox item after decision was recorded.",
+      "OpsAI recorded a human response after the refund decision was made.",
     payload: {
       inbox_item_id:
         "inbox:action_needed:thread-pricing-glitch:none:evt-price-003",
+      response_text: "Refunds approved; proceed with the cache fix.",
+      notify_mode: "original",
     },
     provenance: { sources: ["actor_statement:evt-price-008b"] },
   },

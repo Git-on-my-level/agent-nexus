@@ -190,16 +190,16 @@ func TestDraftCreateTreatsHelpAsFlagValue(t *testing.T) {
 	}
 }
 
-func TestValidateDraftBodySupportsInboxAcknowledge(t *testing.T) {
+func TestValidateDraftBodySupportsInboxRespond(t *testing.T) {
 	t.Parallel()
 
-	errors := validateDraftBody("inbox.acknowledge", map[string]any{
+	errors := validateDraftBody("inbox.respond", map[string]any{
 		"actor_id":      "actor_1",
-		"subject_ref":   "thread:thread_1",
-		"inbox_item_id": "inbox:action_needed:thread_1:none:event_1",
+		"inbox_item_id": "inbox:ask:thread_1:none:event_1",
+		"response_text": "Approved.",
 	})
 	if len(errors) != 0 {
-		t.Fatalf("expected inbox.acknowledge draft validation to pass, got %#v", errors)
+		t.Fatalf("expected inbox.respond draft validation to pass, got %#v", errors)
 	}
 }
 

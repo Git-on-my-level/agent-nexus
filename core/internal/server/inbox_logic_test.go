@@ -1,7 +1,6 @@
 package server
 
 import (
-	"reflect"
 	"testing"
 	"time"
 
@@ -11,13 +10,13 @@ import (
 func TestMakeInboxItemIDDeterministic(t *testing.T) {
 	t.Parallel()
 
-	first := makeInboxItemID("action_needed", "thread-1", "", "event-1")
-	second := makeInboxItemID("action_needed", "thread-1", "", "event-1")
+	first := makeInboxItemID("ask", "thread-1", "", "event-1")
+	second := makeInboxItemID("ask", "thread-1", "", "event-1")
 	if first != second {
 		t.Fatalf("expected deterministic inbox id, got %q and %q", first, second)
 	}
 
-	want := "inbox:action_needed:thread-1:none:event-1"
+	want := "inbox:ask:thread-1:none:event-1"
 	if first != want {
 		t.Fatalf("unexpected inbox id: got %q want %q", first, want)
 	}
@@ -26,129 +25,57 @@ func TestMakeInboxItemIDDeterministic(t *testing.T) {
 func TestMakeInboxItemIDDefaultsNone(t *testing.T) {
 	t.Parallel()
 
-	got := makeInboxItemID("risk_exception", "thread-1", "", "")
-	want := "inbox:risk_exception:thread-1:none:none"
+	got := makeInboxItemID("escalate", "thread-1", "", "")
+	want := "inbox:escalate:thread-1:none:none"
 	if got != want {
 		t.Fatalf("unexpected inbox id defaults: got %q want %q", got, want)
 	}
 }
 
-func TestLatestInboxAcknowledgmentsMatchesInboxIDRef(t *testing.T) {
-	t.Parallel()
-
-	canonicalID := makeInboxItemID("risk_exception", "thread-1", "card-1", "")
-	ackedAt := latestInboxAcknowledgments([]map[string]any{
-		{
-			"type": "inbox_item_acknowledged",
-			"ts":   "2026-04-05T00:00:00Z",
-			"refs": []any{"inbox:" + canonicalID},
-		},
-	})
-
-	acked, ok := ackedAt[canonicalID]
-	if !ok {
-		t.Fatalf("expected id %q to be ack-suppressed, got %#v", canonicalID, ackedAt)
-	}
-	if !acked.Equal(time.Date(2026, 4, 5, 0, 0, 0, 0, time.UTC)) {
-		t.Fatalf("unexpected acknowledgment time: %#v", acked)
-	}
-}
-
-func TestDeriveEventBackedInboxItemContractFields(t *testing.T) {
-	t.Parallel()
-
-	ev := map[string]any{
-		"type":      "decision_needed",
-		"id":        "evt-decide-1",
-		"thread_id": "thr-1",
-		"ts":        "2026-04-05T12:00:00Z",
-		"refs":      []any{"topic:top-1", "document:doc-9"},
-		"summary":   "Need a decision",
-	}
-	item, ok := deriveEventBackedInboxItem(ev)
-	if !ok {
-		t.Fatal("expected derived item")
-	}
-	if got := item.Data["subject_ref"]; got != "topic:top-1" {
-		t.Fatalf("subject_ref: got %#v", got)
-	}
-	if got := item.Data["source_event_ref"]; got != "event:evt-decide-1" {
-		t.Fatalf("source_event_ref: got %#v", got)
-	}
-	rr, err := extractStringSlice(item.Data["related_refs"])
-	if err != nil {
-		t.Fatalf("related_refs: %v", err)
-	}
-	wantRR := []string{"document:doc-9", "thread:thr-1", "topic:top-1"}
-	if !reflect.DeepEqual(rr, wantRR) {
-		t.Fatalf("related_refs: got %#v want %#v", rr, wantRR)
-	}
-}
-
-func TestDeriveEventBackedInboxItemSubjectFallsBackToThread(t *testing.T) {
-	t.Parallel()
-
-	ev := map[string]any{
-		"type":      "intervention_needed",
-		"id":        "evt-int-2",
-		"thread_id": "thr-z",
-		"ts":        "2026-04-05T12:00:00Z",
-		"refs":      []any{"inbox:inbox:action_needed:thr-z:none:e1"},
-		"summary":   "Act",
-	}
-	item, ok := deriveEventBackedInboxItem(ev)
-	if !ok {
-		t.Fatal("expected derived item")
-	}
-	if got := item.Data["subject_ref"]; got != "thread:thr-z" {
-		t.Fatalf("subject_ref: got %#v want thread:thr-z", got)
-	}
-}
-
-func TestDeriveWorkItemRiskInboxItemContractFields(t *testing.T) {
+func TestDeriveHumanAttentionInboxItemContractFields(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, 4, 5, 12, 0, 0, 0, time.UTC)
-	horizon := 7 * 24 * time.Hour
-	card := map[string]any{
-		"id":           "card-42",
-		"thread_id":    "thr-card",
-		"board_id":     "brd-1",
-		"title":        "Ship fix",
-		"column_key":   "ready",
-		"due_at":       now.Add(24 * time.Hour).Format(time.RFC3339),
-		"updated_at":   now.Format(time.RFC3339),
-		"refs":         []any{"topic:top-77"},
-		"related_refs": []any{"document:doc-2", "thread:thr-board"},
-		"document_ref": "document:doc-pin",
+	event := map[string]any{
+		"id":        "evt-human-1",
+		"thread_id": "thr-card",
+		"ts":        now.Format(time.RFC3339),
+		"refs":      []any{"thread:thr-card", "topic:top-77"},
+		"payload": map[string]any{
+			"kind":               "review",
+			"title":              "Review launch notes",
+			"subject_ref":        "topic:top-77",
+			"related_refs":       []any{"document:doc-2"},
+			"requester_actor_id": "actor-agent",
+			"requester_agent_id": "agent-a",
+		},
 	}
-	item, ok := deriveWorkItemRiskInboxItem(card, now, horizon)
+	item, ok := deriveHumanAttentionInboxItem(event)
 	if !ok {
-		t.Fatal("expected work item risk")
+		t.Fatal("expected human attention item")
 	}
-	if got := item.Data["subject_ref"]; got != "card:card-42" {
+	if got := item.Data["subject_ref"]; got != "topic:top-77" {
 		t.Fatalf("subject_ref: got %#v", got)
 	}
 	rr, err := extractStringSlice(item.Data["related_refs"])
 	if err != nil {
 		t.Fatalf("related_refs: %v", err)
 	}
-	wantRR := []string{"board:brd-1", "document:doc-2", "document:doc-pin", "thread:thr-board", "topic:top-77"}
-	if !reflect.DeepEqual(rr, wantRR) {
-		t.Fatalf("related_refs: got %#v want %#v", rr, wantRR)
+	if len(rr) != 3 || rr[0] != "document:doc-2" || rr[1] != "thread:thr-card" || rr[2] != "topic:top-77" {
+		t.Fatalf("related_refs: got %#v", rr)
 	}
-	if got := item.Data["thread_id"]; got != "thr-board" {
-		t.Fatalf("thread_id: got %#v want thr-board", got)
+	if got := item.Category; got != "review" {
+		t.Fatalf("category/kind: got %#v want review", got)
 	}
 }
 
-func TestPayloadFromDerivedInboxItemUsesColumnCategory(t *testing.T) {
+func TestPayloadFromDerivedInboxItemUsesColumnKind(t *testing.T) {
 	t.Parallel()
 
 	item := primitives.DerivedInboxItem{
-		ID:            "inbox:risk_exception:thr-1:card-9:none",
+		ID:            "inbox:escalate:thr-1:card-9:none",
 		ThreadID:      "thr-1",
-		Category:      "risk_exception",
+		Category:      "escalate",
 		SourceCardID:  "card-9",
 		TriggerAt:     "2026-04-05T00:00:00Z",
 		SourceEventID: "",
@@ -158,24 +85,24 @@ func TestPayloadFromDerivedInboxItemUsesColumnCategory(t *testing.T) {
 		},
 	}
 	out := payloadFromDerivedInboxItem(item)
-	if got := out["category"]; got != "risk_exception" {
-		t.Fatalf("category: got %#v want risk_exception", got)
+	if got := out["kind"]; got != "escalate" {
+		t.Fatalf("kind: got %#v want escalate", got)
 	}
-	if got := out["subject_ref"]; got != "card:card-9" {
+	if got := out["subject_ref"]; got != "thread:thr-1" {
 		t.Fatalf("subject_ref: got %#v", got)
 	}
 	rr, err := extractStringSlice(out["related_refs"])
 	if err != nil || len(rr) == 0 {
 		t.Fatalf("related_refs: %#v err=%v", out["related_refs"], err)
 	}
-	if rr[0] != "board:brd-9" || rr[1] != "thread:thr-1" {
+	if len(rr) != 1 || rr[0] != "thread:thr-1" {
 		t.Fatalf("unexpected related_refs order/content: %#v", rr)
 	}
 
 	evItem := primitives.DerivedInboxItem{
-		ID:            "inbox:action_needed:thr-x:none:evt-old",
+		ID:            "inbox:ask:thr-x:none:evt-old",
 		ThreadID:      "thr-x",
-		Category:      "action_needed",
+		Category:      "ask",
 		SourceEventID: "evt-old",
 		TriggerAt:     "2026-04-05T01:00:00Z",
 		Data: map[string]any{
@@ -183,8 +110,8 @@ func TestPayloadFromDerivedInboxItemUsesColumnCategory(t *testing.T) {
 		},
 	}
 	out2 := payloadFromDerivedInboxItem(evItem)
-	if got := out2["category"]; got != "action_needed" {
-		t.Fatalf("category: got %#v want action_needed", got)
+	if got := out2["kind"]; got != "ask" {
+		t.Fatalf("kind: got %#v want ask", got)
 	}
 	if got := out2["subject_ref"]; got != "thread:thr-x" {
 		t.Fatalf("event subject_ref: got %#v", got)

@@ -8,9 +8,9 @@ func TestStripInboxDataForStoreOmitsColumnMirrors(t *testing.T) {
 	t.Parallel()
 
 	item := DerivedInboxItem{
-		ID:            "inbox:action_needed:th:s:none:e1",
+		ID:            "inbox:ask:th:s:none:e1",
 		ThreadID:      "th",
-		Category:      "action_needed",
+		Category:      "ask",
 		TriggerAt:     "2026-01-01T00:00:00Z",
 		DueAt:         "2026-01-10T00:00:00Z",
 		HasDueAt:      true,
@@ -44,16 +44,16 @@ func TestRehydrateDerivedInboxDataFromColumnsRestoresFields(t *testing.T) {
 	t.Parallel()
 
 	item := DerivedInboxItem{
-		ID:            "inbox:action_needed:th:s:none:e1",
+		ID:            "inbox:ask:th:s:none:e1",
 		ThreadID:      "th",
-		Category:      "action_needed",
+		Category:      "ask",
 		TriggerAt:     "2026-01-01T00:00:00Z",
 		SourceEventID: "e1",
 		GeneratedAt:   "2026-01-02T00:00:00Z",
 		Data:          map[string]any{"title": "X"},
 	}
 	rehydrateDerivedInboxDataFromColumns(&item)
-	if item.Data["id"] != item.ID || item.Data["thread_id"] != "th" || item.Data["category"] != "action_needed" {
+	if item.Data["id"] != item.ID || item.Data["thread_id"] != "th" || item.Data["kind"] != "ask" {
 		t.Fatalf("unexpected rehydrate: %v", item.Data)
 	}
 	if item.Data["generated_at"] != "2026-01-02T00:00:00Z" {

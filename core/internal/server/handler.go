@@ -2173,14 +2173,6 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			}
 			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
 		}
-		if r.Method == http.MethodPost && strings.HasSuffix(remainder, "/acknowledge") {
-			prefix := strings.TrimSuffix(remainder, "/acknowledge")
-			prefix = strings.TrimSuffix(prefix, "/")
-			if prefix == "" || strings.Contains(prefix, "/") {
-				return routeAccessRequirement{}
-			}
-			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
-		}
 		if r.Method == http.MethodGet && !strings.Contains(remainder, "/") {
 			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
 		}
@@ -2199,16 +2191,6 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				return
 			}
 			handleRespondInboxItem(w, r, opts, inboxID)
-			return
-		}
-		if r.Method == http.MethodPost && strings.HasSuffix(remainder, "/acknowledge") {
-			inboxID := strings.TrimSuffix(remainder, "/acknowledge")
-			inboxID = strings.TrimSuffix(inboxID, "/")
-			if inboxID == "" || strings.Contains(inboxID, "/") {
-				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
-				return
-			}
-			handleAckInboxItem(w, r, opts, inboxID)
 			return
 		}
 		if r.Method != http.MethodGet {

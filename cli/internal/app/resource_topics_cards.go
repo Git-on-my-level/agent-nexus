@@ -1228,9 +1228,9 @@ func (a *App) normalizeMutationCommandBodyLegacy(ctx context.Context, cfg config
 			{key: "thread_id", kind: mutationFieldThreadID},
 			{key: "refs", kind: mutationFieldTypedRefList},
 		})
-	case "inbox.acknowledge":
+	case "inbox.respond":
 		return a.normalizeMutationFields(ctx, cfg, body, []mutationFieldSpec{
-			{key: "subject_ref", kind: mutationFieldTypedRef},
+			{key: "related_refs", kind: mutationFieldTypedRefList},
 		})
 	case "packets.receipts.create":
 		if err := a.normalizeMutationFields(ctx, cfg, nestedMutationMap(body, "artifact"), []mutationFieldSpec{

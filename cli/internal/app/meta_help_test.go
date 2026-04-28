@@ -288,8 +288,8 @@ func TestInboxListHelpMentionsViewingAsAndCategories(t *testing.T) {
 	if !strings.Contains(output, "viewing_as") {
 		t.Fatalf("expected viewing_as scoping guidance output=%s", output)
 	}
-	if !strings.Contains(output, "`action_needed`") || !strings.Contains(output, "`risk_exception`") {
-		t.Fatalf("expected inbox category reference output=%s", output)
+	if !strings.Contains(output, "`ask`") || !strings.Contains(output, "`escalate`") {
+		t.Fatalf("expected inbox kind reference output=%s", output)
 	}
 }
 
@@ -453,7 +453,7 @@ func TestJSONModeTrailingHelpShowsHelpEnvelope(t *testing.T) {
 	cli.ReadFile = func(path string) ([]byte, error) {
 		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
 	}
-	exit := cli.Run([]string{"--json", "--base-url", "http://127.0.0.1:8000", "inbox", "ack", "--help"})
+	exit := cli.Run([]string{"--json", "--base-url", "http://127.0.0.1:8000", "inbox", "respond", "--help"})
 	if exit != 0 {
 		t.Fatalf("exit=%d stderr=%s", exit, stderr.String())
 	}
@@ -466,8 +466,8 @@ func TestJSONModeTrailingHelpShowsHelpEnvelope(t *testing.T) {
 	}
 	data, _ := payload["data"].(map[string]any)
 	txt := anyString(data["help_text"])
-	if txt == "" || !strings.Contains(txt, "inbox.acknowledge") {
-		t.Fatalf("expected help_text with inbox acknowledge help, got %q", txt)
+	if txt == "" || !strings.Contains(txt, "inbox.respond") {
+		t.Fatalf("expected help_text with inbox respond help, got %q", txt)
 	}
 }
 
@@ -542,12 +542,12 @@ func TestHelpResolvesRuntimeAliasesThreadsGetInboxAck(t *testing.T) {
 		t.Fatalf("expected threads get alias to resolve to inspect command help, output=%s", threadsGet)
 	}
 
-	inboxAck := run([]string{"help", "inbox", "ack"})
-	if !strings.Contains(inboxAck, "Generated Help: inbox ack") || !strings.Contains(inboxAck, "Command ID: `inbox.acknowledge`") {
-		t.Fatalf("expected inbox ack alias to resolve to acknowledge command help, output=%s", inboxAck)
+	inboxRespond := run([]string{"help", "inbox", "respond"})
+	if !strings.Contains(inboxRespond, "Generated Help: inbox respond") || !strings.Contains(inboxRespond, "Command ID: `inbox.respond`") {
+		t.Fatalf("expected inbox respond help, output=%s", inboxRespond)
 	}
-	if !strings.Contains(inboxAck, "CLI flags") || !strings.Contains(inboxAck, "--inbox-item-id") || !strings.Contains(inboxAck, "--from-file") {
-		t.Fatalf("expected inbox acknowledge help to document CLI flags, output=%s", inboxAck)
+	if !strings.Contains(inboxRespond, "CLI flags") || !strings.Contains(inboxRespond, "--inbox-item-id") || !strings.Contains(inboxRespond, "--from-file") {
+		t.Fatalf("expected inbox respond help to document CLI flags, output=%s", inboxRespond)
 	}
 }
 

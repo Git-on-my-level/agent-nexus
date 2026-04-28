@@ -163,9 +163,9 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - Commands: `4`
 - Command IDs:
-  - `inbox.acknowledge` (`inbox acknowledge`)
   - `inbox.get` (`inbox get`)
   - `inbox.list` (`inbox list`)
+  - `inbox.respond` (`inbox respond`)
   - `inbox.stream` (`inbox stream`)
 
 ## `meta`

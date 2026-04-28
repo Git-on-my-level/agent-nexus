@@ -57,10 +57,10 @@ var conceptsGuidePrimitives = []conceptsPrimitive{
 	},
 	{
 		Name:        "inbox",
-		UseWhen:     "You need the derived queue of what currently needs attention from the active actor's perspective.",
-		NotFor:      "Durable automation contracts or historical truth.",
-		Examples:    []string{"pending decisions", "exceptions", "stalled work"},
-		RelatedRead: []string{"anx inbox list", "anx inbox get", "anx inbox ack"},
+		UseWhen:     "A human operator needs to inspect the human attention queue.",
+		NotFor:      "Agent coordination; agents should create attention items with `anx human ask`, `anx human review`, or `anx human escalate`.",
+		Examples:    []string{"asks", "reviews", "escalations"},
+		RelatedRead: []string{"anx human ask", "anx human review", "anx human escalate"},
 	},
 	{
 		Name:        "draft",

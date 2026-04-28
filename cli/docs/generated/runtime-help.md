@@ -30,7 +30,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `cards` (group): Manage board-scoped work cards
 - `threads` (group): Read-only backing-thread inspection (tooling and diagnostics)
 - `events` (group): Manage events and event streams
-- `inbox` (group): List/get/ack/stream inbox items
+- `inbox` (group): Operator diagnostics for human attention inbox items
 - `artifacts` (group): Manage artifact resources and content
 - `receipts` (group): Create receipt packets (subject_ref must be card:<card_id>)
 - `reviews` (group): Create review packets (subject_ref + receipt_ref; subject_ref must be card:<card_id>)
@@ -93,8 +93,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `events restore` (command): Restore event from trash
 - `inbox list` (command): List inbox items
 - `inbox get` (command): Get one inbox item
-- `inbox acknowledge` (command): Acknowledge inbox item
-- `inbox ack` (command): Acknowledge inbox item
+- `inbox respond` (command): Respond to human attention inbox item
 - `inbox stream` (command): Stream inbox items (SSE)
 - `inbox tail` (command): Stream inbox items (SSE)
 - `artifacts list` (command): List artifacts
@@ -244,10 +243,10 @@ events
 - Read next: anx events list ; anx events explain ; anx threads timeline
 
 inbox
-- Use when: You need the derived queue of what currently needs attention from the active actor's perspective.
-- Not for: Durable automation contracts or historical truth.
-- Examples: pending decisions, exceptions, stalled work
-- Read next: anx inbox list ; anx inbox get ; anx inbox ack
+- Use when: A human operator needs to inspect the human attention queue.
+- Not for: Agent coordination; agents should create attention items with `anx human ask`, `anx human review`, or `anx human escalate`.
+- Examples: asks, reviews, escalations
+- Read next: anx human ask ; anx human review ; anx human escalate
 
 draft
 - Use when: You want to stage a mutation locally, inspect it, then apply it explicitly.
@@ -1437,15 +1436,15 @@ Tip: `anx help <command path>` for full command-level generated details.
 
 ## `inbox`
 
-List/get/ack/stream inbox items
+Operator diagnostics for human attention inbox items
 
 ```text
 Generated Help: inbox
 
 Commands:
-  inbox acknowledge        Acknowledge inbox item
   inbox get                Get one inbox item
   inbox list               List inbox items
+  inbox respond            Respond to human attention inbox item
   inbox stream             Stream inbox items (SSE)
 
 Global flags:
@@ -3020,7 +3019,7 @@ Inputs:
   - body `event.provenance.by_field` (object)
   - body `event.provenance.notes` (string)
   - body `event.thread_ref` (string)
-  Enum values: event.type (open): agent_notification_dismissed, agent_notification_read, board_card_added, board_card_archived, board_card_moved, board_card_trashed, board_created, board_updated, card_archived, card_created, card_moved, card_resolved, card_trashed, card_updated, decision_made, decision_needed, document_created, document_restored, document_revised, document_trashed, exception_raised, inbox_item_acknowledged, intervention_needed, message_posted, receipt_added, review_completed, topic_archived, topic_created, topic_restored, topic_trashed, topic_updated
+  Enum values: event.type (open): agent_notification_dismissed, agent_notification_read, board_card_added, board_card_archived, board_card_moved, board_card_trashed, board_created, board_updated, card_archived, card_created, card_moved, card_resolved, card_trashed, card_updated, decision_made, decision_needed, document_created, document_restored, document_revised, document_trashed, exception_raised, human_attention_requested, human_attention_responded, intervention_needed, message_posted, receipt_added, review_completed, topic_archived, topic_created, topic_restored, topic_trashed, topic_updated
 
 Common authoring types:
   Communication: direct communication or important non-structured information
@@ -3042,7 +3041,7 @@ Common authoring types:
 Usually emitted by higher-level commands:
   - `receipt_added`: prefer `anx receipts create`
   - `review_completed`: prefer `anx reviews create`
-  - `inbox_item_acknowledged`: prefer `anx inbox ack`
+  - `human_attention_requested`: prefer `anx human ask|review|escalate`
 
 Local CLI notes:
   - Common open `event.type` values include `actor_statement`; the enum list above is illustrative, not exhaustive.
@@ -3237,11 +3236,11 @@ Generated Help: inbox list
 - HTTP: `GET /inbox`
 - Stability: `beta`
 - Input mode: `none`
-- Why: Load the derived operator inbox generated from refs and canonical events.
+- Why: Load the operator-only human attention queue derived from explicit human_attention_requested events.
 - Output: Returns `{ items }`.
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `inbox`
-- Adjacent commands: `inbox acknowledge`, `inbox get`, `inbox stream`
+- Adjacent commands: `inbox get`, `inbox respond`, `inbox stream`
 
 
 View scoping:
@@ -3249,10 +3248,10 @@ View scoping:
   - The response includes `viewing_as` so you can confirm the resolved profile, username, and actor_id.
   - Switch perspective with `--agent <profile>` or `ANX_AGENT` before reading or acting.
 
-Inbox categories:
-  - `action_needed`: A responsible actor must decide, take direct action, or own the next step (includes prior decision and intervention queue signals).
-  - `risk_exception`: Exceptions or at-risk work items that need follow-up.
-  - `attention`: Review or lighter operator focus (for example document attention).
+Inbox kinds:
+  - `ask`: A requesting agent needs an answer, judgment, or missing context.
+  - `review`: A requesting agent wants review of generated work or a proposed action.
+  - `escalate`: A requesting agent surfaced a risk or abnormal condition.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3276,7 +3275,7 @@ Generated Help: inbox get
 - Output: Returns `{ item, generated_at, projection_freshness }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `inbox`
-- Adjacent commands: `inbox acknowledge`, `inbox list`, `inbox stream`
+- Adjacent commands: `inbox list`, `inbox respond`, `inbox stream`
 
 Inputs:
   Required:
@@ -3288,87 +3287,49 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
-## `inbox acknowledge`
+## `inbox respond`
 
-Acknowledge inbox item
+Respond to human attention inbox item
 
 ```text
-Generated Help: inbox acknowledge
+Generated Help: inbox respond
 
-- Command ID: `inbox.acknowledge`
-- CLI path: `inbox acknowledge`
-- HTTP: `POST /inbox/{inbox_id}/acknowledge`
+- Command ID: `inbox.respond`
+- CLI path: `inbox respond`
+- HTTP: `POST /inbox/{inbox_id}/respond`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Suppress or clear a derived inbox item via a durable acknowledgment event.
-- Output: Returns `{ event }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Why: Record a freeform human response, close the human attention item, and optionally notify the selected requester/replacement agent.
+- Output: Returns `{ event, notify }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `notification_target_required`, `not_found`
 - Concepts: `inbox`, `write`
 - Adjacent commands: `inbox get`, `inbox list`, `inbox stream`
 
 Inputs:
   Required:
   - path `inbox_id`
-  - body `subject_ref` (string)
+  - body `response_text` (string)
   Optional:
   - body `actor_id` (string)
   - body `inbox_item_id` (string)
-  - body `note` (string)
-  - body `refs` (list<any>)
+  - body `notify_mode` (string)
+  - body `notify_target_actor_id` (string)
+  - body `notify_target_agent_id` (string)
+  - body `related_refs` (list<any>)
+  Enum values: notify_mode: none, original, replacement
 
-CLI flags (`inbox acknowledge` / `inbox ack`):
-  --inbox-item-id <id>   Inbox item id or list alias (see `inbox list`).
-  --subject-ref <ref>    Typed subject ref; omitted ids may be resolved from `inbox list`.
-  --actor-id <id>        Actor id (`me` uses the active profile's actor when configured).
-  --from-file <path>     JSON body file (API request shape).
+CLI flags (`inbox respond`):
+  --inbox-item-id <id>    Inbox item id or list alias (see `inbox list`).
+  --response-text <text>  Freeform response text.
+  --notify-mode <mode>    original, target, or none.
+  --actor-id <id>         Actor id (`me` uses the active profile's actor when configured).
+  --from-file <path>      JSON body file (API request shape).
   Positional: inbox item id when not given via `--inbox-item-id`.
-  Otherwise: JSON object on stdin (`inbox_item_id`, `subject_ref`, optional fields).
+  Otherwise: JSON object on stdin (`inbox_item_id`, `response_text`, optional fields).
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx inbox acknowledge ... ; anx --json inbox acknowledge ... ; anx inbox acknowledge ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `inbox ack`
-
-Acknowledge inbox item
-
-```text
-Generated Help: inbox ack
-
-- Command ID: `inbox.acknowledge`
-- CLI path: `inbox acknowledge`
-- HTTP: `POST /inbox/{inbox_id}/acknowledge`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Suppress or clear a derived inbox item via a durable acknowledgment event.
-- Output: Returns `{ event }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
-- Concepts: `inbox`, `write`
-- Adjacent commands: `inbox get`, `inbox list`, `inbox stream`
-
-Inputs:
-  Required:
-  - path `inbox_id`
-  - body `subject_ref` (string)
-  Optional:
-  - body `actor_id` (string)
-  - body `inbox_item_id` (string)
-  - body `note` (string)
-  - body `refs` (list<any>)
-
-CLI flags (`inbox acknowledge` / `inbox ack`):
-  --inbox-item-id <id>   Inbox item id or list alias (see `inbox list`).
-  --subject-ref <ref>    Typed subject ref; omitted ids may be resolved from `inbox list`.
-  --actor-id <id>        Actor id (`me` uses the active profile's actor when configured).
-  --from-file <path>     JSON body file (API request shape).
-  Positional: inbox item id when not given via `--inbox-item-id`.
-  Otherwise: JSON object on stdin (`inbox_item_id`, `subject_ref`, optional fields).
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx inbox ack ... ; anx --json inbox ack ... ; anx inbox ack ... --json (last two: JSON envelope on stdout)
+  Examples: anx inbox respond ... ; anx --json inbox respond ... ; anx inbox respond ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3388,7 +3349,7 @@ Generated Help: inbox stream
 - Output: SSE `inbox_item` events with JSON payloads.
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `inbox`
-- Adjacent commands: `inbox acknowledge`, `inbox get`, `inbox list`
+- Adjacent commands: `inbox get`, `inbox list`, `inbox respond`
 
 
 Global flags:
@@ -3413,7 +3374,7 @@ Generated Help: inbox tail
 - Output: SSE `inbox_item` events with JSON payloads.
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `inbox`
-- Adjacent commands: `inbox acknowledge`, `inbox get`, `inbox list`
+- Adjacent commands: `inbox get`, `inbox list`, `inbox respond`
 
 
 Global flags:

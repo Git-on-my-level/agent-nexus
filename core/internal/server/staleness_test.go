@@ -62,9 +62,9 @@ func TestIsMeaningfulThreadActivityEvent(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "inbox ack is coordination noise",
+			name: "human attention response is coordination noise",
 			event: map[string]any{
-				"type":      "inbox_item_acknowledged",
+				"type":      "human_attention_responded",
 				"thread_id": "thread-1",
 				"ts":        "2026-03-04T12:00:00Z",
 			},

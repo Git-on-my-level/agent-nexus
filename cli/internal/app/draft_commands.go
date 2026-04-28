@@ -474,7 +474,7 @@ func validateDraftBody(commandID string, body map[string]any) []string {
 		"docs.revisions.create":   validateDraftDocsRevision,
 		"events.create":           validateDraftEventCreate,
 		"artifacts.create":        validateDraftArtifactCreate,
-		"inbox.acknowledge":       validateDraftInboxAck,
+		"inbox.respond":           validateDraftInboxRespond,
 		"packets.receipts.create": validateDraftReceiptCreate,
 		"packets.reviews.create":  validateDraftReviewCreate,
 		"derived.rebuild":         validateDraftDerivedRebuild,
@@ -852,11 +852,11 @@ func validateDraftArtifactCreate(body map[string]any) []string {
 	return out
 }
 
-func validateDraftInboxAck(body map[string]any) []string {
+func validateDraftInboxRespond(body map[string]any) []string {
 	out := make([]string, 0)
 	validateOptionalNonEmptyString(body, "actor_id", "actor_id", &out)
-	requiredStringField(body, "subject_ref", "subject_ref", true, &out)
 	requiredStringField(body, "inbox_item_id", "inbox_item_id", true, &out)
+	requiredStringField(body, "response_text", "response_text", true, &out)
 	return out
 }
 

@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  applyBackingThreadListClientFilters,
-  applyThreadListClientFilters,
-  applyTopicListClientFilters,
   buildThreadFilterQueryParamsFromThreadListState,
   buildThreadFilterQueryString,
   buildThreadFilterQueryParams,
@@ -40,14 +37,20 @@ describe("thread filter query builders", () => {
     });
   });
 
-  it("parses list URL: open clears state, ignores legacy filter params", () => {
+  it("parses list URL: legacy open=1 maps to state active, ignores unrelated params", () => {
     const sp = new URLSearchParams(
       "open=1&state=active&priority=p2&stale=true&tag=ops&q=hi",
     );
     expect(parseTopicListSearchParams(sp)).toEqual({
-      state: "",
+      state: "active",
       q: "hi",
-      openOnly: true,
+    });
+  });
+
+  it("parses list URL without state as active (default)", () => {
+    expect(parseTopicListSearchParams(new URLSearchParams("q=only"))).toEqual({
+      state: "active",
+      q: "only",
     });
   });
 
@@ -59,64 +62,37 @@ describe("thread filter query builders", () => {
     ).toEqual({
       state: "archived",
       q: "report",
-      openOnly: false,
     });
   });
 
-  it("serializes list URL with open, state, and q", () => {
+  it("serializes list URL: omits state when active; includes q", () => {
     expect(
       buildTopicListSearchString({
-        openOnly: true,
         state: "active",
         q: "needle",
       }),
-    ).toBe("open=1&q=needle");
+    ).toBe("q=needle");
     expect(
       buildTopicListSearchString({
-        openOnly: false,
         state: "archived",
         q: "x",
       }),
     ).toBe("state=archived&q=x");
   });
 
-  it("omits state from thread list API query when openOnly (client-side active filter)", () => {
+  it("includes state in thread list API query when filter state is active", () => {
     expect(
       buildThreadFilterQueryParamsFromThreadListState({
         state: "active",
         q: "find",
-        openOnly: true,
       }),
-    ).toEqual({ q: "find" });
-  });
-
-  it("filters threads client-side for open only", () => {
-    const threads = [
-      { state: "archived" },
-      { state: "trashed" },
-      { state: "active" },
-    ];
-    expect(applyThreadListClientFilters(threads, { openOnly: true })).toEqual([
-      { state: "active" },
-    ]);
-  });
-
-  it("backing thread list filters only by lifecycle for openOnly", () => {
-    const threads = [
-      { id: "a", state: "archived" },
-      { id: "b", state: "active" },
-    ];
-    expect(
-      applyBackingThreadListClientFilters(threads, { openOnly: true }),
-    ).toEqual([threads[1]]);
-    expect(applyBackingThreadListClientFilters(threads, {})).toEqual(threads);
+    ).toEqual({ state: "active", q: "find" });
   });
 
   it("builds GET /topics query from list filter state", () => {
     expect(
       buildTopicListApiQueryParams(
         {
-          openOnly: false,
           state: "archived",
           q: "",
         },
@@ -125,13 +101,21 @@ describe("thread filter query builders", () => {
     ).toEqual({ include_archived: "true", state: "archived" });
   });
 
-  it("topic list client filters match backing thread openOnly behavior", () => {
-    const items = [
-      { id: "a", state: "trashed" },
-      { id: "b", state: "active" },
-    ];
+  it("buildTopicListApiQueryParams normalizes empty state to active", () => {
     expect(
-      applyTopicListClientFilters(items, { openOnly: true, state: "", q: "" }),
-    ).toEqual([items[1]]);
+      buildTopicListApiQueryParams(
+        { state: "", q: "" },
+        { includeArchived: false },
+      ),
+    ).toEqual({ state: "active" });
+  });
+
+  it("buildTopicListApiQueryParams omits state when include_archived and lifecycle active", () => {
+    expect(
+      buildTopicListApiQueryParams(
+        { state: "active", q: "" },
+        { includeArchived: true },
+      ),
+    ).toEqual({ include_archived: "true" });
   });
 });

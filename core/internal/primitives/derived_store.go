@@ -591,11 +591,11 @@ func boolToInt(value bool) int {
 
 func derivedInboxCategoryOrder(category string) int {
 	switch strings.TrimSpace(category) {
-	case "action_needed":
+	case "escalate":
 		return 0
-	case "risk_exception":
+	case "ask":
 		return 1
-	case "attention":
+	case "review":
 		return 2
 	default:
 		return 99
@@ -642,7 +642,9 @@ func rehydrateDerivedInboxDataFromColumns(item *DerivedInboxItem) {
 	d := item.Data
 	d["id"] = item.ID
 	d["thread_id"] = item.ThreadID
-	d["category"] = item.Category
+	if strings.TrimSpace(fmt.Sprint(d["kind"])) == "" || d["kind"] == nil {
+		d["kind"] = item.Category
+	}
 	if item.TriggerAt != "" {
 		d["trigger_at"] = item.TriggerAt
 		if _, ok := d["source_event_time"]; !ok {

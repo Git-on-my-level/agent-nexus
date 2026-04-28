@@ -197,11 +197,10 @@ var eventsSubcommandSpec = subcommandSpec{
 
 var inboxSubcommandSpec = subcommandSpec{
 	command:  "inbox",
-	valid:    []string{"list", "get", "acknowledge", "ack", "stream", "tail"},
-	examples: []string{"anx inbox get --id <id-or-alias>", "anx inbox acknowledge --inbox-item-id <id-or-alias>"},
+	valid:    []string{"list", "get", "respond", "stream", "tail"},
+	examples: []string{"anx inbox get --id <id-or-alias>", "anx inbox respond --inbox-item-id <id-or-alias> --response-text <text>"},
 	aliases: map[string]string{
 		"ls":    "list",
-		"ack":   "acknowledge",
 		"watch": "stream",
 	},
 }
@@ -259,7 +258,7 @@ func (s subcommandSpec) suggestion(raw string) string {
 		return s.commandPath(canonical)
 	}
 	if strings.TrimSpace(s.command) == "inbox" && looksLikePositionalID(raw) {
-		return "anx inbox ack --inbox-item-id <id-or-alias>"
+		return "anx inbox get --id <id-or-alias>"
 	}
 	if closest := closestSubcommand(token, s.valid); closest != "" {
 		return s.commandPath(closest)

@@ -93,16 +93,16 @@ func TestRefreshDerivedTopicProjectionBasicFlow(t *testing.T) {
 	}`, 201).Body.Close()
 
 	items := getInboxItems(t, h.baseURL)
-	if len(items) != 2 {
-		t.Fatalf("expected decision + work item inbox items, got %#v", items)
+	if len(items) != 0 {
+		t.Fatalf("expected no human inbox items from decision_needed or risky cards, got %#v", items)
 	}
 
 	projection := mustLoadDerivedTopicProjection(t, h.workspace.DB(), threadID)
-	if projection.InboxCount != 2 || projection.DecisionRequestCount != 1 || workspaceIntValue(projection.Data["open_work_item_count"]) != 1 || projection.DocumentCount != 1 {
+	if projection.InboxCount != 0 || projection.DecisionRequestCount != 1 || workspaceIntValue(projection.Data["open_work_item_count"]) != 1 || projection.DocumentCount != 1 {
 		t.Fatalf("unexpected derived thread projection: %#v", projection)
 	}
-	if inboxRowCount := countDerivedInboxItemsForThread(t, h.workspace.DB(), threadID); inboxRowCount != 2 {
-		t.Fatalf("expected two derived inbox rows, got %d", inboxRowCount)
+	if inboxRowCount := countDerivedInboxItemsForThread(t, h.workspace.DB(), threadID); inboxRowCount != 0 {
+		t.Fatalf("expected no derived inbox rows, got %d", inboxRowCount)
 	}
 }
 

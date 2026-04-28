@@ -502,13 +502,13 @@ export const QA_EVENTS = [
     summary: "Rollback window approved pending the next monitoring sweep.",
   },
   {
-    id: "evt-home-ack-hidden",
+    id: "evt-home-human-response-hidden",
     ts: hoursAgo(0.33),
-    type: "inbox_item_acknowledged",
+    type: "human_attention_responded",
     actor_id: "actor-jordan-human",
     thread_id: "thread-launch-war-room",
     refs: ["thread:thread-launch-war-room", "inbox:inbox-ask-auth"],
-    summary: "Operator acknowledged the auth rollback ask item.",
+    summary: "Operator responded to the auth rollback ask item.",
   },
 ];
 

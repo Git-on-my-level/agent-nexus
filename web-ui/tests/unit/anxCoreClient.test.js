@@ -328,42 +328,6 @@ describe("anxCoreClient error messaging", () => {
     expect(body.packet.thread_id).toBe("thr-9");
   });
 
-  it("posts inbox acknowledgements to the contract acknowledge path", async () => {
-    const seenRequests = [];
-    const client = createAnxCoreClient({
-      baseUrl: "http://core.test",
-      actorIdProvider: () => "actor-1",
-      fetchFn: async (url, init) => {
-        seenRequests.push({
-          url: String(url),
-          method: init?.method ?? "GET",
-          body: init?.body ?? "",
-        });
-        return new Response(JSON.stringify({ event: { id: "evt-ack" } }), {
-          status: 201,
-          headers: { "content-type": "application/json" },
-        });
-      },
-    });
-
-    await client.ackInboxItem({
-      inbox_item_id: "inbox:action_needed:thread-1:none:evt-1",
-      subject_ref: "thread:thread-1",
-    });
-
-    expect(seenRequests).toEqual([
-      {
-        url: "http://core.test/inbox/inbox%3Aaction_needed%3Athread-1%3Anone%3Aevt-1/acknowledge",
-        method: "POST",
-        body: expect.any(String),
-      },
-    ]);
-    expect(JSON.parse(seenRequests[0].body)).toEqual({
-      actor_id: "actor-1",
-      subject_ref: "thread:thread-1",
-    });
-  });
-
   it("routes card archive, restore, and purge through generated command paths", async () => {
     const seen = [];
     const client = createAnxCoreClient({
@@ -401,7 +365,7 @@ describe("anxCoreClient error messaging", () => {
     ]);
   });
 
-  it("respondInboxAsk POSTs /inbox/{id}/respond with actor_id and snake_case fields", async () => {
+  it("respondInboxItem POSTs /inbox/{id}/respond with actor_id and generic response fields", async () => {
     const requests = [];
     const client = createAnxCoreClient({
       baseUrl: "http://core.test",
@@ -409,7 +373,7 @@ describe("anxCoreClient error messaging", () => {
       fetchFn: async (url, init) => {
         requests.push({ url: String(url), init });
         return new Response(
-          JSON.stringify({ event: { id: "e1" }, acknowledgment: { id: "e2" } }),
+          JSON.stringify({ event: { id: "e1" }, notify: { mode: "none" } }),
           {
             status: 201,
             headers: { "content-type": "application/json" },
@@ -418,10 +382,9 @@ describe("anxCoreClient error messaging", () => {
       },
     });
 
-    const out = await client.respondInboxAsk("ask-item-9", {
-      answer: "Ship it.",
-      save_as_decision: true,
-      notify_asking_agent: false,
+    const out = await client.respondInboxItem("ask-item-9", {
+      response_text: "Ship it.",
+      notify_mode: "none",
     });
 
     expect(out.event?.id).toBe("e1");
@@ -430,9 +393,8 @@ describe("anxCoreClient error messaging", () => {
     expect(requests[0].init.method).toBe("POST");
     expect(JSON.parse(requests[0].init.body)).toEqual({
       actor_id: "actor-1",
-      answer: "Ship it.",
-      save_as_decision: true,
-      notify_asking_agent: false,
+      response_text: "Ship it.",
+      notify_mode: "none",
     });
   });
 });

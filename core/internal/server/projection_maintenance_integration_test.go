@@ -550,8 +550,8 @@ func TestProjectionMaintainerKeepsProjectionPendingForConcurrentWrites(t *testin
 	if state.Status != "current" {
 		t.Fatalf("expected follow-up refresh to clear pending state, got %#v", state.Freshness)
 	}
-	if state.Projection.InboxCount != 2 {
-		t.Fatalf("expected follow-up refresh to materialize both inbox items, got %#v", state.Projection)
+	if state.Projection.InboxCount != 0 {
+		t.Fatalf("expected follow-up refresh to keep generic decision_needed events out of human inbox, got %#v", state.Projection)
 	}
 
 	statuses, err = baseStore.GetTopicProjectionRefreshStatuses(context.Background(), []string{threadID})

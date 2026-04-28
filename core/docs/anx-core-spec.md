@@ -78,7 +78,7 @@ A durable record that something happened or that an actor claims something happe
 
 **Fields:** per `anx-schema.yaml` → `primitives.event`
 
-**v0 event types:** `topic_created`, `topic_updated`, `topic_archived`, `topic_restored`, `topic_trashed`, `message_posted`, `receipt_added`, `review_completed`, `decision_needed`, `intervention_needed`, `decision_made`, `document_created`, `document_revised`, `document_revision_created`, `document_trashed`, `board_created`, `board_updated`, `board_card_added`, `board_card_moved`, `board_card_archived`, `board_card_trashed`, `card_created`, `card_updated`, `card_moved`, `card_archived`, `card_trashed`, `card_resolved`, `exception_raised`, `inbox_item_acknowledged`, `agent_notification_read`, `agent_notification_dismissed`
+**v0 event types:** `topic_created`, `topic_updated`, `topic_archived`, `topic_restored`, `topic_trashed`, `message_posted`, `receipt_added`, `review_completed`, `decision_needed`, `intervention_needed`, `decision_made`, `document_created`, `document_revised`, `document_revision_created`, `document_trashed`, `board_created`, `board_updated`, `board_card_added`, `board_card_moved`, `board_card_archived`, `board_card_trashed`, `card_created`, `card_updated`, `card_moved`, `card_archived`, `card_trashed`, `card_resolved`, `exception_raised`, `human_attention_requested`, `human_attention_responded`, `agent_notification_read`, `agent_notification_dismissed`
 
 ### 3.2 Mutable resources (topic/card/board/document)
 Topics, cards, boards, and documents are mutable current-state records.
@@ -234,18 +234,18 @@ All workspace data routes require authenticated principals. Writes require an
 - Resolve card → emits `card_resolved` event
 - Create artifact (metadata + content) → returns artifact ID; validates packet content for packet kinds; validates typed ref format
 - Create document, update document (new immutable revision), trash document
-- Append event (for messages, decisions, exceptions, acknowledgments) → validates required refs per reference conventions
+- Append event (for messages, decisions, exceptions, human attention requests/responses) → validates required refs per reference conventions
 
 ### 7.3 Convenience operations
 - Submit receipt (validates evidence + packet + refs, creates artifact + emits `receipt_added` with required typed refs)
 - Submit review (validates packet + refs, creates artifact + emits `review_completed` with required typed refs)
 - Record decision (`decision_needed` or `decision_made` event + optional artifact, grounded by `thread:<thread_id>` in refs)
-- Acknowledge inbox item (emits `inbox_item_acknowledged` event with `inbox:<inbox_item_id>` in refs)
+- Respond to inbox item (emits `human_attention_responded` event with `inbox:<inbox_item_id>` in refs)
 
 ### 7.4 Derived views
 - Derived views are asynchronously materialized from canonical writes; GET endpoints remain side-effect free.
 - Canonical writes enqueue affected thread projections for background refresh rather than recomputing projections inline on reads.
-- Get inbox items from the materialized projection layer (respects acknowledgment suppression; uses deterministic IDs; surfaces freshness metadata when projections are pending, missing, or errored).
+- Get inbox items from the materialized projection layer (respects human response suppression; uses deterministic IDs; surfaces freshness metadata when projections are pending, missing, or errored).
 - Board workspace projections may include canonical board membership plus derived scan summaries/freshness in one response, but clients must treat the derived portions as convenience output rather than canonical truth.
 - Compute staleness in the projection worker / explicit rebuild path (see §9); reads consume the last materialized state.
 - Rebuild all derived views explicitly and idempotently.

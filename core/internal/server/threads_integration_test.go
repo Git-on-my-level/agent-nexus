@@ -929,8 +929,8 @@ func TestThreadWorkspaceBundlesCanonicalAndDerivedSections(t *testing.T) {
 	if len(payload.Collaboration.Recommendations) != 1 || len(payload.Collaboration.DecisionRequests) != 1 {
 		t.Fatalf("expected collaboration summary to include recommendation and decision request, got %#v", payload.Collaboration)
 	}
-	if payload.Inbox.Count != 1 || payload.PendingDecisions.Count != 1 {
-		t.Fatalf("expected inbox count=1 and pending decisions count=1, got inbox=%#v pending=%#v", payload.Inbox, payload.PendingDecisions)
+	if payload.Inbox.Count != 0 || payload.PendingDecisions.Count != 0 {
+		t.Fatalf("expected no human-attention inbox rows from generic decision requests, got inbox=%#v pending=%#v", payload.Inbox, payload.PendingDecisions)
 	}
 	if payload.RelatedThreads.Count != 1 || payload.RelatedRecommendations.Count != 1 {
 		t.Fatalf("expected related thread review sections, got related_threads=%#v related_recommendations=%#v", payload.RelatedThreads, payload.RelatedRecommendations)

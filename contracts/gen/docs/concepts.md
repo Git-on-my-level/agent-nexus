@@ -182,9 +182,9 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - Commands: `4`
 - Command IDs:
-  - `inbox.acknowledge`
   - `inbox.get`
   - `inbox.list`
+  - `inbox.respond`
   - `inbox.stream`
 
 ## `inspection`
@@ -364,7 +364,7 @@ Generated from `contracts/anx-openapi.yaml`.
   - `events.restore`
   - `events.trash`
   - `events.unarchive`
-  - `inbox.acknowledge`
+  - `inbox.respond`
   - `secrets.create`
   - `secrets.delete`
   - `secrets.update`

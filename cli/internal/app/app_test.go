@@ -177,7 +177,7 @@ func TestRunSubcommandTrailingHelpIsConfigLenientWithMultipleProfiles(t *testing
 	cli.UserHomeDir = func() (string, error) { return home, nil }
 	cli.ReadFile = os.ReadFile
 
-	exitCode := cli.Run([]string{"--json", "--base-url", "http://127.0.0.1:9", "inbox", "ack", "--help"})
+	exitCode := cli.Run([]string{"--json", "--base-url", "http://127.0.0.1:9", "inbox", "respond", "--help"})
 	if exitCode != 0 {
 		t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
@@ -190,8 +190,8 @@ func TestRunSubcommandTrailingHelpIsConfigLenientWithMultipleProfiles(t *testing
 	}
 	data, _ := payload["data"].(map[string]any)
 	helpText, _ := data["help_text"].(string)
-	if !strings.Contains(helpText, "inbox ack") {
-		t.Fatalf("expected inbox ack help in output, got %q", helpText)
+	if !strings.Contains(helpText, "inbox respond") {
+		t.Fatalf("expected inbox respond help in output, got %q", helpText)
 	}
 }
 

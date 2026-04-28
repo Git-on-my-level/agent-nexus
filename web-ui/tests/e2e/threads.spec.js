@@ -1,11 +1,14 @@
 import { expect, test } from "@playwright/test";
 
 function filterTopicsByQuery(allTopics, url) {
-  const state = url.searchParams.get("state");
+  let state = url.searchParams.get("state");
+  if (!state) {
+    state = "active";
+  }
   const q = (url.searchParams.get("q") ?? "").trim().toLowerCase();
 
   return allTopics.filter((topic) => {
-    if (state && topic.state !== state) {
+    if (topic.state !== state) {
       return false;
     }
 

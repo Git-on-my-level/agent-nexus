@@ -24,11 +24,13 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 	}
 
 	var req struct {
-		ActorID           string `json:"actor_id"`
-		InboxItemID       string `json:"inbox_item_id"`
-		Answer            string `json:"answer"`
-		SaveAsDecision    *bool  `json:"save_as_decision"`
-		NotifyAskingAgent *bool  `json:"notify_asking_agent"`
+		ActorID             string   `json:"actor_id"`
+		InboxItemID         string   `json:"inbox_item_id"`
+		ResponseText        string   `json:"response_text"`
+		RelatedRefs         []string `json:"related_refs"`
+		NotifyMode          string   `json:"notify_mode"`
+		NotifyTargetActorID string   `json:"notify_target_actor_id"`
+		NotifyTargetAgentID string   `json:"notify_target_agent_id"`
 	}
 	if !decodeJSONBody(w, r, &req) {
 		return
@@ -54,9 +56,9 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 		return
 	}
 
-	answer := strings.TrimSpace(req.Answer)
-	if answer == "" {
-		writeError(w, http.StatusBadRequest, "invalid_request", "answer is required")
+	responseText := strings.TrimSpace(req.ResponseText)
+	if responseText == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "response_text is required")
 		return
 	}
 
@@ -71,9 +73,10 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 	}
 
 	itemPayload := cloneWorkspaceMap(item.Data)
-	kind := strings.ToLower(strings.TrimSpace(anyString(itemPayload["kind"])))
-	if kind != "ask" {
-		writeError(w, http.StatusBadRequest, "invalid_request", "inbox item is not an ask item")
+	applyInboxContractShape(itemPayload, inboxContractHintFromDerived(item))
+	kind := canonicalHumanAttentionKind(anyString(itemPayload["kind"]))
+	if kind == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "inbox item is not a human attention item")
 		return
 	}
 
@@ -97,10 +100,26 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 
 	subjectRef := strings.TrimSpace(anyString(itemPayload["subject_ref"]))
 	relatedRefs, _ := extractStringSlice(itemPayload["related_refs"])
-	queryText := strings.TrimSpace(anyString(itemPayload["query_text"]))
-	askingAgentID := strings.TrimSpace(anyString(itemPayload["asking_agent_id"]))
-	coverageHint := strings.TrimSpace(anyString(itemPayload["coverage_hint"]))
+	relatedRefs = append(relatedRefs, normalizeStringSlice(req.RelatedRefs)...)
+	requesterActorID := strings.TrimSpace(anyString(itemPayload["requester_actor_id"]))
+	requesterAgentID := strings.TrimSpace(anyString(itemPayload["requester_agent_id"]))
+	requesterLabel := strings.TrimSpace(anyString(itemPayload["requester_label"]))
 	sourceEventID := strings.TrimSpace(anyString(itemPayload["source_event_id"]))
+	requestEventRef := strings.TrimSpace(anyString(itemPayload["request_event_ref"]))
+	if requestEventRef == "" && sourceEventID != "" {
+		requestEventRef = "event:" + sourceEventID
+	}
+
+	target, ok := resolveHumanAttentionResponseTarget(w, r, opts, humanAttentionTargetRequest{
+		NotifyMode:          req.NotifyMode,
+		NotifyTargetActorID: req.NotifyTargetActorID,
+		NotifyTargetAgentID: req.NotifyTargetAgentID,
+		RequesterActorID:    requesterActorID,
+		RequesterAgentID:    requesterAgentID,
+	})
+	if !ok {
+		return
+	}
 
 	responseRefs := make([]string, 0, len(relatedRefs)+6)
 	responseRefs = append(responseRefs, "thread:"+threadID, "inbox:"+inboxItemID)
@@ -111,21 +130,30 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 	if sourceEventID != "" {
 		responseRefs = append(responseRefs, "event:"+sourceEventID)
 	}
+	if requestEventRef != "" {
+		responseRefs = append(responseRefs, requestEventRef)
+	}
 	responseRefs = mergeUniqueSortedRefs(responseRefs...)
 
-	summary := buildAskResponseSummary(queryText, answer)
+	summary := buildHumanAttentionResponseSummary(kind, itemPayload, responseText)
 	responseEvent := map[string]any{
-		"type":      agentAskAnsweredEventType,
+		"type":      humanAttentionRespondedEventType,
 		"thread_id": threadID,
 		"refs":      responseRefs,
 		"summary":   summary,
 		"payload": map[string]any{
-			"inbox_item_id":   inboxItemID,
-			"query_text":      queryText,
-			"answer":          answer,
-			"asking_agent_id": askingAgentID,
-			"coverage_hint":   coverageHint,
-			"subject_ref":     subjectRef,
+			"inbox_item_id":       inboxItemID,
+			"request_event_ref":   requestEventRef,
+			"kind":                kind,
+			"response_text":       responseText,
+			"subject_ref":         subjectRef,
+			"related_refs":        responseRefs,
+			"requester_actor_id":  requesterActorID,
+			"requester_agent_id":  requesterAgentID,
+			"requester_label":     requesterLabel,
+			"responding_actor_id": actorID,
+			"notified_actor_id":   target.ActorID,
+			"notified_agent_id":   target.AgentID,
 		},
 		"provenance": actorStatementProvenance(),
 	}
@@ -136,87 +164,42 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 
 	responseStored, err := opts.primitiveStore.AppendEvent(r.Context(), actorID, responseEvent)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to store ask response")
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to store human attention response")
 		return
 	}
+	_ = refreshDerivedTopicProjection(r.Context(), opts, threadID, time.Now().UTC(), actorID)
 
-	ackRefs := []string{"inbox:" + inboxItemID}
-	ackEvent := map[string]any{
-		"type":      "inbox_item_acknowledged",
-		"thread_id": threadID,
-		"refs":      ackRefs,
-		"summary":   "Ask response captured",
-		"payload": map[string]any{
-			"inbox_item_id": inboxItemID,
-			"subject_ref":   subjectRef,
-		},
-		"provenance": actorStatementProvenance(),
-	}
-	if err := validateEventReferenceConventions(opts.contract, ackEvent, ackRefs); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
-		return
-	}
-	ackStored, err := opts.primitiveStore.AppendEvent(r.Context(), actorID, ackEvent)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to acknowledge answered ask item")
-		return
-	}
-
-	shouldSaveDecision := resolveOptionalBool(req.SaveAsDecision, hasTopicRef(subjectRef, relatedRefs))
-	var decisionStored map[string]any
-	if shouldSaveDecision {
-		decisionEvent, ok := buildAskDecisionEvent(
-			threadID,
-			inboxItemID,
-			queryText,
-			answer,
-			subjectRef,
-			relatedRefs,
-			strings.TrimSpace(anyString(responseStored["id"])),
-		)
-		if ok {
-			decisionRefs, _ := extractStringSlice(decisionEvent["refs"])
-			if err := validateEventReferenceConventions(opts.contract, decisionEvent, decisionRefs); err != nil {
-				writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
-				return
-			}
-			decisionStored, err = opts.primitiveStore.AppendEvent(r.Context(), actorID, decisionEvent)
-			if err != nil {
-				writeError(w, http.StatusInternalServerError, "internal_error", "failed to store decision from ask response")
-				return
-			}
-		}
-	}
-
-	notifyRequested := resolveOptionalBool(req.NotifyAskingAgent, true)
+	notifyRequested := target.Mode != "none"
 	notifyQueued := false
 	notifyMessage := ""
 	if notifyRequested {
-		notifyQueued, notifyMessage = sendAskResponseWakeBestEffort(
+		notifyQueued, notifyMessage = sendHumanAttentionResponseWakeBestEffort(
 			r.Context(),
 			opts,
 			actorID,
 			threadID,
 			subjectRef,
-			askingAgentID,
+			target.ActorID,
+			target.Handle,
 			summary,
 			strings.TrimSpace(anyString(responseStored["id"])),
 			strings.TrimSpace(anyString(responseStored["ts"])),
 		)
+	} else {
+		notifyMessage = "Response recorded without notification target."
 	}
 
 	response := map[string]any{
-		"event":          responseStored,
-		"acknowledgment": ackStored,
+		"event": responseStored,
 		"notify": map[string]any{
 			"requested":       notifyRequested,
 			"queued":          notifyQueued,
 			"message":         notifyMessage,
-			"asking_agent_id": askingAgentID,
+			"target_actor_id": target.ActorID,
+			"target_agent_id": target.AgentID,
+			"target_handle":   target.Handle,
+			"mode":            target.Mode,
 		},
-	}
-	if decisionStored != nil {
-		response["decision_event"] = decisionStored
 	}
 
 	writeJSON(w, http.StatusCreated, response)
@@ -233,6 +216,103 @@ func resolveInboxItemByVariants(ctx context.Context, store PrimitiveStore, inbox
 		}
 	}
 	return primitives.DerivedInboxItem{}, primitives.ErrNotFound
+}
+
+type humanAttentionTargetRequest struct {
+	NotifyMode          string
+	NotifyTargetActorID string
+	NotifyTargetAgentID string
+	RequesterActorID    string
+	RequesterAgentID    string
+}
+
+type humanAttentionResponseTarget struct {
+	Mode    string
+	ActorID string
+	AgentID string
+	Handle  string
+}
+
+func resolveHumanAttentionResponseTarget(
+	w http.ResponseWriter,
+	r *http.Request,
+	opts handlerOptions,
+	req humanAttentionTargetRequest,
+) (humanAttentionResponseTarget, bool) {
+	mode := strings.ToLower(strings.TrimSpace(req.NotifyMode))
+	if mode == "" {
+		mode = "original"
+	}
+	if strings.TrimSpace(req.NotifyTargetActorID) != "" || strings.TrimSpace(req.NotifyTargetAgentID) != "" {
+		mode = "target"
+	}
+
+	switch mode {
+	case "none":
+		return humanAttentionResponseTarget{Mode: "none"}, true
+	case "original":
+		target, found, err := resolveAgentNotificationTarget(r.Context(), opts, req.RequesterActorID, req.RequesterAgentID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "internal_error", "failed to resolve requester notification target")
+			return humanAttentionResponseTarget{}, false
+		}
+		if !found {
+			writeError(w, http.StatusConflict, "notification_target_required", "original requester is not resolvable; choose a replacement notification target or submit notify_mode=none")
+			return humanAttentionResponseTarget{}, false
+		}
+		target.Mode = "original"
+		return target, true
+	case "target":
+		target, found, err := resolveAgentNotificationTarget(r.Context(), opts, req.NotifyTargetActorID, req.NotifyTargetAgentID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "internal_error", "failed to resolve notification target")
+			return humanAttentionResponseTarget{}, false
+		}
+		if !found {
+			writeError(w, http.StatusConflict, "notification_target_required", "notification target is not resolvable; choose another target or submit notify_mode=none")
+			return humanAttentionResponseTarget{}, false
+		}
+		target.Mode = "target"
+		return target, true
+	default:
+		writeError(w, http.StatusBadRequest, "invalid_request", "notify_mode must be original, target, or none")
+		return humanAttentionResponseTarget{}, false
+	}
+}
+
+func resolveAgentNotificationTarget(ctx context.Context, opts handlerOptions, actorID string, agentID string) (humanAttentionResponseTarget, bool, error) {
+	if opts.authStore == nil {
+		return humanAttentionResponseTarget{}, false, nil
+	}
+	actorID = strings.TrimSpace(actorID)
+	agentID = strings.TrimSpace(agentID)
+	var principal auth.AuthPrincipalSummary
+	var found bool
+	var err error
+	if agentID != "" {
+		principal, found, err = findAgentPrincipalByAgentID(ctx, opts.authStore, agentID)
+	} else if actorID != "" {
+		principal, found, err = findAgentPrincipalByActorID(ctx, opts.authStore, actorID)
+	}
+	if err != nil || !found {
+		return humanAttentionResponseTarget{}, found, err
+	}
+	return humanAttentionResponseTarget{
+		ActorID: principal.ActorID,
+		AgentID: principal.AgentID,
+		Handle:  principal.Username,
+	}, true, nil
+}
+
+func normalizeStringSlice(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			out = append(out, value)
+		}
+	}
+	return out
 }
 
 func resolveOptionalBool(value *bool, fallback bool) bool {
@@ -330,28 +410,47 @@ func buildAskDecisionSummary(queryText, answer string) string {
 	return "Decision recorded from ask response: " + answer
 }
 
-func sendAskResponseWakeBestEffort(
+func buildHumanAttentionResponseSummary(kind string, itemPayload map[string]any, responseText string) string {
+	title := strings.TrimSpace(anyString(itemPayload["title"]))
+	if title == "" {
+		title = strings.TrimSpace(anyString(itemPayload["body"]))
+	}
+	if title == "" {
+		title = strings.TrimSpace(kind)
+	}
+	if len(title) > 72 {
+		title = strings.TrimSpace(title[:72]) + "..."
+	}
+	return "Human response recorded: " + title
+}
+
+func sendHumanAttentionResponseWakeBestEffort(
 	ctx context.Context,
 	opts handlerOptions,
 	actorID string,
 	threadID string,
 	subjectRef string,
-	askingAgentID string,
+	targetActorID string,
+	targetHandle string,
 	triggerText string,
 	triggerEventID string,
 	triggerCreatedAt string,
 ) (bool, string) {
-	if strings.TrimSpace(askingAgentID) == "" {
-		return true, "Queued — will deliver when agent reconnects."
+	targetActorID = strings.TrimSpace(targetActorID)
+	if targetActorID == "" {
+		return false, "Response recorded without notification target."
 	}
 	workspaceID := strings.TrimSpace(opts.workspaceID)
 	if workspaceID == "" {
 		workspaceID = "ws_main"
 	}
-	targetHandle := "agent"
+	targetHandle = strings.TrimSpace(targetHandle)
+	if targetHandle == "" {
+		targetHandle = "agent"
+	}
 	online := false
 	if opts.authStore != nil {
-		principal, found, err := findAgentPrincipalByActorID(ctx, opts.authStore, askingAgentID)
+		principal, found, err := findAgentPrincipalByActorID(ctx, opts.authStore, targetActorID)
 		if err == nil && found {
 			if strings.TrimSpace(principal.Username) != "" {
 				targetHandle = strings.TrimSpace(principal.Username)
@@ -368,14 +467,14 @@ func sendAskResponseWakeBestEffort(
 		triggerCreatedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	}
 
-	wakeupID := router.WakeupArtifactID(workspaceID, threadID, triggerEventID, askingAgentID)
+	wakeupID := router.WakeupArtifactID(workspaceID, threadID, triggerEventID, targetActorID)
 	wakeRefs := append(router.WakeArtifactRefs(threadID, triggerEventID, subjectRef), "artifact:"+wakeupID)
 	sessionKey := fmt.Sprintf("anx:%s:%s:%s", workspaceID, threadID, targetHandle)
 
 	wakePayload := router.BuildWakeRequestPayload(
 		wakeupID,
 		targetHandle,
-		askingAgentID,
+		targetActorID,
 		workspaceID,
 		"Main",
 		threadID,
@@ -393,14 +492,14 @@ func sendAskResponseWakeBestEffort(
 		"summary":         "Wake packet for @" + targetHandle,
 		"refs":            router.WakeArtifactRefs(threadID, triggerEventID, subjectRef),
 		"target_handle":   targetHandle,
-		"target_actor_id": askingAgentID,
+		"target_actor_id": targetActorID,
 		"workspace_id":    workspaceID,
 		"thread_id":       threadID,
 	}, map[string]any{
 		"version":            router.WakePacketVersion,
 		"wakeup_id":          wakeupID,
 		"target_handle":      targetHandle,
-		"target_actor_id":    askingAgentID,
+		"target_actor_id":    targetActorID,
 		"workspace_id":       workspaceID,
 		"thread_id":          threadID,
 		"trigger_event_id":   triggerEventID,
@@ -446,6 +545,27 @@ func findAgentPrincipalByActorID(ctx context.Context, authStore *auth.Store, act
 	wantedActorID := strings.TrimSpace(actorID)
 	for _, principal := range principals {
 		if strings.TrimSpace(principal.ActorID) != wantedActorID {
+			continue
+		}
+		if principal.Revoked || strings.TrimSpace(principal.PrincipalKind) != "agent" {
+			continue
+		}
+		return principal, true, nil
+	}
+	return auth.AuthPrincipalSummary{}, false, nil
+}
+
+func findAgentPrincipalByAgentID(ctx context.Context, authStore *auth.Store, agentID string) (auth.AuthPrincipalSummary, bool, error) {
+	if authStore == nil {
+		return auth.AuthPrincipalSummary{}, false, nil
+	}
+	principals, _, err := authStore.ListPrincipals(ctx, auth.AuthPrincipalListFilter{})
+	if err != nil {
+		return auth.AuthPrincipalSummary{}, false, err
+	}
+	wantedAgentID := strings.TrimSpace(agentID)
+	for _, principal := range principals {
+		if strings.TrimSpace(principal.AgentID) != wantedAgentID {
 			continue
 		}
 		if principal.Revoked || strings.TrimSpace(principal.PrincipalKind) != "agent" {

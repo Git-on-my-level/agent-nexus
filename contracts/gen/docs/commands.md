@@ -941,18 +941,6 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ event }`.
 
-## `inbox.acknowledge`
-
-- CLI path: `inbox acknowledge`
-- HTTP: `POST /inbox/{inbox_id}/acknowledge`
-- Stability: `beta`
-- Surface: `projection`
-- Input mode: `json-body`
-- Why: Suppress or clear a derived inbox item via a durable acknowledgment event.
-- Concepts: `inbox`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
-- Output: Returns `{ event }`.
-
 ## `inbox.get`
 
 - CLI path: `inbox get`
@@ -972,10 +960,22 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `projection`
 - Input mode: `none`
-- Why: Load the derived operator inbox generated from refs and canonical events.
+- Why: Load the operator-only human attention queue derived from explicit human_attention_requested events.
 - Concepts: `inbox`
 - Error codes: `auth_required`, `invalid_token`
 - Output: Returns `{ items }`.
+
+## `inbox.respond`
+
+- CLI path: `inbox respond`
+- HTTP: `POST /inbox/{inbox_id}/respond`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `json-body`
+- Why: Record a freeform human response, close the human attention item, and optionally notify the selected requester/replacement agent.
+- Concepts: `inbox`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `notification_target_required`, `not_found`
+- Output: Returns `{ event, notify }`.
 
 ## `inbox.stream`
 

@@ -184,7 +184,7 @@ func TestRefEdgesListRequiresExactlyOneSelector(t *testing.T) {
 	}
 }
 
-func TestAskCommandCreatesAgentAskRequestedEvent(t *testing.T) {
+func TestHumanAskCommandCreatesHumanAttentionRequestedEvent(t *testing.T) {
 	t.Parallel()
 
 	var captured map[string]any
@@ -194,10 +194,10 @@ func TestAskCommandCreatesAgentAskRequestedEvent(t *testing.T) {
 			return
 		}
 		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
-			t.Fatalf("decode ask body: %v", err)
+			t.Fatalf("decode human ask body: %v", err)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"event":{"id":"event_ask_1","type":"agent_ask_requested","thread_id":"thread_1"}}`))
+		_, _ = w.Write([]byte(`{"event":{"id":"event_ask_1","type":"human_attention_requested","thread_id":"thread_1"}}`))
 	}))
 	defer server.Close()
 
@@ -206,15 +206,15 @@ func TestAskCommandCreatesAgentAskRequestedEvent(t *testing.T) {
 
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json", "--base-url", server.URL, "--agent", "agent-a",
-		"ask", "Should we ship Friday?",
+		"human", "ask", "Should we ship Friday?",
 		"--thread-id", "thread_1",
 		"--subject-ref", "topic:launch",
 		"--ref", "artifact:receipt_1",
 		"--coverage-hint", "thin - 0 decisions",
 	})
 	payload := assertEnvelopeOK(t, raw)
-	if got := anyStringValue(payload["command"]); got != "ask" {
-		t.Fatalf("expected ask command, got %#v", payload)
+	if got := anyStringValue(payload["command"]); got != "human ask" {
+		t.Fatalf("expected human ask command, got %#v", payload)
 	}
 	if got := anyStringValue(payload["command_id"]); got != "events.create" {
 		t.Fatalf("expected events.create command id, got %#v", payload)
@@ -224,8 +224,8 @@ func TestAskCommandCreatesAgentAskRequestedEvent(t *testing.T) {
 		t.Fatalf("expected actor_id from profile, got %#v", captured)
 	}
 	event, _ := captured["event"].(map[string]any)
-	if got := strings.TrimSpace(anyStringValue(event["type"])); got != "agent_ask_requested" {
-		t.Fatalf("expected agent_ask_requested type, got %#v", captured)
+	if got := strings.TrimSpace(anyStringValue(event["type"])); got != "human_attention_requested" {
+		t.Fatalf("expected human_attention_requested type, got %#v", captured)
 	}
 	if got := strings.TrimSpace(anyStringValue(event["thread_id"])); got != "thread_1" {
 		t.Fatalf("expected thread_1, got %#v", captured)
@@ -236,35 +236,38 @@ func TestAskCommandCreatesAgentAskRequestedEvent(t *testing.T) {
 		refs = append(refs, strings.TrimSpace(anyStringValue(raw)))
 	}
 	if !hasString(refs, "thread:thread_1") || !hasString(refs, "topic:launch") || !hasString(refs, "artifact:receipt_1") {
-		t.Fatalf("expected ask refs to include thread/topic/artifact, got %#v", refs)
+		t.Fatalf("expected human refs to include thread/topic/artifact, got %#v", refs)
 	}
 
 	eventPayload, _ := event["payload"].(map[string]any)
-	if got := strings.TrimSpace(anyStringValue(eventPayload["query_text"])); got != "Should we ship Friday?" {
-		t.Fatalf("expected query text, got %#v", eventPayload)
+	if got := strings.TrimSpace(anyStringValue(eventPayload["kind"])); got != "ask" {
+		t.Fatalf("expected ask kind, got %#v", eventPayload)
 	}
-	if got := strings.TrimSpace(anyStringValue(eventPayload["asking_agent_id"])); got != "actor_asker" {
-		t.Fatalf("expected asking_agent_id actor_asker, got %#v", eventPayload)
+	if got := strings.TrimSpace(anyStringValue(eventPayload["title"])); got != "Should we ship Friday?" {
+		t.Fatalf("expected title, got %#v", eventPayload)
 	}
-	if got := strings.TrimSpace(anyStringValue(eventPayload["asking_session_id"])); got != "agent-a" {
-		t.Fatalf("expected asking_session_id agent-a, got %#v", eventPayload)
+	if got := strings.TrimSpace(anyStringValue(eventPayload["requester_actor_id"])); got != "actor_asker" {
+		t.Fatalf("expected requester_actor_id actor_asker, got %#v", eventPayload)
+	}
+	if got := strings.TrimSpace(anyStringValue(eventPayload["requester_agent_id"])); got != "agent-a" {
+		t.Fatalf("expected requester_agent_id agent-a, got %#v", eventPayload)
 	}
 }
 
-func TestAskCommandRequiresThreadID(t *testing.T) {
+func TestHumanCommandRequiresSubjectRef(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json", "ask", "Need a decision",
+		"--json", "human", "ask", "Need a decision",
 	})
 	payload := assertEnvelopeError(t, raw)
 	errObj, _ := payload["error"].(map[string]any)
 	if got := anyStringValue(errObj["code"]); got != "invalid_request" {
 		t.Fatalf("expected invalid_request, got %#v", payload)
 	}
-	if got := anyStringValue(errObj["message"]); !strings.Contains(got, "thread id is required") {
-		t.Fatalf("expected thread id validation message, got %#v", payload)
+	if got := anyStringValue(errObj["message"]); !strings.Contains(got, "--subject-ref is required") {
+		t.Fatalf("expected subject ref validation message, got %#v", payload)
 	}
 }
 
@@ -288,13 +291,13 @@ func TestInboxUnknownSubcommandGuidance(t *testing.T) {
 		t.Fatalf("unexpected error payload: %#v", payload)
 	}
 	message := anyStringValue(errObj["message"])
-	if !strings.Contains(message, "valid subcommands: list, get, acknowledge, ack, stream, tail") {
+	if !strings.Contains(message, "valid subcommands: list, get, respond, stream, tail") {
 		t.Fatalf("expected valid-subcommands guidance, got %q", message)
 	}
-	if !strings.Contains(message, "`anx inbox get --id <id-or-alias>`") || !strings.Contains(message, "`anx inbox acknowledge --inbox-item-id <id-or-alias>`") {
+	if !strings.Contains(message, "`anx inbox get --id <id-or-alias>`") || !strings.Contains(message, "`anx inbox respond --inbox-item-id <id-or-alias> --response-text <text>`") {
 		t.Fatalf("expected concrete inbox examples, got %q", message)
 	}
-	if !strings.Contains(message, "did you mean `anx inbox ack --inbox-item-id <id-or-alias>`?") {
+	if !strings.Contains(message, "did you mean `anx inbox get --id <id-or-alias>`?") {
 		t.Fatalf("expected corrective suggestion, got %q", message)
 	}
 }
@@ -561,33 +564,28 @@ func TestInboxAliasStableAcrossListMembershipChanges(t *testing.T) {
 	}
 }
 
-func TestInboxAckAliasUsesSubjectRefFromInboxList(t *testing.T) {
+func TestInboxRespondPostsGenericResponse(t *testing.T) {
 	t.Parallel()
 
-	const inboxID = "inbox:action_needed:thread_42:none:event_42"
-	alias := inboxAliasByID([]string{inboxID})[inboxID]
+	const inboxID = "inbox:ask:thread_42:none:event_42"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"items":[{"id":"` + inboxID + `","subject_ref":"thread:thread_42"}]}`))
-			return
-		case r.Method == http.MethodPost && r.URL.Path == "/inbox/"+url.PathEscape(inboxID)+"/acknowledge":
+		case r.Method == http.MethodPost && r.URL.Path == "/inbox/"+url.PathEscape(inboxID)+"/respond":
 			body, _ := io.ReadAll(r.Body)
 			var payload map[string]any
 			if err := json.Unmarshal(body, &payload); err != nil {
-				t.Fatalf("decode inbox ack body: %v body=%s", err, string(body))
+				t.Fatalf("decode inbox respond body: %v body=%s", err, string(body))
 			}
 			if _, exists := payload["inbox_item_id"]; exists {
 				t.Fatalf("expected inbox_item_id in path only, got body=%s", string(body))
 			}
-			if got := strings.TrimSpace(anyStringValue(payload["subject_ref"])); got != "thread:thread_42" {
-				t.Fatalf("expected resolved subject_ref thread:thread_42, got %q body=%s", got, string(body))
+			if got := strings.TrimSpace(anyStringValue(payload["response_text"])); got != "Approved." {
+				t.Fatalf("expected response_text Approved., got %q body=%s", got, string(body))
 			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
-			_, _ = w.Write([]byte(`{"event":{"id":"event_ack_alias"}}`))
+			_, _ = w.Write([]byte(`{"event":{"id":"event_response"}}`))
 			return
 		default:
 			http.NotFound(w, r)
@@ -600,8 +598,9 @@ func TestInboxAckAliasUsesSubjectRefFromInboxList(t *testing.T) {
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
 		"--base-url", server.URL,
-		"inbox", "ack",
-		"--inbox-item-id", alias,
+		"inbox", "respond",
+		"--inbox-item-id", inboxID,
+		"--response-text", "Approved.",
 	})
 	assertEnvelopeOK(t, raw)
 }
@@ -1337,6 +1336,49 @@ func TestDocsCreateFromFlagsAndContentFile(t *testing.T) {
 	}
 }
 
+func TestDocsMutationNormalizesTextMarkdownContentType(t *testing.T) {
+	t.Parallel()
+
+	var gotCreate, gotRevise []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/docs":
+			gotCreate, _ = io.ReadAll(r.Body)
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"document":{"id":"doc_md","head_revision_id":"rev_1"},"revision":{"revision_id":"rev_1","revision_number":1}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/docs/doc_md/revisions":
+			gotRevise, _ = io.ReadAll(r.Body)
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"document":{"id":"doc_md","head_revision_id":"rev_2"},"revision":{"revision_id":"rev_2","revision_number":2}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	env := map[string]string{}
+
+	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"document":{"id":"doc_md","title":"T"},"content":"# Hello","content_type":"text/markdown"}`), []string{"--json", "--base-url", server.URL, "docs", "create"}))
+	var createBody map[string]any
+	if err := json.Unmarshal(gotCreate, &createBody); err != nil {
+		t.Fatalf("decode create body: %v", err)
+	}
+	if got := anyStringValue(createBody["content_type"]); got != "text" {
+		t.Fatalf("docs create: expected content_type normalized to text, got %q", got)
+	}
+
+	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"actor_id":"actor_test","if_base_revision":"rev_1","content":"next","content_type":"text/markdown; charset=utf-8"}`), []string{"--json", "--base-url", server.URL, "docs", "revise", "--apply", "--document-id", "doc_md"}))
+	var reviseBody map[string]any
+	if err := json.Unmarshal(gotRevise, &reviseBody); err != nil {
+		t.Fatalf("decode revise body: %v", err)
+	}
+	if got := anyStringValue(reviseBody["content_type"]); got != "text" {
+		t.Fatalf("docs revise: expected content_type normalized to text, got %q", got)
+	}
+}
+
 func TestDocsReviseRejectsNullContentBeforeHTTP(t *testing.T) {
 	t.Parallel()
 
@@ -1962,7 +2004,7 @@ func TestNormalizeMutationBodyIDsPreservesUnsupportedTypedRefsVerbatim(t *testin
 	}
 }
 
-func TestNormalizeMutationBodyIDsResolvesInboxAcknowledgeSubjectRef(t *testing.T) {
+func TestNormalizeMutationBodyIDsHandlesInboxRespondRelatedRefs(t *testing.T) {
 	t.Parallel()
 
 	app := &App{}
@@ -1977,23 +2019,25 @@ func TestNormalizeMutationBodyIDsResolvesInboxAcknowledgeSubjectRef(t *testing.T
 	defer server.Close()
 
 	body := map[string]any{
-		"subject_ref":   "thread:thread_123",
-		"inbox_item_id": "inbox:action_needed:thread_1234567890:none:event_1",
+		"inbox_item_id": "inbox:ask:thread_1234567890:none:event_1",
+		"response_text": "Approved.",
+		"related_refs":  []any{"topic:launch"},
 	}
 
 	normalizedAny, err := app.normalizeMutationBodyIDs(
 		context.Background(),
 		config.Resolved{BaseURL: server.URL},
-		"inbox.acknowledge",
+		"inbox.respond",
 		nil,
 		body,
 	)
 	if err != nil {
-		t.Fatalf("normalize inbox.acknowledge body: %v", err)
+		t.Fatalf("normalize inbox.respond body: %v", err)
 	}
 	normalized, _ := normalizedAny.(map[string]any)
-	if got := anyStringValue(normalized["subject_ref"]); got != "thread:thread_1234567890" {
-		t.Fatalf("expected normalized subject_ref, got %#v", normalized)
+	refs, _ := normalized["related_refs"].([]any)
+	if len(refs) != 1 || anyStringValue(refs[0]) != "topic:launch" {
+		t.Fatalf("expected normalized related_refs, got %#v", normalized)
 	}
 }
 
@@ -4534,23 +4578,18 @@ func TestThreadsListIncludesShortID(t *testing.T) {
 	}
 }
 
-func TestInboxAckActorIDMeAliasFromProfile(t *testing.T) {
+func TestInboxRespondActorIDMeAliasFromProfile(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet && r.URL.Path == "/threads" {
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"threads":[{"id":"thread_1"}]}`))
-			return
-		}
-		if r.Method != http.MethodPost || r.URL.Path != "/inbox/"+url.PathEscape("inbox:1")+"/acknowledge" {
+		if r.Method != http.MethodPost || r.URL.Path != "/inbox/"+url.PathEscape("inbox:1")+"/respond" {
 			http.NotFound(w, r)
 			return
 		}
 		body, _ := io.ReadAll(r.Body)
 		var payload map[string]any
 		if err := json.Unmarshal(body, &payload); err != nil {
-			t.Fatalf("decode inbox ack body: %v body=%s", err, string(body))
+			t.Fatalf("decode inbox respond body: %v body=%s", err, string(body))
 		}
 		if _, exists := payload["inbox_item_id"]; exists {
 			t.Fatalf("expected inbox_item_id in path only, got body=%s", string(body))
@@ -4560,7 +4599,7 @@ func TestInboxAckActorIDMeAliasFromProfile(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		_, _ = w.Write([]byte(`{"event":{"id":"event_ack_profile"}}`))
+		_, _ = w.Write([]byte(`{"event":{"id":"event_response_profile"}}`))
 	}))
 	defer server.Close()
 
@@ -4571,9 +4610,9 @@ func TestInboxAckActorIDMeAliasFromProfile(t *testing.T) {
 		"--json",
 		"--base-url", server.URL,
 		"--agent", "agent-a",
-		"inbox", "ack",
-		"--subject-ref", "thread:thread_1",
+		"inbox", "respond",
 		"--inbox-item-id", "inbox:1",
+		"--response-text", "Approved.",
 		"--actor-id", "me",
 	})
 	assertEnvelopeOK(t, raw)
@@ -4586,19 +4625,15 @@ func (failingStdinReader) Read(p []byte) (int, error) {
 	return 0, io.ErrUnexpectedEOF
 }
 
-func TestInboxAckSkipsStdinWhenInboxItemIDFromFlags(t *testing.T) {
+func TestInboxRespondSkipsStdinWhenInboxItemIDFromFlags(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"items":[{"id":"inbox:1","subject_ref":"thread:t1"}]}`))
-			return
-		case r.Method == http.MethodPost && r.URL.Path == "/inbox/"+url.PathEscape("inbox:1")+"/acknowledge":
+		case r.Method == http.MethodPost && r.URL.Path == "/inbox/"+url.PathEscape("inbox:1")+"/respond":
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
-			_, _ = w.Write([]byte(`{"event":{"id":"event_ack_stdin_skip"}}`))
+			_, _ = w.Write([]byte(`{"event":{"id":"event_response_stdin_skip"}}`))
 			return
 		default:
 			http.NotFound(w, r)
@@ -4614,25 +4649,18 @@ func TestInboxAckSkipsStdinWhenInboxItemIDFromFlags(t *testing.T) {
 		"--json",
 		"--base-url", server.URL,
 		"--agent", "agent-a",
-		"inbox", "ack",
+		"inbox", "respond",
 		"--inbox-item-id", "inbox:1",
+		"--response-text", "OK.",
 	})
 	assertEnvelopeOK(t, raw)
 }
 
-func TestInboxAckPositionalInboxItemIDRequiresSubjectRefFromInboxList(t *testing.T) {
+func TestInboxRespondRequiresResponseText(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"items":[{"id":"inbox:action_needed:thread_42:none:event_1","thread_id":"thread_42"}],"generated_at":"2026-03-05T00:00:00Z"}`))
-			return
-		default:
-			http.NotFound(w, r)
-			return
-		}
+		http.NotFound(w, r)
 	}))
 	defer server.Close()
 
@@ -4640,20 +4668,20 @@ func TestInboxAckPositionalInboxItemIDRequiresSubjectRefFromInboxList(t *testing
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
 		"--base-url", server.URL,
-		"inbox", "ack",
-		"inbox:action_needed:thread_42:none:event_1",
+		"inbox", "respond",
+		"inbox:ask:thread_42:none:event_1",
 	})
 	payload := assertEnvelopeError(t, raw)
 	errObj, _ := payload["error"].(map[string]any)
 	if got := anyStringValue(errObj["code"]); got != "invalid_request" {
 		t.Fatalf("expected invalid_request, got %#v", payload)
 	}
-	if got := anyStringValue(errObj["message"]); !strings.Contains(got, "subject_ref is required for inbox item") {
-		t.Fatalf("expected subject_ref guidance, got %#v", payload)
+	if got := anyStringValue(errObj["message"]); !strings.Contains(got, "response_text is required") {
+		t.Fatalf("expected response_text guidance, got %#v", payload)
 	}
 }
 
-func TestInboxAckActorIDMeRequiresProfileActorID(t *testing.T) {
+func TestInboxRespondActorIDMeRequiresProfileActorID(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
@@ -4662,9 +4690,9 @@ func TestInboxAckActorIDMeRequiresProfileActorID(t *testing.T) {
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
 		"--agent", "agent-a",
-		"inbox", "ack",
-		"--subject-ref", "thread:thread_1",
+		"inbox", "respond",
 		"--inbox-item-id", "inbox:1",
+		"--response-text", "OK.",
 		"--actor-id", "me",
 	})
 	payload := assertEnvelopeError(t, raw)

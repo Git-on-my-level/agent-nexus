@@ -35,7 +35,7 @@ var runtimeGeneratedTopics = []runtimeHelpTopic{
 	{Path: "cards", Description: "Manage board-scoped work cards"},
 	{Path: "threads", Description: "Read-only backing-thread inspection (tooling and diagnostics)"},
 	{Path: "events", Description: "Manage events and event streams"},
-	{Path: "inbox", Description: "List/get/ack/stream inbox items"},
+	{Path: "inbox", Description: "Operator diagnostics for human attention inbox items"},
 	{Path: "artifacts", Description: "Manage artifact resources and content"},
 	{Path: "receipts", Description: "Create receipt packets (subject_ref must be card:<card_id>)"},
 	{Path: "reviews", Description: "Create review packets (subject_ref + receipt_ref; subject_ref must be card:<card_id>)"},
@@ -463,7 +463,7 @@ Core Commands:
   config        Inspect effective CLI config and set the active profile (base URL, agent)
   import        Bootstrap a precision-first workspace import and run local import helpers
   draft         Stage write requests locally and commit them later
-  ask           Create an ask inbox item for human guidance via existing event/inbox primitives
+  human         Surface ask, review, or escalation items to the human Inbox
   provenance    Walk refs/provenance links as a deterministic graph
   secret        Manage workspace secrets for agent credential injection
   api call      Perform an arbitrary HTTP API request
@@ -517,8 +517,8 @@ func helpTopicText(topic string) (string, bool) {
 	if topic == "draft" {
 		return draftUsageText(), true
 	}
-	if topic == "ask" {
-		return askUsageText() + "\n", true
+	if topic == "human" {
+		return humanUsageText() + "\n", true
 	}
 	if topic == "import" {
 		return importUsageText() + "\n", true
@@ -1054,7 +1054,7 @@ func formatCommandSpecificHelpBlock(cmd registry.Command) string {
 Usually emitted by higher-level commands:
   - ` + "`receipt_added`" + `: prefer ` + "`anx receipts create`" + `
   - ` + "`review_completed`" + `: prefer ` + "`anx reviews create`" + `
-  - ` + "`inbox_item_acknowledged`" + `: prefer ` + "`anx inbox ack`" + `
+  - ` + "`human_attention_requested`" + `: prefer ` + "`anx human ask|review|escalate`" + `
 
 Local CLI notes:
   - Common open ` + "`event.type`" + ` values include ` + "`actor_statement`" + `; the enum list above is illustrative, not exhaustive.
@@ -1073,18 +1073,19 @@ Note: by default, archived and trashed events are excluded from the timeline out
   - The response includes ` + "`viewing_as`" + ` so you can confirm the resolved profile, username, and actor_id.
   - Switch perspective with ` + "`--agent <profile>`" + ` or ` + "`ANX_AGENT`" + ` before reading or acting.
 
-Inbox categories:
-  - ` + "`action_needed`" + `: A responsible actor must decide, take direct action, or own the next step (includes prior decision and intervention queue signals).
-  - ` + "`risk_exception`" + `: Exceptions or at-risk work items that need follow-up.
-  - ` + "`attention`" + `: Review or lighter operator focus (for example document attention).`)
-	case "inbox.acknowledge":
-		return strings.TrimSpace(`CLI flags (` + "`inbox acknowledge`" + ` / ` + "`inbox ack`" + `):
-  --inbox-item-id <id>   Inbox item id or list alias (see ` + "`inbox list`" + `).
-  --subject-ref <ref>    Typed subject ref; omitted ids may be resolved from ` + "`inbox list`" + `.
-  --actor-id <id>        Actor id (` + "`me`" + ` uses the active profile's actor when configured).
-  --from-file <path>     JSON body file (API request shape).
+Inbox kinds:
+  - ` + "`ask`" + `: A requesting agent needs an answer, judgment, or missing context.
+  - ` + "`review`" + `: A requesting agent wants review of generated work or a proposed action.
+  - ` + "`escalate`" + `: A requesting agent surfaced a risk or abnormal condition.`)
+	case "inbox.respond":
+		return strings.TrimSpace(`CLI flags (` + "`inbox respond`" + `):
+  --inbox-item-id <id>    Inbox item id or list alias (see ` + "`inbox list`" + `).
+  --response-text <text>  Freeform response text.
+  --notify-mode <mode>    original, target, or none.
+  --actor-id <id>         Actor id (` + "`me`" + ` uses the active profile's actor when configured).
+  --from-file <path>      JSON body file (API request shape).
   Positional: inbox item id when not given via ` + "`--inbox-item-id`" + `.
-  Otherwise: JSON object on stdin (` + "`inbox_item_id`" + `, ` + "`subject_ref`" + `, optional fields).`)
+  Otherwise: JSON object on stdin (` + "`inbox_item_id`" + `, ` + "`response_text`" + `, optional fields).`)
 	case "boards.cards.batch_add":
 		return strings.TrimSpace(`CLI input:
   - Provide a JSON object on stdin or via ` + "`--from-file`" + `; it must include ` + "`items`" + ` (array of card create payloads).
@@ -1250,7 +1251,6 @@ func mapRuntimePathToRegistryPath(path string) string {
 	rewrites := map[string]string{
 		"events tail":       "events stream",
 		"inbox tail":        "inbox stream",
-		"inbox ack":         "inbox acknowledge",
 		"threads get":       "threads inspect",
 		"artifacts content": "artifacts content get",
 		"meta commands":     "meta commands list",

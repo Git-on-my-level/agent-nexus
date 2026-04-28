@@ -13,31 +13,31 @@ import {
 import { resolveRefLink } from "../../src/lib/refLinkModel.js";
 
 describe("inbox grouping", () => {
-  it("groups by schema category and sorts by inferred urgency then age", () => {
+  it("groups by human attention kind and sorts by inferred urgency then age", () => {
     const now = "2026-03-07T12:00:00.000Z";
     const grouped = groupInboxItems(
       [
         {
           id: "new-action",
-          category: "action_needed",
+          kind: "ask",
           title: "Action just raised",
           source_event_time: "2026-03-07T11:00:00.000Z",
         },
         {
           id: "old-risk",
-          category: "risk_exception",
+          kind: "escalate",
           title: "Aging risk",
           source_event_time: "2026-03-03T10:00:00.000Z",
         },
         {
           id: "old-action",
-          category: "action_needed",
+          kind: "ask",
           source_event_time: "2026-03-03T10:00:00.000Z",
           title: "Action waiting for days",
         },
         {
           id: "fresh-risk",
-          category: "risk_exception",
+          kind: "escalate",
           source_event_time: "2026-03-07T10:00:00.000Z",
           title: "Fresh exception",
         },
@@ -46,46 +46,46 @@ describe("inbox grouping", () => {
     );
 
     expect(grouped.map((group) => group.category)).toEqual([
-      "action_needed",
-      "risk_exception",
-      "attention",
+      "escalate",
+      "ask",
+      "review",
     ]);
 
     expect(grouped[0].items.map((item) => item.id)).toEqual([
-      "old-action",
-      "new-action",
-    ]);
-    expect(grouped[1].items.map((item) => item.id)).toEqual([
       "old-risk",
       "fresh-risk",
+    ]);
+    expect(grouped[1].items.map((item) => item.id)).toEqual([
+      "old-action",
+      "new-action",
     ]);
     expect(grouped[2].items).toEqual([]);
   });
 });
 
 describe("inbox urgency derivation", () => {
-  it("derives urgency level from category + source event age", () => {
+  it("derives urgency level from kind + source event age", () => {
     const now = "2026-03-07T12:00:00.000Z";
-    // risk_exception base=84, aged 8h → 84+6=90 → immediate
+    // escalate base=88, aged 8h → 88+6=94 → immediate
     const immediate = deriveInboxUrgency(
       {
-        category: "risk_exception",
+        kind: "escalate",
         source_event_time: "2026-03-07T04:00:00.000Z",
       },
       { now },
     );
-    // action_needed base=76, fresh → 76 → high (>=74)
+    // ask base=76, fresh → 76 → high (>=74)
     const high = deriveInboxUrgency(
       {
-        category: "action_needed",
+        kind: "ask",
         source_event_time: "2026-03-07T11:30:00.000Z",
       },
       { now },
     );
-    // attention base=58, fresh → 58 → normal
+    // review base=64, fresh → 64 → normal
     const normal = deriveInboxUrgency(
       {
-        category: "attention",
+        kind: "review",
         source_event_time: "2026-03-07T11:30:00.000Z",
       },
       { now },
@@ -97,10 +97,10 @@ describe("inbox urgency derivation", () => {
   });
 
   it("parses ISO now values when computing age-based urgency boosts", () => {
-    // action_needed base=76, aged 26h → 76+10=86 → high
+    // ask base=76, aged 26h → 76+10=86 → high
     const urgency = deriveInboxUrgency(
       {
-        category: "action_needed",
+        kind: "ask",
         source_event_time: "2026-03-06T10:00:00.000Z",
       },
       { now: "2026-03-07T12:00:00.000Z" },
@@ -116,24 +116,24 @@ describe("inbox urgency derivation", () => {
     const items = [
       {
         id: "1",
-        category: "risk_exception",
-        source_event_time: "2026-03-07T04:00:00.000Z", // 8h old → 84+6=90 → immediate
+        kind: "escalate",
+        source_event_time: "2026-03-07T04:00:00.000Z", // 8h old → 88+6=94 → immediate
       },
       {
         id: "2",
-        category: "action_needed",
+        kind: "ask",
         source_event_time: "2026-03-07T11:00:00.000Z", // fresh → 76 → high
       },
       {
         id: "3",
-        category: "attention", // no timestamp → base 58 → normal
+        kind: "review", // no timestamp → base 64 → normal
       },
     ];
 
     expect(enrichInboxItem(items[0], { now })).toMatchObject({
       id: "1",
       urgency_level: "immediate",
-      urgency_inferred_from: "category + source event age",
+      urgency_inferred_from: "kind + source event age",
     });
 
     expect(summarizeInboxUrgency(items, { now })).toEqual({

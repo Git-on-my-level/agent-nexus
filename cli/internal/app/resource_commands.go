@@ -324,11 +324,21 @@ var knownEventTypeGuidance = []eventTypeGuidance{
 		},
 	},
 	{
-		Type:             "inbox_item_acknowledged",
-		Group:            "Inbox Lifecycle",
-		PreferredCommand: "anx inbox ack",
+		Type:             "human_attention_requested",
+		Group:            "Human Coordination",
+		PreferredCommand: "anx human ask|review|escalate",
 		Constraints: []string{
-			"Usually created through the inbox acknowledgement flow rather than by authoring a raw event.",
+			`event.refs must include "thread:<thread_id>".`,
+			`event.payload must include "kind", "title", "subject_ref", and "requester_actor_id".`,
+		},
+	},
+	{
+		Type:             "human_attention_responded",
+		Group:            "Human Coordination",
+		PreferredCommand: "anx inbox respond",
+		Constraints: []string{
+			`event.refs must include "inbox:<inbox_item_id>".`,
+			`event.payload must include "inbox_item_id", "kind", "response_text", and "responding_actor_id".`,
 		},
 	},
 }
@@ -3022,18 +3032,18 @@ func (a *App) runInboxCommand(ctx context.Context, args []string, cfg config.Res
 	case "get":
 		result, commandName, err := a.runInboxGet(ctx, args[1:], cfg)
 		return result, commandName, err
-	case "acknowledge", "ack":
-		body, err := a.parseAckBodyInput(ctx, args[1:], cfg)
+	case "respond":
+		body, err := a.parseRespondBodyInput(args[1:], cfg)
 		if err != nil {
-			return nil, "inbox ack", err
+			return nil, "inbox respond", err
 		}
 		bodyMap, ok := body.(map[string]any)
 		if !ok {
-			return nil, "inbox ack", errnorm.Usage("invalid_request", "inbox ack body must be a JSON object")
+			return nil, "inbox respond", errnorm.Usage("invalid_request", "inbox respond body must be a JSON object")
 		}
 		inboxItemID := strings.TrimSpace(anyString(bodyMap["inbox_item_id"]))
 		if inboxItemID == "" {
-			return nil, "inbox ack", errnorm.Usage("invalid_request", "inbox_item_id is required")
+			return nil, "inbox respond", errnorm.Usage("invalid_request", "inbox_item_id is required")
 		}
 		apiBody := make(map[string]any, len(bodyMap))
 		for k, v := range bodyMap {
@@ -3045,13 +3055,13 @@ func (a *App) runInboxCommand(ctx context.Context, args []string, cfg config.Res
 		result, callErr := a.invokeTypedJSON(
 			ctx,
 			cfg,
-			"inbox acknowledge",
-			"inbox.acknowledge",
+			"inbox respond",
+			"inbox.respond",
 			map[string]string{"inbox_id": inboxItemID},
 			nil,
 			apiBody,
 		)
-		return result, "inbox acknowledge", callErr
+		return result, "inbox respond", callErr
 	case "stream":
 		result, err := a.runInboxStream(ctx, args[1:], cfg, "inbox stream", false)
 		return result, "inbox stream", err
@@ -4364,12 +4374,13 @@ func (a *App) parseDerivedRebuildBodyInput(args []string, cfg config.Resolved) (
 	return body, nil
 }
 
-func (a *App) parseAckBodyInput(ctx context.Context, args []string, cfg config.Resolved) (any, error) {
-	fs := newSilentFlagSet("inbox ack")
-	var fromFileFlag, subjectRefFlag, inboxItemIDFlag, actorIDFlag trackedString
+func (a *App) parseRespondBodyInput(args []string, cfg config.Resolved) (any, error) {
+	fs := newSilentFlagSet("inbox respond")
+	var fromFileFlag, inboxItemIDFlag, responseTextFlag, notifyModeFlag, actorIDFlag trackedString
 	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
-	fs.Var(&subjectRefFlag, "subject-ref", "Subject ref")
 	fs.Var(&inboxItemIDFlag, "inbox-item-id", "Inbox item id")
+	fs.Var(&responseTextFlag, "response-text", "Freeform response text")
+	fs.Var(&notifyModeFlag, "notify-mode", "Notification mode: original, target, none")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
@@ -4377,91 +4388,56 @@ func (a *App) parseAckBodyInput(ctx context.Context, args []string, cfg config.R
 	positionals := fs.Args()
 
 	fromFile := strings.TrimSpace(fromFileFlag.value)
-	var payload []byte
-	var err error
+	var body map[string]any
 	if fromFile != "" {
-		payload, err = a.readBodyInput(fromFile)
-	} else {
-		inboxTentative := strings.TrimSpace(inboxItemIDFlag.value)
-		if inboxTentative == "" && len(positionals) > 0 {
-			inboxTentative = strings.TrimSpace(positionals[0])
-		}
-		if inboxTentative != "" {
-			// Flag or positional inbox id fully specifies the non-JSON path; do not probe stdin
-			// (non-TTY stdin breaks automation without </dev/null).
-			payload = nil
-		} else {
-			payload, err = a.readBodyInput("")
-		}
-	}
-	if err != nil {
-		return nil, err
-	}
-	if len(payload) > 0 {
-		if len(positionals) > 0 {
-			return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx inbox ack`")
+		payload, err := a.readBodyInput(fromFile)
+		if err != nil {
+			return nil, err
 		}
 		decoded, err := decodeJSONPayload(payload)
 		if err != nil {
 			return nil, err
 		}
-		bodyMap, ok := decoded.(map[string]any)
+		decodedMap, ok := decoded.(map[string]any)
 		if !ok {
-			return nil, errnorm.Usage("invalid_request", "JSON body for `anx inbox ack` must be an object")
+			return nil, errnorm.Usage("invalid_request", "JSON body for `anx inbox respond` must be an object")
 		}
-		if strings.TrimSpace(actorIDFlag.value) != "" {
-			aid, err := resolveActorIDAlias(actorIDFlag.value, cfg)
-			if err != nil {
-				return nil, err
-			}
-			if aid != "" {
-				bodyMap["actor_id"] = aid
-			}
-		}
-		if err := finalizeMutationActorID(bodyMap, cfg); err != nil {
-			return nil, err
-		}
-		return bodyMap, nil
+		body = decodedMap
+	} else {
+		body = map[string]any{}
 	}
 
-	subjectRef := strings.TrimSpace(subjectRefFlag.value)
-	inboxItemID := strings.TrimSpace(inboxItemIDFlag.value)
-	if inboxItemID == "" && len(positionals) > 0 {
-		inboxItemID = strings.TrimSpace(positionals[0])
+	if inboxItemID := strings.TrimSpace(inboxItemIDFlag.value); inboxItemID != "" {
+		body["inbox_item_id"] = inboxItemID
+	}
+	if strings.TrimSpace(anyString(body["inbox_item_id"])) == "" && len(positionals) > 0 {
+		body["inbox_item_id"] = strings.TrimSpace(positionals[0])
 		positionals = positionals[1:]
 	}
+	if responseText := strings.TrimSpace(responseTextFlag.value); responseText != "" {
+		body["response_text"] = responseText
+	}
+	if notifyMode := strings.TrimSpace(notifyModeFlag.value); notifyMode != "" {
+		body["notify_mode"] = notifyMode
+	}
 	if len(positionals) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx inbox ack`")
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx inbox respond`")
 	}
-	if err := validateID(inboxItemID, "inbox item id"); err != nil {
+	if err := validateID(strings.TrimSpace(anyString(body["inbox_item_id"])), "inbox item id"); err != nil {
 		return nil, err
 	}
-
-	shouldResolveInboxItem := subjectRef == "" || looksLikeInboxAlias(inboxItemID)
-	if shouldResolveInboxItem {
-		resolvedInboxItemID, resolvedSubjectRef, err := a.resolveInboxItemIDAndThread(ctx, cfg, inboxItemID)
-		if err != nil {
-			return nil, err
-		}
-		inboxItemID = resolvedInboxItemID
-		if subjectRef == "" {
-			subjectRef = resolvedSubjectRef
-		}
+	if strings.TrimSpace(anyString(body["response_text"])) == "" {
+		return nil, errnorm.Usage("invalid_request", "response_text is required")
 	}
-	if err := validateTypedRefShape(subjectRef); err != nil {
-		return nil, err
-	}
-
 	actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
 	if err != nil {
 		return nil, err
 	}
-	body := map[string]any{
-		"subject_ref":   subjectRef,
-		"inbox_item_id": inboxItemID,
-	}
 	if actorID != "" {
 		body["actor_id"] = actorID
+	}
+	if err := finalizeMutationActorID(body, cfg); err != nil {
+		return nil, err
 	}
 	return body, nil
 }
@@ -6072,11 +6048,33 @@ func validateEventsCreateInput(body any, commandName string) error {
 	return validateEventsCreateBody(body)
 }
 
+// normalizeDocsMutationContentType maps common MIME-style aliases to the canonical
+// API values (text, structured, binary). Mutates payload in place.
+func normalizeDocsMutationContentType(payload map[string]any) {
+	raw, ok := payload["content_type"]
+	if !ok || raw == nil {
+		return
+	}
+	s, ok := raw.(string)
+	if !ok {
+		return
+	}
+	s = strings.TrimSpace(s)
+	if idx := strings.Index(s, ";"); idx >= 0 {
+		s = strings.TrimSpace(s[:idx])
+	}
+	switch strings.ToLower(s) {
+	case "text/markdown":
+		payload["content_type"] = "text"
+	}
+}
+
 func validateDocsCreateBody(body any, commandName string) error {
 	payload, ok := body.(map[string]any)
 	if !ok {
 		return errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object", commandName))
 	}
+	normalizeDocsMutationContentType(payload)
 
 	issues := make([]string, 0, 8)
 	rawDocument, hasDocument := payload["document"]
@@ -6115,6 +6113,7 @@ func validateDocsRevisionBody(body any, commandName string) error {
 	if !ok {
 		return errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object", commandName))
 	}
+	normalizeDocsMutationContentType(payload)
 
 	issues := make([]string, 0, 8)
 	rawContent, hasContent := payload["content"]

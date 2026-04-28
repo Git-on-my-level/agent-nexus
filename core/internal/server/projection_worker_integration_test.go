@@ -200,8 +200,8 @@ func TestProjectionMaintainerStepClearsPendingStatus(t *testing.T) {
 	if state.Status != "current" {
 		t.Fatalf("expected current projection status after worker run, got %#v", state.Freshness)
 	}
-	if state.Projection.InboxCount != 1 {
-		t.Fatalf("expected materialized inbox_count=1 after worker run, got %#v", state.Projection)
+	if state.Projection.InboxCount != 0 {
+		t.Fatalf("expected no materialized inbox rows from generic decision_needed event, got %#v", state.Projection)
 	}
 
 	statuses, err = h.store.GetTopicProjectionRefreshStatuses(context.Background(), []string{threadID})

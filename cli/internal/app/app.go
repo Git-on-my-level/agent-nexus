@@ -39,7 +39,7 @@ func isAPICallHelpOnly(remaining []string) bool {
 
 // isTrailingHelpOnlyInvocation is true when the user only wants subcommand help:
 // a command prefix with no non-help flags, followed by one or more help tokens
-// (for example: inbox ack --help). This avoids requiring a resolvable agent profile
+// (for example: inbox respond --help). This avoids requiring a resolvable agent profile
 // on hosts with multiple local profiles.
 func isTrailingHelpOnlyInvocation(remaining []string) bool {
 	if len(remaining) == 0 {

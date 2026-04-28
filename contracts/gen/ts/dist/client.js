@@ -3902,7 +3902,8 @@ export const commandRegistry = [
                         "document_revised",
                         "document_trashed",
                         "exception_raised",
-                        "inbox_item_acknowledged",
+                        "human_attention_requested",
+                        "human_attention_responded",
                         "intervention_needed",
                         "message_posted",
                         "receipt_added",
@@ -4212,69 +4213,6 @@ export const commandRegistry = [
         "ts_method": "eventsUnarchive"
     },
     {
-        "command_id": "inbox.acknowledge",
-        "cli_path": "inbox acknowledge",
-        "group": "inbox",
-        "method": "POST",
-        "path": "/inbox/{inbox_id}/acknowledge",
-        "operation_id": "acknowledgeInboxItem",
-        "summary": "Acknowledge inbox item",
-        "why": "Suppress or clear a derived inbox item via a durable acknowledgment event.",
-        "input_mode": "json-body",
-        "streaming": {
-            "mode": "none"
-        },
-        "output_envelope": "Returns `{ event }`.",
-        "error_codes": [
-            "auth_required",
-            "invalid_request",
-            "invalid_token",
-            "not_found"
-        ],
-        "concepts": [
-            "inbox",
-            "write"
-        ],
-        "stability": "beta",
-        "surface": "projection",
-        "body_schema": {
-            "required": [
-                {
-                    "name": "subject_ref",
-                    "type": "string"
-                }
-            ],
-            "optional": [
-                {
-                    "name": "actor_id",
-                    "type": "string"
-                },
-                {
-                    "name": "inbox_item_id",
-                    "type": "string"
-                },
-                {
-                    "name": "note",
-                    "type": "string"
-                },
-                {
-                    "name": "refs",
-                    "type": "list\u003cany\u003e"
-                }
-            ]
-        },
-        "path_params": [
-            "inbox_id"
-        ],
-        "adjacent_commands": [
-            "inbox.get",
-            "inbox.list",
-            "inbox.stream"
-        ],
-        "go_method": "InboxAcknowledge",
-        "ts_method": "inboxAcknowledge"
-    },
-    {
         "command_id": "inbox.get",
         "cli_path": "inbox get",
         "group": "inbox",
@@ -4302,8 +4240,8 @@ export const commandRegistry = [
             "inbox_id"
         ],
         "adjacent_commands": [
-            "inbox.acknowledge",
             "inbox.list",
+            "inbox.respond",
             "inbox.stream"
         ],
         "go_method": "InboxGet",
@@ -4317,7 +4255,7 @@ export const commandRegistry = [
         "path": "/inbox",
         "operation_id": "listInboxItems",
         "summary": "List inbox items",
-        "why": "Load the derived operator inbox generated from refs and canonical events.",
+        "why": "Load the operator-only human attention queue derived from explicit human_attention_requested events.",
         "input_mode": "none",
         "streaming": {
             "mode": "none"
@@ -4333,12 +4271,89 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "projection",
         "adjacent_commands": [
-            "inbox.acknowledge",
             "inbox.get",
+            "inbox.respond",
             "inbox.stream"
         ],
         "go_method": "InboxList",
         "ts_method": "inboxList"
+    },
+    {
+        "command_id": "inbox.respond",
+        "cli_path": "inbox respond",
+        "group": "inbox",
+        "method": "POST",
+        "path": "/inbox/{inbox_id}/respond",
+        "operation_id": "respondInboxItem",
+        "summary": "Respond to human attention inbox item",
+        "why": "Record a freeform human response, close the human attention item, and optionally notify the selected requester/replacement agent.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ event, notify }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "notification_target_required",
+            "not_found"
+        ],
+        "concepts": [
+            "inbox",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "projection",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "response_text",
+                    "type": "string"
+                }
+            ],
+            "optional": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                },
+                {
+                    "name": "inbox_item_id",
+                    "type": "string"
+                },
+                {
+                    "name": "notify_mode",
+                    "type": "string",
+                    "enum_values": [
+                        "none",
+                        "original",
+                        "replacement"
+                    ]
+                },
+                {
+                    "name": "notify_target_actor_id",
+                    "type": "string"
+                },
+                {
+                    "name": "notify_target_agent_id",
+                    "type": "string"
+                },
+                {
+                    "name": "related_refs",
+                    "type": "list\u003cany\u003e"
+                }
+            ]
+        },
+        "path_params": [
+            "inbox_id"
+        ],
+        "adjacent_commands": [
+            "inbox.get",
+            "inbox.list",
+            "inbox.stream"
+        ],
+        "go_method": "InboxRespond",
+        "ts_method": "inboxRespond"
     },
     {
         "command_id": "inbox.stream",
@@ -4364,9 +4379,9 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "projection",
         "adjacent_commands": [
-            "inbox.acknowledge",
             "inbox.get",
-            "inbox.list"
+            "inbox.list",
+            "inbox.respond"
         ],
         "go_method": "InboxStream",
         "ts_method": "inboxStream"
@@ -6286,14 +6301,14 @@ export class AnxClient {
     eventsUnarchive(pathParams, options = {}) {
         return this.invoke("events.unarchive", pathParams, options);
     }
-    inboxAcknowledge(pathParams, options = {}) {
-        return this.invoke("inbox.acknowledge", pathParams, options);
-    }
     inboxGet(pathParams, options = {}) {
         return this.invoke("inbox.get", pathParams, options);
     }
     inboxList(options = {}) {
         return this.invoke("inbox.list", {}, options);
+    }
+    inboxRespond(pathParams, options = {}) {
+        return this.invoke("inbox.respond", pathParams, options);
     }
     inboxStream(options = {}) {
         return this.invoke("inbox.stream", {}, options);

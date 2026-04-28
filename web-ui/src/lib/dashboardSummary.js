@@ -2,7 +2,7 @@ import { parseTimestampMs } from "./dateUtils.js";
 import {
   INBOX_CATEGORY_ORDER,
   getInboxCategoryLabel,
-  normalizeInboxCategory,
+  normalizeInboxKind,
 } from "./inboxUtils";
 
 function compareByTimestampDesc(leftValue, rightValue) {
@@ -26,7 +26,7 @@ export function buildInboxCategorySummary(items = []) {
   const counts = new Map();
 
   for (const item of items) {
-    const category = normalizeInboxCategory(item?.category ?? "unknown");
+    const category = normalizeInboxKind(item);
     counts.set(category, (counts.get(category) ?? 0) + 1);
   }
 
@@ -146,16 +146,14 @@ export function inboxSummarySentence(categorySummary) {
     return "Inbox is clear.";
   }
 
-  const actionEntry = categorySummary.find(
-    (entry) => entry.category === "action_needed",
-  );
-  const actions = actionEntry ? actionEntry.count : 0;
+  const askEntry = categorySummary.find((entry) => entry.category === "ask");
+  const actions = askEntry ? askEntry.count : 0;
 
   const itemWord = total === 1 ? "work item needs" : "work items need";
   const base = `${total} ${itemWord} your attention`;
 
   if (actions > 0) {
-    const actionWord = actions === 1 ? "action item" : "action items";
+    const actionWord = actions === 1 ? "ask" : "asks";
     return `${base}, including ${actions} ${actionWord}.`;
   }
 

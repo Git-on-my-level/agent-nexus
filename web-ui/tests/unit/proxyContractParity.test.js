@@ -43,10 +43,8 @@ describe("proxyContractParity", () => {
       expect(isProxyableCommand("GET", "/inbox")).toBe(true);
     });
 
-    it("matches POST /inbox/{inbox_id}/acknowledge", () => {
-      expect(isProxyableCommand("POST", "/inbox/inbox-123/acknowledge")).toBe(
-        true,
-      );
+    it("matches POST /inbox/{inbox_id}/respond", () => {
+      expect(isProxyableCommand("POST", "/inbox/inbox-123/respond")).toBe(true);
     });
 
     it("matches GET /health", () => {
@@ -104,7 +102,7 @@ describe("proxyContractParity", () => {
       expect(pathStrings).toContain("POST:/events");
       expect(pathStrings).toContain("GET:/docs");
       expect(pathStrings).toContain("GET:/inbox");
-      expect(pathStrings).toContain("POST:/inbox/{inbox_id}/acknowledge");
+      expect(pathStrings).toContain("POST:/inbox/{inbox_id}/respond");
     });
   });
 

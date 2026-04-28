@@ -371,43 +371,6 @@
     }
   }
 
-  function acknowledgeItem(item) {
-    error = "";
-
-    const subjectRef = getInboxSubjectRef(item);
-    if (!subjectRef) {
-      error =
-        "Cannot acknowledge: no subject reference for this inbox item (core requires subject_ref).";
-      return;
-    }
-
-    items = items.filter((candidate) => candidate.id !== item.id);
-
-    const timeoutId = setTimeout(async () => {
-      pendingAckById = Object.fromEntries(
-        Object.entries(pendingAckById).filter(([k]) => k !== item.id),
-      );
-
-      ackInFlightById = { ...ackInFlightById, [item.id]: true };
-      try {
-        const ackPayload = { inbox_item_id: item.id, subject_ref: subjectRef };
-        await coreClient.ackInboxItem(ackPayload);
-      } catch (ackError) {
-        const reason =
-          ackError instanceof Error ? ackError.message : String(ackError);
-        failedAckById = {
-          ...failedAckById,
-          [item.id]: { item, reason },
-        };
-        items = [...items, item];
-      } finally {
-        ackInFlightById = { ...ackInFlightById, [item.id]: false };
-      }
-    }, PENDING_INBOX_ACTION_MS);
-
-    pendingAckById = { ...pendingAckById, [item.id]: { item, timeoutId } };
-  }
-
   function undoAcknowledge(itemId) {
     const pending = pendingAckById[itemId];
     if (!pending) return;
@@ -429,25 +392,10 @@
   async function retryFailedAck(itemId) {
     const failed = failedAckById[itemId];
     if (!failed) return;
-
-    ackInFlightById = { ...ackInFlightById, [itemId]: true };
-    try {
-      const subjectRef = getInboxSubjectRef(failed.item);
-      await coreClient.ackInboxItem({
-        inbox_item_id: itemId,
-        subject_ref: subjectRef,
-      });
-      failedAckById = Object.fromEntries(
-        Object.entries(failedAckById).filter(([k]) => k !== itemId),
-      );
-    } catch {
-      failedAckById = {
-        ...failedAckById,
-        [itemId]: { ...failed, reason: "Retry failed. Try again or dismiss." },
-      };
-    } finally {
-      ackInFlightById = { ...ackInFlightById, [itemId]: false };
-    }
+    failedAckById = {
+      ...failedAckById,
+      [itemId]: { ...failed, reason: "Send a response to close this item." },
+    };
   }
 
   function undoPendingDecision(itemId) {
@@ -584,9 +532,9 @@
   }
 
   function categoryBadgeClass(category) {
-    if (category === "action_needed") return "text-accent-text";
-    if (category === "risk_exception") return "text-warn-text";
-    if (category === "attention") return "text-sky-400";
+    if (category === "ask") return "text-accent-text";
+    if (category === "escalate") return "text-warn-text";
+    if (category === "review") return "text-sky-400";
     return "text-[var(--fg-muted)]";
   }
 
@@ -595,18 +543,17 @@
       .trim()
       .toLowerCase();
     if (explicit) return explicit;
-    return "tag";
-  }
-
-  function isAskItem(item) {
-    return inboxItemKind(item) === "ask";
+    return String(item?.category ?? "unknown")
+      .trim()
+      .toLowerCase();
   }
 
   function inboxKindPillLabel(item) {
     const kind = inboxItemKind(item);
     if (kind === "ask") return "ASK";
-    if (kind === "wake") return "WAKE";
-    return "TAG";
+    if (kind === "review") return "REVIEW";
+    if (kind === "escalate") return "ESCALATE";
+    return kind.toUpperCase();
   }
 
   function askItemHref(item) {
@@ -616,7 +563,12 @@
   }
 
   function askActorLabel(item) {
-    const actorID = String(item?.asking_agent_id ?? "").trim();
+    const actorID = String(
+      item?.requester_label ??
+        item?.requester_agent_id ??
+        item?.requester_actor_id ??
+        "",
+    ).trim();
     if (!actorID) return "unknown session";
     return actorID;
   }
@@ -979,20 +931,18 @@
                   </a>
                 {/if}
               </div>
-              {#if isAskItem(item)}
-                <div
-                  class="mt-1 text-micro text-[var(--fg-muted)]"
-                  data-testid={`inbox-ask-meta-${item.id}`}
-                >
-                  Asked by
-                  <span class="font-mono text-meta text-[var(--fg)]">
-                    {askActorLabel(item)}
-                  </span>
-                  {#if item.age_label}
-                    &middot; asked {item.age_label.replace(" old", "")} ago
-                  {/if}
-                </div>
-              {/if}
+              <div
+                class="mt-1 text-micro text-[var(--fg-muted)]"
+                data-testid={`inbox-requester-meta-${item.id}`}
+              >
+                Requested by
+                <span class="font-mono text-meta text-[var(--fg)]">
+                  {askActorLabel(item)}
+                </span>
+                {#if item.age_label}
+                  &middot; requested {item.age_label.replace(" old", "")} ago
+                {/if}
+              </div>
 
               {#if getInboxSubjectRef(item) || (item.related_refs ?? []).length > 0}
                 <div
@@ -1016,7 +966,7 @@
                       >
                     </span>
                   {/if}
-                  {#each isAskItem(item) ? (item.related_refs ?? []).slice(0, 2) : (item.related_refs ?? []) as refValue}
+                  {#each item.related_refs ?? [] as refValue}
                     <RefLink
                       {refValue}
                       threadId={inboxActionThreadId(item)}
@@ -1027,52 +977,13 @@
               {/if}
 
               <div class="mt-2 flex flex-wrap items-center gap-1.5">
-                {#if isAskItem(item)}
-                  <Button
-                    variant="primary"
-                    size="compact"
-                    href={askItemHref(item)}
-                  >
-                    Answer
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="compact"
-                    disabled={Boolean(ackInFlightById[item.id])}
-                    onclick={() => acknowledgeItem(item)}
-                  >
-                    {ackInFlightById[item.id] ? "Deferring..." : "Defer"}
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="compact"
-                    disabled={Boolean(ackInFlightById[item.id])}
-                    onclick={() => acknowledgeItem(item)}
-                  >
-                    Not for me
-                  </Button>
-                {:else}
-                  <Button
-                    variant="secondary"
-                    size="compact"
-                    disabled={Boolean(ackInFlightById[item.id])}
-                    onclick={() => acknowledgeItem(item)}
-                  >
-                    {ackInFlightById[item.id]
-                      ? "Acknowledging..."
-                      : "Acknowledge"}
-                  </Button>
-                  <Button
-                    variant={getDecisionForm(item.id).open
-                      ? "secondary"
-                      : "primary"}
-                    size="compact"
-                    onclick={() =>
-                      toggleDecisionForm(item, !getDecisionForm(item.id).open)}
-                  >
-                    {getDecisionForm(item.id).open ? "Cancel" : "Decide"}
-                  </Button>
-                {/if}
+                <Button
+                  variant="primary"
+                  size="compact"
+                  href={askItemHref(item)}
+                >
+                  Respond
+                </Button>
               </div>
 
               {#if postedDecisionByInboxItem[item.id]}

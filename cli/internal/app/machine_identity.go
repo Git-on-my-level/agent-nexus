@@ -8,7 +8,9 @@ type machineCommandIdentity struct {
 }
 
 var machineCommandIdentityByPath = map[string]machineCommandIdentity{
-	"ask":             {Command: "ask", CommandID: "events.create"},
+	"human ask":       {Command: "human ask", CommandID: "events.create"},
+	"human review":    {Command: "human review", CommandID: "events.create"},
+	"human escalate":  {Command: "human escalate", CommandID: "events.create"},
 	"secret list":     {Command: "secret list", CommandID: "secrets.list"},
 	"secret create":   {Command: "secret create", CommandID: "secrets.create"},
 	"secret get":      {Command: "secret get", CommandID: "secrets.get"},

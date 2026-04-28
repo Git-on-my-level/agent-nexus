@@ -1,15 +1,11 @@
 import { parseTimestampMs } from "./dateUtils.js";
 
-export const INBOX_CATEGORY_ORDER = [
-  "action_needed",
-  "risk_exception",
-  "attention",
-];
+export const INBOX_CATEGORY_ORDER = ["escalate", "ask", "review"];
 
 export const INBOX_CATEGORY_LABELS = {
-  action_needed: "Action needed",
-  risk_exception: "Risk / Exception",
-  attention: "Attention",
+  ask: "Ask",
+  review: "Review",
+  escalate: "Escalation",
 };
 
 export function getInboxCategoryLabel(category) {
@@ -25,9 +21,9 @@ export const INBOX_URGENCY_LABELS = {
 };
 
 const INBOX_CATEGORY_URGENCY_BASE = {
-  action_needed: 76,
-  risk_exception: 84,
-  attention: 58,
+  escalate: 88,
+  ask: 76,
+  review: 64,
 };
 
 const INBOX_SUBJECT_LABELS = {
@@ -40,6 +36,13 @@ const INBOX_SUBJECT_LABELS = {
 
 export function normalizeInboxCategory(category) {
   return String(category ?? "").trim();
+}
+
+export function normalizeInboxKind(itemOrKind) {
+  if (typeof itemOrKind === "object" && itemOrKind !== null) {
+    return String(itemOrKind.kind ?? itemOrKind.category ?? "unknown").trim();
+  }
+  return String(itemOrKind ?? "").trim();
 }
 
 export function splitTypedRef(refValue) {
@@ -196,9 +199,14 @@ export function deriveInboxUrgency(item, options = {}) {
   const ageHours = hasSourceEventTime
     ? Math.max(0, (nowTs - sourceEventTs) / (60 * 60 * 1000))
     : Number.NaN;
-  const category = normalizeInboxCategory(item?.category ?? "unknown");
+  const category = normalizeInboxKind(item);
 
   let score = INBOX_CATEGORY_URGENCY_BASE[category] ?? 54;
+  const severity = String(item?.severity ?? "")
+    .trim()
+    .toLowerCase();
+  if (severity === "critical") score += 12;
+  else if (severity === "high") score += 8;
 
   if (hasSourceEventTime) {
     if (ageHours >= 72) score += 14;
@@ -221,7 +229,7 @@ export function deriveInboxUrgency(item, options = {}) {
     ageLabel: formatAgeLabel(ageHours),
     hasSourceEventTime,
     sourceEventTime,
-    inferredFrom: "category + source event age",
+    inferredFrom: "kind + source event age",
   };
 }
 
@@ -269,7 +277,8 @@ export function enrichInboxItem(item, options = {}) {
   const subject = splitTypedRef(subjectRef);
   return {
     ...item,
-    category: normalizeInboxCategory(item?.category ?? "unknown"),
+    kind: normalizeInboxKind(item),
+    category: normalizeInboxKind(item),
     subject_ref: subjectRef || item?.subject_ref || "",
     subject_kind: subject.prefix,
     subject_id: subject.id,
@@ -344,7 +353,7 @@ export function groupInboxItems(items = [], options = {}) {
   INBOX_CATEGORY_ORDER.forEach((category) => grouped.set(category, []));
 
   for (const item of items) {
-    const category = normalizeInboxCategory(item?.category ?? "unknown");
+    const category = normalizeInboxKind(item);
 
     if (!grouped.has(category)) {
       grouped.set(category, []);
@@ -375,7 +384,7 @@ export function summarizeInboxByCategory(items = []) {
     counts[category] = 0;
   }
   for (const item of items) {
-    const category = normalizeInboxCategory(item?.category ?? "unknown");
+    const category = normalizeInboxKind(item);
     counts[category] = (counts[category] ?? 0) + 1;
   }
   return counts;

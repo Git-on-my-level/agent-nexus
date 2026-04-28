@@ -886,48 +886,19 @@ export function createAnxCoreClient(options = {}) {
         ),
       );
     },
-    ackInboxItem: (payload) => {
-      const inboxItemId =
-        payload?.inbox_item_id ?? payload?.inbox_id ?? payload?.inboxId;
-      if (!inboxItemId) {
-        throw new Error(
-          "ackInboxItem requires inbox_item_id (or inbox_id) in the payload.",
-        );
-      }
-      const body = { ...(payload ?? {}) };
-      delete body.inbox_item_id;
-      delete body.inbox_id;
-      delete body.inboxId;
-      return invokeJSON("inbox.acknowledge", () =>
-        generated.inboxAcknowledge(
-          { inbox_id: String(inboxItemId) },
-          { body: withActorId(body) },
-        ),
-      );
-    },
-
-    /**
-     * POST /inbox/{id}/respond — ask-item answer (not yet in generated command registry).
-     * Uses the same transport as other writes (auth + workspace headers + actor_id for dev actor).
-     */
-    respondInboxAsk: async (inboxItemId, payload) => {
+    respondInboxItem: async (inboxItemId, payload) => {
       const id = String(inboxItemId ?? "").trim();
       if (!id) {
-        throw new Error("respondInboxAsk requires inboxItemId.");
+        throw new Error("respondInboxItem requires inboxItemId.");
       }
-      const answer = String(payload?.answer ?? "").trim();
-      if (!answer) {
-        throw new Error("respondInboxAsk requires a non-empty answer.");
+      const responseText = String(payload?.response_text ?? "").trim();
+      if (!responseText) {
+        throw new Error("respondInboxItem requires a non-empty response_text.");
       }
       const path = `/inbox/${encodeURIComponent(id)}/respond`;
       const body = withActorId({
-        answer,
-        ...(typeof payload?.save_as_decision === "boolean"
-          ? { save_as_decision: payload.save_as_decision }
-          : {}),
-        ...(typeof payload?.notify_asking_agent === "boolean"
-          ? { notify_asking_agent: payload.notify_asking_agent }
-          : {}),
+        ...payload,
+        response_text: responseText,
       });
       const response = await invokeDirectRaw(path, {
         method: "POST",

@@ -131,14 +131,9 @@ Threads are backing infrastructure for timelines and packet subjects. The worksp
 - `GET /inbox`
   - Response: `{ "items": [<inbox_item>...], "generated_at": "..." }`
 
-- `POST /inbox/{inbox_id}/acknowledge`
-  - Body: `{ "actor_id": "...", "subject_ref": "<typed ref>" }`
-  - `subject_ref` must be one of `thread:`, `topic:` (existing topic row), `card:`, or `board:`; use `thread:` when the anchor is only a backing thread id.
-  - Response: `{ "event": <event> }`
-
-- `POST /inbox/{inbox_id}/respond` (items with `kind: ask` only)
-  - Body: `{ "actor_id": "...", "answer": "...", "save_as_decision"?: <bool>, "notify_asking_agent"?: <bool> }`
-  - Response: `{ "event": <agent_ask_answered event>, "acknowledgment": <event>, ... }` per core (may include `notify` when wake delivery is used).
+- `POST /inbox/{inbox_id}/respond`
+  - Body: `{ "actor_id": "...", "response_text": "...", "notify_mode"?: "original" | "target" | "none", "notify_target_actor_id"?: "...", "notify_target_agent_id"?: "..." }`
+  - Response: `{ "event": <human_attention_responded event>, "notify": <notification status> }` per core.
 
 - `POST /derived/rebuild`
   - Body: `{ "actor_id": "..." }`

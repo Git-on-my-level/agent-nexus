@@ -148,7 +148,7 @@ describe("homeHandoff helpers", () => {
     expect(nextMarker).toBe("2026-03-12T12:00:00.000Z");
   });
 
-  it("includes high-signal messages and unknown events while excluding inbox acknowledgements", () => {
+  it("includes high-signal messages and unknown events while excluding human attention responses", () => {
     const events = filterHomeTimelineEvents(
       [
         {
@@ -162,8 +162,8 @@ describe("homeHandoff helpers", () => {
           ts: "2026-03-12T09:00:00.000Z",
         },
         {
-          id: "evt-ack",
-          type: "inbox_item_acknowledged",
+          id: "evt-human-response",
+          type: "human_attention_responded",
           ts: "2026-03-12T10:00:00.000Z",
         },
         {

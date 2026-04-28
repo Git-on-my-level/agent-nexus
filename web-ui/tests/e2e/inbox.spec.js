@@ -4,7 +4,7 @@ function hoursAgo(hours) {
   return new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
 }
 
-test("inbox triage shows urgency summary and acknowledging removes an item", async ({
+test("inbox triage shows urgency summary and responding removes an item", async ({
   page,
 }) => {
   const actorId = "actor-e2e";
@@ -12,24 +12,30 @@ test("inbox triage shows urgency summary and acknowledging removes an item", asy
   let inboxItems = [
     {
       id: "inbox-001",
-      category: "action_needed",
+      kind: "ask",
       title: "Approve onboarding exception handling",
+      body: "Can we proceed with the onboarding exception?",
+      subject_ref: "thread:thread-onboarding",
       thread_id: "thread-onboarding",
       related_refs: ["thread:thread-onboarding"],
       source_event_time: hoursAgo(30),
     },
     {
       id: "inbox-002",
-      category: "risk_exception",
+      kind: "escalate",
       title: "Missing legal signer",
+      body: "Legal signer is missing.",
+      subject_ref: "thread:thread-onboarding",
       thread_id: "thread-onboarding",
       related_refs: ["event:evt-1001"],
       source_event_time: hoursAgo(1),
     },
     {
       id: "inbox-003",
-      category: "attention",
+      kind: "review",
       title: "Review updated runbook draft",
+      body: "Please review the runbook draft.",
+      subject_ref: "thread:thread-incident-42",
       thread_id: "thread-incident-42",
       related_refs: ["thread:thread-incident-42"],
       source_event_time: hoursAgo(60),
@@ -50,21 +56,37 @@ test("inbox triage shows urgency summary and acknowledging removes an item", asy
     });
   });
 
-  await page.route(/\/inbox\/ack(\?.*)?$/, async (route) => {
-    const requestBody = JSON.parse(route.request().postData() ?? "{}");
-    inboxItems = inboxItems.filter(
-      (item) => item.id !== requestBody.inbox_item_id,
-    );
+  await page.route(/\/inbox\/([^/]+)\/respond(\?.*)?$/, async (route) => {
+    const url = new URL(route.request().url());
+    const id = decodeURIComponent(url.pathname.split("/").at(-2) ?? "");
+    inboxItems = inboxItems.filter((item) => item.id !== id);
 
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
         event: {
-          id: "event-ack",
-          type: "inbox_item_acknowledged",
+          id: "event-human-response",
+          type: "human_attention_responded",
         },
+        notify: { mode: "original", delivered: true },
       }),
+    });
+  });
+
+  await page.route(/\/inbox\/([^/?]+)(\?.*)?$/, async (route) => {
+    const request = route.request();
+    if (request.method() !== "GET") {
+      await route.continue();
+      return;
+    }
+    const url = new URL(request.url());
+    const id = decodeURIComponent(url.pathname.split("/").at(-1) ?? "");
+    const item = inboxItems.find((candidate) => candidate.id === id);
+    await route.fulfill({
+      status: item ? 200 : 404,
+      contentType: "application/json",
+      body: JSON.stringify(item ? { item } : { error: "not found" }),
     });
   });
 
@@ -99,7 +121,9 @@ test("inbox triage shows urgency summary and acknowledging removes an item", asy
   const targetCard = page.getByTestId("inbox-card-inbox-001");
   await expect(targetCard).toBeVisible();
 
-  await targetCard.getByRole("button", { name: "Acknowledge" }).click();
+  await targetCard.getByRole("link", { name: "Respond" }).click();
+  await page.getByLabel("Response").fill("Approved.");
+  await page.getByRole("button", { name: "Send response" }).click();
   await expect(targetCard).toHaveCount(0);
 });
 
@@ -109,7 +133,7 @@ test("inbox urgency filters reduce visible cards", async ({ page }) => {
   const inboxItems = [
     {
       id: "inbox-001",
-      category: "action_needed",
+      kind: "ask",
       title: "Approve onboarding exception handling",
       thread_id: "thread-onboarding",
       related_refs: ["thread:thread-onboarding"],
@@ -117,7 +141,7 @@ test("inbox urgency filters reduce visible cards", async ({ page }) => {
     },
     {
       id: "inbox-002",
-      category: "risk_exception",
+      kind: "escalate",
       title: "Missing legal signer",
       thread_id: "thread-onboarding",
       related_refs: ["event:evt-1001"],
@@ -125,7 +149,7 @@ test("inbox urgency filters reduce visible cards", async ({ page }) => {
     },
     {
       id: "inbox-003",
-      category: "attention",
+      kind: "review",
       title: "Needs attention",
       thread_id: "thread-incident-42",
       related_refs: ["thread:thread-incident-42"],

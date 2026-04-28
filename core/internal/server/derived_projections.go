@@ -69,7 +69,7 @@ func refreshDerivedTopicProjection(ctx context.Context, opts handlerOptions, thr
 	artifactCount := len(documents)
 	pendingDecisions := 0
 	for _, item := range inboxItems {
-		if item.Category == "action_needed" {
+		if item.Category == "ask" || item.Category == "review" || item.Category == "escalate" {
 			pendingDecisions++
 		}
 	}
@@ -136,32 +136,15 @@ func refreshDerivedTopicProjection(ctx context.Context, opts handlerOptions, thr
 }
 
 func deriveThreadInboxItems(opts handlerOptions, events []map[string]any, workItems []map[string]any, activityAt time.Time, now time.Time) ([]derivedInboxItem, error) {
-	ackedAt := latestInboxAcknowledgments(events)
 	decidedIDs := decidedInboxItemIDs(events)
 	items := make([]derivedInboxItem, 0)
 
 	for _, event := range events {
 		eventType, _ := event["type"].(string)
 		switch eventType {
-		case "decision_needed", "intervention_needed", "exception_raised", agentAskRequestedEventType:
-			var (
-				item derivedInboxItem
-				ok   bool
-			)
-			if eventType == agentAskRequestedEventType {
-				item, ok = deriveAgentAskInboxItem(event)
-			} else {
-				item, ok = deriveEventBackedInboxItem(event)
-			}
+		case humanAttentionRequestedEventType:
+			item, ok := deriveHumanAttentionInboxItem(event)
 			if !ok {
-				continue
-			}
-			if eventType == "exception_raised" && isStaleTopicException(event) {
-				if !activityAt.IsZero() && activityAt.After(item.TriggerAt) {
-					continue
-				}
-			}
-			if isSuppressedByAck(item, ackedAt) {
 				continue
 			}
 			if _, decided := decidedIDs[item.ID]; decided {
@@ -169,17 +152,6 @@ func deriveThreadInboxItems(opts handlerOptions, events []map[string]any, workIt
 			}
 			items = append(items, item)
 		}
-	}
-
-	for _, workItem := range workItems {
-		item, ok := deriveWorkItemRiskInboxItem(workItem, now, resolvedInboxRiskHorizon(opts))
-		if !ok || isSuppressedByAck(item, ackedAt) {
-			continue
-		}
-		if _, decided := decidedIDs[item.ID]; decided {
-			continue
-		}
-		items = append(items, item)
 	}
 
 	sortInboxItems(items)

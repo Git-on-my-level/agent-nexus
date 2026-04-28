@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -217,32 +216,8 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 	postJSONExpectStatus(t, h.baseURL+"/derived/rebuild", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
 
 	inboxItems := getInboxItems(t, h.baseURL)
-	categories := map[string]bool{}
-	for _, item := range inboxItems {
-		categories[asString(item["category"])] = true
-	}
-	if !categories["risk_exception"] || !categories["action_needed"] {
-		t.Fatalf("expected inbox categories risk_exception and action_needed, got %#v", categories)
-	}
-
-	decisionItem, ok := findInboxItem(inboxItems, func(item map[string]any) bool {
-		return asString(item["category"]) == "action_needed" && asString(item["thread_id"]) == threadID
-	})
-	if !ok {
-		t.Fatalf("expected action_needed item for thread %s, got %#v", threadID, inboxItems)
-	}
-	decisionItemID := asString(decisionItem["id"])
-
-	postJSONExpectStatus(t, h.baseURL+"/inbox/"+url.PathEscape(decisionItemID)+"/acknowledge", `{
-		"actor_id":"actor-1",
-		"subject_ref":"thread:`+threadID+`"
-	}`, http.StatusCreated).Body.Close()
-
-	inboxAfterAck := getInboxItems(t, h.baseURL)
-	if _, exists := findInboxItem(inboxAfterAck, func(item map[string]any) bool {
-		return asString(item["id"]) == decisionItemID
-	}); exists {
-		t.Fatalf("expected acknowledged inbox item to be suppressed, got %#v", inboxAfterAck)
+	if len(inboxItems) != 0 {
+		t.Fatalf("expected no human inbox rows from generic decisions or card risk, got %#v", inboxItems)
 	}
 
 	newDecisionResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
@@ -267,9 +242,11 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 
 	inboxAfterRetrigger := getInboxItems(t, h.baseURL)
 	if _, ok := findInboxItem(inboxAfterRetrigger, func(item map[string]any) bool {
-		return asString(item["category"]) == "action_needed" && asString(item["source_event_id"]) == newDecisionEventID
+		return asString(item["source_event_id"]) == newDecisionEventID
 	}); !ok {
-		t.Fatalf("expected retriggered decision item, got %#v", inboxAfterRetrigger)
+		if len(inboxAfterRetrigger) != 0 {
+			t.Fatalf("expected decision retrigger to stay out of human inbox, got %#v", inboxAfterRetrigger)
+		}
 	}
 
 	// PrimitiveStore accepts opaque thread bodies; strict enum checks live at HTTP ingress.

@@ -25,7 +25,8 @@ const EVENT_TYPE_LABELS = {
   card_moved: "Card moved",
   card_resolved: "Card resolved",
   exception_raised: "Exception raised",
-  inbox_item_acknowledged: "Item acknowledged",
+  human_attention_requested: "Human attention requested",
+  human_attention_responded: "Human response recorded",
 };
 
 export const KNOWN_EVENT_TYPES = new Set(Object.keys(EVENT_TYPE_LABELS));
@@ -44,7 +45,8 @@ const EVENT_TYPE_DOT_CLASSES = {
   card_moved: "bg-purple-400",
   card_resolved: "bg-purple-400",
   exception_raised: "bg-red-400",
-  inbox_item_acknowledged: "bg-teal-400",
+  human_attention_requested: "bg-cyan-400",
+  human_attention_responded: "bg-teal-400",
 };
 
 export function eventTypeDotClass(type) {

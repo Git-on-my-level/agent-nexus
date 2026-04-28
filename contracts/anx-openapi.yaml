@@ -2749,7 +2749,7 @@ paths:
       x-anx-surface: projection
       x-anx-command-id: inbox.list
       x-anx-cli-path: inbox list
-      x-anx-why: Load the derived operator inbox generated from refs and canonical events.
+      x-anx-why: Load the operator-only human attention queue derived from explicit human_attention_requested events.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ items }`."
@@ -2766,19 +2766,19 @@ paths:
         '401':
           $ref: '#/components/responses/ErrorResponse'
 
-  /inbox/{inbox_id}/acknowledge:
+  /inbox/{inbox_id}/respond:
     post:
-      operationId: acknowledgeInboxItem
-      summary: Acknowledge inbox item
+      operationId: respondInboxItem
+      summary: Respond to human attention inbox item
       tags: [inbox]
       x-anx-surface: projection
-      x-anx-command-id: inbox.acknowledge
-      x-anx-cli-path: inbox acknowledge
-      x-anx-why: Suppress or clear a derived inbox item via a durable acknowledgment event.
+      x-anx-command-id: inbox.respond
+      x-anx-cli-path: inbox respond
+      x-anx-why: Record a freeform human response, close the human attention item, and optionally notify the selected requester/replacement agent.
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ event }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found]
+      x-anx-output-envelope: "Returns `{ event, notify }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, notification_target_required, not_found]
       x-anx-concepts: [inbox, write]
       x-anx-stability: beta
       parameters:
@@ -2788,14 +2788,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AcknowledgeInboxItemRequest'
+              $ref: '#/components/schemas/RespondInboxItemRequest'
       responses:
         '201':
-          description: Acknowledgment event appended
+          description: Human response event appended
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AcknowledgeInboxItemResponse'
+                $ref: '#/components/schemas/RespondInboxItemResponse'
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '401':
@@ -4620,19 +4620,28 @@ components:
       type: object
       properties:
         id: { type: string }
-        category:
+        kind:
           type: string
-          enum: [action_needed, risk_exception, attention]
+          description: Open classifier; v1 known values are ask, review, and escalate.
         thread_id:
           type: string
-          description: Backing thread id for the inbox item and decision actions.
+          description: Backing thread id for the inbox item and response correlation.
         subject_ref: { $ref: '#/components/schemas/TypedRef' }
+        request_event_ref: { $ref: '#/components/schemas/TypedRef' }
         source_event_ref: { $ref: '#/components/schemas/TypedRef' }
         title: { type: string }
+        body: { type: string }
         related_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
-      required: [id, category, subject_ref, title, related_refs]
+        requester_actor_id: { type: string }
+        requester_agent_id: { type: string }
+        requester_label: { type: string }
+        severity: { type: string }
+        notification_target_status:
+          type: object
+          additionalProperties: true
+      required: [id, kind, subject_ref, title, related_refs]
 
     TopicWriteInput:
       type: object
@@ -5127,23 +5136,27 @@ components:
         event: { $ref: '#/components/schemas/EventCreateInput' }
       required: [event]
 
-    AcknowledgeInboxItemRequest:
+    RespondInboxItemRequest:
       type: object
       description: >
-        Acknowledges a derived inbox item. `subject_ref` is resolved to the backing thread for
-        correlation. Supported prefixes: `thread:<thread_id>`, `topic:<topic_id>` (topic row must
-        exist), `card:<card_id>`, `board:<board_id>`. Do not pass a thread id with the `topic:` prefix.
+        Records a freeform human response to a human attention inbox item. The response target must be
+        resolvable unless `notify_mode` is `none` or a replacement target is supplied.
       properties:
         actor_id: { type: string }
-        subject_ref: { $ref: '#/components/schemas/TypedRef' }
         inbox_item_id:
           type: string
           description: Must match path inbox_id when both are provided.
-        note: { type: string }
-        refs:
+        response_text: { type: string }
+        related_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
-      required: [subject_ref]
+        notify_mode:
+          type: string
+          enum: [original, replacement, none]
+          description: Defaults to original requester when resolvable.
+        notify_target_actor_id: { type: string }
+        notify_target_agent_id: { type: string }
+      required: [response_text]
 
     TopicLifecycleMutationRequest:
       type: object
@@ -5548,11 +5561,14 @@ components:
           items: { $ref: '#/components/schemas/InboxItem' }
       required: [items]
 
-    AcknowledgeInboxItemResponse:
+    RespondInboxItemResponse:
       type: object
       properties:
         event: { $ref: '#/components/schemas/Event' }
-      required: [event]
+        notify:
+          type: object
+          additionalProperties: true
+      required: [event, notify]
 
     ArtifactsListResponse:
       type: object

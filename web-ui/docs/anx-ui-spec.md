@@ -130,15 +130,15 @@ A dedicated surface showing items that need operator attention.
 
 **Display:**
 
-- Inbox items grouped by **`category`** using `enums.inbox_category`: `action_needed`, `risk_exception`, and `attention` (aligned with core and OpenAPI). Core v0 derivation mainly emits the first two; `attention` is the canonical bucket for document-review-style items when surfaced. Unknown categories MUST still appear in their own groups (forward compatibility).
-- Within each group, sorted by inferred **urgency** (from category plus trigger/source recency) and then by **source or trigger time**; v0 does not add a separate ranking engine beyond that ordering.
-- Each item shows: title, category, and a link to the relevant topic/board/card/thread.
+- Inbox items grouped by generic **`kind`**. The current first-class UI affordances are `ask`, `review`, and `escalate`; unknown kinds MUST still appear in their own groups (forward compatibility).
+- Within each group, sorted by inferred **urgency** (from kind, optional severity, and trigger/source recency) and then by **source or trigger time**; v0 does not add a separate ranking engine beyond that ordering.
+- Each item shows: title, kind, requester context, and a link to the relevant topic/board/card/thread.
 - Inbox item IDs are deterministic (see schema) and stable across rebuilds.
 
 **Actions:**
 
 - Navigate to the relevant topic, board, card, thread, or artifact.
-- Acknowledge an item → emits an `inbox_item_acknowledged` event with `inbox:<inbox_item_id>` in refs. Acknowledged items are suppressed from the inbox unless a new triggering event occurs after the acknowledgment.
+- Respond to an item → emits a `human_attention_responded` event with `inbox:<inbox_item_id>` in refs. Responded items are suppressed from the inbox unless a new human attention request is created.
 - Record a decision (creates a `decision_made` event with notes and typed refs). The write is anchored on the inbox item's backing **thread** (`thread_id` / `thread:` in event refs). The operator may have arrived via a **topic** route, but durable decision lifecycle events still attach to the backing thread; topic refs are optional context when present, not the anchor.
 
 ### 3.2 Topic list

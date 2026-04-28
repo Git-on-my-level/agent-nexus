@@ -375,32 +375,7 @@ func TestInboxStreamSuppressesDuplicateItems(t *testing.T) {
 		"provenance":       map[string]any{"sources": []any{"inferred"}},
 	})
 
-	createBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
-		"actor_id":"actor-1",
-		"board":{
-			"title":"Inbox stream board",
-			"refs":["thread:`+threadID+`"]
-		}
-	}`, http.StatusCreated)
-	defer createBoardResp.Body.Close()
-	var boardPayload struct {
-		Board map[string]any `json:"board"`
-	}
-	if err := json.NewDecoder(createBoardResp.Body).Decode(&boardPayload); err != nil {
-		t.Fatalf("decode board response: %v", err)
-	}
-	boardID := asString(boardPayload.Board["id"])
-	boardUpdatedAt := asString(boardPayload.Board["updated_at"])
-
-	dueSoon := time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339)
-	postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
-		"actor_id":"actor-1",
-		"if_board_updated_at":"`+boardUpdatedAt+`",
-		"title":"At risk work item",
-		"related_refs":["thread:`+threadID+`"],
-		"column_key":"ready",
-		"due_at":"`+dueSoon+`"
-	}`, http.StatusCreated).Body.Close()
+	createHumanAttentionEvent(t, h.baseURL, threadID, "escalate", "At risk work item", "thread:"+threadID, nil, map[string]any{"severity": "high"})
 
 	resp := openSSEStream(t, h.baseURL+"/stream/inbox", "")
 	reader, stop := startSSEReader(resp.Body)
