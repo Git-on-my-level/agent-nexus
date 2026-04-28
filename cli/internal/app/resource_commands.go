@@ -493,24 +493,14 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 			return nil, "threads list", errnorm.Usage("invalid_request", "limit must be between 1 and 1000")
 		}
 		query := make([]queryParam, 0, 8)
-		addSingleQuery(&query, "state", stateFlag.value)
+		if err := appendLifecycleStatesForHTTPList(&query, stateFlag.value, includeArchived, archivedOnly, includeTrashed, trashedOnly); err != nil {
+			return nil, "threads list", err
+		}
 		addSingleQuery(&query, "q", queryFlag.value)
 		if limitFlag.set {
 			addSingleQuery(&query, "limit", strconv.Itoa(limitFlag.value))
 		}
 		addSingleQuery(&query, "cursor", cursorFlag.value)
-		if includeArchived {
-			query = append(query, queryParam{name: "include_archived", values: []string{"true"}})
-		}
-		if archivedOnly {
-			query = append(query, queryParam{name: "archived_only", values: []string{"true"}})
-		}
-		if includeTrashed {
-			query = append(query, queryParam{name: "include_trashed", values: []string{"true"}})
-		}
-		if trashedOnly {
-			query = append(query, queryParam{name: "trashed_only", values: []string{"true"}})
-		}
 		result, err := a.invokeTypedJSON(ctx, cfg, "threads list", "threads.list", nil, query, nil)
 		return result, "threads list", err
 	case "get":
@@ -1207,22 +1197,13 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 			}
 		}
 		query := make([]queryParam, 0, 6)
+		if err := appendLifecycleStatesForHTTPList(&query, "", includeArchived, archivedOnly, includeTrashed, trashedOnly); err != nil {
+			return nil, "artifacts list", err
+		}
 		addSingleQuery(&query, "kind", kindFlag.value)
 		addSingleQuery(&query, "thread_id", resolvedThreadID)
 		addSingleQuery(&query, "created_before", beforeFlag.value)
 		addSingleQuery(&query, "created_after", afterFlag.value)
-		if includeTrashed {
-			query = append(query, queryParam{name: "include_trashed", values: []string{"true"}})
-		}
-		if trashedOnly {
-			query = append(query, queryParam{name: "trashed_only", values: []string{"true"}})
-		}
-		if includeArchived {
-			query = append(query, queryParam{name: "include_archived", values: []string{"true"}})
-		}
-		if archivedOnly {
-			query = append(query, queryParam{name: "archived_only", values: []string{"true"}})
-		}
 		result, err := a.invokeTypedJSON(ctx, cfg, "artifacts list", "artifacts.list", nil, query, nil)
 		return result, "artifacts list", err
 	case "get":
@@ -1484,25 +1465,15 @@ func (a *App) runBoardsCommand(ctx context.Context, args []string, cfg config.Re
 			return nil, "boards list", errnorm.Usage("invalid_request", "limit must be between 1 and 1000")
 		}
 		query := make([]queryParam, 0, 6)
-		addSingleQuery(&query, "state", stateFlag.value)
+		if err := appendLifecycleStatesForHTTPList(&query, stateFlag.value, includeArchived, archivedOnly, includeTrashed, trashedOnly); err != nil {
+			return nil, "boards list", err
+		}
 		addSingleQuery(&query, "q", queryFlag.value)
 		if limitFlag.set {
 			addSingleQuery(&query, "limit", strconv.Itoa(limitFlag.value))
 		}
 		addSingleQuery(&query, "cursor", cursorFlag.value)
 		addMultiQuery(&query, "owner", ownerFlag.values)
-		if includeArchived {
-			query = append(query, queryParam{name: "include_archived", values: []string{"true"}})
-		}
-		if archivedOnly {
-			query = append(query, queryParam{name: "archived_only", values: []string{"true"}})
-		}
-		if includeTrashed {
-			query = append(query, queryParam{name: "include_trashed", values: []string{"true"}})
-		}
-		if trashedOnly {
-			query = append(query, queryParam{name: "trashed_only", values: []string{"true"}})
-		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "boards list", "boards.list", nil, query, nil)
 		return result, "boards list", callErr
 	case "create":
@@ -1937,24 +1908,15 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 			}
 		}
 		query := make([]queryParam, 0, 5)
+		if err := appendLifecycleStatesForHTTPList(&query, "", includeArchived, archivedOnly, includeTrashed, trashedOnly); err != nil {
+			return nil, "docs list", err
+		}
 		addSingleQuery(&query, "thread_id", resolvedThreadID)
 		addSingleQuery(&query, "q", queryFlag.value)
 		if limitFlag.set {
 			addSingleQuery(&query, "limit", strconv.Itoa(limitFlag.value))
 		}
 		addSingleQuery(&query, "cursor", cursorFlag.value)
-		if includeTrashed {
-			query = append(query, queryParam{name: "include_trashed", values: []string{"true"}})
-		}
-		if trashedOnly {
-			query = append(query, queryParam{name: "trashed_only", values: []string{"true"}})
-		}
-		if includeArchived {
-			query = append(query, queryParam{name: "include_archived", values: []string{"true"}})
-		}
-		if archivedOnly {
-			query = append(query, queryParam{name: "archived_only", values: []string{"true"}})
-		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "docs list", "docs.list", nil, query, nil)
 		return result, "docs list", callErr
 	case "create":
@@ -6241,6 +6203,72 @@ func addMultiQuery(out *[]queryParam, name string, values []string) {
 		return
 	}
 	*out = append(*out, queryParam{name: name, values: clean})
+}
+
+// appendLifecycleStatesForHTTPList converts legacy CLI lifecycle flags into repeated HTTP `state=…` pairs.
+func appendLifecycleStatesForHTTPList(query *[]queryParam, explicitState string, includeArchived, archivedOnly, includeTrashed, trashedOnly bool) error {
+	es := strings.TrimSpace(explicitState)
+	if trashedOnly {
+		if es != "" && es != "trashed" {
+			return errnorm.Usage("invalid_flags", "--trashed-only cannot be combined with --state unless --state is trashed")
+		}
+		addMultiQuery(query, "state", []string{"trashed"})
+		return nil
+	}
+	if archivedOnly {
+		if es != "" && es != "archived" {
+			return errnorm.Usage("invalid_flags", "--archived-only cannot be combined with --state unless --state is archived")
+		}
+		addMultiQuery(query, "state", []string{"archived"})
+		return nil
+	}
+	if es != "" {
+		switch es {
+		case "active", "archived", "trashed":
+			states := []string{es}
+			if includeArchived {
+				states = append(states, "archived")
+			}
+			if includeTrashed {
+				states = append(states, "trashed")
+			}
+			states = dedupeCanonLifecycleStates(states)
+			addMultiQuery(query, "state", states)
+			return nil
+		default:
+			return errnorm.Usage("invalid_flags", fmt.Sprintf("--state must be one of active, archived, trashed (got %q)", es))
+		}
+	}
+	states := []string{"active"}
+	if includeArchived {
+		states = append(states, "archived")
+	}
+	if includeTrashed {
+		states = append(states, "trashed")
+	}
+	if len(states) == 1 && states[0] == "active" && !includeArchived && !includeTrashed {
+		return nil
+	}
+	states = dedupeCanonLifecycleStates(states)
+	addMultiQuery(query, "state", states)
+	return nil
+}
+
+func dedupeCanonLifecycleStates(states []string) []string {
+	seen := make(map[string]struct{})
+	for _, s := range states {
+		switch strings.TrimSpace(s) {
+		case "active", "archived", "trashed":
+			seen[s] = struct{}{}
+		}
+	}
+	out := make([]string, 0, 3)
+	for _, k := range []string{"active", "archived", "trashed"} {
+		if _, ok := seen[k]; ok {
+			out = append(out, k)
+		}
+	}
+	return out
 }
 
 func queryValuesFromParams(query []queryParam) map[string][]string {

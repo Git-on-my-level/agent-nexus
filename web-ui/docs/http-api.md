@@ -44,7 +44,7 @@ Each endpoint is classified with an `x-anx-surface` extension indicating its rol
   - Response: `{ "topic": <topic> }`
 
 - `GET /topics`
-  - Query (optional): `type`, `state`, `q`, `limit`, `cursor`, `include_archived`, `archived_only`, `include_trashed`, `trashed_only`
+  - Query (optional): `type`, repeated `state` (`active`|`archived`|`trashed`; OR semantics; omit → active only), `q`, `limit`, `cursor`
   - Response: `{ "topics": [<topic>...] }`
 
 - `GET /topics/{topic_id}`
@@ -75,7 +75,7 @@ Each endpoint is classified with an `x-anx-surface` extension indicating its rol
 Threads are backing infrastructure for timelines and packet subjects. The workspace contract exposes **GET-only** thread routes for inspection and projections; prefer **topics** and **cards** for operator mutations.
 
 - `GET /threads`
-  - Query (optional): `state`, `q`, `limit`, `cursor`, `include_archived`, `archived_only`, `include_trashed`, `trashed_only`
+  - Query (optional): repeated `state` (`active`|`archived`|`trashed`; OR semantics; omit → active only), `q`, `limit`, `cursor`
   - Notes: `stale` is a derived projection field on thread responses, not a query filter.
   - Response: `{ "threads": [<thread>...] }` (each `thread` matches the schema’s thread resource shape)
 

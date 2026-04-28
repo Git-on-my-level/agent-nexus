@@ -25,7 +25,7 @@
   import Button from "$lib/components/Button.svelte";
 
   const defaultFilters = {
-    state: "active",
+    states: ["active"],
     q: "",
   };
 
@@ -38,7 +38,6 @@
   let creatingTopic = $state(false);
   let createError = $state("");
   let filtersOpen = $state(false);
-  let showArchived = $state(false);
   let archiveBusyId = $state("");
   /** @type {{ open: boolean, action: string, entityId: string, bulkIds: string[] | null }} */
   let confirmModal = $state({
@@ -112,7 +111,6 @@
       return;
     }
 
-    showArchived;
     const parsed = parseTopicListSearchParams($page.url.searchParams);
     filters = { ...defaultFilters, ...parsed };
     if ([...$page.url.searchParams.keys()].length > 0) {
@@ -127,9 +125,7 @@
     retrying = isRetry;
 
     try {
-      const query = buildTopicListApiQueryParams(state, {
-        includeArchived: showArchived,
-      });
+      const query = buildTopicListApiQueryParams(state);
       const response = await coreClient.listTopics(query);
       topics = response.topics ?? [];
     } catch (loadError) {
@@ -341,9 +337,29 @@
     }
   }
 
-  let hasActiveFilters = $derived(
-    showArchived || filters.state !== "active" || filters.q.trim() !== "",
-  );
+  let hasActiveFilters = $derived.by(() => {
+    const st = filters.states ?? ["active"];
+    const isDefaultFilters =
+      st.length === 1 && String(st[0]) === "active" && filters.q.trim() === "";
+    return !isDefaultFilters;
+  });
+
+  /** @param {string} value */
+  function toggleTopicLifecycleState(value) {
+    const cur = [...(filters.states ?? ["active"])];
+    const set = new Set(cur);
+    if (set.has(value)) {
+      if (set.size <= 1) return;
+      set.delete(value);
+    } else {
+      set.add(value);
+    }
+    const order = /** @type {const} */ (["active", "archived", "trashed"]);
+    filters = {
+      ...filters,
+      states: order.filter((s) => set.has(s)),
+    };
+  }
 
   function topicStatePillTone(state) {
     if (state === "active") return "text-ok-text bg-ok-soft";
@@ -624,17 +640,26 @@
   <CompactFilterBar testId="topics-filter-panel">
     {#snippet children()}
       <div class="grid gap-3 sm:grid-cols-2">
-        <label class="text-micro">
-          <span class="font-medium text-[var(--fg-muted)]">State</span>
-          <select
-            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
-            bind:value={filters.state}
+        <div class="text-micro">
+          <span class="font-medium text-[var(--fg-muted)]">Lifecycle</span>
+          <fieldset
+            class="mt-1 space-y-1 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-2"
           >
-            {#each Object.entries(BOARD_LIFECYCLE_STATE_LABELS) as [value, label]}
-              <option {value}>{label}</option>
+            {#each Object.entries(BOARD_LIFECYCLE_STATE_LABELS) as [value, label] (value)}
+              <label
+                class="flex cursor-pointer items-center gap-2 text-meta text-[var(--fg)]"
+              >
+                <input
+                  checked={(filters.states ?? ["active"]).includes(value)}
+                  class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--line)] bg-[var(--bg)] text-[var(--accent-hover)] focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-0"
+                  type="checkbox"
+                  onchange={() => toggleTopicLifecycleState(value)}
+                />
+                {label}
+              </label>
             {/each}
-          </select>
-        </label>
+          </fieldset>
+        </div>
         <label class="text-micro sm:col-span-1">
           <span class="font-medium text-[var(--fg-muted)]">Search</span>
           <input
@@ -646,19 +671,6 @@
           />
         </label>
       </div>
-      {#if listSurface === "topics"}
-        <label
-          class="mt-3 inline-flex cursor-pointer items-center gap-1.5 text-micro text-[var(--fg-muted)]"
-        >
-          <input
-            bind:checked={showArchived}
-            class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--line)] bg-[var(--bg)] text-[var(--accent-hover)] focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-0"
-            type="checkbox"
-            data-testid="topics-show-archived"
-          />
-          Show archived
-        </label>
-      {/if}
       <div class="mt-3 flex gap-1.5">
         <button
           class="cursor-pointer rounded-md bg-[var(--panel)] px-3 py-1.5 text-micro font-medium text-[var(--fg)] hover:bg-[var(--line)]"

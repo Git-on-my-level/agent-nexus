@@ -62,24 +62,14 @@ func (a *App) runTopicsCommand(ctx context.Context, args []string, cfg config.Re
 			return nil, "topics list", errnorm.Usage("invalid_request", "limit must be between 1 and 1000")
 		}
 		query := make([]queryParam, 0, 8)
-		addSingleQuery(&query, "state", stateFlag.value)
+		if err := appendLifecycleStatesForHTTPList(&query, stateFlag.value, includeArchived, archivedOnly, includeTrashed, trashedOnly); err != nil {
+			return nil, "topics list", err
+		}
 		addSingleQuery(&query, "q", queryFlag.value)
 		if limitFlag.set {
 			addSingleQuery(&query, "limit", strconv.Itoa(limitFlag.value))
 		}
 		addSingleQuery(&query, "cursor", cursorFlag.value)
-		if includeArchived {
-			query = append(query, queryParam{name: "include_archived", values: []string{"true"}})
-		}
-		if archivedOnly {
-			query = append(query, queryParam{name: "archived_only", values: []string{"true"}})
-		}
-		if includeTrashed {
-			query = append(query, queryParam{name: "include_trashed", values: []string{"true"}})
-		}
-		if trashedOnly {
-			query = append(query, queryParam{name: "trashed_only", values: []string{"true"}})
-		}
 		result, err := a.invokeTypedJSON(ctx, cfg, "topics list", "topics.list", nil, query, nil)
 		if err != nil {
 			return nil, "topics list", err
@@ -228,17 +218,8 @@ func (a *App) runCardsCommand(ctx context.Context, args []string, cfg config.Res
 			return nil, "cards list", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx cards list`")
 		}
 		query := make([]queryParam, 0, 4)
-		if includeArchived {
-			query = append(query, queryParam{name: "include_archived", values: []string{"true"}})
-		}
-		if archivedOnly {
-			query = append(query, queryParam{name: "archived_only", values: []string{"true"}})
-		}
-		if includeTrashed {
-			query = append(query, queryParam{name: "include_trashed", values: []string{"true"}})
-		}
-		if trashedOnly {
-			query = append(query, queryParam{name: "trashed_only", values: []string{"true"}})
+		if err := appendLifecycleStatesForHTTPList(&query, "", includeArchived, archivedOnly, includeTrashed, trashedOnly); err != nil {
+			return nil, "cards list", err
 		}
 		result, err := a.invokeTypedJSON(ctx, cfg, "cards list", "cards.list", nil, query, nil)
 		return result, "cards list", err

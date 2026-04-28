@@ -23,6 +23,7 @@ describe("artifact list URL state", () => {
       thread_id: "thread-onboarding",
       created_after: createdAfterIso,
       created_before: "",
+      states: ["active"],
     });
   });
 
@@ -40,6 +41,7 @@ describe("artifact list URL state", () => {
       thread_id: "",
       created_after: "",
       created_before: createdBeforeIso,
+      states: ["active"],
     });
   });
 
@@ -72,6 +74,7 @@ describe("artifact list URL state", () => {
       thread_id: "thread-onboarding",
       created_after: new Date("2026-03-04T09:30").toISOString(),
       created_before: new Date("2026-03-04T17:45").toISOString(),
+      state: ["active"],
     });
   });
 

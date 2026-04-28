@@ -53,7 +53,7 @@ func TestWorkspaceListQueriesUseIndexedPlans(t *testing.T) {
 		t.Fatalf("create document: %v", err)
 	}
 
-	threadQuery, threadArgs := buildListThreadsQuery(ThreadListFilter{State: "active"})
+	threadQuery, threadArgs := buildListThreadsQuery(ThreadListFilter{States: []string{"active"}})
 	threadPlan := explainQueryPlan(t, workspace.DB(), threadQuery, threadArgs...)
 	if !strings.Contains(threadPlan, "idx_threads_updated_at") && !strings.Contains(threadPlan, "idx_threads_trashed_at") {
 		t.Fatalf("threads query plan did not use an expected threads index:\n%s", threadPlan)
@@ -79,9 +79,8 @@ func TestBuildListThreadsQueryAddsWhereBeforeQFilter(t *testing.T) {
 	t.Parallel()
 
 	query, args := buildListThreadsQuery(ThreadListFilter{
-		IncludeArchived: true,
-		IncludeTrashed:  true,
-		Query:           "plan",
+		States: []string{"active", "archived", "trashed"},
+		Query:  "plan",
 	})
 
 	if !strings.Contains(query, "FROM threads WHERE") {

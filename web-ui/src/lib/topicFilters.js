@@ -1,12 +1,31 @@
-/** Lifecycle filter values for GET /topics and GET /threads (`state` query param). */
+/** Lifecycle filter values for GET /topics and GET /threads (`state` query params, OR semantics). */
 export const TOPIC_STATUSES = ["active", "archived", "trashed"];
 
-/** Query string for GET /threads — `state` and optional `q`. */
+const DEFAULT_TOPIC_LIST_STATES = ["active"];
+
+function normalizeLifecycleStates(raw) {
+  if (Array.isArray(raw)) {
+    const ordered = [];
+    for (const st of TOPIC_STATUSES) {
+      if (raw.some((x) => String(x ?? "").trim() === st)) {
+        ordered.push(st);
+      }
+    }
+    return ordered.length > 0 ? ordered : [...DEFAULT_TOPIC_LIST_STATES];
+  }
+  const one = String(raw ?? "").trim();
+  if (one && TOPIC_STATUSES.includes(one)) {
+    return [one];
+  }
+  return [...DEFAULT_TOPIC_LIST_STATES];
+}
+
+/** Query string for GET /threads — repeated `state` and optional `q`. */
 export function buildThreadFilterQueryString(filters = {}) {
   const params = new URLSearchParams();
-
-  if (filters.state) {
-    params.set("state", filters.state);
+  const states = normalizeLifecycleStates(filters.states ?? filters.state);
+  for (const s of states) {
+    params.append("state", s);
   }
   const q = String(filters.q ?? "").trim();
   if (q) {
@@ -16,13 +35,10 @@ export function buildThreadFilterQueryString(filters = {}) {
   return params.toString();
 }
 
-/** Query object for GET /threads / listThreads. */
+/** Request query object for listThreads — `state[]` arrays serialize to repeated keys. */
 export function buildThreadFilterQueryParams(filters = {}) {
-  const query = {};
-
-  if (filters.state) {
-    query.state = filters.state;
-  }
+  const states = normalizeLifecycleStates(filters.states ?? filters.state);
+  const query = { state: states };
   const q = String(filters.q ?? "").trim();
   if (q) {
     query.q = q;
@@ -32,7 +48,7 @@ export function buildThreadFilterQueryParams(filters = {}) {
 }
 
 /**
- * Thread / topic list URL: `state`, optional `q`, and legacy `open=1` (→ state active).
+ * Thread / topic list URL: repeated `state`, optional `q`, and legacy `open=1` (→ states [active]).
  */
 export function parseTopicListSearchParams(searchParams) {
   const sp =
@@ -41,34 +57,30 @@ export function parseTopicListSearchParams(searchParams) {
       : new URLSearchParams(searchParams);
 
   const legacyOpen = sp.get("open") === "1";
-  let state = String(sp.get("state") ?? "").trim();
+  let states = [...sp.getAll("state")]
+    .map((s) => String(s ?? "").trim())
+    .filter(Boolean);
+
   const q = String(sp.get("q") ?? "").trim();
 
   if (legacyOpen) {
-    state = "active";
+    states = ["active"];
   }
 
-  if (state && !TOPIC_STATUSES.includes(state)) {
-    state = "";
-  }
+  states = normalizeLifecycleStates(states);
 
-  if (!state) {
-    state = "active";
-  }
-
-  return { state, q };
+  return { states, q };
 }
 
 /** Serialize list filters for `/topics` and `/threads` URL query strings. */
 export function buildTopicListSearchString(state = {}) {
   const params = new URLSearchParams();
 
-  let st = String(state.state ?? "").trim();
-  if (!TOPIC_STATUSES.includes(st)) {
-    st = "active";
-  }
-  if (st !== "active") {
-    params.set("state", st);
+  let states = normalizeLifecycleStates(state.states ?? state.state);
+  if (states.length !== 1 || states[0] !== "active") {
+    for (const s of states) {
+      params.append("state", s);
+    }
   }
   const q = String(state.q ?? "").trim();
   if (q) {
@@ -79,28 +91,14 @@ export function buildTopicListSearchString(state = {}) {
 }
 
 /**
- * Query object for GET /topics (`listTopics`); only OpenAPI list parameters.
- * When `includeArchived` is true and lifecycle is `active`, `state` is omitted so the
- * server applies defaults that honor `include_archived` (explicit `state=active` would not).
+ * Query object for GET /topics (`listTopics`); passes `state` as string[] for repeated query keys.
  */
-export function buildTopicListApiQueryParams(
-  state = {},
-  { includeArchived = false } = {},
-) {
-  const query = {};
-  if (includeArchived) {
-    query.include_archived = "true";
-  }
+export function buildTopicListApiQueryParams(state = {}) {
+  const states = normalizeLifecycleStates(state.states ?? state.state);
+  const query = { state: states };
   const q = String(state.q ?? "").trim();
   if (q) {
     query.q = q;
-  }
-  let st = String(state.state ?? "").trim();
-  if (!TOPIC_STATUSES.includes(st)) {
-    st = "active";
-  }
-  if (!(includeArchived && st === "active")) {
-    query.state = st;
   }
   return query;
 }
@@ -109,16 +107,5 @@ export function buildTopicListApiQueryParams(
  * Query for GET /threads (`listThreads`).
  */
 export function buildThreadFilterQueryParamsFromThreadListState(state = {}) {
-  let st = String(state.state ?? "").trim();
-  if (!TOPIC_STATUSES.includes(st)) {
-    st = "active";
-  }
-  const base = buildThreadFilterQueryParams({
-    state: st,
-  });
-  const q = String(state.q ?? "").trim();
-  if (q) {
-    base.q = q;
-  }
-  return base;
+  return buildThreadFilterQueryParams(state);
 }

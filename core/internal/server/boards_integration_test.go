@@ -944,9 +944,9 @@ func TestCardGlobalTrashListRestoreAndPurge(t *testing.T) {
 		}
 	}
 
-	archivedOnlyResp, err := http.Get(h.baseURL + "/cards?archived_only=true")
+	archivedOnlyResp, err := http.Get(h.baseURL + "/cards?state=archived")
 	if err != nil {
-		t.Fatalf("GET /cards?archived_only=true: %v", err)
+		t.Fatalf("GET /cards?state=archived: %v", err)
 	}
 	defer archivedOnlyResp.Body.Close()
 	if archivedOnlyResp.StatusCode != http.StatusOK {

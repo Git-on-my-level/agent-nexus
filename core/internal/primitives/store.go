@@ -36,50 +36,39 @@ var ErrInvalidCursor = errors.New("invalid cursor")
 const actorStatementEventIDPlaceholder = "<event_id>"
 
 type ArtifactListFilter struct {
-	Q               string
-	Limit           *int
-	Kind            string
-	ThreadID        string
-	CreatedBefore   string
-	CreatedAfter    string
-	IncludeTrashed  bool
-	TrashedOnly     bool
-	IncludeArchived bool
-	ArchivedOnly    bool
+	States []string
+
+	Q             string
+	Limit         *int
+	Kind          string
+	ThreadID      string
+	CreatedBefore string
+	CreatedAfter  string
 }
 
 type DocumentListFilter struct {
-	ThreadID        string
-	State           string
-	IncludeTrashed  bool
-	TrashedOnly     bool
-	IncludeArchived bool
-	ArchivedOnly    bool
-	Query           string
-	Limit           *int
-	Cursor          string
+	States []string
+
+	ThreadID string
+	Query    string
+	Limit    *int
+	Cursor   string
 }
 
 type ThreadListFilter struct {
-	State           string
-	Query           string
-	Limit           *int
-	Cursor          string
-	IncludeArchived bool
-	ArchivedOnly    bool
-	IncludeTrashed  bool
-	TrashedOnly     bool
+	States []string
+
+	Query  string
+	Limit  *int
+	Cursor string
 }
 
 type TopicListFilter struct {
-	State           string
-	Query           string
-	Limit           *int
-	Cursor          string
-	IncludeArchived bool
-	ArchivedOnly    bool
-	IncludeTrashed  bool
-	TrashedOnly     bool
+	States []string
+
+	Query  string
+	Limit  *int
+	Cursor string
 }
 
 type EventListFilter struct {
@@ -574,6 +563,7 @@ func (s *Store) ListArtifacts(ctx context.Context, filter ArtifactListFilter) ([
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("primitives store database is not initialized")
 	}
+	filter.States = NormalizeListLifecycleStates(filter.States)
 
 	query, args := buildListArtifactsQuery(filter)
 	rows, err := s.db.QueryContext(ctx, query, args...)
@@ -1686,6 +1676,7 @@ func (s *Store) ListThreads(ctx context.Context, filter ThreadListFilter) ([]map
 	if s == nil || s.db == nil {
 		return nil, "", fmt.Errorf("primitives store database is not initialized")
 	}
+	filter.States = NormalizeListLifecycleStates(filter.States)
 	if filter.Cursor != "" {
 		if _, err := decodeCursor(filter.Cursor); err != nil {
 			return nil, "", fmt.Errorf("%w: %v", ErrInvalidCursor, err)
@@ -2477,30 +2468,7 @@ func buildListThreadsQuery(filter ThreadListFilter) (string, []any) {
 		query += ` WHERE ` + clause
 		hasWhere = true
 	}
-	state := strings.TrimSpace(filter.State)
-	if state != "" {
-		switch state {
-		case "active":
-			appendClause(`threads.archived_at IS NULL AND threads.trashed_at IS NULL`)
-		case "archived":
-			appendClause(`threads.archived_at IS NOT NULL AND threads.trashed_at IS NULL`)
-		case "trashed":
-			appendClause(`threads.trashed_at IS NOT NULL`)
-		default:
-			appendClause(`1=0`)
-		}
-	} else {
-		if filter.TrashedOnly {
-			appendClause(`threads.trashed_at IS NOT NULL`)
-		} else if !filter.IncludeTrashed {
-			appendClause(`threads.trashed_at IS NULL`)
-		}
-		if filter.ArchivedOnly {
-			appendClause(`threads.archived_at IS NOT NULL AND threads.trashed_at IS NULL`)
-		} else if !filter.IncludeArchived {
-			appendClause(`threads.archived_at IS NULL`)
-		}
-	}
+	appendClause(LifecycleStatesOrGroup("threads.archived_at", "threads.trashed_at", filter.States))
 	if q := strings.TrimSpace(filter.Query); q != "" {
 		searchPattern := "%" + strings.ToLower(q) + "%"
 		appendClause(`(LOWER(threads.id) LIKE ? OR LOWER(threads.thread_id) LIKE ? OR LOWER(COALESCE(json_extract(body_json, '$.subject_ref'), json_extract(body_json, '$.topic_ref'), '')) LIKE ? OR LOWER(COALESCE(json_extract(body_json, '$.title'), '')) LIKE ? OR LOWER(COALESCE(json_extract(body_json, '$.current_summary'), '')) LIKE ?)`)
@@ -2535,20 +2503,10 @@ func buildListArtifactsQuery(filter ArtifactListFilter) (string, []any) {
 		}
 		primaryArgs := []any{threadID}
 		secondaryArgs := []any{threadID, "artifact", "thread", threadID, refEdgeTypeRef}
-		if filter.TrashedOnly {
-			primaryClauses = append(primaryClauses, "trashed_at IS NOT NULL")
-			secondaryClauses = append(secondaryClauses, "artifacts.trashed_at IS NOT NULL")
-		} else if !filter.IncludeTrashed {
-			primaryClauses = append(primaryClauses, "trashed_at IS NULL")
-			secondaryClauses = append(secondaryClauses, "artifacts.trashed_at IS NULL")
-		}
-		if filter.ArchivedOnly {
-			primaryClauses = append(primaryClauses, "archived_at IS NOT NULL", "trashed_at IS NULL")
-			secondaryClauses = append(secondaryClauses, "artifacts.archived_at IS NOT NULL", "artifacts.trashed_at IS NULL")
-		} else if !filter.IncludeArchived {
-			primaryClauses = append(primaryClauses, "archived_at IS NULL")
-			secondaryClauses = append(secondaryClauses, "artifacts.archived_at IS NULL")
-		}
+		lifecyclePrimary := LifecycleStatesOrGroup("archived_at", "trashed_at", filter.States)
+		lifecycleSecondary := LifecycleStatesOrGroup("artifacts.archived_at", "artifacts.trashed_at", filter.States)
+		primaryClauses = append(primaryClauses, lifecyclePrimary)
+		secondaryClauses = append(secondaryClauses, lifecycleSecondary)
 		if kind := strings.TrimSpace(filter.Kind); kind != "" {
 			primaryClauses = append(primaryClauses, "kind = ?")
 			secondaryClauses = append(secondaryClauses, "artifacts.kind = ?")
@@ -2590,16 +2548,7 @@ func buildListArtifactsQuery(filter ArtifactListFilter) (string, []any) {
 
 	query := `SELECT metadata_json FROM artifacts WHERE 1=1`
 	args := make([]any, 0, 8)
-	if filter.TrashedOnly {
-		query += ` AND trashed_at IS NOT NULL`
-	} else if !filter.IncludeTrashed {
-		query += ` AND trashed_at IS NULL`
-	}
-	if filter.ArchivedOnly {
-		query += ` AND archived_at IS NOT NULL AND trashed_at IS NULL`
-	} else if !filter.IncludeArchived {
-		query += ` AND archived_at IS NULL`
-	}
+	query += ` AND ` + LifecycleStatesOrGroup("archived_at", "trashed_at", filter.States)
 	if kind := strings.TrimSpace(filter.Kind); kind != "" {
 		query += ` AND kind = ?`
 		args = append(args, kind)

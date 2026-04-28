@@ -24,14 +24,10 @@ func handleListBoards(w http.ResponseWriter, r *http.Request, opts handlerOption
 	}
 
 	query := r.URL.Query()
-	state := strings.TrimSpace(query.Get("state"))
-	if state != "" {
-		switch state {
-		case "active", "archived", "trashed":
-		default:
-			writeError(w, http.StatusBadRequest, "invalid_request", "state must be one of: active, archived, trashed")
-			return
-		}
+	states, parseErr := ParseListLifecycleStates(query)
+	if parseErr != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", parseErr.Error())
+		return
 	}
 
 	var limitFilter *int
@@ -46,15 +42,11 @@ func handleListBoards(w http.ResponseWriter, r *http.Request, opts handlerOption
 	}
 
 	items, nextCursor, err := opts.primitiveStore.ListBoards(r.Context(), primitives.BoardListFilter{
-		State:           state,
-		Owners:          normalizedQueryValues(query["owner"]),
-		Query:           strings.TrimSpace(query.Get("q")),
-		Limit:           limitFilter,
-		Cursor:          strings.TrimSpace(query.Get("cursor")),
-		IncludeArchived: strings.TrimSpace(query.Get("include_archived")) == "true",
-		ArchivedOnly:    strings.TrimSpace(query.Get("archived_only")) == "true",
-		IncludeTrashed:  strings.TrimSpace(query.Get("include_trashed")) == "true",
-		TrashedOnly:     strings.TrimSpace(query.Get("trashed_only")) == "true",
+		States: states,
+		Owners: normalizedQueryValues(query["owner"]),
+		Query:  strings.TrimSpace(query.Get("q")),
+		Limit:  limitFilter,
+		Cursor: strings.TrimSpace(query.Get("cursor")),
 	})
 	if err != nil {
 		if errors.Is(err, primitives.ErrInvalidCursor) {

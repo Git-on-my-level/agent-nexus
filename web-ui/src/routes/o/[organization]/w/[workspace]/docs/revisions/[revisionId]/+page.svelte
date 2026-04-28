@@ -44,7 +44,7 @@
 
     try {
       const listResponse = await coreClient.listDocuments({
-        include_trashed: true,
+        state: ["active", "archived", "trashed"],
       });
       const documents = listResponse.documents ?? [];
 

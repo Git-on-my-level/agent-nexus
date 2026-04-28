@@ -16,20 +16,12 @@ func handleListCards(w http.ResponseWriter, r *http.Request, opts handlerOptions
 	}
 
 	query := r.URL.Query()
-	trashedOnly := strings.TrimSpace(query.Get("trashed_only")) == "true"
-	archivedOnly := strings.TrimSpace(query.Get("archived_only")) == "true"
-	includeArchived := strings.TrimSpace(query.Get("include_archived")) == "true"
-	includeTrashed := strings.TrimSpace(query.Get("include_trashed")) == "true"
-	listFilter := primitives.CardListFilter{
-		IncludeArchived: includeArchived,
-		IncludeTrashed:  includeTrashed,
+	states, parseErr := ParseListLifecycleStates(query)
+	if parseErr != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", parseErr.Error())
+		return
 	}
-	if trashedOnly {
-		listFilter.TrashedOnly = true
-	} else if archivedOnly {
-		listFilter.ArchivedOnly = true
-	}
-	cards, err := opts.primitiveStore.ListCards(r.Context(), listFilter)
+	cards, err := opts.primitiveStore.ListCards(r.Context(), primitives.CardListFilter{States: states})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list cards")
 		return

@@ -5,13 +5,18 @@ import {
   readStringSearchParam,
 } from "$lib/urlState";
 
-export const ARTIFACT_KIND_VALUES = Object.freeze(Object.keys(KIND_LABELS));
+export const ARTIFACT_STATE_VALUES = Object.freeze([
+  "active",
+  "archived",
+  "trashed",
+]);
 
 export const DEFAULT_ARTIFACT_LIST_FILTERS = Object.freeze({
   kind: "",
   thread_id: "",
   created_after: "",
   created_before: "",
+  states: ["active"],
 });
 
 function normalizeTimestampValue(value) {
@@ -48,9 +53,44 @@ export function formatArtifactTimestampInputValue(value) {
   return `${year}-${month}-${day}T${hours}:${minutes}`;
 }
 
+/** @param {string[]} states */
+export function normalizeArtifactLifecycleStates(states) {
+  const raw = Array.isArray(states) ? states : [];
+  const seen = new Set(
+    raw
+      .map((s) => String(s ?? "").trim())
+      .filter((s) => ARTIFACT_STATE_VALUES.includes(s)),
+  );
+  const out = [];
+  for (const canon of ARTIFACT_STATE_VALUES) {
+    if (seen.has(canon)) {
+      out.push(canon);
+    }
+  }
+  return out.length > 0 ? out : ["active"];
+}
+
+/** @param {URLSearchParams | string[][] | Record<string,string>} searchParams */
+function parseLifecycleStates(searchParams) {
+  const sp =
+    searchParams instanceof URLSearchParams
+      ? searchParams
+      : new URLSearchParams(searchParams);
+  const raw = sp
+    .getAll("state")
+    .map((s) => String(s ?? "").trim())
+    .filter(Boolean);
+  return normalizeArtifactLifecycleStates(raw);
+}
+
 export function parseArtifactListSearchParams(searchParams) {
   return {
-    kind: readEnumSearchParam(searchParams, "kind", ARTIFACT_KIND_VALUES, ""),
+    kind: readEnumSearchParam(
+      searchParams,
+      "kind",
+      Object.keys(KIND_LABELS),
+      "",
+    ),
     thread_id: readStringSearchParam(searchParams, "thread_id"),
     created_after: normalizeTimestampValue(
       readStringSearchParam(searchParams, "created_after"),
@@ -58,32 +98,56 @@ export function parseArtifactListSearchParams(searchParams) {
     created_before: normalizeTimestampValue(
       readStringSearchParam(searchParams, "created_before"),
     ),
+    states: parseLifecycleStates(searchParams),
   };
 }
 
 export function buildArtifactListSearchString(filters = {}) {
-  return buildSearchString({
-    kind: filters.kind,
-    thread_id: filters.thread_id,
-    created_after: normalizeTimestampValue(filters.created_after),
-    created_before: normalizeTimestampValue(filters.created_before),
-  });
-}
+  const states = normalizeArtifactLifecycleStates(filters.states ?? ["active"]);
 
-export function buildArtifactListQuery(filters = {}) {
-  return {
+  /** @type {Record<string, string | string[]>} */
+  const entries = {
     kind: String(filters.kind ?? "").trim(),
     thread_id: String(filters.thread_id ?? "").trim(),
     created_after: normalizeTimestampValue(filters.created_after),
     created_before: normalizeTimestampValue(filters.created_before),
   };
+  const defaultStates = states.length === 1 && String(states[0]) === "active";
+  if (!defaultStates) {
+    entries.state = states;
+  }
+  return buildSearchString(entries);
+}
+
+export function buildArtifactListQuery(filters = {}) {
+  const states = normalizeArtifactLifecycleStates(filters.states ?? ["active"]);
+
+  /** @type {Record<string, string | string[]>} */
+  const q = {};
+  q.kind = String(filters.kind ?? "").trim();
+  q.thread_id = String(filters.thread_id ?? "").trim();
+  const ca = normalizeTimestampValue(filters.created_after);
+  const cb = normalizeTimestampValue(filters.created_before);
+  if (ca) {
+    q.created_after = ca;
+  }
+  if (cb) {
+    q.created_before = cb;
+  }
+  q.state = states;
+  return q;
 }
 
 export function hasArtifactListFilters(filters = {}) {
+  const f = { ...DEFAULT_ARTIFACT_LIST_FILTERS, ...filters };
   return Boolean(
-    String(filters.kind ?? "").trim() ||
-    String(filters.thread_id ?? "").trim() ||
-    String(filters.created_after ?? "").trim() ||
-    String(filters.created_before ?? "").trim(),
+    String(f.kind ?? "").trim() ||
+    String(f.thread_id ?? "").trim() ||
+    String(f.created_after ?? "").trim() ||
+    String(f.created_before ?? "").trim() ||
+    (() => {
+      const st = normalizeArtifactLifecycleStates(f.states ?? ["active"]);
+      return !(st.length === 1 && st[0] === "active");
+    })(),
   );
 }

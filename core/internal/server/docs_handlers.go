@@ -33,31 +33,18 @@ func handleListDocuments(w http.ResponseWriter, r *http.Request, opts handlerOpt
 	}
 
 	query := r.URL.Query()
-	state := strings.TrimSpace(query.Get("state"))
-	if state != "" {
-		switch state {
-		case "active", "archived", "trashed":
-		default:
-			writeError(w, http.StatusBadRequest, "invalid_request", "state must be one of: active, archived, trashed")
-			return
-		}
+	states, parseErr := ParseListLifecycleStates(query)
+	if parseErr != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", parseErr.Error())
+		return
 	}
-
-	includeTrashed := strings.TrimSpace(query.Get("include_trashed")) == "true"
-	trashedOnly := strings.TrimSpace(query.Get("trashed_only")) == "true"
-	includeArchived := strings.TrimSpace(query.Get("include_archived")) == "true"
-	archivedOnly := strings.TrimSpace(query.Get("archived_only")) == "true"
 	threadID := strings.TrimSpace(query.Get("thread_id"))
 	documents, nextCursor, err := opts.primitiveStore.ListDocuments(r.Context(), primitives.DocumentListFilter{
-		ThreadID:        threadID,
-		State:           state,
-		IncludeTrashed:  includeTrashed,
-		TrashedOnly:     trashedOnly,
-		IncludeArchived: includeArchived,
-		ArchivedOnly:    archivedOnly,
-		Query:           strings.TrimSpace(query.Get("q")),
-		Limit:           limitFilter,
-		Cursor:          strings.TrimSpace(query.Get("cursor")),
+		States:   states,
+		ThreadID: threadID,
+		Query:    strings.TrimSpace(query.Get("q")),
+		Limit:    limitFilter,
+		Cursor:   strings.TrimSpace(query.Get("cursor")),
 	})
 	if err != nil {
 		if errors.Is(err, primitives.ErrInvalidCursor) {

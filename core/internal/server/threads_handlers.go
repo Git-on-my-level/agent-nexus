@@ -61,25 +61,17 @@ func handleListThreads(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		limitFilter = &parsed
 	}
 
-	state := strings.TrimSpace(query.Get("state"))
-	if state != "" {
-		switch state {
-		case "active", "archived", "trashed":
-		default:
-			writeError(w, http.StatusBadRequest, "invalid_request", "state must be one of: active, archived, trashed")
-			return
-		}
+	lifecycleStates, parseErr := ParseListLifecycleStates(query)
+	if parseErr != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", parseErr.Error())
+		return
 	}
 
 	threads, nextCursor, err := opts.primitiveStore.ListThreads(r.Context(), primitives.ThreadListFilter{
-		State:           state,
-		Query:           strings.TrimSpace(query.Get("q")),
-		Limit:           limitFilter,
-		Cursor:          strings.TrimSpace(query.Get("cursor")),
-		IncludeArchived: strings.TrimSpace(query.Get("include_archived")) == "true",
-		ArchivedOnly:    strings.TrimSpace(query.Get("archived_only")) == "true",
-		IncludeTrashed:  strings.TrimSpace(query.Get("include_trashed")) == "true",
-		TrashedOnly:     strings.TrimSpace(query.Get("trashed_only")) == "true",
+		States: lifecycleStates,
+		Query:  strings.TrimSpace(query.Get("q")),
+		Limit:  limitFilter,
+		Cursor: strings.TrimSpace(query.Get("cursor")),
 	})
 	if err != nil {
 		if errors.Is(err, primitives.ErrInvalidCursor) {

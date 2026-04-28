@@ -113,11 +113,15 @@ paths:
           in: query
           required: false
           schema:
-            type: string
-            enum: [active, archived, trashed]
+            type: array
+            items:
+              type: string
+              enum: [active, archived, trashed]
+          style: form
+          explode: true
           description: >
-            Filter by canonical topic lifecycle state (derived from trashed_at/archived_at).
-            When set, overrides include_trashed, trashed_only, include_archived, and archived_only for SQL filtering.
+            Lifecycle buckets to include (OR semantics over active / archived / trashed rows).
+            Repeat per bucket, e.g. state=active&state=archived. Omit to default to active-only.
         - name: q
           in: query
           required: false
@@ -136,22 +140,6 @@ paths:
           required: false
           schema: { type: string }
           description: Opaque pagination cursor from a previous list response.
-        - name: include_archived
-          in: query
-          required: false
-          schema: { type: boolean, default: false }
-        - name: archived_only
-          in: query
-          required: false
-          schema: { type: boolean, default: false }
-        - name: include_trashed
-          in: query
-          required: false
-          schema: { type: boolean, default: false }
-        - name: trashed_only
-          in: query
-          required: false
-          schema: { type: boolean, default: false }
       responses:
         '200':
           description: Topic list
@@ -537,11 +525,15 @@ paths:
           in: query
           required: false
           schema:
-            type: string
-            enum: [active, archived, trashed]
+            type: array
+            items:
+              type: string
+              enum: [active, archived, trashed]
+          style: form
+          explode: true
           description: >
-            Filter by canonical thread lifecycle state. When set, overrides include_trashed, trashed_only,
-            include_archived, and archived_only for SQL filtering.
+            Lifecycle buckets to include (OR). Repeat per bucket, e.g. state=active&state=archived.
+            Omit to default to active-only.
         - name: q
           in: query
           required: false
@@ -558,22 +550,6 @@ paths:
           in: query
           required: false
           schema: { type: string }
-        - name: include_archived
-          in: query
-          required: false
-          schema: { type: boolean, default: false }
-        - name: archived_only
-          in: query
-          required: false
-          schema: { type: boolean, default: false }
-        - name: include_trashed
-          in: query
-          required: false
-          schema: { type: boolean, default: false }
-        - name: trashed_only
-          in: query
-          required: false
-          schema: { type: boolean, default: false }
       responses:
         '200':
           description: Thread list
@@ -754,33 +730,19 @@ paths:
             minimum: 1
             maximum: 1000
           description: Page size; omit to return the full matching set.
-        - name: include_trashed
-          in: query
-          required: false
-          schema: { type: boolean, default: false }
-          description: Include trashed documents (ignored when state is set).
-        - name: trashed_only
-          in: query
-          required: false
-          schema: { type: boolean, default: false }
-          description: Return only trashed documents (ignored when state is set).
-        - name: include_archived
-          in: query
-          required: false
-          schema: { type: boolean, default: false }
-          description: Include archived documents (ignored when state is set).
-        - name: archived_only
-          in: query
-          required: false
-          schema: { type: boolean, default: false }
-          description: Return only archived documents (ignored when state is set).
         - name: state
           in: query
           required: false
           schema:
-            type: string
-            enum: [active, archived, trashed]
-          description: Filter by canonical document lifecycle state (document.state). When set, overrides include_trashed, trashed_only, include_archived, and archived_only for SQL filtering.
+            type: array
+            items:
+              type: string
+              enum: [active, archived, trashed]
+          style: form
+          explode: true
+          description: >
+            Lifecycle buckets to include (OR). Repeat per bucket, e.g. state=active&state=archived.
+            Omit to default to active-only.
       responses:
         '200':
           description: Document list
@@ -1201,11 +1163,15 @@ paths:
           in: query
           required: false
           schema:
-            type: string
-            enum: [active, archived, trashed]
+            type: array
+            items:
+              type: string
+              enum: [active, archived, trashed]
+          style: form
+          explode: true
           description: >
-            Filter by canonical board lifecycle state. When set, overrides include_trashed, trashed_only,
-            include_archived, and archived_only for SQL filtering.
+            Lifecycle buckets to include (OR). Repeat per bucket, e.g. state=active&state=archived.
+            Omit to default to active-only.
         - name: owner
           in: query
           required: false
@@ -1225,22 +1191,6 @@ paths:
           in: query
           required: false
           schema: { type: string }
-        - name: include_archived
-          in: query
-          required: false
-          schema: { type: boolean, default: false }
-        - name: archived_only
-          in: query
-          required: false
-          schema: { type: boolean, default: false }
-        - name: include_trashed
-          in: query
-          required: false
-          schema: { type: boolean, default: false }
-        - name: trashed_only
-          in: query
-          required: false
-          schema: { type: boolean, default: false }
       responses:
         '200':
           description: Board list
@@ -1723,34 +1673,18 @@ paths:
       x-anx-concepts: [cards]
       x-anx-stability: beta
       parameters:
-        - name: include_archived
+        - name: state
           in: query
           required: false
           schema:
-            type: boolean
-            default: false
-          description: When true, include archived cards alongside active cards.
-        - name: include_trashed
-          in: query
-          required: false
-          schema:
-            type: boolean
-            default: false
-          description: When true, include trashed cards alongside active cards.
-        - name: archived_only
-          in: query
-          required: false
-          schema:
-            type: boolean
-            default: false
-          description: When true, return only archived cards (distinct from trashed cards).
-        - name: trashed_only
-          in: query
-          required: false
-          schema:
-            type: boolean
-            default: false
-          description: When true, return only trashed cards.
+            type: array
+            items:
+              type: string
+              enum: [active, archived, trashed]
+          style: form
+          explode: true
+          description: >
+            Lifecycle buckets to include (OR). Omit to default to active-only.
       responses:
         '200':
           description: Card list
@@ -2460,22 +2394,18 @@ paths:
           in: query
           required: false
           schema: { type: integer, minimum: 1 }
-        - name: include_trashed
+        - name: state
           in: query
           required: false
-          schema: { type: boolean }
-        - name: trashed_only
-          in: query
-          required: false
-          schema: { type: boolean }
-        - name: include_archived
-          in: query
-          required: false
-          schema: { type: boolean }
-        - name: archived_only
-          in: query
-          required: false
-          schema: { type: boolean }
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [active, archived, trashed]
+          style: form
+          explode: true
+          description: >
+            Lifecycle buckets to include (OR). Omit to default to active-only.
       responses:
         '200':
           description: Artifact list

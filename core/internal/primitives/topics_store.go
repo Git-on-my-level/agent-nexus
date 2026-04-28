@@ -316,6 +316,7 @@ func (s *Store) ListTopics(ctx context.Context, filter TopicListFilter) ([]map[s
 	if s == nil || s.db == nil {
 		return nil, "", fmt.Errorf("primitives store database is not initialized")
 	}
+	filter.States = NormalizeListLifecycleStates(filter.States)
 	if filter.Cursor != "" {
 		if _, err := decodeCursor(filter.Cursor); err != nil {
 			return nil, "", fmt.Errorf("%w: %v", ErrInvalidCursor, err)
@@ -1070,30 +1071,7 @@ func buildListTopicsQuery(filter TopicListFilter) (string, []any) {
 		FROM topics
 		WHERE 1=1`
 	args := make([]any, 0, 8)
-	state := strings.TrimSpace(filter.State)
-	if state != "" {
-		switch state {
-		case "active":
-			query += ` AND archived_at IS NULL AND trashed_at IS NULL`
-		case "archived":
-			query += ` AND archived_at IS NOT NULL AND trashed_at IS NULL`
-		case "trashed":
-			query += ` AND trashed_at IS NOT NULL`
-		default:
-			query += ` AND 1=0`
-		}
-	} else {
-		if filter.TrashedOnly {
-			query += ` AND trashed_at IS NOT NULL`
-		} else if !filter.IncludeTrashed {
-			query += ` AND trashed_at IS NULL`
-		}
-		if filter.ArchivedOnly {
-			query += ` AND archived_at IS NOT NULL AND trashed_at IS NULL`
-		} else if !filter.IncludeArchived {
-			query += ` AND archived_at IS NULL`
-		}
-	}
+	query += ` AND ` + LifecycleStatesOrGroup("archived_at", "trashed_at", filter.States)
 	if q := strings.TrimSpace(filter.Query); q != "" {
 		pattern := "%" + strings.ToLower(q) + "%"
 		query += ` AND (LOWER(id) LIKE ? OR LOWER(COALESCE(title, '')) LIKE ? OR LOWER(COALESCE(summary, '')) LIKE ?)`

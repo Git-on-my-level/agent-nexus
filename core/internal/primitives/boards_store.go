@@ -163,24 +163,18 @@ func boardEffectiveTypedRefsForPatch(ctx context.Context, q sqlRowsQuerier, row 
 }
 
 type BoardListFilter struct {
-	State           string
-	Owner           string
-	Owners          []string
-	Query           string
-	Limit           *int
-	Cursor          string
-	IncludeArchived bool
-	ArchivedOnly    bool
-	IncludeTrashed  bool
-	TrashedOnly     bool
+	States []string
+
+	Owner   string
+	Owners  []string
+	Query   string
+	Limit   *int
+	Cursor  string
 }
 
 // CardListFilter scopes global card listing (GET /cards).
 type CardListFilter struct {
-	IncludeArchived bool
-	ArchivedOnly    bool
-	IncludeTrashed  bool
-	TrashedOnly     bool
+	States []string
 }
 
 type BoardListItem struct {
@@ -1095,6 +1089,7 @@ func (s *Store) ListBoards(ctx context.Context, filter BoardListFilter) ([]Board
 	if s == nil || s.db == nil {
 		return nil, "", fmt.Errorf("primitives store database is not initialized")
 	}
+	filter.States = NormalizeListLifecycleStates(filter.States)
 	if filter.Cursor != "" {
 		if _, err := decodeCursor(filter.Cursor); err != nil {
 			return nil, "", fmt.Errorf("%w: %v", ErrInvalidCursor, err)
@@ -1197,21 +1192,8 @@ func (s *Store) ListCards(ctx context.Context, filter CardListFilter) ([]map[str
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("primitives store database is not initialized")
 	}
-	conditions := make([]string, 0, 4)
-	if filter.TrashedOnly {
-		conditions = append(conditions, `trashed_at IS NOT NULL`)
-	} else if !filter.IncludeTrashed {
-		conditions = append(conditions, `trashed_at IS NULL`)
-	}
-	if filter.ArchivedOnly {
-		conditions = append(conditions, `archived_at IS NOT NULL AND trashed_at IS NULL`)
-	} else if !filter.IncludeArchived {
-		conditions = append(conditions, `archived_at IS NULL`)
-	}
-	whereSQL := `1=1`
-	if len(conditions) > 0 {
-		whereSQL = strings.Join(conditions, ` AND `)
-	}
+	filter.States = NormalizeListLifecycleStates(filter.States)
+	whereSQL := LifecycleStatesOrGroup("archived_at", "trashed_at", filter.States)
 	rows, err := s.db.QueryContext(
 		ctx,
 		`SELECT board_id, id, column_key, rank, title, summary, version, thread_id, parent_thread_id, due_at,
@@ -2679,30 +2661,7 @@ func buildListBoardsQuery(filter BoardListFilter) (string, []any) {
 		FROM boards
 		WHERE 1=1`
 	args := make([]any, 0, 8)
-	state := strings.TrimSpace(filter.State)
-	if state != "" {
-		switch state {
-		case "active":
-			query += ` AND archived_at IS NULL AND trashed_at IS NULL`
-		case "archived":
-			query += ` AND archived_at IS NOT NULL AND trashed_at IS NULL`
-		case "trashed":
-			query += ` AND trashed_at IS NOT NULL`
-		default:
-			query += ` AND 1=0`
-		}
-	} else {
-		if filter.TrashedOnly {
-			query += ` AND trashed_at IS NOT NULL`
-		} else if !filter.IncludeTrashed {
-			query += ` AND trashed_at IS NULL`
-		}
-		if filter.ArchivedOnly {
-			query += ` AND archived_at IS NOT NULL AND trashed_at IS NULL`
-		} else if !filter.IncludeArchived {
-			query += ` AND archived_at IS NULL`
-		}
-	}
+	query += ` AND ` + LifecycleStatesOrGroup("archived_at", "trashed_at", filter.States)
 
 	ownerFilters := uniqueNormalizedStrings(append([]string{filter.Owner}, filter.Owners...))
 	if len(ownerFilters) > 0 {

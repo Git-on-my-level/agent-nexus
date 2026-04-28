@@ -143,12 +143,12 @@
         archivedCardResult,
         trashedCardResult,
       ] = await Promise.all([
-        coreClient.listArtifacts({ trashed_only: "true" }),
-        coreClient.listDocuments({ trashed_only: "true" }),
-        coreClient.listTopics({ trashed_only: "true" }),
-        coreClient.listBoards({ trashed_only: "true" }),
-        coreClient.listCards({ archived_only: "true" }),
-        coreClient.listCards({ trashed_only: "true" }),
+        coreClient.listArtifacts({ state: ["trashed"] }),
+        coreClient.listDocuments({ state: ["trashed"] }),
+        coreClient.listTopics({ state: ["trashed"] }),
+        coreClient.listBoards({ state: ["trashed"] }),
+        coreClient.listCards({ state: ["archived"] }),
+        coreClient.listCards({ state: ["trashed"] }),
       ]);
       artifacts = artifactResult.artifacts ?? [];
       documents = docResult.documents ?? [];

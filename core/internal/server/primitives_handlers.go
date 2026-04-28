@@ -620,10 +620,11 @@ func handleListArtifacts(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		threadID = strings.TrimSpace(query.Get("thread"))
 	}
 
-	includeTrashed := strings.TrimSpace(query.Get("include_trashed")) == "true"
-	trashedOnly := strings.TrimSpace(query.Get("trashed_only")) == "true"
-	includeArchived := strings.TrimSpace(query.Get("include_archived")) == "true"
-	archivedOnly := strings.TrimSpace(query.Get("archived_only")) == "true"
+	states, parseErr := ParseListLifecycleStates(query)
+	if parseErr != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", parseErr.Error())
+		return
+	}
 
 	var limitPtr *int
 	if limitStr := strings.TrimSpace(query.Get("limit")); limitStr != "" {
@@ -633,16 +634,13 @@ func handleListArtifacts(w http.ResponseWriter, r *http.Request, opts handlerOpt
 	}
 
 	artifacts, err := opts.primitiveStore.ListArtifacts(r.Context(), primitives.ArtifactListFilter{
-		Q:               strings.TrimSpace(query.Get("q")),
-		Limit:           limitPtr,
-		Kind:            strings.TrimSpace(query.Get("kind")),
-		ThreadID:        threadID,
-		CreatedBefore:   strings.TrimSpace(query.Get("created_before")),
-		CreatedAfter:    strings.TrimSpace(query.Get("created_after")),
-		IncludeTrashed:  includeTrashed,
-		TrashedOnly:     trashedOnly,
-		IncludeArchived: includeArchived,
-		ArchivedOnly:    archivedOnly,
+		States:        states,
+		Q:             strings.TrimSpace(query.Get("q")),
+		Limit:         limitPtr,
+		Kind:          strings.TrimSpace(query.Get("kind")),
+		ThreadID:      threadID,
+		CreatedBefore: strings.TrimSpace(query.Get("created_before")),
+		CreatedAfter:  strings.TrimSpace(query.Get("created_after")),
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list artifacts")

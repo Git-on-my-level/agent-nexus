@@ -228,8 +228,7 @@
       coreClient.listDocuments({}),
       coreClient.listArtifacts({}),
       coreClient.listCards({
-        include_archived: "true",
-        include_trashed: "true",
+        state: ["active", "archived", "trashed"],
       }),
       coreClient.listEvents(),
     ]);

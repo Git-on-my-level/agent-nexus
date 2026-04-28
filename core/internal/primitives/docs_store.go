@@ -64,30 +64,7 @@ func buildListDocumentsQuery(filter DocumentListFilter) (string, []any) {
 		conditions = append(conditions, "d.thread_id = ?")
 		args = append(args, threadID)
 	}
-	state := strings.TrimSpace(filter.State)
-	if state != "" {
-		switch state {
-		case "active":
-			conditions = append(conditions, "d.archived_at IS NULL AND d.trashed_at IS NULL")
-		case "archived":
-			conditions = append(conditions, "d.archived_at IS NOT NULL AND d.trashed_at IS NULL")
-		case "trashed":
-			conditions = append(conditions, "d.trashed_at IS NOT NULL")
-		default:
-			conditions = append(conditions, "1=0")
-		}
-	} else {
-		if filter.TrashedOnly {
-			conditions = append(conditions, "d.trashed_at IS NOT NULL")
-		} else if !filter.IncludeTrashed {
-			conditions = append(conditions, "d.trashed_at IS NULL")
-		}
-		if filter.ArchivedOnly {
-			conditions = append(conditions, "d.archived_at IS NOT NULL AND d.trashed_at IS NULL")
-		} else if !filter.IncludeArchived {
-			conditions = append(conditions, "d.archived_at IS NULL")
-		}
-	}
+	conditions = append(conditions, LifecycleStatesOrGroup("d.archived_at", "d.trashed_at", filter.States))
 	if q := strings.TrimSpace(filter.Query); q != "" {
 		searchPattern := "%" + strings.ToLower(q) + "%"
 		conditions = append(conditions, "(LOWER(d.id) LIKE ? OR LOWER(d.title) LIKE ? OR LOWER(d.summary) LIKE ?)")
@@ -114,6 +91,7 @@ func (s *Store) ListDocuments(ctx context.Context, filter DocumentListFilter) ([
 	if s == nil || s.db == nil {
 		return nil, "", fmt.Errorf("primitives store database is not initialized")
 	}
+	filter.States = NormalizeListLifecycleStates(filter.States)
 	if filter.Cursor != "" {
 		if _, err := decodeCursor(filter.Cursor); err != nil {
 			return nil, "", fmt.Errorf("%w: %v", ErrInvalidCursor, err)

@@ -1643,9 +1643,9 @@ func TestArtifactTrashLifecycle(t *testing.T) {
 		}
 	}
 
-	withTrashedListResp, err := http.Get(h.baseURL + "/artifacts?include_trashed=true")
+	withTrashedListResp, err := http.Get(h.baseURL + "/artifacts?state=active&state=archived&state=trashed")
 	if err != nil {
-		t.Fatalf("GET /artifacts?include_trashed=true: %v", err)
+		t.Fatalf("GET /artifacts?state=active&state=archived&state=trashed: %v", err)
 	}
 	defer withTrashedListResp.Body.Close()
 	var withTrashedList map[string][]map[string]any
@@ -1831,7 +1831,7 @@ func TestArtifactPurgeLifecycle(t *testing.T) {
 		t.Fatalf("expected 404 after purge, got %d", getResp.StatusCode)
 	}
 
-	listResp, err := http.Get(h.baseURL + "/artifacts?include_trashed=true")
+	listResp, err := http.Get(h.baseURL + "/artifacts?state=active&state=archived&state=trashed")
 	if err != nil {
 		t.Fatalf("GET /artifacts: %v", err)
 	}
@@ -1989,7 +1989,7 @@ func TestArtifactTrashedOnlyListFilter(t *testing.T) {
 
 	postJSONExpectStatus(t, h.baseURL+"/artifacts/"+idA+"/trash", `{"actor_id":"actor-1","reason":"x"}`, http.StatusOK).Body.Close()
 
-	onlyResp, err := http.Get(h.baseURL + "/artifacts?trashed_only=true")
+	onlyResp, err := http.Get(h.baseURL + "/artifacts?state=trashed")
 	if err != nil {
 		t.Fatalf("GET trashed_only: %v", err)
 	}
@@ -2128,9 +2128,9 @@ func TestDocumentTrashLifecycle(t *testing.T) {
 		t.Fatalf("expected trashed document to be hidden by default, got %#v", defaultDocList.Documents)
 	}
 
-	includeTrashedResp, err := http.Get(h.baseURL + "/docs?include_trashed=true")
+	includeTrashedResp, err := http.Get(h.baseURL + "/docs?state=active&state=archived&state=trashed")
 	if err != nil {
-		t.Fatalf("GET /docs?include_trashed=true: %v", err)
+		t.Fatalf("GET /docs?state=active&state=archived&state=trashed: %v", err)
 	}
 	defer includeTrashedResp.Body.Close()
 	if includeTrashedResp.StatusCode != http.StatusOK {
@@ -2230,7 +2230,7 @@ func TestArtifactArchiveLifecycle(t *testing.T) {
 		}
 	}
 
-	withArchived, err := http.Get(h.baseURL + "/artifacts?include_archived=true")
+	withArchived, err := http.Get(h.baseURL + "/artifacts?state=active&state=archived")
 	if err != nil {
 		t.Fatalf("GET include_archived: %v", err)
 	}
@@ -2250,7 +2250,7 @@ func TestArtifactArchiveLifecycle(t *testing.T) {
 		t.Fatal("expected archived artifact with include_archived=true")
 	}
 
-	onlyArchived, err := http.Get(h.baseURL + "/artifacts?archived_only=true")
+	onlyArchived, err := http.Get(h.baseURL + "/artifacts?state=archived")
 	if err != nil {
 		t.Fatalf("GET archived_only: %v", err)
 	}
@@ -2428,7 +2428,7 @@ func TestDocumentArchiveLifecycle(t *testing.T) {
 		}
 	}
 
-	withArchived, err := http.Get(h.baseURL + "/docs?include_archived=true")
+	withArchived, err := http.Get(h.baseURL + "/docs?state=active&state=archived")
 	if err != nil {
 		t.Fatalf("GET include_archived docs: %v", err)
 	}
@@ -2450,7 +2450,7 @@ func TestDocumentArchiveLifecycle(t *testing.T) {
 		t.Fatal("expected doc in include_archived list")
 	}
 
-	onlyArchived, err := http.Get(h.baseURL + "/docs?archived_only=true")
+	onlyArchived, err := http.Get(h.baseURL + "/docs?state=archived")
 	if err != nil {
 		t.Fatalf("GET archived_only docs: %v", err)
 	}
@@ -2632,7 +2632,7 @@ func TestDocumentTrashedOnlyFilter(t *testing.T) {
 
 	postJSONExpectStatus(t, h.baseURL+"/docs/"+idA+"/trash", `{"actor_id":"actor-1","reason":"x"}`, http.StatusOK).Body.Close()
 
-	onlyResp, err := http.Get(h.baseURL + "/docs?trashed_only=true")
+	onlyResp, err := http.Get(h.baseURL + "/docs?state=trashed")
 	if err != nil {
 		t.Fatalf("GET trashed_only: %v", err)
 	}
@@ -2715,7 +2715,7 @@ func TestTopicArchiveLifecycle(t *testing.T) {
 		}
 	}
 
-	withArchived, err := http.Get(h.baseURL + "/topics?include_archived=true")
+	withArchived, err := http.Get(h.baseURL + "/topics?state=active&state=archived")
 	if err != nil {
 		t.Fatalf("GET include_archived topics: %v", err)
 	}
@@ -2737,7 +2737,7 @@ func TestTopicArchiveLifecycle(t *testing.T) {
 		t.Fatal("expected topic in include_archived list")
 	}
 
-	onlyArchived, err := http.Get(h.baseURL + "/topics?archived_only=true")
+	onlyArchived, err := http.Get(h.baseURL + "/topics?state=archived")
 	if err != nil {
 		t.Fatalf("GET archived_only topics: %v", err)
 	}
@@ -3122,7 +3122,7 @@ func TestTopicTrashLifecycle(t *testing.T) {
 		}
 	}
 
-	withTomb, err := http.Get(h.baseURL + "/topics?include_trashed=true")
+	withTomb, err := http.Get(h.baseURL + "/topics?state=active&state=archived&state=trashed")
 	if err != nil {
 		t.Fatalf("GET include_trashed: %v", err)
 	}
@@ -3144,7 +3144,7 @@ func TestTopicTrashLifecycle(t *testing.T) {
 		t.Fatal("expected topic in include_trashed list")
 	}
 
-	onlyTomb, err := http.Get(h.baseURL + "/topics?trashed_only=true")
+	onlyTomb, err := http.Get(h.baseURL + "/topics?state=trashed")
 	if err != nil {
 		t.Fatalf("GET trashed_only: %v", err)
 	}
@@ -3330,7 +3330,7 @@ func TestBoardArchiveLifecycle(t *testing.T) {
 		}
 	}
 
-	withArchived, err := http.Get(h.baseURL + "/boards?include_archived=true")
+	withArchived, err := http.Get(h.baseURL + "/boards?state=active&state=archived")
 	if err != nil {
 		t.Fatalf("GET include_archived boards: %v", err)
 	}
@@ -3354,7 +3354,7 @@ func TestBoardArchiveLifecycle(t *testing.T) {
 		t.Fatal("expected board in include_archived list")
 	}
 
-	onlyArchived, err := http.Get(h.baseURL + "/boards?archived_only=true")
+	onlyArchived, err := http.Get(h.baseURL + "/boards?state=archived")
 	if err != nil {
 		t.Fatalf("GET archived_only boards: %v", err)
 	}
@@ -3455,7 +3455,7 @@ func TestBoardTrashLifecycle(t *testing.T) {
 		}
 	}
 
-	onlyTomb, err := http.Get(h.baseURL + "/boards?trashed_only=true")
+	onlyTomb, err := http.Get(h.baseURL + "/boards?state=trashed")
 	if err != nil {
 		t.Fatalf("GET trashed_only boards: %v", err)
 	}

@@ -5,6 +5,7 @@
   import CompactFilterBar from "$lib/components/CompactFilterBar.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
   import {
+    ARTIFACT_STATE_VALUES,
     DEFAULT_ARTIFACT_LIST_FILTERS,
     buildArtifactListQuery,
     buildArtifactListSearchString,
@@ -35,8 +36,13 @@
   let confirmModal = $state({ open: false, action: "", entityId: "" });
   let trashBusyId = $state("");
   let archiveBusyId = $state("");
-  let showArchived = $state(false);
   let filtersOpen = $state(false);
+
+  const ARTIFACT_LIFECYCLE_LABELS = {
+    active: "Active",
+    archived: "Archived",
+    trashed: "Trashed",
+  };
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
   let actorName = $derived((id) =>
@@ -53,7 +59,6 @@
   }
 
   $effect(() => {
-    showArchived;
     const parsed = parseArtifactListSearchParams($page.url.searchParams);
     filters = { ...DEFAULT_ARTIFACT_LIST_FILTERS, ...parsed };
     dateInputs = {
@@ -70,9 +75,6 @@
     retrying = isRetry;
     try {
       const query = { ...buildArtifactListQuery(state) };
-      if (showArchived) {
-        query.include_archived = "true";
-      }
       artifacts = (await coreClient.listArtifacts(query)).artifacts ?? [];
     } catch (e) {
       error = `Failed to load artifacts: ${e instanceof Error ? e.message : String(e)}`;
@@ -116,6 +118,23 @@
   function refPreview(artifact) {
     const refs = Array.isArray(artifact?.refs) ? artifact.refs : [];
     return refs.slice(0, 3);
+  }
+
+  /** @param {string} value */
+  function toggleArtifactLifecycleState(value) {
+    const cur = [...(filters.states ?? ["active"])];
+    const set = new Set(cur);
+    if (set.has(value)) {
+      if (set.size <= 1) return;
+      set.delete(value);
+    } else {
+      set.add(value);
+    }
+    const order = /** @type {const} */ ([...ARTIFACT_STATE_VALUES]);
+    filters = {
+      ...filters,
+      states: order.filter((s) => set.has(s)),
+    };
   }
 
   function isArtifactArchived(artifact) {
@@ -264,17 +283,26 @@
             />
           </label>
         </div>
-        <label
-          class="mt-3 inline-flex cursor-pointer items-center gap-1.5 text-micro text-[var(--fg-muted)]"
-        >
-          <input
-            bind:checked={showArchived}
-            class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--line)] bg-[var(--bg)] text-[var(--accent-hover)] focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-0"
-            type="checkbox"
-            data-testid="artifacts-show-archived"
-          />
-          Show archived
-        </label>
+        <div class="mt-3 text-micro">
+          <span class="font-medium text-[var(--fg-muted)]">Lifecycle</span>
+          <fieldset
+            class="mt-1 space-y-1 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-2"
+          >
+            {#each Object.entries(ARTIFACT_LIFECYCLE_LABELS) as [value, label] (value)}
+              <label
+                class="flex cursor-pointer items-center gap-2 text-meta text-[var(--fg)]"
+              >
+                <input
+                  checked={(filters.states ?? ["active"]).includes(value)}
+                  class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--line)] bg-[var(--bg)] text-[var(--accent-hover)] focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-0"
+                  type="checkbox"
+                  onchange={() => toggleArtifactLifecycleState(value)}
+                />
+                {label}
+              </label>
+            {/each}
+          </fieldset>
+        </div>
         <div class="mt-3 flex gap-1.5">
           <button
             class="cursor-pointer rounded-md bg-[var(--panel)] px-3 py-1.5 text-micro font-medium text-[var(--fg)] hover:bg-[var(--line)]"

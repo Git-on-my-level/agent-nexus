@@ -22,7 +22,7 @@
   };
 
   const defaultDocListFilters = {
-    showArchived: false,
+    states: ["active"],
   };
 
   let documents = $state([]);
@@ -33,8 +33,8 @@
   let docFiltersDraft = $state({ ...defaultDocListFilters });
   let docFiltersApplied = $state({ ...defaultDocListFilters });
   let hasActiveFilters = $derived.by(() => {
-    const f = docFiltersApplied;
-    return f.showArchived;
+    const st = docFiltersApplied.states ?? ["active"];
+    return !(st.length === 1 && String(st[0]) === "active");
   });
   let archiveBusyId = $state("");
   /** @type {{ open: boolean, action: string, entityId: string, bulkIds: string[] | null }} */
@@ -191,10 +191,11 @@
     retrying = isRetry;
     try {
       const f = docFiltersApplied;
-      const filters = {};
+      const filters = {
+        state: f.states ?? ["active"],
+      };
       const threadFromUrl = String(scopedThreadId ?? "").trim();
       if (threadFromUrl) filters.thread_id = threadFromUrl;
-      if (f.showArchived) filters.include_archived = "true";
       const data = await coreClient.listDocuments(filters);
       documents = filterTopLevelDocuments(data.documents);
     } catch (e) {
@@ -283,6 +284,23 @@
     docFiltersApplied = { ...defaultDocListFilters };
     filtersOpen = false;
     void loadDocuments();
+  }
+
+  /** @param {string} value */
+  function toggleDocLifecycleState(value) {
+    const cur = [...(docFiltersDraft.states ?? ["active"])];
+    const set = new Set(cur);
+    if (set.has(value)) {
+      if (set.size <= 1) return;
+      set.delete(value);
+    } else {
+      set.add(value);
+    }
+    const order = /** @type {const} */ (["active", "archived", "trashed"]);
+    docFiltersDraft = {
+      ...docFiltersDraft,
+      states: order.filter((s) => set.has(s)),
+    };
   }
 
   function isDocArchived(doc) {
@@ -529,16 +547,28 @@
   <CompactFilterBar testId="docs-filter-panel">
     {#snippet children()}
       <div class="grid gap-3">
-        <label
-          class="inline-flex cursor-pointer items-center gap-1.5 text-micro text-[var(--fg-muted)]"
-        >
-          <input
-            bind:checked={docFiltersDraft.showArchived}
-            class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--line)] bg-[var(--bg)] text-[var(--accent-hover)] focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-0"
-            type="checkbox"
-          />
-          Show archived
-        </label>
+        <div class="text-micro">
+          <span class="font-medium text-[var(--fg-muted)]">Lifecycle</span>
+          <fieldset
+            class="mt-1 space-y-1 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-2"
+          >
+            {#each Object.entries(DOC_STATE_LABELS) as [value, label] (value)}
+              <label
+                class="flex cursor-pointer items-center gap-2 text-meta text-[var(--fg)]"
+              >
+                <input
+                  checked={(docFiltersDraft.states ?? ["active"]).includes(
+                    value,
+                  )}
+                  class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--line)] bg-[var(--bg)] text-[var(--accent-hover)] focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-0"
+                  type="checkbox"
+                  onchange={() => toggleDocLifecycleState(value)}
+                />
+                {label}
+              </label>
+            {/each}
+          </fieldset>
+        </div>
       </div>
       <div class="mt-3 flex flex-wrap gap-1.5">
         <button

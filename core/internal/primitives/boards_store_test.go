@@ -69,9 +69,9 @@ func TestBoardStoreCreateUpdateAndListSummaries(t *testing.T) {
 	putBoardTestProjection(t, ctx, store, cardThreadB, "2099-01-03T00:00:00Z", 1, 0)
 
 	listed, _, err := store.ListBoards(ctx, primitives.BoardListFilter{
-		State: "active",
-		Query: "Operations",
-		Owner: "actor-1",
+		States: []string{"active"},
+		Query:  "Operations",
+		Owner:  "actor-1",
 	})
 	if err != nil {
 		t.Fatalf("list boards: %v", err)
@@ -610,7 +610,7 @@ func TestBoardStoreCardTrashVsArchiveLists(t *testing.T) {
 		}
 	}
 
-	archivedOnly, err := store.ListCards(ctx, primitives.CardListFilter{ArchivedOnly: true})
+	archivedOnly, err := store.ListCards(ctx, primitives.CardListFilter{States: []string{"archived"}})
 	if err != nil {
 		t.Fatalf("list archived_only: %v", err)
 	}
@@ -627,7 +627,7 @@ func TestBoardStoreCardTrashVsArchiveLists(t *testing.T) {
 		t.Fatalf("expected archived card in archived_only, got %#v", archivedOnly)
 	}
 
-	tombOnly, err := store.ListCards(ctx, primitives.CardListFilter{TrashedOnly: true})
+	tombOnly, err := store.ListCards(ctx, primitives.CardListFilter{States: []string{"trashed"}})
 	if err != nil {
 		t.Fatalf("list trashed_only: %v", err)
 	}

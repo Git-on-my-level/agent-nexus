@@ -16,8 +16,7 @@
   import Button from "$lib/components/Button.svelte";
 
   const defaultBoardListFilters = {
-    showArchived: false,
-    state: "active",
+    states: ["active"],
     owners: "",
     q: "",
   };
@@ -32,12 +31,9 @@
   let boardListGeneration = $state(0);
   let hasActiveFilters = $derived.by(() => {
     const f = boardFiltersApplied;
-    return (
-      f.showArchived ||
-      f.state !== "active" ||
-      Boolean(f.owners.trim()) ||
-      Boolean(f.q.trim())
-    );
+    const st = f.states ?? ["active"];
+    const defaultLifecycle = st.length === 1 && String(st[0]) === "active";
+    return !defaultLifecycle || Boolean(f.owners.trim()) || Boolean(f.q.trim());
   });
   let archiveBusyId = $state("");
   /** @type {{ open: boolean, action: string, entityId: string, bulkIds: string[] | null }} */
@@ -111,13 +107,9 @@
     retrying = isRetry;
     try {
       const f = boardFiltersApplied;
-      const filters = {};
-      if (f.showArchived) filters.include_archived = "true";
-      /* Omit state when active + include_archived so the server honors archived rows (explicit state=active would not). */
-      const lifecycle = String(f.state ?? "").trim() || "active";
-      if (!(f.showArchived && lifecycle === "active")) {
-        filters.state = lifecycle;
-      }
+      const filters = {
+        state: f.states ?? ["active"],
+      };
       const owners = parseDelimitedValues(f.owners);
       if (owners.length > 0) filters.owner = owners;
       const q = f.q.trim();
@@ -433,6 +425,23 @@
     boardListGeneration++;
     filtersOpen = false;
   }
+
+  /** @param {string} value */
+  function toggleBoardLifecycleState(value) {
+    const cur = [...(boardFiltersDraft.states ?? ["active"])];
+    const set = new Set(cur);
+    if (set.has(value)) {
+      if (set.size <= 1) return;
+      set.delete(value);
+    } else {
+      set.add(value);
+    }
+    const order = /** @type {const} */ (["active", "archived", "trashed"]);
+    boardFiltersDraft = {
+      ...boardFiltersDraft,
+      states: order.filter((s) => set.has(s)),
+    };
+  }
 </script>
 
 <div class="mb-3 flex max-md:mb-2 flex-wrap items-start justify-between gap-4">
@@ -496,17 +505,28 @@
   <CompactFilterBar testId="boards-filter-panel">
     {#snippet children()}
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <label class="text-micro">
-          <span class="font-medium text-[var(--fg-muted)]">State</span>
-          <select
-            bind:value={boardFiltersDraft.state}
-            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
+        <div class="text-micro">
+          <span class="font-medium text-[var(--fg-muted)]">Lifecycle</span>
+          <fieldset
+            class="mt-1 space-y-1 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-2"
           >
-            {#each Object.entries(BOARD_STATUS_LABELS) as [value, label]}
-              <option {value}>{label}</option>
+            {#each Object.entries(BOARD_STATUS_LABELS) as [value, label] (value)}
+              <label
+                class="flex cursor-pointer items-center gap-2 text-meta text-[var(--fg)]"
+              >
+                <input
+                  checked={(boardFiltersDraft.states ?? ["active"]).includes(
+                    value,
+                  )}
+                  class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--line)] bg-[var(--bg)] text-[var(--accent-hover)] focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-0"
+                  type="checkbox"
+                  onchange={() => toggleBoardLifecycleState(value)}
+                />
+                {label}
+              </label>
             {/each}
-          </select>
-        </label>
+          </fieldset>
+        </div>
         <label class="text-micro sm:col-span-2 lg:col-span-2">
           <span class="font-medium text-[var(--fg-muted)]">Search</span>
           <input
@@ -526,16 +546,6 @@
             placeholder="actor-ops-ai"
             type="text"
           />
-        </label>
-        <label
-          class="flex items-end gap-1.5 pb-0.5 text-micro text-[var(--fg-muted)] sm:col-span-2 lg:col-span-3"
-        >
-          <input
-            bind:checked={boardFiltersDraft.showArchived}
-            class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--line)] bg-[var(--bg)] text-[var(--accent-hover)] focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-0"
-            type="checkbox"
-          />
-          Show archived
         </label>
       </div>
       <div class="mt-3 flex flex-wrap gap-1.5">

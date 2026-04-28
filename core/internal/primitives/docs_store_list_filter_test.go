@@ -16,42 +16,42 @@ func TestBuildListDocumentsQueryStateFilter(t *testing.T) {
 	}{
 		{
 			name:         "active",
-			filter:       DocumentListFilter{State: "active"},
+			filter:       DocumentListFilter{States: []string{"active"}},
 			wantFragment: "d.archived_at IS NULL AND d.trashed_at IS NULL",
 		},
 		{
 			name:         "archived",
-			filter:       DocumentListFilter{State: "archived"},
+			filter:       DocumentListFilter{States: []string{"archived"}},
 			wantFragment: "d.archived_at IS NOT NULL AND d.trashed_at IS NULL",
 		},
 		{
 			name:         "trashed",
-			filter:       DocumentListFilter{State: "trashed"},
+			filter:       DocumentListFilter{States: []string{"trashed"}},
 			wantFragment: "d.trashed_at IS NOT NULL",
 		},
 		{
-			name: "state active overrides trashed_only",
+			name: "active and archived union",
 			filter: DocumentListFilter{
-				State:       "active",
-				TrashedOnly: true,
+				States: []string{"active", "archived"},
 			},
-			wantFragment: "d.archived_at IS NULL AND d.trashed_at IS NULL",
-			wantNot:      []string{"d.trashed_at IS NOT NULL"},
+			wantFragment: "d.archived_at IS NOT NULL AND d.trashed_at IS NULL",
+			wantNot:      []string{}, // union contains both predicates
 		},
 		{
-			name: "legacy trashed_only when state empty",
+			name: "trashed only via union",
 			filter: DocumentListFilter{
-				TrashedOnly: true,
+				States: []string{"trashed"},
 			},
 			wantFragment: "d.trashed_at IS NOT NULL",
-			wantNot:      []string{"d.archived_at IS NULL AND d.trashed_at IS NULL"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			query, _ := buildListDocumentsQuery(tt.filter)
+			ff := tt.filter
+			ff.States = NormalizeListLifecycleStates(ff.States)
+			query, _ := buildListDocumentsQuery(ff)
 			if !strings.Contains(query, tt.wantFragment) {
 				t.Fatalf("query missing expected fragment %q:\n%s", tt.wantFragment, query)
 			}
@@ -64,11 +64,10 @@ func TestBuildListDocumentsQueryStateFilter(t *testing.T) {
 	}
 }
 
-func TestBuildListDocumentsQueryInvalidStateDefensive(t *testing.T) {
+func TestLifecycleStatePredicateUnknown(t *testing.T) {
 	t.Parallel()
-
-	query, _ := buildListDocumentsQuery(DocumentListFilter{State: "unknown"})
-	if !strings.Contains(query, "1=0") {
-		t.Fatalf("expected defensive empty match for invalid state, got:\n%s", query)
+	sql := LifecycleStatePredicate("a", "t", "nope")
+	if sql != "1=0" {
+		t.Fatalf("got %s", sql)
 	}
 }

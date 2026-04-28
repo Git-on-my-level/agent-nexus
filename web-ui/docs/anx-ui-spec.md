@@ -72,7 +72,7 @@ Operator-facing copy MUST use one term per concept. Banned aliases MUST NOT appe
 
 | Concept | Canonical term | Banned UI aliases | Allowed technical exceptions |
 | --- | --- | --- | --- |
-| Soft-delete lifecycle | Trash, trashed, move to trash, restore | tombstone, tombstoned | HTTP paths and machine identifiers follow `contracts/` (`/trash`, `trashed_at`, `trash_reason`, `include_trashed`, `trashed_only`) |
+| Soft-delete lifecycle | Trash, trashed, move to trash, restore | tombstone, tombstoned | HTTP paths and machine identifiers follow `contracts/` (`/trash`, `trashed_at`, `trash_reason`; list endpoints use repeated `state=active|archived|trashed`) |
 | Root work item | Topic, Topics | backing thread, Threads (as operator-facing label) | `thread_id`, `thread:` refs, `/threads` diagnostic routes |
 | Document collection | Docs | Documents (as collection label) | `document` for singular resources and API field names |
 | Inbox triage action | Acknowledge | Dismiss | — |

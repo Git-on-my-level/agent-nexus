@@ -894,8 +894,9 @@ func TestDocsCommands(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/docs":
-			if got := strings.TrimSpace(r.URL.Query().Get("include_trashed")); got != "true" {
-				t.Fatalf("expected include_trashed=true query, got %q", got)
+			states := r.URL.Query()["state"]
+			if len(states) != 2 || states[0] != "active" || states[1] != "trashed" {
+				t.Fatalf("expected state=active&state=trashed for --include-trashed, got %#v", states)
 			}
 			if got := strings.TrimSpace(r.URL.Query().Get("thread_id")); got != "thread_docs_1" {
 				t.Fatalf("expected thread_id=thread_docs_1 query, got %q", got)
