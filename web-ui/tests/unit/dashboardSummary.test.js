@@ -177,41 +177,42 @@ describe("dashboard summaries", () => {
   it("does not suppress a ref to a different kind", () => {
     const artifacts = [
       {
-        id: "evidence-1",
-        kind: "evidence",
+        id: "doc-1",
+        kind: "doc",
         thread_id: "thread-1",
         summary: "Fix the thing",
         refs: ["thread:thread-1"],
         created_at: "2025-01-01T00:00:00.000Z",
       },
       {
-        id: "receipt-1",
-        kind: "receipt",
+        id: "card-1",
+        kind: "card",
         thread_id: "thread-1",
-        summary: "Receipt for fixing the thing",
-        refs: ["thread:thread-1", "artifact:evidence-1"],
+        summary: "Card for fixing the thing",
+        refs: ["thread:thread-1", "artifact:doc-1"],
         created_at: "2026-01-01T00:00:00.000Z",
       },
     ];
 
     const result = selectRecentArtifacts(artifacts);
-    expect(result.map((a) => a.id)).toEqual(["receipt-1", "evidence-1"]);
+    expect(result.map((a) => a.id)).toEqual(["card-1", "doc-1"]);
     expect(result[0].isUpdate).toBe(false);
     expect(result[1].isUpdate).toBe(false);
   });
 
   it("summarizes artifact kinds", () => {
     const summary = buildArtifactKindSummary([
-      { kind: "review" },
-      { kind: "review" },
-      { kind: "receipt" },
-      { kind: "receipt" },
       { kind: "doc" },
+      { kind: "doc" },
+      { kind: "card" },
+      { kind: "agent_wake" },
+      { kind: "binary_blob" },
     ]);
 
     expect(summary).toEqual({
-      review: 2,
-      receipt: 2,
+      doc: 2,
+      card: 1,
+      agent_wake: 1,
       other: 1,
     });
   });

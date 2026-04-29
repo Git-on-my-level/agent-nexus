@@ -3,8 +3,8 @@
 Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
-- Contract version: `0.5.0`
-- Commands: `119`
+- Contract version: `0.6.0`
+- Commands: `120`
 
 ## `actors.create`
 
@@ -145,7 +145,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `json-body`
-- Why: Store content-addressed artifact metadata and payload (bytes, text, or structured packet JSON).
+- Why: Store content-addressed artifact metadata and payload (bytes, text, or structured JSON).
 - Concepts: `artifacts`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `conflict`
 - Output: Returns `{ artifact }`.
@@ -157,7 +157,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `none`
-- Why: Resolve immutable artifact metadata referenced from timelines and packets.
+- Why: Resolve immutable artifact metadata referenced from timelines and resources.
 - Concepts: `artifacts`
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Output: Returns `{ artifact }`.
@@ -665,6 +665,42 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ board, card }`.
 
+## `cards.revisions.create`
+
+- CLI path: `cards revise`
+- HTTP: `POST /cards/{card_id}/revisions`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Append a new immutable card content revision and advance the card head.
+- Concepts: `cards`, `revisions`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Output: Returns `{ card, revision }`.
+
+## `cards.revisions.get`
+
+- CLI path: `cards revision get`
+- HTTP: `GET /cards/{card_id}/revisions/{revision_id}`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Resolve one immutable card content revision.
+- Concepts: `cards`, `revisions`
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Output: Returns `{ card_id, revision }`.
+
+## `cards.revisions.list`
+
+- CLI path: `cards history`
+- HTTP: `GET /cards/{card_id}/revisions`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Enumerate immutable content revisions for one card lineage.
+- Concepts: `cards`, `revisions`
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Output: Returns `{ card_id, revisions }`.
+
 ## `cards.timeline`
 
 - CLI path: `cards timeline`
@@ -1128,30 +1164,6 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_token`
 - Output: Returns usage envelope JSON.
 
-## `packets.receipts.create`
-
-- CLI path: `packets receipts create`
-- HTTP: `POST /packets/receipts`
-- Stability: `beta`
-- Surface: `canonical`
-- Input mode: `json-body`
-- Why: Record structured delivery evidence anchored by `subject_ref`.
-- Concepts: `packets`, `evidence`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`
-- Output: Returns `{ artifact, packet_kind, packet }`.
-
-## `packets.reviews.create`
-
-- CLI path: `packets reviews create`
-- HTTP: `POST /packets/reviews`
-- Stability: `beta`
-- Surface: `canonical`
-- Input mode: `json-body`
-- Why: Record a structured review over a receipt anchored to the same card as subject_ref.
-- Concepts: `packets`, `evidence`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`
-- Output: Returns `{ artifact, packet_kind, packet }`.
-
 ## `ref_edges.list`
 
 - CLI path: `ref-edges list`
@@ -1320,7 +1332,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `json-body`
-- Why: Create a first-class durable topic before attaching cards, docs, or packets.
+- Why: Create a first-class durable topic before attaching cards, docs, or artifacts.
 - Concepts: `topics`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Output: Returns `{ topic }`.

@@ -337,6 +337,11 @@ func handleCreateArtifact(w http.ResponseWriter, r *http.Request, opts handlerOp
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
+	switch strings.TrimSpace(kind) {
+	case "doc", "card":
+		writeError(w, http.StatusBadRequest, "invalid_request", "doc and card artifacts are created only by revision endpoints")
+		return
+	}
 
 	refs, err := extractStringSlice(req.Artifact["refs"])
 	if err != nil {
@@ -352,25 +357,6 @@ func handleCreateArtifact(w http.ResponseWriter, r *http.Request, opts handlerOp
 	if req.ContentType == "" {
 		writeError(w, http.StatusBadRequest, "invalid_request", "content_type is required")
 		return
-	}
-	if packetSchema, isPacketKind := opts.contract.Packets[kind]; isPacketKind {
-		if packetSchema.Kind != "" && packetSchema.Kind != kind {
-			writeError(w, http.StatusBadRequest, "invalid_request", "artifact.kind does not match packet schema")
-			return
-		}
-		if req.ContentType != "structured" {
-			writeError(w, http.StatusBadRequest, "invalid_request", "packet artifacts must use content_type=structured")
-			return
-		}
-		packet, ok := req.Content.(map[string]any)
-		if !ok {
-			writeError(w, http.StatusBadRequest, "invalid_request", "packet artifacts must provide content as a JSON object")
-			return
-		}
-		if _, err := validatePacketArtifactAndContent(opts.contract, kind, req.Artifact, packet); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
-			return
-		}
 	}
 
 	artifact, err := opts.primitiveStore.CreateArtifact(r.Context(), actorID, req.Artifact, req.Content, req.ContentType)
@@ -521,8 +507,8 @@ func handlePurgeArtifact(w http.ResponseWriter, r *http.Request, opts handlerOpt
 			writeError(w, http.StatusConflict, "not_trashed", "artifact is not currently trashed")
 			return
 		}
-		if errors.Is(err, primitives.ErrArtifactInUse) {
-			writeError(w, http.StatusConflict, "artifact_in_use", "artifact is referenced by document revisions")
+		if errors.Is(err, primitives.ErrOwnedArtifactLifecycle) {
+			writeError(w, http.StatusConflict, "owned_artifact_lifecycle", "artifact lifecycle is owned by its parent resource")
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to permanently delete artifact")
@@ -641,6 +627,8 @@ func handleListArtifacts(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		ThreadID:      threadID,
 		CreatedBefore: strings.TrimSpace(query.Get("created_before")),
 		CreatedAfter:  strings.TrimSpace(query.Get("created_after")),
+		IncludeSystemOwned: strings.EqualFold(strings.TrimSpace(query.Get("include_system_owned")), "true") ||
+			strings.EqualFold(strings.TrimSpace(query.Get("include_system_owned")), "1"),
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list artifacts")

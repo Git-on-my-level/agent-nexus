@@ -37,13 +37,11 @@ var runtimeGeneratedTopics = []runtimeHelpTopic{
 	{Path: "events", Description: "Manage events and event streams"},
 	{Path: "inbox", Description: "Operator diagnostics for human attention inbox items"},
 	{Path: "artifacts", Description: "Manage artifact resources and content"},
-	{Path: "receipts", Description: "Create receipt packets (subject_ref must be card:<card_id>)"},
-	{Path: "reviews", Description: "Create review packets (subject_ref + receipt_ref; subject_ref must be card:<card_id>)"},
 	{Path: "derived", Description: "Run derived-view maintenance actions"},
 	{Path: "meta", Description: "Inspect generated command/concept metadata"},
 }
 
-var runtimeGeneratedPacketResources = []string{"receipts", "reviews"}
+var runtimeGeneratedPacketResources = []string{}
 
 var localHelperTopics = []localHelperTopic{
 	{
@@ -155,19 +153,19 @@ var localHelperTopics = []localHelperTopic{
 	{
 		Path:        "cards revise",
 		Summary:     "Revise a card title and/or summary/body from local files without hand-authoring patch JSON.",
-		JSONShape:   "`{ patch, if_updated_at, actor_id? }`; discovers `if_updated_at` from `cards get` when omitted.",
-		Composition: "Fetches the card when needed for optimistic concurrency, then sends `cards.patch` with `summary` from `--content-file` and optional `title`.",
+		JSONShape:   "`{ if_base_revision, revision: { title?, summary?, definition_of_done? }, actor_id? }`; discovers `if_base_revision` from `cards get` when omitted.",
+		Composition: "Fetches the card when needed for optimistic concurrency, then sends `cards.revisions.create` with `summary` from `--content-file` and optional `title`.",
 		Examples: []string{
 			"anx cards revise --card <card-id> --content-file card.md",
 			"anx cards revise --card <card-id> --title \"Updated title\" --content-file card.md",
-			"anx cards revise --card <card-id> --from-file card-patch.json",
+			"anx cards revise --card <card-id> --from-file card-revision.json",
 		},
 		Flags: []localHelperFlag{
 			{Name: "--card <card-id>", Description: "Card id or unique prefix to revise."},
 			{Name: "--content-file <path>", Description: "Load revised card summary/body text from a local file."},
 			{Name: "--title <text>", Description: "Optional revised card title."},
-			{Name: "--if-updated-at <timestamp>", Description: "Card optimistic concurrency token; discovered when omitted."},
-			{Name: "--from-file <path>", Description: "Advanced JSON patch request body from file."},
+			{Name: "--if-base-revision <revision-id>", Description: "Base card revision id; discovered when omitted."},
+			{Name: "--from-file <path>", Description: "Advanced JSON revision request body from file."},
 		},
 	},
 	{
@@ -278,7 +276,6 @@ var localHelperTopics = []localHelperTopic{
 		Examples: []string{
 			`anx events explain`,
 			`anx events explain message_posted`,
-			`anx events explain review_completed`,
 		},
 		Flags: []localHelperFlag{
 			{Name: "<event-type>", Description: "Optional event type to focus on; omit it to list known event types."},
@@ -750,7 +747,7 @@ Read paths:
 	case "cards":
 		return strings.TrimSpace(`Agent-facing Card workflow:
   cards create             Create a board work card from flags plus ` + "`--content-file`" + `.
-  cards revise             Revise card title/body from ` + "`--content-file`" + `; discovers ` + "`if_updated_at`" + ` when omitted.
+  cards revise             Revise card title/body from ` + "`--content-file`" + `; discovers ` + "`if_base_revision`" + ` when omitted.
   cards move               Move workflow column; discovers the parent board concurrency token when omitted.
   cards assign             Replace or clear assignees.
   cards resolve            Move to done with resolution evidence refs.
@@ -1029,12 +1026,10 @@ func formatCommandSpecificHelpBlock(cmd registry.Command) string {
   - ` + "`exception_raised`" + `
 
 Usually emitted by higher-level commands:
-  - ` + "`receipt_added`" + `: prefer ` + "`anx receipts create`" + `
-  - ` + "`review_completed`" + `: prefer ` + "`anx reviews create`" + `
   - ` + "`human_attention_requested`" + `: prefer ` + "`anx human ask|review|escalate`" + `
 
 Local CLI notes:
-  - Prefer higher-level commands for topic, board, card, doc, receipt, review, and human-attention lifecycle writes.
+  - Prefer higher-level commands for topic, board, card, doc, and human-attention lifecycle writes.
   - Use ` + "`--dry-run`" + ` with ` + "`--from-file`" + ` to validate and preview the request without sending the mutation.`)
 	case "threads.timeline":
 		return strings.TrimSpace(`Local CLI flags:
@@ -1218,12 +1213,6 @@ func mapRuntimePathToRegistryPath(path string) string {
 	if len(parts) == 0 {
 		return ""
 	}
-	switch parts[0] {
-	case "receipts":
-		parts = append([]string{"packets", "receipts"}, parts[1:]...)
-	case "reviews":
-		parts = append([]string{"packets", "reviews"}, parts[1:]...)
-	}
 	path = strings.Join(parts, " ")
 	rewrites := map[string]string{
 		"events tail":       "events stream",
@@ -1246,12 +1235,6 @@ func runtimePathFromRegistryPath(path string) string {
 	parts := strings.Fields(path)
 	if len(parts) == 0 {
 		return ""
-	}
-	if len(parts) >= 2 && parts[0] == "packets" {
-		switch parts[1] {
-		case "receipts", "reviews":
-			parts = append([]string{parts[1]}, parts[2:]...)
-		}
 	}
 	path = strings.Join(parts, " ")
 	rewrites := map[string]string{
@@ -1285,8 +1268,6 @@ func generatedCommandByID(commandID string) (registry.Command, bool) {
 
 func runtimeCommandFromRegistryCommand(command string) string {
 	command = strings.TrimSpace(command)
-	command = strings.ReplaceAll(command, "anx packets receipts", "anx receipts")
-	command = strings.ReplaceAll(command, "anx packets reviews", "anx reviews")
 	command = strings.ReplaceAll(command, "anx auth agents register", "anx auth register")
 	command = strings.ReplaceAll(command, "anx events stream", "anx events tail")
 	command = strings.ReplaceAll(command, "anx inbox stream", "anx inbox tail")

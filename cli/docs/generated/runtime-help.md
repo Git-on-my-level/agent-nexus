@@ -32,8 +32,6 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `events` (group): Manage events and event streams
 - `inbox` (group): Operator diagnostics for human attention inbox items
 - `artifacts` (group): Manage artifact resources and content
-- `receipts` (group): Create receipt packets (subject_ref must be card:<card_id>)
-- `reviews` (group): Create review packets (subject_ref + receipt_ref; subject_ref must be card:<card_id>)
 - `derived` (group): Run derived-view maintenance actions
 - `meta` (group): Inspect generated command/concept metadata
 - `auth invites list` (command): List invite tokens
@@ -73,6 +71,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `docs revision get` (command): Get document revision
 - `cards list` (command): List cards
 - `cards get` (command): Get card
+- `cards history` (command): List card revisions
 - `cards patch` (command): Patch card
 - `cards archive` (command): Archive card
 - `cards trash` (command): Move card to trash
@@ -109,8 +108,6 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `meta command` (command): Get one command metadata entry
 - `meta concepts` (command): List concept index
 - `meta concept` (command): Get commands grouped by concept
-- `receipts create` (command): Create receipt packet
-- `reviews create` (command): Create review packet
 - `secret list` (command): List secrets
 - `secret create` (command): Create secret
 - `secret delete` (command): Delete secret
@@ -1358,17 +1355,19 @@ Commands:
   cards archive            Archive card
   cards create             Create card (global path)
   cards get                Get card
+  cards history            List card revisions
   cards list               List cards
   cards move               Move card
   cards patch              Patch card
   cards purge              Permanently delete archived or trashed card
   cards restore            Restore archived or trashed card
+  cards revise             Create card revision
   cards timeline           Get card timeline
   cards trash              Move card to trash
 
 Agent-facing Card workflow:
   cards create             Create a board work card from flags plus `--content-file`.
-  cards revise             Revise card title/body from `--content-file`; discovers `if_updated_at` when omitted.
+  cards revise             Revise card title/body from `--content-file`; discovers `if_base_revision` when omitted.
   cards move               Move workflow column; discovers the parent board concurrency token when omitted.
   cards assign             Replace or clear assignees.
   cards resolve            Move to done with resolution evidence refs.
@@ -1487,42 +1486,6 @@ Local inspection helper:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx artifacts ... ; anx --json artifacts ... ; anx artifacts ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-
-Tip: `anx help <command path>` for full command-level generated details.
-```
-
-## `receipts`
-
-Create receipt packets (subject_ref must be card:<card_id>)
-
-```text
-Generated Help: receipts
-
-Commands:
-  receipts create          Create receipt packet
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx receipts ... ; anx --json receipts ... ; anx receipts ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-
-Tip: `anx help <command path>` for full command-level generated details.
-```
-
-## `reviews`
-
-Create review packets (subject_ref + receipt_ref; subject_ref must be card:<card_id>)
-
-```text
-Generated Help: reviews
-
-Commands:
-  reviews create           Create review packet
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx reviews ... ; anx --json reviews ... ; anx reviews ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
@@ -2618,7 +2581,7 @@ Generated Help: cards list
 - Output: Returns `{ cards }`.
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `cards`
-- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards timeline`, `cards trash`
+- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards revise`, `cards revision get`, `cards timeline`, `cards trash`
 
 
 Global flags:
@@ -2643,7 +2606,7 @@ Generated Help: cards get
 - Output: Returns `{ card }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `cards`
-- Adjacent commands: `cards archive`, `cards create`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards timeline`, `cards trash`
+- Adjacent commands: `cards archive`, `cards create`, `cards history`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards revise`, `cards revision get`, `cards timeline`, `cards trash`
 
 Inputs:
   Required:
@@ -2652,6 +2615,34 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards get ... ; anx --json cards get ... ; anx cards get ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `cards history`
+
+List card revisions
+
+```text
+Generated Help: cards history
+
+- Command ID: `cards.revisions.list`
+- CLI path: `cards history`
+- HTTP: `GET /cards/{card_id}/revisions`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Enumerate immutable content revisions for one card lineage.
+- Output: Returns `{ card_id, revisions }`.
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Concepts: `cards`, `revisions`
+- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards revise`, `cards revision get`, `cards timeline`, `cards trash`
+
+Inputs:
+  Required:
+  - path `card_id`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx cards history ... ; anx --json cards history ... ; anx cards history ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2671,7 +2662,7 @@ Generated Help: cards patch
 - Output: Returns `{ card }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `cards`, `write`, `concurrency`
-- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards list`, `cards move`, `cards purge`, `cards restore`, `cards timeline`, `cards trash`
+- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards list`, `cards move`, `cards purge`, `cards restore`, `cards revise`, `cards revision get`, `cards timeline`, `cards trash`
 
 Inputs:
   Required:
@@ -2680,7 +2671,6 @@ Inputs:
   Optional:
   - body `actor_id` (string)
   - body `patch.assignee_refs` (list<any>)
-  - body `patch.definition_of_done` (list<string>)
   - body `patch.document_ref` (string)
   - body `patch.due_at` (datetime)
   - body `patch.provenance.by_field` (object)
@@ -2690,8 +2680,6 @@ Inputs:
   - body `patch.resolution` (string)
   - body `patch.resolution_refs` (list<any>)
   - body `patch.risk` (string)
-  - body `patch.summary` (string)
-  - body `patch.title` (string)
   - body `patch.topic_ref` (string)
   Enum values: patch.resolution: canceled, done; patch.risk: critical, high, low, medium
 
@@ -2717,7 +2705,7 @@ Generated Help: cards archive
 - Output: Returns `{ board, card }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `already_trashed`
 - Concepts: `cards`, `write`
-- Adjacent commands: `cards create`, `cards get`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards timeline`, `cards trash`
+- Adjacent commands: `cards create`, `cards get`, `cards history`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards revise`, `cards revision get`, `cards timeline`, `cards trash`
 
 Inputs:
   Required:
@@ -2748,7 +2736,7 @@ Generated Help: cards trash
 - Output: Returns `{ board, card }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `cards`, `write`
-- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards timeline`
+- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards revise`, `cards revision get`, `cards timeline`
 
 Inputs:
   Required:
@@ -2780,7 +2768,7 @@ Generated Help: cards purge
 - Output: Returns `{ purged, card_id }`.
 - Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `cards`, `write`
-- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards list`, `cards move`, `cards patch`, `cards restore`, `cards timeline`, `cards trash`
+- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards list`, `cards move`, `cards patch`, `cards restore`, `cards revise`, `cards revision get`, `cards timeline`, `cards trash`
 
 Inputs:
   Required:
@@ -2810,7 +2798,7 @@ Generated Help: cards restore
 - Output: Returns `{ board, card }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `cards`, `write`
-- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards timeline`, `cards trash`
+- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards revise`, `cards revision get`, `cards timeline`, `cards trash`
 
 Inputs:
   Required:
@@ -2841,7 +2829,7 @@ Generated Help: cards timeline
 - Output: Returns `{ card, events, artifacts, cards, documents, threads }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `cards`, `timeline`
-- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards trash`
+- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards revise`, `cards revision get`, `cards trash`
 
 Inputs:
   Required:
@@ -3028,7 +3016,7 @@ Inputs:
   - body `event.provenance.by_field` (object)
   - body `event.provenance.notes` (string)
   - body `event.thread_ref` (string)
-  Enum values: event.type (open): agent_notification_dismissed, agent_notification_read, board_created, board_updated, card_archived, card_created, card_moved, card_resolved, card_trashed, card_updated, document_created, document_restored, document_revised, document_trashed, exception_raised, human_attention_requested, human_attention_responded, message_posted, receipt_added, review_completed, topic_archived, topic_created, topic_restored, topic_trashed, topic_updated
+  Enum values: event.type (open): agent_notification_dismissed, agent_notification_read, board_created, board_updated, card_archived, card_created, card_moved, card_resolved, card_trashed, card_updated, document_created, document_restored, document_revised, document_trashed, exception_raised, human_attention_requested, human_attention_responded, message_posted, topic_archived, topic_created, topic_restored, topic_trashed, topic_updated
 
 Common authoring types:
   Communication: direct communication or important non-structured information
@@ -3046,12 +3034,10 @@ Common authoring types:
   - `exception_raised`
 
 Usually emitted by higher-level commands:
-  - `receipt_added`: prefer `anx receipts create`
-  - `review_completed`: prefer `anx reviews create`
   - `human_attention_requested`: prefer `anx human ask|review|escalate`
 
 Local CLI notes:
-  - Prefer higher-level commands for topic, board, card, doc, receipt, review, and human-attention lifecycle writes.
+  - Prefer higher-level commands for topic, board, card, doc, and human-attention lifecycle writes.
   - Use `--dry-run` with `--from-file` to validate and preview the request without sending the mutation.
 
 Global flags:
@@ -3425,7 +3411,7 @@ Generated Help: artifacts get
 - HTTP: `GET /artifacts/{artifact_id}`
 - Stability: `beta`
 - Input mode: `none`
-- Why: Resolve immutable artifact metadata referenced from timelines and packets.
+- Why: Resolve immutable artifact metadata referenced from timelines and resources.
 - Output: Returns `{ artifact }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `artifacts`
@@ -3453,7 +3439,7 @@ Generated Help: artifacts create
 - HTTP: `POST /artifacts`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Store content-addressed artifact metadata and payload (bytes, text, or structured packet JSON).
+- Why: Store content-addressed artifact metadata and payload (bytes, text, or structured JSON).
 - Output: Returns `{ artifact }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `conflict`
 - Concepts: `artifacts`, `write`
@@ -3751,81 +3737,6 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx meta concept ... ; anx --json meta concept ... ; anx meta concept ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `receipts create`
-
-Create receipt packet
-
-```text
-Generated Help: receipts create
-
-- Command ID: `packets.receipts.create`
-- CLI path: `receipts create`
-- HTTP: `POST /packets/receipts`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Record structured delivery evidence anchored by `subject_ref`.
-- Output: Returns `{ artifact, packet_kind, packet }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`
-- Concepts: `packets`, `evidence`
-- Adjacent commands: `reviews create`
-
-Inputs:
-  Required:
-  - body `artifact` (object)
-  - body `packet.changes_summary` (string)
-  - body `packet.known_gaps` (list<string>)
-  - body `packet.outputs` (list<any>)
-  - body `packet.receipt_id` (string)
-  - body `packet.subject_ref` (typed_ref)
-  - body `packet.verification_evidence` (list<any>)
-  Optional:
-  - body `actor_id` (string)
-  - body `request_key` (string)
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx receipts create ... ; anx --json receipts create ... ; anx receipts create ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `reviews create`
-
-Create review packet
-
-```text
-Generated Help: reviews create
-
-- Command ID: `packets.reviews.create`
-- CLI path: `reviews create`
-- HTTP: `POST /packets/reviews`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Record a structured review over a receipt anchored to the same card as subject_ref.
-- Output: Returns `{ artifact, packet_kind, packet }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`
-- Concepts: `packets`, `evidence`
-- Adjacent commands: `receipts create`
-
-Inputs:
-  Required:
-  - body `artifact` (object)
-  - body `packet.evidence_refs` (list<any>)
-  - body `packet.notes` (string)
-  - body `packet.outcome` (string)
-  - body `packet.receipt_ref` (string)
-  - body `packet.review_id` (string)
-  - body `packet.subject_ref` (typed_ref)
-  Optional:
-  - body `actor_id` (string)
-  - body `request_key` (string)
-  Enum values: packet.outcome (strict): accept, escalate, revise
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx reviews create ... ; anx --json reviews create ... ; anx reviews create ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4180,19 +4091,19 @@ Local Help: cards revise
 
 - Kind: `local helper`
 - Summary: Revise a card title and/or summary/body from local files without hand-authoring patch JSON.
-- Composition: Fetches the card when needed for optimistic concurrency, then sends `cards.patch` with `summary` from `--content-file` and optional `title`.
-- JSON body: `{ patch, if_updated_at, actor_id? }`; discovers `if_updated_at` from `cards get` when omitted.
+- Composition: Fetches the card when needed for optimistic concurrency, then sends `cards.revisions.create` with `summary` from `--content-file` and optional `title`.
+- JSON body: `{ if_base_revision, revision: { title?, summary?, definition_of_done? }, actor_id? }`; discovers `if_base_revision` from `cards get` when omitted.
 - Examples:
   - `anx cards revise --card <card-id> --content-file card.md`
   - `anx cards revise --card <card-id> --title "Updated title" --content-file card.md`
-  - `anx cards revise --card <card-id> --from-file card-patch.json`
+  - `anx cards revise --card <card-id> --from-file card-revision.json`
 
 Flags:
   --card <card-id>             Card id or unique prefix to revise.
   --content-file <path>        Load revised card summary/body text from a local file.
   --title <text>               Optional revised card title.
-  --if-updated-at <timestamp>  Card optimistic concurrency token; discovered when omitted.
-  --from-file <path>           Advanced JSON patch request body from file.
+  --if-base-revision <revision-id> Base card revision id; discovered when omitted.
+  --from-file <path>           Advanced JSON revision request body from file.
 
 
 Global flags:
@@ -4387,7 +4298,6 @@ Local Help: events explain
 - Examples:
   - `anx events explain`
   - `anx events explain message_posted`
-  - `anx events explain review_completed`
 
 Flags:
   <event-type>                 Optional event type to focus on; omit it to list known event types.

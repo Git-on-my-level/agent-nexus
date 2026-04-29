@@ -44,7 +44,7 @@ variables.
 | Workspace blob quota | n/a | `ANX_WORKSPACE_MAX_BLOB_BYTES` | `1073741824` |
 | Workspace artifact quota | n/a | `ANX_WORKSPACE_MAX_ARTIFACTS` | `100000` |
 | Workspace document quota | n/a | `ANX_WORKSPACE_MAX_DOCUMENTS` | `50000` |
-| Workspace revision quota | n/a | `ANX_WORKSPACE_MAX_DOCUMENT_REVISIONS` | `250000` |
+| Workspace revision quota | n/a | `ANX_WORKSPACE_MAX_REVISIONS` | `250000` |
 | Max upload size per workspace write | n/a | `ANX_WORKSPACE_MAX_UPLOAD_BYTES` | `8388608` |
 | Default JSON request body cap | n/a | `ANX_REQUEST_BODY_LIMIT_BYTES` | `1048576` |
 | Auth request body cap | n/a | `ANX_AUTH_REQUEST_BODY_LIMIT_BYTES` | `262144` |

@@ -14,7 +14,7 @@ const anxCoreClientMocks = vi.hoisted(() => ({
   createAnxCoreClient: vi.fn(() => ({})),
   verifyCoreSchemaVersion: vi.fn(() =>
     Promise.resolve({
-      schema_version: "0.5.0",
+      schema_version: "0.6.0",
       command_registry_digest: "test-digest",
     }),
   ),

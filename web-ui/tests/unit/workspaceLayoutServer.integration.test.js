@@ -20,7 +20,7 @@ const envState = vi.hoisted(() => ({}));
 const anxCoreClientIntegrationMocks = vi.hoisted(() => ({
   createAnxCoreClient: vi.fn(() => ({})),
   verifyCoreSchemaVersion: vi.fn().mockResolvedValue({
-    schema_version: "0.5.0",
+    schema_version: "0.6.0",
     command_registry_digest: "integration-test",
   }),
 }));

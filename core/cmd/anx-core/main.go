@@ -40,18 +40,18 @@ const (
 	defaultAPIVersion    = "v0"
 	defaultInstanceID    = "core-local"
 
-	defaultWorkspaceMaxBlobBytes         int64 = 1 << 30
-	defaultWorkspaceMaxArtifacts         int64 = 100000
-	defaultWorkspaceMaxDocuments         int64 = 50000
-	defaultWorkspaceMaxDocumentRevisions int64 = 250000
-	defaultWorkspaceMaxUploadBytes       int64 = 8 << 20
-	defaultRequestBodyLimit              int64 = 1 << 20
-	defaultAuthRequestBodyLimit          int64 = 256 << 10
-	defaultContentRequestBodyLimit       int64 = 8 << 20
-	defaultAuthRouteRateLimitPerMinute         = 600
-	defaultAuthRouteRateBurst                  = 100
-	defaultWriteRouteRateLimitPerMinute        = 1200
-	defaultWriteRouteRateBurst                 = 200
+	defaultWorkspaceMaxBlobBytes        int64 = 1 << 30
+	defaultWorkspaceMaxArtifacts        int64 = 100000
+	defaultWorkspaceMaxDocuments        int64 = 50000
+	defaultWorkspaceMaxRevisions        int64 = 250000
+	defaultWorkspaceMaxUploadBytes      int64 = 8 << 20
+	defaultRequestBodyLimit             int64 = 1 << 20
+	defaultAuthRequestBodyLimit         int64 = 256 << 10
+	defaultContentRequestBodyLimit      int64 = 8 << 20
+	defaultAuthRouteRateLimitPerMinute        = 600
+	defaultAuthRouteRateBurst                 = 100
+	defaultWriteRouteRateLimitPerMinute       = 1200
+	defaultWriteRouteRateBurst                = 200
 )
 
 func main() {
@@ -111,11 +111,11 @@ func main() {
 		shutdownTimeout             = envDuration("ANX_SHUTDOWN_TIMEOUT", 15*time.Second)
 		enforceLocalQuotas          = envBool("ANX_ENFORCE_LOCAL_QUOTAS", true)
 		workspaceQuota              = primitives.WorkspaceQuota{
-			MaxBlobBytes:         envInt64("ANX_WORKSPACE_MAX_BLOB_BYTES", defaultWorkspaceMaxBlobBytes),
-			MaxArtifacts:         envInt64("ANX_WORKSPACE_MAX_ARTIFACTS", defaultWorkspaceMaxArtifacts),
-			MaxDocuments:         envInt64("ANX_WORKSPACE_MAX_DOCUMENTS", defaultWorkspaceMaxDocuments),
-			MaxDocumentRevisions: envInt64("ANX_WORKSPACE_MAX_DOCUMENT_REVISIONS", defaultWorkspaceMaxDocumentRevisions),
-			MaxUploadBytes:       envInt64("ANX_WORKSPACE_MAX_UPLOAD_BYTES", defaultWorkspaceMaxUploadBytes),
+			MaxBlobBytes:   envInt64("ANX_WORKSPACE_MAX_BLOB_BYTES", defaultWorkspaceMaxBlobBytes),
+			MaxArtifacts:   envInt64("ANX_WORKSPACE_MAX_ARTIFACTS", defaultWorkspaceMaxArtifacts),
+			MaxDocuments:   envInt64("ANX_WORKSPACE_MAX_DOCUMENTS", defaultWorkspaceMaxDocuments),
+			MaxRevisions:   envInt64("ANX_WORKSPACE_MAX_REVISIONS", defaultWorkspaceMaxRevisions),
+			MaxUploadBytes: envInt64("ANX_WORKSPACE_MAX_UPLOAD_BYTES", defaultWorkspaceMaxUploadBytes),
 		}
 		requestBodyLimits = server.RequestBodyLimits{
 			Default: envInt64("ANX_REQUEST_BODY_LIMIT_BYTES", defaultRequestBodyLimit),

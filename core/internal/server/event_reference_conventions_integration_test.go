@@ -14,31 +14,31 @@ func TestEventReferenceConventionsRejectMissingRequiredRefs(t *testing.T) {
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
-	reviewMissingRefsResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
+	cardCreatedMissingRefsResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-1",
 		"event":{
-			"type":"review_completed",
+			"type":"card_created",
 			"thread_id":"thread-1",
-			"refs":["artifact:review-1","artifact:receipt-1"],
-			"summary":"review completed",
+			"refs":["card:card-1","board:board-1"],
+			"summary":"card created",
 			"payload":{"subject_ref":"card:card-1"},
 			"provenance":{"sources":["inferred"]}
 		}
 	}`, http.StatusBadRequest)
-	assertEventErrorMessageContains(t, reviewMissingRefsResp, "event.refs must include")
+	assertEventErrorMessageContains(t, cardCreatedMissingRefsResp, "event.refs must include")
 
-	receiptResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
+	cardMovedMissingRefsResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-1",
 		"event":{
-			"type":"receipt_added",
+			"type":"card_moved",
 			"thread_id":"thread-1",
-			"refs":["artifact:receipt-1"],
-			"summary":"receipt added",
+			"refs":["card:card-1"],
+			"summary":"card moved",
 			"payload":{"subject_ref":"card:card-1"},
 			"provenance":{"sources":["inferred"]}
 		}
 	}`, http.StatusBadRequest)
-	assertEventErrorMessageContains(t, receiptResp, "event.refs must include")
+	assertEventErrorMessageContains(t, cardMovedMissingRefsResp, "event.refs must include")
 
 	humanAttentionRequestedResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-1",

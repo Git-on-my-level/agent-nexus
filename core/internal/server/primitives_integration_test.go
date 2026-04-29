@@ -1341,7 +1341,7 @@ func TestCreateArtifactRejectsUnsafeArtifactIDs(t *testing.T) {
 		"actor_id":"actor-1",
 		"artifact":{
 			"id":"../../etc/passwd",
-			"kind":"doc",
+			"kind":"agent_wake",
 			"refs":["thread:thread-1"],
 			"summary":"bad artifact id"
 		},
@@ -1354,7 +1354,7 @@ func TestCreateArtifactRejectsUnsafeArtifactIDs(t *testing.T) {
 		"actor_id":"actor-1",
 		"artifact":{
 			"id":"/tmp/absolute",
-			"kind":"doc",
+			"kind":"agent_wake",
 			"refs":["thread:thread-1"],
 			"summary":"bad artifact id"
 		},
@@ -1362,6 +1362,18 @@ func TestCreateArtifactRejectsUnsafeArtifactIDs(t *testing.T) {
 		"content_type":"text"
 	}`, http.StatusBadRequest)
 	assertErrorMessageContains(t, respWithAbsolute, "artifact.id")
+}
+
+func assertErrorMessageContains(t *testing.T, resp *http.Response, want string) {
+	t.Helper()
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read error response: %v", err)
+	}
+	if !strings.Contains(string(body), want) {
+		t.Fatalf("expected error response to contain %q, got %s", want, string(body))
+	}
 }
 
 type primitivesTestHarness struct {
@@ -2011,7 +2023,7 @@ func TestArtifactTrashedOnlyListFilter(t *testing.T) {
 	}
 }
 
-func TestArtifactPurgeReferencedByDocRevision(t *testing.T) {
+func TestArtifactPurgeOwnedDocRevisionArtifactPurgesDocument(t *testing.T) {
 	t.Parallel()
 
 	h := newPrimitivesTestServerWithHumanPrincipal(t)
@@ -2038,9 +2050,15 @@ func TestArtifactPurgeReferencedByDocRevision(t *testing.T) {
 
 	postJSONExpectStatus(t, h.baseURL+"/artifacts/"+artifactID+"/trash", `{"actor_id":"actor-1","reason":"try purge"}`, http.StatusOK).Body.Close()
 
-	conflictResp := postJSONExpectStatusBearer(t, h.baseURL+"/artifacts/"+artifactID+"/purge", `{}`, h.humanAccessToken, http.StatusConflict)
-	defer conflictResp.Body.Close()
-	assertErrorCode(t, conflictResp, "artifact_in_use")
+	postJSONExpectStatusBearer(t, h.baseURL+"/artifacts/"+artifactID+"/purge", `{}`, h.humanAccessToken, http.StatusOK).Body.Close()
+	getResp, err := http.Get(h.baseURL + "/docs/" + fmt.Sprint(docPayload.Revision["document_id"]))
+	if err != nil {
+		t.Fatalf("get purged document: %v", err)
+	}
+	defer getResp.Body.Close()
+	if getResp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected purged document to be gone, got %d", getResp.StatusCode)
+	}
 }
 
 func TestDocumentTrashLifecycle(t *testing.T) {

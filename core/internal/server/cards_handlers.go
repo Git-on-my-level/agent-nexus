@@ -203,6 +203,107 @@ func handleGetCardTimeline(w http.ResponseWriter, r *http.Request, opts handlerO
 	})
 }
 
+func handleListCardRevisions(w http.ResponseWriter, r *http.Request, opts handlerOptions, cardID string) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	revisions, err := opts.primitiveStore.ListBoardCardHistory(r.Context(), cardID)
+	if err != nil {
+		if errors.Is(err, primitives.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "card not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load card revisions")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"card_id": cardID, "revisions": revisions})
+}
+
+func handleGetCardRevision(w http.ResponseWriter, r *http.Request, opts handlerOptions, cardID, revisionID string) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	revisions, err := opts.primitiveStore.ListBoardCardHistory(r.Context(), cardID)
+	if err != nil {
+		if errors.Is(err, primitives.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "card not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load card revision")
+		return
+	}
+	revisionID = strings.TrimSpace(revisionID)
+	for _, revision := range revisions {
+		if strings.TrimSpace(anyString(revision["revision_id"])) == revisionID || strings.TrimSpace(anyString(revision["id"])) == revisionID {
+			writeJSON(w, http.StatusOK, map[string]any{"card_id": cardID, "revision": revision})
+			return
+		}
+	}
+	writeError(w, http.StatusNotFound, "not_found", "card revision not found")
+}
+
+func handleCreateCardRevision(w http.ResponseWriter, r *http.Request, opts handlerOptions, cardID string) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	var req struct {
+		ActorID          string   `json:"actor_id"`
+		Title            *string  `json:"title"`
+		Summary          *string  `json:"summary"`
+		DefinitionOfDone []string `json:"definition_of_done"`
+		IfBaseRevision   *string  `json:"if_base_revision"`
+		Revision         *struct {
+			Title            *string  `json:"title"`
+			Summary          *string  `json:"summary"`
+			DefinitionOfDone []string `json:"definition_of_done"`
+		} `json:"revision"`
+	}
+	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
+	if !ok {
+		return
+	}
+	if req.Revision == nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "revision is required")
+		return
+	}
+	var dod *[]string
+	if req.Revision.Title != nil {
+		req.Title = req.Revision.Title
+	}
+	if req.Revision.Summary != nil {
+		req.Summary = req.Revision.Summary
+	}
+	if req.Revision.DefinitionOfDone != nil {
+		dod = &req.Revision.DefinitionOfDone
+	}
+	result, revision, err := opts.primitiveStore.CreateCardRevision(r.Context(), actorID, cardID, primitives.CreateCardRevisionInput{
+		Title:            req.Title,
+		Summary:          req.Summary,
+		DefinitionOfDone: dod,
+		IfBaseRevision:   req.IfBaseRevision,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, primitives.ErrInvalidBoardRequest):
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		case errors.Is(err, primitives.ErrNotFound):
+			writeError(w, http.StatusNotFound, "not_found", "card not found")
+		case errors.Is(err, primitives.ErrConflict):
+			writeError(w, http.StatusConflict, "conflict", "card revision conflict")
+		default:
+			writeError(w, http.StatusInternalServerError, "internal_error", "failed to create card revision")
+		}
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"board": result.Board, "card": publicCardView(result.Card), "revision": revision})
+}
+
 func handlePatchCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, cardID string) {
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")

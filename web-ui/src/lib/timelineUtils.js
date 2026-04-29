@@ -2,8 +2,6 @@ import { resolveRefLink } from "./refLinkModel.js";
 
 const EVENT_TYPE_LABELS = {
   message_posted: "Message posted",
-  receipt_added: "Receipt added",
-  review_completed: "Review completed",
   card_created: "Card created",
   card_updated: "Card updated",
   card_moved: "Card moved",
@@ -17,8 +15,6 @@ export const KNOWN_EVENT_TYPES = new Set(Object.keys(EVENT_TYPE_LABELS));
 
 const EVENT_TYPE_DOT_CLASSES = {
   message_posted: "bg-indigo-400",
-  receipt_added: "bg-emerald-400",
-  review_completed: "bg-amber-400",
   card_created: "bg-purple-400",
   card_updated: "bg-purple-400",
   card_moved: "bg-purple-400",

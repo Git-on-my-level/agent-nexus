@@ -89,23 +89,14 @@ describe("eventRefRules", () => {
       expect(result.valid).toBe(true);
     });
 
-    it("requires card ref for review_completed", () => {
+    it("does not apply removed packet rules", () => {
       const result = validateEventRefRule(
         "review_completed",
         ["artifact:review-1", "artifact:receipt-1"],
         { subject_ref: "card:card-1" },
       );
-      expect(result.valid).toBe(false);
-      expect(result.error).toContain('"card:<id>" typed ref');
-    });
-
-    it("accepts review_completed with all required refs", () => {
-      const result = validateEventRefRule(
-        "review_completed",
-        ["artifact:review-1", "artifact:receipt-1", "card:card-1"],
-        { subject_ref: "card:card-1" },
-      );
       expect(result.valid).toBe(true);
+      expect(result.error).toBe("");
     });
 
     it("requires the right refs for human attention request and response events", () => {

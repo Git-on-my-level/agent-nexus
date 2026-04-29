@@ -113,7 +113,7 @@ describe("anxCoreClient error messaging", () => {
         if (String(url).endsWith("/meta/handshake")) {
           return new Response(
             JSON.stringify({
-              schema_version: "0.5.0",
+              schema_version: "0.6.0",
               command_registry_digest: expectedDigest,
               core_version: "test",
               api_version: "0.2",
@@ -133,7 +133,7 @@ describe("anxCoreClient error messaging", () => {
     });
 
     await expect(verifyCoreSchemaVersion(client)).resolves.toMatchObject({
-      schema_version: "0.5.0",
+      schema_version: "0.6.0",
     });
   });
 
@@ -167,7 +167,7 @@ describe("anxCoreClient error messaging", () => {
         if (String(url).endsWith("/version")) {
           return new Response(
             JSON.stringify({
-              schema_version: "0.5.0",
+              schema_version: "0.6.0",
               command_registry_digest: expectedDigest,
             }),
             {
@@ -185,7 +185,7 @@ describe("anxCoreClient error messaging", () => {
     });
 
     await expect(verifyCoreSchemaVersion(client)).resolves.toMatchObject({
-      schema_version: "0.5.0",
+      schema_version: "0.6.0",
     });
   });
 
@@ -214,7 +214,7 @@ describe("anxCoreClient error messaging", () => {
         if (String(url).endsWith("/meta/handshake")) {
           return new Response(
             JSON.stringify({
-              schema_version: "0.5.0",
+              schema_version: "0.6.0",
               command_registry_digest: "stale-core-digest",
               core_version: "test",
               api_version: "0.2",
@@ -286,46 +286,6 @@ describe("anxCoreClient error messaging", () => {
         },
       },
     ]);
-  });
-
-  it("forwards receipt create bodies without mutating packet", async () => {
-    const seenBodies = [];
-    const client = createAnxCoreClient({
-      baseUrl: "http://core.test",
-      actorIdProvider: () => "actor-1",
-      fetchFn: async (url, init) => {
-        seenBodies.push(init?.body ?? "");
-        return new Response(
-          JSON.stringify({
-            artifact: { id: "artifact-receipt-x" },
-            packet_kind: "receipt",
-            packet: {},
-          }),
-          {
-            status: 201,
-            headers: { "content-type": "application/json" },
-          },
-        );
-      },
-    });
-
-    await client.createReceipt({
-      request_key: "rk-1",
-      artifact: { kind: "receipt" },
-      packet: {
-        thread_id: "thr-9",
-        subject_ref: "card:c-1",
-        outputs: ["artifact:o1"],
-        verification_evidence: ["event:e1"],
-        changes_summary: "done",
-        known_gaps: [],
-      },
-    });
-
-    expect(seenBodies.length).toBe(1);
-    const body = JSON.parse(seenBodies[0]);
-    expect(body.packet.subject_ref).toBe("card:c-1");
-    expect(body.packet.thread_id).toBe("thr-9");
   });
 
   it("routes card archive, restore, and purge through generated command paths", async () => {

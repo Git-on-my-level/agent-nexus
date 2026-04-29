@@ -86,7 +86,6 @@ type anxSchemaDocument struct {
 	Provenance           anxFieldContainer                 `yaml:"provenance"`
 	Primitives           map[string]anxMaybeFieldContainer `yaml:"primitives"`
 	Threads              map[string]anxMaybeFieldContainer `yaml:"-"`
-	Packets              map[string]anxMaybeFieldContainer `yaml:"packets"`
 	ReferenceConventions anxReferenceConventions           `yaml:"reference_conventions"`
 }
 
@@ -712,14 +711,6 @@ func applyAnxSchemaOverlays(acc map[string]bodyFieldState, schemaDoc anxSchemaDo
 				exclude:          map[string]struct{}{"open_cards": {}},
 				forceOptionalAll: true,
 			})
-		}
-	case "packets.receipts.create":
-		if source, ok := schemaDoc.Packets["receipt"]; ok {
-			expandContainerFromAnx(acc, schemaDoc, "packet", source, anxExpansionOptions{})
-		}
-	case "packets.reviews.create":
-		if source, ok := schemaDoc.Packets["review"]; ok {
-			expandContainerFromAnx(acc, schemaDoc, "packet", source, anxExpansionOptions{})
 		}
 	}
 }

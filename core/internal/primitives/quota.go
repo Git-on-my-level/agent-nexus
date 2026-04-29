@@ -12,11 +12,11 @@ import (
 type Option func(*Store)
 
 type WorkspaceQuota struct {
-	MaxBlobBytes         int64 `json:"max_blob_bytes"`
-	MaxArtifacts         int64 `json:"max_artifacts"`
-	MaxDocuments         int64 `json:"max_documents"`
-	MaxDocumentRevisions int64 `json:"max_document_revisions"`
-	MaxUploadBytes       int64 `json:"max_upload_bytes"`
+	MaxBlobBytes   int64 `json:"max_blob_bytes"`
+	MaxArtifacts   int64 `json:"max_artifacts"`
+	MaxDocuments   int64 `json:"max_documents"`
+	MaxRevisions   int64 `json:"max_revisions"`
+	MaxUploadBytes int64 `json:"max_upload_bytes"`
 }
 
 type QuotaViolation struct {
@@ -48,7 +48,7 @@ func WithWorkspaceQuota(quota WorkspaceQuota) Option {
 }
 
 func (q WorkspaceQuota) enabled() bool {
-	return q.MaxBlobBytes > 0 || q.MaxArtifacts > 0 || q.MaxDocuments > 0 || q.MaxDocumentRevisions > 0 || q.MaxUploadBytes > 0
+	return q.MaxBlobBytes > 0 || q.MaxArtifacts > 0 || q.MaxDocuments > 0 || q.MaxRevisions > 0 || q.MaxUploadBytes > 0
 }
 
 type quotaWriteDelta struct {
@@ -58,11 +58,13 @@ type quotaWriteDelta struct {
 }
 
 type workspaceUsage struct {
-	blobBytes   int64
-	blobObjects int64
-	artifacts   int64
-	documents   int64
-	revisions   int64
+	blobBytes     int64
+	blobObjects   int64
+	artifacts     int64
+	documents     int64
+	revisions     int64
+	docRevisions  int64
+	cardRevisions int64
 }
 
 type WorkspaceUsageSummary struct {
@@ -77,11 +79,13 @@ type WorkspaceUsageV1Summary struct {
 }
 
 type WorkspaceUsage struct {
-	BlobBytes   int64 `json:"blob_bytes"`
-	BlobObjects int64 `json:"blob_objects"`
-	Artifacts   int64 `json:"artifact_count"`
-	Documents   int64 `json:"document_count"`
-	Revisions   int64 `json:"document_revision_count"`
+	BlobBytes         int64 `json:"blob_bytes"`
+	BlobObjects       int64 `json:"blob_objects"`
+	Artifacts         int64 `json:"artifact_count"`
+	Documents         int64 `json:"document_count"`
+	Revisions         int64 `json:"revision_count"`
+	DocumentRevisions int64 `json:"document_revision_count"`
+	CardRevisions     int64 `json:"card_revision_count"`
 }
 
 type WorkspaceUsageV1 struct {
@@ -151,13 +155,13 @@ func (s *Store) checkWorkspaceWriteQuota(ctx context.Context, uploadBytes int64,
 			}
 		}
 	}
-	if s.quota.MaxDocumentRevisions > 0 {
+	if s.quota.MaxRevisions > 0 {
 		projected := usage.revisions + delta.revisions
-		if projected > s.quota.MaxDocumentRevisions {
+		if projected > s.quota.MaxRevisions {
 			return &QuotaViolation{
 				Code:      "workspace_quota_exceeded",
-				Metric:    "document_revision_count",
-				Limit:     s.quota.MaxDocumentRevisions,
+				Metric:    "revision_count",
+				Limit:     s.quota.MaxRevisions,
 				Current:   usage.revisions,
 				Projected: projected,
 			}
@@ -189,9 +193,13 @@ func (s *Store) currentWorkspaceUsage(ctx context.Context, includeBlobBytes bool
 	if usage.documents, err = countTableRows(ctx, s.db, "documents"); err != nil {
 		return workspaceUsage{}, err
 	}
-	if usage.revisions, err = countTableRows(ctx, s.db, "document_revisions"); err != nil {
+	if usage.docRevisions, err = countTableRows(ctx, s.db, "document_revisions"); err != nil {
 		return workspaceUsage{}, err
 	}
+	if usage.cardRevisions, err = countTableRows(ctx, s.db, "card_revisions"); err != nil {
+		return workspaceUsage{}, err
+	}
+	usage.revisions = usage.docRevisions + usage.cardRevisions
 
 	return usage, nil
 }
@@ -206,11 +214,13 @@ func (s *Store) GetWorkspaceUsageSummary(ctx context.Context) (WorkspaceUsageSum
 	}
 	return WorkspaceUsageSummary{
 		Usage: WorkspaceUsage{
-			BlobBytes:   usage.blobBytes,
-			BlobObjects: usage.blobObjects,
-			Artifacts:   usage.artifacts,
-			Documents:   usage.documents,
-			Revisions:   usage.revisions,
+			BlobBytes:         usage.blobBytes,
+			BlobObjects:       usage.blobObjects,
+			Artifacts:         usage.artifacts,
+			Documents:         usage.documents,
+			Revisions:         usage.revisions,
+			DocumentRevisions: usage.docRevisions,
+			CardRevisions:     usage.cardRevisions,
 		},
 		Quota:       s.quota,
 		GeneratedAt: time.Now().UTC().Format(time.RFC3339Nano),

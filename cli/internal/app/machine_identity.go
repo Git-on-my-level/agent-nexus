@@ -45,12 +45,20 @@ var machineCommandIdentityByPath = map[string]machineCommandIdentity{
 		Command:   "docs history",
 		CommandID: "docs.revisions.list",
 	},
+	"cards history": {
+		Command:   "cards history",
+		CommandID: "cards.revisions.list",
+	},
+	"cards revision get": {
+		Command:   "cards revision get",
+		CommandID: "cards.revisions.get",
+	},
 	"docs revision get": {
 		Command:   "docs revision get",
 		CommandID: "docs.revisions.get",
 	},
 	"topics discuss": {Command: "topics discuss", CommandID: "events.create"},
-	"cards revise":   {Command: "cards revise", CommandID: "cards.patch"},
+	"cards revise":   {Command: "cards revise", CommandID: "cards.revisions.create"},
 	"cards assign":   {Command: "cards assign", CommandID: "cards.patch"},
 	"cards resolve":  {Command: "cards resolve", CommandID: "cards.move"},
 	"cards reopen":   {Command: "cards reopen", CommandID: "cards.move"},

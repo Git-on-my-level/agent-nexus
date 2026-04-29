@@ -62,9 +62,9 @@ func TestIsMeaningfulThreadActivityEvent(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "review completed counts as activity",
+			name: "card resolved counts as activity",
 			event: map[string]any{
-				"type":      "review_completed",
+				"type":      "card_resolved",
 				"thread_id": "thread-1",
 				"ts":        "2026-03-04T12:00:00Z",
 			},

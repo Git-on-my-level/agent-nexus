@@ -467,9 +467,9 @@ func TestUpdateDocumentRejectsRevisionQuotaExceeded(t *testing.T) {
 		blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir),
 		workspace.Layout().ArtifactContentDir,
 		primitives.WithWorkspaceQuota(primitives.WorkspaceQuota{
-			MaxBlobBytes:         1024,
-			MaxUploadBytes:       1024,
-			MaxDocumentRevisions: 1,
+			MaxBlobBytes:   1024,
+			MaxUploadBytes: 1024,
+			MaxRevisions:   1,
 		}),
 	)
 
@@ -492,7 +492,7 @@ func TestUpdateDocumentRejectsRevisionQuotaExceeded(t *testing.T) {
 	if !errors.As(err, &violation) {
 		t.Fatalf("expected quota violation, got %v", err)
 	}
-	if violation.Code != "workspace_quota_exceeded" || violation.Metric != "document_revision_count" {
+	if violation.Code != "workspace_quota_exceeded" || violation.Metric != "revision_count" {
 		t.Fatalf("unexpected quota violation: %#v", violation)
 	}
 }

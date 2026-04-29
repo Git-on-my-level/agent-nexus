@@ -184,6 +184,16 @@
     );
   }
 
+  async function reviseCardContent(cardItem, payload) {
+    if (!workspace?.board) return;
+
+    const cardId = boardCardStableId(cardItem.membership);
+    await runBoardMutation(
+      () => coreClient.updateCardContent(cardId, payload),
+      "Card revision saved.",
+    );
+  }
+
   async function removeCard(cardItem) {
     if (!workspace?.board) return;
 
@@ -969,6 +979,7 @@
   onclose={closeCardDetailModal}
   onmovecard={moveCard}
   onsavecard={saveCardDetails}
+  onrevisecard={reviseCardContent}
   onremovecard={removeCard}
 />
 

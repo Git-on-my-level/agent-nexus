@@ -5,7 +5,6 @@
   import ArchiveButton from "$lib/components/ArchiveButton.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import TrashButton from "$lib/components/TrashButton.svelte";
-  import GuidedTypedRefsInput from "$lib/components/GuidedTypedRefsInput.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import { coreClient } from "$lib/coreClient";
   import { kindLabel, kindDescription, kindColor } from "$lib/artifactKinds";
@@ -14,8 +13,6 @@
   import ProvenanceBadge from "$lib/components/ProvenanceBadge.svelte";
   import WorkspaceResourceTopRow from "$lib/components/WorkspaceResourceTopRow.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
-  import { buildReviewPayload } from "$lib/reviewUtils";
-  import { toTimelineView } from "$lib/timelineUtils";
   import { topicDetailPathFromRef } from "$lib/topicRouteUtils";
   import { parseRef } from "$lib/typedRefs";
   import {
@@ -23,8 +20,6 @@
     actorRegistry,
     principalRegistry,
   } from "$lib/actorSession";
-
-  const KNOWN_PACKET_ARTIFACT_KINDS = new Set(["receipt", "review"]);
 
   let artifactId = $derived($page.params.artifactId);
   let organizationSlug = $derived($page.params.organization);
@@ -39,16 +34,6 @@
   let loadError = $state("");
   let contentLoadError = $state("");
   let loadedArtifactId = $state("");
-  let reviewDraft = $state(null);
-  let submittingReview = $state(false);
-  let reviewErrors = $state([]);
-  let reviewFieldErrors = $state({});
-  let reviewNotice = $state("");
-  let createdReview = $state(null);
-  let reviseFollowupLink = $state("");
-  let threadTimeline = $state([]);
-  let timelineLoading = $state(false);
-  let timelineError = $state("");
   let confirmModal = $state({ open: false, action: "" });
   let lifecycleBusy = $state(false);
 
@@ -61,18 +46,8 @@
     artifactId;
     confirmModal = { open: false, action: "" };
   });
-  let receiptPacket = $derived(
-    artifact?.kind === "receipt" &&
-      artifactContentType.includes("application/json") &&
-      artifactContent &&
-      typeof artifactContent === "object" &&
-      !Array.isArray(artifactContent)
-      ? artifactContent
-      : null,
-  );
   let artifactTopicRef = $derived.by(() => {
     const candidates = [
-      String(receiptPacket?.subject_ref ?? "").trim(),
       ...((artifact?.refs ?? []).map((ref) => String(ref ?? "").trim()) ?? []),
     ];
     return (
@@ -92,122 +67,35 @@
     String(parseRef(artifactTopicRef).value ?? "").trim() ||
       String(artifact?.thread_id ?? "").trim(),
   );
-  let reviewPacket = $derived(
-    artifact?.kind === "review" &&
-      artifactContentType.includes("application/json") &&
-      artifactContent &&
-      typeof artifactContent === "object" &&
-      !Array.isArray(artifactContent)
-      ? artifactContent
-      : null,
-  );
   let textContent = $derived(
     artifactContentType.startsWith("text/") &&
       typeof artifactContent === "string"
       ? artifactContent
       : "",
   );
-  let isKnownPacketArtifactKind = $derived(
-    KNOWN_PACKET_ARTIFACT_KINDS.has(String(artifact?.kind ?? "")),
+  let structuredContent = $derived(
+    artifactContent &&
+      typeof artifactContent === "object" &&
+      !Array.isArray(artifactContent)
+      ? artifactContent
+      : null,
   );
-  let timelineView = $derived(
-    toTimelineView(threadTimeline, { threadId: artifact?.thread_id ?? "" }),
+  let cardArtifactContent = $derived(
+    artifact?.kind === "card" && structuredContent ? structuredContent : null,
   );
   let hasTextContent = $derived(
     typeof textContent === "string" && textContent.length > 0,
   );
   let artifactRefHints = $derived(buildArtifactRefHints());
-  let reviewEvidenceSuggestions = $derived(
-    buildRefSuggestions([
-      String(receiptPacket?.subject_ref ?? "")
-        .trim()
-        .startsWith("card:")
-        ? {
-            value: String(receiptPacket.subject_ref).trim(),
-            label: `Card · ${String(receiptPacket.subject_ref).trim()}`,
-          }
-        : null,
-      receiptPacket?.receipt_id
-        ? {
-            value: `artifact:${receiptPacket.receipt_id}`,
-            label: `Receipt · ${receiptPacket.receipt_id}`,
-          }
-        : artifact?.id
-          ? {
-              value: `artifact:${artifact.id}`,
-              label: `Receipt · ${artifact.id}`,
-            }
-          : null,
-      ...(receiptPacket?.verification_evidence ?? []).map((refValue) => ({
-        value: refValue,
-        label: `Receipt evidence · ${refValue}`,
-      })),
-      ...(receiptPacket?.outputs ?? []).map((refValue) => ({
-        value: refValue,
-        label: `Receipt output · ${refValue}`,
-      })),
-      ...timelineView.slice(0, 8).map((event) => ({
-        value: `event:${event.id}`,
-        label: `Event · ${event.typeLabel}`,
-      })),
-    ]),
-  );
 
   function workspaceHref(pathname = "/") {
     return workspacePath(organizationSlug, workspaceSlug, pathname);
   }
 
-  let reviewOutcomeGuidance = $derived(
-    reviewDraft?.outcome === "accept"
-      ? "Accept records that this receipt is sufficient and closes review without follow-up."
-      : reviewDraft?.outcome === "revise"
-        ? "Revise records that more work is required on the card before another receipt."
-        : reviewDraft?.outcome === "escalate"
-          ? "Escalate marks this as requiring higher-level intervention."
-          : "",
-  );
-
   let artifactHeaderTitle = $derived(
     String(artifact?.summary ?? "").trim() ||
       `${kindLabel(artifact?.kind ?? "artifact")} artifact`,
   );
-
-  function blankReviewDraft() {
-    return { outcome: "accept", notes: "", evidenceRefsInput: "" };
-  }
-  function generateReviewId() {
-    return `rv-${Math.random().toString(36).slice(2, 10)}`;
-  }
-
-  function buildRefSuggestions(candidates = []) {
-    const seen = new Set();
-    const suggestions = [];
-    candidates.forEach((candidate) => {
-      const value = String(candidate?.value ?? "").trim();
-      if (!value || seen.has(value)) return;
-      const parsed = parseRef(value);
-      if (!parsed.prefix || !parsed.value) return;
-      seen.add(value);
-      suggestions.push({
-        value,
-        label: String(candidate?.label ?? "").trim() || value,
-      });
-    });
-    return suggestions;
-  }
-
-  function firstFieldError(fieldErrors, fieldName) {
-    const candidates = fieldErrors?.[fieldName];
-    if (!Array.isArray(candidates) || candidates.length === 0) return "";
-    return candidates[0];
-  }
-
-  function truncateLabel(value, max = 72) {
-    const text = String(value ?? "").trim();
-    if (!text) return "";
-    if (text.length <= max) return text;
-    return `${text.slice(0, max)}...`;
-  }
 
   function firstTypedRefValue(refs, prefix) {
     const list = Array.isArray(refs) ? refs : [];
@@ -234,6 +122,22 @@
     return revId ? `/docs/revisions/${encodeURIComponent(revId)}` : "";
   });
 
+  let cardArtifactCardRef = $derived.by(() => {
+    if (!artifact || String(artifact.kind ?? "").trim() !== "card") return "";
+    const cardId =
+      String(artifact.card_id ?? "").trim() ||
+      firstTypedRefValue(artifact.refs, "card");
+    return cardId ? `card:${cardId}` : "";
+  });
+
+  let cardArtifactRevisionRef = $derived.by(() => {
+    if (!artifact || String(artifact.kind ?? "").trim() !== "card") return "";
+    const revId =
+      String(artifact.revision_id ?? "").trim() ||
+      firstTypedRefValue(artifact.refs, "card_revision");
+    return revId ? `card_revision:${revId}` : "";
+  });
+
   function buildArtifactRefHints() {
     const hints = {};
     if (!artifact) return hints;
@@ -245,91 +149,15 @@
       const revId = String(artifact.revision_id ?? "").trim();
       if (revId) hints[`document_revision:${revId}`] = "Document revision";
     }
+    if (artifact.kind === "card") {
+      const cardId = String(artifact.card_id ?? "").trim();
+      if (cardId) hints[`card:${cardId}`] = "Card";
+      const revId = String(artifact.revision_id ?? "").trim();
+      if (revId) hints[`card_revision:${revId}`] = "Card revision";
+    }
     if (artifact.thread_id)
       hints[`thread:${artifact.thread_id}`] = "Thread (timeline)";
-    if (receiptPacket?.receipt_id)
-      hints[`artifact:${receiptPacket.receipt_id}`] = "Receipt";
-    else if (artifact.kind === "receipt")
-      hints[`artifact:${artifact.id}`] = "Receipt";
-    if (reviewPacket?.review_id)
-      hints[`artifact:${reviewPacket.review_id}`] = "Review";
-    if (reviewPacket?.receipt_id)
-      hints[`artifact:${reviewPacket.receipt_id}`] = "Reviewed receipt";
-    timelineView.slice(0, 30).forEach((event) => {
-      hints[`event:${event.id}`] =
-        `${event.typeLabel}: ${truncateLabel(event.summary, 52)}`;
-    });
     return hints;
-  }
-
-  async function loadThreadTimeline(threadId) {
-    if (!threadId) {
-      threadTimeline = [];
-      return;
-    }
-    timelineLoading = true;
-    timelineError = "";
-    try {
-      threadTimeline =
-        (await coreClient.listThreadTimeline(threadId)).events ?? [];
-    } catch (e) {
-      timelineError = `Failed to load timeline: ${e instanceof Error ? e.message : String(e)}`;
-      threadTimeline = [];
-    } finally {
-      timelineLoading = false;
-    }
-  }
-
-  async function submitReview(event) {
-    if (event?.preventDefault) event.preventDefault();
-    if (!artifact || !receiptPacket || !reviewDraft) return;
-    reviewErrors = [];
-    reviewFieldErrors = {};
-    reviewNotice = "";
-    reviseFollowupLink = "";
-    submittingReview = true;
-    const reviewId = generateReviewId();
-    const subjectRef =
-      String(receiptPacket?.subject_ref ?? "").trim() ||
-      (() => {
-        const first = (artifact.refs ?? []).find((r) =>
-          /^(topic|thread|card):/.test(String(r)),
-        );
-        return first ? String(first).trim() : "";
-      })();
-    const payload = buildReviewPayload(reviewDraft, {
-      subjectRef,
-      receiptId: artifact.id,
-      reviewId,
-    });
-    if (!payload.valid) {
-      reviewErrors = payload.errors;
-      reviewFieldErrors = payload.fieldErrors ?? {};
-      submittingReview = false;
-      return;
-    }
-    try {
-      const response = await coreClient.createReview({
-        artifact: payload.artifact,
-        packet: payload.packet,
-      });
-      createdReview = response.artifact ?? null;
-      reviewNotice = "Review submitted.";
-      reviewFieldErrors = {};
-      reviewDraft = blankReviewDraft();
-      if (payload.packet.outcome === "revise") {
-        reviseFollowupLink = artifactTopicHref
-          ? workspaceHref(artifactTopicHref)
-          : "";
-      }
-      await loadThreadTimeline(artifact.thread_id);
-    } catch (e) {
-      reviewErrors = [
-        `Failed to submit review: ${e instanceof Error ? e.message : String(e)}`,
-      ];
-    } finally {
-      submittingReview = false;
-    }
   }
 
   async function loadArtifact(targetId) {
@@ -348,8 +176,6 @@
       artifact = null;
       artifactContent = null;
       artifactContentType = "";
-      threadTimeline = [];
-      timelineError = "";
       loading = false;
       return;
     }
@@ -364,13 +190,6 @@
     }
 
     artifact = loadedArtifact;
-    reviewDraft = blankReviewDraft();
-    reviewErrors = [];
-    reviewFieldErrors = {};
-    reviewNotice = "";
-    createdReview = null;
-    reviseFollowupLink = "";
-
     try {
       const contentResponse = await coreClient.getArtifactContent(targetId);
       artifactContent = contentResponse.content ?? null;
@@ -380,18 +199,6 @@
       artifactContentType = "";
       contentLoadError = `Content unavailable: ${e instanceof Error ? e.message : String(e)}`;
     }
-
-    try {
-      if (artifact?.kind === "receipt" && artifact?.thread_id)
-        await loadThreadTimeline(artifact.thread_id);
-      else {
-        threadTimeline = [];
-        timelineError = "";
-      }
-    } catch {
-      threadTimeline = [];
-    }
-
     loading = false;
   }
 
@@ -634,6 +441,30 @@
         {/if}
       </div>
     {/if}
+    {#if cardArtifactCardRef || cardArtifactRevisionRef}
+      <div
+        class="mt-1.5 flex flex-wrap items-center gap-2 text-micro text-[var(--fg-muted)]"
+      >
+        {#if cardArtifactCardRef}
+          <RefLink
+            humanize
+            labelHints={artifactRefHints}
+            refValue={cardArtifactCardRef}
+            showRaw
+            threadId={artifact.thread_id}
+          />
+        {/if}
+        {#if cardArtifactRevisionRef}
+          <RefLink
+            humanize
+            labelHints={artifactRefHints}
+            refValue={cardArtifactRevisionRef}
+            showRaw
+            threadId={artifact.thread_id}
+          />
+        {/if}
+      </div>
+    {/if}
     {#if artifact.thread_id && artifactTopicHref}
       <div class="mt-1.5 text-micro text-[var(--fg-muted)]">
         <span class="text-[var(--fg-muted)]">Topic</span>
@@ -701,7 +532,7 @@
     </div>
   {/if}
 
-  {#if !contentLoadError && !isKnownPacketArtifactKind && artifact.kind !== "doc" && !hasTextContent}
+  {#if !contentLoadError && artifact.kind !== "doc" && artifact.kind !== "card" && !hasTextContent}
     <div
       class="mt-3 rounded-md bg-warn-soft px-3 py-2 text-micro text-warn-text"
     >
@@ -709,281 +540,69 @@
     </div>
   {/if}
 
-  {#if receiptPacket}
+  {#if !contentLoadError && artifact.kind === "card" && !cardArtifactContent && !hasTextContent}
     <div
-      class="mt-4 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
+      class="mt-3 rounded-md bg-warn-soft px-3 py-2 text-micro text-warn-text"
     >
-      <div class="border-b border-[var(--line)] px-4 py-2.5">
-        <h2 class="text-meta font-medium text-[var(--fg)]">Receipt</h2>
-      </div>
-      <div class="px-4 py-3 text-meta">
-        <div class="flex flex-wrap gap-3 text-micro text-[var(--fg-muted)]">
-          <span class="flex items-center gap-1"
-            >Subject: {#if String(receiptPacket.subject_ref ?? "").trim()}<RefLink
-                humanize
-                labelHints={artifactRefHints}
-                refValue={String(receiptPacket.subject_ref).trim()}
-                showRaw
-              />{:else}<span class="text-[var(--fg-muted)]">—</span>{/if}</span
-          >
-        </div>
-        {#if (receiptPacket.outputs ?? []).length > 0}
-          <div class="mt-3">
-            <p class="text-micro font-medium text-[var(--fg-muted)]">Outputs</p>
-            <div class="mt-1 flex flex-wrap gap-1.5 text-micro">
-              {#each receiptPacket.outputs as r}<RefLink
-                  humanize
-                  labelHints={artifactRefHints}
-                  refValue={r}
-                  showRaw
-                  threadId={artifact?.thread_id ?? ""}
-                />{/each}
-            </div>
-          </div>
-        {/if}
-        {#if (receiptPacket.verification_evidence ?? []).length > 0}
-          <div class="mt-3">
-            <p class="text-micro font-medium text-[var(--fg-muted)]">
-              Verification evidence
-            </p>
-            <div class="mt-1 flex flex-wrap gap-1.5 text-micro">
-              {#each receiptPacket.verification_evidence as r}<RefLink
-                  humanize
-                  labelHints={artifactRefHints}
-                  refValue={r}
-                  showRaw
-                  threadId={artifact?.thread_id ?? ""}
-                />{/each}
-            </div>
-          </div>
-        {/if}
-        <div class="mt-3">
-          <p class="text-micro font-medium text-[var(--fg-muted)]">
-            Changes summary
-          </p>
-          {#if receiptPacket.changes_summary}
-            <MarkdownRenderer
-              source={receiptPacket.changes_summary}
-              class="mt-1 leading-relaxed text-[var(--fg)]"
-            />
-          {:else}
-            <p class="mt-1 leading-relaxed text-[var(--fg)]">—</p>
-          {/if}
-        </div>
-        {#if (receiptPacket.known_gaps ?? []).length > 0}
-          <div class="mt-3">
-            <p class="text-micro font-medium text-[var(--fg-muted)]">
-              Known gaps
-            </p>
-            <ul class="mt-1 space-y-0.5 text-[var(--fg-muted)]">
-              {#each receiptPacket.known_gaps as g}
-                <li class="flex items-start gap-2">
-                  <span
-                    class="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-warn-text"
-                  ></span>{g}
-                </li>
-              {/each}
-            </ul>
-          </div>
-        {/if}
-      </div>
-
-      <div class="border-t border-[var(--line)] px-4 py-3">
-        <h3 class="text-meta font-medium text-[var(--fg)]">Submit Review</h3>
-        {#if reviewErrors.length > 0}
-          <ul
-            class="mt-2 list-inside list-disc rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
-          >
-            {#each reviewErrors as e}<li>{e}</li>{/each}
-          </ul>
-        {/if}
-        {#if reviewNotice}
-          <div
-            class="mt-2 rounded-md bg-ok-soft px-3 py-1.5 text-micro text-ok-text"
-          >
-            {reviewNotice}
-          </div>
-        {/if}
-        {#if reviseFollowupLink}
-          <div
-            class="mt-2 rounded-md bg-warn-soft px-3 py-1.5 text-micro text-warn-text"
-          >
-            Outcome is revise.
-            <a class="font-medium underline" href={reviseFollowupLink}
-              >Open topic</a
-            >
-            to continue on the card.
-          </div>
-        {/if}
-        {#if reviewDraft}
-          <form class="mt-2 grid gap-3" onsubmit={submitReview}>
-            <label class="text-micro font-medium text-[var(--fg-muted)]"
-              >Outcome
-              <select
-                aria-label="Review outcome"
-                bind:value={reviewDraft.outcome}
-                class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta focus:bg-[var(--panel)]"
-              >
-                <option value="accept">Accept</option><option value="revise"
-                  >Revise</option
-                ><option value="escalate">Escalate</option>
-              </select>
-            </label>
-            {#if firstFieldError(reviewFieldErrors, "outcome")}<p
-                class="-mt-1 text-micro text-danger-text"
-              >
-                {firstFieldError(reviewFieldErrors, "outcome")}
-              </p>{/if}
-            {#if reviewOutcomeGuidance}
-              <p
-                class="-mt-1 rounded-md bg-[var(--bg-soft)] px-3 py-1.5 text-micro text-[var(--fg-muted)]"
-              >
-                {reviewOutcomeGuidance}
-              </p>
-            {/if}
-            <label class="text-micro font-medium text-[var(--fg-muted)]"
-              >Notes
-              <textarea
-                aria-label="Review notes"
-                bind:value={reviewDraft.notes}
-                class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-meta focus:bg-[var(--panel)]"
-                placeholder="Review notes..."
-                rows="2"
-              ></textarea>
-            </label>
-            {#if firstFieldError(reviewFieldErrors, "notes")}<p
-                class="-mt-1 text-micro text-danger-text"
-              >
-                {firstFieldError(reviewFieldErrors, "notes")}
-              </p>{/if}
-            <div class="text-micro font-medium text-[var(--fg-muted)]">
-              Evidence refs
-              <GuidedTypedRefsInput
-                addButtonLabel="Add review evidence ref"
-                addInputLabel="Add review evidence ref"
-                addInputPlaceholder="artifact:artifact-evidence-123 or event:event-456"
-                advancedHint="Paste typed refs separated by commas or new lines."
-                advancedLabel="Advanced raw review evidence refs"
-                advancedToggleLabel="Use advanced raw review evidence input"
-                bind:value={reviewDraft.evidenceRefsInput}
-                fieldError={firstFieldError(reviewFieldErrors, "evidence_refs")}
-                helperText="At least one typed ref required."
-                hideAdvancedToggleLabel="Hide advanced raw review evidence input"
-                suggestions={reviewEvidenceSuggestions}
-                textareaAriaLabel="Review evidence refs (typed refs, comma/newline separated)"
-              />
-            </div>
-            <div class="flex justify-end">
-              <button
-                class="cursor-pointer rounded-md bg-accent-solid px-3 py-1.5 text-micro font-medium text-white hover:bg-accent disabled:opacity-50"
-                disabled={submittingReview}
-                type="submit"
-                >{submittingReview ? "Submitting..." : "Submit review"}</button
-              >
-            </div>
-          </form>
-        {/if}
-        {#if createdReview}
-          <div class="mt-2 text-micro text-[var(--fg-muted)]">
-            Review submitted: <a
-              class="font-medium text-accent-text hover:text-accent-text"
-              href={workspaceHref(`/artifacts/${createdReview.id}`)}
-              >{createdReview.summary || createdReview.id}</a
-            >
-          </div>
-        {/if}
-      </div>
-
-      {#if threadTimeline.length > 0 || timelineLoading}
-        <div class="border-t border-[var(--line)] px-4 py-3">
-          <h3 class="text-meta font-medium text-[var(--fg)]">Topic Timeline</h3>
-          {#if timelineLoading}
-            <div class="mt-2 text-micro text-[var(--fg-muted)]">Loading...</div>
-          {:else if timelineError}
-            <p class="mt-2 text-micro text-danger-text">{timelineError}</p>
-          {:else}
-            <div class="mt-2 space-y-1">
-              {#each timelineView.slice(0, 10) as event}
-                <div
-                  class="rounded-md bg-[var(--bg-soft)] px-3 py-2 text-micro"
-                >
-                  <MarkdownRenderer
-                    source={event.summary}
-                    class="font-medium text-[var(--fg)]"
-                  />
-                  <p class="text-micro text-[var(--fg-muted)]">
-                    {actorName(event.actor_id)} · {event.typeLabel} · {formatTimestamp(
-                      event.ts,
-                    ) || "—"}
-                  </p>
-                </div>
-              {/each}
-            </div>
-          {/if}
-        </div>
-      {/if}
+      Card revision content unavailable for this artifact.
     </div>
   {/if}
 
-  {#if reviewPacket}
+  {#if cardArtifactContent}
     <div
       class="mt-4 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
     >
       <div class="border-b border-[var(--line)] px-4 py-2.5">
-        <h2 class="text-meta font-medium text-[var(--fg)]">Review</h2>
+        <h2 class="text-meta font-medium text-[var(--fg)]">
+          Card revision content
+        </h2>
       </div>
       <div class="px-4 py-3 text-meta">
-        <div class="flex items-center gap-3">
-          <span
-            class="rounded px-1.5 py-0.5 text-micro font-medium {reviewPacket.outcome ===
-            'accept'
-              ? 'bg-ok-soft text-ok-text'
-              : reviewPacket.outcome === 'revise'
-                ? 'bg-warn-soft text-warn-text'
-                : 'bg-danger-soft text-danger-text'}"
-            >{reviewPacket.outcome}</span
-          >
-          <span class="text-micro text-[var(--fg-muted)]"
-            >Receipt: <RefLink
+        <div class="flex flex-wrap gap-2 text-micro text-[var(--fg-muted)]">
+          {#if cardArtifactCardRef}
+            <RefLink
               humanize
               labelHints={artifactRefHints}
-              refValue={`artifact:${reviewPacket.receipt_id}`}
+              refValue={cardArtifactCardRef}
               showRaw
               threadId={artifact.thread_id}
-            /></span
-          >
-          {#if String(reviewPacket.subject_ref ?? "").trim()}
-            <span class="text-micro text-[var(--fg-muted)]"
-              >Subject: <RefLink
-                humanize
-                labelHints={artifactRefHints}
-                refValue={String(reviewPacket.subject_ref ?? "").trim()}
-                showRaw
-                threadId={artifact.thread_id}
-              /></span
-            >
+            />
+          {/if}
+          {#if cardArtifactRevisionRef}
+            <RefLink
+              humanize
+              labelHints={artifactRefHints}
+              refValue={cardArtifactRevisionRef}
+              showRaw
+              threadId={artifact.thread_id}
+            />
           {/if}
         </div>
-        {#if reviewPacket.notes}
-          <MarkdownRenderer
-            source={reviewPacket.notes}
-            class="mt-2 leading-relaxed text-[var(--fg)]"
-          />
+        {#if cardArtifactContent.title}
+          <p class="mt-3 text-base font-medium text-[var(--fg)]">
+            {cardArtifactContent.title}
+          </p>
         {/if}
-        {#if (reviewPacket.evidence_refs ?? []).length > 0}
+        {#if cardArtifactContent.summary}
+          <div class="mt-2 leading-relaxed text-[var(--fg)]">
+            <MarkdownRenderer source={cardArtifactContent.summary} />
+          </div>
+        {/if}
+        {#if Array.isArray(cardArtifactContent.definition_of_done) && cardArtifactContent.definition_of_done.length > 0}
           <div class="mt-3">
             <p class="text-micro font-medium text-[var(--fg-muted)]">
-              Evidence
+              Definition of done
             </p>
-            <div class="mt-1 flex flex-wrap gap-1.5 text-micro">
-              {#each reviewPacket.evidence_refs as r}<RefLink
-                  humanize
-                  labelHints={artifactRefHints}
-                  refValue={r}
-                  showRaw
-                  threadId={artifact.thread_id}
-                />{/each}
-            </div>
+            <ul class="mt-1 space-y-0.5 text-[var(--fg-muted)]">
+              {#each cardArtifactContent.definition_of_done as item}
+                <li class="flex items-start gap-2">
+                  <span
+                    class="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-[var(--fg-muted)]"
+                  ></span>
+                  <span>{item}</span>
+                </li>
+              {/each}
+            </ul>
           </div>
         {/if}
       </div>

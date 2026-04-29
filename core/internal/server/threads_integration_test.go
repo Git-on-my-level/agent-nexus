@@ -372,7 +372,7 @@ func TestThreadTimelineIncludesReferencedObjectsAndOmitsMissingRefs(t *testing.T
 		"actor_id":"actor-1",
 		"artifact":{
 			"id":"`+artifactID+`",
-			"kind":"doc",
+			"kind":"agent_wake",
 			"refs":["thread:`+threadID+`"],
 			"summary":"timeline artifact"
 		},
@@ -577,7 +577,7 @@ func TestThreadContextBundlesRecentEventsArtifactsAndOpenCards(t *testing.T) {
 		"actor_id":"actor-1",
 		"artifact":{
 			"id":"ctx-artifact-1",
-			"kind":"doc",
+			"kind":"agent_wake",
 			"refs":["thread:`+threadID+`"],
 			"summary":"context artifact"
 		},
@@ -788,7 +788,7 @@ func TestThreadWorkspaceBundlesCanonicalAndDerivedSections(t *testing.T) {
 		"actor_id":"actor-1",
 		"artifact":{
 			"id":"workspace-artifact-1",
-			"kind":"doc",
+			"kind":"agent_wake",
 			"refs":["thread:`+rootThreadID+`"],
 			"summary":"workspace artifact"
 		},
@@ -1004,4 +1004,13 @@ func patchJSONExpectStatus(t *testing.T, url string, body string, expectedStatus
 		t.Fatalf("PATCH %s unexpected status: got %d want %d body=%s", url, resp.StatusCode, expectedStatus, string(bodyBytes))
 	}
 	return resp
+}
+
+func findEventByType(events []map[string]any, eventType string) map[string]any {
+	for _, event := range events {
+		if asString(event["type"]) == eventType {
+			return event
+		}
+	}
+	return nil
 }

@@ -29,12 +29,6 @@ type FieldSpec struct {
 	Ref      string
 }
 
-type PacketSchema struct {
-	Name   string
-	Kind   string
-	Fields map[string]FieldSpec
-}
-
 type ProvenanceSpec struct {
 	Fields map[string]FieldSpec
 }
@@ -73,8 +67,6 @@ type Contract struct {
 	TypedRefPrefixes map[string]struct{}
 	Provenance       ProvenanceSpec
 	Threads          map[string]ThreadSchema
-	Packets          map[string]PacketSchema
-	ArtifactRefRules map[string][]string
 	EventRefRules    map[string]EventRefRule
 }
 
@@ -92,8 +84,7 @@ type contractFile struct {
 	// LegacyThreadYAML holds deprecated schema YAML keyed as `snapshots` from pre-refactor
 	// bundles; kept only so older checked-in schema files still parse. Canonical thread
 	// field definitions live under `primitives.thread`.
-	LegacyThreadYAML     rawThreads `yaml:"snapshots"`
-	Packets              rawPackets
+	LegacyThreadYAML     rawThreads              `yaml:"snapshots"`
 	ReferenceConventions rawReferenceConventions `yaml:"reference_conventions"`
 }
 
@@ -110,23 +101,8 @@ type rawProvenance struct {
 	Fields map[string]rawFieldSpec `yaml:"fields"`
 }
 
-type rawPackets struct {
-	Receipt rawPacketSchema `yaml:"receipt"`
-	Review  rawPacketSchema `yaml:"review"`
-}
-
 type rawReferenceConventions struct {
-	ArtifactRefs rawArtifactRefConventions `yaml:"artifact_refs"`
-	EventRefs    rawEventRefConventions    `yaml:"event_refs"`
-}
-
-type rawArtifactRefConventions struct {
-	Receipt rawArtifactRefRule `yaml:"receipt"`
-	Review  rawArtifactRefRule `yaml:"review"`
-}
-
-type rawArtifactRefRule struct {
-	RefsMustInclude []string `yaml:"refs_must_include"`
+	EventRefs rawEventRefConventions `yaml:"event_refs"`
 }
 
 type rawEventRefConventions struct {
@@ -188,11 +164,6 @@ type rawThreadSchema struct {
 	Fields map[string]rawFieldSpec `yaml:"fields"`
 }
 
-type rawPacketSchema struct {
-	Kind   string                  `yaml:"kind"`
-	Fields map[string]rawFieldSpec `yaml:"fields"`
-}
-
 type rawFieldSpec struct {
 	Type     string `yaml:"type"`
 	Required bool   `yaml:"required"`
@@ -218,12 +189,7 @@ func Load(path string) (*Contract, error) {
 		Provenance: ProvenanceSpec{
 			Fields: make(map[string]FieldSpec, len(file.Provenance.Fields)),
 		},
-		Threads: make(map[string]ThreadSchema, 1),
-		Packets: make(map[string]PacketSchema, 2),
-		ArtifactRefRules: map[string][]string{
-			"receipt": append([]string(nil), file.ReferenceConventions.ArtifactRefs.Receipt.RefsMustInclude...),
-			"review":  append([]string(nil), file.ReferenceConventions.ArtifactRefs.Review.RefsMustInclude...),
-		},
+		Threads:       make(map[string]ThreadSchema, 1),
 		EventRefRules: make(map[string]EventRefRule, len(file.ReferenceConventions.EventRefs.Rules)),
 	}
 
@@ -265,9 +231,6 @@ func Load(path string) (*Contract, error) {
 		threadSource = file.LegacyThreadYAML
 	}
 	contract.Threads["thread"] = normalizeThread("thread", threadSource.Thread)
-
-	contract.Packets["receipt"] = normalizePacket("receipt", file.Packets.Receipt)
-	contract.Packets["review"] = normalizePacket("review", file.Packets.Review)
 
 	for eventType, rawRule := range file.ReferenceConventions.EventRefs.Rules {
 		contract.EventRefRules[eventType] = normalizeEventRefRule(rawRule)
@@ -323,25 +286,6 @@ func normalizeEnum(name string, enum rawEnum) (EnumSpec, error) {
 
 	sort.Strings(spec.OrderedValue)
 	return spec, nil
-}
-
-func normalizePacket(name string, raw rawPacketSchema) PacketSchema {
-	packet := PacketSchema{
-		Name:   name,
-		Kind:   raw.Kind,
-		Fields: make(map[string]FieldSpec, len(raw.Fields)),
-	}
-
-	for fieldName, field := range raw.Fields {
-		packet.Fields[fieldName] = FieldSpec{
-			Type:     field.Type,
-			Required: field.Required,
-			MinItems: field.MinItems,
-			Ref:      field.Ref,
-		}
-	}
-
-	return packet
 }
 
 func normalizeThread(name string, raw rawThreadSchema) ThreadSchema {

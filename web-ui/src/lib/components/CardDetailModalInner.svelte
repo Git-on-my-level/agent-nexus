@@ -66,6 +66,7 @@
     onclose,
     onmovecard,
     onsavecard,
+    onrevisecard = async () => {},
     onremovecard,
   } = $props();
 
@@ -87,6 +88,9 @@
   let derived = $derived(cardItem?.derived);
   let thread = $derived(backing?.thread);
   let cdmDetailPane = $state("overview");
+  let cardRevisions = $state([]);
+  let revisionsLoading = $state(false);
+  let revisionsError = $state("");
   let previousCardKey = $state("");
   let removeCardConfirmOpen = $state(false);
 
@@ -206,6 +210,25 @@
     if (linkedThreadId) void timelineApi.loadTimeline(linkedThreadId);
   });
 
+  $effect(() => {
+    if (cdmDetailPane !== "revisions") return;
+    if (cardKey) void loadCardRevisions(cardKey);
+  });
+
+  async function loadCardRevisions(cardId) {
+    revisionsLoading = true;
+    revisionsError = "";
+    try {
+      const result = await coreClient.getCardHistory(cardId);
+      cardRevisions = (result.revisions ?? []).slice().reverse();
+    } catch (e) {
+      revisionsError = e instanceof Error ? e.message : String(e);
+      cardRevisions = [];
+    } finally {
+      revisionsLoading = false;
+    }
+  }
+
   async function searchThreadOptions(query) {
     const threads = await searchTopicRecords(query);
     return threads.map(topicSearchResultToPickerOption);
@@ -223,13 +246,6 @@
 
   function buildCardPatch(m, draft) {
     const patch = {};
-    if (draft.title.trim() !== String(m.title ?? "").trim()) {
-      patch.title = draft.title.trim();
-    }
-    if (draft.summary.trim() !== String(m.summary ?? "").trim()) {
-      patch.summary = draft.summary.trim();
-    }
-
     const docDraft = draft.documentId.trim();
     const nextDoc = docDraft ? `document:${docDraft}` : null;
     const prevDocRaw = String(m.document_ref ?? "").trim();
@@ -274,14 +290,6 @@
     const dueMem = String(m.due_at ?? "").trim() || null;
     if (dueDraft !== dueMem) {
       patch.due_at = dueDraft;
-    }
-
-    const dodDraft = parseDelimitedValues(draft.definitionOfDone);
-    const dodMem = [...(m.definition_of_done ?? [])].map((x) =>
-      String(x).trim(),
-    );
-    if (normalizeRefList(dodDraft) !== normalizeRefList(dodMem)) {
-      patch.definition_of_done = dodDraft;
     }
 
     return patch;
@@ -333,12 +341,49 @@
       };
 
       const patch = buildCardPatch(membership, draft);
-      if (Object.keys(patch).length === 0) {
+      const dodDraft = parseDelimitedValues(draft.definitionOfDone);
+      const dodMem = [...(membership.definition_of_done ?? [])].map((x) =>
+        String(x).trim(),
+      );
+      const contentPatch = {};
+      if (draft.title.trim() !== String(membership.title ?? "").trim()) {
+        contentPatch.title = draft.title.trim();
+      }
+      if (draft.summary.trim() !== String(membership.summary ?? "").trim()) {
+        contentPatch.summary = draft.summary.trim();
+      }
+      if (normalizeRefList(dodDraft) !== normalizeRefList(dodMem)) {
+        contentPatch.definition_of_done = dodDraft;
+      }
+      const contentPayload = {};
+      if (Object.keys(contentPatch).length > 0) {
+        const baseRevision = String(membership.head_revision_ref ?? "").replace(
+          /^card_revision:/,
+          "",
+        );
+        if (!baseRevision) {
+          saveError =
+            "Cannot determine base card revision. Refresh the board and try again.";
+          return;
+        }
+        contentPayload.if_base_revision = baseRevision;
+        contentPayload.revision = contentPatch;
+      }
+      if (Object.keys(patch).length > 0) {
+        await onsavecard(cardItem, patch);
+      }
+      if (Object.keys(contentPayload).length > 0) {
+        await onrevisecard(cardItem, contentPayload);
+      }
+      if (
+        Object.keys(patch).length === 0 &&
+        Object.keys(contentPayload).length === 0
+      ) {
         editOpen = false;
         return;
       }
 
-      await onsavecard(cardItem, patch);
+      cardRevisions = [];
       editOpen = false;
     } catch (e) {
       saveError = e instanceof Error ? e.message : String(e ?? "Save failed");
@@ -366,7 +411,9 @@
     }
   }
 
-  function pickDetailPane(/** @type {"overview" | "timeline"} */ pane) {
+  function pickDetailPane(
+    /** @type {"overview" | "timeline" | "revisions"} */ pane,
+  ) {
     cdmDetailPane = pane;
   }
 
@@ -597,6 +644,18 @@
         >
           Timeline
         </button>
+        <button
+          type="button"
+          role="tab"
+          data-cdm-pane-tab="revisions"
+          tabindex={cdmDetailPane === "revisions" ? 0 : -1}
+          aria-selected={cdmDetailPane === "revisions"}
+          class={`relative inline-flex cursor-pointer border-0 border-b-2 border-transparent bg-transparent px-3 py-2 text-meta font-medium transition-colors ${cdmDetailPane === "revisions" ? "border-accent text-[var(--fg)]" : "text-[var(--fg-muted)] hover:text-[var(--fg)]"}`}
+          onpointerdown={() => pickDetailPane("revisions")}
+          onclick={() => pickDetailPane("revisions")}
+        >
+          Revisions
+        </button>
       </div>
       <span class="hidden" data-testid="cdm-section-tab-val"
         >{cdmDetailPane}</span
@@ -766,7 +825,7 @@
                         bind:value={editResolutionRefs}
                         {boardId}
                         addInputLabel="Add resolution ref"
-                        addInputPlaceholder="artifact:receipt-123"
+                        addInputPlaceholder="artifact:supporting-context"
                         addButtonLabel="Add ref"
                         emptyText="No resolution evidence yet."
                         helperText="Refs that evidence resolution."
@@ -956,6 +1015,60 @@
               This card has no backing thread; timeline requires a linked
               thread.
             </p>
+          {/if}
+        </div>
+      {:else if cdmDetailPane === "revisions"}
+        <div class="space-y-3 px-4 pb-4 pt-3" data-cdm-panel="revisions">
+          <div class="flex items-center justify-between gap-3">
+            <p class="text-meta text-[var(--fg-muted)]">
+              Head revision {membership?.head_revision_number ?? ""}
+            </p>
+            <button
+              type="button"
+              class="rounded-md border border-[var(--line)] px-2 py-1 text-micro text-[var(--fg-muted)] hover:text-[var(--fg)]"
+              onclick={() => loadCardRevisions(cardKey)}
+            >
+              Refresh
+            </button>
+          </div>
+          {#if revisionsLoading}
+            <p class="text-meta text-[var(--fg-muted)]">Loading revisions...</p>
+          {:else if revisionsError}
+            <p class="text-meta text-red-400">{revisionsError}</p>
+          {:else if cardRevisions.length === 0}
+            <p class="text-meta text-[var(--fg-muted)]">No revisions found.</p>
+          {:else}
+            <ol class="space-y-2">
+              {#each cardRevisions as rev}
+                <li class="rounded-md border border-[var(--line)] p-3">
+                  <div class="flex items-start justify-between gap-3">
+                    <div>
+                      <p class="text-meta font-medium text-[var(--fg)]">
+                        Revision {rev.revision_number}
+                      </p>
+                      <p class="text-micro text-[var(--fg-muted)]">
+                        {formatTimestamp(rev.created_at)} by {actorName(
+                          rev.created_by,
+                        )}
+                      </p>
+                    </div>
+                    {#if rev.artifact_ref}
+                      <RefLink refValue={rev.artifact_ref} />
+                    {/if}
+                  </div>
+                  {#if rev.title}
+                    <p class="mt-2 text-meta font-medium text-[var(--fg)]">
+                      {rev.title}
+                    </p>
+                  {/if}
+                  {#if rev.summary}
+                    <div class="mt-2 text-meta text-[var(--fg-muted)]">
+                      <MarkdownRenderer source={rev.summary} />
+                    </div>
+                  {/if}
+                </li>
+              {/each}
+            </ol>
           {/if}
         </div>
       {/if}

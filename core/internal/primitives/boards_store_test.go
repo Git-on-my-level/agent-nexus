@@ -282,9 +282,9 @@ func TestBoardStoreCardOrderingAndMutations(t *testing.T) {
 	if updatedCard.Board["updated_by"] != "actor-5" {
 		t.Fatalf("expected board updated_by actor-5 after card update, got %#v", updatedCard.Board["updated_by"])
 	}
-	newTitle := "stale token title"
+	newRisk := "high"
 	if _, err := store.UpdateBoardCard(ctx, "actor-stale", boardID, cardThreadA, primitives.UpdateBoardCardInput{
-		Title:            &newTitle,
+		Risk:             &newRisk,
 		IfBoardUpdatedAt: &updateUpdatedAt,
 	}); !errors.Is(err, primitives.ErrConflict) {
 		t.Fatalf("expected stale card update ErrConflict, got %v", err)

@@ -435,7 +435,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/artifacts",
     "operation_id": "createArtifact",
     "summary": "Create artifact",
-    "why": "Store content-addressed artifact metadata and payload (bytes, text, or structured packet JSON).",
+    "why": "Store content-addressed artifact metadata and payload (bytes, text, or structured JSON).",
     "input_mode": "json-body",
     "streaming": {
       "mode": "none"
@@ -496,7 +496,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/artifacts/{artifact_id}",
     "operation_id": "getArtifact",
     "summary": "Get artifact metadata",
-    "why": "Resolve immutable artifact metadata referenced from timelines and packets.",
+    "why": "Resolve immutable artifact metadata referenced from timelines and resources.",
     "input_mode": "none",
     "streaming": {
       "mode": "none"
@@ -2385,11 +2385,14 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "cards.create",
       "cards.get",
+      "cards.revisions.list",
       "cards.list",
       "cards.move",
       "cards.patch",
       "cards.purge",
       "cards.restore",
+      "cards.revisions.create",
+      "cards.revisions.get",
       "cards.timeline",
       "cards.trash"
     ],
@@ -2543,11 +2546,14 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "cards.archive",
       "cards.get",
+      "cards.revisions.list",
       "cards.list",
       "cards.move",
       "cards.patch",
       "cards.purge",
       "cards.restore",
+      "cards.revisions.create",
+      "cards.revisions.get",
       "cards.timeline",
       "cards.trash"
     ],
@@ -2584,11 +2590,14 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "cards.archive",
       "cards.create",
+      "cards.revisions.list",
       "cards.list",
       "cards.move",
       "cards.patch",
       "cards.purge",
       "cards.restore",
+      "cards.revisions.create",
+      "cards.revisions.get",
       "cards.timeline",
       "cards.trash"
     ],
@@ -2622,10 +2631,13 @@ export const commandRegistry: CommandSpec[] = [
       "cards.archive",
       "cards.create",
       "cards.get",
+      "cards.revisions.list",
       "cards.move",
       "cards.patch",
       "cards.purge",
       "cards.restore",
+      "cards.revisions.create",
+      "cards.revisions.get",
       "cards.timeline",
       "cards.trash"
     ],
@@ -2749,10 +2761,13 @@ export const commandRegistry: CommandSpec[] = [
       "cards.archive",
       "cards.create",
       "cards.get",
+      "cards.revisions.list",
       "cards.list",
       "cards.patch",
       "cards.purge",
       "cards.restore",
+      "cards.revisions.create",
+      "cards.revisions.get",
       "cards.timeline",
       "cards.trash"
     ],
@@ -2804,10 +2819,6 @@ export const commandRegistry: CommandSpec[] = [
           "type": "list\u003cany\u003e"
         },
         {
-          "name": "patch.definition_of_done",
-          "type": "list\u003cstring\u003e"
-        },
-        {
           "name": "patch.document_ref",
           "type": "string"
         },
@@ -2854,14 +2865,6 @@ export const commandRegistry: CommandSpec[] = [
           ]
         },
         {
-          "name": "patch.summary",
-          "type": "string"
-        },
-        {
-          "name": "patch.title",
-          "type": "string"
-        },
-        {
           "name": "patch.topic_ref",
           "type": "string"
         }
@@ -2874,10 +2877,13 @@ export const commandRegistry: CommandSpec[] = [
       "cards.archive",
       "cards.create",
       "cards.get",
+      "cards.revisions.list",
       "cards.list",
       "cards.move",
       "cards.purge",
       "cards.restore",
+      "cards.revisions.create",
+      "cards.revisions.get",
       "cards.timeline",
       "cards.trash"
     ],
@@ -2926,10 +2932,13 @@ export const commandRegistry: CommandSpec[] = [
       "cards.archive",
       "cards.create",
       "cards.get",
+      "cards.revisions.list",
       "cards.list",
       "cards.move",
       "cards.patch",
       "cards.restore",
+      "cards.revisions.create",
+      "cards.revisions.get",
       "cards.timeline",
       "cards.trash"
     ],
@@ -2982,15 +2991,199 @@ export const commandRegistry: CommandSpec[] = [
       "cards.archive",
       "cards.create",
       "cards.get",
+      "cards.revisions.list",
       "cards.list",
       "cards.move",
       "cards.patch",
       "cards.purge",
+      "cards.revisions.create",
+      "cards.revisions.get",
       "cards.timeline",
       "cards.trash"
     ],
     "go_method": "CardsRestore",
     "ts_method": "cardsRestore"
+  },
+  {
+    "command_id": "cards.revisions.create",
+    "cli_path": "cards revise",
+    "group": "cards",
+    "method": "POST",
+    "path": "/cards/{card_id}/revisions",
+    "operation_id": "createCardRevision",
+    "summary": "Create card revision",
+    "why": "Append a new immutable card content revision and advance the card head.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ card, revision }`.",
+    "error_codes": [
+      "auth_required",
+      "invalid_request",
+      "invalid_token",
+      "not_found",
+      "conflict"
+    ],
+    "concepts": [
+      "cards",
+      "revisions",
+      "write"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "body_schema": {
+      "required": [
+        {
+          "name": "if_base_revision",
+          "type": "string"
+        },
+        {
+          "name": "revision.summary",
+          "type": "string"
+        },
+        {
+          "name": "revision.title",
+          "type": "string"
+        }
+      ],
+      "optional": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        },
+        {
+          "name": "revision.definition_of_done",
+          "type": "list\u003cstring\u003e"
+        },
+        {
+          "name": "revision.provenance.by_field",
+          "type": "object"
+        },
+        {
+          "name": "revision.provenance.notes",
+          "type": "string"
+        },
+        {
+          "name": "revision.provenance.sources",
+          "type": "list\u003cstring\u003e"
+        },
+        {
+          "name": "revision.refs",
+          "type": "list\u003cany\u003e"
+        }
+      ]
+    },
+    "path_params": [
+      "card_id"
+    ],
+    "adjacent_commands": [
+      "cards.archive",
+      "cards.create",
+      "cards.get",
+      "cards.revisions.list",
+      "cards.list",
+      "cards.move",
+      "cards.patch",
+      "cards.purge",
+      "cards.restore",
+      "cards.revisions.get",
+      "cards.timeline",
+      "cards.trash"
+    ],
+    "go_method": "CardsRevisionsCreate",
+    "ts_method": "cardsRevisionsCreate"
+  },
+  {
+    "command_id": "cards.revisions.get",
+    "cli_path": "cards revision get",
+    "group": "cards",
+    "method": "GET",
+    "path": "/cards/{card_id}/revisions/{revision_id}",
+    "operation_id": "getCardRevision",
+    "summary": "Get card revision",
+    "why": "Resolve one immutable card content revision.",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ card_id, revision }`.",
+    "error_codes": [
+      "auth_required",
+      "invalid_token",
+      "not_found"
+    ],
+    "concepts": [
+      "cards",
+      "revisions"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "path_params": [
+      "card_id",
+      "revision_id"
+    ],
+    "adjacent_commands": [
+      "cards.archive",
+      "cards.create",
+      "cards.get",
+      "cards.revisions.list",
+      "cards.list",
+      "cards.move",
+      "cards.patch",
+      "cards.purge",
+      "cards.restore",
+      "cards.revisions.create",
+      "cards.timeline",
+      "cards.trash"
+    ],
+    "go_method": "CardsRevisionsGet",
+    "ts_method": "cardsRevisionsGet"
+  },
+  {
+    "command_id": "cards.revisions.list",
+    "cli_path": "cards history",
+    "group": "cards",
+    "method": "GET",
+    "path": "/cards/{card_id}/revisions",
+    "operation_id": "listCardRevisions",
+    "summary": "List card revisions",
+    "why": "Enumerate immutable content revisions for one card lineage.",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ card_id, revisions }`.",
+    "error_codes": [
+      "auth_required",
+      "invalid_token",
+      "not_found"
+    ],
+    "concepts": [
+      "cards",
+      "revisions"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "path_params": [
+      "card_id"
+    ],
+    "adjacent_commands": [
+      "cards.archive",
+      "cards.create",
+      "cards.get",
+      "cards.list",
+      "cards.move",
+      "cards.patch",
+      "cards.purge",
+      "cards.restore",
+      "cards.revisions.create",
+      "cards.revisions.get",
+      "cards.timeline",
+      "cards.trash"
+    ],
+    "go_method": "CardsRevisionsList",
+    "ts_method": "cardsRevisionsList"
   },
   {
     "command_id": "cards.timeline",
@@ -3024,11 +3217,14 @@ export const commandRegistry: CommandSpec[] = [
       "cards.archive",
       "cards.create",
       "cards.get",
+      "cards.revisions.list",
       "cards.list",
       "cards.move",
       "cards.patch",
       "cards.purge",
       "cards.restore",
+      "cards.revisions.create",
+      "cards.revisions.get",
       "cards.trash"
     ],
     "go_method": "CardsTimeline",
@@ -3086,11 +3282,14 @@ export const commandRegistry: CommandSpec[] = [
       "cards.archive",
       "cards.create",
       "cards.get",
+      "cards.revisions.list",
       "cards.list",
       "cards.move",
       "cards.patch",
       "cards.purge",
       "cards.restore",
+      "cards.revisions.create",
+      "cards.revisions.get",
       "cards.timeline"
     ],
     "go_method": "CardsTrash",
@@ -3944,8 +4143,6 @@ export const commandRegistry: CommandSpec[] = [
             "human_attention_requested",
             "human_attention_responded",
             "message_posted",
-            "receipt_added",
-            "review_completed",
             "topic_archived",
             "topic_created",
             "topic_restored",
@@ -4831,158 +5028,6 @@ export const commandRegistry: CommandSpec[] = [
     "ts_method": "opsUsageSummary"
   },
   {
-    "command_id": "packets.receipts.create",
-    "cli_path": "packets receipts create",
-    "group": "packets",
-    "method": "POST",
-    "path": "/packets/receipts",
-    "operation_id": "createReceiptPacket",
-    "summary": "Create receipt packet",
-    "why": "Record structured delivery evidence anchored by `subject_ref`.",
-    "input_mode": "json-body",
-    "streaming": {
-      "mode": "none"
-    },
-    "output_envelope": "Returns `{ artifact, packet_kind, packet }`.",
-    "error_codes": [
-      "auth_required",
-      "invalid_request",
-      "invalid_token"
-    ],
-    "concepts": [
-      "packets",
-      "evidence"
-    ],
-    "stability": "beta",
-    "surface": "canonical",
-    "body_schema": {
-      "required": [
-        {
-          "name": "artifact",
-          "type": "object"
-        },
-        {
-          "name": "packet.changes_summary",
-          "type": "string"
-        },
-        {
-          "name": "packet.known_gaps",
-          "type": "list\u003cstring\u003e"
-        },
-        {
-          "name": "packet.outputs",
-          "type": "list\u003cany\u003e"
-        },
-        {
-          "name": "packet.receipt_id",
-          "type": "string"
-        },
-        {
-          "name": "packet.subject_ref",
-          "type": "typed_ref"
-        },
-        {
-          "name": "packet.verification_evidence",
-          "type": "list\u003cany\u003e"
-        }
-      ],
-      "optional": [
-        {
-          "name": "actor_id",
-          "type": "string"
-        },
-        {
-          "name": "request_key",
-          "type": "string"
-        }
-      ]
-    },
-    "adjacent_commands": [
-      "packets.reviews.create"
-    ],
-    "go_method": "PacketsReceiptsCreate",
-    "ts_method": "packetsReceiptsCreate"
-  },
-  {
-    "command_id": "packets.reviews.create",
-    "cli_path": "packets reviews create",
-    "group": "packets",
-    "method": "POST",
-    "path": "/packets/reviews",
-    "operation_id": "createReviewPacket",
-    "summary": "Create review packet",
-    "why": "Record a structured review over a receipt anchored to the same card as subject_ref.",
-    "input_mode": "json-body",
-    "streaming": {
-      "mode": "none"
-    },
-    "output_envelope": "Returns `{ artifact, packet_kind, packet }`.",
-    "error_codes": [
-      "auth_required",
-      "invalid_request",
-      "invalid_token"
-    ],
-    "concepts": [
-      "packets",
-      "evidence"
-    ],
-    "stability": "beta",
-    "surface": "canonical",
-    "body_schema": {
-      "required": [
-        {
-          "name": "artifact",
-          "type": "object"
-        },
-        {
-          "name": "packet.evidence_refs",
-          "type": "list\u003cany\u003e"
-        },
-        {
-          "name": "packet.notes",
-          "type": "string"
-        },
-        {
-          "name": "packet.outcome",
-          "type": "string",
-          "enum_values": [
-            "accept",
-            "escalate",
-            "revise"
-          ],
-          "enum_policy": "strict"
-        },
-        {
-          "name": "packet.receipt_ref",
-          "type": "string"
-        },
-        {
-          "name": "packet.review_id",
-          "type": "string"
-        },
-        {
-          "name": "packet.subject_ref",
-          "type": "typed_ref"
-        }
-      ],
-      "optional": [
-        {
-          "name": "actor_id",
-          "type": "string"
-        },
-        {
-          "name": "request_key",
-          "type": "string"
-        }
-      ]
-    },
-    "adjacent_commands": [
-      "packets.receipts.create"
-    ],
-    "go_method": "PacketsReviewsCreate",
-    "ts_method": "packetsReviewsCreate"
-  },
-  {
     "command_id": "ref_edges.list",
     "cli_path": "ref-edges list",
     "group": "ref-edges",
@@ -5523,7 +5568,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/topics",
     "operation_id": "createTopic",
     "summary": "Create topic",
-    "why": "Create a first-class durable topic before attaching cards, docs, or packets.",
+    "why": "Create a first-class durable topic before attaching cards, docs, or artifacts.",
     "input_mode": "json-body",
     "streaming": {
       "mode": "none"
@@ -6331,6 +6376,18 @@ export class AnxClient {
     return this.invoke("cards.restore", pathParams, options);
   }
 
+  cardsRevisionsCreate(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("cards.revisions.create", pathParams, options);
+  }
+
+  cardsRevisionsGet(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("cards.revisions.get", pathParams, options);
+  }
+
+  cardsRevisionsList(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("cards.revisions.list", pathParams, options);
+  }
+
   cardsTimeline(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("cards.timeline", pathParams, options);
   }
@@ -6485,14 +6542,6 @@ export class AnxClient {
 
   opsUsageSummary(options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("ops.usage.summary", {}, options);
-  }
-
-  packetsReceiptsCreate(options: RequestOptions = {}): Promise<InvokeResult> {
-    return this.invoke("packets.receipts.create", {}, options);
-  }
-
-  packetsReviewsCreate(options: RequestOptions = {}): Promise<InvokeResult> {
-    return this.invoke("packets.reviews.create", {}, options);
   }
 
   refEdgesList(options: RequestOptions = {}): Promise<InvokeResult> {

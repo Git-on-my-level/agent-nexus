@@ -1900,7 +1900,7 @@ function buildCanonicalTopicSeed(thread) {
     owner_refs: ownerActor ? [`actor:${ownerActor}`] : [],
     board_refs: boardRefs,
     document_refs: documentRefs,
-    related_refs: [...new Set(relatedRefs)],
+    related_refs: cleanRemovedPacketRefs([...new Set(relatedRefs)]),
     created_at: thread?.created_at ?? null,
     created_by: thread?.created_by ?? thread?.updated_by ?? "unknown",
     updated_at: thread?.updated_at ?? thread?.created_at ?? null,
@@ -1992,16 +1992,16 @@ function buildCanonicalCardSeed(card) {
     assignee_refs: deepClone(resolvedAssigneeRefs),
     risk: String(card?.risk ?? "").trim() || "medium",
     resolution: cardResolutionFromRow(card),
-    resolution_refs: Array.isArray(card?.resolution_refs)
-      ? deepClone(card.resolution_refs)
-      : [],
-    related_refs: [
-      boardRef,
-      topicRef,
-      threadTypedRef,
-      documentRef,
-      ...(Array.isArray(card?.related_refs) ? card.related_refs : []),
-    ].filter(Boolean),
+    resolution_refs: cleanRemovedPacketRefs(card?.resolution_refs),
+    related_refs: cleanRemovedPacketRefs(
+      [
+        boardRef,
+        topicRef,
+        threadTypedRef,
+        documentRef,
+        ...(Array.isArray(card?.related_refs) ? card.related_refs : []),
+      ].filter(Boolean),
+    ),
     created_at: card?.created_at ?? null,
     created_by: card?.created_by ?? thread?.created_by ?? "unknown",
     updated_at: card?.updated_at ?? card?.created_at ?? null,
@@ -2052,19 +2052,53 @@ function buildCanonicalPacketSeed(artifact) {
   };
 }
 
+const REMOVED_PACKET_ARTIFACT_KINDS = new Set(["receipt", "review"]);
+const REMOVED_PACKET_EVENT_TYPES = new Set([
+  "receipt_added",
+  "review_completed",
+]);
+
+function keepDevSeedArtifact(artifact) {
+  return !REMOVED_PACKET_ARTIFACT_KINDS.has(String(artifact?.kind ?? ""));
+}
+
+function cleanRemovedPacketRefs(refs) {
+  return (Array.isArray(refs) ? refs : []).filter((ref) => {
+    const value = String(ref ?? "");
+    return (
+      !value.startsWith("artifact:artifact-receipt-") &&
+      !value.startsWith("artifact:artifact-review-")
+    );
+  });
+}
+
+function cleanDevSeedEvent(event) {
+  if (REMOVED_PACKET_EVENT_TYPES.has(String(event?.type ?? ""))) {
+    return null;
+  }
+  return {
+    ...event,
+    refs: cleanRemovedPacketRefs(event?.refs),
+  };
+}
+
 export function getDevSeedData() {
+  const exportedArtifacts = artifacts.filter(keepDevSeedArtifact);
+  const exportedEvents = events.map(cleanDevSeedEvent).filter(Boolean);
   return {
     actors: deepClone(actors),
     topics: deepClone(threads.map(buildCanonicalTopicSeed)),
     boards: deepClone(boards.map(buildCanonicalBoardSeed)),
     cards: deepClone(boardCards.map(buildCanonicalCardSeed)),
-    packets: deepClone(artifacts.map(buildCanonicalPacketSeed).filter(Boolean)),
+    packets: deepClone(
+      exportedArtifacts.map(buildCanonicalPacketSeed).filter(Boolean),
+    ),
     threads: deepClone(threads),
     documents: deepClone(MOCK_DOCUMENTS),
     documentRevisions: deepClone(MOCK_DOCUMENT_REVISIONS),
-    artifacts: deepClone(artifacts),
+    artifacts: deepClone(exportedArtifacts),
     boardCards: deepClone(boardCards),
-    events: deepClone(events),
+    events: deepClone(exportedEvents),
   };
 }
 

@@ -29,6 +29,7 @@ var ErrNotTrashed = errors.New("entity is not trashed")
 var ErrNotArchived = errors.New("entity is not archived")
 var ErrAlreadyTrashed = errors.New("entity is trashed")
 var ErrArtifactInUse = errors.New("artifact is referenced by document revisions")
+var ErrOwnedArtifactLifecycle = errors.New("artifact lifecycle is owned by its parent resource")
 var ErrInvalidArtifactID = errors.New("invalid artifact id")
 var ErrInvalidDocumentRequest = errors.New("invalid document request")
 var ErrInvalidCursor = errors.New("invalid cursor")
@@ -42,12 +43,13 @@ const (
 type ArtifactListFilter struct {
 	States []string
 
-	Q             string
-	Limit         *int
-	Kind          string
-	ThreadID      string
-	CreatedBefore string
-	CreatedAfter  string
+	Q                  string
+	Limit              *int
+	Kind               string
+	ThreadID           string
+	CreatedBefore      string
+	CreatedAfter       string
+	IncludeSystemOwned bool
 }
 
 type DocumentListFilter struct {
@@ -628,7 +630,63 @@ func (s *Store) GetArtifact(ctx context.Context, id string) (map[string]any, err
 		return nil, fmt.Errorf("query artifact metadata: %w", err)
 	}
 
-	return decodeArtifactMetadataJSON(metadataJSON)
+	metadata, err := decodeArtifactMetadataJSON(metadataJSON)
+	if err != nil {
+		return nil, err
+	}
+	if owner, err := s.loadArtifactOwner(ctx, s.db, id); err != nil {
+		return nil, err
+	} else if owner.Kind != "" {
+		owner.apply(metadata)
+	}
+	return metadata, nil
+}
+
+type artifactOwner struct {
+	Kind       string
+	ResourceID string
+	RevisionID string
+}
+
+func (o artifactOwner) apply(metadata map[string]any) {
+	if metadata == nil || strings.TrimSpace(o.Kind) == "" {
+		return
+	}
+	metadata["system_owned"] = true
+	metadata["owner_ref"] = strings.TrimSpace(o.Kind) + ":" + strings.TrimSpace(o.ResourceID)
+	metadata["owner_revision_ref"] = strings.TrimSpace(o.Kind) + "_revision:" + strings.TrimSpace(o.RevisionID)
+}
+
+func (s *Store) loadArtifactOwner(ctx context.Context, q queryRower, artifactID string) (artifactOwner, error) {
+	artifactID = strings.TrimSpace(artifactID)
+	if artifactID == "" {
+		return artifactOwner{}, nil
+	}
+	var docID, revisionID string
+	err := q.QueryRowContext(ctx,
+		`SELECT document_id, revision_id FROM document_revisions WHERE artifact_id = ? LIMIT 1`,
+		artifactID,
+	).Scan(&docID, &revisionID)
+	if err == nil {
+		return artifactOwner{Kind: "document", ResourceID: docID, RevisionID: revisionID}, nil
+	}
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return artifactOwner{}, fmt.Errorf("query document artifact owner: %w", err)
+	}
+	err = q.QueryRowContext(ctx,
+		`SELECT card_id, revision_id FROM card_revisions WHERE artifact_id = ? LIMIT 1`,
+		artifactID,
+	).Scan(&docID, &revisionID)
+	if err == nil {
+		return artifactOwner{Kind: "card", ResourceID: docID, RevisionID: revisionID}, nil
+	}
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		if strings.Contains(err.Error(), "no such table: card_revisions") {
+			return artifactOwner{}, nil
+		}
+		return artifactOwner{}, fmt.Errorf("query card artifact owner: %w", err)
+	}
+	return artifactOwner{}, nil
 }
 
 func (s *Store) GetArtifactContent(ctx context.Context, id string) ([]byte, string, error) {
@@ -678,14 +736,19 @@ func (s *Store) ListArtifacts(ctx context.Context, filter ArtifactListFilter) ([
 
 	artifacts := make([]map[string]any, 0)
 	for rows.Next() {
-		var metadataJSON string
-		if err := rows.Scan(&metadataJSON); err != nil {
+		var artifactID, metadataJSON string
+		if err := rows.Scan(&artifactID, &metadataJSON); err != nil {
 			return nil, fmt.Errorf("scan artifact row: %w", err)
 		}
 
 		metadata, err := decodeArtifactMetadataJSON(metadataJSON)
 		if err != nil {
 			return nil, err
+		}
+		if owner, err := s.loadArtifactOwner(ctx, s.db, artifactID); err != nil {
+			return nil, err
+		} else if owner.Kind != "" {
+			owner.apply(metadata)
 		}
 
 		artifacts = append(artifacts, metadata)
@@ -708,6 +771,25 @@ func (s *Store) TrashArtifact(ctx context.Context, actorID string, artifactID st
 	artifactID = strings.TrimSpace(artifactID)
 	if artifactID == "" {
 		return nil, fmt.Errorf("artifact_id is required")
+	}
+
+	if owner, err := s.loadArtifactOwner(ctx, s.db, artifactID); err != nil {
+		return nil, err
+	} else if owner.Kind != "" {
+		switch owner.Kind {
+		case "document":
+			if _, _, err := s.TrashDocument(ctx, actorID, owner.ResourceID, reason); err != nil {
+				return nil, err
+			}
+			return s.GetArtifact(ctx, artifactID)
+		case "card":
+			if _, err := s.TrashBoardCard(ctx, actorID, "", owner.ResourceID, reason, RemoveBoardCardInput{}); err != nil {
+				return nil, err
+			}
+			return s.GetArtifact(ctx, artifactID)
+		default:
+			return nil, ErrOwnedArtifactLifecycle
+		}
 	}
 
 	var metadataJSON string
@@ -765,6 +847,12 @@ func (s *Store) ArchiveArtifact(ctx context.Context, actorID, artifactID string)
 	artifactID = strings.TrimSpace(artifactID)
 	if artifactID == "" {
 		return nil, fmt.Errorf("artifact_id is required")
+	}
+
+	if owner, err := s.loadArtifactOwner(ctx, s.db, artifactID); err != nil {
+		return nil, err
+	} else if owner.Kind != "" {
+		return nil, ErrOwnedArtifactLifecycle
 	}
 
 	var metadataJSON string
@@ -829,6 +917,12 @@ func (s *Store) UnarchiveArtifact(ctx context.Context, actorID, artifactID strin
 		return nil, fmt.Errorf("artifact_id is required")
 	}
 
+	if owner, err := s.loadArtifactOwner(ctx, s.db, artifactID); err != nil {
+		return nil, err
+	} else if owner.Kind != "" {
+		return nil, ErrOwnedArtifactLifecycle
+	}
+
 	var metadataJSON string
 	var trashedDiscard sql.NullString
 	var archivedAt sql.NullString
@@ -882,6 +976,25 @@ func (s *Store) RestoreArtifact(ctx context.Context, actorID, artifactID string)
 	artifactID = strings.TrimSpace(artifactID)
 	if artifactID == "" {
 		return nil, fmt.Errorf("artifact_id is required")
+	}
+
+	if owner, err := s.loadArtifactOwner(ctx, s.db, artifactID); err != nil {
+		return nil, err
+	} else if owner.Kind != "" {
+		switch owner.Kind {
+		case "document":
+			if _, _, err := s.RestoreDocument(ctx, actorID, owner.ResourceID, ""); err != nil {
+				return nil, err
+			}
+			return s.GetArtifact(ctx, artifactID)
+		case "card":
+			if _, err := s.RestoreArchivedBoardCard(ctx, actorID, "", owner.ResourceID, RemoveBoardCardInput{}); err != nil {
+				return nil, err
+			}
+			return s.GetArtifact(ctx, artifactID)
+		default:
+			return nil, ErrOwnedArtifactLifecycle
+		}
 	}
 
 	var metadataJSON string
@@ -1421,6 +1534,19 @@ func (s *Store) PurgeTrashedArtifact(ctx context.Context, artifactID string) err
 		return fmt.Errorf("artifact_id is required")
 	}
 
+	if owner, err := s.loadArtifactOwner(ctx, s.db, artifactID); err != nil {
+		return err
+	} else if owner.Kind != "" {
+		switch owner.Kind {
+		case "document":
+			return s.PurgeDocument(ctx, owner.ResourceID)
+		case "card":
+			return s.PurgeArchivedBoardCard(ctx, "", owner.ResourceID)
+		default:
+			return ErrOwnedArtifactLifecycle
+		}
+	}
+
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin purge transaction: %w", err)
@@ -1445,15 +1571,6 @@ func (s *Store) PurgeTrashedArtifact(ctx context.Context, artifactID string) err
 	}
 	if err != nil {
 		return fmt.Errorf("select trashed artifact: %w", err)
-	}
-
-	var ref int
-	err = tx.QueryRowContext(ctx, `SELECT 1 FROM document_revisions WHERE artifact_id = ? LIMIT 1`, artifactID).Scan(&ref)
-	if err == nil {
-		return ErrArtifactInUse
-	}
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("check document revisions referencing artifact: %w", err)
 	}
 
 	if _, err := tx.ExecContext(ctx, `DELETE FROM artifacts WHERE id = ?`, artifactID); err != nil {
@@ -2667,13 +2784,17 @@ func buildListArtifactsQuery(filter ArtifactListFilter) (string, []any) {
 			primaryArgs = append(primaryArgs, qPattern, qPattern, qPattern)
 			secondaryArgs = append(secondaryArgs, qPattern, qPattern, qPattern)
 		}
-		innerQuery := `SELECT metadata_json, created_at, id FROM artifacts WHERE ` + strings.Join(primaryClauses, " AND ") + `
+		if !filter.IncludeSystemOwned && strings.TrimSpace(filter.Kind) == "" {
+			primaryClauses = append(primaryClauses, "kind NOT IN ('doc', 'card')")
+			secondaryClauses = append(secondaryClauses, "artifacts.kind NOT IN ('doc', 'card')")
+		}
+		innerQuery := `SELECT id, metadata_json, created_at FROM artifacts WHERE ` + strings.Join(primaryClauses, " AND ") + `
 			UNION ALL
-			SELECT artifacts.metadata_json, artifacts.created_at, artifacts.id
+			SELECT artifacts.id, artifacts.metadata_json, artifacts.created_at
 			  FROM ref_edges
 			  JOIN artifacts ON artifacts.id = ref_edges.source_id
 			 WHERE ` + strings.Join(secondaryClauses, " AND ")
-		query := `SELECT metadata_json FROM (` + innerQuery + `) ORDER BY created_at ASC, id ASC`
+		query := `SELECT id, metadata_json FROM (` + innerQuery + `) ORDER BY created_at ASC, id ASC`
 		if filter.Limit != nil && *filter.Limit > 0 {
 			query += fmt.Sprintf(` LIMIT %d`, *filter.Limit)
 		}
@@ -2681,12 +2802,14 @@ func buildListArtifactsQuery(filter ArtifactListFilter) (string, []any) {
 		return query, args
 	}
 
-	query := `SELECT metadata_json FROM artifacts WHERE 1=1`
+	query := `SELECT id, metadata_json FROM artifacts WHERE 1=1`
 	args := make([]any, 0, 8)
 	query += ` AND ` + LifecycleStatesOrGroup("archived_at", "trashed_at", filter.States)
 	if kind := strings.TrimSpace(filter.Kind); kind != "" {
 		query += ` AND kind = ?`
 		args = append(args, kind)
+	} else if !filter.IncludeSystemOwned {
+		query += ` AND kind NOT IN ('doc', 'card')`
 	}
 	if createdAfter := strings.TrimSpace(filter.CreatedAfter); createdAfter != "" {
 		query += ` AND created_at >= ?`

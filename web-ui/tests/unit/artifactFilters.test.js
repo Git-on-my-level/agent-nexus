@@ -15,11 +15,11 @@ describe("artifact list URL state", () => {
     expect(
       parseArtifactListSearchParams(
         new URLSearchParams(
-          `kind=receipt&thread_id=thread-onboarding&created_after=${encodeURIComponent(createdAfterIso)}`,
+          `kind=card&thread_id=thread-onboarding&created_after=${encodeURIComponent(createdAfterIso)}`,
         ),
       ),
     ).toEqual({
-      kind: "receipt",
+      kind: "card",
       thread_id: "thread-onboarding",
       created_after: createdAfterIso,
       created_before: "",
@@ -51,26 +51,26 @@ describe("artifact list URL state", () => {
 
     expect(
       buildArtifactListSearchString({
-        kind: "receipt",
+        kind: "card",
         thread_id: "thread-onboarding",
         created_after: createdAfterLocal,
         created_before: "",
       }),
     ).toBe(
-      `kind=receipt&thread_id=thread-onboarding&created_after=${encodeURIComponent(createdAfterIso)}`,
+      `kind=card&thread_id=thread-onboarding&created_after=${encodeURIComponent(createdAfterIso)}`,
     );
   });
 
   it("builds the artifact API query with ISO timestamps", () => {
     expect(
       buildArtifactListQuery({
-        kind: "review",
+        kind: "doc",
         thread_id: "thread-onboarding",
         created_after: "2026-03-04T09:30",
         created_before: "2026-03-04T17:45",
       }),
     ).toEqual({
-      kind: "review",
+      kind: "doc",
       thread_id: "thread-onboarding",
       created_after: new Date("2026-03-04T09:30").toISOString(),
       created_before: new Date("2026-03-04T17:45").toISOString(),

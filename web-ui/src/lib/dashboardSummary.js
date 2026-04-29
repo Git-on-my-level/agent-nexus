@@ -80,15 +80,16 @@ export function selectRecentlyUpdatedTopics(topics = [], limit = 5) {
 
 export function buildArtifactKindSummary(artifacts = []) {
   const counts = {
-    review: 0,
-    receipt: 0,
+    doc: 0,
+    card: 0,
+    agent_wake: 0,
     other: 0,
   };
 
   for (const artifact of artifacts) {
     const kind = String(artifact?.kind ?? "");
 
-    if (kind === "review" || kind === "receipt") {
+    if (kind === "doc" || kind === "card" || kind === "agent_wake") {
       counts[kind] += 1;
       continue;
     }

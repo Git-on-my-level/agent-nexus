@@ -389,7 +389,31 @@ func TestBoardCardWriteEdgeRejectsMixedAliases(t *testing.T) {
 	}
 
 	cardID := asString(addCardPayload.Card["id"])
-	cardUpdatedAt := asString(addCardPayload.Card["updated_at"])
+	baseRevisionRef := asString(addCardPayload.Card["head_revision_ref"])
+	if !strings.HasPrefix(baseRevisionRef, "card_revision:") {
+		t.Fatalf("expected card create response to include head_revision_ref, got %#v", addCardPayload.Card)
+	}
+	revisionResp := postJSONExpectStatus(t, h.baseURL+"/cards/"+cardID+"/revisions", `{
+		"actor_id":"actor-1",
+		"if_base_revision":"`+strings.TrimPrefix(baseRevisionRef, "card_revision:")+`",
+		"revision":{"summary":"Canonical revised summary"}
+	}`, http.StatusCreated)
+	defer revisionResp.Body.Close()
+	var revisionPayload struct {
+		Card     map[string]any `json:"card"`
+		Revision map[string]any `json:"revision"`
+	}
+	if err := json.NewDecoder(revisionResp.Body).Decode(&revisionPayload); err != nil {
+		t.Fatalf("decode card revision response: %v", err)
+	}
+	if got := asString(revisionPayload.Card["summary"]); got != "Canonical revised summary" {
+		t.Fatalf("expected nested revision summary to update card, got %#v", revisionPayload.Card)
+	}
+	if got := asString(revisionPayload.Revision["summary"]); got != "Canonical revised summary" {
+		t.Fatalf("expected nested revision summary in revision, got %#v", revisionPayload.Revision)
+	}
+
+	cardUpdatedAt := asString(revisionPayload.Card["updated_at"])
 	patchResp := patchJSONExpectStatus(t, h.baseURL+"/cards/"+cardID, `{
 		"actor_id":"actor-1",
 		"if_updated_at":"`+cardUpdatedAt+`",

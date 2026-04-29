@@ -3,8 +3,8 @@
 Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
-- Contract version: `0.5.0`
-- Groups: `19`
+- Contract version: `0.6.0`
+- Groups: `18`
 
 ## `topics`
 
@@ -110,7 +110,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `cards`
 
-- Commands: `10`
+- Commands: `13`
 - Command IDs:
   - `cards.archive` (`cards archive`)
   - `cards.create` (`cards create`)
@@ -120,6 +120,9 @@ Generated from `contracts/anx-openapi.yaml`.
   - `cards.patch` (`cards patch`)
   - `cards.purge` (`cards purge`)
   - `cards.restore` (`cards restore`)
+  - `cards.revisions.create` (`cards revise`)
+  - `cards.revisions.get` (`cards revision get`)
+  - `cards.revisions.list` (`cards history`)
   - `cards.timeline` (`cards timeline`)
   - `cards.trash` (`cards trash`)
 
@@ -189,13 +192,6 @@ Generated from `contracts/anx-openapi.yaml`.
   - `ops.blob.usage.rebuild` (`ops blob usage rebuild`)
   - `ops.health` (`ops health`)
   - `ops.usage.summary` (`ops usage summary`)
-
-## `packets`
-
-- Commands: `2`
-- Command IDs:
-  - `packets.receipts.create` (`packets receipts create`)
-  - `packets.reviews.create` (`packets reviews create`)
 
 ## `ref-edges`
 

@@ -236,7 +236,7 @@ func TestRunLocalAuthLifecycleHelpTopics(t *testing.T) {
 }
 
 func TestRunGeneratedHelpTopicSupportsPacketsReceiptsCreatePath(t *testing.T) {
-	t.Parallel()
+	t.Skip("packet help topics were removed in the artifact-clean-cut model")
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
@@ -825,8 +825,8 @@ func TestGeneratedCommandHelpIncludesBodySchemaAndEnums(t *testing.T) {
 	if !strings.Contains(output, "body `event.type` (string)") {
 		t.Fatalf("expected event.type body field output=%s", output)
 	}
-	if !strings.Contains(output, "receipt_added") {
-		t.Fatalf("expected enum discoverability for receipt_added output=%s", output)
+	if !strings.Contains(output, "card_created") {
+		t.Fatalf("expected enum discoverability for card_created output=%s", output)
 	}
 	if !strings.Contains(output, "Communication:") {
 		t.Fatalf("expected authoring group heading output=%s", output)
@@ -839,9 +839,6 @@ func TestGeneratedCommandHelpIncludesBodySchemaAndEnums(t *testing.T) {
 	}
 	if !strings.Contains(output, "- `human_attention_responded`") {
 		t.Fatalf("expected human_attention_responded listing output=%s", output)
-	}
-	if !strings.Contains(output, "`receipt_added`: prefer `anx receipts create`") {
-		t.Fatalf("expected higher-level command hint output=%s", output)
 	}
 	if !strings.Contains(output, "`message_posted`") {
 		t.Fatalf("expected message_posted discoverability note output=%s", output)
@@ -1009,9 +1006,6 @@ func expectedRuntimeSupportedCommandIDs(meta registry.MetaRegistry) map[string]s
 			addPath(path)
 		}
 	}
-	for _, resource := range []string{"receipts", "reviews"} {
-		addPath(resource + " create")
-	}
 	for _, path := range runtimeRegistrySecretHelpPaths {
 		addPath(path)
 	}
@@ -1037,9 +1031,6 @@ func expectedGeneratedHelpRuntimePaths() []string {
 		for _, subcommand := range spec.valid {
 			appendPath(command + " " + strings.TrimSpace(subcommand))
 		}
-	}
-	for _, resource := range []string{"receipts", "reviews"} {
-		appendPath(resource + " create")
 	}
 	for _, path := range runtimeRegistrySecretHelpPaths {
 		appendPath(path)

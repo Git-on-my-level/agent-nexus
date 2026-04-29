@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Agent Nexus HTTP API
-  version: 0.5.0
+  version: 0.6.0
   description: |
     Canonical workspace HTTP contract for Agent Nexus.
 
@@ -156,7 +156,7 @@ paths:
       x-anx-surface: canonical
       x-anx-command-id: topics.create
       x-anx-cli-path: topics create
-      x-anx-why: Create a first-class durable topic before attaching cards, docs, or packets.
+      x-anx-why: Create a first-class durable topic before attaching cards, docs, or artifacts.
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ topic }`."
@@ -1827,6 +1827,102 @@ paths:
         '404':
           $ref: '#/components/responses/ErrorResponse'
 
+  /cards/{card_id}/revisions:
+    get:
+      operationId: listCardRevisions
+      summary: List card revisions
+      tags: [cards]
+      x-anx-surface: canonical
+      x-anx-command-id: cards.revisions.list
+      x-anx-cli-path: cards history
+      x-anx-why: Enumerate immutable content revisions for one card lineage.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ card_id, revisions }`."
+      x-anx-error-codes: [auth_required, invalid_token, not_found]
+      x-anx-concepts: [cards, revisions]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/CardID'
+      responses:
+        '200':
+          description: Card revisions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardRevisionsResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+    post:
+      operationId: createCardRevision
+      summary: Create card revision
+      tags: [cards]
+      x-anx-surface: canonical
+      x-anx-command-id: cards.revisions.create
+      x-anx-cli-path: cards revise
+      x-anx-why: Append a new immutable card content revision and advance the card head.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ card, revision }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-concepts: [cards, revisions, write]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/CardID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCardRevisionRequest'
+      responses:
+        '201':
+          description: Card revision created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardWithRevisionResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /cards/{card_id}/revisions/{revision_id}:
+    get:
+      operationId: getCardRevision
+      summary: Get card revision
+      tags: [cards]
+      x-anx-surface: canonical
+      x-anx-command-id: cards.revisions.get
+      x-anx-cli-path: cards revision get
+      x-anx-why: Resolve one immutable card content revision.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ card_id, revision }`."
+      x-anx-error-codes: [auth_required, invalid_token, not_found]
+      x-anx-concepts: [cards, revisions]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/CardID'
+        - $ref: '#/components/parameters/RevisionID'
+      responses:
+        '200':
+          description: Card revision payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardRevisionResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
   /cards/{card_id}/archive:
     post:
       operationId: archiveCard
@@ -2020,72 +2116,6 @@ paths:
         '404':
           $ref: '#/components/responses/ErrorResponse'
         '409':
-          $ref: '#/components/responses/ErrorResponse'
-
-  /packets/receipts:
-    post:
-      operationId: createReceiptPacket
-      summary: Create receipt packet
-      tags: [packets]
-      x-anx-surface: canonical
-      x-anx-command-id: packets.receipts.create
-      x-anx-cli-path: packets receipts create
-      x-anx-why: Record structured delivery evidence anchored by `subject_ref`.
-      x-anx-input-mode: json-body
-      x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ artifact, packet_kind, packet }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token]
-      x-anx-concepts: [packets, evidence]
-      x-anx-stability: beta
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateReceiptRequest'
-      responses:
-        '201':
-          description: Receipt packet created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PacketArtifactResponse'
-        '400':
-          $ref: '#/components/responses/ErrorResponse'
-        '401':
-          $ref: '#/components/responses/ErrorResponse'
-
-  /packets/reviews:
-    post:
-      operationId: createReviewPacket
-      summary: Create review packet
-      tags: [packets]
-      x-anx-surface: canonical
-      x-anx-command-id: packets.reviews.create
-      x-anx-cli-path: packets reviews create
-      x-anx-why: Record a structured review over a receipt anchored to the same card as subject_ref.
-      x-anx-input-mode: json-body
-      x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ artifact, packet_kind, packet }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token]
-      x-anx-concepts: [packets, evidence]
-      x-anx-stability: beta
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateReviewRequest'
-      responses:
-        '201':
-          description: Review packet created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PacketArtifactResponse'
-        '400':
-          $ref: '#/components/responses/ErrorResponse'
-        '401':
           $ref: '#/components/responses/ErrorResponse'
 
   /events:
@@ -2422,7 +2452,7 @@ paths:
       x-anx-surface: canonical
       x-anx-command-id: artifacts.create
       x-anx-cli-path: artifacts create
-      x-anx-why: Store content-addressed artifact metadata and payload (bytes, text, or structured packet JSON).
+      x-anx-why: Store content-addressed artifact metadata and payload (bytes, text, or structured JSON).
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ artifact }`."
@@ -2457,7 +2487,7 @@ paths:
       x-anx-surface: canonical
       x-anx-command-id: artifacts.get
       x-anx-cli-path: artifacts get
-      x-anx-why: Resolve immutable artifact metadata referenced from timelines and packets.
+      x-anx-why: Resolve immutable artifact metadata referenced from timelines and resources.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ artifact }`."
@@ -4340,6 +4370,17 @@ components:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
         summary: { type: string }
+        system_owned:
+          type: boolean
+          description: True when this artifact is owned by a document/card revision wrapper.
+        owner_ref:
+          allOf:
+            - $ref: '#/components/schemas/TypedRef'
+          description: Owning document/card ref for system-owned revision artifacts.
+        owner_revision_ref:
+          allOf:
+            - $ref: '#/components/schemas/TypedRef'
+          description: Owning document_revision/card_revision ref for system-owned revision artifacts.
         created_at: { type: string, format: date-time }
         created_by: { type: string }
       required: [id, kind, content_type, content_hash, refs, created_at, created_by]
@@ -4492,6 +4533,8 @@ components:
           type: string
           description: Backing thread id for card timeline and packet lifecycle (always set for persisted cards).
         document_ref: { $ref: '#/components/schemas/TypedRef' }
+        head_revision_ref: { $ref: '#/components/schemas/TypedRef' }
+        head_revision_number: { type: integer }
         title: { type: string }
         summary: { type: string }
         column_key:
@@ -4535,8 +4578,21 @@ components:
         trashed_by: { type: string }
         trash_reason: { type: string }
       required:
-        [id, board_ref, thread_id, title, summary, column_key, rank, assignee_refs, risk, resolution_refs,
+        [id, board_ref, thread_id, head_revision_ref, head_revision_number, title, summary, column_key, rank, assignee_refs, risk, resolution_refs,
          related_refs, created_at, created_by, updated_at, updated_by, provenance]
+
+    CardRevision:
+      type: object
+      properties:
+        revision_id: { type: string }
+        card_ref: { $ref: '#/components/schemas/TypedRef' }
+        prev_revision_ref: { $ref: '#/components/schemas/TypedRef' }
+        artifact_ref: { $ref: '#/components/schemas/TypedRef' }
+        revision_number: { type: integer }
+        summary: { type: string }
+        created_at: { type: string, format: date-time }
+        created_by: { type: string }
+      required: [revision_id, card_ref, artifact_ref, revision_number, created_at, created_by]
 
     BoardSummary:
       type: object
@@ -4773,11 +4829,12 @@ components:
 
     CardPatchInput:
       type: object
+      description: >
+        Mutable non-content card fields only. Versioned card content (`title`, `summary`,
+        `definition_of_done`) is changed through POST /cards/{card_id}/revisions.
       properties:
         topic_ref: { $ref: '#/components/schemas/TypedRef' }
         document_ref: { $ref: '#/components/schemas/TypedRef' }
-        title: { type: string }
-        summary: { type: string }
         assignee_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
@@ -4798,10 +4855,21 @@ components:
           type: string
           format: date-time
           nullable: true
+        provenance: { $ref: '#/components/schemas/Provenance' }
+
+    CardRevisionCreateInput:
+      type: object
+      properties:
+        title: { type: string }
+        summary: { type: string }
         definition_of_done:
           type: array
           items: { type: string }
+        refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
         provenance: { $ref: '#/components/schemas/Provenance' }
+      required: [title, summary]
 
     MoveCardInput:
       type: object
@@ -4826,45 +4894,6 @@ components:
           format: date-time
           description: Parent board optimistic concurrency token; required for moves that update column/rank (matches core).
       required: [column_key, if_board_updated_at]
-
-    ReceiptPacket:
-      type: object
-      properties:
-        receipt_id: { type: string }
-        subject_ref:
-          allOf:
-            - $ref: '#/components/schemas/TypedRef'
-          description: MUST be card:<card_id>.
-        outputs:
-          type: array
-          items: { $ref: '#/components/schemas/TypedRef' }
-        verification_evidence:
-          type: array
-          items: { $ref: '#/components/schemas/TypedRef' }
-        changes_summary: { type: string }
-        known_gaps:
-          type: array
-          items: { type: string }
-      required:
-        [receipt_id, subject_ref, outputs, verification_evidence, changes_summary, known_gaps]
-
-    ReviewPacket:
-      type: object
-      properties:
-        review_id: { type: string }
-        subject_ref:
-          allOf:
-            - $ref: '#/components/schemas/TypedRef'
-          description: MUST be card:<card_id>.
-        receipt_ref: { $ref: '#/components/schemas/TypedRef' }
-        outcome:
-          type: string
-          enum: [accept, revise, escalate]
-        notes: { type: string }
-        evidence_refs:
-          type: array
-          items: { $ref: '#/components/schemas/TypedRef' }
-      required: [review_id, subject_ref, receipt_ref, outcome, notes, evidence_refs]
 
     EventCreateInput:
       type: object
@@ -4952,6 +4981,16 @@ components:
           items: { $ref: '#/components/schemas/TypedRef' }
         provenance: { $ref: '#/components/schemas/Provenance' }
       required: [if_base_revision, content, content_type]
+
+    CreateCardRevisionRequest:
+      type: object
+      properties:
+        if_base_revision:
+          type: string
+          description: Base card revision id for optimistic concurrency; must match the card head.
+        actor_id: { type: string }
+        revision: { $ref: '#/components/schemas/CardRevisionCreateInput' }
+      required: [if_base_revision, revision]
 
     CreateBoardRequest:
       type: object
@@ -5089,36 +5128,6 @@ components:
               $ref: '#/components/schemas/MoveCardInput'
               deprecated: true
               description: Legacy envelope; prefer flat top-level fields. Ignored when `column_key` is set at the root.
-
-    CreateReceiptRequest:
-      type: object
-      description: >
-        Artifact envelope plus structured packet. Core requires both `artifact` and `packet`;
-        `artifact.kind` defaults to `receipt` when omitted.
-      properties:
-        actor_id: { type: string }
-        request_key: { type: string }
-        artifact:
-          type: object
-          additionalProperties: true
-          description: Artifact fields before persistence (kind, id, refs, summary, provenance, …).
-        packet: { $ref: '#/components/schemas/ReceiptPacket' }
-      required: [artifact, packet]
-
-    CreateReviewRequest:
-      type: object
-      description: >
-        Artifact envelope plus structured packet. Core requires both `artifact` and `packet`;
-        `artifact.kind` defaults to `review` when omitted.
-      properties:
-        actor_id: { type: string }
-        request_key: { type: string }
-        artifact:
-          type: object
-          additionalProperties: true
-          description: Artifact fields before persistence (kind, id, refs, summary, provenance, …).
-        packet: { $ref: '#/components/schemas/ReviewPacket' }
-      required: [artifact, packet]
 
     CreateEventRequest:
       type: object
@@ -5465,6 +5474,29 @@ components:
         card: { $ref: '#/components/schemas/Card' }
       required: [card]
 
+    CardWithRevisionResponse:
+      type: object
+      properties:
+        card: { $ref: '#/components/schemas/Card' }
+        revision: { $ref: '#/components/schemas/CardRevision' }
+      required: [card, revision]
+
+    CardRevisionsResponse:
+      type: object
+      properties:
+        card_id: { type: string }
+        revisions:
+          type: array
+          items: { $ref: '#/components/schemas/CardRevision' }
+      required: [card_id, revisions]
+
+    CardRevisionResponse:
+      type: object
+      properties:
+        card_id: { type: string }
+        revision: { $ref: '#/components/schemas/CardRevision' }
+      required: [card_id, revision]
+
     CardsResponse:
       type: object
       properties:
@@ -5509,19 +5541,6 @@ components:
         purged: { type: boolean }
         card_id: { type: string }
       required: [purged, card_id]
-
-    PacketPayload:
-      oneOf:
-        - $ref: '#/components/schemas/ReceiptPacket'
-        - $ref: '#/components/schemas/ReviewPacket'
-
-    PacketArtifactResponse:
-      type: object
-      properties:
-        artifact: { $ref: '#/components/schemas/Artifact' }
-        packet_kind: { type: string }
-        packet: { $ref: '#/components/schemas/PacketPayload' }
-      required: [artifact, packet_kind, packet]
 
     EventResponse:
       type: object

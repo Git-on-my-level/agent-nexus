@@ -99,6 +99,9 @@ export declare class AnxClient {
     cardsPatch(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     cardsPurge(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     cardsRestore(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    cardsRevisionsCreate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    cardsRevisionsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    cardsRevisionsList(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     cardsTimeline(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     cardsTrash(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     derivedRebuild(options?: RequestOptions): Promise<InvokeResult>;
@@ -138,8 +141,6 @@ export declare class AnxClient {
     opsBlobUsageRebuild(options?: RequestOptions): Promise<InvokeResult>;
     opsHealth(options?: RequestOptions): Promise<InvokeResult>;
     opsUsageSummary(options?: RequestOptions): Promise<InvokeResult>;
-    packetsReceiptsCreate(options?: RequestOptions): Promise<InvokeResult>;
-    packetsReviewsCreate(options?: RequestOptions): Promise<InvokeResult>;
     refEdgesList(options?: RequestOptions): Promise<InvokeResult>;
     secretsCreate(options?: RequestOptions): Promise<InvokeResult>;
     secretsDelete(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;

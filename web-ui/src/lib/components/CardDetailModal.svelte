@@ -13,6 +13,7 @@
     onclose = () => {},
     onmovecard = async () => {},
     onsavecard = async () => {},
+    onrevisecard = async () => {},
     onremovecard = async () => {},
   } = $props();
 </script>
@@ -29,6 +30,7 @@
     {onclose}
     {onmovecard}
     {onsavecard}
+    {onrevisecard}
     {onremovecard}
   />
 {/if}

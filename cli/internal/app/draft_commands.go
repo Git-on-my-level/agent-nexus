@@ -467,17 +467,15 @@ func validateDraftBody(commandID string, body map[string]any) []string {
 		return []string{fmt.Sprintf("command %q does not accept a request body", commandID)}
 	}
 	validators := map[string]func(map[string]any) []string{
-		"topics.create":           validateDraftTopicCreate,
-		"topics.patch":            validateDraftTopicPatch,
-		"cards.patch":             validateDraftCardPatch,
-		"cards.move":              validateDraftCardMove,
-		"docs.revisions.create":   validateDraftDocsRevision,
-		"events.create":           validateDraftEventCreate,
-		"artifacts.create":        validateDraftArtifactCreate,
-		"inbox.respond":           validateDraftInboxRespond,
-		"packets.receipts.create": validateDraftReceiptCreate,
-		"packets.reviews.create":  validateDraftReviewCreate,
-		"derived.rebuild":         validateDraftDerivedRebuild,
+		"topics.create":         validateDraftTopicCreate,
+		"topics.patch":          validateDraftTopicPatch,
+		"cards.patch":           validateDraftCardPatch,
+		"cards.move":            validateDraftCardMove,
+		"docs.revisions.create": validateDraftDocsRevision,
+		"events.create":         validateDraftEventCreate,
+		"artifacts.create":      validateDraftArtifactCreate,
+		"inbox.respond":         validateDraftInboxRespond,
+		"derived.rebuild":       validateDraftDerivedRebuild,
 	}
 	validate, exists := validators[commandID]
 	if !exists {

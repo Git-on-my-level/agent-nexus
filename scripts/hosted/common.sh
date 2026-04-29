@@ -428,14 +428,14 @@ emit_workspace_quota_env_lines() {
   local max_blob_bytes="$1"
   local max_artifacts="$2"
   local max_documents="$3"
-  local max_document_revisions="$4"
+  local max_revisions="$4"
   local max_upload_bytes="$5"
 
   cat <<EOF
 ANX_WORKSPACE_MAX_BLOB_BYTES=${max_blob_bytes}
 ANX_WORKSPACE_MAX_ARTIFACTS=${max_artifacts}
 ANX_WORKSPACE_MAX_DOCUMENTS=${max_documents}
-ANX_WORKSPACE_MAX_DOCUMENT_REVISIONS=${max_document_revisions}
+ANX_WORKSPACE_MAX_REVISIONS=${max_revisions}
 ANX_WORKSPACE_MAX_UPLOAD_BYTES=${max_upload_bytes}
 EOF
 }
@@ -444,14 +444,14 @@ emit_workspace_quota_metadata_lines() {
   local max_blob_bytes="$1"
   local max_artifacts="$2"
   local max_documents="$3"
-  local max_document_revisions="$4"
+  local max_revisions="$4"
   local max_upload_bytes="$5"
 
   cat <<EOF
 WORKSPACE_MAX_BLOB_BYTES=${max_blob_bytes}
 WORKSPACE_MAX_ARTIFACTS=${max_artifacts}
 WORKSPACE_MAX_DOCUMENTS=${max_documents}
-WORKSPACE_MAX_DOCUMENT_REVISIONS=${max_document_revisions}
+WORKSPACE_MAX_REVISIONS=${max_revisions}
 WORKSPACE_MAX_UPLOAD_BYTES=${max_upload_bytes}
 EOF
 }

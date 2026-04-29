@@ -1319,14 +1319,110 @@ func (s *Store) PurgeDocument(ctx context.Context, documentID string) error {
 		return fmt.Errorf("select trashed document: %w", err)
 	}
 
+	type ownedRevisionArtifact struct {
+		revisionID  string
+		artifactID  string
+		contentHash string
+	}
+	rows, err := tx.QueryContext(ctx,
+		`SELECT dr.revision_id, dr.artifact_id, a.content_hash
+		   FROM document_revisions dr
+		   JOIN artifacts a ON a.id = dr.artifact_id
+		  WHERE dr.document_id = ?`,
+		documentID,
+	)
+	if err != nil {
+		return fmt.Errorf("query document revision artifacts: %w", err)
+	}
+	owned := make([]ownedRevisionArtifact, 0)
+	for rows.Next() {
+		var item ownedRevisionArtifact
+		if err := rows.Scan(&item.revisionID, &item.artifactID, &item.contentHash); err != nil {
+			rows.Close()
+			return fmt.Errorf("scan document revision artifact: %w", err)
+		}
+		item.revisionID = strings.TrimSpace(item.revisionID)
+		item.artifactID = strings.TrimSpace(item.artifactID)
+		item.contentHash = strings.TrimSpace(item.contentHash)
+		owned = append(owned, item)
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("close document revision artifacts: %w", err)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate document revision artifacts: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM ref_edges WHERE source_type = ? AND source_id = ?`, "document", documentID); err != nil {
+		return fmt.Errorf("delete document source ref edges: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM ref_edges WHERE target_type = ? AND target_id = ?`, "document", documentID); err != nil {
+		return fmt.Errorf("delete document target ref edges: %w", err)
+	}
+	for _, item := range owned {
+		if item.revisionID != "" {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM ref_edges WHERE source_type = ? AND source_id = ?`, "document_revision", item.revisionID); err != nil {
+				return fmt.Errorf("delete document revision source ref edges: %w", err)
+			}
+			if _, err := tx.ExecContext(ctx, `DELETE FROM ref_edges WHERE target_type = ? AND target_id = ?`, "document_revision", item.revisionID); err != nil {
+				return fmt.Errorf("delete document revision target ref edges: %w", err)
+			}
+		}
+		if item.artifactID != "" {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM ref_edges WHERE source_type = ? AND source_id = ?`, "artifact", item.artifactID); err != nil {
+				return fmt.Errorf("delete document artifact source ref edges: %w", err)
+			}
+			if _, err := tx.ExecContext(ctx, `DELETE FROM ref_edges WHERE target_type = ? AND target_id = ?`, "artifact", item.artifactID); err != nil {
+				return fmt.Errorf("delete document artifact target ref edges: %w", err)
+			}
+		}
+	}
+
 	if _, err := tx.ExecContext(ctx, `DELETE FROM document_revisions WHERE document_id = ?`, documentID); err != nil {
 		return fmt.Errorf("delete document revisions: %w", err)
 	}
+	for _, item := range owned {
+		if item.artifactID == "" {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM artifacts WHERE id = ?`, item.artifactID); err != nil {
+			return fmt.Errorf("delete document revision artifact: %w", err)
+		}
+	}
+
+	hashes := make(map[string]struct{})
+	for _, item := range owned {
+		if item.contentHash != "" {
+			hashes[item.contentHash] = struct{}{}
+		}
+	}
+	blobsToDelete := make([]string, 0, len(hashes))
+	for contentHash := range hashes {
+		var cnt int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM artifacts WHERE content_hash = ?`, contentHash).Scan(&cnt); err != nil {
+			return fmt.Errorf("count remaining artifact blob references: %w", err)
+		}
+		if cnt == 0 {
+			if err := s.removeBlobLedgerEntryTx(ctx, tx, contentHash); err != nil {
+				return err
+			}
+			blobsToDelete = append(blobsToDelete, contentHash)
+		}
+	}
+
 	if _, err := tx.ExecContext(ctx, `DELETE FROM documents WHERE id = ?`, documentID); err != nil {
 		return fmt.Errorf("delete document: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit purge document: %w", err)
+	}
+
+	if s.blob != nil {
+		for _, contentHash := range blobsToDelete {
+			if err := s.blob.Delete(ctx, contentHash); err != nil && !errors.Is(err, blob.ErrBlobNotFound) {
+				return fmt.Errorf("delete document revision blob object: %w", err)
+			}
+		}
 	}
 	return nil
 }

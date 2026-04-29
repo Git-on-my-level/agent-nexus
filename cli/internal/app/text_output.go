@@ -56,7 +56,7 @@ func formatCommandSummary(commandID string, body any) string {
 		return formatEventsList(body)
 	case "inbox.list":
 		return formatInboxList(body)
-	case "docs.history", "docs.revisions.list":
+	case "docs.history", "docs.revisions.list", "cards.revisions.list":
 		return formatNamedList(body, "revisions", "Revisions", "revision", renderRevisionListItem)
 	case "topics.get", "topics.create", "topics.patch":
 		return formatTopicRecord(extractNestedMap(body, "topic"))
@@ -66,7 +66,7 @@ func formatCommandSummary(commandID string, body any) string {
 		return formatCardTimeline(body)
 	case "topics.workspace":
 		return formatTopicWorkspace(body)
-	case "cards.get", "cards.patch", "cards.move", "cards.archive", "cards.trash", "cards.restore":
+	case "cards.get", "cards.patch", "cards.move", "cards.revisions.create", "cards.archive", "cards.trash", "cards.restore":
 		if board := extractNestedMap(body, "board"); board != nil && extractNestedMap(body, "card") != nil {
 			return formatBoardCardMutationResult(body)
 		}
@@ -118,7 +118,7 @@ func formatCommandSummary(commandID string, body any) string {
 		return formatDocumentContentRecord(body)
 	case "docs.comments":
 		return formatDocsComments(body)
-	case "docs.revision.get", "docs.revisions.get":
+	case "docs.revision.get", "docs.revisions.get", "cards.revisions.get":
 		return formatRevisionRecord(extractNestedMap(body, "revision"))
 	case "provenance.walk":
 		return formatProvenanceWalkSummary(asMap(body))

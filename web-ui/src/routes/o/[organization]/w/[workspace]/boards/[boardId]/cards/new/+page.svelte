@@ -427,7 +427,7 @@
                   bind:value={resolutionRefs}
                   {boardId}
                   addInputLabel="Add resolution ref"
-                  addInputPlaceholder="artifact:receipt-123"
+                  addInputPlaceholder="artifact:supporting-context"
                   addButtonLabel="Add ref"
                   emptyText="No resolution evidence yet."
                   helperText="Optional typed refs that evidence the card's resolution."

@@ -8,7 +8,7 @@ function assertTypedRef(refValue) {
 }
 
 describe("dev seed fixtures", () => {
-  it("exposes topic, board, card, and packet seed views", async () => {
+  it("exposes topic, board, card, and clean artifact seed views", async () => {
     const mod = await import("../../src/lib/devSeedData.js");
     const seed = mod.getDevSeedData();
 
@@ -39,17 +39,39 @@ describe("dev seed fixtures", () => {
       resolution: null,
     });
     expect(seed.cards[0].thread_ref).toBeUndefined();
+    expect(seed.packets).toEqual([]);
     expect(
-      seed.packets.every((packet) => packet?.artifact && packet?.packet),
-    ).toBe(true);
-    expect(seed.packets.map((packet) => packet.kind)).toEqual([
-      "receipt",
-      "review",
-      "receipt",
-      "review",
-      "receipt",
-      "review",
-    ]);
+      seed.artifacts.every((artifact) =>
+        ["doc", "card", "agent_wake"].includes(String(artifact.kind ?? "")),
+      ),
+    ).toBe(false);
+    expect(
+      seed.artifacts.some((artifact) =>
+        ["receipt", "review"].includes(String(artifact.kind ?? "")),
+      ),
+    ).toBe(false);
+    expect(
+      seed.events.some((event) =>
+        ["receipt_added", "review_completed"].includes(
+          String(event.type ?? ""),
+        ),
+      ),
+    ).toBe(false);
+    const exportedRefs = [
+      ...seed.topics.flatMap((topic) => topic.related_refs ?? []),
+      ...seed.cards.flatMap((card) => [
+        ...(card.related_refs ?? []),
+        ...(card.resolution_refs ?? []),
+      ]),
+      ...seed.events.flatMap((event) => event.refs ?? []),
+    ];
+    expect(
+      exportedRefs.some(
+        (ref) =>
+          String(ref).startsWith("artifact:artifact-receipt-") ||
+          String(ref).startsWith("artifact:artifact-review-"),
+      ),
+    ).toBe(false);
   });
 
   it("normalizes topic related_refs into typed refs", async () => {

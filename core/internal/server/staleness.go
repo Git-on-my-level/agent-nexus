@@ -78,8 +78,6 @@ func isMeaningfulThreadActivityEvent(event map[string]any) bool {
 		"card_archived",
 		"card_trashed",
 		"card_resolved",
-		"receipt_added",
-		"review_completed",
 		"document_created",
 		"document_revised",
 		"document_trashed",

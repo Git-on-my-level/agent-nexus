@@ -48,22 +48,6 @@ func TestCanonicalCommandPathsHitRegistryHandlers(t *testing.T) {
 		wantCommand string
 	}{
 		{
-			name:        "receipts create",
-			args:        []string{"receipts", "create"},
-			stdin:       `{"receipt":{"thread_id":"thread_1"}}`,
-			wantMethod:  http.MethodPost,
-			wantPath:    "/packets/receipts",
-			wantCommand: "receipts create",
-		},
-		{
-			name:        "reviews create",
-			args:        []string{"reviews", "create"},
-			stdin:       `{"review":{"thread_id":"thread_1"}}`,
-			wantMethod:  http.MethodPost,
-			wantPath:    "/packets/reviews",
-			wantCommand: "reviews create",
-		},
-		{
 			name:        "artifacts content with id flag",
 			args:        []string{"artifacts", "content", "--artifact-id", "artifact_1"},
 			wantMethod:  http.MethodGet,

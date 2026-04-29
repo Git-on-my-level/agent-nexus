@@ -58,7 +58,7 @@ describe("event validation", () => {
     expect(error).toContain('event.refs must include a "board:<id>"');
   });
 
-  it("rejects review_completed payloads that miss required card ref", () => {
+  it("allows removed packet event types as unknown event types", () => {
     const error = validateEventCreatePayload(
       validBaseEvent({
         type: "review_completed",
@@ -67,7 +67,7 @@ describe("event validation", () => {
       }),
     );
 
-    expect(error).toContain('"card:<id>" typed ref');
+    expect(error).toBe("");
   });
 
   it("keeps unknown event types open", () => {

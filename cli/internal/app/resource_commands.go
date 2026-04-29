@@ -171,7 +171,6 @@ var eventTypeGroupDescriptions = map[string]string{
 	"Topics And Documents": "Durable work-subject and document lifecycle signals.",
 	"Boards And Cards":     "Board and card workflow signals.",
 	"Exceptions":           "Surface problems, risks, or escalations.",
-	"Packet Lifecycle":     "Packet lifecycle facts, usually emitted by higher-level commands.",
 	"Inbox Lifecycle":      "Inbox lifecycle facts, usually emitted by higher-level commands.",
 }
 
@@ -184,25 +183,6 @@ var knownEventTypeGuidance = []eventTypeGuidance{
 			"thread_id is required when posting directly to a backing thread timeline.",
 			"Use this type for messages, replies, or important non-structured information that should read like direct communication on a backing thread.",
 			`event.refs may include "event:<parent_event_id>" for replies and "artifact:<artifact_id>" mentions.`,
-		},
-	},
-	{
-		Type:             "receipt_added",
-		Group:            "Packet Lifecycle",
-		PreferredCommand: "anx receipts create",
-		Constraints: []string{
-			`event.refs must include "artifact:<receipt_artifact_id>" and "card:<card_id>".`,
-			`event.payload must include "subject_ref".`,
-		},
-	},
-	{
-		Type:             "review_completed",
-		Group:            "Packet Lifecycle",
-		PreferredCommand: "anx reviews create",
-		Constraints: []string{
-			`event.refs must include "artifact:<review_artifact_id>", "artifact:<receipt_artifact_id>", and "card:<card_id>".`,
-			`event.payload must include "subject_ref".`,
-			`Local CLI validation for "anx events create" enforces the bundled event reference rules.`,
 		},
 	},
 	{
@@ -365,10 +345,6 @@ func (a *App) runTypedResource(ctx context.Context, resource string, args []stri
 		return a.runEventsCommand(ctx, args, cfg)
 	case "inbox":
 		return a.runInboxCommand(ctx, args, cfg)
-	case "receipts":
-		return a.runPacketsCreateCommand(ctx, resource, "packets.receipts.create", args, cfg)
-	case "reviews":
-		return a.runPacketsCreateCommand(ctx, resource, "packets.reviews.create", args, cfg)
 	case "derived":
 		return a.runDerivedCommand(ctx, args, cfg)
 	default:

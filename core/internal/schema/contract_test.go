@@ -11,7 +11,7 @@ func TestLoadExtractsCoreSchemaRules(t *testing.T) {
 
 	contract := loadContract(t)
 
-	if contract.Version != "0.5.0" {
+	if contract.Version != "0.6.0" {
 		t.Fatalf("unexpected schema version: got %q", contract.Version)
 	}
 
@@ -36,6 +36,9 @@ func TestLoadExtractsCoreSchemaRules(t *testing.T) {
 	if !contract.HasKnownTypedRefPrefix("board") {
 		t.Fatal("expected typed ref prefix board to be loaded")
 	}
+	if !contract.HasKnownTypedRefPrefix("card_revision") {
+		t.Fatal("expected typed ref prefix card_revision to be loaded")
+	}
 
 	sources, ok := contract.Provenance.Fields["sources"]
 	if !ok {
@@ -48,40 +51,15 @@ func TestLoadExtractsCoreSchemaRules(t *testing.T) {
 		t.Fatalf("unexpected provenance.sources type: got %q", sources.Type)
 	}
 
-	receipt, ok := contract.Packets["receipt"]
+	if _, ok := contract.EventRefRules["receipt_added"]; ok {
+		t.Fatal("receipt_added event ref rule should not be loaded")
+	}
+	cardCreatedRule, ok := contract.EventRefRules["card_created"]
 	if !ok {
-		t.Fatal("receipt packet schema was not loaded")
+		t.Fatal("card_created event ref rule was not loaded")
 	}
-	outputs, ok := receipt.Fields["outputs"]
-	if !ok {
-		t.Fatal("receipt.outputs field was not loaded")
-	}
-	if !outputs.Required {
-		t.Fatal("expected receipt.outputs to be required")
-	}
-	if outputs.Type != "list<typed_ref>" {
-		t.Fatalf("unexpected receipt.outputs type: got %q", outputs.Type)
-	}
-	verification, ok := receipt.Fields["verification_evidence"]
-	if !ok {
-		t.Fatal("receipt.verification_evidence field was not loaded")
-	}
-	if !verification.Required {
-		t.Fatal("expected receipt.verification_evidence to be required")
-	}
-	if verification.Type != "list<typed_ref>" {
-		t.Fatalf("unexpected receipt.verification_evidence type: got %q", verification.Type)
-	}
-	artifactRefRule := contract.ArtifactRefRules["receipt"]
-	if len(artifactRefRule) != 2 {
-		t.Fatalf("expected 2 receipt artifact ref rules, got %#v", artifactRefRule)
-	}
-	receiptEventRule, ok := contract.EventRefRules["receipt_added"]
-	if !ok {
-		t.Fatal("receipt_added event ref rule was not loaded")
-	}
-	if len(receiptEventRule.RefsMustInclude) != 2 {
-		t.Fatalf("expected receipt_added refs_must_include length=2, got %#v", receiptEventRule.RefsMustInclude)
+	if len(cardCreatedRule.RefsMustInclude) != 4 {
+		t.Fatalf("expected card_created refs_must_include length=4, got %#v", cardCreatedRule.RefsMustInclude)
 	}
 	boardUpdatedRule, ok := contract.EventRefRules["board_updated"]
 	if !ok {

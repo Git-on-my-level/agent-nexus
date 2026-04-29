@@ -1698,9 +1698,6 @@ func TestEventsExplainListMode(t *testing.T) {
 	if !strings.Contains(raw, "- human_attention_requested: Use the human command group to ask for operator attention, review, or escalation.") {
 		t.Fatalf("expected human_attention_requested guidance in explain output, got %q", raw)
 	}
-	if !strings.Contains(raw, "- review_completed: prefer `anx reviews create`") {
-		t.Fatalf("expected preferred command guidance in explain output, got %q", raw)
-	}
 	if !strings.Contains(raw, "anx events explain <event-type>") {
 		t.Fatalf("expected follow-up hint in explain output, got %q", raw)
 	}
@@ -1720,7 +1717,6 @@ func TestEventsExplainListModeJSON(t *testing.T) {
 
 	foundMessagePosted := false
 	foundInterventionNeeded := false
-	foundReviewCompleted := false
 	for _, item := range items {
 		entry, _ := item.(map[string]any)
 		switch anyStringValue(entry["type"]) {
@@ -1734,11 +1730,6 @@ func TestEventsExplainListModeJSON(t *testing.T) {
 			if got := anyStringValue(entry["group"]); got != "Inbox Lifecycle" {
 				t.Fatalf("expected human_attention_requested group Inbox Lifecycle, got %q entry=%#v", got, entry)
 			}
-		case "review_completed":
-			foundReviewCompleted = true
-			if got := anyStringValue(entry["preferred_command"]); got != "anx reviews create" {
-				t.Fatalf("expected review_completed preferred command, got %q entry=%#v", got, entry)
-			}
 		}
 	}
 	if !foundMessagePosted {
@@ -1747,41 +1738,38 @@ func TestEventsExplainListModeJSON(t *testing.T) {
 	if !foundInterventionNeeded {
 		t.Fatalf("expected human_attention_requested in JSON output, payload=%#v", payload)
 	}
-	if !foundReviewCompleted {
-		t.Fatalf("expected review_completed in JSON output, payload=%#v", payload)
-	}
 }
 
 func TestEventsExplainSpecificTypeMode(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
-	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "events", "explain", "review_completed"})
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "events", "explain", "card_created"})
 	payload := assertEnvelopeOK(t, raw)
 	if got := anyStringValue(payload["command"]); got != "events explain" {
 		t.Fatalf("unexpected command label: %#v", payload)
 	}
 	data, _ := payload["data"].(map[string]any)
-	if got := anyStringValue(data["event_type"]); got != "review_completed" {
-		t.Fatalf("expected event_type review_completed, got %q payload=%#v", got, payload)
+	if got := anyStringValue(data["event_type"]); got != "card_created" {
+		t.Fatalf("expected event_type card_created, got %q payload=%#v", got, payload)
 	}
 	constraints, _ := data["constraints"].([]any)
 	foundArtifactConstraint := false
 	for _, item := range constraints {
-		if strings.Contains(anyStringValue(item), "artifact:") {
+		if strings.Contains(anyStringValue(item), "card:") {
 			foundArtifactConstraint = true
 			break
 		}
 	}
 	if !foundArtifactConstraint {
-		t.Fatalf("expected artifact constraint guidance, payload=%#v", payload)
+		t.Fatalf("expected card constraint guidance, payload=%#v", payload)
 	}
 
-	rawFlag := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "events", "explain", "--type", "review_completed"})
+	rawFlag := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "events", "explain", "--type", "card_created"})
 	payloadFlag := assertEnvelopeOK(t, rawFlag)
 	dataFlag, _ := payloadFlag["data"].(map[string]any)
-	if got := anyStringValue(dataFlag["event_type"]); got != "review_completed" {
-		t.Fatalf("expected event_type review_completed via --type, got %q payload=%#v", got, payloadFlag)
+	if got := anyStringValue(dataFlag["event_type"]); got != "card_created" {
+		t.Fatalf("expected event_type card_created via --type, got %q payload=%#v", got, payloadFlag)
 	}
 }
 
@@ -1812,7 +1800,7 @@ func TestEventsExplainUnknownTypeFailure(t *testing.T) {
 		t.Fatalf("unexpected error payload: %#v", payload)
 	}
 	message := anyStringValue(errObj["message"])
-	if !strings.Contains(message, "known types:") || !strings.Contains(message, "review_completed") {
+	if !strings.Contains(message, "known types:") || !strings.Contains(message, "card_created") {
 		t.Fatalf("expected known-types guidance in error message, got %q payload=%#v", message, payload)
 	}
 }
@@ -1920,7 +1908,7 @@ func TestEventsCreateReviewCompletedInvalidRefsFailsLocally(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	raw := runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{"event":{"type":"review_completed","summary":"review done","refs":["artifact:review_1","artifact:receipt_1"],"provenance":{"sources":["artifact:source_1"]},"payload":{"subject_ref":"card:card_1"}}}`), []string{
+	raw := runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{"event":{"type":"card_created","summary":"review done","refs":["artifact:review_1","artifact:receipt_1"],"provenance":{"sources":["artifact:source_1"]},"payload":{"subject_ref":"card:card_1"}}}`), []string{
 		"--json",
 		"--base-url", server.URL,
 		"events", "create",
@@ -1931,7 +1919,7 @@ func TestEventsCreateReviewCompletedInvalidRefsFailsLocally(t *testing.T) {
 		t.Fatalf("unexpected error payload: %#v", payload)
 	}
 	message := anyStringValue(errObj["message"])
-	if !strings.Contains(message, "review_completed") || !strings.Contains(message, "card:") {
+	if !strings.Contains(message, "card_created") || !strings.Contains(message, "card:") {
 		t.Fatalf("expected actionable refs guidance, got message=%q payload=%#v", message, payload)
 	}
 
@@ -2239,12 +2227,14 @@ func TestCardsFileFirstWorkflowCommands(t *testing.T) {
 	const (
 		boardID      = "board_cards_workflow_123456"
 		cardID       = "card_cards_workflow_123456"
+		revisionID   = "card_rev_cards_workflow_1"
+		revisionID2  = "card_rev_cards_workflow_2"
 		cardUpdated  = "2026-04-20T00:00:00Z"
 		boardUpdated = "2026-04-20T00:05:00Z"
 		profileActor = "actor_cards_profile"
 	)
 
-	var createSeen, reviseSeen, assignSeen, moveSeen, resolveSeen, reopenSeen bool
+	var createSeen, reviseSeen, historySeen, revisionGetSeen, assignSeen, moveSeen, resolveSeen, reopenSeen bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
@@ -2271,11 +2261,34 @@ func TestCardsFileFirstWorkflowCommands(t *testing.T) {
 			}
 			createSeen = true
 			w.WriteHeader(http.StatusCreated)
-			_, _ = w.Write([]byte(`{"card":{"id":"` + cardID + `","board_id":"` + boardID + `","title":"Implement login","summary":"Card body from disk\n","column_key":"backlog","updated_at":"` + cardUpdated + `"}}`))
+			_, _ = w.Write([]byte(`{"card":{"id":"` + cardID + `","board_id":"` + boardID + `","title":"Implement login","summary":"Card body from disk\n","column_key":"backlog","head_revision_ref":"card_revision:` + revisionID + `","head_revision_number":1,"updated_at":"` + cardUpdated + `"}}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/cards/"+cardID:
-			_, _ = w.Write([]byte(`{"card":{"id":"` + cardID + `","board_id":"` + boardID + `","title":"Implement login","summary":"Old body","column_key":"backlog","updated_at":"` + cardUpdated + `"}}`))
+			_, _ = w.Write([]byte(`{"card":{"id":"` + cardID + `","board_id":"` + boardID + `","title":"Implement login","summary":"Old body","column_key":"backlog","head_revision_ref":"card_revision:` + revisionID + `","head_revision_number":1,"updated_at":"` + cardUpdated + `"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/cards/"+cardID+"/revisions":
+			historySeen = true
+			_, _ = w.Write([]byte(`{"card_id":"` + cardID + `","revisions":[{"revision_id":"` + revisionID + `","revision_number":1},{"revision_id":"` + revisionID2 + `","revision_number":2}]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/cards/"+cardID+"/revisions/"+revisionID:
+			revisionGetSeen = true
+			_, _ = w.Write([]byte(`{"card_id":"` + cardID + `","revision":{"revision_id":"` + revisionID + `","revision_number":1,"summary":"Old body"}}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/boards/"+boardID:
 			_, _ = w.Write([]byte(`{"board":{"id":"` + boardID + `","updated_at":"` + boardUpdated + `"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/cards/"+cardID+"/revisions":
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode cards revise body: %v", err)
+			}
+			if got := anyStringValue(payload["if_base_revision"]); got != revisionID {
+				t.Fatalf("expected discovered base revision %q, got %#v", revisionID, payload)
+			}
+			if got := anyStringValue(payload["actor_id"]); got != profileActor {
+				t.Fatalf("expected profile actor_id %q, got %#v", profileActor, payload)
+			}
+			revision, _ := payload["revision"].(map[string]any)
+			if got := anyStringValue(revision["summary"]); got != "Revised card body" {
+				t.Fatalf("expected revised summary, got %#v", payload)
+			}
+			reviseSeen = true
+			_, _ = w.Write([]byte(`{"card":{"id":"` + cardID + `","board_id":"` + boardID + `","updated_at":"2026-04-20T00:10:00Z","head_revision_ref":"card_revision:` + revisionID2 + `","head_revision_number":2},"revision":{"revision_id":"` + revisionID2 + `","revision_number":2}}`))
 		case r.Method == http.MethodPatch && r.URL.Path == "/cards/"+cardID:
 			var payload map[string]any
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
@@ -2289,8 +2302,6 @@ func TestCardsFileFirstWorkflowCommands(t *testing.T) {
 			}
 			patch, _ := payload["patch"].(map[string]any)
 			switch {
-			case anyStringValue(patch["summary"]) == "Revised card body":
-				reviseSeen = true
 			case len(asSlice(patch["assignee_refs"])) == 1 && anyStringValue(asSlice(patch["assignee_refs"])[0]) == "actor:actor_owner":
 				assignSeen = true
 			default:
@@ -2358,8 +2369,24 @@ func TestCardsFileFirstWorkflowCommands(t *testing.T) {
 	if got := anyStringValue(revisePayload["command"]); got != "cards revise" {
 		t.Fatalf("expected cards revise command, got %#v", revisePayload)
 	}
-	if got := anyStringValue(revisePayload["command_id"]); got != "cards.patch" {
-		t.Fatalf("expected cards.patch command_id, got %#v", revisePayload)
+	if got := anyStringValue(revisePayload["command_id"]); got != "cards.revisions.create" {
+		t.Fatalf("expected cards.revisions.create command_id, got %#v", revisePayload)
+	}
+
+	historyPayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
+		"--json", "--base-url", server.URL, "--agent", "agent-cards",
+		"cards", "history", "--card-id", cardID,
+	}))
+	if got := anyStringValue(historyPayload["command_id"]); got != "cards.revisions.list" {
+		t.Fatalf("expected cards.revisions.list command_id, got %#v", historyPayload)
+	}
+
+	revisionPayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
+		"--json", "--base-url", server.URL, "--agent", "agent-cards",
+		"cards", "revision", "get", "--card-id", cardID, "--revision-id", revisionID,
+	}))
+	if got := anyStringValue(revisionPayload["command_id"]); got != "cards.revisions.get" {
+		t.Fatalf("expected cards.revisions.get command_id, got %#v", revisionPayload)
 	}
 
 	assignPayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
@@ -2398,12 +2425,14 @@ func TestCardsFileFirstWorkflowCommands(t *testing.T) {
 	}
 
 	for name, seen := range map[string]bool{
-		"create":  createSeen,
-		"revise":  reviseSeen,
-		"assign":  assignSeen,
-		"move":    moveSeen,
-		"resolve": resolveSeen,
-		"reopen":  reopenSeen,
+		"create":       createSeen,
+		"revise":       reviseSeen,
+		"history":      historySeen,
+		"revision_get": revisionGetSeen,
+		"assign":       assignSeen,
+		"move":         moveSeen,
+		"resolve":      resolveSeen,
+		"reopen":       reopenSeen,
 	} {
 		if !seen {
 			t.Fatalf("expected %s request to be observed", name)

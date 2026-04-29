@@ -17,8 +17,6 @@ const HOME_INCLUDED_EVENT_TYPES = new Set([
   "card_updated",
   "card_moved",
   "card_resolved",
-  "receipt_added",
-  "review_completed",
   "message_posted",
 ]);
 
@@ -382,9 +380,6 @@ export function homeHandoffEventPillId(event) {
   if (t.startsWith("card_")) return "boards";
   if (t === "message_posted") {
     return "topics";
-  }
-  if (t === "receipt_added" || t === "review_completed") {
-    return "docs-proof";
   }
   if (t === "exception_raised") {
     return "topics";

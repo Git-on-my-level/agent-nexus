@@ -27,7 +27,11 @@ function summarizeUrl(value) {
 }
 
 function shouldHumanizeByDefault(prefix) {
-  return prefix === "document" || prefix === "document_revision";
+  return (
+    prefix === "document" ||
+    prefix === "document_revision" ||
+    prefix === "card_revision"
+  );
 }
 
 const UUID_RE =
@@ -48,6 +52,7 @@ function humanizedLabelForPrefix(prefix, value) {
   if (prefix === "document") return `Document ${short}`.trim();
   if (prefix === "document_revision")
     return `Document revision ${short}`.trim();
+  if (prefix === "card_revision") return `Card revision ${short}`.trim();
   if (prefix === "url") return summarizeUrl(value);
   if (prefix === "inbox") return "Inbox item";
   if (prefix === "board") return `Board ${short}`.trim();

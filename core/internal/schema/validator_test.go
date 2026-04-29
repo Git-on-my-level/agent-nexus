@@ -66,10 +66,10 @@ func TestValidateProvenanceAcceptsValidShape(t *testing.T) {
 	contract := loadContract(t)
 
 	err := ValidateProvenance(contract, map[string]any{
-		"sources": []any{"receipt:artifact-1", "inferred"},
+		"sources": []any{"event:event-1", "inferred"},
 		"notes":   "validated",
 		"by_field": map[string]any{
-			"status": []any{"decision:event-1"},
+			"status": []any{"event:event-1"},
 		},
 	})
 	if err != nil {

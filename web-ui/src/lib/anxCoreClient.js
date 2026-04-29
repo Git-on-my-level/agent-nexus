@@ -785,6 +785,24 @@ export function createAnxCoreClient(options = {}) {
           { body: withActorId(payload) },
         ),
       ),
+    getCardHistory: (cardId) =>
+      invokeJSON("cards.revisions.list", () =>
+        generated.cardsRevisionsList({ card_id: String(cardId) }),
+      ),
+    getCardRevision: (cardId, revisionId) =>
+      invokeJSON("cards.revisions.get", () =>
+        generated.cardsRevisionsGet({
+          card_id: String(cardId),
+          revision_id: String(revisionId),
+        }),
+      ),
+    updateCardContent: (cardId, payload) =>
+      invokeJSON("cards.revisions.create", () =>
+        generated.cardsRevisionsCreate(
+          { card_id: String(cardId) },
+          { body: withActorId(payload) },
+        ),
+      ),
     trashDocument: (documentId, payload) =>
       invokeJSON("docs.trash", () =>
         generated.docsTrash(
@@ -859,19 +877,6 @@ export function createAnxCoreClient(options = {}) {
           { body: withActorId(payload) },
         ),
       ),
-
-    createReceipt: (payload) => {
-      const body = withActorId({ ...payload });
-      return invokeJSON("packets.receipts.create", () =>
-        generated.packetsReceiptsCreate({ body }),
-      );
-    },
-    createReview: (payload) => {
-      const body = withActorId({ ...payload });
-      return invokeJSON("packets.reviews.create", () =>
-        generated.packetsReviewsCreate({ body }),
-      );
-    },
 
     listInboxItems: (filters) =>
       invokeJSON("inbox.list", () => generated.inboxList({ query: filters })),

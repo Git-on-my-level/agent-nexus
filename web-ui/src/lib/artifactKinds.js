@@ -1,25 +1,19 @@
 export const KIND_LABELS = {
-  receipt: "Receipt",
-  review: "Review",
   doc: "Document",
-  evidence: "Evidence",
-  log: "Log",
+  card: "Card",
+  agent_wake: "Agent wake",
 };
 
 const KIND_DESCRIPTIONS = {
-  receipt: "Work completion evidence and verification",
-  review: "Human decision on receipt quality",
   doc: "Readable document artifact",
-  evidence: "Supporting evidence and logs",
-  log: "Operational activity record",
+  card: "Immutable card revision content",
+  agent_wake: "Agent wake payload",
 };
 
 const KIND_COLORS = {
-  receipt: "text-emerald-400 bg-emerald-500/10",
-  review: "text-amber-400 bg-amber-500/10",
   doc: "text-fuchsia-400 bg-fuchsia-500/10",
-  evidence: "text-[var(--fg-muted)] bg-[var(--line)]",
-  log: "text-teal-400 bg-teal-500/10",
+  card: "text-sky-400 bg-sky-500/10",
+  agent_wake: "text-teal-400 bg-teal-500/10",
 };
 
 const FALLBACK_COLOR = "text-[var(--fg-muted)] bg-[var(--line)]";

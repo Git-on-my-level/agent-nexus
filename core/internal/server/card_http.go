@@ -36,6 +36,12 @@ func canonicalCardView(card map[string]any) map[string]any {
 
 	out["column_key"] = card["column_key"]
 	out["rank"] = card["rank"]
+	if v, ok := card["head_revision_ref"]; ok {
+		out["head_revision_ref"] = v
+	}
+	if v, ok := card["head_revision_number"]; ok {
+		out["head_revision_number"] = v
+	}
 
 	out["assignee_refs"] = cardAssigneeRefsAny(card)
 

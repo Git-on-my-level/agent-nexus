@@ -53,7 +53,7 @@ func TestWorkspaceInitializationAndRestart(t *testing.T) {
 		"document_revisions",
 		"boards",
 		"cards",
-		"card_versions",
+		"card_revisions",
 		"derived_inbox_items",
 		"derived_topic_views",
 		"derived_topic_dirty_queue",

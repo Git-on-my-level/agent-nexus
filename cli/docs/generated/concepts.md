@@ -3,8 +3,8 @@
 Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
-- Contract version: `0.5.0`
-- Concepts: `31`
+- Contract version: `0.6.0`
+- Concepts: `29`
 
 ## `actors`
 
@@ -95,7 +95,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `cards`
 
-- Commands: `14`
+- Commands: `17`
 - Command IDs:
   - `boards.cards.batch_add`
   - `boards.cards.create`
@@ -109,6 +109,9 @@ Generated from `contracts/anx-openapi.yaml`.
   - `cards.patch`
   - `cards.purge`
   - `cards.restore`
+  - `cards.revisions.create`
+  - `cards.revisions.get`
+  - `cards.revisions.list`
   - `cards.timeline`
   - `cards.trash`
 
@@ -162,13 +165,6 @@ Generated from `contracts/anx-openapi.yaml`.
   - `events.trash`
   - `events.unarchive`
 
-## `evidence`
-
-- Commands: `2`
-- Command IDs:
-  - `packets.receipts.create`
-  - `packets.reviews.create`
-
 ## `health`
 
 - Commands: `4`
@@ -219,13 +215,6 @@ Generated from `contracts/anx-openapi.yaml`.
   - `ops.usage.summary`
   - `usage.summary.v1`
 
-## `packets`
-
-- Commands: `2`
-- Command IDs:
-  - `packets.receipts.create`
-  - `packets.reviews.create`
-
 ## `passkeys`
 
 - Commands: `6`
@@ -264,8 +253,11 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `revisions`
 
-- Commands: `3`
+- Commands: `6`
 - Command IDs:
+  - `cards.revisions.create`
+  - `cards.revisions.get`
+  - `cards.revisions.list`
   - `docs.revisions.create`
   - `docs.revisions.get`
   - `docs.revisions.list`
@@ -324,7 +316,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `write`
 
-- Commands: `47`
+- Commands: `48`
 - Command IDs:
   - `agent.notifications.dismiss`
   - `agent.notifications.read`
@@ -349,6 +341,7 @@ Generated from `contracts/anx-openapi.yaml`.
   - `cards.patch`
   - `cards.purge`
   - `cards.restore`
+  - `cards.revisions.create`
   - `cards.trash`
   - `docs.archive`
   - `docs.create`

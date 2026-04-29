@@ -98,6 +98,7 @@ type PrimitiveStore interface {
 	RestoreArchivedBoardCard(ctx context.Context, actorID string, boardID string, identifier string, input primitives.RemoveBoardCardInput) (primitives.BoardCardMutationResult, error)
 	PurgeArchivedBoardCard(ctx context.Context, boardID string, identifier string) error
 	ListBoardCardHistory(ctx context.Context, cardID string) ([]map[string]any, error)
+	CreateCardRevision(ctx context.Context, actorID string, cardID string, input primitives.CreateCardRevisionInput) (primitives.BoardCardMutationResult, map[string]any, error)
 	ListBoardMembershipsByThread(ctx context.Context, threadID string) ([]primitives.BoardMembership, error)
 	ListRefEdgesBySource(ctx context.Context, sourceRef string, relationFilter string) ([]primitives.RefEdge, error)
 	ListRefEdgesByTarget(ctx context.Context, targetRef string, relationFilter string) ([]primitives.RefEdge, error)
@@ -1814,6 +1815,36 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			handleGetCardTimeline(w, r, opts, cardID)
 			return
 		}
+		if strings.HasSuffix(remainder, "/revisions") {
+			cardID := strings.TrimSuffix(remainder, "/revisions")
+			cardID = strings.TrimSuffix(cardID, "/")
+			if cardID == "" || strings.Contains(cardID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			switch r.Method {
+			case http.MethodGet:
+				handleListCardRevisions(w, r, opts, cardID)
+			case http.MethodPost:
+				handleCreateCardRevision(w, r, opts, cardID)
+			default:
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET and POST are supported")
+			}
+			return
+		}
+		if strings.Contains(remainder, "/revisions/") {
+			parts := strings.Split(remainder, "/revisions/")
+			if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" || strings.Contains(parts[1], "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			if r.Method != http.MethodGet {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+				return
+			}
+			handleGetCardRevision(w, r, opts, parts[0], parts[1])
+			return
+		}
 		if strings.HasSuffix(remainder, "/archive") {
 			if r.Method != http.MethodPost {
 				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
@@ -2135,22 +2166,6 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 
 		handleGetArtifact(w, r, opts, remainder)
-	})
-
-	registerRoute("/packets/receipts", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
-			return
-		}
-		handleCreateReceipt(w, r, opts)
-	})
-
-	registerRoute("/packets/reviews", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
-			return
-		}
-		handleCreateReview(w, r, opts)
 	})
 
 	registerRoute("/inbox", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
