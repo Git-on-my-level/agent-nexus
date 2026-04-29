@@ -69,7 +69,6 @@ func TestThreadEventHandoffScenario(t *testing.T) {
 		"topic": map[string]any{
 			"title":         "Harness Incident " + runID,
 			"type":          "incident",
-			"status":        "active",
 			"summary":       "Topic created by CLI integration coverage.",
 			"owner_refs":    []any{},
 			"document_refs": []any{},
@@ -80,6 +79,7 @@ func TestThreadEventHandoffScenario(t *testing.T) {
 	}, "topics", "create")
 
 	threadID := mustStringPath(t, topic.Payload, "data.body.topic.thread_id")
+	topicID := mustStringPath(t, topic.Payload, "data.body.topic.id")
 
 	h.runCLIExpectOK(t, "coordinator", map[string]any{
 		"event": map[string]any{
@@ -88,8 +88,13 @@ func TestThreadEventHandoffScenario(t *testing.T) {
 			"refs":      []string{"thread:" + threadID},
 			"summary":   "Need worker acknowledgement for integration run " + runID,
 			"payload": map[string]any{
-				"run_id": runID,
-				"source": "integration_test",
+				"kind":               "ask",
+				"title":              "Need worker acknowledgement for integration run " + runID,
+				"subject_ref":        "thread:" + threadID,
+				"requester_actor_id": "actor-1",
+				"response_proposals": []any{"Acknowledge the request."},
+				"run_id":             runID,
+				"source":             "integration_test",
 			},
 			"provenance": map[string]any{
 				"sources": []string{"inferred"},
@@ -97,10 +102,11 @@ func TestThreadEventHandoffScenario(t *testing.T) {
 		},
 	}, "events", "create")
 
-	workerThread := h.runCLIExpectOK(t, "worker", nil, "threads", "get", "--thread-id", threadID)
-	if !strings.Contains(workerThread.Stdout, "Harness Incident") || !strings.Contains(workerThread.Stdout, runID) {
-		t.Fatalf("expected worker thread read to include run title, got: %s", workerThread.Stdout)
+	workerTopic := h.runCLIExpectOK(t, "worker", nil, "topics", "get", "--topic-id", topicID)
+	if !strings.Contains(workerTopic.Stdout, "Harness Incident") || !strings.Contains(workerTopic.Stdout, runID) {
+		t.Fatalf("expected worker topic read to include run title, got: %s", workerTopic.Stdout)
 	}
+	workerThread := h.runCLIExpectOK(t, "worker", nil, "threads", "get", "--thread-id", threadID)
 
 	ack := h.runCLIExpectOK(t, "worker", map[string]any{
 		"event": map[string]any{
@@ -145,7 +151,6 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 		"topic": map[string]any{
 			"title":         "Harness Docs Lifecycle " + runID,
 			"type":          "incident",
-			"status":        "active",
 			"summary":       "Coordinator started docs lifecycle integration run " + runID + ".",
 			"owner_refs":    []any{},
 			"document_refs": []any{},
@@ -178,6 +183,11 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 			"refs":      []string{"thread:" + threadID, "document:" + documentID},
 			"summary":   "Coordinator requested draft + review for run " + runID,
 			"payload": map[string]any{
+				"kind":                "review",
+				"title":               "Coordinator requested draft + review for run " + runID,
+				"subject_ref":         "document:" + documentID,
+				"requester_actor_id":  "actor-1",
+				"response_proposals":  []any{"Accept the draft and review task."},
 				"run_id":              runID,
 				"document_id":         documentID,
 				"initial_revision_id": initialRevisionID,
@@ -220,7 +230,7 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 		"content":          "Worker-produced revision for run " + runID + " (v2).",
 		"content_type":     "text",
 		"refs":             []string{"thread:" + threadID, "event:" + decisionEventID},
-	}, "docs", "update", "--document-id", documentID)
+	}, "docs", "revise", "--apply", "--document-id", documentID)
 	workerRevisionID := mustStringPath(t, workerUpdate.Payload, "data.body.revision.revision_id")
 
 	completion := h.runCLIExpectOK(t, "worker", map[string]any{
@@ -252,7 +262,7 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 		"content":          "Reviewer stale overwrite attempt for run " + runID + ".",
 		"content_type":     "text",
 		"refs":             []string{"thread:" + threadID, "event:" + completionEventID},
-	}, "docs", "update", "--document-id", documentID)
+	}, "docs", "revise", "--apply", "--document-id", documentID)
 	if stale.ExitCode == 0 {
 		t.Fatalf("expected stale update to fail, got success payload=%s", stale.Stdout)
 	}
@@ -295,9 +305,9 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 		},
 	}, "topics", "patch", "--topic-id", topicID)
 
-	coordThread := h.runCLIExpectOK(t, "coordinator", nil, "threads", "get", "--thread-id", threadID)
-	if !strings.Contains(coordThread.Stdout, "Harness Docs Lifecycle") || !strings.Contains(coordThread.Stdout, runID) {
-		t.Fatalf("expected thread read to include run title, got: %s", coordThread.Stdout)
+	coordTopic := h.runCLIExpectOK(t, "coordinator", nil, "topics", "get", "--topic-id", topicID)
+	if !strings.Contains(coordTopic.Stdout, "Harness Docs Lifecycle") || !strings.Contains(coordTopic.Stdout, runID) {
+		t.Fatalf("expected topic read to include run title, got: %s", coordTopic.Stdout)
 	}
 
 	coordCompletion := h.runCLIExpectOK(t, "coordinator", nil, "events", "get", "--event-id", completionEventID)
@@ -347,7 +357,6 @@ func TestProvenanceWalkScenario(t *testing.T) {
 		"topic": map[string]any{
 			"title":         "Provenance Walk Harness " + runID,
 			"type":          "incident",
-			"status":        "active",
 			"summary":       "Validate event -> thread + event -> artifact traversal via refs.",
 			"owner_refs":    []any{},
 			"document_refs": []any{},
@@ -365,7 +374,12 @@ func TestProvenanceWalkScenario(t *testing.T) {
 			"refs":      []string{"thread:" + threadID, "artifact:" + artifactID},
 			"summary":   "Trace thread provenance for run " + runID,
 			"payload": map[string]any{
-				"run_id": runID,
+				"kind":               "ask",
+				"title":              "Trace thread provenance for run " + runID,
+				"subject_ref":        "artifact:" + artifactID,
+				"requester_actor_id": "actor-1",
+				"response_proposals": []any{"Trace the provenance graph."},
+				"run_id":             runID,
 			},
 			"provenance": map[string]any{
 				"sources": []string{"inferred"},
