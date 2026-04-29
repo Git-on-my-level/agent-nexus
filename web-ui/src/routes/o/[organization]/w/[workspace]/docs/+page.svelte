@@ -14,6 +14,7 @@
   import WorkspaceResourceListRow from "$lib/components/WorkspaceResourceListRow.svelte";
   import WorkspaceListBulkToolbar from "$lib/components/WorkspaceListBulkToolbar.svelte";
   import LeadingSelectionGlyph from "$lib/components/LeadingSelectionGlyph.svelte";
+  import LifecycleBadge from "$lib/components/LifecycleBadge.svelte";
   import { createWorkspaceListSelection } from "$lib/workspaceListSelection.svelte.js";
 
   const DOC_STATE_LABELS = {
@@ -210,12 +211,14 @@
     }
   }
 
-  function docStateColor(state) {
-    if (state === "active") return "text-ok-text bg-ok-soft";
-    if (state === "archived") return "text-warn-text bg-warn-soft";
-    if (state === "trashed") return "text-slate-300 bg-slate-500/10";
-    return "text-[var(--fg-muted)] bg-[var(--line)]";
-  }
+  let docsHaveMixedLifecycle = $derived(
+    documents.some((d) => {
+      const s = String(d?.state ?? "")
+        .trim()
+        .toLowerCase();
+      return s && s !== "active";
+    }),
+  );
 
   function applyDocFilters() {
     docFiltersApplied = { ...docFiltersDraft };
@@ -680,13 +683,11 @@
           description={doc.summary ?? ""}
         >
           {#snippet badges()}
-            {#if doc.state}
-              <span
-                class="inline-flex shrink-0 rounded px-1.5 py-0.5 text-micro font-semibold {docStateColor(
-                  doc.state,
-                )}">{DOC_STATE_LABELS[doc.state] ?? doc.state}</span
-              >
-            {/if}
+            <LifecycleBadge
+              state={doc.state}
+              label={DOC_STATE_LABELS[doc.state]}
+              forceShow={docsHaveMixedLifecycle}
+            />
           {/snippet}
         </WorkspaceResourceListRow>
         <div
@@ -713,13 +714,11 @@
           description={doc.summary ?? ""}
         >
           {#snippet badges()}
-            {#if doc.state}
-              <span
-                class="inline-flex shrink-0 rounded px-1.5 py-0.5 text-micro font-semibold {docStateColor(
-                  doc.state,
-                )}">{DOC_STATE_LABELS[doc.state] ?? doc.state}</span
-              >
-            {/if}
+            <LifecycleBadge
+              state={doc.state}
+              label={DOC_STATE_LABELS[doc.state]}
+              forceShow={docsHaveMixedLifecycle}
+            />
           {/snippet}
         </WorkspaceResourceListRow>
         <div

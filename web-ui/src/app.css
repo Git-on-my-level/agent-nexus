@@ -1323,7 +1323,7 @@
           :has([data-mobile-chat-expanded])
         )
         .page-dock-scroll {
-        padding-bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
+        padding-bottom: calc(7.25rem + env(safe-area-inset-bottom, 0px));
       }
 
       .page-dock-layout--fixed-mobile-chat .page-dock-feed {
@@ -1398,7 +1398,7 @@
           .page-dock-layout--mobile-only
         ):not(:has([data-mobile-chat-expanded]))
         .page-dock-scroll {
-        padding-bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
+        padding-bottom: calc(7.25rem + env(safe-area-inset-bottom, 0px));
       }
 
       .page-dock-layout--fixed-mobile-chat:not(.page-dock-layout--mobile-only)

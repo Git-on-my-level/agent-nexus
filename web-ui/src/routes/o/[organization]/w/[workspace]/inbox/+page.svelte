@@ -4,7 +4,6 @@
 
   import CompactFilterBar from "$lib/components/CompactFilterBar.svelte";
   import Button from "$lib/components/Button.svelte";
-  import RefLink from "$lib/components/RefLink.svelte";
   import StateEmpty from "$lib/components/state/StateEmpty.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
   import SkeletonInboxRow from "$lib/components/state/SkeletonInboxRow.svelte";
@@ -22,11 +21,7 @@
     enrichInboxItem,
     getInboxCategoryLabel,
     normalizeInboxCategory,
-    getInboxSubjectId,
-    getInboxSubjectKind,
     getInboxSubjectLabel,
-    getInboxSubjectRef,
-    splitTypedRef,
     groupInboxItems,
     summarizeInboxUrgency,
   } from "$lib/inboxUtils";
@@ -92,6 +87,14 @@
     groupedItems.filter((group) => group.items.length > 0),
   );
   let hasFilteredItems = $derived(filteredItems.length > 0);
+  let inboxHasMixedUrgency = $derived(
+    filteredItems.some((it) => {
+      const lvl = String(it?.urgency_level ?? "")
+        .trim()
+        .toLowerCase();
+      return lvl && lvl !== "normal";
+    }),
+  );
 
   let hasActiveFilters = $derived(
     categoryFilter !== "all" || urgencyFilter !== "all",
@@ -99,21 +102,6 @@
 
   function workspaceHref(pathname = "/") {
     return workspacePath(organizationSlug, workspaceSlug, pathname);
-  }
-
-  function inboxActionThreadId(item) {
-    const explicitThreadId = String(item?.thread_id ?? "").trim();
-    if (explicitThreadId) {
-      return explicitThreadId;
-    }
-
-    const subjectRef = getInboxSubjectRef(item);
-    const { prefix, id } = splitTypedRef(subjectRef);
-    if (prefix === "thread") {
-      return id;
-    }
-
-    return "";
   }
 
   function snippet(text, max = 140) {
@@ -216,6 +204,27 @@
     });
   }
 
+  async function setStatus(nextStatus) {
+    if (nextStatus === inboxTab) return;
+    if (nextStatus === "completed") {
+      const params = new URLSearchParams();
+      params.set("status", "completed");
+      params.set("completed_kind", completedKindFilter);
+      params.set("window_days", String(completedWindowDays));
+      await goto(`${workspaceHref("/inbox")}?${params}`, {
+        replaceState: false,
+        noScroll: true,
+        keepFocus: true,
+      });
+    } else {
+      await goto(buildFilterUrl(), {
+        replaceState: false,
+        noScroll: true,
+        keepFocus: true,
+      });
+    }
+  }
+
   function setUrgencyFromCard(level) {
     urgencyFilter = urgencyFilter === level ? "all" : level;
     applyFilters();
@@ -315,12 +324,6 @@
     void reloadForTab();
   });
 
-  function urgencyDot(level) {
-    if (level === "immediate") return "bg-danger";
-    if (level === "high") return "bg-warn-text";
-    return "bg-line-strong";
-  }
-
   function urgencyBorderClass(level) {
     if (level === "immediate") return "border-l-danger-text";
     if (level === "high") return "border-l-warn-text";
@@ -340,6 +343,12 @@
     return "text-[var(--fg-muted)]";
   }
 
+  function ageOnly(label) {
+    return String(label ?? "")
+      .replace(/\s*old\s*$/i, "")
+      .trim();
+  }
+
   function inboxItemKind(item) {
     const explicit = String(item?.kind ?? "")
       .trim()
@@ -348,14 +357,6 @@
     return String(item?.category ?? "unknown")
       .trim()
       .toLowerCase();
-  }
-
-  function inboxKindPillLabel(item) {
-    const kind = inboxItemKind(item);
-    if (kind === "ask") return "ASK";
-    if (kind === "review") return "REVIEW";
-    if (kind === "escalate") return "ESCALATE";
-    return kind.toUpperCase();
   }
 
   function askItemHref(item) {
@@ -524,96 +525,56 @@
 </script>
 
 <div
-  class="mb-2 flex flex-col gap-2 border-b border-[var(--line)] pb-2 sm:mb-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3 sm:pb-3"
+  class="mb-2 flex flex-wrap items-center justify-between gap-2 border-b border-[var(--line)] pb-2 sm:mb-3 sm:gap-3 sm:pb-3"
 >
-  <div
-    class="flex flex-wrap items-center justify-between gap-2 sm:justify-start sm:gap-3"
-  >
+  <div class="flex min-w-0 items-baseline gap-2">
     <h1 class="text-subtitle font-semibold text-[var(--fg)]">Inbox</h1>
-    <div
-      class="inline-flex rounded-md border border-[var(--line)] bg-[var(--panel)] p-0.5 text-micro font-semibold"
-      role="tablist"
-      aria-label="Inbox scope"
-      data-testid="inbox-tab-scope"
-    >
-      <a
-        role="tab"
-        aria-selected={inboxTab === "open"}
-        class="rounded px-2.5 py-1 transition-colors {inboxTab === 'open'
-          ? 'bg-[var(--accent)]/15 text-[var(--accent)]'
-          : 'text-[var(--fg-muted)] hover:text-[var(--fg)]'}"
-        href={workspaceHref("/inbox")}
-        data-testid="inbox-tab-open"
-      >
-        Open
-      </a>
-      <a
-        role="tab"
-        aria-selected={inboxTab === "completed"}
-        class="rounded px-2.5 py-1 transition-colors {inboxTab === 'completed'
-          ? 'bg-[var(--accent)]/15 text-[var(--accent)]'
-          : 'text-[var(--fg-muted)] hover:text-[var(--fg)]'}"
-        href={workspaceHref("/inbox?status=completed")}
-        data-testid="inbox-tab-completed"
+    {#if inboxTab === "completed"}
+      <span
+        class="text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)]"
+        data-testid="inbox-tab-scope"
       >
         Completed
-      </a>
-    </div>
+      </span>
+    {/if}
   </div>
   <div class="flex items-center gap-1.5 sm:gap-2">
-    {#if inboxTab === "open"}
+    <button
+      class="cursor-pointer inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-micro font-medium transition-colors {hasActiveFilters ||
+      inboxTab === 'completed'
+        ? 'border-[var(--accent)]/40 bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/15'
+        : 'border-[var(--line)] bg-[var(--bg-soft)] text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]'}"
+      onclick={() => (filtersOpen = !filtersOpen)}
+      type="button"
+      data-testid="inbox-filters-toggle"
+    >
+      <svg
+        class="h-3.5 w-3.5"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        stroke-width="2"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+        />
+      </svg>
+      {hasActiveFilters || inboxTab === "completed" ? "Filtered" : "Filter"}
+    </button>
+    {#if inboxTab === "open" && totalItems > 0 && !loading}
       <button
-        class="cursor-pointer inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-micro font-medium transition-colors {hasActiveFilters
+        type="button"
+        class="cursor-pointer inline-flex h-7 items-center rounded-md border px-2.5 text-micro font-medium transition-colors {inboxSel.selectMode
           ? 'border-[var(--accent)]/40 bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/15'
           : 'border-[var(--line)] bg-[var(--bg-soft)] text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]'}"
-        onclick={() => (filtersOpen = !filtersOpen)}
-        type="button"
-        data-testid="inbox-filters-toggle"
+        onclick={() => inboxSel.toggleSelectMode()}
+        disabled={inboxBulkBusy}
+        data-testid="inbox-select-toggle"
       >
-        <svg
-          class="h-3.5 w-3.5"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          stroke-width="2"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
-          />
-        </svg>
-        {hasActiveFilters ? "Filtered" : "Filter"}
+        {inboxSel.selectMode ? "Done" : "Select"}
       </button>
-      {#if totalItems > 0 && !loading}
-        <button
-          type="button"
-          class="cursor-pointer inline-flex h-7 items-center rounded-md border px-2.5 text-micro font-medium transition-colors {inboxSel.selectMode
-            ? 'border-[var(--accent)]/40 bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/15'
-            : 'border-[var(--line)] bg-[var(--bg-soft)] text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]'}"
-          onclick={() => inboxSel.toggleSelectMode()}
-          disabled={inboxBulkBusy}
-          data-testid="inbox-select-toggle"
-        >
-          {inboxSel.selectMode ? "Done" : "Select"}
-        </button>
-      {/if}
-      <span
-        class="inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-micro font-semibold tabular-nums leading-none {totalItems >
-        0
-          ? 'bg-[var(--accent)]/10 text-[var(--accent)]'
-          : 'bg-[var(--panel)] text-[var(--fg-muted)]'}"
-        data-testid="inbox-triage-header"
-      >
-        {totalItems} open
-      </span>
-    {:else}
-      <span
-        class="inline-flex h-7 items-center rounded-md px-2.5 text-micro font-semibold tabular-nums leading-none bg-[var(--panel)] text-[var(--fg-muted)]"
-        data-testid="inbox-completed-count"
-      >
-        {completedItems.length} shown
-      </span>
     {/if}
   </div>
 </div>
@@ -663,101 +624,105 @@
   </div>
 {/if}
 
-{#if inboxTab === "open" && filtersOpen}
+{#if filtersOpen || inboxTab === "completed"}
   <CompactFilterBar testId="inbox-filter-panel">
     {#snippet children()}
       <div
         class="flex flex-wrap items-end gap-3 sm:flex-nowrap sm:items-end sm:gap-4"
       >
-        <label class="min-w-[11rem] flex-1 text-micro sm:min-w-[13rem]">
-          <span class="font-medium text-[var(--fg-muted)]">Category</span>
+        <label class="min-w-[9rem] flex-1 text-micro sm:min-w-[10rem]">
+          <span class="font-medium text-[var(--fg-muted)]">Status</span>
           <select
             class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
-            value={categoryFilter}
-            onchange={(e) => {
-              categoryFilter = e.currentTarget.value;
-              applyFilters();
-            }}
-            data-testid="inbox-category-filter"
+            value={inboxTab}
+            onchange={(e) => void setStatus(e.currentTarget.value)}
+            data-testid="inbox-status-filter"
           >
-            <option value="all">All</option>
-            {#each INBOX_CATEGORY_ORDER as cat}
-              <option value={cat}>{INBOX_CATEGORY_LABELS[cat]}</option>
-            {/each}
+            <option value="open">Open</option>
+            <option value="completed">Completed</option>
           </select>
         </label>
-        <label class="min-w-[11rem] flex-1 text-micro sm:min-w-[13rem]">
-          <span class="font-medium text-[var(--fg-muted)]">Urgency</span>
-          <select
-            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
-            value={urgencyFilter}
-            onchange={(e) => {
-              urgencyFilter = e.currentTarget.value;
-              applyFilters();
-            }}
-            data-testid="inbox-urgency-filter"
-          >
-            <option value="all">All</option>
-            {#each INBOX_URGENCY_LEVELS as level}
-              <option value={level}>{INBOX_URGENCY_LABELS[level]}</option>
-            {/each}
-          </select>
-        </label>
-        {#if hasActiveFilters}
+        {#if inboxTab === "open"}
+          <label class="min-w-[10rem] flex-1 text-micro sm:min-w-[12rem]">
+            <span class="font-medium text-[var(--fg-muted)]">Category</span>
+            <select
+              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
+              value={categoryFilter}
+              onchange={(e) => {
+                categoryFilter = e.currentTarget.value;
+                applyFilters();
+              }}
+              data-testid="inbox-category-filter"
+            >
+              <option value="all">All</option>
+              {#each INBOX_CATEGORY_ORDER as cat}
+                <option value={cat}>{INBOX_CATEGORY_LABELS[cat]}</option>
+              {/each}
+            </select>
+          </label>
+          <label class="min-w-[10rem] flex-1 text-micro sm:min-w-[12rem]">
+            <span class="font-medium text-[var(--fg-muted)]">Urgency</span>
+            <select
+              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
+              value={urgencyFilter}
+              onchange={(e) => {
+                urgencyFilter = e.currentTarget.value;
+                applyFilters();
+              }}
+              data-testid="inbox-urgency-filter"
+            >
+              <option value="all">All</option>
+              {#each INBOX_URGENCY_LEVELS as level}
+                <option value={level}>{INBOX_URGENCY_LABELS[level]}</option>
+              {/each}
+            </select>
+          </label>
+          {#if hasActiveFilters}
+            <Button
+              variant="secondary"
+              size="compact"
+              onclick={resetFilters}
+              class="sm:ml-auto"
+            >
+              Clear
+            </Button>
+          {/if}
+        {:else}
+          <label class="min-w-[10rem] flex-1 text-micro sm:min-w-[12rem]">
+            <span class="font-medium text-[var(--fg-muted)]">Kind</span>
+            <select
+              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
+              bind:value={completedKindFilter}
+              data-testid="inbox-completed-kind-filter"
+            >
+              <option value="all">All</option>
+              <option value="ask">Ask</option>
+              <option value="review">Review</option>
+              <option value="escalate">Escalate</option>
+              <option value="unknown">Unknown</option>
+            </select>
+          </label>
+          <label class="min-w-[10rem] flex-1 text-micro sm:min-w-[12rem]">
+            <span class="font-medium text-[var(--fg-muted)]">Time window</span>
+            <select
+              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
+              bind:value={completedWindowDays}
+              data-testid="inbox-completed-window-filter"
+            >
+              <option value={7}>Last 7 days</option>
+              <option value={30}>Last 30 days</option>
+              <option value={0}>All time</option>
+            </select>
+          </label>
           <Button
             variant="secondary"
             size="compact"
-            onclick={resetFilters}
+            onclick={() => void applyCompletedFilters()}
             class="sm:ml-auto"
           >
-            Clear filters
+            Apply
           </Button>
         {/if}
-      </div>
-    {/snippet}
-  </CompactFilterBar>
-{/if}
-
-{#if inboxTab === "completed"}
-  <CompactFilterBar testId="inbox-completed-filter-panel">
-    {#snippet children()}
-      <div
-        class="flex flex-wrap items-end gap-3 sm:flex-nowrap sm:items-end sm:gap-4"
-      >
-        <label class="min-w-[11rem] flex-1 text-micro sm:min-w-[13rem]">
-          <span class="font-medium text-[var(--fg-muted)]">Kind</span>
-          <select
-            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
-            bind:value={completedKindFilter}
-            data-testid="inbox-completed-kind-filter"
-          >
-            <option value="all">All</option>
-            <option value="ask">Ask</option>
-            <option value="review">Review</option>
-            <option value="escalate">Escalate</option>
-            <option value="unknown">Unknown</option>
-          </select>
-        </label>
-        <label class="min-w-[11rem] flex-1 text-micro sm:min-w-[13rem]">
-          <span class="font-medium text-[var(--fg-muted)]">Time window</span>
-          <select
-            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
-            bind:value={completedWindowDays}
-            data-testid="inbox-completed-window-filter"
-          >
-            <option value={7}>Last 7 days</option>
-            <option value={30}>Last 30 days</option>
-            <option value={0}>All time</option>
-          </select>
-        </label>
-        <Button
-          variant="secondary"
-          size="compact"
-          onclick={() => void applyCompletedFilters()}
-          class="sm:ml-auto"
-        >
-          Apply
-        </Button>
       </div>
     {/snippet}
   </CompactFilterBar>
@@ -918,10 +883,10 @@
       </Button>
     </div>
   {:else if hasFilteredItems}
-    <div class="space-y-4">
+    <div class="space-y-5">
       {#each visibleGroups as group}
         <section data-testid={`inbox-group-${group.category}`}>
-          <div class="mb-1.5 flex items-center gap-1.5">
+          <div class="mb-2 flex items-baseline gap-1.5 px-0.5">
             <h2
               class="text-micro font-semibold uppercase tracking-wider {categoryBadgeClass(
                 group.category,
@@ -934,19 +899,75 @@
             >
           </div>
 
-          <div class="space-y-1">
-            {#each group.items as item (item.id)}
+          <div
+            class="overflow-hidden rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
+          >
+            {#each group.items as item, rowIdx (item.id)}
               {@const flatIdx = openInboxFlatIndex(item)}
               {@const selected = inboxSel.selectedIds.has(
                 String(item.id).trim(),
               )}
+              {@const subjectLabel = getInboxSubjectLabel(item)}
+              {@const ageText = ageOnly(item.age_label)}
+              {@const requester = askActorLabel(item)}
+              {#snippet rowBody()}
+                <div class="min-w-0 flex-1 px-3 py-2.5">
+                  <div class="flex min-w-0 items-center gap-2">
+                    <h3
+                      class="min-w-0 truncate text-meta font-semibold text-[var(--fg)]"
+                    >
+                      {item.title}
+                    </h3>
+                    {#if item.urgency_level && (item.urgency_level !== "normal" || inboxHasMixedUrgency)}
+                      <span
+                        class="inline-flex shrink-0 rounded px-1.5 py-0.5 text-micro font-semibold {item.urgency_level ===
+                        'immediate'
+                          ? 'bg-danger-soft text-danger-text'
+                          : item.urgency_level === 'high'
+                            ? 'bg-warn-soft text-warn-text'
+                            : 'bg-[var(--line)] text-[var(--fg-muted)]'}"
+                      >
+                        {item.urgency_label}
+                      </span>
+                    {/if}
+                    <div class="flex-1"></div>
+                    {#if ageText}
+                      <span
+                        class="shrink-0 text-micro tabular-nums text-[var(--fg-muted)]"
+                        title={item.has_source_event_time
+                          ? formatAbsoluteDateTime(item.source_event_time)
+                          : undefined}
+                      >
+                        {ageText}
+                      </span>
+                    {/if}
+                  </div>
+                  <div
+                    class="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-micro text-[var(--fg-muted)]"
+                  >
+                    {#if subjectLabel}
+                      <span class="min-w-0 truncate">{subjectLabel}</span>
+                      <span class="text-[var(--fg-subtle)]">·</span>
+                    {/if}
+                    <span class="inline-flex min-w-0 items-center gap-1">
+                      <span class="text-[var(--fg-subtle)]">from</span>
+                      <span class="truncate font-mono text-[var(--fg)]"
+                        >{requester}</span
+                      >
+                    </span>
+                  </div>
+                </div>
+              {/snippet}
+
               {#if inboxSel.selectMode}
                 <div
-                  class="flex cursor-pointer items-stretch rounded-md border border-[var(--line)] border-l-[3px] bg-[var(--bg-soft)] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 {urgencyBorderClass(
+                  class="flex cursor-pointer items-stretch border-l-[3px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-soft)] {urgencyBorderClass(
                     item.urgency_level,
-                  )} {selected
+                  )} {rowIdx > 0
+                    ? 'border-t border-[var(--line)]'
+                    : ''} {selected
                     ? 'border-l-[var(--accent)] bg-[var(--accent)]/10'
-                    : ''}"
+                    : 'hover:bg-[var(--line-subtle)]'}"
                   aria-label={`${selected ? "Deselect" : "Select"} ${item.title}`}
                   aria-pressed={selected}
                   data-testid={`inbox-card-${item.id}`}
@@ -976,224 +997,20 @@
                   >
                     <LeadingSelectionGlyph {selected} />
                   </div>
-                  <div
-                    class="pointer-events-none min-w-0 flex-1 px-3 py-2 pl-2 sm:pl-2.5"
-                  >
-                    <div
-                      class="flex items-center justify-between gap-2 text-micro"
-                    >
-                      <div class="flex min-w-0 items-center gap-1.5">
-                        <span
-                          class="inline-flex items-center rounded px-1.5 py-0.5 text-micro font-semibold tracking-wide {inboxItemKind(
-                            item,
-                          ) === 'ask'
-                            ? 'bg-accent-soft text-accent-text'
-                            : 'bg-[var(--line)] text-[var(--fg-muted)]'}"
-                        >
-                          {inboxKindPillLabel(item)}
-                        </span>
-                        <span
-                          class="inline-flex h-1.5 w-1.5 shrink-0 rounded-full {urgencyDot(
-                            item.urgency_level,
-                          )}"
-                        ></span>
-                        <span class="font-medium text-[var(--fg-muted)]"
-                          >{item.urgency_label}</span
-                        >
-                        {#if item.age_label}
-                          <span
-                            class="text-[var(--fg-muted)]"
-                            title={item.has_source_event_time
-                              ? formatAbsoluteDateTime(item.source_event_time)
-                              : undefined}>&middot; {item.age_label}</span
-                          >
-                        {/if}
-                        <span class="text-[var(--fg-muted)] sm:hidden"
-                          >&middot; requested by</span
-                        >
-                        <span
-                          class="truncate font-mono text-[var(--fg)] sm:hidden"
-                          >{askActorLabel(item)}</span
-                        >
-                      </div>
-                    </div>
-
-                    <div
-                      class="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5"
-                    >
-                      <h3
-                        class="text-meta font-semibold text-[var(--fg)] leading-snug"
-                      >
-                        {item.title}
-                      </h3>
-                      {#if getInboxSubjectLabel(item)}
-                        <span
-                          class="shrink-0 rounded bg-[var(--line)] px-1.5 py-0.5 text-micro font-medium text-[var(--fg-muted)]"
-                        >
-                          {getInboxSubjectLabel(item)}
-                        </span>
-                      {/if}
-                    </div>
-                    <div
-                      class="mt-1 hidden text-micro text-[var(--fg-muted)] sm:block"
-                      data-testid={`inbox-requester-meta-${item.id}`}
-                    >
-                      Requested by
-                      <span class="font-mono text-meta text-[var(--fg)]">
-                        {askActorLabel(item)}
-                      </span>
-                      {#if item.age_label}
-                        &middot; requested {item.age_label.replace(" old", "")} ago
-                      {/if}
-                    </div>
-
-                    {#if getInboxSubjectRef(item) || (item.related_refs ?? []).length > 0}
-                      <div
-                        class="mt-1.5 hidden flex-wrap items-center gap-1 text-micro sm:flex"
-                      >
-                        {#if getInboxSubjectRef(item)}
-                          {@const subjectId = getInboxSubjectId(item)}
-                          <span
-                            class="inline-flex items-center gap-1 rounded bg-[var(--panel)] px-1.5 py-0.5 font-medium text-[var(--fg-muted)]"
-                            title={getInboxSubjectRef(item)}
-                          >
-                            <span>
-                              {getInboxSubjectKind(item)
-                                ? `${getInboxSubjectKind(item)}:`
-                                : "Subject:"}
-                            </span>
-                            <span
-                              >{subjectId.length > 10
-                                ? `${subjectId.slice(0, 10)}…`
-                                : subjectId}</span
-                            >
-                          </span>
-                        {/if}
-                        {#each item.related_refs ?? [] as refValue}
-                          <RefLink
-                            {refValue}
-                            threadId={inboxActionThreadId(item)}
-                            humanize
-                          />
-                        {/each}
-                      </div>
-                    {/if}
+                  <div class="pointer-events-none min-w-0 flex-1">
+                    {@render rowBody()}
                   </div>
                 </div>
               {:else}
-                <div
+                <a
+                  href={askItemHref(item)}
                   data-testid={`inbox-card-${item.id}`}
-                  class="rounded-md border border-[var(--line)] border-l-[3px] bg-[var(--bg-soft)] transition-colors hover:bg-[var(--panel)] {urgencyBorderClass(
+                  class="flex items-stretch border-l-[3px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-soft)] hover:bg-[var(--line-subtle)] {urgencyBorderClass(
                     item.urgency_level,
-                  )}"
+                  )} {rowIdx > 0 ? 'border-t border-[var(--line)]' : ''}"
                 >
-                  <a
-                    href={askItemHref(item)}
-                    class="block px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-soft)] sm:py-2"
-                  >
-                    <div
-                      class="flex items-center justify-between gap-2 text-micro"
-                    >
-                      <div class="flex min-w-0 items-center gap-1.5">
-                        <span
-                          class="inline-flex items-center rounded px-1.5 py-0.5 text-micro font-semibold tracking-wide {inboxItemKind(
-                            item,
-                          ) === 'ask'
-                            ? 'bg-accent-soft text-accent-text'
-                            : 'bg-[var(--line)] text-[var(--fg-muted)]'}"
-                        >
-                          {inboxKindPillLabel(item)}
-                        </span>
-                        <span
-                          class="inline-flex h-1.5 w-1.5 shrink-0 rounded-full {urgencyDot(
-                            item.urgency_level,
-                          )}"
-                        ></span>
-                        <span class="font-medium text-[var(--fg-muted)]"
-                          >{item.urgency_label}</span
-                        >
-                        {#if item.age_label}
-                          <span
-                            class="text-[var(--fg-muted)]"
-                            title={item.has_source_event_time
-                              ? formatAbsoluteDateTime(item.source_event_time)
-                              : undefined}>&middot; {item.age_label}</span
-                          >
-                        {/if}
-                        <span class="text-[var(--fg-muted)] sm:hidden"
-                          >&middot; requested by</span
-                        >
-                        <span
-                          class="truncate font-mono text-[var(--fg)] sm:hidden"
-                          >{askActorLabel(item)}</span
-                        >
-                      </div>
-                    </div>
-
-                    <div
-                      class="mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5"
-                    >
-                      <h3
-                        class="text-meta font-semibold text-[var(--fg)] leading-snug"
-                      >
-                        {item.title}
-                      </h3>
-                      {#if getInboxSubjectLabel(item)}
-                        <span
-                          class="shrink-0 rounded bg-[var(--line)] px-1.5 py-0.5 text-micro font-medium text-[var(--fg-muted)]"
-                        >
-                          {getInboxSubjectLabel(item)}
-                        </span>
-                      {/if}
-                    </div>
-                    <div
-                      class="mt-0.5 hidden text-micro text-[var(--fg-muted)] sm:block"
-                      data-testid={`inbox-requester-meta-${item.id}`}
-                    >
-                      Requested by
-                      <span class="font-mono text-meta text-[var(--fg)]">
-                        {askActorLabel(item)}
-                      </span>
-                      {#if item.age_label}
-                        &middot; requested {item.age_label.replace(" old", "")} ago
-                      {/if}
-                    </div>
-                  </a>
-
-                  {#if getInboxSubjectRef(item) || (item.related_refs ?? []).length > 0}
-                    <div
-                      class="hidden border-t border-[var(--line)] px-3 py-2 pt-2 text-micro sm:block"
-                    >
-                      <div class="flex flex-wrap items-center gap-1">
-                        {#if getInboxSubjectRef(item)}
-                          {@const subjectId = getInboxSubjectId(item)}
-                          <span
-                            class="inline-flex items-center gap-1 rounded bg-[var(--panel)] px-1.5 py-0.5 font-medium text-[var(--fg-muted)]"
-                            title={getInboxSubjectRef(item)}
-                          >
-                            <span>
-                              {getInboxSubjectKind(item)
-                                ? `${getInboxSubjectKind(item)}:`
-                                : "Subject:"}
-                            </span>
-                            <span
-                              >{subjectId.length > 10
-                                ? `${subjectId.slice(0, 10)}…`
-                                : subjectId}</span
-                            >
-                          </span>
-                        {/if}
-                        {#each item.related_refs ?? [] as refValue}
-                          <RefLink
-                            {refValue}
-                            threadId={inboxActionThreadId(item)}
-                            humanize
-                          />
-                        {/each}
-                      </div>
-                    </div>
-                  {/if}
-                </div>
+                  {@render rowBody()}
+                </a>
               {/if}
             {/each}
           </div>

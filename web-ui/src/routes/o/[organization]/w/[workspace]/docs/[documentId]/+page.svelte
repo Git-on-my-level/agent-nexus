@@ -1407,12 +1407,14 @@
         </div>
 
         {#if historyOpen}
-          <aside class="w-72 shrink-0">
+          <aside
+            class="shrink-0 md:w-72 max-md:fixed max-md:inset-x-3 max-md:top-[5.75rem] max-md:z-40 max-md:w-auto"
+          >
             <div
-              class="sticky top-4 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
+              class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] shadow-lg md:sticky md:top-4"
             >
               <div
-                class="flex items-center justify-between border-b border-[var(--line)] px-4 py-2.5"
+                class="flex items-center justify-between border-b border-[var(--line)] px-4 py-2.5 max-md:px-3"
               >
                 <h2 class="text-meta font-medium text-[var(--fg)]">
                   Revision history
@@ -1469,14 +1471,16 @@
                   No earlier revisions found.
                 </p>
               {:else}
-                <div class="max-h-[calc(100vh-12rem)] overflow-y-auto">
+                <div
+                  class="max-h-[calc(100vh-12rem)] overflow-y-auto max-md:max-h-[min(58dvh,28rem)]"
+                >
                   {#each revisions as rev, i}
                     {@const isHead =
                       rev.revision_id === headRevision?.revision_id}
                     {@const isSelected =
                       displayedRevision?.revision_id === rev.revision_id}
                     <button
-                      class="w-full text-left px-4 py-3 transition-colors hover:bg-[var(--line-subtle)] {i >
+                      class="w-full px-4 py-3 text-left transition-colors hover:bg-[var(--line-subtle)] max-md:px-3 max-md:py-2.5 {i >
                       0
                         ? 'border-t border-[var(--line)]'
                         : ''} {isSelected ? 'bg-[var(--line-subtle)]' : ''}"
@@ -1499,7 +1503,7 @@
                           {/if}
                         </div>
                         <div class="min-w-0 flex-1">
-                          <p class="text-micro font-medium text-[var(--fg)]">
+                          <p class="text-meta font-medium text-[var(--fg)]">
                             {#if isHead}Current version{:else}Version {rev.revision_number}{/if}
                           </p>
                           <p class="text-micro text-[var(--fg-muted)]">
@@ -1509,7 +1513,7 @@
                           </p>
                           {#if rev.revision_hash}
                             <p
-                              class="mt-0.5 font-mono text-micro text-[var(--fg-muted)]"
+                              class="mt-0.5 truncate font-mono text-micro text-[var(--fg-muted)]"
                             >
                               {rev.revision_hash.slice(0, 12)}...
                             </p>

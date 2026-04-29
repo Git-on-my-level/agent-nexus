@@ -22,6 +22,7 @@
   import WorkspaceResourceListRow from "$lib/components/WorkspaceResourceListRow.svelte";
   import WorkspaceListBulkToolbar from "$lib/components/WorkspaceListBulkToolbar.svelte";
   import LeadingSelectionGlyph from "$lib/components/LeadingSelectionGlyph.svelte";
+  import LifecycleBadge from "$lib/components/LifecycleBadge.svelte";
   import Button from "$lib/components/Button.svelte";
   import { createWorkspaceListSelection } from "$lib/workspaceListSelection.svelte.js";
 
@@ -304,12 +305,14 @@
     };
   }
 
-  function topicStatePillTone(state) {
-    if (state === "active") return "text-ok-text bg-ok-soft";
-    if (state === "archived") return "text-warn-text bg-warn-soft";
-    if (state === "trashed") return "text-slate-300 bg-slate-500/10";
-    return "text-[var(--fg-muted)] bg-[var(--line)]";
-  }
+  let topicsHaveMixedLifecycle = $derived(
+    topics.some((t) => {
+      const s = String(t?.state ?? "")
+        .trim()
+        .toLowerCase();
+      return s && s !== "active";
+    }),
+  );
 
   function isTopicArchived(topic) {
     const at = topic?.archived_at;
@@ -732,18 +735,12 @@
               description={topic.current_summary ?? topic.summary ?? ""}
             >
               {#snippet badges()}
-                {#if topic.state}
-                  <span
-                    class="inline-flex rounded px-1.5 py-0.5 text-micro font-semibold capitalize {topicStatePillTone(
-                      topic.state,
-                    )}">{topic.state}</span
-                  >
-                {/if}
+                <LifecycleBadge
+                  state={topic.state}
+                  forceShow={topicsHaveMixedLifecycle}
+                />
                 {#if isTopicArchived(topic) && topic.state !== "archived"}
-                  <span
-                    class="rounded bg-warn-soft px-1.5 py-0.5 text-micro font-medium text-warn-text"
-                    >Archived</span
-                  >
+                  <LifecycleBadge state="archived" forceShow />
                 {/if}
               {/snippet}
             </WorkspaceResourceListRow>
@@ -771,18 +768,12 @@
               description={topic.current_summary ?? topic.summary ?? ""}
             >
               {#snippet badges()}
-                {#if topic.state}
-                  <span
-                    class="inline-flex rounded px-1.5 py-0.5 text-micro font-semibold capitalize {topicStatePillTone(
-                      topic.state,
-                    )}">{topic.state}</span
-                  >
-                {/if}
+                <LifecycleBadge
+                  state={topic.state}
+                  forceShow={topicsHaveMixedLifecycle}
+                />
                 {#if isTopicArchived(topic) && topic.state !== "archived"}
-                  <span
-                    class="rounded bg-warn-soft px-1.5 py-0.5 text-micro font-medium text-warn-text"
-                    >Archived</span
-                  >
+                  <LifecycleBadge state="archived" forceShow />
                 {/if}
               {/snippet}
             </WorkspaceResourceListRow>

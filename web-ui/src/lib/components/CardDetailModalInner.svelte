@@ -68,6 +68,7 @@
     onsavecard,
     onrevisecard = async () => {},
     onremovecard,
+    presentation = "modal",
   } = $props();
 
   const timelineWorkspaceSlug = writable("");
@@ -420,6 +421,7 @@
   onMount(() => {
     if (!browser) return;
     function onKeydown(e) {
+      if (presentation !== "modal") return;
       if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
@@ -532,17 +534,85 @@
   });
 </script>
 
+{#snippet cardActionsFooter()}
+  <div
+    class="shrink-0 border-t border-[var(--line)] bg-[var(--panel)] px-4 py-3"
+  >
+    <div
+      class="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-end md:justify-between"
+    >
+      <div
+        class="flex min-w-0 max-w-full items-stretch rounded-md border border-[var(--line)] bg-[var(--bg-soft)] md:w-60"
+      >
+        <span
+          class="flex shrink-0 items-center border-r border-[var(--line)] px-2.5 py-1.5 text-micro text-[var(--fg-muted)]"
+          aria-hidden="true"
+        >
+          Column
+        </span>
+        <select
+          bind:value={moveColumnKey}
+          onchange={handleColumnSelectChange}
+          aria-label="Column"
+          class="min-w-0 flex-1 cursor-pointer rounded-r-md border-0 bg-transparent px-2 py-1.5 pr-7 text-meta text-[var(--fg)] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[var(--accent)]"
+        >
+          {#each board?.column_schema ?? [] as column (column.key)}
+            <option value={column.key}>
+              {column.title ||
+                boardColumnTitle(column.key, board?.column_schema ?? [])}
+            </option>
+          {/each}
+        </select>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        {#if editOpen}
+          <Button
+            variant="primary"
+            size="compact"
+            disabled={savingCard}
+            onclick={() => void handleSave()}
+          >
+            {savingCard ? "Saving…" : "Save card details"}
+          </Button>
+          <Button variant="secondary" size="compact" onclick={cancelEdit}>
+            Cancel
+          </Button>
+        {:else}
+          <Button variant="secondary" size="compact" onclick={beginEdit}>
+            Edit card
+          </Button>
+        {/if}
+        <Button
+          variant="destructive"
+          size="compact"
+          onclick={() => {
+            removeCardConfirmOpen = true;
+          }}
+        >
+          Remove card
+        </Button>
+      </div>
+    </div>
+  </div>
+{/snippet}
+
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
-  class="cdm-backdrop"
-  data-testid="cdm-dialog"
-  role="dialog"
-  aria-modal="true"
+  class={presentation === "modal" ? "cdm-backdrop" : "cdm-page"}
+  data-testid={presentation === "modal" ? "cdm-dialog" : "card-detail-page"}
+  role={presentation === "modal" ? "dialog" : undefined}
+  aria-modal={presentation === "modal" ? "true" : undefined}
   aria-label="Card details"
 >
-  <div class="cdm-overlay" onclick={handleBackdropClick}></div>
-  <div class="cdm-panel">
+  {#if presentation === "modal"}
+    <div class="cdm-overlay" onclick={handleBackdropClick}></div>
+  {/if}
+  <div
+    class={presentation === "modal"
+      ? "cdm-panel"
+      : "cdm-panel cdm-page-panel page-dock-layout page-dock-layout--mobile-only page-dock-layout--fixed-mobile-chat"}
+  >
     <div class="sticky top-0 z-10 bg-[var(--panel)] px-3 pt-2 sm:px-4 sm:pt-3">
       <div class="flex items-start justify-between gap-3">
         <div class="min-w-0 flex-1">
@@ -595,21 +665,37 @@
             type="button"
             class="shrink-0 rounded-md border border-[var(--line)] p-1.5 text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
             onclick={() => onclose()}
-            aria-label="Close"
+            aria-label={presentation === "modal" ? "Close" : "Back to board"}
           >
-            <svg
-              class="h-4 w-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
+            {#if presentation === "modal"}
+              <svg
+                class="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            {:else}
+              <svg
+                class="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18"
+                />
+              </svg>
+            {/if}
           </button>
         </div>
       </div>
@@ -662,7 +748,11 @@
       >
     </div>
 
-    <div class="cdm-scroll">
+    <div
+      class={presentation === "modal"
+        ? "cdm-scroll"
+        : "cdm-scroll page-dock-scroll"}
+    >
       {#if cdmDetailPane === "overview"}
         <div class="p-4" data-cdm-panel="overview">
           {#if editOpen}
@@ -1072,80 +1162,29 @@
           {/if}
         </div>
       {/if}
+      {#if presentation === "page"}
+        {@render cardActionsFooter()}
+      {/if}
     </div>
 
     {#if linkedThreadId}
-      <DiscussionDrawer
-        layout="dock"
-        threadId={linkedThreadId}
-        {workspaceId}
-        {workspaceSlug}
-        label="Discussion"
-        storageKey={`card-discussion:${cardKey}`}
-        expandFillsParent
-        narrowEdgeToEdge
-      />
+      <div class={presentation === "modal" ? "contents" : "page-dock-feed"}>
+        <DiscussionDrawer
+          layout="dock"
+          threadId={linkedThreadId}
+          {workspaceId}
+          {workspaceSlug}
+          label="Discussion"
+          storageKey={`card-discussion:${cardKey}`}
+          expandFillsParent
+          narrowEdgeToEdge
+        />
+      </div>
     {/if}
 
-    <div
-      class="shrink-0 border-t border-[var(--line)] bg-[var(--panel)] px-4 py-3"
-    >
-      <div
-        class="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-end md:justify-between"
-      >
-        <div
-          class="flex min-w-0 max-w-full items-stretch rounded-md border border-[var(--line)] bg-[var(--bg-soft)] md:w-60"
-        >
-          <span
-            class="flex shrink-0 items-center border-r border-[var(--line)] px-2.5 py-1.5 text-micro text-[var(--fg-muted)]"
-            aria-hidden="true"
-          >
-            Column
-          </span>
-          <select
-            bind:value={moveColumnKey}
-            onchange={handleColumnSelectChange}
-            aria-label="Column"
-            class="min-w-0 flex-1 cursor-pointer rounded-r-md border-0 bg-transparent px-2 py-1.5 pr-7 text-meta text-[var(--fg)] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[var(--accent)]"
-          >
-            {#each board?.column_schema ?? [] as column (column.key)}
-              <option value={column.key}>
-                {column.title ||
-                  boardColumnTitle(column.key, board?.column_schema ?? [])}
-              </option>
-            {/each}
-          </select>
-        </div>
-        <div class="flex flex-wrap items-center gap-2">
-          {#if editOpen}
-            <Button
-              variant="primary"
-              size="compact"
-              disabled={savingCard}
-              onclick={() => void handleSave()}
-            >
-              {savingCard ? "Saving…" : "Save card details"}
-            </Button>
-            <Button variant="secondary" size="compact" onclick={cancelEdit}>
-              Cancel
-            </Button>
-          {:else}
-            <Button variant="secondary" size="compact" onclick={beginEdit}>
-              Edit card
-            </Button>
-          {/if}
-          <Button
-            variant="destructive"
-            size="compact"
-            onclick={() => {
-              removeCardConfirmOpen = true;
-            }}
-          >
-            Remove card
-          </Button>
-        </div>
-      </div>
-    </div>
+    {#if presentation === "modal"}
+      {@render cardActionsFooter()}
+    {/if}
   </div>
 </div>
 
@@ -1200,5 +1239,23 @@
     flex: 1;
     min-height: 0;
     overflow-y: auto;
+  }
+
+  .cdm-page {
+    min-height: 0;
+  }
+
+  .cdm-page-panel {
+    min-height: calc(100dvh - 9rem);
+    max-height: none;
+    box-shadow: none;
+  }
+
+  @media (max-width: 767px) {
+    .cdm-page-panel {
+      min-height: calc(100dvh - 6.75rem);
+      border-inline: 0;
+      border-radius: 0;
+    }
   }
 </style>

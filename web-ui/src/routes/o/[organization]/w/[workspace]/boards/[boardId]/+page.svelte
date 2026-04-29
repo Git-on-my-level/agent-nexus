@@ -1,4 +1,5 @@
 <script>
+  import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
   import BoardFeedStrip from "$lib/components/BoardFeedStrip.svelte";
@@ -84,6 +85,14 @@
   function openCardDetailModal(cardItem) {
     const id = boardCardStableId(cardItem?.membership);
     if (!id) return;
+    if (browser && window.matchMedia?.("(max-width: 767px)")?.matches) {
+      void goto(
+        workspaceHref(
+          `/boards/${encodeURIComponent(boardId)}/cards/${encodeURIComponent(id)}`,
+        ),
+      );
+      return;
+    }
     detailModalCard = cardItem;
     navigateBoardCardParam({ card: id });
   }

@@ -5,6 +5,7 @@
   import { onDestroy, onMount } from "svelte";
 
   import Button from "$lib/components/Button.svelte";
+  import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
   import Skeleton from "$lib/components/state/Skeleton.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
@@ -47,6 +48,23 @@
           .filter(Boolean)
       : [],
   );
+  let inboxRefs = $derived.by(() => {
+    const refs = [];
+    const seen = new Set();
+    const add = (value) => {
+      const ref = String(value ?? "").trim();
+      if (!ref || seen.has(ref)) return;
+      seen.add(ref);
+      refs.push(ref);
+    };
+    add(item?.subject_ref);
+    for (const ref of Array.isArray(item?.related_refs)
+      ? item.related_refs
+      : []) {
+      add(ref);
+    }
+    return refs;
+  });
 
   let isCompleted = $derived(String(item?.status ?? "").trim() === "completed");
   function workspaceHref(pathname = "/") {
@@ -263,10 +281,10 @@
   });
 </script>
 
-<div class="mx-auto max-w-3xl space-y-4 px-4 py-4 max-md:py-3">
+<div class="mx-auto max-w-3xl space-y-3 px-4 py-4 max-md:px-3 max-md:py-3">
   <div class="flex items-center justify-between">
     <a
-      class="text-meta text-fg-muted hover:text-fg"
+      class="text-meta text-fg-muted hover:text-fg max-md:text-micro"
       href={workspaceHref(isCompleted ? "/inbox?status=completed" : "/inbox")}
     >
       ← Back to inbox
@@ -284,8 +302,8 @@
       retrying={loading}
     />
   {:else if item}
-    <section class="space-y-5">
-      <header class="space-y-2">
+    <section class="space-y-4 max-md:space-y-3">
+      <header class="space-y-2 max-md:space-y-1.5">
         <div class="flex flex-wrap items-center gap-2 text-micro">
           <span
             class="rounded border border-[var(--line)] bg-[var(--panel)] px-2 py-0.5 font-semibold uppercase tracking-wide text-fg-muted"
@@ -309,20 +327,22 @@
           {item.title}
         </h1>
         {#if item.body}
-          <p class="whitespace-pre-wrap text-meta text-fg">{item.body}</p>
+          <div
+            class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-2 text-meta leading-relaxed text-fg"
+          >
+            <MarkdownRenderer source={item.body} />
+          </div>
         {/if}
-        {#if item.subject_ref || (Array.isArray(item.related_refs) && item.related_refs.length > 0)}
-          <div class="flex flex-wrap items-center gap-2 text-micro">
-            {#if item.subject_ref}
-              <RefLink
-                refValue={item.subject_ref}
-                threadId={item.thread_id}
-                humanize
-              />
-            {/if}
-            {#each Array.isArray(item.related_refs) ? item.related_refs.slice(0, 4) : [] as refValue}
+        {#if inboxRefs.length > 0}
+          <div
+            class="flex flex-wrap items-center gap-2 text-micro max-md:gap-x-2 max-md:gap-y-1"
+          >
+            {#each inboxRefs.slice(0, 4) as refValue}
               <RefLink {refValue} threadId={item.thread_id} humanize />
             {/each}
+            {#if inboxRefs.length > 4}
+              <span class="text-fg-muted">+{inboxRefs.length - 4} more</span>
+            {/if}
           </div>
         {/if}
       </header>
@@ -413,12 +433,12 @@
               >
                 Suggested responses
               </div>
-              <div class="space-y-2">
+              <div class="space-y-1.5">
                 {#each proposalStrings as proposal, index (proposal)}
                   {@const isRecommended = index === 0}
                   {@const isSelected = responseDraft.trim() === proposal.trim()}
                   <button
-                    class="group block w-full rounded border bg-[var(--panel)] px-3 py-2 text-left text-meta text-fg transition hover:bg-[var(--bg-soft)] {isSelected
+                    class="group block w-full rounded border bg-[var(--panel)] px-3 py-2 text-left text-meta text-fg transition hover:bg-[var(--bg-soft)] max-md:px-2.5 max-md:py-1.5 max-md:text-micro max-md:leading-snug {isSelected
                       ? 'border-[var(--accent)] ring-1 ring-[var(--accent)] bg-[var(--accent)]/5'
                       : 'border-[var(--line)]'}"
                     type="button"
@@ -429,7 +449,7 @@
                     >
                       {#if isRecommended}
                         <span
-                          class="shrink-0 rounded border border-[var(--accent)]/40 bg-[var(--accent)]/15 px-2 py-0.5 text-micro font-semibold uppercase tracking-wide text-[var(--accent)]"
+                          class="shrink-0 rounded border border-[var(--accent)]/40 bg-[var(--accent)]/15 px-2 py-0.5 text-micro font-semibold uppercase tracking-wide text-[var(--accent)] max-md:px-1.5 max-md:text-[11px]"
                         >
                           Recommended
                         </span>
@@ -449,7 +469,7 @@
             >
             <textarea
               id="human-response-input"
-              class="mt-2 min-h-[200px] w-full rounded border border-[var(--line)] bg-[var(--panel)] px-3 py-2 text-meta text-[var(--fg)] outline-none placeholder:text-[var(--fg-muted)] focus:ring-2 focus:ring-[var(--accent)]"
+              class="mt-2 min-h-[200px] w-full rounded border border-[var(--line)] bg-[var(--panel)] px-3 py-2 text-meta text-[var(--fg)] outline-none placeholder:text-[var(--fg-muted)] focus:ring-2 focus:ring-[var(--accent)] max-md:min-h-[140px]"
               bind:value={responseDraft}
               onkeydown={handleTextareaKeydown}
               placeholder="Write the response the agent should rely on."
@@ -457,13 +477,19 @@
           </div>
 
           <div
-            class="rounded border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta"
+            class="rounded border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta max-md:space-y-2"
           >
-            <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
-              <span class="text-fg-muted">{notifyDescription()}</span>
-              <div class="ml-auto flex flex-wrap items-center gap-1">
+            <div
+              class="flex flex-wrap items-center gap-x-3 gap-y-2 max-md:block"
+            >
+              <span class="text-fg-muted max-md:block max-md:text-micro"
+                >{notifyDescription()}</span
+              >
+              <div
+                class="ml-auto flex flex-wrap items-center gap-1 max-md:mt-2 max-md:grid max-md:grid-cols-3 max-md:rounded-md max-md:border max-md:border-[var(--line)] max-md:bg-[var(--panel)] max-md:p-1"
+              >
                 <button
-                  class="rounded px-2 py-1 text-micro font-medium {notifyMode ===
+                  class="rounded px-2 py-1 text-micro font-medium max-md:py-1.5 {notifyMode ===
                   'original'
                     ? 'bg-[var(--accent)]/15 text-[var(--accent)]'
                     : 'text-fg-muted hover:text-fg'}"
@@ -477,7 +503,7 @@
                   Original requester
                 </button>
                 <button
-                  class="rounded px-2 py-1 text-micro font-medium {notifyMode ===
+                  class="rounded px-2 py-1 text-micro font-medium max-md:py-1.5 {notifyMode ===
                   'target'
                     ? 'bg-[var(--accent)]/15 text-[var(--accent)]'
                     : 'text-fg-muted hover:text-fg'}"
@@ -490,7 +516,7 @@
                   Someone else
                 </button>
                 <button
-                  class="rounded px-2 py-1 text-micro font-medium {notifyMode ===
+                  class="rounded px-2 py-1 text-micro font-medium max-md:py-1.5 {notifyMode ===
                   'none'
                     ? 'bg-[var(--accent)]/15 text-[var(--accent)]'
                     : 'text-fg-muted hover:text-fg'}"
@@ -578,8 +604,15 @@
           {/if}
 
           <div class="flex items-center justify-between gap-3">
-            <p class="text-meta text-fg-muted">⌘+Enter to submit</p>
-            <Button type="submit" variant="primary" disabled={submitting}>
+            <p class="text-meta text-fg-muted max-md:hidden">
+              ⌘+Enter to submit
+            </p>
+            <Button
+              class="max-md:w-full max-md:justify-center"
+              type="submit"
+              variant="primary"
+              disabled={submitting}
+            >
               {submitting ? "Sending..." : "Send response"}
             </Button>
           </div>

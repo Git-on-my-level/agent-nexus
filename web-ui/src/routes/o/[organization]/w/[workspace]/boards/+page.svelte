@@ -12,6 +12,7 @@
   import WorkspaceResourceListRow from "$lib/components/WorkspaceResourceListRow.svelte";
   import WorkspaceListBulkToolbar from "$lib/components/WorkspaceListBulkToolbar.svelte";
   import LeadingSelectionGlyph from "$lib/components/LeadingSelectionGlyph.svelte";
+  import LifecycleBadge from "$lib/components/LifecycleBadge.svelte";
   import Button from "$lib/components/Button.svelte";
   import { createWorkspaceListSelection } from "$lib/workspaceListSelection.svelte.js";
 
@@ -121,12 +122,14 @@
     }
   }
 
-  function lifecycleStateColor(state) {
-    if (state === "active") return "text-ok-text bg-ok-soft";
-    if (state === "archived") return "text-warn-text bg-warn-soft";
-    if (state === "trashed") return "text-slate-300 bg-slate-500/10";
-    return "text-[var(--fg-muted)] bg-[var(--line)]";
-  }
+  let boardsHaveMixedLifecycle = $derived(
+    boards.some((row) => {
+      const s = String(row?.board?.state ?? "")
+        .trim()
+        .toLowerCase();
+      return s && s !== "active";
+    }),
+  );
 
   $effect(() => {
     boardListGeneration;
@@ -562,20 +565,12 @@
             description={board.summary ?? ""}
           >
             {#snippet badges()}
-              {#if board.state}
-                <span
-                  class="inline-flex shrink-0 rounded px-1.5 py-0.5 text-micro font-semibold {lifecycleStateColor(
-                    board.state,
-                  )}"
-                >
-                  {BOARD_STATUS_LABELS[board.state] ?? board.state}
-                </span>
-              {/if}
+              <LifecycleBadge
+                state={board.state}
+                label={BOARD_STATUS_LABELS[board.state]}
+              />
               {#if isBoardArchived(board) && board.state !== "archived"}
-                <span
-                  class="shrink-0 rounded bg-warn-soft px-1.5 py-0.5 text-micro font-medium text-warn-text"
-                  >Archived</span
-                >
+                <LifecycleBadge state="archived" forceShow />
               {/if}
             {/snippet}
           </WorkspaceResourceListRow>
@@ -611,20 +606,13 @@
               titleClass="group-hover:text-accent-text"
             >
               {#snippet badges()}
-                {#if board.state}
-                  <span
-                    class="inline-flex shrink-0 rounded px-1.5 py-0.5 text-micro font-semibold {lifecycleStateColor(
-                      board.state,
-                    )}"
-                  >
-                    {BOARD_STATUS_LABELS[board.state] ?? board.state}
-                  </span>
-                {/if}
+                <LifecycleBadge
+                  state={board.state}
+                  label={BOARD_STATUS_LABELS[board.state]}
+                  forceShow={boardsHaveMixedLifecycle}
+                />
                 {#if isBoardArchived(board) && board.state !== "archived"}
-                  <span
-                    class="shrink-0 rounded bg-warn-soft px-1.5 py-0.5 text-micro font-medium text-warn-text"
-                    >Archived</span
-                  >
+                  <LifecycleBadge state="archived" forceShow />
                 {/if}
               {/snippet}
             </WorkspaceResourceListRow>
