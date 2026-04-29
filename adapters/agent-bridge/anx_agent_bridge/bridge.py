@@ -30,6 +30,11 @@ from .util import compact_text, sign_bridge_checkin, utc_after_seconds_iso, utc_
 LOGGER = logging.getLogger(__name__)
 BRIDGE_RECONNECT_DELAY_SECONDS = 3
 NOTIFICATION_READ_RETRY_ATTEMPTS = 3
+WAKEUP_FAILURE_RETRY_LIMIT = 3
+WAKEUP_REDISPATCH_BACKOFF_BASE_SECONDS = 60
+WAKEUP_REDISPATCH_BACKOFF_MAX_SECONDS = 300
+REPLY_POST_RETRY_ATTEMPTS = 3
+REPLY_POST_RETRY_BASE_SECONDS = 0.5
 
 
 class AgentBridge:
@@ -42,9 +47,11 @@ class AgentBridge:
         self.state = state
         self.adapter = adapter
         self.handle = config.agent.handle
-        # Wakeup ids where the server already recorded completion but local handled-state write failed
+        # Wakeup ids consumed after adapter dispatch where local handled-state write failed
         # after retries; skip adapter redispatch until restart (set is in-memory only).
         self._completion_without_local_ack: set[str] = set()
+        self._failure_counts: dict[str, int] = {}
+        self._next_retry_at_monotonic: dict[str, float] = {}
 
     def run_forever(self) -> None:
         self._start_checkin_loop()
@@ -154,6 +161,7 @@ class AgentBridge:
         target_actor_id = str(notification.get("target_actor_id", "")).strip()
         thread_id = str(notification.get("thread_id", "")).strip()
         request_event_id = str(notification.get("request_event_id", "")).strip()
+        packet: WakePacket | None = None
         try:
             if not wakeup_id or not thread_id:
                 raise RuntimeError(f"Malformed agent notification: {notification}")
@@ -186,6 +194,18 @@ class AgentBridge:
                 if notification_status != "read":
                     self._mark_notification_read(wakeup_id)
                 return
+            fail_count = self._failure_counts.get(wakeup_id, 0)
+            if fail_count >= WAKEUP_FAILURE_RETRY_LIMIT:
+                LOGGER.warning(
+                    "Skipping wakeup %s after %d consecutive failures",
+                    wakeup_id,
+                    fail_count,
+                )
+                self._mark_wakeup_consumed(wakeup_id)
+                self._mark_notification_read(wakeup_id)
+                return
+            if fail_count > 0 and not self._is_wakeup_retry_due(wakeup_id):
+                return
             packet_content = self.client.get_artifact_content(wakeup_id)
             if not isinstance(packet_content, dict):
                 raise RuntimeError(f"Wake artifact {wakeup_id} did not return structured content")
@@ -193,8 +213,17 @@ class AgentBridge:
             claimed = self._claim_wakeup(packet, target_actor_id, request_event_id)
             if not claimed:
                 return
-        except Exception:
+        except Exception as exc:
             LOGGER.exception("Wakeup %s failed before adapter dispatch", wakeup_id or "(unknown)")
+            if wakeup_id:
+                self._record_wakeup_failure(
+                    packet,
+                    wakeup_id,
+                    target_actor_id,
+                    thread_id,
+                    request_event_id,
+                    exc,
+                )
             return
 
         prompt_text = build_wake_prompt(packet)
@@ -202,10 +231,35 @@ class AgentBridge:
         existing_session_id = session_map.get(packet.session_key)
         try:
             result = self.adapter.dispatch(packet, prompt_text, packet.session_key, existing_native_session_id=existing_session_id)
-            if result.native_session_id:
+        except Exception as exc:
+            LOGGER.exception("Wakeup %s failed", wakeup_id)
+            self._record_wakeup_failure(
+                packet,
+                wakeup_id,
+                target_actor_id,
+                thread_id,
+                packet.trigger_event_id,
+                exc,
+            )
+            # Per-wakeup failure only (WAKE_FAILED is durable). Do not re-raise: that would abort
+            # _drain_notifications and run_forever's broad except would log "Bridge loop failed" and
+            # skip other pending notifications for the same drain.
+            return
+
+        self._failure_counts.pop(packet.wakeup_id, None)
+        self._next_retry_at_monotonic.pop(packet.wakeup_id, None)
+        if result.native_session_id:
+            try:
                 self.state.set_session(packet.session_key, result.native_session_id)
-            if result.response_text.strip():
-                self._post_reply_message(packet, result.response_text.strip(), result.native_session_id)
+            except Exception:
+                LOGGER.exception("Wakeup %s: failed to persist native session id", packet.wakeup_id)
+        if not self._mark_wakeup_consumed(packet.wakeup_id):
+            self._completion_without_local_ack.add(packet.wakeup_id)
+
+        try:
+            response_text = result.response_text.strip()
+            if response_text:
+                self._post_reply_message_with_retries(packet, response_text, result.native_session_id)
             self.client.create_event(
                 event={
                     "type": WAKE_COMPLETED_EVENT,
@@ -222,13 +276,56 @@ class AgentBridge:
                 request_key=completion_request_key(packet.wakeup_id, target_actor_id),
             )
         except Exception as exc:
-            LOGGER.exception("Wakeup %s failed", wakeup_id)
+            LOGGER.exception("Wakeup %s writeback failed after adapter dispatch", wakeup_id)
+            self._create_wakeup_failed_event(
+                packet,
+                wakeup_id,
+                target_actor_id,
+                thread_id,
+                packet.trigger_event_id,
+                exc,
+            )
+        finally:
+            self._mark_notification_read(packet.wakeup_id)
+
+    def _packet_subject_refs(self, packet: WakePacket) -> list[str]:
+        return packet.subject_context_refs()
+
+    def _record_wakeup_failure(
+        self,
+        packet: WakePacket | None,
+        wakeup_id: str,
+        target_actor_id: str,
+        thread_id: str,
+        event_id: str,
+        exc: BaseException,
+    ) -> None:
+        self._failure_counts[wakeup_id] = self._failure_counts.get(wakeup_id, 0) + 1
+        self._schedule_wakeup_retry(wakeup_id, self._failure_counts[wakeup_id])
+        self._create_wakeup_failed_event(packet, wakeup_id, target_actor_id, thread_id, event_id, exc)
+
+    def _create_wakeup_failed_event(
+        self,
+        packet: WakePacket | None,
+        wakeup_id: str,
+        target_actor_id: str,
+        thread_id: str,
+        event_id: str,
+        exc: BaseException,
+    ) -> None:
+        refs = self._packet_event_refs(
+            packet,
+            event_id,
+            fallback_thread_id=thread_id,
+            fallback_wakeup_id=wakeup_id,
+        )
+        try:
             self.client.create_event(
                 event={
                     "type": WAKE_FAILED_EVENT,
                     "thread_id": thread_id,
                     "summary": f"Wakeup {wakeup_id} failed for @{self.handle}",
-                    "refs": self._packet_event_refs(packet, packet.trigger_event_id),
+                    "refs": refs,
                     "payload": {
                         "wakeup_id": wakeup_id,
                         "target_handle": self.handle,
@@ -238,42 +335,65 @@ class AgentBridge:
                 },
                 request_key=failure_request_key(wakeup_id, target_actor_id),
             )
-            # Per-wakeup failure only (WAKE_FAILED is durable). Do not re-raise: that would abort
-            # _drain_notifications and run_forever's broad except would log "Bridge loop failed" and
-            # skip other pending notifications for the same drain.
-            return
+        except Exception:
+            LOGGER.exception("Wakeup %s failed and failure event write also failed", wakeup_id)
+
+    def _schedule_wakeup_retry(self, wakeup_id: str, fail_count: int) -> None:
+        delay = min(
+            WAKEUP_REDISPATCH_BACKOFF_BASE_SECONDS * (2 ** (fail_count - 1)),
+            WAKEUP_REDISPATCH_BACKOFF_MAX_SECONDS,
+        )
+        self._next_retry_at_monotonic[wakeup_id] = time.monotonic() + delay
+        LOGGER.warning(
+            "Scheduled wakeup %s retry in %ss after %d consecutive failures",
+            wakeup_id,
+            delay,
+            fail_count,
+        )
+
+    def _is_wakeup_retry_due(self, wakeup_id: str) -> bool:
+        retry_at = self._next_retry_at_monotonic.get(wakeup_id, 0)
+        now = time.monotonic()
+        if retry_at <= now:
+            self._next_retry_at_monotonic.pop(wakeup_id, None)
+            return True
+        LOGGER.info(
+            "Skipping wakeup %s until scheduled retry time in %.1fs",
+            wakeup_id,
+            retry_at - now,
+        )
+        return False
+
+    def _mark_wakeup_consumed(self, wakeup_id: str) -> bool:
         last_exc: BaseException | None = None
         for attempt in range(5):
             try:
-                self.state.mark_wakeup_handled(packet.wakeup_id)
-                self._mark_notification_read(packet.wakeup_id)
-                last_exc = None
-                break
+                self.state.mark_wakeup_handled(wakeup_id)
+                return True
             except Exception as exc:
                 last_exc = exc
                 LOGGER.warning(
-                    "Wakeup %s: persist local handled state / read-ack failed (attempt %s/5): %s",
-                    packet.wakeup_id,
-                    attempt+1,
+                    "Wakeup %s: persist local handled state failed (attempt %s/5): %s",
+                    wakeup_id,
+                    attempt + 1,
                     exc,
                 )
                 time.sleep(0.05 * (2**attempt))
         if last_exc is not None:
             LOGGER.critical(
-                "Wakeup %s: server recorded completion but local handled state could not be persisted; "
+                "Wakeup %s: consumed by adapter but local handled state could not be persisted; "
                 "skipping adapter redispatch for this id until bridge restart (fix disk/permissions)",
-                packet.wakeup_id,
+                wakeup_id,
             )
-            self._completion_without_local_ack.add(packet.wakeup_id)
-            return
-
-    def _packet_subject_refs(self, packet: WakePacket) -> list[str]:
-        return packet.subject_context_refs()
+        return False
 
     def _packet_event_refs(self, packet: WakePacket | None, event_id: str, *, fallback_thread_id: str | None = None, fallback_wakeup_id: str | None = None) -> list[str]:
         if packet is not None:
             refs = self._packet_subject_refs(packet)
-            return [*refs, f"event:{event_id}", f"artifact:{packet.wakeup_id}"]
+            if event_id.strip():
+                refs.append(f"event:{event_id}")
+            refs.append(f"artifact:{packet.wakeup_id}")
+            return refs
         refs = []
         if fallback_thread_id:
             refs.append(f"thread:{fallback_thread_id}")
@@ -305,6 +425,23 @@ class AgentBridge:
                     exc,
                 )
                 time.sleep(BRIDGE_RECONNECT_DELAY_SECONDS)
+
+    def _post_reply_message_with_retries(self, packet: WakePacket, response_text: str, native_session_id: str | None) -> None:
+        for attempt in range(1, REPLY_POST_RETRY_ATTEMPTS + 1):
+            try:
+                self._post_reply_message(packet, response_text, native_session_id)
+                return
+            except Exception as exc:
+                if attempt == REPLY_POST_RETRY_ATTEMPTS:
+                    raise
+                LOGGER.warning(
+                    "Reply post retry %d/%d for wakeup %s failed: %s",
+                    attempt,
+                    REPLY_POST_RETRY_ATTEMPTS,
+                    packet.wakeup_id,
+                    exc,
+                )
+                time.sleep(REPLY_POST_RETRY_BASE_SECONDS * (2 ** (attempt - 1)))
 
     def _claim_wakeup(self, packet: WakePacket, target_actor_id: str, request_event_id: str) -> bool:
         wakeup_id = packet.wakeup_id

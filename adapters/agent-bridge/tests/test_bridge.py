@@ -287,7 +287,20 @@ def test_handle_notification_marks_read_after_dispatch():
     ]
 
 
-def test_handle_notification_leaves_notification_unread_when_completion_fails():
+def test_packet_event_refs_omits_empty_trigger_event_id():
+    bridge, _state, client = build_bridge([])
+    packet_content = client.get_artifact_content("wake-1")
+    packet_content["trigger"]["message_event_id"] = ""
+    packet = WakePacket.from_content(packet_content)
+
+    assert bridge._packet_event_refs(packet, packet.trigger_event_id) == [
+        "thread:thread-1",
+        "topic:topic-1",
+        "artifact:wake-1",
+    ]
+
+
+def test_handle_notification_marks_consumed_when_completion_fails():
     bridge, state, client = build_bridge([])
     original_create_event = client.create_event
 
@@ -309,11 +322,151 @@ def test_handle_notification_leaves_notification_unread_when_completion_fails():
         }
     )
 
-    assert client.notification_reads == []
-    assert "wake-1" not in state.handled_wakeup_ids()
+    assert client.notification_reads == ["wake-1"]
+    assert "wake-1" in state.handled_wakeup_ids()
     event_types = [entry["event"]["type"] for entry in client.created_events]
     assert "agent_wakeup_failed" in event_types
     assert event_types[-1] == "agent_wakeup_failed"
+
+
+def test_handle_notification_retries_reply_post_without_redispatch(monkeypatch):
+    bridge, state, client = build_bridge([])
+    original_create_event = client.create_event
+    attempts = {"message": 0}
+
+    def flaky_message_post(**kwargs):
+        event = kwargs.get("event") or {}
+        if event.get("type") == "message_posted":
+            attempts["message"] += 1
+            if attempts["message"] < 3:
+                raise RuntimeError("temporary post failure")
+        return original_create_event(**kwargs)
+
+    client.create_event = flaky_message_post
+    monkeypatch.setattr("anx_agent_bridge.bridge.time.sleep", lambda _seconds: None)
+
+    bridge._handle_notification(
+        {
+            "wakeup_id": "wake-1",
+            "target_actor_id": "actor-hermes",
+            "thread_id": "thread-1",
+            "request_event_id": "evt-request",
+            "trigger_event_id": "evt-trigger",
+        }
+    )
+
+    assert attempts["message"] == 3
+    assert len(bridge.adapter.dispatch_calls) == 1
+    assert client.notification_reads == ["wake-1"]
+    assert "wake-1" in state.handled_wakeup_ids()
+    event_types = [entry["event"]["type"] for entry in client.created_events]
+    assert event_types == ["agent_wakeup_claimed", "message_posted", "agent_wakeup_completed"]
+
+
+def test_handle_notification_does_not_redispatch_after_reply_post_exhausts_retries(monkeypatch):
+    bridge, state, client = build_bridge([])
+    original_create_event = client.create_event
+    attempts = {"message": 0}
+
+    def fail_message_post(**kwargs):
+        event = kwargs.get("event") or {}
+        if event.get("type") == "message_posted":
+            attempts["message"] += 1
+            raise RuntimeError("post rejected")
+        return original_create_event(**kwargs)
+
+    client.create_event = fail_message_post
+    monkeypatch.setattr("anx_agent_bridge.bridge.time.sleep", lambda _seconds: None)
+    notification = {
+        "wakeup_id": "wake-1",
+        "target_actor_id": "actor-hermes",
+        "thread_id": "thread-1",
+        "request_event_id": "evt-request",
+        "trigger_event_id": "evt-trigger",
+    }
+
+    bridge._handle_notification(notification)
+    bridge._handle_notification(notification)
+
+    assert attempts["message"] == 3
+    assert len(bridge.adapter.dispatch_calls) == 1
+    assert client.notification_reads == ["wake-1", "wake-1"]
+    assert "wake-1" in state.handled_wakeup_ids()
+    event_types = [entry["event"]["type"] for entry in client.created_events]
+    assert event_types == ["agent_wakeup_claimed", "agent_wakeup_failed"]
+
+
+def test_handle_notification_caps_dispatch_failures(monkeypatch):
+    bridge, state, client = build_bridge([])
+    now = {"value": 0.0}
+    calls = {"dispatch": 0}
+
+    def fail_dispatch(*_args, **_kwargs):
+        calls["dispatch"] += 1
+        raise RuntimeError("adapter down")
+
+    bridge.adapter.dispatch = fail_dispatch
+    monkeypatch.setattr("anx_agent_bridge.bridge.time.monotonic", lambda: now["value"])
+    monkeypatch.setattr("anx_agent_bridge.bridge.time.sleep", lambda _seconds: None)
+    notification = {
+        "wakeup_id": "wake-1",
+        "target_actor_id": "actor-hermes",
+        "thread_id": "thread-1",
+        "request_event_id": "evt-request",
+        "trigger_event_id": "evt-trigger",
+    }
+
+    bridge._handle_notification(notification)
+    now["value"] = 61
+    bridge._handle_notification(notification)
+    now["value"] = 182
+    bridge._handle_notification(notification)
+    now["value"] = 423
+    bridge._handle_notification(notification)
+
+    assert calls["dispatch"] == 3
+    assert "wake-1" in state.handled_wakeup_ids()
+    assert client.notification_reads == ["wake-1"]
+    failed = [e for e in client.created_events if e["event"]["type"] == "agent_wakeup_failed"]
+    assert len(failed) == 3
+
+
+def test_drain_notifications_does_not_block_on_backed_off_wakeup(monkeypatch):
+    bridge, _state, client = build_bridge([])
+    now = {"value": 100.0}
+    base_artifact = client.get_artifact_content("wake-1")
+
+    def artifact_for(wakeup_id: str):
+        return {**base_artifact, "wakeup_id": wakeup_id}
+
+    client.get_artifact_content = lambda wid: artifact_for(str(wid))
+    monkeypatch.setattr("anx_agent_bridge.bridge.time.monotonic", lambda: now["value"])
+    bridge._failure_counts["wake-backoff"] = 1
+    bridge._next_retry_at_monotonic["wake-backoff"] = 160.0
+    client.notifications = [
+        {
+            "wakeup_id": "wake-backoff",
+            "status": "unread",
+            "target_actor_id": "actor-hermes",
+            "thread_id": "thread-1",
+            "request_event_id": "evt-req-b",
+            "trigger_event_id": "evt-trig-b",
+        },
+        {
+            "wakeup_id": "wake-good",
+            "status": "unread",
+            "target_actor_id": "actor-hermes",
+            "thread_id": "thread-1",
+            "request_event_id": "evt-req-g",
+            "trigger_event_id": "evt-trig-g",
+        },
+    ]
+
+    bridge._drain_notifications()
+
+    assert len(bridge.adapter.dispatch_calls) == 1
+    assert bridge.adapter.dispatch_calls[0]["packet"].wakeup_id == "wake-good"
+    assert client.notification_reads == ["wake-good"]
 
 
 def test_drain_notifications_continues_after_dispatch_failure():
