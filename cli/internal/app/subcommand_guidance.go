@@ -24,7 +24,7 @@ var apiSubcommandSpec = subcommandSpec{
 var bridgeSubcommandSpec = subcommandSpec{
 	command:  "bridge",
 	valid:    []string{"install", "import-auth", "init-config", "start", "stop", "restart", "status", "logs", "workspace-id", "doctor"},
-	examples: []string{"anx bridge install", "anx bridge import-auth --config ./bridge.toml --from-profile agent-a", "anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --workspace-id ws_main --handle myagent --adapter-entrypoint ./adapter.py", "anx bridge workspace-id --handle myagent", "anx bridge start --config ./bridge.toml", "anx bridge status --config ./bridge.toml"},
+	examples: []string{"anx bridge install", "anx bridge import-auth --config ./bridge.toml --from-profile agent-a", "anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --workspace-id ws_main --handle myagent", "anx bridge workspace-id --handle myagent", "anx bridge start --config ./bridge.toml", "anx bridge status --config ./bridge.toml"},
 }
 
 var notificationsSubcommandSpec = subcommandSpec{

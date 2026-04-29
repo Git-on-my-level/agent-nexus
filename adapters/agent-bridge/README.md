@@ -8,11 +8,24 @@ This package implements three things:
 
 1. **Wake registration metadata** stored on the authenticated ANX principal
 2. **Bridge readiness check-ins** stored in ANX events and reflected in that registration
-3. **Pluggable local adapters** that consume wake events and invoke code you write (subprocess JSON or optional in-process Python plugin)
-
-ANX does **not** ship or maintain integrations for specific third-party agent products. You implement a small adapter (shell, Python, Node, etc.) against a stable JSON contract.
+3. **Pluggable local adapters** that consume wake events and invoke code you write (subprocess JSON, the bundled Hermes ACP subprocess adapter, or optional in-process Python plugin)
 
 ## Adapter kinds
+
+### `hermes` (recommended for Hermes ACP operators)
+
+`anx bridge init-config --kind hermes` writes a config that uses the bundled adapter:
+
+```toml
+[bridge]
+driver_kind = "hermes"
+adapter_kind = "hermes"
+
+[adapter]
+kind = "hermes"
+```
+
+The bundled adapter starts Hermes over ACP stdio through the same subprocess isolation used by custom adapters, creates or resumes an ACP session, collects streamed text from `session/update` notifications, and returns the response through the stable bridge JSON contract. It discovers the Hermes binary from `HERMES_BIN`, `[adapter].hermes_bin`, or `hermes` on `PATH`. Optional controls: `HERMES_ARGS` / `[adapter].hermes_args`, `HERMES_CWD` / `[adapter].hermes_cwd`, `HERMES_INTERACTIVE` / `[adapter].interactive`, and `[adapter].command` when you need to override the Python module entrypoint.
 
 ### `subprocess` (recommended)
 
@@ -136,6 +149,7 @@ Minimum config contract:
 - `agent.toml` `[auth] state_path` optional; defaults to `profiles/default.json`
 - `wake.toml` with one or more `[[workspaces]]` entries; this is the local wake subscription source
 - bridge `[runtime] state_dir` optional; defaults under the agent home
+- **Hermes ACP:** generated as `[adapter] kind = "hermes"`, optional `command`, `hermes_bin`, `hermes_args`, `hermes_cwd`, `interactive`
 - **Subprocess:** `[adapter] kind = "subprocess"`, `command` (argv array), optional `cwd`, `env`, `timeout_seconds`, `doctor_timeout_seconds`, `doctor_command`
 
 ### JSON contract (subprocess)
@@ -155,8 +169,8 @@ Minimum config contract:
 
 1. `anx bridge install` and `anx-agent-bridge --version`
 2. Note the deployment `workspace_id`
-3. `anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --workspace-id <id> --handle <handle> --adapter-entrypoint ./adapter.py`
-4. Implement `./adapter.py` (or change `[adapter].command` to any executable). Validate with `anx-agent-bridge adapter contract --config ./bridge.toml`
+3. For Hermes, `anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --workspace-id <id> --handle <handle>`
+4. For custom adapters, use `--kind subprocess` or `--kind python-plugin`; validate subprocess adapters with `anx-agent-bridge adapter contract --config ./bridge.toml`
 5. `anx bridge import-auth --config ./bridge.toml --from-profile <agent>` when auth exists
 6. `anx-agent-bridge auth register ... --apply-registration` when auth does not exist
 7. `anx bridge start --config ./bridge.toml`
@@ -167,6 +181,7 @@ Minimum config contract:
 - `anx_agent_bridge/registry.py` - registration apply/status and check-in publication
 - `anx_agent_bridge/bridge.py` - wake claim, adapter dispatch, reply/failure writeback
 - `anx_agent_bridge/adapters/adapter_contract.py` - JSON schemas and sample payloads
+- `anx_agent_bridge/adapters/hermes_acp.py` - bundled Hermes ACP subprocess adapter
 - `anx_agent_bridge/adapters/subprocess_adapter.py` - generic subprocess runner
 - `anx_agent_bridge/adapters/python_plugin.py` - explicit module loader
 - `anx_agent_bridge/adapters/deterministic_ack.py` - test-only canned replies

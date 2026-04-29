@@ -81,6 +81,31 @@ func TestRenderBridgePythonPluginTemplate(t *testing.T) {
 	}
 }
 
+func TestRenderBridgeHermesTemplate(t *testing.T) {
+	rendered, handle, err := renderBridgeConfigTemplate(bridgeTemplateParams{
+		Kind:          "hermes",
+		BaseURL:       "https://anx.example",
+		WorkspaceIDs:  []string{"ws_main"},
+		WorkspaceName: "Main",
+		Handle:        "myagent",
+	})
+	if err != nil {
+		t.Fatalf("renderBridgeConfigTemplate: %v", err)
+	}
+	if handle != "myagent" {
+		t.Fatalf("expected handle myagent, got %q", handle)
+	}
+	if !strings.Contains(rendered, `driver_kind = "hermes"`) || !strings.Contains(rendered, `adapter_kind = "hermes"`) {
+		t.Fatalf("expected hermes bridge metadata output=%s", rendered)
+	}
+	if !strings.Contains(rendered, `kind = "hermes"`) {
+		t.Fatalf("expected hermes adapter kind output=%s", rendered)
+	}
+	if !strings.Contains(rendered, `command = ["python3", "-m", "anx_agent_bridge.adapters.hermes_acp"]`) {
+		t.Fatalf("expected optional hermes module command hint output=%s", rendered)
+	}
+}
+
 func TestBridgeInstallPackageSpecDefaultsToRepoSubdirectory(t *testing.T) {
 	spec := bridgeInstallPackageSpec("v0.0.6")
 	if !strings.Contains(spec, "agent-nexus.git@v0.0.6#subdirectory=adapters/agent-bridge") {
@@ -465,6 +490,32 @@ func TestBridgeInitConfigSubprocessUsesAdapterEntrypoint(t *testing.T) {
 	}
 	if !strings.Contains(string(content), `command = ["python3", "/custom/adapter.py"]`) {
 		t.Fatalf("expected adapter entrypoint in command, content=%s", content)
+	}
+}
+
+func TestBridgeInitConfigHermesWritesBundledAdapter(t *testing.T) {
+	dir := t.TempDir()
+	outputPath := filepath.Join(dir, "agent.toml")
+	app := New()
+	result, err := app.runBridgeInitConfig([]string{
+		"--kind", "hermes",
+		"--output", outputPath,
+		"--workspace-id", "ws_main",
+		"--handle", "myagent",
+	}, config.Resolved{})
+	if err != nil {
+		t.Fatalf("runBridgeInitConfig: %v", err)
+	}
+	if !strings.Contains(result.Text, "bridge doctor") {
+		t.Fatalf("expected hermes doctor next step in output=%s", result.Text)
+	}
+	content, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("read output config: %v", err)
+	}
+	body := string(content)
+	if !strings.Contains(body, `adapter_kind = "hermes"`) || !strings.Contains(body, `kind = "hermes"`) {
+		t.Fatalf("expected hermes adapter config, content=%s", body)
 	}
 }
 

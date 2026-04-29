@@ -91,6 +91,28 @@ def test_build_adapter_defaults_cwd_to_config_dir(tmp_path: Path):
     assert adapter.cwd == str(tmp_path)
 
 
+def test_build_adapter_hermes_uses_bundled_module(tmp_path: Path):
+    config = LoadedConfig(
+        anx=ANXConfig(base_url="https://anx.example", workspace_id="ws_main", workspace_name="Main"),
+        agent=AgentConfig(
+            handle="hermes",
+            driver_kind="hermes",
+            adapter_kind="hermes",
+            state_dir=tmp_path / "state",
+        ),
+        adapter=AdapterConfig(raw={"kind": "hermes"}),
+        auth_state_path=tmp_path / "auth.json",
+        config_path=tmp_path / "bridge.toml",
+        config_dir=tmp_path,
+    )
+
+    adapter = build_adapter(config)
+
+    assert adapter.command[-2:] == ["-m", "anx_agent_bridge.adapters.hermes_acp"]
+    assert adapter.dispatch_timeout_seconds == 900
+    assert adapter.adapter_raw["kind"] == "hermes"
+
+
 def test_adapter_contract_subcommand_is_available():
     parser = build_parser()
 

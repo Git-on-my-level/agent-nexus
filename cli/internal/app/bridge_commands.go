@@ -97,11 +97,12 @@ func init() {
 			JSONShape:   "`kind`, `output`, `agent_home`, `workspace_ids`, `handle`, `content`",
 			Composition: "Pure local helper. Renders a bridge runtime config that references an explicit agent home, plus agent.toml and wake.toml when --output is used.",
 			Examples: []string{
+				"anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --workspace-id ws_main --handle myagent",
 				"anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --workspace-id ws_main --handle myagent --adapter-entrypoint ./adapter.py",
 				"anx bridge init-config --kind python-plugin --output ./bridge.toml --agent-home ./.anx --workspace-id ws_main --workspace-id ws_ops --handle myagent --plugin-module my_bridge --plugin-factory build_adapter",
 			},
 			Flags: []localHelperFlag{
-				{Name: "--kind <subprocess|python-plugin>", Description: "Template kind to render."},
+				{Name: "--kind <hermes|subprocess|python-plugin>", Description: "Template kind to render."},
 				{Name: "--output <path>", Description: "Write the rendered TOML to a file. Omit to print it."},
 				{Name: "--agent-home <dir>", Description: "Agent home directory for identity, auth, wake config, state, and logs. Default: ./.anx."},
 				{Name: "--base-url <url>", Description: "ANX base URL for agent.toml identity and wake.toml workspace entries."},
@@ -483,7 +484,7 @@ func (a *App) runBridgeInitConfig(args []string, cfg config.Resolved) (*commandR
 	var adapterEntryFlag trackedString
 	var pluginModuleFlag trackedString
 	var pluginFactoryFlag trackedString
-	fs.Var(&kindFlag, "kind", "Template kind: subprocess or python-plugin")
+	fs.Var(&kindFlag, "kind", "Template kind: hermes, subprocess, or python-plugin")
 	fs.Var(&outputFlag, "output", "Write the rendered TOML to a file")
 	fs.Var(&agentHomeFlag, "agent-home", "Directory for this local agent identity")
 	fs.Var(&baseURLFlag, "base-url", "ANX base URL")
@@ -593,7 +594,7 @@ func (a *App) runBridgeInitConfig(args []string, cfg config.Resolved) (*commandR
 			"Agent home: " + agentHomePath,
 			"Wake config: " + filepath.Join(agentHomePath, "wake.toml"),
 			"Lifecycle: registrations stay pending until the bridge checks in.",
-			"Next: implement your adapter (subprocess JSON or python_plugin), then `anx-agent-bridge adapter contract --config " + outputPath + "`.",
+			bridgeInitConfigNextStep(kind, outputPath),
 		}
 		text = strings.Join(textLines, "\n")
 	}
@@ -705,8 +706,8 @@ func (a *App) runBridgeWorkspaceID(ctx context.Context, args []string, cfg confi
 		for _, workspaceID := range workspaceIDs {
 			repeated = append(repeated, "--workspace-id "+workspaceID)
 		}
-		lines = append(lines, "Next step: anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx "+strings.Join(repeated, " ")+" --handle "+handle+" --adapter-entrypoint ./adapter.py")
-		lines = append(lines, "Or: --kind python-plugin --plugin-module <mod> --plugin-factory <callable> for an in-process Python adapter.")
+		lines = append(lines, "Next step: anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx "+strings.Join(repeated, " ")+" --handle "+handle)
+		lines = append(lines, "Or: --kind subprocess with --adapter-entrypoint for a custom JSON adapter, or --kind python-plugin with --plugin-module and --plugin-factory.")
 	}
 	return &commandResult{
 		Text: strings.Join(lines, "\n"),
@@ -935,6 +936,8 @@ func normalizeBridgeInitConfigKind(kind string) string {
 	switch k {
 	case "python-plugin", "python_plugin":
 		return "python_plugin"
+	case "hermes":
+		return "hermes"
 	case "subprocess":
 		return "subprocess"
 	default:
@@ -946,6 +949,35 @@ func renderBridgeConfigTemplate(params bridgeTemplateParams) (string, string, er
 	agentHome := firstNonEmptyString(params.AgentHome, ".anx")
 	kind := normalizeBridgeInitConfigKind(params.Kind)
 	switch kind {
+	case "hermes":
+		handle := firstNonEmptyString(params.Handle, "<handle>")
+		stateDir := firstNonEmptyString(params.StateDir, "run/"+handle)
+		return strings.TrimSpace(fmt.Sprintf(`
+agent_home = %q
+wake_config = "wake.toml"
+
+[bridge]
+driver_kind = "hermes"
+adapter_kind = "hermes"
+resume_policy = "resume_or_create"
+status = "pending"
+checkin_interval_seconds = 60
+checkin_ttl_seconds = 300
+
+[runtime]
+state_dir = %q
+
+[adapter]
+kind = "hermes"
+timeout_seconds = 900
+doctor_timeout_seconds = 60
+# Optional overrides:
+# command = ["python3", "-m", "anx_agent_bridge.adapters.hermes_acp"]
+# hermes_bin = "/path/to/hermes"
+# hermes_args = ["acp"]
+# cwd = "."
+# interactive = false
+`, agentHome, stateDir)) + "\n", handle, nil
 	case "subprocess":
 		handle := firstNonEmptyString(params.Handle, "<handle>")
 		stateDir := firstNonEmptyString(params.StateDir, "run/"+handle)
@@ -997,8 +1029,15 @@ plugin_module = %q
 plugin_factory = %q
 `, agentHome, stateDir, mod, fac)) + "\n", handle, nil
 	default:
-		return "", "", errnorm.Usage("invalid_request", "unknown bridge config kind; use subprocess or python-plugin")
+		return "", "", errnorm.Usage("invalid_request", "unknown bridge config kind; use hermes, subprocess, or python-plugin")
 	}
+}
+
+func bridgeInitConfigNextStep(kind string, outputPath string) string {
+	if normalizeBridgeInitConfigKind(kind) == "hermes" {
+		return "Next: run `anx bridge doctor --config " + outputPath + "` to verify Hermes and ACP readiness."
+	}
+	return "Next: implement your adapter (subprocess JSON or python_plugin), then `anx-agent-bridge adapter contract --config " + outputPath + "`."
 }
 
 func renderAgentHomeFiles(params bridgeTemplateParams) (agentManifest string, wakeConfig string) {
