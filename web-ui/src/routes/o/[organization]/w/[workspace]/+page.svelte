@@ -137,6 +137,18 @@
         : "",
   );
 
+  let homeMobileStatus = $derived.by(() => {
+    const parts = [];
+    if (handoffUpdatedCopy) {
+      parts.push(handoffUpdatedCopy);
+    }
+    for (const id of ["inbox", "topics"]) {
+      const card = homeChangeCards.find((entry) => entry.id === id);
+      if (card) parts.push(`${compactChangeLabel(id)} ${card.count}`);
+    }
+    return parts.join(" · ") || handoffIntro;
+  });
+
   const handoffErrorStates = $derived([
     inboxState,
     topicsState,
@@ -365,22 +377,25 @@
   }
 </script>
 
-<div class="min-w-0 max-w-full space-y-6 max-md:space-y-4" data-tour="home">
+<div class="min-w-0 max-w-full space-y-6 max-md:space-y-3" data-tour="home">
   <div
-    class="flex flex-wrap items-start justify-between gap-x-4 gap-y-3 min-w-0"
+    class="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 min-w-0"
   >
     <div class="min-w-0">
       <h1 class="text-subtitle font-semibold text-[var(--fg)]">Home</h1>
-      <p class="mt-0.5 text-meta text-[var(--fg-muted)]">
+      <p class="mt-0.5 hidden text-meta text-[var(--fg-muted)] sm:block">
         {handoffIntro}
       </p>
+      <p class="mt-0.5 text-micro text-[var(--fg-muted)] sm:hidden">
+        {homeMobileStatus}
+      </p>
       {#if handoffUpdatedCopy}
-        <p class="mt-1 text-micro text-[var(--fg-muted)]">
+        <p class="mt-1 hidden text-micro text-[var(--fg-muted)] sm:block">
           {handoffUpdatedCopy}
         </p>
       {/if}
     </div>
-    <div class="flex shrink-0 flex-wrap items-center gap-2">
+    <div class="flex shrink-0 flex-wrap items-center gap-1.5 sm:gap-2">
       {#if canReplayTour}
         <button
           class="dashboard-tour-button"
@@ -408,7 +423,7 @@
         </button>
       {/if}
       <button
-        class="cursor-pointer rounded-md border border-[var(--line)] px-2.5 py-1.5 text-meta font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] disabled:cursor-not-allowed disabled:opacity-60"
+        class="cursor-pointer rounded-md border border-[var(--line)] px-2.5 py-1.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] disabled:cursor-not-allowed disabled:opacity-60 sm:text-meta"
         data-testid="home-mark-read"
         onclick={resolveMarkAsRead}
         disabled={isMarkAsReadDisabled()}
@@ -420,7 +435,7 @@
         Mark as read
       </button>
       <button
-        class="cursor-pointer rounded-md border border-[var(--line)] px-2.5 py-1.5 text-meta font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)]"
+        class="cursor-pointer rounded-md border border-[var(--line)] px-2.5 py-1.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] sm:text-meta"
         onclick={loadDashboard}
         type="button"
       >
@@ -430,7 +445,7 @@
   </div>
 
   <section
-    class="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-2.5 sm:p-3.5"
+    class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-2.5 sm:p-3.5"
     data-testid="home-change-counts"
     aria-label="Handoff and activity"
   >
@@ -442,7 +457,7 @@
           What’s happened
         </h2>
         <p
-          class="mt-0.5 text-[0.65rem] leading-snug text-[var(--fg-muted)] sm:text-micro"
+          class="mt-0.5 hidden text-[0.65rem] leading-snug text-[var(--fg-muted)] sm:block sm:text-micro"
         >
           Change counts and high-signal workspace events since your last handoff
           mark
@@ -525,11 +540,11 @@
             {#each handoffTimelineViewFiltered as event (event.id)}
               {@const primaryRef = homeTimelinePrimaryRefFromEvent(event)}
               <div
-                class="rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] px-3.5 py-2.5"
+                class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 sm:px-3.5 sm:py-2.5"
               >
                 <div class="flex items-start gap-3">
                   <span
-                    class={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${eventTypeDotClass(event.rawType)}`}
+                    class={`mt-1.5 h-2 w-2 shrink-0 rounded-full sm:h-2.5 sm:w-2.5 ${eventTypeDotClass(event.rawType)}`}
                     title={event.typeLabel}
                   ></span>
                   <div class="min-w-0 flex-1">

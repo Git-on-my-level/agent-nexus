@@ -453,7 +453,9 @@
   );
 </script>
 
-<div class="mb-3 flex max-md:mb-2 flex-wrap items-start justify-between gap-4">
+<div
+  class="mb-3 flex max-md:mb-2 flex-wrap items-center justify-between gap-2 sm:items-start sm:gap-4"
+>
   <div class="min-w-0 flex-1">
     <h1 class="text-subtitle font-semibold text-[var(--fg)]">
       {listSurface === "topics" ? "Topics" : "Threads"}
@@ -472,7 +474,7 @@
       </p>
     {/if}
   </div>
-  <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-1.5">
+  <div class="flex flex-wrap items-center justify-end gap-1.5 sm:gap-1.5">
     {#if listSurface === "topics"}
       <button
         class="cursor-pointer inline-flex h-7 items-center gap-1.5 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] {topics.length ===

@@ -343,7 +343,7 @@ const events = [
     type: "topic_updated",
     actor_id: "actor-ops-ai",
     thread_id: "thread-lemon-shortage",
-    refs: ["thread:thread-lemon-shortage"],
+    refs: ["thread:thread-lemon-shortage", "topic:lemon-shortage"],
     summary: "Priority raised to P0.",
     payload: { changed_fields: ["current_summary"] },
     provenance: { sources: ["event:evt-supply-003"] },
@@ -410,7 +410,7 @@ const events = [
     type: "topic_updated",
     actor_id: "actor-flavor-ai",
     thread_id: "thread-summer-menu",
-    refs: ["thread:thread-summer-menu"],
+    refs: ["thread:thread-summer-menu", "topic:summer-menu"],
     summary: "Summer menu thread updated — launch blocked on lemon shortage.",
     payload: { changed_fields: ["current_summary", "next_actions"] },
     provenance: { sources: ["event:evt-menu-003"] },
@@ -527,6 +527,8 @@ const events = [
       "thread:thread-lemon-shortage",
       "board:board-supply-crisis",
       "card:card-emergency-restock",
+      "card_revision:card-emergency-restock-seed",
+      "artifact:artifact-card-emergency-restock-seed",
     ],
     summary: "Card created: place emergency restock order.",
     payload: { card_id: "card-emergency-restock" },
@@ -544,6 +546,8 @@ const events = [
       "thread:thread-summer-menu",
       "board:board-product-launch",
       "card:thread-summer-menu",
+      "card_revision:thread-summer-menu-seed",
+      "artifact:artifact-card-thread-summer-menu-seed",
     ],
     summary: "Card created: update menu board with summer flavors.",
     payload: { card_id: "thread-summer-menu" },
@@ -648,6 +652,7 @@ const events = [
     payload: {
       kind: "ask",
       subject_ref: "topic:pricing-glitch",
+      requester_actor_id: "actor-ops-ai",
       title: "Approve customer refunds",
       body:
         "3 customers were overcharged $0.50 each ($1.50 total). " +
@@ -673,6 +678,8 @@ const events = [
       "thread:thread-pricing-glitch",
       "board:board-summer-menu",
       "card:thread-pricing-glitch",
+      "card_revision:thread-pricing-glitch-seed",
+      "artifact:artifact-card-thread-pricing-glitch-seed",
     ],
     summary: "Card created: patch and validate pricing cache invalidation.",
     payload: { card_id: "thread-pricing-glitch" },
@@ -740,6 +747,7 @@ const events = [
       inbox_item_id: "pricing-refunds",
       kind: "ask",
       request_event_ref: "event:evt-price-003",
+      responding_actor_id: "actor-ops-ai",
       response_text:
         "Issuing $0.50 refunds to all 3 affected customers via payment processor bot. " +
         "Config pushes suspended until cache invalidation patch is deployed. " +
@@ -858,7 +866,7 @@ const events = [
     type: "topic_updated",
     actor_id: "actor-ops-ai",
     thread_id: "thread-pricing-glitch",
-    refs: ["thread:thread-pricing-glitch"],
+    refs: ["thread:thread-pricing-glitch", "topic:pricing-glitch"],
     summary: "Incident closed — timeline fully resolved.",
     payload: { changed_fields: ["status", "current_summary", "next_actions"] },
     provenance: { sources: ["event:evt-price-013"] },
@@ -891,7 +899,7 @@ const events = [
     type: "topic_updated",
     actor_id: "actor-ops-ai",
     thread_id: "thread-q2-initiative",
-    refs: ["thread:thread-q2-initiative"],
+    refs: ["thread:thread-q2-initiative", "topic:q2-initiative"],
     summary:
       "Monthly check-in: permit in review, SqueezeBot 2000 delivery on track.",
     payload: { changed_fields: ["current_summary", "next_actions"] },
@@ -907,6 +915,8 @@ const events = [
       "thread:thread-q2-initiative",
       "board:board-product-launch",
       "card:card-q2-permit",
+      "card_revision:card-q2-permit-seed",
+      "artifact:artifact-card-q2-permit-seed",
     ],
     summary: "Card created: monitor city permit and confirm approval.",
     payload: { card_id: "card-q2-permit" },
@@ -922,6 +932,8 @@ const events = [
       "thread:thread-q2-initiative",
       "board:board-product-launch",
       "card:card-q2-menu",
+      "card_revision:card-q2-menu-seed",
+      "artifact:artifact-card-q2-menu-seed",
     ],
     summary: "Card created: FlavorMind to draft Riverside seasonal menu.",
     payload: { card_id: "card-q2-menu" },
@@ -1134,7 +1146,7 @@ const events = [
 const artifacts = [
   {
     id: "artifact-supplier-sla",
-    kind: "doc",
+    kind: "evidence",
     thread_id: "thread-lemon-shortage",
     summary: "CitrusBot Farm SLA — uptime and delivery terms",
     refs: ["thread:thread-lemon-shortage"],
@@ -1178,7 +1190,7 @@ const artifacts = [
   },
   {
     id: "artifact-supplier-sla-v2",
-    kind: "doc",
+    kind: "evidence",
     thread_id: "thread-lemon-shortage",
     summary: "CitrusBot Farm SLA — uptime and delivery terms",
     refs: ["thread:thread-lemon-shortage", "artifact:artifact-supplier-sla"],
@@ -1219,7 +1231,7 @@ const artifacts = [
   },
   {
     id: "artifact-summer-menu-draft",
-    kind: "doc",
+    kind: "evidence",
     thread_id: "thread-summer-menu",
     summary:
       "Summer menu proposal — Lavender & Mango Chili Lemonade recipe specs",
@@ -1567,7 +1579,7 @@ const artifacts = [
   },
   {
     id: "artifact-trashed-doc",
-    kind: "doc",
+    kind: "evidence",
     thread_id: "thread-pricing-glitch",
     summary: "Superseded draft — replaced by final evidence artifact",
     refs: ["thread:thread-pricing-glitch"],
@@ -2275,7 +2287,8 @@ const boardCards = [
     rank: "0001",
     document_ref: null,
     resolution: "done",
-    resolution_refs: ["artifact:artifact-receipt-pricing-v2"],
+    // Receipt packet artifacts are no longer seeded; use the durable resolution event.
+    resolution_refs: ["event:evt-price-011"],
     created_at: new Date(now - 10 * 24 * 60 * 60 * 1000).toISOString(),
     created_by: "actor-ops-ai",
     updated_at: new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString(),

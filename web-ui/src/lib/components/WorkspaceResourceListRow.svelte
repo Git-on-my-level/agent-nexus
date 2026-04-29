@@ -33,7 +33,13 @@
       </div>
     {/if}
   </div>
-  <p class="truncate text-micro text-[var(--fg-muted)]">
-    {text || emptyDescription}
-  </p>
+  {#if text}
+    <p class="truncate text-micro text-[var(--fg-muted)]">
+      {text}
+    </p>
+  {:else if emptyDescription}
+    <p class="hidden truncate text-micro text-[var(--fg-muted)] sm:block">
+      {emptyDescription}
+    </p>
+  {/if}
 </div>

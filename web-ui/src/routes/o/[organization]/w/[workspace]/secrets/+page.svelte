@@ -120,8 +120,8 @@
   <title>Secrets{workspaceSlug ? ` - ${workspaceSlug}` : ""} · ANX</title>
 </svelte:head>
 
-<div class="mx-auto max-w-3xl px-4 py-6">
-  <div class="mb-4 flex items-center justify-between">
+<div class="mx-auto max-w-3xl sm:px-4 sm:py-6">
+  <div class="mb-3 flex items-center justify-between gap-3 sm:mb-4">
     <h1 class="text-body font-semibold text-[var(--fg)]">Secrets</h1>
     {#if isHuman}
       <Button
@@ -135,7 +135,7 @@
     {/if}
   </div>
 
-  <p class="mb-4 text-micro text-[var(--fg-muted)]">
+  <p class="mb-4 hidden text-micro text-[var(--fg-muted)] sm:block">
     Workspace credentials for agent use. Values are encrypted at rest. Reveals
     are logged in audit.
   </p>
@@ -236,7 +236,11 @@
     >
       {#each secrets as secret, i}
         {@const revealed = revealedSecrets[secret.id]}
-        <div class="px-4 py-3 {i > 0 ? 'border-t border-[var(--line)]' : ''}">
+        <div
+          class="px-3 py-2.5 sm:px-4 sm:py-3 {i > 0
+            ? 'border-t border-[var(--line)]'
+            : ''}"
+        >
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2">
@@ -245,11 +249,13 @@
                 >
               </div>
               {#if secret.description}
-                <p class="mt-0.5 text-micro text-[var(--fg-muted)]">
+                <p
+                  class="mt-0.5 hidden text-micro text-[var(--fg-muted)] sm:block"
+                >
                   {secret.description}
                 </p>
               {/if}
-              <p class="mt-1 text-micro text-[var(--fg-subtle)]">
+              <p class="mt-0.5 text-micro text-[var(--fg-subtle)] sm:mt-1">
                 Updated {formatTimestamp(secret.updated_at)}
               </p>
             </div>

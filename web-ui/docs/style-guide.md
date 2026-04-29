@@ -8,6 +8,7 @@ Follow this guide when adding or modifying UI in the web-ui codebase.
 The UI targets a **dark-first, compact, information-dense** aesthetic inspired by Linear and Slack. Every pixel should earn its place. Avoid decorative elements, excessive shadows, and nested card hierarchies. Prefer flat surfaces with subtle borders.
 
 **Core principles:**
+
 - Compact over spacious — tighter padding, smaller type, less vertical waste.
 - Flat over layered — single-level cards with dividers, not nested card stacks.
 - Monochromatic over colorful — semantic colors only for lifecycle/urgency, never decoration.
@@ -21,24 +22,24 @@ The UI targets a **dark-first, compact, information-dense** aesthetic inspired b
 
 All text intended to be read must meet **WCAG 2 AA** contrast thresholds against the surface it sits on:
 
-| Threshold | Minimum ratio | Applies to |
-|-----------|---------------|------------|
-| Normal text (< 18px / < 14px bold) | **4.5 : 1** | Body, labels, timestamps, metadata, badges |
-| Large text (≥ 18px / ≥ 14px bold) | **3 : 1** | Page headings, section headings |
+| Threshold                          | Minimum ratio | Applies to                                 |
+| ---------------------------------- | ------------- | ------------------------------------------ |
+| Normal text (< 18px / < 14px bold) | **4.5 : 1**   | Body, labels, timestamps, metadata, badges |
+| Large text (≥ 18px / ≥ 14px bold)  | **3 : 1**     | Page headings, section headings            |
 
 Measured contrast ratios for each text token on the two primary surfaces:
 
-| Token | on `gray-100` (#181a21) | on `gray-50` (#0e1015) | Verdict |
-|-------|-------------------------|------------------------|---------|
-| `gray-400` (#6b7080) | 3.5 : 1 | 3.9 : 1 | Large text only; disabled/decorative |
-| `gray-500` (#8e939c) | 5.6 : 1 | 6.2 : 1 | **AA pass** — minimum for readable text |
-| `gray-600` (#9ca1ab) | 6.7 : 1 | 7.3 : 1 | AA pass |
-| `gray-700`+ | > 8 : 1 | > 9 : 1 | AA pass |
+| Token                | on `gray-100` (#181a21) | on `gray-50` (#0e1015) | Verdict                                 |
+| -------------------- | ----------------------- | ---------------------- | --------------------------------------- |
+| `gray-400` (#6b7080) | 3.5 : 1                 | 3.9 : 1                | Large text only; disabled/decorative    |
+| `gray-500` (#8e939c) | 5.6 : 1                 | 6.2 : 1                | **AA pass** — minimum for readable text |
+| `gray-600` (#9ca1ab) | 6.7 : 1                 | 7.3 : 1                | AA pass                                 |
+| `gray-700`+          | > 8 : 1                 | > 9 : 1                | AA pass                                 |
 
 **Rules:**
 
 1. **All readable text uses `gray-500` minimum.** Labels, timestamps, metadata, badge text, secondary copy, empty-state messages, placeholder-text-that-should-be-read — all must use `text-gray-500` / `text-[var(--ui-text-muted)]` or brighter.
-2. **`gray-400` is decorative/disabled only.** Use it for disabled controls, non-essential separators (e.g. `·` dot dividers), and text the operator is *not* expected to read. Never pair `text-gray-400` with `text-[11px]` — the combination is unreadable.
+2. **`gray-400` is decorative/disabled only.** Use it for disabled controls, non-essential separators (e.g. `·` dot dividers), and text the operator is _not_ expected to read. Never pair `text-gray-400` with `text-[11px]` — the combination is unreadable.
 3. **Test on `gray-100` (the worse case).** If text passes contrast on `gray-100`, it will also pass on the darker `gray-50`.
 
 ## Color System
@@ -47,19 +48,19 @@ Measured contrast ratios for each text token on the two primary surfaces:
 
 The default Tailwind `gray` scale is overridden in `tailwind.config.cjs` to dark values. The numbering is **inverted** from what you might expect: lower numbers are darker, higher numbers are lighter.
 
-| Token      | Hex       | Usage                                     |
-|------------|-----------|-------------------------------------------|
-| `gray-50`  | `#0e1015` | Body/page background, inset wells         |
-| `gray-100` | `#181a21` | Card/panel surfaces (replaces `bg-white`)  |
-| `gray-200` | `#262a33` | Borders, badge backgrounds, button fills   |
-| `gray-300` | `#353a45` | Strong borders, active button fills        |
+| Token      | Hex       | Usage                                                    |
+| ---------- | --------- | -------------------------------------------------------- |
+| `gray-50`  | `#0e1015` | Body/page background, inset wells                        |
+| `gray-100` | `#181a21` | Card/panel surfaces (replaces `bg-white`)                |
+| `gray-200` | `#262a33` | Borders, badge backgrounds, button fills                 |
+| `gray-300` | `#353a45` | Strong borders, active button fills                      |
 | `gray-400` | `#6b7080` | Disabled text, decorative separators (not readable text) |
-| `gray-500` | `#8e939c` | Muted text — minimum for readable content  |
-| `gray-600` | `#9ca1ab` | Secondary text                             |
-| `gray-700` | `#b4b9c2` | Body text                                  |
-| `gray-800` | `#d0d4db` | Strong text, button label text             |
-| `gray-900` | `#e2e5eb` | Headings, primary text                     |
-| `gray-950` | `#f0f2f5` | Brightest text (rare)                      |
+| `gray-500` | `#8e939c` | Muted text — minimum for readable content                |
+| `gray-600` | `#9ca1ab` | Secondary text                                           |
+| `gray-700` | `#b4b9c2` | Body text                                                |
+| `gray-800` | `#d0d4db` | Strong text, button label text                           |
+| `gray-900` | `#e2e5eb` | Headings, primary text                                   |
+| `gray-950` | `#f0f2f5` | Brightest text (rare)                                    |
 
 **Key consequence:** `bg-white` is never used. Use `bg-gray-100` for panel surfaces. `text-gray-900` produces near-white text suitable for headings.
 
@@ -69,34 +70,34 @@ The default Tailwind `gray` scale is overridden in `tailwind.config.cjs` to dark
 
 Global design tokens live in `src/app.css` under `:root`. These power the shell, sidebar, and non-Tailwind styles.
 
-| Variable              | Value       | Purpose                          |
-|-----------------------|-------------|----------------------------------|
-| `--ui-bg`             | `#0e1015`   | Page background                  |
-| `--ui-panel`          | `#181a21`   | Panel/card surface               |
-| `--ui-panel-muted`    | `#13151b`   | Muted/inset panel surface        |
-| `--ui-border`         | `#262a33`   | Standard border                  |
-| `--ui-border-subtle`  | `#1e2129`   | Very subtle border               |
-| `--ui-border-strong`  | `#353a45`   | Emphasized border                |
-| `--ui-text`           | `#e2e5eb`   | Primary text                     |
-| `--ui-text-muted`     | `#8e939c`   | Muted text (min for readable content) |
-| `--ui-text-subtle`    | `#6b7080`   | Disabled/decorative only         |
-| `--ui-accent`         | `#818cf8`   | Accent color (indigo)            |
-| `--ui-accent-strong`  | `#6366f1`   | Strong accent (brand mark, CTAs) |
+| Variable             | Value     | Purpose                               |
+| -------------------- | --------- | ------------------------------------- |
+| `--ui-bg`            | `#0e1015` | Page background                       |
+| `--ui-panel`         | `#181a21` | Panel/card surface                    |
+| `--ui-panel-muted`   | `#13151b` | Muted/inset panel surface             |
+| `--ui-border`        | `#262a33` | Standard border                       |
+| `--ui-border-subtle` | `#1e2129` | Very subtle border                    |
+| `--ui-border-strong` | `#353a45` | Emphasized border                     |
+| `--ui-text`          | `#e2e5eb` | Primary text                          |
+| `--ui-text-muted`    | `#8e939c` | Muted text (min for readable content) |
+| `--ui-text-subtle`   | `#6b7080` | Disabled/decorative only              |
+| `--ui-accent`        | `#818cf8` | Accent color (indigo)                 |
+| `--ui-accent-strong` | `#6366f1` | Strong accent (brand mark, CTAs)      |
 
 ### Semantic Colors
 
 Semantic colors use Tailwind defaults (not overridden). For dark backgrounds, use **opacity-based backgrounds** and **lightened text**:
 
-| Purpose       | Background        | Text            | Border (if needed)   |
-|---------------|-------------------|-----------------|----------------------|
-| Error/danger  | `bg-red-500/10`   | `text-red-400`  | `border-red-500/20`  |
-| Warning       | `bg-amber-500/10` | `text-amber-400`| `border-amber-500/20`|
-| Success       | `bg-emerald-500/10`| `text-emerald-400`| —                  |
-| Info/accent   | `bg-indigo-500/10`| `text-indigo-400`| —                   |
-| Blue badge    | `bg-blue-500/10`  | `text-blue-400` | —                    |
-| Fuchsia badge | `bg-fuchsia-500/10`| `text-fuchsia-400`| —                  |
-| Teal badge    | `bg-teal-500/10`  | `text-teal-400` | —                    |
-| Purple badge  | `bg-purple-500/10`| `text-purple-400`| —                   |
+| Purpose       | Background          | Text               | Border (if needed)    |
+| ------------- | ------------------- | ------------------ | --------------------- |
+| Error/danger  | `bg-red-500/10`     | `text-red-400`     | `border-red-500/20`   |
+| Warning       | `bg-amber-500/10`   | `text-amber-400`   | `border-amber-500/20` |
+| Success       | `bg-emerald-500/10` | `text-emerald-400` | —                     |
+| Info/accent   | `bg-indigo-500/10`  | `text-indigo-400`  | —                     |
+| Blue badge    | `bg-blue-500/10`    | `text-blue-400`    | —                     |
+| Fuchsia badge | `bg-fuchsia-500/10` | `text-fuchsia-400` | —                     |
+| Teal badge    | `bg-teal-500/10`    | `text-teal-400`    | —                     |
+| Purple badge  | `bg-purple-500/10`  | `text-purple-400`  | —                     |
 
 **Never use** `-50` shade backgrounds (e.g. `bg-red-50`) or `-600`/`-700` shade text for semantic colors. Those are calibrated for light themes and produce poor contrast on dark surfaces.
 
@@ -104,23 +105,23 @@ Semantic colors use Tailwind defaults (not overridden). For dark backgrounds, us
 
 Urgency escalation follows a fixed hue ladder. Apply these consistently across inbox triage surfaces:
 
-| Level       | Text            | Background (subtle tint) |
-|-------------|-----------------|--------------------------|
-| Immediate   | `text-red-400`  | `bg-red-500/5`           |
-| High        | `text-amber-400`| `bg-amber-500/5`         |
-| Normal      | `text-[var(--ui-text)]` | — (no tint)      |
+| Level     | Text                    | Background (subtle tint) |
+| --------- | ----------------------- | ------------------------ |
+| Immediate | `text-red-400`          | `bg-red-500/5`           |
+| High      | `text-amber-400`        | `bg-amber-500/5`         |
+| Normal    | `text-[var(--ui-text)]` | — (no tint)              |
 
-**Rule:** Color both the label *and* the count/number when the count is non-zero. Zero counts stay muted (`text-[var(--ui-text)]`). This prevents visual noise when a queue is empty while still surfacing urgency when it isn't.
+**Rule:** Color both the label _and_ the count/number when the count is non-zero. Zero counts stay muted (`text-[var(--ui-text)]`). This prevents visual noise when a queue is empty while still surfacing urgency when it isn't.
 
 ### Inbox Category Colors
 
 Inbox categories use a fixed color assignment. Use these whenever a category label or count is rendered as a signal (summary cards, badges, section headers):
 
-| Category          | Text              | Badge background     |
-|-------------------|-------------------|----------------------|
-| `action_needed`   | `text-indigo-400` | `bg-indigo-500/10`   |
-| `risk_exception`  | `text-amber-400`  | `bg-amber-500/10`    |
-| `attention`       | `text-sky-400`    | `bg-sky-500/10`      |
+| Category         | Text              | Badge background   |
+| ---------------- | ----------------- | ------------------ |
+| `action_needed`  | `text-indigo-400` | `bg-indigo-500/10` |
+| `risk_exception` | `text-amber-400`  | `bg-amber-500/10`  |
+| `attention`      | `text-sky-400`    | `bg-sky-500/10`    |
 
 **Rule:** Color the count only when it is non-zero. Zero counts and category labels for empty queues stay muted. Never apply category color decoratively — only when it carries a live signal.
 
@@ -128,23 +129,23 @@ Inbox categories use a fixed color assignment. Use these whenever a category lab
 
 Artifact kind badges use a fixed color assignment from `src/lib/artifactKinds.js`:
 
-| Kind       | Classes                                   |
-|------------|-------------------------------------------|
-| `receipt`  | `text-emerald-400 bg-emerald-500/10`      |
-| `review`   | `text-amber-400 bg-amber-500/10`          |
-| `doc`      | `text-fuchsia-400 bg-fuchsia-500/10`      |
-| `log`      | `text-teal-400 bg-teal-500/10`            |
+| Kind       | Classes                                             |
+| ---------- | --------------------------------------------------- |
+| `receipt`  | `text-emerald-400 bg-emerald-500/10`                |
+| `review`   | `text-amber-400 bg-amber-500/10`                    |
+| `doc`      | `text-fuchsia-400 bg-fuchsia-500/10`                |
+| `log`      | `text-teal-400 bg-teal-500/10`                      |
 | `evidence` | `text-[var(--ui-text-muted)] bg-[var(--ui-border)]` |
 
 ### Lifecycle Colors
 
 Topic, board, and document lifecycle badges follow this mapping:
 
-| State      | Text                | Background          |
-|------------|---------------------|---------------------|
-| `active`   | `text-emerald-400`  | `bg-emerald-500/10` |
-| `archived` | `text-amber-400`    | `bg-amber-500/10`   |
-| `trashed`  | `text-slate-300`    | `bg-slate-500/10`   |
+| State      | Text               | Background          |
+| ---------- | ------------------ | ------------------- |
+| `active`   | `text-emerald-400` | `bg-emerald-500/10` |
+| `archived` | `text-amber-400`   | `bg-amber-500/10`   |
+| `trashed`  | `text-slate-300`   | `bg-slate-500/10`   |
 
 ### Risk and Projection
 
@@ -156,11 +157,11 @@ Projection freshness badges use the existing `Current`, `Pending refresh`, `Refr
 
 Provenance indicators (rendered by `ProvenanceBadge`) use dots only — no badge background:
 
-| State            | Dot class          |
-|------------------|--------------------|
-| Evidence-backed  | `bg-emerald-400`   |
-| Inferred         | `bg-amber-400`     |
-| Unknown          | `bg-slate-400`     |
+| State           | Dot class        |
+| --------------- | ---------------- |
+| Evidence-backed | `bg-emerald-400` |
+| Inferred        | `bg-amber-400`   |
+| Unknown         | `bg-slate-400`   |
 
 ### Color Usage Rules
 
@@ -176,15 +177,15 @@ Provenance indicators (rendered by `ProvenanceBadge`) use dots only — no badge
 - **Base size:** 13px (`font-size: 13px` on body).
 - **Line height:** 1.5 (on body).
 
-| Role             | Class                                        |
-|------------------|----------------------------------------------|
-| Page heading     | `text-lg font-semibold text-gray-900`        |
-| Section heading  | `text-[13px] font-semibold text-gray-900`    |
-| Body text        | `text-[13px] text-gray-700` or `text-gray-800` |
-| Label (uppercase)| `text-[11px] font-medium text-gray-500 uppercase tracking-wide` |
-| Muted/secondary  | `text-[13px] text-gray-500`                  |
-| Timestamp/meta   | `text-[11px] text-gray-500`                  |
-| Disabled/decorative | `text-[13px] text-gray-400` (not at 11px) |
+| Role                | Class                                                           |
+| ------------------- | --------------------------------------------------------------- |
+| Page heading        | `text-lg font-semibold text-gray-900`                           |
+| Section heading     | `text-[13px] font-semibold text-gray-900`                       |
+| Body text           | `text-[13px] text-gray-700` or `text-gray-800`                  |
+| Label (uppercase)   | `text-[11px] font-medium text-gray-500 uppercase tracking-wide` |
+| Muted/secondary     | `text-[13px] text-gray-500`                                     |
+| Timestamp/meta      | `text-[11px] text-gray-500`                                     |
+| Disabled/decorative | `text-[13px] text-gray-400` (not at 11px)                       |
 
 Preferred font sizes: `text-lg`, `text-[13px]`, `text-[12px]`, `text-[11px]`. Avoid Tailwind's `text-sm` / `text-xs` / `text-base` — use explicit pixel sizes for consistency.
 
@@ -206,9 +207,15 @@ Page background (--ui-bg / gray-50)
 Use a single bordered container with thin dividers, not individual cards per item:
 
 ```svelte
-<div class="space-y-px rounded-md border border-gray-200 bg-gray-100 overflow-hidden">
+<div
+  class="space-y-px rounded-md border border-gray-200 bg-gray-100 overflow-hidden"
+>
   {#each items as item, i}
-    <div class="px-3 py-2.5 hover:bg-gray-200 {i > 0 ? 'border-t border-gray-200' : ''}">
+    <div
+      class="px-3 py-2.5 hover:bg-gray-200 {i > 0
+        ? 'border-t border-gray-200'
+        : ''}"
+    >
       ...
     </div>
   {/each}
@@ -226,7 +233,9 @@ Use a single bordered container with thin dividers, not individual cards per ite
 ```svelte
 <label class="text-[12px] font-medium text-gray-600">
   Field name
-  <input class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px]" />
+  <input
+    class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px]"
+  />
 </label>
 ```
 
@@ -234,12 +243,12 @@ Use a single bordered container with thin dividers, not individual cards per ite
 
 ### Buttons
 
-| Style      | Classes                                                                      |
-|------------|-----------------------------------------------------------------------------|
-| Primary    | `rounded-md bg-gray-200 px-3 py-1.5 text-[12px] font-medium text-gray-900 hover:bg-gray-300` |
-| Accent     | `rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-indigo-500` |
-| Secondary  | `rounded-md border border-gray-200 bg-gray-100 px-3 py-1.5 text-[12px] font-medium text-gray-600 hover:bg-gray-200` |
-| Ghost      | `rounded-md px-3 py-1.5 text-[12px] font-medium text-gray-500 hover:bg-gray-200` |
+| Style     | Classes                                                                                                             |
+| --------- | ------------------------------------------------------------------------------------------------------------------- |
+| Primary   | `rounded-md bg-gray-200 px-3 py-1.5 text-[12px] font-medium text-gray-900 hover:bg-gray-300`                        |
+| Accent    | `rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-indigo-500`                       |
+| Secondary | `rounded-md border border-gray-200 bg-gray-100 px-3 py-1.5 text-[12px] font-medium text-gray-600 hover:bg-gray-200` |
+| Ghost     | `rounded-md px-3 py-1.5 text-[12px] font-medium text-gray-500 hover:bg-gray-200`                                    |
 
 Use **accent** for save/submit/create actions. Use **primary** for prominent navigation (e.g. "Review inbox"). Use **secondary** for cancel/reset/filter toggles.
 
@@ -248,7 +257,9 @@ Use **accent** for save/submit/create actions. Use **primary** for prominent nav
 ### Badges and Tags
 
 ```svelte
-<span class="rounded bg-gray-200 px-1.5 py-0.5 text-[11px] font-medium text-gray-600">
+<span
+  class="rounded bg-gray-200 px-1.5 py-0.5 text-[11px] font-medium text-gray-600"
+>
   tag-name
 </span>
 ```
@@ -256,7 +267,9 @@ Use **accent** for save/submit/create actions. Use **primary** for prominent nav
 For semantic badges, use the opacity-based backgrounds:
 
 ```svelte
-<span class="rounded px-1.5 py-0.5 text-[11px] font-semibold text-blue-400 bg-blue-500/10">
+<span
+  class="rounded px-1.5 py-0.5 text-[11px] font-semibold text-blue-400 bg-blue-500/10"
+>
   Receipt
 </span>
 ```
@@ -278,16 +291,26 @@ For semantic badges, use the opacity-based backgrounds:
 
 ```svelte
 <!-- Error -->
-<div class="rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400">...</div>
+<div class="rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400">
+  ...
+</div>
 
 <!-- Success -->
-<div class="rounded-md bg-emerald-500/10 px-3 py-2 text-[12px] text-emerald-400">...</div>
+<div
+  class="rounded-md bg-emerald-500/10 px-3 py-2 text-[12px] text-emerald-400"
+>
+  ...
+</div>
 
 <!-- Warning -->
-<div class="rounded-md bg-amber-500/10 px-3 py-2 text-[12px] text-amber-400">...</div>
+<div class="rounded-md bg-amber-500/10 px-3 py-2 text-[12px] text-amber-400">
+  ...
+</div>
 
 <!-- Info -->
-<div class="rounded-md bg-indigo-500/10 px-3 py-2 text-[12px] text-indigo-400">...</div>
+<div class="rounded-md bg-indigo-500/10 px-3 py-2 text-[12px] text-indigo-400">
+  ...
+</div>
 ```
 
 ### Hover States
@@ -311,10 +334,10 @@ Long identifiers (UUIDs, thread IDs, content hashes) are common in Agent Nexus d
 
 Destructive operations (delete, permanently delete, archive) follow escalating prominence:
 
-| Action type | Style | Safeguard |
-|-------------|-------|-----------|
-| Single-item delete | Ghost or secondary button, `text-red-400` | Inline confirmation or undo toast |
-| Single-item permanent delete | `bg-red-500/10 text-red-400 border border-red-500/20` | Inline confirmation |
+| Action type                                       | Style                                                        | Safeguard                                                  |
+| ------------------------------------------------- | ------------------------------------------------------------ | ---------------------------------------------------------- |
+| Single-item delete                                | Ghost or secondary button, `text-red-400`                    | Inline confirmation or undo toast                          |
+| Single-item permanent delete                      | `bg-red-500/10 text-red-400 border border-red-500/20`        | Inline confirmation                                        |
 | Batch destructive (e.g. "Permanently delete all") | Same as single permanent delete, but **disabled by default** | Must require explicit confirmation dialog before execution |
 
 **Rule:** Batch destructive actions that affect multiple resources should never execute on a single click. The button itself is acceptable; the action must gate behind a confirmation modal that names the count and action.
@@ -327,18 +350,18 @@ Never nest focusable/clickable elements. A `<button>` inside an `<a>`, or an `<a
 
 The UI uses a **mobile-first responsive shell**. Breakpoints:
 
-| Breakpoint | Value | Notes |
-|---|---|---|
-| Mobile | `< 640px` | Bottom nav only, no sidebar |
-| Tablet | `640px–1023px` | Bottom nav only, no sidebar |
-| Desktop | `≥ 1024px` | Sidebar visible, bottom nav hidden |
+| Breakpoint | Value          | Notes                              |
+| ---------- | -------------- | ---------------------------------- |
+| Mobile     | `< 640px`      | Bottom nav only, no sidebar        |
+| Tablet     | `640px–1023px` | Bottom nav only, no sidebar        |
+| Desktop    | `≥ 1024px`     | Sidebar visible, bottom nav hidden |
 
 ### Bottom Navigation Bar (mobile/tablet)
 
 On screens narrower than 1024px a fixed bottom tab bar (`.shell-bottom-nav`) replaces the sidebar for primary navigation. It shows the five primary destinations (Home, Inbox, Topics, Boards, Docs) plus a **More** tab (icon + short label on each).
 
 - `z-index: 20` — below overlays that use higher z-index (for example modals and the command palette), above normal page content.
-- Respects `env(safe-area-inset-bottom)` for notched devices.
+- Respects `env(safe-area-inset-bottom)` for notched devices. Apply this inset to each `.shell-bottom-nav-item`, not only the wrapper, so iOS Safari's visible safe-area band remains inside the link hit targets.
 - `.shell-main-scroll` bottom padding is `5rem` on mobile/tablet to clear the bar; it resets to `2.5rem` at the 1024px breakpoint.
 
 **Do not add a second bottom bar** or position fixed elements at `bottom: 0` without accounting for this bar. Reserve `z-index: 20+` for shell chrome only.
@@ -355,6 +378,16 @@ List pages have a `flex flex-wrap items-start justify-between gap-4` header row.
 - **Hide descriptive subtitles** — the one-liner description below the page heading should use `hidden sm:block` so it doesn't consume 2–3 lines on a 390px screen.
 - The action buttons (`Filters`, `New topic`, `Create board`, etc.) wrap naturally and remain visible.
 
+### Compact Ops Mobile Screens
+
+Mobile is for triage. Show work first, chrome second, explanatory copy last.
+
+- Keep page headers to one compact row when possible: title, primary action, then secondary controls.
+- Hide page descriptions, section subtitles, desktop-only hints, and empty placeholder copy on mobile.
+- Do not render `No description provided.` in mobile resource lists; only show a second line when real operator-facing content exists.
+- Prefer one useful secondary line per row: state/count/time, owner, or a real summary. Avoid stacking refs, helper text, and repeated metadata unless the page is a detail view.
+- Keep safety-critical copy in confirmations and destructive modals; mobile headers should not carry long warnings.
+
 ```svelte
 <!-- Page heading + description (hide description on mobile) -->
 <h1 class="text-lg font-semibold text-gray-900">Topics</h1>
@@ -363,7 +396,9 @@ List pages have a `flex flex-wrap items-start justify-between gap-4` header row.
 </p>
 
 <!-- ⌘K shortcut — keyboard-only, hide on mobile -->
-<span class="hidden items-center gap-1 rounded border border-gray-200 ... sm:inline-flex">
+<span
+  class="hidden items-center gap-1 rounded border border-gray-200 ... sm:inline-flex"
+>
   <kbd>⌘K</kbd>
 </span>
 ```
@@ -416,15 +451,15 @@ The same relationship should not appear in multiple places on the same page with
 
 Use consistent labels for relationship types:
 
-| Relationship | Label | Where |
-|---|---|---|
-| Board → topic | `Topic` | Board header context line |
-| Document → topic | `Topic` | Document header (when linking to the organizational work item) |
-| Artifact → topic | `Topic` | Artifact header (same) |
-| Topic detail → owned boards | Section: "Owned by this topic" | Topic/boards panel |
-| Topic detail → board cards | Section: "Appears as card on" | Topic boards panel |
-| List item → topic | `Topic: {title or id}` | List row metadata |
-| Diagnostic / `thread:` target | `Backing thread` or `Thread` | Only when the route or ref is explicitly thread-scoped |
+| Relationship                  | Label                          | Where                                                          |
+| ----------------------------- | ------------------------------ | -------------------------------------------------------------- |
+| Board → topic                 | `Topic`                        | Board header context line                                      |
+| Document → topic              | `Topic`                        | Document header (when linking to the organizational work item) |
+| Artifact → topic              | `Topic`                        | Artifact header (same)                                         |
+| Topic detail → owned boards   | Section: "Owned by this topic" | Topic/boards panel                                             |
+| Topic detail → board cards    | Section: "Appears as card on"  | Topic boards panel                                             |
+| List item → topic             | `Topic: {title or id}`         | List row metadata                                              |
+| Diagnostic / `thread:` target | `Backing thread` or `Thread`   | Only when the route or ref is explicitly thread-scoped         |
 
 ### Scope Labels for Counts
 

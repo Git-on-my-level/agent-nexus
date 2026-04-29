@@ -406,17 +406,17 @@
   );
 </script>
 
-<div class="mb-3 flex max-md:mb-2 items-center justify-between">
+<div class="mb-3 flex max-md:mb-2 flex-wrap items-center justify-between gap-2">
   <div>
     <h1 class="text-subtitle font-semibold text-[var(--fg)]">Docs</h1>
     {#if scopedThreadId}
-      <p class="mt-1 text-micro text-[var(--fg-muted)]">
+      <p class="mt-1 hidden text-micro text-[var(--fg-muted)] sm:block">
         Scoped to backing thread
         <RefLink refValue={`thread:${scopedThreadId}`} humanize showRaw />
       </p>
     {/if}
   </div>
-  <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-1.5">
+  <div class="flex flex-wrap items-center justify-end gap-1.5">
     <button
       class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] {!documents.length &&
       !loading
@@ -535,12 +535,12 @@
 
 {#if scopedThreadId}
   <div
-    class="mb-4 flex items-center justify-between rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2"
+    class="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2"
   >
     <p class="text-micro text-[var(--fg-muted)]">
       Showing only documents on this backing thread timeline.
     </p>
-    <p class="text-micro text-[var(--fg-muted)]">
+    <p class="hidden text-micro text-[var(--fg-muted)] sm:block">
       Create from the unscoped docs view. New documents always get their own
       backing thread.
     </p>

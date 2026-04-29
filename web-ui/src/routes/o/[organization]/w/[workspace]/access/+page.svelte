@@ -643,7 +643,7 @@
     <div class="flex items-baseline justify-between gap-4">
       <div>
         <h1 class="text-subtitle font-semibold text-[var(--fg)]">Access</h1>
-        <p class="mt-0.5 text-meta text-[var(--fg-muted)]">
+        <p class="mt-0.5 hidden text-meta text-[var(--fg-muted)] sm:block">
           Manage workspace access and invitations
         </p>
       </div>
@@ -664,11 +664,13 @@
     </div>
   </div>
 {:else}
-  <div class="space-y-6">
-    <div class="flex items-baseline justify-between gap-4">
+  <div class="space-y-4 sm:space-y-6">
+    <div
+      class="flex items-center justify-between gap-3 sm:items-baseline sm:gap-4"
+    >
       <div>
         <h1 class="text-subtitle font-semibold text-[var(--fg)]">Access</h1>
-        <p class="mt-0.5 text-meta text-[var(--fg-muted)]">
+        <p class="mt-0.5 hidden text-meta text-[var(--fg-muted)] sm:block">
           Manage workspace access, principals, and invitations
         </p>
       </div>

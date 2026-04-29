@@ -104,11 +104,11 @@
   }
 </script>
 
-<div class="space-y-4">
+<div class="space-y-3 sm:space-y-4">
   <!-- Settings navigation -->
   <section>
     <p
-      class="mb-2 text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)]"
+      class="mb-1.5 text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)] sm:mb-2"
     >
       Settings
     </p>
@@ -117,7 +117,7 @@
     >
       {#each settingsNavItems as item, i}
         <a
-          class="flex items-center gap-3 px-4 py-3 text-meta font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line-subtle)] {i >
+          class="flex items-center gap-2.5 px-3 py-2.5 text-meta font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line-subtle)] sm:gap-3 sm:px-4 sm:py-3 {i >
           0
             ? 'border-t border-[var(--line)]'
             : ''}"
@@ -140,7 +140,9 @@
           </svg>
           <span class="flex-1">{item.label}</span>
           {#if item.hint}
-            <span class="text-micro text-[var(--fg-muted)]">{item.hint}</span>
+            <span class="hidden text-micro text-[var(--fg-muted)] sm:inline"
+              >{item.hint}</span
+            >
           {/if}
           <svg
             class="h-4 w-4 shrink-0 text-[var(--fg-muted)]"
@@ -164,7 +166,7 @@
   {#if hostedMode}
     <section>
       <p
-        class="mb-2 text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)]"
+        class="mb-1.5 text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)] sm:mb-2"
       >
         Account
       </p>
@@ -172,7 +174,7 @@
         class="overflow-hidden rounded-md border border-[var(--line)] bg-[var(--panel)]"
       >
         <a
-          class="flex items-center gap-3 px-4 py-3 text-meta font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line-subtle)]"
+          class="flex items-center gap-2.5 px-3 py-2.5 text-meta font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line-subtle)] sm:gap-3 sm:px-4 sm:py-3"
           href={hostedAccountPath}
         >
           <svg
@@ -190,7 +192,7 @@
             />
           </svg>
           <span class="flex-1">Account</span>
-          <span class="text-micro text-[var(--fg-muted)]"
+          <span class="hidden text-micro text-[var(--fg-muted)] sm:inline"
             >Organizations, billing, all workspaces</span
           >
           <svg
@@ -216,7 +218,7 @@
   {#if hasMultipleWorkspaces}
     <section>
       <p
-        class="mb-2 text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)]"
+        class="mb-1.5 text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)] sm:mb-2"
       >
         Workspace
       </p>
@@ -226,7 +228,7 @@
         {#each workspaces as ws, i}
           {@const isCurrent = ws.slug === workspaceSlug}
           <button
-            class="flex w-full items-center gap-3 px-4 py-3 text-left text-meta transition-colors hover:bg-[var(--line-subtle)] {i >
+            class="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-meta transition-colors hover:bg-[var(--line-subtle)] sm:gap-3 sm:px-4 sm:py-3 {i >
             0
               ? 'border-t border-[var(--line)]'
               : ''} {isCurrent
@@ -265,7 +267,7 @@
   <!-- Identity -->
   <section>
     <p
-      class="mb-2 text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)]"
+      class="mb-1.5 text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)] sm:mb-2"
     >
       Identity
     </p>
@@ -273,10 +275,10 @@
       class="overflow-hidden rounded-md border border-[var(--line)] bg-[var(--panel)]"
     >
       <div
-        class="flex items-center gap-3 border-b border-[var(--line)] px-4 py-3"
+        class="flex items-center gap-2.5 border-b border-[var(--line)] px-3 py-2.5 sm:gap-3 sm:px-4 sm:py-3"
       >
         <span
-          class="inline-grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#4a5060] text-[0.625rem] font-bold text-white"
+          class="inline-grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#4a5060] text-[0.625rem] font-bold text-white sm:h-8 sm:w-8"
           aria-hidden="true"
         >
           {initials}
@@ -293,13 +295,13 @@
               {shellIdentity.secondaryLabel}
             </p>
           {/if}
-          <p class="text-micro text-[var(--fg-muted)]">
+          <p class="hidden text-micro text-[var(--fg-muted)] sm:block">
             {$authenticatedAgent ? "Authenticated principal" : "Dev actor mode"}
           </p>
         </div>
       </div>
       <button
-        class="flex w-full items-center gap-2 px-4 py-3 text-left text-meta font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
+        class="flex w-full items-center gap-2 px-3 py-2.5 text-left text-meta font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)] sm:px-4 sm:py-3"
         onclick={switchIdentity}
         type="button"
       >

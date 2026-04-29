@@ -573,10 +573,12 @@
   }
 </script>
 
-<div class="mb-3 flex max-md:mb-2 items-start justify-between gap-4">
+<div
+  class="mb-3 flex max-md:mb-2 flex-wrap items-center justify-between gap-2 sm:items-start sm:gap-4"
+>
   <div>
     <h1 class="text-subtitle font-semibold text-[var(--fg)]">Trash</h1>
-    <p class="mt-0.5 text-micro text-[var(--fg-muted)]">
+    <p class="mt-0.5 hidden text-micro text-[var(--fg-muted)] sm:block">
       Trashed items available for restore or permanent deletion. Restore returns
       them to their normal lists; permanent delete removes supported resource
       types (human principals only). Topics can be restored but not permanently
@@ -584,7 +586,9 @@
       from within their timeline view.
     </p>
   </div>
-  <div class="shrink-0 flex flex-wrap items-center gap-2 justify-end">
+  <div
+    class="shrink-0 flex flex-wrap items-center justify-end gap-1.5 sm:gap-2"
+  >
     {#if !loading && activeItems.length > 0 && trashBulkUxEnabled}
       <button
         type="button"
@@ -609,7 +613,10 @@
             purgeAllOpen = true;
           }}
         >
-          Permanently delete all ({activeItems.length})
+          <span class="sm:hidden">Delete all ({activeItems.length})</span>
+          <span class="hidden sm:inline"
+            >Permanently delete all ({activeItems.length})</span
+          >
         </Button>
       </div>
     {/if}

@@ -750,12 +750,20 @@
   @media (max-width: 640px) {
     .tour-card,
     .tour-card--center {
+      width: calc(100vw - 1.5rem);
+      animation: tour-card-in-mobile 240ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    }
+    .tour-card:not(.tour-card--above),
+    .tour-card--center {
       left: 50% !important;
       top: auto !important;
       bottom: 16px;
       transform: translateX(-50%) !important;
-      width: calc(100vw - 1.5rem);
-      animation: tour-card-in-mobile 240ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    }
+    .tour-card--above {
+      left: 50% !important;
+      bottom: auto;
+      transform: translateX(-50%) !important;
     }
     .tour-arrow {
       display: none;

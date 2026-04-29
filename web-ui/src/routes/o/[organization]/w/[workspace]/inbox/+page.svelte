@@ -524,9 +524,11 @@
 </script>
 
 <div
-  class="mb-3 flex max-md:mb-2 flex-wrap items-center justify-between gap-3 border-b border-[var(--line)] pb-3 max-md:pb-2"
+  class="mb-2 flex flex-col gap-2 border-b border-[var(--line)] pb-2 sm:mb-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3 sm:pb-3"
 >
-  <div class="flex flex-wrap items-center gap-3">
+  <div
+    class="flex flex-wrap items-center justify-between gap-2 sm:justify-start sm:gap-3"
+  >
     <h1 class="text-subtitle font-semibold text-[var(--fg)]">Inbox</h1>
     <div
       class="inline-flex rounded-md border border-[var(--line)] bg-[var(--panel)] p-0.5 text-micro font-semibold"
@@ -558,7 +560,7 @@
       </a>
     </div>
   </div>
-  <div class="flex items-center gap-2">
+  <div class="flex items-center gap-1.5 sm:gap-2">
     {#if inboxTab === "open"}
       <button
         class="cursor-pointer inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-micro font-medium transition-colors {hasActiveFilters
@@ -814,9 +816,12 @@
 {/if}
 
 {#if inboxTab === "open"}
-  <div class="flex gap-1.5 mb-4" data-testid="urgency-summary-strip">
+  <div
+    class="mb-3 flex gap-1.5 overflow-x-auto pb-0.5 sm:mb-4"
+    data-testid="urgency-summary-strip"
+  >
     <button
-      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-micro font-medium transition-colors {urgencyCardClass(
+      class="cursor-pointer inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-micro font-medium transition-colors sm:px-2.5 sm:py-1.5 {urgencyCardClass(
         'immediate',
       )} {urgencySummary.immediate > 0
         ? 'bg-danger-soft'
@@ -835,7 +840,7 @@
       >
     </button>
     <button
-      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-micro font-medium transition-colors {urgencyCardClass(
+      class="cursor-pointer inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-micro font-medium transition-colors sm:px-2.5 sm:py-1.5 {urgencyCardClass(
         'high',
       )} {urgencySummary.high > 0 ? 'bg-warn/5' : 'bg-[var(--bg-soft)]'}"
       onclick={() => setUrgencyFromCard("high")}
@@ -852,7 +857,7 @@
       >
     </button>
     <button
-      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-micro font-medium transition-colors bg-[var(--bg-soft)] {urgencyCardClass(
+      class="cursor-pointer inline-flex shrink-0 items-center gap-1.5 rounded-md border bg-[var(--bg-soft)] px-2 py-1 text-micro font-medium transition-colors sm:px-2.5 sm:py-1.5 {urgencyCardClass(
         'normal',
       )}"
       onclick={() => setUrgencyFromCard("normal")}
@@ -1003,6 +1008,13 @@
                               : undefined}>&middot; {item.age_label}</span
                           >
                         {/if}
+                        <span class="text-[var(--fg-muted)] sm:hidden"
+                          >&middot; requested by</span
+                        >
+                        <span
+                          class="truncate font-mono text-[var(--fg)] sm:hidden"
+                          >{askActorLabel(item)}</span
+                        >
                       </div>
                     </div>
 
@@ -1023,7 +1035,7 @@
                       {/if}
                     </div>
                     <div
-                      class="mt-1 text-micro text-[var(--fg-muted)]"
+                      class="mt-1 hidden text-micro text-[var(--fg-muted)] sm:block"
                       data-testid={`inbox-requester-meta-${item.id}`}
                     >
                       Requested by
@@ -1037,7 +1049,7 @@
 
                     {#if getInboxSubjectRef(item) || (item.related_refs ?? []).length > 0}
                       <div
-                        class="mt-1.5 flex flex-wrap items-center gap-1 text-micro"
+                        class="mt-1.5 hidden flex-wrap items-center gap-1 text-micro sm:flex"
                       >
                         {#if getInboxSubjectRef(item)}
                           {@const subjectId = getInboxSubjectId(item)}
@@ -1077,7 +1089,7 @@
                 >
                   <a
                     href={askItemHref(item)}
-                    class="block px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-soft)]"
+                    class="block px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-soft)] sm:py-2"
                   >
                     <div
                       class="flex items-center justify-between gap-2 text-micro"
@@ -1108,6 +1120,13 @@
                               : undefined}>&middot; {item.age_label}</span
                           >
                         {/if}
+                        <span class="text-[var(--fg-muted)] sm:hidden"
+                          >&middot; requested by</span
+                        >
+                        <span
+                          class="truncate font-mono text-[var(--fg)] sm:hidden"
+                          >{askActorLabel(item)}</span
+                        >
                       </div>
                     </div>
 
@@ -1128,7 +1147,7 @@
                       {/if}
                     </div>
                     <div
-                      class="mt-0.5 text-micro text-[var(--fg-muted)]"
+                      class="mt-0.5 hidden text-micro text-[var(--fg-muted)] sm:block"
                       data-testid={`inbox-requester-meta-${item.id}`}
                     >
                       Requested by
@@ -1143,7 +1162,7 @@
 
                   {#if getInboxSubjectRef(item) || (item.related_refs ?? []).length > 0}
                     <div
-                      class="border-t border-[var(--line)] px-3 py-2 pt-2 text-micro"
+                      class="hidden border-t border-[var(--line)] px-3 py-2 pt-2 text-micro sm:block"
                     >
                       <div class="flex flex-wrap items-center gap-1">
                         {#if getInboxSubjectRef(item)}

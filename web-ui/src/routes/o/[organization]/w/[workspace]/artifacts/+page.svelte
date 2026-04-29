@@ -331,9 +331,9 @@
   }
 </script>
 
-<div class="mb-3 flex max-md:mb-2 items-center justify-between">
+<div class="mb-3 flex max-md:mb-2 flex-wrap items-center justify-between gap-2">
   <h1 class="text-subtitle font-semibold text-[var(--fg)]">Artifacts</h1>
-  <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-1.5">
+  <div class="flex flex-wrap items-center justify-end gap-1.5">
     <button
       class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] {!artifacts.length &&
       !loading
@@ -580,7 +580,9 @@
                 </div>
               </div>
               {#if refPreview(artifact).length > 0 || artifact.thread_id}
-                <div class="flex flex-wrap items-center gap-1.5 text-micro">
+                <div
+                  class="hidden flex-wrap items-center gap-1.5 text-micro sm:flex"
+                >
                   {#if artifact.thread_id}
                     <RefLink
                       humanize
@@ -612,7 +614,7 @@
         </div>
       {:else}
         <div
-          class="px-4 py-2 transition-colors hover:bg-[var(--line-subtle)] {borderTop}"
+          class="px-3 py-2 transition-colors hover:bg-[var(--line-subtle)] sm:px-4 {borderTop}"
         >
           <div class="flex items-start justify-between gap-3">
             <a
@@ -648,7 +650,7 @@
 
           {#if refPreview(artifact).length > 0 || artifact.thread_id}
             <a
-              class="mt-1.5 flex flex-wrap items-center gap-1.5 text-micro"
+              class="mt-1.5 hidden flex-wrap items-center gap-1.5 text-micro sm:flex"
               href={workspaceHref(`/artifacts/${artifact.id}`)}
             >
               {#if artifact.thread_id}
