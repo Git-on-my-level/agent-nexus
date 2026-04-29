@@ -452,10 +452,11 @@ Config generation
 
 Generate minimal configs from the CLI:
 
+  anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --workspace-id <workspace-id> --handle <handle>
   anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py
   anx bridge init-config --kind python-plugin --output ./bridge.toml --agent-home ./.anx --workspace-id <workspace-id> --workspace-id <workspace-id-2> --handle <handle> --plugin-module my_bridge --plugin-factory build_adapter
 
-You own the adapter implementation. ANX does not ship or maintain integrations for specific third-party agents.
+Use `--kind hermes` for the bundled Hermes ACP subprocess adapter. Use `subprocess` or `python-plugin` when you own a custom adapter implementation.
 
 This scaffolds an explicit agent home:
 
@@ -486,7 +487,11 @@ First-time agent-host path
 
   anx bridge install
 
-2. Render the bridge runtime config and agent home, then implement the adapter (see `anx-agent-bridge adapter contract --config ./bridge.toml`):
+2. Render the bridge runtime config and agent home. For Hermes ACP:
+
+  anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --workspace-id <workspace-id> --handle <handle>
+
+  For a custom subprocess adapter, render the config and then inspect the JSON contract with `anx-agent-bridge adapter contract --config ./bridge.toml`:
 
   anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py
 
@@ -619,7 +624,11 @@ Preferred path when you are using `anx-agent-bridge`
 
 2. Confirm the workspace deployment's `anx-core` config and note the durable workspace id it uses.
 
-3. Generate the agent config and implement your adapter (subprocess JSON or python_plugin):
+3. Generate the agent config. For Hermes ACP, use the bundled adapter:
+
+  anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --workspace-id <workspace-id> --handle <handle>
+
+  For custom adapters, use subprocess JSON or python_plugin:
 
   anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py
 
@@ -4706,11 +4715,12 @@ Local Help: bridge init-config
 - Composition: Pure local helper. Renders a bridge runtime config that references an explicit agent home, plus agent.toml and wake.toml when --output is used.
 - JSON body: `kind`, `output`, `agent_home`, `workspace_ids`, `handle`, `content`
 - Examples:
+  - `anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --workspace-id ws_main --handle myagent`
   - `anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --workspace-id ws_main --handle myagent --adapter-entrypoint ./adapter.py`
   - `anx bridge init-config --kind python-plugin --output ./bridge.toml --agent-home ./.anx --workspace-id ws_main --workspace-id ws_ops --handle myagent --plugin-module my_bridge --plugin-factory build_adapter`
 
 Flags:
-  --kind <subprocess|python-plugin> Template kind to render.
+  --kind <hermes|subprocess|python-plugin> Template kind to render.
   --output <path>              Write the rendered TOML to a file. Omit to print it.
   --agent-home <dir>           Agent home directory for identity, auth, wake config, state, and logs. Default: ./.anx.
   --base-url <url>             ANX base URL for agent.toml identity and wake.toml workspace entries.

@@ -37,7 +37,7 @@ make serve
 make e2e-smoke
 ```
 
-`make setup` also installs the pinned local `actionlint` binary used by repo workflow checks into `.bin/`.
+`make setup` also installs pre-commit/pre-push hooks into a repo-local `.venv/` and installs the pinned local `actionlint` binary used by repo workflow checks into `.bin/`.
 
 Regenerate contract artifacts from the canonical OpenAPI contracts:
 

@@ -1,4 +1,5 @@
 node_modules/
+.venv/
 .bin/
 .pnpm-store/
 .tmp/

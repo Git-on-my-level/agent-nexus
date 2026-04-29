@@ -5,6 +5,8 @@ CLI_DIR := cli
 WEB_UI_DIR := web-ui
 BRIDGE_DIR := adapters/agent-bridge
 HTTP_RECORD_DIR := tools/anx-http-record
+PYTHON ?= python3
+PRE_COMMIT_BIN := $(CURDIR)/.venv/bin/pre-commit
 
 CORE_HOST ?= 127.0.0.1
 CORE_PORT ?= 8000
@@ -28,6 +30,9 @@ help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z0-9_.-]+:.*##/ {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 setup: ## Install repo tooling plus dependencies for web-ui, core, and cli
+	$(PYTHON) -m venv .venv
+	.venv/bin/pip install --upgrade pip pre-commit
+	$(PRE_COMMIT_BIN) install --install-hooks -t pre-commit -t pre-push
 	./scripts/install-actionlint.sh
 	pnpm install
 	cd $(CORE_DIR) && go mod download

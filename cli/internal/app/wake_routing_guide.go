@@ -64,7 +64,11 @@ Preferred path when you are using <<tick>>anx-agent-bridge<<tick>>
 
 2. Confirm the workspace deployment's <<tick>>anx-core<<tick>> config and note the durable workspace id it uses.
 
-3. Generate the agent config and implement your adapter (subprocess JSON or python_plugin):
+3. Generate the agent config. For Hermes ACP, use the bundled adapter:
+
+  anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --workspace-id <workspace-id> --handle <handle>
+
+  For custom adapters, use subprocess JSON or python_plugin:
 
   anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py
 
