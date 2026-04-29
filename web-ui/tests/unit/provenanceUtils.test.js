@@ -24,9 +24,7 @@ describe("provenance utils", () => {
     expect(getProvenanceSources(undefined)).toEqual([]);
     expect(isUnknownProvenance(undefined)).toBe(true);
     expect(isUnknownProvenance({ sources: [] })).toBe(true);
-    expect(isUnknownProvenance({ sources: ["event:event-1"] })).toBe(
-      false,
-    );
+    expect(isUnknownProvenance({ sources: ["event:event-1"] })).toBe(false);
 
     expect(getProvenancePresentation(undefined)).toEqual({
       unknown: true,
@@ -42,9 +40,7 @@ describe("provenance utils", () => {
       toneClass: "border-amber-500/20 bg-amber-500/10 text-amber-400",
     });
 
-    expect(
-      getProvenancePresentation({ sources: ["event:event-1"] }),
-    ).toEqual({
+    expect(getProvenancePresentation({ sources: ["event:event-1"] })).toEqual({
       unknown: false,
       inferred: false,
       title: "Evidence-backed provenance",

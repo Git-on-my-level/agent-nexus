@@ -9,14 +9,18 @@
     canArchive = false,
     canUnarchive = false,
     canTrash = false,
+    canRestore = false,
     onClear = () => {},
     onArchive = () => {},
     onUnarchive = () => {},
     onTrash = () => {},
+    onRestore = () => {},
+    trashLabel = "Move to trash",
     selectionChromeActive = false,
     allVisibleSelected = false,
     onSelectAll = () => {},
     onDeselectAll = () => {},
+    extraActions,
   } = $props();
 </script>
 
@@ -69,6 +73,16 @@
       {/if}
     </div>
     <div class="flex flex-wrap items-center gap-1.5">
+      {#if canRestore}
+        <button
+          class="inline-flex h-7 cursor-pointer items-center rounded-md border border-[var(--line)] bg-[var(--panel)] px-2.5 text-micro font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line)] disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={busy}
+          onclick={onRestore}
+          type="button"
+        >
+          Restore
+        </button>
+      {/if}
       {#if canArchive}
         <button
           class="inline-flex h-7 cursor-pointer items-center rounded-md border border-[var(--line)] bg-[var(--panel)] px-2.5 text-micro font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line)] disabled:cursor-not-allowed disabled:opacity-50"
@@ -96,9 +110,10 @@
           onclick={onTrash}
           type="button"
         >
-          Move to trash
+          {trashLabel}
         </button>
       {/if}
+      {#if extraActions}{@render extraActions()}{/if}
       <button
         class="inline-flex h-7 cursor-pointer items-center rounded-md px-2.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)] disabled:cursor-not-allowed disabled:opacity-50"
         disabled={busy}

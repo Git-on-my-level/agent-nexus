@@ -1,16 +1,5 @@
 import { resolveRefLink } from "./refLinkModel.js";
 
-const SNAPSHOT_FIELD_LABELS = {
-  summary: "Summary",
-  owner_refs: "Owners",
-  document_refs: "Documents",
-  board_refs: "Boards",
-  related_refs: "Related refs",
-  title: "Title",
-  state: "Lifecycle state",
-  type: "Type",
-};
-
 const EVENT_TYPE_LABELS = {
   message_posted: "Message posted",
   receipt_added: "Receipt added",

@@ -22,20 +22,29 @@
     actorRegistry,
     principalRegistry,
   } from "$lib/actorSession";
-  import ArchiveButton from "$lib/components/ArchiveButton.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
-  import TrashButton from "$lib/components/TrashButton.svelte";
   import Skeleton from "$lib/components/state/Skeleton.svelte";
   import StateEmpty from "$lib/components/state/StateEmpty.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
+  import LeadingSelectionGlyph from "$lib/components/LeadingSelectionGlyph.svelte";
+  import WorkspaceListBulkToolbar from "$lib/components/WorkspaceListBulkToolbar.svelte";
+  import { createWorkspaceListSelection } from "$lib/workspaceListSelection.svelte.js";
 
   let artifacts = $state([]);
   let loading = $state(false);
   let error = $state("");
   let retrying = $state(false);
-  let confirmModal = $state({ open: false, action: "", entityId: "" });
-  let trashBusyId = $state("");
-  let archiveBusyId = $state("");
+  let confirmModal = $state({
+    open: false,
+    action: "",
+    entityId: "",
+    bulkIds: /** @type {string[] | null} */ (null),
+  });
+  let bulkBusy = $state(false);
+
+  const artifactSel = createWorkspaceListSelection({
+    bulkBusy: () => bulkBusy,
+  });
   let filtersOpen = $state(false);
 
   const ARTIFACT_LIFECYCLE_LABELS = {
@@ -53,6 +62,7 @@
     created_after: "",
     created_before: "",
   });
+  let hasActiveFilters = $derived(hasArtifactListFilters(filters));
 
   function workspaceHref(pathname = "/") {
     return workspacePath(organizationSlug, workspaceSlug, pathname);
@@ -83,6 +93,13 @@
       retrying = false;
     }
   }
+
+  $effect(() => {
+    artifacts;
+    artifactSel.reconcileSelectionWithIds(
+      artifacts.map((a) => String(a?.id ?? "").trim()).filter(Boolean),
+    );
+  });
 
   async function applyFilters() {
     const qs = buildArtifactListSearchString(filters);
@@ -142,62 +159,171 @@
     return typeof at === "string" ? at.trim() !== "" : Boolean(at);
   }
 
-  async function archiveArtifact(artifactId) {
-    const id = String(artifactId ?? "").trim();
-    if (!id || archiveBusyId) return;
-    archiveBusyId = id;
+  function isArtifactTrashed(artifact) {
+    if (artifact?.state === "trashed") return true;
+    const t = artifact?.trashed_at;
+    return typeof t === "string" ? t.trim() !== "" : Boolean(t);
+  }
+
+  let selectedArtifacts = $derived(
+    artifacts.filter((a) => artifactSel.selectedIds.has(a.id)),
+  );
+  let allArtifactsVisibleSelected = $derived(
+    artifacts.length > 0 &&
+      artifacts.every((a) => artifactSel.selectedIds.has(a.id)),
+  );
+  let bulkArtifactsCanArchive = $derived(
+    selectedArtifacts.some(
+      (a) => !isArtifactArchived(a) && !isArtifactTrashed(a),
+    ),
+  );
+  let bulkArtifactsCanUnarchive = $derived(
+    selectedArtifacts.some(
+      (a) => isArtifactArchived(a) && !isArtifactTrashed(a),
+    ),
+  );
+  let bulkArtifactsCanTrash = $derived(
+    selectedArtifacts.some((a) => !isArtifactTrashed(a)),
+  );
+
+  function selectAllVisibleArtifacts() {
+    artifactSel.selectAllFromVisibleIds(
+      artifacts.map((a) => a.id).filter(Boolean),
+    );
+  }
+
+  function clearArtifactSelection() {
+    artifactSel.clearSelection();
+  }
+
+  function toggleArtifactSelectMode() {
+    artifactSel.toggleSelectMode();
+  }
+
+  /** @param {number} i */
+  function artifactIdAtVisibleIndex(i) {
+    const a = artifacts[i];
+    return String(a?.id ?? "").trim();
+  }
+
+  /** @param {number} i */
+  function artifactHrefAtVisibleIndex(i) {
+    return workspaceHref(`/artifacts/${artifactIdAtVisibleIndex(i)}`);
+  }
+
+  async function bulkArchiveArtifacts(ids) {
+    const list = ids.filter(Boolean);
+    if (!list.length || bulkBusy) return;
+    bulkBusy = true;
     error = "";
     try {
-      await coreClient.archiveArtifact(id, {});
+      for (const id of list) {
+        await coreClient.archiveArtifact(id, {});
+      }
+      clearArtifactSelection();
+      confirmModal = { open: false, action: "", entityId: "", bulkIds: null };
       const parsed = parseArtifactListSearchParams($page.url.searchParams);
       await loadArtifactsFromState(parsed);
     } catch (e) {
       error = `Archive failed: ${e instanceof Error ? e.message : String(e)}`;
     } finally {
-      archiveBusyId = "";
+      bulkBusy = false;
     }
   }
 
-  async function unarchiveArtifact(artifactId) {
-    const id = String(artifactId ?? "").trim();
-    if (!id || archiveBusyId) return;
-    archiveBusyId = id;
+  async function bulkUnarchiveArtifacts(ids) {
+    const list = ids.filter(Boolean);
+    if (!list.length || bulkBusy) return;
+    bulkBusy = true;
     error = "";
     try {
-      await coreClient.unarchiveArtifact(id, {});
+      for (const id of list) {
+        await coreClient.unarchiveArtifact(id, {});
+      }
+      clearArtifactSelection();
       const parsed = parseArtifactListSearchParams($page.url.searchParams);
       await loadArtifactsFromState(parsed);
     } catch (e) {
       error = `Unarchive failed: ${e instanceof Error ? e.message : String(e)}`;
     } finally {
-      archiveBusyId = "";
+      bulkBusy = false;
     }
   }
 
-  async function trashArtifact(artifactId) {
-    const id = String(artifactId ?? "").trim();
-    if (!id || trashBusyId) return;
-    trashBusyId = id;
+  async function bulkTrashArtifacts(ids) {
+    const list = ids.filter(Boolean);
+    if (!list.length || bulkBusy) return;
+    bulkBusy = true;
     error = "";
     try {
-      await coreClient.trashArtifact(id, {});
-      confirmModal = { open: false, action: "", entityId: "" };
+      for (const id of list) {
+        await coreClient.trashArtifact(id, {});
+      }
+      clearArtifactSelection();
+      confirmModal = { open: false, action: "", entityId: "", bulkIds: null };
       const parsed = parseArtifactListSearchParams($page.url.searchParams);
       await loadArtifactsFromState(parsed);
     } catch (e) {
       error = `Trash failed: ${e instanceof Error ? e.message : String(e)}`;
     } finally {
-      trashBusyId = "";
+      bulkBusy = false;
     }
   }
 
-  function handleConfirm() {
-    const id = confirmModal.entityId;
-    const action = confirmModal.action;
-    confirmModal = { open: false, action: "", entityId: "" };
-    if (action === "archive") void archiveArtifact(id);
-    else if (action === "trash") void trashArtifact(id);
+  function idsForBulkArtifactArchive() {
+    return selectedArtifacts
+      .filter((a) => !isArtifactArchived(a) && !isArtifactTrashed(a))
+      .map((a) => a.id);
   }
+
+  function idsForBulkArtifactUnarchive() {
+    return selectedArtifacts
+      .filter((a) => isArtifactArchived(a) && !isArtifactTrashed(a))
+      .map((a) => a.id);
+  }
+
+  function idsForBulkArtifactTrash() {
+    return selectedArtifacts
+      .filter((a) => !isArtifactTrashed(a))
+      .map((a) => a.id);
+  }
+
+  function handleConfirm() {
+    const bulkIds = confirmModal.bulkIds;
+    const action = confirmModal.action;
+    confirmModal = { open: false, action: "", entityId: "", bulkIds: null };
+    if (bulkIds && bulkIds.length > 0) {
+      if (action === "archive") void bulkArchiveArtifacts(bulkIds);
+      else if (action === "trash") void bulkTrashArtifacts(bulkIds);
+    }
+  }
+
+  let artifactConfirmBulkCount = $derived(confirmModal.bulkIds?.length ?? 0);
+  let artifactConfirmIsBulk = $derived(artifactConfirmBulkCount > 0);
+
+  let artifactConfirmModalTitle = $derived.by(() => {
+    if (confirmModal.action === "trash") {
+      return artifactConfirmIsBulk
+        ? `Move ${artifactConfirmBulkCount} artifacts to trash`
+        : "Move to trash";
+    }
+    return artifactConfirmIsBulk
+      ? `Archive ${artifactConfirmBulkCount} artifacts`
+      : "Archive artifact";
+  });
+
+  let artifactConfirmModalMessage = $derived.by(() => {
+    if (confirmModal.action === "trash") {
+      return artifactConfirmIsBulk
+        ? `These artifacts (${artifactConfirmBulkCount}) will be moved to trash. You can restore them later.`
+        : "This artifact will be moved to trash. You can restore it later.";
+    }
+    return artifactConfirmIsBulk
+      ? `These artifacts (${artifactConfirmBulkCount}) will be hidden from default views. You can unarchive them later.`
+      : "This artifact will be hidden from default views. You can unarchive it later.";
+  });
+
+  let artifactConfirmModalBusy = $derived(artifactConfirmIsBulk && bulkBusy);
 
   function updateDateFilter(field, value) {
     dateInputs = { ...dateInputs, [field]: value };
@@ -207,9 +333,23 @@
 
 <div class="mb-3 flex max-md:mb-2 items-center justify-between">
   <h1 class="text-subtitle font-semibold text-[var(--fg)]">Artifacts</h1>
-  <div class="flex items-center gap-3">
+  <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-1.5">
     <button
-      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)]"
+      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] {!artifacts.length &&
+      !loading
+        ? 'opacity-50 pointer-events-none'
+        : ''}"
+      onclick={toggleArtifactSelectMode}
+      disabled={!artifacts.length && !loading}
+      type="button"
+      aria-pressed={artifactSel.selectMode}
+    >
+      {artifactSel.selectMode ? "Done" : "Select"}
+    </button>
+    <button
+      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-micro font-medium transition-colors {hasActiveFilters
+        ? 'border-[var(--accent)]/40 bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/15'
+        : 'border-[var(--line)] bg-[var(--bg-soft)] text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]'}"
       onclick={() => (filtersOpen = !filtersOpen)}
       type="button"
     >
@@ -226,7 +366,7 @@
           d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
         />
       </svg>
-      Filter
+      {hasActiveFilters ? "Filtered" : "Filter"}
     </button>
   </div>
 </div>
@@ -336,122 +476,226 @@
 {/if}
 
 {#if !loading && artifacts.length > 0}
+  {#if artifactSel.selectMode}
+    <WorkspaceListBulkToolbar
+      allVisibleSelected={allArtifactsVisibleSelected}
+      busy={bulkBusy}
+      canArchive={bulkArtifactsCanArchive}
+      canTrash={bulkArtifactsCanTrash}
+      canUnarchive={bulkArtifactsCanUnarchive}
+      onArchive={() => {
+        const ids = idsForBulkArtifactArchive();
+        if (!ids.length) return;
+        confirmModal = {
+          open: true,
+          action: "archive",
+          entityId: "",
+          bulkIds: ids,
+        };
+      }}
+      onClear={clearArtifactSelection}
+      onDeselectAll={clearArtifactSelection}
+      onSelectAll={selectAllVisibleArtifacts}
+      onTrash={() => {
+        const ids = idsForBulkArtifactTrash();
+        if (!ids.length) return;
+        confirmModal = {
+          open: true,
+          action: "trash",
+          entityId: "",
+          bulkIds: ids,
+        };
+      }}
+      onUnarchive={() =>
+        void bulkUnarchiveArtifacts(idsForBulkArtifactUnarchive())}
+      selectionChromeActive={true}
+      selectedCount={artifactSel.selectedIds.size}
+    />
+  {/if}
   <div
     class="space-y-px rounded-md border border-[var(--line)] bg-[var(--bg-soft)] overflow-hidden"
   >
     {#each artifacts as artifact, i}
-      <div
-        class="px-4 py-2 transition-colors hover:bg-[var(--line-subtle)] {i > 0
-          ? 'border-t border-[var(--line)]'
-          : ''}"
-      >
-        <div class="flex items-start justify-between gap-3">
-          <a
-            class="min-w-0 flex-1"
-            href={workspaceHref(`/artifacts/${artifact.id}`)}
+      {@const selected = artifactSel.selectedIds.has(artifact.id)}
+      {@const borderTop = i > 0 ? "border-t border-[var(--line)]" : ""}
+      {@const artifactRefCount = (artifact.refs ?? []).length}
+      {#if artifactSel.selectMode}
+        <div
+          class="transition-colors hover:bg-[var(--line-subtle)] {borderTop}"
+        >
+          <div
+            aria-label={`${selected ? "Deselect" : "Select"} ${rowHeading(artifact)}`}
+            aria-pressed={selected}
+            class="flex cursor-pointer items-stretch outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-soft)] {selected
+              ? 'border-l-[3px] border-l-[var(--accent)] bg-[var(--accent)]/10'
+              : 'border-l-[3px] border-l-transparent'}"
+            onclick={(e) =>
+              artifactSel.handleRowMouseEvent(
+                e,
+                i,
+                artifacts.length,
+                artifactIdAtVisibleIndex,
+                artifactHrefAtVisibleIndex,
+              )}
+            onkeydown={(e) =>
+              artifactSel.handleRowKeyboardEvent(
+                e,
+                i,
+                artifactIdAtVisibleIndex,
+              )}
+            role="button"
+            tabindex="0"
           >
-            <div class="flex flex-wrap items-center gap-2">
-              <p class="truncate text-meta font-medium text-[var(--fg)]">
-                {rowHeading(artifact)}
-              </p>
-              {#if isArtifactArchived(artifact)}
-                <span
-                  class="rounded bg-warn-soft px-1.5 py-0.5 text-micro font-medium text-warn-text"
-                  >Archived</span
-                >
+            <div class="flex shrink-0 items-center self-stretch pl-2 sm:pl-3">
+              <LeadingSelectionGlyph {selected} />
+            </div>
+            <div
+              class="pointer-events-none flex min-w-0 flex-1 flex-col gap-2 px-3 py-2 sm:pr-4 sm:pl-2"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0 flex-1">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <p class="truncate text-meta font-medium text-[var(--fg)]">
+                      {rowHeading(artifact)}
+                    </p>
+                    {#if isArtifactArchived(artifact)}
+                      <span
+                        class="rounded bg-warn-soft px-1.5 py-0.5 text-micro font-medium text-warn-text"
+                        >Archived</span
+                      >
+                    {/if}
+                  </div>
+                  <p class="text-micro text-[var(--fg-muted)]">
+                    <span class="font-medium">{kindLabel(artifact.kind)}</span>
+                    · Created {formatTimestamp(artifact.created_at) || "—"} by {actorName(
+                      artifact.created_by,
+                    )}
+                  </p>
+                </div>
+                <div class="flex shrink-0 items-center gap-1">
+                  <span class="mr-1 text-micro text-[var(--fg-muted)]">
+                    {artifactRefCount}
+                    {artifactRefCount === 1 ? "ref" : "refs"}
+                  </span>
+                </div>
+              </div>
+              {#if refPreview(artifact).length > 0 || artifact.thread_id}
+                <div class="flex flex-wrap items-center gap-1.5 text-micro">
+                  {#if artifact.thread_id}
+                    <RefLink
+                      humanize
+                      labelHints={{
+                        [`thread:${artifact.thread_id}`]: "Thread (timeline)",
+                      }}
+                      refValue={`thread:${artifact.thread_id}`}
+                      showRaw
+                      threadId={artifact.thread_id}
+                    />
+                  {/if}
+                  {#each refPreview(artifact) as refValue}
+                    <RefLink
+                      humanize
+                      {refValue}
+                      showRaw
+                      threadId={artifact.thread_id}
+                    />
+                  {/each}
+                  {#if artifactRefCount > 3}
+                    <span class="text-micro text-[var(--fg-muted)]"
+                      >+{artifact.refs.length - 3} more</span
+                    >
+                  {/if}
+                </div>
               {/if}
             </div>
-            <p class="text-micro text-[var(--fg-muted)]">
-              <span class="font-medium">{kindLabel(artifact.kind)}</span>
-              · Created {formatTimestamp(artifact.created_at) || "—"} by {actorName(
-                artifact.created_by,
-              )}
-            </p>
-          </a>
-          <div class="flex shrink-0 items-center gap-1">
-            <span class="mr-1 text-micro text-[var(--fg-muted)]">
-              {(artifact.refs ?? []).length} ref{(artifact.refs ?? [])
-                .length === 1
-                ? ""
-                : "s"}
-            </span>
-            <ArchiveButton
-              archived={isArtifactArchived(artifact)}
-              busy={Boolean(archiveBusyId) || Boolean(trashBusyId)}
-              onarchive={(e) => {
-                e.stopPropagation();
-                confirmModal = {
-                  open: true,
-                  action: "archive",
-                  entityId: artifact.id,
-                };
-              }}
-              onunarchive={(e) => {
-                e.stopPropagation();
-                void unarchiveArtifact(artifact.id);
-              }}
-            />
-            <TrashButton
-              busy={Boolean(trashBusyId) || Boolean(archiveBusyId)}
-              ontrash={(e) => {
-                e.stopPropagation();
-                confirmModal = {
-                  open: true,
-                  action: "trash",
-                  entityId: artifact.id,
-                };
-              }}
-            />
           </div>
         </div>
+      {:else}
+        <div
+          class="px-4 py-2 transition-colors hover:bg-[var(--line-subtle)] {borderTop}"
+        >
+          <div class="flex items-start justify-between gap-3">
+            <a
+              class="min-w-0 flex-1 outline-none rounded-sm focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-soft)]"
+              href={workspaceHref(`/artifacts/${artifact.id}`)}
+            >
+              <div class="flex flex-wrap items-center gap-2">
+                <p class="truncate text-meta font-medium text-[var(--fg)]">
+                  {rowHeading(artifact)}
+                </p>
+                {#if isArtifactArchived(artifact)}
+                  <span
+                    class="rounded bg-warn-soft px-1.5 py-0.5 text-micro font-medium text-warn-text"
+                    >Archived</span
+                  >
+                {/if}
+              </div>
+              <p class="text-micro text-[var(--fg-muted)]">
+                <span class="font-medium">{kindLabel(artifact.kind)}</span>
+                · Created {formatTimestamp(artifact.created_at) || "—"} by {actorName(
+                  artifact.created_by,
+                )}
+              </p>
+            </a>
+            <span
+              class="shrink-0 tabular-nums text-micro text-[var(--fg-muted)]"
+              aria-hidden="true"
+            >
+              {artifactRefCount}
+              {artifactRefCount === 1 ? "ref" : "refs"}
+            </span>
+          </div>
 
-        {#if refPreview(artifact).length > 0 || artifact.thread_id}
-          <a
-            class="mt-1.5 flex flex-wrap items-center gap-1.5 text-micro"
-            href={workspaceHref(`/artifacts/${artifact.id}`)}
-          >
-            {#if artifact.thread_id}
-              <RefLink
-                humanize
-                labelHints={{
-                  [`thread:${artifact.thread_id}`]: "Thread (timeline)",
-                }}
-                refValue={`thread:${artifact.thread_id}`}
-                showRaw
-                threadId={artifact.thread_id}
-              />
-            {/if}
-            {#each refPreview(artifact) as refValue}
-              <RefLink
-                humanize
-                {refValue}
-                showRaw
-                threadId={artifact.thread_id}
-              />
-            {/each}
-            {#if (artifact.refs ?? []).length > 3}
-              <span class="text-micro text-[var(--fg-muted)]"
-                >+{artifact.refs.length - 3} more</span
-              >
-            {/if}
-          </a>
-        {/if}
-      </div>
+          {#if refPreview(artifact).length > 0 || artifact.thread_id}
+            <a
+              class="mt-1.5 flex flex-wrap items-center gap-1.5 text-micro"
+              href={workspaceHref(`/artifacts/${artifact.id}`)}
+            >
+              {#if artifact.thread_id}
+                <RefLink
+                  humanize
+                  labelHints={{
+                    [`thread:${artifact.thread_id}`]: "Thread (timeline)",
+                  }}
+                  refValue={`thread:${artifact.thread_id}`}
+                  showRaw
+                  threadId={artifact.thread_id}
+                />
+              {/if}
+              {#each refPreview(artifact) as refValue}
+                <RefLink
+                  humanize
+                  {refValue}
+                  showRaw
+                  threadId={artifact.thread_id}
+                />
+              {/each}
+              {#if artifactRefCount > 3}
+                <span class="text-micro text-[var(--fg-muted)]"
+                  >+{artifact.refs.length - 3} more</span
+                >
+              {/if}
+            </a>
+          {/if}
+        </div>
+      {/if}
     {/each}
   </div>
 {/if}
 
 <ConfirmModal
   open={confirmModal.open}
-  title={confirmModal.action === "trash" ? "Move to trash" : "Archive artifact"}
-  message={confirmModal.action === "trash"
-    ? "This artifact will be moved to trash. You can restore it later."
-    : "This artifact will be hidden from default views. You can unarchive it later."}
+  title={artifactConfirmModalTitle}
+  message={artifactConfirmModalMessage}
   confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
   variant={confirmModal.action === "trash" ? "danger" : "warning"}
-  busy={confirmModal.action === "trash"
-    ? Boolean(trashBusyId)
-    : Boolean(archiveBusyId)}
+  busy={artifactConfirmModalBusy}
   onconfirm={handleConfirm}
-  oncancel={() => (confirmModal = { open: false, action: "", entityId: "" })}
+  oncancel={() =>
+    (confirmModal = {
+      open: false,
+      action: "",
+      entityId: "",
+      bulkIds: null,
+    })}
 />

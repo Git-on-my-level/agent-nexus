@@ -1,5 +1,4 @@
 <script>
-  import { goto } from "$app/navigation";
   import { page } from "$app/stores";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import CompactFilterBar from "$lib/components/CompactFilterBar.svelte";
@@ -14,6 +13,7 @@
   import WorkspaceListBulkToolbar from "$lib/components/WorkspaceListBulkToolbar.svelte";
   import LeadingSelectionGlyph from "$lib/components/LeadingSelectionGlyph.svelte";
   import Button from "$lib/components/Button.svelte";
+  import { createWorkspaceListSelection } from "$lib/workspaceListSelection.svelte.js";
 
   const defaultBoardListFilters = {
     states: ["active"],
@@ -45,11 +45,8 @@
   });
   let trashBusyId = $state("");
   let bulkBusy = $state(false);
-  /** @type {Set<string>} */
-  let selectedBoardIds = $state(new Set());
-  let boardSelectMode = $state(false);
-  /** @type {number | null} */
-  let boardSelectionAnchorIndex = $state(null);
+
+  const boardSel = createWorkspaceListSelection({ bulkBusy: () => bulkBusy });
 
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
@@ -140,21 +137,17 @@
 
   $effect(() => {
     boards;
-    const valid = new Set(
+    boardSel.reconcileSelectionWithIds(
       boards.map((row) => String(row?.board?.id ?? "").trim()).filter(Boolean),
     );
-    const next = new Set([...selectedBoardIds].filter((id) => valid.has(id)));
-    if (next.size !== selectedBoardIds.size) {
-      selectedBoardIds = next;
-    }
   });
 
   let allBoardsVisibleSelected = $derived(
     boards.length > 0 &&
-      boards.every((row) => selectedBoardIds.has(row.board.id)),
+      boards.every((row) => boardSel.selectedIds.has(row.board.id)),
   );
   let selectedBoardRows = $derived(
-    boards.filter((row) => selectedBoardIds.has(row.board.id)),
+    boards.filter((row) => boardSel.selectedIds.has(row.board.id)),
   );
 
   let bulkBoardsCanArchive = $derived(
@@ -172,86 +165,30 @@
   );
 
   function selectAllVisibleBoards() {
-    selectedBoardIds = new Set(
+    boardSel.selectAllFromVisibleIds(
       boards.map((row) => row.board.id).filter(Boolean),
     );
   }
 
   function clearBoardSelection() {
-    selectedBoardIds = new Set();
+    boardSel.clearSelection();
   }
 
   function toggleBoardSelectMode() {
-    boardSelectMode = !boardSelectMode;
-    if (!boardSelectMode) {
-      clearBoardSelection();
-      boardSelectionAnchorIndex = null;
-    }
+    boardSel.toggleSelectMode();
   }
 
-  function applyBoardRangeFromIndices(fromIndex, toIndex) {
-    const lo = Math.min(fromIndex, toIndex);
-    const hi = Math.max(fromIndex, toIndex);
-    const next = new Set(selectedBoardIds);
-    for (let i = lo; i <= hi; i++) {
-      const b = boards[i]?.board;
-      if (b?.id) next.add(b.id);
-    }
-    selectedBoardIds = next;
+  /** @param {number} i */
+  function boardIdAtVisibleIndex(i) {
+    const b = boards[i]?.board;
+    return String(b?.id ?? "").trim();
   }
 
-  /** @param {{ board: { id: string } }} item */
-  function handleBoardRowClick(item, index, e) {
-    if (!boardSelectMode || bulkBusy) return;
-    const board = item.board;
-    const href = workspaceHref(`/boards/${board.id}`);
-    const ce = /** @type {MouseEvent & { detail?: number }} */ (e);
-    if ((ce.detail ?? 1) >= 2) {
-      void goto(href);
-      return;
-    }
-    if (e.shiftKey && boardSelectionAnchorIndex !== null) {
-      applyBoardRangeFromIndices(boardSelectionAnchorIndex, index);
-      return;
-    }
-    const id = board.id;
-    const next = new Set(selectedBoardIds);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    selectedBoardIds = next;
-    boardSelectionAnchorIndex = index;
+  /** @param {number} i */
+  function boardHrefAtVisibleIndex(i) {
+    const id = boardIdAtVisibleIndex(i);
+    return workspaceHref(`/boards/${id}`);
   }
-
-  /** @param {{ board: { id: string } }} item */
-  function boardRowKeydown(item, index, e) {
-    if (!boardSelectMode || bulkBusy) return;
-    if (e.key !== " " && e.key !== "Enter") return;
-    e.preventDefault();
-    const board = item.board;
-    if (e.shiftKey && boardSelectionAnchorIndex !== null) {
-      applyBoardRangeFromIndices(boardSelectionAnchorIndex, index);
-      return;
-    }
-    const id = board.id;
-    const next = new Set(selectedBoardIds);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    selectedBoardIds = next;
-    boardSelectionAnchorIndex = index;
-  }
-
-  $effect(() => {
-    if (!boardSelectMode) return;
-    /** @param {KeyboardEvent} ev */
-    function onBoardKey(ev) {
-      if (ev.key !== "Escape") return;
-      boardSelectMode = false;
-      clearBoardSelection();
-      boardSelectionAnchorIndex = null;
-    }
-    document.addEventListener("keydown", onBoardKey);
-    return () => document.removeEventListener("keydown", onBoardKey);
-  });
 
   function boardIdsForBulkArchive() {
     return selectedBoardRows
@@ -458,9 +395,9 @@
       onclick={toggleBoardSelectMode}
       disabled={boards.length === 0 && !loading}
       type="button"
-      aria-pressed={boardSelectMode}
+      aria-pressed={boardSel.selectMode}
     >
-      {boardSelectMode ? "Done" : "Select"}
+      {boardSel.selectMode ? "Done" : "Select"}
     </button>
     <button
       class="cursor-pointer inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-micro font-medium transition-colors {hasActiveFilters
@@ -589,8 +526,8 @@
 {:else}
   {#snippet boardRow(item, index, showBorderTop)}
     {@const board = item.board}
-    {@const selected = selectedBoardIds.has(board.id)}
-    {#if boardSelectMode}
+    {@const selected = boardSel.selectedIds.has(board.id)}
+    {#if boardSel.selectMode}
       <div
         aria-label={`${selected ? "Deselect" : "Select"} ${board.title || board.id}`}
         aria-pressed={selected}
@@ -599,8 +536,16 @@
           : ''} {selected
           ? 'border-l-[3px] border-l-[var(--accent)] bg-[var(--accent)]/10'
           : 'border-l-[3px] border-l-transparent hover:bg-[var(--line-subtle)]'}"
-        onclick={(e) => handleBoardRowClick(item, index, e)}
-        onkeydown={(e) => boardRowKeydown(item, index, e)}
+        onclick={(e) =>
+          boardSel.handleRowMouseEvent(
+            e,
+            index,
+            boards.length,
+            boardIdAtVisibleIndex,
+            boardHrefAtVisibleIndex,
+          )}
+        onkeydown={(e) =>
+          boardSel.handleRowKeyboardEvent(e, index, boardIdAtVisibleIndex)}
         role="button"
         tabindex="0"
       >
@@ -693,7 +638,7 @@
       </div>
     {/if}
   {/snippet}
-  {#if boardSelectMode}
+  {#if boardSel.selectMode}
     <WorkspaceListBulkToolbar
       allVisibleSelected={allBoardsVisibleSelected}
       busy={bulkBusy}
@@ -725,7 +670,7 @@
       }}
       onUnarchive={() => void bulkUnarchiveBoards(boardIdsForBulkUnarchive())}
       selectionChromeActive={true}
-      selectedCount={selectedBoardIds.size}
+      selectedCount={boardSel.selectedIds.size}
     />
   {/if}
   <div

@@ -468,7 +468,8 @@ export const QA_EVENTS = [
     actor_id: "actor-jordan-human",
     thread_id: "thread-billing-rollout",
     refs: ["topic:topic-billing-rollout", "document:doc-billing-runbook"],
-    summary: "Billing rollout update posted after the latest portal smoke pass.",
+    summary:
+      "Billing rollout update posted after the latest portal smoke pass.",
     payload: { changed_fields: ["current_summary", "next_actions"] },
   },
   {

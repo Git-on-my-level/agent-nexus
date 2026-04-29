@@ -14,6 +14,7 @@
   import WorkspaceResourceListRow from "$lib/components/WorkspaceResourceListRow.svelte";
   import WorkspaceListBulkToolbar from "$lib/components/WorkspaceListBulkToolbar.svelte";
   import LeadingSelectionGlyph from "$lib/components/LeadingSelectionGlyph.svelte";
+  import { createWorkspaceListSelection } from "$lib/workspaceListSelection.svelte.js";
 
   const DOC_STATE_LABELS = {
     active: "Active",
@@ -46,11 +47,9 @@
   });
   let trashBusyId = $state("");
   let bulkBusy = $state(false);
-  /** @type {Set<string>} */
-  let selectedIds = $state(new Set());
-  let selectMode = $state(false);
-  /** @type {number | null} */
-  let selectionAnchorIndex = $state(null);
+
+  const docSel = createWorkspaceListSelection({ bulkBusy: () => bulkBusy });
+
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
   let scopedThreadId = $derived(
@@ -85,19 +84,18 @@
 
   $effect(() => {
     documents;
-    const valid = new Set(
+    docSel.reconcileSelectionWithIds(
       documents.map((d) => String(d?.id ?? "").trim()).filter(Boolean),
     );
-    const next = new Set([...selectedIds].filter((id) => valid.has(id)));
-    if (next.size !== selectedIds.size) {
-      selectedIds = next;
-    }
   });
 
   let allVisibleSelected = $derived(
-    documents.length > 0 && documents.every((d) => selectedIds.has(d.id)),
+    documents.length > 0 &&
+      documents.every((d) => docSel.selectedIds.has(d.id)),
   );
-  let selectedDocs = $derived(documents.filter((d) => selectedIds.has(d.id)));
+  let selectedDocs = $derived(
+    documents.filter((d) => docSel.selectedIds.has(d.id)),
+  );
 
   let bulkCanArchive = $derived(
     selectedDocs.some((d) => !isDocArchived(d) && !isDocTrashed(d)),
@@ -108,82 +106,27 @@
   let bulkCanTrash = $derived(selectedDocs.some((d) => !isDocTrashed(d)));
 
   function selectAllVisibleDocs() {
-    selectedIds = new Set(documents.map((d) => d.id).filter(Boolean));
+    docSel.selectAllFromVisibleIds(documents.map((d) => d.id).filter(Boolean));
   }
 
   function clearDocSelection() {
-    selectedIds = new Set();
+    docSel.clearSelection();
   }
 
   function toggleSelectMode() {
-    selectMode = !selectMode;
-    if (!selectMode) {
-      clearDocSelection();
-      selectionAnchorIndex = null;
-    }
+    docSel.toggleSelectMode();
   }
 
-  function applyDocRangeFromIndices(fromIndex, toIndex) {
-    const lo = Math.min(fromIndex, toIndex);
-    const hi = Math.max(fromIndex, toIndex);
-    const next = new Set(selectedIds);
-    for (let i = lo; i <= hi; i++) {
-      const d = documents[i];
-      if (d?.id) next.add(d.id);
-    }
-    selectedIds = next;
+  /** @param {number} i */
+  function docIdAtVisibleIndex(i) {
+    const d = documents[i];
+    return String(d?.id ?? "").trim();
   }
 
-  /** @param {MouseEvent} e */
-  function handleDocRowClick(doc, index, e) {
-    if (!selectMode || bulkBusy) return;
-    const href = workspaceHref(`/docs/${doc.id}`);
-    const ce = /** @type {MouseEvent & { detail?: number }} */ (e);
-    if ((ce.detail ?? 1) >= 2) {
-      void goto(href);
-      return;
-    }
-    if (e.shiftKey && selectionAnchorIndex !== null) {
-      applyDocRangeFromIndices(selectionAnchorIndex, index);
-      return;
-    }
-    const id = doc.id;
-    const next = new Set(selectedIds);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    selectedIds = next;
-    selectionAnchorIndex = index;
+  /** @param {number} i */
+  function docHrefAtVisibleIndex(i) {
+    return workspaceHref(`/docs/${docIdAtVisibleIndex(i)}`);
   }
-
-  /** @param {KeyboardEvent} e */
-  function docRowKeydown(doc, index, e) {
-    if (!selectMode || bulkBusy) return;
-    if (e.key !== " " && e.key !== "Enter") return;
-    e.preventDefault();
-    if (e.shiftKey && selectionAnchorIndex !== null) {
-      applyDocRangeFromIndices(selectionAnchorIndex, index);
-      return;
-    }
-    const id = doc.id;
-    const next = new Set(selectedIds);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    selectedIds = next;
-    selectionAnchorIndex = index;
-  }
-
-  $effect(() => {
-    if (!selectMode) return;
-    /** @param {KeyboardEvent} ev */
-    function onDocKey(ev) {
-      if (ev.key !== "Escape") return;
-      selectMode = false;
-      clearDocSelection();
-      selectionAnchorIndex = null;
-    }
-    document.addEventListener("keydown", onDocKey);
-    return () => document.removeEventListener("keydown", onDocKey);
-  });
 
   async function loadDocuments(isRetry = false) {
     loading = true;
@@ -482,9 +425,9 @@
       onclick={toggleSelectMode}
       disabled={!documents.length && !loading}
       type="button"
-      aria-pressed={selectMode}
+      aria-pressed={docSel.selectMode}
     >
-      {selectMode ? "Done" : "Select"}
+      {docSel.selectMode ? "Done" : "Select"}
     </button>
     <button
       class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-micro font-medium transition-colors {hasActiveFilters
@@ -703,8 +646,8 @@
 {/if}
 
 {#snippet docRow(doc, index, showBorderTop)}
-  {@const selected = selectedIds.has(doc.id)}
-  {#if selectMode}
+  {@const selected = docSel.selectedIds.has(doc.id)}
+  {#if docSel.selectMode}
     <div
       aria-label={`${selected ? "Deselect" : "Select"} ${doc.title || doc.id}`}
       aria-pressed={selected}
@@ -713,8 +656,16 @@
         : ''} {selected
         ? 'border-l-[3px] border-l-[var(--accent)] bg-[var(--accent)]/10'
         : 'border-l-[3px] border-l-transparent hover:bg-[var(--line-subtle)]'}"
-      onclick={(e) => handleDocRowClick(doc, index, e)}
-      onkeydown={(e) => docRowKeydown(doc, index, e)}
+      onclick={(e) =>
+        docSel.handleRowMouseEvent(
+          e,
+          index,
+          documents.length,
+          docIdAtVisibleIndex,
+          docHrefAtVisibleIndex,
+        )}
+      onkeydown={(e) =>
+        docSel.handleRowKeyboardEvent(e, index, docIdAtVisibleIndex)}
       role="button"
       tabindex="0"
     >
@@ -784,7 +735,7 @@
 {/snippet}
 
 {#if !loading && documents.length > 0}
-  {#if selectMode}
+  {#if docSel.selectMode}
     <WorkspaceListBulkToolbar
       {allVisibleSelected}
       busy={bulkBusy}
@@ -816,7 +767,7 @@
       }}
       onUnarchive={() => void bulkUnarchiveDocuments(idsForBulkUnarchive())}
       selectionChromeActive={true}
-      selectedCount={selectedIds.size}
+      selectedCount={docSel.selectedIds.size}
     />
   {/if}
   <div

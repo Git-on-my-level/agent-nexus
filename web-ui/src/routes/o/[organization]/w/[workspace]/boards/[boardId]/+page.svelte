@@ -1,5 +1,5 @@
 <script>
-  import { goto, replaceState } from "$app/navigation";
+  import { goto } from "$app/navigation";
   import { page } from "$app/stores";
   import BoardFeedStrip from "$lib/components/BoardFeedStrip.svelte";
   import BoardCard from "$lib/components/BoardCard.svelte";
@@ -71,16 +71,26 @@
     return workspacePath(organizationSlug, workspaceSlug, pathname);
   }
 
+  /** Keeps `$page.url` aligned with shallow card query-param changes (`replaceState` alone can leave `$page` stale). */
+  function navigateBoardCardParam(updates = {}) {
+    const next = withUpdatedSearchParams($page.url, updates);
+    void goto(next, {
+      replaceState: true,
+      keepFocus: true,
+      noScroll: true,
+    });
+  }
+
   function openCardDetailModal(cardItem) {
     const id = boardCardStableId(cardItem?.membership);
     if (!id) return;
     detailModalCard = cardItem;
-    replaceState(withUpdatedSearchParams($page.url, { card: id }), {});
+    navigateBoardCardParam({ card: id });
   }
 
   function closeCardDetailModal() {
     detailModalCard = null;
-    replaceState(withUpdatedSearchParams($page.url, { card: "" }), {});
+    navigateBoardCardParam({ card: "" });
   }
 
   async function loadWorkspace() {
@@ -252,7 +262,7 @@
       detailModalCard = match;
     } else {
       detailModalCard = null;
-      replaceState(withUpdatedSearchParams($page.url, { card: "" }), {});
+      navigateBoardCardParam({ card: "" });
     }
   });
 

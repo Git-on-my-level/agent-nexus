@@ -23,6 +23,7 @@
   import WorkspaceListBulkToolbar from "$lib/components/WorkspaceListBulkToolbar.svelte";
   import LeadingSelectionGlyph from "$lib/components/LeadingSelectionGlyph.svelte";
   import Button from "$lib/components/Button.svelte";
+  import { createWorkspaceListSelection } from "$lib/workspaceListSelection.svelte.js";
 
   const defaultFilters = {
     states: ["active"],
@@ -48,11 +49,7 @@
   });
   let trashBusyId = $state("");
   let bulkBusy = $state(false);
-  /** @type {Set<string>} */
-  let selectedTopicIds = $state(new Set());
-  let topicSelectMode = $state(false);
-  /** @type {number | null} */
-  let topicSelectionAnchorIndex = $state(null);
+
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
 
@@ -60,6 +57,11 @@
   let listSurface = $derived.by(() => {
     const path = String($page.url.pathname ?? "").replace(/\/+$/, "");
     return path.endsWith("/topics") ? "topics" : "threads";
+  });
+
+  const topicSel = createWorkspaceListSelection({
+    bulkBusy: () => bulkBusy,
+    when: () => listSurface === "topics",
   });
 
   let backingThreads = $state([]);
@@ -144,32 +146,26 @@
 
   $effect(() => {
     if (listSurface !== "topics") {
-      selectedTopicIds = new Set();
-      topicSelectMode = false;
-      topicSelectionAnchorIndex = null;
+      topicSel.exitSelectionMode();
     }
   });
 
   $effect(() => {
     if (listSurface !== "topics") return;
     topics;
-    const valid = new Set(
+    topicSel.reconcileSelectionWithIds(
       topics.map((t) => String(t?.id ?? "").trim()).filter(Boolean),
     );
-    const next = new Set([...selectedTopicIds].filter((id) => valid.has(id)));
-    if (next.size !== selectedTopicIds.size) {
-      selectedTopicIds = next;
-    }
   });
 
   let allTopicsVisibleSelected = $derived(
     listSurface === "topics" &&
       topics.length > 0 &&
-      topics.every((t) => selectedTopicIds.has(t.id)),
+      topics.every((t) => topicSel.selectedIds.has(t.id)),
   );
   let selectedTopics = $derived(
     listSurface === "topics"
-      ? topics.filter((t) => selectedTopicIds.has(t.id))
+      ? topics.filter((t) => topicSel.selectedIds.has(t.id))
       : [],
   );
 
@@ -184,82 +180,29 @@
   );
 
   function selectAllVisibleTopics() {
-    selectedTopicIds = new Set(topics.map((t) => t.id).filter(Boolean));
+    topicSel.selectAllFromVisibleIds(topics.map((t) => t.id).filter(Boolean));
   }
 
   function clearTopicSelection() {
-    selectedTopicIds = new Set();
+    topicSel.clearSelection();
   }
 
   function toggleTopicSelectMode() {
-    topicSelectMode = !topicSelectMode;
-    if (!topicSelectMode) {
-      clearTopicSelection();
-      topicSelectionAnchorIndex = null;
-    }
+    topicSel.toggleSelectMode();
   }
 
-  function applyTopicRangeFromIndices(fromIndex, toIndex) {
-    const lo = Math.min(fromIndex, toIndex);
-    const hi = Math.max(fromIndex, toIndex);
-    const next = new Set(selectedTopicIds);
-    for (let i = lo; i <= hi; i++) {
-      const t = topics[i];
-      if (t?.id) next.add(t.id);
-    }
-    selectedTopicIds = next;
+  /** @param {number} i */
+  function topicIdAtVisibleIndex(i) {
+    const t = topics[i];
+    return String(t?.id ?? "").trim();
   }
 
-  /** @param {MouseEvent} e */
-  function handleTopicRowClick(topic, index, e) {
-    if (!topicSelectMode || bulkBusy) return;
-    const href = workspaceHref(`/topics/${encodeURIComponent(topic.id)}`);
-    const ce = /** @type {MouseEvent & { detail?: number }} */ (e);
-    if ((ce.detail ?? 1) >= 2) {
-      void goto(href);
-      return;
-    }
-    if (e.shiftKey && topicSelectionAnchorIndex !== null) {
-      applyTopicRangeFromIndices(topicSelectionAnchorIndex, index);
-      return;
-    }
-    const id = topic.id;
-    const next = new Set(selectedTopicIds);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    selectedTopicIds = next;
-    topicSelectionAnchorIndex = index;
+  /** @param {number} i */
+  function topicHrefAtVisibleIndex(i) {
+    return workspaceHref(
+      `/topics/${encodeURIComponent(topicIdAtVisibleIndex(i))}`,
+    );
   }
-
-  /** @param {KeyboardEvent} e */
-  function topicRowKeydown(topic, index, e) {
-    if (!topicSelectMode || bulkBusy) return;
-    if (e.key !== " " && e.key !== "Enter") return;
-    e.preventDefault();
-    if (e.shiftKey && topicSelectionAnchorIndex !== null) {
-      applyTopicRangeFromIndices(topicSelectionAnchorIndex, index);
-      return;
-    }
-    const id = topic.id;
-    const next = new Set(selectedTopicIds);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    selectedTopicIds = next;
-    topicSelectionAnchorIndex = index;
-  }
-
-  $effect(() => {
-    if (!topicSelectMode || listSurface !== "topics") return;
-    /** @param {KeyboardEvent} ev */
-    function onTopicKey(ev) {
-      if (ev.key !== "Escape") return;
-      topicSelectMode = false;
-      clearTopicSelection();
-      topicSelectionAnchorIndex = null;
-    }
-    document.addEventListener("keydown", onTopicKey);
-    return () => document.removeEventListener("keydown", onTopicKey);
-  });
 
   function topicIdsForBulkArchive() {
     return selectedTopics
@@ -539,9 +482,9 @@
         onclick={toggleTopicSelectMode}
         disabled={topics.length === 0 && !loading}
         type="button"
-        aria-pressed={topicSelectMode}
+        aria-pressed={topicSel.selectMode}
       >
-        {topicSelectMode ? "Done" : "Select"}
+        {topicSel.selectMode ? "Done" : "Select"}
       </button>
       <button
         class="cursor-pointer inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-micro font-medium transition-colors {hasActiveFilters
@@ -751,8 +694,8 @@
     />
   {:else}
     {#snippet topicRow(topic, index, showBorderTop)}
-      {@const selected = selectedTopicIds.has(topic.id)}
-      {#if topicSelectMode}
+      {@const selected = topicSel.selectedIds.has(topic.id)}
+      {#if topicSel.selectMode}
         <div
           aria-label={`${selected ? "Deselect" : "Select"} ${topic.title || topic.id}`}
           aria-pressed={selected}
@@ -761,8 +704,16 @@
             : ''} {selected
             ? 'border-l-[3px] border-l-[var(--accent)] bg-[var(--accent)]/10'
             : 'border-l-[3px] border-l-transparent hover:bg-[var(--line-subtle)]'}"
-          onclick={(e) => handleTopicRowClick(topic, index, e)}
-          onkeydown={(e) => topicRowKeydown(topic, index, e)}
+          onclick={(e) =>
+            topicSel.handleRowMouseEvent(
+              e,
+              index,
+              topics.length,
+              topicIdAtVisibleIndex,
+              topicHrefAtVisibleIndex,
+            )}
+          onkeydown={(e) =>
+            topicSel.handleRowKeyboardEvent(e, index, topicIdAtVisibleIndex)}
           role="button"
           tabindex="0"
         >
@@ -844,7 +795,7 @@
         </div>
       {/if}
     {/snippet}
-    {#if topicSelectMode}
+    {#if topicSel.selectMode}
       <WorkspaceListBulkToolbar
         allVisibleSelected={allTopicsVisibleSelected}
         busy={bulkBusy}
@@ -876,7 +827,7 @@
         }}
         onUnarchive={() => void bulkUnarchiveTopics(topicIdsForBulkUnarchive())}
         selectionChromeActive={true}
-        selectedCount={selectedTopicIds.size}
+        selectedCount={topicSel.selectedIds.size}
       />
     {/if}
     <div

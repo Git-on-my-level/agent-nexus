@@ -734,7 +734,8 @@ const events = [
       "card:thread-pricing-glitch",
       "inbox:pricing-refunds",
     ],
-    summary: "Human response recorded: issue refunds and proceed with cache fix.",
+    summary:
+      "Human response recorded: issue refunds and proceed with cache fix.",
     payload: {
       inbox_item_id: "pricing-refunds",
       kind: "ask",
