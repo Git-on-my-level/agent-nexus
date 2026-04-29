@@ -350,8 +350,6 @@ fi
 printf '{"patch":{"summary":"smoke updated"}}\n' \
   | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" topics patch --topic-id "$MAIN_TOPIC_ID" >"$TMP_DIR/topic-update.json"
 
-RECEIPT_ID="rc-smoke"
-REVIEW_ID="rv-smoke"
 THREAD_ID="$MAIN_TOPIC_THREAD_ID"
 
 # Board smoke: create a board, add/reorder/move/archive cards, and verify the
@@ -457,11 +455,8 @@ if [[ -z "$BOARD_UPDATED_AT" ]]; then
   exit 1
 fi
 
-printf '{"artifact":{"id":"%s","refs":["card:%s"],"summary":"Smoke receipt"},"packet":{"receipt_id":"%s","subject_ref":"card:%s","outputs":["card:%s"],"verification_evidence":["artifact:%s"],"changes_summary":"smoke complete","known_gaps":[]}}\n' "$RECEIPT_ID" "$BOARD_CARD_A_ID" "$RECEIPT_ID" "$BOARD_CARD_A_ID" "$BOARD_CARD_A_ID" "$RECEIPT_ID" \
-  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" receipts create >"$TMP_DIR/receipt-create.json"
-
-printf '{"artifact":{"id":"%s","refs":["card:%s","artifact:%s"],"summary":"Smoke review"},"packet":{"review_id":"%s","subject_ref":"card:%s","receipt_ref":"artifact:%s","outcome":"accept","notes":"accepted","evidence_refs":["artifact:%s"]}}\n' "$REVIEW_ID" "$BOARD_CARD_A_ID" "$RECEIPT_ID" "$REVIEW_ID" "$BOARD_CARD_A_ID" "$RECEIPT_ID" "$RECEIPT_ID" \
-  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" reviews create >"$TMP_DIR/review-create.json"
+# Legacy `anx receipts` / `anx reviews` commands were removed; packet convenience
+# flows are not exposed as standalone CLI commands in the current registry.
 
 printf '{"card":{"title":"Smoke board card B","summary":"smoke card B","column_key":"backlog","after_card_id":"%s","topic_ref":"topic:%s","assignee_refs":[],"risk":"low","resolution_refs":[],"related_refs":["topic:%s"],"provenance":{"sources":["event:smoke-card-b"]}}}\n' \
   "$BOARD_CARD_A_ID" "$BOARD_TOPIC_B_ID" "$BOARD_TOPIC_B_ID" \
