@@ -139,19 +139,19 @@ class _HermesClient:
 
 
 def _resolve_hermes_bin(settings: dict[str, Any]) -> str:
-    configured = _clean_string(settings.get("hermes_bin")) or _clean_string(os.environ.get("HERMES_BIN"))
+    configured = _clean_string(os.environ.get("HERMES_BIN")) or _clean_string(settings.get("hermes_bin"))
     if configured:
         return str(Path(configured).expanduser())
     return shutil.which("hermes") or ""
 
 
 def _resolve_hermes_args(settings: dict[str, Any]) -> list[str]:
-    raw = settings.get("hermes_args")
-    if isinstance(raw, list) and raw:
-        return [str(item) for item in raw if str(item).strip()]
     env_args = _clean_string(os.environ.get("HERMES_ARGS"))
     if env_args:
         return env_args.split()
+    raw = settings.get("hermes_args")
+    if isinstance(raw, list) and raw:
+        return [str(item) for item in raw if str(item).strip()]
     return list(DEFAULT_HERMES_ARGS)
 
 
@@ -328,7 +328,7 @@ def _session_update_text(update: Any) -> str:
     if isinstance(content, dict):
         if _clean_string(content.get("type")) == "text":
             return _clean_string(content.get("text"))
-        return _clean_string(content.get("text"))
+        return ""
     return _clean_string(data.get("text"))
 
 

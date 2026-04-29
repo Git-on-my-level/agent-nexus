@@ -45,6 +45,15 @@ def test_hermes_session_update_text_collects_agent_chunks() -> None:
 
     assert hermes_acp._session_update_text(update) == "hello"
     assert hermes_acp._session_update_text({"sessionUpdate": "tool_call"}) == ""
+    assert (
+        hermes_acp._session_update_text(
+            {
+                "sessionUpdate": "agent_message_chunk",
+                "content": {"type": "tool_result", "text": "internal"},
+            }
+        )
+        == ""
+    )
 
 
 def test_hermes_doctor_reports_missing_runtime(monkeypatch) -> None:
