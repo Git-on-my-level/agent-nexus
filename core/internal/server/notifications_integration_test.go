@@ -80,7 +80,7 @@ func TestNotificationsListReadAndDismissAreTargetScoped(t *testing.T) {
 				"trigger_text":       "@target.agent please check this",
 				"session_key":        "anx:ws_main:" + threadID + ":" + target.Username,
 			},
-			"provenance": map[string]any{"sources": []string{"actor_statement:" + triggerEventID}},
+			"provenance": map[string]any{"sources": []string{"event:" + triggerEventID}},
 		},
 	}, sender.AccessToken, http.StatusCreated).Body.Close()
 

@@ -222,7 +222,7 @@
       cardsResult,
       eventsResult,
     ] = await Promise.allSettled([
-      coreClient.listInboxItems({ view: "items" }),
+      coreClient.listInboxItems({ status: "open" }),
       coreClient.listTopics({}),
       coreClient.listBoards({}),
       coreClient.listDocuments({}),

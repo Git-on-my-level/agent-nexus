@@ -19,12 +19,9 @@ func TestBuildCardLifecycleEventsPreferCanonicalFields(t *testing.T) {
 	}
 
 	for _, ev := range []map[string]any{
-		buildBoardCardAddedEvent(board, card),
 		buildCardCreatedEvent(board, card),
 		buildCardArchivedEvent(board, card),
 		buildCardTrashedEvent(board, card),
-		buildBoardCardArchivedEvent(board, card),
-		buildBoardCardTrashedEvent(board, card),
 	} {
 		payload, ok := ev["payload"].(map[string]any)
 		if !ok {

@@ -43,7 +43,7 @@ describe("topicDetailStore", () => {
     coreClientMocks.getThreadWorkspace.mockResolvedValueOnce({
       thread: { id: "thread-1", title: "Initial workspace" },
       context: {
-        recent_events: [{ id: "event-seed", type: "actor_statement" }],
+        recent_events: [{ id: "event-seed", type: "message_posted" }],
         documents: [],
         open_cards: [],
       },
@@ -52,7 +52,7 @@ describe("topicDetailStore", () => {
     await topicDetailStore.loadWorkspace("thread-1");
 
     expect(get(topicDetailStore).timeline).toEqual([
-      { id: "event-seed", type: "actor_statement" },
+      { id: "event-seed", type: "message_posted" },
     ]);
     expect(get(topicDetailStore).timelineThreadId).toBe("thread-1");
 
@@ -79,7 +79,7 @@ describe("topicDetailStore", () => {
     pendingRefresh.resolve({
       thread: { id: "thread-1", title: "Refreshed workspace" },
       context: {
-        recent_events: [{ id: "event-1", type: "actor_statement" }],
+        recent_events: [{ id: "event-1", type: "message_posted" }],
         documents: [{ id: "doc-1", title: "Doc 1" }],
         open_cards: [{ id: "card-1", title: "Example" }],
       },

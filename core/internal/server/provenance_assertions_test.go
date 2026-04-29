@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func assertActorStatementProvenance(t *testing.T, event map[string]any) {
+func assertEventProvenance(t *testing.T, event map[string]any) {
 	t.Helper()
 
 	eventID, _ := event["id"].(string)
@@ -19,9 +19,9 @@ func assertActorStatementProvenance(t *testing.T, event map[string]any) {
 	}
 
 	sources := extractProvenanceSources(t, provenance["sources"])
-	want := []string{"actor_statement:" + eventID}
+	want := []string{"event:" + eventID}
 	if !reflect.DeepEqual(sources, want) {
-		t.Fatalf("unexpected actor statement provenance: got %#v want %#v", sources, want)
+		t.Fatalf("unexpected event provenance: got %#v want %#v", sources, want)
 	}
 }
 

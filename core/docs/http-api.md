@@ -89,6 +89,6 @@ Drift from the live router is gated in CI: `core` runs `TestExactRegisterRoutesC
   - Standard GET responses never repair or recompute projections inline; they return the best currently materialized data plus freshness metadata.
 
 - Meaningful topic activity for stale-topic clearing:
-  - The current activity set is explicit: `actor_statement`, `topic_created`, `topic_updated`, `topic_archived`, `topic_trashed`, `topic_restored`, `card_created`, `card_updated`, `card_moved`, `card_resolved`, `decision_needed`, `intervention_needed`, `decision_made`, `receipt_added`, `review_completed`, `document_created`, `document_revised`, `document_trashed`, `board_created`, `board_updated`, plus any non-create topic/card edits that materially change operator-authored state.
-  - Coordination noise does not count as activity: inbox acknowledgments, exception notifications, topic-creation bookkeeping, and derived board/card membership maintenance.
+  - The current activity set is explicit: topic/card/document/board lifecycle events, `message_posted`, `receipt_added`, `review_completed`, `human_attention_requested`, `human_attention_responded`, and `exception_raised`, plus non-create topic/card edits that materially change operator-authored state.
+  - Coordination noise does not count as activity: agent notification read/dismissal, topic-creation bookkeeping, and derived projection maintenance.
 - Topic, board, and card backing-thread linkage is exposed through `thread_id` on the canonical resource shape; keeping those backing links synchronized no longer emits an operator-visible timeline event or bumps the topic’s visible update clock.

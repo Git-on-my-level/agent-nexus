@@ -48,12 +48,12 @@ func TestBoardsWorkspaceAndThreadWorkspaceMemberships(t *testing.T) {
 	postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-1",
 		"event":{
-			"type":"decision_needed",
+			"type":"card_updated",
 			"thread_id":"`+memberThreadID+`",
-			"refs":["thread:`+memberThreadID+`"],
-			"summary":"Need member-thread decision",
-			"payload":{"decision":"Approve board work"},
-			"provenance":{"sources":["seed:board-workspace"]}
+			"refs":["card:board-member-card-1","board:board-member-1"],
+			"summary":"Member thread updated",
+			"payload":{"changed_fields":["title"]},
+			"provenance":{"sources":["event:board-workspace"]}
 		}
 	}`, http.StatusCreated).Body.Close()
 
@@ -613,11 +613,11 @@ func TestBoardLifecycleEventsAndConflictValidation(t *testing.T) {
 	boardEventsByType := map[string]map[string]any{}
 	for _, event := range timelinePayload.Events {
 		eventType := asString(event["type"])
-		if strings.HasPrefix(eventType, "board_") {
+		if strings.HasPrefix(eventType, "board_") || strings.HasPrefix(eventType, "card_") {
 			boardEventsByType[eventType] = event
 		}
 	}
-	expectedBoardEvents := []string{"board_created", "board_updated", "board_card_added", "board_card_moved", "board_card_archived"}
+	expectedBoardEvents := []string{"board_created", "board_updated"}
 	for _, eventType := range expectedBoardEvents {
 		event, ok := boardEventsByType[eventType]
 		if !ok {
@@ -634,10 +634,6 @@ func TestBoardLifecycleEventsAndConflictValidation(t *testing.T) {
 	if !containsAny(boardEventsByType["board_created"]["refs"].([]any), "thread:"+primaryThreadID) || !containsAny(boardEventsByType["board_created"]["refs"].([]any), "document:"+primaryDocumentID) {
 		t.Fatalf("expected primary thread/document refs on board_created, got %#v", boardEventsByType["board_created"]["refs"])
 	}
-	if !containsAny(boardEventsByType["board_card_moved"]["refs"].([]any), "card:"+asString(addCardPayload.Card["id"])) || !containsAny(boardEventsByType["board_card_archived"]["refs"].([]any), "card:"+asString(addCardPayload.Card["id"])) {
-		t.Fatalf("expected card refs on move/archive events, got moved=%#v archived=%#v", boardEventsByType["board_card_moved"]["refs"], boardEventsByType["board_card_archived"]["refs"])
-	}
-
 	cardBackingThreadID := asString(addCardPayload.Card["thread_id"])
 	if cardBackingThreadID == "" {
 		t.Fatalf("expected card.thread_id for lifecycle timeline lookup, got %#v", addCardPayload.Card)
@@ -1198,8 +1194,8 @@ func TestBoardCardPatchAllowsContractValidNoOpShapes(t *testing.T) {
 	}
 	assertTimelineStableOrder(t, timelinePayload.Events)
 	for _, event := range timelinePayload.Events {
-		if asString(event["type"]) == "board_card_updated" {
-			t.Fatalf("expected semantic no-op patches to avoid board_card_updated events, got %#v", timelinePayload.Events)
+		if asString(event["type"]) == "card_updated" {
+			t.Fatalf("expected semantic no-op patches to avoid card_updated events, got %#v", timelinePayload.Events)
 		}
 	}
 }
@@ -1548,18 +1544,8 @@ func TestCardMoveResolutionTransitionsAndEvents(t *testing.T) {
 	if err := json.NewDecoder(boardTimelineResp.Body).Decode(&boardTimelinePayload); err != nil {
 		t.Fatalf("decode board timeline response: %v", err)
 	}
-	var boardMovedEvent map[string]any
-	for _, event := range boardTimelinePayload.Events {
-		if asString(event["type"]) == "board_card_moved" {
-			boardMovedEvent = event
-			break
-		}
-	}
-	if boardMovedEvent == nil {
-		t.Fatalf("expected board_card_moved event in board timeline, got %#v", boardTimelinePayload.Events)
-	}
-	if !containsAny(boardMovedEvent["refs"].([]any), "board:"+boardID) || !containsAny(boardMovedEvent["refs"].([]any), "card:"+cardID) {
-		t.Fatalf("expected board and card refs on board_card_moved, got %#v", boardMovedEvent["refs"])
+	if len(boardTimelinePayload.Events) == 0 {
+		t.Fatalf("expected board timeline events, got %#v", boardTimelinePayload.Events)
 	}
 
 	cardTimelineResp, err := http.Get(h.baseURL + "/threads/" + cardThreadID + "/timeline")

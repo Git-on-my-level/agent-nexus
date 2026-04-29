@@ -260,14 +260,14 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	refs := uniqueStringsInOrder(append([]string{"thread:" + threadID, subjectRef}, relatedRefs...))
 
 	payload := map[string]any{
-		"kind":                kind,
-		"title":               title,
-		"subject_ref":         subjectRef,
-		"related_refs":        relatedRefs,
-		"requester_actor_id":  requesterActorID,
-		"requester_agent_id":  requesterAgentID,
-		"requester_label":     requesterLabel,
-		"response_proposals":  responseProposals,
+		"kind":               kind,
+		"title":              title,
+		"subject_ref":        subjectRef,
+		"related_refs":       relatedRefs,
+		"requester_actor_id": requesterActorID,
+		"requester_agent_id": requesterAgentID,
+		"requester_label":    requesterLabel,
+		"response_proposals": responseProposals,
 	}
 	if body != "" {
 		payload["body"] = body
@@ -309,7 +309,7 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 			"refs":      refs,
 			"payload":   payload,
 			"provenance": map[string]any{
-				"sources": []string{"actor_statement:cli.human"},
+				"sources": []string{"event:cli.human"},
 			},
 		},
 	}

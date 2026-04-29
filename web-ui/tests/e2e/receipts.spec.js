@@ -8,7 +8,8 @@ test("thread work tab points operators to card-scoped receipts", async ({
   const actorId = "actor-receipt-e2e";
 
   await page.addInitScript((selectedActorId) => {
-    window.localStorage.setItem("anx_ui_actor_id", selectedActorId);
+    window.localStorage.setItem("anx_ui_actor_id:local", selectedActorId);
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
   }, actorId);
 
   await page.route(/\/actors$/, async (route) => {
@@ -43,7 +44,7 @@ test("thread work tab points operators to card-scoped receipts", async ({
           open_cards: [],
           updated_at: "2026-03-04T00:00:00.000Z",
           updated_by: actorId,
-          provenance: { sources: ["actor_statement:event-1001"] },
+          provenance: { sources: ["event:event-1001"] },
         },
       }),
     });
@@ -65,7 +66,7 @@ test("thread work tab points operators to card-scoped receipts", async ({
           open_cards: [],
           updated_at: "2026-03-04T00:00:00.000Z",
           updated_by: actorId,
-          provenance: { sources: ["actor_statement:event-1001"] },
+          provenance: { sources: ["event:event-1001"] },
         },
         context: {
           recent_events: [],

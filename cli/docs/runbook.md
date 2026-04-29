@@ -169,14 +169,14 @@ The runner:
 ## Typed Command Smoke
 
 ```bash
-printf '{"topic":{"title":"Incident #42","summary":"Investigate #42","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":[],"provenance":{"sources":["actor_statement:example"]}}}\n' | anx --agent agent-a topics create
+printf '{"topic":{"title":"Incident #42","summary":"Investigate #42","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":[],"provenance":{"sources":["event:example"]}}}\n' | anx --agent agent-a topics create
 anx --agent agent-a topics list --state active
 
 anx --agent agent-a events stream --max-events 1
 anx --agent agent-a inbox stream --max-events 1
 anx --agent agent-a events stream --follow
 # Diagnostic/local helper over backing-thread timelines; prefer topics/cards/boards for primary coordination reads.
-anx --agent agent-a events list --thread-id thread_123 --thread-id thread_456 --type actor_statement --mine --full-id --max-events 20
+anx --agent agent-a events list --thread-id thread_123 --thread-id thread_456 --type message_posted --mine --full-id --max-events 20
 anx --agent agent-a provenance walk --from event:event_123 --depth 2
 anx --agent agent-a topics get --topic-id topic_123
 anx --agent agent-a topics create --title "Launch" --summary "Coordinate launch work"
@@ -185,7 +185,7 @@ anx --agent agent-a topics workspace --topic-id topic_123 --full-id
 # Backing-thread reads (tooling/diagnostics; prefer topics workspace for operator triage)
 anx --agent agent-a threads inspect --thread-id thread_123 --max-events 50 --full-id
 anx --agent agent-a threads context --state active --full-id
-anx --agent agent-a threads recommendations --thread-id thread_123 --full-id --full-summary
+anx --agent agent-a threads workspace --thread-id thread_123 --full-id
 anx --agent agent-a docs content --document-id product-constitution
 anx --agent agent-a artifacts inspect --artifact-id artifact_123
 anx --agent agent-a boards list --state active
@@ -211,7 +211,7 @@ shape; the agent-facing Card workflow is `cards create/revise/move/assign/resolv
 Draft/commit flow:
 
 ```bash
-printf '%s\n' '{"topic":{"title":"Drafted incident","summary":"Staged via draft","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":[],"provenance":{"sources":["actor_statement:example"]}}}' | anx --agent agent-a draft create --command topics.create
+printf '%s\n' '{"topic":{"title":"Drafted incident","summary":"Staged via draft","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":[],"provenance":{"sources":["event:example"]}}}' | anx --agent agent-a draft create --command topics.create
 anx --agent agent-a draft list
 anx --agent agent-a draft commit <draft-id>
 anx --agent agent-a draft discard <draft-id>
@@ -242,7 +242,7 @@ Generated board help lands in:
 
 Machine-facing notes for the targeted automation commands:
 
-- `events list`, `events get`, `events stream`, `inbox stream`, `topics workspace`, `threads inspect`, `threads context`, and `threads recommendations` include a stable `command_id` alongside `command`.
+- `events list`, `events get`, `events stream`, `inbox stream`, `topics workspace`, `threads inspect`, `threads context`, and `threads workspace` include a stable `command_id` alongside `command`.
 - User-facing paths with registered contract ids report those ids in JSON envelopes even when the CLI composes lower-level reads underneath (`events list` currently composes backing-thread timelines); purely local helpers keep stable local ids.
 - `events tail` and `inbox tail` resolve to canonical machine command identity (`events stream` / `inbox stream`) in JSON success/error envelopes.
 - Stream frames expose a normalized payload contract:

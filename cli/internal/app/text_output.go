@@ -86,8 +86,6 @@ func formatCommandSummary(commandID string, body any) string {
 		return formatThreadWorkspace(body)
 	case "threads.workspace":
 		return formatThreadWorkspace(body)
-	case "threads.recommendations":
-		return formatThreadRecommendations(body)
 	case "threads.timeline":
 		return formatThreadTimeline(body)
 	case "artifacts.get", "artifacts.create", "artifacts.trash", "artifacts.restore", "artifacts.archive", "artifacts.unarchive":
@@ -165,9 +163,8 @@ func formatThreadContext(body any) string {
 	lines = append(lines, formatThreadRecord(thread))
 	collaboration := extractNestedMap(root, "collaboration_summary")
 	if collaboration != nil {
-		lines = appendEventListSection(lines, "recommendations", asSlice(collaboration["recommendations"]), fullID)
-		lines = appendEventListSection(lines, "decision_requests", asSlice(collaboration["decision_requests"]), fullID)
-		lines = appendEventListSection(lines, "decisions", asSlice(collaboration["decisions"]), fullID)
+		lines = appendArtifactListSection(lines, "key_artifacts", asSlice(collaboration["key_artifacts"]), fullID)
+		lines = appendOpenCardListSection(lines, "open_cards", asSlice(collaboration["open_cards"]), fullID)
 	}
 	lines = appendEventListSection(lines, "recent_events", asSlice(root["recent_events"]), fullID)
 	lines = appendArtifactListSection(lines, "key_artifacts", asSlice(root["key_artifacts"]), fullID)
@@ -187,27 +184,19 @@ func formatThreadContextAggregate(root map[string]any, fullID bool) string {
 			continue
 		}
 		thread := asMap(context["thread"])
-		collaboration := asMap(context["collaboration_summary"])
-		recommendations := len(asSlice(collaboration["recommendations"]))
-		decisionRequests := len(asSlice(collaboration["decision_requests"]))
-		decisions := len(asSlice(collaboration["decisions"]))
 		openCards := len(asSlice(context["open_cards"]))
 		documents := len(asSlice(context["documents"]))
 		lines = append(lines, fmt.Sprintf(
-			"- %s :: recommendations=%d :: decision_requests=%d :: decisions=%d :: open_cards=%d :: documents=%d",
+			"- %s :: open_cards=%d :: documents=%d",
 			displayListScanID(thread, "thread", false),
-			recommendations,
-			decisionRequests,
-			decisions,
 			openCards,
 			documents,
 		))
 	}
 
 	if collaboration := extractNestedMap(root, "collaboration_summary"); collaboration != nil {
-		lines = appendEventListSection(lines, "recommendations", asSlice(collaboration["recommendations"]), fullID)
-		lines = appendEventListSection(lines, "decision_requests", asSlice(collaboration["decision_requests"]), fullID)
-		lines = appendEventListSection(lines, "decisions", asSlice(collaboration["decisions"]), fullID)
+		lines = appendArtifactListSection(lines, "key_artifacts", asSlice(collaboration["key_artifacts"]), fullID)
+		lines = appendOpenCardListSection(lines, "open_cards", asSlice(collaboration["open_cards"]), fullID)
 	}
 	lines = appendEventListSection(lines, "recent_events", asSlice(root["recent_events"]), fullID)
 	lines = appendArtifactListSection(lines, "key_artifacts", asSlice(root["key_artifacts"]), fullID)
@@ -281,9 +270,8 @@ func formatThreadInspect(body any) string {
 	context := extractNestedMap(root, "context")
 	fullID := asBool(root["full_id"])
 	if collaboration != nil {
-		lines = appendEventListSection(lines, "recommendations", asSlice(collaboration["recommendations"]), fullID)
-		lines = appendEventListSection(lines, "decision_requests", asSlice(collaboration["decision_requests"]), fullID)
-		lines = appendEventListSection(lines, "decisions", asSlice(collaboration["decisions"]), fullID)
+		lines = appendArtifactListSection(lines, "key_artifacts", asSlice(collaboration["key_artifacts"]), fullID)
+		lines = appendOpenCardListSection(lines, "open_cards", asSlice(collaboration["open_cards"]), fullID)
 	}
 	if context != nil {
 		lines = appendEventListSection(lines, "recent_events", asSlice(context["recent_events"]), fullID)
@@ -296,35 +284,17 @@ func formatThreadInspect(body any) string {
 	return strings.Join(lines, "\n")
 }
 
-func formatThreadRecommendations(body any) string {
-	root := asMap(body)
-	lines := make([]string, 0, 40)
-	lines = append(lines, formatThreadRecord(extractNestedMap(root, "thread")))
-	fullID := asBool(root["full_id"])
-	fullSummary := asBool(root["full_summary"])
-	lines = appendRecommendationEventSection(lines, "recommendations", extractNestedSlice(extractNestedMap(root, "recommendations"), "items"), fullID, fullSummary)
-	lines = appendRecommendationEventSection(lines, "decision_requests", extractNestedSlice(extractNestedMap(root, "decision_requests"), "items"), fullID, fullSummary)
-	lines = appendRecommendationEventSection(lines, "decisions", extractNestedSlice(extractNestedMap(root, "decisions"), "items"), fullID, fullSummary)
-	lines = appendInboxListSection(lines, "pending_decisions", extractNestedSlice(extractNestedMap(root, "pending_decisions"), "items"), fullID)
-	lines = appendWarningListSection(lines, "warnings", extractNestedSlice(extractNestedMap(root, "warnings"), "items"))
-	lines = appendScalar(lines, "total_review_items", root, "total_review_items")
-	lines = appendFollowUpSection(lines, extractNestedMap(root, "follow_up"))
-	return strings.Join(lines, "\n")
-}
-
 func formatThreadWorkspace(body any) string {
 	root := asMap(body)
 	lines := make([]string, 0, 64)
 	lines = append(lines, formatThreadRecord(extractNestedMap(root, "thread")))
 	fullID := asBool(root["full_id"])
-	fullSummary := asBool(root["full_summary"])
 
 	collaboration := extractNestedMap(root, "collaboration")
 	context := extractNestedMap(root, "context")
 	if collaboration != nil {
-		lines = appendRecommendationEventSection(lines, "recommendations", extractNestedSlice(collaboration, "recommendations"), fullID, fullSummary)
-		lines = appendRecommendationEventSection(lines, "decision_requests", extractNestedSlice(collaboration, "decision_requests"), fullID, fullSummary)
-		lines = appendRecommendationEventSection(lines, "decisions", extractNestedSlice(collaboration, "decisions"), fullID, fullSummary)
+		lines = appendArtifactListSection(lines, "key_artifacts", asSlice(collaboration["key_artifacts"]), fullID)
+		lines = appendOpenCardListSection(lines, "open_cards", asSlice(collaboration["open_cards"]), fullID)
 	}
 	if context != nil {
 		lines = appendEventListSection(lines, "recent_events", asSlice(context["recent_events"]), fullID)
@@ -334,10 +304,7 @@ func formatThreadWorkspace(body any) string {
 	}
 	inbox := extractNestedMap(root, "inbox")
 	lines = appendInboxListSection(lines, "inbox_items", extractNestedSlice(inbox, "items"), fullID)
-	lines = appendInboxListSection(lines, "pending_decisions", extractNestedSlice(extractNestedMap(root, "pending_decisions"), "items"), fullID)
-	lines = appendRecommendationEventSection(lines, "related_recommendations", extractNestedSlice(extractNestedMap(root, "related_recommendations"), "items"), fullID, fullSummary)
-	lines = appendRecommendationEventSection(lines, "related_decision_requests", extractNestedSlice(extractNestedMap(root, "related_decision_requests"), "items"), fullID, fullSummary)
-	lines = appendRecommendationEventSection(lines, "related_decisions", extractNestedSlice(extractNestedMap(root, "related_decisions"), "items"), fullID, fullSummary)
+	lines = appendInboxListSection(lines, "pending_attention", extractNestedSlice(extractNestedMap(root, "pending_attention"), "items"), fullID)
 	lines = appendWarningListSection(lines, "warnings", extractNestedSlice(extractNestedMap(root, "warnings"), "items"))
 	lines = appendScalar(lines, "total_review_items", root, "total_review_items")
 	lines = appendFollowUpSection(lines, extractNestedMap(root, "follow_up"))
@@ -1038,18 +1005,6 @@ func appendEventListSection(lines []string, label string, items []any, fullID bo
 	return lines
 }
 
-func appendRecommendationEventSection(lines []string, label string, items []any, fullID bool, fullSummary bool) []string {
-	lines = append(lines, fmt.Sprintf("%s (%d):", label, len(items)))
-	for _, raw := range items {
-		item := asMap(raw)
-		if item == nil {
-			continue
-		}
-		lines = append(lines, "- "+renderRecommendationEventItemWithMode(item, fullID, fullSummary))
-	}
-	return lines
-}
-
 func appendInboxListSection(lines []string, label string, items []any, fullID bool) []string {
 	lines = append(lines, fmt.Sprintf("%s (%d):", label, len(items)))
 	for _, raw := range items {
@@ -1126,10 +1081,8 @@ func appendFollowUpSection(lines []string, followUp map[string]any) []string {
 	}
 	template := strings.TrimSpace(anyString(followUp["events_get_template"]))
 	examples := stringList(followUp["events_get_examples"])
-	recommendationsList := strings.TrimSpace(anyString(followUp["recommendations_list_command"]))
-	decisionsList := strings.TrimSpace(anyString(followUp["decisions_list_command"]))
 	contextRefresh := strings.TrimSpace(anyString(followUp["context_refresh_command"]))
-	if template == "" && len(examples) == 0 && recommendationsList == "" && decisionsList == "" && contextRefresh == "" {
+	if template == "" && len(examples) == 0 && contextRefresh == "" {
 		return lines
 	}
 	lines = append(lines, "follow_up:")
@@ -1138,12 +1091,6 @@ func appendFollowUpSection(lines []string, followUp map[string]any) []string {
 	}
 	for _, example := range examples {
 		lines = append(lines, "- events_get_example: "+example)
-	}
-	if recommendationsList != "" {
-		lines = append(lines, "- recommendations_list: "+recommendationsList)
-	}
-	if decisionsList != "" {
-		lines = append(lines, "- decisions_list: "+decisionsList)
 	}
 	if contextRefresh != "" {
 		lines = append(lines, "- context_refresh: "+contextRefresh)
@@ -1248,34 +1195,6 @@ func renderEventListItemWithMode(item map[string]any, fullID bool) string {
 		prefix = "[ARCHIVED] "
 	}
 	return compactSummary(displayEventID(item, fullID), prefix+anyString(item["type"]), summary)
-}
-
-func renderRecommendationEventItemWithMode(item map[string]any, fullID bool, fullSummary bool) string {
-	summary := firstNonEmpty(anyString(item["summary_preview"]), anyString(item["summary"]), anyString(item["created_at"]))
-	if fullSummary {
-		summary = firstNonEmpty(anyString(item["summary"]), anyString(item["summary_preview"]), anyString(item["created_at"]))
-	}
-	actor := strings.TrimSpace(anyString(item["actor_id"]))
-	if actor == "" {
-		actor = "unknown_actor"
-	}
-	createdAt := strings.TrimSpace(anyString(item["created_at"]))
-	if createdAt == "" {
-		createdAt = "unknown_time"
-	}
-	sources := stringList(item["provenance_sources"])
-	sourceLabel := ""
-	if len(sources) > 0 {
-		sourceLabel = "sources=" + strings.Join(sources, ",")
-	}
-	return compactSummary(
-		displayEventID(item, fullID),
-		anyString(item["type"]),
-		"actor="+actor,
-		"at="+createdAt,
-		summary,
-		sourceLabel,
-	)
 }
 
 func displayEventID(item map[string]any, fullID bool) string {

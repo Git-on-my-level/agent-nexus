@@ -337,7 +337,7 @@ func TestInboxGetAliasMapsToList(t *testing.T) {
 		t.Fatalf("expected viewing_as actor_id actor_123, got %#v", payload)
 	}
 	categoryReference, _ := data["category_reference"].(map[string]any)
-	if got := anyStringValue(categoryReference["action_needed"]); !strings.Contains(got, "must decide") {
+	if got := anyStringValue(categoryReference["action_needed"]); !strings.Contains(got, "take direct action") {
 		t.Fatalf("expected category reference in alias response, got %#v", payload)
 	}
 	items, _ := data["items"].([]any)
@@ -345,7 +345,7 @@ func TestInboxGetAliasMapsToList(t *testing.T) {
 		t.Fatalf("expected one inbox item, got %#v", payload)
 	}
 	item, _ := items[0].(map[string]any)
-	if got := anyStringValue(item["category_description"]); !strings.Contains(got, "must decide") {
+	if got := anyStringValue(item["category_description"]); !strings.Contains(got, "take direct action") {
 		t.Fatalf("expected per-item category_description in alias response, got %#v", payload)
 	}
 }
@@ -474,14 +474,14 @@ func TestInboxListTypeFilterRejectsLegacyCategoryAliases(t *testing.T) {
 		"--base-url", server.URL,
 		"inbox", "list",
 		"--thread-id", "thread_1234567890",
-		"--type", "decision_needed",
+		"--type", "human_attention_requested",
 	})
 	payload := assertEnvelopeError(t, raw)
 	errObj, _ := payload["error"].(map[string]any)
 	if errObj == nil || anyStringValue(errObj["code"]) != "invalid_flags" {
 		t.Fatalf("expected invalid_flags error, got %#v", payload)
 	}
-	if got := anyStringValue(errObj["message"]); !strings.Contains(got, "legacy inbox type/category aliases are no longer supported") || !strings.Contains(got, "decision_needed") {
+	if got := anyStringValue(errObj["message"]); !strings.Contains(got, "legacy inbox type/category aliases are no longer supported") || !strings.Contains(got, "human_attention_requested") {
 		t.Fatalf("expected legacy alias rejection message, got %q", got)
 	}
 	mu.Lock()
@@ -529,7 +529,7 @@ func TestInboxListIncludesViewingAsAndCategoryReference(t *testing.T) {
 		t.Fatalf("expected viewing_as actor_id actor_123, got %#v", data)
 	}
 	categoryReference, _ := data["category_reference"].(map[string]any)
-	if got := anyStringValue(categoryReference["action_needed"]); !strings.Contains(got, "must decide") {
+	if got := anyStringValue(categoryReference["action_needed"]); !strings.Contains(got, "take direct action") {
 		t.Fatalf("expected action_needed category description, got %#v", data)
 	}
 	items, _ := data["items"].([]any)
@@ -537,7 +537,7 @@ func TestInboxListIncludesViewingAsAndCategoryReference(t *testing.T) {
 		t.Fatalf("expected one inbox item, got %#v", data)
 	}
 	item, _ := items[0].(map[string]any)
-	if got := anyStringValue(item["category_description"]); !strings.Contains(got, "must decide") {
+	if got := anyStringValue(item["category_description"]); !strings.Contains(got, "take direct action") {
 		t.Fatalf("expected item category_description, got %#v", item)
 	}
 
@@ -549,7 +549,7 @@ func TestInboxListIncludesViewingAsAndCategoryReference(t *testing.T) {
 	if !strings.Contains(textOut, "viewing_as: profile=agent-a :: username=agent.alpha :: actor_id=actor_123") {
 		t.Fatalf("expected viewing_as summary in default text output, got:\n%s", textOut)
 	}
-	if !strings.Contains(textOut, "category_reference:") || !strings.Contains(textOut, "action_needed: A responsible actor must decide") {
+	if !strings.Contains(textOut, "category_reference:") || !strings.Contains(textOut, "action_needed: A responsible actor must take direct action or own the next step.") {
 		t.Fatalf("expected category reference in default text output, got:\n%s", textOut)
 	}
 }
@@ -631,7 +631,7 @@ func TestEventsUnknownSubcommandGuidance(t *testing.T) {
 	if !strings.Contains(message, "did you mean `anx events stream`?") {
 		t.Fatalf("expected stream correction, got %q", message)
 	}
-	if !strings.Contains(message, "`anx events list --thread-id <thread-id> --type actor_statement --mine --full-id`") || !strings.Contains(message, "`anx events tail --max-events 20`") {
+	if !strings.Contains(message, "`anx events list --thread-id <thread-id> --type message_posted --mine --full-id`") || !strings.Contains(message, "`anx events tail --max-events 20`") {
 		t.Fatalf("expected list/tail examples, got %q", message)
 	}
 }
@@ -647,9 +647,9 @@ func TestEventsListCommandFiltersAndLimits(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{
 			"events":[
-				{"id":"event_1","thread_id":"thread_1","type":"actor_statement","summary":"first"},
-				{"id":"event_2","thread_id":"thread_1","type":"decision_needed","summary":"second"},
-				{"id":"event_3","thread_id":"thread_1","type":"actor_statement","summary":"third"}
+				{"id":"event_1","thread_id":"thread_1","type":"message_posted","summary":"first"},
+				{"id":"event_2","thread_id":"thread_1","type":"human_attention_requested","summary":"second"},
+				{"id":"event_3","thread_id":"thread_1","type":"message_posted","summary":"third"}
 			],
 			"artifacts":{}
 		}`))
@@ -662,7 +662,7 @@ func TestEventsListCommandFiltersAndLimits(t *testing.T) {
 		"--base-url", server.URL,
 		"events", "list",
 		"--thread-id", "thread_1",
-		"--type", "actor_statement",
+		"--type", "message_posted",
 		"--max-events", "1",
 	})
 	payload := assertEnvelopeOK(t, raw)
@@ -695,10 +695,10 @@ func TestEventsListCommandFiltersAndLimits(t *testing.T) {
 		"--base-url", server.URL,
 		"events", "list",
 		"--thread-id", "thread_1",
-		"--type", "actor_statement",
+		"--type", "message_posted",
 		"--max-events", "1",
 	})
-	if !strings.Contains(textOut, "types:") || !strings.Contains(textOut, "- actor_statement") {
+	if !strings.Contains(textOut, "types:") || !strings.Contains(textOut, "- message_posted") {
 		t.Fatalf("expected default text output to include selected filter types, got:\n%s", textOut)
 	}
 }
@@ -714,8 +714,8 @@ func TestEventsListMaxFlagAliasMatchesMaxEvents(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{
 			"events":[
-				{"id":"event_1","thread_id":"thread_1","type":"actor_statement","summary":"first"},
-				{"id":"event_2","thread_id":"thread_1","type":"actor_statement","summary":"second"}
+				{"id":"event_1","thread_id":"thread_1","type":"message_posted","summary":"first"},
+				{"id":"event_2","thread_id":"thread_1","type":"message_posted","summary":"second"}
 			],
 			"artifacts":{}
 		}`))
@@ -728,7 +728,7 @@ func TestEventsListMaxFlagAliasMatchesMaxEvents(t *testing.T) {
 		"--base-url", server.URL,
 		"events", "list",
 		"--thread-id", "thread_1",
-		"--type", "actor_statement",
+		"--type", "message_posted",
 		"--max", "1",
 	})
 	payload := assertEnvelopeOK(t, raw)
@@ -753,8 +753,8 @@ func TestEventsListCommandSupportsMineActorFilterAndFullID(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{
 			"events":[
-				{"id":"` + mineEventID + `","thread_id":"thread_1","type":"actor_statement","actor_id":"` + mineActorID + `","payload":{"recommendation":"Ship Friday rescue scope"}},
-				{"id":"event_other_actor","thread_id":"thread_1","type":"actor_statement","actor_id":"actor-other","summary":"other recommendation"}
+				{"id":"` + mineEventID + `","thread_id":"thread_1","type":"message_posted","actor_id":"` + mineActorID + `","payload":{"recommendation":"Ship Friday rescue scope"}},
+				{"id":"event_other_actor","thread_id":"thread_1","type":"message_posted","actor_id":"actor-other","summary":"other recommendation"}
 			],
 			"artifacts":{}
 		}`))
@@ -770,7 +770,7 @@ func TestEventsListCommandSupportsMineActorFilterAndFullID(t *testing.T) {
 		"--agent", "agent-a",
 		"events", "list",
 		"--thread-id", "thread_1",
-		"--type", "actor_statement",
+		"--type", "message_posted",
 		"--mine",
 		"--full-id",
 	})
@@ -799,7 +799,7 @@ func TestEventsListCommandSupportsMineActorFilterAndFullID(t *testing.T) {
 		"--agent", "agent-a",
 		"events", "list",
 		"--thread-id", "thread_1",
-		"--type", "actor_statement",
+		"--type", "message_posted",
 		"--mine",
 		"--full-id",
 	})
@@ -812,7 +812,7 @@ func TestEventsListCommandSupportsMineActorFilterAndFullID(t *testing.T) {
 		"--agent", "agent-a",
 		"events", "list",
 		"--thread-id", "thread_1",
-		"--type", "actor_statement",
+		"--type", "message_posted",
 		"--mine",
 	})
 	if strings.Contains(textShort, mineEventID) {
@@ -841,13 +841,13 @@ func TestEventsListCommandSupportsMultipleThreadIDs(t *testing.T) {
 		switch r.URL.Path {
 		case "/threads/thread_1/timeline":
 			_, _ = w.Write([]byte(`{"thread_id":"thread_1","events":[
-				{"id":"event_1","thread_id":"thread_1","type":"actor_statement","summary":"first","ts":"2026-03-06T12:01:00Z","created_at":"2026-03-06T12:10:00Z"},
-				{"id":"event_2","thread_id":"thread_1","type":"actor_statement","summary":"second","ts":"2026-03-06T12:02:00Z","created_at":"2026-03-06T12:11:00Z"}
+				{"id":"event_1","thread_id":"thread_1","type":"message_posted","summary":"first","ts":"2026-03-06T12:01:00Z","created_at":"2026-03-06T12:10:00Z"},
+				{"id":"event_2","thread_id":"thread_1","type":"message_posted","summary":"second","ts":"2026-03-06T12:02:00Z","created_at":"2026-03-06T12:11:00Z"}
 			],"artifacts":{"artifact_1":{"id":"artifact_1","kind":"note"}}}`))
 		case "/threads/thread_2/timeline":
 			_, _ = w.Write([]byte(`{"thread_id":"thread_2","events":[
-				{"id":"event_3","thread_id":"thread_2","type":"actor_statement","summary":"third","ts":"2026-03-06T12:03:00Z","created_at":"2026-03-06T12:00:00Z"},
-				{"id":"event_4","thread_id":"thread_2","type":"actor_statement","summary":"fourth","ts":"2026-03-06T12:04:00Z","created_at":"2026-03-06T12:01:00Z"}
+				{"id":"event_3","thread_id":"thread_2","type":"message_posted","summary":"third","ts":"2026-03-06T12:03:00Z","created_at":"2026-03-06T12:00:00Z"},
+				{"id":"event_4","thread_id":"thread_2","type":"message_posted","summary":"fourth","ts":"2026-03-06T12:04:00Z","created_at":"2026-03-06T12:01:00Z"}
 			],"artifacts":{"artifact_2":{"id":"artifact_2","kind":"report"}}}`))
 		default:
 			http.NotFound(w, r)
@@ -862,7 +862,7 @@ func TestEventsListCommandSupportsMultipleThreadIDs(t *testing.T) {
 		"events", "list",
 		"--thread-id", "thread_1",
 		"--thread-id", "thread_2",
-		"--type", "actor_statement",
+		"--type", "message_posted",
 		"--max-events", "2",
 	})
 	payload := assertEnvelopeOK(t, raw)
@@ -1689,14 +1689,14 @@ func TestEventsExplainListMode(t *testing.T) {
 	if !strings.Contains(raw, "Communication: Direct communication or important non-structured information.") {
 		t.Fatalf("expected communication group in explain output, got %q", raw)
 	}
-	if !strings.Contains(raw, "Interventions: Single clear path exists, but a responsible actor must complete it.") {
-		t.Fatalf("expected interventions group in explain output, got %q", raw)
+	if !strings.Contains(raw, "Inbox Lifecycle: Inbox lifecycle facts, usually emitted by higher-level commands.") {
+		t.Fatalf("expected inbox lifecycle group in explain output, got %q", raw)
 	}
 	if !strings.Contains(raw, "- message_posted: Use for direct communication that belongs on a backing thread; prefer topic/card/board surfaces as the primary operator nouns.") {
 		t.Fatalf("expected message_posted communication guidance in explain output, got %q", raw)
 	}
-	if !strings.Contains(raw, "- intervention_needed: Use when the next step is clear but a responsible actor must perform it.") {
-		t.Fatalf("expected intervention_needed guidance in explain output, got %q", raw)
+	if !strings.Contains(raw, "- human_attention_requested: Use the human command group to ask for operator attention, review, or escalation.") {
+		t.Fatalf("expected human_attention_requested guidance in explain output, got %q", raw)
 	}
 	if !strings.Contains(raw, "- review_completed: prefer `anx reviews create`") {
 		t.Fatalf("expected preferred command guidance in explain output, got %q", raw)
@@ -1729,10 +1729,10 @@ func TestEventsExplainListModeJSON(t *testing.T) {
 			if got := anyStringValue(entry["group"]); got != "Communication" {
 				t.Fatalf("expected message_posted group Communication, got %q entry=%#v", got, entry)
 			}
-		case "intervention_needed":
+		case "human_attention_requested":
 			foundInterventionNeeded = true
-			if got := anyStringValue(entry["group"]); got != "Interventions" {
-				t.Fatalf("expected intervention_needed group Interventions, got %q entry=%#v", got, entry)
+			if got := anyStringValue(entry["group"]); got != "Inbox Lifecycle" {
+				t.Fatalf("expected human_attention_requested group Inbox Lifecycle, got %q entry=%#v", got, entry)
 			}
 		case "review_completed":
 			foundReviewCompleted = true
@@ -1745,7 +1745,7 @@ func TestEventsExplainListModeJSON(t *testing.T) {
 		t.Fatalf("expected message_posted in JSON output, payload=%#v", payload)
 	}
 	if !foundInterventionNeeded {
-		t.Fatalf("expected intervention_needed in JSON output, payload=%#v", payload)
+		t.Fatalf("expected human_attention_requested in JSON output, payload=%#v", payload)
 	}
 	if !foundReviewCompleted {
 		t.Fatalf("expected review_completed in JSON output, payload=%#v", payload)
@@ -1996,7 +1996,7 @@ func TestNormalizeMutationBodyIDsPreservesUnsupportedTypedRefsVerbatim(t *testin
 	app := &App{}
 	body := map[string]any{
 		"event": map[string]any{
-			"type":      "actor_statement",
+			"type":      "message_posted",
 			"thread_id": "thread_123456789",
 			"refs":      []any{"CuStOmType:ABC123"},
 		},
@@ -2124,9 +2124,9 @@ func TestThreadsContextIncludesCollaborationSummarySections(t *testing.T) {
 		_, _ = w.Write([]byte(`{
 			"thread":{"id":"thread_1","title":"Pilot Rescue"},
 			"recent_events":[
-				{"id":"event_actor_1","type":"actor_statement","summary":"support recommends Friday launch"},
-				{"id":"event_need_1","type":"decision_needed","summary":"pick launch day"},
-				{"id":"event_done_1","type":"decision_made","summary":"launch Friday"}
+				{"id":"event_actor_1","type":"message_posted","summary":"support recommends Friday launch"},
+				{"id":"event_need_1","type":"human_attention_requested","summary":"pick launch day"},
+				{"id":"event_done_1","type":"human_attention_responded","summary":"launch Friday"}
 			],
 			"key_artifacts":[
 				{"ref":"artifact:brief_1","artifact":{"id":"artifact_1","kind":"gtm-brief","summary":"Pilot rescue brief"}}
@@ -2151,17 +2151,11 @@ func TestThreadsContextIncludesCollaborationSummarySections(t *testing.T) {
 	if collaboration == nil {
 		t.Fatalf("expected collaboration_summary, got %#v", data)
 	}
-	recommendationCount, _ := collaboration["recommendation_count"].(float64)
-	if got := int(recommendationCount); got != 1 {
-		t.Fatalf("expected recommendation_count=1, got %#v", collaboration)
+	if got := intValue(collaboration["artifact_count"]); got != 1 {
+		t.Fatalf("expected artifact_count=1, got %#v", collaboration)
 	}
-	decisionRequestCount, _ := collaboration["decision_request_count"].(float64)
-	if got := int(decisionRequestCount); got != 1 {
-		t.Fatalf("expected decision_request_count=1, got %#v", collaboration)
-	}
-	decisionCount, _ := collaboration["decision_count"].(float64)
-	if got := int(decisionCount); got != 1 {
-		t.Fatalf("expected decision_count=1, got %#v", collaboration)
+	if _, ok := collaboration["recommendation_count"]; ok {
+		t.Fatalf("expected simplified collaboration_summary without recommendation_count, got %#v", collaboration)
 	}
 
 	textOut := runCLIForTest(t, home, map[string]string{}, nil, []string{
@@ -2169,7 +2163,7 @@ func TestThreadsContextIncludesCollaborationSummarySections(t *testing.T) {
 		"threads", "context",
 		"--thread-id", "thread_1",
 	})
-	if !strings.Contains(textOut, "recommendations (1):") || !strings.Contains(textOut, "decision_requests (1):") || !strings.Contains(textOut, "decisions (1):") {
+	if !strings.Contains(textOut, "recent_events (3):") || !strings.Contains(textOut, "message_posted") || !strings.Contains(textOut, "human_attention_requested") || !strings.Contains(textOut, "human_attention_responded") {
 		t.Fatalf("expected collaboration sections in default text output, got:\n%s", textOut)
 	}
 }
@@ -3050,8 +3044,8 @@ func TestThreadsContextAggregatesAcrossMultipleThreads(t *testing.T) {
 			_, _ = w.Write([]byte(`{
 				"thread":{"id":"thread_1","title":"Pilot Rescue","state":"active"},
 				"recent_events":[
-					{"id":"event_actor_1","type":"actor_statement","summary":"support recommends Friday launch","created_at":"2026-03-06T10:00:00Z"},
-					{"id":"event_need_1","type":"decision_needed","summary":"pick launch day","created_at":"2026-03-06T10:01:00Z"}
+					{"id":"event_actor_1","type":"message_posted","summary":"support recommends Friday launch","created_at":"2026-03-06T10:00:00Z"},
+					{"id":"event_need_1","type":"human_attention_requested","summary":"pick launch day","created_at":"2026-03-06T10:01:00Z"}
 				],
 				"key_artifacts":[{"id":"artifact_1","kind":"brief"}],
 				"open_cards":[{"id":"card_1","status":"open","title":"Publish brief"}]
@@ -3060,8 +3054,8 @@ func TestThreadsContextAggregatesAcrossMultipleThreads(t *testing.T) {
 			_, _ = w.Write([]byte(`{
 				"thread":{"id":"thread_2","title":"Delivery Readiness","state":"active"},
 				"recent_events":[
-					{"id":"event_actor_2","type":"actor_statement","summary":"delivery recommends staged rollout","created_at":"2026-03-06T10:05:00Z"},
-					{"id":"event_done_2","type":"decision_made","summary":"ship Friday scope","created_at":"2026-03-06T10:10:00Z"}
+					{"id":"event_actor_2","type":"message_posted","summary":"delivery recommends staged rollout","created_at":"2026-03-06T10:05:00Z"},
+					{"id":"event_done_2","type":"human_attention_responded","summary":"ship Friday scope","created_at":"2026-03-06T10:10:00Z"}
 				],
 				"key_artifacts":[{"id":"artifact_2","kind":"plan"}],
 				"open_cards":[{"id":"card_2","status":"open","title":"Prep release runbook"}]
@@ -3090,17 +3084,11 @@ func TestThreadsContextAggregatesAcrossMultipleThreads(t *testing.T) {
 	if collaboration == nil {
 		t.Fatalf("expected collaboration summary, got %#v", data)
 	}
-	recommendationCount, _ := collaboration["recommendation_count"].(float64)
-	if got := int(recommendationCount); got != 2 {
-		t.Fatalf("expected recommendation_count=2, got %#v", collaboration)
+	if got := intValue(collaboration["artifact_count"]); got != 2 {
+		t.Fatalf("expected artifact_count=2, got %#v", collaboration)
 	}
-	decisionRequestCount, _ := collaboration["decision_request_count"].(float64)
-	if got := int(decisionRequestCount); got != 1 {
-		t.Fatalf("expected decision_request_count=1, got %#v", collaboration)
-	}
-	decisionCount, _ := collaboration["decision_count"].(float64)
-	if got := int(decisionCount); got != 1 {
-		t.Fatalf("expected decision_count=1, got %#v", collaboration)
+	if _, ok := collaboration["recommendation_count"]; ok {
+		t.Fatalf("expected simplified collaboration_summary without recommendation_count, got %#v", collaboration)
 	}
 
 	textOut := runCLIForTest(t, home, map[string]string{}, nil, []string{
@@ -3109,7 +3097,7 @@ func TestThreadsContextAggregatesAcrossMultipleThreads(t *testing.T) {
 		"--thread-id", "thread_1",
 		"--thread-id", "thread_2",
 	})
-	if !strings.Contains(textOut, "Thread contexts (2):") || !strings.Contains(textOut, "recommendations (2):") {
+	if !strings.Contains(textOut, "Thread contexts (2):") || !strings.Contains(textOut, "recent_events (4):") || !strings.Contains(textOut, "human_attention_requested") {
 		t.Fatalf("expected aggregate context sections in default text output, got:\n%s", textOut)
 	}
 }
@@ -3192,7 +3180,7 @@ func TestThreadsContextSupportsFullIDForEventSections(t *testing.T) {
 		_, _ = w.Write([]byte(`{
 			"thread":{"id":"thread_1","title":"Pilot Rescue"},
 			"recent_events":[
-				{"id":"` + eventID + `","type":"actor_statement","summary":"ship Friday rescue scope"}
+				{"id":"` + eventID + `","type":"message_posted","summary":"ship Friday rescue scope"}
 			],
 			"key_artifacts":[{"id":"` + artifactID + `","kind":"brief","summary":"Launch brief"}],
 			"open_cards":[{"id":"` + cardID + `","status":"open","title":"Publish launch brief"}]
@@ -3249,8 +3237,8 @@ func TestThreadsInspectBuildsCoordinationView(t *testing.T) {
 			_, _ = w.Write([]byte(`{
 				"thread":{"id":"thread_1","title":"Pilot Rescue","state":"active","type":"initiative"},
 				"recent_events":[
-					{"id":"` + eventID + `","thread_id":"thread_1","type":"actor_statement","summary":"ship Friday rescue scope"},
-					{"id":"event_need_1","thread_id":"thread_1","type":"decision_needed","summary":"approve launch date"}
+					{"id":"` + eventID + `","thread_id":"thread_1","type":"message_posted","summary":"ship Friday rescue scope"},
+					{"id":"event_need_1","thread_id":"thread_1","type":"human_attention_requested","summary":"approve launch date"}
 				],
 				"key_artifacts":[{"id":"artifact_1","kind":"brief"}],
 				"open_cards":[{"id":"card_1","status":"open","title":"Publish brief"}]
@@ -3291,9 +3279,8 @@ func TestThreadsInspectBuildsCoordinationView(t *testing.T) {
 		t.Fatalf("expected 2 recent events, got %#v", data)
 	}
 	collaboration, _ := data["collaboration"].(map[string]any)
-	recommendationCount, _ := collaboration["recommendation_count"].(float64)
-	if got := int(recommendationCount); got != 1 {
-		t.Fatalf("expected recommendation_count=1, got %#v", collaboration)
+	if got := intValue(collaboration["artifact_count"]); got != 1 {
+		t.Fatalf("expected artifact_count=1, got %#v", collaboration)
 	}
 	inbox, _ := data["inbox"].(map[string]any)
 	items, _ := inbox["items"].([]any)
@@ -3375,246 +3362,6 @@ func TestThreadsInspectRejectsMixedSelectionModes(t *testing.T) {
 	}
 }
 
-func TestThreadsRecommendationsBuildsFocusedReview(t *testing.T) {
-	t.Parallel()
-
-	const recommendationID = "event_rec_1234567890abcdef"
-	const decisionNeededID = "event_need_1"
-	const decisionMadeID = "event_done_1"
-	const inboxID = "inbox:action_needed:thread_1:none:event_need_1"
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_1/context":
-			_, _ = w.Write([]byte(`{
-				"thread":{"id":"thread_1","title":"Pilot Rescue","state":"active","type":"initiative"},
-				"recent_events":[
-					{"id":"` + recommendationID + `","thread_id":"thread_1","type":"actor_statement","actor_id":"agent-pm","created_at":"2026-03-07T12:00:00Z","summary":"Ship Friday rescue scope","provenance":{"sources":["seed:pilot-rescue"]}},
-					{"id":"` + decisionNeededID + `","thread_id":"thread_1","type":"decision_needed","actor_id":"agent-lead","created_at":"2026-03-07T12:02:00Z","summary":"Need approval on launch date"},
-					{"id":"` + decisionMadeID + `","thread_id":"thread_1","type":"decision_made","actor_id":"agent-pm","created_at":"2026-03-07T12:05:00Z","summary":"Approved Friday launch"}
-				],
-				"key_artifacts":[],
-				"open_cards":[]
-			}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
-			_, _ = w.Write([]byte(`{"items":[
-				{"id":"` + inboxID + `","thread_id":"thread_1","type":"action_needed","summary":"launch date still needs acknowledgement"},
-				{"id":"inbox:action_needed:thread_2:none:event_other","thread_id":"thread_2","type":"action_needed","summary":"other thread"}
-			]}`))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-
-	home := t.TempDir()
-	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"threads", "recommendations",
-		"--thread-id", "thread_1",
-	})
-	payload := assertEnvelopeOK(t, raw)
-	if got := anyStringValue(payload["command"]); got != "threads recommendations" {
-		t.Fatalf("expected threads recommendations command, got %#v", payload)
-	}
-	if got := anyStringValue(payload["command_id"]); got != "threads.recommendations" {
-		t.Fatalf("expected threads.recommendations command_id, got %#v", payload)
-	}
-
-	data, _ := payload["data"].(map[string]any)
-	recommendations, _ := data["recommendations"].(map[string]any)
-	recommendationCount, _ := recommendations["count"].(float64)
-	if got := int(recommendationCount); got != 1 {
-		t.Fatalf("expected recommendation count=1, got %#v", data)
-	}
-	recItems, _ := recommendations["items"].([]any)
-	if len(recItems) != 1 {
-		t.Fatalf("expected one recommendation item, got %#v", recommendations)
-	}
-	rec, _ := recItems[0].(map[string]any)
-	if got := anyStringValue(rec["actor_id"]); got != "agent-pm" {
-		t.Fatalf("expected actor_id agent-pm, got %#v", rec)
-	}
-	if got := anyStringValue(rec["created_at"]); got != "2026-03-07T12:00:00Z" {
-		t.Fatalf("expected created_at to be preserved, got %#v", rec)
-	}
-	sources := stringList(rec["provenance_sources"])
-	if len(sources) != 1 || sources[0] != "seed:pilot-rescue" {
-		t.Fatalf("expected provenance_sources, got %#v", rec)
-	}
-
-	pending, _ := data["pending_decisions"].(map[string]any)
-	pendingCount, _ := pending["count"].(float64)
-	if got := int(pendingCount); got != 1 {
-		t.Fatalf("expected pending decision count=1, got %#v", pending)
-	}
-	totalReviewItems, _ := data["total_review_items"].(float64)
-	if got := int(totalReviewItems); got != 4 {
-		t.Fatalf("expected total_review_items=4 to include pending decisions, got %#v", data)
-	}
-	followUp, _ := data["follow_up"].(map[string]any)
-	examples := stringList(followUp["events_get_examples"])
-	if len(examples) == 0 || !strings.Contains(examples[0], "anx events get --event-id") {
-		t.Fatalf("expected events_get_examples follow-up commands, got %#v", followUp)
-	}
-
-	textOut := runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--base-url", server.URL,
-		"threads", "recommendations",
-		"--thread-id", "thread_1",
-		"--full-id",
-	})
-	if !strings.Contains(textOut, "actor=agent-pm") || !strings.Contains(textOut, "at=2026-03-07T12:00:00Z") {
-		t.Fatalf("expected provenance fields in default text output, got:\n%s", textOut)
-	}
-	if !strings.Contains(textOut, "follow_up:") || !strings.Contains(textOut, "events_get_template: anx events get --event-id <event-id> --json") {
-		t.Fatalf("expected follow-up guidance in default text output, got:\n%s", textOut)
-	}
-}
-
-func TestThreadsRecommendationsIncludesRelatedThreadReview(t *testing.T) {
-	t.Parallel()
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_main/workspace":
-			_, _ = w.Write([]byte(`{
-				"thread_id":"thread_main",
-				"thread":{"id":"thread_main","title":"Main Pilot Rescue","state":"active","type":"initiative"},
-				"context":{
-					"recent_events":[
-						{"id":"event_main_1","thread_id":"thread_main","type":"actor_statement","summary":"Main recommendation","refs":["thread:thread_related"]}
-					],
-					"key_artifacts":[],
-					"open_cards":[],
-					"documents":[]
-				},
-				"collaboration":{
-					"recommendations":[
-						{"id":"event_main_1","thread_id":"thread_main","type":"actor_statement","summary":"Main recommendation","refs":["thread:thread_related"]}
-					],
-					"decision_requests":[],
-					"decisions":[],
-					"key_artifacts":[],
-					"open_cards":[],
-					"recommendation_count":1,
-					"decision_request_count":0,
-					"decision_count":0,
-					"artifact_count":0,
-					"unresolved_card_count":0
-				},
-				"inbox":{"thread_id":"thread_main","items":[],"count":0},
-				"pending_decisions":{"thread_id":"thread_main","items":[],"count":0},
-				"related_threads":{
-					"count":1,
-					"items":[
-						{"thread":{"id":"thread_related","title":"Related Feedback Thread","state":"active","type":"case"},"match_reason":"thread_ref"}
-					]
-				},
-				"related_recommendations":{
-					"count":1,
-					"items":[
-						{
-							"thread":{"id":"thread_related","title":"Related Feedback Thread","state":"active","type":"case"},
-							"event":{
-								"id":"event_related_1",
-								"thread_id":"thread_related",
-								"type":"actor_statement",
-								"summary":"Related recommendation",
-								"payload":{"recommendation":"Document the staged artifact follow-up"}
-							}
-						}
-					]
-				},
-				"related_decision_requests":{"count":0,"items":[]},
-				"related_decisions":{"count":0,"items":[]},
-				"total_review_items":2,
-				"follow_up":{"workspace_refresh_command":"anx threads workspace --thread-id thread_main --include-artifact-content --full-id --json"},
-				"section_kinds":{
-					"thread":"canonical",
-					"context":"canonical",
-					"collaboration":"derived",
-					"inbox":"derived",
-					"pending_decisions":"derived",
-					"related_threads":"derived",
-					"related_recommendations":"derived",
-					"related_decision_requests":"derived",
-					"related_decisions":"derived",
-					"follow_up":"convenience"
-				},
-				"context_source":"threads.workspace",
-				"inbox_source":"threads.workspace",
-				"related_event_content_enabled":true,
-				"related_event_content_count":1
-			}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_main/context":
-			_, _ = w.Write([]byte(`{
-				"thread":{"id":"thread_main","title":"Main Pilot Rescue","state":"active","type":"initiative"},
-					"recent_events":[
-						{"id":"event_main_1","thread_id":"thread_main","type":"actor_statement","actor_id":"agent-main","created_at":"2026-03-07T12:00:00Z","summary":"Main recommendation","refs":["thread:thread_related"]}
-					],
-					"key_artifacts":[],
-					"open_cards":[
-						{"id":"commit_main_1","thread_id":"thread_main","title":"Coordinate related work","links":["thread:thread_main","thread:thread_related"]}
-					]
-				}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_related/context":
-			_, _ = w.Write([]byte(`{
-				"thread":{"id":"thread_related","title":"Related Feedback Thread","state":"active","type":"case"},
-				"recent_events":[
-					{"id":"event_related_1","thread_id":"thread_related","type":"actor_statement","actor_id":"agent-related","created_at":"2026-03-07T12:05:00Z","summary":"Related recommendation"}
-				],
-				"key_artifacts":[],
-				"open_cards":[]
-			}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
-			_, _ = w.Write([]byte(`{"items":[]}`))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-
-	home := t.TempDir()
-	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"threads", "recommendations",
-		"--thread-id", "thread_main",
-	})
-	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
-
-	relatedThreads, _ := data["related_threads"].(map[string]any)
-	relatedThreadCount, _ := relatedThreads["count"].(float64)
-	if got := int(relatedThreadCount); got != 1 {
-		t.Fatalf("expected one related thread, got %#v", data)
-	}
-	relatedRecommendations, _ := data["related_recommendations"].(map[string]any)
-	relatedRecommendationCount, _ := relatedRecommendations["count"].(float64)
-	if got := int(relatedRecommendationCount); got != 1 {
-		t.Fatalf("expected one related recommendation, got %#v", data)
-	}
-	relatedItems, _ := relatedRecommendations["items"].([]any)
-	if len(relatedItems) != 1 {
-		t.Fatalf("expected one related recommendation item, got %#v", relatedRecommendations)
-	}
-	relatedEvent, _ := relatedItems[0].(map[string]any)
-	if got := anyStringValue(relatedEvent["source_thread_id"]); got != "thread_related" {
-		t.Fatalf("expected source_thread_id to annotate related thread, got %#v", relatedEvent)
-	}
-	if got := anyStringValue(relatedEvent["source_thread_title"]); got != "Related Feedback Thread" {
-		t.Fatalf("expected source_thread_title annotation, got %#v", relatedEvent)
-	}
-	totalReviewItems, _ := data["total_review_items"].(float64)
-	if got := int(totalReviewItems); got != 2 {
-		t.Fatalf("expected total_review_items to include related recommendation, got %#v", data)
-	}
-}
-
 func TestThreadsWorkspaceJSONIncludesShortIDs(t *testing.T) {
 	t.Parallel()
 
@@ -3625,30 +3372,21 @@ func TestThreadsWorkspaceJSONIncludesShortIDs(t *testing.T) {
 				"thread_id":"thread_ws_main",
 				"thread":{"id":"thread_ws_main","title":"T"},
 				"context":{
-					"recent_events":[{"id":"event_ws_1","thread_id":"thread_ws_main","type":"actor_statement"}],
+					"recent_events":[{"id":"event_ws_1","thread_id":"thread_ws_main","type":"message_posted"}],
 					"key_artifacts":[],
 					"open_cards":[],
 					"documents":[]
 				},
 				"collaboration":{
-					"recommendations":[{"id":"event_ws_1","thread_id":"thread_ws_main","type":"actor_statement"}],
-					"decision_requests":[],
-					"decisions":[],
 					"key_artifacts":[],
 					"open_cards":[],
-					"recommendation_count":1,
-					"decision_request_count":0,
-					"decision_count":0,
 					"artifact_count":0,
 					"open_card_count":0
 				},
 				"inbox":{"thread_id":"thread_ws_main","items":[],"count":0},
-				"pending_decisions":{"thread_id":"thread_ws_main","items":[],"count":0},
+				"pending_attention":{"thread_id":"thread_ws_main","items":[],"count":0},
 				"related_threads":{"count":1,"items":[{"thread":{"id":"thread_ws_related","title":"R"},"match_reason":"ref"}]},
-				"related_recommendations":{"count":1,"items":[{"thread":{"id":"thread_ws_related","title":"R"},"event":{"id":"event_ws_rel","thread_id":"thread_ws_related","type":"actor_statement"}}]},
-				"related_decision_requests":{"count":0,"items":[]},
-				"related_decisions":{"count":0,"items":[]},
-				"total_review_items":1
+				"total_review_items":0
 			}`))
 			return
 		}
@@ -3691,560 +3429,6 @@ func TestThreadsWorkspaceJSONIncludesShortIDs(t *testing.T) {
 		t.Fatalf("related_threads[0].thread.short_id: want %q got %q", shortID("thread_ws_related"), got)
 	}
 
-	rr := asMap(data["related_recommendations"])
-	rrItems, _ := rr["items"].([]any)
-	rr0, _ := rrItems[0].(map[string]any)
-	rrEv := asMap(rr0["event"])
-	if got := anyStringValue(rrEv["short_id"]); got != shortID("event_ws_rel") {
-		t.Fatalf("related_recommendations[0].event.short_id: want %q got %q", shortID("event_ws_rel"), got)
-	}
-}
-
-func TestThreadsRecommendationsSkipsMissingRelatedThreadsWithWarnings(t *testing.T) {
-	t.Parallel()
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_main/context":
-			_, _ = w.Write([]byte(`{
-				"thread":{"id":"thread_main","title":"Main Pilot Rescue","state":"active","type":"initiative"},
-				"recent_events":[
-					{"id":"event_main_1","thread_id":"thread_main","type":"actor_statement","summary":"Main recommendation","refs":["thread:thread_missing","thread:thread_related"]}
-				],
-				"key_artifacts":[],
-				"open_cards":[]
-			}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_related/context":
-			_, _ = w.Write([]byte(`{
-				"thread":{"id":"thread_related","title":"Related Feedback Thread","state":"active","type":"case"},
-				"recent_events":[
-					{"id":"event_related_1","thread_id":"thread_related","type":"actor_statement","summary":"Related recommendation"}
-				],
-				"key_artifacts":[],
-				"open_cards":[]
-			}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_missing/context":
-			http.NotFound(w, r)
-		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
-			_, _ = w.Write([]byte(`{"items":[]}`))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-
-	home := t.TempDir()
-	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"threads", "recommendations",
-		"--thread-id", "thread_main",
-	})
-	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
-
-	relatedRecommendations, _ := data["related_recommendations"].(map[string]any)
-	relatedRecommendationCount, _ := relatedRecommendations["count"].(float64)
-	if got := int(relatedRecommendationCount); got != 1 {
-		t.Fatalf("expected one successful related recommendation despite missing thread, got %#v", data)
-	}
-
-	warnings, _ := data["warnings"].(map[string]any)
-	warningCount, _ := warnings["count"].(float64)
-	if got := int(warningCount); got != 1 {
-		t.Fatalf("expected one warning for skipped related thread, got %#v", data)
-	}
-	warningItems, _ := warnings["items"].([]any)
-	if len(warningItems) != 1 {
-		t.Fatalf("expected warning item, got %#v", warnings)
-	}
-	warning, _ := warningItems[0].(map[string]any)
-	if got := anyStringValue(warning["thread_id"]); got != "thread_missing" {
-		t.Fatalf("expected skipped thread id in warning, got %#v", warning)
-	}
-	if !strings.Contains(anyStringValue(warning["message"]), "skipped related thread thread_missing") {
-		t.Fatalf("expected skipped related thread warning, got %#v", warning)
-	}
-
-	textOut := runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--base-url", server.URL,
-		"threads", "recommendations",
-		"--thread-id", "thread_main",
-	})
-	if !strings.Contains(textOut, "warnings:") || !strings.Contains(textOut, "thread_missing") {
-		t.Fatalf("expected warning section in default text output, got:\n%s", textOut)
-	}
-}
-
-func TestThreadsRecommendationsCanHydrateRelatedEventContent(t *testing.T) {
-	t.Parallel()
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_main/context":
-			_, _ = w.Write([]byte(`{
-				"thread":{"id":"thread_main","title":"Main Pilot Rescue","state":"active","type":"initiative"},
-				"recent_events":[
-					{"id":"event_main_1","thread_id":"thread_main","type":"actor_statement","summary":"Main recommendation","refs":["thread:thread_related"]}
-				],
-				"key_artifacts":[],
-				"open_cards":[]
-			}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_related/context":
-			_, _ = w.Write([]byte(`{
-				"thread":{"id":"thread_related","title":"Related Feedback Thread","state":"active","type":"case"},
-				"recent_events":[
-					{"id":"event_related_1","thread_id":"thread_related","type":"actor_statement","actor_id":"agent-related","created_at":"2026-03-07T12:05:00Z","summary":"Related recommendation"}
-				],
-				"key_artifacts":[],
-				"open_cards":[]
-			}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/events/event_related_1":
-			_, _ = w.Write([]byte(`{
-				"event":{
-					"id":"event_related_1",
-					"type":"actor_statement",
-					"summary":"Related recommendation",
-					"payload":{"recommendation":"Ship the digest owner field first","evidence":["customer quote"]}
-				}
-			}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
-			_, _ = w.Write([]byte(`{"items":[]}`))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-
-	home := t.TempDir()
-	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"threads", "recommendations",
-		"--thread-id", "thread_main",
-		"--include-related-event-content",
-	})
-	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
-	if !asBool(data["related_event_content_enabled"]) {
-		t.Fatalf("expected related_event_content_enabled=true, got %#v", data)
-	}
-	if got := intValue(data["related_event_content_count"]); got != 1 {
-		t.Fatalf("expected one hydrated related event, got %#v", data)
-	}
-	relatedRecommendations, _ := data["related_recommendations"].(map[string]any)
-	relatedItems, _ := relatedRecommendations["items"].([]any)
-	if len(relatedItems) != 1 {
-		t.Fatalf("expected one related recommendation item, got %#v", relatedRecommendations)
-	}
-	relatedEvent, _ := relatedItems[0].(map[string]any)
-	fullEvent, _ := relatedEvent["event"].(map[string]any)
-	payloadMap, _ := fullEvent["payload"].(map[string]any)
-	if got := anyStringValue(payloadMap["recommendation"]); got != "Ship the digest owner field first" {
-		t.Fatalf("expected hydrated related event payload, got %#v", relatedEvent)
-	}
-}
-
-func TestThreadsWorkspaceCanHydrateRelatedEventContent(t *testing.T) {
-	t.Parallel()
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_main/workspace":
-			_, _ = w.Write([]byte(`{
-				"thread_id":"thread_main",
-				"thread":{"id":"thread_main","title":"Main Pilot Rescue","state":"active","type":"initiative"},
-				"context":{
-					"recent_events":[
-						{"id":"event_main_1","thread_id":"thread_main","type":"actor_statement","summary":"Main recommendation","refs":["thread:thread_related"]}
-					],
-					"key_artifacts":[],
-					"open_cards":[],
-					"documents":[]
-				},
-				"collaboration":{
-					"recommendations":[
-						{"id":"event_main_1","thread_id":"thread_main","type":"actor_statement","summary":"Main recommendation","refs":["thread:thread_related"]}
-					],
-					"decision_requests":[],
-					"decisions":[],
-					"key_artifacts":[],
-					"open_cards":[],
-					"recommendation_count":1,
-					"decision_request_count":0,
-					"decision_count":0,
-					"artifact_count":0,
-					"unresolved_card_count":0
-				},
-				"inbox":{"thread_id":"thread_main","items":[],"count":0},
-				"pending_decisions":{"thread_id":"thread_main","items":[],"count":0},
-				"related_threads":{
-					"count":1,
-					"items":[
-						{"thread":{"id":"thread_related","title":"Related Feedback Thread","state":"active","type":"case"},"match_reason":"thread_ref"}
-					]
-				},
-				"related_recommendations":{
-					"count":1,
-					"items":[
-						{
-							"thread":{"id":"thread_related","title":"Related Feedback Thread","state":"active","type":"case"},
-							"event":{
-								"id":"event_related_1",
-								"thread_id":"thread_related",
-								"type":"actor_statement",
-								"summary":"Related recommendation",
-								"payload":{"recommendation":"Document the staged artifact follow-up"}
-							}
-						}
-					]
-				},
-				"related_decision_requests":{"count":0,"items":[]},
-				"related_decisions":{"count":0,"items":[]},
-				"total_review_items":2,
-				"follow_up":{"workspace_refresh_command":"anx threads workspace --thread-id thread_main --include-artifact-content --full-id --json"},
-				"section_kinds":{
-					"thread":"canonical",
-					"context":"canonical",
-					"collaboration":"derived",
-					"inbox":"derived",
-					"pending_decisions":"derived",
-					"related_threads":"derived",
-					"related_recommendations":"derived",
-					"related_decision_requests":"derived",
-					"related_decisions":"derived",
-					"follow_up":"convenience"
-				},
-				"context_source":"threads.workspace",
-				"inbox_source":"threads.workspace",
-				"related_event_content_enabled":true,
-				"related_event_content_count":1
-			}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_main/context":
-			_, _ = w.Write([]byte(`{
-				"thread":{"id":"thread_main","title":"Main Pilot Rescue","state":"active","type":"initiative"},
-				"recent_events":[
-					{"id":"event_main_1","thread_id":"thread_main","type":"actor_statement","summary":"Main recommendation","refs":["thread:thread_related"]}
-				],
-				"key_artifacts":[],
-				"open_cards":[]
-			}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_related/context":
-			_, _ = w.Write([]byte(`{
-				"thread":{"id":"thread_related","title":"Related Feedback Thread","state":"active","type":"case"},
-				"recent_events":[
-					{"id":"event_related_1","thread_id":"thread_related","type":"actor_statement","summary":"Related recommendation"}
-				],
-				"key_artifacts":[],
-				"open_cards":[]
-			}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/events/event_related_1":
-			_, _ = w.Write([]byte(`{
-				"event":{
-					"id":"event_related_1",
-					"type":"actor_statement",
-					"summary":"Related recommendation",
-					"payload":{"recommendation":"Document the staged artifact follow-up"}
-				}
-			}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
-			_, _ = w.Write([]byte(`{"items":[]}`))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-
-	home := t.TempDir()
-	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"threads", "workspace",
-		"--thread-id", "thread_main",
-		"--include-related-event-content",
-	})
-	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
-	if !asBool(data["related_event_content_enabled"]) {
-		t.Fatalf("expected related_event_content_enabled=true, got %#v", data)
-	}
-	if got := intValue(data["related_event_content_count"]); got != 1 {
-		t.Fatalf("expected one hydrated related event, got %#v", data)
-	}
-	relatedRecommendations, _ := data["related_recommendations"].(map[string]any)
-	relatedItems, _ := relatedRecommendations["items"].([]any)
-	relatedEvent, _ := relatedItems[0].(map[string]any)
-	fullEvent, _ := relatedEvent["event"].(map[string]any)
-	payloadMap, _ := fullEvent["payload"].(map[string]any)
-	if got := anyStringValue(payloadMap["recommendation"]); got != "Document the staged artifact follow-up" {
-		t.Fatalf("expected hydrated related event payload in workspace output, got %#v", relatedEvent)
-	}
-}
-
-func TestThreadsRecommendationsWarnsWhenRelatedEventHydrationFails(t *testing.T) {
-	t.Parallel()
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_main/context":
-			_, _ = w.Write([]byte(`{
-				"thread":{"id":"thread_main","title":"Main Pilot Rescue","state":"active","type":"initiative"},
-				"recent_events":[
-					{"id":"event_main_1","thread_id":"thread_main","type":"actor_statement","summary":"Main recommendation","refs":["thread:thread_related"]}
-				],
-				"key_artifacts":[],
-				"open_cards":[]
-			}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_related/context":
-			_, _ = w.Write([]byte(`{
-				"thread":{"id":"thread_related","title":"Related Feedback Thread","state":"active","type":"case"},
-				"recent_events":[
-					{"id":"event_related_1","thread_id":"thread_related","type":"actor_statement","summary":"Related recommendation"}
-				],
-				"key_artifacts":[],
-				"open_cards":[]
-			}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/events/event_related_1":
-			http.NotFound(w, r)
-		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
-			_, _ = w.Write([]byte(`{"items":[]}`))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-
-	home := t.TempDir()
-	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"threads", "recommendations",
-		"--thread-id", "thread_main",
-		"--include-related-event-content",
-	})
-	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
-	if got := intValue(data["related_event_content_count"]); got != 0 {
-		t.Fatalf("expected no hydrated related events when events get fails, got %#v", data)
-	}
-	warnings, _ := data["warnings"].(map[string]any)
-	warningItems, _ := warnings["items"].([]any)
-	if len(warningItems) != 1 {
-		t.Fatalf("expected one hydration warning, got %#v", warnings)
-	}
-	warning, _ := warningItems[0].(map[string]any)
-	if got := anyStringValue(warning["event_id"]); got != "event_related_1" {
-		t.Fatalf("expected event_id in hydration warning, got %#v", warning)
-	}
-	if !strings.Contains(anyStringValue(warning["message"]), "kept summary-only related event event_related_1") {
-		t.Fatalf("expected hydration warning message, got %#v", warning)
-	}
-}
-
-func TestThreadsRecommendationsFullSummaryToggle(t *testing.T) {
-	t.Parallel()
-
-	longSummary := "Recommendation narrative starts here and stays intentionally long to trigger preview truncation while keeping the terminal marker hidden until full summary mode tail-marker-xyz"
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_1/context":
-			_, _ = w.Write([]byte(`{
-				"thread":{"id":"thread_1","title":"Pilot Rescue","state":"active","type":"initiative"},
-				"recent_events":[
-					{"id":"event_rec_1","thread_id":"thread_1","type":"actor_statement","actor_id":"agent-pm","created_at":"2026-03-07T12:00:00Z","summary":"` + longSummary + `"}
-				],
-				"key_artifacts":[],
-				"open_cards":[]
-			}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
-			_, _ = w.Write([]byte(`{"items":[]}`))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-
-	home := t.TempDir()
-	defaultOut := runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--base-url", server.URL,
-		"threads", "recommendations",
-		"--thread-id", "thread_1",
-	})
-	if strings.Contains(defaultOut, "tail-marker-xyz") {
-		t.Fatalf("expected default summary preview to truncate tail marker, got:\n%s", defaultOut)
-	}
-
-	fullOut := runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--base-url", server.URL,
-		"threads", "recommendations",
-		"--thread-id", "thread_1",
-		"--full-summary",
-	})
-	if !strings.Contains(fullOut, "tail-marker-xyz") {
-		t.Fatalf("expected --full-summary output to include full summary, got:\n%s", fullOut)
-	}
-}
-
-func TestThreadsRecommendationsCountsPendingDecisionsInTotalWhenRecentWindowExcludesReviewEvents(t *testing.T) {
-	t.Parallel()
-
-	const pendingInboxID = "inbox:action_needed:thread_1:none:event_pending_1"
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_1/context":
-			_, _ = w.Write([]byte(`{
-				"thread":{"id":"thread_1","title":"Pilot Rescue","state":"active","type":"initiative"},
-				"recent_events":[
-					{"id":"event_noise_1","thread_id":"thread_1","type":"status_changed","created_at":"2026-03-07T12:06:00Z","summary":"status moved to active"}
-				],
-				"key_artifacts":[],
-				"open_cards":[]
-			}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
-			_, _ = w.Write([]byte(`{"items":[
-				{"id":"` + pendingInboxID + `","thread_id":"thread_1","type":"action_needed","summary":"pending approval remains"}
-			]}`))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-
-	home := t.TempDir()
-	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"threads", "recommendations",
-		"--thread-id", "thread_1",
-		"--max-events", "1",
-	})
-	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
-
-	pending, _ := data["pending_decisions"].(map[string]any)
-	pendingCount, _ := pending["count"].(float64)
-	if got := int(pendingCount); got != 1 {
-		t.Fatalf("expected pending decision count=1, got %#v", pending)
-	}
-	totalReviewItems, _ := data["total_review_items"].(float64)
-	if got := int(totalReviewItems); got != 1 {
-		t.Fatalf("expected total_review_items=1 when only pending decisions are present, got %#v", data)
-	}
-}
-
-func TestThreadsRecommendationsSelectionValidation(t *testing.T) {
-	t.Parallel()
-
-	home := t.TempDir()
-
-	mixedSelection := assertEnvelopeError(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json",
-		"threads", "recommendations",
-		"--thread-id", "thread_1",
-		"--state", "active",
-	}))
-	if got := anyStringValue(mixedSelection["command"]); got != "threads recommendations" {
-		t.Fatalf("expected threads recommendations error command, got %#v", mixedSelection)
-	}
-	if got := anyStringValue(mixedSelection["command_id"]); got != "threads.recommendations" {
-		t.Fatalf("expected threads.recommendations command_id, got %#v", mixedSelection)
-	}
-	mixedErr, _ := mixedSelection["error"].(map[string]any)
-	if mixedErr == nil || anyStringValue(mixedErr["code"]) != "invalid_request" {
-		t.Fatalf("expected invalid_request for mixed selection, got %#v", mixedSelection)
-	}
-	message := anyStringValue(mixedErr["message"])
-	if !strings.Contains(message, "--thread-id cannot be combined with discovery filters") || !strings.Contains(message, "anx threads recommendations --thread-id <thread-id>") || !strings.Contains(message, "anx threads inspect --state active") {
-		t.Fatalf("expected mixed selection guidance, got %#v", mixedSelection)
-	}
-
-	negativeMaxEvents := assertEnvelopeError(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json",
-		"threads", "recommendations",
-		"--thread-id", "thread_1",
-		"--max-events", "-1",
-	}))
-	if got := anyStringValue(negativeMaxEvents["command"]); got != "threads recommendations" {
-		t.Fatalf("expected threads recommendations error command, got %#v", negativeMaxEvents)
-	}
-	if got := anyStringValue(negativeMaxEvents["command_id"]); got != "threads.recommendations" {
-		t.Fatalf("expected threads.recommendations command_id, got %#v", negativeMaxEvents)
-	}
-	maxErr, _ := negativeMaxEvents["error"].(map[string]any)
-	if maxErr == nil || anyStringValue(maxErr["code"]) != "invalid_request" {
-		t.Fatalf("expected invalid_request for max-events, got %#v", negativeMaxEvents)
-	}
-	if !strings.Contains(anyStringValue(maxErr["message"]), "--max-events must be >= 0") {
-		t.Fatalf("expected max-events guidance, got %#v", negativeMaxEvents)
-	}
-}
-
-func TestThreadsRecommendationsDiscoveryErrors(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name           string
-		threadsJSON    string
-		wantMessageSub string
-	}{
-		{
-			name:           "no matches",
-			threadsJSON:    `{"threads":[]}`,
-			wantMessageSub: "threads recommendations discovery returned no matching threads",
-		},
-		{
-			name: "multiple matches",
-			threadsJSON: `{"threads":[
-				{"id":"thread_init_1","type":"initiative","state":"active"},
-				{"id":"thread_init_2","type":"initiative","state":"active"}
-			]}`,
-			wantMessageSub: "threads recommendations requires exactly one thread",
-		},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.Method != http.MethodGet || r.URL.Path != "/threads" {
-					http.NotFound(w, r)
-					return
-				}
-				w.Header().Set("Content-Type", "application/json")
-				_, _ = w.Write([]byte(tt.threadsJSON))
-			}))
-			defer server.Close()
-
-			home := t.TempDir()
-			payload := assertEnvelopeError(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
-				"--json",
-				"--base-url", server.URL,
-				"threads", "recommendations",
-				"--state", "active",
-			}))
-			if got := anyStringValue(payload["command"]); got != "threads recommendations" {
-				t.Fatalf("expected threads recommendations error command, got %#v", payload)
-			}
-			if got := anyStringValue(payload["command_id"]); got != "threads.recommendations" {
-				t.Fatalf("expected threads.recommendations command_id, got %#v", payload)
-			}
-			errObj, _ := payload["error"].(map[string]any)
-			if errObj == nil || anyStringValue(errObj["code"]) != "invalid_request" {
-				t.Fatalf("expected invalid_request error payload, got %#v", payload)
-			}
-			if !strings.Contains(anyStringValue(errObj["message"]), tt.wantMessageSub) {
-				t.Fatalf("expected message containing %q, got %#v", tt.wantMessageSub, payload)
-			}
-		})
-	}
 }
 
 func TestThreadsContextTextOutputIsPayloadFirst(t *testing.T) {
@@ -4259,8 +3443,8 @@ func TestThreadsContextTextOutputIsPayloadFirst(t *testing.T) {
 		_, _ = w.Write([]byte(`{
 			"thread":{"id":"thread_1","title":"Pilot Rescue","state":"active","priority":"p1","current_summary":"Need a launch decision today."},
 			"recent_events":[
-				{"id":"event_1","type":"decision_needed","summary":"Need support and delivery recommendations"},
-				{"id":"event_2","type":"decision_made","summary":"Ship the Friday rescue scope"}
+				{"id":"event_1","type":"human_attention_requested","summary":"Need support and delivery recommendations"},
+				{"id":"event_2","type":"human_attention_responded","summary":"Ship the Friday rescue scope"}
 			],
 			"key_artifacts":[
 				{"id":"artifact_1","kind":"gtm-brief","summary":"NorthWave pilot rescue brief"}
@@ -4282,7 +3466,7 @@ func TestThreadsContextTextOutputIsPayloadFirst(t *testing.T) {
 	if !strings.Contains(out, "Thread thread_1") || !strings.Contains(out, "recent_events (2):") {
 		t.Fatalf("expected thread context summary, got:\n%s", out)
 	}
-	if !strings.Contains(out, "decision_needed") || !strings.Contains(out, "gtm-brief") || !strings.Contains(out, "Publish rescue brief") {
+	if !strings.Contains(out, "human_attention_requested") || !strings.Contains(out, "gtm-brief") || !strings.Contains(out, "Publish rescue brief") {
 		t.Fatalf("expected actionable summary sections, got:\n%s", out)
 	}
 	if strings.Contains(out, "status: 200") || strings.Contains(out, "header Content-Type:") || strings.Contains(out, `"thread":`) {
@@ -4402,7 +3586,7 @@ func TestThreadsContextDeduplicatesResolvedDuplicateIDs(t *testing.T) {
 		case r.Method == http.MethodGet && r.URL.Path == "/threads/"+canonicalID+"/context":
 			_, _ = w.Write([]byte(`{
 				"thread":{"id":"` + canonicalID + `","title":"Pilot Rescue"},
-				"recent_events":[{"id":"event_actor_1","type":"actor_statement","summary":"ship Friday scope"}],
+				"recent_events":[{"id":"event_actor_1","type":"message_posted","summary":"ship Friday scope"}],
 				"key_artifacts":[],
 				"open_cards":[]
 			}`))
@@ -4439,9 +3623,11 @@ func TestThreadsContextDeduplicatesResolvedDuplicateIDs(t *testing.T) {
 		t.Fatalf("expected one deduplicated recent event, got %#v", data)
 	}
 	collaboration, _ := data["collaboration_summary"].(map[string]any)
-	recommendationCount, _ := collaboration["recommendation_count"].(float64)
-	if got := int(recommendationCount); got != 1 {
-		t.Fatalf("expected recommendation_count=1 after dedupe, got %#v", collaboration)
+	if got := intValue(collaboration["artifact_count"]); got != 0 {
+		t.Fatalf("expected artifact_count=0 after dedupe, got %#v", collaboration)
+	}
+	if _, ok := collaboration["recommendation_count"]; ok {
+		t.Fatalf("expected simplified collaboration_summary after dedupe, got %#v", collaboration)
 	}
 }
 
@@ -5071,21 +4257,21 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 			_, _ = w.Write([]byte(`{
 				"thread_id":"thread_123",
 				"events":[
-					{"id":"event_100","thread_id":"thread_123","type":"actor_statement","created_at":"2026-03-07T00:00:00Z","summary":"ship machine-facing fixes"},
-					{"id":"event_101","thread_id":"thread_123","type":"decision_needed","created_at":"2026-03-07T00:01:00Z","summary":"confirm frame shape"}
+					{"id":"event_100","thread_id":"thread_123","type":"message_posted","created_at":"2026-03-07T00:00:00Z","summary":"ship machine-facing fixes"},
+					{"id":"event_101","thread_id":"thread_123","type":"human_attention_requested","created_at":"2026-03-07T00:01:00Z","summary":"confirm frame shape"}
 				],
 				"artifacts":{}
 			}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/events/event_456":
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"event":{"id":"event_456","thread_id":"thread_123","type":"actor_statement","summary":"canonical event payload"}}`))
+			_, _ = w.Write([]byte(`{"event":{"id":"event_456","thread_id":"thread_123","type":"message_posted","summary":"canonical event payload"}}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_123/context":
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{
 					"thread":{"id":"thread_123","title":"Machine-facing consistency"},
 				"recent_events":[
-					{"id":"event_ctx_1","thread_id":"thread_123","type":"actor_statement","summary":"normalize frame shape"},
-					{"id":"event_ctx_2","thread_id":"thread_123","type":"decision_needed","summary":"confirm canonical command labels"}
+					{"id":"event_ctx_1","thread_id":"thread_123","type":"message_posted","summary":"normalize frame shape"},
+					{"id":"event_ctx_2","thread_id":"thread_123","type":"human_attention_requested","summary":"confirm canonical command labels"}
 				],
 				"key_artifacts":[{"id":"artifact_ctx_1","kind":"receipt"}],
 				"open_cards":[{"id":"card_ctx_1","status":"open"}],
@@ -5100,8 +4286,8 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 					"thread":{"id":"thread_123","title":"Machine-facing consistency"},
 					"context":{
 						"recent_events":[
-							{"id":"event_ctx_1","thread_id":"thread_123","type":"actor_statement","summary":"normalize frame shape"},
-							{"id":"event_ctx_2","thread_id":"thread_123","type":"decision_needed","summary":"confirm canonical command labels"}
+							{"id":"event_ctx_1","thread_id":"thread_123","type":"message_posted","summary":"normalize frame shape"},
+							{"id":"event_ctx_2","thread_id":"thread_123","type":"human_attention_requested","summary":"confirm canonical command labels"}
 						],
 						"key_artifacts":[{"id":"artifact_ctx_1","kind":"receipt"}],
 						"open_cards":[{"id":"card_ctx_1","status":"open"}],
@@ -5110,18 +4296,8 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 						]
 					},
 					"collaboration":{
-						"recommendations":[
-							{"id":"event_ctx_1","thread_id":"thread_123","type":"actor_statement","summary":"normalize frame shape"}
-						],
-						"decision_requests":[
-							{"id":"event_ctx_2","thread_id":"thread_123","type":"decision_needed","summary":"confirm canonical command labels"}
-						],
-						"decisions":[],
 						"key_artifacts":[{"id":"artifact_ctx_1","kind":"receipt"}],
 						"open_cards":[{"id":"card_ctx_1","status":"open"}],
-						"recommendation_count":1,
-						"decision_request_count":1,
-						"decision_count":0,
 						"artifact_count":1,
 						"open_card_count":1
 					},
@@ -5132,7 +4308,7 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 						],
 						"count":1
 					},
-					"pending_decisions":{
+					"pending_attention":{
 						"thread_id":"thread_123",
 						"items":[
 							{"id":"inbox:action_needed:thread_123:none:event_ctx_2","thread_id":"thread_123","type":"action_needed","summary":"confirm canonical command labels"}
@@ -5140,19 +4316,14 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 						"count":1
 					},
 					"related_threads":{"count":0,"items":[]},
-					"related_recommendations":{"count":0,"items":[]},
-					"related_decision_requests":{"count":0,"items":[]},
-					"related_decisions":{"count":0,"items":[]},
-					"total_review_items":3,
+					"total_review_items":1,
 					"follow_up":{
 						"context_refresh_command":"anx threads context --thread-id thread_123 --include-artifact-content --full-id --json",
-						"decisions_list_command":"anx events list --thread-id thread_123 --type decision_needed --type decision_made --full-id --json",
 						"events_get_examples":[
 							"anx events get --event-id event_ctx_1 --json",
 							"anx events get --event-id event_ctx_2 --json"
 						],
-						"events_get_template":"anx events get --event-id <event-id> --json",
-						"recommendations_list_command":"anx events list --thread-id thread_123 --type actor_statement --full-id --json"
+						"events_get_template":"anx events get --event-id <event-id> --json"
 					},
 					"context_source":"threads.context",
 					"inbox_source":"inbox.list"
@@ -5214,7 +4385,7 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 			}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/events/stream":
 			w.Header().Set("Content-Type", "text/event-stream")
-			_, _ = io.WriteString(w, "id: es_1\nevent: event\ndata: {\"event\":{\"id\":\"event_stream_1\",\"type\":\"actor_statement\"}}\n\n")
+			_, _ = io.WriteString(w, "id: es_1\nevent: event\ndata: {\"event\":{\"id\":\"event_stream_1\",\"type\":\"message_posted\"}}\n\n")
 		case r.Method == http.MethodGet && r.URL.Path == "/inbox/stream":
 			w.Header().Set("Content-Type", "text/event-stream")
 			_, _ = io.WriteString(w, "id: ibx_1\nevent: inbox_item\ndata: {\"item\":{\"id\":\"inbox:1\",\"thread_id\":\"thread_123\"}}\n\n")
@@ -5232,7 +4403,7 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 		"--base-url", server.URL,
 		"events", "list",
 		"--thread-id", "thread_123",
-		"--type", "actor_statement",
+		"--type", "message_posted",
 	})
 	assertGolden(t, "events_list_machine.golden.json", eventsListOut)
 
@@ -5301,8 +4472,8 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 	if _, ok := threadsWorkspaceData["related_threads"].(map[string]any); !ok {
 		t.Fatalf("expected related_threads section in workspace payload, got %#v", threadsWorkspaceData)
 	}
-	if _, ok := threadsWorkspaceData["pending_decisions"].(map[string]any); !ok {
-		t.Fatalf("expected pending_decisions section in workspace payload, got %#v", threadsWorkspaceData)
+	if _, ok := threadsWorkspaceData["pending_attention"].(map[string]any); !ok {
+		t.Fatalf("expected pending_attention section in workspace payload, got %#v", threadsWorkspaceData)
 	}
 
 	boardsListOut := runCLIForTest(t, home, env, nil, []string{
@@ -5337,33 +4508,27 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 	if got := anyBoolValue(threadsReviewData["review_mode"]); !got {
 		t.Fatalf("expected review_mode marker in review payload, got %#v", threadsReviewData)
 	}
-	if got := anyBoolValue(threadsReviewData["related_event_content_enabled"]); !got {
-		t.Fatalf("expected related_event_content_enabled marker in review payload, got %#v", threadsReviewData)
-	}
-	if got := anyBoolValue(threadsReviewData["full_summary"]); !got {
-		t.Fatalf("expected full_summary enabled in review payload, got %#v", threadsReviewData)
-	}
 
 	threadsRecommendationsOut := runCLIForTest(t, home, env, nil, []string{
 		"--json",
 		"--base-url", server.URL,
-		"threads", "recommendations",
+		"threads", "workspace",
 		"--thread-id", "thread_123",
 	})
-	assertGoldenStabilizedInboxAliases(t, "threads_recommendations_machine.golden.json", threadsRecommendationsOut)
+	assertGoldenStabilizedInboxAliases(t, "threads_workspace_machine.golden.json", threadsRecommendationsOut)
 	threadsRecommendationsPayload := assertEnvelopeOK(t, threadsRecommendationsOut)
-	if got := anyStringValue(threadsRecommendationsPayload["command"]); got != "threads recommendations" {
-		t.Fatalf("expected threads recommendations command label, got %#v", threadsRecommendationsPayload)
+	if got := anyStringValue(threadsRecommendationsPayload["command"]); got != "threads workspace" {
+		t.Fatalf("expected threads workspace command label, got %#v", threadsRecommendationsPayload)
 	}
-	if got := anyStringValue(threadsRecommendationsPayload["command_id"]); got != "threads.recommendations" {
-		t.Fatalf("expected threads.recommendations command_id, got %#v", threadsRecommendationsPayload)
+	if got := anyStringValue(threadsRecommendationsPayload["command_id"]); got != "threads.workspace" {
+		t.Fatalf("expected threads.workspace command_id, got %#v", threadsRecommendationsPayload)
 	}
 	threadsRecommendationsData, _ := threadsRecommendationsPayload["data"].(map[string]any)
-	if _, ok := threadsRecommendationsData["recommendations"].(map[string]any); !ok {
-		t.Fatalf("expected recommendations section in payload, got %#v", threadsRecommendationsData)
+	if _, ok := threadsRecommendationsData["collaboration"].(map[string]any); !ok {
+		t.Fatalf("expected collaboration section in payload, got %#v", threadsRecommendationsData)
 	}
-	if _, ok := threadsRecommendationsData["pending_decisions"].(map[string]any); !ok {
-		t.Fatalf("expected pending_decisions section in payload, got %#v", threadsRecommendationsData)
+	if _, ok := threadsRecommendationsData["pending_attention"].(map[string]any); !ok {
+		t.Fatalf("expected pending_attention section in payload, got %#v", threadsRecommendationsData)
 	}
 	if _, ok := threadsRecommendationsData["follow_up"].(map[string]any); !ok {
 		t.Fatalf("expected follow_up section in payload, got %#v", threadsRecommendationsData)
@@ -5514,13 +4679,13 @@ func TestMachineFacingNonStreamErrorsIncludeCommandIdentity(t *testing.T) {
 
 	threadsRecommendationsErr := assertEnvelopeError(t, runCLIForTest(t, home, env, nil, []string{
 		"--json",
-		"threads", "recommendations",
+		"threads", "workspace",
 	}))
-	if got := anyStringValue(threadsRecommendationsErr["command"]); got != "threads recommendations" {
-		t.Fatalf("expected threads recommendations error command, got %q payload=%#v", got, threadsRecommendationsErr)
+	if got := anyStringValue(threadsRecommendationsErr["command"]); got != "threads workspace" {
+		t.Fatalf("expected threads workspace error command, got %q payload=%#v", got, threadsRecommendationsErr)
 	}
-	if got := anyStringValue(threadsRecommendationsErr["command_id"]); got != "threads.recommendations" {
-		t.Fatalf("expected threads.recommendations command_id, got %q payload=%#v", got, threadsRecommendationsErr)
+	if got := anyStringValue(threadsRecommendationsErr["command_id"]); got != "threads.workspace" {
+		t.Fatalf("expected threads.workspace command_id, got %q payload=%#v", got, threadsRecommendationsErr)
 	}
 }
 
@@ -5533,7 +4698,7 @@ func TestEventsStreamFallbackPayloadForNonWrapperJSON(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
-		_, _ = io.WriteString(w, "id: e-fallback\nevent: event\ndata: {\"id\":\"event_raw_1\",\"type\":\"actor_statement\"}\n\n")
+		_, _ = io.WriteString(w, "id: e-fallback\nevent: event\ndata: {\"id\":\"event_raw_1\",\"type\":\"message_posted\"}\n\n")
 	}))
 	defer server.Close()
 
@@ -5609,7 +4774,7 @@ func TestDocsRevisionSubcommandRequiredGuidance(t *testing.T) {
 func TestFilterEventsByLifecycleState(t *testing.T) {
 	t.Parallel()
 
-	active := map[string]any{"id": "evt_a", "type": "actor_statement"}
+	active := map[string]any{"id": "evt_a", "type": "message_posted"}
 	archived := map[string]any{"id": "evt_b", "archived_at": "2024-01-01T00:00:00Z"}
 	tomb := map[string]any{"id": "evt_c", "trashed_at": "2024-01-02T00:00:00Z"}
 	archivedAndTomb := map[string]any{"id": "evt_d", "archived_at": "2024-01-01T00:00:00Z", "trashed_at": "2024-01-02T00:00:00Z"}

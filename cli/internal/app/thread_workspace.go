@@ -2,13 +2,12 @@ package app
 
 import (
 	"context"
-	"fmt"
 
 	"agent-nexus-cli/internal/config"
 )
 
 func (a *App) runThreadsWorkspaceCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
-	selection, err := parseThreadRecommendationsArgs(args)
+	selection, err := parseThreadWorkspaceArgs(args)
 	if err != nil {
 		return nil, err
 	}
@@ -33,13 +32,10 @@ func (a *App) runThreadsWorkspaceCommand(ctx context.Context, args []string, cfg
 }
 
 func (a *App) runThreadsReviewCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
-	selection, err := parseThreadRecommendationsArgs(args)
+	selection, err := parseThreadWorkspaceArgs(args)
 	if err != nil {
 		return nil, err
 	}
-	selection.includeRelatedEventContent = true
-	selection.fullSummary = true
-
 	result, err := a.buildThreadWorkspaceResult(ctx, cfg, selection)
 	if err != nil {
 		return nil, err
@@ -50,7 +46,6 @@ func (a *App) runThreadsReviewCommand(ctx context.Context, args []string, cfg co
 		return result, nil
 	}
 	body["review_mode"] = true
-	body["related_event_content_enabled"] = true
 	data["body"] = body
 	result.Data = data
 	result.Text = formatTypedCommandText(
@@ -64,15 +59,11 @@ func (a *App) runThreadsReviewCommand(ctx context.Context, args []string, cfg co
 	return result, nil
 }
 
-func threadWorkspaceQuery(selection threadRecommendationsSelection) []queryParam {
-	query := threadContextQuery(selection.threadContextSelection)
-	if selection.includeRelatedEventContent {
-		addSingleQuery(&query, "include_related_event_content", fmt.Sprintf("%t", true))
-	}
-	return query
+func threadWorkspaceQuery(selection threadWorkspaceSelection) []queryParam {
+	return threadContextQuery(selection.threadContextSelection)
 }
 
-func (a *App) buildThreadWorkspaceResult(ctx context.Context, cfg config.Resolved, selection threadRecommendationsSelection) (*commandResult, error) {
+func (a *App) buildThreadWorkspaceResult(ctx context.Context, cfg config.Resolved, selection threadWorkspaceSelection) (*commandResult, error) {
 	threadIDs, err := a.resolveThreadContextSelection(ctx, cfg, "threads workspace", selection.threadContextSelection, false)
 	if err != nil {
 		return nil, err
@@ -99,7 +90,6 @@ func (a *App) buildThreadWorkspaceResult(ctx context.Context, cfg config.Resolve
 		return workspaceResult, nil
 	}
 	body["full_id"] = selection.fullID
-	body["full_summary"] = selection.fullSummary
 	if inbox := asMap(body["inbox"]); inbox != nil {
 		inbox["full_id"] = selection.fullID
 		body["inbox"] = inbox

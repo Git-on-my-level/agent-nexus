@@ -10,10 +10,10 @@ import {
 describe("provenance utils", () => {
   it("treats inferred provenance distinctly from evidence-backed provenance", () => {
     const inferred = {
-      sources: ["inferred", "actor_statement:event-1"],
+      sources: ["inferred", "event:event-1"],
     };
     const evidenceBacked = {
-      sources: ["actor_statement:event-1", "receipt:artifact-1"],
+      sources: ["event:event-1", "receipt:artifact-1"],
     };
 
     expect(hasInferredProvenance(inferred)).toBe(true);
@@ -24,7 +24,7 @@ describe("provenance utils", () => {
     expect(getProvenanceSources(undefined)).toEqual([]);
     expect(isUnknownProvenance(undefined)).toBe(true);
     expect(isUnknownProvenance({ sources: [] })).toBe(true);
-    expect(isUnknownProvenance({ sources: ["actor_statement:event-1"] })).toBe(
+    expect(isUnknownProvenance({ sources: ["event:event-1"] })).toBe(
       false,
     );
 
@@ -43,7 +43,7 @@ describe("provenance utils", () => {
     });
 
     expect(
-      getProvenancePresentation({ sources: ["actor_statement:event-1"] }),
+      getProvenancePresentation({ sources: ["event:event-1"] }),
     ).toEqual({
       unknown: false,
       inferred: false,

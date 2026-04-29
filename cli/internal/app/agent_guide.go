@@ -36,7 +36,7 @@ func agentGuideSections() []guideSection {
 		{
 			Title: "Core model",
 			Lines: []string{
-				"- `events`: immutable facts, observations, and updates. Use for append-only activity, audit trails, and streams. Decision lifecycle events (`decision_needed`, `intervention_needed`, `decision_made`) require `thread:<thread_id>` in refs; `topic:` refs are optional context when a topic exists.",
+				"- `events`: immutable facts, messages, human-attention lifecycle facts, and audit updates. Use `human_attention_requested` and `human_attention_responded` for operator asks, reviews, and escalations.",
 				"- `topics`: the primary durable work subjects. Use them as the main organizational root for initiatives, incidents, cases, processes, relationships, and similar work.",
 				"- `cards`: the primary work items. Use them for tracked execution on boards.",
 				"- `threads`: backing timelines and packet-routing infrastructure. Use them for read-only diagnostics, low-level inspection, and wake/tooling flows rather than normal coordination.",

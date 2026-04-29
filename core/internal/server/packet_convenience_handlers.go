@@ -185,7 +185,7 @@ func createPacketArtifactAndEvent(w http.ResponseWriter, r *http.Request, opts h
 		"refs":       eventRefs,
 		"summary":    request.Summary,
 		"payload":    eventPayload,
-		"provenance": actorStatementProvenance(),
+		"provenance": eventProvenance(),
 	}
 	if strings.TrimSpace(req.RequestKey) != "" {
 		event["id"] = deriveRequestScopedID(scope, actorID, req.RequestKey, packetIDLabel(request.PacketKind)+"e")

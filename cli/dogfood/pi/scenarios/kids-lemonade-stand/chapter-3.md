@@ -21,7 +21,7 @@ Required chapter behavior for every role:
 - post at least one fresh `message_posted` on your role thread
 - revise your role document at least twice during this chapter: once before the combo plan is settled, and once after teammate replies force you to update the plan
 - update your existing board card after at least one tagged handoff lands
-- end with a fresh `actor_statement` that explicitly says who you tagged, who replied, and what changed because of that exchange
+- end with a fresh `message_posted` that explicitly says who you tagged, who replied, and what changed because of that exchange
 
 Chapter rules:
 - do not create a second board

@@ -1,10 +1,8 @@
 <script>
-  import { goto } from "$app/navigation";
+  import { afterNavigate, goto } from "$app/navigation";
   import { page } from "$app/stores";
-  import { onDestroy, onMount } from "svelte";
 
   import CompactFilterBar from "$lib/components/CompactFilterBar.svelte";
-  import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import Button from "$lib/components/Button.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
   import StateEmpty from "$lib/components/state/StateEmpty.svelte";
@@ -18,7 +16,6 @@
     INBOX_CATEGORY_LABELS,
     INBOX_URGENCY_LEVELS,
     INBOX_URGENCY_LABELS,
-    decisionGroundingRefForInboxItem,
     enrichInboxItem,
     getInboxCategoryLabel,
     normalizeInboxCategory,
@@ -32,47 +29,40 @@
   } from "$lib/inboxUtils";
   import { inboxTopicRouteSegment } from "$lib/topicRouteUtils";
 
-  /** Delay before inbox mutations hit core; allows Undo before the request runs. */
-  const PENDING_INBOX_ACTION_MS = 5000;
-
   let loading = $state(false);
+  let completedLoading = $state(false);
+  let completedLoadingMore = $state(false);
   let error = $state("");
   let retrying = $state(false);
   let items = $state([]);
-  let ackInFlightById = $state({});
-  let pendingAckById = $state({});
-  let pendingDecisionById = $state({});
-  let decisionInFlightById = $state({});
-  let decisionFormsById = $state({});
-  let decisionFormErrorsById = $state({});
-  let postedDecisionByInboxItem = $state({});
-  let failedAckById = $state({});
+  let completedItems = $state([]);
+  let completedNextCursor = $state("");
+
   let urgencyFilter = $state("all");
   let categoryFilter = $state("all");
   let filtersOpen = $state(false);
+
+  let completedKindFilter = $state("all");
+  let completedWindowDays = $state(30);
+
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
 
-  function cancelPendingInboxTimers() {
-    for (const pending of Object.values(pendingAckById)) {
-      if (pending?.timeoutId != null) {
-        clearTimeout(pending.timeoutId);
-      }
-    }
-    for (const pending of Object.values(pendingDecisionById)) {
-      if (pending?.timeoutId != null) {
-        clearTimeout(pending.timeoutId);
-      }
-    }
-  }
-
-  onDestroy(() => {
-    cancelPendingInboxTimers();
+  let inboxTab = $derived.by(() => {
+    const s = String($page.url.searchParams.get("status") ?? "")
+      .trim()
+      .toLowerCase();
+    return s === "completed" ? "completed" : "open";
   });
 
-  let subjectContextCache = $state({});
-  let subjectContextLoading = $state({});
-  let subjectContextErrors = $state({});
+  let respondedBanner = $derived.by(() => {
+    const eventId = String($page.url.searchParams.get("responded") ?? "").trim();
+    const threadId = String($page.url.searchParams.get("responded_thread") ?? "").trim();
+    if (!eventId) return null;
+    const notifyQueued = $page.url.searchParams.get("notify_queued") === "1";
+    const notifyRecorded = $page.url.searchParams.get("notify_recorded") === "1";
+    return { eventId, threadId, notifyQueued, notifyRecorded };
+  });
 
   let totalItems = $derived(items.length);
   let enrichedItems = $derived(items.map((item) => enrichInboxItem(item)));
@@ -161,6 +151,45 @@
     return "";
   }
 
+  function completedTimelineHref(row) {
+    const tid = String(row.thread_id ?? "").trim();
+    let eventId = "";
+    const ref = String(row.response_event_ref ?? "").trim();
+    if (ref.startsWith("event:")) {
+      eventId = ref.slice("event:".length).trim();
+    }
+    if (!tid || !eventId) return "";
+    return `${workspaceHref(`/threads/${encodeURIComponent(tid)}`)}#event-${encodeURIComponent(eventId)}`;
+  }
+
+  function completedDetailHref(row) {
+    const id = String(row?.id ?? "").trim();
+    if (!id) return workspaceHref("/inbox");
+    return workspaceHref(`/inbox/${encodeURIComponent(id)}`);
+  }
+
+  function snippet(text, max = 140) {
+    const s = String(text ?? "").trim();
+    if (!s) return "";
+    return s.length <= max ? s : `${s.slice(0, max)}…`;
+  }
+
+  function syncCompletedFiltersFromUrl() {
+    const params = $page.url.searchParams;
+    const rawKind = String(params.get("completed_kind") ?? "").trim().toLowerCase();
+    const allowedKinds = ["all", "ask", "review", "escalate", "unknown"];
+    completedKindFilter = allowedKinds.includes(rawKind) ? rawKind : "all";
+    const rawWin = String(params.get("window_days") ?? "").trim();
+    if (rawWin === "7" || rawWin === "30" || rawWin === "0") {
+      completedWindowDays = Number(rawWin);
+    }
+  }
+
+  $effect(() => {
+    void $page.url.searchParams;
+    syncCompletedFiltersFromUrl();
+  });
+
   $effect(() => {
     const params = $page.url.searchParams;
     const rawCategory = String(params.get("category") ?? "").trim();
@@ -208,22 +237,53 @@
     });
   }
 
+  async function applyCompletedFilters() {
+    const params = new URLSearchParams();
+    params.set("status", "completed");
+    params.set("completed_kind", completedKindFilter);
+    params.set("window_days", String(completedWindowDays));
+    await goto(`${workspaceHref("/inbox")}?${params}`, {
+      replaceState: true,
+      noScroll: true,
+      keepFocus: true,
+    });
+  }
+
   function setUrgencyFromCard(level) {
     urgencyFilter = urgencyFilter === level ? "all" : level;
     applyFilters();
   }
 
-  onMount(() => {
-    void loadInbox();
-  });
+  async function dismissRespondBanner() {
+    const url = new URL($page.url);
+    url.searchParams.delete("responded");
+    url.searchParams.delete("responded_thread");
+    url.searchParams.delete("notify_queued");
+    url.searchParams.delete("notify_recorded");
+    await goto(`${url.pathname}${url.search}`, {
+      replaceState: true,
+      noScroll: true,
+      keepFocus: true,
+    });
+  }
 
-  async function loadInbox(isRetry = false) {
+  async function gotoCompletedTab() {
+    await goto(workspaceHref("/inbox?status=completed"), {
+      replaceState: false,
+      noScroll: false,
+      keepFocus: false,
+    });
+  }
+
+  async function loadOpenInbox(isRetry = false) {
     loading = true;
     error = "";
     retrying = isRetry;
 
     try {
-      const response = await coreClient.listInboxItems({ view: "items" });
+      const response = await coreClient.listInboxItems({
+        status: "open",
+      });
       items = response.items ?? [];
     } catch (loadError) {
       const reason =
@@ -235,271 +295,58 @@
     }
   }
 
-  function getDecisionForm(itemId) {
-    return (
-      decisionFormsById[itemId] ?? {
-        summary: "",
-        notes: "",
-        open: false,
-      }
-    );
-  }
-
-  function getDecisionFormError(itemId) {
-    return String(decisionFormErrorsById[itemId] ?? "").trim();
-  }
-
-  function toggleDecisionForm(item, open) {
-    const existing = getDecisionForm(item.id);
-
-    decisionFormsById = {
-      ...decisionFormsById,
-      [item.id]: {
-        ...existing,
-        open,
-      },
-    };
-
-    if (open) {
-      loadSubjectContext(item);
+  async function loadCompletedInbox(reset = true) {
+    if (reset) {
+      completedLoading = true;
+      completedNextCursor = "";
+    } else {
+      completedLoadingMore = true;
     }
-  }
-
-  async function loadSubjectContext(item) {
-    const subjectRef = getInboxSubjectRef(item);
-    const { prefix, id } = splitTypedRef(subjectRef);
-    const cacheKey = subjectRef || String(item?.id ?? "");
-
-    if (!cacheKey || subjectContextCache[cacheKey]) return;
-
-    subjectContextLoading = { ...subjectContextLoading, [cacheKey]: true };
-    try {
-      let subject = null;
-      let related = {};
-
-      if (prefix === "topic") {
-        try {
-          const response = await coreClient.getTopic(id);
-          subject = response.topic ?? null;
-        } catch (err) {
-          if (err?.status !== 404) {
-            throw err;
-          }
-          const response = await coreClient.getThread(id);
-          subject = response.thread ?? null;
-        }
-      } else if (prefix === "thread") {
-        const response = await coreClient.getThread(id);
-        subject = response.thread ?? null;
-      } else if (prefix === "board") {
-        const response = await coreClient.getBoard(id);
-        subject = response.board ?? null;
-        related = {
-          summary: response.summary ?? null,
-        };
-      } else if (prefix === "card") {
-        const response = await coreClient.getCard(id);
-        subject = response.card ?? response.membership ?? null;
-        if (subject?.board_ref) {
-          const boardId = String(subject.board_ref ?? "").replace(
-            /^board:/,
-            "",
-          );
-          if (boardId) {
-            try {
-              const boardResponse = await coreClient.getBoard(boardId);
-              related.board = boardResponse.board ?? null;
-              related.board_summary = boardResponse.summary ?? null;
-            } catch {
-              related.board = null;
-            }
-          }
-        }
-      } else if (prefix === "document") {
-        const response = await coreClient.getDocument(id);
-        subject = response.document ?? null;
-      }
-
-      subjectContextCache = {
-        ...subjectContextCache,
-        [cacheKey]: {
-          subject,
-          related,
-          subject_ref: subjectRef,
-        },
-      };
-    } catch (e) {
-      subjectContextErrors = {
-        ...subjectContextErrors,
-        [cacheKey]: e.message || String(e),
-      };
-    } finally {
-      subjectContextLoading = { ...subjectContextLoading, [cacheKey]: false };
-    }
-  }
-
-  function setDecisionFormError(itemId, message) {
-    decisionFormErrorsById = {
-      ...decisionFormErrorsById,
-      [itemId]: String(message ?? ""),
-    };
-  }
-
-  function updateDecisionField(itemId, field, value) {
-    decisionFormsById = {
-      ...decisionFormsById,
-      [itemId]: {
-        ...getDecisionForm(itemId),
-        [field]: value,
-      },
-    };
-
-    if (field === "summary" && String(value ?? "").trim()) {
-      setDecisionFormError(itemId, "");
-    }
-  }
-
-  function undoAcknowledge(itemId) {
-    const pending = pendingAckById[itemId];
-    if (!pending) return;
-
-    clearTimeout(pending.timeoutId);
-    pendingAckById = Object.fromEntries(
-      Object.entries(pendingAckById).filter(([k]) => k !== itemId),
-    );
-
-    items = [...items, pending.item];
-  }
-
-  function dismissFailedAck(itemId) {
-    failedAckById = Object.fromEntries(
-      Object.entries(failedAckById).filter(([k]) => k !== itemId),
-    );
-  }
-
-  async function retryFailedAck(itemId) {
-    const failed = failedAckById[itemId];
-    if (!failed) return;
-    failedAckById = {
-      ...failedAckById,
-      [itemId]: { ...failed, reason: "Send a response to close this item." },
-    };
-  }
-
-  function undoPendingDecision(itemId) {
-    const pending = pendingDecisionById[itemId];
-    if (!pending) return;
-
-    clearTimeout(pending.timeoutId);
-    pendingDecisionById = Object.fromEntries(
-      Object.entries(pendingDecisionById).filter(([k]) => k !== itemId),
-    );
-
-    items = [...items, pending.item];
-    decisionFormsById = {
-      ...decisionFormsById,
-      [itemId]: {
-        ...getDecisionForm(itemId),
-        summary: pending.summary,
-        notes: pending.notes,
-        open: true,
-      },
-    };
-    loadSubjectContext(pending.item);
-  }
-
-  function recordDecision(item) {
-    const draft = getDecisionForm(item.id);
     error = "";
-    setDecisionFormError(item.id, "");
 
-    const actionThreadId = inboxActionThreadId(item);
-
-    if (!actionThreadId) {
-      error = "Cannot record decision: no backing thread to attach.";
-      return;
-    }
-
-    if (!draft.summary.trim()) {
-      setDecisionFormError(item.id, "Decision summary is required.");
-      return;
-    }
-
-    const groundingRef = decisionGroundingRefForInboxItem(item);
-    if (!groundingRef) {
-      error =
-        "Cannot record decision: no thread grounding ref could be derived for this inbox item.";
-      return;
-    }
-
-    const summary = draft.summary.trim();
-    const notes = draft.notes.trim();
-    const refs = Array.from(
-      new Set([
-        ...(Array.isArray(item.related_refs) ? item.related_refs : []),
-        `inbox:${item.id}`,
-        groundingRef,
-      ]),
-    );
-    items = items.filter((candidate) => candidate.id !== item.id);
-    toggleDecisionForm(item, false);
-    updateDecisionField(item.id, "summary", "");
-    updateDecisionField(item.id, "notes", "");
-
-    const timeoutId = setTimeout(async () => {
-      pendingDecisionById = Object.fromEntries(
-        Object.entries(pendingDecisionById).filter(([k]) => k !== item.id),
-      );
-
-      decisionInFlightById = { ...decisionInFlightById, [item.id]: true };
-      try {
-        const response = await coreClient.createEvent({
-          event: {
-            type: "decision_made",
-            thread_id: actionThreadId,
-            refs,
-            summary,
-            payload: {
-              notes,
-              inbox_item_id: item.id,
-            },
-            provenance: {
-              sources: ["actor_statement:ui"],
-            },
-          },
-        });
-
-        postedDecisionByInboxItem = {
-          ...postedDecisionByInboxItem,
-          [item.id]: response.event,
-        };
-      } catch (decisionError) {
-        const reason =
-          decisionError instanceof Error
-            ? decisionError.message
-            : String(decisionError);
-        error = `Failed to record decision: ${reason}`;
-        items = [...items, item];
-        decisionFormsById = {
-          ...decisionFormsById,
-          [item.id]: {
-            ...getDecisionForm(item.id),
-            summary,
-            notes,
-            open: true,
-          },
-        };
-        loadSubjectContext(item);
-      } finally {
-        decisionInFlightById = { ...decisionInFlightById, [item.id]: false };
+    try {
+      const query = {
+        status: "completed",
+        limit: 50,
+        window_days: Number(completedWindowDays),
+      };
+      if (completedKindFilter !== "all") {
+        query.completed_kind = completedKindFilter;
       }
-    }, PENDING_INBOX_ACTION_MS);
-
-    pendingDecisionById = {
-      ...pendingDecisionById,
-      [item.id]: { item, summary, notes, timeoutId },
-    };
+      if (!reset && completedNextCursor) {
+        query.cursor = completedNextCursor;
+      }
+      const response = await coreClient.listInboxItems(query);
+      const rows = response.items ?? [];
+      completedNextCursor = String(response.next_cursor ?? "").trim();
+      if (reset) {
+        completedItems = rows;
+      } else {
+        completedItems = [...completedItems, ...rows];
+      }
+    } catch (loadError) {
+      const reason =
+        loadError instanceof Error ? loadError.message : String(loadError);
+      error = `Failed to load completed inbox: ${reason}`;
+    } finally {
+      completedLoading = false;
+      completedLoadingMore = false;
+    }
   }
+
+  async function reloadForTab() {
+    syncCompletedFiltersFromUrl();
+    if (inboxTab === "completed") {
+      await loadCompletedInbox(true);
+    } else {
+      await loadOpenInbox(false);
+    }
+  }
+
+  afterNavigate(() => {
+    syncCompletedFiltersFromUrl();
+    void reloadForTab();
+  });
 
   function urgencyDot(level) {
     if (level === "immediate") return "bg-danger";
@@ -563,48 +410,131 @@
 </script>
 
 <div
-  class="mb-3 flex max-md:mb-2 items-center justify-between border-b border-[var(--line)] pb-3 max-md:pb-2"
+  class="mb-3 flex max-md:mb-2 flex-wrap items-center justify-between gap-3 border-b border-[var(--line)] pb-3 max-md:pb-2"
 >
-  <div>
+  <div class="flex flex-wrap items-center gap-3">
     <h1 class="text-subtitle font-semibold text-[var(--fg)]">Inbox</h1>
+    <div
+      class="inline-flex rounded-md border border-[var(--line)] bg-[var(--panel)] p-0.5 text-micro font-semibold"
+      role="tablist"
+      aria-label="Inbox scope"
+      data-testid="inbox-tab-scope"
+    >
+      <a
+        role="tab"
+        aria-selected={inboxTab === "open"}
+        class="rounded px-2.5 py-1 transition-colors {inboxTab === 'open'
+          ? 'bg-[var(--accent)]/15 text-[var(--accent)]'
+          : 'text-[var(--fg-muted)] hover:text-[var(--fg)]'}"
+        href={workspaceHref("/inbox")}
+        data-testid="inbox-tab-open"
+      >
+        Open
+      </a>
+      <a
+        role="tab"
+        aria-selected={inboxTab === "completed"}
+        class="rounded px-2.5 py-1 transition-colors {inboxTab === 'completed'
+          ? 'bg-[var(--accent)]/15 text-[var(--accent)]'
+          : 'text-[var(--fg-muted)] hover:text-[var(--fg)]'}"
+        href={workspaceHref("/inbox?status=completed")}
+        data-testid="inbox-tab-completed"
+      >
+        Completed
+      </a>
+    </div>
   </div>
   <div class="flex items-center gap-2">
-    <button
-      class="cursor-pointer inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-micro font-medium transition-colors {hasActiveFilters
-        ? 'border-[var(--accent)]/40 bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/15'
-        : 'border-[var(--line)] bg-[var(--bg-soft)] text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]'}"
-      onclick={() => (filtersOpen = !filtersOpen)}
-      type="button"
-      data-testid="inbox-filters-toggle"
-    >
-      <svg
-        class="h-3.5 w-3.5"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-        stroke-width="2"
+    {#if inboxTab === "open"}
+      <button
+        class="cursor-pointer inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-micro font-medium transition-colors {hasActiveFilters
+          ? 'border-[var(--accent)]/40 bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/15'
+          : 'border-[var(--line)] bg-[var(--bg-soft)] text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]'}"
+        onclick={() => (filtersOpen = !filtersOpen)}
+        type="button"
+        data-testid="inbox-filters-toggle"
       >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
-        />
-      </svg>
-      {hasActiveFilters ? "Filtered" : "Filter"}
-    </button>
-    <span
-      class="inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-micro font-semibold tabular-nums leading-none {totalItems >
-      0
-        ? 'bg-[var(--accent)]/10 text-[var(--accent)]'
-        : 'bg-[var(--panel)] text-[var(--fg-muted)]'}"
-      data-testid="inbox-triage-header"
-    >
-      {totalItems} open
-    </span>
+        <svg
+          class="h-3.5 w-3.5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+          />
+        </svg>
+        {hasActiveFilters ? "Filtered" : "Filter"}
+      </button>
+      <span
+        class="inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-micro font-semibold tabular-nums leading-none {totalItems >
+        0
+          ? 'bg-[var(--accent)]/10 text-[var(--accent)]'
+          : 'bg-[var(--panel)] text-[var(--fg-muted)]'}"
+        data-testid="inbox-triage-header"
+      >
+        {totalItems} open
+      </span>
+    {:else}
+      <span
+        class="inline-flex h-7 items-center rounded-md px-2.5 text-micro font-semibold tabular-nums leading-none bg-[var(--panel)] text-[var(--fg-muted)]"
+        data-testid="inbox-completed-count"
+      >
+        {completedItems.length} shown
+      </span>
+    {/if}
   </div>
 </div>
 
-{#if filtersOpen}
+{#if respondedBanner && inboxTab === "open"}
+  <div
+    class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-ok/40 bg-ok-soft px-3 py-2.5 text-meta text-ok-text"
+    role="status"
+    data-testid="inbox-response-banner"
+  >
+    <div class="space-y-1">
+      <div class="font-semibold">Response recorded.</div>
+      <div class="text-micro text-ok-text/90">
+        {#if respondedBanner.notifyQueued}
+          Notification queued for delivery.
+        {:else if respondedBanner.notifyRecorded}
+          Recorded without notification (notify none or unresolved target).
+        {:else}
+          Notification status unavailable for this submission.
+        {/if}
+      </div>
+      <div class="flex flex-wrap gap-x-3 gap-y-1 text-micro">
+        {#if respondedBanner.threadId && respondedBanner.eventId}
+          <a
+            class="font-medium underline hover:text-ok-text"
+            href={`${workspaceHref(`/threads/${encodeURIComponent(respondedBanner.threadId)}`)}#event-${encodeURIComponent(respondedBanner.eventId)}`}
+          >
+            View timeline event
+          </a>
+        {/if}
+        <button
+          type="button"
+          class="font-medium underline hover:text-ok-text"
+          onclick={() => void gotoCompletedTab()}
+        >
+          View in Completed
+        </button>
+      </div>
+    </div>
+    <button
+      type="button"
+      class="shrink-0 text-micro font-medium text-ok-text/80 hover:text-ok-text"
+      onclick={() => void dismissRespondBanner()}
+    >
+      Dismiss
+    </button>
+  </div>
+{/if}
+
+{#if inboxTab === "open" && filtersOpen}
   <CompactFilterBar testId="inbox-filter-panel">
     {#snippet children()}
       <div
@@ -659,570 +589,363 @@
   </CompactFilterBar>
 {/if}
 
+{#if inboxTab === "completed"}
+  <CompactFilterBar testId="inbox-completed-filter-panel">
+    {#snippet children()}
+      <div
+        class="flex flex-wrap items-end gap-3 sm:flex-nowrap sm:items-end sm:gap-4"
+      >
+        <label class="min-w-[11rem] flex-1 text-micro sm:min-w-[13rem]">
+          <span class="font-medium text-[var(--fg-muted)]">Kind</span>
+          <select
+            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
+            bind:value={completedKindFilter}
+            data-testid="inbox-completed-kind-filter"
+          >
+            <option value="all">All</option>
+            <option value="ask">Ask</option>
+            <option value="review">Review</option>
+            <option value="escalate">Escalate</option>
+            <option value="unknown">Unknown</option>
+          </select>
+        </label>
+        <label class="min-w-[11rem] flex-1 text-micro sm:min-w-[13rem]">
+          <span class="font-medium text-[var(--fg-muted)]">Time window</span>
+          <select
+            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
+            bind:value={completedWindowDays}
+            data-testid="inbox-completed-window-filter"
+          >
+            <option value={7}>Last 7 days</option>
+            <option value={30}>Last 30 days</option>
+            <option value={0}>All time</option>
+          </select>
+        </label>
+        <Button
+          variant="secondary"
+          size="compact"
+          onclick={() => void applyCompletedFilters()}
+          class="sm:ml-auto"
+        >
+          Apply
+        </Button>
+      </div>
+    {/snippet}
+  </CompactFilterBar>
+{/if}
+
 {#if error}
   <StateError
     message={error}
-    onretry={() => void loadInbox(true)}
+    onretry={() => void reloadForTab()}
     {retrying}
     class="mb-4"
   />
 {/if}
 
-<div class="flex gap-1.5 mb-4" data-testid="urgency-summary-strip">
-  <button
-    class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-micro font-medium transition-colors {urgencyCardClass(
-      'immediate',
-    )} {urgencySummary.immediate > 0
-      ? 'bg-danger-soft'
-      : 'bg-[var(--bg-soft)]'}"
-    onclick={() => setUrgencyFromCard("immediate")}
-    type="button"
-    data-testid="urgency-summary-immediate"
-  >
-    <span class="inline-block h-1.5 w-1.5 rounded-full bg-danger shrink-0"
-    ></span>
-    <span class="text-danger-text">Immediate</span>
-    <span
-      class="tabular-nums {urgencySummary.immediate > 0
-        ? 'text-danger-text'
-        : 'text-[var(--fg-subtle)]'}">{urgencySummary.immediate}</span
+{#if inboxTab === "open"}
+  <div class="flex gap-1.5 mb-4" data-testid="urgency-summary-strip">
+    <button
+      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-micro font-medium transition-colors {urgencyCardClass(
+        'immediate',
+      )} {urgencySummary.immediate > 0
+        ? 'bg-danger-soft'
+        : 'bg-[var(--bg-soft)]'}"
+      onclick={() => setUrgencyFromCard("immediate")}
+      type="button"
+      data-testid="urgency-summary-immediate"
     >
-  </button>
-  <button
-    class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-micro font-medium transition-colors {urgencyCardClass(
-      'high',
-    )} {urgencySummary.high > 0 ? 'bg-warn/5' : 'bg-[var(--bg-soft)]'}"
-    onclick={() => setUrgencyFromCard("high")}
-    type="button"
-    data-testid="urgency-summary-high"
-  >
-    <span class="inline-block h-1.5 w-1.5 rounded-full bg-warn-text shrink-0"
-    ></span>
-    <span class="text-warn-text">High</span>
-    <span
-      class="tabular-nums {urgencySummary.high > 0
-        ? 'text-warn-text'
-        : 'text-[var(--fg-subtle)]'}">{urgencySummary.high}</span
-    >
-  </button>
-  <button
-    class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-micro font-medium transition-colors bg-[var(--bg-soft)] {urgencyCardClass(
-      'normal',
-    )}"
-    onclick={() => setUrgencyFromCard("normal")}
-    type="button"
-    data-testid="urgency-summary-normal"
-  >
-    <span class="inline-block h-1.5 w-1.5 rounded-full bg-fg-muted shrink-0"
-    ></span>
-    <span class="text-[var(--fg-muted)]">Normal</span>
-    <span class="tabular-nums text-[var(--fg-subtle)]"
-      >{urgencySummary.normal}</span
-    >
-  </button>
-</div>
-
-{#if Object.keys(pendingAckById).length > 0 || Object.keys(pendingDecisionById).length > 0}
-  <div class="mb-4 space-y-1.5" data-testid="inbox-pending-actions">
-    {#each Object.values(pendingAckById) as pending}
-      <div
-        class="flex items-center justify-between gap-3 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-micro text-[var(--fg-muted)]"
+      <span class="inline-block h-1.5 w-1.5 rounded-full bg-danger shrink-0"
+      ></span>
+      <span class="text-danger-text">Immediate</span>
+      <span
+        class="tabular-nums {urgencySummary.immediate > 0
+          ? 'text-danger-text'
+          : 'text-[var(--fg-subtle)]'}">{urgencySummary.immediate}</span
       >
-        <span class="truncate"
-          >Acknowledged: <span class="font-medium text-[var(--fg)]"
-            >{pending.item.title ?? pending.item.summary ?? "item"}</span
-          ></span
-        >
-        <button
-          class="cursor-pointer shrink-0 font-medium text-accent-text hover:text-accent-text"
-          onclick={() => undoAcknowledge(pending.item.id)}
-          type="button"
-          aria-label="Undo acknowledge for {pending.item.title ??
-            pending.item.summary ??
-            'inbox item'}"
-        >
-          Undo
-        </button>
-      </div>
-    {/each}
-    {#each Object.values(pendingDecisionById) as pending}
-      <div
-        class="flex items-center justify-between gap-3 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-micro text-[var(--fg-muted)]"
+    </button>
+    <button
+      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-micro font-medium transition-colors {urgencyCardClass(
+        'high',
+      )} {urgencySummary.high > 0 ? 'bg-warn/5' : 'bg-[var(--bg-soft)]'}"
+      onclick={() => setUrgencyFromCard("high")}
+      type="button"
+      data-testid="urgency-summary-high"
+    >
+      <span class="inline-block h-1.5 w-1.5 rounded-full bg-warn-text shrink-0"
+      ></span>
+      <span class="text-warn-text">High</span>
+      <span
+        class="tabular-nums {urgencySummary.high > 0
+          ? 'text-warn-text'
+          : 'text-[var(--fg-subtle)]'}">{urgencySummary.high}</span
       >
-        <span class="truncate"
-          >Decision pending: <span class="font-medium text-[var(--fg)]"
-            >{pending.item.title ?? pending.item.summary ?? "item"}</span
-          ></span
-        >
-        <button
-          class="cursor-pointer shrink-0 font-medium text-accent-text hover:text-accent-text"
-          onclick={() => undoPendingDecision(pending.item.id)}
-          type="button"
-          aria-label="Undo pending decision for {pending.item.title ??
-            pending.item.summary ??
-            'inbox item'}"
-        >
-          Undo
-        </button>
-      </div>
-    {/each}
+    </button>
+    <button
+      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-micro font-medium transition-colors bg-[var(--bg-soft)] {urgencyCardClass(
+        'normal',
+      )}"
+      onclick={() => setUrgencyFromCard("normal")}
+      type="button"
+      data-testid="urgency-summary-normal"
+    >
+      <span class="inline-block h-1.5 w-1.5 rounded-full bg-fg-muted shrink-0"
+      ></span>
+      <span class="text-[var(--fg-muted)]">Normal</span>
+      <span class="tabular-nums text-[var(--fg-subtle)]"
+        >{urgencySummary.normal}</span
+      >
+    </button>
   </div>
 {/if}
 
-{#if Object.keys(failedAckById).length > 0}
-  <div class="mb-4 space-y-1.5" data-testid="inbox-failed-ack-toast">
-    {#each Object.entries(failedAckById) as [itemId, failed]}
+{#if inboxTab === "open"}
+  {#if loading && items.length === 0}
+    <SkeletonInboxRow count={5} />
+  {:else if totalItems === 0 && !error}
+    <StateEmpty
+      title="Inbox is clear"
+      helper="Nothing needs attention right now."
+    />
+  {:else if !hasFilteredItems && totalItems > 0}
+    <div class="mt-8 text-center py-12" data-testid="inbox-filter-empty-state">
       <div
-        class="flex items-center justify-between gap-3 rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-micro"
-        role="alert"
+        class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[var(--panel)] mb-3"
       >
-        <span class="truncate text-danger-text"
-          >Ack failed: <span class="font-medium text-danger-text"
-            >{failed.item.title ?? failed.item.summary ?? "item"}</span
-          >
-          — {failed.reason}</span
+        <svg
+          class="h-6 w-6 text-[var(--fg-subtle)]"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          stroke-width="1.5"
         >
-        <div class="flex shrink-0 gap-2">
-          <button
-            class="cursor-pointer font-medium text-accent-text hover:text-accent-text"
-            onclick={() => void retryFailedAck(itemId)}
-            disabled={Boolean(ackInFlightById[itemId])}
-            type="button"
-          >
-            {ackInFlightById[itemId] ? "Retrying…" : "Retry"}
-          </button>
-          <button
-            class="cursor-pointer font-medium text-[var(--fg-muted)] hover:text-[var(--fg)]"
-            onclick={() => dismissFailedAck(itemId)}
-            type="button"
-          >
-            Dismiss
-          </button>
-        </div>
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z"
+          />
+        </svg>
       </div>
-    {/each}
-  </div>
-{/if}
-
-{#if loading && items.length === 0}
-  <SkeletonInboxRow count={5} />
-{:else if totalItems === 0 && !error}
-  <StateEmpty
-    title="Inbox is clear"
-    helper="Nothing needs attention right now."
-  />
-{:else if !hasFilteredItems && totalItems > 0}
-  <div class="mt-8 text-center py-12" data-testid="inbox-filter-empty-state">
-    <div
-      class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[var(--panel)] mb-3"
-    >
-      <svg
-        class="h-6 w-6 text-[var(--fg-subtle)]"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-        stroke-width="1.5"
+      <h2 class="text-body font-semibold text-[var(--fg)]">
+        No items match this view
+      </h2>
+      <p class="mt-1 text-meta text-[var(--fg-muted)]">
+        Try switching back to <span class="font-semibold">All</span> to see the full
+        queue.
+      </p>
+      <Button
+        variant="secondary"
+        size="compact"
+        onclick={resetFilters}
+        class="mt-4"
       >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z"
-        />
-      </svg>
+        Clear filters
+      </Button>
     </div>
-    <h2 class="text-body font-semibold text-[var(--fg)]">
-      No items match this view
-    </h2>
-    <p class="mt-1 text-meta text-[var(--fg-muted)]">
-      Try switching back to <span class="font-semibold">All</span> to see the full
-      queue.
-    </p>
-    <Button
-      variant="secondary"
-      size="compact"
-      onclick={resetFilters}
-      class="mt-4"
-    >
-      Clear filters
-    </Button>
-  </div>
-{:else if hasFilteredItems}
-  <div class="space-y-4">
-    {#each visibleGroups as group}
-      <section data-testid={`inbox-group-${group.category}`}>
-        <div class="mb-1.5 flex items-center gap-1.5">
-          <h2
-            class="text-micro font-semibold uppercase tracking-wider {categoryBadgeClass(
-              group.category,
-            )}"
-          >
-            {getInboxCategoryLabel(group.category)}
-          </h2>
-          <span class="text-micro text-[var(--fg-subtle)] tabular-nums"
-            >{group.items.length}</span
-          >
-        </div>
-
-        <div class="space-y-1.5">
-          {#each group.items as item}
-            <article
-              class="rounded-md border border-[var(--line)] border-l-[3px] bg-[var(--bg-soft)] px-3 py-2.5 transition-colors hover:bg-[var(--panel)] {urgencyBorderClass(
-                item.urgency_level,
+  {:else if hasFilteredItems}
+    <div class="space-y-4">
+      {#each visibleGroups as group}
+        <section data-testid={`inbox-group-${group.category}`}>
+          <div class="mb-1.5 flex items-center gap-1.5">
+            <h2
+              class="text-micro font-semibold uppercase tracking-wider {categoryBadgeClass(
+                group.category,
               )}"
-              data-testid={`inbox-card-${item.id}`}
             >
-              <div class="flex items-center justify-between gap-2 text-micro">
-                <div class="flex min-w-0 items-center gap-1.5">
-                  <span
-                    class="inline-flex items-center rounded px-1.5 py-0.5 text-micro font-semibold tracking-wide {inboxItemKind(
-                      item,
-                    ) === 'ask'
-                      ? 'bg-accent-soft text-accent-text'
-                      : 'bg-[var(--line)] text-[var(--fg-muted)]'}"
-                  >
-                    {inboxKindPillLabel(item)}
-                  </span>
-                  <span
-                    class="inline-flex h-1.5 w-1.5 shrink-0 rounded-full {urgencyDot(
-                      item.urgency_level,
-                    )}"
-                  ></span>
-                  <span class="font-medium text-[var(--fg-muted)]"
-                    >{item.urgency_label}</span
-                  >
-                  {#if item.age_label}
-                    <span
-                      class="text-[var(--fg-muted)]"
-                      title={item.has_source_event_time
-                        ? formatAbsoluteDateTime(item.source_event_time)
-                        : undefined}>&middot; {item.age_label}</span
-                    >
-                  {/if}
-                </div>
-              </div>
+              {getInboxCategoryLabel(group.category)}
+            </h2>
+            <span class="text-micro text-[var(--fg-subtle)] tabular-nums"
+              >{group.items.length}</span
+            >
+          </div>
 
-              <div class="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                <h3
-                  class="text-meta font-semibold text-[var(--fg)] leading-snug"
-                >
-                  {item.title}
-                </h3>
-                {#if getInboxSubjectLabel(item)}
-                  <a
-                    class="shrink-0 rounded bg-[var(--line)] px-1.5 py-0.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
-                    href={inboxItemHref(item)}
-                  >
-                    {getInboxSubjectLabel(item)}
-                  </a>
-                {/if}
-              </div>
-              <div
-                class="mt-1 text-micro text-[var(--fg-muted)]"
-                data-testid={`inbox-requester-meta-${item.id}`}
+          <div class="space-y-1.5">
+            {#each group.items as item}
+              <article
+                class="rounded-md border border-[var(--line)] border-l-[3px] bg-[var(--bg-soft)] px-3 py-2.5 transition-colors hover:bg-[var(--panel)] {urgencyBorderClass(
+                  item.urgency_level,
+                )}"
+                data-testid={`inbox-card-${item.id}`}
               >
-                Requested by
-                <span class="font-mono text-meta text-[var(--fg)]">
-                  {askActorLabel(item)}
-                </span>
-                {#if item.age_label}
-                  &middot; requested {item.age_label.replace(" old", "")} ago
-                {/if}
-              </div>
-
-              {#if getInboxSubjectRef(item) || (item.related_refs ?? []).length > 0}
-                <div
-                  class="mt-1.5 flex flex-wrap items-center gap-1 text-micro"
-                >
-                  {#if getInboxSubjectRef(item)}
-                    {@const subjectId = getInboxSubjectId(item)}
+                <div class="flex items-center justify-between gap-2 text-micro">
+                  <div class="flex min-w-0 items-center gap-1.5">
                     <span
-                      class="inline-flex items-center gap-1 rounded bg-[var(--panel)] px-1.5 py-0.5 font-medium text-[var(--fg-muted)]"
-                      title={getInboxSubjectRef(item)}
+                      class="inline-flex items-center rounded px-1.5 py-0.5 text-micro font-semibold tracking-wide {inboxItemKind(
+                        item,
+                      ) === 'ask'
+                        ? 'bg-accent-soft text-accent-text'
+                        : 'bg-[var(--line)] text-[var(--fg-muted)]'}"
                     >
-                      <span>
-                        {getInboxSubjectKind(item)
-                          ? `${getInboxSubjectKind(item)}:`
-                          : "Subject:"}
-                      </span>
-                      <span
-                        >{subjectId.length > 10
-                          ? `${subjectId.slice(0, 10)}…`
-                          : subjectId}</span
-                      >
+                      {inboxKindPillLabel(item)}
                     </span>
-                  {/if}
-                  {#each item.related_refs ?? [] as refValue}
-                    <RefLink
-                      {refValue}
-                      threadId={inboxActionThreadId(item)}
-                      humanize
-                    />
-                  {/each}
-                </div>
-              {/if}
-
-              <div class="mt-2 flex flex-wrap items-center gap-1.5">
-                <Button
-                  variant="primary"
-                  size="compact"
-                  href={askItemHref(item)}
-                >
-                  Respond
-                </Button>
-              </div>
-
-              {#if postedDecisionByInboxItem[item.id]}
-                <div
-                  class="mt-2 flex items-center gap-2 rounded-md bg-ok-soft px-3 py-2 text-micro text-ok-text"
-                >
-                  <svg
-                    class="h-3.5 w-3.5 shrink-0"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    stroke-width="2.5"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M5 13l4 4L19 7"
-                    />
-                  </svg>
-                  <span>
-                    Decision recorded &mdash;
-                    <a
-                      class="font-medium underline hover:text-ok-text"
-                      href={`${inboxItemHref(item)}#event-${postedDecisionByInboxItem[item.id].id}`}
+                    <span
+                      class="inline-flex h-1.5 w-1.5 shrink-0 rounded-full {urgencyDot(
+                        item.urgency_level,
+                      )}"
+                    ></span>
+                    <span class="font-medium text-[var(--fg-muted)]"
+                      >{item.urgency_label}</span
                     >
-                      view in timeline
-                    </a>
-                  </span>
-                </div>
-              {/if}
-
-              {#if getDecisionForm(item.id).open}
-                <div
-                  class="mt-3 grid grid-cols-1 md:grid-cols-[3fr_2fr] gap-3"
-                  data-testid={`decision-panel-${item.id}`}
-                >
-                  {#if getInboxSubjectRef(item)}
-                    {@const subjectRef = getInboxSubjectRef(item)}
-                    <div
-                      class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-3 min-w-0"
-                    >
-                      {#if subjectContextLoading[subjectRef]}
-                        <div
-                          class="flex items-center gap-2 text-micro text-[var(--fg-muted)] py-4 justify-center"
-                        >
-                          <svg
-                            class="h-3.5 w-3.5 animate-spin"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                          >
-                            <circle
-                              class="opacity-25"
-                              cx="12"
-                              cy="12"
-                              r="10"
-                              stroke="currentColor"
-                              stroke-width="4"
-                            ></circle>
-                            <path
-                              class="opacity-75"
-                              fill="currentColor"
-                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                            ></path>
-                          </svg>
-                          Loading subject context…
-                        </div>
-                      {:else if subjectContextErrors[subjectRef]}
-                        <div class="text-micro text-danger-text py-2">
-                          Failed to load subject: {subjectContextErrors[
-                            subjectRef
-                          ]}
-                        </div>
-                      {:else if subjectContextCache[subjectRef]}
-                        {@const ctx = subjectContextCache[subjectRef]}
-                        {@const subject = ctx.subject}
-                        {@const related = ctx.related}
-                        <div class="flex items-center gap-2 mb-2">
-                          <h4
-                            class="text-meta font-semibold text-[var(--fg)] truncate min-w-0"
-                          >
-                            {subject?.title ??
-                              subject?.summary ??
-                              subject?.current_summary ??
-                              subject?.id ??
-                              getInboxSubjectLabel(item)}
-                          </h4>
-                          <span
-                            class="shrink-0 rounded-md border border-[var(--line)] px-1.5 py-0.5 text-micro font-medium capitalize {subject?.state ===
-                            'active'
-                              ? 'text-ok-text'
-                              : subject?.state === 'archived'
-                                ? 'text-warn-text'
-                                : subject?.state === 'trashed'
-                                  ? 'text-danger-text'
-                                  : 'text-[var(--fg-muted)]'}"
-                          >
-                            {subject?.state ?? "unknown"}
-                          </span>
-                          {#if subject?.type}
-                            <span
-                              class="shrink-0 text-micro font-medium text-[var(--fg-muted)] uppercase"
-                              >{subject.type}</span
-                            >
-                          {/if}
-                        </div>
-
-                        {#if subject?.summary || subject?.current_summary}
-                          <div
-                            class="mb-2 text-micro text-[var(--fg)] leading-relaxed"
-                          >
-                            <MarkdownRenderer
-                              source={subject.summary ??
-                                subject.current_summary}
-                              class="text-micro"
-                            />
-                          </div>
-                        {/if}
-
-                        <div class="flex flex-wrap gap-1.5">
-                          {#if subject?.board_ref}
-                            <span
-                              class="rounded bg-[var(--line)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
-                            >
-                              Board: {subject.board_ref}
-                            </span>
-                          {/if}
-                          {#if subject?.topic_ref}
-                            <span
-                              class="rounded bg-[var(--line)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
-                            >
-                              Topic: {subject.topic_ref}
-                            </span>
-                          {/if}
-                          {#if subject?.document_ref}
-                            <span
-                              class="rounded bg-[var(--line)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
-                            >
-                              Doc: {subject.document_ref}
-                            </span>
-                          {/if}
-                          {#if related?.board_summary}
-                            <span
-                              class="rounded bg-[var(--line)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
-                            >
-                              {related.board_summary.card_count ?? 0} cards
-                            </span>
-                          {/if}
-                        </div>
-
-                        {#if Array.isArray(subject?.related_refs) && subject.related_refs.length > 0}
-                          <div class="border-t border-[var(--line)] pt-2 mt-2">
-                            <p
-                              class="text-micro font-medium text-[var(--fg-muted)] uppercase tracking-wide mb-1.5"
-                            >
-                              Related refs
-                            </p>
-                            <div class="flex flex-wrap gap-1.5">
-                              {#each subject.related_refs as refValue}
-                                <RefLink
-                                  {refValue}
-                                  threadId={subject?.thread_id ??
-                                    inboxActionThreadId(item)}
-                                  humanize
-                                />
-                              {/each}
-                            </div>
-                          </div>
-                        {/if}
-
-                        <div class="border-t border-[var(--line)] pt-2 mt-2">
-                          <a
-                            class="inline-flex items-center gap-1 text-micro font-medium text-accent-text hover:text-accent-text transition-colors"
-                            href={inboxItemHref(item)}
-                          >
-                            View subject &rarr;
-                          </a>
-                        </div>
-                      {/if}
-                    </div>
-                  {/if}
-
-                  <form
-                    class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] p-3 {inboxActionThreadId(
-                      item,
-                    )
-                      ? ''
-                      : 'md:col-span-2'}"
-                    data-testid={`decision-form-${item.id}`}
-                    onsubmit={(event) => {
-                      event.preventDefault();
-                      void recordDecision(item);
-                    }}
-                  >
-                    <label
-                      class="block text-micro font-medium text-[var(--fg-muted)]"
-                      for={`decision-summary-${item.id}`}
-                    >
-                      Your decision
-                    </label>
-                    <input
-                      class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta transition-colors"
-                      id={`decision-summary-${item.id}`}
-                      oninput={(event) =>
-                        updateDecisionField(
-                          item.id,
-                          "summary",
-                          event.currentTarget.value,
-                        )}
-                      placeholder="e.g., Approved emergency reorder of 500 units"
-                      value={getDecisionForm(item.id).summary}
-                    />
-                    {#if getDecisionFormError(item.id)}
-                      <p class="mt-1 text-micro text-danger-text">
-                        {getDecisionFormError(item.id)}
-                      </p>
+                    {#if item.age_label}
+                      <span
+                        class="text-[var(--fg-muted)]"
+                        title={item.has_source_event_time
+                          ? formatAbsoluteDateTime(item.source_event_time)
+                          : undefined}>&middot; {item.age_label}</span
+                      >
                     {/if}
-                    <label
-                      class="mt-2 block text-micro font-medium text-[var(--fg-muted)]"
-                      for={`decision-notes-${item.id}`}
-                    >
-                      Rationale <span class="font-normal text-[var(--fg-muted)]"
-                        >optional</span
-                      >
-                    </label>
-                    <textarea
-                      class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta transition-colors"
-                      id={`decision-notes-${item.id}`}
-                      oninput={(event) =>
-                        updateDecisionField(
-                          item.id,
-                          "notes",
-                          event.currentTarget.value,
-                        )}
-                      placeholder="Why this choice? Any constraints, trade-offs, or follow-ups..."
-                      rows="2">{getDecisionForm(item.id).notes}</textarea
-                    >
-                    <div class="mt-2 flex justify-end">
-                      <Button
-                        type="submit"
-                        variant="primary"
-                        disabled={Boolean(decisionInFlightById[item.id])}
-                      >
-                        {decisionInFlightById[item.id]
-                          ? "Recording..."
-                          : "Submit decision"}
-                      </Button>
-                    </div>
-                  </form>
+                  </div>
                 </div>
-              {/if}
-            </article>
-          {/each}
+
+                <div class="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <h3
+                    class="text-meta font-semibold text-[var(--fg)] leading-snug"
+                  >
+                    {item.title}
+                  </h3>
+                  {#if getInboxSubjectLabel(item)}
+                    <a
+                      class="shrink-0 rounded bg-[var(--line)] px-1.5 py-0.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
+                      href={inboxItemHref(item)}
+                    >
+                      {getInboxSubjectLabel(item)}
+                    </a>
+                  {/if}
+                </div>
+                <div
+                  class="mt-1 text-micro text-[var(--fg-muted)]"
+                  data-testid={`inbox-requester-meta-${item.id}`}
+                >
+                  Requested by
+                  <span class="font-mono text-meta text-[var(--fg)]">
+                    {askActorLabel(item)}
+                  </span>
+                  {#if item.age_label}
+                    &middot; requested {item.age_label.replace(" old", "")} ago
+                  {/if}
+                </div>
+
+                {#if getInboxSubjectRef(item) || (item.related_refs ?? []).length > 0}
+                  <div
+                    class="mt-1.5 flex flex-wrap items-center gap-1 text-micro"
+                  >
+                    {#if getInboxSubjectRef(item)}
+                      {@const subjectId = getInboxSubjectId(item)}
+                      <span
+                        class="inline-flex items-center gap-1 rounded bg-[var(--panel)] px-1.5 py-0.5 font-medium text-[var(--fg-muted)]"
+                        title={getInboxSubjectRef(item)}
+                      >
+                        <span>
+                          {getInboxSubjectKind(item)
+                            ? `${getInboxSubjectKind(item)}:`
+                            : "Subject:"}
+                        </span>
+                        <span
+                          >{subjectId.length > 10
+                            ? `${subjectId.slice(0, 10)}…`
+                            : subjectId}</span
+                        >
+                      </span>
+                    {/if}
+                    {#each item.related_refs ?? [] as refValue}
+                      <RefLink
+                        {refValue}
+                        threadId={inboxActionThreadId(item)}
+                        humanize
+                      />
+                    {/each}
+                  </div>
+                {/if}
+
+                <div class="mt-2 flex flex-wrap items-center gap-1.5">
+                  <Button
+                    variant="primary"
+                    size="compact"
+                    href={askItemHref(item)}
+                  >
+                    Respond
+                  </Button>
+                </div>
+              </article>
+            {/each}
+          </div>
+        </section>
+      {/each}
+    </div>
+  {/if}
+{:else}
+  {#if completedLoading && completedItems.length === 0}
+    <SkeletonInboxRow count={5} />
+  {:else if completedItems.length === 0 && !error}
+    <StateEmpty
+      title="No completed responses yet"
+      helper="Responses you submit appear here after they are recorded."
+    />
+  {:else}
+    <div class="space-y-2">
+      {#each completedItems as row}
+        <article
+          class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2.5 transition-colors hover:bg-[var(--panel)]"
+          data-testid={`inbox-completed-card-${row.id}`}
+        >
+          <div class="flex flex-wrap items-center gap-2 text-micro">
+            <span
+              class="inline-flex items-center rounded px-1.5 py-0.5 font-semibold tracking-wide bg-[var(--line)] text-[var(--fg-muted)]"
+            >
+              {String(row.kind ?? "").toUpperCase()}
+            </span>
+            {#if row.responded_at}
+              <span class="text-[var(--fg-muted)] tabular-nums">
+                {formatAbsoluteDateTime(row.responded_at)}
+              </span>
+            {/if}
+            {#if row.responding_actor_id}
+              <span class="text-[var(--fg-muted)]">
+                · <span class="font-mono text-[var(--fg)]">{row.responding_actor_id}</span>
+              </span>
+            {/if}
+          </div>
+          <h3 class="mt-1 text-meta font-semibold text-[var(--fg)] leading-snug">
+            {row.title}
+          </h3>
+          {#if row.response_text}
+            <p class="mt-1 text-micro text-[var(--fg-muted)] leading-snug">
+              {snippet(row.response_text)}
+            </p>
+          {/if}
+          {#if row.original_request_missing}
+            <p class="mt-1 text-micro text-warn-text">
+              Original request details are unavailable for this entry.
+            </p>
+          {/if}
+          <div class="mt-2 flex flex-wrap gap-2">
+            <Button variant="secondary" size="compact" href={completedDetailHref(row)}>
+              Details
+            </Button>
+            {#if completedTimelineHref(row)}
+              <Button
+                variant="secondary"
+                size="compact"
+                href={completedTimelineHref(row)}
+              >
+                Timeline event
+              </Button>
+            {/if}
+          </div>
+        </article>
+      {/each}
+      {#if completedNextCursor}
+        <div class="flex justify-center pt-2">
+          <Button
+            variant="secondary"
+            size="compact"
+            disabled={completedLoadingMore}
+            onclick={() => void loadCompletedInbox(false)}
+          >
+            {completedLoadingMore ? "Loading…" : "Load more"}
+          </Button>
         </div>
-      </section>
-    {/each}
-  </div>
+      {/if}
+    </div>
+  {/if}
 {/if}

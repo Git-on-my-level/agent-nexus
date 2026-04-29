@@ -270,6 +270,19 @@ func handleGetInbox(w http.ResponseWriter, r *http.Request, opts handlerOptions)
 	}
 
 	now := time.Now().UTC()
+	status := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("status")))
+	if status == "" {
+		status = "open"
+	}
+	if status == "completed" {
+		handleGetCompletedInbox(w, r, opts, now)
+		return
+	}
+	if status != "open" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "status must be open or completed")
+		return
+	}
+
 	horizon, ok := resolveInboxRiskHorizon(w, r, opts)
 	if !ok {
 		return
@@ -289,8 +302,9 @@ func handleGetInbox(w http.ResponseWriter, r *http.Request, opts handlerOptions)
 		}
 
 		writeJSON(w, http.StatusOK, map[string]any{
-			"items":        payloadItems,
-			"generated_at": now.Format(time.RFC3339Nano),
+			"status":         "open",
+			"items":          payloadItems,
+			"generated_at":   now.Format(time.RFC3339Nano),
 		})
 		return
 	}
@@ -324,6 +338,7 @@ func handleGetInbox(w http.ResponseWriter, r *http.Request, opts handlerOptions)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
+		"status":               "open",
 		"items":                payloadItems,
 		"generated_at":         now.Format(time.RFC3339Nano),
 		"projection_freshness": aggregateTopicProjectionFreshness(states, threadIDs),
@@ -343,6 +358,11 @@ func handleGetInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	}
 
 	now := time.Now().UTC()
+	if strings.HasPrefix(inboxItemID, "completed:") {
+		handleGetCompletedInboxItem(w, r, opts, inboxItemID, now)
+		return
+	}
+
 	horizon, ok := resolveInboxRiskHorizon(w, r, opts)
 	if !ok {
 		return

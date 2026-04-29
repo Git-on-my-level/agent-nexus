@@ -145,10 +145,8 @@ type threadContextSelection struct {
 	fullID                 bool
 }
 
-type threadRecommendationsSelection struct {
+type threadWorkspaceSelection struct {
 	threadContextSelection
-	fullSummary                bool
-	includeRelatedEventContent bool
 }
 
 type eventTypeGuidance struct {
@@ -161,8 +159,6 @@ type eventTypeGuidance struct {
 
 var eventTypeGroupOrder = []string{
 	"Communication",
-	"Decisions",
-	"Interventions",
 	"Topics And Documents",
 	"Boards And Cards",
 	"Exceptions",
@@ -172,8 +168,6 @@ var eventTypeGroupOrder = []string{
 
 var eventTypeGroupDescriptions = map[string]string{
 	"Communication":        "Direct communication or important non-structured information.",
-	"Decisions":            "Request or record decisions tied to a topic.",
-	"Interventions":        "Single clear path exists, but a responsible actor must complete it.",
 	"Topics And Documents": "Durable work-subject and document lifecycle signals.",
 	"Boards And Cards":     "Board and card workflow signals.",
 	"Exceptions":           "Surface problems, risks, or escalations.",
@@ -212,28 +206,23 @@ var knownEventTypeGuidance = []eventTypeGuidance{
 		},
 	},
 	{
-		Type:  "decision_needed",
-		Group: "Decisions",
+		Type:             "human_attention_requested",
+		Group:            "Inbox Lifecycle",
+		PreferredCommand: "anx human ask|review|escalate",
+		Summary:          "Use the human command group to ask for operator attention, review, or escalation.",
 		Constraints: []string{
-			`event.refs must include "topic:<topic_id>".`,
-			`event.refs may include "artifact:<related_id>".`,
+			`event.refs must include "thread:<thread_id>" and a typed subject ref such as "topic:<topic_id>", "card:<card_id>", or "document:<document_id>".`,
+			`event.payload must include "kind", "title", "body", "subject_ref", and ordered "response_proposals".`,
 		},
 	},
 	{
-		Type:    "intervention_needed",
-		Group:   "Interventions",
-		Summary: "Use when the next step is clear but a responsible actor must perform it.",
+		Type:             "human_attention_responded",
+		Group:            "Inbox Lifecycle",
+		PreferredCommand: "anx inbox respond",
+		Summary:          "Records a human response and is the only source for Completed Inbox history.",
 		Constraints: []string{
-			`event.refs must include "topic:<topic_id>".`,
-			`event.refs may include "artifact:<related_id>".`,
-		},
-	},
-	{
-		Type:  "decision_made",
-		Group: "Decisions",
-		Constraints: []string{
-			`event.refs must include "topic:<topic_id>".`,
-			`event.refs may include "artifact:<decision_artifact_id>".`,
+			`event.refs must include "inbox:<inbox_item_id>".`,
+			`event.payload must include "inbox_item_id", "kind", "request_event_ref", and "response_text".`,
 		},
 	},
 	{
@@ -417,8 +406,8 @@ func (a *App) runActorsCommand(ctx context.Context, args []string, cfg config.Re
 		addSingleQuery(&query, "cursor", cursorFlag.value)
 		result, err := a.invokeTypedJSON(ctx, cfg, "actors list", "actors.list", nil, query, nil)
 		return result, "actors list", err
-	case "register":
-		fs := newSilentFlagSet("actors register")
+	case "create":
+		fs := newSilentFlagSet("actors create")
 		var idFlag, displayNameFlag, createdAtFlag trackedString
 		var tagsFlag trackedStrings
 		fs.Var(&idFlag, "id", "Actor id")
@@ -426,23 +415,23 @@ func (a *App) runActorsCommand(ctx context.Context, args []string, cfg config.Re
 		fs.Var(&createdAtFlag, "created-at", "Actor created_at timestamp (RFC3339)")
 		fs.Var(&tagsFlag, "tag", "Actor tag (repeatable)")
 		if err := fs.Parse(args[1:]); err != nil {
-			return nil, "actors register", errnorm.Usage("invalid_flags", err.Error())
+			return nil, "actors create", errnorm.Usage("invalid_flags", err.Error())
 		}
 		if len(fs.Args()) > 0 {
-			return nil, "actors register", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx actors register`")
+			return nil, "actors create", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx actors create`")
 		}
 		if strings.TrimSpace(idFlag.value) == "" {
-			return nil, "actors register", errnorm.Usage("invalid_request", "id is required")
+			return nil, "actors create", errnorm.Usage("invalid_request", "id is required")
 		}
 		if strings.TrimSpace(displayNameFlag.value) == "" {
-			return nil, "actors register", errnorm.Usage("invalid_request", "display-name is required")
+			return nil, "actors create", errnorm.Usage("invalid_request", "display-name is required")
 		}
 		createdAt := strings.TrimSpace(createdAtFlag.value)
 		if createdAt == "" {
-			return nil, "actors register", errnorm.Usage("invalid_request", "created-at is required")
+			return nil, "actors create", errnorm.Usage("invalid_request", "created-at is required")
 		}
 		if _, err := time.Parse(time.RFC3339, createdAt); err != nil {
-			return nil, "actors register", errnorm.Usage("invalid_request", "created-at must be an RFC3339 datetime string")
+			return nil, "actors create", errnorm.Usage("invalid_request", "created-at must be an RFC3339 datetime string")
 		}
 		body := map[string]any{
 			"actor": map[string]any{
@@ -454,8 +443,8 @@ func (a *App) runActorsCommand(ctx context.Context, args []string, cfg config.Re
 		if len(tagsFlag.values) > 0 {
 			body["actor"].(map[string]any)["tags"] = tagsFlag.values
 		}
-		result, err := a.invokeTypedJSON(ctx, cfg, "actors register", "actors.register", nil, nil, body)
-		return result, "actors register", err
+		result, err := a.invokeTypedJSON(ctx, cfg, "actors create", "actors.create", nil, nil, body)
+		return result, "actors create", err
 	default:
 		return nil, "actors", actorsSubcommandSpec.unknownError(args[0])
 	}
@@ -597,9 +586,6 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 	case "review":
 		result, err := a.runThreadsReviewCommand(ctx, args[1:], cfg)
 		return result, "threads review", err
-	case "recommendations":
-		result, err := a.runThreadsRecommendationsCommand(ctx, args[1:], cfg)
-		return result, "threads recommendations", err
 	case "archive":
 		return nil, "threads archive", threadsMutationUnsupportedErr("archive")
 	case "unarchive":
@@ -654,24 +640,21 @@ func parseThreadContextSelectionArgs(args []string, commandName string) (threadC
 	}, nil
 }
 
-func parseThreadRecommendationsArgs(args []string) (threadRecommendationsSelection, error) {
-	fs := newSilentFlagSet("threads recommendations")
+func parseThreadWorkspaceArgs(args []string) (threadWorkspaceSelection, error) {
+	fs := newSilentFlagSet("threads workspace")
 	var threadIDFlags trackedStrings
 	var stateFlag trackedString
 	var maxEventsFlag trackedInt
 	var includeArtifactContentFlag trackedBool
-	var includeRelatedEventContentFlag trackedBool
-	var fullIDFlag, fullSummaryFlag trackedBool
+	var fullIDFlag trackedBool
 
 	fs.Var(&threadIDFlags, "thread-id", "Thread id (repeatable)")
 	fs.Var(&stateFlag, "state", "Discover threads by lifecycle state (active, archived, trashed)")
 	fs.Var(&maxEventsFlag, "max-events", "Maximum recent events to include")
 	fs.Var(&includeArtifactContentFlag, "include-artifact-content", "Include key artifact content previews")
-	fs.Var(&includeRelatedEventContentFlag, "include-related-event-content", "Hydrate related review items with full events.get payloads")
 	fs.Var(&fullIDFlag, "full-id", "Render full ids in default text output (non-JSON)")
-	fs.Var(&fullSummaryFlag, "full-summary", "Show full recommendation summaries in default text output (non-JSON)")
 	if err := fs.Parse(args); err != nil {
-		return threadRecommendationsSelection{}, errnorm.Usage("invalid_flags", err.Error())
+		return threadWorkspaceSelection{}, errnorm.Usage("invalid_flags", err.Error())
 	}
 
 	positionals := append([]string(nil), fs.Args()...)
@@ -684,10 +667,10 @@ func parseThreadRecommendationsArgs(args []string) (threadRecommendationsSelecti
 	addSingleQuery(&discoveryQuery, "state", stateFlag.value)
 
 	if maxEventsFlag.set && maxEventsFlag.value < 0 {
-		return threadRecommendationsSelection{}, errnorm.Usage("invalid_request", "--max-events must be >= 0")
+		return threadWorkspaceSelection{}, errnorm.Usage("invalid_request", "--max-events must be >= 0")
 	}
 
-	return threadRecommendationsSelection{
+	return threadWorkspaceSelection{
 		threadContextSelection: threadContextSelection{
 			threadIDs:              threadIDs,
 			discoveryQuery:         discoveryQuery,
@@ -696,8 +679,6 @@ func parseThreadRecommendationsArgs(args []string) (threadRecommendationsSelecti
 			includeArtifactContent: includeArtifactContentFlag.set && includeArtifactContentFlag.value,
 			fullID:                 fullIDFlag.set && fullIDFlag.value,
 		},
-		fullSummary:                fullSummaryFlag.set && fullSummaryFlag.value,
-		includeRelatedEventContent: includeRelatedEventContentFlag.set && includeRelatedEventContentFlag.value,
 	}, nil
 }
 
@@ -751,8 +732,6 @@ func mixedThreadSelectionMessage(commandName string) string {
 	switch strings.TrimSpace(commandName) {
 	case "threads context":
 		return base + " For one thread, use `anx threads inspect --thread-id <thread-id>` or `anx threads workspace --thread-id <thread-id>` for backing-thread diagnostics. Prefer `anx topics workspace --topic-id <topic-id>` for primary coordination when you have a topic id. For discovery, remove `--thread-id` and use `" + discoveryExample + "`."
-	case "threads recommendations":
-		return base + " For one thread, use `anx threads recommendations --thread-id <thread-id>`. For discovery, remove `--thread-id` and use `" + discoveryExample + "`."
 	case "threads workspace":
 		return base + " For one thread, use `anx threads workspace --thread-id <thread-id>`. For discovery, remove `--thread-id` and use `" + discoveryExample + "`."
 	case "threads inspect":
@@ -836,324 +815,6 @@ func (a *App) runThreadsInspectCommand(ctx context.Context, args []string, cfg c
 		cfg.Headers,
 	)
 	return result, nil
-}
-
-func (a *App) runThreadsRecommendationsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
-	selection, err := parseThreadRecommendationsArgs(args)
-	if err != nil {
-		return nil, err
-	}
-	threadIDs, err := a.resolveThreadContextSelection(ctx, cfg, "threads recommendations", selection.threadContextSelection, false)
-	if err != nil {
-		return nil, err
-	}
-
-	statusCode, headers, body, callErr := a.loadThreadContextEnvelope(ctx, cfg, threadIDs[0], selection.threadContextSelection)
-	if callErr != nil {
-		return nil, callErr
-	}
-
-	thread := extractNestedMap(body, "thread")
-	resolvedThreadID := firstNonEmpty(strings.TrimSpace(anyString(body["thread_id"])), strings.TrimSpace(anyString(thread["id"])), strings.TrimSpace(threadIDs[0]))
-	collaboration := asMap(body["collaboration_summary"])
-	recommendations := normalizeRecommendationReviewEvents(asSlice(collaboration["recommendations"]))
-	decisionRequests := normalizeRecommendationReviewEvents(asSlice(collaboration["decision_requests"]))
-	decisions := normalizeRecommendationReviewEvents(asSlice(collaboration["decisions"]))
-
-	inboxResult, err := a.invokeTypedJSON(ctx, cfg, "inbox list", "inbox.list", nil, nil, nil)
-	if err != nil {
-		return nil, err
-	}
-	inboxData := asMap(inboxResult.Data)
-	inboxBody := extractNestedMap(inboxData, "body")
-	pendingDecisions := filteredInboxItems(asSlice(inboxBody["items"]), []string{resolvedThreadID}, []string{"action_needed"})
-	relatedThreadReview, err := a.collectRelatedThreadRecommendationReview(ctx, cfg, resolvedThreadID, body, selection.threadContextSelection, selection.includeRelatedEventContent)
-	if err != nil {
-		return nil, err
-	}
-
-	recommendationBody := map[string]any{
-		"thread_id":    resolvedThreadID,
-		"thread":       thread,
-		"full_id":      selection.fullID,
-		"full_summary": selection.fullSummary,
-		"recommendations": map[string]any{
-			"items": recommendations,
-			"count": len(recommendations),
-		},
-		"decision_requests": map[string]any{
-			"items": decisionRequests,
-			"count": len(decisionRequests),
-		},
-		"decisions": map[string]any{
-			"items": decisions,
-			"count": len(decisions),
-		},
-		"pending_decisions": map[string]any{
-			"items": pendingDecisions,
-			"count": len(pendingDecisions),
-		},
-		"related_threads":           relatedThreadReview["related_threads"],
-		"related_recommendations":   relatedThreadReview["related_recommendations"],
-		"related_decision_requests": relatedThreadReview["related_decision_requests"],
-		"related_decisions":         relatedThreadReview["related_decisions"],
-		"total_review_items":        len(recommendations) + len(decisionRequests) + len(decisions) + len(pendingDecisions) + intValue(relatedThreadReview["total_review_items"]),
-		"follow_up":                 recommendationFollowUpHints(resolvedThreadID, recommendations, decisionRequests, decisions),
-		"context_source":            "threads.context",
-		"inbox_source":              "inbox.list",
-	}
-	if selection.includeRelatedEventContent {
-		recommendationBody["related_event_content_enabled"] = true
-		recommendationBody["related_event_content_count"] = intValue(relatedThreadReview["related_event_content_count"])
-	}
-	if warningCount := intValue(relatedThreadReview["warning_count"]); warningCount > 0 {
-		recommendationBody["warnings"] = map[string]any{
-			"items": relatedThreadReview["warnings"],
-			"count": warningCount,
-		}
-	}
-
-	data := map[string]any{
-		"status_code": statusCode,
-		"headers":     headers,
-		"body":        recommendationBody,
-	}
-	contextResult := &commandResult{Data: data}
-	contextResult.Text = formatTypedCommandText(
-		"threads.recommendations",
-		statusCode,
-		headers,
-		recommendationBody,
-		cfg.Verbose,
-		cfg.Headers,
-	)
-	return contextResult, nil
-}
-
-func (a *App) collectRelatedThreadRecommendationReview(ctx context.Context, cfg config.Resolved, rootThreadID string, rootBody map[string]any, selection threadContextSelection, includeRelatedEventContent bool) (map[string]any, error) {
-	relatedThreadIDs := relatedThreadRefIDs(rootThreadID, rootBody)
-	items := make([]any, 0, len(relatedThreadIDs))
-	relatedRecommendations := make([]any, 0)
-	relatedDecisionRequests := make([]any, 0)
-	relatedDecisions := make([]any, 0)
-	warnings := make([]any, 0)
-	totalReviewItems := 0
-	relatedEventContentCount := 0
-
-	for _, relatedThreadID := range relatedThreadIDs {
-		_, _, body, err := a.loadThreadContextEnvelope(ctx, cfg, relatedThreadID, selection)
-		if err != nil {
-			warnings = append(warnings, map[string]any{
-				"thread_id": relatedThreadID,
-				"message":   fmt.Sprintf("skipped related thread %s: %s", relatedThreadID, err.Error()),
-			})
-			continue
-		}
-		thread := extractNestedMap(body, "thread")
-		collaboration := asMap(body["collaboration_summary"])
-		recommendations := annotateRecommendationReviewEvents(normalizeRecommendationReviewEvents(asSlice(collaboration["recommendations"])), thread)
-		decisionRequests := annotateRecommendationReviewEvents(normalizeRecommendationReviewEvents(asSlice(collaboration["decision_requests"])), thread)
-		decisions := annotateRecommendationReviewEvents(normalizeRecommendationReviewEvents(asSlice(collaboration["decisions"])), thread)
-		if includeRelatedEventContent {
-			var hydrateWarnings []any
-			recommendations, hydrateWarnings = a.hydrateRelatedReviewEvents(ctx, cfg, relatedThreadID, recommendations)
-			warnings = append(warnings, hydrateWarnings...)
-			decisionRequests, hydrateWarnings = a.hydrateRelatedReviewEvents(ctx, cfg, relatedThreadID, decisionRequests)
-			warnings = append(warnings, hydrateWarnings...)
-			decisions, hydrateWarnings = a.hydrateRelatedReviewEvents(ctx, cfg, relatedThreadID, decisions)
-			warnings = append(warnings, hydrateWarnings...)
-			relatedEventContentCount += hydratedRelatedReviewEventCount(recommendations)
-			relatedEventContentCount += hydratedRelatedReviewEventCount(decisionRequests)
-			relatedEventContentCount += hydratedRelatedReviewEventCount(decisions)
-		}
-		relatedRecommendations = append(relatedRecommendations, recommendations...)
-		relatedDecisionRequests = append(relatedDecisionRequests, decisionRequests...)
-		relatedDecisions = append(relatedDecisions, decisions...)
-		threadReviewCount := len(recommendations) + len(decisionRequests) + len(decisions)
-		totalReviewItems += threadReviewCount
-		items = append(items, map[string]any{
-			"thread_id": resolvedThreadIDFromContextBody(body, relatedThreadID),
-			"thread":    thread,
-			"recommendations": map[string]any{
-				"items": recommendations,
-				"count": len(recommendations),
-			},
-			"decision_requests": map[string]any{
-				"items": decisionRequests,
-				"count": len(decisionRequests),
-			},
-			"decisions": map[string]any{
-				"items": decisions,
-				"count": len(decisions),
-			},
-			"total_review_items": threadReviewCount,
-		})
-	}
-
-	return map[string]any{
-		"related_threads": map[string]any{
-			"items": items,
-			"count": len(items),
-		},
-		"related_recommendations": map[string]any{
-			"items": relatedRecommendations,
-			"count": len(relatedRecommendations),
-		},
-		"related_decision_requests": map[string]any{
-			"items": relatedDecisionRequests,
-			"count": len(relatedDecisionRequests),
-		},
-		"related_decisions": map[string]any{
-			"items": relatedDecisions,
-			"count": len(relatedDecisions),
-		},
-		"warnings":                    warnings,
-		"warning_count":               len(warnings),
-		"related_event_content_count": relatedEventContentCount,
-		"total_review_items":          totalReviewItems,
-	}, nil
-}
-
-func (a *App) hydrateRelatedReviewEvents(ctx context.Context, cfg config.Resolved, threadID string, events []any) ([]any, []any) {
-	if len(events) == 0 {
-		return []any{}, nil
-	}
-	out := make([]any, 0, len(events))
-	warnings := make([]any, 0)
-	for _, raw := range events {
-		item := cloneMap(asMap(raw))
-		if item == nil {
-			continue
-		}
-		eventID := strings.TrimSpace(anyString(item["id"]))
-		if eventID == "" {
-			out = append(out, item)
-			continue
-		}
-		resolvedEventID := eventID
-		if shouldResolveDisplayedShortID(eventID) {
-			var resolveErr error
-			resolvedEventID, resolveErr = a.resolveResourceIDFromList(ctx, cfg, eventID, eventIDLookupSpec)
-			if resolveErr != nil {
-				warnings = append(warnings, map[string]any{
-					"thread_id": threadID,
-					"event_id":  eventID,
-					"message":   fmt.Sprintf("kept summary-only related event %s: %s", eventID, resolveErr.Error()),
-				})
-				out = append(out, item)
-				continue
-			}
-		}
-		result, err := a.invokeTypedJSON(ctx, cfg, "events get", "events.get", map[string]string{"event_id": resolvedEventID}, nil, nil)
-		if err != nil {
-			warnings = append(warnings, map[string]any{
-				"thread_id": threadID,
-				"event_id":  eventID,
-				"message":   fmt.Sprintf("kept summary-only related event %s: %s", eventID, err.Error()),
-			})
-			out = append(out, item)
-			continue
-		}
-		data := asMap(result.Data)
-		body := extractNestedMap(data, "body")
-		fullEvent := extractNestedMap(body, "event")
-		if fullEvent == nil {
-			out = append(out, item)
-			continue
-		}
-		item["event"] = fullEvent
-		if strings.TrimSpace(anyString(item["summary"])) == "" {
-			item["summary"] = anyString(fullEvent["summary"])
-		}
-		if strings.TrimSpace(anyString(item["summary_preview"])) == "" {
-			if preview := eventSummaryPreview(fullEvent); preview != "" {
-				item["summary_preview"] = preview
-			}
-		}
-		out = append(out, item)
-	}
-	return out, warnings
-}
-
-func hydratedRelatedReviewEventCount(events []any) int {
-	count := 0
-	for _, raw := range events {
-		if item := asMap(raw); item != nil && asMap(item["event"]) != nil {
-			count++
-		}
-	}
-	return count
-}
-
-func relatedThreadRefIDs(rootThreadID string, body map[string]any) []string {
-	if body == nil {
-		return nil
-	}
-	seen := map[string]struct{}{}
-	out := make([]string, 0)
-	collectThreadRefIDs(body, rootThreadID, seen, &out)
-	sort.Strings(out)
-	return out
-}
-
-func collectThreadRefIDs(value any, rootThreadID string, seen map[string]struct{}, out *[]string) {
-	switch typed := value.(type) {
-	case []any:
-		for _, item := range typed {
-			collectThreadRefIDs(item, rootThreadID, seen, out)
-		}
-	case map[string]any:
-		for _, nested := range typed {
-			collectThreadRefIDs(nested, rootThreadID, seen, out)
-		}
-	case string:
-		ref := strings.TrimSpace(typed)
-		if !strings.HasPrefix(ref, "thread:") {
-			return
-		}
-		threadID := strings.TrimSpace(strings.TrimPrefix(ref, "thread:"))
-		if threadID == "" || threadID == strings.TrimSpace(rootThreadID) {
-			return
-		}
-		if _, ok := seen[threadID]; ok {
-			return
-		}
-		seen[threadID] = struct{}{}
-		*out = append(*out, threadID)
-	}
-}
-
-func annotateRecommendationReviewEvents(events []any, thread map[string]any) []any {
-	if len(events) == 0 {
-		return []any{}
-	}
-	threadID := firstNonEmpty(strings.TrimSpace(anyString(thread["thread_id"])), strings.TrimSpace(anyString(thread["id"])))
-	threadTitle := strings.TrimSpace(anyString(thread["title"]))
-	out := make([]any, 0, len(events))
-	for _, raw := range events {
-		event := cloneMap(asMap(raw))
-		if event == nil {
-			continue
-		}
-		if threadID != "" {
-			event["source_thread_id"] = threadID
-		}
-		if threadTitle != "" {
-			event["source_thread_title"] = threadTitle
-		}
-		out = append(out, event)
-	}
-	return out
-}
-
-func resolvedThreadIDFromContextBody(body map[string]any, fallback string) string {
-	thread := extractNestedMap(body, "thread")
-	return firstNonEmpty(
-		strings.TrimSpace(anyString(body["thread_id"])),
-		strings.TrimSpace(anyString(thread["thread_id"])),
-		strings.TrimSpace(anyString(thread["id"])),
-		strings.TrimSpace(fallback),
-	)
 }
 
 func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
@@ -3007,6 +2668,12 @@ func (a *App) runInboxCommand(ctx context.Context, args []string, cfg config.Res
 		if inboxItemID == "" {
 			return nil, "inbox respond", errnorm.Usage("invalid_request", "inbox_item_id is required")
 		}
+		resolvedInboxItemID := inboxItemID
+		if match, err := a.resolveInboxItemFromList(ctx, cfg, inboxItemID); err == nil {
+			resolvedInboxItemID = match.ID
+		} else if looksLikeInboxAlias(inboxItemID) {
+			return nil, "inbox respond", err
+		}
 		apiBody := make(map[string]any, len(bodyMap))
 		for k, v := range bodyMap {
 			if k == "inbox_item_id" {
@@ -3019,7 +2686,7 @@ func (a *App) runInboxCommand(ctx context.Context, args []string, cfg config.Res
 			cfg,
 			"inbox respond",
 			"inbox.respond",
-			map[string]string{"inbox_id": inboxItemID},
+			map[string]string{"inbox_id": resolvedInboxItemID},
 			nil,
 			apiBody,
 		)
@@ -3411,7 +3078,7 @@ func docsCreateBodyFromFlags(title string, summary string, topic string, subject
 		"title":       title,
 		"subject_ref": subjectRef,
 		"refs":        uniqueStrings(refSet),
-		"provenance":  map[string]any{"sources": []any{"actor_statement:anx-cli"}},
+		"provenance":  map[string]any{"sources": []any{"event:anx-cli"}},
 	}
 	if summary != "" {
 		document["summary"] = summary
@@ -3470,7 +3137,7 @@ func (a *App) parseBoardCreateInput(args []string, cfg config.Resolved, commandN
 		"title":         title,
 		"document_refs": normalizedStringsOrEmpty(documentRefFlags.values),
 		"pinned_refs":   normalizedStringsOrEmpty(pinnedRefFlags.values),
-		"provenance":    map[string]any{"sources": []any{"actor_statement:anx-cli"}},
+		"provenance":    map[string]any{"sources": []any{"event:anx-cli"}},
 	}
 	if summary := strings.TrimSpace(summaryFlag.value); summary != "" {
 		board["summary"] = summary
@@ -4410,11 +4077,7 @@ func looksLikeInboxAlias(raw string) bool {
 }
 
 func (a *App) resolveInboxItemIDAndThread(ctx context.Context, cfg config.Resolved, inboxItemID string) (string, string, error) {
-	result, err := a.invokeTypedJSON(ctx, cfg, "inbox list", "inbox.list", nil, nil, nil)
-	if err != nil {
-		return "", "", err
-	}
-	match, err := resolveInboxItemFromListResult(result, inboxItemID)
+	match, err := a.resolveInboxItemFromList(ctx, cfg, inboxItemID)
 	if err != nil {
 		return "", "", err
 	}
@@ -4429,6 +4092,18 @@ func (a *App) resolveInboxItemIDAndThread(ctx context.Context, cfg config.Resolv
 		return "", "", err
 	}
 	return match.ID, subjectRef, nil
+}
+
+func (a *App) resolveInboxItemFromList(ctx context.Context, cfg config.Resolved, inboxItemID string) (inboxListMatch, error) {
+	result, err := a.invokeTypedJSON(ctx, cfg, "inbox list", "inbox.list", nil, nil, nil)
+	if err != nil {
+		return inboxListMatch{}, err
+	}
+	match, err := resolveInboxItemFromListResult(result, inboxItemID)
+	if err != nil {
+		return inboxListMatch{}, err
+	}
+	return match, nil
 }
 
 type inboxListMatch struct {
@@ -4942,7 +4617,7 @@ func enrichThreadWorkspaceBodyWithShortIDs(body map[string]any) bool {
 			}
 		}
 	}
-	collabSliceKeys := []string{"recommendations", "decision_requests", "decisions", "key_artifacts", "open_cards"}
+	collabSliceKeys := []string{"key_artifacts", "open_cards"}
 	if collab := asMap(body["collaboration"]); collab != nil {
 		for _, key := range collabSliceKeys {
 			if items, ok := collab[key].([]any); ok {
@@ -4953,7 +4628,7 @@ func enrichThreadWorkspaceBodyWithShortIDs(body map[string]any) bool {
 	if inbox := asMap(body["inbox"]); inbox != nil {
 		changed = addInboxAliasesToListField(inbox, "items") || changed
 	}
-	if pending := asMap(body["pending_decisions"]); pending != nil {
+	if pending := asMap(body["pending_attention"]); pending != nil {
 		changed = addInboxAliasesToListField(pending, "items") || changed
 	}
 	if memberships := asMap(body["board_memberships"]); memberships != nil {
@@ -4986,38 +4661,6 @@ func enrichThreadWorkspaceBodyWithShortIDs(body map[string]any) bool {
 				if t := asMap(item["thread"]); t != nil {
 					if addShortIDToObjectIfPresent(t) {
 						changed = true
-					}
-				}
-				for _, sec := range []string{"recommendations", "decision_requests", "decisions"} {
-					if secMap := asMap(item[sec]); secMap != nil {
-						if nestedItems, ok := secMap["items"].([]any); ok {
-							changed = addShortIDsToObjectSlice(nestedItems) || changed
-						}
-					}
-				}
-			}
-		}
-	}
-	for _, sectionKey := range []string{"related_recommendations", "related_decision_requests", "related_decisions"} {
-		if sec := asMap(body[sectionKey]); sec != nil {
-			if items, ok := sec["items"].([]any); ok {
-				for _, raw := range items {
-					item, _ := raw.(map[string]any)
-					if item == nil {
-						continue
-					}
-					if addShortIDToObjectIfPresent(item) {
-						changed = true
-					}
-					if t := asMap(item["thread"]); t != nil {
-						if addShortIDToObjectIfPresent(t) {
-							changed = true
-						}
-					}
-					if ev := asMap(item["event"]); ev != nil {
-						if addShortIDToObjectIfPresent(ev) {
-							changed = true
-						}
 					}
 				}
 			}
@@ -5594,79 +5237,6 @@ func enrichEventsForList(events []any) []any {
 	return out
 }
 
-func normalizeRecommendationReviewEvents(events []any) []any {
-	if len(events) == 0 {
-		return []any{}
-	}
-	out := make([]any, 0, len(events))
-	for _, raw := range events {
-		event := asMap(raw)
-		if event == nil {
-			continue
-		}
-		copy := cloneMap(event)
-		id := strings.TrimSpace(anyString(copy["id"]))
-		if id != "" && strings.TrimSpace(anyString(copy["short_id"])) == "" {
-			copy["short_id"] = shortID(id)
-		}
-		if preview := eventSummaryPreview(copy); preview != "" && strings.TrimSpace(anyString(copy["summary_preview"])) == "" {
-			copy["summary_preview"] = preview
-		}
-		if len(stringList(copy["provenance_sources"])) == 0 {
-			provenance := asMap(copy["provenance"])
-			if len(provenance) > 0 {
-				sources := stringList(provenance["sources"])
-				if len(sources) > 0 {
-					copy["provenance_sources"] = sources
-				}
-			}
-		}
-		out = append(out, copy)
-	}
-	sortEventsByCreatedAt(out)
-	return out
-}
-
-func recommendationFollowUpHints(threadID string, sections ...[]any) map[string]any {
-	eventIDs := make([]string, 0, 8)
-	for _, section := range sections {
-		for _, raw := range section {
-			event := asMap(raw)
-			if event == nil {
-				continue
-			}
-			eventID := strings.TrimSpace(anyString(event["id"]))
-			if eventID == "" {
-				continue
-			}
-			eventIDs = append(eventIDs, eventID)
-		}
-	}
-	eventIDs = normalizeIDFilters(eventIDs)
-
-	examples := make([]string, 0, 3)
-	for _, eventID := range eventIDs {
-		examples = append(examples, "anx events get --event-id "+eventID+" --json")
-		if len(examples) >= 3 {
-			break
-		}
-	}
-
-	hints := map[string]any{
-		"events_get_template":          "anx events get --event-id <event-id> --json",
-		"events_get_examples":          examples,
-		"recommendations_list_command": "",
-		"decisions_list_command":       "",
-		"context_refresh_command":      "",
-	}
-	if strings.TrimSpace(threadID) != "" {
-		hints["recommendations_list_command"] = "anx events list --thread-id " + threadID + " --type actor_statement --full-id --json"
-		hints["decisions_list_command"] = "anx events list --thread-id " + threadID + " --type decision_needed --type decision_made --full-id --json"
-		hints["context_refresh_command"] = "anx threads context --thread-id " + threadID + " --include-artifact-content --full-id --json"
-	}
-	return hints
-}
-
 func cloneMap(in map[string]any) map[string]any {
 	if in == nil {
 		return nil
@@ -5758,15 +5328,9 @@ func addThreadContextCollaborationSummary(body map[string]any) bool {
 	body["recent_events"] = recentEvents
 
 	collaboration := map[string]any{
-		"recommendations":   filterEventsByType(recentEvents, []string{"actor_statement"}),
-		"decision_requests": filterEventsByType(recentEvents, []string{"decision_needed"}),
-		"decisions":         filterEventsByType(recentEvents, []string{"decision_made"}),
-		"key_artifacts":     asSlice(body["key_artifacts"]),
-		"open_cards":        asSlice(body["open_cards"]),
+		"key_artifacts": asSlice(body["key_artifacts"]),
+		"open_cards":    asSlice(body["open_cards"]),
 	}
-	collaboration["recommendation_count"] = len(asSlice(collaboration["recommendations"]))
-	collaboration["decision_request_count"] = len(asSlice(collaboration["decision_requests"]))
-	collaboration["decision_count"] = len(asSlice(collaboration["decisions"]))
 	collaboration["artifact_count"] = len(asSlice(collaboration["key_artifacts"]))
 	collaboration["open_card_count"] = len(asSlice(collaboration["open_cards"]))
 

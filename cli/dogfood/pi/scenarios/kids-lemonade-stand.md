@@ -29,7 +29,7 @@ What makes this run successful:
 4. The boss kid creates the shared board and the team uses board/card workflow instead of leaving every task trapped in prose.
 5. Board cards should be role-scoped: one coordination card from the boss is enough, and the other kids should create or update their own task cards tied to their own role threads.
 6. Each role updates its assigned scenario document so the run leaves edit history behind.
-7. Each role publishes a grounded final `actor_statement` with role-specific observations and suggestions.
+7. Each role publishes a grounded final `message_posted` with role-specific observations and suggestions.
 8. Every role writes `result.md` documenting friction and concrete CLI improvements.
 
 Constraints:
@@ -48,13 +48,13 @@ Live environment:
 Important collaboration rules:
 - Stay playful, specific, and useful. Friendly bossiness is fine. Boardroom seriousness is not.
 - Use `message_posted` when you want another kid to actually read and respond.
-- Use `actor_statement` for your more durable role summary after the conversational work is done.
+- Use `message_posted` for your more durable role summary after the conversational work is done.
 - If you are the boss-kid role, do not publish the final plan until the sales kid and backoffice kid have both posted messages and updated their role docs.
 
 Required end-state artifacts in the working directory:
 - `message-template.json` updated with a real message you actually send
 - `reply-template.json` updated with a real reply you actually send
-- `event-template.json` updated with the final actor_statement you actually send
+- `event-template.json` updated with the final `message_posted` you actually send
 - `result.md`
 - if you revise a document, `doc-revision-template.json` updated with the revision you actually send
 - if you create the board, `board-template.json` reflects the board payload you actually used

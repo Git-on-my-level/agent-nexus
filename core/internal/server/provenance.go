@@ -1,9 +1,9 @@
 package server
 
-const actorStatementEventIDPlaceholder = "<event_id>"
+const provenanceEventIDPlaceholder = "<event_id>"
 
-func actorStatementProvenance() map[string]any {
+func eventProvenance() map[string]any {
 	return map[string]any{
-		"sources": []string{"actor_statement:" + actorStatementEventIDPlaceholder},
+		"sources": []string{"event:" + provenanceEventIDPlaceholder},
 	}
 }

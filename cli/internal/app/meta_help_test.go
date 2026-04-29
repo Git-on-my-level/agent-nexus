@@ -132,14 +132,8 @@ func TestRunGeneratedHelpTopic(t *testing.T) {
 	if !strings.Contains(output, "anx threads workspace") {
 		t.Fatalf("expected threads workspace diagnostic hint in threads group help output=%s", output)
 	}
-	if !strings.Contains(output, "threads recommendations") {
-		t.Fatalf("expected local threads recommendations helper in generated help output=%s", output)
-	}
 	if !strings.Contains(output, "threads workspace") {
 		t.Fatalf("expected local threads workspace helper in generated help output=%s", output)
-	}
-	if !strings.Contains(output, "threads recommendations") {
-		t.Fatalf("expected local threads recommendations helper in generated help output=%s", output)
 	}
 	if strings.Contains(output, "threads create") || strings.Contains(output, "threads patch") || strings.Contains(output, "threads propose-patch") || strings.Contains(output, "threads apply") {
 		t.Fatalf("unexpected legacy thread write guidance in generated help output=%s", output)
@@ -390,9 +384,6 @@ func TestRunLocalHelperHelpTopicsResolveAcrossEntryPoints(t *testing.T) {
 	threadsFromFlag := run([]string{"threads", "inspect", "--help"})
 	threadsWorkspaceFromTopic := run([]string{"help", "threads", "workspace"})
 	threadsWorkspaceFromFlag := run([]string{"threads", "workspace", "--help"})
-	threadsRecommendationsFromTopic := run([]string{"help", "threads", "recommendations"})
-	threadsRecommendationsFromFlag := run([]string{"threads", "recommendations", "--help"})
-
 	for _, output := range []string{eventsFromTopic, eventsFromFlag} {
 		if !strings.Contains(output, "Local Help: events list") {
 			t.Fatalf("expected local events list help header output=%s", output)
@@ -413,16 +404,8 @@ func TestRunLocalHelperHelpTopicsResolveAcrossEntryPoints(t *testing.T) {
 		if !strings.Contains(output, "Local Help: threads workspace") {
 			t.Fatalf("expected local threads workspace help header output=%s", output)
 		}
-		if !strings.Contains(output, "related thread refs") || !strings.Contains(output, "thread-scoped inbox items") || !strings.Contains(output, "--full-summary") {
+		if !strings.Contains(output, "Read-only backing-thread workspace projection: context, inbox, board membership, and related-thread signals in one command.") || !strings.Contains(output, "pending_attention") || !strings.Contains(output, "--full-id") {
 			t.Fatalf("expected workspace helper details output=%s", output)
-		}
-	}
-	for _, output := range []string{threadsRecommendationsFromTopic, threadsRecommendationsFromFlag} {
-		if !strings.Contains(output, "Local Help: threads recommendations") {
-			t.Fatalf("expected local threads recommendations help header output=%s", output)
-		}
-		if !strings.Contains(output, "Compose a diagnostic recommendation-oriented review of one backing thread with related follow-up context.") || !strings.Contains(output, "Loads the read-only thread context, inbox, and related-thread review context") || !strings.Contains(output, "--include-related-event-content") {
-			t.Fatalf("expected recommendations helper details output=%s", output)
 		}
 	}
 	if eventsFromTopic != eventsFromFlag {
@@ -433,9 +416,6 @@ func TestRunLocalHelperHelpTopicsResolveAcrossEntryPoints(t *testing.T) {
 	}
 	if threadsWorkspaceFromTopic != threadsWorkspaceFromFlag {
 		t.Fatalf("expected same threads workspace help via topic and --help\nhelp output:\n%s\nflag output:\n%s", threadsWorkspaceFromTopic, threadsWorkspaceFromFlag)
-	}
-	if threadsRecommendationsFromTopic != threadsRecommendationsFromFlag {
-		t.Fatalf("expected same threads recommendations help via topic and --help\nhelp output:\n%s\nflag output:\n%s", threadsRecommendationsFromTopic, threadsRecommendationsFromFlag)
 	}
 }
 
@@ -854,17 +834,17 @@ func TestGeneratedCommandHelpIncludesBodySchemaAndEnums(t *testing.T) {
 	if !strings.Contains(output, "Communication: direct communication or important non-structured information") {
 		t.Fatalf("expected communication description output=%s", output)
 	}
-	if !strings.Contains(output, "- `decision_needed`") {
-		t.Fatalf("expected decision_needed listing output=%s", output)
+	if !strings.Contains(output, "- `human_attention_requested`") {
+		t.Fatalf("expected human_attention_requested listing output=%s", output)
 	}
-	if !strings.Contains(output, "- `intervention_needed`") {
-		t.Fatalf("expected intervention_needed listing output=%s", output)
+	if !strings.Contains(output, "- `human_attention_responded`") {
+		t.Fatalf("expected human_attention_responded listing output=%s", output)
 	}
 	if !strings.Contains(output, "`receipt_added`: prefer `anx receipts create`") {
 		t.Fatalf("expected higher-level command hint output=%s", output)
 	}
-	if !strings.Contains(output, "`actor_statement`") {
-		t.Fatalf("expected actor_statement discoverability note output=%s", output)
+	if !strings.Contains(output, "`message_posted`") {
+		t.Fatalf("expected message_posted discoverability note output=%s", output)
 	}
 	if !strings.Contains(output, "`--dry-run`") {
 		t.Fatalf("expected dry-run discoverability note output=%s", output)
@@ -1075,4 +1055,22 @@ func sortedCommandIDs(set map[string]struct{}) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+func runHelpCommandAllowExit(t *testing.T, args []string) (string, string, int) {
+	t.Helper()
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	cli := New()
+	cli.Stdout = stdout
+	cli.Stderr = stderr
+	cli.Stdin = strings.NewReader("")
+	cli.StdinIsTTY = func() bool { return true }
+	cli.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	cli.ReadFile = func(path string) ([]byte, error) {
+		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
+	}
+
+	exitCode := cli.Run(args)
+	return stdout.String(), stderr.String(), exitCode
 }

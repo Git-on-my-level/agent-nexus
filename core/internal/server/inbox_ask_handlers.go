@@ -155,7 +155,7 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 			"notified_actor_id":   target.ActorID,
 			"notified_agent_id":   target.AgentID,
 		},
-		"provenance": actorStatementProvenance(),
+		"provenance": eventProvenance(),
 	}
 	if err := validateEventReferenceConventions(opts.contract, responseEvent, responseRefs); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
@@ -322,61 +322,6 @@ func resolveOptionalBool(value *bool, fallback bool) bool {
 	return *value
 }
 
-func hasTopicRef(subjectRef string, relatedRefs []string) bool {
-	if strings.HasPrefix(strings.TrimSpace(subjectRef), "topic:") {
-		return true
-	}
-	for _, ref := range relatedRefs {
-		if strings.HasPrefix(strings.TrimSpace(ref), "topic:") {
-			return true
-		}
-	}
-	return false
-}
-
-func firstTopicRef(subjectRef string, relatedRefs []string) string {
-	subjectRef = strings.TrimSpace(subjectRef)
-	if strings.HasPrefix(subjectRef, "topic:") {
-		return subjectRef
-	}
-	for _, ref := range relatedRefs {
-		ref = strings.TrimSpace(ref)
-		if strings.HasPrefix(ref, "topic:") {
-			return ref
-		}
-	}
-	return ""
-}
-
-func buildAskDecisionEvent(threadID, inboxItemID, queryText, answer, subjectRef string, relatedRefs []string, responseEventID string) (map[string]any, bool) {
-	topicRef := firstTopicRef(subjectRef, relatedRefs)
-	if topicRef == "" {
-		return nil, false
-	}
-	decisionRefs := make([]string, 0, len(relatedRefs)+8)
-	decisionRefs = append(decisionRefs, "thread:"+threadID, "inbox:"+inboxItemID, topicRef)
-	decisionRefs = append(decisionRefs, relatedRefs...)
-	if subjectRef != "" {
-		decisionRefs = append(decisionRefs, subjectRef)
-	}
-	if responseEventID != "" {
-		decisionRefs = append(decisionRefs, "event:"+responseEventID)
-	}
-	decisionRefs = mergeUniqueSortedRefs(decisionRefs...)
-	return map[string]any{
-		"type":      "decision_made",
-		"thread_id": threadID,
-		"refs":      decisionRefs,
-		"summary":   buildAskDecisionSummary(queryText, answer),
-		"payload": map[string]any{
-			"inbox_item_id": inboxItemID,
-			"notes":         answer,
-			"source":        "ask_response",
-		},
-		"provenance": actorStatementProvenance(),
-	}, true
-}
-
 func buildAskResponseSummary(queryText, answer string) string {
 	queryText = strings.TrimSpace(queryText)
 	answer = strings.TrimSpace(answer)
@@ -390,24 +335,6 @@ func buildAskResponseSummary(queryText, answer string) string {
 		return "Answered: " + queryText
 	}
 	return "Answered: " + queryText
-}
-
-func buildAskDecisionSummary(queryText, answer string) string {
-	queryText = strings.TrimSpace(queryText)
-	answer = strings.TrimSpace(answer)
-	if queryText != "" {
-		if len(queryText) > 72 {
-			queryText = strings.TrimSpace(queryText[:72]) + "…"
-		}
-		return "Decision recorded from ask: " + queryText
-	}
-	if answer == "" {
-		return "Decision recorded from ask response"
-	}
-	if len(answer) > 72 {
-		answer = strings.TrimSpace(answer[:72]) + "…"
-	}
-	return "Decision recorded from ask response: " + answer
 }
 
 func buildHumanAttentionResponseSummary(kind string, itemPayload map[string]any, responseText string) string {
@@ -518,7 +445,7 @@ func sendHumanAttentionResponseWakeBestEffort(
 		"refs":      wakeRefs,
 		"payload":   wakePayload,
 		"provenance": map[string]any{
-			"sources": []string{"actor_statement:" + triggerEventID},
+			"sources": []string{"event:" + triggerEventID},
 		},
 	}
 	if err := validateEventReferenceConventions(opts.contract, wakeEvent, wakeRefs); err == nil {

@@ -5522,10 +5522,6 @@
                 "enum_values": [
                   "agent_notification_dismissed",
                   "agent_notification_read",
-                  "board_card_added",
-                  "board_card_archived",
-                  "board_card_moved",
-                  "board_card_trashed",
                   "board_created",
                   "board_updated",
                   "card_archived",
@@ -5534,8 +5530,6 @@
                   "card_resolved",
                   "card_trashed",
                   "card_updated",
-                  "decision_made",
-                  "decision_needed",
                   "document_created",
                   "document_restored",
                   "document_revised",
@@ -5543,7 +5537,6 @@
                   "exception_raised",
                   "human_attention_requested",
                   "human_attention_responded",
-                  "intervention_needed",
                   "message_posted",
                   "receipt_added",
                   "review_completed",
@@ -6160,10 +6153,9 @@
     },
     {
       "name": "inbox",
-      "command_count": 4,
+      "command_count": 3,
       "command_ids": [
         "inbox.get",
-        "inbox.list",
         "inbox.respond",
         "inbox.stream"
       ],
@@ -6202,37 +6194,6 @@
           ],
           "go_method": "InboxGet",
           "ts_method": "inboxGet"
-        },
-        {
-          "command_id": "inbox.list",
-          "cli_path": "inbox list",
-          "group": "inbox",
-          "method": "GET",
-          "path": "/inbox",
-          "operation_id": "listInboxItems",
-          "summary": "List inbox items",
-          "why": "Load the operator-only human attention queue derived from explicit human_attention_requested events.",
-          "input_mode": "none",
-          "streaming": {
-            "mode": "none"
-          },
-          "output_envelope": "Returns `{ items }`.",
-          "error_codes": [
-            "auth_required",
-            "invalid_token"
-          ],
-          "concepts": [
-            "inbox"
-          ],
-          "stability": "beta",
-          "surface": "projection",
-          "adjacent_commands": [
-            "inbox.get",
-            "inbox.respond",
-            "inbox.stream"
-          ],
-          "go_method": "InboxList",
-          "ts_method": "inboxList"
         },
         {
           "command_id": "inbox.respond",
@@ -11340,10 +11301,6 @@
                 "enum_values": [
                   "agent_notification_dismissed",
                   "agent_notification_read",
-                  "board_card_added",
-                  "board_card_archived",
-                  "board_card_moved",
-                  "board_card_trashed",
                   "board_created",
                   "board_updated",
                   "card_archived",
@@ -11352,8 +11309,6 @@
                   "card_resolved",
                   "card_trashed",
                   "card_updated",
-                  "decision_made",
-                  "decision_needed",
                   "document_created",
                   "document_restored",
                   "document_revised",
@@ -11361,7 +11316,6 @@
                   "exception_raised",
                   "human_attention_requested",
                   "human_attention_responded",
-                  "intervention_needed",
                   "message_posted",
                   "receipt_added",
                   "review_completed",

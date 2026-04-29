@@ -9,6 +9,7 @@
   import Skeleton from "$lib/components/state/Skeleton.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
   import { coreClient } from "$lib/coreClient";
+  import { formatAbsoluteDateTime } from "$lib/formatDate";
   import { searchActors } from "$lib/searchHelpers";
   import { workspacePath } from "$lib/workspacePaths";
 
@@ -46,8 +47,21 @@
           .filter(Boolean)
       : [],
   );
+
+  let isCompleted = $derived(String(item?.status ?? "").trim() === "completed");
   function workspaceHref(pathname = "/") {
     return workspacePath(organizationSlug, workspaceSlug, pathname);
+  }
+
+  function completedTimelineHref(value = item) {
+    const tid = String(value?.thread_id ?? "").trim();
+    let eventId = "";
+    const ref = String(value?.response_event_ref ?? "").trim();
+    if (ref.startsWith("event:")) {
+      eventId = ref.slice("event:".length).trim();
+    }
+    if (!tid || !eventId) return "";
+    return `${workspaceHref(`/threads/${encodeURIComponent(tid)}`)}#event-${encodeURIComponent(eventId)}`;
   }
 
   function draftStorageKey() {
@@ -196,7 +210,7 @@
     submitError = "";
     submitting = true;
     try {
-      await coreClient.respondInboxItem(inboxItemID, {
+      const resp = await coreClient.respondInboxItem(inboxItemID, {
         response_text: text,
         notify_mode: notifyMode,
         notify_target_actor_id:
@@ -206,7 +220,18 @@
       });
       if (browser) localStorage.removeItem(draftStorageKey());
       responseDraft = "";
-      await goto(workspaceHref("/inbox"), {
+      const eventId = String(resp?.event?.id ?? "").trim();
+      const notify = resp?.notify ?? {};
+      const requested = Boolean(notify.requested);
+      const queued = Boolean(notify.queued);
+      const qs = new URLSearchParams();
+      qs.set("status", "open");
+      if (eventId) qs.set("responded", eventId);
+      const tid = String(item?.thread_id ?? "").trim();
+      if (tid) qs.set("responded_thread", tid);
+      if (requested && queued) qs.set("notify_queued", "1");
+      else qs.set("notify_recorded", "1");
+      await goto(`${workspaceHref("/inbox")}?${qs}`, {
         replaceState: false,
         noScroll: false,
         keepFocus: false,
@@ -228,7 +253,7 @@
   onMount(() => {
     void loadItem();
     autosaveInterval = setInterval(() => {
-      if (!browser || !item) return;
+      if (!browser || !item || isCompleted) return;
       localStorage.setItem(draftStorageKey(), String(responseDraft ?? ""));
     }, 2000);
   });
@@ -242,7 +267,7 @@
   <div class="flex items-center justify-between">
     <a
       class="text-meta text-fg-muted hover:text-fg"
-      href={workspaceHref("/inbox")}
+      href={workspaceHref(isCompleted ? "/inbox?status=completed" : "/inbox")}
     >
       ← Back to inbox
     </a>
@@ -302,6 +327,53 @@
         {/if}
       </header>
 
+      {#if isCompleted}
+        <div
+          class="space-y-3 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-4 py-3 text-meta text-fg"
+          data-testid="inbox-completed-detail"
+        >
+          {#if item.original_request_missing}
+            <p class="text-micro text-warn-text">
+              Original request details are unavailable for this entry.
+            </p>
+          {/if}
+          {#if item.responded_at}
+            <p class="text-micro text-fg-muted">
+              Responded {formatAbsoluteDateTime(item.responded_at)}
+            </p>
+          {/if}
+          {#if item.responding_actor_id}
+            <p class="text-micro text-fg-muted">
+              Responder{" "}
+              <span class="font-mono text-fg">{item.responding_actor_id}</span>
+            </p>
+          {/if}
+          <div>
+            <div
+              class="text-micro font-medium uppercase tracking-wide text-fg-muted"
+            >
+              Final response
+            </div>
+            <p class="mt-1 whitespace-pre-wrap text-meta text-fg">
+              {item.response_text ?? ""}
+            </p>
+          </div>
+          <div class="flex flex-wrap gap-2 pt-1">
+            {#if completedTimelineHref()}
+              <Button variant="secondary" size="compact" href={completedTimelineHref()}>
+                Timeline event
+              </Button>
+            {/if}
+            <Button
+              variant="secondary"
+              size="compact"
+              href={workspaceHref("/inbox?status=completed")}
+            >
+              View Completed inbox
+            </Button>
+          </div>
+        </div>
+      {:else}
       <form
         class="space-y-4"
         onsubmit={(event) => {
@@ -508,6 +580,7 @@
           </Button>
         </div>
       </form>
+      {/if}
     </section>
   {/if}
 </div>

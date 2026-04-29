@@ -33,10 +33,6 @@ var machineCommandIdentityByPath = map[string]machineCommandIdentity{
 		Command:   "threads review",
 		CommandID: "threads.review",
 	},
-	"threads recommendations": {
-		Command:   "threads recommendations",
-		CommandID: "threads.recommendations",
-	},
 	"docs revise": {
 		Command:   "docs revise",
 		CommandID: "docs.revisions.create.propose",

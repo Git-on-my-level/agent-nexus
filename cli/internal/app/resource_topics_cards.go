@@ -396,7 +396,7 @@ func (a *App) parseTopicCreateInput(args []string, cfg config.Resolved, commandN
 			"document_refs": normalizedStringsOrEmpty(documentRefFlags.values),
 			"board_refs":    normalizedStringsOrEmpty(boardRefFlags.values),
 			"related_refs":  normalizedStringsOrEmpty(relatedRefFlags.values),
-			"provenance":    map[string]any{"sources": []any{"actor_statement:anx-cli"}},
+			"provenance":    map[string]any{"sources": []any{"event:anx-cli"}},
 		},
 	}
 	actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
@@ -473,7 +473,7 @@ func (a *App) parseTopicDiscussInput(ctx context.Context, args []string, cfg con
 			"kind": "topic_discussion_message",
 			"text": message,
 		},
-		"provenance": map[string]any{"sources": []any{"actor_statement:anx-cli"}},
+		"provenance": map[string]any{"sources": []any{"event:anx-cli"}},
 	}
 	return map[string]any{"actor_id": actorID, "event": event}, dryRunFlag.set && dryRunFlag.value, nil
 }

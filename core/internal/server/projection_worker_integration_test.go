@@ -75,17 +75,7 @@ func TestThreadWorkspaceReadDoesNotMutateDerivedState(t *testing.T) {
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
 
 	threadID := createBoardThreadViaHTTP(t, h.primitivesTestHarness, "Workspace projection thread")
-	postJSONExpectStatus(t, h.baseURL+"/events", `{
-		"actor_id":"actor-1",
-		"event":{
-			"type":"decision_needed",
-			"thread_id":"`+threadID+`",
-			"refs":["thread:`+threadID+`"],
-			"summary":"Need a decision",
-			"payload":{},
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated).Body.Close()
+	createHumanAttentionEvent(t, h.baseURL, threadID, "ask", "Need a decision", "thread:"+threadID, nil, nil)
 
 	eventsBefore := countTableRows(t, h.workspace.DB(), "events")
 	projectionsBefore := countTableRows(t, h.workspace.DB(), "derived_topic_views")
@@ -169,17 +159,7 @@ func TestProjectionMaintainerStepClearsPendingStatus(t *testing.T) {
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
 
 	threadID := createBoardThreadViaHTTP(t, h.primitivesTestHarness, "Manual worker thread")
-	postJSONExpectStatus(t, h.baseURL+"/events", `{
-		"actor_id":"actor-1",
-		"event":{
-			"type":"decision_needed",
-			"thread_id":"`+threadID+`",
-			"refs":["thread:`+threadID+`"],
-			"summary":"Need a decision",
-			"payload":{},
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated).Body.Close()
+	createHumanAttentionEvent(t, h.baseURL, threadID, "ask", "Need a decision", "thread:"+threadID, nil, nil)
 
 	statuses, err := h.store.GetTopicProjectionRefreshStatuses(context.Background(), []string{threadID})
 	if err != nil {
@@ -200,8 +180,8 @@ func TestProjectionMaintainerStepClearsPendingStatus(t *testing.T) {
 	if state.Status != "current" {
 		t.Fatalf("expected current projection status after worker run, got %#v", state.Freshness)
 	}
-	if state.Projection.InboxCount != 0 {
-		t.Fatalf("expected no materialized inbox rows from generic decision_needed event, got %#v", state.Projection)
+	if state.Projection.InboxCount != 1 {
+		t.Fatalf("expected one materialized inbox row from human_attention_requested event, got %#v", state.Projection)
 	}
 
 	statuses, err = h.store.GetTopicProjectionRefreshStatuses(context.Background(), []string{threadID})
@@ -220,17 +200,7 @@ func TestDisabledWorkerLeavesProjectionPendingButReadable(t *testing.T) {
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
 
 	threadID := createBoardThreadViaHTTP(t, h.primitivesTestHarness, "Pending-only thread")
-	postJSONExpectStatus(t, h.baseURL+"/events", `{
-		"actor_id":"actor-1",
-		"event":{
-			"type":"decision_needed",
-			"thread_id":"`+threadID+`",
-			"refs":["thread:`+threadID+`"],
-			"summary":"Need a decision",
-			"payload":{},
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated).Body.Close()
+	createHumanAttentionEvent(t, h.baseURL, threadID, "ask", "Need a decision", "thread:"+threadID, nil, nil)
 
 	inboxResp, err := http.Get(h.baseURL + "/inbox")
 	if err != nil {

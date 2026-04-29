@@ -762,6 +762,17 @@ func TestPatchThreadPreservesUnknownFieldsAndEmitsChangedFields(t *testing.T) {
 		t.Fatalf("insert initial thread row: %v", err)
 	}
 
+	var eventCountBefore int
+	if err := workspace.DB().QueryRowContext(
+		context.Background(),
+		`SELECT COUNT(*) FROM events`,
+	).Scan(&eventCountBefore); err != nil {
+		t.Fatalf("count events before patch: %v", err)
+	}
+	if eventCountBefore != 0 {
+		t.Fatalf("expected no events before patch, got %d", eventCountBefore)
+	}
+
 	patchResult, err := store.PatchThread(context.Background(), "actor-1", "thread-patch-row-1", map[string]any{
 		"title": "updated title",
 		"tags":  []any{"gamma"},
@@ -784,44 +795,19 @@ func TestPatchThreadPreservesUnknownFieldsAndEmitsChangedFields(t *testing.T) {
 		t.Fatalf("tags were not replaced wholesale: %#v", patchResult.Thread["tags"])
 	}
 
-	if patchResult.Event["type"] != "thread_updated" {
-		t.Fatalf("unexpected event type: %#v", patchResult.Event["type"])
-	}
-	assertActorStatementProvenance(t, patchResult.Event)
-
-	eventRefs, ok := patchResult.Event["refs"].([]string)
-	if !ok || len(eventRefs) != 1 || eventRefs[0] != "thread:thread-patch-row-1" {
-		t.Fatalf("unexpected event refs: %#v", patchResult.Event["refs"])
+	if patchResult.Event != nil {
+		t.Fatalf("expected no emitted thread lifecycle event, got %#v", patchResult.Event)
 	}
 
-	if patchResult.Event["thread_id"] != "thread-1" {
-		t.Fatalf("expected thread_id on emitted event, got %#v", patchResult.Event["thread_id"])
-	}
-
-	payload, ok := patchResult.Event["payload"].(map[string]any)
-	if !ok {
-		t.Fatalf("missing event payload: %#v", patchResult.Event["payload"])
-	}
-	rawChanged, ok := payload["changed_fields"].([]string)
-	if !ok {
-		t.Fatalf("changed_fields should be []string, got %#v", payload["changed_fields"])
-	}
-	sort.Strings(rawChanged)
-	if !reflect.DeepEqual(rawChanged, []string{"tags", "title"}) {
-		t.Fatalf("unexpected changed_fields: %#v", rawChanged)
-	}
-
-	var eventCount int
+	var eventCountAfter int
 	if err := workspace.DB().QueryRowContext(
 		context.Background(),
-		`SELECT COUNT(*) FROM events WHERE type = ? AND thread_id = ?`,
-		"thread_updated",
-		"thread-1",
-	).Scan(&eventCount); err != nil {
-		t.Fatalf("count thread_updated events: %v", err)
+		`SELECT COUNT(*) FROM events`,
+	).Scan(&eventCountAfter); err != nil {
+		t.Fatalf("count events after patch: %v", err)
 	}
-	if eventCount != 1 {
-		t.Fatalf("expected exactly one thread_updated event, got %d", eventCount)
+	if eventCountAfter != eventCountBefore {
+		t.Fatalf("expected patch not to emit events, got before=%d after=%d", eventCountBefore, eventCountAfter)
 	}
 
 	secondPatch, err := store.PatchThread(context.Background(), "actor-2", "thread-patch-row-1", map[string]any{
@@ -836,14 +822,8 @@ func TestPatchThreadPreservesUnknownFieldsAndEmitsChangedFields(t *testing.T) {
 		t.Fatalf("tags should remain unchanged when absent from patch: %#v", secondPatch.Thread["tags"])
 	}
 
-	secondPayload, ok := secondPatch.Event["payload"].(map[string]any)
-	if !ok {
-		t.Fatalf("missing second event payload: %#v", secondPatch.Event["payload"])
-	}
-	assertActorStatementProvenance(t, secondPatch.Event)
-	secondChanged, ok := secondPayload["changed_fields"].([]string)
-	if !ok || len(secondChanged) != 1 || secondChanged[0] != "title" {
-		t.Fatalf("unexpected second changed_fields: %#v", secondPayload["changed_fields"])
+	if secondPatch.Event != nil {
+		t.Fatalf("expected no emitted thread lifecycle event on second patch, got %#v", secondPatch.Event)
 	}
 }
 
@@ -945,7 +925,6 @@ func TestPatchThreadOptimisticLockingIfUpdatedAt(t *testing.T) {
 	if matchedPatch.Thread["title"] != "matched update" {
 		t.Fatalf("expected matched update title, got %#v", matchedPatch.Thread["title"])
 	}
-	assertActorStatementProvenance(t, matchedPatch.Event)
 
 	var eventsBeforeConflict int
 	if err := workspace.DB().QueryRowContext(context.Background(), `SELECT COUNT(*) FROM events`).Scan(&eventsBeforeConflict); err != nil {
@@ -1014,7 +993,7 @@ func TestCreateThreadStoresProvenanceOnlyInProvenanceJSON(t *testing.T) {
 		"next_actions":     []string{"step-1"},
 		"key_artifacts":    []string{},
 		"provenance": map[string]any{
-			"sources": []string{"actor_statement:event-create"},
+			"sources": []string{"event:event-create"},
 			"notes":   "created by actor",
 		},
 	})
@@ -1054,7 +1033,7 @@ func TestCreateThreadStoresProvenanceOnlyInProvenanceJSON(t *testing.T) {
 		t.Fatalf("stored provenance notes mismatch: %#v", provenance["notes"])
 	}
 	provenanceSources := toSortedStrings(provenance["sources"])
-	if !reflect.DeepEqual(provenanceSources, []string{"actor_statement:event-create"}) {
+	if !reflect.DeepEqual(provenanceSources, []string{"event:event-create"}) {
 		t.Fatalf("stored provenance sources mismatch: %#v", provenance["sources"])
 	}
 }
@@ -1082,7 +1061,7 @@ func TestPatchThreadProvenanceRoundTripAndPreserveWhenOmitted(t *testing.T) {
 		"next_actions":     []string{"step-1"},
 		"key_artifacts":    []string{},
 		"provenance": map[string]any{
-			"sources": []string{"actor_statement:event-initial"},
+			"sources": []string{"event:event-initial"},
 		},
 	})
 	if err != nil {
@@ -1091,7 +1070,7 @@ func TestPatchThreadProvenanceRoundTripAndPreserveWhenOmitted(t *testing.T) {
 	threadID, _ := threadResult.Thread["id"].(string)
 
 	updatedProvenance := map[string]any{
-		"sources": []string{"actor_statement:event-updated"},
+		"sources": []string{"event:event-updated"},
 		"notes":   "updated by patch",
 	}
 	patchWithProvenance, err := store.PatchThread(context.Background(), "actor-2", threadID, map[string]any{
@@ -1132,7 +1111,7 @@ func TestPatchThreadProvenanceRoundTripAndPreserveWhenOmitted(t *testing.T) {
 		t.Fatalf("stored provenance notes after patch mismatch: %#v", storedProvenance["notes"])
 	}
 	storedSources := toSortedStrings(storedProvenance["sources"])
-	if !reflect.DeepEqual(storedSources, []string{"actor_statement:event-updated"}) {
+	if !reflect.DeepEqual(storedSources, []string{"event:event-updated"}) {
 		t.Fatalf("stored provenance sources after patch mismatch: %#v", storedProvenance["sources"])
 	}
 
@@ -1151,7 +1130,7 @@ func TestPatchThreadProvenanceRoundTripAndPreserveWhenOmitted(t *testing.T) {
 		t.Fatalf("provenance notes changed unexpectedly when omitted: %#v", finalProvenance["notes"])
 	}
 	finalSources := toSortedStrings(finalProvenance["sources"])
-	if !reflect.DeepEqual(finalSources, []string{"actor_statement:event-updated"}) {
+	if !reflect.DeepEqual(finalSources, []string{"event:event-updated"}) {
 		t.Fatalf("provenance sources changed unexpectedly when omitted: %#v", finalProvenance["sources"])
 	}
 }
@@ -1233,7 +1212,7 @@ func toSortedStrings(raw any) []string {
 	}
 }
 
-func assertActorStatementProvenance(t *testing.T, event map[string]any) {
+func assertEventProvenance(t *testing.T, event map[string]any) {
 	t.Helper()
 
 	eventID, _ := event["id"].(string)
@@ -1247,9 +1226,9 @@ func assertActorStatementProvenance(t *testing.T, event map[string]any) {
 	}
 
 	sources := toSortedStrings(provenance["sources"])
-	want := []string{"actor_statement:" + eventID}
+	want := []string{"event:" + eventID}
 	if !reflect.DeepEqual(sources, want) {
-		t.Fatalf("unexpected actor statement provenance: got %#v want %#v", sources, want)
+		t.Fatalf("unexpected event provenance: got %#v want %#v", sources, want)
 	}
 }
 

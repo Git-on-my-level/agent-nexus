@@ -464,12 +464,11 @@ export const QA_EVENTS = [
   {
     id: "evt-home-thread-update",
     ts: hoursAgo(5),
-    type: "thread_updated",
+    type: "message_posted",
     actor_id: "actor-jordan-human",
     thread_id: "thread-billing-rollout",
     refs: ["topic:topic-billing-rollout", "document:doc-billing-runbook"],
-    summary:
-      "Billing rollout summary updated after the latest portal smoke pass.",
+    summary: "Billing rollout update posted after the latest portal smoke pass.",
     payload: { changed_fields: ["current_summary", "next_actions"] },
   },
   {
@@ -503,9 +502,9 @@ export const QA_EVENTS = [
     summary: "Legal sign-off gap raised as a billing rollout exception.",
   },
   {
-    id: "evt-home-decision-launch",
+    id: "evt-home-launch-approval",
     ts: hoursAgo(0.75),
-    type: "decision_made",
+    type: "message_posted",
     actor_id: "actor-zara-ops",
     thread_id: "thread-launch-war-room",
     refs: ["thread:thread-launch-war-room", "document:doc-launch-checklist"],

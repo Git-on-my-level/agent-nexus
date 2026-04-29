@@ -2682,10 +2682,57 @@ paths:
       x-anx-why: Load the operator-only human attention queue derived from explicit human_attention_requested events.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ items }`."
-      x-anx-error-codes: [auth_required, invalid_token]
-      x-anx-concepts: [inbox]
-      x-anx-stability: beta
+      x-anx-output-envelope: "Returns `{ status, items, generated_at }`; completed adds `{ next_cursor }`; open projection adds `{ projection_freshness }` unless risk_horizon_days derivation path."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token]
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: >
+            open lists pending human_attention_requested work; completed lists human_attention_responded
+            history (newest first, paginated).
+          schema:
+            type: string
+            enum: [open, completed]
+            default: open
+        - name: risk_horizon_days
+          in: query
+          required: false
+          description: Diagnostic derivation horizon for open-queue snapshots (ignored when status=completed).
+          schema:
+            type: integer
+            minimum: 0
+        - name: limit
+          in: query
+          required: false
+          description: Page size when status=completed (default 50, max 100).
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+        - name: cursor
+          in: query
+          required: false
+          description: Opaque pagination cursor returned as next_cursor from a prior completed page.
+          schema:
+            type: string
+        - name: window_days
+          in: query
+          required: false
+          description: >
+            Restrict completed history to events newer than now minus this many days (default 30).
+            Use 0 for all time.
+          schema:
+            type: integer
+            minimum: 0
+        - name: completed_kind
+          in: query
+          required: false
+          description: Filter completed rows by original human attention kind (ignored when status=open).
+          schema:
+            type: string
+            enum: [all, ask, review, escalate, unknown]
+            default: all
       responses:
         '200':
           description: Inbox items
@@ -2693,6 +2740,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/InboxResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
         '401':
           $ref: '#/components/responses/ErrorResponse'
 
@@ -5494,12 +5543,62 @@ components:
         artifact: { $ref: '#/components/schemas/Artifact' }
       required: [artifact]
 
+    CompletedInboxItem:
+      type: object
+      description: Human attention item closed by human_attention_responded; list/get history row.
+      properties:
+        id:
+          type: string
+          description: Stable id formatted as completed:<response_event_id>.
+        status:
+          type: string
+          enum: [completed]
+        inbox_item_id: { type: string }
+        kind: { type: string }
+        thread_id: { type: string }
+        subject_ref: { $ref: '#/components/schemas/TypedRef' }
+        title: { type: string }
+        body: { type: string }
+        related_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        response_proposals:
+          type: array
+          items: { type: string }
+        request_event_ref: { $ref: '#/components/schemas/TypedRef' }
+        response_event_ref: { $ref: '#/components/schemas/TypedRef' }
+        response_text: { type: string }
+        response_summary: { type: string }
+        responded_at: { type: string }
+        responding_actor_id: { type: string }
+        requester_actor_id: { type: string }
+        requester_agent_id: { type: string }
+        requester_label: { type: string }
+        original_request_missing: { type: boolean }
+      required: [id, status, title, related_refs]
+
     InboxResponse:
       type: object
       properties:
+        status:
+          type: string
+          enum: [open, completed]
         items:
           type: array
-          items: { $ref: '#/components/schemas/InboxItem' }
+          items:
+            oneOf:
+              - $ref: '#/components/schemas/InboxItem'
+              - $ref: '#/components/schemas/CompletedInboxItem'
+        next_cursor:
+          type: string
+          nullable: true
+          description: Present when status=completed and another page exists.
+        generated_at:
+          type: string
+        projection_freshness:
+          type: object
+          additionalProperties: true
+          description: Present for status=open materialized projections when applicable.
       required: [items]
 
     RespondInboxItemResponse:

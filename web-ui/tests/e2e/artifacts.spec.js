@@ -69,7 +69,8 @@ test("artifact filters are URL-backed and survive refresh", async ({
   ];
 
   await page.addInitScript((selectedActorId) => {
-    window.localStorage.setItem("anx_ui_actor_id", selectedActorId);
+    window.localStorage.setItem("anx_ui_actor_id:local", selectedActorId);
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
   }, actorId);
 
   await page.route(/\/actors(\?.*)?$/, async (route) => {
@@ -109,7 +110,7 @@ test("artifact filters are URL-backed and survive refresh", async ({
 
   await page.getByRole("button", { name: "Filter" }).click();
   await page.getByLabel("Kind").selectOption("receipt");
-  await page.getByLabel("Thread ID").fill("thread-onboarding");
+  await page.getByLabel("Topic ID").fill("thread-onboarding");
   await page.getByRole("button", { name: "Apply" }).click();
 
   await expect(page).toHaveURL(
@@ -125,7 +126,7 @@ test("artifact filters are URL-backed and survive refresh", async ({
     /\/o\/local\/w\/local\/artifacts\?kind=receipt&thread_id=thread-onboarding$/,
   );
   await expect(page.getByLabel("Kind")).toHaveValue("receipt");
-  await expect(page.getByLabel("Thread ID")).toHaveValue("thread-onboarding");
+  await expect(page.getByLabel("Topic ID")).toHaveValue("thread-onboarding");
   await expect(page.getByText("Collected onboarding evidence")).toBeVisible();
   await expect(page.getByText("Prepare onboarding plan")).toHaveCount(0);
   await expect(page.getByText("Incident recovery evidence")).toHaveCount(0);

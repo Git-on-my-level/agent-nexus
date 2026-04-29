@@ -86,7 +86,7 @@ describe("actor flow integration (mocked)", () => {
         type: "message_posted",
         refs: [],
         summary: "hello",
-        provenance: { sources: ["actor_statement:test"] },
+        provenance: { sources: ["event:test"] },
       },
     });
 

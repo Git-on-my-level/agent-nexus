@@ -257,7 +257,7 @@ THREAD_RESPONSE=$(curl -sS \
       "current_summary":"smoke test",
       "next_actions":["verify"],
       "key_artifacts":[],
-      "provenance":{"sources":["actor_statement:hosted-smoke"]}
+      "provenance":{"sources":["event:hosted-smoke-thread"]}
     }
   }' \
   "$CORE_BASE_URL/threads")
@@ -288,12 +288,12 @@ EVENT_STATUS=$(curl -sS -o /dev/null -w '%{http_code}' \
   -X POST \
   -d "{
     \"event\":{
-      \"type\":\"actor_statement\",
+      \"type\":\"message_posted\",
       \"thread_id\":\"$THREAD_ID\",
       \"refs\":[\"thread:$THREAD_ID\"],
       \"summary\":\"hosted smoke event\",
-      \"payload\":{\"statement\":\"test\"},
-      \"provenance\":{\"sources\":[\"actor_statement:hosted-smoke\"]}
+      \"payload\":{\"body\":\"test\"},
+      \"provenance\":{\"sources\":[\"event:hosted-smoke-message\"]}
     }
   }" \
   "$CORE_BASE_URL/events" || true)

@@ -598,7 +598,6 @@ func addBoardCardFromRaw(w http.ResponseWriter, r *http.Request, opts handlerOpt
 	}
 
 	emitCardLifecycleEventBestEffort(r.Context(), opts, actorID, buildCardCreatedEvent(result.Board, result.Card))
-	emitBoardLifecycleEventBestEffort(r.Context(), opts, actorID, buildBoardCardAddedEvent(result.Board, result.Card))
 
 	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, idempotencyOp, actorID, req.RequestKey, replayRequest, http.StatusCreated, map[string]any{
 		"board": result.Board,
@@ -711,7 +710,6 @@ func handleBatchAddBoardCards(w http.ResponseWriter, r *http.Request, opts handl
 
 	for _, res := range results {
 		emitCardLifecycleEventBestEffort(r.Context(), opts, actorID, buildCardCreatedEvent(res.Board, res.Card))
-		emitBoardLifecycleEventBestEffort(r.Context(), opts, actorID, buildBoardCardAddedEvent(res.Board, res.Card))
 	}
 
 	finalBoard := results[len(results)-1].Board
@@ -935,7 +933,6 @@ func handleMoveCardMutation(w http.ResponseWriter, r *http.Request, opts handler
 		return
 	}
 
-	emitBoardLifecycleEventBestEffort(r.Context(), opts, actorID, buildBoardCardMovedEvent(result.Board, beforeCard, result.Card, req.BeforeCardID, req.AfterCardID, req.BeforeThreadID, req.AfterThreadID))
 	emitCardLifecycleEventBestEffort(r.Context(), opts, actorID, buildCardMovedEvent(result.Board, beforeCard, result.Card, req.BeforeCardID, req.AfterCardID, req.BeforeThreadID, req.AfterThreadID))
 	if anyString(result.Card["updated_at"]) != anyString(beforeCard["updated_at"]) || anyString(result.Card["version"]) != anyString(beforeCard["version"]) {
 		emitCardLifecycleEventBestEffort(r.Context(), opts, actorID, buildCardUpdatedEvent(result.Board, beforeCard, result.Card, []string{"resolution", "resolution_refs"}))
@@ -989,7 +986,6 @@ func handleRemoveBoardCard(w http.ResponseWriter, r *http.Request, opts handlerO
 	}
 
 	emitCardLifecycleEventBestEffort(r.Context(), opts, actorID, buildCardArchivedEvent(result.Board, result.Card))
-	emitBoardLifecycleEventBestEffort(r.Context(), opts, actorID, buildBoardCardArchivedEvent(result.Board, result.Card))
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"board":             result.Board,
@@ -1040,7 +1036,6 @@ func handleArchiveBoardCard(w http.ResponseWriter, r *http.Request, opts handler
 		return
 	}
 	emitCardLifecycleEventBestEffort(r.Context(), opts, actorID, buildCardArchivedEvent(result.Board, result.Card))
-	emitBoardLifecycleEventBestEffort(r.Context(), opts, actorID, buildBoardCardArchivedEvent(result.Board, result.Card))
 	writeJSON(w, http.StatusOK, map[string]any{"board": result.Board, "card": publicCardView(result.Card)})
 }
 
@@ -1091,7 +1086,6 @@ func handleTrashBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOp
 	}
 	if result.Card == nil || result.Card["_mutation_applied"] != false {
 		emitCardLifecycleEventBestEffort(r.Context(), opts, actorID, buildCardTrashedEvent(result.Board, result.Card))
-		emitBoardLifecycleEventBestEffort(r.Context(), opts, actorID, buildBoardCardTrashedEvent(result.Board, result.Card))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"board": result.Board, "card": publicCardView(result.Card)})
 }
@@ -1456,20 +1450,6 @@ func buildBoardUpdatedEvent(previousBoard, updatedBoard, patch map[string]any) m
 	return buildBoardLifecycleEvent("board_updated", updatedBoard, nil, payload, "Board updated: "+boardDisplayName(updatedBoard))
 }
 
-func buildBoardCardAddedEvent(board, card map[string]any) map[string]any {
-	payload := map[string]any{
-		"board_id":      anyString(board["id"]),
-		"card_id":       anyString(card["id"]),
-		"thread_id":     nullableStringValue(anyString(card["thread_id"])),
-		"column_key":    anyString(card["column_key"]),
-		"status":        nullableStringValue(anyString(card["status"])),
-		"assignee_refs": cardAssigneeRefsAny(card),
-		"document_ref":  nullableStringValue(documentRefForPublicCard(card)),
-		"related_refs":  typedRefStringsToAnyList(cardRelatedRefs(card)),
-	}
-	return buildBoardLifecycleEvent("board_card_added", board, card, payload, "Board card added: "+cardDisplayName(card))
-}
-
 func buildCardCreatedEvent(board, card map[string]any) map[string]any {
 	payload := map[string]any{
 		"board_id":      anyString(board["id"]),
@@ -1534,20 +1514,6 @@ func buildCardTrashedEvent(board, card map[string]any) map[string]any {
 	return buildCardLifecycleEvent("card_trashed", board, card, payload, "Card trashed: "+cardDisplayName(card))
 }
 
-func buildBoardCardMovedEvent(board, previousCard, updatedCard map[string]any, beforeCardID, afterCardID, beforeThreadID, afterThreadID string) map[string]any {
-	payload := map[string]any{
-		"board_id":         anyString(board["id"]),
-		"card_id":          anyString(updatedCard["id"]),
-		"from_column_key":  nullableStringValue(anyString(previousCard["column_key"])),
-		"column_key":       nullableStringValue(anyString(updatedCard["column_key"])),
-		"before_card_id":   nullableStringValue(strings.TrimSpace(beforeCardID)),
-		"after_card_id":    nullableStringValue(strings.TrimSpace(afterCardID)),
-		"before_thread_id": nullableStringValue(strings.TrimSpace(beforeThreadID)),
-		"after_thread_id":  nullableStringValue(strings.TrimSpace(afterThreadID)),
-	}
-	return buildBoardLifecycleEvent("board_card_moved", board, updatedCard, payload, "Board card moved: "+cardDisplayName(updatedCard))
-}
-
 func buildCardMovedEvent(board, previousCard, updatedCard map[string]any, beforeCardID, afterCardID, beforeThreadID, afterThreadID string) map[string]any {
 	payload := map[string]any{
 		"board_id":         anyString(board["id"]),
@@ -1560,29 +1526,6 @@ func buildCardMovedEvent(board, previousCard, updatedCard map[string]any, before
 		"after_thread_id":  nullableStringValue(strings.TrimSpace(afterThreadID)),
 	}
 	return buildCardLifecycleEvent("card_moved", board, updatedCard, payload, "Card moved: "+cardDisplayName(updatedCard))
-}
-
-func buildBoardCardArchivedEvent(board, card map[string]any) map[string]any {
-	payload := map[string]any{
-		"board_id":     anyString(board["id"]),
-		"card_id":      anyString(card["id"]),
-		"column_key":   nullableStringValue(anyString(card["column_key"])),
-		"document_ref": nullableStringValue(documentRefForPublicCard(card)),
-		"related_refs": typedRefStringsToAnyList(cardRelatedRefs(card)),
-	}
-	return buildBoardLifecycleEvent("board_card_archived", board, card, payload, "Board card archived: "+cardDisplayName(card))
-}
-
-func buildBoardCardTrashedEvent(board, card map[string]any) map[string]any {
-	payload := map[string]any{
-		"board_id":     anyString(board["id"]),
-		"card_id":      anyString(card["id"]),
-		"column_key":   nullableStringValue(anyString(card["column_key"])),
-		"document_ref": nullableStringValue(documentRefForPublicCard(card)),
-		"related_refs": typedRefStringsToAnyList(cardRelatedRefs(card)),
-		"trash_reason": nullableStringValue(anyString(card["trash_reason"])),
-	}
-	return buildBoardLifecycleEvent("board_card_trashed", board, card, payload, "Board card trashed: "+cardDisplayName(card))
 }
 
 func buildCardLifecycleEvent(eventType string, board, card map[string]any, payload map[string]any, summary string) map[string]any {
@@ -1610,7 +1553,7 @@ func buildCardLifecycleEvent(eventType string, board, card map[string]any, paylo
 		"refs":       refs,
 		"summary":    strings.TrimSpace(summary),
 		"payload":    payload,
-		"provenance": actorStatementProvenance(),
+		"provenance": eventProvenance(),
 	}
 	return event
 }
@@ -1640,7 +1583,7 @@ func buildBoardLifecycleEvent(eventType string, board, card map[string]any, payl
 		"refs":       refs,
 		"summary":    strings.TrimSpace(summary),
 		"payload":    payload,
-		"provenance": actorStatementProvenance(),
+		"provenance": eventProvenance(),
 	}
 	return event
 }

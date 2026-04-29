@@ -70,17 +70,17 @@ func TestStalenessActorStatementAndDocumentActivityKeepsThreadNotStale(t *testin
 	postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-1",
 		"event":{
-			"type":"actor_statement",
+			"type":"card_updated",
 			"thread_id":"`+threadID+`",
-			"refs":["thread:`+threadID+`"],
+			"refs":["card:stale-card-1","board:stale-board-1"],
 			"summary":"shared an update",
-			"payload":{"statement":"progress update"},
+			"payload":{"changed_fields":["title"]},
 			"provenance":{"sources":["inferred"]}
 		}
 	}`, http.StatusCreated).Body.Close()
 
 	if threadListedAsStale(t, h.baseURL, threadID) {
-		t.Fatalf("unexpected stale flag after actor_statement for thread %s", threadID)
+		t.Fatalf("unexpected stale flag after card_updated for thread %s", threadID)
 	}
 
 	postJSONExpectStatus(t, h.baseURL+"/derived/rebuild", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()

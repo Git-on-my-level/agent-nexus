@@ -1636,7 +1636,7 @@ func buildDocumentLifecycleEvent(eventType, threadID, documentID, revisionID, ar
 		"refs":       refs,
 		"summary":    summary + ": " + label,
 		"payload":    payload,
-		"provenance": actorStatementProvenance(),
+		"provenance": eventProvenance(),
 	}
 	if threadID != "" {
 		event["thread_id"] = threadID

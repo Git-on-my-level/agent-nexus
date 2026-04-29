@@ -338,7 +338,8 @@ test("board UI supports create/edit and card mutation flows", async ({
   }
 
   await page.addInitScript((selectedActorId) => {
-    window.localStorage.setItem("anx_ui_actor_id", selectedActorId);
+    window.localStorage.setItem("anx_ui_actor_id:local", selectedActorId);
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
   }, actorId);
 
   await page.route(/\/actors$/, async (route) => {
@@ -391,7 +392,7 @@ test("board UI supports create/edit and card mutation flows", async ({
     });
   });
 
-  await page.route(/\/boards$/, async (route) => {
+  await page.route(/\/boards(?:\?.*)?$/, async (route) => {
     const request = route.request();
     if (request.method() === "GET" && request.resourceType() === "document") {
       await route.continue();
@@ -677,19 +678,22 @@ test("board UI supports create/edit and card mutation flows", async ({
   await page.goto("/o/local/w/local/boards");
   await page.waitForLoadState("networkidle");
 
-  await expect(page.getByRole("heading", { name: "Boards" })).toBeVisible();
-  await page.getByRole("button", { name: "Create board", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "Hide create form" }),
+    page.getByRole("heading", { name: "Boards", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "New board", exact: true })
+    .first()
+    .click();
+  await expect(page).toHaveURL(/\/o\/local\/w\/local\/boards\/new$/);
+  await expect(
+    page.getByRole("heading", { name: "New board", exact: true }),
   ).toBeVisible();
   await page.getByLabel("Board title").fill("Launch Control");
-  await page.getByLabel("Link topic search").fill("Primary Coordination");
   await page
-    .getByRole("button", { name: /Primary Coordination Thread/ })
-    .click();
-  await page.getByLabel("Board document search").fill("Launch Runbook");
-  await page.getByRole("button", { name: /Launch Runbook/ }).click();
-  await page.getByRole("button", { name: "Create board", exact: true }).click();
+    .getByRole("textbox", { name: "Summary" })
+    .fill("Launch workflow board");
+  await page.getByRole("button", { name: "Create board" }).click();
 
   await expect(page).toHaveURL(/\/o\/local\/w\/local\/boards\/board-created$/);
   await expect(
@@ -699,9 +703,7 @@ test("board UI supports create/edit and card mutation flows", async ({
   await expect(
     page.getByRole("heading", { name: "Workspace docs" }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Resolved cards" }),
-  ).toBeVisible();
+  await expect(page.getByText("0 resolved", { exact: true })).toBeVisible();
   await expect(page.getByText("Review inbox", { exact: true })).toBeVisible();
   await expect(page.getByText("Warnings", { exact: true })).toBeVisible();
   expect(boardCreatePayloads).toEqual([
@@ -709,36 +711,33 @@ test("board UI supports create/edit and card mutation flows", async ({
       actor_id: actorId,
       board: {
         title: "Launch Control",
-        document_refs: ["document:doc-runbook"],
-        refs: ["topic:topic-primary"],
-      },
-    },
-  ]);
-
-  await page.getByRole("button", { name: "Edit" }).click();
-  await page.getByLabel("Board title").fill("Launch Control v2");
-  await page.getByLabel("Board document search").fill("Incident Playbook");
-  await page.getByRole("button", { name: /Incident Playbook/ }).click();
-  await page.getByRole("button", { name: "Save board" }).click();
-
-  await expect(
-    page.getByRole("heading", { name: "Launch Control v2" }),
-  ).toBeVisible();
-  await expect(page.getByText("Active", { exact: true })).toBeVisible();
-  expect(boardPatchPayloads).toEqual([
-    {
-      actor_id: actorId,
-      if_updated_at: "2026-03-05T00:00:00.000Z",
-      patch: {
-        title: "Launch Control v2",
-        document_refs: ["document:doc-playbook"],
-        owners: [actorId],
+        summary: "Launch workflow board",
+        document_refs: [],
         pinned_refs: [],
       },
     },
   ]);
 
-  await page.getByRole("link", { name: "Add card", exact: true }).click();
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("menuitem", { name: "Settings" }).click();
+  await page.getByLabel("Title").fill("Launch Control v2");
+  await page.getByLabel("Summary").fill("Launch workflow board v2");
+  await page.getByRole("button", { name: "Save" }).click();
+
+  await expect(
+    page.getByRole("heading", { name: "Launch Control v2" }),
+  ).toBeVisible();
+  await expect(page.getByText("Active", { exact: true })).toBeVisible();
+  expect(boardPatchPayloads.at(-1)).toEqual({
+    actor_id: actorId,
+    if_updated_at: "2026-03-05T01:00:00.000Z",
+    patch: {
+      title: "Launch Control v2",
+      summary: "Launch workflow board v2",
+    },
+  });
+
+  await page.getByRole("button", { name: "Add card", exact: true }).click();
   await expect(page).toHaveURL(/\/boards\/[^/]+\/cards\/new$/);
   await expect(
     page.getByRole("heading", { name: "Add card", exact: true }),
@@ -962,7 +961,8 @@ test("board detail shows pending freshness and hides derived card counts until r
   ];
 
   await page.addInitScript((selectedActorId) => {
-    window.localStorage.setItem("anx_ui_actor_id", selectedActorId);
+    window.localStorage.setItem("anx_ui_actor_id:local", selectedActorId);
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
   }, actorId);
 
   await page.route(/\/actors$/, async (route) => {
@@ -1066,7 +1066,8 @@ test("board edit conflict reloads latest state and allows retry", async ({
   let patchAttempt = 0;
 
   await page.addInitScript((selectedActorId) => {
-    window.localStorage.setItem("anx_ui_actor_id", selectedActorId);
+    window.localStorage.setItem("anx_ui_actor_id:local", selectedActorId);
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
   }, actorId);
 
   await page.route(/\/actors$/, async (route) => {

@@ -28,7 +28,7 @@ test("thread detail separates messages from timeline and nests replies", async (
       refs: ["thread:thread-onboarding"],
       summary: "Latest workspace message",
       payload: { text: "Latest workspace message" },
-      provenance: { sources: ["actor_statement:event-1002"] },
+      provenance: { sources: ["event:event-1002"] },
     },
   ];
   let timeline = [
@@ -41,7 +41,7 @@ test("thread detail separates messages from timeline and nests replies", async (
       refs: ["thread:thread-onboarding"],
       summary: "Earlier timeline-only message",
       payload: { text: "Earlier timeline-only message" },
-      provenance: { sources: ["actor_statement:event-0999"] },
+      provenance: { sources: ["event:event-0999"] },
     },
     {
       id: "evt-1002",
@@ -52,12 +52,13 @@ test("thread detail separates messages from timeline and nests replies", async (
       refs: ["thread:thread-onboarding"],
       summary: "Latest workspace message",
       payload: { text: "Latest workspace message" },
-      provenance: { sources: ["actor_statement:event-1002"] },
+      provenance: { sources: ["event:event-1002"] },
     },
   ];
 
   await page.addInitScript((selectedActorId) => {
-    window.localStorage.setItem("anx_ui_actor_id", selectedActorId);
+    window.localStorage.setItem("anx_ui_actor_id:local", selectedActorId);
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
   }, actorId);
   await page.context().addCookies([
     {
@@ -209,7 +210,7 @@ test("thread detail separates messages from timeline and nests replies", async (
           open_cards: ["card-onboard-1"],
           updated_at: "2026-03-04T00:00:00.000Z",
           updated_by: actorId,
-          provenance: { sources: ["actor_statement:event-1001"] },
+          provenance: { sources: ["event:event-1001"] },
         },
       }),
     });
@@ -228,7 +229,7 @@ test("thread detail separates messages from timeline and nests replies", async (
         open_cards: ["card-onboard-1"],
         updated_at: "2026-03-04T00:00:00.000Z",
         updated_by: actorId,
-        provenance: { sources: ["actor_statement:event-1001"] },
+        provenance: { sources: ["event:event-1001"] },
       },
       context: {
         recent_events: recentEvents,
@@ -502,11 +503,12 @@ test("thread detail handles snapshot update conflict and retries after reload", 
     open_cards: ["card-onboard-1"],
     updated_at: "2026-03-04T00:00:00.000Z",
     updated_by: actorId,
-    provenance: { sources: ["actor_statement:event-1001"] },
+    provenance: { sources: ["event:event-1001"] },
   };
 
   await page.addInitScript((selectedActorId) => {
-    window.localStorage.setItem("anx_ui_actor_id", selectedActorId);
+    window.localStorage.setItem("anx_ui_actor_id:local", selectedActorId);
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
   }, actorId);
 
   await page.route(/\/actors$/, async (route) => {
@@ -687,7 +689,7 @@ test("thread detail handles snapshot update conflict and retries after reload", 
     actor_id: actorId,
     patch: {
       title: "Edited after conflict",
-      provenance: { sources: ["actor_statement:ui"] },
+      provenance: { sources: ["event:ui"] },
     },
     if_updated_at: "2026-03-04T00:00:00.000Z",
   });
@@ -696,7 +698,7 @@ test("thread detail handles snapshot update conflict and retries after reload", 
     patch: {
       title: "Final merged title",
       summary: "Final summary body",
-      provenance: { sources: ["actor_statement:ui"] },
+      provenance: { sources: ["event:ui"] },
     },
     if_updated_at: "2026-03-04T02:00:00.000Z",
   });
@@ -761,7 +763,8 @@ test("thread detail updates workspace panels from another actor via event stream
   });
 
   await page.addInitScript((selectedActorId) => {
-    window.localStorage.setItem("anx_ui_actor_id", selectedActorId);
+    window.localStorage.setItem("anx_ui_actor_id:local", selectedActorId);
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
   }, actorId);
 
   await page.route(/\/actors$/, async (route) => {

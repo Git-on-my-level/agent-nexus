@@ -159,7 +159,7 @@ seed_workspace_fixture() {
   curl -fsS \
     -H 'content-type: application/json' \
     -X POST \
-    -d '{"actor_id":"anx-core","thread":{"id":"thread-hosted-ops","title":"Hosted ops restore drill","type":"incident","status":"active","priority":"p2","tags":["hosted","ops"],"cadence":"daily","current_summary":"Seed data for hosted restore verification","next_actions":["validate backup restore"],"key_artifacts":[],"provenance":{"sources":["actor_statement:hosted-ops-test"]}}}' \
+    -d '{"actor_id":"anx-core","thread":{"id":"thread-hosted-ops","title":"Hosted ops restore drill","type":"incident","status":"active","priority":"p2","tags":["hosted","ops"],"cadence":"daily","current_summary":"Seed data for hosted restore verification","next_actions":["validate backup restore"],"key_artifacts":[],"provenance":{"sources":["event:hosted-ops-test"]}}}' \
     "http://127.0.0.1:${listen_port}/threads" >/dev/null
 
   curl -fsS \

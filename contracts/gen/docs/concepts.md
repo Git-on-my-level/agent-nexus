@@ -180,10 +180,9 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `inbox`
 
-- Commands: `4`
+- Commands: `3`
 - Command IDs:
   - `inbox.get`
-  - `inbox.list`
   - `inbox.respond`
   - `inbox.stream`
 

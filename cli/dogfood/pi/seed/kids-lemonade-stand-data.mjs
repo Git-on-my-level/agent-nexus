@@ -58,7 +58,7 @@ export function getKidsLemonadeStandSeedData() {
         updated_at: iso(-18 * 60 * 1000),
         updated_by: "actor-boss-kid",
         provenance: {
-          sources: ["actor_statement:evt-kids-main-001"],
+          sources: ["event:evt-kids-main-001"],
         },
       },
       {
@@ -85,7 +85,7 @@ export function getKidsLemonadeStandSeedData() {
         updated_at: iso(-24 * 60 * 1000),
         updated_by: "actor-sales-kid",
         provenance: {
-          sources: ["actor_statement:evt-kids-sales-001"],
+          sources: ["event:evt-kids-sales-001"],
         },
       },
       {
@@ -113,7 +113,7 @@ export function getKidsLemonadeStandSeedData() {
         updated_at: iso(-22 * 60 * 1000),
         updated_by: "actor-backoffice-kid",
         provenance: {
-          sources: ["actor_statement:evt-kids-backoffice-001"],
+          sources: ["event:evt-kids-backoffice-001"],
         },
       },
     ],
@@ -128,7 +128,7 @@ export function getKidsLemonadeStandSeedData() {
           "topic:kids-lemonade-main",
         ],
         provenance: {
-          sources: ["actor_statement:evt-kids-sales-001"],
+          sources: ["event:evt-kids-sales-001"],
         },
         created_at: iso(-34 * 60 * 1000),
         created_by: "actor-sales-kid",
@@ -141,7 +141,7 @@ export function getKidsLemonadeStandSeedData() {
         summary: "Draft chalkboard slogans and sign ideas for the front stand",
         refs: ["topic:kids-lemonade-sales"],
         provenance: {
-          sources: ["actor_statement:evt-kids-sales-001"],
+          sources: ["event:evt-kids-sales-001"],
         },
         created_at: iso(-33 * 60 * 1000),
         created_by: "actor-sales-kid",
@@ -157,7 +157,7 @@ export function getKidsLemonadeStandSeedData() {
           "topic:kids-lemonade-main",
         ],
         provenance: {
-          sources: ["actor_statement:evt-kids-backoffice-001"],
+          sources: ["event:evt-kids-backoffice-001"],
         },
         created_at: iso(-32 * 60 * 1000),
         created_by: "actor-backoffice-kid",
@@ -173,7 +173,7 @@ export function getKidsLemonadeStandSeedData() {
           "topic:kids-lemonade-main",
         ],
         provenance: {
-          sources: ["actor_statement:evt-kids-backoffice-001"],
+          sources: ["event:evt-kids-backoffice-001"],
         },
         created_at: iso(-31 * 60 * 1000),
         created_by: "actor-backoffice-kid",
@@ -186,7 +186,7 @@ export function getKidsLemonadeStandSeedData() {
         summary: "Weather and neighborhood timing note for the stand",
         refs: ["topic:kids-lemonade-main"],
         provenance: {
-          sources: ["actor_statement:evt-kids-main-001"],
+          sources: ["event:evt-kids-main-001"],
         },
         created_at: iso(-30 * 60 * 1000),
         created_by: "actor-boss-kid",
@@ -287,7 +287,7 @@ export function getKidsLemonadeStandSeedData() {
       {
         id: "evt-kids-main-001",
         actor_id: "actor-boss-kid",
-        type: "actor_statement",
+        type: "message_posted",
         thread_id: "thread-kids-lemonade-main",
         refs: [
           "thread:thread-kids-lemonade-main",
@@ -309,7 +309,7 @@ export function getKidsLemonadeStandSeedData() {
       {
         id: "evt-kids-sales-001",
         actor_id: "actor-sales-kid",
-        type: "actor_statement",
+        type: "message_posted",
         thread_id: "thread-kids-lemonade-sales",
         refs: [
           "thread:thread-kids-lemonade-sales",
@@ -331,7 +331,7 @@ export function getKidsLemonadeStandSeedData() {
       {
         id: "evt-kids-backoffice-001",
         actor_id: "actor-backoffice-kid",
-        type: "actor_statement",
+        type: "message_posted",
         thread_id: "thread-kids-lemonade-backoffice",
         refs: [
           "thread:thread-kids-lemonade-backoffice",
@@ -404,7 +404,7 @@ export function getKidsLemonadeStandSeedData() {
       {
         id: "evt-kids-main-002",
         actor_id: "actor-boss-kid",
-        type: "actor_statement",
+        type: "message_posted",
         thread_id: "thread-kids-lemonade-main",
         refs: [
           "thread:thread-kids-lemonade-main",

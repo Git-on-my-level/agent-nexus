@@ -76,7 +76,7 @@ describe("anxCoreClient auth behavior", () => {
         type: "message_posted",
         refs: [],
         summary: "locked",
-        provenance: { sources: ["actor_statement:test"] },
+        provenance: { sources: ["event:test"] },
       },
     });
 

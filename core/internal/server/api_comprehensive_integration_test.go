@@ -164,17 +164,11 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 	}
 	assertRefsContain(t, reviewCompleted["refs"], "artifact:"+reviewID, "artifact:"+receiptID, cardRef)
 
-	postJSONExpectStatus(t, h.baseURL+"/events", `{
-		"actor_id":"actor-1",
-		"event":{
-			"type":"decision_needed",
-			"thread_id":"`+threadID+`",
-			"refs":["thread:`+threadID+`"],
-			"summary":"need decision",
-			"payload":{},
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated).Body.Close()
+	firstAttention := createHumanAttentionEvent(t, h.baseURL, threadID, "ask", "need decision", "thread:"+threadID, nil, nil)
+	firstAttentionEventID := asString(firstAttention["id"])
+	if firstAttentionEventID == "" {
+		t.Fatal("expected first human attention event id")
+	}
 
 	inboxBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
 		"actor_id":"actor-1",
@@ -216,37 +210,27 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 	postJSONExpectStatus(t, h.baseURL+"/derived/rebuild", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
 
 	inboxItems := getInboxItems(t, h.baseURL)
-	if len(inboxItems) != 0 {
-		t.Fatalf("expected no human inbox rows from generic decisions or card risk, got %#v", inboxItems)
+	firstInboxItem, ok := findInboxItem(inboxItems, func(item map[string]any) bool {
+		return asString(item["source_event_id"]) == firstAttentionEventID
+	})
+	if !ok {
+		t.Fatalf("expected human inbox row from first attention request, got %#v", inboxItems)
+	}
+	if asString(firstInboxItem["kind"]) != "ask" {
+		t.Fatalf("unexpected inbox kind: %#v", firstInboxItem["kind"])
 	}
 
-	newDecisionResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
-		"actor_id":"actor-1",
-		"event":{
-			"type":"decision_needed",
-			"thread_id":"`+threadID+`",
-			"refs":["thread:`+threadID+`"],
-			"summary":"retrigger decision",
-			"payload":{},
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated)
-	defer newDecisionResp.Body.Close()
-	var newDecisionPayload struct {
-		Event map[string]any `json:"event"`
+	newDecision := createHumanAttentionEvent(t, h.baseURL, threadID, "ask", "retrigger decision", "thread:"+threadID, nil, nil)
+	newDecisionEventID := asString(newDecision["id"])
+	if newDecisionEventID == "" {
+		t.Fatal("expected retrigger human attention event id")
 	}
-	if err := json.NewDecoder(newDecisionResp.Body).Decode(&newDecisionPayload); err != nil {
-		t.Fatalf("decode retrigger decision response: %v", err)
-	}
-	newDecisionEventID := asString(newDecisionPayload.Event["id"])
 
 	inboxAfterRetrigger := getInboxItems(t, h.baseURL)
 	if _, ok := findInboxItem(inboxAfterRetrigger, func(item map[string]any) bool {
 		return asString(item["source_event_id"]) == newDecisionEventID
 	}); !ok {
-		if len(inboxAfterRetrigger) != 0 {
-			t.Fatalf("expected decision retrigger to stay out of human inbox, got %#v", inboxAfterRetrigger)
-		}
+		t.Fatalf("expected retrigger human inbox row, got %#v", inboxAfterRetrigger)
 	}
 
 	// PrimitiveStore accepts opaque thread bodies; strict enum checks live at HTTP ingress.

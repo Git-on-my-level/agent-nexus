@@ -391,7 +391,7 @@ func (s *Service) routeMention(ctx context.Context, handle string, event map[str
 			subjectRef, resolvedSubject,
 		),
 		"provenance": map[string]any{
-			"sources": []string{fmt.Sprintf("actor_statement:%s", eventID)},
+			"sources": []string{fmt.Sprintf("event:%s", eventID)},
 		},
 	}
 	if err := s.appendThreadEvent(ctx, requestKey, eventBody); err != nil {
@@ -413,7 +413,7 @@ func (s *Service) emitException(ctx context.Context, threadID string, eventID st
 			"handle":  handle,
 		},
 		"provenance": map[string]any{
-			"sources": []string{fmt.Sprintf("actor_statement:%s", eventID)},
+			"sources": []string{fmt.Sprintf("event:%s", eventID)},
 		},
 	})
 }

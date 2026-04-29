@@ -3883,10 +3883,6 @@ export const commandRegistry = [
                     "enum_values": [
                         "agent_notification_dismissed",
                         "agent_notification_read",
-                        "board_card_added",
-                        "board_card_archived",
-                        "board_card_moved",
-                        "board_card_trashed",
                         "board_created",
                         "board_updated",
                         "card_archived",
@@ -3895,8 +3891,6 @@ export const commandRegistry = [
                         "card_resolved",
                         "card_trashed",
                         "card_updated",
-                        "decision_made",
-                        "decision_needed",
                         "document_created",
                         "document_restored",
                         "document_revised",
@@ -3904,7 +3898,6 @@ export const commandRegistry = [
                         "exception_raised",
                         "human_attention_requested",
                         "human_attention_responded",
-                        "intervention_needed",
                         "message_posted",
                         "receipt_added",
                         "review_completed",
@@ -4260,15 +4253,12 @@ export const commandRegistry = [
         "streaming": {
             "mode": "none"
         },
-        "output_envelope": "Returns `{ items }`.",
+        "output_envelope": "Returns `{ status, items, generated_at }`; completed adds `{ next_cursor }`; open projection adds `{ projection_freshness }` unless risk_horizon_days derivation path.",
         "error_codes": [
             "auth_required",
+            "invalid_request",
             "invalid_token"
         ],
-        "concepts": [
-            "inbox"
-        ],
-        "stability": "beta",
         "surface": "projection",
         "adjacent_commands": [
             "inbox.get",

@@ -25,8 +25,10 @@ test("preserves a configured mount prefix in redirects and generated links", asy
   page,
 }) => {
   await page.addInitScript(() => {
-    window.localStorage.setItem("anx_ui_actor_id", "actor-ops-ai");
     window.localStorage.setItem("anx_ui_actor_id:local", "actor-ops-ai");
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
+    window.localStorage.setItem("anx_ui_actor_id:local", "actor-ops-ai");
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
   });
 
   await page.context().addCookies([
@@ -62,5 +64,7 @@ test("preserves a configured mount prefix in redirects and generated links", asy
   await expect(page).toHaveURL(
     new RegExp(`${APP_BASE_PATH}/o/local/w/local/topics/?$`),
   );
-  await expect(page.getByRole("heading", { name: "Topics" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Topics", exact: true }),
+  ).toBeVisible();
 });

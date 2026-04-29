@@ -37,7 +37,9 @@ test("registers actor, unlocks shell, and performs a write", async ({
   await page.getByRole("link", { name: "Topics", exact: true }).click();
 
   await expect(page).toHaveURL(/\/o\/local\/w\/local\/topics$/);
-  await expect(page.getByRole("heading", { name: "Topics" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Topics", exact: true }),
+  ).toBeVisible();
 
   await page.getByRole("button", { name: "New topic" }).click();
   await page.getByLabel("Title").fill(threadTitle);
@@ -51,7 +53,8 @@ test("renders a dashboard on workspace root and routes into inbox", async ({
   page,
 }) => {
   await page.addInitScript(() => {
-    window.localStorage.setItem("anx_ui_actor_id", "actor-ops-ai");
+    window.localStorage.setItem("anx_ui_actor_id:local", "actor-ops-ai");
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
   });
 
   await page.goto(WS_HOME);
@@ -76,7 +79,8 @@ test("shows partial-failure messaging when one dashboard source is unavailable",
   page,
 }) => {
   await page.addInitScript(() => {
-    window.localStorage.setItem("anx_ui_actor_id", "actor-ops-ai");
+    window.localStorage.setItem("anx_ui_actor_id:local", "actor-ops-ai");
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
   });
 
   await page.route(/\/topics(\?.*)?$/, async (route) => {
@@ -109,7 +113,8 @@ test("opens mobile drawer navigation and navigates between routes", async ({
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.addInitScript(() => {
-    window.localStorage.setItem("anx_ui_actor_id", "actor-ops-ai");
+    window.localStorage.setItem("anx_ui_actor_id:local", "actor-ops-ai");
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
   });
 
   await page.goto(`${WS_HOME}/inbox`);

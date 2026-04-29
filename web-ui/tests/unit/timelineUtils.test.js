@@ -28,21 +28,18 @@ describe("timeline utils", () => {
     });
   });
 
-  it("extracts changed_fields for thread_updated and resolves refs", () => {
+  it("resolves refs for message_posted events", () => {
     const view = toTimelineViewEvent(
       {
         id: "evt-y",
-        type: "thread_updated",
+        type: "message_posted",
         refs: ["event:evt-z", "thread:thread-1", "document:doc-1"],
-        payload: {
-          changed_fields: ["state", "summary"],
-        },
       },
       { threadId: "thread-1" },
     );
 
     expect(view.isKnownType).toBe(true);
-    expect(view.changedFields).toEqual(["Lifecycle state", "Summary"]);
+    expect(view.typeLabel).toBe("Message posted");
     expect(view.resolvedRefs[0]).toMatchObject({
       kind: "event",
       href: "",

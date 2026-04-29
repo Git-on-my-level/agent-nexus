@@ -5,19 +5,6 @@
   "data": {
     "collaboration": {
       "artifact_count": 1,
-      "decision_count": 0,
-      "decision_request_count": 1,
-      "decision_requests": [
-        {
-          "id": "event_ctx_2",
-          "short_id": "event_ctx_",
-          "summary": "confirm canonical command labels",
-          "summary_preview": "confirm canonical command labels",
-          "thread_id": "thread_123",
-          "type": "decision_needed"
-        }
-      ],
-      "decisions": [],
       "key_artifacts": [
         {
           "id": "artifact_ctx_1",
@@ -30,35 +17,11 @@
           "id": "card_ctx_1",
           "status": "open"
         }
-      ],
-      "recommendation_count": 1,
-      "recommendations": [
-        {
-          "id": "event_ctx_1",
-          "short_id": "event_ctx_",
-          "summary": "normalize frame shape",
-          "summary_preview": "normalize frame shape",
-          "thread_id": "thread_123",
-          "type": "actor_statement"
-        }
       ]
     },
     "context": {
       "collaboration_summary": {
         "artifact_count": 1,
-        "decision_count": 0,
-        "decision_request_count": 1,
-        "decision_requests": [
-          {
-            "id": "event_ctx_2",
-            "short_id": "event_ctx_",
-            "summary": "confirm canonical command labels",
-            "summary_preview": "confirm canonical command labels",
-            "thread_id": "thread_123",
-            "type": "decision_needed"
-          }
-        ],
-        "decisions": [],
         "key_artifacts": [
           {
             "id": "artifact_ctx_1",
@@ -70,17 +33,6 @@
           {
             "id": "card_ctx_1",
             "status": "open"
-          }
-        ],
-        "recommendation_count": 1,
-        "recommendations": [
-          {
-            "id": "event_ctx_1",
-            "short_id": "event_ctx_",
-            "summary": "normalize frame shape",
-            "summary_preview": "normalize frame shape",
-            "thread_id": "thread_123",
-            "type": "actor_statement"
           }
         ]
       },
@@ -119,7 +71,7 @@
           "summary": "normalize frame shape",
           "summary_preview": "normalize frame shape",
           "thread_id": "thread_123",
-          "type": "actor_statement"
+          "type": "message_posted"
         },
         {
           "id": "event_ctx_2",
@@ -127,7 +79,7 @@
           "summary": "confirm canonical command labels",
           "summary_preview": "confirm canonical command labels",
           "thread_id": "thread_123",
-          "type": "decision_needed"
+          "type": "human_attention_requested"
         }
       ],
       "thread": {

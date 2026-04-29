@@ -19,7 +19,7 @@ export function buildTopicCreatePayloadFromDraft(draft) {
       document_refs: [],
       board_refs: [],
       related_refs: [],
-      provenance: { sources: ["actor_statement:ui"] },
+      provenance: { sources: ["event:ui"] },
     },
   };
 }

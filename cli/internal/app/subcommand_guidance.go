@@ -106,8 +106,8 @@ var authAuditSubcommandSpec = subcommandSpec{
 
 var actorsSubcommandSpec = subcommandSpec{
 	command:  "actors",
-	valid:    []string{"list", "register"},
-	examples: []string{"anx actors list --q bot --limit 50", "anx actors register --id bot-1 --display-name \"Bot 1\" --created-at 2026-03-04T10:00:00Z"},
+	valid:    []string{"list", "create"},
+	examples: []string{"anx actors list --q bot --limit 50", "anx actors create --id bot-1 --display-name \"Bot 1\" --created-at 2026-03-04T10:00:00Z"},
 	aliases: map[string]string{
 		"ls": "list",
 	},
@@ -139,7 +139,7 @@ var provenanceSubcommandSpec = subcommandSpec{
 
 var threadsSubcommandSpec = subcommandSpec{
 	command:  "threads",
-	valid:    []string{"list", "get", "timeline", "context", "inspect", "workspace", "review", "recommendations"},
+	valid:    []string{"list", "get", "timeline", "context", "inspect", "workspace", "review"},
 	examples: []string{"anx topics workspace --topic-id <topic-id>", "anx threads list --state active", "anx threads workspace --state active --full-id"},
 	aliases: map[string]string{
 		"ls": "list",
@@ -188,7 +188,7 @@ var docsRevisionSubcommandSpec = subcommandSpec{
 var eventsSubcommandSpec = subcommandSpec{
 	command:  "events",
 	valid:    []string{"list", "get", "create", "validate", "stream", "tail", "explain", "archive", "unarchive", "trash", "restore"},
-	examples: []string{"anx events list --thread-id <thread-id> --type actor_statement --mine --full-id", "anx events tail --max-events 20"},
+	examples: []string{"anx events list --thread-id <thread-id> --type message_posted --mine --full-id", "anx events tail --max-events 20"},
 	aliases: map[string]string{
 		"watch": "stream",
 		"ls":    "list",

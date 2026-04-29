@@ -5,12 +5,12 @@
   "data": {
     "event": {
       "id": "event_stream_1",
-      "type": "actor_statement"
+      "type": "message_posted"
     },
     "id": "es_1",
     "payload": {
       "id": "event_stream_1",
-      "type": "actor_statement"
+      "type": "message_posted"
     },
     "payload_key": "event",
     "type": "event"

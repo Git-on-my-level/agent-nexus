@@ -203,7 +203,7 @@
       await coreClient.updateTopic(topicId, {
         patch: {
           ...topicPatch,
-          provenance: { sources: ["actor_statement:ui"] },
+          provenance: { sources: ["event:ui"] },
         },
         if_updated_at: ifUpdatedAt,
       });

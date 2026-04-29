@@ -16,7 +16,7 @@ func TestDraftCreateAggregatesEventValidationErrors(t *testing.T) {
 
 	home := t.TempDir()
 	env := map[string]string{}
-	raw := runCLIForTest(t, home, env, strings.NewReader(`{"event":{"thread_id":"thread_1","actor_id":"actor_1","type":"actor_statement"}}`), []string{
+	raw := runCLIForTest(t, home, env, strings.NewReader(`{"event":{"thread_id":"thread_1","actor_id":"actor_1","type":"message_posted"}}`), []string{
 		"--json",
 		"--agent", "agent-a",
 		"draft", "create",
@@ -49,7 +49,7 @@ func TestDraftCreateInterventionNeededRequiresThreadRefInRefs(t *testing.T) {
 
 	home := t.TempDir()
 	env := map[string]string{}
-	raw := runCLIForTest(t, home, env, strings.NewReader(`{"event":{"type":"intervention_needed","summary":"unblock me","refs":["topic:top_1"],"provenance":{"sources":["actor_statement:event_seed"]}}}`), []string{
+	raw := runCLIForTest(t, home, env, strings.NewReader(`{"event":{"type":"human_attention_requested","summary":"unblock me","refs":["topic:top_1"],"provenance":{"sources":["event:event_seed"]}}}`), []string{
 		"--json",
 		"--agent", "agent-a",
 		"draft", "create",
@@ -67,7 +67,7 @@ func TestDraftCreateInterventionNeededRequiresThreadRefInRefs(t *testing.T) {
 		joined = append(joined, anyStringValue(item))
 	}
 	joinedText := strings.Join(joined, "\n")
-	if !strings.Contains(joinedText, `event.refs must include a "thread:<id>" typed ref for event.type="intervention_needed"`) {
+	if !strings.Contains(joinedText, `event.refs must include a "thread:<id>" typed ref for event.type="human_attention_requested"`) {
 		t.Fatalf("expected thread ref validation in payload=%#v", payload)
 	}
 }
@@ -113,7 +113,7 @@ func TestDraftCreateResolvesCLITokensToCommandID(t *testing.T) {
 
 	home := t.TempDir()
 	env := map[string]string{}
-	raw := runCLIForTest(t, home, env, strings.NewReader(`{"topic":{"title":"Alpha","summary":"seed","owner_refs":["thread:thread_1"],"document_refs":[],"board_refs":[],"related_refs":[],"provenance":{"sources":["actor_statement:event_seed"]}}}`), []string{
+	raw := runCLIForTest(t, home, env, strings.NewReader(`{"topic":{"title":"Alpha","summary":"seed","owner_refs":["thread:thread_1"],"document_refs":[],"board_refs":[],"related_refs":[],"provenance":{"sources":["event:event_seed"]}}}`), []string{
 		"--json",
 		"--agent", "agent-a",
 		"draft", "create",
@@ -170,7 +170,7 @@ func TestDraftCreateTreatsHelpAsFlagValue(t *testing.T) {
 	env := map[string]string{}
 
 	fromFile := filepath.Join(t.TempDir(), "help")
-	body := `{"topic":{"title":"Alpha","summary":"seed","owner_refs":["thread:thread_1"],"document_refs":[],"board_refs":[],"related_refs":[],"provenance":{"sources":["actor_statement:event_seed"]}}}`
+	body := `{"topic":{"title":"Alpha","summary":"seed","owner_refs":["thread:thread_1"],"document_refs":[],"board_refs":[],"related_refs":[],"provenance":{"sources":["event:event_seed"]}}}`
 	if err := os.WriteFile(fromFile, []byte(body), 0o600); err != nil {
 		t.Fatalf("write from-file body: %v", err)
 	}

@@ -222,7 +222,7 @@ func handleMutateAgentNotification(
 			"target_handle":   notification.TargetHandle,
 			"target_actor_id": notification.TargetActorID,
 		},
-		"provenance": actorStatementProvenance(),
+		"provenance": eventProvenance(),
 	}
 	if err := validateEventReferenceConventions(opts.contract, event, notification.eventRefs()); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())

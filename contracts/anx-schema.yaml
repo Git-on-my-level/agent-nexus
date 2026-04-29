@@ -48,19 +48,12 @@ enums:
       - message_posted
       - receipt_added
       - review_completed
-      - decision_needed
-      - intervention_needed
-      - decision_made
       - document_created
       - document_revised
       - document_trashed
       - document_restored
       - board_created
       - board_updated
-      - board_card_added
-      - board_card_moved
-      - board_card_archived
-      - board_card_trashed
       - card_created
       - card_updated
       - card_moved
@@ -82,8 +75,7 @@ enums:
     description: Discrete evidence label. Never a numeric confidence score.
     examples:
       - "receipt:<artifact_id>"
-      - "decision:<event_id>"
-      - "actor_statement:<event_id>"
+      - "event:<event_id>"
       - "inferred"
 
 ref_format:
@@ -384,13 +376,11 @@ packets:
 reference_conventions:
   description: >
     Required refs per event and packet kind.
-    Operators coordinate work in topic space, but decision lifecycle events
-    (`decision_needed`, `intervention_needed`, `decision_made`) are durably
-    anchored on the backing thread: each MUST include `thread:<thread_id>` in
-    `refs` matching `event.thread_id`. Optional `topic:` refs may appear when a
-    real topic exists; they are contextual cross-links and MUST NOT replace the
-    required `thread:` ref. Using `topic:<thread_id>` as a substitute for the
-    backing thread is forbidden.
+    Thread-scoped events are durably anchored by `event.thread_id` and a matching
+    `thread:<thread_id>` ref when they belong to a backing timeline. Human
+    coordination uses `human_attention_requested` and `human_attention_responded`;
+    legacy decision/intervention event types are not part of the current product
+    vocabulary.
 
   event_refs:
     _rule: "Thread-scoped events SHOULD set thread_ref on the event payload."
@@ -439,19 +429,6 @@ reference_conventions:
     board_updated:
       refs_must_include: ["board:<board_id>"]
 
-    board_card_added:
-      refs_must_include: ["board:<board_id>", "card:<card_id>"]
-
-    board_card_moved:
-      refs_must_include: ["board:<board_id>", "card:<card_id>"]
-      payload_must_include: ["column_key"]
-
-    board_card_archived:
-      refs_must_include: ["board:<board_id>", "card:<card_id>"]
-
-    board_card_trashed:
-      refs_must_include: ["board:<board_id>", "card:<card_id>"]
-
     card_created:
       refs_must_include: ["card:<card_id>", "board:<board_id>"]
 
@@ -471,15 +448,6 @@ reference_conventions:
     card_resolved:
       refs_must_include: ["card:<card_id>", "board:<board_id>"]
       payload_must_include: ["resolution"]
-
-    decision_needed:
-      refs_must_include: ["thread:<thread_id>"]
-
-    intervention_needed:
-      refs_must_include: ["thread:<thread_id>"]
-
-    decision_made:
-      refs_must_include: ["thread:<thread_id>"]
 
     exception_raised:
       payload_must_include: ["subtype"]
@@ -572,10 +540,6 @@ lifecycle_rules:
     - "Events and artifacts are append-only."
     - "Topics, documents, boards, and cards are mutable resources with explicit provenance."
     - "Document revisions are immutable append-only records."
-
-  decision_lifecycle_anchoring:
-    - "decision_needed, intervention_needed, and decision_made events append to the backing thread; refs must include thread:<thread_id> (see reference_conventions.event_refs)."
-    - "topic: refs on those events are optional operator context when a topic id exists, not a substitute for thread:."
 
   concurrency_tokens:
     - "topic.updated_at"

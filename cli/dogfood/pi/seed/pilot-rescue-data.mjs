@@ -64,7 +64,7 @@ export function getPilotRescueSeedData() {
         updated_at: iso(-35 * 60 * 1000),
         updated_by: "actor-product-lead",
         provenance: {
-          sources: ["actor_statement:evt-pilot-main-001"],
+          sources: ["event:evt-pilot-main-001"],
         },
       },
       {
@@ -87,7 +87,7 @@ export function getPilotRescueSeedData() {
         updated_at: iso(-50 * 60 * 1000),
         updated_by: "actor-support-lead",
         provenance: {
-          sources: ["actor_statement:evt-feedback-001"],
+          sources: ["event:evt-feedback-001"],
         },
       },
       {
@@ -110,7 +110,7 @@ export function getPilotRescueSeedData() {
         updated_at: iso(-42 * 60 * 1000),
         updated_by: "actor-project-manager",
         provenance: {
-          sources: ["actor_statement:evt-delivery-001"],
+          sources: ["event:evt-delivery-001"],
         },
       },
     ],
@@ -125,7 +125,7 @@ export function getPilotRescueSeedData() {
           "topic:pilot-rescue-main",
         ],
         provenance: {
-          sources: ["actor_statement:evt-feedback-001"],
+          sources: ["event:evt-feedback-001"],
         },
         created_at: iso(-55 * 60 * 1000),
         created_by: "actor-support-lead",
@@ -138,7 +138,7 @@ export function getPilotRescueSeedData() {
         summary: "Direct customer quotes from NorthWave and BriskPay pilot feedback",
         refs: ["topic:pilot-feedback"],
         provenance: {
-          sources: ["actor_statement:evt-feedback-001"],
+          sources: ["event:evt-feedback-001"],
         },
         created_at: iso(-54 * 60 * 1000),
         created_by: "actor-support-lead",
@@ -154,7 +154,7 @@ export function getPilotRescueSeedData() {
           "topic:pilot-rescue-main",
         ],
         provenance: {
-          sources: ["actor_statement:evt-delivery-001"],
+          sources: ["event:evt-delivery-001"],
         },
         created_at: iso(-48 * 60 * 1000),
         created_by: "actor-project-manager",
@@ -170,7 +170,7 @@ export function getPilotRescueSeedData() {
           "topic:pilot-rescue-main",
         ],
         provenance: {
-          sources: ["actor_statement:evt-delivery-001"],
+          sources: ["event:evt-delivery-001"],
         },
         created_at: iso(-47 * 60 * 1000),
         created_by: "actor-delivery-engineer",
@@ -183,7 +183,7 @@ export function getPilotRescueSeedData() {
         summary: "Pilot metrics and renewal risk snapshot",
         refs: ["topic:pilot-rescue-main"],
         provenance: {
-          sources: ["actor_statement:evt-pilot-main-001"],
+          sources: ["event:evt-pilot-main-001"],
         },
         created_at: iso(-46 * 60 * 1000),
         created_by: "actor-growth-ops",
@@ -216,7 +216,7 @@ export function getPilotRescueSeedData() {
       {
         id: "evt-pilot-main-001",
         actor_id: "actor-product-lead",
-        type: "actor_statement",
+        type: "message_posted",
         thread_id: "thread-pilot-rescue-main",
         refs: [
           "topic:pilot-rescue-main",
@@ -236,7 +236,7 @@ export function getPilotRescueSeedData() {
       {
         id: "evt-feedback-001",
         actor_id: "actor-support-lead",
-        type: "actor_statement",
+        type: "message_posted",
         thread_id: "thread-pilot-feedback",
         refs: [
           "topic:pilot-feedback",
@@ -256,7 +256,7 @@ export function getPilotRescueSeedData() {
       {
         id: "evt-delivery-001",
         actor_id: "actor-delivery-engineer",
-        type: "actor_statement",
+        type: "message_posted",
         thread_id: "thread-pilot-delivery",
         refs: [
           "topic:pilot-delivery",
@@ -277,7 +277,7 @@ export function getPilotRescueSeedData() {
       {
         id: "evt-main-decision-needed",
         actor_id: "actor-project-manager",
-        type: "decision_needed",
+        type: "human_attention_requested",
         thread_id: "thread-pilot-rescue-main",
         refs: [
           "thread:thread-pilot-rescue-main",
@@ -287,7 +287,7 @@ export function getPilotRescueSeedData() {
         ],
         summary: "Need cross-functional rescue recommendation before Friday pilot gate",
         payload: {
-          ask: "Support, Delivery, and PM should post role-specific recommendations. Product will publish final rescue brief after reviewing them.",
+          ask: "Support, Delivery, and PM should post role-specific updates. Product will publish the final rescue brief after reviewing them.",
           deadline: iso(8 * 60 * 60 * 1000),
         },
         provenance: {

@@ -30,7 +30,7 @@
   {/if}
   <p class="mt-3 text-meta text-fg-subtle">
     If this keeps happening, <a
-      class="text-accent-text underline-offset-2 hover:underline"
+      class="text-accent-text underline underline-offset-2"
       href={supportHref}
       {...supportExternal ? { target: "_blank", rel: "noreferrer" } : {}}
       >contact support</a

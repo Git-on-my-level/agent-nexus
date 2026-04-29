@@ -47,17 +47,14 @@ func TestRefreshDerivedTopicProjectionBasicFlow(t *testing.T) {
 		t.Fatalf("refreshDerivedTopicProjection: %v", err)
 	}
 
-	postJSONExpectStatus(t, h.baseURL+"/events", `{
-		"actor_id":"actor-1",
-		"event":{
-			"type":"decision_needed",
-			"thread_id":"`+threadID+`",
-			"refs":["thread:`+threadID+`"],
-			"summary":"Need a decision",
-			"payload":{},
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, 201).Body.Close()
+	requestEvent := createHumanAttentionEvent(t, h.baseURL, threadID, "ask", "Need a decision", "card:decision-card-1", nil, map[string]any{
+		"body":          "Need a decision",
+		"coverage_hint": "thin - 0 decisions",
+	})
+	requestEventID := asString(requestEvent["id"])
+	if requestEventID == "" {
+		t.Fatal("expected human attention request id")
+	}
 
 	boardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
 		"actor_id":"actor-1",
@@ -93,16 +90,22 @@ func TestRefreshDerivedTopicProjectionBasicFlow(t *testing.T) {
 	}`, 201).Body.Close()
 
 	items := getInboxItems(t, h.baseURL)
-	if len(items) != 0 {
-		t.Fatalf("expected no human inbox items from decision_needed or risky cards, got %#v", items)
+	item, ok := findInboxItem(items, func(candidate map[string]any) bool {
+		return asString(candidate["kind"]) == "ask" && asString(candidate["source_event_id"]) == requestEventID
+	})
+	if !ok {
+		t.Fatalf("expected human inbox item from human_attention_requested event, got %#v", items)
+	}
+	if asString(item["subject_ref"]) != "card:decision-card-1" {
+		t.Fatalf("unexpected inbox item subject_ref: %#v", item["subject_ref"])
 	}
 
 	projection := mustLoadDerivedTopicProjection(t, h.workspace.DB(), threadID)
-	if projection.InboxCount != 0 || projection.DecisionRequestCount != 1 || workspaceIntValue(projection.Data["open_work_item_count"]) != 1 || projection.DocumentCount != 1 {
+	if projection.InboxCount != 1 || projection.DecisionRequestCount != 0 || workspaceIntValue(projection.Data["open_work_item_count"]) != 1 || projection.DocumentCount != 1 {
 		t.Fatalf("unexpected derived thread projection: %#v", projection)
 	}
-	if inboxRowCount := countDerivedInboxItemsForThread(t, h.workspace.DB(), threadID); inboxRowCount != 0 {
-		t.Fatalf("expected no derived inbox rows, got %d", inboxRowCount)
+	if inboxRowCount := countDerivedInboxItemsForThread(t, h.workspace.DB(), threadID); inboxRowCount != 1 {
+		t.Fatalf("expected one derived inbox row, got %d", inboxRowCount)
 	}
 }
 

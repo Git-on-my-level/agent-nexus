@@ -12,7 +12,7 @@
         "summary": "ship machine-facing fixes",
         "summary_preview": "ship machine-facing fixes",
         "thread_id": "thread_123",
-        "type": "actor_statement"
+        "type": "message_posted"
       }
     ],
     "full_id": false,
@@ -23,7 +23,7 @@
     ],
     "total_events": 2,
     "types": [
-      "actor_statement"
+      "message_posted"
     ]
   }
 }

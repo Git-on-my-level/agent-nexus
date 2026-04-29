@@ -110,33 +110,8 @@ func TestThreadsCreatePatchListAndTimeline(t *testing.T) {
 	if err := json.NewDecoder(timelineResp.Body).Decode(&timeline); err != nil {
 		t.Fatalf("decode timeline response: %v", err)
 	}
-	if len(timeline.Events) < 2 {
-		t.Fatalf("expected at least 2 timeline events, got %d", len(timeline.Events))
-	}
-
-	for _, event := range timeline.Events {
-		refs, ok := event["refs"].([]any)
-		if !ok || !containsAny(refs, "thread:"+threadID) {
-			t.Fatalf("timeline event missing thread ref: %#v", event)
-		}
-		assertActorStatementProvenance(t, event)
-	}
-
-	assertTimelineStableOrder(t, timeline.Events)
-
-	lastEvent := timeline.Events[len(timeline.Events)-1]
-	payload, ok := lastEvent["payload"].(map[string]any)
-	if !ok {
-		t.Fatalf("missing event payload: %#v", lastEvent)
-	}
-	changedFields, ok := payload["changed_fields"].([]any)
-	if !ok {
-		t.Fatalf("changed_fields missing: %#v", payload)
-	}
-	gotFields := anyListToSortedStrings(changedFields)
-	wantFields := []string{"title"}
-	if len(gotFields) != len(wantFields) || gotFields[0] != wantFields[0] {
-		t.Fatalf("unexpected changed_fields: got %#v want %#v", gotFields, wantFields)
+	if len(timeline.Events) != 0 {
+		t.Fatalf("expected no thread lifecycle events, got %#v", timeline.Events)
 	}
 }
 
@@ -241,14 +216,14 @@ func TestPatchThreadProvenanceRoundTrip(t *testing.T) {
 		"current_summary": "initial",
 		"next_actions":    []any{"step-1"},
 		"key_artifacts":   []any{},
-		"provenance":      map[string]any{"sources": []any{"actor_statement:event-create"}, "notes": "created"},
+		"provenance":      map[string]any{"sources": []any{"event:event-create"}, "notes": "created"},
 		"custom_unknown":  "persist_me",
 	})
 
 	patchedThread := integrationPatchThread(t, h, "actor-1", threadID, map[string]any{
 		"title": "Provenance roundtrip thread updated",
 		"provenance": map[string]any{
-			"sources": []any{"actor_statement:event-patch"},
+			"sources": []any{"event:event-patch"},
 			"notes":   "patched",
 		},
 	}, nil)
@@ -796,7 +771,7 @@ func TestThreadWorkspaceBundlesCanonicalAndDerivedSections(t *testing.T) {
 		"current_summary": "summary",
 		"next_actions":    []any{"triage"},
 		"key_artifacts":   []any{"artifact:workspace-artifact-1"},
-		"provenance":      map[string]any{"sources": []any{"inferred"}},
+		"provenance":      map[string]any{"sources": []any{"event:workspace-root"}},
 	})
 
 	relatedThreadID := integrationSeedThread(t, h, "actor-1", map[string]any{
@@ -806,7 +781,7 @@ func TestThreadWorkspaceBundlesCanonicalAndDerivedSections(t *testing.T) {
 		"current_summary": "related summary",
 		"next_actions":    []any{"follow-up"},
 		"key_artifacts":   []any{},
-		"provenance":      map[string]any{"sources": []any{"inferred"}},
+		"provenance":      map[string]any{"sources": []any{"event:workspace-related"}},
 	})
 
 	postJSONExpectStatus(t, h.baseURL+"/artifacts", `{
@@ -832,36 +807,26 @@ func TestThreadWorkspaceBundlesCanonicalAndDerivedSections(t *testing.T) {
 	postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-1",
 		"event":{
-			"type":"actor_statement",
+			"type":"card_updated",
 			"thread_id":"`+rootThreadID+`",
-			"refs":["thread:`+rootThreadID+`","thread:`+relatedThreadID+`"],
+			"refs":["card:workspace-root-card-1","board:workspace-root-board-1"],
 			"summary":"Coordinate with related thread",
-			"payload":{"recommendation":"Work with the related team"},
-			"provenance":{"sources":["seed:workspace-root"]}
+			"payload":{"changed_fields":["title"]},
+			"provenance":{"sources":["event:workspace-root"]}
 		}
 	}`, http.StatusCreated).Body.Close()
+
+	createHumanAttentionEvent(t, h.baseURL, rootThreadID, "ask", "Need approval on rollout", "thread:"+relatedThreadID, nil, nil)
 
 	postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-1",
 		"event":{
-			"type":"decision_needed",
-			"thread_id":"`+rootThreadID+`",
-			"refs":["thread:`+rootThreadID+`"],
-			"summary":"Need approval on rollout",
-			"payload":{"decision":"Approve rollout"},
-			"provenance":{"sources":["seed:workspace-root"]}
-		}
-	}`, http.StatusCreated).Body.Close()
-
-	postJSONExpectStatus(t, h.baseURL+"/events", `{
-		"actor_id":"actor-1",
-		"event":{
-			"type":"actor_statement",
+			"type":"card_updated",
 			"thread_id":"`+relatedThreadID+`",
-			"refs":["thread:`+relatedThreadID+`"],
+			"refs":["card:workspace-related-card-1","board:workspace-related-board-1"],
 			"summary":"Related recommendation",
-			"payload":{"recommendation":"Use the migration checklist"},
-			"provenance":{"sources":["seed:workspace-related"]}
+			"payload":{"changed_fields":["title"]},
+			"provenance":{"sources":["event:workspace-related"]}
 		}
 	}`, http.StatusCreated).Body.Close()
 
@@ -886,29 +851,28 @@ func TestThreadWorkspaceBundlesCanonicalAndDerivedSections(t *testing.T) {
 			Documents    []map[string]any `json:"documents"`
 		} `json:"context"`
 		Collaboration struct {
-			Recommendations  []map[string]any `json:"recommendations"`
-			DecisionRequests []map[string]any `json:"decision_requests"`
-			Decisions        []map[string]any `json:"decisions"`
+			KeyArtifacts  []map[string]any `json:"key_artifacts"`
+			OpenCards     []map[string]any `json:"open_cards"`
+			ArtifactCount int              `json:"artifact_count"`
+			OpenCardCount int              `json:"open_card_count"`
 		} `json:"collaboration"`
 		Inbox struct {
 			Items []map[string]any `json:"items"`
 			Count int              `json:"count"`
 		} `json:"inbox"`
-		PendingDecisions struct {
+		PendingAttention struct {
 			Items []map[string]any `json:"items"`
 			Count int              `json:"count"`
-		} `json:"pending_decisions"`
+		} `json:"pending_attention"`
 		RelatedThreads struct {
 			Count int `json:"count"`
 		} `json:"related_threads"`
-		RelatedRecommendations struct {
-			Items []map[string]any `json:"items"`
-			Count int              `json:"count"`
-		} `json:"related_recommendations"`
-		SectionKinds  map[string]string `json:"section_kinds"`
-		ContextSource string            `json:"context_source"`
-		InboxSource   string            `json:"inbox_source"`
-		FollowUp      map[string]any    `json:"follow_up"`
+		TotalReviewItems int               `json:"total_review_items"`
+		WorkspaceSummary map[string]any    `json:"workspace_summary"`
+		SectionKinds     map[string]string `json:"section_kinds"`
+		ContextSource    string            `json:"context_source"`
+		InboxSource      string            `json:"inbox_source"`
+		FollowUp         map[string]any    `json:"follow_up"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode workspace response: %v", err)
@@ -926,23 +890,19 @@ func TestThreadWorkspaceBundlesCanonicalAndDerivedSections(t *testing.T) {
 	if len(payload.Context.Documents) != 1 || asString(payload.Context.Documents[0]["id"]) != "workspace-doc-1" {
 		t.Fatalf("expected workspace document in context, got %#v", payload.Context.Documents)
 	}
-	if len(payload.Collaboration.Recommendations) != 1 || len(payload.Collaboration.DecisionRequests) != 1 {
-		t.Fatalf("expected collaboration summary to include recommendation and decision request, got %#v", payload.Collaboration)
+	if len(payload.Context.RecentEvents) < 3 || findEventByType(payload.Context.RecentEvents, "human_attention_requested") == nil {
+		t.Fatalf("expected workspace context to include human attention request, got %#v", payload.Context.RecentEvents)
 	}
-	if payload.Inbox.Count != 0 || payload.PendingDecisions.Count != 0 {
-		t.Fatalf("expected no human-attention inbox rows from generic decision requests, got inbox=%#v pending=%#v", payload.Inbox, payload.PendingDecisions)
+	if payload.Collaboration.ArtifactCount != 1 || payload.Collaboration.OpenCardCount != 0 {
+		t.Fatalf("expected derived collaboration summary to track artifacts/open cards, got %#v", payload.Collaboration)
 	}
-	if payload.RelatedThreads.Count != 1 || payload.RelatedRecommendations.Count != 1 {
-		t.Fatalf("expected related thread review sections, got related_threads=%#v related_recommendations=%#v", payload.RelatedThreads, payload.RelatedRecommendations)
+	if payload.Inbox.Count != 1 || payload.PendingAttention.Count != 1 || payload.TotalReviewItems != 1 {
+		t.Fatalf("expected inbox + pending attention to reflect human attention request, got inbox=%#v pending=%#v total_review_items=%d", payload.Inbox, payload.PendingAttention, payload.TotalReviewItems)
 	}
-	relatedEvent := payload.RelatedRecommendations.Items[0]
-	if asString(relatedEvent["source_thread_id"]) != relatedThreadID {
-		t.Fatalf("expected related recommendation source_thread_id=%q, got %#v", relatedThreadID, relatedEvent)
+	if payload.RelatedThreads.Count != 1 {
+		t.Fatalf("expected related thread review section, got %#v", payload.RelatedThreads)
 	}
-	if _, ok := relatedEvent["event"].(map[string]any); !ok {
-		t.Fatalf("expected hydrated related recommendation event payload, got %#v", relatedEvent)
-	}
-	if payload.SectionKinds["context"] != "canonical" || payload.SectionKinds["inbox"] != "derived" || payload.SectionKinds["follow_up"] != "convenience" {
+	if payload.SectionKinds["context"] != "canonical" || payload.SectionKinds["collaboration"] != "derived" || payload.SectionKinds["inbox"] != "derived" || payload.SectionKinds["follow_up"] != "convenience" {
 		t.Fatalf("unexpected section kinds: %#v", payload.SectionKinds)
 	}
 	if payload.ContextSource != "threads.workspace" || payload.InboxSource != "threads.workspace" {

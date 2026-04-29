@@ -520,7 +520,7 @@ func (s *Store) CreateTopic(ctx context.Context, actorID string, topic map[strin
 		"refs":       []string{"topic:" + topicID},
 		"summary":    "topic created",
 		"payload":    map[string]any{"changed_fields": changedFields},
-		"provenance": actorStatementProvenance(),
+		"provenance": eventProvenance(),
 	}
 	preparedEvent, err := prepareEventForInsert(actorID, createEvent)
 	if err != nil {
@@ -742,7 +742,7 @@ func (s *Store) PatchTopic(ctx context.Context, actorID string, topicID string, 
 		"refs":       []string{"topic:" + topicID},
 		"summary":    "topic updated",
 		"payload":    eventPayload,
-		"provenance": actorStatementProvenance(),
+		"provenance": eventProvenance(),
 	}
 	preparedEvent, err := prepareEventForInsert(actorID, event)
 	if err != nil {
@@ -1004,7 +1004,7 @@ func (s *Store) applyTopicLifecycleWithReason(ctx context.Context, actorID, topi
 		"refs":       []string{"topic:" + topicID},
 		"summary":    "topic " + action,
 		"payload":    map[string]any{"action": action, "reason": strings.TrimSpace(reason)},
-		"provenance": actorStatementProvenance(),
+		"provenance": eventProvenance(),
 	}
 	preparedEvent, err := prepareEventForInsert(actorID, event)
 	if err != nil {

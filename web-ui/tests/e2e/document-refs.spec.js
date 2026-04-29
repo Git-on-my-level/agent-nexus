@@ -63,7 +63,7 @@ test("document typed refs navigate from overview chips, timeline refs, and recei
     content_type: "application/json",
     created_at: "2026-03-09T09:00:00Z",
     created_by: actorId,
-    provenance: { sources: ["actor_statement:ui"] },
+    provenance: { sources: ["event:ui"] },
   };
 
   const receiptPacket = {
@@ -79,7 +79,8 @@ test("document typed refs navigate from overview chips, timeline refs, and recei
   };
 
   await page.addInitScript((selectedActorId) => {
-    window.localStorage.setItem("anx_ui_actor_id", selectedActorId);
+    window.localStorage.setItem("anx_ui_actor_id:local", selectedActorId);
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
   }, actorId);
 
   await page.route(/\/actors$/, async (route) => {
@@ -114,7 +115,7 @@ test("document typed refs navigate from overview chips, timeline refs, and recei
           open_cards: [],
           updated_at: "2026-03-11T00:00:00.000Z",
           updated_by: actorId,
-          provenance: { sources: ["actor_statement:event-doc-1"] },
+          provenance: { sources: ["event:event-doc-1"] },
         },
       }),
     });
@@ -136,7 +137,7 @@ test("document typed refs navigate from overview chips, timeline refs, and recei
           open_cards: [],
           updated_at: "2026-03-11T00:00:00.000Z",
           updated_by: actorId,
-          provenance: { sources: ["actor_statement:event-doc-1"] },
+          provenance: { sources: ["event:event-doc-1"] },
         },
         context: {
           recent_events: [
@@ -152,7 +153,7 @@ test("document typed refs navigate from overview chips, timeline refs, and recei
               ],
               summary: "Document refs linked for review.",
               payload: { text: "Please review the constitution updates." },
-              provenance: { sources: ["actor_statement:event-doc-1"] },
+              provenance: { sources: ["event:event-doc-1"] },
             },
           ],
           key_artifacts: [],
@@ -203,7 +204,7 @@ test("document typed refs navigate from overview chips, timeline refs, and recei
               ],
               summary: "Document refs linked for review.",
               payload: { text: "Please review the constitution updates." },
-              provenance: { sources: ["actor_statement:event-doc-1"] },
+              provenance: { sources: ["event:event-doc-1"] },
             },
           ],
         }),

@@ -760,7 +760,7 @@ const chapterEvents = {
     {
       id: "evt-kids-ch1-main-actor-001",
       actor_id: "actor-sales-kid",
-      type: "actor_statement",
+      type: "message_posted",
       thread_id: "thread-kids-lemonade-main",
       refs: [
         "thread:thread-kids-lemonade-main",
@@ -805,7 +805,7 @@ const chapterEvents = {
     {
       id: "evt-kids-ch1-main-actor-002",
       actor_id: "actor-backoffice-kid",
-      type: "actor_statement",
+      type: "message_posted",
       thread_id: "thread-kids-lemonade-main",
       refs: [
         "thread:thread-kids-lemonade-main",
@@ -852,7 +852,7 @@ const chapterEvents = {
     {
       id: "evt-kids-ch1-main-actor-003",
       actor_id: "actor-boss-kid",
-      type: "actor_statement",
+      type: "message_posted",
       thread_id: "thread-kids-lemonade-main",
       refs: [
         "thread:thread-kids-lemonade-main",
@@ -1090,7 +1090,7 @@ const chapterEvents = {
     {
       id: "evt-kids-ch2-main-actor-001",
       actor_id: "actor-backoffice-kid",
-      type: "actor_statement",
+      type: "message_posted",
       thread_id: "thread-kids-lemonade-main",
       refs: [
         "thread:thread-kids-lemonade-main",
@@ -1129,7 +1129,7 @@ const chapterEvents = {
     {
       id: "evt-kids-ch2-main-actor-002",
       actor_id: "actor-boss-kid",
-      type: "actor_statement",
+      type: "message_posted",
       thread_id: "thread-kids-lemonade-main",
       refs: [
         "thread:thread-kids-lemonade-main",
@@ -1172,7 +1172,7 @@ const chapterEvents = {
     {
       id: "evt-kids-ch2-main-actor-003",
       actor_id: "actor-sales-kid",
-      type: "actor_statement",
+      type: "message_posted",
       thread_id: "thread-kids-lemonade-main",
       refs: [
         "thread:thread-kids-lemonade-main",
@@ -1376,7 +1376,7 @@ const chapterEvents = {
     {
       id: "evt-kids-ch3-main-actor-001",
       actor_id: "actor-boss-kid",
-      type: "actor_statement",
+      type: "message_posted",
       thread_id: "thread-kids-lemonade-main",
       refs: [
         "thread:thread-kids-lemonade-main",
@@ -1412,7 +1412,7 @@ const chapterEvents = {
     {
       id: "evt-kids-ch3-main-actor-002",
       actor_id: "actor-sales-kid",
-      type: "actor_statement",
+      type: "message_posted",
       thread_id: "thread-kids-lemonade-main",
       refs: [
         "thread:thread-kids-lemonade-main",
@@ -1447,7 +1447,7 @@ const chapterEvents = {
     {
       id: "evt-kids-ch3-main-actor-003",
       actor_id: "actor-backoffice-kid",
-      type: "actor_statement",
+      type: "message_posted",
       thread_id: "thread-kids-lemonade-main",
       refs: [
         "thread:thread-kids-lemonade-main",

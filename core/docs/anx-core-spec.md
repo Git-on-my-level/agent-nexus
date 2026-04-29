@@ -78,7 +78,7 @@ A durable record that something happened or that an actor claims something happe
 
 **Fields:** per `anx-schema.yaml` → `primitives.event`
 
-**v0 event types:** `topic_created`, `topic_updated`, `topic_archived`, `topic_restored`, `topic_trashed`, `message_posted`, `receipt_added`, `review_completed`, `decision_needed`, `intervention_needed`, `decision_made`, `document_created`, `document_revised`, `document_revision_created`, `document_trashed`, `board_created`, `board_updated`, `board_card_added`, `board_card_moved`, `board_card_archived`, `board_card_trashed`, `card_created`, `card_updated`, `card_moved`, `card_archived`, `card_trashed`, `card_resolved`, `exception_raised`, `human_attention_requested`, `human_attention_responded`, `agent_notification_read`, `agent_notification_dismissed`
+**v0 event types:** `topic_created`, `topic_updated`, `topic_archived`, `topic_restored`, `topic_trashed`, `message_posted`, `receipt_added`, `review_completed`, `document_created`, `document_revised`, `document_restored`, `document_trashed`, `board_created`, `board_updated`, `card_created`, `card_updated`, `card_moved`, `card_archived`, `card_trashed`, `card_resolved`, `exception_raised`, `human_attention_requested`, `human_attention_responded`, `agent_notification_read`, `agent_notification_dismissed`
 
 ### 3.2 Mutable resources (topic/card/board/document)
 Topics, cards, boards, and documents are mutable current-state records.
@@ -234,12 +234,12 @@ All workspace data routes require authenticated principals. Writes require an
 - Resolve card → emits `card_resolved` event
 - Create artifact (metadata + content) → returns artifact ID; validates packet content for packet kinds; validates typed ref format
 - Create document, update document (new immutable revision), trash document
-- Append event (for messages, decisions, exceptions, human attention requests/responses) → validates required refs per reference conventions
+- Append event (for messages, exceptions, human attention requests/responses, and other audit facts) → validates required refs per reference conventions
 
 ### 7.3 Convenience operations
 - Submit receipt (validates evidence + packet + refs, creates artifact + emits `receipt_added` with required typed refs)
 - Submit review (validates packet + refs, creates artifact + emits `review_completed` with required typed refs)
-- Record decision (`decision_needed` or `decision_made` event + optional artifact, grounded by `thread:<thread_id>` in refs)
+- Request human attention (emits `human_attention_requested`; prefer `anx human ask|review|escalate` over raw event authoring)
 - Respond to inbox item (emits `human_attention_responded` event with `inbox:<inbox_item_id>` in refs)
 
 ### 7.4 Derived views
@@ -264,7 +264,7 @@ Provenance MUST conform to the standardized shape defined in `anx-schema.yaml` �
 - `notes`: optional free-text explanation
 - `by_field`: optional per-field provenance map, required when restricted fields are updated
 
-Examples of source labels: `receipt:<artifact_id>`, `decision:<event_id>`, `actor_statement:<event_id>`, `inferred`
+Examples of source labels: `receipt:<artifact_id>`, `decision:<event_id>`, `event:<event_id>`, `inferred`
 
 The `inferred` label indicates the system generated or updated a value without direct evidence.
 
@@ -318,7 +318,7 @@ failure.
 
 anx-core MUST enforce the reference conventions defined in `anx-schema.yaml` → `reference_conventions`.
 
-**Topic vs thread for decisions:** Operators think in topics (work subjects, navigation, ownership). Decision lifecycle events (`decision_needed`, `intervention_needed`, `decision_made`) are nonetheless written on and grounded by the **backing thread** — `event.refs` MUST include `thread:<thread_id>` matching `event.thread_id`. A real `topic:<topic_id>` may appear alongside for cross-linking, but it is optional context, not the durable write anchor. Do not use `topic:<thread_id>` as a bridge for the required `thread:` ref.
+**Topic vs thread for human attention:** Operators think in topics, cards, boards, and docs. Human-attention events are still grounded by the backing thread for timeline/audit purposes: `human_attention_requested` includes `thread:<thread_id>` plus a typed `subject_ref`, and `human_attention_responded` includes `inbox:<inbox_item_id>` plus response metadata. Do not model operator requests as decision lifecycle events.
 
 Key rules:
 - All ref strings MUST use typed prefixes (`artifact:`, `event:`, `thread:`, `topic:`, `document:`, `board:`, `card:`, `url:`, `inbox:`). Unknown prefixes are preserved, not rejected.

@@ -26,18 +26,27 @@ func TestIsMeaningfulThreadActivityEvent(t *testing.T) {
 		want  bool
 	}{
 		{
-			name: "actor statement counts as activity",
+			name: "card updated counts as activity",
 			event: map[string]any{
-				"type":      "actor_statement",
+				"type":      "card_updated",
 				"thread_id": "thread-1",
 				"ts":        "2026-03-04T12:00:00Z",
 			},
 			want: true,
 		},
 		{
-			name: "review completed counts as activity",
+			name: "card moved counts as activity",
 			event: map[string]any{
-				"type":      "review_completed",
+				"type":      "card_moved",
+				"thread_id": "thread-1",
+				"ts":        "2026-03-04T12:00:00Z",
+			},
+			want: true,
+		},
+		{
+			name: "card archived counts as activity",
+			event: map[string]any{
+				"type":      "card_archived",
 				"thread_id": "thread-1",
 				"ts":        "2026-03-04T12:00:00Z",
 			},
@@ -53,13 +62,22 @@ func TestIsMeaningfulThreadActivityEvent(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "intervention needed is meaningful activity",
+			name: "review completed counts as activity",
 			event: map[string]any{
-				"type":      "intervention_needed",
+				"type":      "review_completed",
 				"thread_id": "thread-1",
 				"ts":        "2026-03-04T12:00:00Z",
 			},
 			want: true,
+		},
+		{
+			name: "human attention requested is coordination noise",
+			event: map[string]any{
+				"type":      "human_attention_requested",
+				"thread_id": "thread-1",
+				"ts":        "2026-03-04T12:00:00Z",
+			},
+			want: false,
 		},
 		{
 			name: "human attention response is coordination noise",
@@ -79,48 +97,6 @@ func TestIsMeaningfulThreadActivityEvent(t *testing.T) {
 				"payload":   map[string]any{"subtype": "stale_topic"},
 			},
 			want: false,
-		},
-		{
-			name: "thread_updated open_cards only is coordination noise",
-			event: map[string]any{
-				"type":      "thread_updated",
-				"thread_id": "thread-1",
-				"ts":        "2026-03-04T12:00:00Z",
-				"payload":   map[string]any{"changed_fields": []string{"open_cards"}},
-			},
-			want: false,
-		},
-		{
-			name: "thread_created is not follow up activity",
-			event: map[string]any{
-				"type":      "thread_created",
-				"thread_id": "thread-1",
-				"ts":        "2026-03-04T12:00:00Z",
-				"summary":   "thread created",
-				"payload":   map[string]any{"changed_fields": []string{"title", "status"}},
-			},
-			want: false,
-		},
-		{
-			name: "legacy snapshot events are ignored",
-			event: map[string]any{
-				"type":      "snapshot_updated",
-				"thread_id": "thread-1",
-				"ts":        "2026-03-04T12:00:00Z",
-				"summary":   "legacy snapshot event",
-			},
-			want: false,
-		},
-		{
-			name: "thread_updated with substantive fields counts as activity",
-			event: map[string]any{
-				"type":      "thread_updated",
-				"thread_id": "thread-1",
-				"ts":        "2026-03-04T12:00:00Z",
-				"summary":   "thread updated",
-				"payload":   map[string]any{"changed_fields": []string{"title"}},
-			},
-			want: true,
 		},
 	}
 

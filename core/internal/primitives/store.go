@@ -33,7 +33,7 @@ var ErrInvalidArtifactID = errors.New("invalid artifact id")
 var ErrInvalidDocumentRequest = errors.New("invalid document request")
 var ErrInvalidCursor = errors.New("invalid cursor")
 
-const actorStatementEventIDPlaceholder = "<event_id>"
+const provenanceEventIDPlaceholder = "<event_id>"
 
 type ArtifactListFilter struct {
 	States []string
@@ -73,6 +73,19 @@ type TopicListFilter struct {
 
 type EventListFilter struct {
 	Types []string
+}
+
+// HumanAttentionRespondedPageParams configures newest-first pagination over human_attention_responded events.
+type HumanAttentionRespondedPageParams struct {
+	CursorTS string
+	CursorID string
+	Limit    int
+
+	// KindFilter limits rows by payload.kind: "", "ask", "review", "escalate", or "unknown".
+	KindFilter string
+
+	// SinceRFC3339Nano, when non-empty, restricts to events with ts >= this value (30-day window, etc.).
+	SinceRFC3339Nano string
 }
 
 type EventCursor struct {
@@ -1384,7 +1397,7 @@ func (s *Store) PurgeTrashedArtifact(ctx context.Context, artifactID string) err
 	return nil
 }
 
-// applyThreadPatch updates a threads-table row with kind "thread" and emits a thread_updated event.
+// applyThreadPatch updates a threads-table row with kind "thread".
 func (s *Store) applyThreadPatch(ctx context.Context, actorID string, id string, patch map[string]any, ifUpdatedAt *string) (ThreadMutationResult, error) {
 	if s == nil || s.db == nil {
 		return ThreadMutationResult{}, fmt.Errorf("primitives store database is not initialized")
@@ -1499,33 +1512,6 @@ func (s *Store) applyThreadPatch(ctx context.Context, actorID string, id string,
 		return ThreadMutationResult{}, err
 	}
 
-	eventPayload := map[string]any{
-		"changed_fields": changedFields,
-	}
-	event := map[string]any{
-		"type":       "thread_updated",
-		"refs":       []string{"thread:" + rowID},
-		"summary":    "thread updated",
-		"payload":    eventPayload,
-		"provenance": actorStatementProvenance(),
-	}
-	if threadID.Valid {
-		event["thread_id"] = threadID.String
-	}
-
-	preparedEvent, err := prepareEventForInsert(actorID, event)
-	if err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
-		return ThreadMutationResult{}, fmt.Errorf("prepare thread_updated event: %w", err)
-	}
-	if err := insertPreparedEvent(ctx, tx, preparedEvent); err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
-		return ThreadMutationResult{}, fmt.Errorf("emit thread_updated event: %w", err)
-	}
 	if err := tx.Commit(); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -1546,7 +1532,6 @@ func (s *Store) applyThreadPatch(ctx context.Context, actorID string, id string,
 
 	return ThreadMutationResult{
 		Thread: current,
-		Event:  preparedEvent.Body,
 	}, nil
 }
 
@@ -1608,34 +1593,6 @@ func (s *Store) CreateThread(ctx context.Context, actorID string, thread map[str
 		return ThreadMutationResult{}, fmt.Errorf("insert thread row: %w", err)
 	}
 
-	changedFields := make([]string, 0, len(body))
-	for key := range body {
-		changedFields = append(changedFields, key)
-	}
-	changedFields = append(changedFields, "provenance")
-	sort.Strings(changedFields)
-
-	event := map[string]any{
-		"type":       "thread_created",
-		"thread_id":  threadID,
-		"refs":       []string{"thread:" + threadID},
-		"summary":    "thread created",
-		"payload":    map[string]any{"changed_fields": changedFields},
-		"provenance": actorStatementProvenance(),
-	}
-	preparedEvent, err := prepareEventForInsert(actorID, event)
-	if err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
-		return ThreadMutationResult{}, fmt.Errorf("prepare thread_created event: %w", err)
-	}
-	if err := insertPreparedEvent(ctx, tx, preparedEvent); err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
-		return ThreadMutationResult{}, fmt.Errorf("emit thread_created event: %w", err)
-	}
 	if err := tx.Commit(); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -1653,7 +1610,6 @@ func (s *Store) CreateThread(ctx context.Context, actorID string, thread map[str
 
 	return ThreadMutationResult{
 		Thread: out,
-		Event:  preparedEvent.Body,
 	}, nil
 }
 
@@ -2052,7 +2008,7 @@ func prepareEventForInsert(actorID string, event map[string]any) (preparedEvent,
 	body["id"] = eventID
 	body["ts"] = time.Now().UTC().Format(time.RFC3339Nano)
 	body["actor_id"] = actorID
-	replaceActorStatementProvenancePlaceholder(body, eventID)
+	replaceEventProvenancePlaceholder(body, eventID)
 
 	typeValue, _ := body["type"].(string)
 	threadID, _ := body["thread_id"].(string)
@@ -2170,6 +2126,94 @@ func (s *Store) ListEvents(ctx context.Context, filter EventListFilter) ([]map[s
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate events: %w", err)
+	}
+
+	return events, nil
+}
+
+const humanAttentionRespondedEventType = "human_attention_responded"
+
+// ListHumanAttentionRespondedPage returns up to Limit human_attention_responded events ordered newest first.
+// CursorTS/CursorID describe the last row from the previous page (exclusive): rows strictly older than that tuple are returned.
+func (s *Store) ListHumanAttentionRespondedPage(ctx context.Context, params HumanAttentionRespondedPageParams) ([]map[string]any, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("primitives store database is not initialized")
+	}
+	limit := params.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	query := `SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json,
+		archived_at, archived_by, trashed_at, trashed_by, trash_reason
+		FROM events
+		WHERE type = ? AND COALESCE(trashed_at, '') = ''`
+	args := []any{humanAttentionRespondedEventType}
+
+	if ts := strings.TrimSpace(params.SinceRFC3339Nano); ts != "" {
+		query += ` AND ts >= ?`
+		args = append(args, ts)
+	}
+
+	kind := strings.TrimSpace(strings.ToLower(params.KindFilter))
+	switch kind {
+	case "", "all":
+	case "unknown":
+		query += ` AND (json_extract(payload_json, '$.payload.kind') IS NULL OR json_extract(payload_json, '$.payload.kind') NOT IN ('ask','review','escalate'))`
+	default:
+		query += ` AND lower(trim(json_extract(payload_json, '$.payload.kind'))) = ?`
+		args = append(args, kind)
+	}
+
+	cursorTS := strings.TrimSpace(params.CursorTS)
+	cursorID := strings.TrimSpace(params.CursorID)
+	if cursorTS != "" && cursorID != "" {
+		query += ` AND ((ts < ?) OR (ts = ? AND id < ?))`
+		args = append(args, cursorTS, cursorTS, cursorID)
+	}
+
+	query += ` ORDER BY ts DESC, id DESC LIMIT ?`
+	args = append(args, limit)
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query human_attention_responded page: %w", err)
+	}
+	defer rows.Close()
+
+	events := make([]map[string]any, 0)
+	for rows.Next() {
+		var (
+			eventID     string
+			typeValue   string
+			ts          string
+			actorID     string
+			thread      sql.NullString
+			refsJSON    string
+			payloadJSON string
+			archivedAt  sql.NullString
+			archivedBy  sql.NullString
+			trashedAt   sql.NullString
+			trashedBy   sql.NullString
+			trashReason sql.NullString
+		)
+		if err := rows.Scan(&eventID, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON,
+			&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason); err != nil {
+			return nil, fmt.Errorf("scan human_attention_responded row: %w", err)
+		}
+
+		body, err := decodeEventBodyFromRow(eventID, typeValue, ts, actorID, thread, refsJSON, payloadJSON)
+		if err != nil {
+			return nil, err
+		}
+		overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, trashedAt, trashedBy, trashReason)
+		events = append(events, body)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate human_attention_responded page: %w", err)
 	}
 
 	return events, nil
@@ -2372,13 +2416,13 @@ func encodeContent(content any) ([]byte, error) {
 	}
 }
 
-func actorStatementProvenance() map[string]any {
+func eventProvenance() map[string]any {
 	return map[string]any{
-		"sources": []string{"actor_statement:" + actorStatementEventIDPlaceholder},
+		"sources": []string{"event:" + provenanceEventIDPlaceholder},
 	}
 }
 
-func replaceActorStatementProvenancePlaceholder(body map[string]any, eventID string) {
+func replaceEventProvenancePlaceholder(body map[string]any, eventID string) {
 	rawProvenance, ok := body["provenance"].(map[string]any)
 	if !ok {
 		return
@@ -2395,10 +2439,10 @@ func replaceActorStatementProvenancePlaceholder(body map[string]any, eventID str
 	}
 
 	changed := false
-	placeholder := "actor_statement:" + actorStatementEventIDPlaceholder
+	placeholder := "event:" + provenanceEventIDPlaceholder
 	for idx, source := range sources {
 		if source == placeholder {
-			sources[idx] = "actor_statement:" + eventID
+			sources[idx] = "event:" + eventID
 			changed = true
 		}
 	}

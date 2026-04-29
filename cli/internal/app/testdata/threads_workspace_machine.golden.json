@@ -5,18 +5,6 @@
   "data": {
     "collaboration": {
       "artifact_count": 1,
-      "decision_count": 0,
-      "decision_request_count": 1,
-      "decision_requests": [
-        {
-          "id": "event_ctx_2",
-          "short_id": "event_ctx_",
-          "summary": "confirm canonical command labels",
-          "thread_id": "thread_123",
-          "type": "decision_needed"
-        }
-      ],
-      "decisions": [],
       "key_artifacts": [
         {
           "id": "artifact_ctx_1",
@@ -30,16 +18,6 @@
           "id": "card_ctx_1",
           "short_id": "card_ctx_1",
           "status": "open"
-        }
-      ],
-      "recommendation_count": 1,
-      "recommendations": [
-        {
-          "id": "event_ctx_1",
-          "short_id": "event_ctx_",
-          "summary": "normalize frame shape",
-          "thread_id": "thread_123",
-          "type": "actor_statement"
         }
       ]
     },
@@ -80,30 +58,27 @@
           "short_id": "event_ctx_",
           "summary": "normalize frame shape",
           "thread_id": "thread_123",
-          "type": "actor_statement"
+          "type": "message_posted"
         },
         {
           "id": "event_ctx_2",
           "short_id": "event_ctx_",
           "summary": "confirm canonical command labels",
           "thread_id": "thread_123",
-          "type": "decision_needed"
+          "type": "human_attention_requested"
         }
       ]
     },
     "context_source": "threads.context",
     "follow_up": {
       "context_refresh_command": "anx threads context --thread-id thread_123 --include-artifact-content --full-id --json",
-      "decisions_list_command": "anx events list --thread-id thread_123 --type decision_needed --type decision_made --full-id --json",
       "events_get_examples": [
         "anx events get --event-id event_ctx_1 --json",
         "anx events get --event-id event_ctx_2 --json"
       ],
-      "events_get_template": "anx events get --event-id \u003cevent-id\u003e --json",
-      "recommendations_list_command": "anx events list --thread-id thread_123 --type actor_statement --full-id --json"
+      "events_get_template": "anx events get --event-id \u003cevent-id\u003e --json"
     },
     "full_id": false,
-    "full_summary": false,
     "inbox": {
       "count": 1,
       "full_id": false,
@@ -121,7 +96,7 @@
       "thread_id": "thread_123"
     },
     "inbox_source": "inbox.list",
-    "pending_decisions": {
+    "pending_attention": {
       "count": 1,
       "items": [
         {
@@ -136,18 +111,6 @@
       ],
       "thread_id": "thread_123"
     },
-    "related_decision_requests": {
-      "count": 0,
-      "items": []
-    },
-    "related_decisions": {
-      "count": 0,
-      "items": []
-    },
-    "related_recommendations": {
-      "count": 0,
-      "items": []
-    },
     "related_threads": {
       "count": 0,
       "items": []
@@ -158,6 +121,6 @@
       "title": "Machine-facing consistency"
     },
     "thread_id": "thread_123",
-    "total_review_items": 3
+    "total_review_items": 1
   }
 }

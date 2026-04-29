@@ -192,7 +192,9 @@ test("golden path integration runs against a real anx-core", async ({
   });
 
   await page.getByRole("link", { name: "Topics", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Topics" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Topics", exact: true }),
+  ).toBeVisible();
 
   await page.getByRole("button", { name: "New topic" }).click();
   await page.getByLabel("Title").fill(threadTitle);
@@ -226,7 +228,9 @@ test("golden path integration runs against a real anx-core", async ({
   });
 
   await page.getByRole("link", { name: "Boards", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Boards" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Boards", exact: true }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Create board", exact: true }).click();
   await page.getByLabel("Board timeline search").fill(threadTitle);
   const listTopicsSearchResp = await listTopicsSearchPromise;
@@ -236,7 +240,9 @@ test("golden path integration runs against a real anx-core", async ({
   ).toBeTruthy();
 
   await page.getByRole("link", { name: "Topics", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Topics" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Topics", exact: true }),
+  ).toBeVisible();
 
   const boardBody = await postCoreJson(request, coreBaseUrl, "/boards", {
     actor_id: actorId,
@@ -246,7 +252,7 @@ test("golden path integration runs against a real anx-core", async ({
       primary_topic_ref: `topic:${topicId}`,
       document_refs: [],
       pinned_refs: [`topic:${topicId}`],
-      provenance: { sources: ["actor_statement:integration-e2e"] },
+      provenance: { sources: ["event:integration-e2e"] },
     },
   });
   const boardId = String(boardBody?.board?.id ?? "").trim();
@@ -268,7 +274,7 @@ test("golden path integration runs against a real anx-core", async ({
         risk: "low",
         resolution_refs: [],
         related_refs: [],
-        provenance: { sources: ["actor_statement:integration-e2e"] },
+        provenance: { sources: ["event:integration-e2e"] },
       },
     },
   );
@@ -399,15 +405,20 @@ test("golden path integration runs against a real anx-core", async ({
   await postCoreJson(request, coreBaseUrl, "/events", {
     actor_id: actorId,
     event: {
-      type: "decision_needed",
+      type: "human_attention_requested",
       thread_id: threadId,
       refs: [`thread:${threadId}`],
-      summary: `Decision needed ${runSuffix}`,
+      summary: `Human attention requested ${runSuffix}`,
       payload: {
-        source: "integration-e2e",
+        kind: "ask",
+        title: `Review handoff ${runSuffix}`,
+        body: "Please review the inbox item.",
+        subject_ref: `thread:${threadId}`,
+        requester_actor_id: actorId,
+        response_proposals: ["Approve", "Request changes"],
       },
       provenance: {
-        sources: ["actor_statement:integration-e2e"],
+        sources: ["event:integration-e2e"],
       },
     },
   });
@@ -429,13 +440,13 @@ test("golden path integration runs against a real anx-core", async ({
 
   await openThreadDetailFromNav(page, threadTitle);
 
-  const decisionEntry = page
+  const attentionEntry = page
     .locator("article", {
-      hasText: `Decision needed ${runSuffix}`,
+      hasText: `Human attention requested ${runSuffix}`,
     })
     .first();
-  await expect(decisionEntry).toBeVisible();
-  const threadRef = decisionEntry.getByRole("link", {
+  await expect(attentionEntry).toBeVisible();
+  const threadRef = attentionEntry.getByRole("link", {
     name: `thread:${threadId}`,
   });
   await expect(threadRef).toBeVisible();

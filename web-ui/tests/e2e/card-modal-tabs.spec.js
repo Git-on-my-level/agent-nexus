@@ -190,12 +190,13 @@ test("card detail modal Discussion drawer and Timeline tab render without reques
       refs: [`thread:${cardThreadId}`],
       summary: "Message: hello from modal card thread",
       payload: { text: "hello from modal card thread" },
-      provenance: { sources: ["actor_statement:ui"] },
+      provenance: { sources: ["event:ui"] },
     },
   ];
 
   await page.addInitScript((selectedActorId) => {
-    window.localStorage.setItem("anx_ui_actor_id", selectedActorId);
+    window.localStorage.setItem("anx_ui_actor_id:local", selectedActorId);
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
   }, actorId);
 
   await page.context().addCookies([

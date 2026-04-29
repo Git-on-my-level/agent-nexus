@@ -196,11 +196,11 @@ func TestProjectionMaintainerSuppressesStaleInboxAfterNewActivity(t *testing.T) 
 	postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-1",
 		"event":{
-			"type":"actor_statement",
+			"type":"card_updated",
 			"thread_id":"`+threadID+`",
-			"refs":["thread:`+threadID+`"],
+			"refs":["card:stale-card-1","board:stale-board-1"],
 			"summary":"progress update",
-			"payload":{"statement":"on it"},
+			"payload":{"changed_fields":["title"]},
 			"provenance":{"sources":["inferred"]}
 		}
 	}`, http.StatusCreated).Body.Close()
@@ -461,11 +461,11 @@ func TestProjectionMaintainerKeepsProjectionPendingForConcurrentWrites(t *testin
 	postJSONExpectStatus(t, server.URL+"/events", `{
 		"actor_id":"actor-1",
 		"event":{
-			"type":"decision_needed",
+			"type":"human_attention_requested",
 			"thread_id":"`+threadID+`",
 			"refs":["thread:`+threadID+`"],
 			"summary":"Need a first decision",
-			"payload":{},
+			"payload":{"kind":"ask","title":"Need a first decision","subject_ref":"thread:`+threadID+`","requester_actor_id":"actor-1","response_proposals":["Approve"]},
 			"provenance":{"sources":["inferred"]}
 		}
 	}`, http.StatusCreated).Body.Close()
@@ -492,11 +492,11 @@ func TestProjectionMaintainerKeepsProjectionPendingForConcurrentWrites(t *testin
 	postJSONExpectStatus(t, server.URL+"/events", `{
 		"actor_id":"actor-1",
 		"event":{
-			"type":"decision_needed",
+			"type":"human_attention_requested",
 			"thread_id":"`+threadID+`",
 			"refs":["thread:`+threadID+`"],
 			"summary":"Need a second decision",
-			"payload":{},
+			"payload":{"kind":"ask","title":"Need a second decision","subject_ref":"thread:`+threadID+`","requester_actor_id":"actor-1","response_proposals":["Approve"]},
 			"provenance":{"sources":["inferred"]}
 		}
 	}`, http.StatusCreated).Body.Close()
@@ -550,8 +550,8 @@ func TestProjectionMaintainerKeepsProjectionPendingForConcurrentWrites(t *testin
 	if state.Status != "current" {
 		t.Fatalf("expected follow-up refresh to clear pending state, got %#v", state.Freshness)
 	}
-	if state.Projection.InboxCount != 0 {
-		t.Fatalf("expected follow-up refresh to keep generic decision_needed events out of human inbox, got %#v", state.Projection)
+	if state.Projection.InboxCount != 2 {
+		t.Fatalf("expected follow-up refresh to materialize both human attention requests, got %#v", state.Projection)
 	}
 
 	statuses, err = baseStore.GetTopicProjectionRefreshStatuses(context.Background(), []string{threadID})

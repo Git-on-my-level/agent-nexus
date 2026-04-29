@@ -27,7 +27,7 @@ func TestTopicWorkspaceResolvesBoardsCardsAndDocsViaRefEdges(t *testing.T) {
 			"document_refs":[],
 			"board_refs":[],
 			"related_refs":[],
-			"provenance":{"sources":["seed:topic-workspace"]}
+			"provenance":{"sources":["event:topic-workspace"]}
 		}
 	}`, http.StatusCreated)
 	defer createTopicResp.Body.Close()
@@ -136,7 +136,7 @@ func TestTopicWorkspaceResolvesResourcesThatPointAtTopic(t *testing.T) {
 			"document_refs":[],
 			"board_refs":[],
 			"related_refs":[],
-			"provenance":{"sources":["seed:topic-workspace"]}
+			"provenance":{"sources":["event:topic-workspace"]}
 		}
 	}`, http.StatusCreated)
 	defer createTopicResp.Body.Close()

@@ -957,13 +957,11 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - CLI path: `inbox list`
 - HTTP: `GET /inbox`
-- Stability: `beta`
 - Surface: `projection`
 - Input mode: `none`
 - Why: Load the operator-only human attention queue derived from explicit human_attention_requested events.
-- Concepts: `inbox`
-- Error codes: `auth_required`, `invalid_token`
-- Output: Returns `{ items }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Output: Returns `{ status, items, generated_at }`; completed adds `{ next_cursor }`; open projection adds `{ projection_freshness }` unless risk_horizon_days derivation path.
 
 ## `inbox.respond`
 

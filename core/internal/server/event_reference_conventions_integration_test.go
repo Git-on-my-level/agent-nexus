@@ -40,57 +40,57 @@ func TestEventReferenceConventionsRejectMissingRequiredRefs(t *testing.T) {
 	}`, http.StatusBadRequest)
 	assertEventErrorMessageContains(t, receiptResp, "event.refs must include")
 
-	decisionNeededResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
+	humanAttentionRequestedResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-1",
 		"event":{
-			"type":"decision_needed",
+			"type":"human_attention_requested",
 			"thread_id":"thread-1",
 			"refs":[],
 			"summary":"status changed",
-			"payload":{"decision":"approve"},
+			"payload":{"kind":"ask","title":"Need a decision","subject_ref":"card:card-1","requester_actor_id":"actor-1","response_proposals":["Approve"]},
 			"provenance":{"sources":["inferred"]}
 		}
 	}`, http.StatusBadRequest)
-	assertEventErrorMessageContains(t, decisionNeededResp, "event.refs must include")
+	assertEventErrorMessageContains(t, humanAttentionRequestedResp, "event.refs must include")
 
-	decisionTopicOnlyResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
+	humanAttentionRequestedTopicOnlyResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-1",
 		"event":{
-			"type":"decision_needed",
+			"type":"human_attention_requested",
 			"thread_id":"thread-1",
 			"refs":["topic:thread-1"],
 			"summary":"status changed",
-			"payload":{"decision":"approve"},
+			"payload":{"kind":"ask","title":"Need a decision","subject_ref":"card:card-1","requester_actor_id":"actor-1","response_proposals":["Approve"]},
 			"provenance":{"sources":["inferred"]}
 		}
 	}`, http.StatusBadRequest)
-	assertEventErrorMessageContains(t, decisionTopicOnlyResp, "thread:<id>")
+	assertEventErrorMessageContains(t, humanAttentionRequestedTopicOnlyResp, "thread:<id>")
 
-	decisionMadeTopicOnlyResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
+	humanAttentionRespondedTopicOnlyResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-1",
 		"event":{
-			"type":"decision_made",
+			"type":"human_attention_responded",
 			"thread_id":"thread-1",
 			"refs":["topic:topic-1"],
-			"summary":"decided",
-			"payload":{"notes":""},
+			"summary":"responded",
+			"payload":{"inbox_item_id":"inbox-1","kind":"ask","response_text":"Approved.","responding_actor_id":"actor-1"},
 			"provenance":{"sources":["inferred"]}
 		}
 	}`, http.StatusBadRequest)
-	assertEventErrorMessageContains(t, decisionMadeTopicOnlyResp, "thread:<id>")
+	assertEventErrorMessageContains(t, humanAttentionRespondedTopicOnlyResp, "inbox:<id>")
 
-	interventionTopicOnlyResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
+	humanAttentionRespondedThreadOnlyResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-1",
 		"event":{
-			"type":"intervention_needed",
+			"type":"human_attention_responded",
 			"thread_id":"thread-1",
-			"refs":["topic:topic-1"],
-			"summary":"human must act",
-			"payload":{},
+			"refs":["thread:thread-1"],
+			"summary":"responded",
+			"payload":{"inbox_item_id":"inbox-1","kind":"ask","response_text":"Approved.","responding_actor_id":"actor-1"},
 			"provenance":{"sources":["inferred"]}
 		}
 	}`, http.StatusBadRequest)
-	assertEventErrorMessageContains(t, interventionTopicOnlyResp, "thread:<id>")
+	assertEventErrorMessageContains(t, humanAttentionRespondedThreadOnlyResp, "inbox:<id>")
 }
 
 func TestEventReferenceConventionsRejectMissingRequiredPayloadFields(t *testing.T) {

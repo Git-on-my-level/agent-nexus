@@ -17,7 +17,7 @@ test("submit review from receipt artifact and see payload + revise follow-up lin
     refs: [cardRef, "thread:thread-onboarding"],
     created_at: "2026-03-04T06:00:00.000Z",
     created_by: actorId,
-    provenance: { sources: ["actor_statement:ui"] },
+    provenance: { sources: ["event:ui"] },
   };
 
   const receiptPacket = {
@@ -30,7 +30,8 @@ test("submit review from receipt artifact and see payload + revise follow-up lin
   };
 
   await page.addInitScript((selectedActorId) => {
-    window.localStorage.setItem("anx_ui_actor_id", selectedActorId);
+    window.localStorage.setItem("anx_ui_actor_id:local", selectedActorId);
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
   }, actorId);
 
   await page.route(/\/actors$/, async (route) => {
@@ -112,7 +113,7 @@ test("submit review from receipt artifact and see payload + revise follow-up lin
         receipt_id: reviewPayload.packet.receipt_id,
         outcome: reviewPayload.packet.outcome,
       },
-      provenance: { sources: ["actor_statement:ui"] },
+      provenance: { sources: ["event:ui"] },
     };
     timelineEvents.push(createdEvent);
 

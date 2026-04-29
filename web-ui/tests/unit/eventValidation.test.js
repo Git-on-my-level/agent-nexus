@@ -9,7 +9,7 @@ function validBaseEvent(overrides = {}) {
       type: "topic_created",
       summary: "hello",
       refs: ["topic:topic-1"],
-      provenance: { sources: ["actor_statement:event-1"] },
+      provenance: { sources: ["event:event-1"] },
       ...overrides,
     },
   };
@@ -70,19 +70,6 @@ describe("event validation", () => {
     expect(error).toContain('"card:<id>" typed ref');
   });
 
-  it("enforces board_card_moved payload fields", () => {
-    const error = validateEventCreatePayload(
-      validBaseEvent({
-        type: "board_card_moved",
-        refs: ["board:board_1", "card:card_1"],
-        payload: {},
-      }),
-    );
-
-    expect(error).toContain("event.payload.column_key is required");
-    expect(error).toContain("board_card_moved");
-  });
-
   it("keeps unknown event types open", () => {
     const error = validateEventCreatePayload(
       validBaseEvent({
@@ -95,29 +82,65 @@ describe("event validation", () => {
     expect(error).toBe("");
   });
 
-  it("requires thread refs for decision lifecycle events", () => {
-    for (const type of [
-      "decision_made",
-      "decision_needed",
-      "intervention_needed",
-    ]) {
-      expect(
-        validateEventCreatePayload(
-          validBaseEvent({
-            type,
-            thread_id: "thread-1",
-            refs: ["topic:topic-1"],
-          }),
-        ),
-      ).toContain('event.refs must include a "thread:<id>"');
-    }
+  it("requires the right refs for human attention request and response events", () => {
+    expect(
+      validateEventCreatePayload(
+        validBaseEvent({
+          type: "human_attention_requested",
+          refs: ["topic:topic-1"],
+          payload: {
+            kind: "ask",
+            title: "Need approval",
+            subject_ref: "topic:topic-1",
+            requester_actor_id: "actor-1",
+            response_proposals: ["Approve", "Reject"],
+          },
+        }),
+      ),
+    ).toContain('event.refs must include a "thread:<id>"');
 
     expect(
       validateEventCreatePayload(
         validBaseEvent({
-          type: "decision_made",
-          thread_id: "thread-1",
-          refs: ["thread:thread-1", "topic:topic-1"],
+          type: "human_attention_requested",
+          refs: ["thread:thread-1"],
+          payload: {
+            kind: "ask",
+            title: "Need approval",
+            subject_ref: "topic:topic-1",
+            requester_actor_id: "actor-1",
+            response_proposals: ["Approve", "Reject"],
+          },
+        }),
+      ),
+    ).toBe("");
+
+    expect(
+      validateEventCreatePayload(
+        validBaseEvent({
+          type: "human_attention_responded",
+          refs: ["thread:thread-1"],
+          payload: {
+            inbox_item_id: "inbox-1",
+            kind: "ask",
+            response_text: "Approved",
+            responding_actor_id: "actor-1",
+          },
+        }),
+      ),
+    ).toContain('event.refs must include a "inbox:<id>"');
+
+    expect(
+      validateEventCreatePayload(
+        validBaseEvent({
+          type: "human_attention_responded",
+          refs: ["inbox:inbox-1"],
+          payload: {
+            inbox_item_id: "inbox-1",
+            kind: "ask",
+            response_text: "Approved",
+            responding_actor_id: "actor-1",
+          },
         }),
       ),
     ).toBe("");

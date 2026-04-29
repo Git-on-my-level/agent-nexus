@@ -132,8 +132,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `events explain` (local-helper): Explain known event-type conventions, required refs, and validation hints, including when `message_posted` targets a backing-thread message stream.
 - `artifacts inspect` (local-helper): Fetch artifact metadata and resolved content in one command for operator inspection.
 - `threads inspect` (local-helper): Diagnostic backing-thread bundle: compose one view from read-only thread data and related `inbox list` items.
-- `threads workspace` (local-helper): Read-only backing-thread workspace projection: context, inbox, recommendation review, and related-thread signals in one command.
-- `threads recommendations` (local-helper): Compose a diagnostic recommendation-oriented review of one backing thread with related follow-up context.
+- `threads workspace` (local-helper): Read-only backing-thread workspace projection: context, inbox, board membership, and related-thread signals in one command.
 - `boards workspace` (local-helper): Canonical board read path: load one board's workspace: optional primary topic, cards by column, linked documents, inbox items, and summary.
 - `boards cards list` (local-helper): List all cards on a board in canonical column order without hydrating thread details.
 - `docs revise` (local-helper): Revise a durable document from a local file or JSON body; stages a diff proposal by default.
@@ -237,9 +236,9 @@ cards
 - Read next: anx cards list ; anx cards get ; anx cards move
 
 events
-- Use when: You need immutable facts, observations, decisions, or updates in an auditable sequence. Decision lifecycle events (`decision_needed`, `intervention_needed`, `decision_made`) must include `thread:<thread_id>` in refs; optional `topic:` refs are cross-links only, not a substitute for the thread anchor.
+- Use when: You need immutable facts, messages, human-attention lifecycle events, or updates in an auditable sequence. Use `human_attention_requested` and `human_attention_responded` for operator asks, reviews, escalations, and their completion history.
 - Not for: Replacing the current durable state of a Topic, Board, Card, or Doc.
-- Examples: decision_needed, decision_made, message_posted, exception_raised
+- Examples: message_posted, human_attention_requested, human_attention_responded, exception_raised
 - Read next: anx events list ; anx events explain ; anx threads timeline
 
 inbox
@@ -261,7 +260,7 @@ threads
 - Read next: anx threads list ; anx threads inspect ; anx threads workspace
 
 Inbox categories:
-- `action_needed`: A responsible actor must decide, take direct action, or own the next step (includes prior decision and intervention queue signals).
+- `action_needed`: A responsible actor must take direct action or own the next step.
 - `risk_exception`: Exceptions or at-risk work items that need follow-up.
 - `attention`: Review or lighter operator focus (for example document attention).
 
@@ -289,7 +288,7 @@ Operating posture
 
 Core model
 
-- `events`: immutable facts, observations, and updates. Use for append-only activity, audit trails, and streams. Decision lifecycle events (`decision_needed`, `intervention_needed`, `decision_made`) require `thread:<thread_id>` in refs; `topic:` refs are optional context when a topic exists.
+- `events`: immutable facts, messages, human-attention lifecycle facts, and audit updates. Use `human_attention_requested` and `human_attention_responded` for operator asks, reviews, and escalations.
 - `topics`: the primary durable work subjects. Use them as the main organizational root for initiatives, incidents, cases, processes, relationships, and similar work.
 - `cards`: the primary work items. Use them for tracked execution on boards.
 - `threads`: backing timelines and packet-routing infrastructure. Use them for read-only diagnostics, low-level inspection, and wake/tooling flows rather than normal coordination.
@@ -1390,8 +1389,7 @@ Commands:
   threads workspace        Get backing thread workspace projection (diagnostic)
 
 Read-only backing-thread diagnostics (tooling):
-  threads recommendations   Recommendation-focused review for one backing thread.
-  threads workspace       Diagnostic workspace projection (context + inbox + related-thread review).
+  threads workspace       Diagnostic workspace projection (context + inbox + related threads).
   threads inspect          Smaller diagnostic bundle (context + inbox).
   threads timeline         Backing thread timeline and expansions.
   Tip: prefer `anx topics workspace` for normal operator coordination. Use `anx threads workspace --full-id` when you need the backing-thread projection with full ids in default text; use `--state active` to discover backing threads by lifecycle state. For a minimal `{thread}` read, use `anx threads get` (contract: `threads.inspect`).
@@ -3021,16 +3019,14 @@ Inputs:
   - body `event.provenance.by_field` (object)
   - body `event.provenance.notes` (string)
   - body `event.thread_ref` (string)
-  Enum values: event.type (open): agent_notification_dismissed, agent_notification_read, board_card_added, board_card_archived, board_card_moved, board_card_trashed, board_created, board_updated, card_archived, card_created, card_moved, card_resolved, card_trashed, card_updated, decision_made, decision_needed, document_created, document_restored, document_revised, document_trashed, exception_raised, human_attention_requested, human_attention_responded, intervention_needed, message_posted, receipt_added, review_completed, topic_archived, topic_created, topic_restored, topic_trashed, topic_updated
+  Enum values: event.type (open): agent_notification_dismissed, agent_notification_read, board_created, board_updated, card_archived, card_created, card_moved, card_resolved, card_trashed, card_updated, document_created, document_restored, document_revised, document_trashed, exception_raised, human_attention_requested, human_attention_responded, message_posted, receipt_added, review_completed, topic_archived, topic_created, topic_restored, topic_trashed, topic_updated
 
 Common authoring types:
   Communication: direct communication or important non-structured information
   - `message_posted`
-  Decisions: request or record decisions tied to a topic
-  - `decision_needed`
-  - `decision_made`
-  Interventions: single clear path exists, but a responsible actor must complete it
-  - `intervention_needed`
+  Human attention: request and close operator attention
+  - `human_attention_requested`
+  - `human_attention_responded`
   Topics and documents: durable subject and document lifecycle signals
   - `topic_created`, `topic_updated`, `topic_archived`, `topic_trashed`
   - `document_created`, `document_revised`, `document_trashed`
@@ -3046,7 +3042,7 @@ Usually emitted by higher-level commands:
   - `human_attention_requested`: prefer `anx human ask|review|escalate`
 
 Local CLI notes:
-  - Common open `event.type` values include `actor_statement`; the enum list above is illustrative, not exhaustive.
+  - Prefer higher-level commands for topic, board, card, doc, receipt, review, and human-attention lifecycle writes.
   - Use `--dry-run` with `--from-file` to validate and preview the request without sending the mutation.
 
 Global flags:
@@ -3236,12 +3232,10 @@ Generated Help: inbox list
 - Command ID: `inbox.list`
 - CLI path: `inbox list`
 - HTTP: `GET /inbox`
-- Stability: `beta`
 - Input mode: `none`
 - Why: Load the operator-only human attention queue derived from explicit human_attention_requested events.
-- Output: Returns `{ items }`.
-- Error codes: `auth_required`, `invalid_token`
-- Concepts: `inbox`
+- Output: Returns `{ status, items, generated_at }`; completed adds `{ next_cursor }`; open projection adds `{ projection_freshness }` unless risk_horizon_days derivation path.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Adjacent commands: `inbox get`, `inbox respond`, `inbox stream`
 
 
@@ -4321,7 +4315,7 @@ Local Help: events list
 - Composition: Fetches one or more backing-thread timelines locally, then filters and summarizes the events without changing contracts or core behavior. Use it as a diagnostic read; prefer `topics workspace` and card/board reads for normal coordination.
 - JSON body: `thread_id`, `thread_ids`, `events`, `total_events`, `returned_events`
 - Examples:
-  - `anx events list --thread-id <thread-id> --type actor_statement --mine --full-id`
+  - `anx events list --thread-id <thread-id> --type message_posted --mine --full-id`
   - `anx events list --thread-id <thread-id> --max-events 10`
 
 Flags:
@@ -4452,62 +4446,30 @@ Global flags:
 
 ## `threads workspace`
 
-Read-only backing-thread workspace projection: context, inbox, recommendation review, and related-thread signals in one command.
+Read-only backing-thread workspace projection: context, inbox, board membership, and related-thread signals in one command.
 
 ```text
 Local Help: threads workspace
 
 - Kind: `local helper`
-- Summary: Read-only backing-thread workspace projection: context, inbox, recommendation review, and related-thread signals in one command.
+- Summary: Read-only backing-thread workspace projection: context, inbox, board membership, and related-thread signals in one command.
 - Composition: Resolves one thread by id or discovery filters, loads read-only thread projections, adds thread-scoped inbox items, and follows related thread refs for diagnostic review. Prefer `topics workspace` for normal operator coordination.
-- JSON body: `thread`, `context`, `collaboration`, `inbox`, `pending_decisions`, `related_threads`, `related_recommendations`, `related_decisions`, `follow_up`
+- JSON body: `thread`, `context`, `collaboration`, `inbox`, `pending_attention`, `related_threads`, `follow_up`
 - Examples:
   - `anx threads workspace --thread-id <thread-id> --full-id`
-  - `anx threads workspace --state active --full-summary`
+  - `anx threads workspace --state active`
 
 Flags:
   --thread-id <thread-id>      Thread id to inspect.
   --state <state>              Discover one thread by lifecycle state (active, archived, trashed).
   --max-events <n>             Maximum recent context events to include.
   --include-artifact-content   Include artifact content previews from the underlying read-only thread views.
-  --full-summary               Show full recommendation/decision summaries in default text output (non-JSON).
   --full-id                    Render full event and inbox ids in default text output (non-JSON).
 
 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx threads workspace ... ; anx --json threads workspace ... ; anx threads workspace ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `threads recommendations`
-
-Compose a diagnostic recommendation-oriented review of one backing thread with related follow-up context.
-
-```text
-Local Help: threads recommendations
-
-- Kind: `local helper`
-- Summary: Compose a diagnostic recommendation-oriented review of one backing thread with related follow-up context.
-- Composition: Loads the read-only thread context, inbox, and related-thread review context to highlight recommendation signals and follow-up hints without changing state. Prefer `topics workspace` for the main coordination read when a topic exists.
-- JSON body: `thread`, `recommendations`, `decision_requests`, `decisions`, `pending_decisions`, `related_threads`, `related_recommendations`, `related_decision_requests`, `related_decisions`, `warnings`, `follow_up`
-- Examples:
-  - `anx threads recommendations --thread-id <thread-id>`
-  - `anx threads recommendations --state active --full-summary`
-
-Flags:
-  --thread-id <thread-id>      Thread id to inspect.
-  --state <state>              Discover one thread by lifecycle state (active, archived, trashed).
-  --max-events <n>             Maximum recent context events to include.
-  --include-artifact-content   Include artifact content previews from the underlying read-only thread views.
-  --include-related-event-content Hydrate related review items with full `events.get` payloads.
-  --full-summary               Show full recommendation/decision summaries in default text output (non-JSON).
-  --full-id                    Render full event and inbox ids in default text output (non-JSON).
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx threads recommendations ... ; anx --json threads recommendations ... ; anx threads recommendations ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 

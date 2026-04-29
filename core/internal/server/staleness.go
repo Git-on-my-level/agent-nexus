@@ -69,13 +69,9 @@ func isMeaningfulThreadActivityEvent(event map[string]any) bool {
 	}
 
 	switch eventType {
-	case "actor_statement",
-		"topic_archived",
+	case "topic_archived",
 		"topic_restored",
 		"topic_trashed",
-		"decision_needed",
-		"intervention_needed",
-		"decision_made",
 		"card_created",
 		"card_updated",
 		"card_moved",
@@ -91,15 +87,6 @@ func isMeaningfulThreadActivityEvent(event map[string]any) bool {
 		return true
 	case "human_attention_requested", "human_attention_responded", "exception_raised":
 		return false
-	case "thread_created":
-		return false
-	case "thread_updated":
-		payload, _ := event["payload"].(map[string]any)
-		changedFields, err := extractStringSlice(payload["changed_fields"])
-		if err == nil && len(changedFields) == 1 && strings.TrimSpace(changedFields[0]) == "open_cards" {
-			return false
-		}
-		return true
 	default:
 		return false
 	}

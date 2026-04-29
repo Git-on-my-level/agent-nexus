@@ -83,7 +83,7 @@ func TestThreadEventHandoffScenario(t *testing.T) {
 
 	h.runCLIExpectOK(t, "coordinator", map[string]any{
 		"event": map[string]any{
-			"type":      "decision_needed",
+			"type":      "human_attention_requested",
 			"thread_id": threadID,
 			"refs":      []string{"thread:" + threadID},
 			"summary":   "Need worker acknowledgement for integration run " + runID,
@@ -104,7 +104,7 @@ func TestThreadEventHandoffScenario(t *testing.T) {
 
 	ack := h.runCLIExpectOK(t, "worker", map[string]any{
 		"event": map[string]any{
-			"type":      "actor_statement",
+			"type":      "message_posted",
 			"thread_id": threadID,
 			"refs":      []string{"thread:" + threadID},
 			"summary":   "Worker acknowledged harness thread " + threadID,
@@ -173,7 +173,7 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 
 	decision := h.runCLIExpectOK(t, "coordinator", map[string]any{
 		"event": map[string]any{
-			"type":      "decision_needed",
+			"type":      "human_attention_requested",
 			"thread_id": threadID,
 			"refs":      []string{"thread:" + threadID, "document:" + documentID},
 			"summary":   "Coordinator requested draft + review for run " + runID,
@@ -200,7 +200,7 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 
 	ack := h.runCLIExpectOK(t, "worker", map[string]any{
 		"event": map[string]any{
-			"type":      "actor_statement",
+			"type":      "message_posted",
 			"thread_id": threadID,
 			"refs":      []string{"thread:" + threadID, "event:" + decisionEventID},
 			"summary":   "Worker accepted run " + runID + " draft task",
@@ -273,7 +273,7 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 
 	review := h.runCLIExpectOK(t, "reviewer", map[string]any{
 		"event": map[string]any{
-			"type":      "actor_statement",
+			"type":      "message_posted",
 			"thread_id": threadID,
 			"refs":      []string{"thread:" + threadID, "document:" + documentID, "event:" + completionEventID},
 			"summary":   "Reviewer completed review for run " + runID + " (conflict-safe check passed).",
@@ -316,7 +316,7 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 	}
 
 	coordReview := h.runCLIExpectOK(t, "coordinator", nil, "events", "get", "--event-id", reviewEventID)
-	if !strings.Contains(coordReview.Stdout, "actor_statement") || !strings.Contains(coordReview.Stdout, "conflict-safe") || !strings.Contains(coordReview.Stdout, runID) {
+	if !strings.Contains(coordReview.Stdout, "message_posted") || !strings.Contains(coordReview.Stdout, "conflict-safe") || !strings.Contains(coordReview.Stdout, runID) {
 		t.Fatalf("expected review event output to include review details, got: %s", coordReview.Stdout)
 	}
 }
@@ -360,7 +360,7 @@ func TestProvenanceWalkScenario(t *testing.T) {
 
 	event := h.runCLIExpectOK(t, "investigator", map[string]any{
 		"event": map[string]any{
-			"type":      "decision_needed",
+			"type":      "human_attention_requested",
 			"thread_id": threadID,
 			"refs":      []string{"thread:" + threadID, "artifact:" + artifactID},
 			"summary":   "Trace thread provenance for run " + runID,

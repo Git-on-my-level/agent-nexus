@@ -116,7 +116,7 @@ describe("homeHandoff helpers", () => {
       events: [
         {
           id: "evt-newest",
-          type: "decision_made",
+          type: "message_posted",
           ts: "2026-03-12T11:30:00.000Z",
         },
       ],
@@ -139,7 +139,7 @@ describe("homeHandoff helpers", () => {
       events: [
         {
           id: "evt-old",
-          type: "decision_made",
+          type: "message_posted",
           ts: "2026-03-12T11:30:00.000Z",
         },
       ],
@@ -148,7 +148,7 @@ describe("homeHandoff helpers", () => {
     expect(nextMarker).toBe("2026-03-12T12:00:00.000Z");
   });
 
-  it("includes high-signal messages and unknown events while excluding human attention responses", () => {
+  it("includes high-signal messages and unknown events while excluding human attention events", () => {
     const events = filterHomeTimelineEvents(
       [
         {
@@ -167,8 +167,13 @@ describe("homeHandoff helpers", () => {
           ts: "2026-03-12T10:00:00.000Z",
         },
         {
+          id: "evt-human-request",
+          type: "human_attention_requested",
+          ts: "2026-03-12T10:30:00.000Z",
+        },
+        {
           id: "evt-archived",
-          type: "decision_made",
+          type: "message_posted",
           ts: "2026-03-12T11:00:00.000Z",
           archived_at: "2026-03-12T11:30:00.000Z",
         },
@@ -190,10 +195,13 @@ describe("homeHandoff helpers", () => {
       homeHandoffEventPillId({ refs: ["board:b1"], type: "card_updated" }),
     ).toBe("boards");
     expect(
-      homeHandoffEventPillId({ refs: ["inbox:n1"], type: "decision_made" }),
+      homeHandoffEventPillId({
+        refs: ["inbox:n1"],
+        type: "human_attention_requested",
+      }),
     ).toBe("inbox");
     expect(
-      homeHandoffEventPillId({ refs: ["document:d1"], type: "decision_made" }),
+      homeHandoffEventPillId({ refs: ["document:d1"], type: "message_posted" }),
     ).toBe("docs-proof");
     expect(
       homeHandoffEventPillId({

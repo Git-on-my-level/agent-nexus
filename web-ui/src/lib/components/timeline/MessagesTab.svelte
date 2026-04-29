@@ -645,7 +645,7 @@
         refs,
         summary,
         payload,
-        provenance: { sources: ["actor_statement:ui"] },
+        provenance: { sources: ["event:ui"] },
       });
       messageText = "";
       replyToEventId = "";

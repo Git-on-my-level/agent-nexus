@@ -51,7 +51,8 @@ test("CSP header blocks inline script execution", async ({ page }) => {
 
 test("security headers are set on all document responses", async ({ page }) => {
   page.addInitScript(() => {
-    window.localStorage.setItem("anx_ui_actor_id", "actor-ops-ai");
+    window.localStorage.setItem("anx_ui_actor_id:local", "actor-ops-ai");
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
   });
 
   const routes = ["/", "/inbox", "/topics"];
@@ -70,7 +71,8 @@ test("security headers are set on all document responses", async ({ page }) => {
 
 test("CSP does not interfere with legitimate resources", async ({ page }) => {
   page.addInitScript(() => {
-    window.localStorage.setItem("anx_ui_actor_id", "actor-ops-ai");
+    window.localStorage.setItem("anx_ui_actor_id:local", "actor-ops-ai");
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
   });
 
   const failedRequests = [];

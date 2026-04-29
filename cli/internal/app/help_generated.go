@@ -239,7 +239,7 @@ var localHelperTopics = []localHelperTopic{
 		JSONShape:   "`thread_id`, `thread_ids`, `events`, `total_events`, `returned_events`",
 		Composition: "Fetches one or more backing-thread timelines locally, then filters and summarizes the events without changing contracts or core behavior. Use it as a diagnostic read; prefer `topics workspace` and card/board reads for normal coordination.",
 		Examples: []string{
-			"anx events list --thread-id <thread-id> --type actor_statement --mine --full-id",
+			"anx events list --thread-id <thread-id> --type message_posted --mine --full-id",
 			"anx events list --thread-id <thread-id> --max-events 10",
 		},
 		Flags: []localHelperFlag{
@@ -316,38 +316,18 @@ var localHelperTopics = []localHelperTopic{
 	},
 	{
 		Path:        "threads workspace",
-		Summary:     "Read-only backing-thread workspace projection: context, inbox, recommendation review, and related-thread signals in one command.",
-		JSONShape:   "`thread`, `context`, `collaboration`, `inbox`, `pending_decisions`, `related_threads`, `related_recommendations`, `related_decisions`, `follow_up`",
+		Summary:     "Read-only backing-thread workspace projection: context, inbox, board membership, and related-thread signals in one command.",
+		JSONShape:   "`thread`, `context`, `collaboration`, `inbox`, `pending_attention`, `related_threads`, `follow_up`",
 		Composition: "Resolves one thread by id or discovery filters, loads read-only thread projections, adds thread-scoped inbox items, and follows related thread refs for diagnostic review. Prefer `topics workspace` for normal operator coordination.",
 		Examples: []string{
 			"anx threads workspace --thread-id <thread-id> --full-id",
-			"anx threads workspace --state active --full-summary",
+			"anx threads workspace --state active",
 		},
 		Flags: []localHelperFlag{
 			{Name: "--thread-id <thread-id>", Description: "Thread id to inspect."},
 			{Name: "--state <state>", Description: "Discover one thread by lifecycle state (active, archived, trashed)."},
 			{Name: "--max-events <n>", Description: "Maximum recent context events to include."},
 			{Name: "--include-artifact-content", Description: "Include artifact content previews from the underlying read-only thread views."},
-			{Name: "--full-summary", Description: "Show full recommendation/decision summaries in default text output (non-JSON)."},
-			{Name: "--full-id", Description: "Render full event and inbox ids in default text output (non-JSON)."},
-		},
-	},
-	{
-		Path:        "threads recommendations",
-		Summary:     "Compose a diagnostic recommendation-oriented review of one backing thread with related follow-up context.",
-		JSONShape:   "`thread`, `recommendations`, `decision_requests`, `decisions`, `pending_decisions`, `related_threads`, `related_recommendations`, `related_decision_requests`, `related_decisions`, `warnings`, `follow_up`",
-		Composition: "Loads the read-only thread context, inbox, and related-thread review context to highlight recommendation signals and follow-up hints without changing state. Prefer `topics workspace` for the main coordination read when a topic exists.",
-		Examples: []string{
-			"anx threads recommendations --thread-id <thread-id>",
-			"anx threads recommendations --state active --full-summary",
-		},
-		Flags: []localHelperFlag{
-			{Name: "--thread-id <thread-id>", Description: "Thread id to inspect."},
-			{Name: "--state <state>", Description: "Discover one thread by lifecycle state (active, archived, trashed)."},
-			{Name: "--max-events <n>", Description: "Maximum recent context events to include."},
-			{Name: "--include-artifact-content", Description: "Include artifact content previews from the underlying read-only thread views."},
-			{Name: "--include-related-event-content", Description: "Hydrate related review items with full `events.get` payloads."},
-			{Name: "--full-summary", Description: "Show full recommendation/decision summaries in default text output (non-JSON)."},
 			{Name: "--full-id", Description: "Render full event and inbox ids in default text output (non-JSON)."},
 		},
 	},
@@ -727,8 +707,7 @@ func localGroupHelpSupplement(topic string) string {
   Tip: use Topics for discussion/current context; use Boards for active work and Docs for durable knowledge. Start triage with ` + "`anx topics workspace --topic-id <topic-id>`" + `.`)
 	case "threads":
 		return strings.TrimSpace(`Read-only backing-thread diagnostics (tooling):
-  threads recommendations   Recommendation-focused review for one backing thread.
-  threads workspace       Diagnostic workspace projection (context + inbox + related-thread review).
+  threads workspace       Diagnostic workspace projection (context + inbox + related threads).
   threads inspect          Smaller diagnostic bundle (context + inbox).
   threads timeline         Backing thread timeline and expansions.
   Tip: prefer ` + "`anx topics workspace`" + ` for normal operator coordination. Use ` + "`anx threads workspace --full-id`" + ` when you need the backing-thread projection with full ids in default text; use ` + "`--state active`" + ` to discover backing threads by lifecycle state. For a minimal ` + "`{thread}`" + ` read, use ` + "`anx threads get`" + ` (contract: ` + "`threads.inspect`" + `).`)
@@ -1037,11 +1016,9 @@ func formatCommandSpecificHelpBlock(cmd registry.Command) string {
 		return strings.TrimSpace(`Common authoring types:
   Communication: direct communication or important non-structured information
   - ` + "`message_posted`" + `
-  Decisions: request or record decisions tied to a topic
-  - ` + "`decision_needed`" + `
-  - ` + "`decision_made`" + `
-  Interventions: single clear path exists, but a responsible actor must complete it
-  - ` + "`intervention_needed`" + `
+  Human attention: request and close operator attention
+  - ` + "`human_attention_requested`" + `
+  - ` + "`human_attention_responded`" + `
   Topics and documents: durable subject and document lifecycle signals
   - ` + "`topic_created`" + `, ` + "`topic_updated`" + `, ` + "`topic_archived`" + `, ` + "`topic_trashed`" + `
   - ` + "`document_created`" + `, ` + "`document_revised`" + `, ` + "`document_trashed`" + `
@@ -1057,7 +1034,7 @@ Usually emitted by higher-level commands:
   - ` + "`human_attention_requested`" + `: prefer ` + "`anx human ask|review|escalate`" + `
 
 Local CLI notes:
-  - Common open ` + "`event.type`" + ` values include ` + "`actor_statement`" + `; the enum list above is illustrative, not exhaustive.
+  - Prefer higher-level commands for topic, board, card, doc, receipt, review, and human-attention lifecycle writes.
   - Use ` + "`--dry-run`" + ` with ` + "`--from-file`" + ` to validate and preview the request without sending the mutation.`)
 	case "threads.timeline":
 		return strings.TrimSpace(`Local CLI flags:

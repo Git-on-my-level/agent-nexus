@@ -154,7 +154,7 @@ MAIN_TOPIC_RESP="$(post_json "/topics" "$(cat <<JSON
     "board_refs": [],
     "document_refs": [],
     "related_refs": ["topic:${MAIN_TOPIC_ID}"],
-    "provenance": {"sources": ["actor_statement:smoke"]}
+    "provenance": {"sources": ["event:smoke"]}
   }
 }
 JSON
@@ -174,7 +174,7 @@ CARD_A_TOPIC_RESP="$(post_json "/topics" "$(cat <<JSON
     "board_refs": [],
     "document_refs": [],
     "related_refs": ["topic:${CARD_A_TOPIC_ID}"],
-    "provenance": {"sources": ["actor_statement:smoke"]}
+    "provenance": {"sources": ["event:smoke"]}
   }
 }
 JSON
@@ -194,7 +194,7 @@ CARD_B_TOPIC_RESP="$(post_json "/topics" "$(cat <<JSON
     "board_refs": [],
     "document_refs": [],
     "related_refs": ["topic:${CARD_B_TOPIC_ID}"],
-    "provenance": {"sources": ["actor_statement:smoke"]}
+    "provenance": {"sources": ["event:smoke"]}
   }
 }
 JSON
@@ -255,7 +255,7 @@ BOARD_RESP="$(post_json "/boards" "$(cat <<JSON
     "document_refs": ["document:${PRIMARY_DOC_ID}"],
     "card_refs": [],
     "pinned_refs": ["document:${PRIMARY_DOC_ID}"],
-    "provenance": {"sources": ["actor_statement:smoke"]}
+    "provenance": {"sources": ["event:smoke"]}
   }
 }
 JSON
@@ -304,7 +304,7 @@ post_json "/packets/receipts" "$(cat <<JSON
     "id": "${RECEIPT_ID}",
     "refs": ["card:card-smoke-a"],
     "summary": "Smoke receipt",
-    "provenance": {"sources": ["actor_statement:smoke"]}
+    "provenance": {"sources": ["event:smoke"]}
   },
   "packet": {
     "receipt_id": "${RECEIPT_ID}",
@@ -325,7 +325,7 @@ post_json "/packets/reviews" "$(cat <<JSON
     "id": "${REVIEW_ID}",
     "refs": ["card:card-smoke-a", "artifact:${RECEIPT_ID}"],
     "summary": "Smoke review",
-    "provenance": {"sources": ["actor_statement:smoke"]}
+    "provenance": {"sources": ["event:smoke"]}
   },
   "packet": {
     "review_id": "${REVIEW_ID}",

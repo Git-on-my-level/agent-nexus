@@ -50,9 +50,9 @@ var conceptsGuidePrimitives = []conceptsPrimitive{
 	},
 	{
 		Name:        "events",
-		UseWhen:     "You need immutable facts, observations, decisions, or updates in an auditable sequence. Decision lifecycle events (`decision_needed`, `intervention_needed`, `decision_made`) must include `thread:<thread_id>` in refs; optional `topic:` refs are cross-links only, not a substitute for the thread anchor.",
+		UseWhen:     "You need immutable facts, messages, human-attention lifecycle events, or updates in an auditable sequence. Use `human_attention_requested` and `human_attention_responded` for operator asks, reviews, escalations, and their completion history.",
 		NotFor:      "Replacing the current durable state of a Topic, Board, Card, or Doc.",
-		Examples:    []string{"decision_needed", "decision_made", "message_posted", "exception_raised"},
+		Examples:    []string{"message_posted", "human_attention_requested", "human_attention_responded", "exception_raised"},
 		RelatedRead: []string{"anx events list", "anx events explain", "anx threads timeline"},
 	},
 	{
@@ -79,7 +79,7 @@ var conceptsGuidePrimitives = []conceptsPrimitive{
 }
 
 var inboxCategoryReference = []namedDescription{
-	{Name: "action_needed", Description: "A responsible actor must decide, take direct action, or own the next step (includes prior decision and intervention queue signals)."},
+	{Name: "action_needed", Description: "A responsible actor must take direct action or own the next step."},
 	{Name: "risk_exception", Description: "Exceptions or at-risk work items that need follow-up."},
 	{Name: "attention", Description: "Review or lighter operator focus (for example document attention)."},
 }

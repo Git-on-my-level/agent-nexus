@@ -282,15 +282,11 @@ func TestEventsStreamEmitsDocumentLifecycleEventsForThread(t *testing.T) {
 	if err := json.NewDecoder(timelineResp.Body).Decode(&timeline); err != nil {
 		t.Fatalf("decode initial timeline: %v", err)
 	}
-	if len(timeline.Events) == 0 {
-		t.Fatal("expected initial thread event in timeline")
-	}
-	lastExistingEventID := asString(timeline.Events[len(timeline.Events)-1]["id"])
-	if lastExistingEventID == "" {
-		t.Fatalf("expected initial event id in timeline, got %#v", timeline.Events)
+	if len(timeline.Events) != 0 {
+		t.Fatalf("expected no thread lifecycle events in initial timeline, got %#v", timeline.Events)
 	}
 
-	resp := openSSEStream(t, h.baseURL+"/stream/events?thread_id="+threadID, lastExistingEventID)
+	resp := openSSEStream(t, h.baseURL+"/stream/events?thread_id="+threadID, "")
 	reader, stop := startSSEReader(resp.Body)
 	defer stop()
 

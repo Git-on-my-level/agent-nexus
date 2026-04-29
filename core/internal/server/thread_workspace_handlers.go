@@ -129,7 +129,6 @@ func buildThreadWorkspacePayload(ctx context.Context, opts handlerOptions, threa
 	}
 
 	thread, _ := contextBody["thread"].(map[string]any)
-	collaboration := buildThreadWorkspaceCollaborationSummary(contextBody)
 
 	now := time.Now().UTC()
 	projectionState, err := loadTopicProjectionState(ctx, opts, threadID)
@@ -140,7 +139,7 @@ func buildThreadWorkspacePayload(ctx context.Context, opts handlerOptions, threa
 	if err != nil {
 		return nil, err
 	}
-	pendingDecisions := filterThreadWorkspaceInboxItems(inboxItems, []string{"ask", "review", "escalate"})
+	pendingAttention := filterThreadWorkspaceInboxItems(inboxItems, []string{"ask", "review", "escalate"})
 
 	relatedThreadReview := buildEmptyRelatedThreadReview()
 	if related, err := buildThreadWorkspaceRelatedThreadReview(ctx, opts, threadID, contextBody, options); err != nil {
@@ -149,10 +148,7 @@ func buildThreadWorkspacePayload(ctx context.Context, opts handlerOptions, threa
 		relatedThreadReview = related
 	}
 
-	recommendations := asWorkspaceEventSlice(collaboration["recommendations"])
-	decisionRequests := asWorkspaceEventSlice(collaboration["decision_requests"])
-	decisions := asWorkspaceEventSlice(collaboration["decisions"])
-	totalReviewItems := len(recommendations) + len(decisionRequests) + len(decisions) + len(pendingDecisions) + workspaceIntValue(relatedThreadReview["total_review_items"])
+	totalReviewItems := len(pendingAttention) + workspaceIntValue(relatedThreadReview["total_review_items"])
 	boardMemberships, err := opts.primitiveStore.ListBoardMembershipsByThread(ctx, threadID)
 	if err != nil {
 		return nil, err
@@ -166,42 +162,30 @@ func buildThreadWorkspacePayload(ctx context.Context, opts handlerOptions, threa
 		"thread":    thread,
 		"context":   contextSection,
 		"collaboration": map[string]any{
-			"recommendations":        recommendations,
-			"decision_requests":      decisionRequests,
-			"decisions":              decisions,
-			"key_artifacts":          contextBody["key_artifacts"],
-			"open_cards":             contextBody["open_cards"],
-			"recommendation_count":   len(recommendations),
-			"decision_request_count": len(decisionRequests),
-			"decision_count":         len(decisions),
-			"artifact_count":         workspaceSliceLen(contextBody["key_artifacts"]),
-			"open_card_count":        workspaceSliceLen(contextBody["open_cards"]),
+			"key_artifacts":   contextBody["key_artifacts"],
+			"open_cards":      contextBody["open_cards"],
+			"artifact_count":  workspaceSliceLen(contextBody["key_artifacts"]),
+			"open_card_count": workspaceSliceLen(contextBody["open_cards"]),
 		},
 		"board_memberships":           boardMembershipSectionResponse(boardMemberships),
 		"inbox":                       inboxSection,
-		"pending_decisions":           map[string]any{"thread_id": strings.TrimSpace(threadID), "items": pendingDecisions, "count": len(pendingDecisions), "generated_at": nullableStringValue(projectionState.Projection.GeneratedAt), "projection_freshness": cloneWorkspaceMap(projectionState.Freshness)},
+		"pending_attention":           map[string]any{"thread_id": strings.TrimSpace(threadID), "items": pendingAttention, "count": len(pendingAttention), "generated_at": nullableStringValue(projectionState.Projection.GeneratedAt), "projection_freshness": cloneWorkspaceMap(projectionState.Freshness)},
 		"related_threads":             relatedThreadReview["related_threads"],
-		"related_recommendations":     relatedThreadReview["related_recommendations"],
-		"related_decision_requests":   relatedThreadReview["related_decision_requests"],
-		"related_decisions":           relatedThreadReview["related_decisions"],
 		"total_review_items":          totalReviewItems,
-		"follow_up":                   buildThreadWorkspaceFollowUpHints(thread, threadID, recommendations, decisionRequests, decisions),
+		"follow_up":                   buildThreadWorkspaceFollowUpHints(thread, threadID),
 		"workspace_summary":           cloneWorkspaceMap(projectionState.Projection.Data),
 		"projection_freshness":        cloneWorkspaceMap(projectionState.Freshness),
 		"workspace_summary_freshness": cloneWorkspaceMap(projectionState.Freshness),
 		"section_kinds": map[string]any{
-			"thread":                    "canonical",
-			"context":                   "canonical",
-			"collaboration":             "derived",
-			"board_memberships":         "canonical",
-			"inbox":                     "derived",
-			"pending_decisions":         "derived",
-			"workspace_summary":         "derived",
-			"related_threads":           "derived",
-			"related_recommendations":   "derived",
-			"related_decision_requests": "derived",
-			"related_decisions":         "derived",
-			"follow_up":                 "convenience",
+			"thread":            "canonical",
+			"context":           "canonical",
+			"collaboration":     "derived",
+			"board_memberships": "canonical",
+			"inbox":             "derived",
+			"pending_attention": "derived",
+			"workspace_summary": "derived",
+			"related_threads":   "derived",
+			"follow_up":         "convenience",
 		},
 		"context_source": "threads.workspace",
 		"inbox_source":   "threads.workspace",
@@ -245,33 +229,16 @@ func buildThreadWorkspaceInboxSection(ctx context.Context, opts handlerOptions, 
 }
 
 func buildThreadWorkspaceCollaborationSummary(contextBody map[string]any) map[string]any {
-	recentEvents, _ := contextBody["recent_events"].([]map[string]any)
-	normalizedEvents := workspaceNormalizeEvents(recentEvents)
-	recommendations := filterWorkspaceEventsByType(normalizedEvents, []string{"actor_statement"})
-	decisionRequests := filterWorkspaceEventsByType(normalizedEvents, []string{"decision_needed"})
-	decisions := filterWorkspaceEventsByType(normalizedEvents, []string{"decision_made"})
-
 	return map[string]any{
-		"recommendations":        recommendations,
-		"decision_requests":      decisionRequests,
-		"decisions":              decisions,
-		"recommendation_count":   len(recommendations),
-		"decision_request_count": len(decisionRequests),
-		"decision_count":         len(decisions),
-		"artifact_count":         workspaceSliceLen(contextBody["key_artifacts"]),
-		"open_card_count":        workspaceSliceLen(contextBody["open_cards"]),
+		"artifact_count":  workspaceSliceLen(contextBody["key_artifacts"]),
+		"open_card_count": workspaceSliceLen(contextBody["open_cards"]),
 	}
 }
 
 func buildThreadWorkspaceRelatedThreadReview(ctx context.Context, opts handlerOptions, rootThreadID string, rootContextBody map[string]any, options threadWorkspaceOptions) (map[string]any, error) {
 	relatedThreadIDs := relatedThreadRefIDs(rootThreadID, rootContextBody)
 	items := make([]map[string]any, 0, len(relatedThreadIDs))
-	relatedRecommendations := make([]map[string]any, 0)
-	relatedDecisionRequests := make([]map[string]any, 0)
-	relatedDecisions := make([]map[string]any, 0)
 	warnings := make([]map[string]any, 0)
-	totalReviewItems := 0
-	relatedEventContentCount := 0
 
 	for _, relatedThreadID := range relatedThreadIDs {
 		contextBody, err := buildThreadContextPayload(ctx, opts, relatedThreadID, options.threadContextOptions)
@@ -284,46 +251,9 @@ func buildThreadWorkspaceRelatedThreadReview(ctx context.Context, opts handlerOp
 		}
 
 		thread, _ := contextBody["thread"].(map[string]any)
-		collaboration := buildThreadWorkspaceCollaborationSummary(contextBody)
-		recommendations := annotateWorkspaceEvents(asWorkspaceEventSlice(collaboration["recommendations"]), thread)
-		decisionRequests := annotateWorkspaceEvents(asWorkspaceEventSlice(collaboration["decision_requests"]), thread)
-		decisions := annotateWorkspaceEvents(asWorkspaceEventSlice(collaboration["decisions"]), thread)
-
-		if options.IncludeRelatedEventContent {
-			var hydrateWarnings []map[string]any
-			recommendations, hydrateWarnings = hydrateWorkspaceEvents(ctx, opts, relatedThreadID, recommendations)
-			warnings = append(warnings, hydrateWarnings...)
-			decisionRequests, hydrateWarnings = hydrateWorkspaceEvents(ctx, opts, relatedThreadID, decisionRequests)
-			warnings = append(warnings, hydrateWarnings...)
-			decisions, hydrateWarnings = hydrateWorkspaceEvents(ctx, opts, relatedThreadID, decisions)
-			warnings = append(warnings, hydrateWarnings...)
-			relatedEventContentCount += hydratedWorkspaceEventCount(recommendations)
-			relatedEventContentCount += hydratedWorkspaceEventCount(decisionRequests)
-			relatedEventContentCount += hydratedWorkspaceEventCount(decisions)
-		}
-
-		relatedRecommendations = append(relatedRecommendations, recommendations...)
-		relatedDecisionRequests = append(relatedDecisionRequests, decisionRequests...)
-		relatedDecisions = append(relatedDecisions, decisions...)
-
-		threadReviewCount := len(recommendations) + len(decisionRequests) + len(decisions)
-		totalReviewItems += threadReviewCount
 		items = append(items, map[string]any{
 			"thread_id": firstNonEmptyString(thread["id"], relatedThreadID),
 			"thread":    thread,
-			"recommendations": map[string]any{
-				"items": recommendations,
-				"count": len(recommendations),
-			},
-			"decision_requests": map[string]any{
-				"items": decisionRequests,
-				"count": len(decisionRequests),
-			},
-			"decisions": map[string]any{
-				"items": decisions,
-				"count": len(decisions),
-			},
-			"total_review_items": threadReviewCount,
 		})
 	}
 
@@ -332,35 +262,18 @@ func buildThreadWorkspaceRelatedThreadReview(ctx context.Context, opts handlerOp
 			"items": items,
 			"count": len(items),
 		},
-		"related_recommendations": map[string]any{
-			"items": relatedRecommendations,
-			"count": len(relatedRecommendations),
-		},
-		"related_decision_requests": map[string]any{
-			"items": relatedDecisionRequests,
-			"count": len(relatedDecisionRequests),
-		},
-		"related_decisions": map[string]any{
-			"items": relatedDecisions,
-			"count": len(relatedDecisions),
-		},
-		"warnings":                    warnings,
-		"warning_count":               len(warnings),
-		"related_event_content_count": relatedEventContentCount,
-		"total_review_items":          totalReviewItems,
+		"warnings":           warnings,
+		"warning_count":      len(warnings),
+		"total_review_items": 0,
 	}, nil
 }
 
 func buildEmptyRelatedThreadReview() map[string]any {
 	return map[string]any{
-		"related_threads":             map[string]any{"items": []map[string]any{}, "count": 0},
-		"related_recommendations":     map[string]any{"items": []map[string]any{}, "count": 0},
-		"related_decision_requests":   map[string]any{"items": []map[string]any{}, "count": 0},
-		"related_decisions":           map[string]any{"items": []map[string]any{}, "count": 0},
-		"warnings":                    []map[string]any{},
-		"warning_count":               0,
-		"related_event_content_count": 0,
-		"total_review_items":          0,
+		"related_threads":    map[string]any{"items": []map[string]any{}, "count": 0},
+		"warnings":           []map[string]any{},
+		"warning_count":      0,
+		"total_review_items": 0,
 	}
 }
 

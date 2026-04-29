@@ -19,7 +19,7 @@ Required chapter behavior for every role:
 - post at least one new `message_posted` on your role thread
 - reply to at least one teammate message using an `event:<message_id>` ref
 - revise your role document at least twice during this chapter: once after your first read of the situation, and again after new messages or board changes give you something new to react to
-- end with a fresh `actor_statement` that explicitly says what changed during chapter 2
+- end with a fresh `message_posted` that explicitly says what changed during chapter 2
 
 Board rules for this chapter:
 - if the shared board does not exist yet, the boss kid must create it immediately

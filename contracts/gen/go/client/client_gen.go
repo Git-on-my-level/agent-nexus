@@ -952,8 +952,6 @@ var CommandRegistry = []CommandSpec{
 		Method:    "GET",
 		Path:      "/inbox",
 		InputMode: "none",
-		Stability: "beta",
-		Concepts:  []string{"inbox"},
 		Adjacent:  []string{"inbox.get", "inbox.respond", "inbox.stream"},
 	},
 	{

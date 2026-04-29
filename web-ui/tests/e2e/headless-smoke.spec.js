@@ -16,7 +16,7 @@ test("mocked core smoke flow: inbox -> threads -> thread detail -> post message 
       refs: ["thread:thread-onboarding"],
       summary: "Initial timeline message",
       payload: { text: "Initial timeline message" },
-      provenance: { sources: ["actor_statement:event-1"] },
+      provenance: { sources: ["event:event-1"] },
     },
     {
       id: "evt-unknown-1",
@@ -33,7 +33,8 @@ test("mocked core smoke flow: inbox -> threads -> thread detail -> post message 
   let postedCount = 0;
 
   await page.addInitScript((selectedActorId) => {
-    window.localStorage.setItem("anx_ui_actor_id", selectedActorId);
+    window.localStorage.setItem("anx_ui_actor_id:local", selectedActorId);
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
   }, actorId);
 
   await page.route(/\/actors$/, async (route) => {
@@ -85,7 +86,7 @@ test("mocked core smoke flow: inbox -> threads -> thread detail -> post message 
               summary: "Onboarding policy review pending.",
               current_summary: "Onboarding policy review pending.",
               updated_at: "2026-03-03T11:00:00.000Z",
-              provenance: { sources: ["actor_statement:event-1"] },
+              provenance: { sources: ["event:event-1"] },
             },
           ],
         }),
@@ -118,7 +119,7 @@ test("mocked core smoke flow: inbox -> threads -> thread detail -> post message 
           open_cards: [],
           updated_at: "2026-03-04T00:00:00.000Z",
           updated_by: actorId,
-          provenance: { sources: ["actor_statement:event-1"] },
+          provenance: { sources: ["event:event-1"] },
         },
       }),
     });
@@ -138,7 +139,7 @@ test("mocked core smoke flow: inbox -> threads -> thread detail -> post message 
         open_cards: [],
         updated_at: "2026-03-04T00:00:00.000Z",
         updated_by: actorId,
-        provenance: { sources: ["actor_statement:event-1"] },
+        provenance: { sources: ["event:event-1"] },
       },
       context: {
         recent_events: timeline,
@@ -236,7 +237,9 @@ test("mocked core smoke flow: inbox -> threads -> thread detail -> post message 
   ).toBeVisible();
 
   await page.getByRole("link", { name: "Topics", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Topics" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Topics", exact: true }),
+  ).toBeVisible();
   const threadLink = page.getByRole("link", {
     name: /Customer Onboarding Workflow/,
   });

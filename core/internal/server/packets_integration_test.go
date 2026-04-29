@@ -173,14 +173,14 @@ func TestPacketConvenienceEndpointsAndTimeline(t *testing.T) {
 		t.Fatal("expected receipt_added event in timeline")
 	}
 	assertRefsContain(t, receiptEvent["refs"], "artifact:"+receiptID, cardRef)
-	assertActorStatementProvenance(t, receiptEvent)
+	assertEventProvenance(t, receiptEvent)
 
 	reviewEvent := findEventByType(timeline.Events, "review_completed")
 	if reviewEvent == nil {
 		t.Fatal("expected review_completed event in timeline")
 	}
 	assertRefsContain(t, reviewEvent["refs"], "artifact:"+reviewID, "artifact:"+receiptID, cardRef)
-	assertActorStatementProvenance(t, reviewEvent)
+	assertEventProvenance(t, reviewEvent)
 
 	cardTimelineResp, err := http.Get(h.baseURL + "/cards/" + cardID + "/timeline")
 	if err != nil {

@@ -164,7 +164,7 @@ run_cli_json() {
 }
 
 board_create_attempt() {
-  printf '{"board":{"id":"%s","title":"Smoke Board","owners":["%s"],"primary_topic_ref":"topic:%s","thread_id":"%s","document_refs":["document:%s"],"pinned_refs":["document:%s"],"provenance":{"sources":["actor_statement:smoke"]}}}\n' \
+  printf '{"board":{"id":"%s","title":"Smoke Board","owners":["%s"],"primary_topic_ref":"topic:%s","thread_id":"%s","document_refs":["document:%s"],"pinned_refs":["document:%s"],"provenance":{"sources":["event:smoke-board-create"]}}}\n' \
     "$BOARD_ID" "$USERNAME" "$MAIN_TOPIC_ID" "$BOARD_ID" "$PRIMARY_DOC_ID" "$PRIMARY_DOC_ID" \
     | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" boards create >"$TMP_DIR/board-create.json"
 }
@@ -331,7 +331,7 @@ if [[ "$NEEDS_REFRESH_AFTER" != "false" ]]; then
 fi
 
 # Typed command flow: topic -> board -> cards -> packets.
-printf '{"topic":{"id":"topic-smoke-main","title":"Smoke coordination topic","summary":"Smoke workflow in progress","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":["topic:topic-smoke-main"],"provenance":{"sources":["actor_statement:smoke"]}}}\n' \
+printf '{"topic":{"id":"topic-smoke-main","title":"Smoke coordination topic","summary":"Smoke workflow in progress","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":["topic:topic-smoke-main"],"provenance":{"sources":["event:smoke-topic-main"]}}}\n' \
   | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" topics create >"$TMP_DIR/topic-create.json"
 MAIN_TOPIC_ID="$(json_get "$TMP_DIR/topic-create.json" 'data.topic.id' || true)"
 if [[ -z "$MAIN_TOPIC_ID" ]]; then
@@ -356,7 +356,7 @@ THREAD_ID="$MAIN_TOPIC_THREAD_ID"
 
 # Board smoke: create a board, add/reorder/move/archive cards, and verify the
 # canonical workspace through both core and the UI proxy.
-printf '{"topic":{"id":"topic-smoke-board-a","title":"Smoke board card A","summary":"board card A","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":["topic:topic-smoke-board-a"],"provenance":{"sources":["actor_statement:smoke"]}}}\n' \
+printf '{"topic":{"id":"topic-smoke-board-a","title":"Smoke board card A","summary":"board card A","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":["topic:topic-smoke-board-a"],"provenance":{"sources":["event:smoke-topic-board-a"]}}}\n' \
   | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" topics create >"$TMP_DIR/board-topic-a-create.json"
 BOARD_TOPIC_A_ID="$(json_get "$TMP_DIR/board-topic-a-create.json" 'data.topic.id' || true)"
 if [[ -z "$BOARD_TOPIC_A_ID" ]]; then
@@ -377,7 +377,7 @@ if [[ -z "$BOARD_TOPIC_A_ID" ]]; then
   exit 1
 fi
 
-printf '{"topic":{"id":"topic-smoke-board-b","title":"Smoke board card B","summary":"board card B","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":["topic:topic-smoke-board-b"],"provenance":{"sources":["actor_statement:smoke"]}}}\n' \
+printf '{"topic":{"id":"topic-smoke-board-b","title":"Smoke board card B","summary":"board card B","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":["topic:topic-smoke-board-b"],"provenance":{"sources":["event:smoke-topic-board-b"]}}}\n' \
   | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" topics create >"$TMP_DIR/board-topic-b-create.json"
 BOARD_TOPIC_B_ID="$(json_get "$TMP_DIR/board-topic-b-create.json" 'data.topic.id' || true)"
 if [[ -z "$BOARD_TOPIC_B_ID" ]]; then
@@ -429,7 +429,7 @@ fi
 
 run_cli_json "$TMP_DIR/board-get.json" boards get --board-id "$BOARD_ID"
 
-printf '{"card":{"title":"Smoke board card A","summary":"smoke card A","column_key":"backlog","topic_ref":"topic:%s","document_ref":"document:%s","assignee_refs":[],"risk":"low","resolution_refs":[],"related_refs":["topic:%s"],"provenance":{"sources":["actor_statement:smoke"]}}}\n' \
+printf '{"card":{"title":"Smoke board card A","summary":"smoke card A","column_key":"backlog","topic_ref":"topic:%s","document_ref":"document:%s","assignee_refs":[],"risk":"low","resolution_refs":[],"related_refs":["topic:%s"],"provenance":{"sources":["event:smoke-card-a"]}}}\n' \
   "$BOARD_TOPIC_A_ID" "$CARD_DOC_ID" "$BOARD_TOPIC_A_ID" \
   | run_cli_json "$TMP_DIR/board-card-a-add.json" boards cards create --board-id "$BOARD_ID"
 BOARD_CARD_A_ID="$(json_get "$TMP_DIR/board-card-a-add.json" 'data.card.id' || true)"
@@ -463,7 +463,7 @@ printf '{"artifact":{"id":"%s","refs":["card:%s"],"summary":"Smoke receipt"},"pa
 printf '{"artifact":{"id":"%s","refs":["card:%s","artifact:%s"],"summary":"Smoke review"},"packet":{"review_id":"%s","subject_ref":"card:%s","receipt_ref":"artifact:%s","outcome":"accept","notes":"accepted","evidence_refs":["artifact:%s"]}}\n' "$REVIEW_ID" "$BOARD_CARD_A_ID" "$RECEIPT_ID" "$REVIEW_ID" "$BOARD_CARD_A_ID" "$RECEIPT_ID" "$RECEIPT_ID" \
   | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" reviews create >"$TMP_DIR/review-create.json"
 
-printf '{"card":{"title":"Smoke board card B","summary":"smoke card B","column_key":"backlog","after_card_id":"%s","topic_ref":"topic:%s","assignee_refs":[],"risk":"low","resolution_refs":[],"related_refs":["topic:%s"],"provenance":{"sources":["actor_statement:smoke"]}}}\n' \
+printf '{"card":{"title":"Smoke board card B","summary":"smoke card B","column_key":"backlog","after_card_id":"%s","topic_ref":"topic:%s","assignee_refs":[],"risk":"low","resolution_refs":[],"related_refs":["topic:%s"],"provenance":{"sources":["event:smoke-card-b"]}}}\n' \
   "$BOARD_CARD_A_ID" "$BOARD_TOPIC_B_ID" "$BOARD_TOPIC_B_ID" \
   | run_cli_json "$TMP_DIR/board-card-b-add.json" boards cards create --board-id "$BOARD_ID"
 BOARD_CARD_B_ID="$(json_get "$TMP_DIR/board-card-b-add.json" 'data.card.id' || true)"
@@ -536,7 +536,7 @@ if [[ -z "$CARD_A_THREAD_ID" ]]; then
   exit 1
 fi
 
-printf '{"event":{"type":"message_posted","thread_id":"%s","summary":"smoke cancel rationale","refs":["thread:%s","card:%s"],"payload":{"body":"scope withdrawn"},"provenance":{"sources":["actor_statement:smoke"]}}}\n' \
+printf '{"event":{"type":"message_posted","thread_id":"%s","summary":"smoke cancel rationale","refs":["thread:%s","card:%s"],"payload":{"body":"scope withdrawn"},"provenance":{"sources":["event:smoke-cancel-rationale"]}}}\n' \
   "$CARD_A_THREAD_ID" "$CARD_A_THREAD_ID" "$BOARD_CARD_A_ID" \
   | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" events create >"$TMP_DIR/cancel-rationale-event.json"
 CANCEL_EVENT_ID="$(json_get "$TMP_DIR/cancel-rationale-event.json" 'data.event.id' || true)"
@@ -575,7 +575,7 @@ node -e 'const fs=require("fs"); const data=JSON.parse(fs.readFileSync(process.a
 }
 
 # Trash lane (operational lifecycle, spec §3.6) — topics support trash; default topic list hides trashed rows.
-printf '{"topic":{"id":"topic-smoke-trash","title":"Smoke trashed topic","summary":"Disposed after smoke","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":["topic:topic-smoke-trash"],"provenance":{"sources":["actor_statement:smoke"]}}}\n' \
+printf '{"topic":{"id":"topic-smoke-trash","title":"Smoke trashed topic","summary":"Disposed after smoke","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":["topic:topic-smoke-trash"],"provenance":{"sources":["event:smoke-topic-trash"]}}}\n' \
   | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" topics create >"$TMP_DIR/trash-topic-create.json"
 printf '{"reason":"e2e-smoke trash lane assertion"}\n' \
   | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" topics trash --topic-id topic-smoke-trash >"$TMP_DIR/topic-trash.json"
@@ -588,7 +588,7 @@ printf '{"if_board_updated_at":"%s"}\n' "$BOARD_UPDATED_AT" \
 curl -fsS -H "Authorization: Bearer $ACCESS_TOKEN" "${CORE_BASE_URL}/cards?state=archived" >"$TMP_DIR/cards-archived-only.json"
 assert_contains "$TMP_DIR/cards-archived-only.json" "\"${BOARD_CARD_B_ID}\""
 
-printf '{"event":{"type":"message_posted","thread_id":"%s","summary":"smoke stream event","refs":["thread:%s"],"payload":{"body":"hello"},"provenance":{"sources":["actor_statement:smoke"]}}}\n' "$THREAD_ID" "$THREAD_ID" \
+printf '{"event":{"type":"message_posted","thread_id":"%s","summary":"smoke stream event","refs":["thread:%s"],"payload":{"body":"hello"},"provenance":{"sources":["event:smoke-stream-event"]}}}\n' "$THREAD_ID" "$THREAD_ID" \
   | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" events create >"$TMP_DIR/event-create.json"
 
 # Basic UI compatibility check after typed flow.

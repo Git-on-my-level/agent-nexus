@@ -7,7 +7,7 @@
       "id": "event_456",
       "summary": "canonical event payload",
       "thread_id": "thread_123",
-      "type": "actor_statement"
+      "type": "message_posted"
     }
   }
 }

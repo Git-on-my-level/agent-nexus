@@ -37,7 +37,8 @@ test("create document flow — POST /docs and navigate to new document", async (
   };
 
   await page.addInitScript((selectedActorId) => {
-    window.localStorage.setItem("anx_ui_actor_id", selectedActorId);
+    window.localStorage.setItem("anx_ui_actor_id:local", selectedActorId);
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
   }, actorId);
 
   await page.route(/\/actors$/, async (route) => {
@@ -118,7 +119,9 @@ test("create document flow — POST /docs and navigate to new document", async (
 
   await page.getByRole("button", { name: "New doc" }).click();
   // The form appears inside {#if createOpen}; wait for textarea to confirm
-  await expect(page.locator("textarea")).toBeVisible();
+  await expect(
+    page.getByRole("textbox", { name: "Head content (Markdown) *" }),
+  ).toBeVisible();
 
   // Use exact placeholder match to distinguish the title input from the textarea
   // (whose placeholder also starts with "# Document title").
@@ -126,7 +129,7 @@ test("create document flow — POST /docs and navigate to new document", async (
     .getByPlaceholder("Document title", { exact: true })
     .fill("New Test Document");
   await page
-    .locator("textarea")
+    .getByRole("textbox", { name: "Head content (Markdown) *" })
     .fill("# New Test Document\n\nThis is created from the E2E test.");
 
   await page.getByRole("button", { name: "Create doc" }).click();
@@ -210,7 +213,8 @@ test("update document flow — PATCH /docs/:id creates a new revision", async ({
   };
 
   await page.addInitScript((selectedActorId) => {
-    window.localStorage.setItem("anx_ui_actor_id", selectedActorId);
+    window.localStorage.setItem("anx_ui_actor_id:local", selectedActorId);
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
   }, actorId);
 
   await page.route(/\/actors$/, async (route) => {
@@ -295,7 +299,9 @@ test("update document flow — PATCH /docs/:id creates a new revision", async ({
   ).toBeVisible();
 
   // The single textarea in the revision form (pre-filled with head content).
-  await page.locator("textarea").fill("Revised content from E2E test.");
+  await page
+    .getByRole("textbox", { name: "Head content (Markdown) *" })
+    .fill("Revised content from E2E test.");
 
   await page.getByRole("button", { name: "Save revision" }).click();
 
@@ -340,7 +346,8 @@ test("structured/binary content type — New revision button is hidden, CLI hint
   };
 
   await page.addInitScript((selectedActorId) => {
-    window.localStorage.setItem("anx_ui_actor_id", selectedActorId);
+    window.localStorage.setItem("anx_ui_actor_id:local", selectedActorId);
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
   }, actorId);
 
   await page.route(/\/actors$/, async (route) => {
@@ -422,7 +429,8 @@ test("update document conflict — 409 response shows error", async ({
   };
 
   await page.addInitScript((selectedActorId) => {
-    window.localStorage.setItem("anx_ui_actor_id", selectedActorId);
+    window.localStorage.setItem("anx_ui_actor_id:local", selectedActorId);
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
   }, actorId);
 
   await page.route(/\/actors$/, async (route) => {
@@ -488,7 +496,9 @@ test("update document conflict — 409 response shows error", async ({
   await expect(
     page.getByRole("button", { name: "Save revision" }),
   ).toBeVisible();
-  await page.locator("textarea").fill("Some conflicting changes.");
+  await page
+    .getByRole("textbox", { name: "Head content (Markdown) *" })
+    .fill("Some conflicting changes.");
   await page.getByRole("button", { name: "Save revision" }).click();
 
   await expect(page.getByRole("alert")).toBeVisible();
@@ -531,7 +541,8 @@ test("documents list redirects through the default workspace and loads revision 
   ];
 
   await page.addInitScript((selectedActorId) => {
-    window.localStorage.setItem("anx_ui_actor_id", selectedActorId);
+    window.localStorage.setItem("anx_ui_actor_id:local", selectedActorId);
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
   }, actorId);
 
   await page.route(/\/threads(\?.*)?$/, async (route) => {

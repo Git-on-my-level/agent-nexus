@@ -37,7 +37,7 @@ test("topics list filters and create flow use GET/POST /topics", async ({
       summary: "Onboarding policy review pending.",
       current_summary: "Onboarding policy review pending.",
       updated_at: "2026-03-03T11:00:00.000Z",
-      provenance: { sources: ["actor_statement:event-1"] },
+      provenance: { sources: ["event:event-1"] },
     },
     {
       id: "thread-incident-42",
@@ -46,12 +46,13 @@ test("topics list filters and create flow use GET/POST /topics", async ({
       summary: "Postmortem still in progress.",
       current_summary: "Postmortem still in progress.",
       updated_at: "2026-03-03T12:00:00.000Z",
-      provenance: { sources: ["actor_statement:event-2"] },
+      provenance: { sources: ["event:event-2"] },
     },
   ];
 
   await page.addInitScript((selectedActorId) => {
-    window.localStorage.setItem("anx_ui_actor_id", selectedActorId);
+    window.localStorage.setItem("anx_ui_actor_id:local", selectedActorId);
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
   }, actorId);
 
   await page.route(/\/actors$/, async (route) => {
@@ -92,7 +93,7 @@ test("topics list filters and create flow use GET/POST /topics", async ({
         id: `topic-new-${createCount}`,
         type: "other",
         updated_at: "2026-03-04T00:00:00.000Z",
-        provenance: { sources: ["actor_statement:ui"] },
+        provenance: { sources: ["event:ui"] },
         owner_refs: [],
         document_refs: [],
         board_refs: [],
@@ -115,7 +116,9 @@ test("topics list filters and create flow use GET/POST /topics", async ({
 
   await page.goto("/o/local/w/local/topics");
 
-  await expect(page.getByRole("heading", { name: "Topics" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Topics", exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByText("Customer Onboarding Workflow", { exact: true }),
   ).toBeVisible();

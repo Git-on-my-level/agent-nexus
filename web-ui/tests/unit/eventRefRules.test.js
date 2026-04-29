@@ -72,16 +72,6 @@ describe("eventRefRules", () => {
       expect(result.error).toContain("valid typed refs");
     });
 
-    it("rejects board_card_moved payloads missing column_key", () => {
-      const result = validateEventRefRule(
-        "board_card_moved",
-        ["board:board-1", "card:card-1"],
-        {},
-      );
-      expect(result.valid).toBe(false);
-      expect(result.error).toContain("event.payload.column_key");
-    });
-
     it("requires board refs for card_moved", () => {
       const bad = validateEventRefRule("card_moved", ["card:card-1"], {
         column_key: "done",
@@ -118,36 +108,51 @@ describe("eventRefRules", () => {
       expect(result.valid).toBe(true);
     });
 
-    it("requires thread refs for decision lifecycle events", () => {
-      for (const eventType of [
-        "decision_made",
-        "decision_needed",
-        "intervention_needed",
-      ]) {
-        const topicOnly = validateEventRefRule(
-          eventType,
-          ["topic:topic-1"],
-          {},
-        );
-        expect(topicOnly.valid).toBe(false);
-        expect(topicOnly.error).toContain("thread:<id>");
-      }
+    it("requires the right refs for human attention request and response events", () => {
+      const requestPayload = {
+        kind: "ask",
+        title: "Need approval",
+        subject_ref: "topic:topic-1",
+        requester_actor_id: "actor-1",
+        response_proposals: ["Approve", "Reject"],
+      };
 
-      for (const eventType of [
-        "decision_made",
-        "decision_needed",
-        "intervention_needed",
-      ]) {
-        const good = validateEventRefRule(eventType, ["thread:thread-1"], {});
-        expect(good.valid).toBe(true);
-      }
-
-      const withTopicContext = validateEventRefRule(
-        "decision_made",
-        ["thread:thread-1", "topic:real-topic"],
-        {},
+      const requestMissingThread = validateEventRefRule(
+        "human_attention_requested",
+        ["topic:topic-1"],
+        requestPayload,
       );
-      expect(withTopicContext.valid).toBe(true);
+      expect(requestMissingThread.valid).toBe(false);
+      expect(requestMissingThread.error).toContain("thread:<id>");
+
+      const requestGood = validateEventRefRule(
+        "human_attention_requested",
+        ["thread:thread-1"],
+        requestPayload,
+      );
+      expect(requestGood.valid).toBe(true);
+
+      const responsePayload = {
+        inbox_item_id: "inbox-1",
+        kind: "ask",
+        response_text: "Approved",
+        responding_actor_id: "actor-1",
+      };
+
+      const responseMissingInbox = validateEventRefRule(
+        "human_attention_responded",
+        ["thread:thread-1"],
+        responsePayload,
+      );
+      expect(responseMissingInbox.valid).toBe(false);
+      expect(responseMissingInbox.error).toContain("inbox:<id>");
+
+      const responseGood = validateEventRefRule(
+        "human_attention_responded",
+        ["inbox:inbox-1"],
+        responsePayload,
+      );
+      expect(responseGood.valid).toBe(true);
     });
   });
 

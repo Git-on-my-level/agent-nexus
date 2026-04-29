@@ -662,7 +662,7 @@ func TestDocumentResourceRefsAndProvenancePersist(t *testing.T) {
 		"thread_id":  threadID,
 		"title":      "Spec",
 		"refs":       []string{"thread:" + threadID, "topic:nonexistent-will-still-store"},
-		"provenance": map[string]any{"sources": []string{"actor_statement"}},
+		"provenance": map[string]any{"sources": []string{"event:document-create"}},
 	}, "# Body", "text", []string{"thread:" + threadID})
 	if err != nil {
 		t.Fatalf("create document: %v", err)
@@ -682,7 +682,7 @@ func TestDocumentResourceRefsAndProvenancePersist(t *testing.T) {
 		t.Fatalf("expected provenance map, got %#v", loaded["provenance"])
 	}
 	src, _ := prov["sources"].([]any)
-	if len(src) != 1 || src[0] != "actor_statement" {
+	if len(src) != 1 || src[0] != "event:document-create" {
 		t.Fatalf("expected provenance.sources, got %#v", prov)
 	}
 }

@@ -12,12 +12,7 @@ import {
 const HOME_HANDOFF_STORAGE_VERSION = "v1";
 
 const HOME_INCLUDED_EVENT_TYPES = new Set([
-  "decision_needed",
-  "intervention_needed",
-  "decision_made",
   "exception_raised",
-  "thread_created",
-  "thread_updated",
   "card_created",
   "card_updated",
   "card_moved",
@@ -384,22 +379,13 @@ export function homeHandoffEventPillId(event) {
 
   const t = String(event?.type ?? "");
   if (t.startsWith("card_")) return "boards";
-  if (
-    t === "message_posted" ||
-    t === "thread_created" ||
-    t === "thread_updated"
-  ) {
+  if (t === "message_posted") {
     return "topics";
   }
   if (t === "receipt_added" || t === "review_completed") {
     return "docs-proof";
   }
-  if (
-    t === "decision_needed" ||
-    t === "intervention_needed" ||
-    t === "exception_raised" ||
-    t === "decision_made"
-  ) {
+  if (t === "exception_raised") {
     return "topics";
   }
   return "topics";

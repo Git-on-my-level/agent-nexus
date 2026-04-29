@@ -105,11 +105,11 @@ Scenario command-shape guidance:
 - default to `anx topics workspace --topic-id <topic-id>` for the main operator coordination read
 - use `anx threads workspace --thread-id <thread-id>` for backing-thread diagnostic review when you do not have a topic id or need the thread-scoped projection
 - use `anx threads workspace --thread-id <thread-id> --include-related-event-content --include-artifact-content --verbose` when you want the richest one-command backing-thread diagnostic bundle
-- use `anx threads recommendations --thread-id <thread-id>` for recommendation/decision review
-- add `--include-related-event-content --verbose` when you need full related-thread recommendation content in one command
+- use `anx threads workspace --thread-id <thread-id>` for backing-thread review
+- add `--include-related-event-content --verbose` when you need the full related-thread workspace content in one command
 - use `anx cards get --card-id <card-id>` when a card listed in workspace needs full detail
 - document revisions use one command: `anx docs revise --document-id <document-id> --content-file <path>` stages a diff proposal by default, and the returned apply command uses `anx docs revise --apply --proposal-id <proposal-id>`
 - use `anx docs revise --apply --document-id <document-id> --content-file <path>` only when you want to write the new revision immediately without staging a proposal
 - use `anx events validate --from-file <path>` when you want a local payload check before `anx events create`
 - use `anx events create --from-file <path> --dry-run` when you want the exact create request preview without sending it
-- use `message_posted` for visible thread chat and replies, then use `actor_statement` for the higher-signal role summary
+- use `message_posted` for visible thread chat and replies, then use a doc, topic, or card update for the higher-signal role summary

@@ -126,7 +126,7 @@ const threads = [
     updated_at: new Date(now - 45 * 60 * 1000).toISOString(),
     updated_by: "actor-supply-rover",
     provenance: {
-      sources: ["actor_statement:evt-supply-001"],
+      sources: ["event:evt-supply-001"],
     },
   },
   {
@@ -149,7 +149,7 @@ const threads = [
     updated_at: new Date(now - 3 * 60 * 60 * 1000).toISOString(),
     updated_by: "actor-flavor-ai",
     provenance: {
-      sources: ["actor_statement:evt-menu-003"],
+      sources: ["event:evt-menu-003"],
     },
   },
   {
@@ -195,7 +195,7 @@ const threads = [
     updated_at: new Date(now - 30 * 60 * 1000).toISOString(),
     updated_by: "actor-cashier-bot",
     provenance: {
-      sources: ["actor_statement:evt-ops-101"],
+      sources: ["event:evt-ops-101"],
     },
   },
   {
@@ -220,7 +220,7 @@ const threads = [
     ).toISOString(),
     updated_by: "actor-ops-ai",
     provenance: {
-      sources: ["actor_statement:evt-price-013"],
+      sources: ["event:evt-price-013"],
     },
   },
   {
@@ -243,7 +243,7 @@ const threads = [
     updated_at: new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString(),
     updated_by: "actor-ops-ai",
     provenance: {
-      sources: ["actor_statement:evt-q2-001"],
+      sources: ["event:evt-q2-001"],
     },
   },
   {
@@ -264,7 +264,7 @@ const threads = [
     updated_at: new Date(now - 5 * 24 * 60 * 60 * 1000).toISOString(),
     updated_by: "actor-ops-ai",
     provenance: {
-      sources: ["actor_statement:evt-onboard-001"],
+      sources: ["event:evt-onboard-001"],
     },
   },
   {
@@ -317,7 +317,7 @@ const events = [
         "LocalGrove Bot ($0.31/lemon, currently offline but checking again shortly). " +
         "Requesting decision on which supplier to engage for emergency order.",
     },
-    provenance: { sources: ["actor_statement:evt-supply-001"] },
+    provenance: { sources: ["event:evt-supply-001"] },
   },
   {
     id: "evt-supply-002",
@@ -335,18 +335,18 @@ const events = [
         "order until LocalGrove Bot status is confirmed — prefer their pricing. " +
         "@FlavorMind — summer menu launch is on hold until supply is stable.",
     },
-    provenance: { sources: ["actor_statement:evt-supply-002"] },
+    provenance: { sources: ["event:evt-supply-002"] },
   },
   {
     id: "evt-supply-003",
     ts: new Date(now - 14 * 60 * 60 * 1000).toISOString(),
-    type: "thread_updated",
+    type: "topic_updated",
     actor_id: "actor-ops-ai",
     thread_id: "thread-lemon-shortage",
     refs: ["thread:thread-lemon-shortage"],
     summary: "Priority raised to P0.",
     payload: { changed_fields: ["current_summary"] },
-    provenance: { sources: ["actor_statement:evt-supply-003"] },
+    provenance: { sources: ["event:evt-supply-003"] },
   },
   {
     id: "evt-supply-004",
@@ -364,7 +364,7 @@ const events = [
         "covers 3 days at normal batch rate. This is significantly better than CitrusFresh " +
         "($0.48/lemon). Awaiting OpsAI approval to place order via LocalGrove API.",
     },
-    provenance: { sources: ["actor_statement:evt-supply-004"] },
+    provenance: { sources: ["event:evt-supply-004"] },
   },
 
   // ── Summer menu thread ────────────────────────────────────────────────────
@@ -384,7 +384,7 @@ const events = [
         "the simulated taste matrix. Recipe specs attached. Requesting SqueezeBot to run " +
         "small test batches for sensor validation.",
     },
-    provenance: { sources: ["actor_statement:evt-menu-001"] },
+    provenance: { sources: ["event:evt-menu-001"] },
   },
   {
     id: "evt-menu-002",
@@ -402,18 +402,18 @@ const events = [
         "flavor complexity 9.2) — PASS. Zero seed contamination in both runs. " +
         "Both cleared for production pending ingredient availability. Full sensor log attached.",
     },
-    provenance: { sources: ["actor_statement:evt-menu-002"] },
+    provenance: { sources: ["event:evt-menu-002"] },
   },
   {
     id: "evt-menu-003",
     ts: new Date(now - 3 * 24 * 60 * 60 * 1000).toISOString(),
-    type: "thread_updated",
+    type: "topic_updated",
     actor_id: "actor-flavor-ai",
     thread_id: "thread-summer-menu",
     refs: ["thread:thread-summer-menu"],
     summary: "Summer menu thread updated — launch blocked on lemon shortage.",
     payload: { changed_fields: ["current_summary", "next_actions"] },
-    provenance: { sources: ["actor_statement:evt-menu-003"] },
+    provenance: { sources: ["event:evt-menu-003"] },
   },
   {
     id: "evt-menu-004",
@@ -458,7 +458,7 @@ const events = [
         "OpsAI. Throttling left arm to 80% duty cycle until repaired. " +
         "Estimated throughput impact: -20%.",
     },
-    provenance: { sources: ["actor_statement:evt-maint-001"] },
+    provenance: { sources: ["event:evt-maint-001"] },
   },
   {
     id: "evt-maint-002",
@@ -476,7 +476,7 @@ const events = [
         "FlavorMind will run a QA scan after repair to confirm seed contamination is back " +
         "under threshold before returning to full production.",
     },
-    provenance: { sources: ["actor_statement:evt-maint-002"] },
+    provenance: { sources: ["event:evt-maint-002"] },
   },
 
   // ── Daily ops thread ──────────────────────────────────────────────────────
@@ -497,7 +497,7 @@ const events = [
         "likely timeout during peak. Latency report filed with payment processor bot. " +
         "Recommend double batch tomorrow to avoid 14:30 sellout. 🍋",
     },
-    provenance: { sources: ["actor_statement:evt-ops-101"] },
+    provenance: { sources: ["event:evt-ops-101"] },
   },
 
   // ── Lemon shortage: exception raised + card created ──────────────────────
@@ -530,7 +530,7 @@ const events = [
     ],
     summary: "Card created: place emergency restock order.",
     payload: { card_id: "card-emergency-restock" },
-    provenance: { sources: ["actor_statement:evt-supply-002"] },
+    provenance: { sources: ["event:evt-supply-002"] },
   },
 
   // ── Summer menu: receipt_added / review_completed (card-scoped) ──────────
@@ -547,7 +547,7 @@ const events = [
     ],
     summary: "Card created: update menu board with summer flavors.",
     payload: { card_id: "thread-summer-menu" },
-    provenance: { sources: ["actor_statement:evt-menu-003"] },
+    provenance: { sources: ["event:evt-menu-003"] },
   },
   {
     id: "evt-menu-receipt-added",
@@ -566,7 +566,7 @@ const events = [
     payload: {
       artifact_id: "artifact-receipt-lavender-sourcing",
     },
-    provenance: { sources: ["actor_statement:evt-menu-003"] },
+    provenance: { sources: ["event:evt-menu-003"] },
   },
   {
     id: "evt-menu-review-completed",
@@ -588,7 +588,7 @@ const events = [
       receipt_id: "artifact-receipt-lavender-sourcing",
       outcome: "accept",
     },
-    provenance: { sources: ["actor_statement:evt-menu-003"] },
+    provenance: { sources: ["event:evt-menu-003"] },
   },
 
   // ── Pricing glitch thread (closed, 10→7 days ago) ─────────────────────────
@@ -629,14 +629,14 @@ const events = [
       responding_actor_id: "actor-ops-ai",
       notify_mode: "original",
     },
-    provenance: { sources: ["actor_statement:evt-price-002"] },
+    provenance: { sources: ["event:evt-price-002"] },
   },
   {
     id: "evt-price-003",
     ts: new Date(
       now - 10 * 24 * 60 * 60 * 1000 + 1 * 60 * 60 * 1000,
     ).toISOString(),
-    type: "decision_needed",
+    type: "human_attention_requested",
     actor_id: "actor-ops-ai",
     thread_id: "thread-pricing-glitch",
     refs: [
@@ -644,20 +644,22 @@ const events = [
       "thread:thread-pricing-glitch",
       "artifact:artifact-pricing-evidence",
     ],
-    summary:
-      "Decision needed: approve customer refunds for overcharged transactions.",
+    summary: "Human attention requested: approve customer refunds.",
     payload: {
-      question:
+      kind: "ask",
+      subject_ref: "topic:pricing-glitch",
+      title: "Approve customer refunds",
+      body:
         "3 customers were overcharged $0.50 each ($1.50 total). " +
         "Should we issue refunds via the payment processor bot? " +
         "Also: should we suspend pricing config pushes pending a cache invalidation fix?",
-      options: [
+      response_proposals: [
         "Issue refunds and suspend config pushes",
         "Issue refunds only",
         "No action",
       ],
     },
-    provenance: { sources: ["actor_statement:evt-price-003"] },
+    provenance: { sources: ["event:evt-price-003"] },
   },
   {
     id: "evt-price-005",
@@ -674,7 +676,7 @@ const events = [
     ],
     summary: "Card created: patch and validate pricing cache invalidation.",
     payload: { card_id: "thread-pricing-glitch" },
-    provenance: { sources: ["actor_statement:evt-price-004"] },
+    provenance: { sources: ["event:evt-price-004"] },
   },
   {
     id: "evt-price-006",
@@ -692,7 +694,7 @@ const events = [
     payload: {
       artifact_id: "artifact-receipt-pricing-v1",
     },
-    provenance: { sources: ["actor_statement:evt-price-006"] },
+    provenance: { sources: ["event:evt-price-006"] },
   },
   {
     id: "evt-price-007",
@@ -715,14 +717,14 @@ const events = [
       receipt_id: "artifact-receipt-pricing-v1",
       outcome: "escalate",
     },
-    provenance: { sources: ["actor_statement:evt-price-007"] },
+    provenance: { sources: ["event:evt-price-007"] },
   },
   {
     id: "evt-price-008",
     ts: new Date(
       now - 9 * 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000,
     ).toISOString(),
-    type: "decision_made",
+    type: "human_attention_responded",
     actor_id: "actor-ops-ai",
     thread_id: "thread-pricing-glitch",
     refs: [
@@ -730,15 +732,19 @@ const events = [
       "thread:thread-pricing-glitch",
       "artifact:artifact-pricing-evidence",
       "card:thread-pricing-glitch",
+      "inbox:pricing-refunds",
     ],
-    summary: "Decision made: issue refunds and proceed with cache fix.",
+    summary: "Human response recorded: issue refunds and proceed with cache fix.",
     payload: {
-      decision:
+      inbox_item_id: "pricing-refunds",
+      kind: "ask",
+      request_event_ref: "event:evt-price-003",
+      response_text:
         "Issuing $0.50 refunds to all 3 affected customers via payment processor bot. " +
         "Config pushes suspended until cache invalidation patch is deployed. " +
         "Till-E to file refund receipts. SqueezeBot pricing logic patch to proceed.",
     },
-    provenance: { sources: ["actor_statement:evt-price-008"] },
+    provenance: { sources: ["event:evt-price-008"] },
   },
   {
     id: "evt-price-008b",
@@ -762,7 +768,7 @@ const events = [
       responding_actor_id: "actor-ops-ai",
       notify_mode: "original",
     },
-    provenance: { sources: ["actor_statement:evt-price-008b"] },
+    provenance: { sources: ["event:evt-price-008b"] },
   },
   {
     id: "evt-price-009",
@@ -780,7 +786,7 @@ const events = [
     payload: {
       artifact_id: "artifact-receipt-pricing-v2",
     },
-    provenance: { sources: ["actor_statement:evt-price-009"] },
+    provenance: { sources: ["event:evt-price-009"] },
   },
   {
     id: "evt-price-010",
@@ -803,7 +809,7 @@ const events = [
       receipt_id: "artifact-receipt-pricing-v2",
       outcome: "accept",
     },
-    provenance: { sources: ["actor_statement:evt-price-010"] },
+    provenance: { sources: ["event:evt-price-010"] },
   },
   {
     id: "evt-price-011",
@@ -819,7 +825,7 @@ const events = [
     ],
     summary: "Card resolved: pricing cache fix deployed and validated.",
     payload: { resolution: "completed" },
-    provenance: { sources: ["actor_statement:evt-price-011"] },
+    provenance: { sources: ["event:evt-price-011"] },
   },
   {
     id: "evt-price-012",
@@ -841,20 +847,20 @@ const events = [
         "Root cause confirmed as a single stale cache entry from March 3rd menu push. " +
         "A full historical audit is not warranted. Decision made per evt-price-008.",
     },
-    provenance: { sources: ["actor_statement:evt-price-008"] },
+    provenance: { sources: ["event:evt-price-008"] },
   },
   {
     id: "evt-price-013",
     ts: new Date(
       now - 7 * 24 * 60 * 60 * 1000 + 1 * 60 * 60 * 1000,
     ).toISOString(),
-    type: "thread_updated",
+    type: "topic_updated",
     actor_id: "actor-ops-ai",
     thread_id: "thread-pricing-glitch",
     refs: ["thread:thread-pricing-glitch"],
     summary: "Incident closed — timeline fully resolved.",
     payload: { changed_fields: ["status", "current_summary", "next_actions"] },
-    provenance: { sources: ["actor_statement:evt-price-013"] },
+    provenance: { sources: ["event:evt-price-013"] },
   },
 
   // ── Q2 initiative thread ──────────────────────────────────────────────────
@@ -876,19 +882,19 @@ const events = [
         "Monthly check-ins until launch. @FlavorMind — start scoping a riverside seasonal menu. " +
         "@SupplyRover — add Stand #2 as a provisioning location once the permit clears.",
     },
-    provenance: { sources: ["actor_statement:evt-q2-001"] },
+    provenance: { sources: ["event:evt-q2-001"] },
   },
   {
     id: "evt-q2-002",
     ts: new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString(),
-    type: "thread_updated",
+    type: "topic_updated",
     actor_id: "actor-ops-ai",
     thread_id: "thread-q2-initiative",
     refs: ["thread:thread-q2-initiative"],
     summary:
       "Monthly check-in: permit in review, SqueezeBot 2000 delivery on track.",
     payload: { changed_fields: ["current_summary", "next_actions"] },
-    provenance: { sources: ["actor_statement:evt-q2-002"] },
+    provenance: { sources: ["event:evt-q2-002"] },
   },
   {
     id: "evt-q2-card-permit",
@@ -903,7 +909,7 @@ const events = [
     ],
     summary: "Card created: monitor city permit and confirm approval.",
     payload: { card_id: "card-q2-permit" },
-    provenance: { sources: ["actor_statement:evt-q2-001"] },
+    provenance: { sources: ["event:evt-q2-001"] },
   },
   {
     id: "evt-q2-card-menu",
@@ -918,7 +924,7 @@ const events = [
     ],
     summary: "Card created: FlavorMind to draft Riverside seasonal menu.",
     payload: { card_id: "card-q2-menu" },
-    provenance: { sources: ["actor_statement:evt-q2-001"] },
+    provenance: { sources: ["event:evt-q2-001"] },
   },
 
   // ── Onboarding thread ───────────────────────────────────────────────────
@@ -936,7 +942,7 @@ const events = [
         "of record. When SqueezeBot 2000 arrives for Riverside, we'll add stand setup and " +
         "handoff steps. Till-E and FlavorMind were onboarded using this runbook.",
     },
-    provenance: { sources: ["actor_statement:evt-onboard-001"] },
+    provenance: { sources: ["event:evt-onboard-001"] },
   },
 
   // ── Human inbox queue (explicit human_attention_requested drives /inbox) ──
@@ -1079,7 +1085,7 @@ const events = [
     payload: {
       text: "@Till-E Agree on double batch tomorrow. Jordan: see separate human attention item for time window sign-off.",
     },
-    provenance: { sources: ["actor_statement:evt-ops-101-reply"] },
+    provenance: { sources: ["event:evt-ops-101-reply"] },
   },
   {
     id: "evt-q2-001-reply",
@@ -1094,7 +1100,7 @@ const events = [
         "Leaning into citrus + herb profiles for Riverside (less sugar forward than Stand #1). " +
         "Will post a one-pager after first recipe pass.",
     },
-    provenance: { sources: ["actor_statement:evt-q2-001-reply"] },
+    provenance: { sources: ["event:evt-q2-001-reply"] },
   },
   {
     id: "evt-seed-archive-001",
@@ -1166,7 +1172,7 @@ const artifacts = [
 - SLA breach report: pending (assigned OpsAI)`,
     created_at: new Date(now - 20 * 60 * 60 * 1000).toISOString(),
     created_by: "actor-ops-ai",
-    provenance: { sources: ["actor_statement:evt-supply-001"] },
+    provenance: { sources: ["event:evt-supply-001"] },
     trashed_at: null,
   },
   {
@@ -1207,7 +1213,7 @@ const artifacts = [
 - ✅ API restored. Amendment accepted by CitrusBot Farm.`,
     created_at: new Date(now - 10 * 60 * 1000).toISOString(),
     created_by: "actor-ops-ai",
-    provenance: { sources: ["actor_statement:evt-supply-001"] },
+    provenance: { sources: ["event:evt-supply-001"] },
     trashed_at: null,
   },
   {
@@ -1263,7 +1269,7 @@ const artifacts = [
 3. 🟢 Lavender syrup: contracted and on order`,
     created_at: new Date(now - 5 * 24 * 60 * 60 * 1000).toISOString(),
     created_by: "actor-flavor-ai",
-    provenance: { sources: ["actor_statement:evt-menu-001"] },
+    provenance: { sources: ["event:evt-menu-001"] },
     trashed_at: null,
   },
   {
@@ -1288,7 +1294,7 @@ const artifacts = [
     ].join("\n"),
     created_at: new Date(now - 4 * 24 * 60 * 60 * 1000).toISOString(),
     created_by: "actor-squeeze-bot",
-    provenance: { sources: ["actor_statement:evt-menu-002"] },
+    provenance: { sources: ["event:evt-menu-002"] },
     trashed_at: null,
   },
   {
@@ -1313,7 +1319,7 @@ const artifacts = [
     ].join("\n"),
     created_at: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString(),
     created_by: "actor-squeeze-bot",
-    provenance: { sources: ["actor_statement:evt-maint-001"] },
+    provenance: { sources: ["event:evt-maint-001"] },
     trashed_at: null,
   },
   {
@@ -1326,7 +1332,7 @@ const artifacts = [
       now - 2 * 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000,
     ).toISOString(),
     created_by: "actor-flavor-ai",
-    provenance: { sources: ["actor_statement:evt-menu-003"] },
+    provenance: { sources: ["event:evt-menu-003"] },
     packet: {
       receipt_id: "artifact-receipt-lavender-sourcing",
       subject_ref: "card:thread-summer-menu",
@@ -1358,7 +1364,7 @@ const artifacts = [
       now - 2 * 24 * 60 * 60 * 1000 + 3 * 60 * 60 * 1000,
     ).toISOString(),
     created_by: "actor-ops-ai",
-    provenance: { sources: ["actor_statement:evt-menu-003"] },
+    provenance: { sources: ["event:evt-menu-003"] },
     packet: {
       review_id: "artifact-review-lavender-sourcing",
       subject_ref: "card:thread-summer-menu",
@@ -1400,7 +1406,7 @@ const artifacts = [
     ].join("\n"),
     created_at: new Date(now - 10 * 24 * 60 * 60 * 1000).toISOString(),
     created_by: "actor-cashier-bot",
-    provenance: { sources: ["actor_statement:evt-price-001"] },
+    provenance: { sources: ["event:evt-price-001"] },
     trashed_at: null,
   },
   {
@@ -1412,7 +1418,7 @@ const artifacts = [
     refs: ["thread:thread-pricing-glitch", "card:thread-pricing-glitch"],
     created_at: new Date(now - 9 * 24 * 60 * 60 * 1000).toISOString(),
     created_by: "actor-cashier-bot",
-    provenance: { sources: ["actor_statement:evt-price-006"] },
+    provenance: { sources: ["event:evt-price-006"] },
     trashed_at: null,
     packet: {
       receipt_id: "artifact-receipt-pricing-v1",
@@ -1445,7 +1451,7 @@ const artifacts = [
       now - 9 * 24 * 60 * 60 * 1000 + 1 * 60 * 60 * 1000,
     ).toISOString(),
     created_by: "actor-ops-ai",
-    provenance: { sources: ["actor_statement:evt-price-007"] },
+    provenance: { sources: ["event:evt-price-007"] },
     trashed_at: null,
     packet: {
       review_id: "artifact-review-pricing-escalate",
@@ -1471,7 +1477,7 @@ const artifacts = [
     refs: ["thread:thread-pricing-glitch", "card:thread-pricing-glitch"],
     created_at: new Date(now - 8 * 24 * 60 * 60 * 1000).toISOString(),
     created_by: "actor-cashier-bot",
-    provenance: { sources: ["actor_statement:evt-price-009"] },
+    provenance: { sources: ["event:evt-price-009"] },
     trashed_at: null,
     packet: {
       receipt_id: "artifact-receipt-pricing-v2",
@@ -1504,7 +1510,7 @@ const artifacts = [
       now - 8 * 24 * 60 * 60 * 1000 + 1 * 60 * 60 * 1000,
     ).toISOString(),
     created_by: "actor-ops-ai",
-    provenance: { sources: ["actor_statement:evt-price-010"] },
+    provenance: { sources: ["event:evt-price-010"] },
     packet: {
       review_id: "artifact-review-pricing-accept",
       subject_ref: "card:thread-pricing-glitch",
@@ -1535,7 +1541,7 @@ const artifacts = [
       "Dev seed: superseded onboarding notes. Eligible for permanent delete — not linked to any document revision.",
     created_at: new Date(now - 3 * 24 * 60 * 60 * 1000).toISOString(),
     created_by: "actor-ops-ai",
-    provenance: { sources: ["actor_statement:dev-trash-seed"] },
+    provenance: { sources: ["event:dev-trash-seed"] },
     trashed_at: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString(),
     trashed_by: "actor-ops-ai",
     trash_reason:
@@ -1552,7 +1558,7 @@ const artifacts = [
       "Dev seed: ephemeral export blob. Delete permanently from Trash to verify removal.",
     created_at: new Date(now - 4 * 24 * 60 * 60 * 1000).toISOString(),
     created_by: "actor-flavor-ai",
-    provenance: { sources: ["actor_statement:dev-trash-seed"] },
+    provenance: { sources: ["event:dev-trash-seed"] },
     trashed_at: new Date(now - 1 * 24 * 60 * 60 * 1000).toISOString(),
     trashed_by: "actor-ops-ai",
     trash_reason:
@@ -1568,7 +1574,7 @@ const artifacts = [
     content_text: "This artifact was superseded and moved to trash.",
     created_at: new Date(now - 11 * 24 * 60 * 60 * 1000).toISOString(),
     created_by: "actor-cashier-bot",
-    provenance: { sources: ["actor_statement:evt-price-001"] },
+    provenance: { sources: ["event:evt-price-001"] },
     trashed_at: new Date(now - 10 * 24 * 60 * 60 * 1000).toISOString(),
     trashed_by: "actor-ops-ai",
     trash_reason:
