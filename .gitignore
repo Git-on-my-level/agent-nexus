@@ -35,3 +35,6 @@ _ui_working_tree.patch
 # Cursor debug-session NDJSON (local only)
 .cursor/debug-*.log
 .gstack/
+
+# Playwright / ad-hoc screenshot output (repo root)
+output/
