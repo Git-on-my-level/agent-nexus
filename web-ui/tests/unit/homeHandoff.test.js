@@ -148,7 +148,7 @@ describe("homeHandoff helpers", () => {
     expect(nextMarker).toBe("2026-03-12T12:00:00.000Z");
   });
 
-  it("includes high-signal messages and unknown events while excluding human attention events", () => {
+  it("includes high-signal messages and unknown events while excluding system and human attention events", () => {
     const events = filterHomeTimelineEvents(
       [
         {
@@ -170,6 +170,11 @@ describe("homeHandoff helpers", () => {
           id: "evt-human-request",
           type: "human_attention_requested",
           ts: "2026-03-12T10:30:00.000Z",
+        },
+        {
+          id: "evt-bridge-checkin",
+          type: "agent_bridge_checked_in",
+          ts: "2026-03-12T10:45:00.000Z",
         },
         {
           id: "evt-archived",

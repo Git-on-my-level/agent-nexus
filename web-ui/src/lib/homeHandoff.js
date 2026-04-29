@@ -23,6 +23,7 @@ const HOME_INCLUDED_EVENT_TYPES = new Set([
 ]);
 
 const HOME_EXCLUDED_EVENT_TYPES = new Set([
+  "agent_bridge_checked_in",
   "human_attention_requested",
   "human_attention_responded",
 ]);

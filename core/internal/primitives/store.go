@@ -34,6 +34,10 @@ var ErrInvalidDocumentRequest = errors.New("invalid document request")
 var ErrInvalidCursor = errors.New("invalid cursor")
 
 const provenanceEventIDPlaceholder = "<event_id>"
+const (
+	bridgeCheckedInEventType       = "agent_bridge_checked_in"
+	bridgeCheckinEventsRetainLimit = 20
+)
 
 type ArtifactListFilter struct {
 	States []string
@@ -143,8 +147,95 @@ func (s *Store) AppendEvent(ctx context.Context, actorID string, event map[strin
 	if err := insertPreparedEvent(ctx, s.db, prepared); err != nil {
 		return nil, err
 	}
+	if prepared.Type == bridgeCheckedInEventType {
+		if err := s.pruneOldBridgeCheckinEvents(ctx, prepared); err != nil {
+			return nil, err
+		}
+	}
 
 	return prepared.Body, nil
+}
+
+func (s *Store) pruneOldBridgeCheckinEvents(ctx context.Context, latest preparedEvent) error {
+	payload, ok := latest.Body["payload"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	actorID := strings.TrimSpace(anyStringValue(payload["actor_id"]))
+	handle := strings.TrimSpace(anyStringValue(payload["handle"]))
+	latestID := strings.TrimSpace(anyStringValue(latest.Body["id"]))
+	if actorID == "" || handle == "" || latestID == "" {
+		return nil
+	}
+
+	// Bridge readiness is authoritative on the agent registration. Keep only a
+	// compact raw check-in history for diagnostics so polling bridges cannot grow
+	// the event log forever.
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT id
+		 FROM events
+		 WHERE type = ?
+		   AND id <> ?
+		   AND json_extract(payload_json, '$.payload.actor_id') = ?
+		   AND json_extract(payload_json, '$.payload.handle') = ?
+		 ORDER BY ts DESC, id DESC
+		 LIMIT -1 OFFSET ?`,
+		bridgeCheckedInEventType,
+		latestID,
+		actorID,
+		handle,
+		bridgeCheckinEventsRetainLimit-1,
+	)
+	if err != nil {
+		return fmt.Errorf("query old bridge check-in events: %w", err)
+	}
+	defer rows.Close()
+
+	oldIDs := make([]string, 0)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return fmt.Errorf("scan old bridge check-in event: %w", err)
+		}
+		id = strings.TrimSpace(id)
+		if id == "" || id == latestID {
+			continue
+		}
+		oldIDs = append(oldIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate old bridge check-in events: %w", err)
+	}
+	if len(oldIDs) == 0 {
+		return nil
+	}
+
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(oldIDs)), ",")
+	args := make([]any, 0, len(oldIDs)+1)
+	args = append(args, "event")
+	for _, id := range oldIDs {
+		args = append(args, id)
+	}
+	if _, err := s.db.ExecContext(
+		ctx,
+		`DELETE FROM ref_edges WHERE source_type = ? AND source_id IN (`+placeholders+`)`,
+		args...,
+	); err != nil {
+		return fmt.Errorf("delete old bridge check-in ref edges: %w", err)
+	}
+	args = args[:0]
+	for _, id := range oldIDs {
+		args = append(args, id)
+	}
+	if _, err := s.db.ExecContext(
+		ctx,
+		`DELETE FROM events WHERE id IN (`+placeholders+`)`,
+		args...,
+	); err != nil {
+		return fmt.Errorf("delete old bridge check-in events: %w", err)
+	}
+	return nil
 }
 
 func overlayEventLifecycleFromSQLColumns(body map[string]any, archivedAt, archivedBy, trashedAt, trashedBy, trashReason sql.NullString) {

@@ -636,6 +636,12 @@ var migrations = []migration{
 		Statements: []string{},
 		AfterApply: applyMigration17BoardsDocumentsSummary,
 	},
+	{
+		Version: 18,
+		Statements: []string{
+			`CREATE INDEX IF NOT EXISTS idx_events_type_ts_id ON events (type, ts DESC, id DESC);`,
+		},
+	},
 }
 
 func sqliteTableExists(ctx context.Context, tx *sql.Tx, name string) (bool, error) {
