@@ -20,6 +20,9 @@ type EnumSpec struct {
 	Policy       EnumPolicy
 	Values       map[string]struct{}
 	OrderedValue []string
+	Groups       map[string][]string
+	BackingTypes []string
+	BackingKinds []string
 }
 
 type FieldSpec struct {
@@ -89,8 +92,11 @@ type contractFile struct {
 }
 
 type rawEnum struct {
-	EnumPolicy string   `yaml:"enum_policy"`
-	Values     []string `yaml:"values"`
+	EnumPolicy        string              `yaml:"enum_policy"`
+	Values            []string            `yaml:"values"`
+	Groups            map[string][]string `yaml:"groups"`
+	BackingEventTypes []string            `yaml:"backing_event_types"`
+	BackingKinds      []string            `yaml:"backing_kinds"`
 }
 
 type rawRefFormat struct {
@@ -270,6 +276,9 @@ func normalizeEnum(name string, enum rawEnum) (EnumSpec, error) {
 	spec := EnumSpec{
 		Values:       make(map[string]struct{}, len(enum.Values)),
 		OrderedValue: append([]string(nil), enum.Values...),
+		Groups:       make(map[string][]string, len(enum.Groups)),
+		BackingTypes: compactSortedStrings(enum.BackingEventTypes),
+		BackingKinds: compactSortedStrings(enum.BackingKinds),
 	}
 
 	policy := EnumPolicy(strings.TrimSpace(enum.EnumPolicy))
@@ -284,8 +293,49 @@ func normalizeEnum(name string, enum rawEnum) (EnumSpec, error) {
 		spec.Values[value] = struct{}{}
 	}
 
+	for group, values := range enum.Groups {
+		group = strings.TrimSpace(group)
+		if group == "" {
+			continue
+		}
+		spec.Groups[group] = compactSortedStrings(values)
+		for _, value := range spec.Groups[group] {
+			if _, ok := spec.Values[value]; !ok {
+				return EnumSpec{}, fmt.Errorf("enum %s group %s references unknown value %q", name, group, value)
+			}
+		}
+	}
+	for _, value := range spec.BackingTypes {
+		if _, ok := spec.Values[value]; !ok {
+			return EnumSpec{}, fmt.Errorf("enum %s backing_event_types references unknown value %q", name, value)
+		}
+	}
+	for _, value := range spec.BackingKinds {
+		if _, ok := spec.Values[value]; !ok {
+			return EnumSpec{}, fmt.Errorf("enum %s backing_kinds references unknown value %q", name, value)
+		}
+	}
+
 	sort.Strings(spec.OrderedValue)
 	return spec, nil
+}
+
+func compactSortedStrings(values []string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func normalizeThread(name string, raw rawThreadSchema) ThreadSchema {

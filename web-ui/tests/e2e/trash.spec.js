@@ -7,7 +7,7 @@ test("trash page restores archived topics, boards, cards, documents, and artifac
   let artifacts = [
     {
       id: "artifact-trash-1",
-      kind: "evidence",
+      kind: "attachment",
       summary: "Archived evidence artifact",
       thread_id: "topic-trash-1",
       created_at: "2026-03-01T08:00:00.000Z",

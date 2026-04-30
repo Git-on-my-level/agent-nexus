@@ -35,7 +35,7 @@ func TestPrimitivesCRUDRoundTrip(t *testing.T) {
 	eventResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-1",
 		"event":{
-			"type":"my_custom_event",
+			"type":"agent_bridge_checked_in",
 			"thread_id":"thread-1",
 			"refs":["customprefix:abc"],
 			"summary":"custom event",
@@ -66,7 +66,7 @@ func TestPrimitivesCRUDRoundTrip(t *testing.T) {
 	if err := json.NewDecoder(getEventResp.Body).Decode(&loadedEvent); err != nil {
 		t.Fatalf("decode get event response: %v", err)
 	}
-	if loadedEvent["event"]["type"] != "my_custom_event" {
+	if loadedEvent["event"]["type"] != "agent_bridge_checked_in" {
 		t.Fatalf("unexpected event type: %#v", loadedEvent["event"]["type"])
 	}
 
@@ -128,7 +128,7 @@ func TestPrimitivesCRUDRoundTrip(t *testing.T) {
 	artifactResp := postJSONExpectStatus(t, h.baseURL+"/artifacts", `{
 		"actor_id":"actor-1",
 		"artifact":{
-			"kind":"my_custom_artifact",
+			"kind":"attachment",
 			"refs":["thread:thread-1","customprefix:abc"],
 			"summary":"artifact summary"
 		},
@@ -171,7 +171,7 @@ func TestPrimitivesCRUDRoundTrip(t *testing.T) {
 	if err := json.NewDecoder(getArtifactResp.Body).Decode(&loadedArtifact); err != nil {
 		t.Fatalf("decode get artifact response: %v", err)
 	}
-	if loadedArtifact["artifact"]["kind"] != "my_custom_artifact" {
+	if loadedArtifact["artifact"]["kind"] != "attachment" {
 		t.Fatalf("unexpected artifact kind: %#v", loadedArtifact["artifact"]["kind"])
 	}
 	if loadedArtifact["artifact"]["content_hash"] != expectedHash {
@@ -225,7 +225,7 @@ func TestListEventsFiltersByEventType(t *testing.T) {
 	postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-evt-filter",
 		"event":{
-			"type":"filter_kept_alpha",
+			"type":"agent_bridge_checked_in",
 			"thread_id":"thread-evfilter",
 			"refs":["thread:thread-evfilter"],
 			"summary":"alpha",
@@ -236,7 +236,7 @@ func TestListEventsFiltersByEventType(t *testing.T) {
 	postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-evt-filter",
 		"event":{
-			"type":"filter_drop_beta",
+			"type":"agent_wakeup_failed",
 			"thread_id":"thread-evfilter",
 			"refs":["thread:thread-evfilter"],
 			"summary":"beta",
@@ -244,7 +244,7 @@ func TestListEventsFiltersByEventType(t *testing.T) {
 		}
 	}`, http.StatusCreated)
 
-	filteredResp, err := http.Get(h.baseURL + "/events?thread_id=thread-evfilter&type=filter_kept_alpha")
+	filteredResp, err := http.Get(h.baseURL + "/events?thread_id=thread-evfilter&type=agent_bridge_checked_in")
 	if err != nil {
 		t.Fatalf("GET /events?thread_id=&type=: %v", err)
 	}
@@ -261,8 +261,179 @@ func TestListEventsFiltersByEventType(t *testing.T) {
 	if len(filtered.Events) != 1 {
 		t.Fatalf("expected 1 event after type filter, got %d", len(filtered.Events))
 	}
-	if anyString(filtered.Events[0]["type"]) != "filter_kept_alpha" {
+	if anyString(filtered.Events[0]["type"]) != "agent_bridge_checked_in" {
 		t.Fatalf("unexpected event type after filter: %#v", filtered.Events[0]["type"])
+	}
+}
+
+func TestListEventsFiltersByGroupAndBackingScope(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-event-groups","display_name":"Actor","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	postJSONExpectStatus(t, h.baseURL+"/events", `{
+		"actor_id":"actor-event-groups",
+		"event":{
+			"type":"agent_bridge_checked_in",
+			"refs":[],
+			"summary":"bridge checked in",
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated).Body.Close()
+
+	postJSONExpectStatus(t, h.baseURL+"/docs", `{
+		"actor_id":"actor-event-groups",
+		"document":{"document_id":"doc-event-groups","title":"Group doc"},
+		"content":"group document",
+		"content_type":"text"
+	}`, http.StatusCreated).Body.Close()
+
+	docGroupResp, err := http.Get(h.baseURL + "/events?event_group=documents")
+	if err != nil {
+		t.Fatalf("GET /events?event_group=documents: %v", err)
+	}
+	defer docGroupResp.Body.Close()
+	if docGroupResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected document group status: got %d", docGroupResp.StatusCode)
+	}
+	var docGroup struct {
+		Events []map[string]any `json:"events"`
+	}
+	if err := json.NewDecoder(docGroupResp.Body).Decode(&docGroup); err != nil {
+		t.Fatalf("decode document group events: %v", err)
+	}
+	if len(docGroup.Events) != 1 || anyString(docGroup.Events[0]["type"]) != "document_created" {
+		t.Fatalf("unexpected document group events: %#v", docGroup.Events)
+	}
+
+	standaloneResp, err := http.Get(h.baseURL + "/events?backing_scope=standalone")
+	if err != nil {
+		t.Fatalf("GET /events?backing_scope=standalone: %v", err)
+	}
+	defer standaloneResp.Body.Close()
+	if standaloneResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected standalone status: got %d", standaloneResp.StatusCode)
+	}
+	var standalone struct {
+		Events []map[string]any `json:"events"`
+	}
+	if err := json.NewDecoder(standaloneResp.Body).Decode(&standalone); err != nil {
+		t.Fatalf("decode standalone events: %v", err)
+	}
+	if len(standalone.Events) != 1 || anyString(standalone.Events[0]["type"]) != "agent_bridge_checked_in" {
+		t.Fatalf("unexpected standalone events: %#v", standalone.Events)
+	}
+
+	backingResp, err := http.Get(h.baseURL + "/events?backing_scope=backing_only")
+	if err != nil {
+		t.Fatalf("GET /events?backing_scope=backing_only: %v", err)
+	}
+	defer backingResp.Body.Close()
+	if backingResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected backing_only status: got %d", backingResp.StatusCode)
+	}
+	var backing struct {
+		Events []map[string]any `json:"events"`
+	}
+	if err := json.NewDecoder(backingResp.Body).Decode(&backing); err != nil {
+		t.Fatalf("decode backing events: %v", err)
+	}
+	if len(backing.Events) != 1 || anyString(backing.Events[0]["type"]) != "document_created" {
+		t.Fatalf("unexpected backing events: %#v", backing.Events)
+	}
+}
+
+func TestListArtifactsFiltersByBackingScope(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-artifact-backing","display_name":"Actor","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	postJSONExpectStatus(t, h.baseURL+"/artifacts", `{
+		"actor_id":"actor-artifact-backing",
+		"artifact":{"kind":"attachment","refs":["thread:thread-artifacts"],"summary":"standalone"},
+		"content":"standalone",
+		"content_type":"text"
+	}`, http.StatusCreated).Body.Close()
+
+	postJSONExpectStatus(t, h.baseURL+"/docs", `{
+		"actor_id":"actor-artifact-backing",
+		"document":{"document_id":"doc-artifact-backing","title":"Backing doc"},
+		"content":"doc content",
+		"content_type":"text"
+	}`, http.StatusCreated).Body.Close()
+
+	standaloneResp, err := http.Get(h.baseURL + "/artifacts?backing_scope=standalone")
+	if err != nil {
+		t.Fatalf("GET /artifacts?backing_scope=standalone: %v", err)
+	}
+	defer standaloneResp.Body.Close()
+	if standaloneResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected standalone artifacts status: got %d", standaloneResp.StatusCode)
+	}
+	var standalone struct {
+		Artifacts []map[string]any `json:"artifacts"`
+	}
+	if err := json.NewDecoder(standaloneResp.Body).Decode(&standalone); err != nil {
+		t.Fatalf("decode standalone artifacts: %v", err)
+	}
+	if len(standalone.Artifacts) != 1 || anyString(standalone.Artifacts[0]["kind"]) != "attachment" {
+		t.Fatalf("unexpected standalone artifacts: %#v", standalone.Artifacts)
+	}
+
+	backingResp, err := http.Get(h.baseURL + "/artifacts?backing_scope=backing_only")
+	if err != nil {
+		t.Fatalf("GET /artifacts?backing_scope=backing_only: %v", err)
+	}
+	defer backingResp.Body.Close()
+	if backingResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected backing artifacts status: got %d", backingResp.StatusCode)
+	}
+	var backing struct {
+		Artifacts []map[string]any `json:"artifacts"`
+	}
+	if err := json.NewDecoder(backingResp.Body).Decode(&backing); err != nil {
+		t.Fatalf("decode backing artifacts: %v", err)
+	}
+	if len(backing.Artifacts) != 1 || anyString(backing.Artifacts[0]["kind"]) != "doc" {
+		t.Fatalf("unexpected backing artifacts: %#v", backing.Artifacts)
+	}
+
+	contradictoryBackingResp, err := http.Get(h.baseURL + "/artifacts?kind=attachment&backing_scope=backing_only")
+	if err != nil {
+		t.Fatalf("GET /artifacts?kind=attachment&backing_scope=backing_only: %v", err)
+	}
+	defer contradictoryBackingResp.Body.Close()
+	if contradictoryBackingResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected contradictory backing artifacts status: got %d", contradictoryBackingResp.StatusCode)
+	}
+	var contradictoryBacking struct {
+		Artifacts []map[string]any `json:"artifacts"`
+	}
+	if err := json.NewDecoder(contradictoryBackingResp.Body).Decode(&contradictoryBacking); err != nil {
+		t.Fatalf("decode contradictory backing artifacts: %v", err)
+	}
+	if len(contradictoryBacking.Artifacts) != 0 {
+		t.Fatalf("kind=attachment must compose with backing_scope=backing_only, got %#v", contradictoryBacking.Artifacts)
+	}
+
+	contradictoryStandaloneResp, err := http.Get(h.baseURL + "/artifacts?kind=doc&backing_scope=standalone")
+	if err != nil {
+		t.Fatalf("GET /artifacts?kind=doc&backing_scope=standalone: %v", err)
+	}
+	defer contradictoryStandaloneResp.Body.Close()
+	if contradictoryStandaloneResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected contradictory standalone artifacts status: got %d", contradictoryStandaloneResp.StatusCode)
+	}
+	var contradictoryStandalone struct {
+		Artifacts []map[string]any `json:"artifacts"`
+	}
+	if err := json.NewDecoder(contradictoryStandaloneResp.Body).Decode(&contradictoryStandalone); err != nil {
+		t.Fatalf("decode contradictory standalone artifacts: %v", err)
+	}
+	if len(contradictoryStandalone.Artifacts) != 0 {
+		t.Fatalf("kind=doc must compose with backing_scope=standalone, got %#v", contradictoryStandalone.Artifacts)
 	}
 }
 
@@ -286,7 +457,7 @@ func TestPrimitivesCRUDRoundTripWithObjectBackend(t *testing.T) {
 	artifactResp := postJSONExpectStatus(t, h.baseURL+"/artifacts", `{
 		"actor_id":"actor-1",
 		"artifact":{
-			"kind":"my_custom_artifact",
+			"kind":"attachment",
 			"refs":["thread:thread-1"],
 			"summary":"object store artifact"
 		},
@@ -330,7 +501,7 @@ func TestArtifactsListBySecondaryThreadRef(t *testing.T) {
 	createResp := postJSONExpectStatus(t, h.baseURL+"/artifacts", `{
 		"actor_id":"actor-1",
 		"artifact":{
-			"kind":"my_custom_artifact",
+			"kind":"attachment",
 			"refs":["thread:thread-primary","thread:thread-secondary","customprefix:abc"],
 			"summary":"cross-thread artifact"
 		},
@@ -379,7 +550,7 @@ func TestCreateArtifactReturnsConflictForDuplicateID(t *testing.T) {
 		"actor_id":"actor-1",
 		"artifact":{
 			"id":"artifact-duplicate",
-			"kind":"my_custom_artifact",
+			"kind":"attachment",
 			"refs":["thread:thread-1"],
 			"summary":"first create"
 		},
@@ -392,7 +563,7 @@ func TestCreateArtifactReturnsConflictForDuplicateID(t *testing.T) {
 		"actor_id":"actor-1",
 		"artifact":{
 			"id":"artifact-duplicate",
-			"kind":"my_custom_artifact",
+			"kind":"attachment",
 			"refs":["thread:thread-1"],
 			"summary":"duplicate create"
 		},
@@ -892,7 +1063,7 @@ func TestEventCreateRequestKeyReplaysSingleWrite(t *testing.T) {
 		"actor_id":"actor-1",
 		"request_key":"replay-event",
 		"event":{
-			"type":"my_custom_event",
+			"type":"agent_bridge_checked_in",
 			"thread_id":"thread-1",
 			"refs":["customprefix:abc"],
 			"summary":"custom event",
@@ -947,7 +1118,7 @@ func TestArtifactContentDeduplication(t *testing.T) {
 
 	resp1 := postJSONExpectStatus(t, h.baseURL+"/artifacts", `{
 		"actor_id":"actor-1",
-		"artifact":{"kind":"evidence","refs":["thread:t1"]},
+		"artifact":{"kind":"attachment","refs":["thread:t1"]},
 		"content":"identical content",
 		"content_type":"text"
 	}`, http.StatusCreated)
@@ -959,7 +1130,7 @@ func TestArtifactContentDeduplication(t *testing.T) {
 
 	resp2 := postJSONExpectStatus(t, h.baseURL+"/artifacts", `{
 		"actor_id":"actor-1",
-		"artifact":{"kind":"evidence","refs":["thread:t2"]},
+		"artifact":{"kind":"attachment","refs":["thread:t2"]},
 		"content":"identical content",
 		"content_type":"text"
 	}`, http.StatusCreated)
@@ -1324,7 +1495,7 @@ func TestInvalidTypedRefsRejectedForEventsAndArtifacts(t *testing.T) {
 
 	artifactResp := postJSONExpectStatus(t, h.baseURL+"/artifacts", `{
 		"actor_id":"actor-1",
-		"artifact":{"kind":"custom","refs":["invalidref"]},
+		"artifact":{"kind":"attachment","refs":["invalidref"]},
 		"content":"x",
 		"content_type":"text"
 	}`, http.StatusBadRequest)
@@ -1582,7 +1753,7 @@ func TestArtifactTrashLifecycle(t *testing.T) {
 	createResp := postJSONExpectStatus(t, h.baseURL+"/artifacts", `{
 		"actor_id":"actor-1",
 		"artifact":{
-			"kind":"blob",
+			"kind":"attachment",
 			"refs":["thread:thread-1"],
 			"summary":"trash test"
 		},
@@ -1717,7 +1888,7 @@ func TestArtifactRestoreLifecycle(t *testing.T) {
 	createResp := postJSONExpectStatus(t, h.baseURL+"/artifacts", `{
 		"actor_id":"actor-1",
 		"artifact":{
-			"kind":"blob",
+			"kind":"attachment",
 			"refs":["thread:thread-1"],
 			"summary":"restore test"
 		},
@@ -1797,7 +1968,7 @@ func TestArtifactPurgeLifecycle(t *testing.T) {
 	createResp := postJSONExpectStatus(t, h.baseURL+"/artifacts", `{
 		"actor_id":"actor-1",
 		"artifact":{
-			"kind":"blob",
+			"kind":"attachment",
 			"refs":["thread:thread-1"],
 			"summary":"purge test"
 		},
@@ -1869,7 +2040,7 @@ func TestArtifactPurgeUnauthenticatedDevHumanTaggedActor(t *testing.T) {
 
 	createResp := postJSONExpectStatus(t, h.baseURL+"/artifacts", `{
 		"actor_id":"actor-1",
-		"artifact":{"kind":"blob","refs":["thread:thread-1"],"summary":"dev purge"},
+		"artifact":{"kind":"attachment","refs":["thread:thread-1"],"summary":"dev purge"},
 		"content":"x",
 		"content_type":"text"
 	}`, http.StatusCreated)
@@ -1910,7 +2081,7 @@ func TestArtifactPurgeUnauthenticatedDevRejectsNonHumanTag(t *testing.T) {
 
 	createResp := postJSONExpectStatus(t, h.baseURL+"/artifacts", `{
 		"actor_id":"actor-1",
-		"artifact":{"kind":"blob","refs":["thread:thread-1"],"summary":"reject purge"},
+		"artifact":{"kind":"attachment","refs":["thread:thread-1"],"summary":"reject purge"},
 		"content":"y",
 		"content_type":"text"
 	}`, http.StatusCreated)
@@ -1944,7 +2115,7 @@ func TestArtifactPurgeNotTrashed(t *testing.T) {
 	createResp := postJSONExpectStatus(t, h.baseURL+"/artifacts", `{
 		"actor_id":"actor-1",
 		"artifact":{
-			"kind":"blob",
+			"kind":"attachment",
 			"refs":["thread:thread-1"],
 			"summary":"live artifact"
 		},
@@ -1975,7 +2146,7 @@ func TestArtifactTrashedOnlyListFilter(t *testing.T) {
 
 	createA := postJSONExpectStatus(t, h.baseURL+"/artifacts", `{
 		"actor_id":"actor-1",
-		"artifact":{"kind":"blob","refs":["thread:thread-1"],"summary":"a"},
+		"artifact":{"kind":"attachment","refs":["thread:thread-1"],"summary":"a"},
 		"content":"a",
 		"content_type":"text"
 	}`, http.StatusCreated)
@@ -1988,7 +2159,7 @@ func TestArtifactTrashedOnlyListFilter(t *testing.T) {
 
 	createB := postJSONExpectStatus(t, h.baseURL+"/artifacts", `{
 		"actor_id":"actor-1",
-		"artifact":{"kind":"blob","refs":["thread:thread-1"],"summary":"b"},
+		"artifact":{"kind":"attachment","refs":["thread:thread-1"],"summary":"b"},
 		"content":"b",
 		"content_type":"text"
 	}`, http.StatusCreated)
@@ -2197,7 +2368,7 @@ func TestArtifactArchiveLifecycle(t *testing.T) {
 
 	createResp := postJSONExpectStatus(t, h.baseURL+"/artifacts", `{
 		"actor_id":"actor-1",
-		"artifact":{"kind":"blob","refs":["thread:thread-1"],"summary":"archive lifecycle"},
+		"artifact":{"kind":"attachment","refs":["thread:thread-1"],"summary":"archive lifecycle"},
 		"content":"body",
 		"content_type":"text"
 	}`, http.StatusCreated)
@@ -2323,7 +2494,7 @@ func TestArtifactArchiveThenTrash(t *testing.T) {
 
 	createResp := postJSONExpectStatus(t, h.baseURL+"/artifacts", `{
 		"actor_id":"actor-1",
-		"artifact":{"kind":"blob","refs":["thread:thread-1"],"summary":"archive then trash"},
+		"artifact":{"kind":"attachment","refs":["thread:thread-1"],"summary":"archive then trash"},
 		"content":"x",
 		"content_type":"text"
 	}`, http.StatusCreated)
@@ -2374,7 +2545,7 @@ func TestArtifactCannotArchiveTrashed(t *testing.T) {
 
 	createResp := postJSONExpectStatus(t, h.baseURL+"/artifacts", `{
 		"actor_id":"actor-1",
-		"artifact":{"kind":"blob","refs":["thread:thread-1"],"summary":"trashed"},
+		"artifact":{"kind":"attachment","refs":["thread:thread-1"],"summary":"trashed"},
 		"content":"y",
 		"content_type":"text"
 	}`, http.StatusCreated)

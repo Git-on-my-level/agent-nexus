@@ -420,7 +420,7 @@ const events = [
     ts: new Date(
       now - 2 * 24 * 60 * 60 * 1000 + 3 * 60 * 60 * 1000,
     ).toISOString(),
-    type: "unknown_future_type",
+    type: "exception_raised",
     actor_id: "actor-supply-rover",
     thread_id: "thread-summer-menu",
     refs: [
@@ -1146,7 +1146,7 @@ const events = [
 const artifacts = [
   {
     id: "artifact-supplier-sla",
-    kind: "evidence",
+    kind: "attachment",
     thread_id: "thread-lemon-shortage",
     summary: "CitrusBot Farm SLA — uptime and delivery terms",
     refs: ["thread:thread-lemon-shortage"],
@@ -1190,7 +1190,7 @@ const artifacts = [
   },
   {
     id: "artifact-supplier-sla-v2",
-    kind: "evidence",
+    kind: "attachment",
     thread_id: "thread-lemon-shortage",
     summary: "CitrusBot Farm SLA — uptime and delivery terms",
     refs: ["thread:thread-lemon-shortage", "artifact:artifact-supplier-sla"],
@@ -1231,7 +1231,7 @@ const artifacts = [
   },
   {
     id: "artifact-summer-menu-draft",
-    kind: "evidence",
+    kind: "attachment",
     thread_id: "thread-summer-menu",
     summary:
       "Summer menu proposal — Lavender & Mango Chili Lemonade recipe specs",
@@ -1287,7 +1287,7 @@ const artifacts = [
   },
   {
     id: "artifact-tasting-log",
-    kind: "log",
+    kind: "attachment",
     thread_id: "thread-summer-menu",
     summary: "SqueezeBot QA sensor log — summer flavor test batches",
     refs: ["thread:thread-summer-menu", "artifact:artifact-summer-menu-draft"],
@@ -1312,7 +1312,7 @@ const artifacts = [
   },
   {
     id: "artifact-maintenance-log",
-    kind: "log",
+    kind: "attachment",
     thread_id: "thread-squeezebot-maintenance",
     summary: "SqueezeBot 3000 self-diagnostic and maintenance event log",
     refs: [
@@ -1337,7 +1337,7 @@ const artifacts = [
   },
   {
     id: "artifact-receipt-lavender-sourcing",
-    kind: "receipt",
+    kind: "attachment",
     thread_id: "thread-summer-menu",
     summary: "Receipt: Lavender syrup sourced — BotBotanicals API, 2L ordered",
     refs: ["thread:thread-summer-menu", "card:thread-summer-menu"],
@@ -1365,7 +1365,7 @@ const artifacts = [
   },
   {
     id: "artifact-review-lavender-sourcing",
-    kind: "review",
+    kind: "attachment",
     thread_id: "thread-summer-menu",
     summary: "Review: Lavender sourcing receipt — accepted with minor note",
     refs: [
@@ -1397,7 +1397,7 @@ const artifacts = [
   // ── Pricing glitch artifacts ───────────────────────────────────────────────
   {
     id: "artifact-pricing-evidence",
-    kind: "evidence",
+    kind: "attachment",
     thread_id: "thread-pricing-glitch",
     summary: "Raw POS transaction log showing overcharged transactions",
     refs: [
@@ -1424,7 +1424,7 @@ const artifacts = [
   },
   {
     id: "artifact-receipt-pricing-v1",
-    kind: "receipt",
+    kind: "attachment",
     thread_id: "thread-pricing-glitch",
     summary:
       "Receipt v1: root cause identified — awaiting refund decision before closing",
@@ -1451,7 +1451,7 @@ const artifacts = [
   },
   {
     id: "artifact-review-pricing-escalate",
-    kind: "review",
+    kind: "attachment",
     thread_id: "thread-pricing-glitch",
     summary:
       "Review v1 (escalate): refund decision required before receipt can be accepted",
@@ -1483,7 +1483,7 @@ const artifacts = [
   },
   {
     id: "artifact-receipt-pricing-v2",
-    kind: "receipt",
+    kind: "attachment",
     thread_id: "thread-pricing-glitch",
     summary:
       "Receipt v2: fix deployed, refunds confirmed, all acceptance criteria met",
@@ -1511,7 +1511,7 @@ const artifacts = [
   },
   {
     id: "artifact-review-pricing-accept",
-    kind: "review",
+    kind: "attachment",
     thread_id: "thread-pricing-glitch",
     summary: "Review v2 (accept): pricing fix complete, incident closed",
     refs: [
@@ -1545,7 +1545,7 @@ const artifacts = [
   // Trashed after seed create (see seed-core-from-mock.mjs) for Trash / permanent delete in local dev.
   {
     id: "artifact-dev-trash-onboarding-draft",
-    kind: "evidence",
+    kind: "attachment",
     thread_id: "thread-onboarding",
     summary: "Obsolete onboarding checklist (dev trash sample)",
     refs: ["thread:thread-onboarding"],
@@ -1562,7 +1562,7 @@ const artifacts = [
   },
   {
     id: "artifact-dev-trash-ops-scratch",
-    kind: "evidence",
+    kind: "attachment",
     thread_id: "thread-onboarding",
     summary: "Scratch export — dev trash sample",
     refs: ["thread:thread-onboarding"],
@@ -1579,7 +1579,7 @@ const artifacts = [
   },
   {
     id: "artifact-trashed-doc",
-    kind: "evidence",
+    kind: "attachment",
     thread_id: "thread-pricing-glitch",
     summary: "Superseded draft — replaced by final evidence artifact",
     refs: ["thread:thread-pricing-glitch"],
@@ -2071,7 +2071,10 @@ const REMOVED_PACKET_EVENT_TYPES = new Set([
 ]);
 
 function keepDevSeedArtifact(artifact) {
-  return !REMOVED_PACKET_ARTIFACT_KINDS.has(String(artifact?.kind ?? ""));
+  return (
+    !REMOVED_PACKET_ARTIFACT_KINDS.has(String(artifact?.kind ?? "")) &&
+    !(artifact?.packet && typeof artifact.packet === "object")
+  );
 }
 
 function cleanRemovedPacketRefs(refs) {

@@ -703,6 +703,54 @@ func TestEventsListCommandFiltersAndLimits(t *testing.T) {
 	}
 }
 
+func TestEventsListCommandAppliesTaxonomyFiltersToThreadTimeline(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/threads/thread_1/timeline" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"events":[
+				{"id":"event_1","thread_id":"thread_1","type":"message_posted","summary":"standalone message"},
+				{"id":"event_2","thread_id":"thread_1","type":"document_created","summary":"backing document"},
+				{"id":"event_3","thread_id":"thread_1","type":"card_created","summary":"backing card"}
+			],
+			"artifacts":{"artifact_1":{"id":"artifact_1","kind":"doc"}}
+		}`))
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"events", "list",
+		"--thread-id", "thread_1",
+		"--event-group", "documents",
+		"--backing-scope", "backing_only",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+	events, _ := data["events"].([]any)
+	if len(events) != 1 {
+		t.Fatalf("expected one event after event-group/backing-scope filters, got %#v", data)
+	}
+	event, _ := events[0].(map[string]any)
+	if got := anyStringValue(event["id"]); got != "event_2" {
+		t.Fatalf("expected document backing event, got %#v", data)
+	}
+	groups := stringList(data["event_groups"])
+	if len(groups) != 1 || groups[0] != "documents" {
+		t.Fatalf("expected event_groups=documents, got %#v", data)
+	}
+	if got := anyStringValue(data["backing_scope"]); got != "backing_only" {
+		t.Fatalf("expected backing_scope=backing_only, got %#v", data)
+	}
+}
+
 func TestEventsListMaxFlagAliasMatchesMaxEvents(t *testing.T) {
 	t.Parallel()
 
@@ -2117,7 +2165,7 @@ func TestThreadsContextIncludesCollaborationSummarySections(t *testing.T) {
 				{"id":"event_done_1","type":"human_attention_responded","summary":"launch Friday"}
 			],
 			"key_artifacts":[
-				{"ref":"artifact:brief_1","artifact":{"id":"artifact_1","kind":"gtm-brief","summary":"Pilot rescue brief"}}
+				{"ref":"artifact:brief_1","artifact":{"id":"artifact_1","kind":"attachment","summary":"Pilot rescue brief"}}
 			],
 			"open_cards":[
 				{"id":"card_1","status":"open","title":"Publish launch brief"}
@@ -3311,7 +3359,7 @@ func TestThreadsContextAggregatesAcrossMultipleThreads(t *testing.T) {
 					{"id":"event_actor_1","type":"message_posted","summary":"support recommends Friday launch","created_at":"2026-03-06T10:00:00Z"},
 					{"id":"event_need_1","type":"human_attention_requested","summary":"pick launch day","created_at":"2026-03-06T10:01:00Z"}
 				],
-				"key_artifacts":[{"id":"artifact_1","kind":"brief"}],
+				"key_artifacts":[{"id":"artifact_1","kind":"attachment"}],
 				"open_cards":[{"id":"card_1","status":"open","title":"Publish brief"}]
 			}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_2/context":
@@ -3321,7 +3369,7 @@ func TestThreadsContextAggregatesAcrossMultipleThreads(t *testing.T) {
 					{"id":"event_actor_2","type":"message_posted","summary":"delivery recommends staged rollout","created_at":"2026-03-06T10:05:00Z"},
 					{"id":"event_done_2","type":"human_attention_responded","summary":"ship Friday scope","created_at":"2026-03-06T10:10:00Z"}
 				],
-				"key_artifacts":[{"id":"artifact_2","kind":"plan"}],
+				"key_artifacts":[{"id":"artifact_2","kind":"attachment"}],
 				"open_cards":[{"id":"card_2","status":"open","title":"Prep release runbook"}]
 			}`))
 		default:
@@ -3446,7 +3494,7 @@ func TestThreadsContextSupportsFullIDForEventSections(t *testing.T) {
 			"recent_events":[
 				{"id":"` + eventID + `","type":"message_posted","summary":"ship Friday rescue scope"}
 			],
-			"key_artifacts":[{"id":"` + artifactID + `","kind":"brief","summary":"Launch brief"}],
+			"key_artifacts":[{"id":"` + artifactID + `","kind":"attachment","summary":"Launch brief"}],
 			"open_cards":[{"id":"` + cardID + `","status":"open","title":"Publish launch brief"}]
 		}`))
 	}))
@@ -3504,7 +3552,7 @@ func TestThreadsInspectBuildsCoordinationView(t *testing.T) {
 					{"id":"` + eventID + `","thread_id":"thread_1","type":"message_posted","summary":"ship Friday rescue scope"},
 					{"id":"event_need_1","thread_id":"thread_1","type":"human_attention_requested","summary":"approve launch date"}
 				],
-				"key_artifacts":[{"id":"artifact_1","kind":"brief"}],
+				"key_artifacts":[{"id":"artifact_1","kind":"attachment"}],
 				"open_cards":[{"id":"card_1","status":"open","title":"Publish brief"}]
 			}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
@@ -3711,7 +3759,7 @@ func TestThreadsContextTextOutputIsPayloadFirst(t *testing.T) {
 				{"id":"event_2","type":"human_attention_responded","summary":"Ship the Friday rescue scope"}
 			],
 			"key_artifacts":[
-				{"id":"artifact_1","kind":"gtm-brief","summary":"NorthWave pilot rescue brief"}
+				{"id":"artifact_1","kind":"attachment","summary":"NorthWave pilot rescue brief"}
 			],
 			"open_cards":[
 				{"id":"card_1","status":"open","title":"Publish rescue brief"}
@@ -3730,7 +3778,7 @@ func TestThreadsContextTextOutputIsPayloadFirst(t *testing.T) {
 	if !strings.Contains(out, "Thread thread_1") || !strings.Contains(out, "recent_events (2):") {
 		t.Fatalf("expected thread context summary, got:\n%s", out)
 	}
-	if !strings.Contains(out, "human_attention_requested") || !strings.Contains(out, "gtm-brief") || !strings.Contains(out, "Publish rescue brief") {
+	if !strings.Contains(out, "human_attention_requested") || !strings.Contains(out, "attachment") || !strings.Contains(out, "Publish rescue brief") {
 		t.Fatalf("expected actionable summary sections, got:\n%s", out)
 	}
 	if strings.Contains(out, "status: 200") || strings.Contains(out, "header Content-Type:") || strings.Contains(out, `"thread":`) {
@@ -4281,7 +4329,7 @@ func TestArtifactsInspectCommand(t *testing.T) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/artifacts/artifact_1":
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"artifact":{"id":"artifact_1","kind":"packet","summary":"Brief"}}`))
+			_, _ = w.Write([]byte(`{"artifact":{"id":"artifact_1","kind":"attachment","summary":"Brief"}}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/artifacts/artifact_1/content":
 			w.Header().Set("Content-Type", "text/plain")
 			_, _ = w.Write([]byte("artifact body"))
@@ -4359,7 +4407,13 @@ func TestEventsTailReconnect(t *testing.T) {
 
 	home := t.TempDir()
 	env := map[string]string{}
-	raw := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "events", "tail", "--max-events", "2"})
+	raw := runCLIForTest(t, home, env, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"events", "tail",
+		"--types", "message_posted,document_created",
+		"--max-events", "2",
+	})
 
 	decoder := json.NewDecoder(strings.NewReader(raw))
 	events := make([]map[string]any, 0, 2)
@@ -4372,6 +4426,22 @@ func TestEventsTailReconnect(t *testing.T) {
 	}
 	if len(events) != 2 {
 		t.Fatalf("expected 2 stream envelopes, got %d raw=%s", len(events), raw)
+	}
+	mu.Lock()
+	capturedRequests := append([]string(nil), requests...)
+	mu.Unlock()
+	for _, rawQuery := range capturedRequests {
+		query, err := url.ParseQuery(rawQuery)
+		if err != nil {
+			t.Fatalf("parse query %q: %v", rawQuery, err)
+		}
+		if got := query["types"]; len(got) != 0 {
+			t.Fatalf("expected no legacy types query parameter, got %q", rawQuery)
+		}
+		gotTypes := query["type"]
+		if len(gotTypes) != 2 || gotTypes[0] != "message_posted" || gotTypes[1] != "document_created" {
+			t.Fatalf("expected repeated type query values, got %q", rawQuery)
+		}
 	}
 	firstData, _ := events[0]["data"].(map[string]any)
 	secondData, _ := events[1]["data"].(map[string]any)
@@ -4537,7 +4607,7 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 					{"id":"event_ctx_1","thread_id":"thread_123","type":"message_posted","summary":"normalize frame shape"},
 					{"id":"event_ctx_2","thread_id":"thread_123","type":"human_attention_requested","summary":"confirm canonical command labels"}
 				],
-				"key_artifacts":[{"id":"artifact_ctx_1","kind":"receipt"}],
+				"key_artifacts":[{"id":"artifact_ctx_1","kind":"attachment"}],
 				"open_cards":[{"id":"card_ctx_1","status":"open"}],
 					"documents":[
 						{"id":"doc_ctx_1","title":"Runbook","state":"active","updated_at":"2026-03-07T00:02:00Z","head_revision":{"revision_id":"rev_ctx_1","revision_number":3,"content_type":"text","artifact_id":"artifact_doc_ctx_1","created_at":"2026-03-07T00:02:00Z"}}
@@ -4553,14 +4623,14 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 							{"id":"event_ctx_1","thread_id":"thread_123","type":"message_posted","summary":"normalize frame shape"},
 							{"id":"event_ctx_2","thread_id":"thread_123","type":"human_attention_requested","summary":"confirm canonical command labels"}
 						],
-						"key_artifacts":[{"id":"artifact_ctx_1","kind":"receipt"}],
+						"key_artifacts":[{"id":"artifact_ctx_1","kind":"attachment"}],
 						"open_cards":[{"id":"card_ctx_1","status":"open"}],
 						"documents":[
 							{"id":"doc_ctx_1","title":"Runbook","state":"active","updated_at":"2026-03-07T00:02:00Z","head_revision":{"revision_id":"rev_ctx_1","revision_number":3,"content_type":"text","artifact_id":"artifact_doc_ctx_1","created_at":"2026-03-07T00:02:00Z"}}
 						]
 					},
 					"collaboration":{
-						"key_artifacts":[{"id":"artifact_ctx_1","kind":"receipt"}],
+						"key_artifacts":[{"id":"artifact_ctx_1","kind":"attachment"}],
 						"open_cards":[{"id":"card_ctx_1","status":"open"}],
 						"artifact_count":1,
 						"open_card_count":1
@@ -4911,12 +4981,29 @@ func TestMachineFacingNonStreamErrorsIncludeCommandIdentity(t *testing.T) {
 	eventsListErr := assertEnvelopeError(t, runCLIForTest(t, home, env, nil, []string{
 		"--json",
 		"events", "list",
+		"--max-events", "-1",
 	}))
 	if got := anyStringValue(eventsListErr["command"]); got != "events list" {
 		t.Fatalf("expected events list error command, got %q payload=%#v", got, eventsListErr)
 	}
 	if got := anyStringValue(eventsListErr["command_id"]); got != "events.list" {
 		t.Fatalf("expected events.list command_id, got %q payload=%#v", got, eventsListErr)
+	}
+
+	eventsListLifecycleErr := assertEnvelopeError(t, runCLIForTest(t, home, env, nil, []string{
+		"--json",
+		"events", "list",
+		"--include-trashed",
+	}))
+	if got := anyStringValue(eventsListLifecycleErr["command"]); got != "events list" {
+		t.Fatalf("expected events list lifecycle error command, got %q payload=%#v", got, eventsListLifecycleErr)
+	}
+	if got := anyStringValue(eventsListLifecycleErr["command_id"]); got != "events.list" {
+		t.Fatalf("expected events.list lifecycle command_id, got %q payload=%#v", got, eventsListLifecycleErr)
+	}
+	errObj, _ := eventsListLifecycleErr["error"].(map[string]any)
+	if !strings.Contains(anyStringValue(errObj["message"]), "require --thread-id") {
+		t.Fatalf("expected lifecycle error to mention --thread-id, got %#v", eventsListLifecycleErr)
 	}
 
 	eventsGetErr := assertEnvelopeError(t, runCLIForTest(t, home, env, nil, []string{

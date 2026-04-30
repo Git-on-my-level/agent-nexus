@@ -23,8 +23,11 @@ func TestLoadExtractsCoreSchemaRules(t *testing.T) {
 	if !ok {
 		t.Fatal("event_type enum was not loaded")
 	}
-	if eventType.Policy != EnumPolicyOpen {
+	if eventType.Policy != EnumPolicyStrict {
 		t.Fatalf("unexpected event_type policy: got %q", eventType.Policy)
+	}
+	if len(eventType.Groups["messages"]) == 0 {
+		t.Fatal("expected event_type groups to be loaded")
 	}
 
 	if !contract.HasKnownTypedRefPrefix("artifact") {

@@ -6,6 +6,7 @@
   import RefLink from "$lib/components/RefLink.svelte";
   import {
     ARTIFACT_STATE_VALUES,
+    ARTIFACT_BACKING_SCOPE_VALUES,
     DEFAULT_ARTIFACT_LIST_FILTERS,
     buildArtifactListQuery,
     buildArtifactListSearchString,
@@ -51,6 +52,11 @@
     active: "Active",
     archived: "Archived",
     trashed: "Trashed",
+  };
+  const ARTIFACT_BACKING_SCOPE_LABELS = {
+    all: "All",
+    standalone: "Standalone",
+    backing_only: "Backing only",
   };
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
@@ -391,6 +397,17 @@
               <option value="">All</option>
               {#each Object.entries(KIND_LABELS) as [value, label]}
                 <option {value}>{label}</option>
+              {/each}
+            </select>
+          </label>
+          <label class="text-micro font-medium text-[var(--fg-muted)]">
+            Backing
+            <select
+              bind:value={filters.backing_scope}
+              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
+            >
+              {#each ARTIFACT_BACKING_SCOPE_VALUES as value}
+                <option {value}>{ARTIFACT_BACKING_SCOPE_LABELS[value]}</option>
               {/each}
             </select>
           </label>

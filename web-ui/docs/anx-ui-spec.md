@@ -26,7 +26,7 @@ Agent Nexus web UI does **not**:
 
 - Agent Nexus web UI MUST support all primitives and typed conventions defined in `/contracts/anx-schema.yaml`: events, topics, cards, boards, documents, artifacts, packets, and read-only thread timelines.
 - Agent Nexus web UI MUST respect **enum policies**: strict enums are closed sets; open enums may contain unknown values.
-- Agent Nexus web UI MUST handle unknown event types and artifact kinds gracefully — render them as "unknown type" with raw payload, summary, and refs visible.
+- Event types and artifact kinds are strict. Contract drift may surface as an API error; unknown fields inside known envelopes must still remain visible and safe.
 - Agent Nexus web UI MUST handle unknown fields on any object gracefully — preserve them on round-trip and do not hide them from display.
 
 ### 1.3 Typed references
@@ -132,8 +132,8 @@ marks read through durable core cursors via `POST /home/read`. Home does not
 use browser-local handoff markers.
 
 Events is the full workspace event browser. It reads `GET /events`, supports
-URL/shareable filter intent for type, topic, actor, search, time range, cursor,
-and the shared `home_feed` preset, and keeps unknown event types inspectable.
+URL/shareable filter intent for type, group, backing scope, topic, actor,
+search, time range, cursor, and the shared `home_feed` preset.
 The first implementation keeps Events under More on mobile rather than adding a
 primary bottom-nav slot.
 
@@ -280,8 +280,8 @@ Replies SHOULD reference the parent event ID as `event:<parent_event_id>` in the
 
 ## 7. Extensibility
 
-- New event types and artifact kinds will be added over time (open enums).
-- Unknown types MUST render in the timeline without breaking the UI.
+- New event types and artifact kinds are added through contract updates to strict enums.
+- Unknown fields inside known types MUST render without breaking the UI.
 - Unknown fields on any object MUST be preserved on round-trip.
 - Unknown ref prefixes MUST be rendered as raw text, not hidden.
 - New detail types beyond the current topic/board/card/thread surfaces may be added in future versions. The UI SHOULD degrade gracefully if it encounters an unknown type (display raw fields).

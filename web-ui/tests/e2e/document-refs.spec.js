@@ -56,7 +56,7 @@ test("document typed refs navigate from overview chips, timeline refs, and recei
 
   const receiptArtifact = {
     id: receiptId,
-    kind: "receipt",
+    kind: "attachment",
     thread_id: threadId,
     summary: "Review constitution refs",
     refs: [`thread:${threadId}`, "card:card-doc-refs"],

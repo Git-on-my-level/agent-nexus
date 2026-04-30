@@ -21,7 +21,7 @@ test("mocked core smoke flow: inbox -> threads -> thread detail -> post message 
     {
       id: "evt-unknown-1",
       ts: "2026-03-03T09:00:00.000Z",
-      type: "future_unknown_type",
+      type: "exception_raised",
       actor_id: actorId,
       thread_id: "thread-onboarding",
       refs: ["thread:thread-onboarding", "mystery:opaque-ref"],

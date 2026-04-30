@@ -454,7 +454,7 @@ func appendEventForTest(t *testing.T, baseURL string, actorID string, threadID s
 	response := postJSONExpectStatus(t, baseURL+"/events", fmt.Sprintf(`{
 		"actor_id":"%s",
 		"event":{
-			"type":"my_custom_event",
+			"type":"agent_bridge_checked_in",
 			"thread_id":"%s",
 			"refs":["topic:%s"],
 			"summary":%q,

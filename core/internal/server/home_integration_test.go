@@ -128,11 +128,11 @@ func TestEventsHomeFeedPresetMatchesHomeEligibility(t *testing.T) {
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-events-preset","display_name":"Events Actor","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
 	postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-events-preset",
-		"event":{"type":"message_posted","refs":["thread:t1"],"summary":"kept","provenance":{"sources":["inferred"]}}
+		"event":{"type":"message_posted","thread_id":"t1","refs":["thread:t1"],"summary":"kept","provenance":{"sources":["inferred"]}}
 	}`, http.StatusCreated).Body.Close()
 	postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-events-preset",
-		"event":{"type":"future_unknown","refs":["thread:t1"],"summary":"visible only in Events","provenance":{"sources":["inferred"]}}
+		"event":{"type":"agent_wakeup_failed","refs":["thread:t1"],"summary":"visible only in Events","provenance":{"sources":["inferred"]}}
 	}`, http.StatusCreated).Body.Close()
 
 	presetResp, err := http.Get(h.baseURL + "/events?preset=home_feed")

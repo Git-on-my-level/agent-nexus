@@ -315,8 +315,8 @@ describe("searchHelpers", () => {
   describe("searchArtifacts", () => {
     it("calls coreClient.listArtifacts with query and limit", async () => {
       const mockArtifacts = [
-        { id: "artifact-1", kind: "receipt", summary: "Test receipt" },
-        { id: "artifact-2", kind: "receipt", summary: "Test receipt" },
+        { id: "artifact-1", kind: "attachment", summary: "Test receipt" },
+        { id: "artifact-2", kind: "attachment", summary: "Test receipt" },
       ];
       coreClient.listArtifacts.mockResolvedValue({ artifacts: mockArtifacts });
 

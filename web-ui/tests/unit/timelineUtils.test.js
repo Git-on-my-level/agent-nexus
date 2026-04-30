@@ -159,7 +159,7 @@ describe("timeline utils", () => {
   it("builds label hints from timeline expansions", () => {
     const hints = buildTimelineRefLabelHints(
       {
-        artifact_1: { kind: "receipt", summary: "Reproduce issue" },
+        artifact_1: { kind: "attachment", summary: "Reproduce issue" },
       },
       {
         doc_1: { title: "Product Constitution" },

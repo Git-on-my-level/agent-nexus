@@ -402,7 +402,7 @@ export const QA_DOCUMENTS = [
 export const QA_ARTIFACTS = [
   {
     id: "artifact-release-review-001",
-    kind: "review",
+    kind: "attachment",
     summary: "Cutover review packet",
     created_at: hoursAgo(3),
     created_by: "actor-zara-ops",
@@ -411,7 +411,7 @@ export const QA_ARTIFACTS = [
   },
   {
     id: "artifact-billing-receipt-001",
-    kind: "receipt",
+    kind: "attachment",
     summary: "Stripe sandbox smoke receipt",
     created_at: hoursAgo(8),
     created_by: "actor-jordan-human",
@@ -420,7 +420,7 @@ export const QA_ARTIFACTS = [
   },
   {
     id: "artifact-docs-evidence-001",
-    kind: "evidence",
+    kind: "attachment",
     summary: "Onboarding screenshot review notes",
     created_at: hoursAgo(20),
     created_by: "actor-iris-docs",
@@ -433,7 +433,7 @@ export const QA_EVENTS = [
   {
     id: "evt-home-future-safe",
     ts: hoursAgo(30),
-    type: "future_signal_emitted",
+    type: "exception_raised",
     actor_id: "actor-iris-docs",
     thread_id: "thread-docs-refresh",
     refs: ["topic:topic-docs-refresh", "document:doc-onboarding-playbook"],

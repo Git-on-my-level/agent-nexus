@@ -126,7 +126,7 @@ func TestEventReferenceConventionsRejectMissingRequiredPayloadFields(t *testing.
 	defer withSubtypeResp.Body.Close()
 }
 
-func TestEventReferenceConventionsAllowUnknownEventType(t *testing.T) {
+func TestEventReferenceConventionsRejectUnknownEventType(t *testing.T) {
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -142,39 +142,8 @@ func TestEventReferenceConventionsAllowUnknownEventType(t *testing.T) {
 			"payload":{"x":1},
 			"provenance":{"sources":["inferred"]}
 		}
-	}`, http.StatusCreated)
-	defer createResp.Body.Close()
-
-	var created struct {
-		Event map[string]any `json:"event"`
-	}
-	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
-		t.Fatalf("decode create event response: %v", err)
-	}
-
-	eventID, _ := created.Event["id"].(string)
-	if eventID == "" {
-		t.Fatal("expected event id")
-	}
-
-	getResp, err := http.Get(h.baseURL + "/events/" + eventID)
-	if err != nil {
-		t.Fatalf("GET /events/{id}: %v", err)
-	}
-	defer getResp.Body.Close()
-	if getResp.StatusCode != http.StatusOK {
-		t.Fatalf("unexpected get status: got %d", getResp.StatusCode)
-	}
-
-	var loaded struct {
-		Event map[string]any `json:"event"`
-	}
-	if err := json.NewDecoder(getResp.Body).Decode(&loaded); err != nil {
-		t.Fatalf("decode get event response: %v", err)
-	}
-	if loaded.Event["type"] != "my_unknown_event_type" {
-		t.Fatalf("unexpected event type: %#v", loaded.Event["type"])
-	}
+	}`, http.StatusBadRequest)
+	assertEventErrorMessageContains(t, createResp, "invalid value")
 }
 
 func assertEventErrorMessageContains(t *testing.T, resp *http.Response, want string) {

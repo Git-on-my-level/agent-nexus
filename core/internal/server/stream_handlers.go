@@ -14,6 +14,7 @@ import (
 
 	"agent-nexus-core/internal/actors"
 	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/schema"
 )
 
 const sseWriteTimeout = 5 * time.Second
@@ -23,14 +24,30 @@ func handleListEvents(w http.ResponseWriter, r *http.Request, opts handlerOption
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
+	if opts.contract == nil {
+		writeError(w, http.StatusServiceUnavailable, "schema_unavailable", "schema contract is not configured")
+		return
+	}
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
 		return
 	}
 
 	threadID := strings.TrimSpace(r.URL.Query().Get("thread_id"))
-	eventTypes := parseEventTypeFilters(r)
 	query := r.URL.Query()
+	eventTypes, ok := parseEventTypeFilters(w, r, opts)
+	if !ok {
+		return
+	}
+	eventGroups, ok := parseEventGroupFilters(w, r, opts)
+	if !ok {
+		return
+	}
+	eventTypes = composeEventTypeFilters(eventTypes, eventGroups, opts.contract)
+	backingScope, ok := parseBackingScope(w, opts, query.Get("backing_scope"))
+	if !ok {
+		return
+	}
 	limit, ok := parseOptionalPositiveInt(w, query.Get("limit"), 50, 200, "limit")
 	if !ok {
 		return
@@ -41,18 +58,19 @@ func handleListEvents(w http.ResponseWriter, r *http.Request, opts handlerOption
 		return
 	}
 	page, err := opts.primitiveStore.ListEventsPage(r.Context(), primitives.EventListFilter{
-		Types:     eventTypes,
-		Preset:    strings.TrimSpace(query.Get("preset")),
-		TopicID:   strings.TrimSpace(query.Get("topic_id")),
-		ThreadID:  threadID,
-		ActorID:   strings.TrimSpace(query.Get("actor_id")),
-		ActorIDs:  actorIDs,
-		ActorKind: actorKind,
-		Query:     strings.TrimSpace(query.Get("q")),
-		Since:     strings.TrimSpace(query.Get("since")),
-		Until:     strings.TrimSpace(query.Get("until")),
-		Limit:     limit,
-		Cursor:    strings.TrimSpace(query.Get("cursor")),
+		Types:        eventTypes,
+		BackingScope: backingScope,
+		Preset:       strings.TrimSpace(query.Get("preset")),
+		TopicID:      strings.TrimSpace(query.Get("topic_id")),
+		ThreadID:     threadID,
+		ActorID:      strings.TrimSpace(query.Get("actor_id")),
+		ActorIDs:     actorIDs,
+		ActorKind:    actorKind,
+		Query:        strings.TrimSpace(query.Get("q")),
+		Since:        strings.TrimSpace(query.Get("since")),
+		Until:        strings.TrimSpace(query.Get("until")),
+		Limit:        limit,
+		Cursor:       strings.TrimSpace(query.Get("cursor")),
 	})
 	if err != nil {
 		if errors.Is(err, primitives.ErrInvalidCursor) {
@@ -119,9 +137,16 @@ func handleEventsStream(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
+	if opts.contract == nil {
+		writeError(w, http.StatusServiceUnavailable, "schema_unavailable", "schema contract is not configured")
+		return
+	}
 
 	threadID := strings.TrimSpace(r.URL.Query().Get("thread_id"))
-	eventTypes := parseEventTypeFilters(r)
+	eventTypes, ok := parseEventTypeFilters(w, r, opts)
+	if !ok {
+		return
+	}
 	lastEventID := resolveLastEventID(r)
 
 	controller, flusher, ok := prepareSSE(w)
@@ -332,16 +357,77 @@ func listEventsForStream(r *http.Request, opts handlerOptions, threadID string, 
 	return events, nil
 }
 
-func parseEventTypeFilters(r *http.Request) []string {
+func parseEventTypeFilters(w http.ResponseWriter, r *http.Request, opts handlerOptions) ([]string, bool) {
 	values := r.URL.Query()
 	out := make([]string, 0)
 	for _, raw := range values["type"] {
 		out = append(out, splitCommaSeparated(raw)...)
 	}
-	for _, raw := range values["types"] {
+	out = uniqueNonEmptyStrings(out)
+	for _, eventType := range out {
+		if err := schema.ValidateEnum(opts.contract, "event_type", eventType); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return nil, false
+		}
+	}
+	return out, true
+}
+
+func parseEventGroupFilters(w http.ResponseWriter, r *http.Request, opts handlerOptions) ([]string, bool) {
+	values := r.URL.Query()
+	out := make([]string, 0)
+	for _, raw := range values["event_group"] {
 		out = append(out, splitCommaSeparated(raw)...)
 	}
-	return uniqueNonEmptyStrings(out)
+	out = uniqueNonEmptyStrings(out)
+	for _, group := range out {
+		if err := schema.ValidateEnum(opts.contract, "event_group", group); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return nil, false
+		}
+	}
+	return out, true
+}
+
+func composeEventTypeFilters(types []string, groups []string, contract *schema.Contract) []string {
+	if len(groups) == 0 || contract == nil {
+		return types
+	}
+	eventEnum, ok := contract.Enums["event_type"]
+	if !ok {
+		return types
+	}
+	groupTypes := make([]string, 0)
+	for _, group := range groups {
+		groupTypes = append(groupTypes, eventEnum.Groups[group]...)
+	}
+	groupTypes = uniqueNonEmptyStrings(groupTypes)
+	if len(types) == 0 {
+		return groupTypes
+	}
+	allowed := map[string]struct{}{}
+	for _, eventType := range groupTypes {
+		allowed[eventType] = struct{}{}
+	}
+	out := make([]string, 0, len(types))
+	for _, eventType := range types {
+		if _, ok := allowed[eventType]; ok {
+			out = append(out, eventType)
+		}
+	}
+	return out
+}
+
+func parseBackingScope(w http.ResponseWriter, opts handlerOptions, raw string) (string, bool) {
+	scope := strings.TrimSpace(raw)
+	if scope == "" {
+		return "all", true
+	}
+	if err := schema.ValidateEnum(opts.contract, "backing_scope", scope); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return "", false
+	}
+	return scope, true
 }
 
 func parseOptionalPositiveInt(w http.ResponseWriter, raw string, defaultValue int, maxValue int, field string) (int, bool) {

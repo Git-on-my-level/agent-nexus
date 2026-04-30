@@ -32,9 +32,9 @@ enums:
     values: [backlog, ready, in_progress, blocked, review, done]
 
   event_type:
-    enum_policy: open
+    enum_policy: strict
     description: >
-      Initial known values. The system MUST accept and store unknown values.
+      Canonical event ledger types. Unknown values are rejected at write time.
     values:
       - topic_created
       - topic_updated
@@ -54,15 +54,52 @@ enums:
       - card_archived
       - card_trashed
       - card_resolved
+      - receipt_added
+      - review_completed
       - exception_raised
       - human_attention_requested
       - human_attention_responded
       - agent_notification_read
       - agent_notification_dismissed
+      - agent_bridge_checked_in
+      - agent_wakeup_requested
+      - agent_wakeup_claimed
+      - agent_wakeup_completed
+      - agent_wakeup_failed
+    groups:
+      messages: [message_posted]
+      topics: [topic_created, topic_updated, topic_archived, topic_restored, topic_trashed]
+      documents: [document_created, document_revised, document_trashed, document_restored]
+      boards: [board_created, board_updated]
+      cards: [card_created, card_updated, card_moved, card_archived, card_trashed, card_resolved]
+      attention: [human_attention_requested, human_attention_responded]
+      notifications: [agent_notification_read, agent_notification_dismissed, agent_bridge_checked_in, agent_wakeup_requested, agent_wakeup_claimed, agent_wakeup_completed, agent_wakeup_failed]
+      reviews: [receipt_added, review_completed]
+      exceptions: [exception_raised]
+    backing_event_types:
+      - document_created
+      - document_revised
+      - document_trashed
+      - document_restored
+      - card_created
+      - card_updated
+      - card_moved
+      - card_archived
+      - card_trashed
+      - card_resolved
 
   artifact_kind:
-    enum_policy: open
-    values: [doc, card, agent_wake]
+    enum_policy: strict
+    values: [doc, card, agent_wake, attachment]
+    backing_kinds: [doc, card]
+
+  backing_scope:
+    enum_policy: strict
+    values: [all, standalone, backing_only]
+
+  event_group:
+    enum_policy: strict
+    values: [messages, topics, documents, boards, cards, attention, notifications, reviews, exceptions]
 
   provenance_source:
     enum_policy: open

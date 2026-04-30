@@ -47,8 +47,8 @@ func TestEmbeddedEventRefRules(t *testing.T) {
 	if rules.RuleCount == 0 {
 		t.Fatal("expected non-empty event ref rules")
 	}
-	if !rules.EventTypeOpenEnum {
-		t.Fatal("expected event_type enum policy to be open in generated metadata")
+	if rules.EventTypeOpenEnum {
+		t.Fatal("expected event_type enum policy to be strict in generated metadata")
 	}
 
 	cardMoved, ok := rules.RuleForEventType("card_moved")
@@ -73,5 +73,20 @@ func TestEmbeddedEventRefRules(t *testing.T) {
 	_, ok = rules.RuleForEventType("unknown_event_type")
 	if ok {
 		t.Fatal("expected unknown event type to not have a rule")
+	}
+
+	taxonomy, err := LoadEmbeddedTaxonomy()
+	if err != nil {
+		t.Fatalf("load embedded taxonomy: %v", err)
+	}
+	eventTypes, ok := taxonomy.Enums["event_type"]
+	if !ok {
+		t.Fatal("expected event_type taxonomy")
+	}
+	if eventTypes.EnumPolicy != "strict" {
+		t.Fatalf("expected strict event_type taxonomy, got %q", eventTypes.EnumPolicy)
+	}
+	if len(taxonomy.EventGroups["messages"]) == 0 {
+		t.Fatal("expected message event group taxonomy")
 	}
 }

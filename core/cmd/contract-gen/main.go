@@ -90,8 +90,11 @@ type anxSchemaDocument struct {
 }
 
 type anxEnumDef struct {
-	EnumPolicy string   `yaml:"enum_policy"`
-	Values     []string `yaml:"values"`
+	EnumPolicy        string              `yaml:"enum_policy"`
+	Values            []string            `yaml:"values"`
+	Groups            map[string][]string `yaml:"groups"`
+	BackingEventTypes []string            `yaml:"backing_event_types"`
+	BackingKinds      []string            `yaml:"backing_kinds"`
 }
 
 type anxFieldContainer struct {
@@ -256,6 +259,22 @@ type conceptsOutput struct {
 	GeneratedBy     string        `json:"generated_by"`
 	ConceptCount    int           `json:"concept_count"`
 	Concepts        []conceptMeta `json:"concepts"`
+}
+
+type taxonomyOutput struct {
+	OpenAPIVersion    string                  `json:"openapi_version"`
+	ContractVersion   string                  `json:"contract_version"`
+	GeneratedBy       string                  `json:"generated_by"`
+	Enums             map[string]taxonomyEnum `json:"enums"`
+	EventGroups       map[string][]string     `json:"event_groups,omitempty"`
+	EventTypeGroups   map[string][]string     `json:"event_type_groups,omitempty"`
+	BackingEventTypes []string                `json:"backing_event_types,omitempty"`
+	BackingKinds      []string                `json:"backing_artifact_kinds,omitempty"`
+}
+
+type taxonomyEnum struct {
+	EnumPolicy string   `json:"enum_policy"`
+	Values     []string `json:"values"`
 }
 
 type groupMeta struct {
@@ -914,6 +933,9 @@ func generateAll(outDir string, doc openAPIDocument, commands []command, schemaD
 	if err := writeHelpMeta(filepath.Join(outDir, "meta", "help.json"), doc, commands); err != nil {
 		return err
 	}
+	if err := writeTaxonomyMeta(filepath.Join(outDir, "meta", "taxonomy.json"), doc, schemaDoc); err != nil {
+		return err
+	}
 	if config.EmitEventRefRules {
 		if err := writeEventRefRulesMeta(filepath.Join(outDir, "meta", "event_ref_rules.json"), doc, schemaDoc); err != nil {
 			return err
@@ -1038,6 +1060,64 @@ func writeEventRefRulesMeta(path string, doc openAPIDocument, schemaDoc anxSchem
 		EventTypeOpenEnum: eventTypeOpenEnum,
 		RuleCount:         len(rules),
 		Rules:             rules,
+	}
+
+	b, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return err
+	}
+	b = append(b, '\n')
+	return os.WriteFile(path, b, 0o644)
+}
+
+func writeTaxonomyMeta(path string, doc openAPIDocument, schemaDoc anxSchemaDocument) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+
+	enums := make(map[string]taxonomyEnum, len(schemaDoc.Enums))
+	for name, enumDef := range schemaDoc.Enums {
+		enums[name] = taxonomyEnum{
+			EnumPolicy: strings.TrimSpace(enumDef.EnumPolicy),
+			Values:     sortedUniqueStrings(enumDef.Values),
+		}
+	}
+
+	eventGroups := map[string][]string{}
+	eventTypeGroups := map[string][]string{}
+	var backingEventTypes []string
+	if eventTypes, ok := schemaDoc.Enums["event_type"]; ok {
+		backingEventTypes = sortedUniqueStrings(eventTypes.BackingEventTypes)
+		for group, values := range eventTypes.Groups {
+			group = strings.TrimSpace(group)
+			if group == "" {
+				continue
+			}
+			compact := sortedUniqueStrings(values)
+			eventGroups[group] = compact
+			for _, eventType := range compact {
+				eventTypeGroups[eventType] = append(eventTypeGroups[eventType], group)
+			}
+		}
+		for eventType, groups := range eventTypeGroups {
+			eventTypeGroups[eventType] = sortedUniqueStrings(groups)
+		}
+	}
+
+	var backingKinds []string
+	if artifactKinds, ok := schemaDoc.Enums["artifact_kind"]; ok {
+		backingKinds = sortedUniqueStrings(artifactKinds.BackingKinds)
+	}
+
+	payload := taxonomyOutput{
+		OpenAPIVersion:    doc.OpenAPI,
+		ContractVersion:   strings.TrimSpace(doc.Info.Version),
+		GeneratedBy:       "core/cmd/contract-gen",
+		Enums:             enums,
+		EventGroups:       eventGroups,
+		EventTypeGroups:   eventTypeGroups,
+		BackingEventTypes: backingEventTypes,
+		BackingKinds:      backingKinds,
 	}
 
 	b, err := json.MarshalIndent(payload, "", "  ")

@@ -9,6 +9,31 @@
   import { initializeAuthSession } from "$lib/authSession";
   import { HOME_FEED_PRESET, normalizeEventRow } from "$lib/events/eventRows";
   import { workspacePath } from "$lib/workspacePaths";
+  import taxonomy from "$lib/generated/taxonomy.json";
+
+  const EVENT_GROUP_LABELS = {
+    messages: "Messages",
+    topics: "Topics",
+    documents: "Documents",
+    boards: "Boards",
+    cards: "Cards",
+    attention: "Attention",
+    notifications: "Notifications",
+    reviews: "Reviews",
+    exceptions: "Exceptions",
+  };
+  const EVENT_GROUPS =
+    taxonomy?.enums?.event_group?.values ?? Object.keys(EVENT_GROUP_LABELS);
+  const BACKING_SCOPE_LABELS = {
+    all: "All",
+    standalone: "Standalone",
+    backing_only: "Backing only",
+  };
+  const BACKING_SCOPES = taxonomy?.enums?.backing_scope?.values ?? [
+    "all",
+    "standalone",
+    "backing_only",
+  ];
 
   let events = $state([]);
   let pageInfo = $state({ has_more: false, next_cursor: "" });
@@ -18,6 +43,8 @@
   let filters = $state({
     preset: "",
     type: "",
+    event_group: [],
+    backing_scope: "all",
     topic_id: "",
     actor_id: "",
     q: "",
@@ -40,6 +67,14 @@
   function queryFromFilters(cursor = "") {
     const query = {};
     for (const [key, value] of Object.entries(filters)) {
+      if (key === "backing_scope" && value === "all") continue;
+      if (Array.isArray(value)) {
+        const items = value
+          .map((item) => String(item ?? "").trim())
+          .filter(Boolean);
+        if (items.length > 0) query[key] = items;
+        continue;
+      }
       const text = String(value ?? "").trim();
       if (text) query[key] = text;
     }
@@ -54,6 +89,8 @@
     filters = {
       preset: params.get("preset") ?? "",
       type: params.get("type") ?? "",
+      event_group: params.getAll("event_group"),
+      backing_scope: params.get("backing_scope") ?? "all",
       topic_id: params.get("topic_id") ?? "",
       actor_id: params.get("actor_id") ?? "",
       q: params.get("q") ?? "",
@@ -65,6 +102,14 @@
   async function replaceUrlFilters(nextCursor = "") {
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(filters)) {
+      if (key === "backing_scope" && value === "all") continue;
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          const text = String(item ?? "").trim();
+          if (text) params.append(key, text);
+        }
+        continue;
+      }
       const text = String(value ?? "").trim();
       if (text) params.set(key, text);
     }
@@ -131,6 +176,16 @@
     await applyFilters();
   }
 
+  function toggleEventGroup(group) {
+    const current = new Set(filters.event_group ?? []);
+    if (current.has(group)) {
+      current.delete(group);
+    } else {
+      current.add(group);
+    }
+    filters.event_group = EVENT_GROUPS.filter((value) => current.has(value));
+  }
+
   onMount(() => {
     filtersFromUrl();
     void loadEvents();
@@ -169,6 +224,14 @@
         bind:value={filters.type}
         placeholder="Type"
       />
+      <select
+        class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta text-[var(--fg)]"
+        bind:value={filters.backing_scope}
+      >
+        {#each BACKING_SCOPES as scope}
+          <option value={scope}>{BACKING_SCOPE_LABELS[scope] ?? scope}</option>
+        {/each}
+      </select>
       <input
         class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta text-[var(--fg)]"
         bind:value={filters.topic_id}
@@ -190,6 +253,21 @@
         placeholder="Until"
       />
     </div>
+    <fieldset class="mt-3 flex flex-wrap gap-2 text-meta">
+      {#each EVENT_GROUPS as group}
+        <label
+          class="flex cursor-pointer items-center gap-1.5 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-1 text-[var(--fg-muted)]"
+        >
+          <input
+            checked={(filters.event_group ?? []).includes(group)}
+            class="h-3.5 w-3.5"
+            type="checkbox"
+            onchange={() => toggleEventGroup(group)}
+          />
+          {EVENT_GROUP_LABELS[group] ?? group}
+        </label>
+      {/each}
+    </fieldset>
     <div class="mt-2 flex justify-end">
       <button
         class="rounded-md border border-[var(--line)] px-2.5 py-1.5 text-meta font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)]"

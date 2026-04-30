@@ -384,7 +384,7 @@ func TestThreadTimelineIncludesReferencedObjectsAndOmitsMissingRefs(t *testing.T
 	appendEventResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-1",
 		"event":{
-			"type":"timeline_ref_test",
+			"type":"agent_bridge_checked_in",
 			"thread_id":"`+threadID+`",
 			"refs":[
 				"thread:`+threadID+`",
@@ -597,7 +597,7 @@ func TestThreadContextBundlesRecentEventsArtifactsAndOpenCards(t *testing.T) {
 	postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-1",
 		"event":{
-			"type":"context_probe_1",
+			"type":"agent_bridge_checked_in",
 			"thread_id":"`+threadID+`",
 			"refs":["thread:`+threadID+`"],
 			"summary":"context probe 1",
@@ -609,7 +609,7 @@ func TestThreadContextBundlesRecentEventsArtifactsAndOpenCards(t *testing.T) {
 	postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-1",
 		"event":{
-			"type":"context_probe_2",
+			"type":"agent_wakeup_completed",
 			"thread_id":"`+threadID+`",
 			"refs":["thread:`+threadID+`"],
 			"summary":"context probe 2",
@@ -644,7 +644,7 @@ func TestThreadContextBundlesRecentEventsArtifactsAndOpenCards(t *testing.T) {
 	if len(payload.RecentEvents) != 2 {
 		t.Fatalf("expected 2 recent events, got %d", len(payload.RecentEvents))
 	}
-	if asString(payload.RecentEvents[0]["type"]) != "context_probe_1" || asString(payload.RecentEvents[1]["type"]) != "context_probe_2" {
+	if asString(payload.RecentEvents[0]["type"]) != "agent_bridge_checked_in" || asString(payload.RecentEvents[1]["type"]) != "agent_wakeup_completed" {
 		t.Fatalf("unexpected recent event types: %#v", payload.RecentEvents)
 	}
 

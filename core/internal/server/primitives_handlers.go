@@ -599,12 +599,13 @@ func handleListArtifacts(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
+	if opts.contract == nil {
+		writeError(w, http.StatusServiceUnavailable, "schema_unavailable", "schema contract is not configured")
+		return
+	}
 
 	query := r.URL.Query()
 	threadID := strings.TrimSpace(query.Get("thread_id"))
-	if threadID == "" {
-		threadID = strings.TrimSpace(query.Get("thread"))
-	}
 
 	states, parseErr := ParseListLifecycleStates(query)
 	if parseErr != nil {
@@ -618,17 +619,27 @@ func handleListArtifacts(w http.ResponseWriter, r *http.Request, opts handlerOpt
 			limitPtr = &n
 		}
 	}
+	kind := strings.TrimSpace(query.Get("kind"))
+	if kind != "" {
+		if err := schema.ValidateEnum(opts.contract, "artifact_kind", kind); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+	}
+	backingScope, ok := parseBackingScope(w, opts, query.Get("backing_scope"))
+	if !ok {
+		return
+	}
 
 	artifacts, err := opts.primitiveStore.ListArtifacts(r.Context(), primitives.ArtifactListFilter{
 		States:        states,
 		Q:             strings.TrimSpace(query.Get("q")),
 		Limit:         limitPtr,
-		Kind:          strings.TrimSpace(query.Get("kind")),
+		Kind:          kind,
+		BackingScope:  backingScope,
 		ThreadID:      threadID,
 		CreatedBefore: strings.TrimSpace(query.Get("created_before")),
 		CreatedAfter:  strings.TrimSpace(query.Get("created_after")),
-		IncludeSystemOwned: strings.EqualFold(strings.TrimSpace(query.Get("include_system_owned")), "true") ||
-			strings.EqualFold(strings.TrimSpace(query.Get("include_system_owned")), "1"),
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list artifacts")

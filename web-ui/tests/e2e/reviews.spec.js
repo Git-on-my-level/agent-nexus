@@ -11,7 +11,7 @@ test("submit review from receipt artifact and see payload + revise follow-up lin
 
   const receiptArtifact = {
     id: receiptId,
-    kind: "receipt",
+    kind: "attachment",
     thread_id: "thread-onboarding",
     summary: "Receipt for review flow test",
     refs: [cardRef, "thread:thread-onboarding"],
@@ -123,7 +123,7 @@ test("submit review from receipt artifact and see payload + revise follow-up lin
       body: JSON.stringify({
         artifact: {
           id: reviewId,
-          kind: "review",
+          kind: "attachment",
           thread_id: backingThreadId,
           refs: reviewPayload.artifact.refs,
           summary: reviewPayload.artifact.summary,

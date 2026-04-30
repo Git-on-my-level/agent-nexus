@@ -23,6 +23,9 @@ var embeddedHelpJSON []byte
 //go:embed event_ref_rules.json
 var embeddedEventRefRulesJSON []byte
 
+//go:embed taxonomy.json
+var embeddedTaxonomyJSON []byte
+
 type Example struct {
 	Title       string `json:"title"`
 	Command     string `json:"command"`
@@ -131,12 +134,28 @@ type EventRefRule struct {
 }
 
 type EventRefRulesRegistry struct {
-	OpenAPIVersion     string                  `json:"openapi_version"`
-	ContractVersion    string                  `json:"contract_version"`
-	GeneratedBy        string                  `json:"generated_by"`
-	EventTypeOpenEnum  bool                    `json:"event_type_open_enum,omitempty"`
-	RuleCount          int                     `json:"rule_count"`
-	Rules              map[string]EventRefRule `json:"rules"`
+	OpenAPIVersion    string                  `json:"openapi_version"`
+	ContractVersion   string                  `json:"contract_version"`
+	GeneratedBy       string                  `json:"generated_by"`
+	EventTypeOpenEnum bool                    `json:"event_type_open_enum,omitempty"`
+	RuleCount         int                     `json:"rule_count"`
+	Rules             map[string]EventRefRule `json:"rules"`
+}
+
+type TaxonomyEnum struct {
+	EnumPolicy string   `json:"enum_policy"`
+	Values     []string `json:"values"`
+}
+
+type TaxonomyRegistry struct {
+	OpenAPIVersion    string                  `json:"openapi_version"`
+	ContractVersion   string                  `json:"contract_version"`
+	GeneratedBy       string                  `json:"generated_by"`
+	Enums             map[string]TaxonomyEnum `json:"enums"`
+	EventGroups       map[string][]string     `json:"event_groups,omitempty"`
+	EventTypeGroups   map[string][]string     `json:"event_type_groups,omitempty"`
+	BackingEventTypes []string                `json:"backing_event_types,omitempty"`
+	BackingKinds      []string                `json:"backing_artifact_kinds,omitempty"`
 }
 
 func CommandSpecs() []contractsclient.CommandSpec {
@@ -181,8 +200,18 @@ func EmbeddedEventRefRulesJSON() []byte {
 	return out
 }
 
+func EmbeddedTaxonomyJSON() []byte {
+	out := make([]byte, len(embeddedTaxonomyJSON))
+	copy(out, embeddedTaxonomyJSON)
+	return out
+}
+
 func LoadEmbeddedEventRefRules() (EventRefRulesRegistry, error) {
 	return parseEventRefRules(embeddedEventRefRulesJSON)
+}
+
+func LoadEmbeddedTaxonomy() (TaxonomyRegistry, error) {
+	return parseTaxonomy(embeddedTaxonomyJSON)
 }
 
 func LoadEventRefRulesFromFile(path string) (EventRefRulesRegistry, error) {
@@ -200,6 +229,17 @@ func parseEventRefRules(content []byte) (EventRefRulesRegistry, error) {
 	}
 	if out.RuleCount != len(out.Rules) {
 		return EventRefRulesRegistry{}, fmt.Errorf("rule_count mismatch: count=%d rules=%d", out.RuleCount, len(out.Rules))
+	}
+	return out, nil
+}
+
+func parseTaxonomy(content []byte) (TaxonomyRegistry, error) {
+	var out TaxonomyRegistry
+	if err := json.Unmarshal(content, &out); err != nil {
+		return TaxonomyRegistry{}, fmt.Errorf("decode taxonomy metadata: %w", err)
+	}
+	if len(out.Enums) == 0 {
+		return TaxonomyRegistry{}, fmt.Errorf("taxonomy metadata has no enums")
 	}
 	return out, nil
 }

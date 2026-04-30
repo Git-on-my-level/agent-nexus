@@ -43,13 +43,13 @@ const (
 type ArtifactListFilter struct {
 	States []string
 
-	Q                  string
-	Limit              *int
-	Kind               string
-	ThreadID           string
-	CreatedBefore      string
-	CreatedAfter       string
-	IncludeSystemOwned bool
+	Q             string
+	Limit         *int
+	Kind          string
+	BackingScope  string
+	ThreadID      string
+	CreatedBefore string
+	CreatedAfter  string
 }
 
 type DocumentListFilter struct {
@@ -78,15 +78,16 @@ type TopicListFilter struct {
 }
 
 type EventListFilter struct {
-	Types     []string
-	Preset    string
-	TopicID   string
-	ThreadID  string
-	ActorID   string
-	ActorIDs  []string
-	ActorKind string
-	Query     string
-	Since     string
+	Types        []string
+	BackingScope string
+	Preset       string
+	TopicID      string
+	ThreadID     string
+	ActorID      string
+	ActorIDs     []string
+	ActorKind    string
+	Query        string
+	Since        string
 	// SinceExclusiveID, when set together with Since, restricts to rows strictly after the (Since, SinceExclusiveID) tuple (ts DESC pagination / read-cursor lower bounds).
 	SinceExclusiveID string
 	Until            string
@@ -110,13 +111,9 @@ var HomeFeedEventTypes = []string{
 	"message_posted",
 	"card_created",
 	"card_moved",
-	"card_closed",
 	"card_resolved",
-	"card_restored",
 	"card_archived",
 	"card_trashed",
-	"topic_priority_changed",
-	"topic_lifecycle_changed",
 	"topic_updated",
 	"topic_archived",
 	"topic_restored",
@@ -127,6 +124,21 @@ var HomeFeedEventTypes = []string{
 	"document_revision_created",
 	"document_revised",
 }
+
+var BackingEventTypes = []string{
+	"document_created",
+	"document_revised",
+	"document_restored",
+	"document_trashed",
+	"card_created",
+	"card_updated",
+	"card_moved",
+	"card_archived",
+	"card_trashed",
+	"card_resolved",
+}
+
+var BackingArtifactKinds = []string{"doc", "card"}
 
 // HumanAttentionRespondedPageParams configures newest-first pagination over human_attention_responded events.
 type HumanAttentionRespondedPageParams struct {
@@ -2365,6 +2377,7 @@ func (s *Store) ListEventsPage(ctx context.Context, filter EventListFilter) (Eve
 		WHERE COALESCE(trashed_at, '') = ''`
 	args := make([]any, 0)
 	filterTypes := filter.Types
+	explicitTypeFilter := len(dedupeStrings(filter.Types)) > 0
 	if strings.EqualFold(strings.TrimSpace(filter.Preset), "home_feed") {
 		explicit := dedupeStrings(filter.Types)
 		if len(explicit) > 0 {
@@ -2383,7 +2396,11 @@ func (s *Store) ListEventsPage(ctx context.Context, filter EventListFilter) (Eve
 			filterTypes = HomeFeedEventTypes
 		}
 	}
+	filterTypes, excludeBacking := applyEventBackingScope(filterTypes, filter.BackingScope)
 
+	if explicitTypeFilter && len(filterTypes) == 0 {
+		query += ` AND 1=0`
+	}
 	if len(filterTypes) > 0 {
 		placeholders := make([]string, 0, len(filterTypes))
 		for _, eventType := range filterTypes {
@@ -2391,6 +2408,14 @@ func (s *Store) ListEventsPage(ctx context.Context, filter EventListFilter) (Eve
 			args = append(args, eventType)
 		}
 		query += ` AND type IN (` + strings.Join(placeholders, ",") + `)`
+	}
+	if excludeBacking {
+		placeholders := make([]string, 0, len(BackingEventTypes))
+		for _, eventType := range BackingEventTypes {
+			placeholders = append(placeholders, "?")
+			args = append(args, eventType)
+		}
+		query += ` AND type NOT IN (` + strings.Join(placeholders, ",") + `)`
 	}
 	if threadID := strings.TrimSpace(filter.ThreadID); threadID != "" {
 		query += ` AND thread_id = ?`
@@ -2937,13 +2962,26 @@ func (s *Store) ListEventsAfter(ctx context.Context, filter EventListFilter, cur
 		WHERE 1=1`
 	args := make([]any, 0, len(filter.Types)+3)
 
-	if len(filter.Types) > 0 {
+	explicitTypeFilter := len(dedupeStrings(filter.Types)) > 0
+	filterTypes, excludeBacking := applyEventBackingScope(filter.Types, filter.BackingScope)
+	if explicitTypeFilter && len(filterTypes) == 0 {
+		query += ` AND 1=0`
+	}
+	if len(filterTypes) > 0 {
 		placeholders := make([]string, 0, len(filter.Types))
-		for _, eventType := range filter.Types {
+		for _, eventType := range filterTypes {
 			placeholders = append(placeholders, "?")
 			args = append(args, eventType)
 		}
 		query += ` AND type IN (` + strings.Join(placeholders, ",") + `)`
+	}
+	if excludeBacking {
+		placeholders := make([]string, 0, len(BackingEventTypes))
+		for _, eventType := range BackingEventTypes {
+			placeholders = append(placeholders, "?")
+			args = append(args, eventType)
+		}
+		query += ` AND type NOT IN (` + strings.Join(placeholders, ",") + `)`
 	}
 	if strings.TrimSpace(cursor.TS) != "" {
 		query += ` AND (julianday(ts) > julianday(?) OR (julianday(ts) = julianday(?) AND id > ?))`
@@ -3239,6 +3277,7 @@ func buildListThreadsQuery(filter ThreadListFilter) (string, []any) {
 func buildListArtifactsQuery(filter ArtifactListFilter) (string, []any) {
 	q := strings.TrimSpace(filter.Q)
 	qPattern := "%" + q + "%"
+	backingScope := normalizeBackingScope(filter.BackingScope)
 
 	if threadID := strings.TrimSpace(filter.ThreadID); threadID != "" {
 		primaryClauses := []string{"thread_id = ?"}
@@ -3280,9 +3319,11 @@ func buildListArtifactsQuery(filter ArtifactListFilter) (string, []any) {
 			primaryArgs = append(primaryArgs, qPattern, qPattern, qPattern)
 			secondaryArgs = append(secondaryArgs, qPattern, qPattern, qPattern)
 		}
-		if !filter.IncludeSystemOwned && strings.TrimSpace(filter.Kind) == "" {
-			primaryClauses = append(primaryClauses, "kind NOT IN ('doc', 'card')")
-			secondaryClauses = append(secondaryClauses, "artifacts.kind NOT IN ('doc', 'card')")
+		if clause := artifactBackingScopeClause("kind", backingScope); clause != "" {
+			primaryClauses = append(primaryClauses, clause)
+		}
+		if clause := artifactBackingScopeClause("artifacts.kind", backingScope); clause != "" {
+			secondaryClauses = append(secondaryClauses, clause)
 		}
 		innerQuery := `SELECT id, metadata_json, created_at FROM artifacts WHERE ` + strings.Join(primaryClauses, " AND ") + `
 			UNION ALL
@@ -3304,8 +3345,9 @@ func buildListArtifactsQuery(filter ArtifactListFilter) (string, []any) {
 	if kind := strings.TrimSpace(filter.Kind); kind != "" {
 		query += ` AND kind = ?`
 		args = append(args, kind)
-	} else if !filter.IncludeSystemOwned {
-		query += ` AND kind NOT IN ('doc', 'card')`
+	}
+	if clause := artifactBackingScopeClause("kind", backingScope); clause != "" {
+		query += ` AND ` + clause
 	}
 	if createdAfter := strings.TrimSpace(filter.CreatedAfter); createdAfter != "" {
 		query += ` AND created_at >= ?`
@@ -3324,6 +3366,63 @@ func buildListArtifactsQuery(filter ArtifactListFilter) (string, []any) {
 		query += fmt.Sprintf(` LIMIT %d`, *filter.Limit)
 	}
 	return query, args
+}
+
+func normalizeBackingScope(scope string) string {
+	scope = strings.TrimSpace(scope)
+	if scope == "" {
+		return "all"
+	}
+	return scope
+}
+
+func artifactBackingScopeClause(column string, scope string) string {
+	switch normalizeBackingScope(scope) {
+	case "standalone":
+		return column + ` NOT IN ('doc', 'card')`
+	case "backing_only":
+		return column + ` IN ('doc', 'card')`
+	default:
+		return ""
+	}
+}
+
+func applyEventBackingScope(types []string, scope string) ([]string, bool) {
+	scope = normalizeBackingScope(scope)
+	switch scope {
+	case "backing_only":
+		if len(types) == 0 {
+			return BackingEventTypes, false
+		}
+		allowed := map[string]struct{}{}
+		for _, eventType := range BackingEventTypes {
+			allowed[eventType] = struct{}{}
+		}
+		out := make([]string, 0, len(types))
+		for _, eventType := range dedupeStrings(types) {
+			if _, ok := allowed[eventType]; ok {
+				out = append(out, eventType)
+			}
+		}
+		return out, false
+	case "standalone":
+		if len(types) == 0 {
+			return types, true
+		}
+		blocked := map[string]struct{}{}
+		for _, eventType := range BackingEventTypes {
+			blocked[eventType] = struct{}{}
+		}
+		out := make([]string, 0, len(types))
+		for _, eventType := range dedupeStrings(types) {
+			if _, ok := blocked[eventType]; !ok {
+				out = append(out, eventType)
+			}
+		}
+		return out, false
+	default:
+		return types, false
+	}
 }
 
 func containsString(values []string, expected string) bool {

@@ -13,11 +13,18 @@ export const ARTIFACT_STATE_VALUES = Object.freeze([
 
 export const DEFAULT_ARTIFACT_LIST_FILTERS = Object.freeze({
   kind: "",
+  backing_scope: "all",
   thread_id: "",
   created_after: "",
   created_before: "",
   states: ["active"],
 });
+
+export const ARTIFACT_BACKING_SCOPE_VALUES = Object.freeze([
+  "all",
+  "standalone",
+  "backing_only",
+]);
 
 function normalizeTimestampValue(value) {
   const raw = String(value ?? "").trim();
@@ -91,6 +98,12 @@ export function parseArtifactListSearchParams(searchParams) {
       Object.keys(KIND_LABELS),
       "",
     ),
+    backing_scope: readEnumSearchParam(
+      searchParams,
+      "backing_scope",
+      ARTIFACT_BACKING_SCOPE_VALUES,
+      "all",
+    ),
     thread_id: readStringSearchParam(searchParams, "thread_id"),
     created_after: normalizeTimestampValue(
       readStringSearchParam(searchParams, "created_after"),
@@ -108,6 +121,10 @@ export function buildArtifactListSearchString(filters = {}) {
   /** @type {Record<string, string | string[]>} */
   const entries = {
     kind: String(filters.kind ?? "").trim(),
+    backing_scope:
+      String(filters.backing_scope ?? "all").trim() === "all"
+        ? ""
+        : String(filters.backing_scope ?? "").trim(),
     thread_id: String(filters.thread_id ?? "").trim(),
     created_after: normalizeTimestampValue(filters.created_after),
     created_before: normalizeTimestampValue(filters.created_before),
@@ -125,6 +142,7 @@ export function buildArtifactListQuery(filters = {}) {
   /** @type {Record<string, string | string[]>} */
   const q = {};
   q.kind = String(filters.kind ?? "").trim();
+  q.backing_scope = String(filters.backing_scope ?? "all").trim() || "all";
   q.thread_id = String(filters.thread_id ?? "").trim();
   const ca = normalizeTimestampValue(filters.created_after);
   const cb = normalizeTimestampValue(filters.created_before);
@@ -142,6 +160,7 @@ export function hasArtifactListFilters(filters = {}) {
   const f = { ...DEFAULT_ARTIFACT_LIST_FILTERS, ...filters };
   return Boolean(
     String(f.kind ?? "").trim() ||
+    String(f.backing_scope ?? "all").trim() !== "all" ||
     String(f.thread_id ?? "").trim() ||
     String(f.created_after ?? "").trim() ||
     String(f.created_before ?? "").trim() ||

@@ -4080,8 +4080,13 @@ export const commandRegistry = [
                     "name": "event.type",
                     "type": "string",
                     "enum_values": [
+                        "agent_bridge_checked_in",
                         "agent_notification_dismissed",
                         "agent_notification_read",
+                        "agent_wakeup_claimed",
+                        "agent_wakeup_completed",
+                        "agent_wakeup_failed",
+                        "agent_wakeup_requested",
                         "board_created",
                         "board_updated",
                         "card_archived",
@@ -4098,13 +4103,15 @@ export const commandRegistry = [
                         "human_attention_requested",
                         "human_attention_responded",
                         "message_posted",
+                        "receipt_added",
+                        "review_completed",
                         "topic_archived",
                         "topic_created",
                         "topic_restored",
                         "topic_trashed",
                         "topic_updated"
                     ],
-                    "enum_policy": "open"
+                    "enum_policy": "strict"
                 }
             ],
             "optional": [

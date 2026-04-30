@@ -1,0 +1,279 @@
+{
+  "openapi_version": "3.1.0",
+  "contract_version": "0.6.0",
+  "generated_by": "core/cmd/contract-gen",
+  "enums": {
+    "agent_notification_status": {
+      "enum_policy": "strict",
+      "values": [
+        "dismissed",
+        "read",
+        "unread"
+      ]
+    },
+    "artifact_kind": {
+      "enum_policy": "strict",
+      "values": [
+        "agent_wake",
+        "attachment",
+        "card",
+        "doc"
+      ]
+    },
+    "backing_scope": {
+      "enum_policy": "strict",
+      "values": [
+        "all",
+        "backing_only",
+        "standalone"
+      ]
+    },
+    "board_column_key": {
+      "enum_policy": "strict",
+      "values": [
+        "backlog",
+        "blocked",
+        "done",
+        "in_progress",
+        "ready",
+        "review"
+      ]
+    },
+    "card_resolution": {
+      "enum_policy": "strict",
+      "values": [
+        "canceled",
+        "done"
+      ]
+    },
+    "event_group": {
+      "enum_policy": "strict",
+      "values": [
+        "attention",
+        "boards",
+        "cards",
+        "documents",
+        "exceptions",
+        "messages",
+        "notifications",
+        "reviews",
+        "topics"
+      ]
+    },
+    "event_type": {
+      "enum_policy": "strict",
+      "values": [
+        "agent_bridge_checked_in",
+        "agent_notification_dismissed",
+        "agent_notification_read",
+        "agent_wakeup_claimed",
+        "agent_wakeup_completed",
+        "agent_wakeup_failed",
+        "agent_wakeup_requested",
+        "board_created",
+        "board_updated",
+        "card_archived",
+        "card_created",
+        "card_moved",
+        "card_resolved",
+        "card_trashed",
+        "card_updated",
+        "document_created",
+        "document_restored",
+        "document_revised",
+        "document_trashed",
+        "exception_raised",
+        "human_attention_requested",
+        "human_attention_responded",
+        "message_posted",
+        "receipt_added",
+        "review_completed",
+        "topic_archived",
+        "topic_created",
+        "topic_restored",
+        "topic_trashed",
+        "topic_updated"
+      ]
+    },
+    "priority": {
+      "enum_policy": "strict",
+      "values": [
+        "p0",
+        "p1",
+        "p2",
+        "p3"
+      ]
+    },
+    "provenance_source": {
+      "enum_policy": "open",
+      "values": null
+    },
+    "work_item_risk": {
+      "enum_policy": "strict",
+      "values": [
+        "critical",
+        "high",
+        "low",
+        "medium"
+      ]
+    }
+  },
+  "event_groups": {
+    "attention": [
+      "human_attention_requested",
+      "human_attention_responded"
+    ],
+    "boards": [
+      "board_created",
+      "board_updated"
+    ],
+    "cards": [
+      "card_archived",
+      "card_created",
+      "card_moved",
+      "card_resolved",
+      "card_trashed",
+      "card_updated"
+    ],
+    "documents": [
+      "document_created",
+      "document_restored",
+      "document_revised",
+      "document_trashed"
+    ],
+    "exceptions": [
+      "exception_raised"
+    ],
+    "messages": [
+      "message_posted"
+    ],
+    "notifications": [
+      "agent_bridge_checked_in",
+      "agent_notification_dismissed",
+      "agent_notification_read",
+      "agent_wakeup_claimed",
+      "agent_wakeup_completed",
+      "agent_wakeup_failed",
+      "agent_wakeup_requested"
+    ],
+    "reviews": [
+      "receipt_added",
+      "review_completed"
+    ],
+    "topics": [
+      "topic_archived",
+      "topic_created",
+      "topic_restored",
+      "topic_trashed",
+      "topic_updated"
+    ]
+  },
+  "event_type_groups": {
+    "agent_bridge_checked_in": [
+      "notifications"
+    ],
+    "agent_notification_dismissed": [
+      "notifications"
+    ],
+    "agent_notification_read": [
+      "notifications"
+    ],
+    "agent_wakeup_claimed": [
+      "notifications"
+    ],
+    "agent_wakeup_completed": [
+      "notifications"
+    ],
+    "agent_wakeup_failed": [
+      "notifications"
+    ],
+    "agent_wakeup_requested": [
+      "notifications"
+    ],
+    "board_created": [
+      "boards"
+    ],
+    "board_updated": [
+      "boards"
+    ],
+    "card_archived": [
+      "cards"
+    ],
+    "card_created": [
+      "cards"
+    ],
+    "card_moved": [
+      "cards"
+    ],
+    "card_resolved": [
+      "cards"
+    ],
+    "card_trashed": [
+      "cards"
+    ],
+    "card_updated": [
+      "cards"
+    ],
+    "document_created": [
+      "documents"
+    ],
+    "document_restored": [
+      "documents"
+    ],
+    "document_revised": [
+      "documents"
+    ],
+    "document_trashed": [
+      "documents"
+    ],
+    "exception_raised": [
+      "exceptions"
+    ],
+    "human_attention_requested": [
+      "attention"
+    ],
+    "human_attention_responded": [
+      "attention"
+    ],
+    "message_posted": [
+      "messages"
+    ],
+    "receipt_added": [
+      "reviews"
+    ],
+    "review_completed": [
+      "reviews"
+    ],
+    "topic_archived": [
+      "topics"
+    ],
+    "topic_created": [
+      "topics"
+    ],
+    "topic_restored": [
+      "topics"
+    ],
+    "topic_trashed": [
+      "topics"
+    ],
+    "topic_updated": [
+      "topics"
+    ]
+  },
+  "backing_event_types": [
+    "card_archived",
+    "card_created",
+    "card_moved",
+    "card_resolved",
+    "card_trashed",
+    "card_updated",
+    "document_created",
+    "document_restored",
+    "document_revised",
+    "document_trashed"
+  ],
+  "backing_artifact_kinds": [
+    "card",
+    "doc"
+  ]
+}

@@ -2144,6 +2144,23 @@ paths:
           style: form
           explode: true
           description: Repeatable event type filter.
+        - name: event_group
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [messages, topics, documents, boards, cards, attention, notifications, reviews, exceptions]
+          style: form
+          explode: true
+          description: Repeatable event group filter. Multiple groups union together before intersecting with other filters.
+        - name: backing_scope
+          in: query
+          schema:
+            type: string
+            enum: [all, standalone, backing_only]
+            default: all
+          description: Whether to include all events, exclude backing lifecycle events, or include only backing lifecycle events.
         - name: topic_id
           in: query
           schema: { type: string }
@@ -2298,11 +2315,6 @@ paths:
           in: query
           required: false
           description: Event type filter (repeatable; comma-separated values allowed per parameter).
-          schema: { type: string }
-        - name: types
-          in: query
-          required: false
-          description: Comma-separated event type filters (alias of repeated `type`).
           schema: { type: string }
         - name: last_event_id
           in: query
@@ -2502,14 +2514,17 @@ paths:
           in: query
           required: false
           schema: { type: string }
+        - name: backing_scope
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [all, standalone, backing_only]
+            default: all
+          description: Whether to include all artifacts, exclude revision backing artifacts, or include only revision backing artifacts.
         - name: thread_id
           in: query
           required: false
-          schema: { type: string }
-        - name: thread
-          in: query
-          required: false
-          description: Alias for thread_id (core accepts either).
           schema: { type: string }
         - name: created_before
           in: query

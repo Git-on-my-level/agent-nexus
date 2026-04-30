@@ -25,6 +25,7 @@ import (
 
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
+	"agent-nexus-cli/internal/registry"
 )
 
 var idPattern = regexp.MustCompile(`^[A-Za-z0-9._:@/-]+$`)
@@ -966,12 +967,13 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 	switch sub {
 	case "list":
 		fs := newSilentFlagSet("artifacts list")
-		var kindFlag, threadIDFlag, beforeFlag, afterFlag trackedString
+		var kindFlag, backingScopeFlag, threadIDFlag, beforeFlag, afterFlag trackedString
 		var includeTrashed bool
 		var trashedOnly bool
 		var includeArchived bool
 		var archivedOnly bool
 		fs.Var(&kindFlag, "kind", "Filter by artifact kind")
+		fs.Var(&backingScopeFlag, "backing-scope", "Filter backing artifacts: all, standalone, or backing_only")
 		fs.Var(&threadIDFlag, "thread-id", "Filter by thread id")
 		fs.Var(&beforeFlag, "created-before", "Filter by created_at upper bound")
 		fs.Var(&afterFlag, "created-after", "Filter by created_at lower bound")
@@ -1003,6 +1005,7 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 			return nil, "artifacts list", err
 		}
 		addSingleQuery(&query, "kind", kindFlag.value)
+		addSingleQuery(&query, "backing_scope", firstNonEmpty(strings.TrimSpace(backingScopeFlag.value), "all"))
 		addSingleQuery(&query, "thread_id", resolvedThreadID)
 		addSingleQuery(&query, "created_before", beforeFlag.value)
 		addSingleQuery(&query, "created_after", afterFlag.value)
@@ -2540,6 +2543,8 @@ func (a *App) runEventsListCommand(ctx context.Context, args []string, cfg confi
 	fs := newSilentFlagSet("events list")
 	var threadIDFlags trackedStrings
 	var typesCSVFlag trackedString
+	var eventGroupFlags trackedStrings
+	var backingScopeFlag trackedString
 	var actorIDFlag trackedString
 	var maxEventsFlag trackedInt
 	var mineFlag trackedBool
@@ -2549,6 +2554,8 @@ func (a *App) runEventsListCommand(ctx context.Context, args []string, cfg confi
 	fs.Var(&threadIDFlags, "thread-id", "Thread id (repeatable)")
 	fs.Var(&typeFlags, "type", "Filter by event type (repeatable)")
 	fs.Var(&typesCSVFlag, "types", "Comma-separated event types")
+	fs.Var(&eventGroupFlags, "event-group", "Filter by event group (repeatable)")
+	fs.Var(&backingScopeFlag, "backing-scope", "Filter backing events: all, standalone, or backing_only")
 	fs.Var(&actorIDFlag, "actor-id", "Filter by actor id")
 	fs.Var(&mineFlag, "mine", "Filter to events authored by active profile actor_id")
 	fs.Var(&fullIDFlag, "full-id", "Render full IDs in default text output (non-JSON)")
@@ -2570,9 +2577,6 @@ func (a *App) runEventsListCommand(ctx context.Context, args []string, cfg confi
 	threadIDs = append(threadIDs, threadIDFlags.values...)
 	threadIDs = append(threadIDs, positionals...)
 	threadIDs = normalizeIDFilters(threadIDs)
-	if len(threadIDs) == 0 {
-		return nil, errnorm.Usage("invalid_request", "thread id is required (provide --thread-id <thread-id>)")
-	}
 	for _, threadID := range threadIDs {
 		if err := validateID(threadID, "thread id"); err != nil {
 			return nil, err
@@ -2584,8 +2588,23 @@ func (a *App) runEventsListCommand(ctx context.Context, args []string, cfg confi
 	if mineFlag.set && mineFlag.value && strings.TrimSpace(actorIDFlag.value) != "" && strings.TrimSpace(actorIDFlag.value) != "me" {
 		return nil, errnorm.Usage("invalid_request", "--mine cannot be combined with --actor-id unless --actor-id=me")
 	}
+	if len(threadIDs) == 0 && (includeArchived || archivedOnly || includeTrashed || trashedOnly) {
+		return nil, errnorm.Usage("invalid_flags", "events list lifecycle flags require --thread-id; workspace-wide events list uses GET /events, which does not expose lifecycle state filtering")
+	}
 
 	typeFilters := normalizeEventTypeFilters(typeFlags.values, typesCSVFlag.value)
+	eventGroupFilters := normalizeCSVFilters(eventGroupFlags.values)
+	backingScopeFilter := firstNonEmpty(strings.TrimSpace(backingScopeFlag.value), "all")
+	taxonomy, err := registry.LoadEmbeddedTaxonomy()
+	if err != nil {
+		return nil, errnorm.Wrap(errnorm.KindInternal, "taxonomy_unavailable", "failed to load embedded taxonomy metadata", err)
+	}
+	if err := validateEventGroupFilters(eventGroupFilters, taxonomy); err != nil {
+		return nil, err
+	}
+	if err := validateBackingScopeFilter(backingScopeFilter, taxonomy); err != nil {
+		return nil, err
+	}
 	actorFilter := strings.TrimSpace(actorIDFlag.value)
 	if mineFlag.set && mineFlag.value {
 		actorFilter = "me"
@@ -2593,6 +2612,19 @@ func (a *App) runEventsListCommand(ctx context.Context, args []string, cfg confi
 	resolvedActorID, err := resolveActorIDAlias(actorFilter, cfg)
 	if err != nil {
 		return nil, err
+	}
+
+	if len(threadIDs) == 0 {
+		query := make([]queryParam, 0, 8)
+		addMultiQuery(&query, "type", typeFilters)
+		addMultiQuery(&query, "event_group", eventGroupFilters)
+		addSingleQuery(&query, "backing_scope", backingScopeFilter)
+		addSingleQuery(&query, "actor_id", resolvedActorID)
+		if maxEventsFlag.set && maxEventsFlag.value > 0 {
+			addSingleQuery(&query, "limit", strconv.Itoa(maxEventsFlag.value))
+		}
+		result, err := a.invokeTypedJSON(ctx, cfg, "events list", "events.list", nil, query, nil)
+		return result, err
 	}
 
 	resolvedThreadIDs := make([]string, 0, len(threadIDs))
@@ -2634,6 +2666,8 @@ func (a *App) runEventsListCommand(ctx context.Context, args []string, cfg confi
 		threadEvents := asSlice(body["events"])
 		allEvents = append(allEvents, threadEvents...)
 		filtered := filterEventsByType(threadEvents, typeFilters)
+		filtered = filterEventsByEventGroups(filtered, eventGroupFilters, taxonomy)
+		filtered = filterEventsByBackingScope(filtered, backingScopeFilter, taxonomy)
 		filtered = filterEventsByActorID(filtered, resolvedActorID)
 		filtered = filterEventsByLifecycleState(filtered, includeArchived, archivedOnly, includeTrashed, trashedOnly)
 		matching = append(matching, filtered...)
@@ -2666,6 +2700,12 @@ func (a *App) runEventsListCommand(ctx context.Context, args []string, cfg confi
 	}
 	if len(typeFilters) > 0 {
 		listBody["types"] = typeFilters
+	}
+	if len(eventGroupFilters) > 0 {
+		listBody["event_groups"] = eventGroupFilters
+	}
+	if backingScopeFilter != "" && backingScopeFilter != "all" {
+		listBody["backing_scope"] = backingScopeFilter
 	}
 	if resolvedActorID != "" {
 		listBody["actor_id"] = resolvedActorID
@@ -2721,7 +2761,7 @@ func (a *App) runEventsExplainCommand(args []string) (*commandResult, error) {
 	}
 	if eventType == "" {
 		textLines := []string{
-			"Known event types (open enum; unknown types are still accepted):",
+			"Known event types (strict enum):",
 		}
 		items := make([]any, 0, len(knownEventTypeGuidance))
 		for _, group := range eventTypeGroupOrder {
@@ -3109,8 +3149,7 @@ func (a *App) runEventsStream(ctx context.Context, args []string, cfg config.Res
 
 	query := make([]queryParam, 0, 4)
 	addSingleQuery(&query, "thread_id", threadIDFlag.value)
-	addMultiQuery(&query, "type", typeFlags.values)
-	addSingleQuery(&query, "types", typesCSVFlag.value)
+	addMultiQuery(&query, "type", normalizeEventTypeFilters(typeFlags.values, typesCSVFlag.value))
 	lastEventID := firstNonEmpty(lastEventIDFlag.value, cursorFlag.value)
 	follow := defaultFollow
 	if followFlag.set {
@@ -5170,6 +5209,25 @@ func normalizeEventTypeFilters(explicit []string, csv string) []string {
 	return out
 }
 
+func normalizeCSVFilters(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, raw := range values {
+		for _, value := range strings.Split(strings.TrimSpace(raw), ",") {
+			value = strings.TrimSpace(value)
+			if value == "" {
+				continue
+			}
+			if _, ok := seen[value]; ok {
+				continue
+			}
+			seen[value] = struct{}{}
+			out = append(out, value)
+		}
+	}
+	return out
+}
+
 func normalizeStringFilters(values []string) []string {
 	if len(values) == 0 {
 		return nil
@@ -5221,6 +5279,112 @@ func filterEventsByType(events []any, types []string) []any {
 		filtered = append(filtered, event)
 	}
 	return filtered
+}
+
+func filterEventsByEventGroups(events []any, groups []string, taxonomy registry.TaxonomyRegistry) []any {
+	if len(events) == 0 {
+		return []any{}
+	}
+	if len(groups) == 0 {
+		return append([]any(nil), events...)
+	}
+	allowed := make(map[string]struct{})
+	for _, group := range groups {
+		for _, eventType := range taxonomy.EventGroups[strings.TrimSpace(group)] {
+			eventType = strings.TrimSpace(eventType)
+			if eventType != "" {
+				allowed[eventType] = struct{}{}
+			}
+		}
+	}
+	if len(allowed) == 0 {
+		return []any{}
+	}
+	filtered := make([]any, 0, len(events))
+	for _, raw := range events {
+		event := asMap(raw)
+		if event == nil {
+			continue
+		}
+		if _, ok := allowed[strings.TrimSpace(anyString(event["type"]))]; ok {
+			filtered = append(filtered, event)
+		}
+	}
+	return filtered
+}
+
+func filterEventsByBackingScope(events []any, scope string, taxonomy registry.TaxonomyRegistry) []any {
+	scope = strings.TrimSpace(scope)
+	if len(events) == 0 {
+		return []any{}
+	}
+	if scope == "" || scope == "all" {
+		return append([]any(nil), events...)
+	}
+	backingTypes := make(map[string]struct{}, len(taxonomy.BackingEventTypes))
+	for _, eventType := range taxonomy.BackingEventTypes {
+		eventType = strings.TrimSpace(eventType)
+		if eventType != "" {
+			backingTypes[eventType] = struct{}{}
+		}
+	}
+	filtered := make([]any, 0, len(events))
+	for _, raw := range events {
+		event := asMap(raw)
+		if event == nil {
+			continue
+		}
+		_, isBacking := backingTypes[strings.TrimSpace(anyString(event["type"]))]
+		if (scope == "backing_only" && isBacking) || (scope == "standalone" && !isBacking) {
+			filtered = append(filtered, event)
+		}
+	}
+	return filtered
+}
+
+func validateEventGroupFilters(groups []string, taxonomy registry.TaxonomyRegistry) error {
+	if len(groups) == 0 {
+		return nil
+	}
+	known := make(map[string]struct{}, len(taxonomy.EventGroups))
+	for group := range taxonomy.EventGroups {
+		known[group] = struct{}{}
+	}
+	for _, group := range groups {
+		group = strings.TrimSpace(group)
+		if _, ok := known[group]; !ok {
+			return errnorm.Usage("invalid_flags", fmt.Sprintf("--event-group must be one of %s (got %q)", strings.Join(sortedMapKeys(known), ", "), group))
+		}
+	}
+	return nil
+}
+
+func validateBackingScopeFilter(scope string, taxonomy registry.TaxonomyRegistry) error {
+	scope = strings.TrimSpace(scope)
+	if scope == "" {
+		return nil
+	}
+	enum, ok := taxonomy.Enums["backing_scope"]
+	if !ok {
+		return errnorm.New(errnorm.KindInternal, "taxonomy_invalid", "embedded taxonomy is missing backing_scope")
+	}
+	known := make(map[string]struct{}, len(enum.Values))
+	for _, value := range enum.Values {
+		known[value] = struct{}{}
+	}
+	if _, ok := known[scope]; !ok {
+		return errnorm.Usage("invalid_flags", fmt.Sprintf("--backing-scope must be one of %s (got %q)", strings.Join(sortedMapKeys(known), ", "), scope))
+	}
+	return nil
+}
+
+func sortedMapKeys(values map[string]struct{}) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func eventThreadIDFromList(events []any) string {

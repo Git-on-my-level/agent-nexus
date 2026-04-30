@@ -289,7 +289,7 @@ test("golden path integration runs against a real anx-core", async ({
       actor_id: actorId,
       artifact: {
         id: receiptId,
-        kind: "receipt",
+        kind: "attachment",
         summary: receiptSummary.slice(0, 120),
         refs: [`card:${resolvedCardId}`],
       },

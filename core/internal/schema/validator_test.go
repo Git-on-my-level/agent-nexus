@@ -13,16 +13,16 @@ func TestValidateEnumRejectsUnknownStrictValue(t *testing.T) {
 	}
 }
 
-func TestValidateEnumAcceptsUnknownOpenValue(t *testing.T) {
+func TestValidateEnumRejectsUnknownEventAndArtifactKinds(t *testing.T) {
 	t.Parallel()
 
 	contract := loadContract(t)
 
-	if err := ValidateEnum(contract, "event_type", "my_custom_event"); err != nil {
-		t.Fatalf("expected unknown open enum value to pass: %v", err)
+	if err := ValidateEnum(contract, "event_type", "my_custom_event"); err == nil {
+		t.Fatal("expected unknown event type to be rejected")
 	}
-	if err := ValidateEnum(contract, "artifact_kind", "my_custom_artifact"); err != nil {
-		t.Fatalf("expected unknown open enum value to pass: %v", err)
+	if err := ValidateEnum(contract, "artifact_kind", "my_custom_artifact"); err == nil {
+		t.Fatal("expected unknown artifact kind to be rejected")
 	}
 }
 

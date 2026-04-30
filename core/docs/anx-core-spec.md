@@ -54,8 +54,8 @@ anx-core does **not**:
 ### 2.2 Schema authority
 - `anx-schema.yaml` is the authoritative field/type definition shared between anx-core and Agent Nexus web UI.
 - anx-core MUST enforce schema constraints on writes where specified (restricted transitions, required fields, packet validation, typed ref format).
-- **Strict enums** (e.g., `lifecycle_state`, `card_resolution`): anx-core MUST reject unknown values.
-- **Open enums** (e.g., `event_type`, `artifact_kind`): anx-core MUST accept and store unknown values.
+- **Strict enums** (including `event_type` and `artifact_kind`): anx-core MUST reject unknown values.
+- Open enums, where explicitly marked in the schema, may accept values outside the initial examples.
 - Unknown fields on any object MUST be preserved and round-tripped.
 
 ### 2.3 Mutable resource update semantics
@@ -73,12 +73,12 @@ A durable record that something happened or that an actor claims something happe
 **Behavior:**
 - Events MUST be append-only. Never edited or deleted.
 - Corrections MUST be new events.
-- The system MUST accept unknown event types without breaking storage or retrieval.
+- The system MUST reject event types outside the strict `event_type` enum.
 - All values in `refs` MUST use typed reference strings (see `anx-schema.yaml` → `ref_format`).
 
 **Fields:** per `anx-schema.yaml` → `primitives.event`
 
-**v0 event types:** `topic_created`, `topic_updated`, `topic_archived`, `topic_restored`, `topic_trashed`, `message_posted`, `receipt_added`, `review_completed`, `document_created`, `document_revised`, `document_restored`, `document_trashed`, `board_created`, `board_updated`, `card_created`, `card_updated`, `card_moved`, `card_archived`, `card_trashed`, `card_resolved`, `exception_raised`, `human_attention_requested`, `human_attention_responded`, `agent_notification_read`, `agent_notification_dismissed`
+**v0 event types:** per strict `event_type` in `anx-schema.yaml`.
 
 **Home feed projection:** core owns durable per-topic read cursors for Home. The
 Home feed is a deterministic projection over Events using the shared
@@ -342,6 +342,6 @@ anx-core SHOULD validate required refs on event creation and reject events missi
 
 - Schemas evolve additively. Fields are added, not removed or renamed.
 - Unknown fields on any object MUST be preserved and round-tripped (enforced by patch/merge semantics on mutable resources).
-- Unknown event types and artifact kinds MUST be stored and retrievable (enforced by open enum policy).
+- Unknown fields on known event and artifact envelopes MUST remain retrievable; unknown event types and artifact kinds are rejected by strict enum policy.
 - Unknown ref prefixes MUST be preserved and round-tripped.
 - anx-core MUST expose a version endpoint (`/version` or equivalent) returning the `anx-schema.yaml` version so clients can adapt.

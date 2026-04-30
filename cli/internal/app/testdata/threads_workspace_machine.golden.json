@@ -8,7 +8,7 @@
       "key_artifacts": [
         {
           "id": "artifact_ctx_1",
-          "kind": "receipt",
+          "kind": "attachment",
           "short_id": "artifact_c"
         }
       ],
@@ -41,7 +41,7 @@
       "key_artifacts": [
         {
           "id": "artifact_ctx_1",
-          "kind": "receipt",
+          "kind": "attachment",
           "short_id": "artifact_c"
         }
       ],

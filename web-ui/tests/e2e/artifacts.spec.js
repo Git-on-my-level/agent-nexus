@@ -41,7 +41,7 @@ test("artifact filters are URL-backed and survive refresh", async ({
   const artifacts = [
     {
       id: "artifact-review-onboarding-1",
-      kind: "review",
+      kind: "attachment",
       thread_id: "thread-onboarding",
       summary: "Prepare onboarding plan",
       refs: ["thread:thread-onboarding"],
@@ -50,7 +50,7 @@ test("artifact filters are URL-backed and survive refresh", async ({
     },
     {
       id: "artifact-receipt-1",
-      kind: "receipt",
+      kind: "attachment",
       thread_id: "thread-onboarding",
       summary: "Collected onboarding evidence",
       refs: ["thread:thread-onboarding"],
@@ -59,7 +59,7 @@ test("artifact filters are URL-backed and survive refresh", async ({
     },
     {
       id: "artifact-receipt-2",
-      kind: "receipt",
+      kind: "attachment",
       thread_id: "thread-incident-42",
       summary: "Incident recovery evidence",
       refs: ["thread:thread-incident-42"],

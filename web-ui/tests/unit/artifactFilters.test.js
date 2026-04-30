@@ -20,6 +20,7 @@ describe("artifact list URL state", () => {
       ),
     ).toEqual({
       kind: "card",
+      backing_scope: "all",
       thread_id: "thread-onboarding",
       created_after: createdAfterIso,
       created_before: "",
@@ -38,6 +39,7 @@ describe("artifact list URL state", () => {
       ),
     ).toEqual({
       kind: "",
+      backing_scope: "all",
       thread_id: "",
       created_after: "",
       created_before: createdBeforeIso,
@@ -71,6 +73,7 @@ describe("artifact list URL state", () => {
       }),
     ).toEqual({
       kind: "doc",
+      backing_scope: "all",
       thread_id: "thread-onboarding",
       created_after: new Date("2026-03-04T09:30").toISOString(),
       created_before: new Date("2026-03-04T17:45").toISOString(),

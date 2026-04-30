@@ -196,7 +196,7 @@ export function getPilotRescueSeedData() {
         document: {
           id: "northwave-pilot-rescue-brief",
           title: "NorthWave Pilot Rescue Brief",
-          kind: "gtm-brief",
+          kind: "attachment",
           owner: "actor-product-lead",
           status: "draft",
         },

@@ -8,7 +8,7 @@
       "key_artifacts": [
         {
           "id": "artifact_ctx_1",
-          "kind": "receipt"
+          "kind": "attachment"
         }
       ],
       "open_card_count": 1,
@@ -37,7 +37,7 @@
     "key_artifacts": [
       {
         "id": "artifact_ctx_1",
-        "kind": "receipt"
+        "kind": "attachment"
       }
     ],
     "open_cards": [
