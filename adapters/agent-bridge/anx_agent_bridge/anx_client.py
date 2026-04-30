@@ -120,6 +120,9 @@ class ANXClient:
             body["registration"] = registration
         return self.raw_request("PATCH", "/agents/me", json_body=body)
 
+    def bridge_check_in(self, checkin: dict[str, Any]) -> dict[str, Any]:
+        return self.raw_request("POST", "/agent-bridge/check-in", json_body=checkin)
+
     def get_document(self, document_id: str) -> dict[str, Any]:
         return self.raw_request("GET", f"/docs/{document_id}")
 
@@ -245,6 +248,23 @@ class ANXClient:
         if actor_id:
             body["actor_id"] = actor_id
         return self.raw_request("POST", "/agent-notifications/dismiss", json_body=body)
+
+    def claim_agent_wakeup(self, wakeup_id: str, bridge_instance_id: str) -> dict[str, Any]:
+        return self.raw_request("POST", "/agent-wakeups/claim", json_body={"wakeup_id": wakeup_id, "bridge_instance_id": bridge_instance_id})
+
+    def complete_agent_wakeup(self, wakeup_id: str, bridge_instance_id: str) -> dict[str, Any]:
+        return self.raw_request("POST", "/agent-wakeups/complete", json_body={"wakeup_id": wakeup_id, "bridge_instance_id": bridge_instance_id})
+
+    def fail_agent_wakeup(self, wakeup_id: str, bridge_instance_id: str, error: str) -> dict[str, Any]:
+        return self.raw_request("POST", "/agent-wakeups/fail", json_body={"wakeup_id": wakeup_id, "bridge_instance_id": bridge_instance_id, "error": error})
+
+    def stream_agent_notifications(self, *, statuses: Iterable[str] | None = None, heartbeat_timeout_seconds: int = 120) -> Iterator[dict[str, Any]]:
+        # Current core serves notifications as queue state. Until a dedicated SSE
+        # notification stream exists, bridge runtime polls through this iterator
+        # without depending on workspace event types.
+        while True:
+            yield {"event": "agent_notifications_poll"}
+            time.sleep(min(max(heartbeat_timeout_seconds / 4, 5), 30))
 
     def stream_events(self, *, types: Iterable[str] | None = None, thread_id: str | None = None, last_event_id: str | None = None, heartbeat_timeout_seconds: int = 120) -> Iterator[dict[str, Any]]:
         params_list: list[tuple[str, str]] = []

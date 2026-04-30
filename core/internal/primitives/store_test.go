@@ -49,86 +49,6 @@ func TestStoreAppendAndGetEventUnknownTypeAccepted(t *testing.T) {
 	}
 }
 
-func TestAppendBridgeCheckinPrunesOldTelemetryPerAgent(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
-	if err != nil {
-		t.Fatalf("initialize workspace: %v", err)
-	}
-	defer workspace.Close()
-
-	store := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
-
-	var latestID string
-	for i := 0; i < 25; i++ {
-		event, err := store.AppendEvent(ctx, "actor-1", map[string]any{
-			"type": "agent_bridge_checked_in",
-			"refs": []string{},
-			"payload": map[string]any{
-				"handle":              "hermes",
-				"actor_id":            "actor-1",
-				"workspace_id":        "ws-main",
-				"workspace_ids":       []any{"ws-main"},
-				"bridge_instance_id":  "bridge-test",
-				"checked_in_at":       "2026-04-29T12:00:00Z",
-				"expires_at":          "2026-04-29T12:02:00Z",
-				"proof_signature_b64": "sig",
-			},
-		})
-		if err != nil {
-			t.Fatalf("append bridge check-in %d: %v", i, err)
-		}
-		latestID = event["id"].(string)
-	}
-	if _, err := store.AppendEvent(ctx, "actor-2", map[string]any{
-		"type": "agent_bridge_checked_in",
-		"refs": []string{},
-		"payload": map[string]any{
-			"handle":              "hermes",
-			"actor_id":            "actor-2",
-			"workspace_id":        "ws-main",
-			"workspace_ids":       []any{"ws-main"},
-			"bridge_instance_id":  "bridge-other",
-			"checked_in_at":       "2026-04-29T12:00:00Z",
-			"expires_at":          "2026-04-29T12:02:00Z",
-			"proof_signature_b64": "sig",
-		},
-	}); err != nil {
-		t.Fatalf("append other actor bridge check-in: %v", err)
-	}
-
-	events, err := store.ListEvents(ctx, primitives.EventListFilter{Types: []string{"agent_bridge_checked_in"}})
-	if err != nil {
-		t.Fatalf("list bridge check-in events: %v", err)
-	}
-	countActor1 := 0
-	countActor2 := 0
-	foundLatest := false
-	for _, event := range events {
-		payload, _ := event["payload"].(map[string]any)
-		switch payload["actor_id"] {
-		case "actor-1":
-			countActor1++
-			if event["id"] == latestID {
-				foundLatest = true
-			}
-		case "actor-2":
-			countActor2++
-		}
-	}
-	if countActor1 != 20 {
-		t.Fatalf("expected 20 retained check-ins for actor-1, got %d in %#v", countActor1, events)
-	}
-	if countActor2 != 1 {
-		t.Fatalf("expected other actor check-in to remain, got %d in %#v", countActor2, events)
-	}
-	if !foundLatest {
-		t.Fatalf("expected latest bridge check-in %s to remain in %#v", latestID, events)
-	}
-}
-
 func TestListEventsAfterUsesChronologicalTimestampOrdering(t *testing.T) {
 	t.Parallel()
 
@@ -310,15 +230,12 @@ func TestListEventsPageHomeFeedPresetIntersectsExplicitTypes(t *testing.T) {
 		t.Fatalf("append message: %v", err)
 	}
 	if _, err := store.AppendEvent(ctx, "actor-1", map[string]any{
-		"type": "agent_bridge_checked_in",
-		"refs": []any{},
-		"payload": map[string]any{
-			"handle": "h", "actor_id": "actor-1", "workspace_id": "w", "workspace_ids": []any{"w"},
-			"bridge_instance_id": "b", "checked_in_at": "2026-04-29T12:00:00Z", "expires_at": "2026-04-29T12:02:00Z",
-			"proof_signature_b64": "sig",
-		},
+		"type":       "exception_raised",
+		"refs":       []any{},
+		"summary":    "not in explicit message type filter",
+		"provenance": map[string]any{"sources": []any{"inferred"}},
 	}); err != nil {
-		t.Fatalf("append bridge: %v", err)
+		t.Fatalf("append exception: %v", err)
 	}
 
 	events, err := store.ListEvents(ctx, primitives.EventListFilter{

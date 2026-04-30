@@ -1,27 +1,18 @@
 from __future__ import annotations
 
-import json
 import logging
 import threading
 import time
-from json import JSONDecodeError
 from typing import Any
 
 from .auth import AuthManager
 from .config import LoadedConfig
 from .models import (
     MESSAGE_POSTED_EVENT,
-    WAKE_CLAIMED_EVENT,
-    WAKE_COMPLETED_EVENT,
-    WAKE_FAILED_EVENT,
-    WAKE_REQUEST_EVENT,
     WakePacket,
-    claim_request_key,
-    completion_request_key,
-    failure_request_key,
     message_request_key,
 )
-from .anx_client import ANXClient, ANXClientError, ANXStreamDisconnected
+from .anx_client import ANXClient, ANXClientError
 from .prompts import build_wake_prompt
 from .registry import apply_registration, publish_bridge_checkin
 from .state_store import JSONStateStore
@@ -58,22 +49,8 @@ class AgentBridge:
         while True:
             try:
                 self._drain_notifications()
-                for stream_message in self.client.stream_events(types=[WAKE_REQUEST_EVENT], last_event_id=self.state.last_event_id):
-                    event = self._decode_stream_event(stream_message)
-                    if event is None:
-                        continue
-                    event_id = str(event.get("id", "")).strip()
-                    payload = event.get("payload") or {}
-                    if not self._is_for_me(payload):
-                        if event_id:
-                            self.state.last_event_id = event_id
-                        continue
+                for _ in self.client.stream_agent_notifications(statuses=["unread", "read"]):
                     self._drain_notifications()
-                    if event_id:
-                        self.state.last_event_id = event_id
-            except ANXStreamDisconnected as exc:
-                LOGGER.info("Event stream interrupted; reconnecting: %s", exc)
-                time.sleep(BRIDGE_RECONNECT_DELAY_SECONDS)
             except Exception:
                 LOGGER.exception("Bridge loop failed; reconnecting")
                 time.sleep(BRIDGE_RECONNECT_DELAY_SECONDS)
@@ -111,7 +88,7 @@ class AgentBridge:
             checked_in_at,
             expires_at,
         )
-        bridge_checkin_event_id = publish_bridge_checkin(
+        publish_bridge_checkin(
             self.config,
             self.auth,
             self.client,
@@ -127,28 +104,10 @@ class AgentBridge:
             bridge_instance_id=self.state.bridge_instance_id,
             bridge_signing_public_key_spki_b64=self.state.bridge_signing_public_key_spki_b64,
             checked_in=True,
-            bridge_checkin_event_id=bridge_checkin_event_id,
             bridge_checked_in_at=checked_in_at,
             bridge_expires_at=expires_at,
+            bridge_proof_signature_b64=proof_signature_b64,
         )
-
-    def _decode_stream_event(self, stream_message: dict[str, Any]) -> dict[str, Any] | None:
-        data = stream_message.get("data")
-        if not isinstance(data, str) or not data.strip():
-            return None
-        try:
-            payload = json.loads(data)
-        except JSONDecodeError:
-            LOGGER.warning("Stream event payload is not valid JSON; skipping this stream message")
-            return None
-        if isinstance(payload, dict) and "event" in payload and isinstance(payload["event"], dict):
-            return payload["event"]
-        if isinstance(payload, dict):
-            return payload
-        return None
-
-    def _is_for_me(self, payload: dict[str, Any]) -> bool:
-        return str(payload.get("target_handle", "")).strip() == self.handle
 
     def _drain_notifications(self) -> None:
         notifications = self.client.list_agent_notifications(statuses=["unread", "read"], order="asc")
@@ -241,7 +200,7 @@ class AgentBridge:
                 packet.trigger_event_id,
                 exc,
             )
-            # Per-wakeup failure only (WAKE_FAILED is durable). Do not re-raise: that would abort
+            # Per-wakeup failure only. Do not re-raise: that would abort
             # _drain_notifications and run_forever's broad except would log "Bridge loop failed" and
             # skip other pending notifications for the same drain.
             return
@@ -260,24 +219,10 @@ class AgentBridge:
             response_text = result.response_text.strip()
             if response_text:
                 self._post_reply_message_with_retries(packet, response_text, result.native_session_id)
-            self.client.create_event(
-                event={
-                    "type": WAKE_COMPLETED_EVENT,
-                    "thread_id": packet.thread_id,
-                    "summary": f"Wakeup {packet.wakeup_id} completed for @{self.handle}",
-                    "refs": self._packet_event_refs(packet, packet.trigger_event_id),
-                    "payload": {
-                        "wakeup_id": packet.wakeup_id,
-                        "target_handle": self.handle,
-                        "native_session_id": result.native_session_id,
-                    },
-                    "provenance": {"sources": [f"artifact:{packet.wakeup_id}"]},
-                },
-                request_key=completion_request_key(packet.wakeup_id, target_actor_id),
-            )
+            self.client.complete_agent_wakeup(packet.wakeup_id, self.state.bridge_instance_id)
         except Exception as exc:
             LOGGER.exception("Wakeup %s writeback failed after adapter dispatch", wakeup_id)
-            self._create_wakeup_failed_event(
+            self._record_wakeup_failure_status(
                 packet,
                 wakeup_id,
                 target_actor_id,
@@ -302,9 +247,9 @@ class AgentBridge:
     ) -> None:
         self._failure_counts[wakeup_id] = self._failure_counts.get(wakeup_id, 0) + 1
         self._schedule_wakeup_retry(wakeup_id, self._failure_counts[wakeup_id])
-        self._create_wakeup_failed_event(packet, wakeup_id, target_actor_id, thread_id, event_id, exc)
+        self._record_wakeup_failure_status(packet, wakeup_id, target_actor_id, thread_id, event_id, exc)
 
-    def _create_wakeup_failed_event(
+    def _record_wakeup_failure_status(
         self,
         packet: WakePacket | None,
         wakeup_id: str,
@@ -313,30 +258,10 @@ class AgentBridge:
         event_id: str,
         exc: BaseException,
     ) -> None:
-        refs = self._packet_event_refs(
-            packet,
-            event_id,
-            fallback_thread_id=thread_id,
-            fallback_wakeup_id=wakeup_id,
-        )
         try:
-            self.client.create_event(
-                event={
-                    "type": WAKE_FAILED_EVENT,
-                    "thread_id": thread_id,
-                    "summary": f"Wakeup {wakeup_id} failed for @{self.handle}",
-                    "refs": refs,
-                    "payload": {
-                        "wakeup_id": wakeup_id,
-                        "target_handle": self.handle,
-                        "error": str(exc),
-                    },
-                    "provenance": {"sources": [f"artifact:{wakeup_id}"]},
-                },
-                request_key=failure_request_key(wakeup_id, target_actor_id),
-            )
+            self.client.fail_agent_wakeup(wakeup_id, self.state.bridge_instance_id, str(exc))
         except Exception:
-            LOGGER.exception("Wakeup %s failed and failure event write also failed", wakeup_id)
+            LOGGER.exception("Wakeup %s failed and failure status write also failed", wakeup_id)
 
     def _schedule_wakeup_retry(self, wakeup_id: str, fail_count: int) -> None:
         delay = min(
@@ -445,31 +370,15 @@ class AgentBridge:
 
     def _claim_wakeup(self, packet: WakePacket, target_actor_id: str, request_event_id: str) -> bool:
         wakeup_id = packet.wakeup_id
-        thread_id = packet.thread_id
         try:
-            claim_refs = [*self._packet_subject_refs(packet), f"event:{request_event_id}", f"artifact:{wakeup_id}"]
-            response = self.client.create_event(
-                event={
-                    "type": WAKE_CLAIMED_EVENT,
-                    "thread_id": thread_id,
-                    "summary": f"Wakeup {wakeup_id} claimed by @{self.handle}",
-                    "refs": claim_refs,
-                    "payload": {
-                        "wakeup_id": wakeup_id,
-                        "target_handle": self.handle,
-                        "bridge_instance_id": self.state.bridge_instance_id,
-                    },
-                    "provenance": {"sources": [f"artifact:{wakeup_id}"]},
-                },
-                request_key=claim_request_key(wakeup_id, target_actor_id or self.handle),
-            )
+            response = self.client.claim_agent_wakeup(wakeup_id, self.state.bridge_instance_id)
         except ANXClientError as exc:
             if exc.status_code == 409:
                 LOGGER.info("Skipping wakeup %s because another bridge instance already claimed it", wakeup_id)
                 return False
             raise
-        event_payload = ((response or {}).get("event") or {}).get("payload") or {}
-        owner = str(event_payload.get("bridge_instance_id", "")).strip()
+        notification = (response or {}).get("notification") or {}
+        owner = str(notification.get("bridge_instance_id", "")).strip()
         if owner and owner != self.state.bridge_instance_id:
             LOGGER.info("Skipping wakeup %s because another bridge instance claimed it: %s", wakeup_id, owner)
             return False

@@ -8,12 +8,7 @@ from .util import parse_bool, parse_utc_iso, sha256_text, utc_now_datetime, utc_
 WAKE_PACKET_VERSION = "agent-wake/v1"
 REGISTRATION_VERSION = "agent-registration/v1"
 BRIDGE_CHECKIN_VERSION = "agent-bridge-checkin/v1"
-BRIDGE_CHECKED_IN_EVENT = "agent_bridge_checked_in"
 WAKE_ARTIFACT_KIND = "agent_wake"
-WAKE_REQUEST_EVENT = "agent_wakeup_requested"
-WAKE_CLAIMED_EVENT = "agent_wakeup_claimed"
-WAKE_FAILED_EVENT = "agent_wakeup_failed"
-WAKE_COMPLETED_EVENT = "agent_wakeup_completed"
 MESSAGE_POSTED_EVENT = "message_posted"
 DEFAULT_CHECKIN_TTL_SECONDS = 300
 
@@ -42,7 +37,8 @@ class AgentRegistration:
     bridge_signing_public_key_spki_b64: str = ""
     bridge_checked_in_at: str = ""
     bridge_expires_at: str = ""
-    bridge_checkin_event_id: str = ""
+    bridge_workspace_ids: list[str] = field(default_factory=list)
+    bridge_proof_signature_b64: str = ""
     bridge_checkin_ttl_seconds: int = DEFAULT_CHECKIN_TTL_SECONDS
     updated_at: str = field(default_factory=utc_now_iso)
 
@@ -60,7 +56,8 @@ class AgentRegistration:
             "bridge_signing_public_key_spki_b64": self.bridge_signing_public_key_spki_b64,
             "bridge_checked_in_at": self.bridge_checked_in_at,
             "bridge_expires_at": self.bridge_expires_at,
-            "bridge_checkin_event_id": self.bridge_checkin_event_id,
+            "bridge_workspace_ids": [item for item in self.bridge_workspace_ids if item],
+            "bridge_proof_signature_b64": self.bridge_proof_signature_b64,
             "bridge_checkin_ttl_seconds": self.bridge_checkin_ttl_seconds,
             "updated_at": self.updated_at,
             "workspace_bindings": [binding.to_dict() for binding in self.workspace_bindings],
@@ -90,7 +87,8 @@ class AgentRegistration:
             bridge_signing_public_key_spki_b64=str(content.get("bridge_signing_public_key_spki_b64", "")).strip(),
             bridge_checked_in_at=str(content.get("bridge_checked_in_at", "")).strip(),
             bridge_expires_at=str(content.get("bridge_expires_at", "")).strip(),
-            bridge_checkin_event_id=str(content.get("bridge_checkin_event_id", "")).strip(),
+            bridge_workspace_ids=[str(item).strip() for item in (content.get("bridge_workspace_ids") or []) if str(item).strip()],
+            bridge_proof_signature_b64=str(content.get("bridge_proof_signature_b64", "")).strip(),
             bridge_checkin_ttl_seconds=max(0, int(content.get("bridge_checkin_ttl_seconds", DEFAULT_CHECKIN_TTL_SECONDS) or DEFAULT_CHECKIN_TTL_SECONDS)),
             updated_at=str(content.get("updated_at", utc_now_iso())).strip() or utc_now_iso(),
         )
@@ -105,8 +103,6 @@ class AgentRegistration:
         if self.status != "active":
             return False
         if not self.bridge_signing_public_key_spki_b64.strip():
-            return False
-        if not self.bridge_checkin_event_id.strip():
             return False
         if not self.bridge_instance_id.strip():
             return False
@@ -361,18 +357,6 @@ def wakeup_request_key(workspace_id: str, thread_id: str, message_event_id: str,
 
 def wakeup_artifact_id(workspace_id: str, thread_id: str, message_event_id: str, actor_id: str) -> str:
     return f"wake_{sha256_text(workspace_id, thread_id, message_event_id, actor_id, length=24)}"
-
-
-def claim_request_key(wakeup_id: str, actor_id: str) -> str:
-    return f"wake-claim-{sha256_text(wakeup_id, actor_id, length=24)}"
-
-
-def completion_request_key(wakeup_id: str, actor_id: str) -> str:
-    return f"wake-complete-{sha256_text(wakeup_id, actor_id, length=24)}"
-
-
-def failure_request_key(wakeup_id: str, actor_id: str) -> str:
-    return f"wake-failed-{sha256_text(wakeup_id, actor_id, length=24)}"
 
 
 def message_request_key(wakeup_id: str, actor_id: str) -> str:

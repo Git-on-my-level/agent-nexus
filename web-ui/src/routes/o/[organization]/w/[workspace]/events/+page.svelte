@@ -17,6 +17,7 @@
     parseEventListSearchParams,
   } from "$lib/eventFilters";
   import { HOME_FEED_PRESET, normalizeEventRow } from "$lib/events/eventRows";
+  import { datetimeLocalToIso, isoToDatetimeLocal } from "$lib/formatDate";
   import { workspacePath } from "$lib/workspacePaths";
 
   const EVENT_GROUP_LABELS = {
@@ -42,6 +43,7 @@
   let loadingMore = $state(false);
   let error = $state("");
   let filters = $state({ ...DEFAULT_EVENT_LIST_FILTERS });
+  let eventDateInputs = $state({ since: "", until: "" });
   let urlCursor = $state("");
   let filtersOpen = $state(false);
 
@@ -109,10 +111,12 @@
     const sig = buildEventListSearchString(parsed);
 
     filters = { ...DEFAULT_EVENT_LIST_FILTERS, ...parsed };
+    eventDateInputs = {
+      since: isoToDatetimeLocal(parsed.since),
+      until: isoToDatetimeLocal(parsed.until),
+    };
     urlCursor = cur;
-    filtersOpen =
-      hasEventListFilters(parsed) ||
-      String(parsed.preset ?? "").trim() === HOME_FEED_PRESET;
+    filtersOpen = hasEventListFilters(parsed);
 
     const isFirst = prevFilterSig === null;
     const filtersChanged = isFirst || sig !== prevFilterSig;
@@ -146,6 +150,7 @@
 
   async function clearFilters() {
     filters = { ...DEFAULT_EVENT_LIST_FILTERS };
+    eventDateInputs = { since: "", until: "" };
     filtersOpen = false;
     const base = workspaceHref("/events");
     await goto(base, { noScroll: true, keepFocus: true });
@@ -165,10 +170,13 @@
     });
   }
 
-  async function useHomePreset() {
-    filters.preset =
-      filters.preset === HOME_FEED_PRESET ? "" : HOME_FEED_PRESET;
-    await applyFilters();
+  /** @param {"since" | "until"} field */
+  function updateEventDateFilter(field, value) {
+    eventDateInputs = { ...eventDateInputs, [field]: value };
+    filters = {
+      ...filters,
+      [field]: value ? datetimeLocalToIso(value) : "",
+    };
   }
 
   function toggleEventGroup(group) {
@@ -195,16 +203,6 @@
       </p>
     </div>
     <div class="flex flex-wrap items-center justify-end gap-1.5">
-      <button
-        class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-micro font-medium transition-colors hover:bg-[var(--line-subtle)] {filters.preset ===
-        HOME_FEED_PRESET
-          ? 'text-[var(--fg)]'
-          : 'text-[var(--fg-muted)]'}"
-        onclick={useHomePreset}
-        type="button"
-      >
-        Home feed
-      </button>
       <button
         class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-micro font-medium transition-colors {hasActiveFilters
           ? 'border-[var(--accent)]/40 bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/15'
@@ -241,6 +239,18 @@
           }}
         >
           <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
+            <label
+              class="text-micro font-medium text-[var(--fg-muted)] sm:col-span-2"
+            >
+              Preset
+              <select
+                bind:value={filters.preset}
+                class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
+              >
+                <option value="">All events</option>
+                <option value={HOME_FEED_PRESET}>Home feed</option>
+              </select>
+            </label>
             <label
               class="text-micro font-medium text-[var(--fg-muted)] sm:col-span-2 lg:col-span-2"
             >
@@ -291,17 +301,21 @@
             <label class="text-micro font-medium text-[var(--fg-muted)]">
               Since
               <input
-                bind:value={filters.since}
+                value={eventDateInputs.since}
                 class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
-                placeholder="Since"
+                type="datetime-local"
+                oninput={(event) =>
+                  updateEventDateFilter("since", event.currentTarget.value)}
               />
             </label>
             <label class="text-micro font-medium text-[var(--fg-muted)]">
               Until
               <input
-                bind:value={filters.until}
+                value={eventDateInputs.until}
                 class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
-                placeholder="Until"
+                type="datetime-local"
+                oninput={(event) =>
+                  updateEventDateFilter("until", event.currentTarget.value)}
               />
             </label>
           </div>

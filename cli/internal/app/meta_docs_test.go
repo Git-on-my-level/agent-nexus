@@ -134,7 +134,7 @@ func TestRunMetaDocPrintsWakeRoutingMarkdown(t *testing.T) {
 	if !strings.Contains(output, "workspace records") || !strings.Contains(output, "ws_main") {
 		t.Fatalf("expected workspace-id discovery guidance output=%s", output)
 	}
-	if !strings.Contains(output, "Manual principal updates do not replace the live bridge-owned check-in event") {
+	if !strings.Contains(output, "Manual principal updates do not replace the live bridge-owned check-in endpoint") {
 		t.Fatalf("expected principal-update guidance output=%s", output)
 	}
 	if !strings.Contains(output, "server actor id as `<actor-id>`") {

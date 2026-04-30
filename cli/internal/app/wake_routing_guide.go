@@ -12,7 +12,7 @@ How it works
 
 - Wake routing is provided by a workspace-owned sidecar hosted inside <<tick>>anx-core<<tick>>, not by the per-agent CLI.
 - The durable wake registration now lives on the agent principal metadata, not in <<tick>>docs<<tick>>.
-- The bridge-owned readiness proof is the latest <<tick>>agent_bridge_checked_in<<tick>> event referenced by that principal registration.
+- The bridge-owned readiness proof is direct presence state on that principal registration.
 - A tagged message becomes durable wake work when the target agent is registered for the workspace. Bridge readiness only changes whether delivery is immediate or queued.
 
 What counts as taggable
@@ -28,8 +28,8 @@ What counts as taggable
 What counts as online
 
 - the agent is already taggable
-- registration records a bridge check-in event id
-- that <<tick>>agent_bridge_checked_in<<tick>> event exists, matches the same actor, and has a fresh bridge check-in window
+- registration records a bridge instance id, signed proof, check-in timestamp, expiry timestamp, and covered workspace ids
+- the signed proof matches the registration's bridge signing public key and its expiry is still fresh for the current workspace
 
 Important lifecycle rule
 
@@ -106,7 +106,7 @@ Preferred path when you are using <<tick>>anx-agent-bridge<<tick>>
 
 Generic ANX CLI lifecycle
 
-If you are writing registration state manually, update the agent principal registration only. Manual principal updates do not replace the live bridge-owned check-in event.
+If you are writing registration state manually, update the agent principal registration only. Manual principal updates do not replace the live bridge-owned check-in endpoint.
 
 1. Confirm the identity you are registering:
 
@@ -162,13 +162,14 @@ Registration schema notes
   - <<tick>>content.actor_id<<tick>> matching the principal actor id
   - at least one enabled <<tick>>content.workspace_bindings[].workspace_id<<tick>> matching the current workspace id
 - Bridge readiness fields are:
-  - <<tick>>content.bridge_checkin_event_id<<tick>> points at the latest <<tick>>agent_bridge_checked_in<<tick>> event
+  - <<tick>>content.bridge_instance_id<<tick>> identifies the currently checking-in bridge runtime
   - <<tick>>content.bridge_signing_public_key_spki_b64<<tick>> stores the bridge-managed public proof key
-  - that event payload includes <<tick>>bridge_instance_id<<tick>>, <<tick>>checked_in_at<<tick>>, and <<tick>>expires_at<<tick>>
-  - that event payload also includes <<tick>>proof_signature_b64<<tick>>, which must verify against the registration's public proof key
+  - <<tick>>content.bridge_checked_in_at<<tick>> and <<tick>>content.bridge_expires_at<<tick>> define freshness
+  - <<tick>>content.bridge_workspace_ids<<tick>> lists the workspaces covered by the proof
+  - <<tick>>content.bridge_proof_signature_b64<<tick>> must verify against the registration's public proof key
 - <<tick>>updated_at<<tick>> is advisory metadata. Set it to the current UTC time when creating or updating the registration, or let bridge-managed flows populate it.
 - Do not hand-edit <<tick>>status = "active"<<tick>> before the bridge has actually checked in.
-- Do not try to hand-author the bridge readiness proof. The supported path is to let the running bridge emit <<tick>>agent_bridge_checked_in<<tick>> and refresh the registration.
+- Do not try to hand-author the bridge readiness proof. The supported path is to let the running bridge call the bridge check-in endpoint and refresh the registration.
 
 Verification flow
 
@@ -190,10 +191,9 @@ Verification flow
   - principal actor id matches <<tick>>content.actor_id<<tick>>
   - <<tick>>workspace_bindings<<tick>> contains the current workspace id with <<tick>>enabled: true<<tick>>
   - <<tick>>status<<tick>> is <<tick>>active<<tick>>
-  - if you need online delivery right now, <<tick>>bridge_checkin_event_id<<tick>> is present on the registration
-  - if you need online delivery right now, <<tick>>anx events get --event-id <bridge-checkin-event-id><<tick>> (add <<tick>>--json<<tick>> for the CLI JSON envelope) returns an <<tick>>agent_bridge_checked_in<<tick>> event
-  - if you need online delivery right now, that event actor id matches the principal actor
-  - if you need online delivery right now, that event <<tick>>expires_at<<tick>> is still in the future
+  - if you need online delivery right now, <<tick>>bridge_instance_id<<tick>>, <<tick>>bridge_checked_in_at<<tick>>, <<tick>>bridge_expires_at<<tick>>, <<tick>>bridge_workspace_ids<<tick>>, and <<tick>>bridge_proof_signature_b64<<tick>> are present
+  - if you need online delivery right now, <<tick>>bridge_workspace_ids<<tick>> contains the current workspace id
+  - if you need online delivery right now, <<tick>>bridge_expires_at<<tick>> is still in the future
 
 5. If you are using <<tick>>anx-agent-bridge<<tick>>, prefer:
 
@@ -208,11 +208,11 @@ Concrete wake example
 
 3. Expected durable trace:
 - existing <<tick>>message_posted<<tick>>
-- new <<tick>>agent_wakeup_requested<<tick>>
-- if online, new <<tick>>agent_wakeup_claimed<<tick>>
+- new wake queue record visible through notifications
+- if online, wake queue status becomes <<tick>>claimed<<tick>>
 - if online, new bridge reply <<tick>>message_posted<<tick>>
-- if online, new <<tick>>agent_wakeup_completed<<tick>>
-- if offline, the <<tick>>agent_wakeup_requested<<tick>> stays pending until the bridge later claims it
+- if online, wake queue status becomes <<tick>>completed<<tick>>
+- if offline, the wake queue record stays requested until the bridge later claims it
 
 Common failure modes
 

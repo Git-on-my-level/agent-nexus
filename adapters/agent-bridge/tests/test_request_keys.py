@@ -1,4 +1,4 @@
-from anx_agent_bridge.models import claim_request_key, wakeup_artifact_id, wakeup_request_key
+from anx_agent_bridge.models import message_request_key, wakeup_artifact_id, wakeup_request_key
 
 
 def test_wakeup_keys_are_deterministic():
@@ -13,7 +13,7 @@ def test_wakeup_keys_change_when_inputs_change():
     assert first != second
 
 
-def test_claim_keys_change_across_bridge_instances():
-    first = claim_request_key("wake_1", "actor_1")
-    second = claim_request_key("wake_1", "actor_1")
+def test_message_keys_are_deterministic():
+    first = message_request_key("wake_1", "actor_1")
+    second = message_request_key("wake_1", "actor_1")
     assert first == second

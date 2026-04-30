@@ -22,7 +22,7 @@ It does not own canonical Agent Nexus state. The durable truth still lives in Ag
 - Bridge-managed registrations stay `pending` until the bridge has checked in.
 - Routing must treat stale or missing bridge check-ins as offline for immediate delivery, while leaving durable notifications queueable.
 - Workspace binding must use the durable `workspace_id`, never a slug or UI path segment.
-- Keep the runtime working with only documented Agent Nexus primitives: auth principals, events, and artifacts.
+- Keep the runtime working with only documented Agent Nexus primitives: auth principals, workspace events (for operator-visible replies only), artifacts, bridge check-in endpoint, and wake queue / agent-notification APIs.
 
 ## Local Workflow
 - Python `3.11+` is required. The repo-local convention is `.python-version = 3.11`.

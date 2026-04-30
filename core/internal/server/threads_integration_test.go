@@ -384,7 +384,7 @@ func TestThreadTimelineIncludesReferencedObjectsAndOmitsMissingRefs(t *testing.T
 	appendEventResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-1",
 		"event":{
-			"type":"agent_bridge_checked_in",
+			"type":"message_posted",
 			"thread_id":"`+threadID+`",
 			"refs":[
 				"thread:`+threadID+`",
@@ -597,7 +597,7 @@ func TestThreadContextBundlesRecentEventsArtifactsAndOpenCards(t *testing.T) {
 	postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-1",
 		"event":{
-			"type":"agent_bridge_checked_in",
+			"type":"message_posted",
 			"thread_id":"`+threadID+`",
 			"refs":["thread:`+threadID+`"],
 			"summary":"context probe 1",
@@ -609,11 +609,11 @@ func TestThreadContextBundlesRecentEventsArtifactsAndOpenCards(t *testing.T) {
 	postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-1",
 		"event":{
-			"type":"agent_wakeup_completed",
+			"type":"exception_raised",
 			"thread_id":"`+threadID+`",
 			"refs":["thread:`+threadID+`"],
 			"summary":"context probe 2",
-			"payload":{},
+			"payload":{"subtype":"test_fixture"},
 			"provenance":{"sources":["inferred"]}
 		}
 	}`, http.StatusCreated).Body.Close()
@@ -644,7 +644,7 @@ func TestThreadContextBundlesRecentEventsArtifactsAndOpenCards(t *testing.T) {
 	if len(payload.RecentEvents) != 2 {
 		t.Fatalf("expected 2 recent events, got %d", len(payload.RecentEvents))
 	}
-	if asString(payload.RecentEvents[0]["type"]) != "agent_bridge_checked_in" || asString(payload.RecentEvents[1]["type"]) != "agent_wakeup_completed" {
+	if asString(payload.RecentEvents[0]["type"]) != "message_posted" || asString(payload.RecentEvents[1]["type"]) != "exception_raised" {
 		t.Fatalf("unexpected recent event types: %#v", payload.RecentEvents)
 	}
 

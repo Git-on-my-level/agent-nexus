@@ -7,8 +7,8 @@ This package is bridge-only. Workspace `@handle` routing is owned by the embedde
 This package implements three things:
 
 1. **Wake registration metadata** stored on the authenticated ANX principal
-2. **Bridge readiness check-ins** stored in ANX events and reflected in that registration
-3. **Pluggable local adapters** that consume wake events and invoke code you write (subprocess JSON, the bundled Hermes ACP subprocess adapter, or optional in-process Python plugin)
+2. **Bridge readiness check-ins** via `POST /agent-bridge/check-in` plus `PATCH /agents/me` registration fields (no workspace event log entry)
+3. **Pluggable local adapters** that consume agent notifications / wake queue deliveries and invoke code you write (subprocess JSON, the bundled Hermes ACP subprocess adapter, or optional in-process Python plugin)
 
 ## Adapter kinds
 
@@ -56,10 +56,10 @@ Returns canned replies; do not use as a production integration.
 
 The bridge uses ANX's existing canonical primitives instead of inventing a parallel state system:
 
-- registration = ANX auth principal metadata
-- bridge check-in = ANX event
-- wake request/claim/fail/complete = ANX events
-- wake packet = ANX artifact
+- registration = ANX auth principal metadata (including bridge presence fields)
+- bridge check-in = signed `POST /agent-bridge/check-in` + registration patch (not a workspace event)
+- wake queue = `agent_wakeups` rows plus `GET /agent-notifications` and `POST /agent-wakeups/*` (not lifecycle events on the workspace ledger)
+- wake packet = ANX artifact (`agent_wake` kind)
 
 ## Install
 

@@ -120,7 +120,7 @@ and starts the web UI.
 - resolves `@handle` mentions against registered agent principals
 - verifies durable registration + workspace binding before creating wake intent
 - treats bridge check-in freshness as online/offline delivery state
-- writes wake artifacts plus `agent_wakeup_requested` events
+- writes wake artifacts plus first-class `agent_wakeups` queue records
 
 Per-agent bridges remain separate runtimes. They do not communicate with the
 router directly; both services communicate through `anx-core` primitives.

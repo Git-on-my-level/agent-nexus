@@ -22,3 +22,31 @@ endpoints:
       Temporary route-parity exception while command metadata generation is being
       re-aligned in this branch; route is documented in contracts/anx-openapi.yaml.
     expected_clients: operator-cli
+  - method: POST
+    path_pattern: /agent-bridge/check-in
+    owner: core
+    reason: >
+      Infrastructure presence endpoint used by self-hosted/local bridge runtimes;
+      bridge presence is not a user-facing workspace command or event surface.
+    expected_clients: server-only
+  - method: POST
+    path_pattern: /agent-wakeups/claim
+    owner: core
+    reason: >
+      Infrastructure wake-queue mutation endpoint used by bridge runtimes; wake
+      delivery state is intentionally not part of the user-facing command/event contract.
+    expected_clients: server-only
+  - method: POST
+    path_pattern: /agent-wakeups/complete
+    owner: core
+    reason: >
+      Infrastructure wake-queue mutation endpoint used by bridge runtimes; wake
+      delivery state is intentionally not part of the user-facing command/event contract.
+    expected_clients: server-only
+  - method: POST
+    path_pattern: /agent-wakeups/fail
+    owner: core
+    reason: >
+      Infrastructure wake-queue mutation endpoint used by bridge runtimes; wake
+      delivery state is intentionally not part of the user-facing command/event contract.
+    expected_clients: server-only

@@ -23,6 +23,9 @@ describe("event list URL state", () => {
     sp.set("until", "2026-01-02");
     sp.set("preset", HOME_FEED_PRESET);
 
+    const sinceIso = new Date(Date.parse("2026-01-01")).toISOString();
+    const untilIso = new Date(Date.parse("2026-01-02")).toISOString();
+
     expect(parseEventListSearchParams(sp)).toEqual({
       preset: HOME_FEED_PRESET,
       type: "message_posted",
@@ -31,8 +34,8 @@ describe("event list URL state", () => {
       topic_id: "topic-1",
       actor_id: "actor-1",
       q: "hello",
-      since: "2026-01-01",
-      until: "2026-01-02",
+      since: sinceIso,
+      until: untilIso,
     });
   });
 

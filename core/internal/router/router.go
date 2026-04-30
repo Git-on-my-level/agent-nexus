@@ -37,6 +37,7 @@ type Dependencies struct {
 	GetEvent               func(ctx context.Context, eventID string) (map[string]any, error)
 	GetThread              func(ctx context.Context, threadID string) (map[string]any, error)
 	CreateArtifact         func(ctx context.Context, actorID string, artifact map[string]any, content any, contentType string) error
+	UpsertAgentWakeup      func(ctx context.Context, wakeup primitives.AgentWakeup) error
 	AppendEvent            func(ctx context.Context, actorID string, event map[string]any) error
 	MarkThreadDirty        func(ctx context.Context, threadID string, queuedAt time.Time) error
 }
@@ -379,24 +380,26 @@ func (s *Service) routeMention(ctx context.Context, handle string, event map[str
 	}
 
 	requestKey := WakeupRequestKey(s.cfg.WorkspaceID, threadID, eventID, registration.ActorID)
-	eventBody := map[string]any{
-		"type":      WakeRequestEvent,
-		"thread_id": threadID,
-		"summary":   fmt.Sprintf("Wake requested for @%s", handle),
-		"refs":      wakeRefs,
-		"payload": BuildWakeRequestPayload(
-			wakeupID, handle, registration.ActorID,
-			s.cfg.WorkspaceID, s.cfg.WorkspaceName, threadID,
-			eventID, anyString(event["ts"]), text, sessionKey,
-			subjectRef, resolvedSubject,
-		),
-		"provenance": map[string]any{
-			"sources": []string{fmt.Sprintf("event:%s", eventID)},
-		},
+	if s.deps.UpsertAgentWakeup == nil {
+		return false, fmt.Errorf("agent wakeup queue is not configured")
 	}
-	if err := s.appendThreadEvent(ctx, requestKey, eventBody); err != nil {
+	if err := s.deps.UpsertAgentWakeup(ctx, primitives.AgentWakeup{
+		WakeupID:         wakeupID,
+		Status:           primitives.AgentWakeupStatusRequested,
+		TargetHandle:     handle,
+		TargetActorID:    registration.ActorID,
+		WorkspaceID:      s.cfg.WorkspaceID,
+		WorkspaceName:    s.cfg.WorkspaceName,
+		ThreadID:         threadID,
+		ThreadTitle:      firstNonEmpty(anyString(thread["title"]), threadID),
+		TriggerEventID:   eventID,
+		TriggerCreatedAt: anyString(event["ts"]),
+		TriggerText:      text,
+		Refs:             wakeRefs,
+	}); err != nil && !errors.Is(err, primitives.ErrConflict) {
 		return false, err
 	}
+	_ = requestKey
 	return true, nil
 }
 

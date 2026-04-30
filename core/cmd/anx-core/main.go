@@ -383,6 +383,10 @@ func main() {
 				_, err := primitiveStore.CreateArtifact(ctx, actorID, artifact, content, contentType)
 				return err
 			},
+			UpsertAgentWakeup: func(ctx context.Context, wakeup primitives.AgentWakeup) error {
+				_, err := primitiveStore.UpsertAgentWakeup(ctx, wakeup)
+				return err
+			},
 			AppendEvent: func(ctx context.Context, actorID string, event map[string]any) error {
 				_, err := primitiveStore.AppendEvent(ctx, actorID, event)
 				return err

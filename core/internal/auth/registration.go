@@ -28,7 +28,8 @@ type AgentRegistration struct {
 	BridgeSigningPublicKeySPKI string                              `json:"bridge_signing_public_key_spki_b64,omitempty"`
 	BridgeCheckedInAt          string                              `json:"bridge_checked_in_at,omitempty"`
 	BridgeExpiresAt            string                              `json:"bridge_expires_at,omitempty"`
-	BridgeCheckinEventID       string                              `json:"bridge_checkin_event_id,omitempty"`
+	BridgeWorkspaceIDs         []string                            `json:"bridge_workspace_ids,omitempty"`
+	BridgeProofSignatureB64    string                              `json:"bridge_proof_signature_b64,omitempty"`
 	BridgeCheckinTTLSeconds    int                                 `json:"bridge_checkin_ttl_seconds,omitempty"`
 	UpdatedAt                  string                              `json:"updated_at,omitempty"`
 }
@@ -47,7 +48,7 @@ func normalizeAgentRegistration(input AgentRegistration) AgentRegistration {
 		BridgeSigningPublicKeySPKI: strings.TrimSpace(input.BridgeSigningPublicKeySPKI),
 		BridgeCheckedInAt:          strings.TrimSpace(input.BridgeCheckedInAt),
 		BridgeExpiresAt:            strings.TrimSpace(input.BridgeExpiresAt),
-		BridgeCheckinEventID:       strings.TrimSpace(input.BridgeCheckinEventID),
+		BridgeProofSignatureB64:    strings.TrimSpace(input.BridgeProofSignatureB64),
 		BridgeCheckinTTLSeconds:    input.BridgeCheckinTTLSeconds,
 		UpdatedAt:                  strings.TrimSpace(input.UpdatedAt),
 	}
@@ -90,6 +91,19 @@ func normalizeAgentRegistration(input AgentRegistration) AgentRegistration {
 		return bindings[i].WorkspaceID < bindings[j].WorkspaceID
 	})
 	output.WorkspaceBindings = bindings
+	workspaceSeen := map[string]struct{}{}
+	for _, workspaceID := range input.BridgeWorkspaceIDs {
+		trimmed := strings.TrimSpace(workspaceID)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := workspaceSeen[trimmed]; ok {
+			continue
+		}
+		workspaceSeen[trimmed] = struct{}{}
+		output.BridgeWorkspaceIDs = append(output.BridgeWorkspaceIDs, trimmed)
+	}
+	sort.Strings(output.BridgeWorkspaceIDs)
 	return output
 }
 

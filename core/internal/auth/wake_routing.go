@@ -137,6 +137,20 @@ func DescribeWakeRouting(principal AuthPrincipalSummary, workspaceID string, now
 		base.Summary = "Bridge heartbeat timing is inconsistent right now."
 		return base
 	}
+	if targetWorkspaceID != "" && len(registration.BridgeWorkspaceIDs) > 0 {
+		covered := false
+		for _, workspaceID := range registration.BridgeWorkspaceIDs {
+			if strings.TrimSpace(workspaceID) == targetWorkspaceID {
+				covered = true
+				break
+			}
+		}
+		if !covered {
+			base.State = WakeRoutingStateOffline
+			base.Summary = "Offline. The agent bridge has not checked in for this workspace."
+			return base
+		}
+	}
 
 	return WakeRoutingStatus{
 		Applicable: true,

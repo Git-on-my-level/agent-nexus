@@ -396,22 +396,6 @@ func sendHumanAttentionResponseWakeBestEffort(
 
 	wakeupID := router.WakeupArtifactID(workspaceID, threadID, triggerEventID, targetActorID)
 	wakeRefs := append(router.WakeArtifactRefs(threadID, triggerEventID, subjectRef), "artifact:"+wakeupID)
-	sessionKey := fmt.Sprintf("anx:%s:%s:%s", workspaceID, threadID, targetHandle)
-
-	wakePayload := router.BuildWakeRequestPayload(
-		wakeupID,
-		targetHandle,
-		targetActorID,
-		workspaceID,
-		"Main",
-		threadID,
-		triggerEventID,
-		triggerCreatedAt,
-		triggerText,
-		sessionKey,
-		subjectRef,
-		nil,
-	)
 
 	_, artifactErr := opts.primitiveStore.CreateArtifact(ctx, actorID, map[string]any{
 		"id":              wakeupID,
@@ -435,24 +419,23 @@ func sendHumanAttentionResponseWakeBestEffort(
 		"subject_ref":        subjectRef,
 	}, "structured")
 	if artifactErr != nil && !errors.Is(artifactErr, primitives.ErrConflict) {
-		// Continue: event payload still carries enough wake metadata for queue delivery.
+		// Continue: queue metadata still carries enough wake metadata for delivery.
 	}
 
-	wakeEvent := map[string]any{
-		"type":      router.WakeRequestEvent,
-		"thread_id": threadID,
-		"summary":   "Wake requested for @" + targetHandle,
-		"refs":      wakeRefs,
-		"payload":   wakePayload,
-		"provenance": map[string]any{
-			"sources": []string{"event:" + triggerEventID},
-		},
-	}
-	if err := validateEventReferenceConventions(opts.contract, wakeEvent, wakeRefs); err == nil {
-		_, appendErr := opts.primitiveStore.AppendEvent(ctx, actorID, wakeEvent)
-		if appendErr != nil && !errors.Is(appendErr, primitives.ErrConflict) {
-			return true, "Queued — will deliver when agent reconnects."
-		}
+	_, wakeErr := opts.primitiveStore.UpsertAgentWakeup(ctx, primitives.AgentWakeup{
+		WakeupID:         wakeupID,
+		Status:           primitives.AgentWakeupStatusRequested,
+		TargetHandle:     targetHandle,
+		TargetActorID:    targetActorID,
+		WorkspaceID:      workspaceID,
+		ThreadID:         threadID,
+		TriggerEventID:   triggerEventID,
+		TriggerCreatedAt: triggerCreatedAt,
+		TriggerText:      triggerText,
+		Refs:             wakeRefs,
+	})
+	if wakeErr != nil && !errors.Is(wakeErr, primitives.ErrConflict) {
+		return true, "Queued — will deliver when agent reconnects."
 	}
 
 	if online {

@@ -63,13 +63,8 @@
     "event_type": {
       "enum_policy": "strict",
       "values": [
-        "agent_bridge_checked_in",
         "agent_notification_dismissed",
         "agent_notification_read",
-        "agent_wakeup_claimed",
-        "agent_wakeup_completed",
-        "agent_wakeup_failed",
-        "agent_wakeup_requested",
         "board_created",
         "board_updated",
         "card_archived",
@@ -148,13 +143,8 @@
       "message_posted"
     ],
     "notifications": [
-      "agent_bridge_checked_in",
       "agent_notification_dismissed",
-      "agent_notification_read",
-      "agent_wakeup_claimed",
-      "agent_wakeup_completed",
-      "agent_wakeup_failed",
-      "agent_wakeup_requested"
+      "agent_notification_read"
     ],
     "reviews": [
       "receipt_added",
@@ -169,25 +159,10 @@
     ]
   },
   "event_type_groups": {
-    "agent_bridge_checked_in": [
-      "notifications"
-    ],
     "agent_notification_dismissed": [
       "notifications"
     ],
     "agent_notification_read": [
-      "notifications"
-    ],
-    "agent_wakeup_claimed": [
-      "notifications"
-    ],
-    "agent_wakeup_completed": [
-      "notifications"
-    ],
-    "agent_wakeup_failed": [
-      "notifications"
-    ],
-    "agent_wakeup_requested": [
       "notifications"
     ],
     "board_created": [

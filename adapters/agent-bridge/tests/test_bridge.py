@@ -38,12 +38,21 @@ class StubClient:
     def __init__(self, events):
         self._events = list(events)
         self.registration_updates = []
+        self.bridge_checkins = []
         self.created_events = []
+        self.claimed_wakeups = []
+        self.completed_wakeups = []
+        self.failed_wakeups = []
         self.list_notification_calls = []
         self.notification_reads = []
         self.notifications = []
 
     def stream_events(self, **_kwargs):
+        for event in self._events:
+            yield event
+        raise KeyboardInterrupt()
+
+    def stream_agent_notifications(self, **_kwargs):
         for event in self._events:
             yield event
         raise KeyboardInterrupt()
@@ -55,6 +64,22 @@ class StubClient:
     def create_event(self, **kwargs):
         self.created_events.append(kwargs)
         return {"event": {"id": f"event-{len(self.created_events)}", **kwargs.get("event", {})}}
+
+    def bridge_check_in(self, payload):
+        self.bridge_checkins.append(payload)
+        return {"agent": {"agent_id": "agent-hermes", "registration": payload}}
+
+    def claim_agent_wakeup(self, wakeup_id, bridge_instance_id):
+        self.claimed_wakeups.append({"wakeup_id": wakeup_id, "bridge_instance_id": bridge_instance_id})
+        return {"notification": {"wakeup_id": wakeup_id, "bridge_instance_id": bridge_instance_id}}
+
+    def complete_agent_wakeup(self, wakeup_id, bridge_instance_id):
+        self.completed_wakeups.append({"wakeup_id": wakeup_id, "bridge_instance_id": bridge_instance_id})
+        return {"notification": {"wakeup_id": wakeup_id, "bridge_instance_id": bridge_instance_id, "delivery_status": "completed"}}
+
+    def fail_agent_wakeup(self, wakeup_id, bridge_instance_id, error):
+        self.failed_wakeups.append({"wakeup_id": wakeup_id, "bridge_instance_id": bridge_instance_id, "error": error})
+        return {"notification": {"wakeup_id": wakeup_id, "bridge_instance_id": bridge_instance_id, "delivery_status": "failed"}}
 
     def list_agent_notifications(self, *, statuses=None, order="desc"):
         self.list_notification_calls.append({"statuses": list(statuses or []), "order": order})
@@ -153,50 +178,19 @@ def build_bridge(events):
     return bridge, state, client
 
 
-def test_bridge_advances_cursor_for_non_target_event():
-    bridge, state, _client = build_bridge(
-        [{"data": '{"event":{"id":"evt-1","payload":{"target_handle":"other","wakeup_id":"wake-1"}}}'}]
-    )
-
-    try:
-        bridge.run_forever()
-    except KeyboardInterrupt:
-        pass
-
-    assert state.last_event_id == "evt-1"
-
-
-def test_bridge_does_not_advance_cursor_when_handle_fails():
-    bridge, state, _client = build_bridge(
-        [{"data": '{"event":{"id":"evt-2","payload":{"target_handle":"hermes","wakeup_id":"wake-2"}}}'}]
-    )
-
-    def fail():
-        raise KeyboardInterrupt()
-
-    bridge._drain_notifications = fail
-
-    try:
-        bridge.run_forever()
-    except KeyboardInterrupt:
-        pass
-
-    assert state.last_event_id is None
-
-
 def test_claim_wakeup_returns_false_on_conflict():
     bridge, _state, _client = build_bridge([])
 
-    def raise_conflict(**_kwargs):
+    def raise_conflict(*_args, **_kwargs):
         raise ANXClientError(409, "conflict", "duplicate request key")
 
-    bridge.client.create_event = raise_conflict
+    bridge.client.claim_agent_wakeup = raise_conflict
 
     packet = WakePacket.from_content(bridge.client.get_artifact_content("wake-1"))
     assert bridge._claim_wakeup(packet, "actor-1", "event-1") is False
 
 
-def test_bridge_logs_transport_disconnect_without_traceback(monkeypatch, caplog):
+def test_bridge_retries_when_notification_poll_raises(monkeypatch, caplog):
     bridge, state, _client = build_bridge([])
     caplog.set_level(logging.INFO)
 
@@ -208,15 +202,14 @@ def test_bridge_logs_transport_disconnect_without_traceback(monkeypatch, caplog)
     def stop_sleep(_seconds):
         raise KeyboardInterrupt()
 
-    bridge.client.stream_events = raise_disconnect
+    bridge.client.stream_agent_notifications = raise_disconnect
     monkeypatch.setattr("anx_agent_bridge.bridge.time.sleep", stop_sleep)
 
     with pytest.raises(KeyboardInterrupt):
         bridge.run_forever()
 
     assert state.last_event_id is None
-    assert "Event stream interrupted; reconnecting" in caplog.text
-    assert "Bridge loop failed; reconnecting" not in caplog.text
+    assert "Bridge loop failed; reconnecting" in caplog.text
 
 
 def test_bridge_retries_when_startup_notification_drain_fails(monkeypatch, caplog):
@@ -262,24 +255,10 @@ def test_handle_notification_marks_read_after_dispatch():
     )
     assert '"subject_ref": "topic:topic-1"' in bridge.adapter.last_prompt_text
     assert '"resolved_subject"' in bridge.adapter.last_prompt_text
-    assert [entry["event"]["type"] for entry in client.created_events] == [
-        "agent_wakeup_claimed",
-        "message_posted",
-        "agent_wakeup_completed",
-    ]
+    assert client.claimed_wakeups == [{"wakeup_id": "wake-1", "bridge_instance_id": "bridge-test"}]
+    assert client.completed_wakeups == [{"wakeup_id": "wake-1", "bridge_instance_id": "bridge-test"}]
+    assert [entry["event"]["type"] for entry in client.created_events] == ["message_posted"]
     assert client.created_events[0]["event"]["refs"] == [
-        "thread:thread-1",
-        "topic:topic-1",
-        "event:evt-request",
-        "artifact:wake-1",
-    ]
-    assert client.created_events[1]["event"]["refs"] == [
-        "thread:thread-1",
-        "topic:topic-1",
-        "event:evt-trigger",
-        "artifact:wake-1",
-    ]
-    assert client.created_events[2]["event"]["refs"] == [
         "thread:thread-1",
         "topic:topic-1",
         "event:evt-trigger",
@@ -302,15 +281,11 @@ def test_packet_event_refs_omits_empty_trigger_event_id():
 
 def test_handle_notification_marks_consumed_when_completion_fails():
     bridge, state, client = build_bridge([])
-    original_create_event = client.create_event
 
-    def fail_completion(**kwargs):
-        event = kwargs.get("event") or {}
-        if event.get("type") == "agent_wakeup_completed":
-            raise RuntimeError("completion write failed")
-        return original_create_event(**kwargs)
+    def fail_completion(*_args, **_kwargs):
+        raise RuntimeError("completion write failed")
 
-    client.create_event = fail_completion
+    client.complete_agent_wakeup = fail_completion
 
     bridge._handle_notification(
         {
@@ -324,9 +299,8 @@ def test_handle_notification_marks_consumed_when_completion_fails():
 
     assert client.notification_reads == ["wake-1"]
     assert "wake-1" in state.handled_wakeup_ids()
-    event_types = [entry["event"]["type"] for entry in client.created_events]
-    assert "agent_wakeup_failed" in event_types
-    assert event_types[-1] == "agent_wakeup_failed"
+    assert client.failed_wakeups[-1]["wakeup_id"] == "wake-1"
+    assert "completion write failed" in client.failed_wakeups[-1]["error"]
 
 
 def test_handle_notification_retries_reply_post_without_redispatch(monkeypatch):
@@ -360,7 +334,8 @@ def test_handle_notification_retries_reply_post_without_redispatch(monkeypatch):
     assert client.notification_reads == ["wake-1"]
     assert "wake-1" in state.handled_wakeup_ids()
     event_types = [entry["event"]["type"] for entry in client.created_events]
-    assert event_types == ["agent_wakeup_claimed", "message_posted", "agent_wakeup_completed"]
+    assert event_types == ["message_posted"]
+    assert client.completed_wakeups == [{"wakeup_id": "wake-1", "bridge_instance_id": "bridge-test"}]
 
 
 def test_handle_notification_does_not_redispatch_after_reply_post_exhausts_retries(monkeypatch):
@@ -392,8 +367,8 @@ def test_handle_notification_does_not_redispatch_after_reply_post_exhausts_retri
     assert len(bridge.adapter.dispatch_calls) == 1
     assert client.notification_reads == ["wake-1", "wake-1"]
     assert "wake-1" in state.handled_wakeup_ids()
-    event_types = [entry["event"]["type"] for entry in client.created_events]
-    assert event_types == ["agent_wakeup_claimed", "agent_wakeup_failed"]
+    assert [entry["event"]["type"] for entry in client.created_events] == []
+    assert client.failed_wakeups[-1]["wakeup_id"] == "wake-1"
 
 
 def test_handle_notification_caps_dispatch_failures(monkeypatch):
@@ -427,8 +402,7 @@ def test_handle_notification_caps_dispatch_failures(monkeypatch):
     assert calls["dispatch"] == 3
     assert "wake-1" in state.handled_wakeup_ids()
     assert client.notification_reads == ["wake-1"]
-    failed = [e for e in client.created_events if e["event"]["type"] == "agent_wakeup_failed"]
-    assert len(failed) == 3
+    assert len(client.failed_wakeups) == 3
 
 
 def test_drain_notifications_does_not_block_on_backed_off_wakeup(monkeypatch):
@@ -510,11 +484,9 @@ def test_drain_notifications_continues_after_dispatch_failure():
     bridge._drain_notifications()
 
     assert calls["n"] == 2
-    failed = [e for e in client.created_events if e["event"]["type"] == "agent_wakeup_failed"]
-    assert len(failed) == 1
-    assert failed[0]["event"]["payload"]["wakeup_id"] == "wake-bad"
-    completed = [e for e in client.created_events if e["event"]["type"] == "agent_wakeup_completed"]
-    assert len(completed) == 1
+    assert len(client.failed_wakeups) == 1
+    assert client.failed_wakeups[0]["wakeup_id"] == "wake-bad"
+    assert client.completed_wakeups == [{"wakeup_id": "wake-good", "bridge_instance_id": "bridge-test"}]
 
 
 def test_handle_notification_does_not_emit_failed_when_read_ack_fails(monkeypatch):
@@ -539,9 +511,8 @@ def test_handle_notification_does_not_emit_failed_when_read_ack_fails(monkeypatc
     )
 
     assert failures["count"] == 3
-    event_types = [entry["event"]["type"] for entry in client.created_events]
-    assert "agent_wakeup_completed" in event_types
-    assert "agent_wakeup_failed" not in event_types
+    assert client.completed_wakeups == [{"wakeup_id": "wake-1", "bridge_instance_id": "bridge-test"}]
+    assert client.failed_wakeups == []
 
 
 def test_handle_notification_skips_redispatch_for_handled_wakeup():
@@ -591,19 +562,16 @@ def test_bridge_checkin_upserts_active_registration():
     bridge._publish_checkin()
 
     assert len(client.registration_updates) == 1
+    assert len(client.bridge_checkins) == 1
     reg_payload = client.registration_updates[0]["registration"]
     assert reg_payload["status"] == "active"
     assert reg_payload["bridge_instance_id"] == "bridge-test"
     assert reg_payload["bridge_signing_public_key_spki_b64"] != ""
     assert reg_payload["bridge_checked_in_at"] != ""
     assert reg_payload["bridge_expires_at"] != ""
-    assert reg_payload["bridge_checkin_event_id"] == "event-1"
-    assert len(client.created_events) == 1
-    checkin_event = client.created_events[0]["event"]
-    checkin_payload = checkin_event["payload"]
-    assert checkin_event["type"] == "agent_bridge_checked_in"
-    assert checkin_event["refs"] == []
-    assert checkin_event["provenance"] == {"sources": ["inferred"]}
+    assert reg_payload["bridge_workspace_ids"] == ["ws_main"]
+    assert reg_payload["bridge_proof_signature_b64"] != ""
+    checkin_payload = client.bridge_checkins[0]
     assert checkin_payload["bridge_instance_id"] == "bridge-test"
     assert checkin_payload["workspace_id"] == "ws_main"
     assert checkin_payload["workspace_ids"] == ["ws_main"]

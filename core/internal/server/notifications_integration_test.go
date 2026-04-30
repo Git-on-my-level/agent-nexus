@@ -1,9 +1,12 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
+
+	"agent-nexus-core/internal/primitives"
 )
 
 func TestNotificationsListReadAndDismissAreTargetScoped(t *testing.T) {
@@ -57,32 +60,25 @@ func TestNotificationsListReadAndDismissAreTargetScoped(t *testing.T) {
 	}
 
 	wakeupID := "wake-notification-1"
-	postJSONExpectStatusWithAuth(t, env.server.URL+"/events", map[string]any{
-		"event": map[string]any{
-			"type":      agentWakeRequestEvent,
-			"thread_id": threadID,
-			"summary":   "Wake requested for @target.agent",
-			"refs": []string{
-				"thread:" + threadID,
-				"event:" + triggerEventID,
-				"artifact:" + wakeupID,
-			},
-			"payload": map[string]any{
-				"wakeup_id":          wakeupID,
-				"wake_artifact_id":   wakeupID,
-				"target_handle":      target.Username,
-				"target_actor_id":    target.ActorID,
-				"workspace_id":       "ws_main",
-				"workspace_name":     "Main",
-				"thread_id":          threadID,
-				"trigger_event_id":   triggerEventID,
-				"trigger_created_at": triggerCreatedAt,
-				"trigger_text":       "@target.agent please check this",
-				"session_key":        "anx:ws_main:" + threadID + ":" + target.Username,
-			},
-			"provenance": map[string]any{"sources": []string{"event:" + triggerEventID}},
+	if _, err := env.primitiveStore.UpsertAgentWakeup(context.Background(), primitives.AgentWakeup{
+		WakeupID:         wakeupID,
+		Status:           primitives.AgentWakeupStatusRequested,
+		TargetHandle:     target.Username,
+		TargetActorID:    target.ActorID,
+		WorkspaceID:      "ws_main",
+		WorkspaceName:    "Main",
+		ThreadID:         threadID,
+		TriggerEventID:   triggerEventID,
+		TriggerCreatedAt: triggerCreatedAt,
+		TriggerText:      "@target.agent please check this",
+		Refs: []string{
+			"thread:" + threadID,
+			"event:" + triggerEventID,
+			"artifact:" + wakeupID,
 		},
-	}, sender.AccessToken, http.StatusCreated).Body.Close()
+	}); err != nil {
+		t.Fatalf("seed wakeup: %v", err)
+	}
 
 	notificationsResp := getJSONExpectStatusWithAuth(t, env.server.URL+"/agent-notifications?status=unread", target.AccessToken, http.StatusOK)
 	var notificationsPayload struct {
@@ -101,7 +97,7 @@ func TestNotificationsListReadAndDismissAreTargetScoped(t *testing.T) {
 
 	postJSONExpectStatusWithAuth(t, env.server.URL+"/events", map[string]any{
 		"event": map[string]any{
-			"type":      agentNotificationReadEvent,
+			"type":      "agent_notification_read",
 			"thread_id": threadID,
 			"summary":   "forged read",
 			"refs": []string{

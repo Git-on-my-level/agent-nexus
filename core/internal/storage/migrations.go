@@ -314,6 +314,32 @@ var migrations = []migration{
 				used_at TEXT NOT NULL
 			);`,
 			`CREATE INDEX IF NOT EXISTS idx_auth_used_assertions_used_at ON auth_used_assertions (used_at);`,
+			`CREATE TABLE IF NOT EXISTS agent_wakeups (
+				wakeup_id TEXT PRIMARY KEY,
+				status TEXT NOT NULL,
+				notification_status TEXT NOT NULL DEFAULT 'unread',
+				target_handle TEXT NOT NULL,
+				target_actor_id TEXT NOT NULL,
+				workspace_id TEXT NOT NULL DEFAULT '',
+				workspace_name TEXT NOT NULL DEFAULT '',
+				thread_id TEXT NOT NULL DEFAULT '',
+				thread_title TEXT NOT NULL DEFAULT '',
+				trigger_event_id TEXT NOT NULL DEFAULT '',
+				trigger_created_at TEXT NOT NULL DEFAULT '',
+				trigger_text TEXT NOT NULL DEFAULT '',
+				refs_json TEXT NOT NULL DEFAULT '[]',
+				bridge_instance_id TEXT NOT NULL DEFAULT '',
+				failure_reason TEXT NOT NULL DEFAULT '',
+				created_at TEXT NOT NULL,
+				claimed_at TEXT,
+				completed_at TEXT,
+				failed_at TEXT,
+				read_at TEXT,
+				dismissed_at TEXT,
+				updated_at TEXT NOT NULL
+			);`,
+			`CREATE INDEX IF NOT EXISTS idx_agent_wakeups_target_status_created ON agent_wakeups (target_actor_id, notification_status, created_at DESC, wakeup_id DESC);`,
+			`CREATE INDEX IF NOT EXISTS idx_agent_wakeups_status_created ON agent_wakeups (status, created_at DESC, wakeup_id DESC);`,
 
 			`CREATE TABLE IF NOT EXISTS passkey_credentials (
 				credential_id TEXT PRIMARY KEY,
@@ -669,6 +695,37 @@ var migrations = []migration{
 			}
 			_, err = tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_events_actor_ts_id ON events (actor_id, ts DESC, id DESC);`)
 			return err
+		},
+	},
+	{
+		Version: 21,
+		Statements: []string{
+			`CREATE TABLE IF NOT EXISTS agent_wakeups (
+				wakeup_id TEXT PRIMARY KEY,
+				status TEXT NOT NULL,
+				notification_status TEXT NOT NULL DEFAULT 'unread',
+				target_handle TEXT NOT NULL,
+				target_actor_id TEXT NOT NULL,
+				workspace_id TEXT NOT NULL DEFAULT '',
+				workspace_name TEXT NOT NULL DEFAULT '',
+				thread_id TEXT NOT NULL DEFAULT '',
+				thread_title TEXT NOT NULL DEFAULT '',
+				trigger_event_id TEXT NOT NULL DEFAULT '',
+				trigger_created_at TEXT NOT NULL DEFAULT '',
+				trigger_text TEXT NOT NULL DEFAULT '',
+				refs_json TEXT NOT NULL DEFAULT '[]',
+				bridge_instance_id TEXT NOT NULL DEFAULT '',
+				failure_reason TEXT NOT NULL DEFAULT '',
+				created_at TEXT NOT NULL,
+				claimed_at TEXT,
+				completed_at TEXT,
+				failed_at TEXT,
+				read_at TEXT,
+				dismissed_at TEXT,
+				updated_at TEXT NOT NULL
+			);`,
+			`CREATE INDEX IF NOT EXISTS idx_agent_wakeups_target_status_created ON agent_wakeups (target_actor_id, notification_status, created_at DESC, wakeup_id DESC);`,
+			`CREATE INDEX IF NOT EXISTS idx_agent_wakeups_status_created ON agent_wakeups (status, created_at DESC, wakeup_id DESC);`,
 		},
 	},
 }

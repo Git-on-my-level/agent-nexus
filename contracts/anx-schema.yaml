@@ -61,11 +61,6 @@ enums:
       - human_attention_responded
       - agent_notification_read
       - agent_notification_dismissed
-      - agent_bridge_checked_in
-      - agent_wakeup_requested
-      - agent_wakeup_claimed
-      - agent_wakeup_completed
-      - agent_wakeup_failed
     groups:
       messages: [message_posted]
       topics: [topic_created, topic_updated, topic_archived, topic_restored, topic_trashed]
@@ -73,7 +68,7 @@ enums:
       boards: [board_created, board_updated]
       cards: [card_created, card_updated, card_moved, card_archived, card_trashed, card_resolved]
       attention: [human_attention_requested, human_attention_responded]
-      notifications: [agent_notification_read, agent_notification_dismissed, agent_bridge_checked_in, agent_wakeup_requested, agent_wakeup_claimed, agent_wakeup_completed, agent_wakeup_failed]
+      notifications: [agent_notification_read, agent_notification_dismissed]
       reviews: [receipt_added, review_completed]
       exceptions: [exception_raised]
     backing_event_types:

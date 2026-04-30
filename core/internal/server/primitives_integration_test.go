@@ -35,7 +35,7 @@ func TestPrimitivesCRUDRoundTrip(t *testing.T) {
 	eventResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-1",
 		"event":{
-			"type":"agent_bridge_checked_in",
+			"type":"message_posted",
 			"thread_id":"thread-1",
 			"refs":["customprefix:abc"],
 			"summary":"custom event",
@@ -66,7 +66,7 @@ func TestPrimitivesCRUDRoundTrip(t *testing.T) {
 	if err := json.NewDecoder(getEventResp.Body).Decode(&loadedEvent); err != nil {
 		t.Fatalf("decode get event response: %v", err)
 	}
-	if loadedEvent["event"]["type"] != "agent_bridge_checked_in" {
+	if loadedEvent["event"]["type"] != "message_posted" {
 		t.Fatalf("unexpected event type: %#v", loadedEvent["event"]["type"])
 	}
 
@@ -225,7 +225,7 @@ func TestListEventsFiltersByEventType(t *testing.T) {
 	postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-evt-filter",
 		"event":{
-			"type":"agent_bridge_checked_in",
+			"type":"message_posted",
 			"thread_id":"thread-evfilter",
 			"refs":["thread:thread-evfilter"],
 			"summary":"alpha",
@@ -236,15 +236,16 @@ func TestListEventsFiltersByEventType(t *testing.T) {
 	postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-evt-filter",
 		"event":{
-			"type":"agent_wakeup_failed",
+			"type":"exception_raised",
 			"thread_id":"thread-evfilter",
 			"refs":["thread:thread-evfilter"],
 			"summary":"beta",
+			"payload":{"subtype":"test_fixture"},
 			"provenance":{"sources":["inferred"]}
 		}
 	}`, http.StatusCreated)
 
-	filteredResp, err := http.Get(h.baseURL + "/events?thread_id=thread-evfilter&type=agent_bridge_checked_in")
+	filteredResp, err := http.Get(h.baseURL + "/events?thread_id=thread-evfilter&type=message_posted")
 	if err != nil {
 		t.Fatalf("GET /events?thread_id=&type=: %v", err)
 	}
@@ -261,7 +262,7 @@ func TestListEventsFiltersByEventType(t *testing.T) {
 	if len(filtered.Events) != 1 {
 		t.Fatalf("expected 1 event after type filter, got %d", len(filtered.Events))
 	}
-	if anyString(filtered.Events[0]["type"]) != "agent_bridge_checked_in" {
+	if anyString(filtered.Events[0]["type"]) != "message_posted" {
 		t.Fatalf("unexpected event type after filter: %#v", filtered.Events[0]["type"])
 	}
 }
@@ -275,9 +276,10 @@ func TestListEventsFiltersByGroupAndBackingScope(t *testing.T) {
 	postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-event-groups",
 		"event":{
-			"type":"agent_bridge_checked_in",
+			"type":"exception_raised",
 			"refs":[],
 			"summary":"bridge checked in",
+			"payload":{"subtype":"test_fixture"},
 			"provenance":{"sources":["inferred"]}
 		}
 	}`, http.StatusCreated).Body.Close()
@@ -321,7 +323,7 @@ func TestListEventsFiltersByGroupAndBackingScope(t *testing.T) {
 	if err := json.NewDecoder(standaloneResp.Body).Decode(&standalone); err != nil {
 		t.Fatalf("decode standalone events: %v", err)
 	}
-	if len(standalone.Events) != 1 || anyString(standalone.Events[0]["type"]) != "agent_bridge_checked_in" {
+	if len(standalone.Events) != 1 || anyString(standalone.Events[0]["type"]) != "exception_raised" {
 		t.Fatalf("unexpected standalone events: %#v", standalone.Events)
 	}
 
@@ -1063,7 +1065,7 @@ func TestEventCreateRequestKeyReplaysSingleWrite(t *testing.T) {
 		"actor_id":"actor-1",
 		"request_key":"replay-event",
 		"event":{
-			"type":"agent_bridge_checked_in",
+			"type":"message_posted",
 			"thread_id":"thread-1",
 			"refs":["customprefix:abc"],
 			"summary":"custom event",

@@ -53,10 +53,11 @@ func TestHomeUnreadGroupsEligibleEventsAndMarksRead(t *testing.T) {
 	postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-home",
 		"event":{
-			"type":"agent_bridge_checked_in",
+			"type":"exception_raised",
 			"thread_id":"`+threadID+`",
 			"refs":["thread:`+threadID+`","topic:`+topicID+`"],
 			"summary":"Heartbeat",
+			"payload":{"subtype":"test_fixture"},
 			"provenance":{"sources":["inferred"]}
 		}
 	}`, http.StatusCreated).Body.Close()
@@ -132,7 +133,7 @@ func TestEventsHomeFeedPresetMatchesHomeEligibility(t *testing.T) {
 	}`, http.StatusCreated).Body.Close()
 	postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-events-preset",
-		"event":{"type":"agent_wakeup_failed","refs":["thread:t1"],"summary":"visible only in Events","provenance":{"sources":["inferred"]}}
+		"event":{"type":"exception_raised","refs":["thread:t1"],"summary":"visible only in Events","payload":{"subtype":"test_fixture"},"provenance":{"sources":["inferred"]}}
 	}`, http.StatusCreated).Body.Close()
 
 	presetResp, err := http.Get(h.baseURL + "/events?preset=home_feed")

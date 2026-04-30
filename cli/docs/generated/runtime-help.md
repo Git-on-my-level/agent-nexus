@@ -519,10 +519,9 @@ First-time agent-host path
 
 8. Confirm the durable trace:
   - `message_posted`
-  - `agent_wakeup_requested`
-  - if online, `agent_wakeup_claimed`
+  - a queued wake record visible through `anx notifications list --status unread`
   - if online, bridge reply `message_posted`
-  - if online, `agent_wakeup_completed`
+  - if online, the wake record moves to completed delivery status
   - if offline, the notification remains queued until the bridge reconnects
 
 9. Pull or dismiss queued notifications directly when needed:
@@ -571,7 +570,7 @@ How it works
 
 - Wake routing is provided by a workspace-owned sidecar hosted inside `anx-core`, not by the per-agent CLI.
 - The durable wake registration now lives on the agent principal metadata, not in `docs`.
-- The bridge-owned readiness proof is the latest `agent_bridge_checked_in` event referenced by that principal registration.
+- The bridge-owned readiness proof is direct presence state on that principal registration.
 - A tagged message becomes durable wake work when the target agent is registered for the workspace. Bridge readiness only changes whether delivery is immediate or queued.
 
 What counts as taggable
@@ -587,8 +586,8 @@ What counts as taggable
 What counts as online
 
 - the agent is already taggable
-- registration records a bridge check-in event id
-- that `agent_bridge_checked_in` event exists, matches the same actor, and has a fresh bridge check-in window
+- registration records a bridge instance id, signed proof, check-in timestamp, expiry timestamp, and covered workspace ids
+- the signed proof matches the registration's bridge signing public key and its expiry is still fresh for the current workspace
 
 Important lifecycle rule
 
@@ -665,7 +664,7 @@ Preferred path when you are using `anx-agent-bridge`
 
 Generic ANX CLI lifecycle
 
-If you are writing registration state manually, update the agent principal registration only. Manual principal updates do not replace the live bridge-owned check-in event.
+If you are writing registration state manually, update the agent principal registration only. Manual principal updates do not replace the live bridge-owned check-in endpoint.
 
 1. Confirm the identity you are registering:
 
@@ -721,13 +720,14 @@ Registration schema notes
   - `content.actor_id` matching the principal actor id
   - at least one enabled `content.workspace_bindings[].workspace_id` matching the current workspace id
 - Bridge readiness fields are:
-  - `content.bridge_checkin_event_id` points at the latest `agent_bridge_checked_in` event
+  - `content.bridge_instance_id` identifies the currently checking-in bridge runtime
   - `content.bridge_signing_public_key_spki_b64` stores the bridge-managed public proof key
-  - that event payload includes `bridge_instance_id`, `checked_in_at`, and `expires_at`
-  - that event payload also includes `proof_signature_b64`, which must verify against the registration's public proof key
+  - `content.bridge_checked_in_at` and `content.bridge_expires_at` define freshness
+  - `content.bridge_workspace_ids` lists the workspaces covered by the proof
+  - `content.bridge_proof_signature_b64` must verify against the registration's public proof key
 - `updated_at` is advisory metadata. Set it to the current UTC time when creating or updating the registration, or let bridge-managed flows populate it.
 - Do not hand-edit `status = "active"` before the bridge has actually checked in.
-- Do not try to hand-author the bridge readiness proof. The supported path is to let the running bridge emit `agent_bridge_checked_in` and refresh the registration.
+- Do not try to hand-author the bridge readiness proof. The supported path is to let the running bridge call the bridge check-in endpoint and refresh the registration.
 
 Verification flow
 
@@ -749,10 +749,9 @@ Verification flow
   - principal actor id matches `content.actor_id`
   - `workspace_bindings` contains the current workspace id with `enabled: true`
   - `status` is `active`
-  - if you need online delivery right now, `bridge_checkin_event_id` is present on the registration
-  - if you need online delivery right now, `anx events get --event-id <bridge-checkin-event-id>` (add `--json` for the CLI JSON envelope) returns an `agent_bridge_checked_in` event
-  - if you need online delivery right now, that event actor id matches the principal actor
-  - if you need online delivery right now, that event `expires_at` is still in the future
+  - if you need online delivery right now, `bridge_instance_id`, `bridge_checked_in_at`, `bridge_expires_at`, `bridge_workspace_ids`, and `bridge_proof_signature_b64` are present
+  - if you need online delivery right now, `bridge_workspace_ids` contains the current workspace id
+  - if you need online delivery right now, `bridge_expires_at` is still in the future
 
 5. If you are using `anx-agent-bridge`, prefer:
 
@@ -767,11 +766,11 @@ Concrete wake example
 
 3. Expected durable trace:
 - existing `message_posted`
-- new `agent_wakeup_requested`
-- if online, new `agent_wakeup_claimed`
+- new wake queue record visible through notifications
+- if online, wake queue status becomes `claimed`
 - if online, new bridge reply `message_posted`
-- if online, new `agent_wakeup_completed`
-- if offline, the `agent_wakeup_requested` stays pending until the bridge later claims it
+- if online, wake queue status becomes `completed`
+- if offline, the wake queue record stays requested until the bridge later claims it
 
 Common failure modes
 
@@ -3038,7 +3037,7 @@ Inputs:
   - body `event.provenance.by_field` (object)
   - body `event.provenance.notes` (string)
   - body `event.thread_ref` (string)
-  Enum values: event.type (strict): agent_bridge_checked_in, agent_notification_dismissed, agent_notification_read, agent_wakeup_claimed, agent_wakeup_completed, agent_wakeup_failed, agent_wakeup_requested, board_created, board_updated, card_archived, card_created, card_moved, card_resolved, card_trashed, card_updated, document_created, document_restored, document_revised, document_trashed, exception_raised, human_attention_requested, human_attention_responded, message_posted, receipt_added, review_completed, topic_archived, topic_created, topic_restored, topic_trashed, topic_updated
+  Enum values: event.type (strict): agent_notification_dismissed, agent_notification_read, board_created, board_updated, card_archived, card_created, card_moved, card_resolved, card_trashed, card_updated, document_created, document_restored, document_revised, document_trashed, exception_raised, human_attention_requested, human_attention_responded, message_posted, receipt_added, review_completed, topic_archived, topic_created, topic_restored, topic_trashed, topic_updated
 
 Common authoring types:
   Communication: direct communication or important non-structured information

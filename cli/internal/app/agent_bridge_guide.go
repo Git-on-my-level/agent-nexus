@@ -120,10 +120,9 @@ First-time agent-host path
 
 8. Confirm the durable trace:
   - <<tick>>message_posted<<tick>>
-  - <<tick>>agent_wakeup_requested<<tick>>
-  - if online, <<tick>>agent_wakeup_claimed<<tick>>
+  - a queued wake record visible through <<tick>>anx notifications list --status unread<<tick>>
   - if online, bridge reply <<tick>>message_posted<<tick>>
-  - if online, <<tick>>agent_wakeup_completed<<tick>>
+  - if online, the wake record moves to completed delivery status
   - if offline, the notification remains queued until the bridge reconnects
 
 9. Pull or dismiss queued notifications directly when needed:

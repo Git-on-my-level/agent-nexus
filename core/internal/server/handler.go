@@ -49,6 +49,13 @@ type PrimitiveStore interface {
 	CreateArtifactAndEvent(ctx context.Context, actorID string, artifact map[string]any, content any, contentType string, event map[string]any) (map[string]any, map[string]any, error)
 	GetArtifact(ctx context.Context, id string) (map[string]any, error)
 	GetArtifactContent(ctx context.Context, id string) ([]byte, string, error)
+	UpsertAgentWakeup(ctx context.Context, wakeup primitives.AgentWakeup) (primitives.AgentWakeup, error)
+	GetAgentWakeup(ctx context.Context, wakeupID string) (primitives.AgentWakeup, error)
+	ListAgentWakeups(ctx context.Context, filter primitives.AgentWakeupListFilter) ([]primitives.AgentWakeup, error)
+	ClaimAgentWakeup(ctx context.Context, wakeupID string, targetActorID string, bridgeInstanceID string) (primitives.AgentWakeup, error)
+	CompleteAgentWakeup(ctx context.Context, wakeupID string, targetActorID string, bridgeInstanceID string) (primitives.AgentWakeup, error)
+	FailAgentWakeup(ctx context.Context, wakeupID string, targetActorID string, bridgeInstanceID string, reason string) (primitives.AgentWakeup, error)
+	MarkAgentWakeupNotification(ctx context.Context, wakeupID string, targetActorID string, status string) (primitives.AgentWakeup, error)
 	ListArtifacts(ctx context.Context, filter primitives.ArtifactListFilter) ([]map[string]any, error)
 	GetWorkspaceUsageSummary(ctx context.Context) (primitives.WorkspaceUsageSummary, error)
 	GetWorkspaceUsageV1Summary(ctx context.Context) (primitives.WorkspaceUsageV1Summary, error)
@@ -1019,6 +1026,14 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			return
 		}
 		handleRevokeCurrentAgent(w, r, opts)
+	})
+
+	registerRoute("/agent-bridge/check-in", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+			return
+		}
+		handleBridgeCheckIn(w, r, opts)
 	})
 
 	registerRoute("/topics", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodGet, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
@@ -2272,6 +2287,30 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			return
 		}
 		handleDismissAgentNotification(w, r, opts)
+	})
+
+	registerRoute("/agent-wakeups/claim", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+			return
+		}
+		handleClaimAgentWakeup(w, r, opts)
+	})
+
+	registerRoute("/agent-wakeups/complete", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+			return
+		}
+		handleCompleteAgentWakeup(w, r, opts)
+	})
+
+	registerRoute("/agent-wakeups/fail", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+			return
+		}
+		handleFailAgentWakeup(w, r, opts)
 	})
 
 	registerRoute("/derived/rebuild", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {

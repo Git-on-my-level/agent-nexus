@@ -48,6 +48,18 @@ export const DEFAULT_EVENT_LIST_FILTERS = Object.freeze({
   until: "",
 });
 
+function normalizeTimestampValue(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) {
+    return "";
+  }
+  const parsed = Date.parse(raw);
+  if (Number.isNaN(parsed)) {
+    return "";
+  }
+  return new Date(parsed).toISOString();
+}
+
 const allowedEventGroups = new Set(EVENT_GROUP_ORDER);
 
 /** @param {unknown} raw */
@@ -87,8 +99,8 @@ export function parseEventListSearchParams(searchParams) {
     topic_id: readStringSearchParam(sp, "topic_id"),
     actor_id: readStringSearchParam(sp, "actor_id"),
     q: readStringSearchParam(sp, "q"),
-    since: readStringSearchParam(sp, "since"),
-    until: readStringSearchParam(sp, "until"),
+    since: normalizeTimestampValue(readStringSearchParam(sp, "since")),
+    until: normalizeTimestampValue(readStringSearchParam(sp, "until")),
   };
 }
 
@@ -104,8 +116,8 @@ export function buildEventListSearchString(filters = {}) {
     q: String(f.q ?? "").trim(),
     topic_id: String(f.topic_id ?? "").trim(),
     actor_id: String(f.actor_id ?? "").trim(),
-    since: String(f.since ?? "").trim(),
-    until: String(f.until ?? "").trim(),
+    since: normalizeTimestampValue(f.since),
+    until: normalizeTimestampValue(f.until),
   };
   const bs = String(f.backing_scope ?? "all").trim();
   if (bs && bs !== "all") entries.backing_scope = bs;
@@ -148,10 +160,14 @@ export function buildEventListApiQuery(
   if (groups.length > 0) query.event_group = groups;
   const bs = String(f.backing_scope ?? "all").trim();
   if (bs && bs !== "all") query.backing_scope = bs;
-  for (const key of ["topic_id", "actor_id", "q", "since", "until"]) {
+  for (const key of ["topic_id", "actor_id", "q"]) {
     const text = String(f[key] ?? "").trim();
     if (text) query[key] = text;
   }
+  const since = normalizeTimestampValue(f.since);
+  const until = normalizeTimestampValue(f.until);
+  if (since) query.since = since;
+  if (until) query.until = until;
   const c = String(cursor ?? "").trim();
   if (c) query.cursor = c;
   query.limit = limit;

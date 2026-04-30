@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"agent-nexus-core/internal/auth"
+	"agent-nexus-core/internal/primitives"
 )
 
 func TestRouteMentionSkipsSelfAuthoredMessages(t *testing.T) {
@@ -15,7 +16,7 @@ func TestRouteMentionSkipsSelfAuthoredMessages(t *testing.T) {
 	}
 
 	createArtifactCalls := 0
-	appendEventCalls := 0
+	wakeupCalls := 0
 	service := NewService(
 		Config{
 			BaseURL:     "http://core.test",
@@ -26,8 +27,8 @@ func TestRouteMentionSkipsSelfAuthoredMessages(t *testing.T) {
 				createArtifactCalls++
 				return nil
 			},
-			AppendEvent: func(context.Context, string, map[string]any) error {
-				appendEventCalls++
+			UpsertAgentWakeup: func(context.Context, primitives.AgentWakeup) error {
+				wakeupCalls++
 				return nil
 			},
 		},
@@ -41,8 +42,8 @@ func TestRouteMentionSkipsSelfAuthoredMessages(t *testing.T) {
 			Handle:                     "m4-hermes",
 			ActorID:                    "actor-m4-hermes",
 			Status:                     "active",
-			BridgeCheckinEventID:       "event-checkin-1",
 			BridgeSigningPublicKeySPKI: "not-needed-for-self-skip",
+			BridgeProofSignatureB64:    "not-needed-for-self-skip",
 			WorkspaceBindings: []auth.AgentRegistrationWorkspaceBinding{
 				{WorkspaceID: "ws-main", Enabled: true},
 			},
@@ -68,8 +69,8 @@ func TestRouteMentionSkipsSelfAuthoredMessages(t *testing.T) {
 	if createArtifactCalls != 0 {
 		t.Fatalf("expected no wake artifact creation, got %d", createArtifactCalls)
 	}
-	if appendEventCalls != 0 {
-		t.Fatalf("expected no wake events appended, got %d", appendEventCalls)
+	if wakeupCalls != 0 {
+		t.Fatalf("expected no wakeups queued, got %d", wakeupCalls)
 	}
 }
 
@@ -80,7 +81,7 @@ func TestRouteMentionQueuesNotificationForOfflineRegisteredAgent(t *testing.T) {
 	}
 
 	createArtifactCalls := 0
-	appendEventCalls := 0
+	wakeupCalls := 0
 	service := NewService(
 		Config{
 			BaseURL:     "http://core.test",
@@ -98,8 +99,8 @@ func TestRouteMentionQueuesNotificationForOfflineRegisteredAgent(t *testing.T) {
 				createArtifactCalls++
 				return nil
 			},
-			AppendEvent: func(context.Context, string, map[string]any) error {
-				appendEventCalls++
+			UpsertAgentWakeup: func(context.Context, primitives.AgentWakeup) error {
+				wakeupCalls++
 				return nil
 			},
 		},
@@ -139,8 +140,8 @@ func TestRouteMentionQueuesNotificationForOfflineRegisteredAgent(t *testing.T) {
 	if createArtifactCalls != 1 {
 		t.Fatalf("expected one wake artifact creation, got %d", createArtifactCalls)
 	}
-	if appendEventCalls != 1 {
-		t.Fatalf("expected one wake event appended, got %d", appendEventCalls)
+	if wakeupCalls != 1 {
+		t.Fatalf("expected one wake queued, got %d", wakeupCalls)
 	}
 }
 
@@ -151,7 +152,7 @@ func TestRouteMentionWakePacketIncludesSubjectFromThread(t *testing.T) {
 	}
 
 	var capturedContent map[string]any
-	var lastEvent map[string]any
+	var capturedWakeup primitives.AgentWakeup
 	service := NewService(
 		Config{
 			BaseURL:     "http://core.test",
@@ -174,8 +175,8 @@ func TestRouteMentionWakePacketIncludesSubjectFromThread(t *testing.T) {
 				capturedContent = m
 				return nil
 			},
-			AppendEvent: func(_ context.Context, _ string, event map[string]any) error {
-				lastEvent = event
+			UpsertAgentWakeup: func(_ context.Context, wakeup primitives.AgentWakeup) error {
+				capturedWakeup = wakeup
 				return nil
 			},
 		},
@@ -226,13 +227,11 @@ func TestRouteMentionWakePacketIncludesSubjectFromThread(t *testing.T) {
 	if len(refs) < 2 || refs[0] != "thread:thread-subj" || refs[1] != "topic:top-9" {
 		t.Fatalf("reply_refs: %#v", refs)
 	}
-	payload, _ := lastEvent["payload"].(map[string]any)
-	if payload["subject_ref"] != "topic:top-9" {
-		t.Fatalf("wake request payload subject_ref: %#v", payload["subject_ref"])
+	if capturedWakeup.TriggerEventID != "event-message-subj" {
+		t.Fatalf("wake trigger event id: %#v", capturedWakeup.TriggerEventID)
 	}
-	evRefs, _ := lastEvent["refs"].([]string)
-	if len(evRefs) < 3 || evRefs[0] != "thread:thread-subj" || evRefs[1] != "topic:top-9" {
-		t.Fatalf("wake request refs: %#v", evRefs)
+	if len(capturedWakeup.Refs) < 3 || capturedWakeup.Refs[0] != "thread:thread-subj" || capturedWakeup.Refs[1] != "topic:top-9" {
+		t.Fatalf("wake refs: %#v", capturedWakeup.Refs)
 	}
 	cf, _ := capturedContent["context_fetch"].(map[string]any)
 	if cf == nil || cf["preferred"] != "topics.workspace" {
@@ -255,7 +254,7 @@ func TestRouteMentionRefreshesPrincipalCacheWhenRegistrationIsStale(t *testing.T
 	}
 
 	createArtifactCalls := 0
-	appendEventCalls := 0
+	wakeupCalls := 0
 	listPrincipalCalls := 0
 	service := NewService(
 		Config{
@@ -292,8 +291,8 @@ func TestRouteMentionRefreshesPrincipalCacheWhenRegistrationIsStale(t *testing.T
 				createArtifactCalls++
 				return nil
 			},
-			AppendEvent: func(context.Context, string, map[string]any) error {
-				appendEventCalls++
+			UpsertAgentWakeup: func(context.Context, primitives.AgentWakeup) error {
+				wakeupCalls++
 				return nil
 			},
 		},
@@ -329,7 +328,7 @@ func TestRouteMentionRefreshesPrincipalCacheWhenRegistrationIsStale(t *testing.T
 	if createArtifactCalls != 1 {
 		t.Fatalf("expected one wake artifact creation, got %d", createArtifactCalls)
 	}
-	if appendEventCalls != 1 {
-		t.Fatalf("expected one wake event appended, got %d", appendEventCalls)
+	if wakeupCalls != 1 {
+		t.Fatalf("expected one wake queued, got %d", wakeupCalls)
 	}
 }

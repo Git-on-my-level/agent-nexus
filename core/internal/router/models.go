@@ -14,10 +14,8 @@ import (
 )
 
 const (
-	BridgeCheckedInEvent = "agent_bridge_checked_in"
-	WakeArtifactKind     = "agent_wake"
-	WakeRequestEvent     = "agent_wakeup_requested"
-	MessagePostedEvent   = "message_posted"
+	WakeArtifactKind   = "agent_wake"
+	MessagePostedEvent = "message_posted"
 )
 
 type WorkspaceBinding = auth.AgentRegistrationWorkspaceBinding

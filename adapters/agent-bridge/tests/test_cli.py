@@ -180,7 +180,6 @@ def test_cmd_registration_status_serializes_slots_dataclass(monkeypatch, capsys)
             registration_status="active",
             workspace_ids=["ws_main"],
             workspace_bound=True,
-            bridge_checkin_event_id="event-1",
             bridge_checked_in_at="2026-03-29T00:00:00Z",
             bridge_expires_at="2026-03-29T00:05:00Z",
             wakeable=True,

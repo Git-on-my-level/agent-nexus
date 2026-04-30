@@ -2,8 +2,6 @@ package server
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -13,13 +11,9 @@ import (
 
 	"agent-nexus-core/internal/auth"
 	"agent-nexus-core/internal/primitives"
-	"agent-nexus-core/internal/router"
 )
 
 const (
-	agentWakeRequestEvent            = router.WakeRequestEvent
-	agentNotificationReadEvent       = "agent_notification_read"
-	agentNotificationDismissedEvent  = "agent_notification_dismissed"
 	agentNotificationStatusUnread    = "unread"
 	agentNotificationStatusRead      = "read"
 	agentNotificationStatusDismissed = "dismissed"
@@ -29,20 +23,26 @@ const (
 )
 
 type agentNotificationItem struct {
-	WakeupID       string
-	Status         string
-	TargetHandle   string
-	TargetActorID  string
-	ThreadID       string
-	ThreadTitle    string
-	TriggerEventID string
-	TriggerText    string
-	CreatedAt      string
-	ReadAt         string
-	DismissedAt    string
-	RequestEventID string
-	ReadEventID    string
-	DismissEventID string
+	WakeupID         string
+	Status           string
+	TargetHandle     string
+	TargetActorID    string
+	WorkspaceID      string
+	WorkspaceName    string
+	ThreadID         string
+	ThreadTitle      string
+	TriggerEventID   string
+	TriggerCreatedAt string
+	TriggerText      string
+	CreatedAt        string
+	ReadAt           string
+	DismissedAt      string
+	RequestEventID   string
+	ReadEventID      string
+	DismissEventID   string
+	BridgeInstanceID string
+	DeliveryStatus   string
+	FailureReason    string
 }
 
 func handleListAgentNotifications(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
@@ -112,27 +112,101 @@ func handleListAgentNotifications(w http.ResponseWriter, r *http.Request, opts h
 }
 
 func handleReadAgentNotification(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
-	handleMutateAgentNotification(w, r, opts, agentNotificationReadEvent, agentNotificationStatusRead, "agent notification marked read")
+	handleMutateAgentNotification(w, r, opts, agentNotificationStatusRead)
 }
 
 func handleDismissAgentNotification(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
-	handleMutateAgentNotification(w, r, opts, agentNotificationDismissedEvent, agentNotificationStatusDismissed, "agent notification dismissed")
+	handleMutateAgentNotification(w, r, opts, agentNotificationStatusDismissed)
+}
+
+func handleClaimAgentWakeup(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
+	principal, req, ok := decodeAgentWakeupMutation(w, r, opts)
+	if !ok {
+		return
+	}
+	wakeup, err := opts.primitiveStore.ClaimAgentWakeup(r.Context(), req.WakeupID, principal.ActorID, req.BridgeInstanceID)
+	if err != nil {
+		if errors.Is(err, primitives.ErrConflict) {
+			writeError(w, http.StatusConflict, "conflict", "agent wakeup is already claimed")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to claim agent wakeup")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"notification": agentNotificationFromWakeup(wakeup).toMap()})
+}
+
+func handleCompleteAgentWakeup(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
+	principal, req, ok := decodeAgentWakeupMutation(w, r, opts)
+	if !ok {
+		return
+	}
+	wakeup, err := opts.primitiveStore.CompleteAgentWakeup(r.Context(), req.WakeupID, principal.ActorID, req.BridgeInstanceID)
+	if err != nil {
+		if errors.Is(err, primitives.ErrConflict) {
+			writeError(w, http.StatusConflict, "conflict", "agent wakeup is not claimed by this bridge")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to complete agent wakeup")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"notification": agentNotificationFromWakeup(wakeup).toMap()})
+}
+
+func handleFailAgentWakeup(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
+	principal, req, ok := decodeAgentWakeupMutation(w, r, opts)
+	if !ok {
+		return
+	}
+	wakeup, err := opts.primitiveStore.FailAgentWakeup(r.Context(), req.WakeupID, principal.ActorID, req.BridgeInstanceID, req.Error)
+	if err != nil {
+		if errors.Is(err, primitives.ErrConflict) {
+			writeError(w, http.StatusConflict, "conflict", "agent wakeup is not claimed by this bridge")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to fail agent wakeup")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"notification": agentNotificationFromWakeup(wakeup).toMap()})
+}
+
+type agentWakeupMutationRequest struct {
+	WakeupID         string `json:"wakeup_id"`
+	BridgeInstanceID string `json:"bridge_instance_id"`
+	Error            string `json:"error"`
+}
+
+func decodeAgentWakeupMutation(w http.ResponseWriter, r *http.Request, opts handlerOptions) (*auth.Principal, agentWakeupMutationRequest, bool) {
+	principal, ok := requireAuthenticatedPrincipal(w, r, opts)
+	if !ok {
+		return nil, agentWakeupMutationRequest{}, false
+	}
+	if !isAgentPrincipal(principal) {
+		writeError(w, http.StatusForbidden, "invalid_request", "agent wakeups are only available to authenticated agents")
+		return nil, agentWakeupMutationRequest{}, false
+	}
+	var req agentWakeupMutationRequest
+	if !decodeJSONBody(w, r, &req) {
+		return nil, agentWakeupMutationRequest{}, false
+	}
+	req.WakeupID = strings.TrimSpace(req.WakeupID)
+	req.BridgeInstanceID = strings.TrimSpace(req.BridgeInstanceID)
+	req.Error = strings.TrimSpace(req.Error)
+	if req.WakeupID == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "wakeup_id is required")
+		return nil, agentWakeupMutationRequest{}, false
+	}
+	return principal, req, true
 }
 
 func handleMutateAgentNotification(
 	w http.ResponseWriter,
 	r *http.Request,
 	opts handlerOptions,
-	eventType string,
 	targetStatus string,
-	summary string,
 ) {
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
-		return
-	}
-	if opts.contract == nil {
-		writeError(w, http.StatusServiceUnavailable, "schema_unavailable", "schema contract is not configured")
 		return
 	}
 
@@ -185,169 +259,44 @@ func handleMutateAgentNotification(
 		return
 	}
 
-	if targetStatus == agentNotificationStatusRead && notification.Status == agentNotificationStatusRead && notification.ReadEventID != "" {
-		existing, err := opts.primitiveStore.GetEvent(r.Context(), notification.ReadEventID)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to load existing read event")
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{
-			"event":        existing,
-			"notification": notification.toMap(),
-		})
+	if targetStatus == agentNotificationStatusRead && notification.Status == agentNotificationStatusRead {
+		writeJSON(w, http.StatusOK, map[string]any{"notification": notification.toMap()})
 		return
 	}
-	if targetStatus == agentNotificationStatusDismissed && notification.DismissEventID != "" {
-		existing, err := opts.primitiveStore.GetEvent(r.Context(), notification.DismissEventID)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to load existing dismiss event")
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{
-			"event":        existing,
-			"notification": notification.toMap(),
-		})
+	if targetStatus == agentNotificationStatusDismissed && notification.Status == agentNotificationStatusDismissed {
+		writeJSON(w, http.StatusOK, map[string]any{"notification": notification.toMap()})
 		return
 	}
 
-	requestKey := agentNotificationRequestKey(eventType, actorID, notificationID)
-	event := map[string]any{
-		"id":        deriveRequestScopedID(eventType, actorID, requestKey, "ev"),
-		"type":      eventType,
-		"thread_id": notification.ThreadID,
-		"refs":      notification.eventRefs(),
-		"summary":   summary,
-		"payload": map[string]any{
-			"wakeup_id":       notification.WakeupID,
-			"target_handle":   notification.TargetHandle,
-			"target_actor_id": notification.TargetActorID,
-		},
-		"provenance": eventProvenance(),
-	}
-	if err := validateEventReferenceConventions(opts.contract, event, notification.eventRefs()); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
-		return
-	}
-
-	stored, err := opts.primitiveStore.AppendEvent(r.Context(), actorID, event)
+	wakeup, err := opts.primitiveStore.MarkAgentWakeupNotification(r.Context(), notificationID, actorID, targetStatus)
 	if err != nil {
-		if errors.Is(err, primitives.ErrConflict) {
-			existing, loadErr := opts.primitiveStore.GetEvent(r.Context(), anyString(event["id"]))
-			if loadErr != nil {
-				writeError(w, http.StatusInternalServerError, "internal_error", "failed to load existing notification event")
-				return
-			}
-			updated, refreshErr := loadAgentNotificationByWakeupID(r.Context(), opts, actorID, notificationID)
-			if refreshErr != nil {
-				writeError(w, http.StatusInternalServerError, "internal_error", "failed to refresh agent notification")
-				return
-			}
-			writeJSON(w, http.StatusOK, map[string]any{
-				"event":        existing,
-				"notification": updated.toMap(),
-			})
+		if errors.Is(err, primitives.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "agent notification not found")
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to update agent notification")
 		return
 	}
 
-	updated, err := loadAgentNotificationByWakeupID(r.Context(), opts, actorID, notificationID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to refresh agent notification")
-		return
-	}
+	updated := agentNotificationFromWakeup(wakeup)
 	writeJSON(w, http.StatusCreated, map[string]any{
-		"event":        stored,
 		"notification": updated.toMap(),
 	})
 }
 
 func deriveAgentNotifications(ctx context.Context, opts handlerOptions, actorID string) ([]map[string]any, error) {
-	events, err := opts.primitiveStore.ListEvents(ctx, primitives.EventListFilter{
-		Types: []string{
-			router.WakeRequestEvent,
-			agentNotificationReadEvent,
-			agentNotificationDismissedEvent,
-		},
+	wakeups, err := opts.primitiveStore.ListAgentWakeups(ctx, primitives.AgentWakeupListFilter{
+		TargetActorID: actorID,
+		Order:         "asc",
 	})
 	if err != nil {
 		return nil, err
 	}
-	sortEventsAscending(events)
-
-	itemsByWakeup := map[string]*agentNotificationItem{}
-	orderedWakeups := make([]string, 0)
-	for _, event := range events {
-		payload, _ := event["payload"].(map[string]any)
-		wakeupID := strings.TrimSpace(anyString(payload["wakeup_id"]))
-		if wakeupID == "" {
-			continue
-		}
-		eventActorID := strings.TrimSpace(anyString(event["actor_id"]))
-		targetActorID := strings.TrimSpace(anyString(payload["target_actor_id"]))
-		switch strings.TrimSpace(anyString(event["type"])) {
-		case router.WakeRequestEvent:
-			if targetActorID != actorID {
-				continue
-			}
-			if _, exists := itemsByWakeup[wakeupID]; exists {
-				continue
-			}
-			item := &agentNotificationItem{
-				WakeupID:       wakeupID,
-				Status:         agentNotificationStatusUnread,
-				TargetHandle:   strings.TrimSpace(anyString(payload["target_handle"])),
-				TargetActorID:  targetActorID,
-				ThreadID:       strings.TrimSpace(anyString(payload["thread_id"])),
-				TriggerEventID: strings.TrimSpace(anyString(payload["trigger_event_id"])),
-				CreatedAt:      strings.TrimSpace(anyString(event["ts"])),
-				RequestEventID: strings.TrimSpace(anyString(event["id"])),
-			}
-			if item.TriggerText == "" || item.ThreadTitle == "" {
-				hydrateAgentNotificationFromArtifact(ctx, opts, item)
-			}
-			itemsByWakeup[wakeupID] = item
-			orderedWakeups = append(orderedWakeups, wakeupID)
-		case agentNotificationReadEvent:
-			if targetActorID != actorID {
-				continue
-			}
-			if eventActorID == "" || eventActorID != targetActorID {
-				continue
-			}
-			item, exists := itemsByWakeup[wakeupID]
-			if !exists {
-				continue
-			}
-			if item.Status == agentNotificationStatusDismissed {
-				continue
-			}
-			item.Status = agentNotificationStatusRead
-			item.ReadAt = strings.TrimSpace(anyString(event["ts"]))
-			item.ReadEventID = strings.TrimSpace(anyString(event["id"]))
-		case agentNotificationDismissedEvent:
-			if targetActorID != actorID {
-				continue
-			}
-			if eventActorID == "" || eventActorID != targetActorID {
-				continue
-			}
-			item, exists := itemsByWakeup[wakeupID]
-			if !exists {
-				continue
-			}
-			item.Status = agentNotificationStatusDismissed
-			item.DismissedAt = strings.TrimSpace(anyString(event["ts"]))
-			item.DismissEventID = strings.TrimSpace(anyString(event["id"]))
-		}
-	}
-
-	items := make([]map[string]any, 0, len(orderedWakeups))
-	for _, wakeupID := range orderedWakeups {
-		item := itemsByWakeup[wakeupID]
-		if item == nil {
-			continue
+	items := make([]map[string]any, 0, len(wakeups))
+	for _, wakeup := range wakeups {
+		item := agentNotificationFromWakeup(wakeup)
+		if item.TriggerText == "" || item.ThreadTitle == "" {
+			hydrateAgentNotificationFromArtifact(ctx, opts, item)
 		}
 		items = append(items, item.toMap())
 	}
@@ -364,20 +313,24 @@ func loadAgentNotificationByWakeupID(ctx context.Context, opts handlerOptions, a
 			continue
 		}
 		return &agentNotificationItem{
-			WakeupID:       strings.TrimSpace(anyString(item["wakeup_id"])),
-			Status:         strings.TrimSpace(anyString(item["status"])),
-			TargetHandle:   strings.TrimSpace(anyString(item["target_handle"])),
-			TargetActorID:  strings.TrimSpace(anyString(item["target_actor_id"])),
-			ThreadID:       strings.TrimSpace(anyString(item["thread_id"])),
-			ThreadTitle:    strings.TrimSpace(anyString(item["thread_title"])),
-			TriggerEventID: strings.TrimSpace(anyString(item["trigger_event_id"])),
-			TriggerText:    strings.TrimSpace(anyString(item["trigger_text"])),
-			CreatedAt:      strings.TrimSpace(anyString(item["created_at"])),
-			ReadAt:         strings.TrimSpace(anyString(item["read_at"])),
-			DismissedAt:    strings.TrimSpace(anyString(item["dismissed_at"])),
-			RequestEventID: strings.TrimSpace(anyString(item["request_event_id"])),
-			ReadEventID:    strings.TrimSpace(anyString(item["read_event_id"])),
-			DismissEventID: strings.TrimSpace(anyString(item["dismiss_event_id"])),
+			WakeupID:         strings.TrimSpace(anyString(item["wakeup_id"])),
+			Status:           strings.TrimSpace(anyString(item["status"])),
+			TargetHandle:     strings.TrimSpace(anyString(item["target_handle"])),
+			TargetActorID:    strings.TrimSpace(anyString(item["target_actor_id"])),
+			WorkspaceID:      strings.TrimSpace(anyString(item["workspace_id"])),
+			WorkspaceName:    strings.TrimSpace(anyString(item["workspace_name"])),
+			ThreadID:         strings.TrimSpace(anyString(item["thread_id"])),
+			ThreadTitle:      strings.TrimSpace(anyString(item["thread_title"])),
+			TriggerEventID:   strings.TrimSpace(anyString(item["trigger_event_id"])),
+			TriggerCreatedAt: strings.TrimSpace(anyString(item["trigger_created_at"])),
+			TriggerText:      strings.TrimSpace(anyString(item["trigger_text"])),
+			CreatedAt:        strings.TrimSpace(anyString(item["created_at"])),
+			ReadAt:           strings.TrimSpace(anyString(item["read_at"])),
+			DismissedAt:      strings.TrimSpace(anyString(item["dismissed_at"])),
+			RequestEventID:   strings.TrimSpace(anyString(item["request_event_id"])),
+			BridgeInstanceID: strings.TrimSpace(anyString(item["bridge_instance_id"])),
+			DeliveryStatus:   strings.TrimSpace(anyString(item["delivery_status"])),
+			FailureReason:    strings.TrimSpace(anyString(item["failure_reason"])),
 		}, nil
 	}
 	return nil, primitives.ErrNotFound
@@ -443,38 +396,46 @@ func isHumanPrincipal(principal *auth.Principal) bool {
 	return strings.TrimSpace(principal.PrincipalKind) == string(auth.PrincipalKindHuman)
 }
 
-func agentNotificationRequestKey(action string, actorID string, wakeupID string) string {
-	sum := sha256.Sum256([]byte(action + "\n" + actorID + "\n" + wakeupID))
-	return hex.EncodeToString(sum[:])[:24]
-}
-
-func (n *agentNotificationItem) eventRefs() []string {
-	refs := []string{}
-	if n.ThreadID != "" {
-		refs = append(refs, "thread:"+n.ThreadID)
+func agentNotificationFromWakeup(wakeup primitives.AgentWakeup) *agentNotificationItem {
+	return &agentNotificationItem{
+		WakeupID:         wakeup.WakeupID,
+		Status:           wakeup.NotificationStatus,
+		TargetHandle:     wakeup.TargetHandle,
+		TargetActorID:    wakeup.TargetActorID,
+		WorkspaceID:      wakeup.WorkspaceID,
+		WorkspaceName:    wakeup.WorkspaceName,
+		ThreadID:         wakeup.ThreadID,
+		ThreadTitle:      wakeup.ThreadTitle,
+		TriggerEventID:   wakeup.TriggerEventID,
+		TriggerCreatedAt: wakeup.TriggerCreatedAt,
+		TriggerText:      wakeup.TriggerText,
+		CreatedAt:        wakeup.CreatedAt,
+		ReadAt:           wakeup.ReadAt,
+		DismissedAt:      wakeup.DismissedAt,
+		RequestEventID:   wakeup.TriggerEventID,
+		BridgeInstanceID: wakeup.BridgeInstanceID,
+		DeliveryStatus:   wakeup.Status,
+		FailureReason:    wakeup.FailureReason,
 	}
-	if n.RequestEventID != "" {
-		refs = append(refs, "event:"+n.RequestEventID)
-	}
-	if n.WakeupID != "" {
-		refs = append(refs, "artifact:"+n.WakeupID)
-	}
-	return refs
 }
 
 func (n *agentNotificationItem) toMap() map[string]any {
 	item := map[string]any{
-		"notification_id":  n.WakeupID,
-		"wakeup_id":        n.WakeupID,
-		"status":           n.Status,
-		"target_handle":    n.TargetHandle,
-		"target_actor_id":  n.TargetActorID,
-		"thread_id":        n.ThreadID,
-		"thread_title":     n.ThreadTitle,
-		"trigger_event_id": n.TriggerEventID,
-		"trigger_text":     n.TriggerText,
-		"created_at":       n.CreatedAt,
-		"request_event_id": n.RequestEventID,
+		"notification_id":    n.WakeupID,
+		"wakeup_id":          n.WakeupID,
+		"status":             n.Status,
+		"target_handle":      n.TargetHandle,
+		"target_actor_id":    n.TargetActorID,
+		"workspace_id":       n.WorkspaceID,
+		"workspace_name":     n.WorkspaceName,
+		"thread_id":          n.ThreadID,
+		"thread_title":       n.ThreadTitle,
+		"trigger_event_id":   n.TriggerEventID,
+		"trigger_created_at": n.TriggerCreatedAt,
+		"trigger_text":       n.TriggerText,
+		"created_at":         n.CreatedAt,
+		"request_event_id":   n.RequestEventID,
+		"delivery_status":    n.DeliveryStatus,
 	}
 	if n.ReadAt != "" {
 		item["read_at"] = n.ReadAt
@@ -487,6 +448,12 @@ func (n *agentNotificationItem) toMap() map[string]any {
 	}
 	if n.DismissEventID != "" {
 		item["dismiss_event_id"] = n.DismissEventID
+	}
+	if n.BridgeInstanceID != "" {
+		item["bridge_instance_id"] = n.BridgeInstanceID
+	}
+	if n.FailureReason != "" {
+		item["failure_reason"] = n.FailureReason
 	}
 	return item
 }

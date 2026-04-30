@@ -12,6 +12,7 @@ import (
 
 	"agent-nexus-core/internal/actors"
 	"agent-nexus-core/internal/auth"
+	"agent-nexus-core/internal/router"
 )
 
 type principalContextKey struct{}
@@ -257,6 +258,65 @@ func handlePatchCurrentAgent(w http.ResponseWriter, r *http.Request, opts handle
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"agent": agent})
+}
+
+func handleBridgeCheckIn(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
+	principal, ok := requireAuthenticatedPrincipal(w, r, opts)
+	if !ok {
+		return
+	}
+	if !isAgentPrincipal(principal) {
+		writeError(w, http.StatusForbidden, "invalid_request", "bridge check-in is only available to authenticated agents")
+		return
+	}
+	var req router.AgentBridgeCheckin
+	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+	req.Handle = strings.TrimSpace(req.Handle)
+	req.ActorID = strings.TrimSpace(req.ActorID)
+	req.WorkspaceID = strings.TrimSpace(req.WorkspaceID)
+	req.BridgeInstanceID = strings.TrimSpace(req.BridgeInstanceID)
+	req.CheckedInAt = strings.TrimSpace(req.CheckedInAt)
+	req.ExpiresAt = strings.TrimSpace(req.ExpiresAt)
+	req.ProofSignatureB64 = strings.TrimSpace(req.ProofSignatureB64)
+	if req.Handle == "" || req.ActorID == "" || req.BridgeInstanceID == "" || req.CheckedInAt == "" || req.ExpiresAt == "" || req.ProofSignatureB64 == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "bridge check-in requires handle, actor_id, bridge_instance_id, checked_in_at, expires_at, and proof_signature_b64")
+		return
+	}
+	if req.Handle != principal.Username || req.ActorID != principal.ActorID {
+		writeError(w, http.StatusForbidden, "invalid_request", "bridge check-in does not match authenticated agent")
+		return
+	}
+	agent, err := opts.authStore.GetAgent(r.Context(), principal.AgentID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load agent profile")
+		return
+	}
+	if agent.Registration == nil {
+		writeError(w, http.StatusConflict, "missing_registration", "agent wake registration is missing")
+		return
+	}
+	registration := *agent.Registration
+	if !router.VerifyBridgeCheckinSignature(registration.BridgeSigningPublicKeySPKI, req) {
+		writeError(w, http.StatusUnauthorized, "invalid_signature", "bridge check-in signature is invalid")
+		return
+	}
+	registration.Status = "active"
+	registration.BridgeInstanceID = req.BridgeInstanceID
+	registration.BridgeCheckedInAt = req.CheckedInAt
+	registration.BridgeExpiresAt = req.ExpiresAt
+	registration.BridgeWorkspaceIDs = req.WorkspaceIDs
+	if req.WorkspaceID != "" {
+		registration.BridgeWorkspaceIDs = append([]string{req.WorkspaceID}, registration.BridgeWorkspaceIDs...)
+	}
+	registration.BridgeProofSignatureB64 = req.ProofSignatureB64
+	updated, err := opts.authStore.UpdateRegistration(r.Context(), principal.AgentID, registration)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to update bridge presence")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"agent": updated, "registration": updated.Registration})
 }
 
 func handleRotateCurrentAgentKey(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
