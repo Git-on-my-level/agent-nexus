@@ -27,6 +27,48 @@ func TestFormatBoardCardRemoveResult_WithCardThreadBacked(t *testing.T) {
 	}
 }
 
+func TestFormatBoardCardsList_LeadsWithCanonicalCardShortIDAndTitle(t *testing.T) {
+	t.Parallel()
+	body := map[string]any{
+		"board_id": "board_1234567890abcdef",
+		"cards": []any{
+			map[string]any{
+				"id":         "card_1234567890abcdef",
+				"short_id":   "card_12345",
+				"thread_id":  "thread_1234567890abcdef",
+				"title":      "Fix CLI card discovery",
+				"column_key": "backlog",
+				"rank":       "a",
+			},
+		},
+	}
+	got := formatBoardCardsList(body)
+	want := "- card_12345 :: backlog :: Fix CLI card discovery :: thread=thread_1234567890abcdef :: rank=a"
+	if !strings.Contains(got, want) {
+		t.Fatalf("expected canonical card id and title before thread id, got:\n%s", got)
+	}
+}
+
+func TestFormatBoardCardsList_FullIDUsesCanonicalCardID(t *testing.T) {
+	t.Parallel()
+	body := map[string]any{
+		"full_id": true,
+		"cards": []any{
+			map[string]any{
+				"id":         "card_1234567890abcdef",
+				"short_id":   "card_12345",
+				"thread_id":  "thread_1234567890abcdef",
+				"title":      "Fix CLI card discovery",
+				"column_key": "backlog",
+			},
+		},
+	}
+	got := formatBoardCardsList(body)
+	if !strings.Contains(got, "- card_1234567890abcdef :: backlog :: Fix CLI card discovery :: thread=thread_1234567890abcdef") {
+		t.Fatalf("expected full canonical card id in full-id mode, got:\n%s", got)
+	}
+}
+
 func TestFormatBoardCardRemoveResult_WithCardStandalone(t *testing.T) {
 	t.Parallel()
 	body := map[string]any{

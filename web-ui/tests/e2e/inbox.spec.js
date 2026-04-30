@@ -149,6 +149,77 @@ test("inbox triage shows urgency summary and responding removes an item", async 
   await expect(targetCard).toHaveCount(0);
 });
 
+test("inbox loads after hard refresh when workspace bootstrap is delayed", async ({
+  page,
+}) => {
+  const actorId = "actor-e2e";
+  let inboxRequestCount = 0;
+
+  await page.addInitScript((selectedActorId) => {
+    window.localStorage.setItem("anx_ui_actor_id:local", selectedActorId);
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
+  }, actorId);
+
+  await page.route(/\/meta\/handshake$/, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        schema_version: "0.6.0",
+        command_registry_digest: "e2e",
+        core_version: "test",
+        api_version: "0.2",
+        dev_actor_mode: true,
+      }),
+    });
+  });
+
+  await page.route(/\/actors(\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        actors: [{ id: actorId, display_name: "E2E User", tags: ["human"] }],
+      }),
+    });
+  });
+
+  await page.route(/\/inbox(?:\?.*)?$/, async (route) => {
+    const request = route.request();
+    if (request.resourceType() === "document") {
+      await route.continue();
+      return;
+    }
+    inboxRequestCount += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        status: "open",
+        items: [
+          {
+            id: "inbox-refresh-001",
+            kind: "ask",
+            title: "Refresh-visible inbox item",
+            thread_id: "thread-refresh",
+            subject_ref: "thread:thread-refresh",
+            related_refs: ["thread:thread-refresh"],
+            response_proposals: ["Proceed."],
+            source_event_time: hoursAgo(2),
+          },
+        ],
+        generated_at: "2026-03-04T00:00:00.000Z",
+      }),
+    });
+  });
+
+  await page.goto("/o/local/w/local/inbox");
+
+  await expect.poll(() => inboxRequestCount).toBeGreaterThan(0);
+  await expect(page.getByTestId("inbox-card-inbox-refresh-001")).toBeVisible();
+});
+
 test("inbox urgency filters reduce visible cards", async ({ page }) => {
   const actorId = "actor-e2e";
   let inboxRequestCount = 0;

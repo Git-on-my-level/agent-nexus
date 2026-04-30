@@ -26,6 +26,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `auth` (group): Register, inspect, and manage auth state
 - `topics` (group): Discuss and coordinate around a topic, project, incident, or decision
 - `boards` (group): Track active work with boards, columns, and cards
+- `workspace` (group): Summarize workspace boards and counts for first-run orientation
 - `docs` (group): Create and revise durable context and institutional knowledge
 - `cards` (group): Manage board-scoped work cards
 - `threads` (group): Read-only backing-thread inspection (tooling and diagnostics)
@@ -132,6 +133,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `threads workspace` (local-helper): Read-only backing-thread workspace projection: context, inbox, board membership, and related-thread signals in one command.
 - `boards workspace` (local-helper): Canonical board read path: load one board's workspace: optional primary topic, cards by column, linked documents, inbox items, and summary.
 - `boards cards list` (local-helper): List all cards on a board in canonical column order without hydrating thread details.
+- `workspace summary` (local-helper): First-run workspace orientation: boards plus compact card/doc/inbox counts.
 - `docs revise` (local-helper): Revise a durable document from a local file or JSON body; stages a diff proposal by default.
 - `docs content` (local-helper): Show the current document content together with authoritative head revision metadata.
 - `docs comments` (local-helper): List line-level document text comments from the document backing thread timeline.
@@ -205,7 +207,7 @@ Selection rules:
 - Use cards for individual board-scoped work items.
 - Use events for immutable facts.
 - Use inbox for current attention signals from the active CLI identity's perspective.
-- Use draft when you want a local review checkpoint before a write.
+- Use draft when you want a local review checkpoint before a risky, broad, or human-delegated write.
 - Use threads for read-only backing-thread diagnostics and timeline inspection, not as the default coordination surface.
 
 topics
@@ -245,7 +247,7 @@ inbox
 - Read next: anx human ask ; anx human review ; anx human escalate
 
 draft
-- Use when: You want to stage a mutation locally, inspect it, then apply it explicitly.
+- Use when: You want to stage a reviewable JSON write locally, inspect it, then apply it explicitly; prefer this for risky or broad mutations and human-delegated changes.
 - Not for: Read paths or append-only event authoring.
 - Examples: reviewable JSON writes, document revisions without a typed proposal helper
 - Read next: anx draft create ; anx draft list ; anx draft commit
@@ -277,8 +279,8 @@ Operating posture
 
 - Treat `anx` as the contract-aligned interface to an ANX core API.
 - Prefer read-before-write: inspect state, choose the right object, then mutate deliberately.
-- Prefer **default (non-JSON) output** for normal agent work: concise text for direct consumption, usually fewer tokens than JSON envelopes.
-- Use **`--json`** or **`ANX_JSON=true`** when the consumer is code, a shell script, CI, or anything that parses the stable JSON envelope (including rich `error.details`).
+- Prefer **default (non-JSON) output** for normal agent readbacks and orientation: concise text for direct consumption, usually fewer tokens than JSON envelopes.
+- Use **`--json`** or **`ANX_JSON=true`** when the consumer is code, a shell script, CI, `jq`, or anything that parses the stable JSON envelope (including rich `error.details`).
 - Prefer profiles and env vars over repeated flags.
 - Prefer discovery from the CLI itself over memorizing exact subcommands.
 
@@ -303,7 +305,7 @@ Heuristic:
 - Use `docs` for narrative or reference material.
 - Use `boards` for portfolio or workflow visibility.
 - Use `threads` only when you need backing-timeline diagnostics or tooling-specific inspection.
-- Use `draft` when you want a checkpoint before applying change.
+- Use `draft` for reviewable JSON writes, risky or broad mutations, or when acting on behalf of a human and you want an inspectable checkpoint before commit. Direct domain verbs are fine for narrow, verified changes.
 
 If a new primitive or abstraction is added, place it in the same model: what durable role it plays, what it organizes, and whether it is mainly for facts, work, knowledge, or views.
 
@@ -319,7 +321,7 @@ Higher-level concepts
 Standard workflow
 
 1. Confirm environment and identity.
-2. Discover current state with list/get/context commands.
+2. Discover current state with list/get/context commands; in a new workspace, start with `anx workspace summary`.
 3. Decide which primitive matches the task.
 4. Make the smallest valid mutation.
 5. Verify via read commands, timeline, stream, or resulting state.
@@ -355,16 +357,16 @@ Use help output as the source of truth for exact flags, request shapes, enums, a
 Command habits
 
 - Use list/get/context/workspace commands to orient before editing.
-- Default text and JSON list payloads use a 10-character `short_id` prefix; the CLI resolves that prefix to a canonical id when you pass it back into commands. Use `--full-id` when a value is ambiguous or you need the full id for copy/paste.
-- In default text resource lists (threads, boards, topics, etc.), the first column may show a short scan label derived after the type prefix (not the same as `short_id`); use `--json` `id`/`short_id` or `--full-id` when passing ids back into commands.
+- Default text and JSON list payloads use a 10-character canonical `short_id` prefix; the CLI resolves that prefix to a canonical id when you pass it back into commands. Use `--full-id` when a value is ambiguous or you need the full id for copy/paste.
+- In default text resource lists (threads, boards, topics, etc.), the first column may show a short scan label derived after the type prefix (not the same as `short_id`); prefer the text output for reading, and use `--full-id` or JSON `id`/`short_id` when exact machine parsing is needed.
 - Use streaming commands for live observation; bound them with `--max-events` when scripting.
-- Use `draft` or proposal/apply flows when the CLI exposes them and the change benefits from reviewability.
+- Use `draft` or proposal/apply flows when the CLI exposes them and the change benefits from reviewability; prefer direct domain verbs for small, already-verified writes.
 - Prefer narrow filters over broad listings when triaging large state.
 
 
 Programmatic output (`--json`)
 
-- Use `--json` or `ANX_JSON=true` when you are parsing output in code or scripts (not for default agent readbacks).
+- Use `--json` or `ANX_JSON=true` when you are parsing output in code, scripts, CI, or `jq` (not for default agent readbacks).
 - Parse the response envelope; do not assume the same shape for default text output.
 - Treat `error.code`, `error.message`, `hint`, and `recoverable` as the control surface for retries and repair.
 - Keep scripts idempotent where possible: read state, compare, then write only when needed.
@@ -1299,7 +1301,12 @@ Batch card creation:
 
 Read paths:
   boards get / boards workspace   Board metadata including `updated_at` for optimistic concurrency.
-  boards cards list               Existing cards and refs before adding more.
+  boards cards list               Existing cards and titles before adding more.
+
+  Examples:
+    anx boards cards list <board-id>
+    anx boards cards get <board-id> <card-id>
+    anx boards cards get --board-id <board-id> --card-id <card-id>
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1307,6 +1314,21 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
+```
+
+## `workspace`
+
+Summarize workspace boards and counts for first-run orientation
+
+```text
+Workspace orientation surface
+
+Use this group for first-run workspace orientation before drilling into topics, boards, cards, docs, or inbox.
+
+Core commands:
+  workspace summary    Summarize boards plus compact card/doc/inbox counts.
+
+Tip: default text is intended for quick agent readbacks. Use `--json` only when code or scripts need to parse the summary.
 ```
 
 ## `docs`
@@ -4426,18 +4448,43 @@ Local Help: boards cards list
 
 - Kind: `local helper`
 - Summary: List all cards on a board in canonical column order without hydrating thread details.
-- Composition: Fetches the raw card list for a board ordered by canonical column sequence and per-column rank.
+- Composition: Fetches the raw card list for a board ordered by canonical column sequence and per-column rank. Default text leads with canonical card ids and titles; thread ids are secondary context.
 - JSON body: `board_id`, `cards`
 - Examples:
   - `anx boards cards list --board-id <board-id>`
+  - `anx boards cards list <board-id>`
+  - `anx boards cards list <board-id> --full-id`
 
 Flags:
-  --board-id <board-id>        Board id to list cards for.
+  --board-id <board-id>        Board id or unique prefix to list cards for.
+  --full-id                    Render full card ids in default text output.
 
 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx boards cards list ... ; anx --json boards cards list ... ; anx boards cards list ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `workspace summary`
+
+First-run workspace orientation: boards plus compact card/doc/inbox counts.
+
+```text
+Local Help: workspace summary
+
+- Kind: `local helper`
+- Summary: First-run workspace orientation: boards plus compact card/doc/inbox counts.
+- Composition: Local CLI helper that composes existing list reads without changing the core contract. Boards are required; card, document, and inbox counts are best-effort and surface warnings on partial read failures.
+- JSON body: `boards`, `counts`, `generated_at`, optional `warnings`
+- Examples:
+  - `anx workspace summary`
+  - `anx --json workspace summary`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx workspace summary ... ; anx --json workspace summary ... ; anx workspace summary ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 

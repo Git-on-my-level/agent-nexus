@@ -31,6 +31,7 @@ var runtimeGeneratedTopics = []runtimeHelpTopic{
 	{Path: "auth", Description: "Register, inspect, and manage auth state"},
 	{Path: "topics", Description: "Discuss and coordinate around a topic, project, incident, or decision"},
 	{Path: "boards", Description: "Track active work with boards, columns, and cards"},
+	{Path: "workspace", Description: "Summarize workspace boards and counts for first-run orientation"},
 	{Path: "docs", Description: "Create and revise durable context and institutional knowledge"},
 	{Path: "cards", Description: "Manage board-scoped work cards"},
 	{Path: "threads", Description: "Read-only backing-thread inspection (tooling and diagnostics)"},
@@ -345,12 +346,25 @@ var localHelperTopics = []localHelperTopic{
 		Path:        "boards cards list",
 		Summary:     "List all cards on a board in canonical column order without hydrating thread details.",
 		JSONShape:   "`board_id`, `cards`",
-		Composition: "Fetches the raw card list for a board ordered by canonical column sequence and per-column rank.",
+		Composition: "Fetches the raw card list for a board ordered by canonical column sequence and per-column rank. Default text leads with canonical card ids and titles; thread ids are secondary context.",
 		Examples: []string{
 			"anx boards cards list --board-id <board-id>",
+			"anx boards cards list <board-id>",
+			"anx boards cards list <board-id> --full-id",
 		},
 		Flags: []localHelperFlag{
-			{Name: "--board-id <board-id>", Description: "Board id to list cards for."},
+			{Name: "--board-id <board-id>", Description: "Board id or unique prefix to list cards for."},
+			{Name: "--full-id", Description: "Render full card ids in default text output."},
+		},
+	},
+	{
+		Path:        "workspace summary",
+		Summary:     "First-run workspace orientation: boards plus compact card/doc/inbox counts.",
+		JSONShape:   "`boards`, `counts`, `generated_at`, optional `warnings`",
+		Composition: "Local CLI helper that composes existing list reads without changing the core contract. Boards are required; card, document, and inbox counts are best-effort and surface warnings on partial read failures.",
+		Examples: []string{
+			"anx workspace summary",
+			"anx --json workspace summary",
 		},
 	},
 	{
@@ -443,6 +457,7 @@ Core Commands:
   human         Surface ask, review, or escalation items to the human Inbox
   provenance    Walk refs/provenance links as a deterministic graph
   secret        Manage workspace secrets for agent credential injection
+  workspace     Summarize workspace boards and counts for first-run orientation
   api call      Perform an arbitrary HTTP API request
   help [topic]  Show onboarding help or generated command help
 `) + "\n")
@@ -550,6 +565,16 @@ Core commands:
   derived rebuild     Rebuild derived state from the canonical records.
 
 Tip: derived commands are operational helpers, not the source of truth.`) + "\n", true
+	}
+	if topic == "workspace" {
+		return strings.TrimSpace(`Workspace orientation surface
+
+Use this group for first-run workspace orientation before drilling into topics, boards, cards, docs, or inbox.
+
+Core commands:
+  workspace summary    Summarize boards plus compact card/doc/inbox counts.
+
+Tip: default text is intended for quick agent readbacks. Use `+"`--json`"+` only when code or scripts need to parse the summary.`) + "\n", true
 	}
 	if topic == "meta" {
 		return strings.TrimSpace(`Metadata and shipped reference surface
@@ -743,7 +768,12 @@ Batch card creation:
 
 Read paths:
   boards get / boards workspace   Board metadata including ` + "`updated_at`" + ` for optimistic concurrency.
-  boards cards list               Existing cards and refs before adding more.`)
+  boards cards list               Existing cards and titles before adding more.
+
+  Examples:
+    anx boards cards list <board-id>
+    anx boards cards get <board-id> <card-id>
+    anx boards cards get --board-id <board-id> --card-id <card-id>`)
 	case "cards":
 		return strings.TrimSpace(`Agent-facing Card workflow:
   cards create             Create a board work card from flags plus ` + "`--content-file`" + `.

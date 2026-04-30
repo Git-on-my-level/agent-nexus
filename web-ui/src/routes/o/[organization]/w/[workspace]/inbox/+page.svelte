@@ -1,6 +1,7 @@
 <script>
   import { afterNavigate, goto } from "$app/navigation";
   import { page } from "$app/stores";
+  import { onMount } from "svelte";
 
   import CompactFilterBar from "$lib/components/CompactFilterBar.svelte";
   import Button from "$lib/components/Button.svelte";
@@ -42,6 +43,7 @@
 
   let completedKindFilter = $state("all");
   let completedWindowDays = $state(30);
+  let lastReloadKey = $state("");
 
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
@@ -319,9 +321,32 @@
     }
   }
 
-  afterNavigate(() => {
-    syncCompletedFiltersFromUrl();
+  function currentReloadKey() {
+    return [
+      organizationSlug,
+      workspaceSlug,
+      $page.url.pathname,
+      $page.url.search,
+    ].join("\n");
+  }
+
+  function reloadForCurrentUrl() {
+    const key = currentReloadKey();
+    if (key === lastReloadKey) {
+      return;
+    }
+    lastReloadKey = key;
     void reloadForTab();
+  }
+
+  onMount(() => {
+    // The workspace shell can render this page after SvelteKit's initial
+    // navigation event during hard refresh, so mount must start the first load.
+    reloadForCurrentUrl();
+  });
+
+  afterNavigate(() => {
+    reloadForCurrentUrl();
   });
 
   function urgencyBorderClass(level) {

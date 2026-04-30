@@ -339,6 +339,8 @@ func (a *App) runTypedResource(ctx context.Context, resource string, args []stri
 		return a.runArtifactsCommand(ctx, args, cfg)
 	case "boards":
 		return a.runBoardsCommand(ctx, args, cfg)
+	case "workspace":
+		return a.runWorkspaceCommand(ctx, args, cfg)
 	case "docs":
 		return a.runDocsCommand(ctx, args, cfg)
 	case "events":
@@ -349,6 +351,169 @@ func (a *App) runTypedResource(ctx context.Context, resource string, args []stri
 		return a.runDerivedCommand(ctx, args, cfg)
 	default:
 		return nil, resource, errnorm.Usage("unknown_command", fmt.Sprintf("unknown command %q", resource))
+	}
+}
+
+func (a *App) runWorkspaceCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
+	if len(args) == 0 || isHelpToken(args[0]) {
+		return nil, "workspace", errnorm.Usage("missing_subcommand", "`anx workspace` requires subcommand `summary`")
+	}
+	sub := strings.TrimSpace(args[0])
+	if sub != "summary" {
+		return nil, "workspace", errnorm.Usage("unknown_subcommand", fmt.Sprintf("unknown `anx workspace` subcommand %q; expected `summary`", sub))
+	}
+	if len(args) > 1 {
+		return nil, "workspace summary", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx workspace summary`")
+	}
+
+	generatedAt := time.Now().UTC().Format(time.RFC3339)
+	boardResult, err := a.invokeTypedJSON(ctx, cfg, "boards list", "boards.list", nil, nil, nil)
+	if err != nil {
+		return nil, "workspace summary", err
+	}
+	boardBody := commandResultBody(boardResult)
+	boards := asSlice(boardBody["boards"])
+	counts := map[string]any{
+		"boards":      len(boards),
+		"cards":       nil,
+		"documents":   nil,
+		"inbox_items": nil,
+	}
+	warnings := make([]any, 0, 3)
+
+	if cardsResult, cardsErr := a.invokeTypedJSON(ctx, cfg, "cards list", "cards.list", nil, nil, nil); cardsErr == nil {
+		counts["cards"] = len(asSlice(commandResultBody(cardsResult)["cards"]))
+	} else {
+		warnings = append(warnings, workspaceSummaryWarning("cards", cardsErr))
+	}
+	if docsResult, docsErr := a.invokeTypedJSON(ctx, cfg, "docs list", "docs.list", nil, nil, nil); docsErr == nil {
+		counts["documents"] = len(asSlice(commandResultBody(docsResult)["documents"]))
+	} else {
+		warnings = append(warnings, workspaceSummaryWarning("documents", docsErr))
+	}
+	if inboxResult, inboxErr := a.invokeTypedJSON(ctx, cfg, "inbox list", "inbox.list", nil, nil, nil); inboxErr == nil {
+		counts["inbox_items"] = len(asSlice(commandResultBody(inboxResult)["items"]))
+	} else {
+		warnings = append(warnings, workspaceSummaryWarning("inbox", inboxErr))
+	}
+
+	data := map[string]any{
+		"boards":       boards,
+		"counts":       counts,
+		"generated_at": generatedAt,
+	}
+	if len(warnings) > 0 {
+		data["warnings"] = warnings
+	}
+	return &commandResult{Data: data, Text: formatWorkspaceSummary(data)}, "workspace summary", nil
+}
+
+func commandResultBody(result *commandResult) map[string]any {
+	if result == nil {
+		return nil
+	}
+	data := asMap(result.Data)
+	return asMap(data["body"])
+}
+
+func workspaceSummaryWarning(section string, err error) map[string]any {
+	normalized := errnorm.Normalize(err)
+	return map[string]any{
+		"section": section,
+		"code":    normalized.Code,
+		"message": normalized.Message,
+	}
+}
+
+func formatWorkspaceSummary(data map[string]any) string {
+	counts := asMap(data["counts"])
+	boards := asSlice(data["boards"])
+	lines := []string{
+		"Workspace summary",
+		fmt.Sprintf(
+			"counts: boards=%s cards=%s documents=%s inbox_items=%s",
+			formatCountValue(counts["boards"]),
+			formatCountValue(counts["cards"]),
+			formatCountValue(counts["documents"]),
+			formatCountValue(counts["inbox_items"]),
+		),
+		fmt.Sprintf("Boards (%d):", len(boards)),
+	}
+	for _, raw := range boards {
+		item := asMap(raw)
+		if item == nil {
+			continue
+		}
+		board := asMap(item["board"])
+		if board == nil {
+			board = item
+		}
+		summary := asMap(item["summary"])
+		badges := make([]string, 0, 4)
+		if cardCount := formatCountValue(summary["card_count"]); cardCount != "unknown" {
+			badges = append(badges, "cards="+cardCount)
+		}
+		if unresolved := formatCountValue(summary["unresolved_card_count"]); unresolved != "unknown" {
+			badges = append(badges, "open="+unresolved)
+		}
+		if docs := formatCountValue(summary["document_count"]); docs != "unknown" {
+			badges = append(badges, "docs="+docs)
+		}
+		if latest := strings.TrimSpace(anyString(summary["latest_activity_at"])); latest != "" {
+			badges = append(badges, "latest="+latest)
+		}
+		status := strings.TrimSpace(anyString(board["state"]))
+		if status == "" {
+			status = strings.TrimSpace(anyString(board["status"]))
+		}
+		row := compactSummary(displayListScanID(map[string]any{"board": board}, "board", false), status, anyString(board["title"]))
+		if len(badges) > 0 {
+			row += " [" + strings.Join(badges, ", ") + "]"
+		}
+		lines = append(lines, "- "+row)
+	}
+	if len(boards) == 0 {
+		lines = append(lines, "- (none)")
+	}
+	if warnings := asSlice(data["warnings"]); len(warnings) > 0 {
+		lines = append(lines, "warnings:")
+		for _, raw := range warnings {
+			warning := asMap(raw)
+			if warning == nil {
+				continue
+			}
+			lines = append(lines, "- "+compactSummary(anyString(warning["section"]), anyString(warning["code"]), anyString(warning["message"])))
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatCountValue(value any) string {
+	if value == nil {
+		return "unknown"
+	}
+	if n := intValue(value); n != 0 {
+		return strconv.Itoa(n)
+	}
+	switch typed := value.(type) {
+	case int:
+		return strconv.Itoa(typed)
+	case int64:
+		return strconv.FormatInt(typed, 10)
+	case float64:
+		return strconv.Itoa(int(typed))
+	case json.Number:
+		return typed.String()
+	case string:
+		if strings.TrimSpace(typed) == "" {
+			return "unknown"
+		}
+		return strings.TrimSpace(typed)
+	default:
+		if fmt.Sprint(value) == "<nil>" {
+			return "unknown"
+		}
+		return fmt.Sprint(value)
 	}
 }
 
@@ -1423,21 +1588,38 @@ func (a *App) runBoardCardsCommand(ctx context.Context, args []string, cfg confi
 	sub := boardsCardsSubcommandSpec.normalize(args[0])
 	switch sub {
 	case "list":
-		boardID, err := parseIDArg(args[1:], "board-id", "board id")
+		boardID, fullID, err := parseBoardCardsListInput(args[1:])
 		if err != nil {
 			return nil, "boards cards list", err
 		}
-		result, callErr := a.invokeTypedJSONWithIDResolution(
+		resolvedBoard, err := a.resolveMaybeBoardID(ctx, cfg, boardID)
+		if err != nil {
+			return nil, "boards cards list", err
+		}
+		result, callErr := a.invokeTypedJSON(
 			ctx,
 			cfg,
 			"boards cards list",
 			"boards.cards.list",
-			"board_id",
-			boardID,
-			boardIDLookupSpec,
+			map[string]string{"board_id": resolvedBoard},
 			nil,
 			nil,
 		)
+		if callErr == nil && fullID {
+			data := asMap(result.Data)
+			body := asMap(data["body"])
+			if body != nil {
+				body["full_id"] = true
+				result.Text = formatTypedCommandText(
+					"boards.cards.list",
+					intValue(data["status_code"]),
+					headerValues(data["headers"]),
+					body,
+					cfg.Verbose,
+					cfg.Headers,
+				)
+			}
+		}
 		return result, "boards cards list", callErr
 	case "create":
 		boardID, body, err := a.parseBoardCardCreateInput(ctx, args[1:], cfg, "boards cards create")
@@ -3805,7 +3987,7 @@ func (a *App) resolveMaybeBoardCardID(ctx context.Context, cfg config.Resolved, 
 	if rawCardID == "" {
 		return "", nil
 	}
-	if !shouldResolveDisplayedShortID(rawCardID) {
+	if !shouldResolveDisplayedShortID(rawCardID) && !looksLikeThreadCardIdentifier(rawCardID) {
 		return rawCardID, nil
 	}
 	resolvedBoard, err := a.resolveMaybeBoardID(ctx, cfg, boardID)
@@ -3816,29 +3998,129 @@ func (a *App) resolveMaybeBoardCardID(ctx context.Context, cfg config.Resolved, 
 	if err != nil {
 		return "", err
 	}
-	ids := listResourceIDs(result, boardCardIDLookupSpec)
-	if len(ids) == 0 {
+	matches := listBoardCardIdentifierMatches(result)
+	if len(matches) == 0 {
 		return "", missingResourceIDError(rawCardID, boardCardIDLookupSpec)
 	}
-	for _, id := range ids {
-		if id == rawCardID {
-			return id, nil
+
+	for _, match := range matches {
+		if match.CardID == rawCardID {
+			return match.CardID, nil
 		}
 	}
-	matches := make([]string, 0, len(ids))
-	for _, id := range ids {
-		if strings.HasPrefix(id, rawCardID) {
-			matches = append(matches, id)
+	for _, match := range matches {
+		if match.CardShortID != "" && match.CardShortID == rawCardID {
+			return match.CardID, nil
 		}
 	}
-	if len(matches) == 1 {
-		return matches[0], nil
+	for _, match := range matches {
+		if match.ThreadID != "" && match.ThreadID == rawCardID {
+			return match.CardID, nil
+		}
 	}
-	if len(matches) > 1 {
-		sort.Strings(matches)
-		return "", ambiguousResourceIDError(rawCardID, boardCardIDLookupSpec, matches)
+
+	cardMatches := make([]string, 0, len(matches))
+	for _, match := range matches {
+		if strings.HasPrefix(match.CardID, rawCardID) || (match.CardShortID != "" && strings.HasPrefix(match.CardShortID, rawCardID)) {
+			cardMatches = append(cardMatches, match.CardID)
+		}
+	}
+	cardMatches = uniqueStringsInOrder(cardMatches)
+	if len(cardMatches) == 1 {
+		return cardMatches[0], nil
+	}
+	if len(cardMatches) > 1 {
+		sort.Strings(cardMatches)
+		return "", ambiguousResourceIDError(rawCardID, boardCardIDLookupSpec, cardMatches)
+	}
+
+	threadMatches := make([]string, 0, len(matches))
+	for _, match := range matches {
+		if match.ThreadID != "" && strings.HasPrefix(match.ThreadID, rawCardID) {
+			threadMatches = append(threadMatches, match.CardID)
+		}
+	}
+	threadMatches = uniqueStringsInOrder(threadMatches)
+	if len(threadMatches) == 1 {
+		return threadMatches[0], nil
+	}
+	if len(threadMatches) > 1 {
+		sort.Strings(threadMatches)
+		return "", ambiguousResourceIDError(rawCardID, boardCardIDLookupSpec, threadMatches)
 	}
 	return "", missingResourceIDError(rawCardID, boardCardIDLookupSpec)
+}
+
+func looksLikeThreadCardIdentifier(raw string) bool {
+	raw = strings.TrimSpace(raw)
+	return strings.HasPrefix(raw, "thread_") || strings.HasPrefix(raw, "thread-") || strings.HasPrefix(raw, "thread:")
+}
+
+type boardCardIdentifierMatch struct {
+	CardID      string
+	CardShortID string
+	ThreadID    string
+}
+
+func listBoardCardIdentifierMatches(result *commandResult) []boardCardIdentifierMatch {
+	if result == nil {
+		return nil
+	}
+	data, _ := result.Data.(map[string]any)
+	body, _ := data["body"].(map[string]any)
+	if body == nil {
+		return nil
+	}
+	rawItems, _ := body["cards"].([]any)
+	if len(rawItems) == 0 {
+		return nil
+	}
+	out := make([]boardCardIdentifierMatch, 0, len(rawItems))
+	seen := make(map[string]struct{}, len(rawItems))
+	for _, rawItem := range rawItems {
+		item, _ := rawItem.(map[string]any)
+		if item == nil {
+			continue
+		}
+		cardID := strings.TrimSpace(anyString(item["id"]))
+		if cardID == "" {
+			continue
+		}
+		if _, exists := seen[cardID]; exists {
+			continue
+		}
+		seen[cardID] = struct{}{}
+		out = append(out, boardCardIdentifierMatch{
+			CardID:      cardID,
+			CardShortID: strings.TrimSpace(anyString(item["short_id"])),
+			ThreadID:    strings.TrimSpace(anyString(item["thread_id"])),
+		})
+	}
+	return out
+}
+
+func parseBoardCardsListInput(args []string) (string, bool, error) {
+	fs := newSilentFlagSet("boards cards list")
+	var boardIDFlag trackedString
+	var fullIDFlag trackedBool
+	fs.Var(&boardIDFlag, "board-id", "Board id")
+	fs.Var(&fullIDFlag, "full-id", "Render full card ids in default text output (non-JSON)")
+	if err := fs.Parse(args); err != nil {
+		return "", false, errnorm.Usage("invalid_flags", err.Error())
+	}
+	positionals := fs.Args()
+	boardID := strings.TrimSpace(boardIDFlag.value)
+	if boardID == "" && len(positionals) > 0 {
+		boardID = strings.TrimSpace(positionals[0])
+		positionals = positionals[1:]
+	}
+	if len(positionals) > 0 {
+		return "", false, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx boards cards list`")
+	}
+	if err := validateID(boardID, "board id"); err != nil {
+		return "", false, err
+	}
+	return boardID, fullIDFlag.set && fullIDFlag.value, nil
 }
 
 func validatePlacementFlags(before string, after string, commandName string) error {
@@ -4498,11 +4780,12 @@ func ambiguousResourceIDError(rawID string, spec resourceIDLookupSpec, matches [
 		samples = append(samples, fmt.Sprintf("%s (short_id=%s)", match, shortID(match)))
 	}
 	message := fmt.Sprintf(
-		"%s %q is ambiguous: %d %s ids share that prefix. Use a longer prefix or the canonical id. Matches: %s",
+		"%s %q is ambiguous: %d %s ids share that prefix. Use a longer prefix or the canonical id. Run `anx %s` to inspect candidates. Matches: %s",
 		spec.idLabel,
 		rawID,
 		len(matches),
 		spec.resource,
+		spec.listCommand,
 		strings.Join(samples, ", "),
 	)
 	return errnorm.Usage("invalid_request", message)
@@ -4533,8 +4816,12 @@ func enrichListBodyWithShortIDs(commandID string, body any) (any, bool) {
 		return body, addShortIDToListField(typedBody, "artifacts")
 	case "boards.list":
 		return body, addShortIDToNestedListField(typedBody, "boards", []string{"board"})
+	case "boards.cards.list":
+		return body, addShortIDToListField(typedBody, "cards")
 	case "docs.list":
 		return body, addShortIDToListField(typedBody, "documents")
+	case "events.list":
+		return body, addShortIDToListField(typedBody, "events")
 	case "inbox.list":
 		return body, addInboxAliasesToListField(typedBody, "items")
 	case "inbox.get":

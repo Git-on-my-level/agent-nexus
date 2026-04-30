@@ -11,7 +11,8 @@ go test -tags=integration ./integration/...
 go run ./cmd/anx version
 go run ./cmd/anx auth register --username agent.example --bootstrap-token <token> --base-url http://127.0.0.1:8000 --agent agent-example
 # When bootstrap is closed: --invite-token <oinv_...> (local serve: see cli/dogfood-resources/README.md)
-# Add --json (or ANX_JSON=true) when a script parses the CLI envelope; default stdout is text.
+# Default stdout is text and should be the first choice for agent readbacks.
+# Add --json (or ANX_JSON=true) only when code/scripts parse the CLI envelope.
 go run ./cmd/anx --agent agent-example auth whoami
 go run ./cmd/anx --agent agent-example topics create --title "Incident #42" --summary "Investigate #42"
 go run ./cmd/anx --agent agent-example boards create --topic <topic-id> --title "Incident #42 work"
@@ -44,7 +45,7 @@ API shape and errors: `../contracts/anx-openapi.yaml` (`/secrets`). Core enforce
 Generated command/concept docs are under `docs/generated/`.
 The shipped runtime reference is available from the binary with `anx meta docs` / `anx meta doc <topic>`, including the bundled `agent-guide` topic. Editor-specific agent skill exports are available with `anx meta skill <target>`, for example `anx meta skill cursor --write-dir ~/.cursor/skills/anx-cli-onboard`. The checked-in runtime-help artifact is regenerated with `go run ./cmd/anx-docs-gen`.
 
-Default text output uses payload-first summaries; list-style payloads include **10-character** `short_id` fields, and the CLI resolves those prefixes (and other supported short ids) to canonical ids on subsequent commands. Use `--full-id` when you need full ids or hit ambiguous-prefix errors. Use `--verbose` to print the full response body and `--headers` to opt into response status/header framing when debugging.
+Default text output uses payload-first summaries and is the preferred mode for normal agent orientation. List-style payloads include **10-character** canonical `short_id` fields, and the CLI resolves those prefixes (and other supported short ids) to canonical ids on subsequent commands. Use `--full-id` when you need full ids or hit ambiguous-prefix errors. Use `--json` for code, scripts, CI, or `jq`, and use `--verbose` / `--headers` when debugging response framing.
 
 See `docs/runbook.md` for command, integration-test, and Pi dogfood details.
 

@@ -12,7 +12,7 @@ go build ./cmd/anx go test ./...
 go test -tags=integration ./integration/...
 ```
 
-Run against local core (default output is **text** on stdout; add **`--json`** or **`ANX_JSON=true`** when a script or program parses the CLI envelope):
+Run against local core (default output is **text** on stdout and should be the first choice for agent readbacks; add **`--json`** or **`ANX_JSON=true`** only when a script or program parses the CLI envelope):
 
 ```bash
 cd cli
@@ -23,9 +23,9 @@ go run ./cmd/anx --base-url http://127.0.0.1:8000 --agent local auth register --
 go run ./cmd/anx --agent local version
 ```
 
-**Output modes:** concise text is the default for direct reading (including LLM tool output). JSON mode is for programmatic consumers (`jq`, CI, services). `auth register` does **not** write `"json": true` into the profile; older profiles may still set it—use `--json=false` / `ANX_JSON=false` for a single command if needed.
+**Output modes:** concise text is the default for direct reading and normal LLM tool output. JSON mode is for programmatic consumers (`jq`, CI, services, scripts). `auth register` does **not** write `"json": true` into the profile; older profiles may still set it—use `--json=false` / `ANX_JSON=false` for a single command if needed.
 
-**Short ids:** list-style JSON and default text rows use **10-character** `short_id` prefixes derived from canonical ids. You can paste those prefixes back into commands; the CLI resolves a unique match via list APIs (or returns a clear ambiguous/missing error). Use `--full-id` when you need canonical ids in the output or when resolution fails.
+**Short ids:** list-style JSON and default text rows use **10-character** canonical `short_id` prefixes derived from resource ids. You can paste those prefixes back into commands; the CLI resolves a unique match via list APIs (or returns a clear ambiguous/missing error). Use `--full-id` when you need canonical ids in the output or when resolution fails.
 
 **Active profile (recommended for interactive use):** after you have at least one profile under `~/.config/anx/profiles/`, run `anx config use <name>` (or `anx auth default <name>`) once. The CLI stores the choice in `~/.config/anx/default-profile` and loads `base_url` and credentials from `~/.config/anx/profiles/<name>.json`, so later commands can omit `--base-url` and `--agent`. Inspect merged settings with `anx config show` (tokens are redacted). Clear the marker with `anx config unset` if you want to rely on single-profile auto-select or explicit flags/env only.
 
@@ -188,6 +188,7 @@ anx --agent agent-a threads context --state active --full-id
 anx --agent agent-a threads workspace --thread-id thread_123 --full-id
 anx --agent agent-a docs content --document-id product-constitution
 anx --agent agent-a artifacts inspect --artifact-id artifact_123
+anx --agent agent-a workspace summary
 anx --agent agent-a boards list --state active
 anx --agent agent-a boards create --topic topic_123 --title "Launch board"
 anx --agent agent-a boards workspace --board-id board_product_launch
@@ -216,6 +217,8 @@ anx --agent agent-a draft list
 anx --agent agent-a draft commit <draft-id>
 anx --agent agent-a draft discard <draft-id>
 ```
+
+Use `draft` for reviewable JSON writes, broad/risky mutations, or changes delegated by a human where an inspectable checkpoint is useful. Prefer direct domain verbs for narrow, already-verified changes.
 
 The raw fallback remains available:
 

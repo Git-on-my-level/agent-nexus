@@ -64,7 +64,7 @@ var conceptsGuidePrimitives = []conceptsPrimitive{
 	},
 	{
 		Name:        "draft",
-		UseWhen:     "You want to stage a mutation locally, inspect it, then apply it explicitly.",
+		UseWhen:     "You want to stage a reviewable JSON write locally, inspect it, then apply it explicitly; prefer this for risky or broad mutations and human-delegated changes.",
 		NotFor:      "Read paths or append-only event authoring.",
 		Examples:    []string{"reviewable JSON writes", "document revisions without a typed proposal helper"},
 		RelatedRead: []string{"anx draft create", "anx draft list", "anx draft commit"},
@@ -131,7 +131,7 @@ func conceptsSelectionRules() []string {
 		"Use cards for individual board-scoped work items.",
 		"Use events for immutable facts.",
 		"Use inbox for current attention signals from the active CLI identity's perspective.",
-		"Use draft when you want a local review checkpoint before a write.",
+		"Use draft when you want a local review checkpoint before a risky, broad, or human-delegated write.",
 		"Use threads for read-only backing-thread diagnostics and timeline inspection, not as the default coordination surface.",
 	}
 }

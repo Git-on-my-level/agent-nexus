@@ -51,6 +51,8 @@ Do not add compatibility aliases for new CLI surfaces. If an old command path co
 - Streaming commands preserve their documented stream framing and resume behavior.
 - Exit code `2` remains reserved for local usage and validation failures.
 - Default text output (non-JSON) should stay line-oriented and concise rather than depending on rich terminal interaction.
+- Default text output is the preferred agent readback mode. Use JSON for code/script parsing, CI, or `jq`, not as the default way to inspect state.
+- List-style short ids are a compatibility contract: when docs claim a 10-character `short_id` can be pasted back into commands, keep resolver coverage in tests. Board-card lists must expose the canonical card id/title first; backing `thread_id` is secondary context.
 - Remote API failures: stderr prints `Error (<code>): <message>` plus a `Hint:` line when the CLI has recovery guidance. In `--json` mode, the same hint is in `error.hint`, and `error.details.hint` is kept in sync with that value when enrichment runs. `error.details` may include `anx_cli_recovery` (e.g. `kind` values such as `stale_concurrency_token`, `invalid_enum`, `auth_refresh`, `key_mismatch`, `agent_revoked`, `resource_exists`, plus `field`, `schema_enum`, `refresh_cli`, `valid_enum_values`, `reason`, `list_cli`, `register_cli`) as a machine-readable supplement—do not rely on it without checking `kind`. Deeper fields under `error.details.parsed` still mirror the raw API payload.
 
 ## What CLI Does Not Own

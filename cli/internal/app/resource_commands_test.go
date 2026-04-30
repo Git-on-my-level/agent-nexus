@@ -1919,7 +1919,7 @@ func TestEventsCreateReviewCompletedInvalidRefsFailsLocally(t *testing.T) {
 		t.Fatalf("unexpected error payload: %#v", payload)
 	}
 	message := anyStringValue(errObj["message"])
-	if !strings.Contains(message, "card_created") || !strings.Contains(message, "card:") {
+	if !strings.Contains(message, "card_created") || !strings.Contains(message, "card") {
 		t.Fatalf("expected actionable refs guidance, got message=%q payload=%#v", message, payload)
 	}
 
@@ -2769,6 +2769,241 @@ func TestBoardsListAddsNestedShortIDAndWorkspaceResolvesShortBoardID(t *testing.
 	workspaceData, _ := workspacePayload["data"].(map[string]any)
 	if got := anyStringValue(workspaceData["board_id"]); got != canonicalID {
 		t.Fatalf("expected canonical board_id %q, got %#v", canonicalID, workspacePayload)
+	}
+}
+
+func TestBoardCardsListAddsCardShortIDAndGetResolvesShortCardID(t *testing.T) {
+	t.Parallel()
+
+	const canonicalBoardID = "board_1234567890abcdef"
+	const shortBoardID = "board_1234"
+	const canonicalCardID = "card_1234567890abcdef"
+	const shortCardID = "card_12345"
+	const threadID = "thread_1234567890abcdef"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/boards":
+			_, _ = w.Write([]byte(`{"boards":[{"board":{"id":"` + canonicalBoardID + `","title":"Ops Board","state":"active"},"summary":{"card_count":1}}]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/boards/"+canonicalBoardID+"/cards":
+			_, _ = w.Write([]byte(`{"board_id":"` + canonicalBoardID + `","cards":[{"id":"` + canonicalCardID + `","board_id":"` + canonicalBoardID + `","thread_id":"` + threadID + `","title":"Fix CLI card discovery","column_key":"backlog","rank":"a"}]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/boards/"+canonicalBoardID+"/cards/"+canonicalCardID:
+			_, _ = w.Write([]byte(`{"card":{"id":"` + canonicalCardID + `","board_id":"` + canonicalBoardID + `","thread_id":"` + threadID + `","title":"Fix CLI card discovery","column_key":"backlog"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	listPayload := assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"boards", "cards", "list",
+		shortBoardID,
+	}))
+	data, _ := listPayload["data"].(map[string]any)
+	cards, _ := data["cards"].([]any)
+	if len(cards) != 1 {
+		t.Fatalf("expected one card, got %#v", listPayload)
+	}
+	card, _ := cards[0].(map[string]any)
+	if got := anyStringValue(card["short_id"]); got != shortCardID {
+		t.Fatalf("expected card short_id %q from canonical card id, got %#v", shortCardID, card)
+	}
+
+	getByPositionals := assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"boards", "cards", "get",
+		shortBoardID,
+		shortCardID,
+	}))
+	getData, _ := getByPositionals["data"].(map[string]any)
+	gotCard, _ := getData["card"].(map[string]any)
+	if got := anyStringValue(gotCard["id"]); got != canonicalCardID {
+		t.Fatalf("expected canonical card id %q, got %#v", canonicalCardID, getByPositionals)
+	}
+
+	assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"boards", "cards", "get",
+		"--board-id", shortBoardID,
+		"--card-id", shortCardID,
+	}))
+}
+
+func TestBoardCardsGetResolvesThreadIDFallbackAndRejectsAmbiguousThreadPrefix(t *testing.T) {
+	t.Parallel()
+
+	const canonicalBoardID = "board_1234567890abcdef"
+	const shortBoardID = "board_1234"
+	const cardA = "card_alpha_1234567890"
+	const cardB = "card_beta_1234567890"
+	const threadA = "thread_alpha_1234567890"
+	const threadB = "thread_alpine_1234567890"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/boards":
+			_, _ = w.Write([]byte(`{"boards":[{"board":{"id":"` + canonicalBoardID + `","title":"Ops Board","state":"active"},"summary":{"card_count":2}}]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/boards/"+canonicalBoardID+"/cards":
+			_, _ = w.Write([]byte(`{"board_id":"` + canonicalBoardID + `","cards":[{"id":"` + cardA + `","board_id":"` + canonicalBoardID + `","thread_id":"` + threadA + `","title":"Alpha","column_key":"backlog"},{"id":"` + cardB + `","board_id":"` + canonicalBoardID + `","thread_id":"` + threadB + `","title":"Beta","column_key":"review"}]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/boards/"+canonicalBoardID+"/cards/"+cardA:
+			_, _ = w.Write([]byte(`{"card":{"id":"` + cardA + `","board_id":"` + canonicalBoardID + `","thread_id":"` + threadA + `","title":"Alpha","column_key":"backlog"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	payload := assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"boards", "cards", "get",
+		shortBoardID,
+		threadA,
+	}))
+	data, _ := payload["data"].(map[string]any)
+	card, _ := data["card"].(map[string]any)
+	if got := anyStringValue(card["id"]); got != cardA {
+		t.Fatalf("expected thread fallback to resolve %q, got %#v", cardA, payload)
+	}
+
+	errPayload := assertEnvelopeError(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"boards", "cards", "get",
+		shortBoardID,
+		"thread_al",
+	}))
+	errObj, _ := errPayload["error"].(map[string]any)
+	if message := anyStringValue(errObj["message"]); !strings.Contains(message, "ambiguous") || !strings.Contains(message, "boards cards list") {
+		t.Fatalf("expected ambiguous error with list guidance, got %#v", errPayload)
+	}
+}
+
+func TestWorkspaceSummaryTextAndJSON(t *testing.T) {
+	t.Parallel()
+
+	const boardID = "board_1234567890abcdef"
+	const updatedAt = "2026-04-30T00:00:00Z"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/boards":
+			_, _ = w.Write([]byte(`{"boards":[{"board":{"id":"` + boardID + `","title":"Launch","state":"active"},"summary":{"card_count":2,"unresolved_card_count":1,"document_count":1,"latest_activity_at":"` + updatedAt + `"}}]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/cards":
+			_, _ = w.Write([]byte(`{"cards":[{"id":"card_1"},{"id":"card_2"}]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/docs":
+			_, _ = w.Write([]byte(`{"documents":[{"id":"doc_1"}]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
+			_, _ = w.Write([]byte(`{"items":[{"id":"inbox_1"}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	text := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--base-url", server.URL,
+		"workspace", "summary",
+	})
+	if !strings.Contains(text, "Workspace summary") || !strings.Contains(text, "counts: boards=1 cards=2 documents=1 inbox_items=1") || !strings.Contains(text, "Launch") {
+		t.Fatalf("unexpected workspace summary text:\n%s", text)
+	}
+
+	payload := assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"workspace", "summary",
+	}))
+	if got := anyStringValue(payload["command_id"]); got != "workspace.summary" {
+		t.Fatalf("expected workspace.summary command_id, got %#v", payload)
+	}
+	data, _ := payload["data"].(map[string]any)
+	counts, _ := data["counts"].(map[string]any)
+	if got := intValue(counts["cards"]); got != 2 {
+		t.Fatalf("expected cards count 2, got %#v", payload)
+	}
+	if strings.TrimSpace(anyStringValue(data["generated_at"])) == "" {
+		t.Fatalf("expected generated_at, got %#v", payload)
+	}
+}
+
+func TestWorkspaceSummaryAllowsPartialOptionalReadFailure(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/boards":
+			_, _ = w.Write([]byte(`{"boards":[]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/cards":
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`{"error":{"code":"internal_error","message":"cards unavailable"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/docs":
+			_, _ = w.Write([]byte(`{"documents":[]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
+			_, _ = w.Write([]byte(`{"items":[]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"workspace", "summary",
+	}))
+	data, _ := payload["data"].(map[string]any)
+	warnings, _ := data["warnings"].([]any)
+	if len(warnings) != 1 {
+		t.Fatalf("expected one warning for cards failure, got %#v", payload)
+	}
+	counts, _ := data["counts"].(map[string]any)
+	if counts["cards"] != nil {
+		t.Fatalf("expected unknown cards count after partial failure, got %#v", payload)
+	}
+}
+
+func TestDocumentedShortIDResourcesHaveRegressionCoverage(t *testing.T) {
+	t.Parallel()
+
+	documented := []resourceIDLookupSpec{
+		threadIDLookupSpec,
+		topicIDLookupSpec,
+		cardIDLookupSpec,
+		artifactIDLookupSpec,
+		boardIDLookupSpec,
+		boardCardIDLookupSpec,
+		documentIDLookupSpec,
+		eventIDLookupSpec,
+	}
+	covered := map[string]bool{
+		"threads.list":      true,
+		"topics.list":       true,
+		"cards.list":        true,
+		"artifacts.list":    true,
+		"boards.list":       true,
+		"boards.cards.list": true,
+		"docs.list":         true,
+		"events.list":       true,
+	}
+	for _, spec := range documented {
+		if !covered[spec.listCommandID] {
+			t.Fatalf("short_id-capable %s lacks resolver regression coverage entry", spec.listCommandID)
+		}
+	}
+	if !strings.Contains(agentGuideText(), "short_id") {
+		t.Fatalf("agent guide no longer documents short_id behavior; update coverage assumptions")
 	}
 }
 

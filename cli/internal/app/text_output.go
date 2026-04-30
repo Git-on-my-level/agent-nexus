@@ -1566,13 +1566,14 @@ func formatBoardCardsList(body any) string {
 	root := asMap(body)
 	boardID := anyString(root["board_id"])
 	cards := asSlice(root["cards"])
+	fullID := asBool(root["full_id"])
 	lines := []string{fmt.Sprintf("Cards (%d):", len(cards))}
 	for _, raw := range cards {
 		card := asMap(raw)
 		if card == nil {
 			continue
 		}
-		lines = append(lines, "- "+renderBoardCardListItem(card))
+		lines = append(lines, "- "+renderBoardCardListItemWithMode(card, fullID))
 	}
 	if boardID != "" {
 		lines = append([]string{fmt.Sprintf("Board: %s", boardID)}, lines...)
@@ -1581,27 +1582,39 @@ func formatBoardCardsList(body any) string {
 }
 
 func renderBoardCardListItem(card map[string]any) string {
+	return renderBoardCardListItemWithMode(card, false)
+}
+
+func renderBoardCardListItemWithMode(card map[string]any, fullID bool) string {
 	threadID := anyString(card["thread_id"])
 	columnKey := anyString(card["column_key"])
 	rank := anyString(card["rank"])
 	documentRef := firstNonEmpty(anyString(card["document_ref"]), anyString(card["pinned_document_id"]))
 	cardID := strings.TrimSpace(anyString(card["id"]))
+	cardShortID := strings.TrimSpace(anyString(card["short_id"]))
 	title := strings.TrimSpace(anyString(card["title"]))
 
-	lead := threadID
+	lead := cardID
+	if !fullID && cardShortID != "" {
+		lead = cardShortID
+	}
 	if lead == "" {
-		if cardID != "" && title != "" && title != cardID {
-			lead = cardID + " — " + title
-		} else if cardID != "" {
-			lead = cardID
-		} else if title != "" {
+		if title != "" {
 			lead = title
+		} else if threadID != "" {
+			lead = "thread=" + threadID
 		} else {
 			lead = "standalone card"
 		}
 	}
 
 	parts := []string{lead, columnKey}
+	if title != "" && title != lead {
+		parts = append(parts, title)
+	}
+	if threadID != "" {
+		parts = append(parts, "thread="+threadID)
+	}
 	if rank != "" {
 		parts = append(parts, "rank="+rank)
 	}

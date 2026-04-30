@@ -80,6 +80,12 @@ func TestRunMetaDocPrintsAgentGuideMarkdown(t *testing.T) {
 	if !strings.Contains(output, "`boards`") || !strings.Contains(output, "`docs`") {
 		t.Fatalf("expected higher-level abstractions in agent guide output=%s", output)
 	}
+	if !strings.Contains(output, "Prefer **default (non-JSON) output**") || !strings.Contains(output, "code, a shell script, CI, `jq`") {
+		t.Fatalf("expected text-first output guidance output=%s", output)
+	}
+	if !strings.Contains(output, "risky or broad mutations") {
+		t.Fatalf("expected prescriptive draft guidance output=%s", output)
+	}
 }
 
 func TestRunMetaDocPrintsAgentBridgeMarkdown(t *testing.T) {
