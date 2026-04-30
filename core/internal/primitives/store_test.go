@@ -194,6 +194,45 @@ func TestListEventsAfterUsesChronologicalTimestampOrdering(t *testing.T) {
 	}
 }
 
+func TestListEventsWithoutLimitReturnsAllMatchingRows(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	store := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+
+	base := time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC)
+	for i := range 55 {
+		ts := base.Add(time.Duration(i) * time.Second).Format(time.RFC3339Nano)
+		_, err := store.AppendEvent(ctx, "actor-1", map[string]any{
+			"type":      "message_posted",
+			"ts":        ts,
+			"thread_id": "thread-all",
+			"refs":      []any{"thread:thread-all"},
+			"payload":   map[string]any{"text": fmt.Sprintf("m%d", i)},
+		})
+		if err != nil {
+			t.Fatalf("append event %d: %v", i, err)
+		}
+	}
+
+	events, err := store.ListEvents(ctx, primitives.EventListFilter{
+		Types:    []string{"message_posted"},
+		ThreadID: "thread-all",
+	})
+	if err != nil {
+		t.Fatalf("list events: %v", err)
+	}
+	if len(events) != 55 {
+		t.Fatalf("expected 55 events for unbounded list, got %d", len(events))
+	}
+}
+
 func TestListEventsPageKeysetPaginationNoSkipsOrDuplicates(t *testing.T) {
 	t.Parallel()
 

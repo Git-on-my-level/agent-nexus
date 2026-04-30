@@ -2325,11 +2325,33 @@ func insertPreparedEvent(ctx context.Context, exec eventExec, prepared preparedE
 }
 
 func (s *Store) ListEvents(ctx context.Context, filter EventListFilter) ([]map[string]any, error) {
-	page, err := s.ListEventsPage(ctx, filter)
-	if err != nil {
-		return nil, err
+	// State-derivation and replay callers use ListEvents without a limit and expect every
+	// matching row. HTTP and UI pagination use ListEventsPage (or ListEvents with Limit set).
+	if filter.Limit > 0 {
+		page, err := s.ListEventsPage(ctx, filter)
+		if err != nil {
+			return nil, err
+		}
+		return page.Events, nil
 	}
-	return page.Events, nil
+	const pageSize = 200
+	var out []map[string]any
+	cursor := strings.TrimSpace(filter.Cursor)
+	for {
+		f := filter
+		f.Limit = pageSize
+		f.Cursor = cursor
+		page, err := s.ListEventsPage(ctx, f)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, page.Events...)
+		if page.NextCursor == "" {
+			break
+		}
+		cursor = page.NextCursor
+	}
+	return out, nil
 }
 
 func (s *Store) ListEventsPage(ctx context.Context, filter EventListFilter) (EventPage, error) {

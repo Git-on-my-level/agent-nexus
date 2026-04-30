@@ -80,20 +80,33 @@ func eventActorIDsForKind(w http.ResponseWriter, r *http.Request, opts handlerOp
 		writeError(w, http.StatusServiceUnavailable, "actor_registry_unavailable", "actor registry is not configured")
 		return nil, false
 	}
-	limit := 1000
-	actorList, _, err := opts.actorRegistry.List(r.Context(), actors.ActorListFilter{Limit: &limit})
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to filter events by actor kind")
-		return nil, false
-	}
+	pageLimit := 1000
 	ids := make([]string, 0)
-	for _, actor := range actorList {
-		for _, tag := range actor.Tags {
-			if strings.EqualFold(strings.TrimSpace(tag), actorKind) {
-				ids = append(ids, actor.ID)
-				break
+	seen := map[string]struct{}{}
+	for cursor := ""; ; {
+		actorList, next, err := opts.actorRegistry.List(r.Context(), actors.ActorListFilter{
+			Limit:  &pageLimit,
+			Cursor: cursor,
+		})
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "internal_error", "failed to filter events by actor kind")
+			return nil, false
+		}
+		for _, actor := range actorList {
+			for _, tag := range actor.Tags {
+				if strings.EqualFold(strings.TrimSpace(tag), actorKind) {
+					if _, ok := seen[actor.ID]; !ok {
+						seen[actor.ID] = struct{}{}
+						ids = append(ids, actor.ID)
+					}
+					break
+				}
 			}
 		}
+		if next == "" {
+			break
+		}
+		cursor = next
 	}
 	if len(ids) == 0 {
 		ids = []string{"__anx_no_actor_kind_match__"}
