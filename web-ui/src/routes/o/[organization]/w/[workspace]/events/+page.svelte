@@ -2,14 +2,22 @@
   import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
-  import { onMount } from "svelte";
 
+  import CompactFilterBar from "$lib/components/CompactFilterBar.svelte";
   import EventRow from "$lib/components/EventRow.svelte";
   import { coreClient } from "$lib/coreClient";
   import { initializeAuthSession } from "$lib/authSession";
+  import {
+    DEFAULT_EVENT_LIST_FILTERS,
+    buildEventListApiQuery,
+    buildEventListSearchString,
+    EVENT_BACKING_SCOPE_VALUES,
+    EVENT_GROUP_ORDER,
+    hasEventListFilters,
+    parseEventListSearchParams,
+  } from "$lib/eventFilters";
   import { HOME_FEED_PRESET, normalizeEventRow } from "$lib/events/eventRows";
   import { workspacePath } from "$lib/workspacePaths";
-  import taxonomy from "$lib/generated/taxonomy.json";
 
   const EVENT_GROUP_LABELS = {
     messages: "Messages",
@@ -22,39 +30,29 @@
     reviews: "Reviews",
     exceptions: "Exceptions",
   };
-  const EVENT_GROUPS =
-    taxonomy?.enums?.event_group?.values ?? Object.keys(EVENT_GROUP_LABELS);
   const BACKING_SCOPE_LABELS = {
     all: "All",
     standalone: "Standalone",
     backing_only: "Backing only",
   };
-  const BACKING_SCOPES = taxonomy?.enums?.backing_scope?.values ?? [
-    "all",
-    "standalone",
-    "backing_only",
-  ];
 
   let events = $state([]);
   let pageInfo = $state({ has_more: false, next_cursor: "" });
   let loading = $state(true);
   let loadingMore = $state(false);
   let error = $state("");
-  let filters = $state({
-    preset: "",
-    type: "",
-    event_group: [],
-    backing_scope: "all",
-    topic_id: "",
-    actor_id: "",
-    q: "",
-    since: "",
-    until: "",
-  });
+  let filters = $state({ ...DEFAULT_EVENT_LIST_FILTERS });
   let urlCursor = $state("");
+  let filtersOpen = $state(false);
+
+  /** @type {string | null} */
+  let prevFilterSig = null;
+  /** @type {string | null} */
+  let prevUrlCursor = null;
 
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
+  let hasActiveFilters = $derived(hasEventListFilters(filters));
 
   function workspaceHref(pathname = "/") {
     return workspacePath(organizationSlug, workspaceSlug, pathname);
@@ -62,64 +60,6 @@
 
   function rowFor(event) {
     return normalizeEventRow(event, { workspaceHref });
-  }
-
-  function queryFromFilters(cursor = "") {
-    const query = {};
-    for (const [key, value] of Object.entries(filters)) {
-      if (key === "backing_scope" && value === "all") continue;
-      if (Array.isArray(value)) {
-        const items = value
-          .map((item) => String(item ?? "").trim())
-          .filter(Boolean);
-        if (items.length > 0) query[key] = items;
-        continue;
-      }
-      const text = String(value ?? "").trim();
-      if (text) query[key] = text;
-    }
-    if (cursor) query.cursor = cursor;
-    query.limit = 50;
-    return query;
-  }
-
-  function filtersFromUrl() {
-    const params = $page.url.searchParams;
-    urlCursor = params.get("cursor") ?? "";
-    filters = {
-      preset: params.get("preset") ?? "",
-      type: params.get("type") ?? "",
-      event_group: params.getAll("event_group"),
-      backing_scope: params.get("backing_scope") ?? "all",
-      topic_id: params.get("topic_id") ?? "",
-      actor_id: params.get("actor_id") ?? "",
-      q: params.get("q") ?? "",
-      since: params.get("since") ?? "",
-      until: params.get("until") ?? "",
-    };
-  }
-
-  async function replaceUrlFilters(nextCursor = "") {
-    const params = new URLSearchParams();
-    for (const [key, value] of Object.entries(filters)) {
-      if (key === "backing_scope" && value === "all") continue;
-      if (Array.isArray(value)) {
-        for (const item of value) {
-          const text = String(item ?? "").trim();
-          if (text) params.append(key, text);
-        }
-        continue;
-      }
-      const text = String(value ?? "").trim();
-      if (text) params.set(key, text);
-    }
-    if (nextCursor) params.set("cursor", nextCursor);
-    const query = params.toString();
-    await goto(`${$page.url.pathname}${query ? `?${query}` : ""}`, {
-      replaceState: false,
-      noScroll: true,
-      keepFocus: true,
-    });
   }
 
   async function loadEvents({ append = false } = {}) {
@@ -138,8 +78,12 @@
           authDriver: "events-page",
         });
       }
+      const cursorForQuery = append ? pageInfo.next_cursor : urlCursor;
       const result = await coreClient.listEvents(
-        queryFromFilters(append ? pageInfo.next_cursor : urlCursor),
+        buildEventListApiQuery(filters, {
+          cursor: cursorForQuery,
+          limit: 50,
+        }),
       );
       events = append
         ? [...events, ...(result.events ?? [])]
@@ -156,18 +100,69 @@
     }
   }
 
+  $effect(() => {
+    const sp = $page.url.searchParams;
+    $page.url.search;
+
+    const parsed = parseEventListSearchParams(sp);
+    const cur = sp.get("cursor") ?? "";
+    const sig = buildEventListSearchString(parsed);
+
+    filters = { ...DEFAULT_EVENT_LIST_FILTERS, ...parsed };
+    urlCursor = cur;
+    filtersOpen =
+      hasEventListFilters(parsed) ||
+      String(parsed.preset ?? "").trim() === HOME_FEED_PRESET;
+
+    const isFirst = prevFilterSig === null;
+    const filtersChanged = isFirst || sig !== prevFilterSig;
+    const cursorOnly = !filtersChanged && cur !== prevUrlCursor;
+
+    if (filtersChanged) {
+      prevFilterSig = sig;
+      prevUrlCursor = cur;
+      void loadEvents();
+      return;
+    }
+    if (cursorOnly && cur) {
+      prevUrlCursor = cur;
+      void loadEvents({ append: true });
+      return;
+    }
+    if (cursorOnly && !cur) {
+      prevUrlCursor = cur;
+      void loadEvents();
+    }
+  });
+
   async function applyFilters() {
-    urlCursor = "";
-    await replaceUrlFilters();
-    await loadEvents();
+    const base = workspaceHref("/events");
+    const qs = buildEventListSearchString(filters);
+    await goto(`${base}${qs ? `?${qs}` : ""}`, {
+      noScroll: true,
+      keepFocus: true,
+    });
+  }
+
+  async function clearFilters() {
+    filters = { ...DEFAULT_EVENT_LIST_FILTERS };
+    filtersOpen = false;
+    const base = workspaceHref("/events");
+    await goto(base, { noScroll: true, keepFocus: true });
   }
 
   async function showOlder() {
     const nextCursor = pageInfo?.next_cursor ?? "";
     if (!nextCursor) return;
-    urlCursor = nextCursor;
-    await replaceUrlFilters(nextCursor);
-    await loadEvents({ append: true });
+    const base = workspaceHref("/events");
+    const qs = buildEventListSearchString(filters);
+    const params = new URLSearchParams(qs);
+    params.set("cursor", nextCursor);
+    const query = params.toString();
+    await goto(`${base}${query ? `?${query}` : ""}`, {
+      noScroll: true,
+      keepFocus: true,
+    });
   }
 
   async function useHomePreset() {
@@ -183,101 +178,168 @@
     } else {
       current.add(group);
     }
-    filters.event_group = EVENT_GROUPS.filter((value) => current.has(value));
+    filters.event_group = EVENT_GROUP_ORDER.filter((value) =>
+      current.has(value),
+    );
   }
-
-  onMount(() => {
-    filtersFromUrl();
-    void loadEvents();
-  });
 </script>
 
 <div class="min-w-0 max-w-full space-y-5">
-  <div class="flex flex-wrap items-start justify-between gap-3">
+  <div
+    class="mb-3 flex max-md:mb-2 flex-wrap items-center justify-between gap-2"
+  >
     <div class="min-w-0">
       <h1 class="text-subtitle font-semibold text-[var(--fg)]">Events</h1>
       <p class="mt-0.5 text-meta text-[var(--fg-muted)]">
         Full workspace event history.
       </p>
     </div>
-    <button
-      class="rounded-md border border-[var(--line)] px-2.5 py-1.5 text-meta font-medium transition-colors hover:bg-[var(--line-subtle)] {filters.preset ===
-      HOME_FEED_PRESET
-        ? 'text-[var(--fg)]'
-        : 'text-[var(--fg-muted)]'}"
-      onclick={useHomePreset}
-      type="button"
-    >
-      Home feed
-    </button>
-  </div>
-
-  <section class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-3">
-    <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
-      <input
-        class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta text-[var(--fg)]"
-        bind:value={filters.q}
-        placeholder="Search"
-      />
-      <input
-        class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta text-[var(--fg)]"
-        bind:value={filters.type}
-        placeholder="Type"
-      />
-      <select
-        class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta text-[var(--fg)]"
-        bind:value={filters.backing_scope}
-      >
-        {#each BACKING_SCOPES as scope}
-          <option value={scope}>{BACKING_SCOPE_LABELS[scope] ?? scope}</option>
-        {/each}
-      </select>
-      <input
-        class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta text-[var(--fg)]"
-        bind:value={filters.topic_id}
-        placeholder="Topic"
-      />
-      <input
-        class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta text-[var(--fg)]"
-        bind:value={filters.actor_id}
-        placeholder="Actor"
-      />
-      <input
-        class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta text-[var(--fg)]"
-        bind:value={filters.since}
-        placeholder="Since"
-      />
-      <input
-        class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta text-[var(--fg)]"
-        bind:value={filters.until}
-        placeholder="Until"
-      />
-    </div>
-    <fieldset class="mt-3 flex flex-wrap gap-2 text-meta">
-      {#each EVENT_GROUPS as group}
-        <label
-          class="flex cursor-pointer items-center gap-1.5 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-1 text-[var(--fg-muted)]"
-        >
-          <input
-            checked={(filters.event_group ?? []).includes(group)}
-            class="h-3.5 w-3.5"
-            type="checkbox"
-            onchange={() => toggleEventGroup(group)}
-          />
-          {EVENT_GROUP_LABELS[group] ?? group}
-        </label>
-      {/each}
-    </fieldset>
-    <div class="mt-2 flex justify-end">
+    <div class="flex flex-wrap items-center justify-end gap-1.5">
       <button
-        class="rounded-md border border-[var(--line)] px-2.5 py-1.5 text-meta font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)]"
-        onclick={applyFilters}
+        class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-micro font-medium transition-colors hover:bg-[var(--line-subtle)] {filters.preset ===
+        HOME_FEED_PRESET
+          ? 'text-[var(--fg)]'
+          : 'text-[var(--fg-muted)]'}"
+        onclick={useHomePreset}
         type="button"
       >
-        Apply filters
+        Home feed
+      </button>
+      <button
+        class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-micro font-medium transition-colors {hasActiveFilters
+          ? 'border-[var(--accent)]/40 bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/15'
+          : 'border-[var(--line)] bg-[var(--bg-soft)] text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]'}"
+        onclick={() => (filtersOpen = !filtersOpen)}
+        type="button"
+      >
+        <svg
+          class="h-3.5 w-3.5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+          />
+        </svg>
+        {hasActiveFilters ? "Filtered" : "Filter"}
       </button>
     </div>
-  </section>
+  </div>
+
+  {#if filtersOpen}
+    <CompactFilterBar testId="events-filter-panel">
+      {#snippet children()}
+        <form
+          class="contents"
+          onsubmit={(event) => {
+            event.preventDefault();
+            void applyFilters();
+          }}
+        >
+          <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
+            <label
+              class="text-micro font-medium text-[var(--fg-muted)] sm:col-span-2 lg:col-span-2"
+            >
+              Search
+              <input
+                bind:value={filters.q}
+                class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
+                placeholder="Search"
+              />
+            </label>
+            <label class="text-micro font-medium text-[var(--fg-muted)]">
+              Type
+              <input
+                bind:value={filters.type}
+                class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
+                placeholder="Type"
+              />
+            </label>
+            <label class="text-micro font-medium text-[var(--fg-muted)]">
+              Backing
+              <select
+                bind:value={filters.backing_scope}
+                class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
+              >
+                {#each EVENT_BACKING_SCOPE_VALUES as scope}
+                  <option value={scope}
+                    >{BACKING_SCOPE_LABELS[scope] ?? scope}</option
+                  >
+                {/each}
+              </select>
+            </label>
+            <label class="text-micro font-medium text-[var(--fg-muted)]">
+              Topic
+              <input
+                bind:value={filters.topic_id}
+                class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
+                placeholder="Topic ID"
+              />
+            </label>
+            <label class="text-micro font-medium text-[var(--fg-muted)]">
+              Actor
+              <input
+                bind:value={filters.actor_id}
+                class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
+                placeholder="Actor ID"
+              />
+            </label>
+            <label class="text-micro font-medium text-[var(--fg-muted)]">
+              Since
+              <input
+                bind:value={filters.since}
+                class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
+                placeholder="Since"
+              />
+            </label>
+            <label class="text-micro font-medium text-[var(--fg-muted)]">
+              Until
+              <input
+                bind:value={filters.until}
+                class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
+                placeholder="Until"
+              />
+            </label>
+          </div>
+          <div class="mt-3 text-micro">
+            <span class="font-medium text-[var(--fg-muted)]">Event groups</span>
+            <fieldset
+              class="mt-1 flex flex-wrap gap-2 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-2"
+            >
+              {#each EVENT_GROUP_ORDER as group}
+                <label
+                  class="flex cursor-pointer items-center gap-1.5 text-meta text-[var(--fg)]"
+                >
+                  <input
+                    checked={(filters.event_group ?? []).includes(group)}
+                    class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--line)] bg-[var(--bg)] text-[var(--accent-hover)] focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-0"
+                    type="checkbox"
+                    onchange={() => toggleEventGroup(group)}
+                  />
+                  {EVENT_GROUP_LABELS[group] ?? group}
+                </label>
+              {/each}
+            </fieldset>
+          </div>
+          <div class="mt-3 flex gap-1.5">
+            <button
+              class="cursor-pointer rounded-md bg-[var(--panel)] px-3 py-1.5 text-micro font-medium text-[var(--fg)] hover:bg-[var(--line)]"
+              type="submit">Apply</button
+            >
+            <button
+              class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-micro font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]"
+              onclick={() => void clearFilters()}
+              type="button">Clear filters</button
+            >
+          </div>
+        </form>
+      {/snippet}
+    </CompactFilterBar>
+  {/if}
 
   {#if error}
     <p class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
@@ -306,7 +368,7 @@
   {#if pageInfo?.has_more}
     <button
       class="rounded-md border border-[var(--line)] px-3 py-1.5 text-meta font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] disabled:opacity-60"
-      onclick={showOlder}
+      onclick={() => void showOlder()}
       disabled={loadingMore}
       type="button"
     >

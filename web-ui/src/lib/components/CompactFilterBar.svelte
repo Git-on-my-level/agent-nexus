@@ -1,6 +1,6 @@
 <script>
   /**
-   * Shared bordered panel for list-page filters (inbox, topics, artifacts).
+   * Shared bordered panel for list-page filters (inbox, topics, artifacts, events, …).
    * Render controls as {@render children()}; keep a single clear/apply row inside.
    */
   let { testId = undefined, children } = $props();
