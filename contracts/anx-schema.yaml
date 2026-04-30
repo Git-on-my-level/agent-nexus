@@ -125,7 +125,80 @@ actor:
 
 primitives:
   event:
-    description: Append-only. Never edited or deleted. Corrections are new events.
+    description: >
+      Append-only. Never edited or deleted. Corrections are new events.
+      Event types that appear in Home MUST declare a deterministic Home render
+      family and required payload fields. Event types without a Home render
+      family remain Events-only and must still be inspectable by raw type,
+      summary, refs, and payload.
+    home_feed:
+      preset_id: home_feed
+      topic_ownership: >
+        Home resolves direct `topic:<id>` refs first, then `thread:<id>` or
+        event.thread_id through topic.thread_id. Events that cannot be assigned
+        to a topic are excluded from Home and remain visible on Events.
+      reader_scope: >
+        Read cursors are keyed by authenticated principal plus topic. Development
+        legacy actor mode may pass a reader id explicitly for local operation.
+      cursor: "Per-topic `(last_read_event_ts, last_read_event_id)`; id breaks equal-timestamp ties."
+      eligible_types:
+        message_posted:
+          family: message
+          required_payload_fields: [body]
+        card_created:
+          family: card_created
+          required_payload_fields: [card_id]
+        card_moved:
+          family: card_moved
+          required_payload_fields: [card_id, from_column_key, column_key]
+        card_closed:
+          family: card_closed
+          required_payload_fields: [card_id]
+        card_resolved:
+          family: card_closed
+          required_payload_fields: [card_id]
+        card_restored:
+          family: card_restored
+          required_payload_fields: [card_id]
+        card_archived:
+          family: card_closed
+          required_payload_fields: [card_id]
+        card_trashed:
+          family: card_closed
+          required_payload_fields: [card_id]
+        topic_priority_changed:
+          family: priority
+          required_payload_fields: [from, to]
+        topic_lifecycle_changed:
+          family: lifecycle
+          required_payload_fields: [from, to]
+        topic_updated:
+          family: lifecycle
+          required_payload_fields: [changed_fields]
+        topic_archived:
+          family: lifecycle
+          required_payload_fields: []
+        topic_restored:
+          family: lifecycle
+          required_payload_fields: []
+        topic_trashed:
+          family: lifecycle
+          required_payload_fields: []
+        human_attention_requested:
+          family: ask_opened
+          required_payload_fields: [title]
+        human_attention_responded:
+          family: ask_resolved
+          required_payload_fields: [title]
+        document_created:
+          family: doc
+          required_payload_fields: [document_id, title]
+        document_revision_created:
+          family: doc
+          required_payload_fields: [document_id, title]
+        document_revised:
+          family: doc
+          required_payload_fields: [document_id, title]
     fields:
       id: { type: string, required: true }
       ts: { type: datetime, required: true }

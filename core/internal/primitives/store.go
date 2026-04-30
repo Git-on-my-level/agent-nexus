@@ -78,7 +78,52 @@ type TopicListFilter struct {
 }
 
 type EventListFilter struct {
-	Types []string
+	Types     []string
+	Preset    string
+	TopicID   string
+	ThreadID  string
+	ActorID   string
+	ActorIDs  []string
+	ActorKind string
+	Query     string
+	Since     string
+	Until     string
+	Limit     int
+	Cursor    string
+}
+
+type EventPage struct {
+	Events     []map[string]any
+	NextCursor string
+}
+
+type HomeUnreadGroup struct {
+	Topic       map[string]any
+	UnreadCount int
+	NewestEvent map[string]any
+	Events      []map[string]any
+}
+
+var HomeFeedEventTypes = []string{
+	"message_posted",
+	"card_created",
+	"card_moved",
+	"card_closed",
+	"card_resolved",
+	"card_restored",
+	"card_archived",
+	"card_trashed",
+	"topic_priority_changed",
+	"topic_lifecycle_changed",
+	"topic_updated",
+	"topic_archived",
+	"topic_restored",
+	"topic_trashed",
+	"human_attention_requested",
+	"human_attention_responded",
+	"document_created",
+	"document_revision_created",
+	"document_revised",
 }
 
 // HumanAttentionRespondedPageParams configures newest-first pagination over human_attention_responded events.
@@ -2278,29 +2323,101 @@ func insertPreparedEvent(ctx context.Context, exec eventExec, prepared preparedE
 }
 
 func (s *Store) ListEvents(ctx context.Context, filter EventListFilter) ([]map[string]any, error) {
+	page, err := s.ListEventsPage(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	return page.Events, nil
+}
+
+func (s *Store) ListEventsPage(ctx context.Context, filter EventListFilter) (EventPage, error) {
 	if s == nil || s.db == nil {
-		return nil, fmt.Errorf("primitives store database is not initialized")
+		return EventPage{}, fmt.Errorf("primitives store database is not initialized")
 	}
 
 	query := `SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json,
 		archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		FROM events
-		WHERE 1=1`
+		WHERE COALESCE(trashed_at, '') = ''`
 	args := make([]any, 0)
+	filterTypes := filter.Types
+	if strings.EqualFold(strings.TrimSpace(filter.Preset), "home_feed") {
+		filterTypes = HomeFeedEventTypes
+	}
 
-	if len(filter.Types) > 0 {
-		placeholders := make([]string, 0, len(filter.Types))
-		for _, eventType := range filter.Types {
+	if len(filterTypes) > 0 {
+		placeholders := make([]string, 0, len(filterTypes))
+		for _, eventType := range filterTypes {
 			placeholders = append(placeholders, "?")
 			args = append(args, eventType)
 		}
 		query += ` AND type IN (` + strings.Join(placeholders, ",") + `)`
 	}
-	query += ` ORDER BY ts DESC, id ASC`
+	if threadID := strings.TrimSpace(filter.ThreadID); threadID != "" {
+		query += ` AND thread_id = ?`
+		args = append(args, threadID)
+	}
+	if topicID := strings.TrimSpace(filter.TopicID); topicID != "" {
+		query += ` AND EXISTS (
+			SELECT 1 FROM json_each(events.refs_json)
+			WHERE json_each.value = ?
+		)`
+		args = append(args, "topic:"+topicID)
+	}
+	if actorID := strings.TrimSpace(filter.ActorID); actorID != "" {
+		query += ` AND actor_id = ?`
+		args = append(args, actorID)
+	}
+	if len(filter.ActorIDs) > 0 {
+		ids := dedupeStrings(filter.ActorIDs)
+		if len(ids) > 0 {
+			placeholders := make([]string, 0, len(ids))
+			for _, actorID := range ids {
+				placeholders = append(placeholders, "?")
+				args = append(args, actorID)
+			}
+			query += ` AND actor_id IN (` + strings.Join(placeholders, ",") + `)`
+		}
+	}
+	if since := strings.TrimSpace(filter.Since); since != "" {
+		query += ` AND ts >= ?`
+		args = append(args, since)
+	}
+	if until := strings.TrimSpace(filter.Until); until != "" {
+		query += ` AND ts <= ?`
+		args = append(args, until)
+	}
+	if q := strings.TrimSpace(filter.Query); q != "" {
+		like := "%" + strings.ToLower(q) + "%"
+		query += ` AND (
+			lower(id) LIKE ? OR lower(type) LIKE ? OR lower(actor_id) LIKE ? OR
+			lower(COALESCE(thread_id, '')) LIKE ? OR lower(refs_json) LIKE ? OR
+			lower(payload_json) LIKE ?
+		)`
+		args = append(args, like, like, like, like, like, like)
+	}
+
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	offset := 0
+	if cursor := strings.TrimSpace(filter.Cursor); cursor != "" {
+		decoded, err := decodeCursor(cursor)
+		if err != nil {
+			return EventPage{}, fmt.Errorf("%w: %v", ErrInvalidCursor, err)
+		}
+		offset = decoded
+	}
+	query += ` ORDER BY ts DESC, id DESC LIMIT ? OFFSET ?`
+	args = append(args, limit+1, offset)
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("query events: %w", err)
+		return EventPage{}, fmt.Errorf("query events: %w", err)
 	}
 	defer rows.Close()
 
@@ -2322,21 +2439,321 @@ func (s *Store) ListEvents(ctx context.Context, filter EventListFilter) ([]map[s
 		)
 		if err := rows.Scan(&eventID, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON,
 			&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason); err != nil {
-			return nil, fmt.Errorf("scan event: %w", err)
+			return EventPage{}, fmt.Errorf("scan event: %w", err)
 		}
 
 		body, err := decodeEventBodyFromRow(eventID, typeValue, ts, actorID, thread, refsJSON, payloadJSON)
 		if err != nil {
-			return nil, err
+			return EventPage{}, err
 		}
 		overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, trashedAt, trashedBy, trashReason)
 		events = append(events, body)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate events: %w", err)
+		return EventPage{}, fmt.Errorf("iterate events: %w", err)
 	}
 
-	return events, nil
+	nextCursor := ""
+	if len(events) > limit {
+		events = events[:limit]
+		nextCursor = encodeCursor(offset + limit)
+	}
+	return EventPage{Events: events, NextCursor: nextCursor}, nil
+}
+
+func (s *Store) ListHomeUnread(ctx context.Context, readerID string) ([]HomeUnreadGroup, int, error) {
+	if s == nil || s.db == nil {
+		return nil, 0, fmt.Errorf("primitives store database is not initialized")
+	}
+	readerID = strings.TrimSpace(readerID)
+	if readerID == "" {
+		return nil, 0, fmt.Errorf("reader_id is required")
+	}
+
+	topicByID, threadToTopicID, err := s.homeTopicLookup(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+	cursorByTopic, err := s.homeReadCursors(ctx, readerID)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	groupByTopic := map[string]*HomeUnreadGroup{}
+	for cursor := ""; ; {
+		eventsPage, err := s.ListEventsPage(ctx, EventListFilter{Preset: "home_feed", Limit: 200, Cursor: cursor})
+		if err != nil {
+			return nil, 0, err
+		}
+		for _, event := range eventsPage.Events {
+			topicID := homeTopicIDForEvent(event, threadToTopicID)
+			if topicID == "" {
+				continue
+			}
+			if !homeEventAfterCursor(event, cursorByTopic[topicID]) {
+				continue
+			}
+			topic := topicByID[topicID]
+			if topic == nil {
+				continue
+			}
+			group := groupByTopic[topicID]
+			if group == nil {
+				group = &HomeUnreadGroup{Topic: topic, NewestEvent: event}
+				groupByTopic[topicID] = group
+			}
+			group.Events = append(group.Events, event)
+			group.UnreadCount++
+		}
+		if eventsPage.NextCursor == "" {
+			break
+		}
+		cursor = eventsPage.NextCursor
+	}
+
+	groups := make([]HomeUnreadGroup, 0, len(groupByTopic))
+	total := 0
+	for _, group := range groupByTopic {
+		total += group.UnreadCount
+		groups = append(groups, *group)
+	}
+	sort.SliceStable(groups, func(i, j int) bool {
+		left := groups[i]
+		right := groups[j]
+		leftTS := anyStringValue(left.NewestEvent["ts"])
+		rightTS := anyStringValue(right.NewestEvent["ts"])
+		if leftTS == rightTS {
+			return anyStringValue(left.Topic["id"]) < anyStringValue(right.Topic["id"])
+		}
+		if homeNearTied(leftTS, rightTS) {
+			lp := homePriorityRank(anyStringValue(left.Topic["priority"]))
+			rp := homePriorityRank(anyStringValue(right.Topic["priority"]))
+			if lp != rp {
+				return lp < rp
+			}
+		}
+		return leftTS > rightTS
+	})
+	return groups, total, nil
+}
+
+func (s *Store) MarkHomeRead(ctx context.Context, readerID string, topicIDs []string) error {
+	return s.MarkHomeReadAt(ctx, readerID, topicIDs, nil)
+}
+
+func (s *Store) MarkHomeReadAt(ctx context.Context, readerID string, topicIDs []string, expected map[string]EventCursor) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("primitives store database is not initialized")
+	}
+	readerID = strings.TrimSpace(readerID)
+	if readerID == "" {
+		return fmt.Errorf("reader_id is required")
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	for _, topicID := range dedupeStrings(topicIDs) {
+		topicID = strings.TrimSpace(topicID)
+		if topicID == "" {
+			continue
+		}
+		cursor := expected[topicID]
+		if strings.TrimSpace(cursor.TS) == "" || strings.TrimSpace(cursor.ID) == "" {
+			event, err := s.newestHomeEventForTopic(ctx, topicID)
+			if err != nil {
+				return err
+			}
+			if event == nil {
+				continue
+			}
+			cursor = EventCursor{TS: anyStringValue(event["ts"]), ID: anyStringValue(event["id"])}
+		}
+		if _, err := s.db.ExecContext(ctx, `INSERT INTO home_topic_read_cursors(
+				reader_id, topic_id, last_read_event_ts, last_read_event_id, updated_at
+			) VALUES (?, ?, ?, ?, ?)
+			ON CONFLICT(reader_id, topic_id) DO UPDATE SET
+				last_read_event_ts = excluded.last_read_event_ts,
+				last_read_event_id = excluded.last_read_event_id,
+				updated_at = excluded.updated_at
+			WHERE excluded.last_read_event_ts > home_topic_read_cursors.last_read_event_ts
+				OR (
+					excluded.last_read_event_ts = home_topic_read_cursors.last_read_event_ts
+					AND excluded.last_read_event_id > home_topic_read_cursors.last_read_event_id
+				)`,
+			readerID, topicID, strings.TrimSpace(cursor.TS), strings.TrimSpace(cursor.ID), now); err != nil {
+			return fmt.Errorf("upsert home read cursor: %w", err)
+		}
+	}
+	return nil
+}
+
+func (s *Store) newestHomeEventForTopic(ctx context.Context, topicID string) (map[string]any, error) {
+	events, err := s.ListEvents(ctx, EventListFilter{Preset: "home_feed", TopicID: topicID, Limit: 1})
+	if err != nil {
+		return nil, err
+	}
+	if len(events) == 0 {
+		return nil, nil
+	}
+	return events[0], nil
+}
+
+type homeReadCursor struct {
+	TS string
+	ID string
+}
+
+func (s *Store) homeReadCursors(ctx context.Context, readerID string) (map[string]homeReadCursor, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT topic_id, last_read_event_ts, last_read_event_id FROM home_topic_read_cursors WHERE reader_id = ?`, readerID)
+	if err != nil {
+		return nil, fmt.Errorf("query home read cursors: %w", err)
+	}
+	defer rows.Close()
+	out := map[string]homeReadCursor{}
+	for rows.Next() {
+		var topicID, ts, id string
+		if err := rows.Scan(&topicID, &ts, &id); err != nil {
+			return nil, fmt.Errorf("scan home read cursor: %w", err)
+		}
+		out[topicID] = homeReadCursor{TS: ts, ID: id}
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) homeTopicLookup(ctx context.Context) (map[string]map[string]any, map[string]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, title, summary, thread_id, updated_at, extensions_json, archived_at, trashed_at FROM topics WHERE COALESCE(trashed_at, '') = ''`)
+	if err != nil {
+		return nil, nil, fmt.Errorf("query home topics: %w", err)
+	}
+	defer rows.Close()
+	topicByID := map[string]map[string]any{}
+	threadToTopicID := map[string]string{}
+	for rows.Next() {
+		var id, updatedAt, extensionsJSON string
+		var title, summary, threadID, archivedAt, trashedAt sql.NullString
+		if err := rows.Scan(&id, &title, &summary, &threadID, &updatedAt, &extensionsJSON, &archivedAt, &trashedAt); err != nil {
+			return nil, nil, fmt.Errorf("scan home topic: %w", err)
+		}
+		var extensions map[string]any
+		_ = json.Unmarshal([]byte(extensionsJSON), &extensions)
+		if extensions == nil {
+			extensions = map[string]any{}
+		}
+		state := LifecycleStateFromTimestampStrings(nullStringValue(archivedAt), nullStringValue(trashedAt))
+		topic := map[string]any{
+			"id":         id,
+			"title":      firstNonEmptyString(title.String, id),
+			"summary":    summary.String,
+			"state":      state,
+			"status":     state,
+			"lifecycle":  state,
+			"priority":   firstNonEmptyString(anyStringValue(extensions["priority"]), anyStringValue(extensions["filter_priority"])),
+			"updated_at": updatedAt,
+		}
+		if threadID.Valid && strings.TrimSpace(threadID.String) != "" {
+			topic["thread_id"] = threadID.String
+			threadToTopicID[threadID.String] = id
+		}
+		topicByID[id] = topic
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, fmt.Errorf("iterate home topics: %w", err)
+	}
+	return topicByID, threadToTopicID, nil
+}
+
+func homeTopicIDForEvent(event map[string]any, threadToTopicID map[string]string) string {
+	for _, ref := range anyStringSlice(event["refs"]) {
+		if strings.HasPrefix(ref, "topic:") {
+			return strings.TrimSpace(strings.TrimPrefix(ref, "topic:"))
+		}
+	}
+	if threadID := strings.TrimSpace(anyStringValue(event["thread_id"])); threadID != "" {
+		return threadToTopicID[threadID]
+	}
+	for _, ref := range anyStringSlice(event["refs"]) {
+		if strings.HasPrefix(ref, "thread:") {
+			if topicID := threadToTopicID[strings.TrimSpace(strings.TrimPrefix(ref, "thread:"))]; topicID != "" {
+				return topicID
+			}
+		}
+	}
+	return ""
+}
+
+func homeEventAfterCursor(event map[string]any, cursor homeReadCursor) bool {
+	if strings.TrimSpace(cursor.TS) == "" {
+		return true
+	}
+	ts := anyStringValue(event["ts"])
+	id := anyStringValue(event["id"])
+	return ts > cursor.TS || (ts == cursor.TS && id > cursor.ID)
+}
+
+func homeNearTied(left, right string) bool {
+	l, lerr := time.Parse(time.RFC3339Nano, left)
+	r, rerr := time.Parse(time.RFC3339Nano, right)
+	if lerr != nil || rerr != nil {
+		return false
+	}
+	if l.After(r) {
+		return l.Sub(r) <= 5*time.Minute
+	}
+	return r.Sub(l) <= 5*time.Minute
+}
+
+func homePriorityRank(priority string) int {
+	switch strings.ToUpper(strings.TrimSpace(priority)) {
+	case "P0":
+		return 0
+	case "P1":
+		return 1
+	case "P2":
+		return 2
+	default:
+		return 3
+	}
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func anyStringSlice(raw any) []string {
+	switch values := raw.(type) {
+	case []string:
+		return values
+	case []any:
+		out := make([]string, 0, len(values))
+		for _, value := range values {
+			if text := anyStringValue(value); text != "" {
+				out = append(out, text)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func dedupeStrings(values []string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
 }
 
 const humanAttentionRespondedEventType = "human_attention_responded"

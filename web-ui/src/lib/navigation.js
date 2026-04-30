@@ -34,6 +34,12 @@ export const navigationItems = [
 /** Secondary destinations grouped with the identity panel (sidebar bottom). */
 export const settingsNavItems = [
   {
+    label: "Events",
+    href: "/events",
+    icon: "events",
+    hint: "Full workspace history",
+  },
+  {
     label: "Artifacts",
     href: "/artifacts",
     icon: "artifacts",
@@ -96,7 +102,7 @@ const SHELL_CONTENT_RULES = [
     maxWidth: "88rem",
   },
   {
-    match: /^\/(threads|topics|artifacts|docs|boards)$/,
+    match: /^\/(threads|topics|events|artifacts|docs|boards)$/,
     mode: "wide",
     maxWidth: "88rem",
   },

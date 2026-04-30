@@ -302,9 +302,9 @@ func handleGetInbox(w http.ResponseWriter, r *http.Request, opts handlerOptions)
 		}
 
 		writeJSON(w, http.StatusOK, map[string]any{
-			"status":         "open",
-			"items":          payloadItems,
-			"generated_at":   now.Format(time.RFC3339Nano),
+			"status":       "open",
+			"items":        payloadItems,
+			"generated_at": now.Format(time.RFC3339Nano),
 		})
 		return
 	}

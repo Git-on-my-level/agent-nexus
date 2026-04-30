@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `120`
+- Commands: `122`
 
 ## `actors.create`
 
@@ -927,7 +927,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Why: Inspect append-only event history across the workspace.
 - Concepts: `events`
 - Error codes: `auth_required`, `invalid_token`
-- Output: Returns `{ events }`.
+- Output: Returns `{ events, page_info }`.
 
 ## `events.restore`
 
@@ -976,6 +976,30 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `events`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ event }`.
+
+## `home.read`
+
+- CLI path: ``
+- HTTP: `POST /home/read`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Advance durable per-topic Home read cursors for the authenticated operator.
+- Concepts: `home`, `events`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Output: Returns `{ ok, unread_count, topic_count }`.
+
+## `home.unread`
+
+- CLI path: ``
+- HTTP: `GET /home/unread`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Load unread high-signal workspace activity grouped by topic for the authenticated operator.
+- Concepts: `home`, `events`
+- Error codes: `auth_required`, `invalid_token`
+- Output: Returns `{ groups, unread_count, topic_count, generated_at }`.
 
 ## `inbox.get`
 
