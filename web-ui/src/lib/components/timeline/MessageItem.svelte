@@ -37,6 +37,8 @@
      * mutating the original event. Falls back to `documentComment.anchor_status`.
      */
     liveAnchorStatus = "",
+    artifactRoutesById = {},
+    eventRoutesById = {},
     /**
      * When set (e.g. from `MessagesTab`), used for every node including nested
      * replies so `liveAnchorStatus` is derived consistently.
@@ -316,7 +318,14 @@
     {#if message.displayRefs.length > 0}
       <div class="mt-2 flex min-w-0 flex-wrap gap-1.5 text-micro">
         {#each message.displayRefs as refValue (refValue)}
-          <CompactRefLink {refValue} {threadId} humanize showRaw />
+          <CompactRefLink
+            {refValue}
+            {threadId}
+            humanize
+            showRaw
+            {artifactRoutesById}
+            {eventRoutesById}
+          />
         {/each}
       </div>
     {/if}
@@ -336,6 +345,8 @@
             {onUnarchive}
             {lifecycleBusy}
             {archiveLabelKind}
+            {artifactRoutesById}
+            {eventRoutesById}
             {getLiveAnchorStatusForMessage}
             depth={depth + 1}
           />

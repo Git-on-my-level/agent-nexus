@@ -1,8 +1,7 @@
 <script>
-  import { page } from "$app/stores";
-  import { resolveRefLink } from "$lib/refLinkModel";
   import { parseRef, renderRef } from "$lib/typedRefs";
   import Button from "$lib/components/Button.svelte";
+  import RefLink from "$lib/components/RefLink.svelte";
 
   let {
     value = $bindable(""),
@@ -65,14 +64,6 @@
 
   let refs = $derived(parseRefs(value));
   let normalizedSuggestions = $derived(buildSuggestions(suggestions));
-  let resolvedRefs = $derived(
-    refs.map((refValue) =>
-      resolveRefLink(refValue, {
-        workspaceSlug: $page.params.workspace,
-        boardId,
-      }),
-    ),
-  );
 
   function writeRefs(items) {
     value = items.join("\n");
@@ -123,26 +114,15 @@
     <p class="text-micro text-[var(--fg-muted)]">{emptyText}</p>
   {:else}
     <div class="flex flex-wrap gap-1.5">
-      {#each resolvedRefs as resolved}
+      {#each refs as refValue (refValue)}
         <span
           class="inline-flex items-center gap-1 rounded-md border border-accent/20 bg-accent-soft px-2 py-0.5 text-micro text-accent-text"
         >
-          {#if resolved.isLink}
-            <a
-              class="hover:text-accent-text"
-              href={resolved.href}
-              rel={resolved.isExternal ? "noreferrer noopener" : undefined}
-              target={resolved.isExternal ? "_blank" : undefined}
-            >
-              {resolved.primaryLabel}
-            </a>
-          {:else}
-            <span>{resolved.primaryLabel}</span>
-          {/if}
+          <RefLink {refValue} {boardId} humanize />
           <button
-            aria-label={`Remove ${resolved.raw}`}
+            aria-label={`Remove ${refValue}`}
             class="cursor-pointer rounded px-1 text-micro text-accent-text transition-colors hover:bg-accent-soft hover:text-accent-text"
-            onclick={() => removeRef(resolved.raw)}
+            onclick={() => removeRef(refValue)}
             type="button"
           >
             x

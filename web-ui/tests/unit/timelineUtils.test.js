@@ -58,6 +58,74 @@ describe("timeline utils", () => {
     });
   });
 
+  it("routes primitive refs when timeline expansions prove a direct high-level object", () => {
+    const view = toTimelineView(
+      [
+        {
+          id: "evt-message",
+          type: "message_posted",
+          refs: ["artifact:rev-doc", "event:evt-parent"],
+        },
+        {
+          id: "evt-parent",
+          type: "message_posted",
+          refs: [],
+        },
+      ],
+      {
+        threadId: "thread-1",
+        artifacts: [
+          {
+            id: "rev-doc",
+            kind: "doc",
+            owner_ref: "document:doc-1",
+          },
+        ],
+        documents: [{ id: "doc-1", title: "Runbook" }],
+      },
+    );
+
+    const message = view.find((event) => event.id === "evt-message");
+    expect(message.resolvedRefs[0]).toMatchObject({
+      routed: true,
+      routedKind: "document",
+      primaryLabel: "Runbook",
+    });
+    expect(message.resolvedRefs[1]).toMatchObject({
+      routed: true,
+      routedKind: "message",
+      primaryLabel: "Message",
+    });
+  });
+
+  it("routes document head revision artifact refs from document expansion metadata", () => {
+    const view = toTimelineView(
+      [
+        {
+          id: "evt-message",
+          type: "message_posted",
+          refs: ["artifact:rev-doc"],
+        },
+      ],
+      {
+        threadId: "thread-1",
+        documents: [
+          {
+            id: "doc-1",
+            title: "Runbook",
+            head_revision: { artifact_id: "rev-doc" },
+          },
+        ],
+      },
+    );
+
+    expect(view[0].resolvedRefs[0]).toMatchObject({
+      routed: true,
+      routedKind: "document",
+      primaryLabel: "Runbook",
+    });
+  });
+
   it("orders timeline view newest first with stable id tie-break", () => {
     const view = toTimelineView(
       [

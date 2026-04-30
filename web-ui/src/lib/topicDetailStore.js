@@ -65,6 +65,9 @@ function initialState() {
     ownedBoards: [],
     timelineThreadId: "",
     timeline: [],
+    timelineArtifacts: [],
+    timelineCards: [],
+    timelineDocuments: [],
     timelineLoading: false,
     timelineError: "",
     /** When true, workspace/timeline loads use topic-scoped APIs for the route id. */
@@ -211,6 +214,19 @@ function createTopicDetailStore() {
               timeline: Array.isArray(context.recent_events)
                 ? context.recent_events
                 : [],
+              timelineArtifacts: Array.isArray(context.key_artifacts)
+                ? context.key_artifacts
+                    .map((entry) => entry?.artifact ?? entry)
+                    .filter(Boolean)
+                : [],
+              timelineCards: Array.isArray(context.open_cards)
+                ? context.open_cards
+                    .map((entry) => entry?.card ?? entry)
+                    .filter(Boolean)
+                : [],
+              timelineDocuments: Array.isArray(context.documents)
+                ? context.documents
+                : [],
               timelineThreadId: Array.isArray(context.recent_events)
                 ? threadId
                 : "",
@@ -244,6 +260,9 @@ function createTopicDetailStore() {
           boardMemberships: [],
           ownedBoards: [],
           timeline: [],
+          timelineArtifacts: [],
+          timelineCards: [],
+          timelineDocuments: [],
           timelineThreadId: "",
         });
       }
@@ -271,15 +290,19 @@ function createTopicDetailStore() {
       currentState.timeline.length > 0;
     patchState({ timelineLoading: true, timelineError: "" });
     try {
-      const nextTimeline = asTopic
-        ? ((await coreClient.listTopicTimeline(threadId)).events ?? [])
-        : ((await coreClient.listThreadTimeline(threadId)).events ?? []);
+      const result = asTopic
+        ? await coreClient.listTopicTimeline(threadId)
+        : await coreClient.listThreadTimeline(threadId);
+      const nextTimeline = result?.events ?? [];
       if (requestSeq !== timelineRequestSeq) {
         return;
       }
       patchState({
         timelineThreadId: threadId,
         timeline: nextTimeline,
+        timelineArtifacts: result?.artifacts ?? [],
+        timelineCards: result?.cards ?? [],
+        timelineDocuments: result?.documents ?? [],
       });
     } catch (e) {
       if (requestSeq !== timelineRequestSeq) {
@@ -289,6 +312,13 @@ function createTopicDetailStore() {
         timelineError: `Failed to load timeline: ${e instanceof Error ? e.message : String(e)}`,
         timelineThreadId: canReuseTimeline ? threadId : "",
         timeline: canReuseTimeline ? currentState.timeline : [],
+        timelineArtifacts: canReuseTimeline
+          ? currentState.timelineArtifacts
+          : [],
+        timelineCards: canReuseTimeline ? currentState.timelineCards : [],
+        timelineDocuments: canReuseTimeline
+          ? currentState.timelineDocuments
+          : [],
       });
     } finally {
       if (requestSeq === timelineRequestSeq) {
@@ -363,6 +393,9 @@ function createTopicDetailStore() {
   function setTimeline(value, threadId = "") {
     patchState({
       timeline: value,
+      timelineArtifacts: [],
+      timelineCards: [],
+      timelineDocuments: [],
       timelineThreadId: threadId || "",
     });
   }

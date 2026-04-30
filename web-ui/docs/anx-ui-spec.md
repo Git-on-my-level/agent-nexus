@@ -32,7 +32,7 @@ Agent Nexus web UI does **not**:
 ### 1.3 Typed references
 
 - All ref strings use typed prefixes as defined in `/contracts/anx-schema.yaml` → `ref_format` (e.g., `artifact:<id>`, `topic:<id>`, `card:<id>`, `board:<id>`, `document:<id>`, `event:<id>`, `thread:<id>`, `inbox:<id>`, `url:<url>`).
-- Agent Nexus web UI MUST parse ref prefixes to determine link targets and render appropriate navigation (e.g., `artifact:` links navigate to artifact detail, `url:` links open externally, `event:` links scroll to timeline entry).
+- Agent Nexus web UI MUST parse ref prefixes to determine link targets and render appropriate navigation (e.g., `artifact:` links navigate to artifact detail, `url:` links open externally, `event:` links scroll to timeline entry or, for `message_posted`, the message item).
 - Unknown ref prefixes MUST be rendered as raw text, not hidden or discarded.
 
 ### 1.4 Actor identity

@@ -506,8 +506,8 @@ test("golden path integration runs against a real anx-core", async ({
   await expect(replyRef).toBeVisible();
 
   const replyHref = await replyRef.getAttribute("href");
-  expect(replyHref).toContain("#event-");
+  expect(replyHref).toContain("#message-");
 
   await replyRef.click();
-  await expect(page).toHaveURL(/#event-/);
+  await expect(page).toHaveURL(/#message-/);
 });

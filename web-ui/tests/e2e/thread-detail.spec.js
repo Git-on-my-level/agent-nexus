@@ -483,6 +483,23 @@ test("thread detail separates messages from timeline and nests replies", async (
   await expect(
     page.getByText("Message: Reply message from e2e", { exact: true }),
   ).toBeVisible();
+
+  await page.goto(
+    "/o/local/w/local/topics/thread-onboarding?tab=messages#message-evt-0999",
+  );
+  await expect(
+    page.getByRole("tab", { name: "Messages", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator("#message-evt-0999")).toContainText("m4-hermes");
+  await expect(page.locator("#message-evt-0999")).toHaveClass(
+    /anx-deep-link-target/,
+  );
+
+  await page.goto("/o/local/w/local/threads/thread-onboarding#event-evt-1002");
+  await expect(page.locator("#message-evt-1002")).toContainText("ops-ai");
+  await expect(page.locator("#message-evt-1002")).toHaveClass(
+    /anx-deep-link-target/,
+  );
 });
 
 test("thread detail handles snapshot update conflict and retries after reload", async ({

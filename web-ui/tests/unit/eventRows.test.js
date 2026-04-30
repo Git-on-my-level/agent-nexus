@@ -15,7 +15,8 @@ describe("event row helpers", () => {
         id: "evt-1",
         type: "message_posted",
         actor_id: "actor-1",
-        refs: ["topic:topic-1"],
+        thread_id: "thread-1",
+        refs: ["topic:topic-1", "thread:thread-1"],
         payload: { body: "First line\nSecond line\nThird line" },
       },
       { workspaceHref },
@@ -25,7 +26,7 @@ describe("event row helpers", () => {
     expect(isHomeFeedEvent(row.event)).toBe(true);
     expect(row.label).toBe("Message");
     expect(row.detail).toBe("First line\nSecond line");
-    expect(row.href).toBe("/w/topics/topic-1");
+    expect(row.href).toBe("/w/topics/topic-1?tab=messages#message-evt-1");
   });
 
   it("keeps unknown events inspectable for Events", () => {

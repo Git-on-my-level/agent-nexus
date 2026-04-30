@@ -63,6 +63,26 @@ describe("RefLink model", () => {
 
   it("scopes internal refs to the active workspace when provided", () => {
     expect(
+      resolveRefLink("artifact:artifact-1", {
+        organizationSlug: "acme",
+        workspaceSlug: "proj",
+      }),
+    ).toMatchObject({
+      href: "/o/acme/w/proj/artifacts/artifact-1",
+      isLink: true,
+    });
+
+    expect(
+      resolveRefLink("event:evt-9", {
+        organizationSlug: "acme",
+        workspaceSlug: "proj",
+      }),
+    ).toMatchObject({
+      href: "/o/acme/w/proj/events#evt-9",
+      isLink: true,
+    });
+
+    expect(
       resolveRefLink("document_revision:rev-1", {
         organizationSlug: "acme",
         workspaceSlug: "proj",
@@ -111,12 +131,137 @@ describe("RefLink model", () => {
     expect(unknown.href).toBe("");
   });
 
-  it("keeps event refs non-linkable when no thread context is available", () => {
+  it("keeps event refs non-linkable when no workspace context is available", () => {
     expect(resolveRefLink("event:evt-9")).toMatchObject({
       kind: "event",
       href: "",
       isExternal: false,
       isLink: false,
+    });
+  });
+
+  it("routes doc artifacts to their document target when direct ownership is known", () => {
+    const ref = resolveRefLink("artifact:rev-1", {
+      organizationSlug: "acme",
+      workspaceSlug: "proj",
+      humanize: true,
+      artifactRoutesById: {
+        "rev-1": {
+          kind: "document",
+          targetPrefix: "document",
+          targetValue: "doc-1",
+          label: "Launch Brief",
+        },
+      },
+    });
+
+    expect(ref).toMatchObject({
+      raw: "artifact:rev-1",
+      kind: "artifact",
+      routed: true,
+      routedKind: "document",
+      routedPrefix: "document",
+      routedValue: "doc-1",
+      primaryLabel: "Launch Brief",
+      secondaryLabel: "",
+      href: "/o/acme/w/proj/docs/doc-1",
+      isLink: true,
+    });
+  });
+
+  it("routes card artifacts to their board card target when direct ownership is known", () => {
+    const ref = resolveRefLink("artifact:card-rev-1", {
+      organizationSlug: "acme",
+      workspaceSlug: "proj",
+      humanize: true,
+      artifactRoutesById: {
+        "artifact:card-rev-1": {
+          kind: "card",
+          targetPrefix: "card",
+          targetValue: "card-1",
+          boardId: "board-1",
+          label: "Restock lemons",
+        },
+      },
+    });
+
+    expect(ref).toMatchObject({
+      routed: true,
+      routedKind: "card",
+      routedPrefix: "card",
+      routedValue: "card-1",
+      primaryLabel: "Restock lemons",
+      secondaryLabel: "",
+      href: "/o/acme/w/proj/boards/board-1?card=card-1",
+      isLink: true,
+    });
+  });
+
+  it("routes message events to message anchors and leaves other events on Events", () => {
+    const message = resolveRefLink("event:evt-message", {
+      organizationSlug: "acme",
+      workspaceSlug: "proj",
+      humanize: true,
+      eventRoutesById: {
+        "evt-message": {
+          kind: "message",
+          type: "message_posted",
+          threadId: "thread-1",
+        },
+      },
+    });
+
+    expect(message).toMatchObject({
+      routed: true,
+      routedKind: "message",
+      routedPrefix: "message",
+      routedValue: "evt-message",
+      primaryLabel: "Message",
+      secondaryLabel: "",
+      href: "/o/acme/w/proj/threads/thread-1?tab=messages#message-evt-message",
+      isLink: true,
+    });
+
+    const lifecycle = resolveRefLink("event:evt-life", {
+      organizationSlug: "acme",
+      workspaceSlug: "proj",
+      humanize: true,
+      eventRoutesById: {
+        "evt-life": {
+          type: "topic_lifecycle_changed",
+        },
+      },
+    });
+
+    expect(lifecycle).toMatchObject({
+      kind: "event",
+      primaryLabel: "Event",
+      secondaryLabel: "event:evt-life",
+      href: "/o/acme/w/proj/events#evt-life",
+      isLink: true,
+    });
+  });
+
+  it("prefers topic message targets when event route metadata includes a topic", () => {
+    const message = resolveRefLink("event:evt-message", {
+      organizationSlug: "acme",
+      workspaceSlug: "proj",
+      humanize: true,
+      eventRoutesById: {
+        "evt-message": {
+          kind: "message",
+          type: "message_posted",
+          topicId: "topic-1",
+          threadId: "thread-1",
+        },
+      },
+    });
+
+    expect(message).toMatchObject({
+      routed: true,
+      routedKind: "message",
+      href: "/o/acme/w/proj/topics/topic-1?tab=messages#message-evt-message",
+      isLink: true,
     });
   });
 

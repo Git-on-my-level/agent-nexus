@@ -172,6 +172,27 @@
   }
 }
 
+.anx-deep-link-target {
+  scroll-margin-block: 5rem;
+  animation: anx-deep-link-target-pulse 2.2s ease-out;
+  box-shadow:
+    0 0 0 1px var(--accent),
+    0 0 0 4px var(--accent-soft);
+}
+
+@keyframes anx-deep-link-target-pulse {
+  0% {
+    box-shadow:
+      0 0 0 1px var(--accent),
+      0 0 0 8px var(--accent-soft);
+  }
+  100% {
+    box-shadow:
+      0 0 0 1px transparent,
+      0 0 0 4px transparent;
+  }
+}
+
 :root[data-qa="1"],
 :root[data-qa="1"] body {
   scroll-behavior: auto !important;

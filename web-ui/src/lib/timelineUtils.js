@@ -1,4 +1,4 @@
-import { resolveRefLink } from "./refLinkModel.js";
+import { buildPrimitiveRefRoutes, resolveRefLink } from "./refLinkModel.js";
 
 const EVENT_TYPE_LABELS = {
   message_posted: "Message posted",
@@ -117,6 +117,15 @@ export function toTimelineViewEvent(event, options = {}) {
       options.documents,
       options.documentRevisions,
     );
+  const routeMaps =
+    options.routeMaps ??
+    buildPrimitiveRefRoutes({
+      artifacts: options.artifacts,
+      events: options.events,
+      cards: options.cards,
+      documents: options.documents,
+      threadId,
+    });
 
   return {
     ...event,
@@ -130,6 +139,7 @@ export function toTimelineViewEvent(event, options = {}) {
         threadId,
         humanize: true,
         labelHints,
+        ...routeMaps,
       }),
     ),
   };
@@ -157,5 +167,16 @@ export function toTimelineView(events = [], options = {}) {
   const ordered = Array.isArray(events)
     ? [...events].sort(compareEventsNewestFirst)
     : [];
-  return ordered.map((event) => toTimelineViewEvent(event, options));
+  const routeMaps =
+    options.routeMaps ??
+    buildPrimitiveRefRoutes({
+      artifacts: options.artifacts,
+      events: ordered,
+      cards: options.cards,
+      documents: options.documents,
+      threadId: options.threadId,
+    });
+  return ordered.map((event) =>
+    toTimelineViewEvent(event, { ...options, routeMaps, events: ordered }),
+  );
 }

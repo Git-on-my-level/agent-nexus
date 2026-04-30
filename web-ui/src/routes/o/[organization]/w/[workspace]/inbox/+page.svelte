@@ -12,6 +12,7 @@
   import LeadingSelectionGlyph from "$lib/components/LeadingSelectionGlyph.svelte";
   import WorkspaceListBulkToolbar from "$lib/components/WorkspaceListBulkToolbar.svelte";
   import { coreClient } from "$lib/coreClient";
+  import { threadTimelineEventHref } from "$lib/deepLinkTargets";
   import { formatAbsoluteDateTime } from "$lib/formatDate";
   import { workspacePath } from "$lib/workspacePaths";
   import {
@@ -120,7 +121,11 @@
       eventId = ref.slice("event:".length).trim();
     }
     if (!tid || !eventId) return "";
-    return `${workspaceHref(`/threads/${encodeURIComponent(tid)}`)}#event-${encodeURIComponent(eventId)}`;
+    return threadTimelineEventHref({
+      threadId: tid,
+      eventId,
+      workspaceHref,
+    });
   }
 
   function completedDetailHref(row) {
@@ -625,7 +630,11 @@
         {#if respondedBanner.threadId && respondedBanner.eventId}
           <a
             class="font-medium underline hover:text-ok-text"
-            href={`${workspaceHref(`/threads/${encodeURIComponent(respondedBanner.threadId)}`)}#event-${encodeURIComponent(respondedBanner.eventId)}`}
+            href={threadTimelineEventHref({
+              threadId: respondedBanner.threadId,
+              eventId: respondedBanner.eventId,
+              workspaceHref,
+            })}
           >
             View timeline event
           </a>

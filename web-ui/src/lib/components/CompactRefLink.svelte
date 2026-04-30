@@ -1,6 +1,9 @@
 <script>
+  import { browser } from "$app/environment";
   import { page } from "$app/stores";
-  import { resolveRefLink } from "$lib/refLinkModel";
+  import { coreClient } from "$lib/coreClient";
+  import { eventRouteForRef } from "$lib/deepLinkTargets";
+  import { buildPrimitiveRefRoutes, resolveRefLink } from "$lib/refLinkModel";
 
   let {
     refValue = "",
@@ -9,7 +12,15 @@
     humanize = true,
     showRaw = true,
     labelHints = {},
+    artifactRoutesById = {},
+    eventRoutesById = {},
   } = $props();
+
+  let fetchedEventRoutesById = $state({});
+  let mergedEventRoutesById = $derived({
+    ...eventRoutesById,
+    ...fetchedEventRoutesById,
+  });
 
   let resolved = $derived(
     resolveRefLink(refValue, {
@@ -17,10 +28,31 @@
       boardId,
       humanize,
       labelHints,
+      artifactRoutesById,
+      eventRoutesById: mergedEventRoutesById,
       workspaceSlug: $page.params.workspace,
       organizationSlug: $page.params.organization,
     }),
   );
+
+  $effect(() => {
+    if (!browser || resolved.prefix !== "event" || resolved.routed) return;
+    const eventId = String(resolved.value ?? "").trim();
+    if (!eventId || fetchedEventRoutesById[eventId]) return;
+
+    let cancelled = false;
+    void eventRouteForRef(eventId, coreClient).then((event) => {
+      if (cancelled || String(event?.type ?? "") !== "message_posted") return;
+      fetchedEventRoutesById = {
+        ...fetchedEventRoutesById,
+        ...buildPrimitiveRefRoutes({ events: [event], threadId })
+          .eventRoutesById,
+      };
+    });
+    return () => {
+      cancelled = true;
+    };
+  });
 
   function compactId(value) {
     const text = String(value ?? "").trim();

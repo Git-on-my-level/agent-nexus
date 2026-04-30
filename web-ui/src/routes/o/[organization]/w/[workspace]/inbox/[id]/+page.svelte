@@ -10,6 +10,7 @@
   import Skeleton from "$lib/components/state/Skeleton.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
   import { coreClient } from "$lib/coreClient";
+  import { threadTimelineEventHref } from "$lib/deepLinkTargets";
   import { formatAbsoluteDateTime } from "$lib/formatDate";
   import { searchActors } from "$lib/searchHelpers";
   import { workspacePath } from "$lib/workspacePaths";
@@ -79,7 +80,11 @@
       eventId = ref.slice("event:".length).trim();
     }
     if (!tid || !eventId) return "";
-    return `${workspaceHref(`/threads/${encodeURIComponent(tid)}`)}#event-${encodeURIComponent(eventId)}`;
+    return threadTimelineEventHref({
+      threadId: tid,
+      eventId,
+      workspaceHref,
+    });
   }
 
   function draftStorageKey() {

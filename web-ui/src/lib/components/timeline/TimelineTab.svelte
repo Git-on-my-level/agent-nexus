@@ -1,6 +1,14 @@
 <script>
+  import { browser } from "$app/environment";
+  import { page } from "$app/stores";
+  import { tick } from "svelte";
+
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import { coreClient } from "$lib/coreClient";
+  import {
+    scrollAndHighlightTarget,
+    timelineTargetFromHash,
+  } from "$lib/deepLinkTargets";
   import { getTimelineContext } from "$lib/timelineContext";
   import {
     actorRegistry,
@@ -11,6 +19,7 @@
   import ArchiveButton from "$lib/components/ArchiveButton.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
+  import { buildPrimitiveRefRoutes } from "$lib/refLinkModel";
   import TrashButton from "$lib/components/TrashButton.svelte";
   import { toTimelineView, eventTypeDotClass } from "$lib/timelineUtils";
 
@@ -19,6 +28,9 @@
   const timelineCtx = getTimelineContext();
   const timelineStore = timelineCtx.store;
   let timeline = $derived($timelineStore.timeline);
+  let timelineArtifacts = $derived($timelineStore.timelineArtifacts ?? []);
+  let timelineCards = $derived($timelineStore.timelineCards ?? []);
+  let timelineDocuments = $derived($timelineStore.timelineDocuments ?? []);
   let timelineLoading = $derived($timelineStore.timelineLoading);
   let timelineError = $derived($timelineStore.timelineError);
 
@@ -26,7 +38,24 @@
     lookupActorDisplayName(id, $actorRegistry, $principalRegistry),
   );
 
-  let timelineView = $derived(toTimelineView(timeline, { threadId }));
+  let routeMaps = $derived(
+    buildPrimitiveRefRoutes({
+      artifacts: timelineArtifacts,
+      events: timeline,
+      cards: timelineCards,
+      documents: timelineDocuments,
+      threadId,
+    }),
+  );
+  let timelineView = $derived(
+    toTimelineView(timeline, {
+      threadId,
+      artifacts: timelineArtifacts,
+      cards: timelineCards,
+      documents: timelineDocuments,
+      routeMaps,
+    }),
+  );
   let hasAnyTimelineEvents = $derived(timelineView.length > 0);
 
   let showArchived = $state(false);
@@ -38,6 +67,7 @@
   });
   let lifecycleBusy = $state(false);
   let lifecycleError = $state("");
+  let handledDeepLinkKey = $state("");
 
   let filteredTimeline = $derived(
     timelineView.filter((event) => {
@@ -50,6 +80,41 @@
   let archivedCount = $derived(
     timelineView.filter((e) => e.archived_at && !e.trashed_at).length,
   );
+
+  function timelineEventById(eventId) {
+    const id = String(eventId ?? "").trim();
+    if (!id) return null;
+    return timelineView.find((event) => String(event?.id ?? "") === id) ?? null;
+  }
+
+  $effect(() => {
+    if (!browser) return;
+    const target = timelineTargetFromHash($page.url.hash);
+    const targetId = String(target.id ?? "").trim();
+    if (!targetId) {
+      handledDeepLinkKey = "";
+      return;
+    }
+
+    const event = timelineEventById(targetId);
+    if (!event || event.trashed_at) return;
+    if (event.archived_at && !showArchived) {
+      showArchived = true;
+      return;
+    }
+    if (!filteredTimeline.some((item) => String(item?.id) === targetId)) {
+      return;
+    }
+
+    const key = `${targetId}:${showArchived ? "archived" : "active"}:${filteredTimeline.length}`;
+    if (handledDeepLinkKey === key) return;
+    handledDeepLinkKey = key;
+
+    void tick().then(() => {
+      const element = document.getElementById(`event-${targetId}`);
+      scrollAndHighlightTarget(element);
+    });
+  });
 
   async function refreshTimeline() {
     await timelineCtx.refreshTimeline();
@@ -228,6 +293,8 @@
                 {#each event.refs as refValue}<RefLink
                     {refValue}
                     {threadId}
+                    artifactRoutesById={routeMaps.artifactRoutesById}
+                    eventRoutesById={routeMaps.eventRoutesById}
                   />{/each}
               </div>
             {/if}

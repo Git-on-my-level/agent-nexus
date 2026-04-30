@@ -12,6 +12,10 @@
   import { authenticatedAgent } from "$lib/authSession";
   import { listAllPrincipals } from "$lib/authPrincipals";
   import { coreClient } from "$lib/coreClient";
+  import {
+    messageTargetFromHash,
+    scrollAndHighlightTarget,
+  } from "$lib/deepLinkTargets";
   import { enrichPrincipalsWithWakeRouting } from "$lib/principalWakeRouting.js";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import MessageItem from "$lib/components/timeline/MessageItem.svelte";
@@ -20,6 +24,7 @@
     flattenMessageThreadView,
     toMessageThreadView,
   } from "$lib/messageThreadUtils";
+  import { buildPrimitiveRefRoutes } from "$lib/refLinkModel";
   import {
     filterMentionCandidates,
     parseActiveMention,
@@ -115,6 +120,9 @@
   const timelineStore = timelineCtx.store;
   const timelineWorkspaceSlug = timelineCtx.workspaceSlug;
   let timeline = $derived($timelineStore.timeline);
+  let timelineArtifacts = $derived($timelineStore.timelineArtifacts ?? []);
+  let timelineCards = $derived($timelineStore.timelineCards ?? []);
+  let timelineDocuments = $derived($timelineStore.timelineDocuments ?? []);
   let timelineLoading = $derived($timelineStore.timelineLoading);
   let timelineError = $derived($timelineStore.timelineError);
   let workspaceSlug = $derived($timelineWorkspaceSlug);
@@ -146,10 +154,23 @@
       return true;
     }),
   );
+  let routeMaps = $derived(
+    buildPrimitiveRefRoutes({
+      artifacts: timelineArtifacts,
+      events: refScopedTimeline,
+      cards: timelineCards,
+      documents: timelineDocuments,
+      threadId,
+    }),
+  );
   let messageThreads = $derived(
     toMessageThreadView(filteredTimeline, {
       threadId,
       suppressDisplayDocumentId,
+      artifacts: timelineArtifacts,
+      cards: timelineCards,
+      documents: timelineDocuments,
+      routeMaps,
     }),
   );
   let allMessages = $derived(flattenMessageThreadView(messageThreads));
@@ -191,6 +212,7 @@
   let textareaRef = $state(null);
   /** Scrollport for the message list when `pinComposerNarrow` (mobile dock). */
   let messagesScrollEl = $state(/** @type {HTMLDivElement | null} */ (null));
+  let handledDeepLinkKey = $state("");
 
   /** Nearest vertical scrollport from `messagesScrollEl` (list or parent rail). */
   function findMessagesScrollport() {
@@ -253,6 +275,47 @@
     align();
     requestAnimationFrame(align);
   }
+
+  function messageEventById(eventId) {
+    const id = String(eventId ?? "").trim();
+    if (!id) return null;
+    return (
+      refScopedTimeline.find(
+        (event) =>
+          String(event?.id ?? "") === id &&
+          String(event?.type ?? "") === "message_posted",
+      ) ?? null
+    );
+  }
+
+  $effect(() => {
+    if (!browser) return;
+    const target = messageTargetFromHash($page.url.hash);
+    const targetId = String(target.id ?? "").trim();
+    if (!targetId) {
+      handledDeepLinkKey = "";
+      return;
+    }
+
+    const event = messageEventById(targetId);
+    if (!event || event.trashed_at) return;
+    if (event.archived_at && !showArchived) {
+      showArchived = true;
+      return;
+    }
+    if (!allMessages.some((message) => String(message?.id) === targetId)) {
+      return;
+    }
+
+    const key = `${targetId}:${showArchived ? "archived" : "active"}:${allMessages.length}`;
+    if (handledDeepLinkKey === key) return;
+    handledDeepLinkKey = key;
+
+    void tick().then(() => {
+      const element = document.getElementById(`message-${targetId}`);
+      scrollAndHighlightTarget(element, { scrollport: messagesScrollEl });
+    });
+  });
 
   let filteredMentions = $derived(
     filterMentionCandidates(mentionCandidates, mentionQuery).slice(0, 12),
@@ -754,6 +817,8 @@
               onUnarchive={doUnarchive}
               {lifecycleBusy}
               {archiveLabelKind}
+              artifactRoutesById={routeMaps.artifactRoutesById}
+              eventRoutesById={routeMaps.eventRoutesById}
               getLiveAnchorStatusForMessage={liveAnchorStatusForMessage}
             />
           {/each}

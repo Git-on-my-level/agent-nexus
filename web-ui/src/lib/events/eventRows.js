@@ -1,3 +1,5 @@
+import { messageEventHrefFromEvent } from "$lib/deepLinkTargets";
+
 export const HOME_FEED_PRESET = "home_feed";
 
 export const HOME_FEED_EVENT_TYPES = new Set([
@@ -96,7 +98,8 @@ export function normalizeEventRow(
     detail = truncateLines(
       firstText(payload.body, payload.text, event?.summary),
     );
-    href = topicHref || href;
+    href =
+      messageEventHrefFromEvent(event, { workspaceHref }) || topicHref || href;
   } else if (type === "card_moved") {
     label = "Card moved";
     detail = firstText(
