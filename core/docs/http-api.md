@@ -72,6 +72,16 @@ Drift from the live router is gated in CI: `core` runs `TestExactRegisterRoutesC
 
 ### Narrative notes (not exhaustive)
 
+- **Home unread feed**: `GET /home/unread` returns high-signal `home_feed`
+  events grouped by topic for the authenticated principal. Read state is durable
+  in core as per-topic cursors keyed by reader identity. `POST /home/read`
+  advances one topic cursor (`topic_id`) or every currently visible topic cursor
+  (`topic_ids`). Opening a topic may mark that topic read from the UI after a
+  successful topic load; cursor writes do not emit synthetic events.
+- **Events history**: `GET /events` is the complete event browser API. It
+  supports the shared `preset=home_feed`, type/topic/thread/actor/search/time
+  filters, and cursor pagination. Unknown event types remain visible here even
+  when they are excluded from Home.
 - **CLI version gate**: Clients may send `X-ANX-CLI-Version`. When below minimum compatibility, core responds with `426` and `cli_outdated` except on a small set of public/meta/auth bootstrap routes; see `x-anx-*` and handler logic — exact allowlist is in OpenAPI and code, not duplicated here.
 - **Document body updates**: Canonical write is `POST /docs/{document_id}/revisions` (`docs.revisions.create`). There is no `PATCH /docs/{document_id}` on workspace core.
 - **Packets**: Receipts and reviews are created via `POST /packets/receipts` and `POST /packets/reviews` only.

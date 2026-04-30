@@ -4235,7 +4235,7 @@ export const commandRegistry: CommandSpec[] = [
     "streaming": {
       "mode": "none"
     },
-    "output_envelope": "Returns `{ events }`.",
+    "output_envelope": "Returns `{ events, page_info }`.",
     "error_codes": [
       "auth_required",
       "invalid_token"
@@ -4446,6 +4446,92 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "go_method": "EventsUnarchive",
     "ts_method": "eventsUnarchive"
+  },
+  {
+    "command_id": "home.read",
+    "cli_path": "",
+    "method": "POST",
+    "path": "/home/read",
+    "operation_id": "markHomeRead",
+    "summary": "Mark Home activity read",
+    "why": "Advance durable per-topic Home read cursors for the authenticated operator.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ ok, unread_count, topic_count }`.",
+    "error_codes": [
+      "auth_required",
+      "invalid_request",
+      "invalid_token"
+    ],
+    "concepts": [
+      "home",
+      "events",
+      "write"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "body_schema": {
+      "optional": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        },
+        {
+          "name": "expected_newest_event_cursor.id",
+          "type": "string"
+        },
+        {
+          "name": "expected_newest_event_cursor.ts",
+          "type": "datetime"
+        },
+        {
+          "name": "reader_id",
+          "type": "string"
+        },
+        {
+          "name": "topic_cursors",
+          "type": "object"
+        },
+        {
+          "name": "topic_id",
+          "type": "string"
+        },
+        {
+          "name": "topic_ids",
+          "type": "list\u003cstring\u003e"
+        }
+      ]
+    },
+    "go_method": "HomeRead",
+    "ts_method": "homeRead"
+  },
+  {
+    "command_id": "home.unread",
+    "cli_path": "",
+    "method": "GET",
+    "path": "/home/unread",
+    "operation_id": "getHomeUnread",
+    "summary": "Get Home unread activity",
+    "why": "Load unread high-signal workspace activity grouped by topic for the authenticated operator.",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ groups, unread_count, topic_count, generated_at }`.",
+    "error_codes": [
+      "auth_required",
+      "invalid_token"
+    ],
+    "concepts": [
+      "home",
+      "events"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "go_method": "HomeUnread",
+    "ts_method": "homeUnread"
   },
   {
     "command_id": "inbox.get",
@@ -6478,6 +6564,14 @@ export class AnxClient {
 
   eventsUnarchive(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("events.unarchive", pathParams, options);
+  }
+
+  homeRead(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("home.read", {}, options);
+  }
+
+  homeUnread(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("home.unread", {}, options);
   }
 
   inboxGet(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {

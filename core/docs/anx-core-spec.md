@@ -80,6 +80,12 @@ A durable record that something happened or that an actor claims something happe
 
 **v0 event types:** `topic_created`, `topic_updated`, `topic_archived`, `topic_restored`, `topic_trashed`, `message_posted`, `receipt_added`, `review_completed`, `document_created`, `document_revised`, `document_restored`, `document_trashed`, `board_created`, `board_updated`, `card_created`, `card_updated`, `card_moved`, `card_archived`, `card_trashed`, `card_resolved`, `exception_raised`, `human_attention_requested`, `human_attention_responded`, `agent_notification_read`, `agent_notification_dismissed`
 
+**Home feed projection:** core owns durable per-topic read cursors for Home. The
+Home feed is a deterministic projection over Events using the shared
+`home_feed` preset, grouped by resolvable topic. Events with only an unmapped
+thread or no topic ownership remain visible on Events and are excluded from
+Home.
+
 ### 3.2 Mutable resources (topic/card/board/document)
 Topics, cards, boards, and documents are mutable current-state records.
 

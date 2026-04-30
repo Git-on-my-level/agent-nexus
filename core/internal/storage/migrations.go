@@ -645,6 +645,32 @@ var migrations = []migration{
 		Statements: []string{},
 		AfterApply: applyMigration19CardRevisions,
 	},
+	{
+		Version: 20,
+		Statements: []string{
+			`CREATE TABLE IF NOT EXISTS home_topic_read_cursors (
+				reader_id TEXT NOT NULL,
+				topic_id TEXT NOT NULL,
+				last_read_event_ts TEXT NOT NULL,
+				last_read_event_id TEXT NOT NULL,
+				updated_at TEXT NOT NULL,
+				PRIMARY KEY (reader_id, topic_id)
+			);`,
+			`CREATE INDEX IF NOT EXISTS idx_home_topic_read_cursors_reader ON home_topic_read_cursors (reader_id, topic_id);`,
+			`CREATE INDEX IF NOT EXISTS idx_home_topic_read_cursors_topic ON home_topic_read_cursors (topic_id, reader_id);`,
+		},
+		AfterApply: func(ctx context.Context, tx *sql.Tx) error {
+			ok, err := sqliteTableExists(ctx, tx, "events")
+			if err != nil || !ok {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_events_thread_ts_id ON events (thread_id, ts DESC, id DESC);`); err != nil {
+				return err
+			}
+			_, err = tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_events_actor_ts_id ON events (actor_id, ts DESC, id DESC);`)
+			return err
+		},
+	},
 }
 
 func sqliteTableExists(ctx context.Context, tx *sql.Tx, name string) (bool, error) {

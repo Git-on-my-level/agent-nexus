@@ -21,6 +21,7 @@ describe("navigation model", () => {
 
   it("includes settings nav labels", () => {
     expect(settingsNavItems.map((item) => item.label)).toEqual([
+      "Events",
       "Artifacts",
       "Trash",
       "Access",
@@ -33,6 +34,7 @@ describe("navigation model", () => {
     expect(isKnownSection("/topics")).toBe(true);
     expect(isKnownSection("/boards")).toBe(true);
     expect(isKnownSection("/docs")).toBe(true);
+    expect(isKnownSection("/events")).toBe(true);
     expect(isKnownSection("/artifacts")).toBe(true);
     expect(isKnownSection("/trash")).toBe(true);
     expect(isKnownSection("/access")).toBe(true);

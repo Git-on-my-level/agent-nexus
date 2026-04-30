@@ -124,6 +124,19 @@ Mutable topic and card fields are interpretive and versioned through events. The
 
 ## 3. Required UI surfaces (v0)
 
+### 3.0 Home and Events
+
+Home is an unread activity feed, not a state-of-world dashboard. It reads
+`GET /home/unread`, renders high-signal unread events grouped by topic, and
+marks read through durable core cursors via `POST /home/read`. Home does not
+use browser-local handoff markers.
+
+Events is the full workspace event browser. It reads `GET /events`, supports
+URL/shareable filter intent for type, topic, actor, search, time range, cursor,
+and the shared `home_feed` preset, and keeps unknown event types inspectable.
+The first implementation keeps Events under More on mobile rather than adding a
+primary bottom-nav slot.
+
 ### 3.1 Inbox
 
 A dedicated surface showing items that need operator attention.

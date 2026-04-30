@@ -3,6 +3,7 @@ package server
 import (
 	"crypto/sha1"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"agent-nexus-core/internal/actors"
 	"agent-nexus-core/internal/primitives"
 )
 
@@ -28,12 +30,88 @@ func handleListEvents(w http.ResponseWriter, r *http.Request, opts handlerOption
 
 	threadID := strings.TrimSpace(r.URL.Query().Get("thread_id"))
 	eventTypes := parseEventTypeFilters(r)
-	events, err := listEventsForStream(r, opts, threadID, eventTypes)
+	query := r.URL.Query()
+	limit, ok := parseOptionalPositiveInt(w, query.Get("limit"), 50, 200, "limit")
+	if !ok {
+		return
+	}
+	actorKind := strings.TrimSpace(query.Get("actor_kind"))
+	actorIDs, ok := eventActorIDsForKind(w, r, opts, actorKind)
+	if !ok {
+		return
+	}
+	page, err := opts.primitiveStore.ListEventsPage(r.Context(), primitives.EventListFilter{
+		Types:     eventTypes,
+		Preset:    strings.TrimSpace(query.Get("preset")),
+		TopicID:   strings.TrimSpace(query.Get("topic_id")),
+		ThreadID:  threadID,
+		ActorID:   strings.TrimSpace(query.Get("actor_id")),
+		ActorIDs:  actorIDs,
+		ActorKind: actorKind,
+		Query:     strings.TrimSpace(query.Get("q")),
+		Since:     strings.TrimSpace(query.Get("since")),
+		Until:     strings.TrimSpace(query.Get("until")),
+		Limit:     limit,
+		Cursor:    strings.TrimSpace(query.Get("cursor")),
+	})
 	if err != nil {
+		if errors.Is(err, primitives.ErrInvalidCursor) {
+			writeError(w, http.StatusBadRequest, "invalid_request", "cursor is invalid")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list events")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"events": events})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"events": page.Events,
+		"page_info": map[string]any{
+			"next_cursor": page.NextCursor,
+			"has_more":    page.NextCursor != "",
+		},
+	})
+}
+
+func eventActorIDsForKind(w http.ResponseWriter, r *http.Request, opts handlerOptions, actorKind string) ([]string, bool) {
+	actorKind = strings.TrimSpace(strings.ToLower(actorKind))
+	if actorKind == "" {
+		return nil, true
+	}
+	if opts.actorRegistry == nil {
+		writeError(w, http.StatusServiceUnavailable, "actor_registry_unavailable", "actor registry is not configured")
+		return nil, false
+	}
+	pageLimit := 1000
+	ids := make([]string, 0)
+	seen := map[string]struct{}{}
+	for cursor := ""; ; {
+		actorList, next, err := opts.actorRegistry.List(r.Context(), actors.ActorListFilter{
+			Limit:  &pageLimit,
+			Cursor: cursor,
+		})
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "internal_error", "failed to filter events by actor kind")
+			return nil, false
+		}
+		for _, actor := range actorList {
+			for _, tag := range actor.Tags {
+				if strings.EqualFold(strings.TrimSpace(tag), actorKind) {
+					if _, ok := seen[actor.ID]; !ok {
+						seen[actor.ID] = struct{}{}
+						ids = append(ids, actor.ID)
+					}
+					break
+				}
+			}
+		}
+		if next == "" {
+			break
+		}
+		cursor = next
+	}
+	if len(ids) == 0 {
+		ids = []string{"__anx_no_actor_kind_match__"}
+	}
+	return ids, true
 }
 
 func handleEventsStream(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
@@ -264,6 +342,22 @@ func parseEventTypeFilters(r *http.Request) []string {
 		out = append(out, splitCommaSeparated(raw)...)
 	}
 	return uniqueNonEmptyStrings(out)
+}
+
+func parseOptionalPositiveInt(w http.ResponseWriter, raw string, defaultValue int, maxValue int, field string) (int, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return defaultValue, true
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value <= 0 {
+		writeError(w, http.StatusBadRequest, "invalid_request", field+" must be a positive integer")
+		return 0, false
+	}
+	if maxValue > 0 && value > maxValue {
+		value = maxValue
+	}
+	return value, true
 }
 
 func splitCommaSeparated(raw string) []string {

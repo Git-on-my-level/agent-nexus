@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Concepts: `29`
+- Concepts: `30`
 
 ## `actors`
 
@@ -154,7 +154,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `events`
 
-- Commands: `8`
+- Commands: `10`
 - Command IDs:
   - `events.archive`
   - `events.create`
@@ -164,6 +164,8 @@ Generated from `contracts/anx-openapi.yaml`.
   - `events.stream`
   - `events.trash`
   - `events.unarchive`
+  - `home.read`
+  - `home.unread`
 
 ## `health`
 
@@ -173,6 +175,13 @@ Generated from `contracts/anx-openapi.yaml`.
   - `meta.livez`
   - `meta.readyz`
   - `ops.health`
+
+## `home`
+
+- Commands: `2`
+- Command IDs:
+  - `home.read`
+  - `home.unread`
 
 ## `inbox`
 
@@ -316,7 +325,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `write`
 
-- Commands: `48`
+- Commands: `49`
 - Command IDs:
   - `agent.notifications.dismiss`
   - `agent.notifications.read`
@@ -356,6 +365,7 @@ Generated from `contracts/anx-openapi.yaml`.
   - `events.restore`
   - `events.trash`
   - `events.unarchive`
+  - `home.read`
   - `inbox.respond`
   - `secrets.create`
   - `secrets.delete`

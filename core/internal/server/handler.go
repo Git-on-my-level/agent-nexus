@@ -117,6 +117,10 @@ type PrimitiveStore interface {
 	ListEventsByThread(ctx context.Context, threadID string) ([]map[string]any, error)
 	ListRecentEventsByThread(ctx context.Context, threadID string, limit int) ([]map[string]any, error)
 	ListEvents(ctx context.Context, filter primitives.EventListFilter) ([]map[string]any, error)
+	ListEventsPage(ctx context.Context, filter primitives.EventListFilter) (primitives.EventPage, error)
+	ListHomeUnread(ctx context.Context, readerID string) ([]primitives.HomeUnreadGroup, int, error)
+	MarkHomeRead(ctx context.Context, readerID string, topicIDs []string) error
+	MarkHomeReadAt(ctx context.Context, readerID string, topicIDs []string, expected map[string]primitives.EventCursor) error
 	ListHumanAttentionRespondedPage(ctx context.Context, params primitives.HumanAttentionRespondedPageParams) ([]map[string]any, error)
 	TrashArtifact(ctx context.Context, actorID string, artifactID string, reason string) (map[string]any, error)
 	ArchiveArtifact(ctx context.Context, actorID string, artifactID string) (map[string]any, error)
@@ -1735,6 +1739,14 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET and POST are supported")
 		}
+	})
+
+	registerRoute("/home/unread", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
+		handleGetHomeUnread(w, r, opts)
+	})
+
+	registerRoute("/home/read", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+		handleMarkHomeRead(w, r, opts)
 	})
 
 	registerRoute("/ref-edges", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {

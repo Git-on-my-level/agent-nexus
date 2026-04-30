@@ -465,6 +465,13 @@ export function createAnxCoreClient(options = {}) {
     return { ...payload, actor_id: requireActorId() };
   }
 
+  function readerQuery() {
+    if (shouldLockActorId()) {
+      return {};
+    }
+    return { reader_id: requireActorId() };
+  }
+
   return {
     baseUrl: resolvedBaseUrl,
     getVersion: () => invokeJSON("meta.version", () => generated.metaVersion()),
@@ -845,6 +852,14 @@ export function createAnxCoreClient(options = {}) {
       ),
     listEvents: (filters) =>
       invokeJSON("events.list", () => generated.eventsList({ query: filters })),
+    getHomeUnread: () =>
+      invokeJSON("home.unread", () =>
+        generated.homeUnread({ query: readerQuery() }),
+      ),
+    markHomeRead: (payload) =>
+      invokeJSON("home.read", () =>
+        generated.homeRead({ body: withActorId(payload) }),
+      ),
     getEvent: (eventId) =>
       invokeJSON("events.get", () =>
         generated.eventsGet({ event_id: String(eventId) }),

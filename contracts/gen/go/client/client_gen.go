@@ -970,6 +970,24 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:   []string{"events.archive", "events.create", "events.get", "events.list", "events.restore", "events.stream", "events.trash"},
 	},
 	{
+		CommandID: "home.read",
+		CLIPath:   "",
+		Method:    "POST",
+		Path:      "/home/read",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"home", "events", "write"},
+	},
+	{
+		CommandID: "home.unread",
+		CLIPath:   "",
+		Method:    "GET",
+		Path:      "/home/unread",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"home", "events"},
+	},
+	{
 		CommandID:  "inbox.get",
 		CLIPath:    "inbox get",
 		Group:      "inbox",
@@ -1853,6 +1871,14 @@ func (c *Client) EventsTrash(ctx context.Context, pathParams map[string]string, 
 
 func (c *Client) EventsUnarchive(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "events.unarchive", pathParams, opts)
+}
+
+func (c *Client) HomeRead(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "home.read", nil, opts)
+}
+
+func (c *Client) HomeUnread(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "home.unread", nil, opts)
 }
 
 func (c *Client) InboxGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
