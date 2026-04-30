@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 )
 
 func TestSign_ExpectedClaimsAndEdDSA(t *testing.T) {
@@ -38,6 +39,13 @@ func TestSign_ExpectedClaimsAndEdDSA(t *testing.T) {
 	}
 	if claims["workspace_id"] != "ws-9" || claims["purpose"] != "heartbeat" {
 		t.Fatalf("custom claims: %#v", claims)
+	}
+	jti, ok := claims["jti"].(string)
+	if !ok || jti == "" {
+		t.Fatalf("jti: expected non-empty string, got %#v", claims["jti"])
+	}
+	if _, err := uuid.Parse(jti); err != nil {
+		t.Fatalf("jti: expected valid UUID, got %q: %v", jti, err)
 	}
 	iat := int64(claims["iat"].(float64))
 	exp := int64(claims["exp"].(float64))
@@ -85,5 +93,38 @@ func TestSign_ValidationErrors(t *testing.T) {
 	bad := make([]byte, ed25519.PrivateKeySize-1)
 	if _, err := Sign("id", ed25519.PrivateKey(bad), "", "w", "p", now); err == nil {
 		t.Fatal("expected error for bad key size")
+	}
+}
+
+func TestSign_UniqueJTI(t *testing.T) {
+	t.Parallel()
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	now := time.Now().UTC()
+	tok1, err := Sign("svc-1", priv, "", "ws-1", "heartbeat", now)
+	if err != nil {
+		t.Fatalf("Sign 1: %v", err)
+	}
+	tok2, err := Sign("svc-1", priv, "", "ws-1", "heartbeat", now)
+	if err != nil {
+		t.Fatalf("Sign 2: %v", err)
+	}
+	extractJTI := func(tok string) string {
+		claims := jwt.MapClaims{}
+		_, _ = jwt.ParseWithClaims(tok, claims, func(token *jwt.Token) (any, error) {
+			return priv.Public().(ed25519.PublicKey), nil
+		}, jwt.WithoutClaimsValidation())
+		s, _ := claims["jti"].(string)
+		return s
+	}
+	jti1 := extractJTI(tok1)
+	jti2 := extractJTI(tok2)
+	if jti1 == "" || jti2 == "" {
+		t.Fatalf("expected non-empty jti, got %q and %q", jti1, jti2)
+	}
+	if jti1 == jti2 {
+		t.Fatalf("expected unique jti per assertion, got same: %q", jti1)
 	}
 }

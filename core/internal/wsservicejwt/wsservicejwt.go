@@ -1,7 +1,7 @@
 // Package wsservicejwt implements Ed25519 (EdDSA) signing for short-lived JWT assertions
 // issued by a hosted workspace service (anx-core) when calling the control plane—for
 // example heartbeat POSTs and account-status checks. The JWT uses registered claims
-// iss, sub, aud, iat, nbf, exp, plus custom claims workspace_id and purpose.
+// iss, sub, aud, iat, nbf, exp, jti, plus custom claims workspace_id and purpose.
 //
 // The control plane verifies these assertions against the service identity and workspace
 // public keys; claim names, time windows, and default audience must stay in lockstep with
@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 )
 
 const (
@@ -61,6 +62,7 @@ func Sign(identityID string, privateKey ed25519.PrivateKey, audience, workspaceI
 		"iat":          now.Unix(),
 		"nbf":          now.Add(-NotBeforeSkew).Unix(),
 		"exp":          now.Add(AssertionTTL).Unix(),
+		"jti":          uuid.NewString(),
 		"workspace_id": workspaceID,
 		"purpose":      purpose,
 	}
