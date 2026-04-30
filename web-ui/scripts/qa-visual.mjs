@@ -20,8 +20,6 @@ import {
   QA_DOCUMENTS,
   QA_EVENTS,
   QA_FIXED_NOW_ISO,
-  QA_HOME_HANDOFF_PARTIAL_MARK_ISO,
-  QA_HOME_HANDOFF_ZERO_MARK_ISO,
   QA_HOSTED_ACCOUNT,
   QA_HOSTED_BILLING_SUMMARY,
   QA_INVITES,
@@ -53,7 +51,27 @@ const QA_BASELINE_DIR = path.join(
 );
 const QA_CURRENT_DIR = path.join(projectRoot, ".qa-current");
 const QA_DIFF_DIR = path.join(projectRoot, ".qa-diff");
-const QA_HOME_HANDOFF_STORAGE_KEY = "anx.home.handoff.lastRead.v1.local.local";
+const QA_HOME_FEED_TYPES = new Set([
+  "message_posted",
+  "card_created",
+  "card_moved",
+  "card_closed",
+  "card_resolved",
+  "card_restored",
+  "card_archived",
+  "card_trashed",
+  "topic_priority_changed",
+  "topic_lifecycle_changed",
+  "topic_updated",
+  "topic_archived",
+  "topic_restored",
+  "topic_trashed",
+  "human_attention_requested",
+  "human_attention_responded",
+  "document_created",
+  "document_revision_created",
+  "document_revised",
+]);
 
 const QA_SCENES = [
   {
@@ -114,7 +132,7 @@ const QA_SCENES = [
     hostedMode: "authed-dashboard",
     waitFor: async (page) => {
       /** `Usage` h1 is SSR; panels render after usage-summary fetch completes. */
-      await page.waitForSelector('text=Workspace breakdown');
+      await page.waitForSelector("text=Workspace breakdown");
     },
   },
   {
@@ -155,38 +173,28 @@ const QA_SCENES = [
   {
     name: "workspace-home-handoff-first-run",
     path: "/o/local/w/local",
-    workspaceMode: "workspace-default",
+    workspaceMode: "home-first-run",
     waitFor: async (page) => {
-      await page.waitForSelector('[data-testid="home-change-counts"]');
-      await page.waitForSelector(
-        "text=Showing all recent workspace changes until you mark this handoff read.",
-      );
+      await page.waitForSelector('[data-testid="home-unread-feed"]');
+      await page.waitForSelector("text=unread across");
     },
   },
   {
     name: "workspace-home-handoff-populated",
     path: "/o/local/w/local",
-    workspaceMode: "workspace-default",
-    localStorage: {
-      [QA_HOME_HANDOFF_STORAGE_KEY]: QA_HOME_HANDOFF_PARTIAL_MARK_ISO,
-    },
+    workspaceMode: "home-recent",
     waitFor: async (page) => {
-      await page.waitForSelector('[data-testid="home-change-counts"]');
-      await page.waitForSelector("text=Since you marked this workspace read");
+      await page.waitForSelector('[data-testid="home-unread-feed"]');
+      await page.waitForSelector("text=Launch war room");
     },
   },
   {
     name: "workspace-home-handoff-empty",
     path: "/o/local/w/local",
-    workspaceMode: "workspace-default",
-    localStorage: {
-      [QA_HOME_HANDOFF_STORAGE_KEY]: QA_HOME_HANDOFF_ZERO_MARK_ISO,
-    },
+    workspaceMode: "home-empty",
     waitFor: async (page) => {
-      await page.waitForSelector('[data-testid="home-change-counts"]');
-      await page.waitForSelector(
-        "text=Nothing new since you marked this workspace read.",
-      );
+      await page.waitForSelector('[data-testid="home-unread-empty"]');
+      await page.waitForSelector("text=You're caught up.");
     },
   },
   {
@@ -331,8 +339,10 @@ const QA_SCENES = [
     workspaceMode: "workspace-default",
     waitFor: async (page) => {
       await page.waitForSelector('h1:has-text("Artifacts")');
-      await page.locator('button[aria-label="Archive"]').first().click();
-      await page.waitForSelector("text=Archive artifact");
+      await page.getByRole("button", { name: "Select" }).click();
+      await page.locator('[aria-label="Select Cutover review packet"]').click();
+      await page.getByRole("button", { name: "Archive" }).click();
+      await page.waitForSelector("text=Archive 1 artifacts");
     },
   },
 ];
@@ -582,21 +592,100 @@ function qaDocumentDetailTimeline(threadId) {
 
 function createWorkspaceScenario(mode) {
   switch (mode) {
+    case "home-empty":
+      return { inboxState: "populated", askState: "ok", homeState: "empty" };
+    case "home-recent":
+      return { inboxState: "populated", askState: "ok", homeState: "recent" };
+    case "home-first-run":
+      return { inboxState: "populated", askState: "ok", homeState: "all" };
     case "inbox-empty":
-      return { inboxState: "empty", askState: "ok" };
+      return { inboxState: "empty", askState: "ok", homeState: "all" };
     case "inbox-populated":
-      return { inboxState: "populated", askState: "ok" };
+      return { inboxState: "populated", askState: "ok", homeState: "all" };
     case "inbox-loading":
-      return { inboxState: "loading", askState: "ok" };
+      return { inboxState: "loading", askState: "ok", homeState: "all" };
     case "inbox-error":
-      return { inboxState: "error", askState: "ok" };
+      return { inboxState: "error", askState: "ok", homeState: "all" };
     case "capture-ui":
-      return { inboxState: "populated", askState: "ok" };
+      return { inboxState: "populated", askState: "ok", homeState: "all" };
     case "capture-degraded":
-      return { inboxState: "populated", askState: "error" };
+      return { inboxState: "populated", askState: "error", homeState: "all" };
     default:
-      return { inboxState: "populated", askState: "ok" };
+      return { inboxState: "populated", askState: "ok", homeState: "all" };
   }
+}
+
+function topicForEvent(event) {
+  const refs = Array.isArray(event?.refs) ? event.refs : [];
+  const topicRef = refs.find((ref) => String(ref).startsWith("topic:"));
+  if (topicRef) {
+    const topicId = topicRef.slice("topic:".length);
+    return QA_TOPICS.find((topic) => topic.id === topicId) ?? null;
+  }
+  const threadId = String(event?.thread_id ?? "").trim();
+  if (!threadId) return null;
+  return QA_TOPICS.find((topic) => topic.thread_id === threadId) ?? null;
+}
+
+function qaHomeUnreadResponse(homeState) {
+  const minTimestamp =
+    homeState === "recent"
+      ? Date.parse(QA_FIXED_NOW_ISO) - 4 * 60 * 60 * 1000
+      : 0;
+  const events =
+    homeState === "empty"
+      ? []
+      : QA_EVENTS.filter((event) => {
+          if (!QA_HOME_FEED_TYPES.has(String(event.type))) return false;
+          if (Date.parse(event.ts) < minTimestamp) return false;
+          return Boolean(topicForEvent(event));
+        });
+  const groupMap = new Map();
+  for (const event of events) {
+    const topic = topicForEvent(event);
+    if (!topic) continue;
+    const group = groupMap.get(topic.id) ?? {
+      topic,
+      events: [],
+      unread_count: 0,
+      newest_event: null,
+      read_cursor: null,
+    };
+    group.events.push(event);
+    group.unread_count += 1;
+    if (
+      !group.newest_event ||
+      Date.parse(event.ts) > Date.parse(group.newest_event.ts)
+    ) {
+      group.newest_event = event;
+    }
+    groupMap.set(topic.id, group);
+  }
+  const groups = Array.from(groupMap.values())
+    .map((group) => ({
+      ...group,
+      events: group.events.sort((left, right) => {
+        const tsDelta = Date.parse(right.ts) - Date.parse(left.ts);
+        return tsDelta || String(right.id).localeCompare(String(left.id));
+      }),
+    }))
+    .sort((left, right) => {
+      const tsDelta =
+        Date.parse(right.newest_event?.ts ?? "") -
+        Date.parse(left.newest_event?.ts ?? "");
+      return (
+        tsDelta || String(left.topic.id).localeCompare(String(right.topic.id))
+      );
+    });
+  return {
+    groups,
+    unread_count: groups.reduce(
+      (count, group) => count + group.unread_count,
+      0,
+    ),
+    topic_count: groups.length,
+    generated_at: QA_FIXED_NOW_ISO,
+  };
 }
 
 function createHostedScenario(mode) {
@@ -1077,6 +1166,24 @@ async function handleWorkspaceApiRoute(
     await route.fulfill(
       jsonResponse(200, {
         value: "sk-qa-visible-secret-value",
+      }),
+    );
+    return;
+  }
+
+  if (pathname === "/home/unread" && request.method() === "GET") {
+    await route.fulfill(
+      jsonResponse(200, qaHomeUnreadResponse(scenario.homeState)),
+    );
+    return;
+  }
+
+  if (pathname === "/home/read" && request.method() === "POST") {
+    await route.fulfill(
+      jsonResponse(200, {
+        ok: true,
+        marked_topic_ids: [],
+        generated_at: QA_FIXED_NOW_ISO,
       }),
     );
     return;

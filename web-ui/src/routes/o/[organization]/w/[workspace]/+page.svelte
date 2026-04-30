@@ -187,12 +187,14 @@
 
   {#if loading && !feed.generated_at}
     <section
+      data-testid="home-unread-loading"
       class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-4 py-5"
     >
       <p class="text-meta text-[var(--fg-muted)]">Loading unread activity…</p>
     </section>
   {:else if groups.length === 0}
     <section
+      data-testid="home-unread-empty"
       class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-4 py-5"
     >
       <p class="text-meta font-medium text-[var(--fg)]">You're caught up.</p>
@@ -209,7 +211,7 @@
       </p>
     </section>
   {:else}
-    <div class="space-y-3">
+    <div class="space-y-3" data-testid="home-unread-feed">
       {#each groups as group (group.topic.id)}
         <section
           class="overflow-hidden rounded-md border border-[var(--line)] bg-[var(--panel)]"
