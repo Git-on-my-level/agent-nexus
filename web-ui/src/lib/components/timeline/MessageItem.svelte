@@ -1,10 +1,10 @@
 <script>
   import ArchiveButton from "$lib/components/ArchiveButton.svelte";
   import Self from "$lib/components/timeline/MessageItem.svelte";
+  import CompactRefLink from "$lib/components/CompactRefLink.svelte";
   import ContextMenuHost from "$lib/components/ContextMenuHost.svelte";
   import CopyButton from "$lib/components/CopyButton.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
-  import RefLink from "$lib/components/RefLink.svelte";
   import { formatTimestamp } from "$lib/formatDate";
   import {
     docCommentBodyFocus,
@@ -303,7 +303,9 @@
           </p>
         {/if}
       {/if}
-      <div class="text-meta text-[var(--fg)] [overflow-wrap:anywhere]">
+      <div
+        class="card-content-block text-meta text-[var(--fg)] [overflow-wrap:anywhere]"
+      >
         <MarkdownRenderer
           source={message.messageText || message.summary || "Untitled message"}
           class="markdown-rendered--bubble text-meta text-[var(--fg)]"
@@ -312,9 +314,9 @@
     </div>
 
     {#if message.displayRefs.length > 0}
-      <div class="mt-2 flex flex-wrap gap-1.5 text-micro">
+      <div class="mt-2 flex min-w-0 flex-wrap gap-1.5 text-micro">
         {#each message.displayRefs as refValue (refValue)}
-          <RefLink {refValue} {threadId} humanize showRaw />
+          <CompactRefLink {refValue} {threadId} humanize showRaw />
         {/each}
       </div>
     {/if}

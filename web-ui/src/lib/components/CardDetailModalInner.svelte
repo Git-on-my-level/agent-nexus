@@ -43,6 +43,7 @@
     setTimelineContext,
   } from "$lib/timelineContext";
   import Button from "$lib/components/Button.svelte";
+  import CompactRefLink from "$lib/components/CompactRefLink.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import IdsIntegrityDisclosure from "$lib/components/IdsIntegrityDisclosure.svelte";
   import GuidedTypedRefsInput from "$lib/components/GuidedTypedRefsInput.svelte";
@@ -420,6 +421,18 @@
 
   onMount(() => {
     if (!browser) return;
+    let scrollY = 0;
+    const previousBodyStyle = {};
+    if (presentation === "modal") {
+      scrollY = window.scrollY;
+      for (const property of ["overflow", "position", "top", "width"]) {
+        previousBodyStyle[property] = document.body.style[property];
+      }
+      document.body.style.overflow = "hidden";
+      document.body.style.position = "fixed";
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.width = "100%";
+    }
     function onKeydown(e) {
       if (presentation !== "modal") return;
       if (e.key === "Escape") {
@@ -429,7 +442,14 @@
       }
     }
     document.addEventListener("keydown", onKeydown, true);
-    return () => document.removeEventListener("keydown", onKeydown, true);
+    return () => {
+      document.removeEventListener("keydown", onKeydown, true);
+      if (presentation !== "modal") return;
+      for (const [property, value] of Object.entries(previousBodyStyle)) {
+        document.body.style[property] = value;
+      }
+      window.scrollTo(0, scrollY);
+    };
   });
 
   let derivedSummary = $derived(derived?.summary);
@@ -936,9 +956,12 @@
                     Summary
                   </h3>
                   <div
-                    class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2"
+                    class="card-content-block rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2"
                   >
-                    <MarkdownRenderer source={summaryText} />
+                    <MarkdownRenderer
+                      source={summaryText}
+                      class="markdown-rendered--card-content"
+                    />
                   </div>
                 </section>
               {/if}
@@ -965,10 +988,10 @@
                   >
                     Related refs
                   </h3>
-                  <ul class="space-y-1">
+                  <ul class="flex min-w-0 flex-wrap gap-1.5">
                     {#each dedupedRelatedRefs as ref (ref)}
-                      <li class="text-micro">
-                        <RefLink
+                      <li class="min-w-0 text-micro">
+                        <CompactRefLink
                           refValue={ref}
                           {boardId}
                           humanize
@@ -988,10 +1011,10 @@
                   >
                     Resolution refs
                   </h3>
-                  <ul class="space-y-1">
+                  <ul class="flex min-w-0 flex-wrap gap-1.5">
                     {#each resolutionRefsList as ref (ref)}
-                      <li class="text-micro">
-                        <RefLink
+                      <li class="min-w-0 text-micro">
+                        <CompactRefLink
                           refValue={ref}
                           {boardId}
                           humanize
@@ -1212,6 +1235,7 @@
     align-items: center;
     justify-content: center;
     padding: 1rem;
+    overscroll-behavior: contain;
   }
 
   .cdm-overlay {
@@ -1224,7 +1248,10 @@
     position: relative;
     z-index: 1;
     display: flex;
+    height: min(90vh, 900px);
+    height: min(90dvh, 900px);
     max-height: min(90vh, 900px);
+    max-height: min(90dvh, 900px);
     width: 100%;
     max-width: 42rem;
     flex-direction: column;
@@ -1238,6 +1265,8 @@
   .cdm-scroll {
     flex: 1;
     min-height: 0;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
     overflow-y: auto;
   }
 
@@ -1252,6 +1281,20 @@
   }
 
   @media (max-width: 767px) {
+    .cdm-backdrop {
+      align-items: stretch;
+      padding: max(0.75rem, env(safe-area-inset-top, 0px))
+        max(0.75rem, env(safe-area-inset-right, 0px))
+        max(0.75rem, env(safe-area-inset-bottom, 0px))
+        max(0.75rem, env(safe-area-inset-left, 0px));
+    }
+
+    .cdm-panel {
+      height: calc(100vh - 1.5rem);
+      height: calc(100dvh - 1.5rem);
+      max-height: none;
+    }
+
     .cdm-page-panel {
       min-height: calc(100dvh - 6.75rem);
       border-inline: 0;

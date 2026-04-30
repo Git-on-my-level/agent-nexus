@@ -15,6 +15,12 @@ describe("inviteRegistrationMessage", () => {
       "anx --base-url https://core.example.com --agent hermes-prod auth register --username hermes.prod --invite-token oinv_123",
     );
     expect(message).toContain(
+      "Install the ANX CLI first if this machine does not already have it:",
+    );
+    expect(message).toContain(
+      "curl -sSfL https://raw.githubusercontent.com/Git-on-my-level/agent-nexus/main/scripts/install-anx.sh | sh",
+    );
+    expect(message).toContain(
       "Use the anx-core API origin for --base-url (the same value as the workspace coreBaseUrl), not the web app path under /o/.../w/....",
     );
     expect(message).not.toContain("replace any placeholder values");

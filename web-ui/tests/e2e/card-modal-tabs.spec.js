@@ -17,6 +17,11 @@ test("card detail modal Discussion drawer and Timeline tab render without reques
       pageErrors.push(`console.error: ${msg.text()}`);
     }
   });
+  page.on("response", (response) => {
+    if (response.status() >= 400) {
+      pageErrors.push(`${response.status()} ${response.url()}`);
+    }
+  });
   const actorId = "actor-card-modal-tabs-e2e";
   const boardId = "board-modal-tabs";
   const cardThreadId = "thread-modal-card";
@@ -224,6 +229,14 @@ test("card detail modal Discussion drawer and Timeline tab render without reques
     });
   });
 
+  await page.route("**/auth/dev/identities", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ personas: [] }),
+    });
+  });
+
   await page.route(/\/auth\/principals(?:\?.*)?$/, async (route) => {
     principalsRequestCount += 1;
     await route.fulfill({
@@ -286,6 +299,14 @@ test("card detail modal Discussion drawer and Timeline tab render without reques
 
   let dialog = page.getByRole("dialog", { name: "Card details" });
   await expect(dialog).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => document.body.style.position))
+    .toBe("fixed");
+  await expect(
+    dialog.locator(".cdm-panel"),
+    "modal panel should establish an internal scrollport",
+  ).toHaveCSS("overflow", "hidden");
+  await expect(dialog.locator(".cdm-scroll")).toHaveCSS("overflow-y", "auto");
 
   await expect(page).toHaveURL(
     new RegExp(`[?&]card=${encodeURIComponent("card-one")}`),
@@ -311,12 +332,12 @@ test("card detail modal Discussion drawer and Timeline tab render without reques
   const tabCount = await dialog
     .locator('[aria-label="Card sections"] [role="tab"]')
     .count();
-  expect(tabCount, "expected 2 section tabs in modal").toBe(2);
+  expect(tabCount, "expected 3 section tabs in modal").toBe(3);
 
   const principalCountBefore = principalsRequestCount;
   const timelineCountBefore = timelineRequestCount;
 
-  await dialog.getByRole("button", { name: /^Discussion$/i }).click();
+  await dialog.getByRole("button", { name: /^Discussion\b/i }).click();
 
   await expect(dialog.getByTestId("cdm-section-tab-val")).toHaveText(
     "overview",

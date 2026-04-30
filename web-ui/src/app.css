@@ -1600,6 +1600,14 @@
     margin-bottom: 0;
   }
 
+  .markdown-rendered.markdown-rendered--bubble,
+  .markdown-rendered.markdown-rendered--card-content,
+  .card-content-block {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: normal;
+  }
+
   .markdown-rendered ul {
     margin: 0.25rem 0 0.5rem;
     padding-left: 1.25rem;
@@ -1623,6 +1631,18 @@
 
   .markdown-rendered li > p {
     margin: 0.15rem 0;
+  }
+
+  .markdown-rendered.markdown-rendered--bubble ol,
+  .markdown-rendered.markdown-rendered--bubble ul,
+  .markdown-rendered.markdown-rendered--card-content ol,
+  .markdown-rendered.markdown-rendered--card-content ul {
+    padding-left: 1rem;
+  }
+
+  .markdown-rendered.markdown-rendered--bubble li,
+  .markdown-rendered.markdown-rendered--card-content li {
+    padding-left: 0.125rem;
   }
 
   .markdown-rendered ul:has(> li > input[type="checkbox"]) {
@@ -1740,6 +1760,31 @@
 
   .markdown-rendered tbody tr:hover td {
     background: rgba(255, 255, 255, 0.02);
+  }
+
+  .compact-ref-link {
+    flex: 0 1 auto;
+  }
+
+  .compact-ref-link__mobile,
+  .compact-ref-link__mobile-raw {
+    display: none;
+  }
+
+  @media (max-width: 639px) {
+    .compact-ref-link {
+      max-width: min(100%, 16rem);
+    }
+
+    .compact-ref-link__full,
+    .compact-ref-link__raw {
+      display: none;
+    }
+
+    .compact-ref-link__mobile,
+    .compact-ref-link__mobile-raw {
+      display: inline;
+    }
   }
 
   .shell-bottom-nav {

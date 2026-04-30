@@ -31,6 +31,10 @@ export function buildRegistrationMessage(
   }
 
   const lines = [
+    "Install the ANX CLI first if this machine does not already have it:",
+    "",
+    "  curl -sSfL https://raw.githubusercontent.com/Git-on-my-level/agent-nexus/main/scripts/install-anx.sh | sh",
+    "",
     "Register with this ANX workspace using the invite token below.",
     "Use the anx-core API origin for --base-url (the same value as the workspace coreBaseUrl), not the web app path under /o/.../w/....",
     "",
