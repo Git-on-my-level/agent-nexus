@@ -1,4 +1,13 @@
 export const browser = false;
 
-/** Vitest runs against source with dev-style cookie fallbacks unless a test mocks `$app/environment`. */
-export const dev = true;
+let _dev = true;
+
+export function __resetDev() {
+  _dev = true;
+}
+
+export function __setDev(value) {
+  _dev = value;
+}
+
+export { _dev as dev };

@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { __resetDev, __setDev } from "$app/environment";
+
 import {
   clearWorkspaceAccessToken,
   clearWorkspaceRefreshToken,
@@ -746,5 +748,97 @@ describe("server auth session helpers", () => {
         }),
       }),
     );
+  });
+});
+
+describe("production secure cookie behavior (TLS termination)", () => {
+  afterEach(() => {
+    __resetDev();
+    resetWorkspaceAuthRefreshStateForTests();
+  });
+
+  it("forces Secure on refresh-token cookies when behind TLS termination (internal http:, production mode)", () => {
+    __setDev(false);
+    const recorder = createCookieRecorder();
+    const event = {
+      url: new URL("http://internal-host/auth/session"),
+      cookies: recorder.cookies,
+    };
+
+    writeWorkspaceRefreshToken(event, DEFAULT_ORG, DEFAULT_WS, "refresh-token");
+
+    expect(recorder.setCalls).toHaveLength(1);
+    expect(recorder.setCalls[0].options.secure).toBe(true);
+  });
+
+  it("forces Secure on access-token cookies when behind TLS termination (internal http:, production mode)", () => {
+    __setDev(false);
+    const recorder = createCookieRecorder();
+    const event = {
+      url: new URL("http://internal-host/auth/session"),
+      cookies: recorder.cookies,
+    };
+
+    writeWorkspaceAccessToken(event, DEFAULT_ORG, DEFAULT_WS, "access-token");
+
+    expect(recorder.setCalls).toHaveLength(1);
+    expect(recorder.setCalls[0].options.secure).toBe(true);
+  });
+
+  it("forces Secure on auth verify cookies when behind TLS termination (production mode)", async () => {
+    __setDev(false);
+    const recorder = createCookieRecorder();
+    const event = {
+      url: new URL("http://internal-host/auth/passkey/login/verify"),
+      cookies: recorder.cookies,
+    };
+    const upstreamResponse = new Response(
+      JSON.stringify({
+        agent: { agent_id: "a1", actor_id: "o1", username: "u" },
+        tokens: {
+          access_token: "at",
+          refresh_token: "rt",
+        },
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+
+    await handleWorkspaceAuthVerifyResponse({
+      event,
+      organizationSlug: DEFAULT_ORG,
+      workspaceSlug: DEFAULT_WS,
+      upstreamResponse,
+    });
+
+    for (const call of recorder.setCalls) {
+      expect(call.options.secure).toBe(true);
+    }
+    expect(recorder.setCalls).toHaveLength(2);
+  });
+
+  it("allows insecure cookies on HTTP in dev mode", () => {
+    const recorder = createCookieRecorder();
+    const event = {
+      url: new URL("http://localhost:5173/auth/session"),
+      cookies: recorder.cookies,
+    };
+
+    writeWorkspaceRefreshToken(event, DEFAULT_ORG, DEFAULT_WS, "refresh-token");
+
+    expect(recorder.setCalls).toHaveLength(1);
+    expect(recorder.setCalls[0].options.secure).toBe(false);
+  });
+
+  it("sets Secure on HTTPS in dev mode", () => {
+    const recorder = createCookieRecorder();
+    const event = {
+      url: new URL("https://localhost/auth/session"),
+      cookies: recorder.cookies,
+    };
+
+    writeWorkspaceRefreshToken(event, DEFAULT_ORG, DEFAULT_WS, "refresh-token");
+
+    expect(recorder.setCalls).toHaveLength(1);
+    expect(recorder.setCalls[0].options.secure).toBe(true);
   });
 });

@@ -1,3 +1,4 @@
+import { dev } from "$app/environment";
 import { json } from "@sveltejs/kit";
 
 import { AuthErrorCode } from "$lib/authErrorCodes.js";
@@ -158,6 +159,9 @@ function clearLegacyWorkspaceAuthCookiesForSlug(event, workspaceSlug) {
 }
 
 function isSecureCookieRequest(event) {
+  if (!dev) {
+    return true;
+  }
   return event.url.protocol === "https:";
 }
 
