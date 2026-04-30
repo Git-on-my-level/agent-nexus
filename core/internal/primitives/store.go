@@ -87,9 +87,11 @@ type EventListFilter struct {
 	ActorKind string
 	Query     string
 	Since     string
-	Until     string
-	Limit     int
-	Cursor    string
+	// SinceExclusiveID, when set together with Since, restricts to rows strictly after the (Since, SinceExclusiveID) tuple (ts DESC pagination / read-cursor lower bounds).
+	SinceExclusiveID string
+	Until            string
+	Limit            int
+	Cursor           string
 }
 
 type EventPage struct {
@@ -2342,7 +2344,22 @@ func (s *Store) ListEventsPage(ctx context.Context, filter EventListFilter) (Eve
 	args := make([]any, 0)
 	filterTypes := filter.Types
 	if strings.EqualFold(strings.TrimSpace(filter.Preset), "home_feed") {
-		filterTypes = HomeFeedEventTypes
+		explicit := dedupeStrings(filter.Types)
+		if len(explicit) > 0 {
+			allowed := map[string]struct{}{}
+			for _, eventType := range HomeFeedEventTypes {
+				allowed[eventType] = struct{}{}
+			}
+			intersect := make([]string, 0, len(explicit))
+			for _, eventType := range explicit {
+				if _, ok := allowed[eventType]; ok {
+					intersect = append(intersect, eventType)
+				}
+			}
+			filterTypes = intersect
+		} else {
+			filterTypes = HomeFeedEventTypes
+		}
 	}
 
 	if len(filterTypes) > 0 {
@@ -2380,8 +2397,13 @@ func (s *Store) ListEventsPage(ctx context.Context, filter EventListFilter) (Eve
 		}
 	}
 	if since := strings.TrimSpace(filter.Since); since != "" {
-		query += ` AND ts >= ?`
-		args = append(args, since)
+		if sid := strings.TrimSpace(filter.SinceExclusiveID); sid != "" {
+			query += ` AND (ts > ? OR (ts = ? AND id > ?))`
+			args = append(args, since, since, sid)
+		} else {
+			query += ` AND ts >= ?`
+			args = append(args, since)
+		}
 	}
 	if until := strings.TrimSpace(filter.Until); until != "" {
 		query += ` AND ts <= ?`
@@ -2404,16 +2426,22 @@ func (s *Store) ListEventsPage(ctx context.Context, filter EventListFilter) (Eve
 	if limit > 200 {
 		limit = 200
 	}
-	offset := 0
-	if cursor := strings.TrimSpace(filter.Cursor); cursor != "" {
-		decoded, err := decodeCursor(cursor)
-		if err != nil {
-			return EventPage{}, fmt.Errorf("%w: %v", ErrInvalidCursor, err)
-		}
-		offset = decoded
+	keyset, keyTS, keyID, offset, err := parseEventListPageCursor(strings.TrimSpace(filter.Cursor))
+	if err != nil {
+		return EventPage{}, fmt.Errorf("%w: %v", ErrInvalidCursor, err)
 	}
-	query += ` ORDER BY ts DESC, id DESC LIMIT ? OFFSET ?`
-	args = append(args, limit+1, offset)
+	if keyset {
+		query += ` AND ((ts < ?) OR (ts = ? AND id < ?))`
+		args = append(args, keyTS, keyTS, keyID)
+	}
+	query += ` ORDER BY ts DESC, id DESC`
+	if keyset {
+		query += ` LIMIT ?`
+		args = append(args, limit+1)
+	} else {
+		query += ` LIMIT ? OFFSET ?`
+		args = append(args, limit+1, offset)
+	}
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -2456,7 +2484,8 @@ func (s *Store) ListEventsPage(ctx context.Context, filter EventListFilter) (Eve
 	nextCursor := ""
 	if len(events) > limit {
 		events = events[:limit]
-		nextCursor = encodeCursor(offset + limit)
+		last := events[len(events)-1]
+		nextCursor = encodeEventKeysetCursor(anyStringValue(last["ts"]), anyStringValue(last["id"]))
 	}
 	return EventPage{Events: events, NextCursor: nextCursor}, nil
 }
@@ -2478,10 +2507,16 @@ func (s *Store) ListHomeUnread(ctx context.Context, readerID string) ([]HomeUnre
 	if err != nil {
 		return nil, 0, err
 	}
+	sinceBoundOK, sinceTS, sinceExclusiveID := homeUnreadSinceLowerBound(topicByID, cursorByTopic)
 
 	groupByTopic := map[string]*HomeUnreadGroup{}
 	for cursor := ""; ; {
-		eventsPage, err := s.ListEventsPage(ctx, EventListFilter{Preset: "home_feed", Limit: 200, Cursor: cursor})
+		f := EventListFilter{Preset: "home_feed", Limit: 200, Cursor: cursor}
+		if sinceBoundOK && cursor == "" {
+			f.Since = sinceTS
+			f.SinceExclusiveID = sinceExclusiveID
+		}
+		eventsPage, err := s.ListEventsPage(ctx, f)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -2686,6 +2721,28 @@ func homeEventAfterCursor(event map[string]any, cursor homeReadCursor) bool {
 	ts := anyStringValue(event["ts"])
 	id := anyStringValue(event["id"])
 	return ts > cursor.TS || (ts == cursor.TS && id > cursor.ID)
+}
+
+// homeUnreadSinceLowerBound returns a global lower bound on events that can still be home-unread
+// when every topic has a read cursor: strictly after the lexicographically smallest (ts, id) cursor.
+func homeUnreadSinceLowerBound(topicByID map[string]map[string]any, cursorByTopic map[string]homeReadCursor) (ok bool, ts string, exclusiveID string) {
+	if len(topicByID) == 0 {
+		return false, "", ""
+	}
+	for topicID := range topicByID {
+		c := cursorByTopic[topicID]
+		if strings.TrimSpace(c.TS) == "" || strings.TrimSpace(c.ID) == "" {
+			return false, "", ""
+		}
+		if ts == "" {
+			ts, exclusiveID = c.TS, c.ID
+			continue
+		}
+		if c.TS < ts || (c.TS == ts && c.ID < exclusiveID) {
+			ts, exclusiveID = c.TS, c.ID
+		}
+	}
+	return true, ts, exclusiveID
 }
 
 func homeNearTied(left, right string) bool {
@@ -3363,6 +3420,58 @@ func encodeCursor(offset int) string {
 	}
 	cursor := fmt.Sprintf("offset:%d", offset)
 	return base64.StdEncoding.EncodeToString([]byte(cursor))
+}
+
+func encodeEventKeysetCursor(ts, id string) string {
+	ts = strings.TrimSpace(ts)
+	id = strings.TrimSpace(id)
+	if ts == "" || id == "" {
+		return ""
+	}
+	payload, err := json.Marshal(map[string]string{"ts": ts, "id": id})
+	if err != nil {
+		return ""
+	}
+	inner := append([]byte("evk:"), payload...)
+	return base64.StdEncoding.EncodeToString(inner)
+}
+
+// parseEventListPageCursor decodes ListEventsPage cursors: keyset (evk:...) or legacy offset cursors.
+func parseEventListPageCursor(cursor string) (keyset bool, ts, id string, offset int, err error) {
+	cursor = strings.TrimSpace(cursor)
+	if cursor == "" {
+		return false, "", "", 0, nil
+	}
+	raw, err := base64.StdEncoding.DecodeString(cursor)
+	if err != nil {
+		return false, "", "", 0, fmt.Errorf("invalid cursor encoding: %w", err)
+	}
+	s := string(raw)
+	if strings.HasPrefix(s, "evk:") {
+		var obj struct {
+			TS string `json:"ts"`
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal([]byte(strings.TrimPrefix(s, "evk:")), &obj); err != nil {
+			return false, "", "", 0, fmt.Errorf("invalid events keyset cursor: %w", err)
+		}
+		if strings.TrimSpace(obj.TS) == "" || strings.TrimSpace(obj.ID) == "" {
+			return false, "", "", 0, fmt.Errorf("invalid events keyset cursor: empty ts or id")
+		}
+		return true, obj.TS, obj.ID, 0, nil
+	}
+	parts := strings.Split(s, ":")
+	if len(parts) != 2 || parts[0] != "offset" {
+		return false, "", "", 0, fmt.Errorf("invalid cursor format")
+	}
+	off, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return false, "", "", 0, fmt.Errorf("invalid cursor offset: %w", err)
+	}
+	if off <= 0 {
+		return false, "", "", 0, fmt.Errorf("invalid cursor offset: must be greater than zero")
+	}
+	return false, "", "", off, nil
 }
 
 func decodeCursor(cursor string) (int, error) {

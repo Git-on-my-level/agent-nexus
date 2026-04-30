@@ -3,6 +3,7 @@ package server
 import (
 	"crypto/sha1"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -54,6 +55,10 @@ func handleListEvents(w http.ResponseWriter, r *http.Request, opts handlerOption
 		Cursor:    strings.TrimSpace(query.Get("cursor")),
 	})
 	if err != nil {
+		if errors.Is(err, primitives.ErrInvalidCursor) {
+			writeError(w, http.StatusBadRequest, "invalid_request", "cursor is invalid")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list events")
 		return
 	}

@@ -122,7 +122,7 @@
     if (!nextCursor) return;
     urlCursor = nextCursor;
     await replaceUrlFilters(nextCursor);
-    await loadEvents();
+    await loadEvents({ append: true });
   }
 
   async function useHomePreset() {

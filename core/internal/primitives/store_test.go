@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -190,6 +191,172 @@ func TestListEventsAfterUsesChronologicalTimestampOrdering(t *testing.T) {
 	}
 	if got := events[0]["id"]; got != "event-fractional" {
 		t.Fatalf("expected fractional event after cursor, got %#v", got)
+	}
+}
+
+func TestListEventsPageKeysetPaginationNoSkipsOrDuplicates(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	store := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+
+	base := time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC)
+	for i := range 5 {
+		ts := base.Add(time.Duration(i) * time.Second).Format(time.RFC3339Nano)
+		_, err := store.AppendEvent(ctx, "actor-1", map[string]any{
+			"type":      "message_posted",
+			"ts":        ts,
+			"thread_id": "thread-pg",
+			"refs":      []any{"thread:thread-pg"},
+			"payload":   map[string]any{"text": fmt.Sprintf("m%d", i)},
+		})
+		if err != nil {
+			t.Fatalf("append event %d: %v", i, err)
+		}
+	}
+
+	seen := map[string]struct{}{}
+	cursor := ""
+	for page := 0; page < 10; page++ {
+		p, err := store.ListEventsPage(ctx, primitives.EventListFilter{
+			Types:    []string{"message_posted"},
+			ThreadID: "thread-pg",
+			Limit:    2,
+			Cursor:   cursor,
+		})
+		if err != nil {
+			t.Fatalf("list page %d: %v", page, err)
+		}
+		for _, ev := range p.Events {
+			id := ev["id"].(string)
+			if _, ok := seen[id]; ok {
+				t.Fatalf("duplicate event id %s across pages", id)
+			}
+			seen[id] = struct{}{}
+		}
+		if p.NextCursor == "" {
+			break
+		}
+		cursor = p.NextCursor
+	}
+	if len(seen) != 5 {
+		t.Fatalf("expected 5 distinct events, got %d", len(seen))
+	}
+}
+
+func TestListEventsPageHomeFeedPresetIntersectsExplicitTypes(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	store := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+
+	if _, err := store.AppendEvent(ctx, "actor-1", map[string]any{
+		"type":      "message_posted",
+		"thread_id": "thread-hf",
+		"refs":      []any{"thread:thread-hf"},
+		"payload":   map[string]any{"text": "a"},
+	}); err != nil {
+		t.Fatalf("append message: %v", err)
+	}
+	if _, err := store.AppendEvent(ctx, "actor-1", map[string]any{
+		"type": "agent_bridge_checked_in",
+		"refs": []any{},
+		"payload": map[string]any{
+			"handle": "h", "actor_id": "actor-1", "workspace_id": "w", "workspace_ids": []any{"w"},
+			"bridge_instance_id": "b", "checked_in_at": "2026-04-29T12:00:00Z", "expires_at": "2026-04-29T12:02:00Z",
+			"proof_signature_b64": "sig",
+		},
+	}); err != nil {
+		t.Fatalf("append bridge: %v", err)
+	}
+
+	events, err := store.ListEvents(ctx, primitives.EventListFilter{
+		Preset: "home_feed",
+		Types:  []string{"message_posted"},
+		Limit:  50,
+	})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event (intersection), got %d: %#v", len(events), events)
+	}
+	if events[0]["type"] != "message_posted" {
+		t.Fatalf("expected message_posted, got %#v", events[0]["type"])
+	}
+}
+
+func TestListEventsPageSinceExclusiveIDBoundsRows(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	store := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+
+	ts := "2026-05-01T10:00:00Z"
+	ins := func(id string) {
+		body := map[string]any{
+			"id":        id,
+			"type":      "message_posted",
+			"ts":        ts,
+			"actor_id":  "actor-1",
+			"thread_id": "thread-since",
+			"refs":      []string{"thread:thread-since"},
+			"payload":   map[string]any{"text": id},
+		}
+		wrapper := primitives.EventPayloadWrapperFromBodyMap(body)
+		payloadCol, err := json.Marshal(wrapper)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		refsJSON, err := json.Marshal(body["refs"])
+		if err != nil {
+			t.Fatalf("marshal refs: %v", err)
+		}
+		if _, err := workspace.DB().ExecContext(ctx,
+			`INSERT INTO events(id, type, ts, actor_id, thread_id, refs_json, payload_json, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+			id, "message_posted", ts, "actor-1", "thread-since", string(refsJSON), string(payloadCol),
+		); err != nil {
+			t.Fatalf("insert %s: %v", id, err)
+		}
+	}
+	ins("ev-aaa")
+	ins("ev-bbb")
+	ins("ev-ccc")
+
+	p, err := store.ListEventsPage(ctx, primitives.EventListFilter{
+		Types:            []string{"message_posted"},
+		ThreadID:         "thread-since",
+		Since:            ts,
+		SinceExclusiveID: "ev-bbb",
+		Limit:            10,
+	})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(p.Events) != 1 {
+		t.Fatalf("expected 1 row strictly after (ts,ev-bbb), got %d", len(p.Events))
+	}
+	if id, _ := p.Events[0]["id"].(string); id != "ev-ccc" {
+		t.Fatalf("expected ev-ccc, got %#v", p.Events[0]["id"])
 	}
 }
 
