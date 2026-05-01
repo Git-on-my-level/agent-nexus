@@ -209,6 +209,49 @@ describe("hooks proxy retry", () => {
     );
   });
 
+  it("adds control-plane auth to same-origin API calls resolved to the hosted /ws proxy", async () => {
+    envState.ANX_CONTROL_BASE_URL = "http://127.0.0.1:8100";
+    authSessionState.currentSession = { accessToken: "workspace-token" };
+    proxyWorkspaceTargetMocks.resolveProxyTarget.mockResolvedValueOnce({
+      coreBaseUrl: "https://anx.example.test/ws/acme/ops",
+      workspace: { slug: "ops", organizationSlug: "acme" },
+    });
+    globalThis.fetch = vi.fn(
+      async () =>
+        new Response("{}", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+
+    const response = await handle({
+      event: {
+        url: new URL("https://anx.example.test/home/unread"),
+        request: new Request("https://anx.example.test/home/unread", {
+          method: "GET",
+          headers: { accept: "application/json" },
+        }),
+        cookies: {
+          get: vi.fn((name) =>
+            name === "anx_cp_access_token" ? "control-plane-token" : "",
+          ),
+        },
+      },
+      resolve: vi.fn(),
+    });
+
+    expect(response.status).toBe(200);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "https://anx.example.test/ws/acme/ops/home/unread",
+      expect.anything(),
+    );
+    const [, init] = globalThis.fetch.mock.calls[0];
+    expect(init.headers.get("X-ANX-Control-Plane-Authorization")).toBe(
+      "Bearer control-plane-token",
+    );
+    expect(init.headers.get("authorization")).toBe("Bearer workspace-token");
+  });
+
   it("pre-refreshes when only a refresh token exists so the first core fetch includes Authorization", async () => {
     authSessionState.currentSession = {
       refreshToken: "rt",
