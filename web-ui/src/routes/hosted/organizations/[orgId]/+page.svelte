@@ -19,6 +19,7 @@
     loadHostedSession,
     setActiveOrg,
   } from "$lib/hosted/session.js";
+  import { pct, storageMetric } from "$lib/hosted/usageStats.js";
 
   const orgId = $derived(String($page.params.orgId ?? ""));
   const session = $derived($hostedSession);
@@ -142,13 +143,6 @@
     void loadAll();
   });
 
-  function pct(used, total) {
-    const u = Number(used ?? 0);
-    const t = Number(total ?? 0);
-    if (!t || t <= 0) return 0;
-    return Math.min(100, Math.round((u / t) * 100));
-  }
-
   function barColor(p) {
     if (p >= 90) return "bg-danger";
     if (p >= 75) return "bg-warn";
@@ -243,8 +237,10 @@
       {@const plan = usage.plan ?? {}}
       {@const u = usage.usage ?? {}}
       <section class="grid gap-3 sm:grid-cols-3">
-        {#each [{ label: "Workspaces", used: u.workspace_count, total: plan.workspace_limit }, { label: "Artifacts (org total)", used: u.artifact_count, total: plan.artifact_capacity }, { label: "Storage (org)", used: u.storage_gb, total: plan.included_storage_gb, suffix: " GB" }] as metric}
+        {#each [{ label: "Workspaces", used: u.workspace_count, total: plan.workspace_limit }, { label: "Artifacts (org total)", used: u.artifact_count, total: plan.artifact_capacity }, storageMetric(u, plan)] as metric}
           {@const p = pct(metric.used, metric.total)}
+          {@const usedText = metric.displayUsed ?? Number(metric.used ?? 0)}
+          {@const totalText = metric.displayTotal ?? metric.total ?? "—"}
           <div class="rounded-md border border-line bg-bg-soft px-4 py-3">
             <div
               class="flex items-center justify-between text-micro uppercase tracking-wide text-fg-subtle"
@@ -253,9 +249,8 @@
               <span class="tabular-nums">{p}%</span>
             </div>
             <div class="mt-2 text-subtitle tabular-nums text-fg">
-              {Number(metric.used ?? 0)}<span class="text-meta text-fg-subtle"
-                >{metric.suffix ?? ""} / {metric.total ?? "—"}{metric.suffix ??
-                  ""}</span
+              {usedText}<span class="text-meta text-fg-subtle"
+                >{" / "}{totalText}</span
               >
             </div>
             <div class="mt-2 h-1 overflow-hidden rounded-full bg-panel-hover">

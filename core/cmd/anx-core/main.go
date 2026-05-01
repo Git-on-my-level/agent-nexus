@@ -110,6 +110,7 @@ func main() {
 		sidecarRouterCacheTTL       = envDuration("ANX_SIDECAR_ROUTER_PRINCIPAL_CACHE_TTL", time.Minute)
 		shutdownTimeout             = envDuration("ANX_SHUTDOWN_TIMEOUT", 15*time.Second)
 		enforceLocalQuotas          = envBool("ANX_ENFORCE_LOCAL_QUOTAS", true)
+		workspaceAccessMode         = envString("ANX_WORKSPACE_ACCESS_MODE", "")
 		workspaceQuota              = primitives.WorkspaceQuota{
 			MaxBlobBytes:   envInt64("ANX_WORKSPACE_MAX_BLOB_BYTES", defaultWorkspaceMaxBlobBytes),
 			MaxArtifacts:   envInt64("ANX_WORKSPACE_MAX_ARTIFACTS", defaultWorkspaceMaxArtifacts),
@@ -150,6 +151,7 @@ func main() {
 	flag.DurationVar(&staleScanInterval, "projection-stale-scan-interval", staleScanInterval, "interval used by background stale-thread scanning")
 	flag.IntVar(&projectionBatchSize, "projection-maintenance-batch-size", projectionBatchSize, "max dirty thread projections refreshed per maintenance pass")
 	flag.BoolVar(&enforceLocalQuotas, "enforce-local-quotas", enforceLocalQuotas, "enforce workspace-local write quotas")
+	flag.StringVar(&workspaceAccessMode, "workspace-access-mode", workspaceAccessMode, "workspace HTTP API mode: read_write or read_only (hosted quota enforcement)")
 	flag.Parse()
 
 	if !enforceLocalQuotas {
@@ -162,6 +164,13 @@ func main() {
 		os.Exit(1)
 	}
 	projectionMode = parsedProjectionMode
+
+	normalizedWorkspaceAccessMode, err := server.NormalizeWorkspaceAccessMode(workspaceAccessMode)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+	workspaceAccessMode = normalizedWorkspaceAccessMode
 
 	if err := auth.ValidateBootstrapTokenForNonDevDeploy(bootstrapToken); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
@@ -417,6 +426,7 @@ func main() {
 			AllowedOrigins: webAuthnAllowedOrigins,
 		}),
 		server.WithWorkspaceID(workspaceID),
+		server.WithWorkspaceAccessMode(workspaceAccessMode),
 		server.WithSecretsStore(secretsStore),
 		server.WithEnableDevActorMode(enableDevActorMode),
 		server.WithAllowUnauthenticatedWrites(allowUnauthenticatedWrites),

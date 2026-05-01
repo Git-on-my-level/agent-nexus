@@ -13,6 +13,11 @@
     isAuthError,
   } from "$lib/hosted/fetchState.js";
   import { setActiveOrg } from "$lib/hosted/session.js";
+  import {
+    formatStorageBytes,
+    pct,
+    storageMetric,
+  } from "$lib/hosted/usageStats.js";
 
   const orgId = $derived(String($page.params.orgId ?? ""));
 
@@ -55,13 +60,6 @@
     load();
   });
 
-  function pct(used, total) {
-    const u = Number(used ?? 0);
-    const t = Number(total ?? 0);
-    if (!t || t <= 0) return 0;
-    return Math.min(100, Math.round((u / t) * 100));
-  }
-
   function barColor(p) {
     if (p >= 90) return "bg-danger";
     if (p >= 75) return "bg-warn";
@@ -72,6 +70,16 @@
     if (p >= 90) return "Almost out — consider upgrading.";
     if (p >= 75) return "Getting close to the limit.";
     return "";
+  }
+
+  /** @param {any} w */
+  function workspaceAccessLabel(w) {
+    const st = String(w?.status ?? "").trim();
+    const mode = String(w?.access_mode ?? "").trim();
+    if (st === "suspended") return "Suspended";
+    if (mode === "read_only") return "Read-only";
+    if (mode === "read_write" || mode === "") return "Writable";
+    return mode;
   }
 </script>
 
@@ -89,6 +97,12 @@
       >
     </p>
     <h1 class="mt-1 text-display text-fg">Usage</h1>
+    <p class="mt-2 max-w-prose text-meta text-fg-subtle">
+      Over plan limits, workspaces may stay online in <strong class="font-medium text-fg"
+        >read-only</strong
+      >
+      mode until usage drops or you upgrade. Suspended workspaces are unavailable until billing or telemetry issues clear.
+    </p>
   </div>
 
   {#if loadError}
@@ -140,8 +154,10 @@
     </section>
 
     <section class="grid gap-3 sm:grid-cols-3">
-      {#each [{ label: "Workspaces", used: usage.workspace_count, total: plan.workspace_limit, remaining: quota.workspaces_remaining }, { label: "Artifacts (org total)", used: usage.artifact_count, total: plan.artifact_capacity, remaining: quota.artifacts_remaining }, { label: "Storage (org)", used: usage.storage_gb, total: plan.included_storage_gb, remaining: quota.storage_gb_remaining, suffix: " GB" }] as metric}
+      {#each [{ label: "Workspaces", used: usage.workspace_count, total: plan.workspace_limit, remaining: quota.workspaces_remaining }, { label: "Artifacts (org total)", used: usage.artifact_count, total: plan.artifact_capacity, remaining: quota.artifacts_remaining }, storageMetric(usage, plan, quota)] as metric}
         {@const p = pct(metric.used, metric.total)}
+        {@const usedText = metric.displayUsed ?? Number(metric.used ?? 0)}
+        {@const totalText = metric.displayTotal ?? metric.total ?? "—"}
         <div class="rounded-md border border-line bg-bg-soft px-4 py-3">
           <div
             class="flex items-center justify-between text-micro uppercase tracking-wide text-fg-subtle"
@@ -150,9 +166,8 @@
             <span class="tabular-nums">{p}%</span>
           </div>
           <div class="mt-2 text-subtitle tabular-nums text-fg">
-            {Number(metric.used ?? 0)}<span class="text-meta text-fg-subtle"
-              >{metric.suffix ?? ""} / {metric.total ?? "—"}{metric.suffix ??
-                ""}</span
+            {usedText}<span class="text-meta text-fg-subtle"
+              >{" / "}{totalText}</span
             >
           </div>
           <div class="mt-2 h-1 overflow-hidden rounded-full bg-panel-hover">
@@ -162,7 +177,7 @@
             ></div>
           </div>
           <p class="mt-2 text-micro text-fg-subtle">
-            {Number(metric.remaining ?? 0)}{metric.suffix ?? ""} remaining
+            {metric.displayRemaining ?? Number(metric.remaining ?? 0)} remaining
             {#if headroomNote(p)}
               · <span class="text-warn-text">{headroomNote(p)}</span>
             {/if}
@@ -213,6 +228,7 @@
                 class="border-b border-line text-left text-micro uppercase tracking-wide text-fg-subtle"
               >
                 <th class="px-4 py-2">Workspace</th>
+                <th class="px-4 py-2">Access</th>
                 <th class="px-4 py-2">Artifacts</th>
                 <th class="px-4 py-2">Storage</th>
                 <th class="px-4 py-2">Launches (mo)</th>
@@ -230,11 +246,12 @@
                       {w.slug}
                     </div>
                   </td>
+                  <td class="px-4 py-2 text-fg">{workspaceAccessLabel(w)}</td>
                   <td class="px-4 py-2 tabular-nums text-fg"
                     >{w.artifact_count ?? 0}</td
                   >
                   <td class="px-4 py-2 tabular-nums text-fg"
-                    >{w.storage_gb ?? 0} GB</td
+                    >{formatStorageBytes(w.storage_bytes ?? 0)}</td
                   >
                   <td class="px-4 py-2 tabular-nums text-fg"
                     >{w.monthly_launch_count ?? 0}</td

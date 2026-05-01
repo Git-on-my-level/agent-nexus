@@ -31,6 +31,7 @@ var defaultErrorMetadata = map[string]errorMetadata{
 	"storage_unavailable":        {Recoverable: true, Hint: "Retry after core storage health recovers."},
 	"request_too_large":          {Recoverable: true, Hint: "Reduce request size or split the upload before retrying."},
 	"workspace_quota_exceeded":   {Recoverable: true, Hint: "Reclaim workspace space or raise the configured quota before retrying."},
+	"workspace_read_only":        {Recoverable: true, Hint: "Remove content to get back under quota or wait for operators to restore read/write access."},
 	"stream_unavailable":         {Recoverable: false, Hint: "Streaming is unavailable on this core instance; use polling endpoints."},
 	"unknown_actor_id":           {Recoverable: true, Hint: "Register/select a valid actor id before mutating state."},
 	"username_taken":             {Recoverable: true, Hint: "Use a different username and retry registration/update."},

@@ -40,6 +40,7 @@ func handshakePayload(opts handlerOptions, schemaVersion string) (map[string]any
 		"core_instance_id":        strings.TrimSpace(opts.coreInstanceID),
 		"dev_actor_mode":          opts.enableDevActorMode,
 		"human_auth_mode":         humanAuthMode,
+		"workspace_access_mode":   strings.TrimSpace(opts.workspaceAccessMode),
 	}
 	return payload, nil
 }
@@ -52,6 +53,7 @@ func versionPayload(opts handlerOptions, schemaVersion string) (map[string]any, 
 	return map[string]any{
 		"schema_version":          strings.TrimSpace(schemaVersion),
 		"command_registry_digest": strings.TrimSpace(commandRegistryDigest),
+		"workspace_access_mode":     strings.TrimSpace(opts.workspaceAccessMode),
 	}, nil
 }
 

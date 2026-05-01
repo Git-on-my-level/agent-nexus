@@ -6,6 +6,19 @@ test.describe("hosted billing routes (mocked CP API)", () => {
   test.beforeEach(async ({ page }) => {
     await page.route("**/hosted/api/**", async (route) => {
       const url = route.request().url();
+      if (url.includes("/account/me")) {
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            account: {
+              id: "acct_test_123",
+              email: "test@example.com",
+              display_name: "Test User",
+            },
+          }),
+        });
+      }
       if (
         url.includes(`/organizations/${orgId}/billing`) &&
         route.request().method() === "GET"
@@ -42,17 +55,20 @@ test.describe("hosted billing routes (mocked CP API)", () => {
                   max_artifacts_per_workspace: 1000,
                   artifact_capacity: 1000,
                   included_storage_gb: 1,
+                  included_storage_bytes: 1024 * 1024 * 1024,
                 },
                 usage: {
-                  workspace_count: 0,
-                  artifact_count: 0,
-                  storage_gb: 0,
+                  workspace_count: 1,
+                  artifact_count: 42,
+                  storage_bytes: 9_400_000,
+                  storage_gb: 1,
                   monthly_launch_count: 0,
                 },
                 quota: {
-                  workspaces_remaining: 1,
-                  artifacts_remaining: 1000,
-                  storage_gb_remaining: 1,
+                  workspaces_remaining: 0,
+                  artifacts_remaining: 958,
+                  storage_bytes_remaining: 1024 * 1024 * 1024 - 9_400_000,
+                  storage_gb_remaining: 0,
                 },
                 workspaces: [],
               },
@@ -85,19 +101,33 @@ test.describe("hosted billing routes (mocked CP API)", () => {
                 max_artifacts_per_workspace: 1000,
                 artifact_capacity: 1000,
                 included_storage_gb: 1,
+                included_storage_bytes: 1024 * 1024 * 1024,
               },
               usage: {
-                workspace_count: 0,
-                artifact_count: 0,
-                storage_gb: 0,
+                workspace_count: 1,
+                artifact_count: 42,
+                storage_bytes: 9_400_000,
+                storage_gb: 1,
                 monthly_launch_count: 0,
               },
               quota: {
-                workspaces_remaining: 1,
-                artifacts_remaining: 1000,
-                storage_gb_remaining: 1,
+                workspaces_remaining: 0,
+                artifacts_remaining: 958,
+                storage_bytes_remaining: 1024 * 1024 * 1024 - 9_400_000,
+                storage_gb_remaining: 0,
               },
-              workspaces: [],
+              workspaces: [
+                {
+                  id: "ws_test_123",
+                  slug: "personal",
+                  display_name: "Personal",
+                  artifact_count: 42,
+                  storage_bytes: 9_400_000,
+                  storage_gb: 1,
+                  monthly_launch_count: 0,
+                  summary_stale: false,
+                },
+              ],
             },
           }),
         });
@@ -146,6 +176,8 @@ test.describe("hosted billing routes (mocked CP API)", () => {
     await page.goto(`/hosted/organizations/${encodeURIComponent(orgId)}/usage`);
     await expect(page.getByRole("heading", { name: "Usage" })).toBeVisible();
     await expect(page.getByText("Free")).toBeVisible();
+    await expect(page.getByText("9.0 MB / 1 GB")).toBeVisible();
+    await expect(page.getByText("1015 MB remaining")).toBeVisible();
   });
 
   test("billing page shows configuration panel when Stripe incomplete", async ({
@@ -155,9 +187,7 @@ test.describe("hosted billing routes (mocked CP API)", () => {
       `/hosted/organizations/${encodeURIComponent(orgId)}/billing`,
     );
     await expect(page.getByRole("heading", { name: "Billing" })).toBeVisible();
-    await expect(
-      page.getByRole("heading", { name: "Billing not yet configured" }),
-    ).toBeVisible();
+    await expect(page.getByText("Billing not yet configured.")).toBeVisible();
   });
 
   test("checkout return redirects toward org billing with activating", async ({

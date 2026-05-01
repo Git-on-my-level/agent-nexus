@@ -430,6 +430,7 @@ emit_workspace_quota_env_lines() {
   local max_documents="$3"
   local max_revisions="$4"
   local max_upload_bytes="$5"
+  local workspace_access_mode="${6:-read_write}"
 
   cat <<EOF
 ANX_WORKSPACE_MAX_BLOB_BYTES=${max_blob_bytes}
@@ -437,6 +438,7 @@ ANX_WORKSPACE_MAX_ARTIFACTS=${max_artifacts}
 ANX_WORKSPACE_MAX_DOCUMENTS=${max_documents}
 ANX_WORKSPACE_MAX_REVISIONS=${max_revisions}
 ANX_WORKSPACE_MAX_UPLOAD_BYTES=${max_upload_bytes}
+ANX_WORKSPACE_ACCESS_MODE=${workspace_access_mode}
 EOF
 }
 

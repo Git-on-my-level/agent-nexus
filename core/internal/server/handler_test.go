@@ -118,6 +118,31 @@ func TestVersionEndpoint(t *testing.T) {
 	if payload["command_registry_digest"] == "" {
 		t.Fatalf("expected command registry digest, payload=%#v", payload)
 	}
+	if payload["workspace_access_mode"] != WorkspaceAccessModeReadWrite {
+		t.Fatalf("unexpected workspace_access_mode: got %#v", payload["workspace_access_mode"])
+	}
+}
+
+func TestVersionEndpointIncludesWorkspaceAccessModeWhenReadOnly(t *testing.T) {
+	t.Parallel()
+
+	handler := NewHandler("0.2.2", WithWorkspaceAccessMode(WorkspaceAccessModeReadOnly))
+	req := httptest.NewRequest(http.MethodGet, "/version", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("unexpected status: got %d", rr.Code)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode body: %v", err)
+	}
+	if payload["workspace_access_mode"] != WorkspaceAccessModeReadOnly {
+		t.Fatalf("unexpected workspace_access_mode: got %#v", payload["workspace_access_mode"])
+	}
 }
 
 func TestHandshakeIncludesCommandRegistryDigest(t *testing.T) {
@@ -148,6 +173,9 @@ func TestHandshakeIncludesCommandRegistryDigest(t *testing.T) {
 	}
 	if payload["human_auth_mode"] != "workspace_local" {
 		t.Fatalf("expected human_auth_mode=workspace_local by default, got %#v", payload["human_auth_mode"])
+	}
+	if payload["workspace_access_mode"] != WorkspaceAccessModeReadWrite {
+		t.Fatalf("unexpected workspace_access_mode: got %#v", payload["workspace_access_mode"])
 	}
 }
 
@@ -392,6 +420,7 @@ func TestRouteRateLimitScopeForRequestIgnoresSpoofedForwardedClientAddr(t *testi
 
 	bucket, scope := routeRateLimitForRequest(req, routeAccessRequirement{
 		bucket:    routeAccessPublicAuthCeremony,
+		mutation:  routeMutationAuthCeremony,
 		supported: true,
 	})
 	if bucket != "auth" {
@@ -441,6 +470,7 @@ func TestRouteRateLimitForRequestScopesWritesByPrincipal(t *testing.T) {
 
 	bucket, scope := routeRateLimitForRequest(req, routeAccessRequirement{
 		bucket:    routeAccessWorkspaceBusiness,
+		mutation:  routeMutationBusiness,
 		supported: true,
 	})
 	if bucket != "write" {
