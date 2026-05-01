@@ -695,6 +695,41 @@ export function createAnxCoreClient(options = {}) {
       invokeJSON("artifacts.create", () =>
         generated.artifactsCreate({ body: withActorId(payload) }),
       ),
+    /**
+     * Multipart attachment upload. `file` should be a browser File or Blob (optional name on File).
+     * @param {{ refs: string[], file: Blob, summary?: string, artifact?: Record<string, unknown> }} opts
+     */
+    createArtifactAttachment: async (opts) => {
+      const refs = opts?.refs;
+      if (!Array.isArray(refs) || refs.length === 0) {
+        throw new Error("createArtifactAttachment: refs array is required");
+      }
+      const file = opts?.file;
+      if (!(file instanceof Blob)) {
+        throw new Error("createArtifactAttachment: file Blob is required");
+      }
+      const form = new FormData();
+      form.append("refs", JSON.stringify(refs));
+      const fname =
+        file instanceof File && file.name ? file.name : "attachment.bin";
+      form.append("file", file, fname);
+      if (opts.summary) form.append("summary", String(opts.summary));
+      if (opts.artifact && typeof opts.artifact === "object") {
+        form.append("artifact", JSON.stringify(opts.artifact));
+      }
+      const aid = requireActorId();
+      if (aid) form.append("actor_id", aid);
+
+      const response = await invokeDirectRaw("/artifacts/attachments", {
+        method: "POST",
+        body: form,
+        accept: "application/json",
+      });
+      return parseJsonBody(
+        await response.text(),
+        "artifacts.attachments.create",
+      );
+    },
     listArtifacts: (filters) =>
       invokeJSON("artifacts.list", () =>
         generated.artifactsList({ query: filters }),

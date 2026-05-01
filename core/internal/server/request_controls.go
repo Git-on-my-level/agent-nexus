@@ -29,12 +29,14 @@ const (
 	defaultRouteRateLimitMaxKeys   = 4096
 	defaultRouteRateLimitBucketTTL = 15 * time.Minute
 	routeRateLimitPruneInterval    = time.Minute
+	defaultAttachmentRequestBodyLimit int64 = 50 << 20
 )
 
 type RequestBodyLimits struct {
-	Default int64
-	Auth    int64
-	Content int64
+	Default    int64
+	Auth       int64
+	Content    int64
+	Attachment int64
 }
 
 type RouteRateLimits struct {
@@ -53,6 +55,9 @@ func (l RequestBodyLimits) normalize() RequestBodyLimits {
 	}
 	if l.Content <= 0 {
 		l.Content = defaultContentRequestBodyLimit
+	}
+	if l.Attachment <= 0 {
+		l.Attachment = defaultAttachmentRequestBodyLimit
 	}
 	return l
 }
@@ -230,6 +235,10 @@ func requestBodyLimitForRequest(path string, method string, bucket routeAccessRe
 	case "/artifacts", "/docs":
 		if method == http.MethodPost || method == http.MethodPatch {
 			return limits.Content
+		}
+	case "/artifacts/attachments":
+		if method == http.MethodPost {
+			return limits.Attachment
 		}
 	}
 

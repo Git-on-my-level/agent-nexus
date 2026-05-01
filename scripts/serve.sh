@@ -102,6 +102,10 @@ cleanup() {
 	kill_tree "${CORE_PID}"
 	kill_tree "${UI_PID}"
 
+	if [[ "${ANX_LOCAL_MINIO_STARTED:-}" == "1" ]]; then
+		docker rm -f "${ANX_LOCAL_MINIO_CONTAINER_NAME:-anx-dev-minio}" >/dev/null 2>&1 || true
+	fi
+
 	if [ -n "${CORE_PID}" ]; then
 		wait "${CORE_PID}" 2>/dev/null || true
 	fi
@@ -122,9 +126,31 @@ if command -v lsof >/dev/null 2>&1; then
 	fi
 fi
 
+ANX_WORKSPACE_ID="${ANX_WORKSPACE_ID:-ws_main}"
+export ANX_WORKSPACE_ID
+ANX_BLOB_S3_PREFIX="${ANX_BLOB_S3_PREFIX:-workspaces/${ANX_WORKSPACE_ID}/}"
+export ANX_BLOB_S3_PREFIX
+ANX_DEV_BLOB_BACKEND="${ANX_DEV_BLOB_BACKEND:-s3}"
+ANX_LOCAL_MINIO_CONTAINER_NAME="${ANX_LOCAL_MINIO_CONTAINER_NAME:-anx-dev-minio}"
+
+if [[ "${ANX_DEV_BLOB_BACKEND}" == "s3" ]]; then
+	# shellcheck source=/dev/null
+	source "${REPO_ROOT}/scripts/local-dev-blob-s3.sh"
+	if ! anx_local_s3_start; then
+		echo "Failed to start local MinIO. Install Docker or run with ANX_DEV_BLOB_BACKEND=filesystem." >&2
+		exit 1
+	fi
+	export ANX_LOCAL_MINIO_STARTED=1
+fi
+
 if [ "$RESET_DEV_WORKSPACE" = "1" ] && [ "$SEED_CORE" = "1" ]; then
 	echo "Clearing dev workspace (mock seed will repopulate): ${CORE_WORKSPACE_ROOT}"
 	rm -rf "${CORE_WORKSPACE_ROOT}"
+	if [[ "${ANX_DEV_BLOB_BACKEND:-}" == "s3" && "${ANX_LOCAL_MINIO_STARTED:-}" == "1" ]]; then
+		# shellcheck source=/dev/null
+		source "${REPO_ROOT}/scripts/local-dev-blob-s3.sh"
+		anx_local_s3_reset_prefix "workspaces/${ANX_WORKSPACE_ID}"
+	fi
 fi
 
 # Workspace secrets (/secrets) need ANX_SECRETS_KEY (32 bytes as 64 hex chars).
@@ -149,14 +175,20 @@ fi
 
 ANX_BOOTSTRAP_TOKEN="${ANX_BOOTSTRAP_TOKEN:-anx-dev-bootstrap-token}"
 export ANX_BOOTSTRAP_TOKEN
-ANX_WORKSPACE_ID="${ANX_WORKSPACE_ID:-ws_main}"
-export ANX_WORKSPACE_ID
 ANX_DEV_REGISTER_LINKED_ACTORS="${ANX_DEV_REGISTER_LINKED_ACTORS:-1}"
 export ANX_DEV_REGISTER_LINKED_ACTORS
 
 HOST="${CORE_HOST}" \
 	PORT="${CORE_PORT}" \
 	WORKSPACE_ROOT="${CORE_WORKSPACE_ROOT}" \
+	ANX_BLOB_BACKEND="${ANX_BLOB_BACKEND:-}" \
+	ANX_BLOB_S3_BUCKET="${ANX_BLOB_S3_BUCKET:-}" \
+	ANX_BLOB_S3_PREFIX="${ANX_BLOB_S3_PREFIX:-}" \
+	ANX_BLOB_S3_REGION="${ANX_BLOB_S3_REGION:-}" \
+	ANX_BLOB_S3_ENDPOINT="${ANX_BLOB_S3_ENDPOINT:-}" \
+	ANX_BLOB_S3_ACCESS_KEY_ID="${ANX_BLOB_S3_ACCESS_KEY_ID:-}" \
+	ANX_BLOB_S3_SECRET_ACCESS_KEY="${ANX_BLOB_S3_SECRET_ACCESS_KEY:-}" \
+	ANX_BLOB_S3_FORCE_PATH_STYLE="${ANX_BLOB_S3_FORCE_PATH_STYLE:-}" \
 	"${REPO_ROOT}/core/scripts/dev" &
 CORE_PID=$!
 

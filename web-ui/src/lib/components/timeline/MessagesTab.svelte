@@ -202,6 +202,9 @@
   );
   let postingMessage = $state(false);
   let postMessageError = $state("");
+  let attachingFile = $state(false);
+  let attachmentError = $state("");
+  let pendingAttachmentRefs = $state([]);
 
   let mentionCandidates = $state([]);
   let mentionLoading = $state(false);
@@ -678,6 +681,11 @@
       const extra = (Array.isArray(extraPostRefs) ? extraPostRefs : [])
         .map((r) => String(r ?? "").trim())
         .filter(Boolean);
+      const pendingAttachments = (
+        Array.isArray(pendingAttachmentRefs) ? pendingAttachmentRefs : []
+      )
+        .map((r) => String(r ?? "").trim())
+        .filter(Boolean);
       const docCom = hasPendingDocumentComment
         ? /** @type {Record<string, unknown>} */ (pendingDocumentComment)
         : null;
@@ -686,7 +694,12 @@
           ? `document_revision:${String(docCom.revision_id).trim()}`
           : "";
       const refs = [
-        ...new Set([...baseRefs, ...extra, ...[revRef].filter(Boolean)]),
+        ...new Set([
+          ...baseRefs,
+          ...extra,
+          ...pendingAttachments,
+          ...[revRef].filter(Boolean),
+        ]),
       ];
       const trimmed = messageText.trim();
       let summary = `Message: ${trimmed.slice(0, 100)}`;
@@ -712,6 +725,8 @@
       });
       messageText = "";
       replyToEventId = "";
+      pendingAttachmentRefs = [];
+      attachmentError = "";
       closeMentions();
       if (docCom) {
         onPendingDocumentPostConsumed?.();
@@ -730,6 +745,43 @@
       postMessageError = `Failed to post: ${error instanceof Error ? error.message : String(error)}`;
     } finally {
       postingMessage = false;
+    }
+  }
+
+  async function handleAttachFile(event) {
+    const input = event.currentTarget;
+    const file = input?.files?.[0];
+    if (!file || attachingFile) return;
+    attachingFile = true;
+    attachmentError = "";
+    try {
+      const refs = [
+        ...new Set(
+          [
+            `thread:${threadId}`,
+            subjectRefFilterNorm,
+            ...(Array.isArray(extraPostRefs) ? extraPostRefs : []),
+          ]
+            .map((ref) => String(ref ?? "").trim())
+            .filter(Boolean),
+        ),
+      ];
+      const payload = await coreClient.createArtifactAttachment({
+        refs,
+        file,
+      });
+      const id = String(payload?.artifact?.id ?? "").trim();
+      if (!id) {
+        attachmentError = "Upload succeeded but artifact id missing.";
+        return;
+      }
+      const ref = `artifact:${id}`;
+      pendingAttachmentRefs = [...new Set([...pendingAttachmentRefs, ref])];
+    } catch (error) {
+      attachmentError = `Upload failed: ${error instanceof Error ? error.message : String(error)}`;
+    } finally {
+      attachingFile = false;
+      if (input) input.value = "";
     }
   }
 </script>
@@ -1075,7 +1127,46 @@
           >.
         </p>
       {/if}
+      {#if pendingAttachmentRefs.length > 0}
+        <div class="flex flex-wrap items-center gap-1.5 text-micro">
+          <span class="text-[var(--fg-muted)]">Attached</span>
+          {#each pendingAttachmentRefs as ref (ref)}
+            <span
+              class="inline-flex items-center gap-1 rounded border border-[var(--line)] bg-[var(--panel)] px-2 py-0.5 text-[var(--fg)]"
+            >
+              {ref}
+              <button
+                class="text-[var(--fg-muted)] hover:text-[var(--fg)]"
+                type="button"
+                aria-label={`Remove ${ref}`}
+                onclick={() => {
+                  pendingAttachmentRefs = pendingAttachmentRefs.filter(
+                    (candidate) => candidate !== ref,
+                  );
+                }}
+              >
+                ×
+              </button>
+            </span>
+          {/each}
+        </div>
+      {/if}
+      {#if attachmentError}
+        <p class="text-micro text-danger-text">{attachmentError}</p>
+      {/if}
       <div class="msg-actions flex shrink-0 items-center justify-end gap-2">
+        <label
+          class="inline-flex cursor-pointer items-center rounded border border-[var(--line)] bg-[var(--bg)] px-3 py-1 text-micro font-medium text-[var(--fg)] hover:bg-[var(--bg-soft)]"
+        >
+          {attachingFile ? "Uploading…" : "Attach file"}
+          <input
+            class="sr-only"
+            accept="image/*,text/plain,text/markdown,text/csv,.md,.txt,.csv,.json,.pdf"
+            disabled={attachingFile || postingMessage}
+            onchange={handleAttachFile}
+            type="file"
+          />
+        </label>
         <button
           class="cursor-pointer rounded bg-accent-solid px-3 py-1 text-micro font-medium text-white hover:bg-accent disabled:opacity-50"
           disabled={!canPost}

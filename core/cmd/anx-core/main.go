@@ -119,9 +119,10 @@ func main() {
 			MaxUploadBytes: envInt64("ANX_WORKSPACE_MAX_UPLOAD_BYTES", defaultWorkspaceMaxUploadBytes),
 		}
 		requestBodyLimits = server.RequestBodyLimits{
-			Default: envInt64("ANX_REQUEST_BODY_LIMIT_BYTES", defaultRequestBodyLimit),
-			Auth:    envInt64("ANX_AUTH_REQUEST_BODY_LIMIT_BYTES", defaultAuthRequestBodyLimit),
-			Content: envInt64("ANX_CONTENT_REQUEST_BODY_LIMIT_BYTES", defaultContentRequestBodyLimit),
+			Default:    envInt64("ANX_REQUEST_BODY_LIMIT_BYTES", defaultRequestBodyLimit),
+			Auth:       envInt64("ANX_AUTH_REQUEST_BODY_LIMIT_BYTES", defaultAuthRequestBodyLimit),
+			Content:    envInt64("ANX_CONTENT_REQUEST_BODY_LIMIT_BYTES", defaultContentRequestBodyLimit),
+			Attachment: envInt64("ANX_ATTACHMENT_MAX_UPLOAD_BYTES", primitives.DefaultAttachmentMaxUploadBytes),
 		}
 		routeRateLimits = server.RouteRateLimits{
 			AuthRequestsPerMinute:  envInt("ANX_AUTH_ROUTE_RATE_LIMIT_PER_MINUTE", defaultAuthRouteRateLimitPerMinute),

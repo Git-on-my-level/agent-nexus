@@ -356,7 +356,7 @@
       "path": "/artifacts/{artifact_id}/content",
       "operation_id": "getArtifactContent",
       "summary": "Download artifact bytes",
-      "why": "Return raw artifact payload with varying content types.",
+      "why": "Return raw artifact bytes with accurate Content-Type, Content-Disposition, ETag, and Last-Modified for attachments.",
       "input_mode": "none",
       "streaming": {
         "mode": "none"

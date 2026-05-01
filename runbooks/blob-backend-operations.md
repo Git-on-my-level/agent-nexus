@@ -53,6 +53,41 @@ For R2, set `ANX_BLOB_S3_REGION=auto` and use the R2 endpoint URL.
 
 For MinIO or other path-style providers, set `ANX_BLOB_S3_FORCE_PATH_STYLE=true`.
 
+### Hetzner Object Storage
+
+Hetzner’s product is S3-compatible. Use a location-specific HTTPS endpoint (see Hetzner docs), for example:
+
+```bash
+ANX_BLOB_BACKEND=s3
+ANX_BLOB_S3_BUCKET=your-bucket
+ANX_BLOB_S3_PREFIX=workspaces/ws_example/
+ANX_BLOB_S3_REGION=eu-central-1
+ANX_BLOB_S3_ENDPOINT=https://fsn1.your-objectstorage.com
+ANX_BLOB_S3_ACCESS_KEY_ID=<access-key>
+ANX_BLOB_S3_SECRET_ACCESS_KEY=<secret-key>
+ANX_BLOB_S3_FORCE_PATH_STYLE=true
+```
+
+Tune `ANX_BLOB_S3_REGION` and `ANX_BLOB_S3_FORCE_PATH_STYLE` per provider documentation if the SDK signs requests incorrectly.
+
+### Local OSS `make serve` (MinIO)
+
+By default, `agent-nexus/scripts/serve.sh` starts a Docker **MinIO** container (label `anx.local_dev=s3-runtime`), creates `ANX_BLOB_S3_BUCKET` (default `anx-dev-workspace-blobs`), and runs `anx-core` with `ANX_BLOB_BACKEND=s3` pointed at `http://127.0.0.1:9000`, prefix `workspaces/${ANX_WORKSPACE_ID}/`. The helper uses a dedicated Docker network (`ANX_LOCAL_MINIO_NETWORK`, default `anx-dev-minio-net`) and named volume (`ANX_LOCAL_MINIO_VOLUME`, default `anx-dev-minio-data`) so bucket setup works on Docker Desktop/macOS and the data can be wiped with other local dev state.
+
+- Escape hatch (no Docker): `ANX_DEV_BLOB_BACKEND=filesystem make serve`
+- Attachment uploads use `ANX_ATTACHMENT_MAX_UPLOAD_BYTES` (default 50 MiB) for `POST /artifacts/attachments` body limit.
+
+### Local SaaS `make serve` (MinIO)
+
+By default, `controlplane/scripts/serve-control-plane.sh` sources the same local MinIO helper and provisions Docker workspace cores with `ANX_BLOB_BACKEND=s3`. Because workspace cores run in Docker, the provisioned core env uses `http://host.docker.internal:${ANX_LOCAL_MINIO_PORT}` as the S3 endpoint while the MinIO container remains exposed on the host for debugging.
+
+- Escape hatch (no Docker local S3): `SAAS_DEV_BLOB_BACKEND=filesystem make serve`
+- `controlplane/scripts/reset-local-dev.sh` removes the local MinIO container, named volume, and Docker network along with the rest of local dev state.
+
+### Attachment previews (HTTP)
+
+`GET /artifacts/{id}/content` returns accurate `Content-Type`, `Content-Disposition` (inline for typical images/safe text; attachment for PDF, SVG, unknown binaries), `ETag`, and `Last-Modified`. PDFs are download-oriented in the web UI; Markdown is rendered via the existing sanitized markdown pipeline; SVG should be shown via `<img>` (blob URL) rather than raw inline SVG.
+
 Advantages:
 - Off-host durability
 - Storage expansion without local disk changes

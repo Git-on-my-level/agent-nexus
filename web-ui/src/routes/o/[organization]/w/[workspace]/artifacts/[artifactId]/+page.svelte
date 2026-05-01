@@ -6,6 +6,7 @@
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import TrashButton from "$lib/components/TrashButton.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
+  import AttachmentPreview from "$lib/components/AttachmentPreview.svelte";
   import { coreClient } from "$lib/coreClient";
   import { kindLabel, kindDescription, kindColor } from "$lib/artifactKinds";
   import { formatTimestamp } from "$lib/formatDate";
@@ -87,6 +88,10 @@
     typeof textContent === "string" && textContent.length > 0,
   );
   let artifactRefHints = $derived(buildArtifactRefHints());
+
+  let attachmentFileName = $derived(
+    String(artifact?.original_filename ?? artifact?.summary ?? "").trim(),
+  );
 
   function workspaceHref(pathname = "/") {
     return workspacePath(organizationSlug, workspaceSlug, pathname);
@@ -532,7 +537,7 @@
     </div>
   {/if}
 
-  {#if !contentLoadError && artifact.kind !== "doc" && artifact.kind !== "card" && !hasTextContent}
+  {#if !contentLoadError && artifact.kind !== "doc" && artifact.kind !== "card" && artifact.kind !== "attachment" && !hasTextContent}
     <div
       class="mt-3 rounded-md bg-warn-soft px-3 py-2 text-micro text-warn-text"
     >
@@ -609,7 +614,29 @@
     </div>
   {/if}
 
-  {#if hasTextContent}
+  {#if !contentLoadError && artifact.kind === "attachment" && artifactContent != null}
+    <div
+      class="mt-4 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
+    >
+      <div
+        class="flex items-center justify-between border-b border-[var(--line)] px-4 py-2.5"
+      >
+        <h2 class="text-meta font-medium text-[var(--fg)]">Attachment</h2>
+        <span class="text-micro text-[var(--fg-muted)]"
+          >{artifactContentType}</span
+        >
+      </div>
+      <div class="px-4 py-3">
+        <AttachmentPreview
+          content={artifactContent}
+          contentType={artifactContentType}
+          fileName={attachmentFileName}
+        />
+      </div>
+    </div>
+  {/if}
+
+  {#if hasTextContent && artifact.kind !== "attachment"}
     <div
       class="mt-4 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
     >
@@ -641,7 +668,7 @@
       )}</pre>
   </details>
 
-  {#if artifactContent && !textContent}
+  {#if artifactContent && !textContent && artifact.kind !== "attachment"}
     <details
       class="mt-2 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
     >

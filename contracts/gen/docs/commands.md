@@ -133,7 +133,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `none`
-- Why: Return raw artifact payload with varying content types.
+- Why: Return raw artifact bytes with accurate Content-Type, Content-Disposition, ETag, and Last-Modified for attachments.
 - Concepts: `artifacts`
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Output: Raw bytes or JSON/text depending on artifact.

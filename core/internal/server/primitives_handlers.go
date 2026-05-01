@@ -1,7 +1,9 @@
 package server
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -11,6 +13,7 @@ import (
 	"time"
 
 	"agent-nexus-core/internal/actors"
+	"agent-nexus-core/internal/blob"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/schema"
 )
@@ -379,6 +382,118 @@ func handleCreateArtifact(w http.ResponseWriter, r *http.Request, opts handlerOp
 	writeJSON(w, http.StatusCreated, map[string]any{"artifact": artifact})
 }
 
+func handleCreateArtifactAttachment(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	if opts.contract == nil {
+		writeError(w, http.StatusServiceUnavailable, "schema_unavailable", "schema contract is not configured")
+		return
+	}
+
+	if err := r.ParseMultipartForm(1 << 20); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			writeError(w, http.StatusRequestEntityTooLarge, "payload_too_large", "attachment exceeds maximum upload size")
+			return
+		}
+		writeError(w, http.StatusBadRequest, "invalid_request", "invalid multipart form")
+		return
+	}
+	defer func() {
+		if r.MultipartForm != nil {
+			_ = r.MultipartForm.RemoveAll()
+		}
+	}()
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "file part is required")
+		return
+	}
+	defer func() { _ = file.Close() }()
+
+	declared := header.Header.Get("Content-Type")
+	br := bufio.NewReader(file)
+	peek, _ := br.Peek(512)
+	detected := http.DetectContentType(peek)
+	mimeChosen, err := primitives.ChooseAttachmentMIME(declared, detected)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "unsupported_mime", err.Error())
+		return
+	}
+
+	refsRaw := strings.TrimSpace(r.FormValue("refs"))
+	if refsRaw == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "refs is required")
+		return
+	}
+	var refs []string
+	if err := json.Unmarshal([]byte(refsRaw), &refs); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "refs must be a JSON array of strings")
+		return
+	}
+	if err := schema.ValidateTypedRefs(opts.contract, refs); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+
+	artifact := map[string]any{
+		"kind": "attachment",
+		"refs": refs,
+	}
+	if summary := strings.TrimSpace(r.FormValue("summary")); summary != "" {
+		artifact["summary"] = summary
+	}
+	if rawExtras := strings.TrimSpace(r.FormValue("artifact")); rawExtras != "" {
+		var extras map[string]any
+		if err := json.Unmarshal([]byte(rawExtras), &extras); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", "artifact must be a JSON object when provided")
+			return
+		}
+		for k, v := range extras {
+			if k == "refs" || k == "kind" {
+				continue
+			}
+			artifact[k] = v
+		}
+	}
+
+	actorID, ok := resolveWriteActorID(w, r, opts, r.FormValue("actor_id"))
+	if !ok {
+		return
+	}
+
+	maxBytes := opts.requestBodyLimits.normalize().Attachment
+	created, err := opts.primitiveStore.CreateArtifactAttachment(r.Context(), actorID, artifact, mimeChosen, header.Filename, br, maxBytes)
+	if err != nil {
+		if errors.Is(err, blob.ErrUploadTooLarge) {
+			writeError(w, http.StatusRequestEntityTooLarge, "payload_too_large", "attachment exceeds maximum upload size")
+			return
+		}
+		if errors.Is(err, primitives.ErrAttachmentMimeNotAllowed) {
+			writeError(w, http.StatusBadRequest, "unsupported_mime", err.Error())
+			return
+		}
+		if writePrimitiveQuotaViolationError(w, err) {
+			return
+		}
+		if errors.Is(err, primitives.ErrConflict) {
+			writeError(w, http.StatusConflict, "conflict", "artifact already exists")
+			return
+		}
+		if errors.Is(err, primitives.ErrInvalidArtifactID) {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to create attachment")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]any{"artifact": created})
+}
+
 func handleGetArtifact(w http.ResponseWriter, r *http.Request, opts handlerOptions, artifactID string) {
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
@@ -524,7 +639,7 @@ func handleGetArtifactContent(w http.ResponseWriter, r *http.Request, opts handl
 		return
 	}
 
-	content, contentType, err := opts.primitiveStore.GetArtifactContent(r.Context(), artifactID)
+	delivery, err := opts.primitiveStore.GetArtifactContentHTTP(r.Context(), artifactID)
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "artifact content not found")
@@ -534,19 +649,28 @@ func handleGetArtifactContent(w http.ResponseWriter, r *http.Request, opts handl
 		return
 	}
 
-	switch contentType {
-	case "structured":
-		w.Header().Set("Content-Type", "application/json")
-	case "text":
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	case "binary":
-		w.Header().Set("Content-Type", "application/octet-stream")
-	default:
-		w.Header().Set("Content-Type", "application/octet-stream")
+	if delivery.ContentType != "" {
+		w.Header().Set("Content-Type", delivery.ContentType)
+	}
+	if delivery.ContentDisposition != "" {
+		w.Header().Set("Content-Disposition", delivery.ContentDisposition)
+	}
+	if delivery.ETag != "" {
+		w.Header().Set("ETag", delivery.ETag)
+	}
+	if delivery.LastModified != "" {
+		w.Header().Set("Last-Modified", delivery.LastModified)
+	}
+	if delivery.CacheControl != "" {
+		w.Header().Set("Cache-Control", delivery.CacheControl)
+	}
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	if delivery.ContentLength >= 0 {
+		w.Header().Set("Content-Length", strconv.FormatInt(delivery.ContentLength, 10))
 	}
 
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(content)
+	_, _ = w.Write(delivery.Body)
 }
 
 func handleGetUsageSummary(w http.ResponseWriter, r *http.Request, opts handlerOptions) {

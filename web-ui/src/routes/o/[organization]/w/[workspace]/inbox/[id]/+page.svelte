@@ -28,6 +28,9 @@
   let notifyTargetAgentID = $state("");
   let submitting = $state(false);
   let submitError = $state("");
+  let attachingResponseFile = $state(false);
+  let responseAttachmentError = $state("");
+  let responseAttachmentRefs = $state([]);
   let autosaveInterval = null;
   let notifyTargetQuery = $state("");
   let notifyTargetResults = $state([]);
@@ -235,6 +238,7 @@
     try {
       const resp = await coreClient.respondInboxItem(inboxItemID, {
         response_text: text,
+        related_refs: responseAttachmentRefs,
         notify_mode: notifyMode,
         notify_target_actor_id:
           notifyMode === "target" && targetActorID ? targetActorID : undefined,
@@ -243,6 +247,8 @@
       });
       if (browser) localStorage.removeItem(draftStorageKey());
       responseDraft = "";
+      responseAttachmentRefs = [];
+      responseAttachmentError = "";
       const eventId = String(resp?.event?.id ?? "").trim();
       const notify = resp?.notify ?? {};
       const requested = Boolean(notify.requested);
@@ -271,6 +277,39 @@
 
   async function submitResponse() {
     await submitResponseWithText(responseDraft);
+  }
+
+  async function handleAttachResponseFile(event) {
+    const input = event.currentTarget;
+    const file = input?.files?.[0];
+    if (!file || attachingResponseFile) return;
+    attachingResponseFile = true;
+    responseAttachmentError = "";
+    try {
+      const threadRef = String(item?.thread_id ?? "").trim()
+        ? `thread:${String(item.thread_id).trim()}`
+        : "";
+      const refs =
+        inboxRefs.length > 0 ? inboxRefs : [threadRef].filter(Boolean);
+      if (refs.length === 0) {
+        responseAttachmentError = "No valid refs are available for this item.";
+        return;
+      }
+      const payload = await coreClient.createArtifactAttachment({ refs, file });
+      const id = String(payload?.artifact?.id ?? "").trim();
+      if (!id) {
+        responseAttachmentError = "Upload succeeded but artifact id missing.";
+        return;
+      }
+      responseAttachmentRefs = [
+        ...new Set([...responseAttachmentRefs, `artifact:${id}`]),
+      ];
+    } catch (error) {
+      responseAttachmentError = `Upload failed: ${error instanceof Error ? error.message : String(error)}`;
+    } finally {
+      attachingResponseFile = false;
+      if (input) input.value = "";
+    }
   }
 
   onMount(() => {
@@ -479,6 +518,47 @@
               onkeydown={handleTextareaKeydown}
               placeholder="Write the response the agent should rely on."
             ></textarea>
+          </div>
+
+          <div class="space-y-2">
+            <div class="flex flex-wrap items-center gap-2">
+              <label
+                class="inline-flex cursor-pointer items-center rounded border border-[var(--line)] bg-[var(--panel)] px-3 py-1.5 text-micro font-medium text-fg hover:bg-[var(--bg-soft)]"
+              >
+                {attachingResponseFile ? "Uploading…" : "Attach file"}
+                <input
+                  class="sr-only"
+                  accept="image/*,text/plain,text/markdown,text/csv,.md,.txt,.csv,.json,.pdf"
+                  disabled={attachingResponseFile || submitting}
+                  onchange={handleAttachResponseFile}
+                  type="file"
+                />
+              </label>
+              {#each responseAttachmentRefs as ref (ref)}
+                <span
+                  class="inline-flex items-center gap-1 rounded border border-[var(--line)] bg-[var(--panel)] px-2 py-0.5 text-micro text-fg"
+                >
+                  {ref}
+                  <button
+                    class="text-fg-muted hover:text-fg"
+                    type="button"
+                    aria-label={`Remove ${ref}`}
+                    onclick={() => {
+                      responseAttachmentRefs = responseAttachmentRefs.filter(
+                        (candidate) => candidate !== ref,
+                      );
+                    }}
+                  >
+                    ×
+                  </button>
+                </span>
+              {/each}
+            </div>
+            {#if responseAttachmentError}
+              <p class="text-micro text-danger-text">
+                {responseAttachmentError}
+              </p>
+            {/if}
           </div>
 
           <div

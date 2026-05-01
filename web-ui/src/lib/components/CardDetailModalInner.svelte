@@ -163,6 +163,14 @@
       .join("\0");
   }
 
+  function uniqueTypedRefs(items) {
+    return [
+      ...new Set(
+        (items ?? []).map((item) => String(item ?? "").trim()).filter(Boolean),
+      ),
+    ];
+  }
+
   function syncCardDraftsFromItem(item) {
     const m = item?.membership ?? {};
     editTitle = String(m.title ?? "").trim();
@@ -461,6 +469,13 @@
   );
   let relatedRefsList = $derived(
     Array.isArray(membership?.related_refs) ? membership.related_refs : [],
+  );
+  let cardAttachContextRefs = $derived(
+    uniqueTypedRefs([
+      linkedThreadId ? `thread:${linkedThreadId}` : "",
+      boardId ? `board:${boardId}` : "",
+      cardKey ? `card:${cardKey}` : "",
+    ]),
   );
   let resolutionRefsList = $derived(
     Array.isArray(membership?.resolution_refs)
@@ -919,6 +934,7 @@
                       <GuidedTypedRefsInput
                         bind:value={editRelatedRefs}
                         {boardId}
+                        attachContextRefs={cardAttachContextRefs}
                         addInputLabel="Add related ref"
                         addInputPlaceholder="topic:summer-menu-rollout"
                         addButtonLabel="Add ref"
@@ -934,6 +950,7 @@
                       <GuidedTypedRefsInput
                         bind:value={editResolutionRefs}
                         {boardId}
+                        attachContextRefs={cardAttachContextRefs}
                         addInputLabel="Add resolution ref"
                         addInputPlaceholder="artifact:supporting-context"
                         addButtonLabel="Add ref"

@@ -2593,6 +2593,56 @@ paths:
         '409':
           $ref: '#/components/responses/ErrorResponse'
 
+  /artifacts/attachments:
+    post:
+      operationId: createArtifactAttachment
+      summary: Upload a file attachment
+      tags: [artifacts]
+      x-anx-surface: canonical
+      x-anx-why: Create kind=attachment via multipart form (efficient binary upload; previews use GET /artifacts/{id}/content).
+      x-anx-input-mode: multipart-form
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ artifact }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, conflict, unsupported_mime, payload_too_large]
+      x-anx-concepts: [artifacts, write]
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [refs, file]
+              properties:
+                refs:
+                  type: string
+                  description: JSON array of typed refs backing the attachment (e.g. `["thread:thread-1"]`).
+                file:
+                  type: string
+                  format: binary
+                summary:
+                  type: string
+                artifact:
+                  type: string
+                  description: Optional JSON object with extra artifact metadata fields (refs and kind are ignored).
+                actor_id:
+                  type: string
+      responses:
+        '201':
+          description: Attachment artifact created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
   /artifacts/{artifact_id}:
     get:
       operationId: getArtifact
@@ -3915,7 +3965,7 @@ paths:
       x-anx-surface: canonical
       x-anx-command-id: artifacts.content
       x-anx-cli-path: artifacts content
-      x-anx-why: Return raw artifact payload with varying content types.
+      x-anx-why: Return raw artifact bytes with accurate Content-Type, Content-Disposition, ETag, and Last-Modified for attachments.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Raw bytes or JSON/text depending on artifact."

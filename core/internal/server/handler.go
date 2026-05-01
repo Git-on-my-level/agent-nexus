@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"path/filepath"
@@ -46,9 +47,11 @@ type PrimitiveStore interface {
 	TrashEvent(ctx context.Context, actorID, eventID, reason string) (map[string]any, error)
 	RestoreEvent(ctx context.Context, actorID, eventID string) (map[string]any, error)
 	CreateArtifact(ctx context.Context, actorID string, artifact map[string]any, content any, contentType string) (map[string]any, error)
+	CreateArtifactAttachment(ctx context.Context, actorID string, artifact map[string]any, mimeType string, originalFilename string, src io.Reader, maxUploadBytes int64) (map[string]any, error)
 	CreateArtifactAndEvent(ctx context.Context, actorID string, artifact map[string]any, content any, contentType string, event map[string]any) (map[string]any, map[string]any, error)
 	GetArtifact(ctx context.Context, id string) (map[string]any, error)
 	GetArtifactContent(ctx context.Context, id string) ([]byte, string, error)
+	GetArtifactContentHTTP(ctx context.Context, id string) (primitives.ArtifactContentHTTP, error)
 	UpsertAgentWakeup(ctx context.Context, wakeup primitives.AgentWakeup) (primitives.AgentWakeup, error)
 	GetAgentWakeup(ctx context.Context, wakeupID string) (primitives.AgentWakeup, error)
 	ListAgentWakeups(ctx context.Context, filter primitives.AgentWakeupListFilter) ([]primitives.AgentWakeup, error)
@@ -2122,6 +2125,19 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			return
 		}
 		handleGetEvent(w, r, opts, remainder)
+	})
+
+	registerRoute("/artifacts/attachments", func(r *http.Request) routeAccessRequirement {
+		if r.Method == http.MethodPost {
+			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+		}
+		return routeAccessRequirement{}
+	}, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+			return
+		}
+		handleCreateArtifactAttachment(w, r, opts)
 	})
 
 	registerRoute("/artifacts", func(r *http.Request) routeAccessRequirement {

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"strings"
 
@@ -148,6 +149,59 @@ func (b *S3Backend) Write(ctx context.Context, hash string, data []byte) (Staged
 	}, nil
 }
 
+func (b *S3Backend) WriteStream(ctx context.Context, src io.Reader, maxBytes int64) (string, int64, StagedWrite, error) {
+	if err := contextOrBackground(ctx).Err(); err != nil {
+		return "", 0, nil, err
+	}
+
+	tmp, err := os.CreateTemp("", "anx-s3-blob-*")
+	if err != nil {
+		return "", 0, nil, err
+	}
+	tempPath := tmp.Name()
+	hasher := newSHA256Hasher()
+	n, copyErr := streamToWriterAndHash(tmp, src, hasher, maxBytes)
+	if copyErr != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tempPath)
+		if errors.Is(copyErr, ErrUploadTooLarge) {
+			return "", 0, nil, ErrUploadTooLarge
+		}
+		return "", 0, nil, copyErr
+	}
+	if _, err := tmp.Seek(0, 0); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tempPath)
+		return "", 0, nil, err
+	}
+
+	hashHex := sha256HexDigest(hasher)
+	key := b.objectKey(hashHex)
+	return hashHex, n, &s3StagedWriteStream{
+		ctx:      contextOrBackground(ctx),
+		backend:  b,
+		hash:     strings.TrimSpace(hashHex),
+		key:      key,
+		file:     tmp,
+		size:     n,
+		tempPath: tempPath,
+	}, nil
+}
+
+func (b *S3Backend) OpenReadStream(ctx context.Context, hash string) (io.ReadCloser, int64, error) {
+	output, err := b.client.GetObject(contextOrBackground(ctx), &s3.GetObjectInput{
+		Bucket: &b.config.Bucket,
+		Key:    stringPtr(b.objectKey(hash)),
+	})
+	if err != nil {
+		if isS3ObjectNotFound(err) {
+			return nil, 0, ErrBlobNotFound
+		}
+		return nil, 0, fmt.Errorf("get blob %q: %w", strings.TrimSpace(hash), err)
+	}
+	return output.Body, derefInt64(output.ContentLength), nil
+}
+
 func (b *S3Backend) Read(ctx context.Context, hash string) ([]byte, error) {
 	output, err := b.client.GetObject(contextOrBackground(ctx), &s3.GetObjectInput{
 		Bucket: &b.config.Bucket,
@@ -253,6 +307,17 @@ func (b *S3Backend) listPrefix() string {
 	return b.config.Prefix + "/"
 }
 
+type s3StagedWriteStream struct {
+	ctx      context.Context
+	backend  *S3Backend
+	hash     string
+	key      string
+	file     *os.File
+	size     int64
+	tempPath string
+	promoted bool
+}
+
 type s3StagedWrite struct {
 	ctx      context.Context
 	backend  *S3Backend
@@ -319,6 +384,87 @@ func (w *s3StagedWrite) Cleanup() error {
 		return nil
 	}
 	w.data = nil
+	return nil
+}
+
+func (w *s3StagedWriteStream) Promote() error {
+	if w == nil || w.promoted {
+		return nil
+	}
+	if w.backend == nil {
+		return fmt.Errorf("S3 blob staged write backend is not configured")
+	}
+	ctx := contextOrBackground(w.ctx)
+
+	defer func() {
+		if w.file != nil {
+			_ = w.file.Close()
+			w.file = nil
+		}
+		if w.tempPath != "" {
+			_ = os.Remove(w.tempPath)
+			w.tempPath = ""
+		}
+	}()
+
+	var body io.Reader
+	if w.size == 0 {
+		body = bytes.NewReader(nil)
+	} else {
+		if _, err := w.file.Seek(0, 0); err != nil {
+			return fmt.Errorf("rewind staged blob %q: %w", w.hash, err)
+		}
+		body = w.file
+	}
+
+	_, err := w.backend.client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:        &w.backend.config.Bucket,
+		Key:           stringPtr(w.key),
+		Body:          body,
+		ContentLength: int64Ptr(w.size),
+		IfNoneMatch:   stringPtr("*"),
+	})
+	if err == nil {
+		w.promoted = true
+		return nil
+	}
+
+	if !isS3ConditionalWriteFailure(err) {
+		exists, statErr := w.backend.Exists(ctx, w.hash)
+		if statErr == nil && exists {
+			w.promoted = true
+			return nil
+		}
+		if statErr != nil && !errors.Is(statErr, ErrBlobNotFound) {
+			return fmt.Errorf("put blob %q: %v (follow-up head failed: %w)", w.hash, err, statErr)
+		}
+		return fmt.Errorf("put blob %q: %w", w.hash, err)
+	}
+
+	exists, statErr := w.backend.Exists(ctx, w.hash)
+	if statErr != nil {
+		return fmt.Errorf("put blob %q: %v (follow-up head failed: %w)", w.hash, err, statErr)
+	}
+	if !exists {
+		return fmt.Errorf("put blob %q: %w", w.hash, err)
+	}
+
+	w.promoted = true
+	return nil
+}
+
+func (w *s3StagedWriteStream) Cleanup() error {
+	if w == nil {
+		return nil
+	}
+	if w.file != nil {
+		_ = w.file.Close()
+		w.file = nil
+	}
+	if w.tempPath != "" {
+		_ = os.Remove(w.tempPath)
+		w.tempPath = ""
+	}
 	return nil
 }
 

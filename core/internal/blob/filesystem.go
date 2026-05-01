@@ -3,6 +3,7 @@ package blob
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 )
@@ -46,6 +47,66 @@ func (b *FilesystemBackend) Write(ctx context.Context, hash string, data []byte)
 	}
 
 	return &filesystemStagedWrite{tempPath: tempPath, finalPath: finalPath}, nil
+}
+
+func (b *FilesystemBackend) WriteStream(ctx context.Context, src io.Reader, maxBytes int64) (string, int64, StagedWrite, error) {
+	_ = ctx
+	if err := os.MkdirAll(b.rootDir, 0o755); err != nil {
+		return "", 0, nil, err
+	}
+
+	file, err := os.CreateTemp(b.rootDir, ".cas-*")
+	if err != nil {
+		return "", 0, nil, err
+	}
+	tempPath := file.Name()
+
+	hasher := newSHA256Hasher()
+	n, err := streamToWriterAndHash(file, src, hasher, maxBytes)
+	if err != nil {
+		_ = file.Close()
+		_ = os.Remove(tempPath)
+		if errors.Is(err, ErrUploadTooLarge) {
+			return "", 0, nil, ErrUploadTooLarge
+		}
+		return "", 0, nil, err
+	}
+	if err := file.Chmod(0o644); err != nil {
+		_ = file.Close()
+		_ = os.Remove(tempPath)
+		return "", 0, nil, err
+	}
+	if err := file.Close(); err != nil {
+		_ = os.Remove(tempPath)
+		return "", 0, nil, err
+	}
+
+	hashHex := sha256HexDigest(hasher)
+	finalPath := b.blobPath(hashHex)
+	return hashHex, n, &filesystemStagedWrite{tempPath: tempPath, finalPath: finalPath}, nil
+}
+
+func (b *FilesystemBackend) OpenReadStream(ctx context.Context, hash string) (io.ReadCloser, int64, error) {
+	_ = ctx
+	path := b.blobPath(hash)
+	info, err := os.Stat(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, 0, ErrBlobNotFound
+		}
+		return nil, 0, err
+	}
+	if info.IsDir() {
+		return nil, 0, ErrBlobNotFound
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, 0, ErrBlobNotFound
+		}
+		return nil, 0, err
+	}
+	return f, info.Size(), nil
 }
 
 func (b *FilesystemBackend) Read(ctx context.Context, hash string) ([]byte, error) {
@@ -185,6 +246,66 @@ func (b *ObjectStoreBackend) Write(ctx context.Context, hash string, data []byte
 	}
 
 	return &objectStoreStagedWrite{tempPath: tempPath, finalPath: finalPath}, nil
+}
+
+func (b *ObjectStoreBackend) WriteStream(ctx context.Context, src io.Reader, maxBytes int64) (string, int64, StagedWrite, error) {
+	_ = ctx
+	if err := os.MkdirAll(b.rootDir, 0o755); err != nil {
+		return "", 0, nil, err
+	}
+
+	file, err := os.CreateTemp(b.rootDir, ".obj-*")
+	if err != nil {
+		return "", 0, nil, err
+	}
+	tempPath := file.Name()
+
+	hasher := newSHA256Hasher()
+	n, err := streamToWriterAndHash(file, src, hasher, maxBytes)
+	if err != nil {
+		_ = file.Close()
+		_ = os.Remove(tempPath)
+		if errors.Is(err, ErrUploadTooLarge) {
+			return "", 0, nil, ErrUploadTooLarge
+		}
+		return "", 0, nil, err
+	}
+	if err := file.Chmod(0o644); err != nil {
+		_ = file.Close()
+		_ = os.Remove(tempPath)
+		return "", 0, nil, err
+	}
+	if err := file.Close(); err != nil {
+		_ = os.Remove(tempPath)
+		return "", 0, nil, err
+	}
+
+	hashHex := sha256HexDigest(hasher)
+	finalPath := b.objectPath(hashHex)
+	return hashHex, n, &objectStoreStagedWrite{tempPath: tempPath, finalPath: finalPath}, nil
+}
+
+func (b *ObjectStoreBackend) OpenReadStream(ctx context.Context, hash string) (io.ReadCloser, int64, error) {
+	_ = ctx
+	path := b.objectPath(hash)
+	info, err := os.Stat(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, 0, ErrBlobNotFound
+		}
+		return nil, 0, err
+	}
+	if info.IsDir() {
+		return nil, 0, ErrBlobNotFound
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, 0, ErrBlobNotFound
+		}
+		return nil, 0, err
+	}
+	return f, info.Size(), nil
 }
 
 func (b *ObjectStoreBackend) Read(ctx context.Context, hash string) ([]byte, error) {

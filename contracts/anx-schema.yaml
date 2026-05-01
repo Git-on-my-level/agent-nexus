@@ -273,7 +273,10 @@ primitives:
     description: >
       Immutable blob. New versions are new artifacts linked through refs. Document
       and card revision artifacts are system-owned and managed through their wrappers;
-      all other kinds remain opaque content.
+      all other kinds remain opaque content. File attachments (`kind: attachment`)
+      store bytes via POST /artifacts/attachments; metadata includes optional
+      mime_type, original_filename, size_bytes, preview_status, and scan_status,
+      while `content_type` holds the concrete MIME type served from GET .../content.
     fields:
       id: { type: string, required: true }
       created_at: { type: datetime, required: true }

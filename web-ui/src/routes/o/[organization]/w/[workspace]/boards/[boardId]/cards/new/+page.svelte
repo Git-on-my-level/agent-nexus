@@ -49,6 +49,12 @@
   let boardId = $derived($page.params.boardId);
   let actorOptions = $derived(toActorPickerOptions($actorRegistry));
   let backingThreadId = $derived(board ? boardBackingThreadId(board) : "");
+  let attachContextRefs = $derived(
+    [
+      threadId.trim() ? `thread:${threadId.trim()}` : "",
+      boardId ? `board:${boardId}` : "",
+    ].filter(Boolean),
+  );
 
   function boardHref() {
     return workspacePath(organizationSlug, workspaceSlug, `/boards/${boardId}`);
@@ -410,6 +416,7 @@
                 <GuidedTypedRefsInput
                   bind:value={relatedRefs}
                   {boardId}
+                  {attachContextRefs}
                   addInputLabel="Add related ref"
                   addInputPlaceholder="topic:summer-menu-rollout"
                   addButtonLabel="Add ref"
@@ -426,6 +433,7 @@
                 <GuidedTypedRefsInput
                   bind:value={resolutionRefs}
                   {boardId}
+                  {attachContextRefs}
                   addInputLabel="Add resolution ref"
                   addInputPlaceholder="artifact:supporting-context"
                   addButtonLabel="Add ref"

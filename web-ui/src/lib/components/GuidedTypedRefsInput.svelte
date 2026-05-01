@@ -2,6 +2,7 @@
   import { parseRef, renderRef } from "$lib/typedRefs";
   import Button from "$lib/components/Button.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
+  import { coreClient } from "$lib/coreClient";
 
   let {
     value = $bindable(""),
@@ -19,11 +20,15 @@
     hideAdvancedToggleLabel = "Hide advanced raw input",
     advancedHint = "Paste typed refs separated by commas or new lines.",
     advancedRows = 3,
+    /** When non-empty, show a file upload that creates `artifact:` refs scoped to these typed refs. */
+    attachContextRefs = [],
   } = $props();
 
   let candidateRef = $state("");
   let localError = $state("");
   let showAdvanced = $state(false);
+  let attachBusy = $state(false);
+  let attachError = $state("");
 
   function parseRefs(rawValue) {
     return String(rawValue ?? "")
@@ -101,6 +106,37 @@
   function addSuggestion(refValue) {
     void addRef(refValue);
   }
+
+  async function onAttachSelected(event) {
+    const input = event.currentTarget;
+    const file = input?.files?.[0];
+    if (
+      !file ||
+      !Array.isArray(attachContextRefs) ||
+      attachContextRefs.length === 0
+    ) {
+      return;
+    }
+    attachBusy = true;
+    attachError = "";
+    try {
+      const payload = await coreClient.createArtifactAttachment({
+        refs: attachContextRefs,
+        file,
+      });
+      const id = payload?.artifact?.id;
+      if (!id) {
+        attachError = "Upload succeeded but artifact id missing.";
+        return;
+      }
+      addRef(`artifact:${id}`);
+    } catch (e) {
+      attachError = e instanceof Error ? e.message : String(e);
+    } finally {
+      attachBusy = false;
+      input.value = "";
+    }
+  }
 </script>
 
 {#if helperText}
@@ -149,7 +185,25 @@
     <Button variant="secondary" size="compact" onclick={addCandidate}>
       {addButtonLabel}
     </Button>
+    {#if Array.isArray(attachContextRefs) && attachContextRefs.length > 0}
+      <label
+        class="inline-flex cursor-pointer items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-2 text-micro text-[var(--fg)] hover:bg-[var(--bg-soft)]"
+      >
+        <span>{attachBusy ? "Uploading…" : "Attach file"}</span>
+        <input
+          class="sr-only"
+          accept="image/*,text/plain,text/markdown,text/csv,.md,.txt,.csv,.json,.pdf"
+          disabled={attachBusy}
+          onchange={onAttachSelected}
+          type="file"
+        />
+      </label>
+    {/if}
   </div>
+
+  {#if attachError}
+    <p class="mt-1.5 text-micro text-danger-text">{attachError}</p>
+  {/if}
 
   {#if localError}
     <p class="mt-1.5 text-micro text-danger-text">{localError}</p>
