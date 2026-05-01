@@ -1080,13 +1080,21 @@
           </p>
         {:else}
           <div
-            class="space-y-px rounded-md border border-[var(--line)] bg-[var(--bg-soft)] overflow-hidden"
+            class="space-y-px rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
           >
             {#each principals as principal, i}
               {@const badge = principalBadge(principal)}
               {@const isCurrent = isCurrentPrincipal(principal)}
+              {@const rowRound =
+                principals.length === 1
+                  ? "rounded-md"
+                  : i === 0
+                    ? "rounded-t-md"
+                    : i === principals.length - 1
+                      ? "rounded-b-md"
+                      : ""}
               <div
-                class="group relative px-3 py-2 transition-colors hover:bg-[var(--line-subtle)] {i >
+                class="group relative px-3 py-2 transition-colors hover:bg-[var(--line-subtle)] {rowRound} {i >
                 0
                   ? 'border-t border-[var(--line)]'
                   : ''} {principal.revoked ? 'opacity-50' : ''}"
@@ -1133,12 +1141,12 @@
                         </button>
                         {#if wakePopoverTarget === principal.agent_id}
                           <div
-                            class="absolute left-12 top-full z-30 mt-1 w-72 rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-2 sm:left-24"
+                            class="absolute left-12 top-full z-30 mt-1 w-72 rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-3 sm:left-24"
                             style="box-shadow: var(--shadow-modal)"
                             role="tooltip"
                           >
-                            <div class="flex items-start justify-between gap-2">
-                              <div>
+                            <div class="flex items-start justify-between gap-3">
+                              <div class="min-w-0 flex-1">
                                 <p
                                   class="text-micro font-medium {principal
                                     .wakeRouting.badgeClass}"

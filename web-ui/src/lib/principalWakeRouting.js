@@ -3,32 +3,32 @@ function badgeForWakeRoutingState(state) {
     case "online":
       return {
         badgeLabel: "Online",
-        badgeClass: "bg-emerald-500/10 text-emerald-400",
+        badgeClass: "bg-ok-soft text-ok-text",
       };
     case "revoked":
       return {
         badgeLabel: "Revoked",
-        badgeClass: "bg-red-500/10 text-red-400",
+        badgeClass: "bg-danger-soft text-danger-text",
       };
     case "disabled":
       return {
         badgeLabel: "Disabled",
-        badgeClass: "bg-amber-500/10 text-amber-400",
+        badgeClass: "bg-warn-soft text-warn-text",
       };
     case "unregistered":
       return {
         badgeLabel: "Unregistered",
-        badgeClass: "bg-amber-500/10 text-amber-400",
+        badgeClass: "bg-warn-soft text-warn-text",
       };
     case "unknown":
       return {
         badgeLabel: "Unknown",
-        badgeClass: "bg-slate-500/10 text-slate-300",
+        badgeClass: "bg-bg-soft text-fg-muted",
       };
     default:
       return {
         badgeLabel: "Offline",
-        badgeClass: "bg-amber-500/10 text-amber-400",
+        badgeClass: "bg-warn-soft text-warn-text",
       };
   }
 }
