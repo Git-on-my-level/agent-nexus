@@ -867,9 +867,10 @@
             event.preventDefault();
             handleCreateInvite();
           }}
+          class="space-y-4"
         >
-          <div class="flex flex-wrap items-end gap-3">
-            <div class="flex-1 min-w-[200px]">
+          <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div class="flex flex-col">
               <label
                 class="mb-1 block text-micro font-medium text-[var(--fg-muted)]"
                 for="invite-kind"
@@ -885,14 +886,23 @@
                 <option value="human">Human</option>
                 <option value="any">Any</option>
               </select>
+              <p class="mt-1 text-micro text-[var(--fg-muted)]">
+                {newInviteKind === "human"
+                  ? "Invites a human to join via passkey."
+                  : newInviteKind === "any"
+                    ? "Recipient chooses agent or human at registration."
+                    : "Invites a CLI agent to register and join wake routing."}
+              </p>
             </div>
             {#if newInviteKind === "agent" || newInviteKind === "any"}
-              <div class="flex-[2] min-w-[240px]">
+              <div class="flex flex-col">
                 <label
                   class="mb-1 block text-micro font-medium text-[var(--fg-muted)]"
                   for="invite-agent-name"
                 >
-                  Agent profile name (optional)
+                  Agent profile name <span class="font-normal opacity-70"
+                    >(optional)</span
+                  >
                 </label>
                 <input
                   value={newInviteAgentName}
@@ -905,16 +915,17 @@
                   type="text"
                 />
                 <p class="mt-1 text-micro text-[var(--fg-muted)]">
-                  Local CLI profile name for <code>--agent</code>; it helps the
-                  agent recognize its own ANX profile on that machine.
+                  Local CLI profile name for <code>--agent</code>.
                 </p>
               </div>
-              <div class="flex-[2] min-w-[240px]">
+              <div class="flex flex-col">
                 <label
                   class="mb-1 block text-micro font-medium text-[var(--fg-muted)]"
                   for="invite-username"
                 >
-                  @handle / username (optional)
+                  @handle / username <span class="font-normal opacity-70"
+                    >(optional)</span
+                  >
                 </label>
                 <input
                   value={newInviteUsername}
@@ -928,11 +939,12 @@
                   type="text"
                 />
                 <p class="mt-1 text-micro text-[var(--fg-muted)]">
-                  Workspace handle used for <code>@claude-code</code> mentions and
-                  wake routing. Suggested from the profile name until you edit it.
+                  Workspace handle for <code>@mentions</code> and wake routing.
                 </p>
               </div>
             {/if}
+          </div>
+          <div class="flex justify-end border-t border-[var(--line)] pt-3">
             <Button
               variant="primary"
               size="compact"
@@ -1047,24 +1059,53 @@
           >
         {/if}
       </h2>
-      <p class="mb-2 text-micro text-[var(--fg-muted)]">
-        Registered agents can be tagged from thread messages with
-        <code class="rounded bg-[var(--line)] px-1 py-px text-micro"
-          >@handle</code
-        >. Tagging an agent creates a wake notification for that agent.
-        <span
-          class="rounded bg-ok-soft px-1 py-px text-micro font-medium text-ok-text"
-          >Online</span
+      <details class="principals-help mb-2 text-micro text-[var(--fg-muted)]">
+        <summary
+          class="inline-flex cursor-pointer items-center gap-1 rounded text-[var(--fg-muted)] hover:text-[var(--fg)]"
         >
-        agents have a fresh bridge check-in and will automatically receive and process
-        tagged messages.
-        <span
-          class="rounded bg-warn-soft px-1 py-px text-micro font-medium text-warn-text"
-          >Offline</span
-        >
-        agents stay taggable; they can read pending wake notifications later from
-        the CLI or when their bridge comes back online.
-      </p>
+          <svg
+            class="principals-help__chevron h-3 w-3 transition-transform"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            stroke-width="2.5"
+            aria-hidden="true"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M9 5l7 7-7 7"
+            />
+          </svg>
+          <span>
+            Tag agents with
+            <code class="rounded bg-[var(--line)] px-1 py-px">@handle</code>
+            to wake them. How wake routing works
+          </span>
+        </summary>
+        <div class="mt-2 space-y-1.5 pl-4">
+          <p class="flex items-start gap-2">
+            <span
+              class="mt-px shrink-0 rounded bg-ok-soft px-1 py-px text-micro font-medium text-ok-text"
+              >Online</span
+            >
+            <span
+              >Fresh bridge check-in — receives and processes tagged messages
+              automatically.</span
+            >
+          </p>
+          <p class="flex items-start gap-2">
+            <span
+              class="mt-px shrink-0 rounded bg-warn-soft px-1 py-px text-micro font-medium text-warn-text"
+              >Offline</span
+            >
+            <span
+              >Still taggable — pending wake notifications are read from the CLI
+              or when the bridge comes back online.</span
+            >
+          </p>
+        </div>
+      </details>
       {#if principalsState.status === SECTION_ERROR}
         <p
           class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
@@ -1094,7 +1135,7 @@
                       ? "rounded-b-md"
                       : ""}
               <div
-                class="group relative px-3 py-2 transition-colors hover:bg-[var(--line-subtle)] {rowRound} {i >
+                class="group relative px-3 py-2.5 transition-colors hover:bg-[var(--line-subtle)] {rowRound} {i >
                 0
                   ? 'border-t border-[var(--line)]'
                   : ''} {principal.revoked ? 'opacity-50' : ''}"
@@ -1108,7 +1149,9 @@
                     </span>
                   {/if}
                   <div class="min-w-0 flex-1">
-                    <div class="flex min-w-0 items-center gap-1.5">
+                    <div
+                      class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"
+                    >
                       {#if principal.username}
                         <span
                           class="truncate text-meta font-medium text-[var(--fg)]"
@@ -1124,7 +1167,7 @@
                         </div>
                       {/if}
                       <span
-                        class="hidden shrink-0 text-micro text-[var(--fg-muted)] sm:inline"
+                        class="hidden shrink-0 rounded bg-[var(--line-subtle)] px-1.5 py-0.5 text-micro font-medium text-[var(--fg-muted)] sm:inline"
                       >
                         {principalLabel(principal)}
                       </span>
@@ -1486,6 +1529,16 @@
 />
 
 <style>
+  .principals-help summary {
+    list-style: none;
+  }
+  .principals-help summary::-webkit-details-marker {
+    display: none;
+  }
+  .principals-help[open] :global(.principals-help__chevron) {
+    transform: rotate(90deg);
+  }
+
   :global(#access-create-invite.access-invite-pulse) {
     animation: access-invite-pulse-anim 1.4s ease-out;
   }

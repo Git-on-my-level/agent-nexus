@@ -74,6 +74,26 @@ export const QA_HOSTED_WORKSPACES = [
   },
 ];
 
+/** Full UsagePlan-shaped rows matching control-plane JSON (billing.plan_usage_envelopes). */
+function qaHostedUsagePlanEnvelope({
+  id,
+  displayName,
+  wl,
+  artifactCap,
+  storageGb,
+}) {
+  const gb = Number(storageGb);
+  return {
+    id,
+    display_name: displayName,
+    workspace_limit: wl,
+    max_artifacts_per_workspace: artifactCap,
+    artifact_capacity: artifactCap,
+    included_storage_gb: gb,
+    included_storage_bytes: gb * 1024 * 1024 * 1024,
+  };
+}
+
 export const QA_HOSTED_BILLING_SUMMARY = {
   organization_id: "org_qa_primary",
   plan_tier: "team",
@@ -102,17 +122,23 @@ export const QA_HOSTED_BILLING_SUMMARY = {
       max_artifacts_per_workspace: 125000,
       artifact_capacity: 125000,
       included_storage_gb: 25,
+      included_storage_bytes: 25 * 1024 * 1024 * 1024,
     },
     usage: {
       workspace_count: 3,
       artifact_count: 384,
-      storage_gb: 7.4,
+      storage_bytes: Math.floor(7.4 * 1024 * 1024 * 1024),
+      storage_gb: 8,
       monthly_launch_count: 118,
     },
     quota: {
       workspaces_remaining: 2,
       artifacts_remaining: 124616,
-      storage_gb_remaining: 17.6,
+      storage_bytes_remaining: Math.max(
+        0,
+        Math.floor(25 * 1024 ** 3 - 7.4 * 1024 ** 3),
+      ),
+      storage_gb_remaining: 17,
     },
     workspaces: QA_HOSTED_WORKSPACES.map((workspace, index) => {
       const artifactCounts = [164, 102, 118];
@@ -148,6 +174,36 @@ export const QA_HOSTED_BILLING_SUMMARY = {
       scale: "price_qa_scale",
     },
     missing_configuration: [],
+  },
+  plan_usage_envelopes: {
+    starter: qaHostedUsagePlanEnvelope({
+      id: "starter",
+      displayName: "Free",
+      wl: 1,
+      artifactCap: 1000,
+      storageGb: 1,
+    }),
+    team: qaHostedUsagePlanEnvelope({
+      id: "team",
+      displayName: "Pro",
+      wl: 5,
+      artifactCap: 125_000,
+      storageGb: 25,
+    }),
+    scale: qaHostedUsagePlanEnvelope({
+      id: "scale",
+      displayName: "Scale",
+      wl: 25,
+      artifactCap: 2_500_000,
+      storageGb: 250,
+    }),
+    enterprise: qaHostedUsagePlanEnvelope({
+      id: "enterprise",
+      displayName: "Enterprise",
+      wl: 100,
+      artifactCap: 100_000_000,
+      storageGb: 1000,
+    }),
   },
 };
 

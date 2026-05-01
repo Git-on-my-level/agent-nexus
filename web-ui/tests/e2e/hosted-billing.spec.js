@@ -2,6 +2,64 @@ import { expect, test } from "@playwright/test";
 
 const orgId = "org_test_123";
 
+/** Mirrors control-plane UsagePlan JSON for mocks (billing plan_usage_envelopes). */
+function mockTierEnvelope(
+  /** @type {"starter"|"team"|"scale"|"enterprise"} */
+  tier,
+) {
+  const base = (
+    /** @type {{ id: string; display: string; wl: number; cap: number; gb: number }} */
+    row,
+  ) => ({
+    id: row.id,
+    display_name: row.display,
+    workspace_limit: row.wl,
+    max_artifacts_per_workspace: row.cap,
+    artifact_capacity: row.cap,
+    included_storage_gb: row.gb,
+    included_storage_bytes:
+      typeof row.gb === "number"
+        ? row.gb * (1024 * 1024 * 1024)
+        : Number(row.gb),
+  });
+  switch (tier) {
+    case "starter":
+      return base({
+        id: "starter",
+        display: "Free",
+        wl: 1,
+        cap: 1000,
+        gb: 1,
+      });
+    case "team":
+      return base({
+        id: "team",
+        display: "Pro",
+        wl: 5,
+        cap: 125_000,
+        gb: 25,
+      });
+    case "scale":
+      return base({
+        id: "scale",
+        display: "Scale",
+        wl: 25,
+        cap: 2_500_000,
+        gb: 250,
+      });
+    case "enterprise":
+      return base({
+        id: "enterprise",
+        display: "Enterprise",
+        wl: 100,
+        cap: 100_000_000,
+        gb: 1000,
+      });
+    default:
+      throw new Error(tier);
+  }
+}
+
 test.describe("hosted billing routes (mocked CP API)", () => {
   test.beforeEach(async ({ page }) => {
     await page.route("**/hosted/api/**", async (route) => {
@@ -82,6 +140,12 @@ test.describe("hosted billing routes (mocked CP API)", () => {
                 customer_portal_configured: false,
                 plan_price_ids: {},
                 missing_configuration: ["stripe secret key"],
+              },
+              plan_usage_envelopes: {
+                starter: mockTierEnvelope("starter"),
+                team: mockTierEnvelope("team"),
+                scale: mockTierEnvelope("scale"),
+                enterprise: mockTierEnvelope("enterprise"),
               },
             },
           }),
@@ -188,6 +252,9 @@ test.describe("hosted billing routes (mocked CP API)", () => {
     );
     await expect(page.getByRole("heading", { name: "Billing" })).toBeVisible();
     await expect(page.getByText("Billing not yet configured.")).toBeVisible();
+    await expect(page.getByText("Up to 1 workspaces")).toBeVisible();
+    await expect(page.getByText("1,000 artifacts included")).toBeVisible();
+    await expect(page.getByText("125,000 artifacts included")).toBeVisible();
   });
 
   test("checkout return redirects toward org billing with activating", async ({

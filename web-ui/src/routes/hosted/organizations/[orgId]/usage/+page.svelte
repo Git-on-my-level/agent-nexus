@@ -127,9 +127,6 @@
           </div>
         {/each}
       </div>
-      <div class="rounded-md border border-line bg-bg-soft px-4 py-4">
-        <Skeleton rows={3} />
-      </div>
     </div>
   {:else if summary}
     {@const plan = summary.plan ?? {}}
@@ -185,30 +182,6 @@
           </p>
         </div>
       {/each}
-    </section>
-
-    <section class="rounded-md border border-line bg-bg-soft px-4 py-3">
-      <div class="flex items-center justify-between">
-        <h2 class="text-subtitle text-fg">This month</h2>
-      </div>
-      <div class="mt-3 grid gap-3 sm:grid-cols-3">
-        <div>
-          <div class="text-micro uppercase tracking-wide text-fg-subtle">
-            Launches
-          </div>
-          <div class="mt-1 text-subtitle tabular-nums text-fg">
-            {usage.monthly_launch_count ?? 0}
-          </div>
-        </div>
-        <div>
-          <div class="text-micro uppercase tracking-wide text-fg-subtle">
-            Org pool cap (per workspace)
-          </div>
-          <div class="mt-1 text-subtitle tabular-nums text-fg">
-            {plan.max_artifacts_per_workspace ?? "—"}
-          </div>
-        </div>
-      </div>
     </section>
 
     <section class="overflow-hidden rounded-md border border-line bg-bg-soft">

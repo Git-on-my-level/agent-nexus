@@ -33,6 +33,28 @@ func TestEnrichRouteMutationRecoveryPostArchive(t *testing.T) {
 	}
 }
 
+func TestEnrichRouteMutationRestoreAndUnarchiveRemainBusiness(t *testing.T) {
+	t.Parallel()
+	base := routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+	for _, path := range []string{"/topics/t1/restore", "/topics/t1/unarchive"} {
+		req := httptest.NewRequest(http.MethodPost, path, nil)
+		got := enrichRouteMutationPolicy(req, base)
+		if got.mutation != routeMutationBusiness {
+			t.Fatalf("%s: expected business mutation, got %q", path, got.mutation)
+		}
+	}
+}
+
+func TestEnrichRouteMutationPurgeIsRecovery(t *testing.T) {
+	t.Parallel()
+	req := httptest.NewRequest(http.MethodPost, "/artifacts/art_1/purge", nil)
+	base := routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+	got := enrichRouteMutationPolicy(req, base)
+	if got.mutation != routeMutationRecovery {
+		t.Fatalf("expected recovery, got %q", got.mutation)
+	}
+}
+
 func TestWorkspaceReadOnlyGateBlocksBusinessMutation(t *testing.T) {
 	t.Parallel()
 	opts := handlerOptions{

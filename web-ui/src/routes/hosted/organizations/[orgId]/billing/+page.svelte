@@ -24,6 +24,8 @@
     ENTERPRISE_SALES_HREF,
     PLAN_CARDS,
     planLabel,
+    tierEnvelopeForBillingSummary,
+    usagePlanLimitFeatureLines,
   } from "$lib/hosted/planCatalog.js";
   import { setActiveOrg } from "$lib/hosted/session.js";
 
@@ -484,6 +486,12 @@
       <div class="mt-3 grid gap-3 lg:grid-cols-4 lg:items-stretch">
         {#each PLAN_CARDS as planCard (planCard.id)}
           {@const isCurrent = planCard.id === currentTier}
+          {@const planCardFeatures = [
+            ...(planCard.features ?? []),
+            ...usagePlanLimitFeatureLines(
+              tierEnvelopeForBillingSummary(summary, planCard.id),
+            ),
+          ]}
           <article
             class="flex flex-col rounded-md border bg-bg-soft px-4 py-4 {isCurrent
               ? 'border-accent/55 ring-1 ring-accent/25'
@@ -518,9 +526,9 @@
                 >
               {/if}
             </div>
-            {#if planCard.features?.length}
+            {#if planCardFeatures.length}
               <ul class="mt-3 space-y-1.5 text-meta text-fg-muted">
-                {#each planCard.features as feat}
+                {#each planCardFeatures as feat}
                   <li class="flex items-start gap-1.5">
                     <span
                       class="mt-1.5 inline-block h-1 w-1 shrink-0 rounded-full bg-fg-muted"
