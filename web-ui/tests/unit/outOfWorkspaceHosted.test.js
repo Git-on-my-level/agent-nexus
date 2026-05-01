@@ -55,6 +55,41 @@ describe("outOfWorkspace hosted provider", () => {
     );
   });
 
+  it("keeps hosted catalog core URL on the control-plane workspace proxy", async () => {
+    const provider = createHosted({
+      ANX_CONTROL_PLANE_DEV_ACCESS_TOKEN: "tok",
+    });
+    const fetchFn = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            workspace: {
+              ...cpWorkspaceRows.minimal,
+              core_origin: "http://localhost:5173/ws/acme/alpha",
+              listen_port: 18042,
+            },
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        ),
+    );
+
+    const result = await provider.resolveWorkspaceById({
+      event: /** @type {any} */ (eventWithFetch(fetchFn)),
+      workspaceId: "ws-cp-1",
+    });
+
+    expect(result.kind).toBe("found");
+    if (result.kind === "found") {
+      expect(result.workspace.coreBaseUrl).toBe(
+        "http://localhost:5173/ws/acme/alpha",
+      );
+      expect(result.workspace.serverCoreBaseUrl).toBeUndefined();
+    }
+  });
+
   it("resolves by slug with cookie token when env token is unset", async () => {
     const provider = createHosted();
     const fetchFn = vi.fn(async (url) => {

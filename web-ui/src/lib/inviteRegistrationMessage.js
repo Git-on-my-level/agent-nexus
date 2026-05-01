@@ -8,6 +8,14 @@ function joinWithAnd(parts) {
   return `${parts.slice(0, -1).join(", ")}, and ${parts.at(-1)}`;
 }
 
+function shellArg(value) {
+  const raw = String(value ?? "");
+  if (/^[A-Za-z0-9_./:@%+=,-]+$/.test(raw)) {
+    return raw;
+  }
+  return `'${raw.replaceAll("'", "'\\''")}'`;
+}
+
 export function buildRegistrationMessage(
   token,
   baseUrl,
@@ -19,8 +27,12 @@ export function buildRegistrationMessage(
     String(baseUrl ?? "").trim() || "<ANX_CORE_BASE_URL>";
   const normalizedAgentName = String(agentName ?? "").trim();
   const normalizedUsername = String(username ?? "").trim();
-  const agentNameArg = normalizedAgentName || "'<agent-name>'";
-  const usernameArg = normalizedUsername || "'<username>'";
+  const agentNameArg = normalizedAgentName
+    ? shellArg(normalizedAgentName)
+    : "'<agent-name>'";
+  const usernameArg = normalizedUsername
+    ? shellArg(normalizedUsername)
+    : "'<username>'";
 
   const missingLabels = [];
   if (!normalizedAgentName) {
@@ -43,7 +55,7 @@ export function buildRegistrationMessage(
   if (missingLabels.length > 0) {
     lines.push(
       `Replace the placeholder ${missingLabels.length === 1 ? "value" : "values"} for ${joinWithAnd(missingLabels)} before running the command.`,
-      "The CLI requires --username; it will not choose one automatically. The --agent value is the local profile name stored by this CLI.",
+      "The CLI requires --username; it will not choose one automatically. The --agent value is the local profile name stored on that machine.",
       "",
       "Run the following command:",
     );

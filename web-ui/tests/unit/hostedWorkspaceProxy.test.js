@@ -17,6 +17,7 @@ const authSessionMocks = vi.hoisted(() => ({
       workspaceSlug,
       coreBaseUrl,
       session,
+      headers,
     }) => {
       const s =
         session ??
@@ -38,6 +39,7 @@ const authSessionMocks = vi.hoisted(() => ({
         organizationSlug,
         workspaceSlug,
         coreBaseUrl,
+        headers,
       });
     },
   ),
@@ -131,6 +133,7 @@ describe("hostedWorkspaceProxy (proxyToControlPlaneWorkspace)", () => {
     for (const key of Object.keys(envState)) {
       delete envState[key];
     }
+    envState.ANX_CONTROL_PLANE_DEV_ACCESS_TOKEN = "cp-dev-token";
     globalThis.fetch = vi.fn();
   });
 
@@ -198,6 +201,10 @@ describe("hostedWorkspaceProxy (proxyToControlPlaneWorkspace)", () => {
     expect(globalThis.fetch.mock.calls[0][0]).toBe(
       "http://control.example.test/ws/scaling-forever/personal/api/x?q=1&x=y",
     );
+    const init = globalThis.fetch.mock.calls[0][1];
+    expect(init.headers.get("X-ANX-Control-Plane-Authorization")).toBe(
+      "Bearer cp-dev-token",
+    );
     expect(response.status).toBe(200);
     expect(response.headers.get("X-ANX-UI-Version")).toBe(CURRENT_VERSION);
   });
@@ -237,6 +244,9 @@ describe("hostedWorkspaceProxy (proxyToControlPlaneWorkspace)", () => {
 
     const init = globalThis.fetch.mock.calls[0][1];
     expect(init.headers.get("authorization")).toBe("Bearer session-token");
+    expect(init.headers.get("X-ANX-Control-Plane-Authorization")).toBe(
+      "Bearer cp-dev-token",
+    );
   });
 
   it("forwards incoming Authorization when no session access token", async () => {
@@ -251,6 +261,9 @@ describe("hostedWorkspaceProxy (proxyToControlPlaneWorkspace)", () => {
 
     const init = globalThis.fetch.mock.calls[0][1];
     expect(init.headers.get("authorization")).toBe("Bearer incoming");
+    expect(init.headers.get("X-ANX-Control-Plane-Authorization")).toBe(
+      "Bearer cp-dev-token",
+    );
   });
 
   it("strips content-encoding and content-length and sets X-ANX-UI-Version on upstream", async () => {
@@ -346,6 +359,9 @@ describe("hostedWorkspaceProxy (proxyToControlPlaneWorkspace)", () => {
       organizationSlug: "acme",
       workspaceSlug: "ops",
       coreBaseUrl: "http://control.example.test/ws/acme/ops",
+      headers: {
+        "X-ANX-Control-Plane-Authorization": "Bearer cp-dev-token",
+      },
     });
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
     const init = globalThis.fetch.mock.calls[0][1];
@@ -374,6 +390,9 @@ describe("hostedWorkspaceProxy (proxyToControlPlaneWorkspace)", () => {
     expect(globalThis.fetch).toHaveBeenCalledTimes(2);
     const retryInit = globalThis.fetch.mock.calls[1][1];
     expect(retryInit.headers.get("authorization")).toBe("Bearer fresh");
+    expect(retryInit.headers.get("X-ANX-Control-Plane-Authorization")).toBe(
+      "Bearer cp-dev-token",
+    );
     expect(response.status).toBe(200);
   });
 });

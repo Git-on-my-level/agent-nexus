@@ -1,3 +1,4 @@
+import { env as privateEnv } from "$env/dynamic/private";
 import { json } from "@sveltejs/kit";
 
 import { AuthErrorCode } from "$lib/authErrorCodes.js";
@@ -8,19 +9,34 @@ import {
   loadWorkspaceAuthenticatedAgent,
   resolveWorkspaceSlugFromEvent,
 } from "$lib/server/authSession";
+import {
+  hostedWorkspaceCoreBaseUrl,
+  hostedWorkspaceCoreProxyHeaders,
+} from "$lib/server/hostedWorkspaceCore.js";
+import { getOutOfWorkspaceProvider } from "$lib/server/outOfWorkspace/index.js";
 
 export async function GET(event) {
   const resolved = await resolveWorkspaceSlugFromEvent(event);
   if (resolved.error) {
     return json(resolved.error.payload, { status: resolved.error.status });
   }
+  const provider =
+    event.locals?.outOfWorkspace ?? getOutOfWorkspaceProvider(privateEnv);
+  const hostedCoreBaseUrl =
+    provider.mode === "hosted"
+      ? hostedWorkspaceCoreBaseUrl({
+          organizationSlug: resolved.organizationSlug,
+          workspaceSlug: resolved.workspaceSlug,
+        })
+      : "";
 
   try {
     const agent = await loadWorkspaceAuthenticatedAgent({
       event,
       organizationSlug: resolved.organizationSlug,
       workspaceSlug: resolved.workspaceSlug,
-      coreBaseUrl: resolved.coreBaseUrl,
+      coreBaseUrl: hostedCoreBaseUrl || resolved.coreBaseUrl,
+      headers: hostedCoreBaseUrl ? hostedWorkspaceCoreProxyHeaders(event) : {},
     });
 
     return json(

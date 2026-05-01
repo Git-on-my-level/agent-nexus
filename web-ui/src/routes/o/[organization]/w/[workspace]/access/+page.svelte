@@ -11,6 +11,7 @@
   import { selectNodeText } from "$lib/dom/selectNodeText.js";
   import { coreClient } from "$lib/coreClient";
   import { formatAbsoluteDateTime, formatTimestamp } from "$lib/formatDate";
+  import { suggestAgentUsername } from "$lib/agentInviteIdentity.js";
   import { buildRegistrationMessage } from "$lib/inviteRegistrationMessage";
   import { buildWakeRegistrationMessage } from "$lib/wakeRegistrationMessage.js";
   import { enrichPrincipalsWithWakeRouting as loadPrincipalsWithWakeRouting } from "$lib/principalWakeRouting.js";
@@ -45,6 +46,7 @@
   let newInviteKind = $state("agent");
   let newInviteAgentName = $state("");
   let newInviteUsername = $state("");
+  let newInviteUsernameManuallyEdited = $state(false);
 
   let createdToken = $state("");
   let createdInviteKind = $state("");
@@ -247,6 +249,7 @@
       createdInviteUsername = newInviteUsername.trim();
       newInviteAgentName = "";
       newInviteUsername = "";
+      newInviteUsernameManuallyEdited = false;
       await loadAccessData();
     } catch (error) {
       inviteError = extractErrorMessage(error, "Failed to create invite");
@@ -581,6 +584,16 @@
   }
 
   $effect(() => {
+    if (newInviteKind !== "agent" && newInviteKind !== "any") {
+      return;
+    }
+    if (newInviteUsernameManuallyEdited) {
+      return;
+    }
+    newInviteUsername = suggestAgentUsername(newInviteAgentName);
+  });
+
+  $effect(() => {
     if (loading) {
       return;
     }
@@ -879,30 +892,45 @@
                   class="mb-1 block text-micro font-medium text-[var(--fg-muted)]"
                   for="invite-agent-name"
                 >
-                  Agent name (optional)
+                  Agent profile name (optional)
                 </label>
                 <input
-                  bind:value={newInviteAgentName}
+                  value={newInviteAgentName}
+                  oninput={(event) => {
+                    newInviteAgentName = event.currentTarget.value;
+                  }}
                   class="w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-2 py-1.5 text-meta text-[var(--fg)]"
                   id="invite-agent-name"
-                  placeholder="e.g. hermes-prod"
+                  placeholder="e.g. Claude Code"
                   type="text"
                 />
+                <p class="mt-1 text-micro text-[var(--fg-muted)]">
+                  Local CLI profile name for <code>--agent</code>; it helps the
+                  agent recognize its own ANX profile on that machine.
+                </p>
               </div>
               <div class="flex-[2] min-w-[240px]">
                 <label
                   class="mb-1 block text-micro font-medium text-[var(--fg-muted)]"
                   for="invite-username"
                 >
-                  Username (optional)
+                  @handle / username (optional)
                 </label>
                 <input
-                  bind:value={newInviteUsername}
+                  value={newInviteUsername}
+                  oninput={(event) => {
+                    newInviteUsername = event.currentTarget.value;
+                    newInviteUsernameManuallyEdited = true;
+                  }}
                   class="w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-2 py-1.5 text-meta text-[var(--fg)]"
                   id="invite-username"
-                  placeholder="e.g. hermes.prod"
+                  placeholder="e.g. claude-code"
                   type="text"
                 />
+                <p class="mt-1 text-micro text-[var(--fg-muted)]">
+                  Workspace handle used for <code>@claude-code</code> mentions and
+                  wake routing. Suggested from the profile name until you edit it.
+                </p>
               </div>
             {/if}
             <Button
@@ -1023,17 +1051,19 @@
         Registered agents can be tagged from thread messages with
         <code class="rounded bg-[var(--line)] px-1 py-px text-micro"
           >@handle</code
-        >.
+        >. Tagging an agent creates a wake notification for that agent.
         <span
           class="rounded bg-ok-soft px-1 py-px text-micro font-medium text-ok-text"
           >Online</span
         >
-        agents have a fresh bridge check-in, while
+        agents have a fresh bridge check-in and will automatically receive and process
+        tagged messages.
         <span
           class="rounded bg-warn-soft px-1 py-px text-micro font-medium text-warn-text"
           >Offline</span
         >
-        agents stay taggable and will receive wakes when they come back.
+        agents stay taggable; they can read pending wake notifications later from
+        the CLI or when their bridge comes back online.
       </p>
       {#if principalsState.status === SECTION_ERROR}
         <p

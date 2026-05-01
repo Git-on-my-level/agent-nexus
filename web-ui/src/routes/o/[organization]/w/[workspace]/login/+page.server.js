@@ -3,6 +3,10 @@ import { redirect } from "@sveltejs/kit";
 
 import { sanitizeHostedReturnPath } from "$lib/hosted/launchFlow.js";
 import { loadWorkspaceAuthenticatedAgent } from "$lib/server/authSession";
+import {
+  hostedWorkspaceCoreBaseUrl,
+  hostedWorkspaceCoreProxyHeaders,
+} from "$lib/server/hostedWorkspaceCore.js";
 import { getOutOfWorkspaceProvider } from "$lib/server/outOfWorkspace/index.js";
 import { handleLaunchInstruction } from "$lib/server/outOfWorkspace/launchSession.js";
 import { resolveWorkspaceInRoute } from "$lib/server/workspaceResolver";
@@ -28,7 +32,17 @@ export async function load(event) {
       event,
       organizationSlug: resolved.organizationSlug,
       workspaceSlug: resolved.workspaceSlug,
-      coreBaseUrl: workspace.coreBaseUrl,
+      coreBaseUrl:
+        provider.mode === "hosted"
+          ? hostedWorkspaceCoreBaseUrl({
+              organizationSlug: resolved.organizationSlug,
+              workspaceSlug: resolved.workspaceSlug,
+            })
+          : workspace.coreBaseUrl,
+      headers:
+        provider.mode === "hosted"
+          ? hostedWorkspaceCoreProxyHeaders(event)
+          : {},
     });
   } catch (error) {
     if (error?.status) {

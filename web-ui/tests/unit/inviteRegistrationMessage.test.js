@@ -26,6 +26,19 @@ describe("inviteRegistrationMessage", () => {
     expect(message).not.toContain("replace any placeholder values");
   });
 
+  it("quotes CLI values that need shell escaping", () => {
+    const message = buildRegistrationMessage(
+      "oinv_123",
+      "https://core.example.com",
+      "Claude Code",
+      "claude-code",
+    );
+
+    expect(message).toContain(
+      "anx --base-url https://core.example.com --agent 'Claude Code' auth register --username claude-code --invite-token oinv_123",
+    );
+  });
+
   it("tells the agent to replace required placeholder values when names are missing", () => {
     const message = buildRegistrationMessage(
       "oinv_123",

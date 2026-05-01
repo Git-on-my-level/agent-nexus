@@ -13,6 +13,10 @@ import {
   getAuthSessionCookieName,
 } from "$lib/server/authSession.js";
 import { logServerEvent } from "$lib/server/devLog";
+import {
+  hostedWorkspaceCoreBaseUrl,
+  hostedWorkspaceCoreProxyHeaders,
+} from "$lib/server/hostedWorkspaceCore.js";
 import { getOutOfWorkspaceProvider } from "$lib/server/outOfWorkspace/index.js";
 import { handleLaunchInstruction } from "$lib/server/outOfWorkspace/launchSession.js";
 import {
@@ -215,18 +219,32 @@ export async function load(event) {
   const workOrg = resolved.workspace.organizationSlug;
   const workSlug = resolved.workspace.slug;
   const coreBaseUrl = String(resolved.workspace.coreBaseUrl ?? "").trim();
+  const schemaCoreBaseUrl =
+    provider.mode === "hosted"
+      ? hostedWorkspaceCoreBaseUrl({
+          organizationSlug: workOrg,
+          workspaceSlug: workSlug,
+        })
+      : coreBaseUrl;
 
   let coreSchemaCheckWarning = "";
 
-  if (workSlug && coreBaseUrl && event.url.searchParams.get("qa") !== "1") {
+  if (
+    workSlug &&
+    schemaCoreBaseUrl &&
+    event.url.searchParams.get("qa") !== "1"
+  ) {
     const cacheKey = workspaceCompositeKey(workOrg, workSlug);
     if (!schemaCheckPromises.has(cacheKey)) {
       const client = createAnxCoreClient({
-        baseUrl: coreBaseUrl,
+        baseUrl: schemaCoreBaseUrl,
         fetchFn: event.fetch,
         requestContextHeadersProvider: () => ({
           [WORKSPACE_HEADER]: workSlug,
           [WORKSPACE_HEADER_CONSTANTS.ORGANIZATION_HEADER]: workOrg,
+          ...(provider.mode === "hosted"
+            ? hostedWorkspaceCoreProxyHeaders(event)
+            : {}),
         }),
       });
       const promise = verifyCoreSchemaVersion(client)

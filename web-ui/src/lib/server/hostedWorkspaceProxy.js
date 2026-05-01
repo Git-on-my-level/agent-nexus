@@ -14,6 +14,7 @@ import {
 } from "$lib/server/authSession";
 import { buildProxyRequestInit } from "$lib/server/coreProxy";
 import { logServerEvent } from "$lib/server/devLog";
+import { hostedWorkspaceCoreProxyHeaders } from "$lib/server/hostedWorkspaceCore";
 
 export function isHostedWorkspaceProxyPath(pathname) {
   return String(pathname ?? "").startsWith("/ws/");
@@ -44,6 +45,7 @@ async function refreshAndRetryHostedWorkspaceRequest(
       organizationSlug,
       workspaceSlug,
       coreBaseUrl: hostedCoreBaseUrl,
+      headers: hostedWorkspaceCoreProxyHeaders(event),
     });
   } catch (error) {
     if (
@@ -84,6 +86,11 @@ async function refreshAndRetryHostedWorkspaceRequest(
   const requestInit = buildProxyRequestInit(event, {
     body: requestBody,
   });
+  for (const [name, value] of Object.entries(
+    hostedWorkspaceCoreProxyHeaders(event),
+  )) {
+    requestInit.headers.set(name, value);
+  }
   requestInit.headers.set(
     "authorization",
     `Bearer ${refreshedSession.accessToken}`,
@@ -204,6 +211,11 @@ export async function proxyToControlPlaneWorkspace(event, pathname) {
   const requestInit = buildProxyRequestInit(event, {
     body: requestBody,
   });
+  for (const [name, value] of Object.entries(
+    hostedWorkspaceCoreProxyHeaders(event),
+  )) {
+    requestInit.headers.set(name, value);
+  }
   let upstreamResponse;
   const session = getWorkspaceAuthSession(
     event,
@@ -224,6 +236,7 @@ export async function proxyToControlPlaneWorkspace(event, pathname) {
       workspaceSlug,
       coreBaseUrl: hostedCoreBaseUrl,
       session: { accessToken: "", refreshToken: refreshTok },
+      headers: hostedWorkspaceCoreProxyHeaders(event),
     });
     const afterEnsure = getWorkspaceAuthSession(
       event,

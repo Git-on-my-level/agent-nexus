@@ -11,6 +11,7 @@ const authSessionMocks = vi.hoisted(() => ({
   writeWorkspaceAccessToken: vi.fn(),
   writeWorkspaceRefreshToken: vi.fn(),
 }));
+const envState = vi.hoisted(() => ({}));
 
 vi.mock("$lib/server/workspaceResolver.js", async (importOriginal) => {
   const actual = await importOriginal();
@@ -25,6 +26,10 @@ vi.mock("$lib/server/authSession.js", () => ({
     authSessionMocks.clearRetryableWorkspaceAuthFailureCount,
   writeWorkspaceAccessToken: authSessionMocks.writeWorkspaceAccessToken,
   writeWorkspaceRefreshToken: authSessionMocks.writeWorkspaceRefreshToken,
+}));
+
+vi.mock("$env/dynamic/private", () => ({
+  env: envState,
 }));
 
 import {
@@ -110,6 +115,11 @@ function createGetEvent(queryFields, options = {}) {
 describe("workspace auth callback route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    for (const key of Object.keys(envState)) {
+      delete envState[key];
+    }
+    envState.ANX_CONTROL_BASE_URL = "http://control.example.test";
+    envState.ANX_CONTROL_PLANE_DEV_ACCESS_TOKEN = "dev-token";
     workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
       organizationSlug: "local",
       workspaceSlug: "acme",
@@ -176,7 +186,7 @@ describe("workspace auth callback route", () => {
     );
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][0]).toBe(
-      "https://core.example.test/auth/token",
+      "http://control.example.test/ws/local/acme/auth/token",
     );
     expect(fetchMock.mock.calls[0][1]?.headers).toMatchObject({
       "x-anx-organization-slug": "local",
@@ -199,7 +209,7 @@ describe("workspace auth callback route", () => {
     ).toHaveBeenCalledWith(event, "local", "acme");
   });
 
-  it("preserves hosted workspace proxy path when exchanging core tokens", async () => {
+  it("authorizes hosted workspace proxy token exchange with the control-plane session", async () => {
     workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValueOnce({
       organizationSlug: "scaling-forever",
       workspaceSlug: "personal",
@@ -252,9 +262,10 @@ describe("workspace auth callback route", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][0]).toBe(
-      "http://127.0.0.1:5173/ws/scaling-forever/personal/auth/token",
+      "http://control.example.test/ws/scaling-forever/personal/auth/token",
     );
     expect(fetchMock.mock.calls[0][1]?.headers).toMatchObject({
+      "X-ANX-Control-Plane-Authorization": "Bearer dev-token",
       "x-anx-organization-slug": "scaling-forever",
       "x-anx-workspace-slug": "personal",
     });
@@ -334,6 +345,35 @@ describe("workspace auth callback route", () => {
         workspace_name: "Acme",
       },
     });
+  });
+
+  it("redirects browser callback replay failures to stable hosted recovery", async () => {
+    globalThis.fetch = vi.fn();
+    const event = createEvent(
+      {
+        exchange_token: "ex_123",
+        state: "state_123",
+        workspace_id: "ws_123",
+      },
+      {
+        headers: { accept: "text/html" },
+        outOfWorkspace: mockHostedProvider({
+          exchangeLaunchSession: vi.fn(async () => ({
+            ok: false,
+            status: 409,
+            code: "exchange_invalid",
+            message: "exchange token has already been used",
+          })),
+        }),
+      },
+    );
+
+    await expect(POST(event)).rejects.toMatchObject({
+      status: 303,
+      location:
+        "/hosted/dashboard?launch_error=exchange_invalid&workspace_id=ws_123",
+    });
+    expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
   it("returns provider state_mismatch failures", async () => {

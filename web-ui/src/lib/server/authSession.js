@@ -214,6 +214,7 @@ async function requestCoreJSON(coreBaseUrl, pathname, options = {}) {
     headers: {
       accept: "application/json",
       ...(options.body ? { "content-type": "application/json" } : {}),
+      ...(options.headers ?? {}),
       ...(options.token ? { authorization: `Bearer ${options.token}` } : {}),
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
@@ -578,6 +579,7 @@ export async function refreshWorkspaceAuthSession({
   organizationSlug,
   workspaceSlug,
   coreBaseUrl,
+  headers = {},
 }) {
   if (!coreBaseUrl) {
     return null;
@@ -620,6 +622,7 @@ export async function refreshWorkspaceAuthSession({
 
   const refreshPromise = requestCoreJSON(coreBaseUrl, "/auth/token", {
     method: "POST",
+    headers,
     body: {
       grant_type: "refresh_token",
       refresh_token: refreshToken,
@@ -669,6 +672,7 @@ export async function refreshWorkspaceAuthSession({
  * @param {string} params.workspaceSlug
  * @param {string} params.coreBaseUrl Base URL for core `/auth/token` (direct core or hosted `/ws/{org}/{ws}` prefix URL)
  * @param {{ accessToken?: string, refreshToken?: string } | null} [params.session] Optional session from a prior {@link getWorkspaceAuthSession} call
+ * @param {Record<string, string>} [params.headers] Extra server-side headers for the core hop
  * @returns {Promise<void>}
  */
 export async function ensureWorkspaceAccessTokenForCoreProxy({
@@ -677,6 +681,7 @@ export async function ensureWorkspaceAccessTokenForCoreProxy({
   workspaceSlug,
   coreBaseUrl,
   session: sessionHint,
+  headers = {},
 }) {
   if (!coreBaseUrl) {
     return;
@@ -701,6 +706,7 @@ export async function ensureWorkspaceAccessTokenForCoreProxy({
       organizationSlug,
       workspaceSlug,
       coreBaseUrl,
+      headers,
     });
   } catch (error) {
     if (
@@ -758,6 +764,7 @@ export async function loadWorkspaceAuthenticatedAgent({
   organizationSlug,
   workspaceSlug,
   coreBaseUrl,
+  headers = {},
 }) {
   if (!coreBaseUrl) {
     return null;
@@ -782,6 +789,7 @@ export async function loadWorkspaceAuthenticatedAgent({
   async function fetchCurrentAgent(token) {
     const agentResponse = await requestCoreJSON(coreBaseUrl, "/agents/me", {
       token,
+      headers,
     });
     return agentResponse.agent ?? null;
   }
@@ -819,6 +827,7 @@ export async function loadWorkspaceAuthenticatedAgent({
       organizationSlug,
       workspaceSlug,
       coreBaseUrl,
+      headers,
     });
     accessToken = readWorkspaceAccessToken(
       event,

@@ -16,6 +16,10 @@ import { coreBaseUrlForNodeFetch } from "$lib/server/coreBaseUrlForNodeFetch.js"
 import { coreEndpointURL } from "$lib/server/coreEndpoint.js";
 import { buildServerCoreWorkspaceContextHeaders } from "$lib/server/coreWorkspaceContextHeaders.js";
 import { logServerEvent } from "$lib/server/devLog";
+import {
+  hostedWorkspaceCoreBaseUrl,
+  hostedWorkspaceCoreProxyHeaders,
+} from "$lib/server/hostedWorkspaceCore.js";
 import { getOutOfWorkspaceProvider } from "$lib/server/outOfWorkspace/index.js";
 import { resolveWorkspaceInRoute } from "$lib/server/workspaceResolver.js";
 import { workspacePath } from "$lib/workspacePaths.js";
@@ -152,6 +156,23 @@ function workspaceDisplayName(resolved) {
   return slug || null;
 }
 
+function isRecoverableExchangeFailure(code) {
+  return (
+    code === "exchange_invalid" ||
+    code === "exchange_expired" ||
+    code === "rate_limited"
+  );
+}
+
+function callbackRecoveryURL(code, workspaceID) {
+  const params = new URLSearchParams();
+  params.set("launch_error", code || "session_exchange_failed");
+  if (workspaceID) {
+    params.set("workspace_id", workspaceID);
+  }
+  return `/hosted/dashboard?${params.toString()}`;
+}
+
 /**
  * Shared workspace launch OAuth callback (POST). Used by nested
  * `/o/{org}/w/{ws}/auth/callback` and root `/auth/callback` when the control
@@ -256,9 +277,14 @@ export async function runWorkspaceAuthCallbackPost(
   }
 
   const workspaceSlug = resolvedWorkspaceSlug;
-  const coreBaseURL = coreBaseUrlForNodeFetch(
-    normalizeBaseUrl(resolvedWorkspace.coreBaseUrl),
-  );
+  const rawCoreBaseURL =
+    provider.mode === "hosted"
+      ? hostedWorkspaceCoreBaseUrl({
+          organizationSlug: resolvedOrganizationSlug,
+          workspaceSlug,
+        })
+      : normalizeBaseUrl(resolvedWorkspace.coreBaseUrl);
+  const coreBaseURL = coreBaseUrlForNodeFetch(rawCoreBaseURL);
   if (!coreBaseURL) {
     logServerEvent(
       "auth.callback.core_unavailable",
@@ -327,20 +353,29 @@ export async function runWorkspaceAuthCallbackPost(
     },
   });
   if (!exchanged.ok) {
+    const failureCode = exchanged.code || "session_exchange_failed";
     logServerEvent(
-      "auth.callback.exchange_failed",
+      isRecoverableExchangeFailure(failureCode)
+        ? "auth.callback.exchange_replay_or_stale"
+        : "auth.callback.exchange_failed",
       {
         path: eventPath,
         workspace_id: workspaceID,
         status: exchanged.status || 502,
-        code: exchanged.code || "session_exchange_failed",
+        code: failureCode,
       },
       { level: "warn" },
     );
+    if (
+      !wantsJson(event.request) &&
+      isRecoverableExchangeFailure(failureCode)
+    ) {
+      throw redirect(303, callbackRecoveryURL(failureCode, workspaceID));
+    }
     return respondWithCallbackError(
       event,
       exchanged.status || 502,
-      exchanged.code || "session_exchange_failed",
+      failureCode,
       exchanged.message ||
         "Failed to exchange launch session with control plane.",
       { workspace_name: workspaceName },
@@ -366,7 +401,16 @@ export async function runWorkspaceAuthCallbackPost(
         grant_type: "workspace_human_grant",
         assertion,
       },
-      { attempts: 10, delayMs: 500, headers: coreContextHeaders },
+      {
+        attempts: 10,
+        delayMs: 500,
+        headers: {
+          ...coreContextHeaders,
+          ...(provider.mode === "hosted"
+            ? hostedWorkspaceCoreProxyHeaders(event)
+            : {}),
+        },
+      },
     );
   } catch (err) {
     logServerEvent(

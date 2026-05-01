@@ -19,6 +19,12 @@ vi.mock("$app/paths", () => ({
   base: "",
 }));
 
+const envState = vi.hoisted(() => ({}));
+
+vi.mock("$env/dynamic/private", () => ({
+  env: envState,
+}));
+
 import { POST } from "../../src/routes/o/[organization]/w/[workspace]/auth/callback/+server.js";
 
 const ORG_SLUG = "local";
@@ -62,6 +68,10 @@ async function readErrorJson(response) {
 
 describe("auth callback POST (+server)", () => {
   beforeEach(() => {
+    for (const key of Object.keys(envState)) {
+      delete envState[key];
+    }
+    envState.ANX_CONTROL_BASE_URL = CORE_BASE;
     mockResolvedWorkspace();
   });
 
