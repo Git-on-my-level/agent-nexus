@@ -188,6 +188,7 @@ git add \
   VERSION \
   cli/internal/buildinfo/version_generated.go \
   core/internal/buildinfo/version_generated.go \
+  adapters/agent-bridge/pyproject.toml \
   web-ui/src/lib/generated/version.js \
   web-ui/package.json
 git commit -m "Prepare release ${TARGET_VERSION}"

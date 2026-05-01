@@ -55,7 +55,7 @@ jobs:
             exit 0
           fi
 
-          git add VERSION cli/internal/buildinfo/version_generated.go core/internal/buildinfo/version_generated.go web-ui/src/lib/generated/version.js web-ui/package.json
+          git add VERSION cli/internal/buildinfo/version_generated.go core/internal/buildinfo/version_generated.go adapters/agent-bridge/pyproject.toml web-ui/src/lib/generated/version.js web-ui/package.json
           git commit -m "Prepare CLI release ${{ inputs.version }}"
           echo "changed=true" >> "$GITHUB_OUTPUT"
 

@@ -79,11 +79,11 @@ VERSION="$(./scripts/read-version.sh)"
 ./scripts/build-cli-release-artifacts.sh "$VERSION"
 ```
 
-Prepare the repo version before tagging. `./scripts/set-version.sh` is the canonical release-prep step: it updates [`VERSION`](../VERSION), syncs generated CLI/core/web version metadata, and keeps `web-ui/package.json` aligned automatically. Either update it locally:
+Prepare the repo version before tagging. `./scripts/set-version.sh` is the canonical release-prep step: it updates [`VERSION`](../VERSION), syncs generated CLI/core/web version metadata, keeps `web-ui/package.json` aligned automatically, and updates the bridge package version. Either update it locally:
 
 ```bash
 ./scripts/set-version.sh v0.0.4
-git add VERSION cli/internal/buildinfo/version_generated.go core/internal/buildinfo/version_generated.go web-ui/src/lib/generated/version.js web-ui/package.json
+git add VERSION cli/internal/buildinfo/version_generated.go core/internal/buildinfo/version_generated.go adapters/agent-bridge/pyproject.toml web-ui/src/lib/generated/version.js web-ui/package.json
 git commit -m "Prepare CLI release v0.0.4"
 git push
 ```
