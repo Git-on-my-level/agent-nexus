@@ -80,7 +80,9 @@ export const PLAN_USAGE_LIMIT_FALLBACK = /** @type {const} */ ({
  * @param {string} tierId
  */
 export function tierEnvelopeForBillingSummary(billingSummary, tierId) {
-  const id = String(tierId ?? "").trim().toLowerCase();
+  const id = String(tierId ?? "")
+    .trim()
+    .toLowerCase();
   const api = billingSummary?.plan_usage_envelopes?.[id];
   const wl = coerceNonNegativeInt(api?.workspace_limit);
   const cap = coerceNonNegativeInt(api?.artifact_capacity);
@@ -89,7 +91,10 @@ export function tierEnvelopeForBillingSummary(billingSummary, tierId) {
   }
   const fb = PLAN_USAGE_LIMIT_FALLBACK[id];
   if (!fb) return {};
-  return { workspace_limit: fb.workspace_limit, artifact_capacity: fb.artifact_capacity };
+  return {
+    workspace_limit: fb.workspace_limit,
+    artifact_capacity: fb.artifact_capacity,
+  };
 }
 
 /**
@@ -135,10 +140,7 @@ export const PLAN_CARDS = [
     price: "$50",
     priceSuffix: "/mo",
     tagline: "Run multiple AI-first organizations at the same time.",
-    features: [
-      "1-1 support from founder",
-      "Prioritized feature requests",
-    ],
+    features: ["1-1 support from founder", "Prioritized feature requests"],
     ctaLabel: "Upgrade to Scale",
     ctaUpgrade: true,
   },

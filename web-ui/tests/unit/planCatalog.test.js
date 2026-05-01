@@ -38,7 +38,10 @@ describe("planCatalog", () => {
 
   it("usagePlanLimitFeatureLines derives bullets from envelope fields", () => {
     expect(
-      usagePlanLimitFeatureLines({ workspace_limit: 5, artifact_capacity: 125_000 }),
+      usagePlanLimitFeatureLines({
+        workspace_limit: 5,
+        artifact_capacity: 125_000,
+      }),
     ).toEqual(["Up to 5 workspaces", "125,000 artifacts included"]);
   });
 
@@ -53,9 +56,7 @@ describe("planCatalog", () => {
 
   it("usagePlanLimitFeatureLines returns empty when incomplete", () => {
     expect(usagePlanLimitFeatureLines({})).toEqual([]);
-    expect(
-      usagePlanLimitFeatureLines({ workspace_limit: 1 }),
-    ).toEqual([]);
+    expect(usagePlanLimitFeatureLines({ workspace_limit: 1 })).toEqual([]);
   });
 
   it("tierEnvelopeForBillingSummary prefers plan_usage_envelopes", () => {
