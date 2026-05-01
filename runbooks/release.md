@@ -79,7 +79,7 @@ VERSION="$(./scripts/read-version.sh)"
 ./scripts/build-cli-release-artifacts.sh "$VERSION"
 ```
 
-Prepare the repo version before tagging. `./scripts/set-version.sh` is the canonical release-prep step: it updates [`VERSION`](../VERSION), syncs generated CLI/core/web version metadata, keeps `web-ui/package.json` aligned automatically, and updates the bridge package version. Either update it locally:
+Prepare the repo version before tagging. `./scripts/set-version.sh` is the canonical release-prep step: it updates [`VERSION`](../VERSION), syncs generated CLI/core/web version metadata, keeps `web-ui/package.json` aligned automatically, and updates the bridge package version. Use `./scripts/version-managed-files.sh` if you need the canonical release-prep file list. Either update it locally:
 
 ```bash
 ./scripts/set-version.sh v0.0.4

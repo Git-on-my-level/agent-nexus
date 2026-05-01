@@ -177,20 +177,16 @@ if [[ "${SKIP_CHECKS}" != "1" ]]; then
 fi
 
 "${SCRIPT_DIR}/set-version.sh" "${TARGET_VERSION}"
+mapfile -t VERSION_FILES < <("${SCRIPT_DIR}/version-managed-files.sh")
+"${SCRIPT_DIR}/check-version-managed-files.sh" --worktree
+git add -- "${VERSION_FILES[@]}"
+"${SCRIPT_DIR}/check-version-managed-files.sh" --staged
 
 if [[ "${SKIP_CHECKS}" != "1" ]]; then
   make cli-check
 fi
 
 "${SCRIPT_DIR}/build-cli-release-artifacts.sh" "${TARGET_VERSION}" ".tmp/release-artifacts-test"
-
-git add \
-  VERSION \
-  cli/internal/buildinfo/version_generated.go \
-  core/internal/buildinfo/version_generated.go \
-  adapters/agent-bridge/pyproject.toml \
-  web-ui/src/lib/generated/version.js \
-  web-ui/package.json
 git commit -m "Prepare release ${TARGET_VERSION}"
 git push origin HEAD:main
 git tag -a "${TARGET_VERSION}" -m "Release ${TARGET_VERSION}"
