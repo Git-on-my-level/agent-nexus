@@ -53,7 +53,7 @@ func versionPayload(opts handlerOptions, schemaVersion string) (map[string]any, 
 	return map[string]any{
 		"schema_version":          strings.TrimSpace(schemaVersion),
 		"command_registry_digest": strings.TrimSpace(commandRegistryDigest),
-		"workspace_access_mode":     strings.TrimSpace(opts.workspaceAccessMode),
+		"workspace_access_mode":   strings.TrimSpace(opts.workspaceAccessMode),
 	}, nil
 }
 
