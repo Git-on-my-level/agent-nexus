@@ -429,7 +429,7 @@ Install on a fresh machine with only `anx`
 
   anx bridge install
 
-  By default, this installs the bridge package at the same git ref as your `anx` release tag and writes the launcher into `~/.local/bin`. Use `--ref main` when you need the latest default-branch commit ahead of that tag. Override `--bin-dir` if needed. The current bootstrap path also requires `git` on PATH.
+  By default, this installs the bridge package at the same git ref as your `anx` release tag and writes the launcher into `~/.local/bin`. Use `--ref main` when you need the latest default-branch commit ahead of that tag. Override `--bin-dir` if needed. The current bootstrap path also requires `git` on PATH. For opt-in unattended alignment with that pinned ref during `anx bridge doctor` / `anx bridge start`, generate configs with `anx bridge init-config ... --managed-package-auto-update` so `[bridge].managed_package_auto_update` is set (same prerequisites as install: Python `3.11+`, `git`, outbound network access, macOS/Linux). Agents who leave it unset only get textual skew hints and should run `anx bridge install` manually (or pass `--bridge-config` during `anx update` alongside that opt-in when they want refreshes tied to CLI upgrades).
 
 2. If you need bridge test dependencies on the same machine:
 
@@ -4689,6 +4689,7 @@ Flags:
   --adapter-entrypoint <path>  Subprocess template: script path used as the second element of `[adapter].command` after python3.
   --plugin-module <module>     python-plugin template: Python module for `[adapter].plugin_module`.
   --plugin-factory <callable>  python-plugin template: factory name for `[adapter].plugin_factory`.
+  --managed-package-auto-update Write `[bridge].managed_package_auto_update = true`; opt-in allows pip refreshes toward the CLI release tag during bridge doctor/start when skew is detected. Requires Python 3.11+, git on PATH, network access, and macOS/Linux (same prerequisites as `anx bridge install`).
 
 
 Global flags:

@@ -30,7 +30,7 @@ Install on a fresh machine with only <<tick>>anx<<tick>>
 
   anx bridge install
 
-  By default, this installs the bridge package at the same git ref as your <<tick>>anx<<tick>> release tag and writes the launcher into <<tick>>~/.local/bin<<tick>>. Use <<tick>>--ref main<<tick>> when you need the latest default-branch commit ahead of that tag. Override <<tick>>--bin-dir<<tick>> if needed. The current bootstrap path also requires <<tick>>git<<tick>> on PATH.
+  By default, this installs the bridge package at the same git ref as your <<tick>>anx<<tick>> release tag and writes the launcher into <<tick>>~/.local/bin<<tick>>. Use <<tick>>--ref main<<tick>> when you need the latest default-branch commit ahead of that tag. Override <<tick>>--bin-dir<<tick>> if needed. The current bootstrap path also requires <<tick>>git<<tick>> on PATH. For opt-in unattended alignment with that pinned ref during <<tick>>anx bridge doctor<<tick>> / <<tick>>anx bridge start<<tick>>, generate configs with <<tick>>anx bridge init-config ... --managed-package-auto-update<<tick>> so <<tick>>[bridge].managed_package_auto_update<<tick>> is set (same prerequisites as install: Python <<tick>>3.11+<<tick>>, <<tick>>git<<tick>>, outbound network access, macOS/Linux). Agents who leave it unset only get textual skew hints and should run <<tick>>anx bridge install<<tick>> manually (or pass <<tick>>--bridge-config<<tick>> during <<tick>>anx update<<tick>> alongside that opt-in when they want refreshes tied to CLI upgrades).
 
 2. If you need bridge test dependencies on the same machine:
 

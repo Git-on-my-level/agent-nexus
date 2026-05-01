@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -168,7 +169,12 @@ func TestBridgeStartPersistsManagedRuntimeState(t *testing.T) {
 		t.Fatalf("mkdir bin dir: %v", err)
 	}
 	binaryPath := filepath.Join(binDir, "anx-agent-bridge")
-	if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\n"), 0o755); err != nil {
+	verLine := normalizedBridgeCLIExpectedPackageSemver(defaultBridgeInstallRef())
+	if strings.TrimSpace(verLine) == "" {
+		verLine = "0.7.1"
+	}
+	shim := fmt.Sprintf("#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo \"anx-agent-bridge %s\"; exit 0; fi\nexit 0\n", verLine)
+	if err := os.WriteFile(binaryPath, []byte(shim), 0o755); err != nil {
 		t.Fatalf("write bridge binary: %v", err)
 	}
 
@@ -805,6 +811,14 @@ func TestLoadBridgeConfigDetailsRejectsInvalidTOML(t *testing.T) {
 	}
 }
 
+func doctorHarnessBridgeVersionStdoutLine() string {
+	v := normalizedBridgeCLIExpectedPackageSemver(defaultBridgeInstallRef())
+	if strings.TrimSpace(v) == "" {
+		v = "0.0.1"
+	}
+	return fmt.Sprintf("anx-agent-bridge %s", v)
+}
+
 func TestRunBridgeDoctorRejectsExtraArgs(t *testing.T) {
 	app := New()
 	_, err := app.runBridgeDoctor(context.Background(), []string{"surprise"})
@@ -878,7 +892,6 @@ func TestRunBridgeDoctorWithConfigAdapterProbeInvalidJSON(t *testing.T) {
 	venvPy := filepath.Join(installDir, ".venv", "bin", "python")
 	bridgeBin := filepath.Join(binDir, "anx-agent-bridge")
 	fakePy := filepath.Join(home, "fakepython")
-	configPath := filepath.Join(home, "agent.toml")
 
 	if err := os.MkdirAll(filepath.Dir(venvPy), 0o755); err != nil {
 		t.Fatalf("mkdir venv: %v", err)
@@ -895,9 +908,7 @@ func TestRunBridgeDoctorWithConfigAdapterProbeInvalidJSON(t *testing.T) {
 	if err := os.WriteFile(fakePy, []byte(""), 0o755); err != nil {
 		t.Fatalf("write fake python: %v", err)
 	}
-	if err := os.WriteFile(configPath, []byte("[agent]\nhandle = \"hermes\"\n"), 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	configPath := writeBridgeAgentHomeFixture(t, home, "hermes")
 
 	origRun := bridgeCommandRun
 	t.Cleanup(func() { bridgeCommandRun = origRun })
@@ -906,7 +917,7 @@ func TestRunBridgeDoctorWithConfigAdapterProbeInvalidJSON(t *testing.T) {
 			return "3.12.0", "", nil
 		}
 		if len(args) == 1 && args[0] == "--version" {
-			return "anx-agent-bridge 1.0.0", "", nil
+			return doctorHarnessBridgeVersionStdoutLine(), "", nil
 		}
 		if len(args) >= 4 && args[0] == "bridge" && args[1] == "doctor" {
 			return "NOT JSON", "", nil
@@ -933,7 +944,6 @@ func TestRunBridgeDoctorWithConfigAllProbesPass(t *testing.T) {
 	venvPy := filepath.Join(installDir, ".venv", "bin", "python")
 	bridgeBin := filepath.Join(binDir, "anx-agent-bridge")
 	fakePy := filepath.Join(home, "fakepython")
-	configPath := filepath.Join(home, "agent.toml")
 
 	if err := os.MkdirAll(filepath.Dir(venvPy), 0o755); err != nil {
 		t.Fatalf("mkdir venv: %v", err)
@@ -950,9 +960,7 @@ func TestRunBridgeDoctorWithConfigAllProbesPass(t *testing.T) {
 	if err := os.WriteFile(fakePy, []byte(""), 0o755); err != nil {
 		t.Fatalf("write fake python: %v", err)
 	}
-	if err := os.WriteFile(configPath, []byte("[agent]\nhandle = \"hermes\"\n"), 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	configPath := writeBridgeAgentHomeFixture(t, home, "hermes")
 
 	origRun := bridgeCommandRun
 	t.Cleanup(func() { bridgeCommandRun = origRun })
@@ -961,7 +969,7 @@ func TestRunBridgeDoctorWithConfigAllProbesPass(t *testing.T) {
 			return "3.12.0", "", nil
 		}
 		if len(args) == 1 && args[0] == "--version" {
-			return "anx-agent-bridge 1.0.0", "", nil
+			return doctorHarnessBridgeVersionStdoutLine(), "", nil
 		}
 		if len(args) >= 4 && args[0] == "bridge" && args[1] == "doctor" {
 			return `{"ok":true,"adapter_kind":"stub"}`, "", nil
@@ -991,7 +999,7 @@ func TestRunBridgeDoctorWithConfigAllProbesPass(t *testing.T) {
 	for _, c := range checks {
 		byName[c.Name] = c
 	}
-	for _, name := range []string{"python", "managed_venv", "bridge_binary", "bridge_version", "config", "adapter", "registration"} {
+	for _, name := range []string{"python", "managed_venv", "bridge_binary", "bridge_version", "config", "managed_bridge_package", "adapter", "registration"} {
 		c, ok := byName[name]
 		if !ok {
 			t.Fatalf("missing check %q in %#v", name, checks)
@@ -999,5 +1007,43 @@ func TestRunBridgeDoctorWithConfigAllProbesPass(t *testing.T) {
 		if !c.OK {
 			t.Fatalf("check %s: %s", name, c.Message)
 		}
+	}
+}
+
+func TestRenderBridgeIncludesManagedAutoWhenOptedIn(t *testing.T) {
+	rendered, _, err := renderBridgeConfigTemplate(bridgeTemplateParams{
+		Kind:                     "subprocess",
+		BaseURL:                  "https://anx.example",
+		WorkspaceIDs:             []string{"ws_main"},
+		WorkspaceName:            "Main",
+		Handle:                   "h",
+		AdapterEntrypoint:        "./adapter.py",
+		ManagedPackageAutoUpdate: true,
+	})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if !strings.Contains(rendered, "managed_package_auto_update = true") {
+		t.Fatalf("expected managed auto update stanza output=%s", rendered)
+	}
+}
+
+func TestLoadBridgeManagedParsesManagedPackageAutoFlag(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "b.toml")
+	if err := os.WriteFile(p, []byte(`
+agent_home = ".anx"
+
+[bridge]
+managed_package_auto_update = true
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := loadBridgeManagedConfig(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.ManagedPackageAutoUpdate {
+		t.Fatalf("managed auto flag parsing failed: %#v", cfg)
 	}
 }

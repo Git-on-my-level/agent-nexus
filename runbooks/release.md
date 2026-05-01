@@ -106,6 +106,10 @@ git push origin "$VERSION"
 
 The workflow fails if the pushed tag does not match the committed [`VERSION`](../VERSION) file or if generated CLI version metadata is stale.
 
+### Python `anx-agent-bridge` package version sync
+
+[`scripts/sync-version.sh`](../scripts/sync-version.sh) bumps `project.version` in [`adapters/agent-bridge/pyproject.toml`](../adapters/agent-bridge/pyproject.toml) alongside the CLI/core/UI metadata so packaged bridge semver stays aligned with the repo tag. Run it (via `./scripts/set-version.sh` release prep or directly) before you tag. Publishing wheels to PyPI is optional and not wired in OSS CI yet; when you publish, ship the artifact for the tagged version after the Git tag exists so `pip install anx-agent-bridge` does not drift from `anx bridge install`'s pinned source install.
+
 ### Painpoint status
 
 Resolved:

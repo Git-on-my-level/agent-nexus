@@ -33,11 +33,12 @@ type bridgeManagedRuntime struct {
 }
 
 type bridgeManagedConfig struct {
-	RuntimeKind      string
-	RunCommand       string
-	ConfigPath       string
-	DisplayName      string
-	ManagerDir       string
-	ProcessStatePath string
-	LogPath          string
+	RuntimeKind              string
+	RunCommand               string
+	ConfigPath               string
+	DisplayName              string
+	ManagerDir               string
+	ProcessStatePath         string
+	LogPath                  string
+	ManagedPackageAutoUpdate bool
 }

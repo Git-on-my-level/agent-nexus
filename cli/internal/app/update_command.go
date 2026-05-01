@@ -49,11 +49,13 @@ type updatePlan struct {
 func (a *App) runUpdate(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
 	fs := newSilentFlagSet("update")
 	var (
-		checkFlag   trackedBool
-		versionFlag trackedString
+		checkFlag        trackedBool
+		versionFlag      trackedString
+		bridgeConfigFlag trackedString
 	)
 	fs.Var(&checkFlag, "check", "Report update availability without downloading or replacing the binary")
 	fs.Var(&versionFlag, "version", "Install a specific release tag (for example v1.2.3)")
+	fs.Var(&bridgeConfigFlag, "bridge-config", "Optional bridge.toml; after a binary upgrade, aligns managed anx-agent-bridge when `[bridge].managed_package_auto_update` is true")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_update_flags", err.Error())
@@ -62,12 +64,16 @@ func (a *App) runUpdate(ctx context.Context, args []string, cfg config.Resolved)
 		return nil, errnorm.Usage("invalid_update_args", "unexpected positional arguments for `anx update`")
 	}
 
+	bridgeCfgTrim := strings.TrimSpace(bridgeConfigFlag.value)
+
 	plan, err := buildUpdatePlan(ctx, cfg, strings.TrimSpace(versionFlag.value))
 	if err != nil {
 		return nil, err
 	}
 	if checkFlag.value || plan.AlreadyCurrent {
-		return renderUpdatePlan(plan, false), nil
+		result := renderUpdatePlan(plan, false)
+		appendUpdateBridgeReminderText(&result.Text, bridgeCfgTrim, plan)
+		return result, nil
 	}
 
 	binaryBytes, mode, err := downloadUpdateBinary(ctx, cfg.Timeout, plan.TargetVersion, plan.ArchiveName)
@@ -77,7 +83,41 @@ func (a *App) runUpdate(ctx context.Context, args []string, cfg config.Resolved)
 	if err := replaceExecutable(plan.InstallPath, binaryBytes, mode); err != nil {
 		return nil, err
 	}
-	return renderUpdatePlan(plan, true), nil
+	result := renderUpdatePlan(plan, true)
+	if bridgeCfgTrim != "" {
+		notes, cerr := a.reconcileBridgePkgAfterCliUpdate(ctx, bridgeCfgTrim, plan.TargetVersion, "")
+		if cerr != nil {
+			return nil, cerr
+		}
+		appendPlainLines(&result.Text, notes)
+	} else {
+		appendUpdateBridgeReminderText(&result.Text, "", plan)
+	}
+	return result, nil
+}
+
+func appendPlainLines(dest *string, lines []string) {
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		*dest = strings.TrimSuffix(*dest, "\n") + "\n" + strings.TrimRight(line, "\n")
+	}
+}
+
+func appendUpdateBridgeReminderText(dest *string, bridgeTomlAbs string, plan updatePlan) {
+	if strings.TrimSpace(bridgeTomlAbs) != "" {
+		exp := normalizedBridgeCLIExpectedPackageSemver(normalizeReleaseTag(plan.TargetVersion))
+		msg := ""
+		if strings.TrimSpace(exp) != "" {
+			msg = fmt.Sprintf("Bridge: upgrading this CLI recommends aligning anx-agent-bridge to semver `%s`; use `anx bridge install`, or rerun `anx update --bridge-config %s` after enabling `[bridge].managed_package_auto_update` in that file.", exp, bridgeTomlAbs)
+		} else {
+			msg = fmt.Sprintf("Bridge: rerun `anx bridge install`, or rerun `anx update --bridge-config %s` when `[bridge].managed_package_auto_update` is enabled.", bridgeTomlAbs)
+		}
+		*dest = strings.TrimSuffix(*dest, "\n") + "\n" + msg
+		return
+	}
+	*dest = strings.TrimSuffix(*dest, "\n") + "\nBridge: if you use the managed anx-agent-bridge runtime, rerun `anx bridge install` after CLI upgrades, or configure `[bridge].managed_package_auto_update` (see `anx bridge init-config --managed-package-auto-update --help`)."
 }
 
 func buildUpdatePlan(ctx context.Context, cfg config.Resolved, requestedVersion string) (updatePlan, error) {
@@ -435,18 +475,21 @@ func updateUsageText() string {
 	return strings.TrimSpace(`Update the installed anx CLI binary in place.
 
 Usage:
-  anx update [--check] [--version <tag>]
+  anx update [--check] [--version <tag>] [--bridge-config <path>]
 
 Options:
-  --check          report the selected target version without changing the binary
-  --version <tag>  install a specific release tag instead of the recommended/latest version
+  --check                 report the selected target version without changing the binary
+  --version <tag>         install a specific release tag instead of the recommended/latest version
+  --bridge-config <path>  optional bridge.toml; after a binary upgrade, refreshes the managed bridge package when [bridge].managed_package_auto_update is true
 
 Behavior:
   - resolves the latest release from GitHub when no explicit version is provided
   - downloads the matching release archive for the current OS/arch and replaces the current binary
+  - reminds managed bridge users to rerun anx bridge install, or refreshes through --bridge-config when that config opts in
 
 Examples:
   anx update --check
   anx update
-  anx update --version v1.2.3`)
+  anx update --version v1.2.3
+  anx update --bridge-config ./bridge.toml`)
 }

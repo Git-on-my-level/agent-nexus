@@ -286,7 +286,8 @@ class ANXClient:
         timeout = httpx.Timeout(connect=10.0, read=heartbeat_timeout_seconds, write=10.0, pool=10.0)
         with httpx.stream("GET", f"{self.base_url}{path}", headers=headers, verify=self.verify_ssl, timeout=timeout) as response:
             if response.status_code >= 400:
-                raise self._decode_response(response)
+                response.read()
+                self._decode_response(response)
             current_id: str | None = None
             current_event: str | None = None
             data_lines: list[str] = []

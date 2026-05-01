@@ -51,6 +51,8 @@ type bridgeDoctorCheck struct {
 	Name    string `json:"name"`
 	OK      bool   `json:"ok"`
 	Message string `json:"message"`
+	// Status is pass | warn | fail. Empty means derive from OK (pass when OK else fail).
+	Status string `json:"status,omitempty"`
 }
 
 func init() {
@@ -115,6 +117,7 @@ func init() {
 				{Name: "--adapter-entrypoint <path>", Description: "Subprocess template: script path used as the second element of `[adapter].command` after python3."},
 				{Name: "--plugin-module <module>", Description: "python-plugin template: Python module for `[adapter].plugin_module`."},
 				{Name: "--plugin-factory <callable>", Description: "python-plugin template: factory name for `[adapter].plugin_factory`."},
+				{Name: "--managed-package-auto-update", Description: "Write `[bridge].managed_package_auto_update = true`; opt-in allows pip refreshes toward the CLI release tag during bridge doctor/start when skew is detected. Requires Python 3.11+, git on PATH, network access, and macOS/Linux (same prerequisites as `anx bridge install`)."},
 			},
 		},
 		localHelperTopic{
@@ -271,71 +274,44 @@ func (a *App) runBridgeInstall(ctx context.Context, args []string) (*commandResu
 	if binDir == "" {
 		binDir = bridgeDefaultBinDir(home)
 	}
-	pythonRuntime, err := detectBridgePython(ctx, strings.TrimSpace(pythonFlag.value))
-	if err != nil {
-		return nil, err
-	}
-	if _, err := bridgeLookPath("git"); err != nil {
-		return nil, errnorm.Local("git_required", "`anx bridge install` currently requires `git` on PATH because it installs the bridge package from the GitHub repo")
-	}
-	venvDir := filepath.Join(installDir, ".venv")
-	venvPython := filepath.Join(venvDir, "bin", "python")
-	bridgeBinary := filepath.Join(venvDir, "bin", "anx-agent-bridge")
 	ref := strings.TrimSpace(refFlag.value)
 	if ref == "" {
 		ref = defaultBridgeInstallRef()
 	}
-	if err := bridgeMkdirAll(installDir, 0o755); err != nil {
-		return nil, errnorm.Wrap(errnorm.KindLocal, "bridge_install_dir_failed", "failed to create bridge install directory", err)
-	}
-	if err := runBridgeExternal(ctx, pythonRuntime.Command, "-m", "venv", venvDir); err != nil {
-		return nil, err
-	}
-	if err := runBridgeExternal(ctx, venvPython, "-m", "pip", "install", "--upgrade", "pip"); err != nil {
-		return nil, err
-	}
-	if err := runBridgeExternal(ctx, venvPython, "-m", "pip", "install", bridgeInstallPackageSpec(ref)); err != nil {
-		return nil, err
-	}
-	if withDev.set && withDev.value {
-		if err := runBridgeExternal(ctx, venvPython, "-m", "pip", "install", "pytest>=8,<9"); err != nil {
-			return nil, err
-		}
-	}
-	if err := bridgeMkdirAll(binDir, 0o755); err != nil {
-		return nil, errnorm.Wrap(errnorm.KindLocal, "bridge_bin_dir_failed", "failed to create bridge bin directory", err)
-	}
-	wrapperPath := filepath.Join(binDir, "anx-agent-bridge")
-	if err := bridgeWriteLauncher(wrapperPath, bridgeBinary); err != nil {
-		return nil, err
-	}
-	versionOut, err := probeBridgeBinaryOutput(ctx, bridgeBinary)
+	result, err := a.performManagedBridgeInstall(ctx, managedBridgeInstallOpts{
+		Home:            home,
+		PreferredPython: strings.TrimSpace(pythonFlag.value),
+		InstallDir:      installDir,
+		BinDir:          binDir,
+		Ref:             ref,
+		WithDev:         withDev.set && withDev.value,
+	})
 	if err != nil {
 		return nil, err
 	}
 	data := map[string]any{
-		"install_dir":    installDir,
-		"bin_dir":        binDir,
-		"wrapper_path":   wrapperPath,
-		"python":         pythonRuntime.Command,
-		"python_version": pythonRuntime.Version,
-		"bridge_binary":  bridgeBinary,
-		"package_ref":    ref,
-		"version":        strings.TrimSpace(versionOut),
+		"install_dir":    result.InstallDir,
+		"bin_dir":        result.BinDir,
+		"wrapper_path":   result.WrapperPath,
+		"python":         result.PythonRuntime.Command,
+		"python_version": result.PythonRuntime.Version,
+		"bridge_binary":  result.BridgeBinary,
+		"package_ref":    result.PackageRef,
+		"version":        result.VersionLine,
 	}
 	lines := []string{
 		"Bridge install complete.",
-		"Bridge binary: " + bridgeBinary,
-		"Wrapper path: " + wrapperPath,
-		"Python: " + pythonRuntime.Command + " (" + pythonRuntime.Version + ")",
-		"Installed ref: " + ref,
-		"Version: " + strings.TrimSpace(versionOut),
+		"Bridge binary: " + result.BridgeBinary,
+		"Wrapper path: " + result.WrapperPath,
+		"Python: " + result.PythonRuntime.Command + " (" + result.PythonRuntime.Version + ")",
+		"Installed ref: " + result.PackageRef,
+		"Version: " + result.VersionLine,
 		"Next step: anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py",
 		"Alternative: --kind python-plugin with --plugin-module and --plugin-factory for in-process Python adapters.",
 		"Next step: anx bridge doctor --config ./bridge.toml once the bridge has checked in",
 	}
-	if !bridgePathContains(a.Getenv, binDir) {
-		lines = append(lines, "PATH note: add "+binDir+" to PATH to run `anx-agent-bridge` directly.")
+	if !bridgePathContains(a.Getenv, result.BinDir) {
+		lines = append(lines, "PATH note: add "+result.BinDir+" to PATH to run `anx-agent-bridge` directly.")
 	}
 	return &commandResult{Text: strings.Join(lines, "\n"), Data: data}, nil
 }
@@ -484,6 +460,7 @@ func (a *App) runBridgeInitConfig(args []string, cfg config.Resolved) (*commandR
 	var adapterEntryFlag trackedString
 	var pluginModuleFlag trackedString
 	var pluginFactoryFlag trackedString
+	var managedBridgeAutoFlag trackedBool
 	fs.Var(&kindFlag, "kind", "Template kind: hermes, subprocess, or python-plugin")
 	fs.Var(&outputFlag, "output", "Write the rendered TOML to a file")
 	fs.Var(&agentHomeFlag, "agent-home", "Directory for this local agent identity")
@@ -497,6 +474,7 @@ func (a *App) runBridgeInitConfig(args []string, cfg config.Resolved) (*commandR
 	fs.Var(&adapterEntryFlag, "adapter-entrypoint", "Subprocess template: path for [adapter].command after python3")
 	fs.Var(&pluginModuleFlag, "plugin-module", "python-plugin template: plugin_module value")
 	fs.Var(&pluginFactoryFlag, "plugin-factory", "python-plugin template: plugin_factory value")
+	fs.Var(&managedBridgeAutoFlag, "managed-package-auto-update", "Write [bridge].managed_package_auto_update=true in the template; when enabled, anx may pip refresh anx-agent-bridge toward the CLI-pinned git ref during doctor/start. Requires Python 3.11+, git on PATH, network access, macOS/Linux (same as anx bridge install).")
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
@@ -533,19 +511,21 @@ func (a *App) runBridgeInitConfig(args []string, cfg config.Resolved) (*commandR
 	if agentHome == "" {
 		agentHome = ".anx"
 	}
+	managedAuto := managedBridgeAutoFlag.set && managedBridgeAutoFlag.value
 	rendered, handle, err := renderBridgeConfigTemplate(bridgeTemplateParams{
-		Kind:              kind,
-		AgentHome:         agentHome,
-		BaseURL:           baseURL,
-		WorkspaceIDs:      workspaceIDs,
-		WorkspaceName:     workspaceName,
-		WorkspaceURL:      strings.TrimSpace(workspaceURLFlag.value),
-		Handle:            handle,
-		AuthStatePath:     strings.TrimSpace(authStateFlag.value),
-		StateDir:          strings.TrimSpace(stateDirFlag.value),
-		AdapterEntrypoint: strings.TrimSpace(adapterEntryFlag.value),
-		PluginModule:      strings.TrimSpace(pluginModuleFlag.value),
-		PluginFactory:     strings.TrimSpace(pluginFactoryFlag.value),
+		Kind:                     kind,
+		AgentHome:                agentHome,
+		BaseURL:                  baseURL,
+		WorkspaceIDs:             workspaceIDs,
+		WorkspaceName:            workspaceName,
+		WorkspaceURL:             strings.TrimSpace(workspaceURLFlag.value),
+		Handle:                   handle,
+		AuthStatePath:            strings.TrimSpace(authStateFlag.value),
+		StateDir:                 strings.TrimSpace(stateDirFlag.value),
+		AdapterEntrypoint:        strings.TrimSpace(adapterEntryFlag.value),
+		PluginModule:             strings.TrimSpace(pluginModuleFlag.value),
+		PluginFactory:            strings.TrimSpace(pluginFactoryFlag.value),
+		ManagedPackageAutoUpdate: managedAuto,
 	})
 	if err != nil {
 		return nil, err
@@ -565,18 +545,19 @@ func (a *App) runBridgeInitConfig(args []string, cfg config.Resolved) (*commandR
 			return nil, err
 		}
 		agentManifest, wakeConfig := renderAgentHomeFiles(bridgeTemplateParams{
-			Kind:              kind,
-			AgentHome:         agentHome,
-			BaseURL:           baseURL,
-			WorkspaceIDs:      workspaceIDs,
-			WorkspaceName:     workspaceName,
-			WorkspaceURL:      strings.TrimSpace(workspaceURLFlag.value),
-			Handle:            handle,
-			AuthStatePath:     strings.TrimSpace(authStateFlag.value),
-			StateDir:          strings.TrimSpace(stateDirFlag.value),
-			AdapterEntrypoint: strings.TrimSpace(adapterEntryFlag.value),
-			PluginModule:      strings.TrimSpace(pluginModuleFlag.value),
-			PluginFactory:     strings.TrimSpace(pluginFactoryFlag.value),
+			Kind:                     kind,
+			AgentHome:                agentHome,
+			BaseURL:                  baseURL,
+			WorkspaceIDs:             workspaceIDs,
+			WorkspaceName:            workspaceName,
+			WorkspaceURL:             strings.TrimSpace(workspaceURLFlag.value),
+			Handle:                   handle,
+			AuthStatePath:            strings.TrimSpace(authStateFlag.value),
+			StateDir:                 strings.TrimSpace(stateDirFlag.value),
+			AdapterEntrypoint:        strings.TrimSpace(adapterEntryFlag.value),
+			PluginModule:             strings.TrimSpace(pluginModuleFlag.value),
+			PluginFactory:            strings.TrimSpace(pluginFactoryFlag.value),
+			ManagedPackageAutoUpdate: managedAuto,
 		})
 		if err := bridgeMkdirAll(agentHomePath, 0o700); err != nil {
 			return nil, errnorm.Wrap(errnorm.KindLocal, "agent_home_create_failed", "failed to create agent home", err)
@@ -801,10 +782,15 @@ func (a *App) runBridgeDoctor(ctx context.Context, args []string) (*commandResul
 	checks := make([]bridgeDoctorCheck, 0, 5)
 	hasFailure := false
 	addCheck := func(name string, ok bool, message string) {
+		st := "pass"
 		if !ok {
 			hasFailure = true
+			st = "fail"
 		}
-		checks = append(checks, bridgeDoctorCheck{Name: name, OK: ok, Message: message})
+		checks = append(checks, bridgeDoctorCheck{Name: name, OK: ok, Message: message, Status: st})
+	}
+	addWarn := func(name, message string) {
+		checks = append(checks, bridgeDoctorCheck{Name: name, OK: true, Message: message, Status: "warn"})
 	}
 
 	pythonRuntime, pyErr := detectBridgePython(ctx, strings.TrimSpace(pythonFlag.value))
@@ -834,13 +820,18 @@ func (a *App) runBridgeDoctor(ctx context.Context, args []string) (*commandResul
 		addCheck("bridge_binary", true, "managed wrapper present at "+bridgeBinary)
 	}
 
-	var versionOut string
-	if !hasFailure || checks[len(checks)-1].Name == "bridge_binary" && checks[len(checks)-1].OK {
-		versionOut, err = probeBridgeBinaryOutput(ctx, bridgeBinary)
-		if err != nil {
-			addCheck("bridge_version", false, errnorm.Normalize(err).Message)
+	var (
+		bridgeVersionProbeOK bool
+		bridgeVersionLine    string
+	)
+	if !hasFailure || (checks[len(checks)-1].Name == "bridge_binary" && checks[len(checks)-1].OK) {
+		out, probeErr := probeBridgeBinaryOutput(ctx, bridgeBinary)
+		if probeErr != nil {
+			addCheck("bridge_version", false, errnorm.Normalize(probeErr).Message)
 		} else {
-			addCheck("bridge_version", true, strings.TrimSpace(versionOut))
+			bridgeVersionLine = strings.TrimSpace(out)
+			bridgeVersionProbeOK = true
+			addCheck("bridge_version", true, bridgeVersionLine)
 		}
 	}
 
@@ -851,6 +842,53 @@ func (a *App) runBridgeDoctor(ctx context.Context, args []string) (*commandResul
 			addCheck("config", false, "config file not found: "+configPath)
 		} else {
 			addCheck("config", true, "config file present: "+configPath)
+			if bridgeVersionProbeOK {
+				details, derr := loadBridgeConfigDetails(configPath)
+				if derr != nil {
+					addCheck("managed_bridge_package", false, "failed loading bridge config for alignment policy: "+errnorm.Normalize(derr).Message)
+				} else {
+					expectedSem := normalizedBridgeCLIExpectedPackageSemver(defaultBridgeInstallRef())
+					installedSem := parsedBridgeInstalledPackageSemver(bridgeVersionLine)
+					if strings.TrimSpace(expectedSem) == "" {
+						addWarn("managed_bridge_package", "could not derive expected bridge package semver from this CLI release tag")
+					} else if strings.TrimSpace(installedSem) == "" {
+						addWarn("managed_bridge_package", fmt.Sprintf(`could not parse installed anx-agent-bridge semver from reported version line %q`, bridgeVersionLine))
+					} else {
+						mism := bridgePackageSemverMismatch(installedSem, expectedSem)
+						managedLayout := bridgeResolvedBinaryUsesManagedInstallLayout(bridgeBinary, binDir) && bridgeManagedVenvExists(installDir)
+						switch {
+						case mism && !managedLayout:
+							addWarn("managed_bridge_package", fmt.Sprintf(`installed semver %s is behind CLI pinned release (%s); non-managed anx-agent-bridge resolved (not the wrapper at %s); automatic pip refresh skipped`, installedSem, expectedSem, filepath.Join(binDir, "anx-agent-bridge")))
+						case mism && managedLayout && !details.ManagedPackageAutoUpdate:
+							addWarn("managed_bridge_package", fmt.Sprintf(`managed anx-agent-bridge semver %s is behind CLI pinned release (%s); run anx bridge install (or set [bridge].managed_package_auto_update = true)`, installedSem, expectedSem))
+						case mism && managedLayout && details.ManagedPackageAutoUpdate && runtime.GOOS == "windows":
+							addWarn("managed_bridge_package", "managed_package_auto_update is enabled but automatic refresh runs on macOS/Linux only")
+						case mism && managedLayout && details.ManagedPackageAutoUpdate:
+							if refrErr := a.refreshManagedBridgeDefaultInstall(ctx, strings.TrimSpace(pythonFlag.value), installDir, binDir, defaultBridgeInstallRef()); refrErr != nil {
+								addCheck("managed_bridge_package", false, "managed_package_auto_update is enabled but refresh failed: "+errnorm.Normalize(refrErr).Message)
+							} else {
+								freshLine, rfErr := probeBridgeBinaryOutput(ctx, bridgeBinary)
+								if rfErr != nil {
+									addCheck("managed_bridge_package", false, "refresh completed but probing version failed: "+errnorm.Normalize(rfErr).Message)
+								} else {
+									freshSem := parsedBridgeInstalledPackageSemver(freshLine)
+									if bridgePackageSemverMismatch(freshSem, expectedSem) {
+										addWarn("managed_bridge_package", fmt.Sprintf(`refresh ran but semver still reports %s while CLI pins %s; inspect logs or rerun anx bridge install`, freshSem, expectedSem))
+									} else {
+										addCheck("managed_bridge_package", true, fmt.Sprintf(`refreshed managed anx-agent-bridge to CLI pinned release (%s)`, expectedSem))
+									}
+								}
+							}
+						default:
+							if managedLayout {
+								addCheck("managed_bridge_package", true, fmt.Sprintf("managed anx-agent-bridge semver matches CLI expectation (%s)", expectedSem))
+							} else {
+								addCheck("managed_bridge_package", true, fmt.Sprintf("anx-agent-bridge semver %s matches CLI expectation (%s) on PATH", installedSem, expectedSem))
+							}
+						}
+					}
+				}
+			}
 			adapterCtx, cancelAdapter := context.WithTimeout(ctx, bridgeDoctorChildTimeout)
 			adapterOut, adapterErr := runBridgeExternalOutput(adapterCtx, bridgeBinary, "bridge", "doctor", "--config", configPath)
 			cancelAdapter()
@@ -892,11 +930,15 @@ func (a *App) runBridgeDoctor(ctx context.Context, args []string) (*commandResul
 
 	lines := []string{"Bridge doctor"}
 	for _, check := range checks {
-		state := "PASS"
-		if !check.OK {
-			state = "FAIL"
+		code := strings.ToLower(strings.TrimSpace(check.Status))
+		if code == "" {
+			if check.OK {
+				code = "pass"
+			} else {
+				code = "fail"
+			}
 		}
-		lines = append(lines, "["+state+"] "+check.Name+": "+check.Message)
+		lines = append(lines, "["+strings.ToUpper(code)+"] "+check.Name+": "+check.Message)
 	}
 	result := &commandResult{
 		Text: strings.Join(lines, "\n"),
@@ -914,18 +956,30 @@ func (a *App) runBridgeDoctor(ctx context.Context, args []string) (*commandResul
 }
 
 type bridgeTemplateParams struct {
-	Kind              string
-	AgentHome         string
-	BaseURL           string
-	WorkspaceIDs      []string
-	WorkspaceName     string
-	WorkspaceURL      string
-	Handle            string
-	AuthStatePath     string
-	StateDir          string
-	AdapterEntrypoint string
-	PluginModule      string
-	PluginFactory     string
+	Kind                     string
+	AgentHome                string
+	BaseURL                  string
+	WorkspaceIDs             []string
+	WorkspaceName            string
+	WorkspaceURL             string
+	Handle                   string
+	AuthStatePath            string
+	StateDir                 string
+	AdapterEntrypoint        string
+	PluginModule             string
+	PluginFactory            string
+	ManagedPackageAutoUpdate bool
+}
+
+func bridgeTomlSnippetManagedAutoUpdate(enabled bool) string {
+	if !enabled {
+		return ""
+	}
+	return `
+
+` + "# managed_package_auto_update: when true, anx may pip refresh anx-agent-bridge to the CLI-pinned git ref during doctor/start (and optional `anx update --bridge-config`)." + `
+` + "# Requires Python 3.11+, git on PATH, outbound network access, macOS/Linux (same prerequisites as anx bridge install)." + `
+managed_package_auto_update = true`
 }
 
 func normalizeBridgeInitConfigKind(kind string) string {
@@ -962,7 +1016,7 @@ adapter_kind = "hermes"
 resume_policy = "resume_or_create"
 status = "pending"
 checkin_interval_seconds = 60
-checkin_ttl_seconds = 300
+checkin_ttl_seconds = 300%s
 
 [runtime]
 state_dir = %q
@@ -977,7 +1031,7 @@ doctor_timeout_seconds = 60
 # hermes_args = ["acp"]
 # cwd = "."
 # interactive = false
-`, agentHome, stateDir)) + "\n", handle, nil
+`, agentHome, bridgeTomlSnippetManagedAutoUpdate(params.ManagedPackageAutoUpdate), stateDir)) + "\n", handle, nil
 	case "subprocess":
 		handle := firstNonEmptyString(params.Handle, "<handle>")
 		stateDir := firstNonEmptyString(params.StateDir, "run/"+handle)
@@ -992,7 +1046,7 @@ adapter_kind = "subprocess"
 resume_policy = "resume_or_create"
 status = "pending"
 checkin_interval_seconds = 60
-checkin_ttl_seconds = 300
+checkin_ttl_seconds = 300%s
 
 [runtime]
 state_dir = %q
@@ -1002,7 +1056,7 @@ kind = "subprocess"
 command = ["python3", %q]
 timeout_seconds = 600
 doctor_timeout_seconds = 60
-`, agentHome, stateDir, entry)) + "\n", handle, nil
+`, agentHome, bridgeTomlSnippetManagedAutoUpdate(params.ManagedPackageAutoUpdate), stateDir, entry)) + "\n", handle, nil
 	case "python_plugin":
 		handle := firstNonEmptyString(params.Handle, "<handle>")
 		stateDir := firstNonEmptyString(params.StateDir, "run/"+handle)
@@ -1018,7 +1072,7 @@ adapter_kind = "python_plugin"
 resume_policy = "resume_or_create"
 status = "pending"
 checkin_interval_seconds = 60
-checkin_ttl_seconds = 300
+checkin_ttl_seconds = 300%s
 
 [runtime]
 state_dir = %q
@@ -1027,7 +1081,7 @@ state_dir = %q
 kind = "python_plugin"
 plugin_module = %q
 plugin_factory = %q
-`, agentHome, stateDir, mod, fac)) + "\n", handle, nil
+`, agentHome, bridgeTomlSnippetManagedAutoUpdate(params.ManagedPackageAutoUpdate), stateDir, mod, fac)) + "\n", handle, nil
 	default:
 		return "", "", errnorm.Usage("invalid_request", "unknown bridge config kind; use hermes, subprocess, or python-plugin")
 	}
@@ -1142,6 +1196,284 @@ func defaultBridgeInstallRef() string {
 	// snapshot that matches the released binary (including adapter surface area).
 	// Development: pass `--ref main` (or a feature branch) when iterating ahead of the tag.
 	return strings.TrimSpace(buildinfo.Current)
+}
+
+type managedBridgeInstallOpts struct {
+	Home            string
+	PreferredPython string
+	InstallDir      string
+	BinDir          string
+	Ref             string
+	WithDev         bool
+}
+
+type managedBridgeInstallResult struct {
+	InstallDir    string
+	BinDir        string
+	VenvPython    string
+	BridgeBinary  string
+	WrapperPath   string
+	PackageRef    string
+	VersionLine   string
+	PythonRuntime bridgePythonRuntime
+}
+
+func (a *App) performManagedBridgeInstall(ctx context.Context, opts managedBridgeInstallOpts) (managedBridgeInstallResult, error) {
+	installDir := strings.TrimSpace(opts.InstallDir)
+	if installDir == "" {
+		installDir = bridgeDefaultInstallDir(opts.Home)
+	}
+	binDir := strings.TrimSpace(opts.BinDir)
+	if binDir == "" {
+		binDir = bridgeDefaultBinDir(opts.Home)
+	}
+	pythonRuntime, err := detectBridgePython(ctx, strings.TrimSpace(opts.PreferredPython))
+	if err != nil {
+		return managedBridgeInstallResult{}, err
+	}
+	if _, err := bridgeLookPath("git"); err != nil {
+		return managedBridgeInstallResult{}, errnorm.Local("git_required", "`anx bridge install` currently requires `git` on PATH because it installs the bridge package from the GitHub repo")
+	}
+	venvDir := filepath.Join(installDir, ".venv")
+	venvPython := filepath.Join(venvDir, "bin", "python")
+	pkgBridgeBinary := filepath.Join(venvDir, "bin", "anx-agent-bridge")
+	ref := strings.TrimSpace(opts.Ref)
+	if ref == "" {
+		ref = defaultBridgeInstallRef()
+	}
+	if err := bridgeMkdirAll(installDir, 0o755); err != nil {
+		return managedBridgeInstallResult{}, errnorm.Wrap(errnorm.KindLocal, "bridge_install_dir_failed", "failed to create bridge install directory", err)
+	}
+	if err := runBridgeExternal(ctx, pythonRuntime.Command, "-m", "venv", venvDir); err != nil {
+		return managedBridgeInstallResult{}, err
+	}
+	if err := runBridgeExternal(ctx, venvPython, "-m", "pip", "install", "--upgrade", "pip"); err != nil {
+		return managedBridgeInstallResult{}, err
+	}
+	if err := runBridgeExternal(ctx, venvPython, "-m", "pip", "install", bridgeInstallPackageSpec(ref)); err != nil {
+		return managedBridgeInstallResult{}, err
+	}
+	if opts.WithDev {
+		if err := runBridgeExternal(ctx, venvPython, "-m", "pip", "install", "pytest>=8,<9"); err != nil {
+			return managedBridgeInstallResult{}, err
+		}
+	}
+	if err := bridgeMkdirAll(binDir, 0o755); err != nil {
+		return managedBridgeInstallResult{}, errnorm.Wrap(errnorm.KindLocal, "bridge_bin_dir_failed", "failed to create bridge bin directory", err)
+	}
+	wrapperPath := filepath.Join(binDir, "anx-agent-bridge")
+	if err := bridgeWriteLauncher(wrapperPath, pkgBridgeBinary); err != nil {
+		return managedBridgeInstallResult{}, err
+	}
+	versionOut, err := probeBridgeBinaryOutput(ctx, pkgBridgeBinary)
+	if err != nil {
+		return managedBridgeInstallResult{}, err
+	}
+	return managedBridgeInstallResult{
+		InstallDir:    installDir,
+		BinDir:        binDir,
+		VenvPython:    venvPython,
+		BridgeBinary:  pkgBridgeBinary,
+		WrapperPath:   wrapperPath,
+		PackageRef:    ref,
+		VersionLine:   strings.TrimSpace(versionOut),
+		PythonRuntime: pythonRuntime,
+	}, nil
+}
+
+func normalizedBridgeCLIExpectedPackageSemver(gitRefOrTag string) string {
+	return strings.TrimPrefix(strings.TrimSpace(strings.ToLower(gitRefOrTag)), "v")
+}
+
+func parsedBridgeInstalledPackageSemver(versionLine string) string {
+	line := strings.TrimSpace(versionLine)
+	if line == "" {
+		return ""
+	}
+	parts := strings.Fields(line)
+	if len(parts) >= 2 && strings.EqualFold(parts[0], "anx-agent-bridge") {
+		return normalizedBridgeCLIExpectedPackageSemver(parts[1])
+	}
+	if len(parts) == 1 {
+		return normalizedBridgeCLIExpectedPackageSemver(parts[0])
+	}
+	if len(parts) >= 2 {
+		return normalizedBridgeCLIExpectedPackageSemver(parts[len(parts)-1])
+	}
+	return ""
+}
+
+func bridgePackageSemverMismatch(installedComparable, expectedComparable string) bool {
+	if strings.TrimSpace(expectedComparable) == "" || strings.TrimSpace(installedComparable) == "" {
+		return false
+	}
+	return installedComparable != expectedComparable
+}
+
+func bridgeManagedVenvExists(installDir string) bool {
+	venvPython := filepath.Join(installDir, ".venv", "bin", "python")
+	if _, err := bridgeStat(venvPython); err != nil {
+		return false
+	}
+	return true
+}
+
+func bridgeResolvedBinaryUsesManagedInstallLayout(bridgeBinary, binDir string) bool {
+	wrapperPath := filepath.Join(binDir, "anx-agent-bridge")
+	bp, err1 := filepath.Abs(bridgeBinary)
+	wp, err2 := filepath.Abs(wrapperPath)
+	if err1 != nil || err2 != nil {
+		return strings.TrimSpace(bridgeBinary) == strings.TrimSpace(wrapperPath)
+	}
+	return bp == wp
+}
+
+func (a *App) refreshManagedBridgeDefaultInstall(ctx context.Context, preferredPython string, installDir string, binDir string, gitRef string) error {
+	if runtime.GOOS == "windows" {
+		return errnorm.Usage("unsupported_platform", "managed bridge install refresh supports macOS and Linux only")
+	}
+	home, err := a.bridgeHome()
+	if err != nil {
+		return err
+	}
+	_, err = a.performManagedBridgeInstall(ctx, managedBridgeInstallOpts{
+		Home:            home,
+		PreferredPython: preferredPython,
+		InstallDir:      installDir,
+		BinDir:          binDir,
+		Ref:             gitRef,
+		WithDev:         false,
+	})
+	return err
+}
+
+// managedBridgeStartupAlignment runs optionally before bridge start when version skew exists.
+func (a *App) managedBridgeStartupAlignment(ctx context.Context, mc bridgeManagedConfig, bridgeBinary string, home string, installDirRaw, binDirRaw, pythonRaw string) ([]string, error) {
+	if runtime.GOOS == "windows" {
+		return nil, nil
+	}
+	installDir := strings.TrimSpace(installDirRaw)
+	if installDir == "" {
+		installDir = bridgeDefaultInstallDir(home)
+	}
+	binDir := strings.TrimSpace(binDirRaw)
+	if binDir == "" {
+		binDir = bridgeDefaultBinDir(home)
+	}
+	expectedSem := normalizedBridgeCLIExpectedPackageSemver(defaultBridgeInstallRef())
+	if strings.TrimSpace(expectedSem) == "" {
+		return nil, nil
+	}
+	versionLine, probeErr := probeBridgeBinaryOutput(ctx, bridgeBinary)
+	if probeErr != nil {
+		return nil, probeErr
+	}
+	installedSem := parsedBridgeInstalledPackageSemver(versionLine)
+	if strings.TrimSpace(installedSem) == "" {
+		return nil, nil
+	}
+	mism := bridgePackageSemverMismatch(installedSem, expectedSem)
+	if !mism {
+		return nil, nil
+	}
+	managedLayout := bridgeResolvedBinaryUsesManagedInstallLayout(bridgeBinary, binDir) && bridgeManagedVenvExists(installDir)
+	if !managedLayout {
+		w := filepath.Join(binDir, "anx-agent-bridge")
+		return []string{
+			fmt.Sprintf("Warning: anx-agent-bridge reports %s; this CLI pins %s. Non-managed binary (not wrapper at %s); skipped automatic pip refresh. Run anx bridge install to align.", installedSem, expectedSem, w),
+		}, nil
+	}
+	if !mc.ManagedPackageAutoUpdate {
+		return []string{
+			fmt.Sprintf("Warning: managed anx-agent-bridge %s is behind CLI pinned release (%s); run anx bridge install (or enable [bridge].managed_package_auto_update in bridge.toml)", installedSem, expectedSem),
+		}, nil
+	}
+	ref := strings.TrimSpace(defaultBridgeInstallRef())
+	if err := a.refreshManagedBridgeDefaultInstall(ctx, strings.TrimSpace(pythonRaw), installDir, binDir, ref); err != nil {
+		return nil, errnorm.Wrap(errnorm.KindLocal, "bridge_managed_refresh_failed", fmt.Sprintf(`managed_package_auto_update is enabled but anx-agent-bridge refresh failed (%s)`, defaultBridgeInstallRef()), err)
+	}
+	fresh, err := probeBridgeBinaryOutput(ctx, bridgeBinary)
+	if err != nil {
+		return nil, errnorm.Wrap(errnorm.KindLocal, "bridge_refresh_probe_failed", "failed probing anx-agent-bridge after refresh", err)
+	}
+	freshSem := parsedBridgeInstalledPackageSemver(fresh)
+	if bridgePackageSemverMismatch(freshSem, expectedSem) {
+		return nil, errnorm.Local("bridge_managed_refresh_failed", fmt.Sprintf(`anx-agent-bridge still reports %s after pip refresh while CLI pins %s; run anx bridge install`, freshSem, expectedSem))
+	}
+	return []string{"Refreshed managed anx-agent-bridge to CLI pinned release (" + expectedSem + ")."}, nil
+}
+
+// reconcileBridgePkgAfterCliUpdate runs after upgrading the anx binary using new release tag expectations.
+func (a *App) reconcileBridgePkgAfterCliUpdate(ctx context.Context, bridgeConfigPath string, targetReleaseTagWithVPrefix string, pythonPref string) ([]string, error) {
+	path := strings.TrimSpace(bridgeConfigPath)
+	if path == "" {
+		return nil, nil
+	}
+	details, err := loadBridgeConfigDetails(path)
+	if err != nil {
+		return nil, err
+	}
+	targetTag := normalizeReleaseTag(targetReleaseTagWithVPrefix)
+	expectedSem := normalizedBridgeCLIExpectedPackageSemver(targetTag)
+	expLine := ""
+	if strings.TrimSpace(expectedSem) != "" {
+		expLine = fmt.Sprintf("New CLI release expects anx-agent-bridge semver %s; run anx bridge install to align.", expectedSem)
+	} else if strings.TrimSpace(targetTag) != "" {
+		expLine = fmt.Sprintf("New CLI release is tagged %s; run anx bridge install to align anx-agent-bridge.", targetTag)
+	}
+	if !details.ManagedPackageAutoUpdate {
+		if expLine != "" {
+			return []string{expLine}, nil
+		}
+		return []string{"If you rely on anx bridge install/managed layouts, rerun anx bridge install after updating the anx binary."}, nil
+	}
+	if runtime.GOOS == "windows" {
+		msg := ""
+		if expLine != "" {
+			msg = expLine + " "
+		}
+		return []string{strings.TrimSpace(msg + "automatic managed bridge refresh skipped on windows")}, nil
+	}
+	home, err := a.bridgeHome()
+	if err != nil {
+		return nil, err
+	}
+	installDir := bridgeDefaultInstallDir(home)
+	binDir := bridgeDefaultBinDir(home)
+	bridgeBinary, err := resolveBridgeBinary(home, installDir, binDir)
+	if err != nil {
+		return []string{"Managed bridge refresh after CLI update skipped: " + errnorm.Normalize(err).Message}, nil
+	}
+	versionLine, probeErr := probeBridgeBinaryOutput(ctx, bridgeBinary)
+	if probeErr != nil {
+		return []string{"Managed bridge refresh after CLI update skipped: " + errnorm.Normalize(probeErr).Message}, nil
+	}
+	installedSem := parsedBridgeInstalledPackageSemver(versionLine)
+	if strings.TrimSpace(expectedSem) != "" && !bridgePackageSemverMismatch(installedSem, expectedSem) {
+		return []string{"Managed anx-agent-bridge already matches CLI release expectation (" + expectedSem + ")."}, nil
+	}
+	managedLayout := bridgeResolvedBinaryUsesManagedInstallLayout(bridgeBinary, binDir) && bridgeManagedVenvExists(installDir)
+	if !managedLayout {
+		lines := []string{
+			fmt.Sprintf(`Managed auto-update skipped: resolved anx-agent-bridge is not the default managed wrapper at %s`, filepath.Join(binDir, "anx-agent-bridge")),
+		}
+		if strings.TrimSpace(expLine) != "" {
+			lines = append(lines, expLine)
+		}
+		return lines, nil
+	}
+	if err := a.refreshManagedBridgeDefaultInstall(ctx, strings.TrimSpace(pythonPref), installDir, binDir, targetTag); err != nil {
+		return nil, errnorm.Wrap(errnorm.KindLocal, "bridge_managed_refresh_failed", "managed anx-agent-bridge refresh after anx update failed", err)
+	}
+	freshLine, ferr := probeBridgeBinaryOutput(ctx, bridgeBinary)
+	if ferr != nil {
+		return nil, errnorm.Wrap(errnorm.KindLocal, "bridge_refresh_probe_failed", "failed probing anx-agent-bridge after update refresh", ferr)
+	}
+	freshSem := parsedBridgeInstalledPackageSemver(freshLine)
+	if strings.TrimSpace(expectedSem) != "" && bridgePackageSemverMismatch(freshSem, expectedSem) {
+		return nil, errnorm.Local("bridge_managed_refresh_failed", fmt.Sprintf(`anx-agent-bridge still reports %s after refresh while new CLI pins %s; run anx bridge install`, freshSem, expectedSem))
+	}
+	return []string{fmt.Sprintf(`Refreshed managed anx-agent-bridge for CLI release expectation (%s; installed semver %s).`, expectedSem, freshSem)}, nil
 }
 
 func detectBridgePython(ctx context.Context, preferred string) (bridgePythonRuntime, error) {
@@ -1276,13 +1608,14 @@ func bridgePathContains(getenv func(string) string, dir string) bool {
 }
 
 type bridgeConfigDetails struct {
-	ConfigPath        string
-	AgentHome         string
-	AgentManifestPath string
-	WakeConfigPath    string
-	AuthStatePath     string
-	AgentHandle       string
-	BaseURL           string
+	ConfigPath               string
+	AgentHome                string
+	AgentManifestPath        string
+	WakeConfigPath           string
+	AuthStatePath            string
+	AgentHandle              string
+	BaseURL                  string
+	ManagedPackageAutoUpdate bool
 }
 
 func loadBridgeConfigDetails(configPath string) (bridgeConfigDetails, error) {
@@ -1346,14 +1679,19 @@ func loadBridgeConfigDetails(configPath string) (bridgeConfigDetails, error) {
 		agentHandle = strings.TrimSpace(bridgeTomlString(identitySec["handle"]))
 		baseURL = strings.TrimSpace(bridgeTomlString(identitySec["base_url"]))
 	}
+	autoManaged := false
+	if bridgeRoot := bridgeTomlTable(root, "bridge"); bridgeRoot != nil {
+		autoManaged = asBool(bridgeRoot["managed_package_auto_update"])
+	}
 	return bridgeConfigDetails{
-		ConfigPath:        absPath,
-		AgentHome:         agentHome,
-		AgentManifestPath: agentManifestPath,
-		WakeConfigPath:    wakeConfigPath,
-		AuthStatePath:     authStatePath,
-		AgentHandle:       agentHandle,
-		BaseURL:           baseURL,
+		ConfigPath:               absPath,
+		AgentHome:                agentHome,
+		AgentManifestPath:        agentManifestPath,
+		WakeConfigPath:           wakeConfigPath,
+		AuthStatePath:            authStatePath,
+		AgentHandle:              agentHandle,
+		BaseURL:                  baseURL,
+		ManagedPackageAutoUpdate: autoManaged,
 	}, nil
 }
 

@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"agent-nexus-cli/internal/errnorm"
+
+	toml "github.com/pelletier/go-toml/v2"
 )
 
 func init() {
@@ -132,6 +134,10 @@ func (a *App) runBridgeStart(ctx context.Context, args []string) (*commandResult
 	if err != nil {
 		return nil, err
 	}
+	preStartNotes, err := a.managedBridgeStartupAlignment(ctx, managedConfig, bridgeBinary, home, strings.TrimSpace(installDirFlag.value), strings.TrimSpace(binDirFlag.value), "")
+	if err != nil {
+		return nil, err
+	}
 	if existing, ok := loadManagedRuntimeState(managedConfig.ProcessStatePath); ok {
 		if running, _ := bridgeManagedRuntimeRunning(existing); running {
 			return nil, errnorm.WithDetails(
@@ -153,15 +159,21 @@ func (a *App) runBridgeStart(ctx context.Context, args []string) (*commandResult
 		_, _ = bridgeStopManagedProcess(runtimeState, 2*time.Second, true)
 		return nil, err
 	}
-	lines := []string{
-		"Bridge runtime started.",
-		"Kind: " + runtimeState.Kind,
-		"Config: " + runtimeState.ConfigPath,
-		"PID: " + strconv.Itoa(runtimeState.PID),
-		"Log: " + runtimeState.LogPath,
-		"State: " + runtimeState.ProcessStatePath,
-		"Next step: anx bridge status --config " + shellSingleQuote(runtimeState.ConfigPath),
+	lines := []string(nil)
+	for _, note := range preStartNotes {
+		if strings.TrimSpace(note) != "" {
+			lines = append(lines, note)
+		}
 	}
+	lines = append(lines,
+		"Bridge runtime started.",
+		"Kind: "+runtimeState.Kind,
+		"Config: "+runtimeState.ConfigPath,
+		"PID: "+strconv.Itoa(runtimeState.PID),
+		"Log: "+runtimeState.LogPath,
+		"State: "+runtimeState.ProcessStatePath,
+		"Next step: anx bridge status --config "+shellSingleQuote(runtimeState.ConfigPath),
+	)
 	return &commandResult{
 		Text: strings.Join(lines, "\n"),
 		Data: map[string]any{
@@ -499,14 +511,22 @@ func loadBridgeManagedConfig(configPath string) (bridgeManagedConfig, error) {
 		return bridgeManagedConfig{}, err
 	}
 	managerDir := bridgeManagerDir(absPath)
+	autoManaged := false
+	var root map[string]any
+	if parseErr := toml.Unmarshal(content, &root); parseErr == nil {
+		if bridgeRoot := bridgeTomlTable(root, "bridge"); bridgeRoot != nil {
+			autoManaged = asBool(bridgeRoot["managed_package_auto_update"])
+		}
+	}
 	return bridgeManagedConfig{
-		RuntimeKind:      runtimeKind,
-		RunCommand:       runCommand,
-		ConfigPath:       absPath,
-		DisplayName:      displayName,
-		ManagerDir:       managerDir,
-		ProcessStatePath: filepath.Join(managerDir, "process.json"),
-		LogPath:          filepath.Join(managerDir, "current.log"),
+		RuntimeKind:              runtimeKind,
+		RunCommand:               runCommand,
+		ConfigPath:               absPath,
+		DisplayName:              displayName,
+		ManagerDir:               managerDir,
+		ProcessStatePath:         filepath.Join(managerDir, "process.json"),
+		LogPath:                  filepath.Join(managerDir, "current.log"),
+		ManagedPackageAutoUpdate: autoManaged,
 	}, nil
 }
 

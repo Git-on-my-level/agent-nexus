@@ -3,7 +3,7 @@ import pytest
 
 from types import SimpleNamespace
 
-from anx_agent_bridge.anx_client import ANXClient, ANXStreamDisconnected
+from anx_agent_bridge.anx_client import ANXClient, ANXClientError, ANXStreamDisconnected
 
 
 class DummyAuthManager:
@@ -129,3 +129,50 @@ def test_stream_events_preserves_connect_error(monkeypatch):
 
     with pytest.raises(httpx.ConnectError, match="dial failed"):
         list(client.stream_events())
+
+
+def test_stream_events_http_error_reads_body_before_decode(monkeypatch):
+    """Streaming responses must be fully read before .text/.json or httpx raises ResponseNotRead."""
+    client = ANXClient("http://anx.test", auth_manager=DummyAuthManager())
+
+    class ErrorStreamResponse:
+        status_code = 400
+        headers: dict[str, str] = {}
+
+        def __init__(self) -> None:
+            self._body = b'{"code":"forbidden","message":"nope"}'
+            self._read = False
+
+        def read(self) -> bytes:
+            self._read = True
+            return self._body
+
+        @property
+        def content(self) -> bytes:
+            return self._body
+
+        @property
+        def text(self) -> str:
+            if not self._read:
+                raise httpx.ResponseNotRead("Attempted to read streaming response body")
+            return self._body.decode()
+
+        def json(self) -> dict:
+            import json as json_lib
+
+            return json_lib.loads(self.text)
+
+    class ErrorStream:
+        def __enter__(self):
+            return ErrorStreamResponse()
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr("anx_agent_bridge.anx_client.httpx.stream", lambda *args, **kwargs: ErrorStream())
+
+    with pytest.raises(ANXClientError) as caught:
+        list(client.stream_events())
+    assert caught.value.status_code == 400
+    assert caught.value.code == "forbidden"
+    assert "nope" in str(caught.value)

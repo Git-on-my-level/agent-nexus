@@ -87,3 +87,8 @@ WEB_PACKAGE_TARGET="${REPO_ROOT}/web-ui/package.json"
 WEB_PACKAGE_TMP="${TMP_DIR}/web-package.json"
 perl -0pe 's/"version":\s*"[^"]+"/"version": "'"${WEB_VERSION}"'"/' "${WEB_PACKAGE_TARGET}" > "${WEB_PACKAGE_TMP}"
 sync_target "${WEB_PACKAGE_TARGET}" "${WEB_PACKAGE_TMP}"
+
+BRIDGE_PYPROJECT_TARGET="${REPO_ROOT}/adapters/agent-bridge/pyproject.toml"
+BRIDGE_PYPROJECT_TMP="${TMP_DIR}/bridge-pyproject.toml"
+perl -0777 -pe 's/^version\s*=\s*"[^"]*"/version = "'"${WEB_VERSION}"'"/m' "${BRIDGE_PYPROJECT_TARGET}" > "${BRIDGE_PYPROJECT_TMP}"
+sync_target "${BRIDGE_PYPROJECT_TARGET}" "${BRIDGE_PYPROJECT_TMP}"
