@@ -98,10 +98,11 @@
     </p>
     <h1 class="mt-1 text-display text-fg">Usage</h1>
     <p class="mt-2 max-w-prose text-meta text-fg-subtle">
-      Over plan limits, workspaces may stay online in <strong class="font-medium text-fg"
-        >read-only</strong
+      Over plan limits, workspaces may stay online in <strong
+        class="font-medium text-fg">read-only</strong
       >
-      mode until usage drops or you upgrade. Suspended workspaces are unavailable until billing or telemetry issues clear.
+      mode until usage drops or you upgrade. Suspended workspaces are unavailable
+      until billing or telemetry issues clear.
     </p>
   </div>
 
