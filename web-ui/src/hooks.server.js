@@ -1,6 +1,7 @@
 import { dev } from "$app/environment";
 import { env as privateEnv } from "$env/dynamic/private";
 import { AuthErrorCode } from "$lib/authErrorCodes.js";
+import { normalizeBaseUrl } from "$lib/config.js";
 import { isProxyableCommand } from "$lib/coreRouteCatalog";
 import { getWorkspaceHeader } from "$lib/compat/workspaceCompat";
 import { CURRENT_VERSION } from "$lib/generated/version";
@@ -18,6 +19,7 @@ import { coreBaseUrlForNodeFetch } from "$lib/server/coreBaseUrlForNodeFetch.js"
 import { coreEndpointURL } from "$lib/server/coreEndpoint";
 import { buildProxyRequestInit } from "$lib/server/coreProxy";
 import { logServerError, logServerEvent } from "$lib/server/devLog";
+import { hostedWorkspaceCoreProxyHeaders } from "$lib/server/hostedWorkspaceCore";
 import {
   isHostedWorkspaceProxyPath,
   proxyToControlPlaneWorkspace,
@@ -97,6 +99,30 @@ function shouldBypassProxy(pathname, method) {
     normalizedPath === "/auth/callback" ||
     normalizedPath.endsWith("/auth/callback")
   );
+}
+
+function isHostedWorkspaceCoreProxyTarget(
+  coreBaseUrl,
+  organizationSlug,
+  workspaceSlug,
+) {
+  if (!normalizeBaseUrl(privateEnv.ANX_CONTROL_BASE_URL)) {
+    return false;
+  }
+  const normalized = normalizeBaseUrl(coreBaseUrl);
+  if (!normalized) {
+    return false;
+  }
+  try {
+    const parsed = new URL(normalized);
+    const expectedPathname = new URL(
+      `/ws/${encodeURIComponent(organizationSlug)}/${encodeURIComponent(workspaceSlug)}`,
+      "http://anx.local",
+    ).pathname;
+    return parsed.pathname.replace(/\/+$/, "") === expectedPathname;
+  } catch {
+    return false;
+  }
 }
 
 async function refreshAndRetry(
@@ -190,6 +216,19 @@ async function proxyToCore(
   const requestInit = buildProxyRequestInit(event, {
     body: requestBody,
   });
+  if (
+    isHostedWorkspaceCoreProxyTarget(
+      coreBaseUrl,
+      organizationSlug,
+      workspaceSlug,
+    )
+  ) {
+    for (const [name, value] of Object.entries(
+      hostedWorkspaceCoreProxyHeaders(event),
+    )) {
+      requestInit.headers.set(name, value);
+    }
+  }
   const session = getWorkspaceAuthSession(
     event,
     organizationSlug,
