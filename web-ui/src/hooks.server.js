@@ -345,7 +345,7 @@ function buildCSPDirectives(env = privateEnv) {
       env.ANX_UI_CSP_STYLE_SRC_EXTRA,
     ),
     "img-src": mergeCSPDirectiveSources(
-      ["'self'", "data:", "https:"],
+      ["'self'", "blob:", "data:", "https:"],
       env.ANX_UI_CSP_IMG_SRC_EXTRA,
     ),
     "font-src": mergeCSPDirectiveSources(

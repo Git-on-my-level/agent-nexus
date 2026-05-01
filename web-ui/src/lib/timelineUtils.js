@@ -1,4 +1,9 @@
-import { buildPrimitiveRefRoutes, resolveRefLink } from "./refLinkModel.js";
+import {
+  attachmentArtifactDisplayLabel,
+  buildPrimitiveRefRoutes,
+  coerceTimelineResourceList,
+  resolveRefLink,
+} from "./refLinkModel.js";
 
 const EVENT_TYPE_LABELS = {
   message_posted: "Message posted",
@@ -36,12 +41,20 @@ function asObject(value) {
 
 function artifactLabel(artifact, id) {
   const record = asObject(artifact);
+  const kind = String(record.kind ?? "")
+    .trim()
+    .toLowerCase();
+  if (kind === "attachment") {
+    const attachmentLabel = attachmentArtifactDisplayLabel(record);
+    if (attachmentLabel) return attachmentLabel;
+  }
+
   const summary = String(record.summary ?? record.title ?? "").trim();
   if (summary) {
     return summary;
   }
-  const kind = String(record.kind ?? "Artifact").trim();
-  return `${kind} ${id}`.trim();
+  const kindFallback = String(record.kind ?? "Artifact").trim();
+  return `${kindFallback} ${id}`.trim();
 }
 
 function documentLabel(document, id) {
@@ -78,15 +91,35 @@ export function buildTimelineRefLabelHints(
 ) {
   const hints = {};
 
-  for (const [artifactId, artifact] of Object.entries(asObject(artifacts))) {
-    const id = String(artifactId ?? "").trim();
+  const artifactHintIds = new Set();
+  for (const artifact of coerceTimelineResourceList(artifacts)) {
+    const id = String(artifact?.id ?? "").trim();
     if (!id) continue;
     hints[`artifact:${id}`] = artifactLabel(artifact, id);
+    artifactHintIds.add(id);
+  }
+  for (const [artifactId, artifact] of Object.entries(asObject(artifacts))) {
+    const id = String(artifactId ?? "").trim();
+    if (!id || artifactHintIds.has(id)) continue;
+    hints[`artifact:${id}`] = artifactLabel(artifact, id);
+  }
+
+  const documentRows = coerceTimelineResourceList(documents);
+  const documentsKeyed = {};
+  const documentHintIds = new Set();
+
+  for (const document of documentRows) {
+    const id = String(document?.id ?? "").trim();
+    if (!id) continue;
+    documentsKeyed[id] = document;
+    hints[`document:${id}`] = documentLabel(document, id);
+    documentHintIds.add(id);
   }
 
   for (const [documentId, document] of Object.entries(asObject(documents))) {
     const id = String(documentId ?? "").trim();
-    if (!id) continue;
+    if (!id || documentHintIds.has(id)) continue;
+    documentsKeyed[id] = document;
     hints[`document:${id}`] = documentLabel(document, id);
   }
 
@@ -98,7 +131,7 @@ export function buildTimelineRefLabelHints(
     hints[`document_revision:${id}`] = documentRevisionLabel(
       revision,
       id,
-      documents,
+      documentsKeyed,
     );
   }
 

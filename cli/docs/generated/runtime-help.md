@@ -3411,7 +3411,7 @@ Generated Help: artifacts list
 - Output: Returns `{ artifacts }`.
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `artifacts`
-- Adjacent commands: `artifacts archive`, `artifacts content`, `artifacts create`, `artifacts get`, `artifacts purge`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
+- Adjacent commands: `artifacts archive`, `artifacts attachments create`, `artifacts content`, `artifacts create`, `artifacts get`, `artifacts purge`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
 
 
 Global flags:
@@ -3436,7 +3436,7 @@ Generated Help: artifacts get
 - Output: Returns `{ artifact }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `artifacts`
-- Adjacent commands: `artifacts archive`, `artifacts content`, `artifacts create`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
+- Adjacent commands: `artifacts archive`, `artifacts attachments create`, `artifacts content`, `artifacts create`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
 
 Inputs:
   Required:
@@ -3464,7 +3464,7 @@ Generated Help: artifacts create
 - Output: Returns `{ artifact }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `conflict`
 - Concepts: `artifacts`, `write`
-- Adjacent commands: `artifacts archive`, `artifacts content`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
+- Adjacent commands: `artifacts archive`, `artifacts attachments create`, `artifacts content`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
 
 Inputs:
   Required:
@@ -3496,7 +3496,7 @@ Generated Help: artifacts archive
 - Output: Returns `{ artifact }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `artifacts`, `write`
-- Adjacent commands: `artifacts content`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
+- Adjacent commands: `artifacts attachments create`, `artifacts content`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
 
 Inputs:
   Required:
@@ -3526,7 +3526,7 @@ Generated Help: artifacts unarchive
 - Output: Returns `{ artifact }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `artifacts`, `write`
-- Adjacent commands: `artifacts archive`, `artifacts content`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts trash`
+- Adjacent commands: `artifacts archive`, `artifacts attachments create`, `artifacts content`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts trash`
 
 Inputs:
   Required:
@@ -3556,7 +3556,7 @@ Generated Help: artifacts trash
 - Output: Returns `{ artifact }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
 - Concepts: `artifacts`, `write`
-- Adjacent commands: `artifacts archive`, `artifacts content`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts unarchive`
+- Adjacent commands: `artifacts archive`, `artifacts attachments create`, `artifacts content`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts unarchive`
 
 Inputs:
   Required:
@@ -3587,7 +3587,7 @@ Generated Help: artifacts restore
 - Output: Returns `{ artifact }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `artifacts`, `write`
-- Adjacent commands: `artifacts archive`, `artifacts content`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts trash`, `artifacts unarchive`
+- Adjacent commands: `artifacts archive`, `artifacts attachments create`, `artifacts content`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts trash`, `artifacts unarchive`
 
 Inputs:
   Required:
@@ -3617,7 +3617,7 @@ Generated Help: artifacts purge
 - Output: Returns `{ purged, artifact_id }`.
 - Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `artifacts`, `write`
-- Adjacent commands: `artifacts archive`, `artifacts content`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
+- Adjacent commands: `artifacts archive`, `artifacts attachments create`, `artifacts content`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
 
 Inputs:
   Required:

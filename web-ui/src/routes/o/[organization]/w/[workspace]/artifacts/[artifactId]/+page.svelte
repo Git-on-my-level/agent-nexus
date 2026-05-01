@@ -92,6 +92,29 @@
   let attachmentFileName = $derived(
     String(artifact?.original_filename ?? artifact?.summary ?? "").trim(),
   );
+  let isAttachmentArtifact = $derived(
+    artifact?.kind === "attachment" && artifactContent != null,
+  );
+  let attachmentByteSize = $derived.by(() => {
+    if (!isAttachmentArtifact) return 0;
+    if (artifactContent instanceof ArrayBuffer)
+      return artifactContent.byteLength;
+    if (typeof artifactContent === "string") return artifactContent.length;
+    return 0;
+  });
+  function formatBytes(bytes) {
+    if (!bytes || bytes < 0) return "";
+    const units = ["B", "KB", "MB", "GB"];
+    let value = bytes;
+    let unit = 0;
+    while (value >= 1024 && unit < units.length - 1) {
+      value /= 1024;
+      unit += 1;
+    }
+    const rounded =
+      value >= 10 || unit === 0 ? Math.round(value) : value.toFixed(1);
+    return `${rounded} ${units[unit]}`;
+  }
 
   function workspaceHref(pathname = "/") {
     return workspacePath(organizationSlug, workspaceSlug, pathname);
@@ -410,122 +433,84 @@
     {/snippet}
   </WorkspaceResourceTopRow>
 
-  <section
-    class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] p-4"
-  >
-    <div
-      class="mt-2 flex flex-wrap items-center gap-2 text-micro max-md:mt-1.5"
-    >
-      <span
-        class="max-md:hidden rounded px-1.5 py-0.5 font-medium {kindColor(
-          artifact.kind,
-        )}">{kindLabel(artifact.kind)}</span
-      >
-      <span class="text-[var(--fg-muted)]"
-        >{formatTimestamp(artifact.created_at) || "—"}</span
-      >
-      <span class="text-[var(--fg-muted)]"
-        >by {actorName(artifact.created_by)}</span
-      >
-    </div>
-    {#if docArtifactDocPath}
-      <div
-        class="mt-1.5 flex flex-wrap items-center gap-2 text-micro text-[var(--fg-muted)]"
-      >
-        <a
-          class="inline-flex items-center rounded-md border border-fuchsia-500/35 bg-fuchsia-500/10 px-2 py-0.5 font-medium text-fuchsia-300 transition-colors hover:bg-fuchsia-500/20"
-          href={workspaceHref(docArtifactDocPath)}
-        >
-          Open in Docs
-        </a>
-        {#if docArtifactRevisionPath}
-          <a
-            class="text-accent-text underline decoration-dotted underline-offset-2 transition-colors hover:text-accent-text"
-            href={workspaceHref(docArtifactRevisionPath)}>This revision</a
-          >
-        {/if}
-      </div>
-    {/if}
-    {#if cardArtifactCardRef || cardArtifactRevisionRef}
-      <div
-        class="mt-1.5 flex flex-wrap items-center gap-2 text-micro text-[var(--fg-muted)]"
-      >
-        {#if cardArtifactCardRef}
-          <RefLink
-            humanize
-            labelHints={artifactRefHints}
-            refValue={cardArtifactCardRef}
-            showRaw
-            threadId={artifact.thread_id}
-          />
-        {/if}
-        {#if cardArtifactRevisionRef}
-          <RefLink
-            humanize
-            labelHints={artifactRefHints}
-            refValue={cardArtifactRevisionRef}
-            showRaw
-            threadId={artifact.thread_id}
-          />
-        {/if}
-      </div>
-    {/if}
-    {#if artifact.thread_id && artifactTopicHref}
-      <div class="mt-1.5 text-micro text-[var(--fg-muted)]">
-        <span class="text-[var(--fg-muted)]">Topic</span>
-        <a
-          class="ml-1 text-accent-text transition-colors hover:text-accent-text"
-          href={workspaceHref(artifactTopicHref)}
-        >
-          {artifactTopicLabel}
-        </a>
-      </div>
-    {/if}
-    <div class="mt-1.5">
-      <ProvenanceBadge provenance={artifact.provenance} />
-    </div>
-  </section>
-
-  {#if artifact.content_hash}
-    <details
-      class="mt-3 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
-    >
-      <summary
-        class="cursor-pointer px-4 py-2.5 text-micro text-[var(--fg-muted)] hover:text-[var(--fg)]"
-        >Hashes</summary
-      >
-      <div class="px-4 pb-3 pt-1">
-        <p
-          class="text-micro uppercase tracking-[0.12em] text-[var(--fg-muted)]"
-        >
-          Content hash
-        </p>
-        <p class="mt-1 break-all font-mono text-micro text-[var(--fg-muted)]">
-          {artifact.content_hash}
-        </p>
-      </div>
-    </details>
-  {/if}
-
   {@const nonThreadRefs = (artifact.refs ?? []).filter(
     (r) => r !== `thread:${artifact.thread_id}`,
   )}
-  {#if nonThreadRefs.length > 0}
-    <div
-      class="mt-3 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] p-3"
-    >
-      <h2 class="text-meta font-medium text-[var(--fg)]">Linked references</h2>
-      <div class="mt-1.5 flex flex-wrap gap-1.5 text-micro">
-        {#each nonThreadRefs as refValue}
-          <RefLink
-            humanize
-            labelHints={artifactRefHints}
-            {refValue}
-            showRaw
-            threadId={artifact.thread_id}
-          />
-        {/each}
-      </div>
+
+  <div
+    class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-micro text-[var(--fg-muted)]"
+  >
+    <span>{formatTimestamp(artifact.created_at) || "—"}</span>
+    <span>by {actorName(artifact.created_by)}</span>
+    {#if isAttachmentArtifact}
+      <span class="text-[var(--fg-subtle)]">·</span>
+      <span class="font-mono text-[var(--fg-muted)]"
+        >{artifactContentType || "unknown"}</span
+      >
+      {#if attachmentByteSize > 0}
+        <span class="text-[var(--fg-subtle)]">·</span>
+        <span>{formatBytes(attachmentByteSize)}</span>
+      {/if}
+      {#if attachmentFileName}
+        <span class="text-[var(--fg-subtle)]">·</span>
+        <span
+          class="min-w-0 truncate text-[var(--fg)]"
+          title={attachmentFileName}>{attachmentFileName}</span
+        >
+      {/if}
+    {/if}
+    {#if artifact.thread_id && artifactTopicHref}
+      <span class="text-[var(--fg-subtle)]">·</span>
+      <a
+        class="text-accent-text transition-colors hover:text-accent-text"
+        href={workspaceHref(artifactTopicHref)}
+      >
+        Topic {artifactTopicLabel}
+      </a>
+    {/if}
+    <ProvenanceBadge provenance={artifact.provenance} />
+    {#if docArtifactDocPath}
+      <a
+        class="inline-flex items-center rounded-md border border-fuchsia-500/35 bg-fuchsia-500/10 px-2 py-0.5 font-medium text-fuchsia-300 transition-colors hover:bg-fuchsia-500/20"
+        href={workspaceHref(docArtifactDocPath)}
+      >
+        Open in Docs
+      </a>
+      {#if docArtifactRevisionPath}
+        <a
+          class="text-accent-text underline decoration-dotted underline-offset-2 transition-colors hover:text-accent-text"
+          href={workspaceHref(docArtifactRevisionPath)}>This revision</a
+        >
+      {/if}
+    {/if}
+    {#if cardArtifactCardRef}
+      <RefLink
+        humanize
+        labelHints={artifactRefHints}
+        refValue={cardArtifactCardRef}
+        showRaw
+        threadId={artifact.thread_id}
+      />
+    {/if}
+    {#if cardArtifactRevisionRef}
+      <RefLink
+        humanize
+        labelHints={artifactRefHints}
+        refValue={cardArtifactRevisionRef}
+        showRaw
+        threadId={artifact.thread_id}
+      />
+    {/if}
+  </div>
+
+  {#if isAttachmentArtifact}
+    <div class="mt-4">
+      <AttachmentPreview
+        content={artifactContent}
+        contentType={artifactContentType}
+        fileName={attachmentFileName}
+        featured
+      />
     </div>
   {/if}
 
@@ -614,28 +599,6 @@
     </div>
   {/if}
 
-  {#if !contentLoadError && artifact.kind === "attachment" && artifactContent != null}
-    <div
-      class="mt-4 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
-    >
-      <div
-        class="flex items-center justify-between border-b border-[var(--line)] px-4 py-2.5"
-      >
-        <h2 class="text-meta font-medium text-[var(--fg)]">Attachment</h2>
-        <span class="text-micro text-[var(--fg-muted)]"
-          >{artifactContentType}</span
-        >
-      </div>
-      <div class="px-4 py-3">
-        <AttachmentPreview
-          content={artifactContent}
-          contentType={artifactContentType}
-          fileName={attachmentFileName}
-        />
-      </div>
-    </div>
-  {/if}
-
   {#if hasTextContent && artifact.kind !== "attachment"}
     <div
       class="mt-4 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
@@ -653,8 +616,46 @@
     </div>
   {/if}
 
+  {#if nonThreadRefs.length > 0}
+    <details
+      class="mt-2 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
+    >
+      <summary
+        class="cursor-pointer px-4 py-2.5 text-micro text-[var(--fg-muted)] hover:text-[var(--fg)]"
+        >Linked references ({nonThreadRefs.length})</summary
+      >
+      <div class="flex flex-wrap gap-1.5 px-4 pb-3 pt-1 text-micro">
+        {#each nonThreadRefs as refValue}
+          <RefLink
+            humanize
+            labelHints={artifactRefHints}
+            {refValue}
+            showRaw
+            threadId={artifact.thread_id}
+          />
+        {/each}
+      </div>
+    </details>
+  {/if}
+
+  {#if artifact.content_hash}
+    <details
+      class="mt-2 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
+    >
+      <summary
+        class="cursor-pointer px-4 py-2.5 text-micro text-[var(--fg-muted)] hover:text-[var(--fg)]"
+        >Content hash</summary
+      >
+      <p
+        class="break-all px-4 pb-3 pt-1 font-mono text-micro text-[var(--fg-muted)]"
+      >
+        {artifact.content_hash}
+      </p>
+    </details>
+  {/if}
+
   <details
-    class="mt-4 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
+    class="mt-2 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
   >
     <summary
       class="cursor-pointer px-4 py-2.5 text-micro text-[var(--fg-muted)] hover:text-[var(--fg)]"

@@ -7,8 +7,8 @@ import (
 )
 
 var (
-	ErrBlobNotFound    = errors.New("blob not found")
-	ErrUploadTooLarge  = errors.New("upload exceeds maximum allowed size")
+	ErrBlobNotFound   = errors.New("blob not found")
+	ErrUploadTooLarge = errors.New("upload exceeds maximum allowed size")
 )
 
 type StagedWrite interface {

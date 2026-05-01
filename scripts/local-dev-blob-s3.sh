@@ -12,6 +12,15 @@ ANX_LOCAL_MINIO_ROOT_USER="${ANX_LOCAL_MINIO_ROOT_USER:-anxminio}"
 ANX_LOCAL_MINIO_ROOT_PASSWORD="${ANX_LOCAL_MINIO_ROOT_PASSWORD:-anxminio-dev-local}"
 ANX_BLOB_S3_BUCKET="${ANX_BLOB_S3_BUCKET:-anx-dev-workspace-blobs}"
 
+# minio/mc image ENTRYPOINT is `mc`; do not pass `sh -lc ...` as args (that runs `mc sh`, which fails).
+# MC_HOST_<alias> replaces `mc alias set` for ephemeral containers (each docker run has a fresh config).
+anx_local_s3_mc_run() {
+	local mc_endpoint="http://${ANX_LOCAL_MINIO_ROOT_USER}:${ANX_LOCAL_MINIO_ROOT_PASSWORD}@${ANX_LOCAL_MINIO_CONTAINER_NAME}:9000"
+	docker run --rm --network "${ANX_LOCAL_MINIO_NETWORK}" \
+		-e "MC_HOST_local=${mc_endpoint}" \
+		minio/mc:latest "$@"
+}
+
 anx_local_s3_stop() {
 	if command -v docker >/dev/null 2>&1; then
 		docker rm -f "${ANX_LOCAL_MINIO_CONTAINER_NAME}" >/dev/null 2>&1 || true
@@ -31,12 +40,7 @@ anx_local_s3_reset_prefix() {
 	if [[ -z "${prefix}" ]] || ! command -v docker >/dev/null 2>&1; then
 		return 0
 	fi
-	docker run --rm --network "${ANX_LOCAL_MINIO_NETWORK}" \
-		minio/mc:latest \
-		sh -lc "
-			mc alias set local http://${ANX_LOCAL_MINIO_CONTAINER_NAME}:9000 '${ANX_LOCAL_MINIO_ROOT_USER}' '${ANX_LOCAL_MINIO_ROOT_PASSWORD}' >/dev/null &&
-			mc rm --recursive --force local/${ANX_BLOB_S3_BUCKET}/${prefix} >/dev/null 2>&1 || true
-		" || true
+	anx_local_s3_mc_run rm --recursive --force "local/${ANX_BLOB_S3_BUCKET}/${prefix}" >/dev/null 2>&1 || true
 }
 
 anx_local_s3_start() {
@@ -70,12 +74,7 @@ anx_local_s3_start() {
 		sleep 0.25
 	done
 
-	docker run --rm --network "${ANX_LOCAL_MINIO_NETWORK}" \
-		minio/mc:latest \
-		sh -lc "
-			mc alias set local http://${ANX_LOCAL_MINIO_CONTAINER_NAME}:9000 '${ANX_LOCAL_MINIO_ROOT_USER}' '${ANX_LOCAL_MINIO_ROOT_PASSWORD}' >/dev/null &&
-			mc mb --ignore-existing local/${ANX_BLOB_S3_BUCKET}
-		"
+	anx_local_s3_mc_run mb --ignore-existing "local/${ANX_BLOB_S3_BUCKET}"
 
 	export ANX_BLOB_BACKEND=s3
 	export ANX_BLOB_S3_BUCKET="${ANX_BLOB_S3_BUCKET}"

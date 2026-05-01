@@ -52,6 +52,87 @@ function compactValue(value) {
   return value;
 }
 
+const MIME_SHORT_LABEL = {
+  "application/pdf": "PDF",
+  "image/jpeg": "JPEG",
+  "image/jpg": "JPEG",
+  "image/pjpeg": "JPEG",
+  "image/png": "PNG",
+  "image/gif": "GIF",
+  "image/webp": "WebP",
+  "image/svg+xml": "SVG",
+  "text/plain": "Text",
+  "text/markdown": "Markdown",
+  "text/html": "HTML",
+  "application/json": "JSON",
+  "application/zip": "ZIP",
+  "application/x-zip-compressed": "ZIP",
+  "application/msword": "DOC",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+    "DOCX",
+  "application/vnd.ms-excel": "XLS",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "XLSX",
+};
+
+function shortFormatFromMime(mime) {
+  const m = String(mime ?? "")
+    .trim()
+    .toLowerCase();
+  if (!m) return "";
+  const base = m.split(";")[0]?.trim() ?? "";
+  if (MIME_SHORT_LABEL[base]) return MIME_SHORT_LABEL[base];
+  const slash = base.indexOf("/");
+  if (slash <= 0) return "";
+  const major = base.slice(0, slash);
+  const minorRaw = base.slice(slash + 1);
+  const minor = minorRaw.split("+")[0]?.trim() ?? "";
+  if (!minor) return "";
+  if (major === "image") {
+    if (minor === "jpeg" || minor === "jpg") return "JPEG";
+    return minor.slice(0, 8).toUpperCase();
+  }
+  if (major === "text") {
+    if (minor === "plain") return "Text";
+    return minor.charAt(0).toUpperCase() + minor.slice(1);
+  }
+  if (major === "audio")
+    return minor.includes("mpeg") ? "MP3" : minor.toUpperCase().slice(0, 8);
+  if (major === "video") return minor.toUpperCase().slice(0, 8);
+  return "";
+}
+
+function fileNameShowsExtension(name) {
+  return /\.[a-zA-Z0-9]{1,12}$/.test(String(name ?? "").trim());
+}
+
+/**
+ * Operator-facing label for `kind: attachment` artifacts (filename + format when helpful).
+ * @param {Record<string, unknown>} artifact
+ */
+export function attachmentArtifactDisplayLabel(artifact) {
+  const fileName = asText(
+    artifact?.original_filename ?? artifact?.originalFilename ?? "",
+  );
+  const summary = asText(artifact?.summary ?? "");
+  const displayName = fileName || summary;
+  const mime = asText(
+    artifact?.content_type ??
+      artifact?.contentType ??
+      artifact?.mime_type ??
+      artifact?.mimeType ??
+      "",
+  );
+  const formatLabel = shortFormatFromMime(mime);
+
+  if (displayName) {
+    if (fileNameShowsExtension(displayName) || !formatLabel) return displayName;
+    return `${displayName} · ${formatLabel}`;
+  }
+
+  if (formatLabel) return `${formatLabel} file`;
+  return "";
+}
+
 function humanizedLabelForPrefix(prefix, value) {
   const short = compactValue(value);
   if (prefix === "artifact") return `Artifact ${short}`.trim();
@@ -406,6 +487,20 @@ export function resolveRefLink(refValue, options = {}) {
   };
 }
 
+/**
+ * Thread timeline responses encode `artifacts` / `documents` as JSON objects
+ * keyed by id; topic timeline and workspace payloads use arrays. Normalize so
+ * ref routing always sees a list.
+ * @param {unknown} value
+ * @returns {unknown[]}
+ */
+export function coerceTimelineResourceList(value) {
+  if (value == null) return [];
+  if (Array.isArray(value)) return value;
+  if (typeof value === "object") return Object.values(value);
+  return [];
+}
+
 export function buildPrimitiveRefRoutes({
   artifacts = [],
   events = [],
@@ -413,13 +508,18 @@ export function buildPrimitiveRefRoutes({
   documents = [],
   threadId = "",
 } = {}) {
+  const artifactRows = coerceTimelineResourceList(artifacts);
+  const cardRows = coerceTimelineResourceList(cards);
+  const documentRows = coerceTimelineResourceList(documents);
+  const eventRows = coerceTimelineResourceList(events);
+
   const cardById = new Map(
-    (Array.isArray(cards) ? cards : [])
+    cardRows
       .map((card) => [asText(card?.id), card])
       .filter(([id]) => Boolean(id)),
   );
   const documentById = new Map(
-    (Array.isArray(documents) ? documents : [])
+    documentRows
       .map((document) => [asText(document?.id), document])
       .filter(([id]) => Boolean(id)),
   );
@@ -444,7 +544,7 @@ export function buildPrimitiveRefRoutes({
     };
   }
 
-  for (const artifact of Array.isArray(artifacts) ? artifacts : []) {
+  for (const artifact of artifactRows) {
     const id = asText(artifact?.id);
     if (!id) continue;
     const kind = asText(artifact?.kind).toLowerCase();
@@ -479,10 +579,21 @@ export function buildPrimitiveRefRoutes({
           (board.prefix === "board" ? board.value : ""),
         label: asText(card?.title),
       };
+      continue;
+    }
+
+    if (kind === "attachment") {
+      const label = attachmentArtifactDisplayLabel(artifact) || "Attachment";
+      artifactRoutesById[id] = {
+        kind: "attachment",
+        targetPrefix: "artifact",
+        targetValue: id,
+        label,
+      };
     }
   }
 
-  for (const event of Array.isArray(events) ? events : []) {
+  for (const event of eventRows) {
     const id = asText(event?.id);
     if (!id || asText(event?.type) !== "message_posted") continue;
     const eventThread = splitTypedRef(event?.thread_ref);

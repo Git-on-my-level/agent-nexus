@@ -1258,7 +1258,7 @@ Required for every command operation:
 - `+"`x-anx-command-id`"+`: stable id (for example `+"`threads.list`"+`)
 - `+"`x-anx-cli-path`"+`: CLI path (for example `+"`threads list`"+`)
 - `+"`x-anx-why`"+`: non-empty purpose/decision boundary
-- `+"`x-anx-input-mode`"+`: one of `+"`none|json-body|raw-stream|file-and-body`"+`
+- `+"`x-anx-input-mode`"+`: one of `+"`none|json-body|raw-stream|file-and-body|multipart-form`"+`
 - `+"`x-anx-streaming`"+`: streaming metadata object
 - `+"`x-anx-output-envelope`"+`: output notes for CLI consumers
 - `+"`x-anx-error-codes`"+`: stable semantic error code list

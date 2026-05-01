@@ -16,6 +16,9 @@ export function createTimelineContext(coreClient) {
     timeline: [],
     timelineLoading: false,
     timelineError: "",
+    timelineArtifacts: [],
+    timelineCards: [],
+    timelineDocuments: [],
   });
 
   let loadSeq = 0;

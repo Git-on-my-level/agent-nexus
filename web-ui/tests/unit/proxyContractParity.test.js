@@ -55,8 +55,8 @@ describe("proxyContractParity", () => {
       expect(isProxyableCommand("GET", "/version")).toBe(true);
     });
 
-    it("matches GET /events/stream (SSE; registered contract path)", () => {
-      expect(isProxyableCommand("GET", "/events/stream")).toBe(true);
+    it("matches POST /artifacts/attachments (multipart upload)", () => {
+      expect(isProxyableCommand("POST", "/artifacts/attachments")).toBe(true);
     });
 
     it("returns false for non-contract paths", () => {

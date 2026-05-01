@@ -330,6 +330,7 @@ export const commandRegistry = [
             "artifact_id"
         ],
         "adjacent_commands": [
+            "artifacts.attachments.create",
             "artifacts.content",
             "artifacts.create",
             "artifacts.get",
@@ -341,6 +342,49 @@ export const commandRegistry = [
         ],
         "go_method": "ArtifactsArchive",
         "ts_method": "artifactsArchive"
+    },
+    {
+        "command_id": "artifacts.attachments.create",
+        "cli_path": "artifacts attachments create",
+        "group": "artifacts",
+        "method": "POST",
+        "path": "/artifacts/attachments",
+        "operation_id": "createArtifactAttachment",
+        "summary": "Upload a file attachment",
+        "why": "Create kind=attachment via multipart form (efficient binary upload; previews use GET /artifacts/{id}/content).",
+        "input_mode": "multipart-form",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ artifact }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "conflict",
+            "unsupported_mime",
+            "payload_too_large"
+        ],
+        "concepts": [
+            "artifacts",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Multipart/form-data upload; generated HTTP Invoke helpers JSON-encode bodies and are not suitable—use UI, curl -F, or a multipart-aware client.",
+        "adjacent_commands": [
+            "artifacts.archive",
+            "artifacts.content",
+            "artifacts.create",
+            "artifacts.get",
+            "artifacts.list",
+            "artifacts.purge",
+            "artifacts.restore",
+            "artifacts.trash",
+            "artifacts.unarchive"
+        ],
+        "go_method": "ArtifactsAttachmentsCreate",
+        "ts_method": "artifactsAttachmentsCreate"
     },
     {
         "command_id": "artifacts.content",
@@ -371,6 +415,7 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "artifacts.archive",
+            "artifacts.attachments.create",
             "artifacts.create",
             "artifacts.get",
             "artifacts.list",
@@ -432,6 +477,7 @@ export const commandRegistry = [
         },
         "adjacent_commands": [
             "artifacts.archive",
+            "artifacts.attachments.create",
             "artifacts.content",
             "artifacts.get",
             "artifacts.list",
@@ -472,6 +518,7 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "artifacts.archive",
+            "artifacts.attachments.create",
             "artifacts.content",
             "artifacts.create",
             "artifacts.list",
@@ -508,6 +555,7 @@ export const commandRegistry = [
         "surface": "canonical",
         "adjacent_commands": [
             "artifacts.archive",
+            "artifacts.attachments.create",
             "artifacts.content",
             "artifacts.create",
             "artifacts.get",
@@ -559,6 +607,7 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "artifacts.archive",
+            "artifacts.attachments.create",
             "artifacts.content",
             "artifacts.create",
             "artifacts.get",
@@ -610,6 +659,7 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "artifacts.archive",
+            "artifacts.attachments.create",
             "artifacts.content",
             "artifacts.create",
             "artifacts.get",
@@ -666,6 +716,7 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "artifacts.archive",
+            "artifacts.attachments.create",
             "artifacts.content",
             "artifacts.create",
             "artifacts.get",
@@ -717,6 +768,7 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "artifacts.archive",
+            "artifacts.attachments.create",
             "artifacts.content",
             "artifacts.create",
             "artifacts.get",
@@ -6219,6 +6271,9 @@ export class AnxClient {
     }
     artifactsArchive(pathParams, options = {}) {
         return this.invoke("artifacts.archive", pathParams, options);
+    }
+    artifactsAttachmentsCreate(options = {}) {
+        return this.invoke("artifacts.attachments.create", {}, options);
     }
     artifactsContent(pathParams, options = {}) {
         return this.invoke("artifacts.content", pathParams, options);

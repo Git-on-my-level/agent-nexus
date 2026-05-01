@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveRefLink } from "../../src/lib/refLinkModel.js";
+import {
+  buildPrimitiveRefRoutes,
+  resolveRefLink,
+} from "../../src/lib/refLinkModel.js";
 
 describe("RefLink model", () => {
   it("resolves known typed refs into deterministic targets", () => {
@@ -334,6 +337,80 @@ describe("RefLink model", () => {
       secondaryLabel: "document:doc-1",
       href: "",
       isLink: false,
+    });
+  });
+
+  it("routes attachment artifacts to artifact detail with filename labels", () => {
+    const artifactId = "aebb0220-dbfd-4fe8-bd67-eb6b317ffa43";
+    const { artifactRoutesById } = buildPrimitiveRefRoutes({
+      artifacts: [
+        {
+          id: artifactId,
+          kind: "attachment",
+          content_type: "application/pdf",
+          original_filename: "Specs.pdf",
+        },
+      ],
+    });
+
+    expect(artifactRoutesById[artifactId]).toMatchObject({
+      kind: "attachment",
+      targetPrefix: "artifact",
+      targetValue: artifactId,
+      label: "Specs.pdf",
+    });
+
+    const ref = resolveRefLink(`artifact:${artifactId}`, {
+      organizationSlug: "acme",
+      workspaceSlug: "proj",
+      humanize: true,
+      artifactRoutesById,
+    });
+
+    expect(ref).toMatchObject({
+      routed: true,
+      routedKind: "attachment",
+      routedPrefix: "artifact",
+      routedValue: artifactId,
+      primaryLabel: "Specs.pdf",
+      secondaryLabel: "",
+      href: `/o/acme/w/proj/artifacts/${artifactId}`,
+      isLink: true,
+    });
+  });
+
+  it("adds format hint for attachment names without file extensions", () => {
+    const artifactId = "b1b2c3d4-e5f6-7890-abcd-ef1234567890";
+    const { artifactRoutesById } = buildPrimitiveRefRoutes({
+      artifacts: [
+        {
+          id: artifactId,
+          kind: "attachment",
+          content_type: "text/markdown",
+          original_filename: "notes",
+        },
+      ],
+    });
+
+    expect(artifactRoutesById[artifactId].label).toBe("notes · Markdown");
+  });
+
+  it("accepts thread-style artifact maps keyed by id", () => {
+    const aid = "aebb0220-dbfd-4fe8-bd67-eb6b317ffa43";
+    const { artifactRoutesById } = buildPrimitiveRefRoutes({
+      artifacts: {
+        [aid]: {
+          id: aid,
+          kind: "attachment",
+          content_type: "application/pdf",
+          original_filename: "Specs.pdf",
+        },
+      },
+    });
+
+    expect(artifactRoutesById[aid]).toMatchObject({
+      kind: "attachment",
+      label: "Specs.pdf",
     });
   });
 

@@ -28,9 +28,10 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `artifacts`
 
-- Commands: `9`
+- Commands: `10`
 - Command IDs:
   - `artifacts.archive`
+  - `artifacts.attachments.create`
   - `artifacts.content`
   - `artifacts.create`
   - `artifacts.get`
@@ -325,11 +326,12 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `write`
 
-- Commands: `49`
+- Commands: `50`
 - Command IDs:
   - `agent.notifications.dismiss`
   - `agent.notifications.read`
   - `artifacts.archive`
+  - `artifacts.attachments.create`
   - `artifacts.create`
   - `artifacts.purge`
   - `artifacts.restore`

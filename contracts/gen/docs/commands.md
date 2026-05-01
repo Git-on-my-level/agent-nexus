@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `122`
+- Commands: `123`
 
 ## `actors.create`
 
@@ -125,6 +125,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `artifacts`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ artifact }`.
+
+## `artifacts.attachments.create`
+
+- CLI path: `artifacts attachments create`
+- HTTP: `POST /artifacts/attachments`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `multipart-form`
+- Why: Create kind=attachment via multipart form (efficient binary upload; previews use GET /artifacts/{id}/content).
+- Concepts: `artifacts`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `conflict`, `unsupported_mime`, `payload_too_large`
+- Output: Returns `{ artifact }`.
+- Agent notes: Multipart/form-data upload; generated HTTP Invoke helpers JSON-encode bodies and are not suitable—use UI, curl -F, or a multipart-aware client.
 
 ## `artifacts.content`
 

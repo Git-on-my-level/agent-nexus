@@ -21,14 +21,14 @@ const (
 	defaultAuthRequestBodyLimit    int64 = 256 << 10
 	defaultContentRequestBodyLimit int64 = 8 << 20
 
-	defaultAuthRequestsPerMinute   = 600
-	defaultAuthRequestsBurst       = 100
-	defaultWriteRequestsPerMinute  = 1200
-	defaultWriteRequestsBurst      = 200
-	requestTooLargeRetryAfterSecs  = 1
-	defaultRouteRateLimitMaxKeys   = 4096
-	defaultRouteRateLimitBucketTTL = 15 * time.Minute
-	routeRateLimitPruneInterval    = time.Minute
+	defaultAuthRequestsPerMinute            = 600
+	defaultAuthRequestsBurst                = 100
+	defaultWriteRequestsPerMinute           = 1200
+	defaultWriteRequestsBurst               = 200
+	requestTooLargeRetryAfterSecs           = 1
+	defaultRouteRateLimitMaxKeys            = 4096
+	defaultRouteRateLimitBucketTTL          = 15 * time.Minute
+	routeRateLimitPruneInterval             = time.Minute
 	defaultAttachmentRequestBodyLimit int64 = 50 << 20
 )
 

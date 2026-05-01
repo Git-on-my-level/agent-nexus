@@ -61,6 +61,15 @@
   }
 
   function compactLabel(link) {
+    const routedKind = String(link?.routedKind ?? "").trim();
+    if (link?.routed && routedKind === "attachment") {
+      const primary = String(link?.primaryLabel ?? "").trim();
+      if (primary) {
+        const max = 44;
+        return primary.length > max ? `${primary.slice(0, max - 1)}…` : primary;
+      }
+    }
+
     const prefix = String(link?.prefix ?? "").trim();
     const value = compactId(link?.value);
     if (!prefix || !value) return String(link?.primaryLabel ?? link?.raw ?? "");

@@ -13,7 +13,7 @@ x-anx-extension-vocabulary:
   x-anx-command-id: Stable command identifier.
   x-anx-cli-path: CLI path segments.
   x-anx-why: Why the command exists.
-  x-anx-input-mode: none | json-body | raw-stream | file-and-body
+  x-anx-input-mode: none | json-body | raw-stream | file-and-body | multipart-form
   x-anx-streaming: Streaming characteristics for the operation.
   x-anx-output-envelope: Output shape and stability notes.
   x-anx-error-codes: Stable semantic error codes.
@@ -2599,7 +2599,10 @@ paths:
       summary: Upload a file attachment
       tags: [artifacts]
       x-anx-surface: canonical
+      x-anx-command-id: artifacts.attachments.create
+      x-anx-cli-path: artifacts attachments create
       x-anx-why: Create kind=attachment via multipart form (efficient binary upload; previews use GET /artifacts/{id}/content).
+      x-anx-agent-notes: Multipart/form-data upload; generated HTTP Invoke helpers JSON-encode bodies and are not suitable—use UI, curl -F, or a multipart-aware client.
       x-anx-input-mode: multipart-form
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ artifact }`."

@@ -141,7 +141,18 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"artifacts", "write"},
-		Adjacent:   []string{"artifacts.content", "artifacts.create", "artifacts.get", "artifacts.list", "artifacts.purge", "artifacts.restore", "artifacts.trash", "artifacts.unarchive"},
+		Adjacent:   []string{"artifacts.attachments.create", "artifacts.content", "artifacts.create", "artifacts.get", "artifacts.list", "artifacts.purge", "artifacts.restore", "artifacts.trash", "artifacts.unarchive"},
+	},
+	{
+		CommandID: "artifacts.attachments.create",
+		CLIPath:   "artifacts attachments create",
+		Group:     "artifacts",
+		Method:    "POST",
+		Path:      "/artifacts/attachments",
+		InputMode: "multipart-form",
+		Stability: "beta",
+		Concepts:  []string{"artifacts", "write"},
+		Adjacent:  []string{"artifacts.archive", "artifacts.content", "artifacts.create", "artifacts.get", "artifacts.list", "artifacts.purge", "artifacts.restore", "artifacts.trash", "artifacts.unarchive"},
 	},
 	{
 		CommandID:  "artifacts.content",
@@ -153,7 +164,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"artifacts"},
-		Adjacent:   []string{"artifacts.archive", "artifacts.create", "artifacts.get", "artifacts.list", "artifacts.purge", "artifacts.restore", "artifacts.trash", "artifacts.unarchive"},
+		Adjacent:   []string{"artifacts.archive", "artifacts.attachments.create", "artifacts.create", "artifacts.get", "artifacts.list", "artifacts.purge", "artifacts.restore", "artifacts.trash", "artifacts.unarchive"},
 	},
 	{
 		CommandID: "artifacts.create",
@@ -164,7 +175,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"artifacts", "write"},
-		Adjacent:  []string{"artifacts.archive", "artifacts.content", "artifacts.get", "artifacts.list", "artifacts.purge", "artifacts.restore", "artifacts.trash", "artifacts.unarchive"},
+		Adjacent:  []string{"artifacts.archive", "artifacts.attachments.create", "artifacts.content", "artifacts.get", "artifacts.list", "artifacts.purge", "artifacts.restore", "artifacts.trash", "artifacts.unarchive"},
 	},
 	{
 		CommandID:  "artifacts.get",
@@ -176,7 +187,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"artifacts"},
-		Adjacent:   []string{"artifacts.archive", "artifacts.content", "artifacts.create", "artifacts.list", "artifacts.purge", "artifacts.restore", "artifacts.trash", "artifacts.unarchive"},
+		Adjacent:   []string{"artifacts.archive", "artifacts.attachments.create", "artifacts.content", "artifacts.create", "artifacts.list", "artifacts.purge", "artifacts.restore", "artifacts.trash", "artifacts.unarchive"},
 	},
 	{
 		CommandID: "artifacts.list",
@@ -187,7 +198,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"artifacts"},
-		Adjacent:  []string{"artifacts.archive", "artifacts.content", "artifacts.create", "artifacts.get", "artifacts.purge", "artifacts.restore", "artifacts.trash", "artifacts.unarchive"},
+		Adjacent:  []string{"artifacts.archive", "artifacts.attachments.create", "artifacts.content", "artifacts.create", "artifacts.get", "artifacts.purge", "artifacts.restore", "artifacts.trash", "artifacts.unarchive"},
 	},
 	{
 		CommandID:  "artifacts.purge",
@@ -199,7 +210,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"artifacts", "write"},
-		Adjacent:   []string{"artifacts.archive", "artifacts.content", "artifacts.create", "artifacts.get", "artifacts.list", "artifacts.restore", "artifacts.trash", "artifacts.unarchive"},
+		Adjacent:   []string{"artifacts.archive", "artifacts.attachments.create", "artifacts.content", "artifacts.create", "artifacts.get", "artifacts.list", "artifacts.restore", "artifacts.trash", "artifacts.unarchive"},
 	},
 	{
 		CommandID:  "artifacts.restore",
@@ -211,7 +222,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"artifacts", "write"},
-		Adjacent:   []string{"artifacts.archive", "artifacts.content", "artifacts.create", "artifacts.get", "artifacts.list", "artifacts.purge", "artifacts.trash", "artifacts.unarchive"},
+		Adjacent:   []string{"artifacts.archive", "artifacts.attachments.create", "artifacts.content", "artifacts.create", "artifacts.get", "artifacts.list", "artifacts.purge", "artifacts.trash", "artifacts.unarchive"},
 	},
 	{
 		CommandID:  "artifacts.trash",
@@ -223,7 +234,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"artifacts", "write"},
-		Adjacent:   []string{"artifacts.archive", "artifacts.content", "artifacts.create", "artifacts.get", "artifacts.list", "artifacts.purge", "artifacts.restore", "artifacts.unarchive"},
+		Adjacent:   []string{"artifacts.archive", "artifacts.attachments.create", "artifacts.content", "artifacts.create", "artifacts.get", "artifacts.list", "artifacts.purge", "artifacts.restore", "artifacts.unarchive"},
 	},
 	{
 		CommandID:  "artifacts.unarchive",
@@ -235,7 +246,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"artifacts", "write"},
-		Adjacent:   []string{"artifacts.archive", "artifacts.content", "artifacts.create", "artifacts.get", "artifacts.list", "artifacts.purge", "artifacts.restore", "artifacts.trash"},
+		Adjacent:   []string{"artifacts.archive", "artifacts.attachments.create", "artifacts.content", "artifacts.create", "artifacts.get", "artifacts.list", "artifacts.purge", "artifacts.restore", "artifacts.trash"},
 	},
 	{
 		CommandID: "auth.agents.register",
@@ -1587,6 +1598,10 @@ func (c *Client) AgentsMeRevoke(ctx context.Context, opts RequestOptions) (*http
 
 func (c *Client) ArtifactsArchive(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "artifacts.archive", pathParams, opts)
+}
+
+func (c *Client) ArtifactsAttachmentsCreate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "artifacts.attachments.create", nil, opts)
 }
 
 func (c *Client) ArtifactsContent(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {

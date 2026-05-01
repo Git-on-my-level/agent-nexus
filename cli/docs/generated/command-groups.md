@@ -57,9 +57,10 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `artifacts`
 
-- Commands: `9`
+- Commands: `10`
 - Command IDs:
   - `artifacts.archive` (`artifacts archive`)
+  - `artifacts.attachments.create` (`artifacts attachments create`)
   - `artifacts.content` (`artifacts content`)
   - `artifacts.create` (`artifacts create`)
   - `artifacts.get` (`artifacts get`)

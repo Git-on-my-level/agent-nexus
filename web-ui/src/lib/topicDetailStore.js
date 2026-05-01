@@ -1,4 +1,5 @@
 import { coreClient } from "./coreClient";
+import { coerceTimelineResourceList } from "./refLinkModel.js";
 import { splitTypedRef } from "./inboxUtils.js";
 import {
   boardOwnsTopicId,
@@ -300,9 +301,9 @@ function createTopicDetailStore() {
       patchState({
         timelineThreadId: threadId,
         timeline: nextTimeline,
-        timelineArtifacts: result?.artifacts ?? [],
-        timelineCards: result?.cards ?? [],
-        timelineDocuments: result?.documents ?? [],
+        timelineArtifacts: coerceTimelineResourceList(result?.artifacts),
+        timelineCards: coerceTimelineResourceList(result?.cards),
+        timelineDocuments: coerceTimelineResourceList(result?.documents),
       });
     } catch (e) {
       if (requestSeq !== timelineRequestSeq) {

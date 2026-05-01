@@ -41,6 +41,9 @@
     timeline: $s.timeline,
     timelineLoading: $s.timelineLoading,
     timelineError: $s.timelineError,
+    timelineArtifacts: $s.timelineArtifacts ?? [],
+    timelineCards: $s.timelineCards ?? [],
+    timelineDocuments: $s.timelineDocuments ?? [],
   }));
 
   const timelineWorkspaceSlug = derived(page, ($p) =>
