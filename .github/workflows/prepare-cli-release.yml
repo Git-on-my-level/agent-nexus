@@ -50,7 +50,11 @@ jobs:
       - name: Commit release prep
         id: commit
         run: |
-          mapfile -t version_files < <(./scripts/version-managed-files.sh)
+          version_files=()
+          while IFS= read -r path; do
+            [[ -n "${path}" ]] || continue
+            version_files+=("${path}")
+          done < <(./scripts/version-managed-files.sh)
 
           if git diff --quiet -- "${version_files[@]}"; then
             echo "changed=false" >> "$GITHUB_OUTPUT"

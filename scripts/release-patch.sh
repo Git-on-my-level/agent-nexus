@@ -177,7 +177,11 @@ if [[ "${SKIP_CHECKS}" != "1" ]]; then
 fi
 
 "${SCRIPT_DIR}/set-version.sh" "${TARGET_VERSION}"
-mapfile -t VERSION_FILES < <("${SCRIPT_DIR}/version-managed-files.sh")
+VERSION_FILES=()
+while IFS= read -r path; do
+  [[ -n "${path}" ]] || continue
+  VERSION_FILES+=("${path}")
+done < <("${SCRIPT_DIR}/version-managed-files.sh")
 "${SCRIPT_DIR}/check-version-managed-files.sh" --worktree
 git add -- "${VERSION_FILES[@]}"
 "${SCRIPT_DIR}/check-version-managed-files.sh" --staged

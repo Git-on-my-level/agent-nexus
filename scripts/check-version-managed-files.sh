@@ -46,7 +46,11 @@ trap 'rm -rf "${TMP_DIR}"' EXIT
 EXPECTED_FILE="${TMP_DIR}/expected"
 ACTUAL_FILE="${TMP_DIR}/actual"
 
-mapfile -t expected_files < <("${SCRIPT_DIR}/version-managed-files.sh")
+expected_files=()
+while IFS= read -r path; do
+  [[ -n "${path}" ]] || continue
+  expected_files+=("${path}")
+done < <("${SCRIPT_DIR}/version-managed-files.sh")
 printf '%s\n' "${expected_files[@]}" | sort -u > "${EXPECTED_FILE}"
 
 case "${MODE}" in
