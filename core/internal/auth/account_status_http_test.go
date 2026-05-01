@@ -73,7 +73,7 @@ func insertExternalGrantHumanWithRefreshToken(t *testing.T, ctx context.Context,
 	}
 
 	sessionID := "refresh_" + uuid.NewString()
-	expires := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC).Format(time.RFC3339Nano)
+	expires := time.Now().UTC().AddDate(1, 0, 0).Format(time.RFC3339Nano)
 	if _, err := db.ExecContext(
 		ctx,
 		`INSERT INTO auth_refresh_sessions(id, agent_id, token_hash, created_at, expires_at, revoked_at, replaced_by_session_id)
