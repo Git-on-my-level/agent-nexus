@@ -62,6 +62,7 @@ vi.mock("$lib/hosted/session.js", () => {
   };
 });
 
+import { handleModEnterFormSubmit } from "../../src/lib/formSubmitShortcut.js";
 import OnboardingOrgPage from "../../src/routes/hosted/onboarding/organization/+page.svelte";
 import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
 import { hostedSession, setActiveOrg } from "$lib/hosted/session.js";
@@ -267,6 +268,90 @@ describe("Onboarding organization page — form submission", () => {
       const alert = container.querySelector("[role='alert']");
       expect(alert).toBeTruthy();
       expect(alert.textContent).toContain("required");
+    });
+  });
+});
+
+describe("Onboarding organization page — keyboard shortcut", () => {
+  it("submits the form on Cmd+Enter", async () => {
+    hostedCpFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        organization: {
+          id: "new-org",
+          slug: "janes-org",
+          display_name: "Jane's org",
+        },
+      }),
+    });
+
+    const { container } = render(OnboardingOrgPage);
+
+    await waitFor(() => {
+      const input = container.querySelector("input[type='text']");
+      expect(input).toBeTruthy();
+    });
+
+    const input = container.querySelector("input[type='text']");
+    /** @type {HTMLInputElement} */ (input).focus();
+    handleModEnterFormSubmit(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        metaKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+      { commandPaletteOpen: false },
+    );
+
+    await waitFor(() => {
+      expect(hostedCpFetch).toHaveBeenCalledWith(
+        "organizations",
+        expect.objectContaining({
+          method: "POST",
+        }),
+      );
+    });
+  });
+
+  it("submits the form on Ctrl+Enter", async () => {
+    hostedCpFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        organization: {
+          id: "new-org-2",
+          slug: "janes-org",
+          display_name: "Jane's org",
+        },
+      }),
+    });
+
+    const { container } = render(OnboardingOrgPage);
+
+    await waitFor(() => {
+      const input = container.querySelector("input[type='text']");
+      expect(input).toBeTruthy();
+    });
+
+    const input = container.querySelector("input[type='text']");
+    /** @type {HTMLInputElement} */ (input).focus();
+    handleModEnterFormSubmit(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+      { commandPaletteOpen: false },
+    );
+
+    await waitFor(() => {
+      expect(hostedCpFetch).toHaveBeenCalledWith(
+        "organizations",
+        expect.objectContaining({
+          method: "POST",
+        }),
+      );
     });
   });
 });

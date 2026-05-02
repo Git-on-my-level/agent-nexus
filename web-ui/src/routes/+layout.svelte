@@ -58,7 +58,11 @@
     devActorModeReady,
   } from "$lib/workspaceContext";
   import WorkspaceTour from "$lib/components/onboarding/WorkspaceTour.svelte";
-  import { handleModEnterFormSubmit } from "$lib/formSubmitShortcut.js";
+  import {
+    handleEscapeTextBlurCommit,
+    handleModEnterBlurCommit,
+    handleModEnterFormSubmit,
+  } from "$lib/formSubmitShortcut.js";
   import {
     appPath,
     bindWorkspaceHref,
@@ -797,9 +801,18 @@
       }
       return;
     }
-    handleModEnterFormSubmit(event, { commandPaletteOpen });
-    if (event.key === "Escape") {
-      if (workspacePickerOpen) closeWorkspacePicker();
+    if (!event.defaultPrevented) {
+      handleModEnterFormSubmit(event, { commandPaletteOpen });
+    }
+    if (!event.defaultPrevented) {
+      handleModEnterBlurCommit(event, { commandPaletteOpen });
+    }
+    if (event.key === "Escape" && workspacePickerOpen) {
+      closeWorkspacePicker();
+      return;
+    }
+    if (!event.defaultPrevented) {
+      handleEscapeTextBlurCommit(event, { commandPaletteOpen });
     }
   }
 

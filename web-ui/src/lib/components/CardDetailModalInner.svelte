@@ -39,6 +39,7 @@
     setTimelineContext,
   } from "$lib/timelineContext";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
+  import { inlineEditEscape } from "$lib/actions/inlineEditEscape.js";
   import IdsIntegrityDisclosure from "$lib/components/IdsIntegrityDisclosure.svelte";
   import GuidedTypedRefsInput from "$lib/components/GuidedTypedRefsInput.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
@@ -1250,14 +1251,16 @@
             <div>
               <input
                 bind:value={editTitle}
+                data-anx-mod-enter-commit="blur"
+                use:inlineEditEscape={{
+                  disabled: isSaving("title"),
+                  onRevert: () => syncCardDraftsFromItem(cardItem),
+                  onAfter: (el) => el.blur(),
+                }}
                 onblur={() => void commitTitleField()}
                 onkeydown={(ev) => {
                   if (ev.key === "Enter") {
                     ev.preventDefault();
-                    ev.currentTarget.blur();
-                  } else if (ev.key === "Escape") {
-                    ev.preventDefault();
-                    syncCardDraftsFromItem(cardItem);
                     ev.currentTarget.blur();
                   }
                 }}
@@ -1283,17 +1286,15 @@
                 <textarea
                   autofocus
                   bind:value={editSummary}
-                  onblur={() => void commitSummaryField()}
-                  onkeydown={(ev) => {
-                    if ((ev.ctrlKey || ev.metaKey) && ev.key === "Enter") {
-                      ev.preventDefault();
-                      ev.currentTarget.blur();
-                    } else if (ev.key === "Escape") {
-                      ev.preventDefault();
-                      syncCardDraftsFromItem(cardItem);
+                  data-anx-mod-enter-commit="blur"
+                  use:inlineEditEscape={{
+                    disabled: isSaving("summary"),
+                    onRevert: () => syncCardDraftsFromItem(cardItem),
+                    onAfter: () => {
                       summaryEditing = false;
-                    }
+                    },
                   }}
+                  onblur={() => void commitSummaryField()}
                   class="cdm-prose-input min-h-[7rem]"
                   aria-label="Card summary"
                   placeholder="Write a description…"
@@ -1596,17 +1597,15 @@
                 <textarea
                   autofocus
                   bind:value={editDefinitionOfDone}
-                  onblur={() => void commitDodField()}
-                  onkeydown={(ev) => {
-                    if ((ev.ctrlKey || ev.metaKey) && ev.key === "Enter") {
-                      ev.preventDefault();
-                      ev.currentTarget.blur();
-                    } else if (ev.key === "Escape") {
-                      ev.preventDefault();
-                      syncCardDraftsFromItem(cardItem);
+                  data-anx-mod-enter-commit="blur"
+                  use:inlineEditEscape={{
+                    disabled: isSaving("definition_of_done"),
+                    onRevert: () => syncCardDraftsFromItem(cardItem),
+                    onAfter: () => {
                       dodEditing = false;
-                    }
+                    },
                   }}
+                  onblur={() => void commitDodField()}
                   class="cdm-prose-input cdm-prose-input--section-align min-h-[5rem]"
                   aria-label="Definition of done (one idea per line)"
                   disabled={isSaving("definition_of_done")}
