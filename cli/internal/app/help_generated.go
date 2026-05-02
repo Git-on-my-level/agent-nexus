@@ -1248,7 +1248,7 @@ func mapRuntimePathToRegistryPath(path string) string {
 		"events tail":       "events stream",
 		"inbox tail":        "inbox stream",
 		"threads get":       "threads inspect",
-		"artifacts content": "artifacts content get",
+		"artifacts content get": "artifacts content",
 		"meta commands":     "meta commands list",
 		"meta command":      "meta commands get",
 		"meta concepts":     "meta concepts list",

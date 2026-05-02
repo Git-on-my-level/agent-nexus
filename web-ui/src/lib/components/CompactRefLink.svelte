@@ -1,6 +1,8 @@
 <script>
   import { browser } from "$app/environment";
   import { page } from "$app/stores";
+  import AttachmentChip from "$lib/components/AttachmentChip.svelte";
+  import RefChip from "$lib/components/RefChip.svelte";
   import { coreClient } from "$lib/coreClient";
   import { eventRouteForRef } from "$lib/deepLinkTargets";
   import { buildPrimitiveRefRoutes, resolveRefLink } from "$lib/refLinkModel";
@@ -14,6 +16,11 @@
     labelHints = {},
     artifactRoutesById = {},
     eventRoutesById = {},
+    attachmentOverlay = null,
+    attachmentPending = false,
+    attachmentUploadProgress = null,
+    /** @type {'inline' | 'compact' | 'block'} */
+    attachmentChipSize = "inline",
   } = $props();
 
   let fetchedEventRoutesById = $state({});
@@ -33,6 +40,11 @@
       workspaceSlug: $page.params.workspace,
       organizationSlug: $page.params.organization,
     }),
+  );
+
+  let useAttachmentChip = $derived(
+    resolved.prefix === "artifact" &&
+      (!resolved.routed || resolved.routedKind === "attachment"),
   );
 
   $effect(() => {
@@ -93,17 +105,23 @@
       ? `${resolved.prefix}:${compactId(resolved.value)}`
       : resolved.raw,
   );
-  const rootClass =
-    "compact-ref-link inline-flex min-w-0 max-w-full items-baseline gap-1 rounded border border-[var(--line)] bg-[var(--bg)] px-1.5 py-0.5 text-micro leading-tight";
 </script>
 
-{#if resolved.isLink}
-  <a
-    class="{rootClass} text-accent-text hover:border-[var(--line-strong)] hover:text-accent-text"
+{#if useAttachmentChip}
+  <AttachmentChip
+    {resolved}
+    artifactOverlay={attachmentOverlay}
+    pending={attachmentPending}
+    uploadProgress={attachmentUploadProgress}
+    size={attachmentChipSize}
+  />
+{:else if resolved.isLink}
+  <RefChip
     href={resolved.href}
-    rel={resolved.isExternal ? "noreferrer noopener" : undefined}
-    target={resolved.isExternal ? "_blank" : undefined}
+    external={resolved.isExternal}
     title={resolved.raw}
+    navigable={true}
+    accentText={true}
   >
     <span class="compact-ref-link__full min-w-0 truncate"
       >{resolved.primaryLabel}</span
@@ -119,9 +137,9 @@
         >{mobileRaw}</span
       >
     {/if}
-  </a>
+  </RefChip>
 {:else}
-  <span class="{rootClass} text-[var(--fg-muted)]" title={resolved.raw}>
+  <RefChip href="" navigable={false} accentText={false} title={resolved.raw}>
     <span class="compact-ref-link__full min-w-0 truncate"
       >{resolved.primaryLabel}</span
     >
@@ -136,5 +154,5 @@
         >{mobileRaw}</span
       >
     {/if}
-  </span>
+  </RefChip>
 {/if}

@@ -21,6 +21,7 @@
     actorRegistry,
     principalRegistry,
   } from "$lib/actorSession";
+  import { formatBytes } from "$lib/attachmentDisplay.js";
 
   let artifactId = $derived($page.params.artifactId);
   let organizationSlug = $derived($page.params.organization);
@@ -102,19 +103,6 @@
     if (typeof artifactContent === "string") return artifactContent.length;
     return 0;
   });
-  function formatBytes(bytes) {
-    if (!bytes || bytes < 0) return "";
-    const units = ["B", "KB", "MB", "GB"];
-    let value = bytes;
-    let unit = 0;
-    while (value >= 1024 && unit < units.length - 1) {
-      value /= 1024;
-      unit += 1;
-    }
-    const rounded =
-      value >= 10 || unit === 0 ? Math.round(value) : value.toFixed(1);
-    return `${rounded} ${units[unit]}`;
-  }
 
   function workspaceHref(pathname = "/") {
     return workspacePath(organizationSlug, workspaceSlug, pathname);

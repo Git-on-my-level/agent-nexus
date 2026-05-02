@@ -149,7 +149,7 @@ var threadsSubcommandSpec = subcommandSpec{
 var artifactsSubcommandSpec = subcommandSpec{
 	command:  "artifacts",
 	valid:    []string{"list", "get", "create", "content", "inspect", "archive", "unarchive", "trash", "restore", "purge"},
-	examples: []string{"anx artifacts list --kind packet", "anx artifacts inspect --artifact-id <artifact-id>"},
+	examples: []string{"anx artifacts list --kind attachment", "anx artifacts attachments create --refs '[\"thread:<id>\"]' --file ./notes.md", "anx artifacts content --artifact-id <id> --output ./out.bin"},
 	aliases: map[string]string{
 		"ls":   "list",
 		"show": "inspect",

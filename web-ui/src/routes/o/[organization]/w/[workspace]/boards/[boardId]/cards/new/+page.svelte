@@ -416,6 +416,7 @@
                 <GuidedTypedRefsInput
                   bind:value={relatedRefs}
                   {boardId}
+                  threadId={threadId.trim()}
                   {attachContextRefs}
                   addInputLabel="Add related ref"
                   addInputPlaceholder="topic:summer-menu-rollout"
@@ -433,6 +434,7 @@
                 <GuidedTypedRefsInput
                   bind:value={resolutionRefs}
                   {boardId}
+                  threadId={threadId.trim()}
                   {attachContextRefs}
                   addInputLabel="Add resolution ref"
                   addInputPlaceholder="artifact:supporting-context"

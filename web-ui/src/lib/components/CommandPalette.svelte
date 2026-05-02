@@ -9,6 +9,7 @@
     boardSearchPickerSubtitle,
   } from "$lib/searchHelpers";
   import { kindLabel } from "$lib/artifactKinds";
+  import { shortMimeBadge } from "$lib/attachmentDisplay.js";
   import { workspacePath } from "$lib/workspacePaths";
 
   let {
@@ -197,7 +198,17 @@
       return sub || entry.item.id;
     }
     if (entry.type === "artifact") {
-      return kindLabel(entry.item.kind);
+      const item = entry.item ?? {};
+      const fn = String(
+        item.original_filename ?? item.originalFilename ?? "",
+      ).trim();
+      const mime = String(item.content_type ?? item.contentType ?? "").trim();
+      const badge = shortMimeBadge(mime);
+      const parts = [];
+      if (fn) parts.push(fn);
+      if (badge) parts.push(badge);
+      if (parts.length) return parts.join(" · ");
+      return kindLabel(item.kind);
     }
     return "";
   }

@@ -1,6 +1,7 @@
 <script>
   import { browser } from "$app/environment";
   import { page } from "$app/stores";
+  import AttachmentChip from "$lib/components/AttachmentChip.svelte";
   import { coreClient } from "$lib/coreClient";
   import { eventRouteForRef } from "$lib/deepLinkTargets";
   import { buildPrimitiveRefRoutes, resolveRefLink } from "$lib/refLinkModel";
@@ -14,6 +15,10 @@
     labelHints = {},
     artifactRoutesById = {},
     eventRoutesById = {},
+    attachmentOverlay = null,
+    attachmentPending = false,
+    attachmentUploadProgress = null,
+    attachmentChipSize = "inline",
   } = $props();
 
   let fetchedEventRoutesById = $state({});
@@ -33,6 +38,11 @@
       workspaceSlug: $page.params.workspace,
       organizationSlug: $page.params.organization,
     }),
+  );
+
+  let useAttachmentChip = $derived(
+    resolved.prefix === "artifact" &&
+      (!resolved.routed || resolved.routedKind === "attachment"),
   );
 
   $effect(() => {
@@ -55,7 +65,22 @@
   });
 </script>
 
-{#if resolved.isLink}
+{#if useAttachmentChip}
+  <span class="inline-flex max-w-full flex-col gap-0.5 align-baseline">
+    <AttachmentChip
+      {resolved}
+      artifactOverlay={attachmentOverlay}
+      pending={attachmentPending}
+      uploadProgress={attachmentUploadProgress}
+      size={attachmentChipSize}
+    />
+    {#if showRaw && resolved.secondaryLabel}
+      <span class="text-micro text-[var(--fg-muted)]"
+        >{resolved.secondaryLabel}</span
+      >
+    {/if}
+  </span>
+{:else if resolved.isLink}
   <a
     class="inline-flex items-baseline gap-1 text-accent-text hover:text-accent-text"
     href={resolved.href}

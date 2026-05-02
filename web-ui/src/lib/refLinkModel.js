@@ -1,3 +1,4 @@
+import { shortMimeBadge } from "./attachmentDisplay.js";
 import { parseRef, renderRef } from "./typedRefs.js";
 import { workspacePath } from "./workspacePaths.js";
 
@@ -52,55 +53,6 @@ function compactValue(value) {
   return value;
 }
 
-const MIME_SHORT_LABEL = {
-  "application/pdf": "PDF",
-  "image/jpeg": "JPEG",
-  "image/jpg": "JPEG",
-  "image/pjpeg": "JPEG",
-  "image/png": "PNG",
-  "image/gif": "GIF",
-  "image/webp": "WebP",
-  "image/svg+xml": "SVG",
-  "text/plain": "Text",
-  "text/markdown": "Markdown",
-  "text/html": "HTML",
-  "application/json": "JSON",
-  "application/zip": "ZIP",
-  "application/x-zip-compressed": "ZIP",
-  "application/msword": "DOC",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-    "DOCX",
-  "application/vnd.ms-excel": "XLS",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "XLSX",
-};
-
-function shortFormatFromMime(mime) {
-  const m = String(mime ?? "")
-    .trim()
-    .toLowerCase();
-  if (!m) return "";
-  const base = m.split(";")[0]?.trim() ?? "";
-  if (MIME_SHORT_LABEL[base]) return MIME_SHORT_LABEL[base];
-  const slash = base.indexOf("/");
-  if (slash <= 0) return "";
-  const major = base.slice(0, slash);
-  const minorRaw = base.slice(slash + 1);
-  const minor = minorRaw.split("+")[0]?.trim() ?? "";
-  if (!minor) return "";
-  if (major === "image") {
-    if (minor === "jpeg" || minor === "jpg") return "JPEG";
-    return minor.slice(0, 8).toUpperCase();
-  }
-  if (major === "text") {
-    if (minor === "plain") return "Text";
-    return minor.charAt(0).toUpperCase() + minor.slice(1);
-  }
-  if (major === "audio")
-    return minor.includes("mpeg") ? "MP3" : minor.toUpperCase().slice(0, 8);
-  if (major === "video") return minor.toUpperCase().slice(0, 8);
-  return "";
-}
-
 function fileNameShowsExtension(name) {
   return /\.[a-zA-Z0-9]{1,12}$/.test(String(name ?? "").trim());
 }
@@ -122,7 +74,7 @@ export function attachmentArtifactDisplayLabel(artifact) {
       artifact?.mimeType ??
       "",
   );
-  const formatLabel = shortFormatFromMime(mime);
+  const formatLabel = shortMimeBadge(mime);
 
   if (displayName) {
     if (fileNameShowsExtension(displayName) || !formatLabel) return displayName;
@@ -388,6 +340,23 @@ function createResolvedLink(raw, prefix, value, labels, { href, isExternal }) {
   };
 }
 
+function attachmentMetaFromRoute(route) {
+  if (!route || String(route.kind ?? "").toLowerCase() !== "attachment") {
+    return null;
+  }
+  const sz =
+    route.size_bytes ?? route.sizeBytes ?? route.byte_size ?? route.byteSize;
+  const sizeNum = sz != null && sz !== "" ? Number(sz) : NaN;
+  return {
+    content_type: asText(route.content_type ?? route.contentType),
+    original_filename: asText(
+      route.original_filename ?? route.originalFilename,
+    ),
+    size_bytes: Number.isFinite(sizeNum) ? sizeNum : undefined,
+    trashed_at: route.trashed_at ?? route.trashedAt ?? null,
+  };
+}
+
 function labelsForRoutedPrimitive(raw, route, options = {}) {
   const labelHint =
     route.label ||
@@ -437,6 +406,7 @@ export function resolveRefLink(refValue, options = {}) {
     const linkResolver = LINK_RESOLVERS[route.prefix];
     const labels = labelsForRoutedPrimitive(raw, route, options);
     if (linkResolver) {
+      const attachmentMeta = attachmentMetaFromRoute(route);
       return {
         ...createResolvedLink(raw, prefix, value, labels, {
           href: linkResolver({
@@ -453,6 +423,7 @@ export function resolveRefLink(refValue, options = {}) {
         routedKind: route.kind,
         routedPrefix: route.prefix,
         routedValue: route.value,
+        attachmentMeta,
       };
     }
   }
@@ -584,11 +555,25 @@ export function buildPrimitiveRefRoutes({
 
     if (kind === "attachment") {
       const label = attachmentArtifactDisplayLabel(artifact) || "Attachment";
+      const sz =
+        artifact?.size_bytes ??
+        artifact?.sizeBytes ??
+        artifact?.byte_size ??
+        artifact?.byteSize;
+      const sizeNum = sz != null && sz !== "" ? Number(sz) : NaN;
       artifactRoutesById[id] = {
         kind: "attachment",
         targetPrefix: "artifact",
         targetValue: id,
         label,
+        content_type: asText(
+          artifact?.content_type ?? artifact?.contentType ?? "",
+        ),
+        original_filename: asText(
+          artifact?.original_filename ?? artifact?.originalFilename ?? "",
+        ),
+        size_bytes: Number.isFinite(sizeNum) ? sizeNum : undefined,
+        trashed_at: artifact?.trashed_at ?? artifact?.trashedAt ?? null,
       };
     }
   }

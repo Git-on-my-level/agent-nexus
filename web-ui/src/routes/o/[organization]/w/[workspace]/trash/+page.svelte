@@ -34,6 +34,7 @@
   import { splitTypedRef } from "$lib/inboxUtils";
   import { createWorkspaceListSelection } from "$lib/workspaceListSelection.svelte.js";
   import { workspacePath } from "$lib/workspacePaths";
+  import { buildPrimitiveRefRoutes } from "$lib/refLinkModel";
 
   const TRASH_TAB_IDS = ["artifacts", "documents", "topics", "boards", "cards"];
 
@@ -102,6 +103,17 @@
   let threads = $state([]);
   let boards = $state([]);
   let cards = $state([]);
+
+  let trashArtifactRoutesById = $derived.by(
+    () =>
+      buildPrimitiveRefRoutes({
+        artifacts,
+        events: [],
+        cards: [],
+        documents: [],
+        threadId: "",
+      }).artifactRoutesById,
+  );
 
   let activeTab = $state("artifacts");
   let loading = $state(true);
@@ -1281,7 +1293,12 @@
                 {/if}
                 {#if Array.isArray(card.related_refs)}
                   {#each card.related_refs as refValue (refValue)}
-                    <RefLink {refValue} threadId={card.thread_id} />
+                    <RefLink
+                      {refValue}
+                      threadId={card.thread_id}
+                      humanize
+                      artifactRoutesById={trashArtifactRoutesById}
+                    />
                   {/each}
                 {/if}
               </div>
@@ -1371,7 +1388,12 @@
                 {/if}
                 {#if Array.isArray(card.related_refs)}
                   {#each card.related_refs as refValue (refValue)}
-                    <RefLink {refValue} threadId={card.thread_id} />
+                    <RefLink
+                      {refValue}
+                      threadId={card.thread_id}
+                      humanize
+                      artifactRoutesById={trashArtifactRoutesById}
+                    />
                   {/each}
                 {/if}
               </div>

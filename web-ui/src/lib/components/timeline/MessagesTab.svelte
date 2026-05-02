@@ -17,6 +17,7 @@
     scrollAndHighlightTarget,
   } from "$lib/deepLinkTargets";
   import { enrichPrincipalsWithWakeRouting } from "$lib/principalWakeRouting.js";
+  import AttachmentChip from "$lib/components/AttachmentChip.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import MessageItem from "$lib/components/timeline/MessageItem.svelte";
   import {
@@ -24,7 +25,7 @@
     flattenMessageThreadView,
     toMessageThreadView,
   } from "$lib/messageThreadUtils";
-  import { buildPrimitiveRefRoutes } from "$lib/refLinkModel";
+  import { buildPrimitiveRefRoutes, resolveRefLink } from "$lib/refLinkModel";
   import {
     filterMentionCandidates,
     parseActiveMention,
@@ -163,6 +164,21 @@
       threadId,
     }),
   );
+
+  let artifactRoutesWithComposerPending = $derived.by(() => {
+    const base = routeMaps.artifactRoutesById ?? {};
+    const artifacts = Object.values(pendingComposerArtifactsByRef).filter(
+      (row) => row && typeof row === "object",
+    );
+    if (!artifacts.length) return base;
+    const extra = buildPrimitiveRefRoutes({
+      artifacts,
+      cards: timelineCards,
+      documents: timelineDocuments,
+      threadId,
+    }).artifactRoutesById;
+    return { ...base, ...extra };
+  });
   let messageThreads = $derived(
     toMessageThreadView(filteredTimeline, {
       threadId,
@@ -205,6 +221,10 @@
   let attachingFile = $state(false);
   let attachmentError = $state("");
   let pendingAttachmentRefs = $state([]);
+  let pendingAttachmentUpload = $state(null);
+  let pendingComposerArtifactsByRef = $state(
+    /** @type {Record<string, Record<string, unknown>>} */ ({}),
+  );
 
   let mentionCandidates = $state([]);
   let mentionLoading = $state(false);
@@ -726,6 +746,7 @@
       messageText = "";
       replyToEventId = "";
       pendingAttachmentRefs = [];
+      pendingComposerArtifactsByRef = {};
       attachmentError = "";
       closeMentions();
       if (docCom) {
@@ -753,6 +774,11 @@
     const file = input?.files?.[0];
     if (!file || attachingFile) return;
     attachingFile = true;
+    pendingAttachmentUpload = {
+      original_filename: file.name || "attachment.bin",
+      content_type: file.type || "application/octet-stream",
+      size_bytes: file.size,
+    };
     attachmentError = "";
     try {
       const refs = [
@@ -777,10 +803,21 @@
       }
       const ref = `artifact:${id}`;
       pendingAttachmentRefs = [...new Set([...pendingAttachmentRefs, ref])];
+      const row =
+        payload?.artifact && typeof payload.artifact === "object"
+          ? payload.artifact
+          : null;
+      if (row) {
+        pendingComposerArtifactsByRef = {
+          ...pendingComposerArtifactsByRef,
+          [ref]: /** @type {Record<string, unknown>} */ (row),
+        };
+      }
     } catch (error) {
       attachmentError = `Upload failed: ${error instanceof Error ? error.message : String(error)}`;
     } finally {
       attachingFile = false;
+      pendingAttachmentUpload = null;
       if (input) input.value = "";
     }
   }
@@ -869,7 +906,7 @@
               onUnarchive={doUnarchive}
               {lifecycleBusy}
               {archiveLabelKind}
-              artifactRoutesById={routeMaps.artifactRoutesById}
+              artifactRoutesById={artifactRoutesWithComposerPending}
               eventRoutesById={routeMaps.eventRoutesById}
               getLiveAnchorStatusForMessage={liveAnchorStatusForMessage}
             />
@@ -1105,55 +1142,93 @@
     own row aligned right; at wider widths (topic / card pages) we put
     them side-by-side. This is what fixes the previous "Replying to: …
     Clear Post message" overlap with the @handle help text.
+
+    Hint + attachment chips must live in `.msg-footer-main` so at wide
+    widths we only lay out **two** flex items (main column vs buttons).
+    If the hint paragraph were a sibling of the attachment row in the
+    same horizontal flex row, it would shrink beside the chip and wrap
+    one word per line.
   -->
     <div class="msg-footer mt-1.5 flex flex-col gap-2">
-      {#if hasPendingDocumentComment}
-        <!--
-        On the "comment on selection" path we don't need the @handle
-        explainer above the submit button — the operator just wants
-        to write a comment. The single-word `@` hint keeps mentions
-        discoverable for power users without dominating the composer.
-      -->
-        <p class="msg-hint text-micro leading-snug text-[var(--fg-muted)]">
-          Tip: <code class="text-[var(--fg)]">@</code> mentions an agent · Esc clears
-        </p>
-      {:else}
-        <p class="msg-hint text-micro leading-snug text-[var(--fg-muted)]">
-          Mention <code class="text-[var(--fg)]">@handle</code> to tag a
-          <a
-            class="text-accent-text hover:text-accent-text"
-            href={workspacePath(organizationSlug, workspaceSlug, "/access")}
-            >registered agent</a
-          >.
-        </p>
-      {/if}
-      {#if pendingAttachmentRefs.length > 0}
-        <div class="flex flex-wrap items-center gap-1.5 text-micro">
-          <span class="text-[var(--fg-muted)]">Attached</span>
-          {#each pendingAttachmentRefs as ref (ref)}
-            <span
-              class="inline-flex items-center gap-1 rounded border border-[var(--line)] bg-[var(--panel)] px-2 py-0.5 text-[var(--fg)]"
-            >
-              {ref}
-              <button
-                class="text-[var(--fg-muted)] hover:text-[var(--fg)]"
-                type="button"
-                aria-label={`Remove ${ref}`}
-                onclick={() => {
-                  pendingAttachmentRefs = pendingAttachmentRefs.filter(
-                    (candidate) => candidate !== ref,
-                  );
-                }}
-              >
-                ×
-              </button>
-            </span>
-          {/each}
-        </div>
-      {/if}
-      {#if attachmentError}
-        <p class="text-micro text-danger-text">{attachmentError}</p>
-      {/if}
+      <div class="msg-footer-main flex min-w-0 flex-col gap-2">
+        {#if hasPendingDocumentComment}
+          <!--
+          On the "comment on selection" path we don't need the @handle
+          explainer above the submit button — the operator just wants
+          to write a comment. The single-word `@` hint keeps mentions
+          discoverable for power users without dominating the composer.
+        -->
+          <p class="msg-hint text-micro leading-snug text-[var(--fg-muted)]">
+            Tip: <code class="text-[var(--fg)]">@</code> mentions an agent · Esc clears
+          </p>
+        {:else}
+          <p class="msg-hint text-micro leading-snug text-[var(--fg-muted)]">
+            Mention <code class="text-[var(--fg)]">@handle</code> to tag a
+            <a
+              class="text-accent-text hover:text-accent-text"
+              href={workspacePath(organizationSlug, workspaceSlug, "/access")}
+              >registered agent</a
+            >.
+          </p>
+        {/if}
+        {#if pendingAttachmentRefs.length > 0 || pendingAttachmentUpload}
+          <div class="flex flex-wrap items-center gap-1.5 text-micro">
+            <span class="text-[var(--fg-muted)]">Attached</span>
+            {#if pendingAttachmentUpload}
+              {@const pendingResolved = resolveRefLink(
+                "artifact:upload-pending",
+                {
+                  threadId,
+                  boardId: "",
+                  humanize: true,
+                  artifactRoutesById: {},
+                  eventRoutesById: {},
+                  workspaceSlug,
+                  organizationSlug,
+                },
+              )}
+              <AttachmentChip
+                resolved={pendingResolved}
+                artifactOverlay={pendingAttachmentUpload}
+                pending
+                size="compact"
+              />
+            {/if}
+            {#each pendingAttachmentRefs as ref (ref)}
+              {@const composerResolved = resolveRefLink(ref, {
+                threadId,
+                boardId: "",
+                humanize: true,
+                artifactRoutesById: artifactRoutesWithComposerPending,
+                eventRoutesById: routeMaps.eventRoutesById,
+                workspaceSlug,
+                organizationSlug,
+              })}
+              <span class="inline-flex max-w-full items-center gap-1">
+                <AttachmentChip resolved={composerResolved} size="compact" />
+                <button
+                  class="shrink-0 text-[var(--fg-muted)] hover:text-[var(--fg)]"
+                  type="button"
+                  aria-label={`Remove ${ref}`}
+                  onclick={() => {
+                    pendingAttachmentRefs = pendingAttachmentRefs.filter(
+                      (candidate) => candidate !== ref,
+                    );
+                    const next = { ...pendingComposerArtifactsByRef };
+                    delete next[ref];
+                    pendingComposerArtifactsByRef = next;
+                  }}
+                >
+                  ×
+                </button>
+              </span>
+            {/each}
+          </div>
+        {/if}
+        {#if attachmentError}
+          <p class="text-micro text-danger-text">{attachmentError}</p>
+        {/if}
+      </div>
       <div class="msg-actions flex shrink-0 items-center justify-end gap-2">
         <label
           class="inline-flex cursor-pointer items-center rounded border border-[var(--line)] bg-[var(--bg)] px-3 py-1 text-micro font-medium text-[var(--fg)] hover:bg-[var(--bg-soft)]"
@@ -1204,13 +1279,13 @@
   @container msg-form (min-width: 22rem) {
     .msg-footer {
       flex-direction: row;
-      align-items: center;
+      align-items: flex-start;
       justify-content: space-between;
       gap: 0.75rem;
     }
-    .msg-hint {
-      min-width: 0;
+    .msg-footer-main {
       flex: 1 1 0%;
+      min-width: 0;
     }
   }
 

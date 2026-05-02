@@ -75,7 +75,9 @@ function lineHasRune(line) {
   return (
     line.includes("$state(") ||
     line.includes("$derived(") ||
+    line.includes("$derived.by") ||
     line.includes("$effect(") ||
+    line.includes("$effect.pre") ||
     line.includes("$props()")
   );
 }

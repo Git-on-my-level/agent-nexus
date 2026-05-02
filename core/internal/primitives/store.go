@@ -39,6 +39,8 @@ const provenanceEventIDPlaceholder = "<event_id>"
 type ArtifactListFilter struct {
 	States []string
 
+	// IDs limits listing to explicit artifact ids (comma-split upstream); capped in query builder.
+	IDs           []string
 	Q             string
 	Limit         *int
 	Kind          string
@@ -3183,7 +3185,41 @@ func buildListThreadsQuery(filter ThreadListFilter) (string, []any) {
 	return query, args
 }
 
+func NormalizeArtifactIDFilter(ids []string, max int) []string {
+	if max <= 0 {
+		max = 48
+	}
+	seen := make(map[string]struct{}, len(ids))
+	out := make([]string, 0, len(ids))
+	for _, raw := range ids {
+		id := strings.TrimSpace(raw)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+		if len(out) >= max {
+			break
+		}
+	}
+	return out
+}
+
 func buildListArtifactsQuery(filter ArtifactListFilter) (string, []any) {
+	if ids := NormalizeArtifactIDFilter(filter.IDs, 48); len(ids) > 0 {
+		placeholders := strings.Repeat("?,", len(ids)-1) + "?"
+		query := `SELECT id, metadata_json FROM artifacts WHERE id IN (` + placeholders + `)`
+		query += ` AND ` + LifecycleStatesOrGroup("archived_at", "trashed_at", filter.States)
+		query += ` ORDER BY created_at ASC, id ASC`
+		args := make([]any, len(ids))
+		for i, id := range ids {
+			args[i] = id
+		}
+		return query, args
+	}
 	q := strings.TrimSpace(filter.Q)
 	qPattern := "%" + q + "%"
 	backingScope := normalizeBackingScope(filter.BackingScope)

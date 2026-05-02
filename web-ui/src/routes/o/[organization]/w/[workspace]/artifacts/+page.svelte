@@ -29,7 +29,9 @@
   import StateError from "$lib/components/state/StateError.svelte";
   import LeadingSelectionGlyph from "$lib/components/LeadingSelectionGlyph.svelte";
   import WorkspaceListBulkToolbar from "$lib/components/WorkspaceListBulkToolbar.svelte";
+  import AttachmentChip from "$lib/components/AttachmentChip.svelte";
   import { createWorkspaceListSelection } from "$lib/workspaceListSelection.svelte.js";
+  import { buildPrimitiveRefRoutes, resolveRefLink } from "$lib/refLinkModel";
 
   let artifacts = $state([]);
   let loading = $state(false);
@@ -129,6 +131,34 @@
     await goto(workspaceHref("/artifacts"), {
       noScroll: true,
       keepFocus: true,
+    });
+  }
+
+  let artifactListRoutesById = $derived.by(
+    () =>
+      buildPrimitiveRefRoutes({
+        artifacts,
+        events: [],
+        cards: [],
+        documents: [],
+        threadId: "",
+      }).artifactRoutesById,
+  );
+
+  function isAttachmentListRow(artifact) {
+    return String(artifact?.kind ?? "").toLowerCase() === "attachment";
+  }
+
+  function listAttachmentResolved(artifact) {
+    const id = String(artifact?.id ?? "").trim();
+    return resolveRefLink(`artifact:${id}`, {
+      threadId: String(artifact?.thread_id ?? "").trim(),
+      boardId: "",
+      humanize: true,
+      artifactRoutesById: artifactListRoutesById,
+      eventRoutesById: {},
+      workspaceSlug,
+      organizationSlug,
     });
   }
 
@@ -572,9 +602,24 @@
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0 flex-1">
                   <div class="flex flex-wrap items-center gap-2">
-                    <p class="truncate text-meta font-medium text-[var(--fg)]">
-                      {rowHeading(artifact)}
-                    </p>
+                    {#if isAttachmentListRow(artifact)}
+                      <div
+                        class="pointer-events-auto max-w-full"
+                        onclick={(e) => e.stopPropagation()}
+                        role="presentation"
+                      >
+                        <AttachmentChip
+                          resolved={listAttachmentResolved(artifact)}
+                          size="compact"
+                        />
+                      </div>
+                    {:else}
+                      <p
+                        class="truncate text-meta font-medium text-[var(--fg)]"
+                      >
+                        {rowHeading(artifact)}
+                      </p>
+                    {/if}
                     {#if isArtifactArchived(artifact)}
                       <span
                         class="rounded bg-warn-soft px-1.5 py-0.5 text-micro font-medium text-warn-text"
@@ -583,8 +628,12 @@
                     {/if}
                   </div>
                   <p class="text-micro text-[var(--fg-muted)]">
-                    <span class="font-medium">{kindLabel(artifact.kind)}</span>
-                    · Created {formatTimestamp(artifact.created_at) || "—"} by {actorName(
+                    {#if !isAttachmentListRow(artifact)}
+                      <span class="font-medium">{kindLabel(artifact.kind)}</span
+                      >
+                      ·
+                    {/if}
+                    Created {formatTimestamp(artifact.created_at) || "—"} by {actorName(
                       artifact.created_by,
                     )}
                   </p>
@@ -634,28 +683,48 @@
           class="px-3 py-2 transition-colors hover:bg-[var(--line-subtle)] sm:px-4 {borderTop}"
         >
           <div class="flex items-start justify-between gap-3">
-            <a
-              class="min-w-0 flex-1 outline-none rounded-sm focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-soft)]"
-              href={workspaceHref(`/artifacts/${artifact.id}`)}
-            >
-              <div class="flex flex-wrap items-center gap-2">
-                <p class="truncate text-meta font-medium text-[var(--fg)]">
-                  {rowHeading(artifact)}
-                </p>
+            {#if isAttachmentListRow(artifact)}
+              <div class="min-w-0 flex-1">
+                <AttachmentChip
+                  resolved={listAttachmentResolved(artifact)}
+                  size="compact"
+                />
                 {#if isArtifactArchived(artifact)}
                   <span
-                    class="rounded bg-warn-soft px-1.5 py-0.5 text-micro font-medium text-warn-text"
+                    class="mt-1 inline-flex rounded bg-warn-soft px-1.5 py-0.5 text-micro font-medium text-warn-text"
                     >Archived</span
                   >
                 {/if}
+                <p class="mt-1 text-micro text-[var(--fg-muted)]">
+                  Created {formatTimestamp(artifact.created_at) || "—"} by {actorName(
+                    artifact.created_by,
+                  )}
+                </p>
               </div>
-              <p class="text-micro text-[var(--fg-muted)]">
-                <span class="font-medium">{kindLabel(artifact.kind)}</span>
-                · Created {formatTimestamp(artifact.created_at) || "—"} by {actorName(
-                  artifact.created_by,
-                )}
-              </p>
-            </a>
+            {:else}
+              <a
+                class="min-w-0 flex-1 outline-none rounded-sm focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-soft)]"
+                href={workspaceHref(`/artifacts/${artifact.id}`)}
+              >
+                <div class="flex flex-wrap items-center gap-2">
+                  <p class="truncate text-meta font-medium text-[var(--fg)]">
+                    {rowHeading(artifact)}
+                  </p>
+                  {#if isArtifactArchived(artifact)}
+                    <span
+                      class="rounded bg-warn-soft px-1.5 py-0.5 text-micro font-medium text-warn-text"
+                      >Archived</span
+                    >
+                  {/if}
+                </div>
+                <p class="text-micro text-[var(--fg-muted)]">
+                  <span class="font-medium">{kindLabel(artifact.kind)}</span>
+                  · Created {formatTimestamp(artifact.created_at) || "—"} by {actorName(
+                    artifact.created_by,
+                  )}
+                </p>
+              </a>
+            {/if}
             <span
               class="shrink-0 tabular-nums text-micro text-[var(--fg-muted)]"
               aria-hidden="true"
@@ -666,9 +735,8 @@
           </div>
 
           {#if refPreview(artifact).length > 0 || artifact.thread_id}
-            <a
+            <div
               class="mt-1.5 hidden flex-wrap items-center gap-1.5 text-micro sm:flex"
-              href={workspaceHref(`/artifacts/${artifact.id}`)}
             >
               {#if artifact.thread_id}
                 <RefLink
@@ -694,7 +762,7 @@
                   >+{artifact.refs.length - 3} more</span
                 >
               {/if}
-            </a>
+            </div>
           {/if}
         </div>
       {/if}

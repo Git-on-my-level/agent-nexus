@@ -36,6 +36,7 @@
     topicSearchResultToPickerOption,
     documentSearchPickerSubtitle,
   } from "$lib/searchHelpers";
+  import { buildPrimitiveRefRoutes } from "$lib/refLinkModel";
   import { toActorPickerOptions } from "$lib/systemActor.js";
   import { boardCardInspectNav } from "$lib/topicRouteUtils";
   import {
@@ -149,6 +150,14 @@
   let editDefinitionOfDone = $state("");
   let moveColumnKey = $state("");
 
+  /** @typedef {"related" | "resolution"} CardAttachTarget */
+  /** @type {CardAttachTarget | null} */
+  let cardAttachBusy = $state(null);
+  let cardAttachError = $state("");
+
+  const CARD_ATTACHMENT_ACCEPT =
+    "image/*,text/plain,text/markdown,text/csv,.md,.txt,.csv,.json,.pdf";
+
   function documentIdFromRef(ref) {
     const s = String(ref ?? "").trim();
     if (s.startsWith("document:")) return s.slice("document:".length).trim();
@@ -169,6 +178,21 @@
         (items ?? []).map((item) => String(item ?? "").trim()).filter(Boolean),
       ),
     ];
+  }
+
+  function mergeTypedRefField(existingRaw, ref) {
+    const r = String(ref ?? "").trim();
+    if (!r) return existingRaw;
+    const items = parseDelimitedValues(existingRaw);
+    if (items.includes(r)) return existingRaw;
+    return joinDelimitedValues([...items, r]);
+  }
+
+  function typedRefsOnlyWithPrefix(refs, prefix) {
+    const p = String(prefix ?? "");
+    return (refs ?? [])
+      .map((x) => String(x ?? "").trim())
+      .filter((x) => x.startsWith(p));
   }
 
   function syncCardDraftsFromItem(item) {
@@ -389,11 +413,13 @@
         Object.keys(patch).length === 0 &&
         Object.keys(contentPayload).length === 0
       ) {
+        cardAttachError = "";
         editOpen = false;
         return;
       }
 
       cardRevisions = [];
+      cardAttachError = "";
       editOpen = false;
     } catch (e) {
       saveError = e instanceof Error ? e.message : String(e ?? "Save failed");
@@ -405,6 +431,7 @@
   function beginEdit() {
     syncCardDraftsFromItem(cardItem);
     saveError = "";
+    cardAttachError = "";
     editAdvanced = false;
     editOpen = true;
   }
@@ -412,6 +439,7 @@
   function cancelEdit() {
     syncCardDraftsFromItem(cardItem);
     saveError = "";
+    cardAttachError = "";
     editOpen = false;
   }
 
@@ -495,6 +523,77 @@
     });
   });
 
+  let cardAttachmentRefsView = $derived.by(() => {
+    const a = typedRefsOnlyWithPrefix(dedupedRelatedRefs, "artifact:");
+    const b = typedRefsOnlyWithPrefix(resolutionRefsList, "artifact:");
+    return [...new Set([...a, ...b])];
+  });
+
+  /** Related / resolution rows omit artifact refs; those render only under Attachments. */
+  function withoutArtifactRefs(refs) {
+    return (refs ?? [])
+      .map((x) => String(x ?? "").trim())
+      .filter((x) => x && !x.startsWith("artifact:"));
+  }
+
+  let dedupedRelatedRefsView = $derived.by(() =>
+    withoutArtifactRefs(dedupedRelatedRefs),
+  );
+
+  let resolutionRefsView = $derived.by(() =>
+    withoutArtifactRefs(resolutionRefsList),
+  );
+
+  let cardEditArtifactRefs = $derived.by(() => {
+    if (!editOpen) return [];
+    const a = typedRefsOnlyWithPrefix(
+      parseDelimitedValues(editRelatedRefs),
+      "artifact:",
+    );
+    const b = typedRefsOnlyWithPrefix(
+      parseDelimitedValues(editResolutionRefs),
+      "artifact:",
+    );
+    return [...new Set([...a, ...b])];
+  });
+
+  /**
+   * @param {Event & { currentTarget: HTMLInputElement }} event
+   * @param {CardAttachTarget} target
+   */
+  async function handleCardAttachPick(event, target) {
+    const input = event.currentTarget;
+    const file = input?.files?.[0];
+    if (!file || cardAttachBusy) return;
+    cardAttachBusy = target;
+    cardAttachError = "";
+    try {
+      const payload = await coreClient.createArtifactAttachment({
+        refs: cardAttachContextRefs,
+        file,
+      });
+      const id = String(payload?.artifact?.id ?? "").trim();
+      if (!id) {
+        cardAttachError = "Upload succeeded but artifact id was missing.";
+        return;
+      }
+      const ref = `artifact:${id}`;
+      if (target === "related") {
+        editRelatedRefs = mergeTypedRefField(editRelatedRefs, ref);
+      } else {
+        editResolutionRefs = mergeTypedRefField(editResolutionRefs, ref);
+      }
+    } catch (e) {
+      cardAttachError =
+        e instanceof Error
+          ? e.message
+          : String(e ?? "Attachment upload failed");
+    } finally {
+      cardAttachBusy = null;
+      input.value = "";
+    }
+  }
+
   let refLabelHints = $derived.by(() => {
     const hints = {};
     const t = thread;
@@ -512,6 +611,63 @@
       hints[`topic:${pt.id}`] = ptitle || pt.id;
     }
     return hints;
+  });
+
+  /** Artifact ids extracted from refs shown on this modal (related + resolution). */
+  function artifactIdsFromTypedRefs(refs) {
+    const ids = new Set();
+    for (const ref of refs) {
+      const s = String(ref ?? "").trim();
+      if (!s.startsWith("artifact:")) continue;
+      const id = s.slice("artifact:".length).trim();
+      if (id) ids.add(id);
+    }
+    return [...ids];
+  }
+
+  let modalArtifactRoutesById = $state(
+    /** @type {Record<string, Record<string, unknown>>} */ ({}),
+  );
+
+  $effect(() => {
+    if (!browser) return;
+    const fromServer = [...dedupedRelatedRefs, ...resolutionRefsList];
+    const fromDraft = editOpen
+      ? [
+          ...parseDelimitedValues(editRelatedRefs),
+          ...parseDelimitedValues(editResolutionRefs),
+        ]
+      : [];
+    const ids = artifactIdsFromTypedRefs([
+      ...new Set([...fromServer, ...fromDraft]),
+    ]);
+    if (!ids.length) {
+      modalArtifactRoutesById = {};
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const resp = await coreClient.listArtifacts({
+          ids: ids.join(","),
+          state: ["active", "archived", "trashed"],
+        });
+        const rows = Array.isArray(resp?.artifacts) ? resp.artifacts : [];
+        if (cancelled) return;
+        modalArtifactRoutesById = buildPrimitiveRefRoutes({
+          artifacts: rows,
+          events: [],
+          cards: [],
+          documents: [],
+          threadId: linkedThreadId,
+        }).artifactRoutesById;
+      } catch {
+        if (!cancelled) modalArtifactRoutesById = {};
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   });
 
   let showSummary = $derived(
@@ -844,6 +1000,94 @@
                 </label>
               </div>
 
+              <div
+                class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] p-3"
+              >
+                <p class="text-micro font-medium text-[var(--fg-muted)]">
+                  Attachments
+                </p>
+                <p class="mt-1 text-micro text-[var(--fg-muted)]">
+                  Upload files as artifact refs. Choose whether each file
+                  supports general context (related) or resolution evidence.
+                </p>
+                <div class="mt-2 flex flex-wrap gap-2">
+                  <label
+                    class="inline-flex h-7 cursor-pointer items-center justify-center rounded bg-accent-solid px-3 text-micro font-medium text-white transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50 {!cardAttachContextRefs.length
+                      ? 'pointer-events-none opacity-50'
+                      : ''}"
+                  >
+                    <span
+                      >{cardAttachBusy === "related"
+                        ? "Uploading…"
+                        : "Attach file (related)"}</span
+                    >
+                    <input
+                      class="sr-only"
+                      accept={CARD_ATTACHMENT_ACCEPT}
+                      disabled={Boolean(cardAttachBusy) ||
+                        !cardAttachContextRefs.length}
+                      onchange={(e) =>
+                        void handleCardAttachPick(
+                          /** @type {any} */ (e),
+                          "related",
+                        )}
+                      type="file"
+                    />
+                  </label>
+                  <label
+                    class="inline-flex h-7 cursor-pointer items-center justify-center rounded border border-[var(--line)] bg-transparent px-3 text-micro font-normal text-[var(--fg)] transition-colors hover:bg-[var(--line-subtle)] disabled:cursor-not-allowed disabled:opacity-50 {!cardAttachContextRefs.length
+                      ? 'pointer-events-none opacity-50'
+                      : ''}"
+                  >
+                    <span
+                      >{cardAttachBusy === "resolution"
+                        ? "Uploading…"
+                        : "Attach file (resolution evidence)"}</span
+                    >
+                    <input
+                      class="sr-only"
+                      accept={CARD_ATTACHMENT_ACCEPT}
+                      disabled={Boolean(cardAttachBusy) ||
+                        !cardAttachContextRefs.length}
+                      onchange={(e) =>
+                        void handleCardAttachPick(
+                          /** @type {any} */ (e),
+                          "resolution",
+                        )}
+                      type="file"
+                    />
+                  </label>
+                </div>
+                {#if !cardAttachContextRefs.length}
+                  <p class="mt-1.5 text-micro text-[var(--fg-muted)]">
+                    Save the card once if attachments are unavailable (card id
+                    required for upload context).
+                  </p>
+                {/if}
+                {#if cardAttachError}
+                  <p class="mt-1.5 text-micro text-danger-text">
+                    {cardAttachError}
+                  </p>
+                {/if}
+                {#if cardEditArtifactRefs.length > 0}
+                  <ul class="mt-2 flex min-w-0 flex-wrap gap-1.5">
+                    {#each cardEditArtifactRefs as ref (ref)}
+                      <li class="min-w-0 text-micro">
+                        <CompactRefLink
+                          refValue={ref}
+                          threadId={linkedThreadId}
+                          {boardId}
+                          humanize
+                          showRaw
+                          labelHints={refLabelHints}
+                          artifactRoutesById={modalArtifactRoutesById}
+                        />
+                      </li>
+                    {/each}
+                  </ul>
+                {/if}
+              </div>
+
               <button
                 type="button"
                 class="flex items-center gap-1.5 text-micro text-[var(--fg-muted)] transition-colors hover:text-[var(--fg)]"
@@ -934,7 +1178,8 @@
                       <GuidedTypedRefsInput
                         bind:value={editRelatedRefs}
                         {boardId}
-                        attachContextRefs={cardAttachContextRefs}
+                        threadId={linkedThreadId}
+                        artifactRoutesById={modalArtifactRoutesById}
                         addInputLabel="Add related ref"
                         addInputPlaceholder="topic:summer-menu-rollout"
                         addButtonLabel="Add ref"
@@ -950,7 +1195,8 @@
                       <GuidedTypedRefsInput
                         bind:value={editResolutionRefs}
                         {boardId}
-                        attachContextRefs={cardAttachContextRefs}
+                        threadId={linkedThreadId}
+                        artifactRoutesById={modalArtifactRoutesById}
                         addInputLabel="Add resolution ref"
                         addInputPlaceholder="artifact:supporting-context"
                         addButtonLabel="Add ref"
@@ -998,7 +1244,36 @@
                 </section>
               {/if}
 
-              {#if dedupedRelatedRefs.length > 0}
+              <section>
+                <h3
+                  class="mb-1.5 text-micro font-medium text-[var(--fg-muted)]"
+                >
+                  Attachments
+                </h3>
+                {#if cardAttachmentRefsView.length > 0}
+                  <ul class="flex min-w-0 flex-wrap gap-1.5">
+                    {#each cardAttachmentRefsView as ref (ref)}
+                      <li class="min-w-0 text-micro">
+                        <CompactRefLink
+                          refValue={ref}
+                          threadId={linkedThreadId}
+                          {boardId}
+                          humanize
+                          showRaw
+                          labelHints={refLabelHints}
+                          artifactRoutesById={modalArtifactRoutesById}
+                        />
+                      </li>
+                    {/each}
+                  </ul>
+                {:else}
+                  <p class="text-micro text-[var(--fg-muted)]">
+                    No file attachments. Use Edit card to upload.
+                  </p>
+                {/if}
+              </section>
+
+              {#if dedupedRelatedRefsView.length > 0}
                 <section>
                   <h3
                     class="mb-1.5 text-micro font-medium text-[var(--fg-muted)]"
@@ -1006,14 +1281,16 @@
                     Related refs
                   </h3>
                   <ul class="flex min-w-0 flex-wrap gap-1.5">
-                    {#each dedupedRelatedRefs as ref (ref)}
+                    {#each dedupedRelatedRefsView as ref (ref)}
                       <li class="min-w-0 text-micro">
                         <CompactRefLink
                           refValue={ref}
+                          threadId={linkedThreadId}
                           {boardId}
                           humanize
                           showRaw
                           labelHints={refLabelHints}
+                          artifactRoutesById={modalArtifactRoutesById}
                         />
                       </li>
                     {/each}
@@ -1021,7 +1298,7 @@
                 </section>
               {/if}
 
-              {#if resolutionRefsList.length > 0}
+              {#if resolutionRefsView.length > 0}
                 <section>
                   <h3
                     class="mb-1.5 text-micro font-medium text-[var(--fg-muted)]"
@@ -1029,14 +1306,16 @@
                     Resolution refs
                   </h3>
                   <ul class="flex min-w-0 flex-wrap gap-1.5">
-                    {#each resolutionRefsList as ref (ref)}
+                    {#each resolutionRefsView as ref (ref)}
                       <li class="min-w-0 text-micro">
                         <CompactRefLink
                           refValue={ref}
+                          threadId={linkedThreadId}
                           {boardId}
                           humanize
                           showRaw
                           labelHints={refLabelHints}
+                          artifactRoutesById={modalArtifactRoutesById}
                         />
                       </li>
                     {/each}
@@ -1111,6 +1390,7 @@
                     humanize
                     showRaw
                     labelHints={refLabelHints}
+                    artifactRoutesById={modalArtifactRoutesById}
                   />
                 </div>
               {/if}
@@ -1285,6 +1565,16 @@
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: contain;
     overflow-y: auto;
+    scroll-padding-block-start: 0.5rem;
+  }
+
+  /*
+   * Expanded discussion dock shares flex space with the overview; without a
+   * floor, the overview scrollport can become too short and the top of the
+   * form feels clipped when "More options" is open.
+   */
+  :global(.cdm-panel:has([data-mobile-chat-expanded])) .cdm-scroll {
+    min-height: min(52dvh, 28rem);
   }
 
   .cdm-page {

@@ -392,7 +392,7 @@ describe("RefLink model", () => {
       ],
     });
 
-    expect(artifactRoutesById[artifactId].label).toBe("notes · Markdown");
+    expect(artifactRoutesById[artifactId].label).toBe("notes · MD");
   });
 
   it("accepts thread-style artifact maps keyed by id", () => {

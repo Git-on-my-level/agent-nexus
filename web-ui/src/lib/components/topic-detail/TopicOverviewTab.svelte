@@ -6,6 +6,7 @@
   import RefLink from "$lib/components/RefLink.svelte";
   import { splitTypedRef } from "$lib/inboxUtils";
   import { buildTopicPatch } from "$lib/topicPatch";
+  import { buildPrimitiveRefRoutes } from "$lib/refLinkModel";
 
   let { threadId, onSave, conflictWarning = "", editNotice = "" } = $props();
 
@@ -45,6 +46,17 @@
   let editDraft = $state(null);
   let savingEdit = $state(false);
   let editError = $state("");
+
+  let overviewArtifactRoutesById = $derived.by(() => {
+    const s = $topicDetailStore;
+    return buildPrimitiveRefRoutes({
+      artifacts: s.timelineArtifacts ?? [],
+      events: [],
+      cards: s.timelineCards ?? [],
+      documents: s.timelineDocuments ?? [],
+      threadId,
+    }).artifactRoutesById;
+  });
 
   let topicRefGroups = $derived.by(() => {
     if (!topic) return [];
@@ -197,7 +209,12 @@
               >
               <div class="flex flex-wrap gap-2">
                 {#each group.refs as ref (ref)}
-                  <RefLink refValue={ref} {threadId} />
+                  <RefLink
+                    refValue={ref}
+                    {threadId}
+                    humanize
+                    artifactRoutesById={overviewArtifactRoutesById}
+                  />
                 {/each}
               </div>
             </div>

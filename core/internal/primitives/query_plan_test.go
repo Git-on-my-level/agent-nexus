@@ -100,6 +100,28 @@ func TestBuildListThreadsQueryAddsWhereBeforeQFilter(t *testing.T) {
 	}
 }
 
+func TestBuildListArtifactsQueryIDsFilterIgnoresSearchFilters(t *testing.T) {
+	t.Parallel()
+
+	query, args := buildListArtifactsQuery(ArtifactListFilter{
+		IDs:      []string{" artifact-b ", "artifact-a", "artifact-b"},
+		Q:        "ignored",
+		Kind:     "ignored",
+		ThreadID: "ignored",
+		States:   []string{"active", "trashed"},
+	})
+
+	if !strings.Contains(query, "WHERE id IN (?,?)") {
+		t.Fatalf("expected id IN filter, got query:\n%s", query)
+	}
+	if strings.Contains(query, "json_extract") || strings.Contains(query, "thread_id") {
+		t.Fatalf("ids lookup should not include search/thread filters, got query:\n%s", query)
+	}
+	if len(args) != 2 || args[0] != "artifact-b" || args[1] != "artifact-a" {
+		t.Fatalf("expected deduped id args in first-seen order, got %#v", args)
+	}
+}
+
 func explainQueryPlan(t *testing.T, db *sql.DB, query string, args ...any) string {
 	t.Helper()
 

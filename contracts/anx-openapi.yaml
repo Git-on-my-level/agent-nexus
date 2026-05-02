@@ -2526,6 +2526,13 @@ paths:
           in: query
           required: false
           schema: { type: string }
+        - name: ids
+          in: query
+          required: false
+          schema: { type: string }
+          description: >
+            Comma-separated artifact UUIDs (deduped; capped server-side). When set,
+            thread-scoped listing and q/kind/backing_scope/date filters are ignored; lifecycle state filter still applies.
         - name: created_before
           in: query
           required: false

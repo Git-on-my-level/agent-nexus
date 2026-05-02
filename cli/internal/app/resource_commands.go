@@ -959,15 +959,59 @@ func (a *App) runThreadsInspectCommand(ctx context.Context, args []string, cfg c
 	return result, nil
 }
 
+func (a *App) runArtifactsAttachmentsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
+	if len(args) == 0 {
+		return nil, "artifacts attachments", errnorm.Usage("invalid_args", "expected a subcommand (e.g. `anx artifacts attachments create`)")
+	}
+	sub := strings.TrimSpace(strings.ToLower(args[0]))
+	switch sub {
+	case "create":
+		fs := newSilentFlagSet("artifacts attachments create")
+		var refsJSON trackedString
+		var filePath trackedString
+		var summary trackedString
+		var artifactJSON trackedString
+		var actorIDFlag trackedString
+		fs.Var(&refsJSON, "refs", `JSON array of typed refs, e.g. ["thread:<uuid>"]`)
+		fs.Var(&filePath, "file", "Path to file to upload")
+		fs.Var(&summary, "summary", "Optional attachment summary")
+		fs.Var(&artifactJSON, "artifact", "Optional JSON object merged into artifact metadata")
+		fs.Var(&actorIDFlag, "actor-id", "Actor id")
+		if err := fs.Parse(args[1:]); err != nil {
+			return nil, "artifacts attachments create", errnorm.Usage("invalid_flags", err.Error())
+		}
+		if len(fs.Args()) > 0 {
+			return nil, "artifacts attachments create", errnorm.Usage("invalid_args", "unexpected positional arguments")
+		}
+		if strings.TrimSpace(refsJSON.value) == "" {
+			return nil, "artifacts attachments create", errnorm.Usage("invalid_request", "--refs is required")
+		}
+		if strings.TrimSpace(filePath.value) == "" {
+			return nil, "artifacts attachments create", errnorm.Usage("invalid_request", "--file is required")
+		}
+		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
+		if err != nil {
+			return nil, "artifacts attachments create", err
+		}
+		result, callErr := a.invokeArtifactAttachmentCreate(ctx, cfg, refsJSON.value, filePath.value, summary.value, artifactJSON.value, actorID)
+		return result, "artifacts attachments create", callErr
+	default:
+		return nil, "artifacts attachments", errnorm.Usage("unknown_command", fmt.Sprintf("unknown artifacts attachments subcommand %q", args[0]))
+	}
+}
+
 func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
 	if len(args) == 0 {
 		return nil, "artifacts", artifactsSubcommandSpec.requiredError()
+	}
+	if len(args) > 0 && strings.EqualFold(strings.TrimSpace(args[0]), "attachments") {
+		return a.runArtifactsAttachmentsCommand(ctx, args[1:], cfg)
 	}
 	sub := artifactsSubcommandSpec.normalize(args[0])
 	switch sub {
 	case "list":
 		fs := newSilentFlagSet("artifacts list")
-		var kindFlag, backingScopeFlag, threadIDFlag, beforeFlag, afterFlag trackedString
+		var kindFlag, backingScopeFlag, threadIDFlag, idsFlag, beforeFlag, afterFlag trackedString
 		var includeTrashed bool
 		var trashedOnly bool
 		var includeArchived bool
@@ -975,6 +1019,7 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 		fs.Var(&kindFlag, "kind", "Filter by artifact kind")
 		fs.Var(&backingScopeFlag, "backing-scope", "Filter backing artifacts: all, standalone, or backing_only")
 		fs.Var(&threadIDFlag, "thread-id", "Filter by thread id")
+		fs.Var(&idsFlag, "ids", "Comma-separated artifact ids (batch lookup)")
 		fs.Var(&beforeFlag, "created-before", "Filter by created_at upper bound")
 		fs.Var(&afterFlag, "created-after", "Filter by created_at lower bound")
 		fs.BoolVar(&includeTrashed, "include-trashed", false, "Include trashed artifacts")
@@ -1009,6 +1054,9 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 		addSingleQuery(&query, "thread_id", resolvedThreadID)
 		addSingleQuery(&query, "created_before", beforeFlag.value)
 		addSingleQuery(&query, "created_after", afterFlag.value)
+		if ids := strings.TrimSpace(idsFlag.value); ids != "" {
+			addSingleQuery(&query, "ids", ids)
+		}
 		result, err := a.invokeTypedJSON(ctx, cfg, "artifacts list", "artifacts.list", nil, query, nil)
 		return result, "artifacts list", err
 	case "get":
@@ -1036,8 +1084,25 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "artifacts create", "artifacts.create", nil, nil, body)
 		return result, "artifacts create", callErr
 	case "content":
-		id, err := parseIDArg(args[1:], "artifact-id", "artifact id")
-		if err != nil {
+		fs := newSilentFlagSet("artifacts content")
+		var artifactIDFlag trackedString
+		var outputPath string
+		fs.Var(&artifactIDFlag, "artifact-id", "Artifact id")
+		fs.StringVar(&outputPath, "o", "", "Write raw artifact bytes to file")
+		fs.StringVar(&outputPath, "output", "", "Write raw artifact bytes to file")
+		if err := fs.Parse(args[1:]); err != nil {
+			return nil, "artifacts content", errnorm.Usage("invalid_flags", err.Error())
+		}
+		positionals := fs.Args()
+		id := strings.TrimSpace(artifactIDFlag.value)
+		if id == "" && len(positionals) > 0 {
+			id = strings.TrimSpace(positionals[0])
+			positionals = positionals[1:]
+		}
+		if len(positionals) > 0 {
+			return nil, "artifacts content", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx artifacts content`")
+		}
+		if err := validateID(id, "artifact id"); err != nil {
 			return nil, "artifacts content", err
 		}
 		result, callErr := a.invokeArtifactContentWithIDResolution(
@@ -1047,6 +1112,7 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 			"artifact_id",
 			id,
 			artifactIDLookupSpec,
+			strings.TrimSpace(outputPath),
 		)
 		return result, "artifacts content", callErr
 	case "inspect":
@@ -2274,6 +2340,7 @@ func (a *App) runArtifactsInspectCommand(ctx context.Context, args []string, cfg
 		"artifact_id",
 		artifactID,
 		artifactIDLookupSpec,
+		"",
 	)
 	if contentErr != nil {
 		return nil, contentErr

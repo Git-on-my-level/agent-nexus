@@ -4322,6 +4322,75 @@ func TestArtifactContentRaw(t *testing.T) {
 	}
 }
 
+func TestArtifactContentOutputFile(t *testing.T) {
+	t.Parallel()
+
+	expected := []byte("artifact file body")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/artifacts/artifact-file/content" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = w.Write(expected)
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	outPath := filepath.Join(t.TempDir(), "artifact.txt")
+	out := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--base-url", server.URL,
+		"artifacts", "content", "--artifact-id", "artifact-file", "-o", outPath,
+	})
+	if !strings.Contains(out, "wrote 18 bytes") {
+		t.Fatalf("expected write summary, got %q", out)
+	}
+	got, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("read output file: %v", err)
+	}
+	if !bytes.Equal(got, expected) {
+		t.Fatalf("unexpected file bytes: got=%q want=%q", got, expected)
+	}
+}
+
+func TestArtifactContentJSONOutputFile(t *testing.T) {
+	t.Parallel()
+
+	expected := []byte("json file body")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/artifacts/artifact-json-file/content" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = w.Write(expected)
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	outPath := filepath.Join(t.TempDir(), "artifact.txt")
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json", "--base-url", server.URL,
+		"artifacts", "content", "--artifact-id", "artifact-json-file", "--output", outPath,
+	})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+	if got := anyStringValue(data["output_path"]); got != outPath {
+		t.Fatalf("expected output_path %q, got %#v", outPath, data)
+	}
+	if got := int(data["bytes_written"].(float64)); got != len(expected) {
+		t.Fatalf("expected bytes_written %d, got %#v", len(expected), data)
+	}
+	got, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("read output file: %v", err)
+	}
+	if !bytes.Equal(got, expected) {
+		t.Fatalf("unexpected file bytes: got=%q want=%q", got, expected)
+	}
+}
+
 func TestArtifactsInspectCommand(t *testing.T) {
 	t.Parallel()
 

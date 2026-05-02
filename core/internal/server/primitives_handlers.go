@@ -731,6 +731,18 @@ func handleListArtifacts(w http.ResponseWriter, r *http.Request, opts handlerOpt
 	query := r.URL.Query()
 	threadID := strings.TrimSpace(query.Get("thread_id"))
 
+	var artifactIDs []string
+	if idsCSV := strings.TrimSpace(query.Get("ids")); idsCSV != "" {
+		parts := strings.Split(idsCSV, ",")
+		raw := make([]string, 0, len(parts))
+		for _, part := range parts {
+			if id := strings.TrimSpace(part); id != "" {
+				raw = append(raw, id)
+			}
+		}
+		artifactIDs = primitives.NormalizeArtifactIDFilter(raw, 48)
+	}
+
 	states, parseErr := ParseListLifecycleStates(query)
 	if parseErr != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", parseErr.Error())
@@ -755,7 +767,7 @@ func handleListArtifacts(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		return
 	}
 
-	artifacts, err := opts.primitiveStore.ListArtifacts(r.Context(), primitives.ArtifactListFilter{
+	listFilter := primitives.ArtifactListFilter{
 		States:        states,
 		Q:             strings.TrimSpace(query.Get("q")),
 		Limit:         limitPtr,
@@ -764,7 +776,13 @@ func handleListArtifacts(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		ThreadID:      threadID,
 		CreatedBefore: strings.TrimSpace(query.Get("created_before")),
 		CreatedAfter:  strings.TrimSpace(query.Get("created_after")),
-	})
+	}
+	if len(artifactIDs) > 0 {
+		listFilter.IDs = artifactIDs
+		listFilter.ThreadID = ""
+	}
+
+	artifacts, err := opts.primitiveStore.ListArtifacts(r.Context(), listFilter)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list artifacts")
 		return

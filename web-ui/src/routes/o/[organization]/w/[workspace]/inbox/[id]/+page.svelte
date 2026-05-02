@@ -9,9 +9,11 @@
   import RefLink from "$lib/components/RefLink.svelte";
   import Skeleton from "$lib/components/state/Skeleton.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
+  import AttachmentChip from "$lib/components/AttachmentChip.svelte";
   import { coreClient } from "$lib/coreClient";
   import { threadTimelineEventHref } from "$lib/deepLinkTargets";
   import { formatAbsoluteDateTime } from "$lib/formatDate";
+  import { buildPrimitiveRefRoutes, resolveRefLink } from "$lib/refLinkModel";
   import { searchActors } from "$lib/searchHelpers";
   import { workspacePath } from "$lib/workspacePaths";
 
@@ -29,8 +31,12 @@
   let submitting = $state(false);
   let submitError = $state("");
   let attachingResponseFile = $state(false);
+  let pendingResponseAttachmentUpload = $state(null);
   let responseAttachmentError = $state("");
   let responseAttachmentRefs = $state([]);
+  let responseComposerArtifactsByRef = $state(
+    /** @type {Record<string, Record<string, unknown>>} */ ({}),
+  );
   let autosaveInterval = null;
   let notifyTargetQuery = $state("");
   let notifyTargetResults = $state([]);
@@ -52,6 +58,20 @@
           .filter(Boolean)
       : [],
   );
+  let inboxComposerArtifactRoutes = $derived.by(() => {
+    const artifacts = Object.values(responseComposerArtifactsByRef).filter(
+      (row) => row && typeof row === "object",
+    );
+    if (!artifacts.length) return {};
+    return buildPrimitiveRefRoutes({
+      artifacts,
+      events: [],
+      cards: [],
+      documents: [],
+      threadId: String(item?.thread_id ?? "").trim(),
+    }).artifactRoutesById;
+  });
+
   let inboxRefs = $derived.by(() => {
     const refs = [];
     const seen = new Set();
@@ -248,6 +268,7 @@
       if (browser) localStorage.removeItem(draftStorageKey());
       responseDraft = "";
       responseAttachmentRefs = [];
+      responseComposerArtifactsByRef = {};
       responseAttachmentError = "";
       const eventId = String(resp?.event?.id ?? "").trim();
       const notify = resp?.notify ?? {};
@@ -284,6 +305,11 @@
     const file = input?.files?.[0];
     if (!file || attachingResponseFile) return;
     attachingResponseFile = true;
+    pendingResponseAttachmentUpload = {
+      original_filename: file.name || "attachment.bin",
+      content_type: file.type || "application/octet-stream",
+      size_bytes: file.size,
+    };
     responseAttachmentError = "";
     try {
       const threadRef = String(item?.thread_id ?? "").trim()
@@ -301,13 +327,23 @@
         responseAttachmentError = "Upload succeeded but artifact id missing.";
         return;
       }
-      responseAttachmentRefs = [
-        ...new Set([...responseAttachmentRefs, `artifact:${id}`]),
-      ];
+      const ref = `artifact:${id}`;
+      responseAttachmentRefs = [...new Set([...responseAttachmentRefs, ref])];
+      const row =
+        payload?.artifact && typeof payload.artifact === "object"
+          ? payload.artifact
+          : null;
+      if (row) {
+        responseComposerArtifactsByRef = {
+          ...responseComposerArtifactsByRef,
+          [ref]: /** @type {Record<string, unknown>} */ (row),
+        };
+      }
     } catch (error) {
       responseAttachmentError = `Upload failed: ${error instanceof Error ? error.message : String(error)}`;
     } finally {
       attachingResponseFile = false;
+      pendingResponseAttachmentUpload = null;
       if (input) input.value = "";
     }
   }
@@ -382,7 +418,12 @@
             class="flex flex-wrap items-center gap-2 text-micro max-md:gap-x-2 max-md:gap-y-1"
           >
             {#each inboxRefs.slice(0, 4) as refValue}
-              <RefLink {refValue} threadId={item.thread_id} humanize />
+              <RefLink
+                {refValue}
+                threadId={item.thread_id}
+                humanize
+                artifactRoutesById={inboxComposerArtifactRoutes}
+              />
             {/each}
             {#if inboxRefs.length > 4}
               <span class="text-fg-muted">+{inboxRefs.length - 4} more</span>
@@ -534,19 +575,49 @@
                   type="file"
                 />
               </label>
+              {#if pendingResponseAttachmentUpload}
+                {@const pendingResolved = resolveRefLink(
+                  "artifact:upload-pending",
+                  {
+                    threadId: String(item?.thread_id ?? "").trim(),
+                    boardId: "",
+                    humanize: true,
+                    artifactRoutesById: {},
+                    eventRoutesById: {},
+                    workspaceSlug,
+                    organizationSlug,
+                  },
+                )}
+                <AttachmentChip
+                  resolved={pendingResolved}
+                  artifactOverlay={pendingResponseAttachmentUpload}
+                  pending
+                  size="compact"
+                />
+              {/if}
               {#each responseAttachmentRefs as ref (ref)}
-                <span
-                  class="inline-flex items-center gap-1 rounded border border-[var(--line)] bg-[var(--panel)] px-2 py-0.5 text-micro text-fg"
-                >
-                  {ref}
+                {@const composerResolved = resolveRefLink(ref, {
+                  threadId: String(item?.thread_id ?? "").trim(),
+                  boardId: "",
+                  humanize: true,
+                  artifactRoutesById: inboxComposerArtifactRoutes,
+                  eventRoutesById: {},
+                  workspaceSlug,
+                  organizationSlug,
+                })}
+                <span class="inline-flex max-w-full items-center gap-1">
+                  <AttachmentChip resolved={composerResolved} size="compact" />
                   <button
-                    class="text-fg-muted hover:text-fg"
+                    class="shrink-0 text-fg-muted hover:text-fg"
                     type="button"
                     aria-label={`Remove ${ref}`}
                     onclick={() => {
                       responseAttachmentRefs = responseAttachmentRefs.filter(
                         (candidate) => candidate !== ref,
                       );
+                      const next = { ...responseComposerArtifactsByRef };
+                      delete next[ref];
+                      responseComposerArtifactsByRef = next;
                     }}
                   >
                     ×

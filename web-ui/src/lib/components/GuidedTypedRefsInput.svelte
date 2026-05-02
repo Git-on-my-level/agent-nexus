@@ -3,11 +3,14 @@
   import Button from "$lib/components/Button.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
   import { coreClient } from "$lib/coreClient";
+  import { buildPrimitiveRefRoutes } from "$lib/refLinkModel";
 
   let {
     value = $bindable(""),
     suggestions = [],
     boardId = "",
+    threadId = "",
+    artifactRoutesById = {},
     addInputLabel = "Add typed ref",
     addInputPlaceholder = "artifact:artifact-123",
     addButtonLabel = "Add ref",
@@ -24,10 +27,30 @@
     attachContextRefs = [],
   } = $props();
 
-  let candidateRef = $state("");
+  let uploadComposerArtifactsByRef = $state(
+    /** @type {Record<string, Record<string, unknown>>} */ ({}),
+  );
+
+  let mergedArtifactRoutesById = $derived.by(() => {
+    const rows = Object.values(uploadComposerArtifactsByRef).filter(
+      (row) => row && typeof row === "object",
+    );
+    const fromUpload = rows.length
+      ? buildPrimitiveRefRoutes({
+          artifacts: rows,
+          events: [],
+          cards: [],
+          documents: [],
+          threadId: String(threadId ?? "").trim(),
+        }).artifactRoutesById
+      : {};
+    return { ...(artifactRoutesById ?? {}), ...fromUpload };
+  });
   let localError = $state("");
+  let candidateRef = $state("");
   let showAdvanced = $state(false);
   let attachBusy = $state(false);
+  let pendingAttachUpload = $state(null);
   let attachError = $state("");
 
   function parseRefs(rawValue) {
@@ -101,6 +124,11 @@
   function removeRef(refValue) {
     writeRefs(refs.filter((item) => item !== refValue));
     localError = "";
+    if (String(refValue ?? "").startsWith("artifact:")) {
+      const next = { ...uploadComposerArtifactsByRef };
+      delete next[refValue];
+      uploadComposerArtifactsByRef = next;
+    }
   }
 
   function addSuggestion(refValue) {
@@ -118,6 +146,11 @@
       return;
     }
     attachBusy = true;
+    pendingAttachUpload = {
+      original_filename: file.name || "attachment.bin",
+      content_type: file.type || "application/octet-stream",
+      size_bytes: file.size,
+    };
     attachError = "";
     try {
       const payload = await coreClient.createArtifactAttachment({
@@ -129,11 +162,23 @@
         attachError = "Upload succeeded but artifact id missing.";
         return;
       }
-      addRef(`artifact:${id}`);
+      const ref = `artifact:${id}`;
+      addRef(ref);
+      const row =
+        payload?.artifact && typeof payload.artifact === "object"
+          ? payload.artifact
+          : null;
+      if (row) {
+        uploadComposerArtifactsByRef = {
+          ...uploadComposerArtifactsByRef,
+          [ref]: /** @type {Record<string, unknown>} */ (row),
+        };
+      }
     } catch (e) {
       attachError = e instanceof Error ? e.message : String(e);
     } finally {
       attachBusy = false;
+      pendingAttachUpload = null;
       input.value = "";
     }
   }
@@ -146,15 +191,32 @@
 <div
   class="mt-1.5 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] p-2.5"
 >
-  {#if refs.length === 0}
+  {#if refs.length === 0 && !pendingAttachUpload}
     <p class="text-micro text-[var(--fg-muted)]">{emptyText}</p>
   {:else}
     <div class="flex flex-wrap gap-1.5">
+      {#if pendingAttachUpload}
+        <RefLink
+          refValue="artifact:upload-pending"
+          {boardId}
+          threadId={String(threadId ?? "").trim()}
+          humanize
+          attachmentOverlay={pendingAttachUpload}
+          attachmentPending
+          attachmentChipSize="compact"
+        />
+      {/if}
       {#each refs as refValue (refValue)}
         <span
           class="inline-flex items-center gap-1 rounded-md border border-accent/20 bg-accent-soft px-2 py-0.5 text-micro text-accent-text"
         >
-          <RefLink {refValue} {boardId} humanize />
+          <RefLink
+            {refValue}
+            {boardId}
+            threadId={String(threadId ?? "").trim()}
+            humanize
+            artifactRoutesById={mergedArtifactRoutesById}
+          />
           <button
             aria-label={`Remove ${refValue}`}
             class="cursor-pointer rounded px-1 text-micro text-accent-text transition-colors hover:bg-accent-soft hover:text-accent-text"

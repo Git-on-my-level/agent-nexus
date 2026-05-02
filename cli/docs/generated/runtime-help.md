@@ -99,6 +99,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `artifacts list` (command): List artifacts
 - `artifacts get` (command): Get artifact metadata
 - `artifacts create` (command): Create artifact
+- `artifacts content` (command): Download artifact bytes
 - `artifacts archive` (command): Archive artifact
 - `artifacts unarchive` (command): Unarchive artifact
 - `artifacts trash` (command): Move artifact to trash
@@ -1493,6 +1494,7 @@ Generated Help: artifacts
 
 Commands:
   artifacts archive        Archive artifact
+  artifacts content        Download artifact bytes
   artifacts create         Create artifact
   artifacts get            Get artifact metadata
   artifacts list           List artifacts
@@ -3477,6 +3479,34 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx artifacts create ... ; anx --json artifacts create ... ; anx artifacts create ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `artifacts content`
+
+Download artifact bytes
+
+```text
+Generated Help: artifacts content
+
+- Command ID: `artifacts.content`
+- CLI path: `artifacts content`
+- HTTP: `GET /artifacts/{artifact_id}/content`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Return raw artifact bytes with accurate Content-Type, Content-Disposition, ETag, and Last-Modified for attachments.
+- Output: Raw bytes or JSON/text depending on artifact.
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Concepts: `artifacts`
+- Adjacent commands: `artifacts archive`, `artifacts attachments create`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
+
+Inputs:
+  Required:
+  - path `artifact_id`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx artifacts content ... ; anx --json artifacts content ... ; anx artifacts content ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 

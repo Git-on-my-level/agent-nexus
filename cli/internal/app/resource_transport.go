@@ -1,12 +1,17 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -18,7 +23,7 @@ import (
 	"agent-nexus-cli/internal/httpclient"
 )
 
-func (a *App) invokeArtifactContent(ctx context.Context, cfg config.Resolved, commandName string, pathParams map[string]string) (*commandResult, error) {
+func (a *App) invokeArtifactContent(ctx context.Context, cfg config.Resolved, commandName string, pathParams map[string]string, outputPath string) (*commandResult, error) {
 	authCfg, err := a.cfgWithResolvedAuthToken(ctx, cfg)
 	if err != nil {
 		return nil, err
@@ -42,6 +47,16 @@ func (a *App) invokeArtifactContent(ctx context.Context, cfg config.Resolved, co
 		return nil, errnorm.FromHTTPFailure(resp.StatusCode, body)
 	}
 
+	outPath := strings.TrimSpace(outputPath)
+	if outPath != "" {
+		if err := os.WriteFile(outPath, body, 0o644); err != nil {
+			return nil, errnorm.Wrap(errnorm.KindLocal, "artifact_content_write_failed", fmt.Sprintf("failed to write %s", outPath), err)
+		}
+		if !authCfg.JSON {
+			return &commandResult{Text: fmt.Sprintf("wrote %d bytes to %s", len(body), outPath)}, nil
+		}
+	}
+
 	if !authCfg.JSON {
 		if len(body) > 0 {
 			if _, err := a.Stdout.Write(body); err != nil {
@@ -55,6 +70,10 @@ func (a *App) invokeArtifactContent(ctx context.Context, cfg config.Resolved, co
 		"status_code": resp.StatusCode,
 		"headers":     normalizedHeaders(resp.Headers),
 		"body_base64": base64.StdEncoding.EncodeToString(body),
+	}
+	if outPath != "" {
+		data["output_path"] = outPath
+		data["bytes_written"] = len(body)
 	}
 	if utf8Body := strings.TrimSpace(string(body)); utf8Body != "" {
 		data["body_text"] = utf8Body
@@ -234,8 +253,9 @@ func (a *App) invokeArtifactContentWithIDResolution(
 	pathParamName string,
 	rawID string,
 	lookupSpec resourceIDLookupSpec,
+	outputPath string,
 ) (*commandResult, error) {
-	result, err := a.invokeArtifactContent(ctx, cfg, commandName, map[string]string{pathParamName: rawID})
+	result, err := a.invokeArtifactContent(ctx, cfg, commandName, map[string]string{pathParamName: rawID}, outputPath)
 	if err == nil {
 		return result, nil
 	}
@@ -249,7 +269,94 @@ func (a *App) invokeArtifactContentWithIDResolution(
 	if resolvedID == rawID {
 		return nil, missingResourceIDError(rawID, lookupSpec)
 	}
-	return a.invokeArtifactContent(ctx, cfg, commandName, map[string]string{pathParamName: resolvedID})
+	return a.invokeArtifactContent(ctx, cfg, commandName, map[string]string{pathParamName: resolvedID}, outputPath)
+}
+
+func (a *App) invokeArtifactAttachmentCreate(ctx context.Context, cfg config.Resolved, refsJSON, filePath, summary, artifactJSON, actorID string) (*commandResult, error) {
+	refsJSON = strings.TrimSpace(refsJSON)
+	var refsProbe []any
+	if err := json.Unmarshal([]byte(refsJSON), &refsProbe); err != nil || len(refsProbe) == 0 {
+		return nil, errnorm.Usage("invalid_request", "--refs must be a JSON array of typed ref strings (e.g. [\"thread:<id>\"])")
+	}
+	cleanPath := filepath.Clean(strings.TrimSpace(filePath))
+	file, err := os.Open(cleanPath)
+	if err != nil {
+		return nil, errnorm.Wrap(errnorm.KindLocal, "attachment_file_open_failed", fmt.Sprintf("failed to open %s", cleanPath), err)
+	}
+	defer file.Close()
+
+	authCfg, err := a.cfgWithResolvedAuthToken(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	client, err := httpclient.New(authCfg)
+	if err != nil {
+		return nil, errnorm.Wrap(errnorm.KindLocal, "http_client_init_failed", "failed to initialize HTTP client", err)
+	}
+
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	if err := mw.WriteField("refs", refsJSON); err != nil {
+		return nil, errnorm.Wrap(errnorm.KindLocal, "multipart_encode_failed", "failed to encode refs field", err)
+	}
+	if strings.TrimSpace(summary) != "" {
+		if err := mw.WriteField("summary", strings.TrimSpace(summary)); err != nil {
+			return nil, errnorm.Wrap(errnorm.KindLocal, "multipart_encode_failed", "failed to encode summary field", err)
+		}
+	}
+	if strings.TrimSpace(artifactJSON) != "" {
+		if err := mw.WriteField("artifact", strings.TrimSpace(artifactJSON)); err != nil {
+			return nil, errnorm.Wrap(errnorm.KindLocal, "multipart_encode_failed", "failed to encode artifact field", err)
+		}
+	}
+	if strings.TrimSpace(actorID) != "" {
+		if err := mw.WriteField("actor_id", strings.TrimSpace(actorID)); err != nil {
+			return nil, errnorm.Wrap(errnorm.KindLocal, "multipart_encode_failed", "failed to encode actor_id field", err)
+		}
+	} else if strings.TrimSpace(cfg.ActorID) != "" {
+		if err := mw.WriteField("actor_id", strings.TrimSpace(cfg.ActorID)); err != nil {
+			return nil, errnorm.Wrap(errnorm.KindLocal, "multipart_encode_failed", "failed to encode actor_id field", err)
+		}
+	}
+	part, err := mw.CreateFormFile("file", filepath.Base(cleanPath))
+	if err != nil {
+		return nil, errnorm.Wrap(errnorm.KindLocal, "multipart_encode_failed", "failed to create file part", err)
+	}
+	if _, err := io.Copy(part, file); err != nil {
+		return nil, errnorm.Wrap(errnorm.KindLocal, "multipart_encode_failed", "failed to stream file bytes", err)
+	}
+	if err := mw.Close(); err != nil {
+		return nil, errnorm.Wrap(errnorm.KindLocal, "multipart_encode_failed", "failed to finalize multipart body", err)
+	}
+
+	headers := generatedHeaders(authCfg)
+	headers["Content-Type"] = mw.FormDataContentType()
+
+	callCtx, cancel := httpclient.WithTimeout(ctx, authCfg.Timeout)
+	defer cancel()
+	resp, invokeErr := client.RawCall(callCtx, httpclient.RawRequest{
+		Method:  http.MethodPost,
+		Path:    "/artifacts/attachments",
+		Headers: headers,
+		Body:    body.Bytes(),
+	})
+	if invokeErr != nil {
+		return nil, errnorm.Wrap(errnorm.KindNetwork, "request_failed", "artifacts attachments create request failed", invokeErr)
+	}
+	responseBody := resp.Body
+	if resp.StatusCode >= http.StatusBadRequest {
+		return nil, errnorm.FromHTTPFailure(resp.StatusCode, responseBody)
+	}
+
+	headersSorted := normalizedHeaders(resp.Headers)
+	parsedBody := parseResponseBody(responseBody)
+	data := map[string]any{
+		"status_code": resp.StatusCode,
+		"headers":     headersSorted,
+		"body":        parsedBody,
+	}
+	text := formatTypedCommandText("artifacts.attachments.create", resp.StatusCode, headersSorted, parsedBody, authCfg.Verbose, authCfg.Headers)
+	return &commandResult{Text: text, Data: data}, nil
 }
 
 func (a *App) cfgWithResolvedAuthToken(ctx context.Context, cfg config.Resolved) (config.Resolved, error) {
