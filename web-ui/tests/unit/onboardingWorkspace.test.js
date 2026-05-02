@@ -62,6 +62,7 @@ vi.mock("$lib/hosted/session.js", () => {
   };
 });
 
+import { handleModEnterFormSubmit } from "../../src/lib/formSubmitShortcut.js";
 import OnboardingWorkspacePage from "../../src/routes/hosted/onboarding/workspace/+page.svelte";
 import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
 import { hostedSession } from "$lib/hosted/session.js";
@@ -315,13 +316,14 @@ describe("Onboarding workspace page — keyboard shortcut", () => {
 
     const input = container.querySelector("input[type='text']");
     /** @type {HTMLInputElement} */ (input).focus();
-
-    input.dispatchEvent(
+    handleModEnterFormSubmit(
       new KeyboardEvent("keydown", {
         key: "Enter",
         metaKey: true,
         bubbles: true,
+        cancelable: true,
       }),
+      { commandPaletteOpen: false },
     );
 
     await waitFor(() => {
@@ -354,13 +356,14 @@ describe("Onboarding workspace page — keyboard shortcut", () => {
 
     const input = container.querySelector("input[type='text']");
     /** @type {HTMLInputElement} */ (input).focus();
-
-    input.dispatchEvent(
+    handleModEnterFormSubmit(
       new KeyboardEvent("keydown", {
         key: "Enter",
         ctrlKey: true,
         bubbles: true,
+        cancelable: true,
       }),
+      { commandPaletteOpen: false },
     );
 
     await waitFor(() => {
