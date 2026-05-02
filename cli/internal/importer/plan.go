@@ -354,7 +354,7 @@ func buildArtifact(item InventoryRecord, sourceName string, collectorThreadKey s
 	}
 	create := map[string]any{
 		"artifact": map[string]any{
-			"kind":            "evidence",
+			"kind":            "attachment",
 			"summary":         fmt.Sprintf("Imported %s — %s", item.Category, item.Filename),
 			"refs":            refs,
 			"source_relpath":  item.RelPath,
@@ -403,7 +403,7 @@ func buildRepoBundle(clusterName string, members []InventoryRecord, sourceName s
 		Reason:     "repo-manifest",
 		Create: map[string]any{
 			"artifact": map[string]any{
-				"kind":            "evidence",
+				"kind":            "attachment",
 				"summary":         fmt.Sprintf("Repo manifest — %s", repoName),
 				"refs":            refs,
 				"source_category": "codebase",

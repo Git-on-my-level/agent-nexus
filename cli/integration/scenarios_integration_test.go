@@ -341,7 +341,7 @@ func TestProvenanceWalkScenario(t *testing.T) {
 
 	artifact := h.runCLIExpectOK(t, "investigator", map[string]any{
 		"artifact": map[string]any{
-			"kind":    "evidence",
+			"kind":    "attachment",
 			"refs":    []string{"url:https://example.com/provenance/" + runID},
 			"summary": "Provenance seed artifact " + runID,
 		},

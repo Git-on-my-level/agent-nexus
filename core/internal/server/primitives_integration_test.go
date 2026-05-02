@@ -1191,7 +1191,7 @@ func TestLegacyContentPathIsStrippedFromArtifactAndRevisionResponses(t *testing.
 
 	legacyArtifactMetadata, err := json.Marshal(map[string]any{
 		"id":           "artifact-legacy-http",
-		"kind":         "evidence",
+		"kind":         "attachment",
 		"created_at":   "2026-03-04T10:00:00Z",
 		"created_by":   "actor-1",
 		"content_type": "text",
@@ -1225,7 +1225,7 @@ func TestLegacyContentPathIsStrippedFromArtifactAndRevisionResponses(t *testing.
 		`INSERT INTO artifacts(id, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		"artifact-legacy-http",
-		"evidence",
+		"attachment",
 		"thread-legacy-http",
 		"2026-03-04T10:00:00Z",
 		"actor-1",

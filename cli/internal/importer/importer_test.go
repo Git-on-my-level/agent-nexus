@@ -224,7 +224,7 @@ func TestApplyExecuteDropsRefsForPendingBinaryArtifacts(t *testing.T) {
 				PendingBinaryUpload: true,
 				Create: map[string]any{
 					"artifact": map[string]any{
-						"kind":    "evidence",
+						"kind":    "attachment",
 						"summary": "Binary artifact",
 						"refs":    []string{"$REF:thread_root"},
 					},
