@@ -374,9 +374,9 @@
 
   let surfaceEl = $state(/** @type {HTMLDivElement | null} */ (null));
 
-  /** Narrow dock: persists `--mobile-chat-panel-height`; viewport-fixed layouts or modal-embedded chrome. */
+  /** Narrow dock: persists `--mobile-chat-panel-height` on the layout host. */
   const DOCK_HEIGHT_HOST_SELECTOR =
-    ".page-dock-layout--fixed-mobile-chat, .page-dock-layout--embedded-modal-chat";
+    ".page-dock-layout--fixed-mobile-chat, [data-discussion-dock-host]";
 
   let dockLayoutHost = $derived(
     browser && surfaceEl ? surfaceEl.closest(DOCK_HEIGHT_HOST_SELECTOR) : null,
@@ -689,7 +689,7 @@
           class="flex w-full min-w-0 touch-manipulation items-center gap-2 py-2 text-left transition-colors hover:bg-[var(--line-subtle)] {narrowEdgeToEdge
             ? 'max-lg:px-4 px-3'
             : 'px-3'} {showResizeGrip
-            ? 'max-lg:select-none max-lg:touch-none'
+            ? 'cursor-ns-resize select-none touch-none'
             : ''}"
           aria-expanded={open}
           aria-label={showResizeGrip

@@ -19,6 +19,7 @@
     attachmentOverlay = null,
     attachmentPending = false,
     attachmentUploadProgress = null,
+    /** @type {'inline' | 'compact' | 'block' | 'tight'} */
     attachmentChipSize = "inline",
   } = $props();
 

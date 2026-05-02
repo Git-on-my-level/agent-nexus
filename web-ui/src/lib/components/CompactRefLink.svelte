@@ -20,8 +20,10 @@
     attachmentOverlay = null,
     attachmentPending = false,
     attachmentUploadProgress = null,
-    /** @type {'inline' | 'compact' | 'block'} */
+    /** @type {'inline' | 'compact' | 'block' | 'tight'} */
     attachmentChipSize = "inline",
+    /** Ref sits in a grouped row with an adjacent control (strip inner chrome). */
+    composerRowEmbed = false,
   } = $props();
 
   let fetchedEventRoutesById = $state({});
@@ -121,9 +123,11 @@
     pending={attachmentPending}
     uploadProgress={attachmentUploadProgress}
     size={attachmentChipSize}
+    groupedInRow={composerRowEmbed}
   />
 {:else if useAttachmentChip && hideTrashedAttachment}{:else if resolved.isLink}
   <RefChip
+    embedded={composerRowEmbed}
     href={resolved.href}
     external={resolved.isExternal}
     title={resolved.raw}
@@ -146,7 +150,13 @@
     {/if}
   </RefChip>
 {:else}
-  <RefChip href="" navigable={false} accentText={false} title={resolved.raw}>
+  <RefChip
+    embedded={composerRowEmbed}
+    href=""
+    navigable={false}
+    accentText={false}
+    title={resolved.raw}
+  >
     <span class="compact-ref-link__full min-w-0 truncate"
       >{resolved.primaryLabel}</span
     >

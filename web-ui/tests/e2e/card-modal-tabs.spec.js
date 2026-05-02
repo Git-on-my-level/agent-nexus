@@ -455,7 +455,7 @@ test("card detail modal Discussion drawer and Timeline tab render without reques
     { timeout: 15_000 },
   );
   await expect(
-    dialog.getByText("Full content", { exact: true }).first(),
+    dialog.getByText("View:", { exact: true }).first(),
   ).toBeVisible();
 
   const principalsDelta = principalsRequestCount - principalCountBefore;

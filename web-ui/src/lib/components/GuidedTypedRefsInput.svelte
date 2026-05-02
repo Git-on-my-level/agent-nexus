@@ -2,6 +2,7 @@
   import { parseRef, renderRef } from "$lib/typedRefs";
   import Button from "$lib/components/Button.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
+  import CompactRefLink from "$lib/components/CompactRefLink.svelte";
   import { coreClient } from "$lib/coreClient";
   import { buildPrimitiveRefRoutes } from "$lib/refLinkModel";
 
@@ -25,6 +26,14 @@
     advancedRows = 3,
     /** When non-empty, show a file upload that creates `artifact:` refs scoped to these typed refs. */
     attachContextRefs = [],
+    /** When true, do not render `artifact:` rows as chips (files are shown elsewhere, e.g. card Attachments). */
+    suppressArtifactChipList = false,
+    /** When true, hide the inline file picker (caller provides upload elsewhere). */
+    hideAttachFileControl = false,
+    /** Passed through for humanized compact labels (e.g. thread titles). */
+    labelHints = /** @type {Record<string, string>} */ ({}),
+    /** Subcopy when refs exist but none are rendered as chips (only hidden artifacts). */
+    artifactOnlyRedirectHint = "File attachments are listed under Attachments.",
   } = $props();
 
   let uploadComposerArtifactsByRef = $state(
@@ -91,6 +100,19 @@
   }
 
   let refs = $derived(parseRefs(value));
+  let refsForChipList = $derived.by(() => {
+    if (!suppressArtifactChipList) return refs;
+    return refs.filter(
+      (r) =>
+        !String(r ?? "")
+          .trim()
+          .toLowerCase()
+          .startsWith("artifact:"),
+    );
+  });
+  let chipListArtifactOnlyHidden = $derived(
+    suppressArtifactChipList && refs.length > 0 && refsForChipList.length === 0,
+  );
   let normalizedSuggestions = $derived(buildSuggestions(suggestions));
 
   function writeRefs(items) {
@@ -203,27 +225,38 @@
           humanize
           attachmentOverlay={pendingAttachUpload}
           attachmentPending
-          attachmentChipSize="compact"
+          attachmentChipSize="tight"
         />
       {/if}
-      {#each refs as refValue (refValue)}
+      {#if chipListArtifactOnlyHidden && !pendingAttachUpload}
+        <p class="text-micro text-[var(--fg-muted)]">
+          {artifactOnlyRedirectHint}
+        </p>
+      {/if}
+      {#each refsForChipList as refValue (refValue)}
         <span
-          class="inline-flex items-center gap-1 rounded-md border border-accent/20 bg-accent-soft px-2 py-0.5 text-micro text-accent-text"
+          class="inline-flex max-w-full min-h-[26px] items-stretch overflow-hidden rounded-md border border-[var(--line)] bg-[var(--bg)] text-micro"
         >
-          <RefLink
-            {refValue}
-            {boardId}
-            threadId={String(threadId ?? "").trim()}
-            humanize
-            artifactRoutesById={mergedArtifactRoutesById}
-          />
+          <span class="flex min-w-0 flex-1 items-center">
+            <CompactRefLink
+              {refValue}
+              {boardId}
+              composerRowEmbed={true}
+              threadId={String(threadId ?? "").trim()}
+              humanize
+              showRaw={false}
+              {labelHints}
+              artifactRoutesById={mergedArtifactRoutesById}
+              attachmentChipSize="tight"
+            />
+          </span>
           <button
             aria-label={`Remove ${refValue}`}
-            class="cursor-pointer rounded px-1 text-micro text-accent-text transition-colors hover:bg-accent-soft hover:text-accent-text"
+            class="flex shrink-0 cursor-pointer items-center justify-center border-l border-[var(--line)] px-2 text-[var(--fg-muted)] transition-colors hover:bg-[var(--bg-soft)] hover:text-[var(--fg)] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-solid/40 focus-visible:ring-inset"
             onclick={() => removeRef(refValue)}
             type="button"
           >
-            x
+            ×
           </button>
         </span>
       {/each}
@@ -247,7 +280,7 @@
     <Button variant="secondary" size="compact" onclick={addCandidate}>
       {addButtonLabel}
     </Button>
-    {#if Array.isArray(attachContextRefs) && attachContextRefs.length > 0}
+    {#if !hideAttachFileControl && Array.isArray(attachContextRefs) && attachContextRefs.length > 0}
       <label
         class="inline-flex cursor-pointer items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-2 text-micro text-[var(--fg)] hover:bg-[var(--bg-soft)]"
       >

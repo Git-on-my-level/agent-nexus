@@ -892,7 +892,7 @@
 
 {#snippet cardActionsFooter()}
   <div
-    class="shrink-0 border-t border-[var(--line)] bg-[var(--panel)] px-4 py-2"
+    class="cdm-modal-actions-footer relative z-20 shrink-0 border-t border-[var(--line)] bg-[var(--panel)] px-4 py-2"
   >
     <div
       class="flex min-w-0 max-w-full flex-wrap items-center gap-2 md:flex-nowrap"
@@ -1068,6 +1068,7 @@
     class={presentation === "modal"
       ? "cdm-panel page-dock-layout--embedded-modal-chat"
       : "cdm-panel cdm-page-panel page-dock-layout page-dock-layout--mobile-only page-dock-layout--fixed-mobile-chat page-dock-layout--card-page-chat"}
+    data-discussion-dock-host={presentation === "modal" ? "" : undefined}
   >
     <div
       class="sticky top-0 z-10 border-b border-[var(--line)] bg-[var(--panel)] px-4 pt-2 sm:px-6 sm:pt-2.5"
@@ -1488,6 +1489,9 @@
                   {boardId}
                   threadId={linkedThreadId}
                   artifactRoutesById={modalArtifactRoutesById}
+                  labelHints={refLabelHints}
+                  suppressArtifactChipList={true}
+                  hideAttachFileControl={true}
                   addInputLabel="Add related ref"
                   addInputPlaceholder="topic:summer-menu-rollout"
                   addButtonLabel="Add ref"
@@ -1515,6 +1519,9 @@
                   {boardId}
                   threadId={linkedThreadId}
                   artifactRoutesById={modalArtifactRoutesById}
+                  labelHints={refLabelHints}
+                  suppressArtifactChipList={true}
+                  hideAttachFileControl={true}
                   addInputLabel="Add resolution ref"
                   addInputPlaceholder="artifact:supporting-context"
                   addButtonLabel="Add ref"
@@ -1688,33 +1695,37 @@
                 {@const changedSummary = delta
                   .map((d) => humanizeRevisionFieldKey(d.field))
                   .join(", ")}
-                <li class="px-3 py-2">
-                  <div class="flex min-w-0 items-baseline gap-2">
-                    <span
-                      class="shrink-0 text-[12px] font-semibold tabular-nums text-[var(--fg)]"
-                      >r{rev.revision_number}</span
-                    >
-                    <span
-                      class="min-w-0 flex-1 truncate text-[12px] text-[var(--fg-muted)]"
-                    >
-                      {#if parent == null}
-                        Initial revision
-                      {:else if delta.length === 0}
-                        No tracked field changes
-                      {:else}
-                        Changed <span class="text-[var(--fg)]"
-                          >{changedSummary}</span
-                        >
-                      {/if}
-                    </span>
-                    <span
-                      class="shrink-0 text-[11px] tabular-nums text-[var(--fg-muted)]"
-                      >{actorName(rev.created_by)} · {formatTimestamp(
-                        rev.created_at,
-                      )}</span
-                    >
+                <li class="px-2 py-1.5">
+                  <div
+                    class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5"
+                  >
+                    <div class="flex min-w-0 flex-1 items-baseline gap-1.5">
+                      <span
+                        class="shrink-0 text-[12px] font-semibold tabular-nums text-[var(--fg)]"
+                        >r{rev.revision_number}</span
+                      >
+                      <span
+                        class="min-w-0 flex-1 truncate text-[12px] text-[var(--fg-muted)]"
+                      >
+                        {#if parent == null}
+                          Initial revision
+                        {:else if delta.length === 0}
+                          No tracked field changes
+                        {:else}
+                          Changed <span class="text-[var(--fg)]"
+                            >{changedSummary}</span
+                          >
+                        {/if}
+                      </span>
+                    </div>
                     {#if rev.artifact_ref}
-                      <span class="shrink-0 text-[11px]">
+                      <span
+                        class="inline-flex max-w-full min-w-0 items-center gap-1"
+                      >
+                        <span
+                          class="shrink-0 whitespace-nowrap text-[10px] leading-none text-[var(--fg-muted)]"
+                          >View:</span
+                        >
                         <RefLink
                           refValue={String(rev.artifact_ref)}
                           threadId={linkedThreadId}
@@ -1722,13 +1733,20 @@
                           humanize
                           labelHints={refLabelHints}
                           artifactRoutesById={modalArtifactRoutesById}
+                          attachmentChipSize="tight"
                         />
                       </span>
                     {/if}
+                    <span
+                      class="shrink-0 whitespace-nowrap text-[11px] tabular-nums text-[var(--fg-muted)]"
+                      >{actorName(rev.created_by)} · {formatTimestamp(
+                        rev.created_at,
+                      )}</span
+                    >
                   </div>
 
                   {#if delta.length > 0}
-                    <div class="mt-1 pl-6 space-y-1">
+                    <div class="mt-0.5 pl-[1.375rem] space-y-0.5">
                       {#each delta as block (block.field)}
                         <div class="min-w-0">
                           {#if delta.length > 1}
@@ -1756,50 +1774,6 @@
                       {/each}
                     </div>
                   {/if}
-
-                  <details class="group mt-1.5 pl-6">
-                    <summary
-                      class="inline-flex cursor-pointer select-none items-center gap-1 text-[11px] text-[var(--fg-muted)] hover:text-[var(--fg)] [&::-webkit-details-marker]:hidden"
-                    >
-                      <span
-                        aria-hidden="true"
-                        class="inline-block transition-transform group-open:rotate-90"
-                        >▸</span
-                      >
-                      Full content
-                    </summary>
-                    <div
-                      class="mt-1.5 -ml-6 rounded-md border border-[var(--line-subtle)] bg-[var(--bg-soft)] px-3 py-2 space-y-2"
-                    >
-                      {#if rev.title}
-                        <p class="text-[13px] font-medium text-[var(--fg)]">
-                          {rev.title}
-                        </p>
-                      {/if}
-                      {#if rev.summary}
-                        <MarkdownRenderer
-                          source={String(rev.summary)}
-                          class="markdown-rendered--card-content text-meta text-[var(--fg)]"
-                        />
-                      {/if}
-                      {#if Array.isArray(rev.definition_of_done) && rev.definition_of_done.length}
-                        <div>
-                          <p
-                            class="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--fg-muted)]"
-                          >
-                            Definition of done
-                          </p>
-                          <ul
-                            class="list-inside list-disc text-[12px] text-[var(--fg)]"
-                          >
-                            {#each rev.definition_of_done as line (line)}
-                              <li>{line}</li>
-                            {/each}
-                          </ul>
-                        </div>
-                      {/if}
-                    </div>
-                  </details>
                 </li>
               {/each}
             </ol>
@@ -2030,34 +2004,65 @@
   }
 
   /*
-   * Modal card details: DiscussionDrawer mounts inside the modal instead of under
-   * `page-dock-layout--fixed-mobile-chat`, so the shared viewport-fixed dock chrome
-   * never applies (and the header-drag resize gesture was inactive). Use the same
-   * `--mobile-chat-panel-height` contract with an in-flow bottom feed so Column /
-   * Move up stay below discussion.
+   * Card modal discussion: mirror doc mobile (`page-dock-layout--fixed-mobile-chat`)
+   * — absolute bottom sheet + scroll padding — but anchored to `.cdm-panel`,
+   * not the viewport. In-flow flex + tall Revisions content fight for height and
+   * collapse the Messages scrollport to ~0. `data-discussion-dock-host` is the
+   * DiscussionDrawer resize / `--mobile-chat-panel-height` host (avoids relying
+   * only on class-based closest()).
    */
-  :global(.cdm-panel.page-dock-layout--embedded-modal-chat) {
+  :global(.cdm-panel[data-discussion-dock-host]) {
+    position: relative;
     min-height: 0;
     --mobile-chat-panel-height: min(42dvh, 22rem);
+    --cdm-modal-discussion-footer-clearance: 3.5rem;
   }
 
-  :global(.cdm-panel.page-dock-layout--embedded-modal-chat .page-dock-feed) {
-    position: relative;
-    z-index: 10;
-    flex: 0 0 auto;
+  :global(.cdm-panel[data-discussion-dock-host] .cdm-scroll.page-dock-scroll) {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  :global(
+    .cdm-panel[data-discussion-dock-host]:has([data-mobile-chat-expanded])
+      .cdm-scroll.page-dock-scroll
+  ) {
+    padding-bottom: calc(
+      var(--mobile-chat-panel-height) +
+        var(--cdm-modal-discussion-footer-clearance) + 0.5rem
+    );
+  }
+
+  :global(
+    .cdm-panel[data-discussion-dock-host]:not(:has([data-mobile-chat-expanded]))
+      .cdm-scroll.page-dock-scroll
+  ) {
+    padding-bottom: calc(5.5rem + var(--cdm-modal-discussion-footer-clearance));
+  }
+
+  :global(.cdm-panel[data-discussion-dock-host] .page-dock-feed) {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: var(--cdm-modal-discussion-footer-clearance);
+    z-index: 15;
     width: 100%;
+    max-width: 100%;
     margin: 0;
-    margin-top: 0;
+    flex: unset;
     box-sizing: border-box;
     min-height: 0;
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    box-shadow: none;
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.24);
   }
 
   :global(
-    .cdm-panel.page-dock-layout--embedded-modal-chat
+    .cdm-panel[data-discussion-dock-host]
       .page-dock-feed:not(:has([data-mobile-chat-expanded]))
   ) {
     max-height: none;
@@ -2065,16 +2070,14 @@
   }
 
   :global(
-    .cdm-panel.page-dock-layout--embedded-modal-chat
+    .cdm-panel[data-discussion-dock-host]
       .page-dock-feed:has([data-mobile-chat-expanded])
   ) {
     height: var(--mobile-chat-panel-height);
     max-height: var(--mobile-chat-panel-height);
   }
 
-  :global(
-    .cdm-panel.page-dock-layout--embedded-modal-chat .page-dock-feed > *
-  ) {
+  :global(.cdm-panel[data-discussion-dock-host] .page-dock-feed > *) {
     display: flex;
     min-height: 0;
     flex: 0 1 auto;
@@ -2082,7 +2085,7 @@
   }
 
   :global(
-    .cdm-panel.page-dock-layout--embedded-modal-chat
+    .cdm-panel[data-discussion-dock-host]
       .page-dock-feed:has([data-mobile-chat-expanded])
       > *
   ) {

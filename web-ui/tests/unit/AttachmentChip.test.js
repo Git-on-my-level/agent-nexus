@@ -108,6 +108,27 @@ describe("AttachmentChip", () => {
     expect(link?.getAttribute("href") ?? "").toContain(encodeURIComponent(aid));
   });
 
+  it("omits sidebar download control in tight size", () => {
+    const resolved = resolvedAttachment([
+      {
+        id: "att-1",
+        kind: "attachment",
+        original_filename: "notes.md",
+        content_type: "text/markdown",
+        byte_size: 2048,
+      },
+    ]);
+    const { container } = render(AttachmentChip, {
+      resolved,
+      size: "tight",
+    });
+    expect(
+      container.querySelector("button[aria-label^='Download']"),
+    ).toBeFalsy();
+    const link = container.querySelector("a.attachment-chip-link");
+    expect(link?.className ?? "").toMatch(/text-\[11px\]/);
+  });
+
   it("renders nothing when trashed_at is set on merged metadata", () => {
     const resolved = resolvedAttachment(
       [

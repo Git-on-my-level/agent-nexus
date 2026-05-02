@@ -16,8 +16,10 @@
     artifactOverlay = null,
     pending = false,
     uploadProgress = null,
-    /** @type {'inline' | 'compact' | 'block'} */
+    /** @type {'inline' | 'compact' | 'block' | 'tight'} — `tight`: minimal row height (no sidebar download). */
     size = "inline",
+    /** Inside a bordered composer row (`CompactRefLink`); drop outer RefChip frame. */
+    groupedInRow = false,
     /** Extra classes on outer shell */
     class: clazz = "",
   } = $props();
@@ -79,12 +81,19 @@
   });
 
   let truncatedName = $derived.by(() => {
-    const max = size === "compact" ? 28 : size === "block" ? 42 : 36;
+    const max =
+      size === "tight"
+        ? 22
+        : size === "compact"
+          ? 28
+          : size === "block"
+            ? 42
+            : 36;
     return middleTruncateFilename(displayName, max);
   });
 
   let sizeLine = $derived.by(() => {
-    if (size === "compact") return "";
+    if (size === "compact" || size === "tight") return "";
     const m = mergedMeta;
     const b = m.size_bytes ?? m.sizeBytes;
     return formatBytes(Number(b));
@@ -108,8 +117,13 @@
   let leadingScale = $derived(
     size === "block"
       ? "h-14 w-14 shrink-0 rounded-md bg-[var(--bg-soft)]"
-      : "h-4 w-4 shrink-0",
+      : size === "tight"
+        ? "h-3 w-3 shrink-0"
+        : "h-4 w-4 shrink-0",
   );
+
+  /** Single-line artifact control for dense toolbars / revision rows. */
+  let rowTight = $derived(size === "tight");
 
   async function handleDownload(ev) {
     ev.preventDefault();
@@ -166,8 +180,8 @@
   {#snippet fileIcon()}
     <svg
       class="text-[var(--fg-muted)]"
-      width="16"
-      height="16"
+      width={rowTight ? 12 : 16}
+      height={rowTight ? 12 : 16}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -187,17 +201,22 @@
   {/snippet}
 
   <span
-    class="attachment-chip-root compact-ref-link inline-flex min-w-0 max-w-full flex-col gap-0.5 {clazz}"
+    class="attachment-chip-root compact-ref-link inline-flex min-w-0 max-w-full flex-col gap-0.5 {groupedInRow
+      ? 'min-h-[26px] flex-1'
+      : ''} {clazz}"
   >
     {#if pending}
       <RefChip
+        embedded={groupedInRow}
         navigable={false}
         accentText={false}
         ariaLabel={ariaLabelText}
         ariaBusy="true"
         role="text"
         title={resolved?.raw ?? ""}
-        class="items-center gap-1.5 text-[var(--fg-muted)]"
+        class={groupedInRow
+          ? "!min-h-[26px] !rounded-none items-center gap-1.5 text-[var(--fg-muted)]"
+          : "items-center gap-1.5 text-[var(--fg-muted)]"}
       >
         <span class="{leadingScale} flex items-center justify-center"
           >{@render spinner()}</span
@@ -217,18 +236,23 @@
       </RefChip>
     {:else}
       <RefChip
+        embedded={groupedInRow}
         navigable={false}
         accentText={false}
         title={resolved?.raw ?? ""}
-        class="attachment-chip-row items-stretch gap-0 p-0 focus-within:ring-2 focus-within:ring-accent-solid/40 {state ===
-        'missing'
-          ? 'opacity-75'
-          : ''}"
+        class="attachment-chip-row items-stretch gap-0 p-0 focus-within:ring-2 focus-within:ring-accent-solid/40 {groupedInRow
+          ? '!rounded-none'
+          : rowTight
+            ? 'rounded-sm'
+            : ''} {state === 'missing' ? 'opacity-75' : ''}"
       >
         {#if resolved?.isLink && resolved?.href}
           <a
-            class="compact-ref-link attachment-chip-link inline-flex min-w-0 flex-1 items-center gap-1.5 px-1.5 py-0.5 hover:border-[var(--line-strong)] {state ===
-            'missing'
+            class="compact-ref-link attachment-chip-link inline-flex min-w-0 flex-1 items-center {groupedInRow
+              ? 'hover:bg-[var(--bg-soft)]'
+              : 'hover:border-[var(--line-strong)]'} {rowTight
+              ? 'gap-1 px-1 py-0 text-[11px] leading-none'
+              : 'gap-1.5 px-1.5 py-0.5'} {state === 'missing'
               ? 'text-[var(--fg-muted)]'
               : 'text-accent-text hover:text-accent-text'}"
             href={resolved.href}
@@ -240,7 +264,9 @@
               >{@render fileIcon()}</span
             >
             <span
-              class="flex min-w-0 flex-1 flex-col gap-0 sm:flex-row sm:items-baseline sm:gap-1.5"
+              class={rowTight
+                ? "flex min-w-0 flex-1 flex-row items-center gap-1"
+                : "flex min-w-0 flex-1 flex-col gap-0 sm:flex-row sm:items-baseline sm:gap-1.5"}
             >
               {#if state === "missing"}
                 <span class="min-w-0 truncate font-medium">
@@ -249,25 +275,31 @@
               {:else}
                 <span class="min-w-0 truncate font-medium">{truncatedName}</span
                 >
-                {#if size !== "compact"}
-                  <span
-                    class="shrink-0 text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)]"
-                  >
-                    {#if typeBadge}{typeBadge}{/if}{#if typeBadge && sizeLine}
-                      {" · "}{/if}{#if sizeLine}{sizeLine}{/if}
-                  </span>
-                {:else if typeBadge}
-                  <span
-                    class="shrink-0 text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)]"
-                    >{typeBadge}</span
-                  >
+                {#if !rowTight}
+                  {#if size !== "compact"}
+                    <span
+                      class="shrink-0 text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)]"
+                    >
+                      {#if typeBadge}{typeBadge}{/if}{#if typeBadge && sizeLine}
+                        {" · "}{/if}{#if sizeLine}{sizeLine}{/if}
+                    </span>
+                  {:else if typeBadge}
+                    <span
+                      class="shrink-0 text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)]"
+                      >{typeBadge}</span
+                    >
+                  {/if}
                 {/if}
               {/if}
             </span>
           </a>
         {:else}
           <span
-            class="compact-ref-link inline-flex min-w-0 flex-1 items-center gap-1.5 px-1.5 py-0.5 text-[var(--fg-muted)]"
+            class="compact-ref-link inline-flex min-w-0 flex-1 items-center text-[var(--fg-muted)] {groupedInRow
+              ? 'rounded-sm hover:bg-[var(--bg-soft)]'
+              : ''} {rowTight
+              ? 'gap-1 px-1 py-0 text-[11px] leading-none'
+              : 'gap-1.5 px-1.5 py-0.5'}"
             aria-label={ariaLabelText}
           >
             <span class="{leadingScale} flex items-center justify-center"
@@ -283,7 +315,7 @@
           </span>
         {/if}
 
-        {#if browser && resolved?.isLink && resolved?.href && state === "ready" && !resolved?.isExternal}
+        {#if browser && resolved?.isLink && resolved?.href && state === "ready" && !resolved?.isExternal && !rowTight}
           <button
             type="button"
             class="hidden shrink-0 items-center justify-center border-l border-[var(--line)] px-2 text-accent-text hover:bg-[var(--bg-soft)] sm:flex"

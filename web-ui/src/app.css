@@ -1059,9 +1059,9 @@
    *   .page-dock-layout--board-viewport-chat — from `lg` up, board announcements
    *                                    use a viewport-fixed bottom sheet (resize
    *                                    + height persistence via DiscussionDrawer).
-   *   .page-dock-layout--embedded-modal-chat — Card detail modal host only: same
-   *                                    DiscussionDrawer `--mobile-chat-panel-height`
-   *                                    contract, in-flow (not viewport-fixed).
+   *   .page-dock-layout--embedded-modal-chat — Card modal: class marker; height
+   *                                    host is `[data-discussion-dock-host]` (see
+   *                                    CardDetailModalInner).
    *   .page-dock-layout--card-page-chat — Full-route card panel: dock discussion
    *                                    at every width (`mobile-only` excludes the
    *                                    default dock rules from tablet/desktop).
