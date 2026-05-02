@@ -33,7 +33,7 @@
   import WorkspaceListBulkToolbar from "$lib/components/WorkspaceListBulkToolbar.svelte";
   import { splitTypedRef } from "$lib/inboxUtils";
   import { createWorkspaceListSelection } from "$lib/workspaceListSelection.svelte.js";
-  import { workspacePath } from "$lib/workspacePaths";
+  import { bindWorkspaceHref } from "$lib/workspacePaths";
   import { buildPrimitiveRefRoutes } from "$lib/refLinkModel";
 
   const TRASH_TAB_IDS = ["artifacts", "documents", "topics", "boards", "cards"];
@@ -57,9 +57,9 @@
   });
 
   /** @param {string} pathname */
-  function workspaceHref(pathname = "/") {
-    return workspacePath(organizationSlug, workspaceSlug, pathname);
-  }
+  let workspaceHref = $derived(
+    bindWorkspaceHref(organizationSlug, workspaceSlug),
+  );
 
   /** @param {*} card */
   function cardTrashNavigateHref(card) {
@@ -282,7 +282,7 @@
       archived: "text-warn-text",
       trashed: "text-danger-text",
     };
-    return styles[state] ?? "text-[var(--fg-muted)]";
+    return styles[state] ?? "text-fg-muted";
   }
 
   async function loadTrash() {
@@ -589,8 +589,8 @@
   class="mb-3 flex max-md:mb-2 flex-wrap items-center justify-between gap-2 sm:items-start sm:gap-4"
 >
   <div>
-    <h1 class="text-subtitle font-semibold text-[var(--fg)]">Trash</h1>
-    <p class="mt-0.5 hidden text-micro text-[var(--fg-muted)] sm:block">
+    <h1 class="text-subtitle font-semibold text-fg">Trash</h1>
+    <p class="mt-0.5 hidden text-micro text-fg-muted sm:block">
       Trashed items available for restore or permanent deletion. Restore returns
       them to their normal lists; permanent delete removes supported resource
       types (human principals only). Topics can be restored but not permanently
@@ -604,7 +604,7 @@
     {#if !loading && activeItems.length > 0 && trashBulkUxEnabled}
       <button
         type="button"
-        class="inline-flex h-8 cursor-pointer items-center rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 text-micro font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line-subtle)] disabled:cursor-not-allowed disabled:opacity-50"
+        class="inline-flex h-8 cursor-pointer items-center rounded-md border border-line bg-bg-soft px-2.5 text-micro font-medium text-fg transition-colors hover:bg-line-subtle disabled:cursor-not-allowed disabled:opacity-50"
         disabled={Boolean(busyItemId) ||
           purgeAllBusy ||
           purgeModalBusy ||
@@ -635,13 +635,13 @@
   </div>
 </div>
 
-<div class="mb-4 flex gap-0 border-b border-[var(--line)]" role="tablist">
+<div class="mb-4 flex gap-0 border-b border-line" role="tablist">
   {#each tabs as tab (tab.id)}
     <button
       class="cursor-pointer px-3 py-2 text-meta font-medium transition-colors {activeTab ===
       tab.id
-        ? 'border-b-2 border-[var(--accent)] text-[var(--fg)]'
-        : 'text-[var(--fg-muted)] hover:text-[var(--fg)]'}"
+        ? 'border-b-2 border-accent text-fg'
+        : 'text-fg-muted hover:text-fg'}"
       onclick={() => void switchTab(tab.id)}
       role="tab"
       aria-selected={activeTab === tab.id}
@@ -649,8 +649,7 @@
     >
       {tab.label}
       {#if tab.count > 0}
-        <span class="ml-1 text-micro text-[var(--fg-muted)]">({tab.count})</span
-        >
+        <span class="ml-1 text-micro text-fg-muted">({tab.count})</span>
       {/if}
     </button>
   {/each}
@@ -686,7 +685,7 @@
 
 {#if loading}
   <div
-    class="mt-12 flex items-center justify-center gap-2 text-meta text-[var(--fg-muted)]"
+    class="mt-12 flex items-center justify-center gap-2 text-meta text-fg-muted"
   >
     <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
       <circle
@@ -707,7 +706,7 @@
   </div>
 {:else if activeItems.length === 0 && !error}
   <div class="mt-8 text-center">
-    <p class="text-meta font-medium text-[var(--fg-muted)]">
+    <p class="text-meta font-medium text-fg-muted">
       {emptyCategoryMessage(activeTab)}
     </p>
   </div>
@@ -715,20 +714,18 @@
 
 {#if !loading && activeTab === "artifacts" && artifacts.length > 0}
   <div
-    class="space-y-px rounded-md border border-[var(--line)] bg-[var(--bg-soft)] overflow-hidden"
+    class="space-y-px rounded-md border border-line bg-bg-soft overflow-hidden"
   >
     {#each artifacts as artifact, i (artifact.id)}
       {@const selected = trashSel.selectedIds.has(String(artifact.id).trim())}
-      {@const borderTop = i > 0 ? "border-t border-[var(--line)]" : ""}
+      {@const borderTop = i > 0 ? "border-t border-line" : ""}
       {#if trashSel.selectMode}
-        <div
-          class="transition-colors hover:bg-[var(--line-subtle)] {borderTop}"
-        >
+        <div class="transition-colors hover:bg-line-subtle {borderTop}">
           <div
             aria-label={`${selected ? "Deselect" : "Select"} ${rowHeading(artifact)}`}
             aria-pressed={selected}
-            class="flex cursor-pointer items-stretch outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-soft)] {selected
-              ? 'border-l-[3px] border-l-[var(--accent)] bg-[var(--accent)]/10'
+            class="flex cursor-pointer items-stretch outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-soft {selected
+              ? 'border-l-[3px] border-l-accent bg-accent-soft'
               : 'border-l-[3px] border-l-transparent'}"
             onclick={(e) =>
               trashSel.handleRowMouseEvent(
@@ -757,28 +754,28 @@
                 >
                   {kindLabel(artifact.kind)}
                 </span>
-                <span class="text-meta font-medium text-[var(--fg)]">
+                <span class="text-meta font-medium text-fg">
                   {rowHeading(artifact)}
                 </span>
               </div>
 
               <div
-                class="grid gap-x-4 gap-y-1 text-micro text-[var(--fg-muted)] sm:grid-cols-2 xl:grid-cols-3"
+                class="grid gap-x-4 gap-y-1 text-micro text-fg-muted sm:grid-cols-2 xl:grid-cols-3"
               >
                 <div>
-                  <span class="text-[var(--fg-muted)]">Created</span>
+                  <span class="text-fg-muted">Created</span>
                   {formatTimestamp(artifact.created_at) || "—"}
-                  <span class="text-[var(--fg-subtle)]"> · </span>
+                  <span class="text-fg-subtle"> · </span>
                   {actorName(artifact.created_by)}
                 </div>
                 <div>
-                  <span class="text-[var(--fg-muted)]">Trashed</span>
+                  <span class="text-fg-muted">Trashed</span>
                   {formatTimestamp(artifact.trashed_at) || "—"}
-                  <span class="text-[var(--fg-subtle)]"> · </span>
+                  <span class="text-fg-subtle"> · </span>
                   {actorName(artifact.trashed_by)}
                 </div>
                 <div class="sm:col-span-2 xl:col-span-1">
-                  <span class="text-[var(--fg-muted)]">Reason</span>
+                  <span class="text-fg-muted">Reason</span>
                   {trashReason(artifact)}
                 </div>
               </div>
@@ -787,7 +784,7 @@
         </div>
       {:else}
         <a
-          class="group block px-4 py-2.5 text-left outline-none transition-colors hover:bg-[var(--line-subtle)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-inset focus-visible:ring-offset-0 {borderTop}"
+          class="group block px-4 py-2.5 text-left outline-none transition-colors hover:bg-line-subtle focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset focus-visible:ring-offset-0 {borderTop}"
           href={workspaceHref(`/artifacts/${artifact.id}`)}
         >
           <div class="flex flex-wrap items-center gap-2">
@@ -798,28 +795,27 @@
             >
               {kindLabel(artifact.kind)}
             </span>
-            <span
-              class="text-meta font-medium text-[var(--fg)] group-hover:text-[var(--fg)]"
+            <span class="text-meta font-medium text-fg group-hover:text-fg"
               >{rowHeading(artifact)}</span
             >
           </div>
           <div
-            class="mt-1 grid gap-x-4 gap-y-0.5 text-micro text-[var(--fg-muted)] sm:grid-cols-2 xl:grid-cols-3"
+            class="mt-1 grid gap-x-4 gap-y-0.5 text-micro text-fg-muted sm:grid-cols-2 xl:grid-cols-3"
           >
             <div class="min-w-0 sm:col-span-1">
-              <span class="text-[var(--fg-muted)]">Created</span>
+              <span class="text-fg-muted">Created</span>
               {formatTimestamp(artifact.created_at) || "—"}
-              <span class="text-[var(--fg-subtle)]"> · </span>
+              <span class="text-fg-subtle"> · </span>
               {actorName(artifact.created_by)}
             </div>
             <div class="min-w-0 sm:col-span-1">
-              <span class="text-[var(--fg-muted)]">Trashed</span>
+              <span class="text-fg-muted">Trashed</span>
               {formatTimestamp(artifact.trashed_at) || "—"}
-              <span class="text-[var(--fg-subtle)]"> · </span>
+              <span class="text-fg-subtle"> · </span>
               {actorName(artifact.trashed_by)}
             </div>
             <div class="min-w-0 sm:col-span-2 xl:col-span-1">
-              <span class="text-[var(--fg-muted)]">Reason</span>
+              <span class="text-fg-muted">Reason</span>
               <span class="line-clamp-2">{trashReason(artifact)}</span>
             </div>
           </div>
@@ -831,21 +827,19 @@
 
 {#if !loading && activeTab === "documents" && documents.length > 0}
   <div
-    class="space-y-px rounded-md border border-[var(--line)] bg-[var(--bg-soft)] overflow-hidden"
+    class="space-y-px rounded-md border border-line bg-bg-soft overflow-hidden"
   >
     {#each documents as doc, i (doc.id)}
       {@const docState = documentResourceState(doc)}
       {@const selected = trashSel.selectedIds.has(String(doc.id).trim())}
-      {@const borderTop = i > 0 ? "border-t border-[var(--line)]" : ""}
+      {@const borderTop = i > 0 ? "border-t border-line" : ""}
       {#if trashSel.selectMode}
-        <div
-          class="transition-colors hover:bg-[var(--line-subtle)] {borderTop}"
-        >
+        <div class="transition-colors hover:bg-line-subtle {borderTop}">
           <div
             aria-label={`${selected ? "Deselect" : "Select"} ${documentTitle(doc)}`}
             aria-pressed={selected}
-            class="flex cursor-pointer items-stretch outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-soft)] {selected
-              ? 'border-l-[3px] border-l-[var(--accent)] bg-[var(--accent)]/10'
+            class="flex cursor-pointer items-stretch outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-soft {selected
+              ? 'border-l-[3px] border-l-accent bg-accent-soft'
               : 'border-l-[3px] border-l-transparent'}"
             onclick={(e) =>
               trashSel.handleRowMouseEvent(
@@ -874,27 +868,27 @@
                     )}">{documentLifecycleLabel(docState)}</span
                   >
                 {/if}
-                <span class="text-meta font-medium text-[var(--fg)]">
+                <span class="text-meta font-medium text-fg">
                   {documentTitle(doc)}
                 </span>
               </div>
               <div
-                class="grid gap-x-4 gap-y-1 text-micro text-[var(--fg-muted)] sm:grid-cols-2 xl:grid-cols-3"
+                class="grid gap-x-4 gap-y-1 text-micro text-fg-muted sm:grid-cols-2 xl:grid-cols-3"
               >
                 <div>
-                  <span class="text-[var(--fg-muted)]">Created</span>
+                  <span class="text-fg-muted">Created</span>
                   {formatTimestamp(doc.created_at) || "—"}
-                  <span class="text-[var(--fg-subtle)]"> · </span>
+                  <span class="text-fg-subtle"> · </span>
                   {actorName(doc.created_by)}
                 </div>
                 <div>
-                  <span class="text-[var(--fg-muted)]">Trashed</span>
+                  <span class="text-fg-muted">Trashed</span>
                   {formatTimestamp(doc.trashed_at) || "—"}
-                  <span class="text-[var(--fg-subtle)]"> · </span>
+                  <span class="text-fg-subtle"> · </span>
                   {actorName(doc.trashed_by)}
                 </div>
                 <div class="sm:col-span-2 xl:col-span-1">
-                  <span class="text-[var(--fg-muted)]">Reason</span>
+                  <span class="text-fg-muted">Reason</span>
                   {trashReason(doc)}
                 </div>
               </div>
@@ -903,7 +897,7 @@
         </div>
       {:else}
         <a
-          class="group block px-4 py-2.5 text-left outline-none transition-colors hover:bg-[var(--line-subtle)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-inset focus-visible:ring-offset-0 {borderTop}"
+          class="group block px-4 py-2.5 text-left outline-none transition-colors hover:bg-line-subtle focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset focus-visible:ring-offset-0 {borderTop}"
           href={workspaceHref(`/docs/${doc.id}`)}
         >
           <div class="flex flex-wrap items-center gap-2">
@@ -914,27 +908,27 @@
                 )}">{documentLifecycleLabel(docState)}</span
               >
             {/if}
-            <span class="text-meta font-medium text-[var(--fg)]"
+            <span class="text-meta font-medium text-fg"
               >{documentTitle(doc)}</span
             >
           </div>
           <div
-            class="mt-1 grid gap-x-4 gap-y-0.5 text-micro text-[var(--fg-muted)] sm:grid-cols-2 xl:grid-cols-3"
+            class="mt-1 grid gap-x-4 gap-y-0.5 text-micro text-fg-muted sm:grid-cols-2 xl:grid-cols-3"
           >
             <div class="min-w-0 sm:col-span-1">
-              <span class="text-[var(--fg-muted)]">Created</span>
+              <span class="text-fg-muted">Created</span>
               {formatTimestamp(doc.created_at) || "—"}
-              <span class="text-[var(--fg-subtle)]"> · </span>
+              <span class="text-fg-subtle"> · </span>
               {actorName(doc.created_by)}
             </div>
             <div class="min-w-0 sm:col-span-1">
-              <span class="text-[var(--fg-muted)]">Trashed</span>
+              <span class="text-fg-muted">Trashed</span>
               {formatTimestamp(doc.trashed_at) || "—"}
-              <span class="text-[var(--fg-subtle)]"> · </span>
+              <span class="text-fg-subtle"> · </span>
               {actorName(doc.trashed_by)}
             </div>
             <div class="min-w-0 sm:col-span-2 xl:col-span-1">
-              <span class="text-[var(--fg-muted)]">Reason</span>
+              <span class="text-fg-muted">Reason</span>
               <span class="line-clamp-2">{trashReason(doc)}</span>
             </div>
           </div>
@@ -946,20 +940,18 @@
 
 {#if !loading && activeTab === "topics" && threads.length > 0}
   <div
-    class="space-y-px rounded-md border border-[var(--line)] bg-[var(--bg-soft)] overflow-hidden"
+    class="space-y-px rounded-md border border-line bg-bg-soft overflow-hidden"
   >
     {#each threads as thread, i (thread.id)}
       {@const selected = trashSel.selectedIds.has(String(thread.id).trim())}
-      {@const borderTop = i > 0 ? "border-t border-[var(--line)]" : ""}
+      {@const borderTop = i > 0 ? "border-t border-line" : ""}
       {#if trashSel.selectMode}
-        <div
-          class="transition-colors hover:bg-[var(--line-subtle)] {borderTop}"
-        >
+        <div class="transition-colors hover:bg-line-subtle {borderTop}">
           <div
             aria-label={`${selected ? "Deselect" : "Select"} ${String(thread?.title ?? "").trim() || thread.id}`}
             aria-pressed={selected}
-            class="flex cursor-pointer items-stretch outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-soft)] {selected
-              ? 'border-l-[3px] border-l-[var(--accent)] bg-[var(--accent)]/10'
+            class="flex cursor-pointer items-stretch outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-soft {selected
+              ? 'border-l-[3px] border-l-accent bg-accent-soft'
               : 'border-l-[3px] border-l-transparent'}"
             onclick={(e) =>
               trashSel.handleRowMouseEvent(
@@ -981,12 +973,12 @@
               class="pointer-events-none flex min-w-0 flex-1 flex-col gap-3 py-3 pr-4 sm:pr-5 pl-2"
             >
               <div class="flex flex-wrap items-center gap-2">
-                <span class="text-meta font-medium text-[var(--fg)]">
+                <span class="text-meta font-medium text-fg">
                   {String(thread?.title ?? "").trim() || thread.id}
                 </span>
                 {#if thread.state}
                   <span
-                    class="rounded bg-[var(--panel)] px-1.5 py-0.5 text-micro font-medium capitalize {threadLifecycleColor(
+                    class="rounded bg-panel px-1.5 py-0.5 text-micro font-medium capitalize {threadLifecycleColor(
                       thread.state,
                     )}"
                     >{BOARD_STATUS_LABELS[thread.state] ?? thread.state}</span
@@ -994,29 +986,29 @@
                 {/if}
               </div>
               {#if topicSummary(thread)}
-                <p class="text-micro text-[var(--fg-muted)]">
+                <p class="text-micro text-fg-muted">
                   {topicSummary(thread)}
                 </p>
               {/if}
               <div
-                class="grid gap-x-4 gap-y-1 text-micro text-[var(--fg-muted)] sm:grid-cols-2 xl:grid-cols-3"
+                class="grid gap-x-4 gap-y-1 text-micro text-fg-muted sm:grid-cols-2 xl:grid-cols-3"
               >
                 <div>
-                  <span class="text-[var(--fg-muted)]">Created</span>
+                  <span class="text-fg-muted">Created</span>
                   {formatTimestamp(threadCreatedAt(thread)) || "—"}
                   {#if thread.created_by}
-                    <span class="text-[var(--fg-subtle)]"> · </span>
+                    <span class="text-fg-subtle"> · </span>
                     {actorName(thread.created_by)}
                   {/if}
                 </div>
                 <div>
-                  <span class="text-[var(--fg-muted)]">Trashed</span>
+                  <span class="text-fg-muted">Trashed</span>
                   {formatTimestamp(thread.trashed_at) || "—"}
-                  <span class="text-[var(--fg-subtle)]"> · </span>
+                  <span class="text-fg-subtle"> · </span>
                   {actorName(thread.trashed_by)}
                 </div>
                 <div class="sm:col-span-2 xl:col-span-1">
-                  <span class="text-[var(--fg-muted)]">Reason</span>
+                  <span class="text-fg-muted">Reason</span>
                   {trashReason(thread)}
                 </div>
               </div>
@@ -1025,45 +1017,45 @@
         </div>
       {:else}
         <a
-          class="group block px-4 py-2.5 text-left outline-none transition-colors hover:bg-[var(--line-subtle)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-inset focus-visible:ring-offset-0 {borderTop}"
+          class="group block px-4 py-2.5 text-left outline-none transition-colors hover:bg-line-subtle focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset focus-visible:ring-offset-0 {borderTop}"
           href={workspaceHref(`/topics/${encodeURIComponent(thread.id)}`)}
         >
           <div class="flex flex-wrap items-center gap-2">
-            <span class="text-meta font-medium text-[var(--fg)]">
+            <span class="text-meta font-medium text-fg">
               {String(thread?.title ?? "").trim() || thread.id}
             </span>
             {#if thread.state}
               <span
-                class="rounded bg-[var(--panel)] px-1.5 py-0.5 text-micro font-medium capitalize {threadLifecycleColor(
+                class="rounded bg-panel px-1.5 py-0.5 text-micro font-medium capitalize {threadLifecycleColor(
                   thread.state,
                 )}">{BOARD_STATUS_LABELS[thread.state] ?? thread.state}</span
               >
             {/if}
           </div>
           {#if topicSummary(thread)}
-            <p class="mt-0.5 line-clamp-2 text-micro text-[var(--fg-muted)]">
+            <p class="mt-0.5 line-clamp-2 text-micro text-fg-muted">
               {topicSummary(thread)}
             </p>
           {/if}
           <div
-            class="mt-1 grid gap-x-4 gap-y-0.5 text-micro text-[var(--fg-muted)] sm:grid-cols-2 xl:grid-cols-3"
+            class="mt-1 grid gap-x-4 gap-y-0.5 text-micro text-fg-muted sm:grid-cols-2 xl:grid-cols-3"
           >
             <div class="min-w-0 sm:col-span-1">
-              <span class="text-[var(--fg-muted)]">Created</span>
+              <span class="text-fg-muted">Created</span>
               {formatTimestamp(threadCreatedAt(thread)) || "—"}
               {#if thread.created_by}
-                <span class="text-[var(--fg-subtle)]"> · </span>
+                <span class="text-fg-subtle"> · </span>
                 {actorName(thread.created_by)}
               {/if}
             </div>
             <div class="min-w-0 sm:col-span-1">
-              <span class="text-[var(--fg-muted)]">Trashed</span>
+              <span class="text-fg-muted">Trashed</span>
               {formatTimestamp(thread.trashed_at) || "—"}
-              <span class="text-[var(--fg-subtle)]"> · </span>
+              <span class="text-fg-subtle"> · </span>
               {actorName(thread.trashed_by)}
             </div>
             <div class="min-w-0 sm:col-span-2 xl:col-span-1">
-              <span class="text-[var(--fg-muted)]">Reason</span>
+              <span class="text-fg-muted">Reason</span>
               <span class="line-clamp-2">{trashReason(thread)}</span>
             </div>
           </div>
@@ -1075,20 +1067,18 @@
 
 {#if !loading && activeTab === "boards" && boards.length > 0}
   <div
-    class="space-y-px rounded-md border border-[var(--line)] bg-[var(--bg-soft)] overflow-hidden"
+    class="space-y-px rounded-md border border-line bg-bg-soft overflow-hidden"
   >
     {#each boards as board, i (board.id)}
       {@const selected = trashSel.selectedIds.has(String(board.id).trim())}
-      {@const borderTop = i > 0 ? "border-t border-[var(--line)]" : ""}
+      {@const borderTop = i > 0 ? "border-t border-line" : ""}
       {#if trashSel.selectMode}
-        <div
-          class="transition-colors hover:bg-[var(--line-subtle)] {borderTop}"
-        >
+        <div class="transition-colors hover:bg-line-subtle {borderTop}">
           <div
             aria-label={`${selected ? "Deselect" : "Select"} ${String(board?.title ?? "").trim() || board.id}`}
             aria-pressed={selected}
-            class="flex cursor-pointer items-stretch outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-soft)] {selected
-              ? 'border-l-[3px] border-l-[var(--accent)] bg-[var(--accent)]/10'
+            class="flex cursor-pointer items-stretch outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-soft {selected
+              ? 'border-l-[3px] border-l-accent bg-accent-soft'
               : 'border-l-[3px] border-l-transparent'}"
             onclick={(e) =>
               trashSel.handleRowMouseEvent(
@@ -1110,33 +1100,33 @@
               class="pointer-events-none flex min-w-0 flex-1 flex-col gap-3 py-3 pr-4 sm:pr-5 pl-2"
             >
               <div class="flex flex-wrap items-center gap-2">
-                <span class="text-meta font-medium text-[var(--fg)]">
+                <span class="text-meta font-medium text-fg">
                   {String(board?.title ?? "").trim() || board.id}
                 </span>
                 {#if board.state}
                   <span
-                    class="rounded bg-[var(--panel)] px-1.5 py-0.5 text-micro font-medium text-[var(--fg-muted)]"
+                    class="rounded bg-panel px-1.5 py-0.5 text-micro font-medium text-fg-muted"
                     >{BOARD_STATUS_LABELS[board.state] ?? board.state}</span
                   >
                 {/if}
               </div>
               <div
-                class="grid gap-x-4 gap-y-1 text-micro text-[var(--fg-muted)] sm:grid-cols-2 xl:grid-cols-3"
+                class="grid gap-x-4 gap-y-1 text-micro text-fg-muted sm:grid-cols-2 xl:grid-cols-3"
               >
                 <div>
-                  <span class="text-[var(--fg-muted)]">Created</span>
+                  <span class="text-fg-muted">Created</span>
                   {formatTimestamp(board.created_at) || "—"}
-                  <span class="text-[var(--fg-subtle)]"> · </span>
+                  <span class="text-fg-subtle"> · </span>
                   {actorName(board.created_by)}
                 </div>
                 <div>
-                  <span class="text-[var(--fg-muted)]">Trashed</span>
+                  <span class="text-fg-muted">Trashed</span>
                   {formatTimestamp(board.trashed_at) || "—"}
-                  <span class="text-[var(--fg-subtle)]"> · </span>
+                  <span class="text-fg-subtle"> · </span>
                   {actorName(board.trashed_by)}
                 </div>
                 <div class="sm:col-span-2 xl:col-span-1">
-                  <span class="text-[var(--fg-muted)]">Reason</span>
+                  <span class="text-fg-muted">Reason</span>
                   {trashReason(board)}
                 </div>
               </div>
@@ -1145,37 +1135,37 @@
         </div>
       {:else}
         <a
-          class="group block px-4 py-2.5 text-left outline-none transition-colors hover:bg-[var(--line-subtle)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-inset focus-visible:ring-offset-0 {borderTop}"
+          class="group block px-4 py-2.5 text-left outline-none transition-colors hover:bg-line-subtle focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset focus-visible:ring-offset-0 {borderTop}"
           href={workspaceHref(`/boards/${board.id}`)}
         >
           <div class="flex flex-wrap items-center gap-2">
-            <span class="text-meta font-medium text-[var(--fg)]">
+            <span class="text-meta font-medium text-fg">
               {String(board?.title ?? "").trim() || board.id}
             </span>
             {#if board.state}
               <span
-                class="rounded bg-[var(--panel)] px-1.5 py-0.5 text-micro font-medium text-[var(--fg-muted)]"
+                class="rounded bg-panel px-1.5 py-0.5 text-micro font-medium text-fg-muted"
                 >{BOARD_STATUS_LABELS[board.state] ?? board.state}</span
               >
             {/if}
           </div>
           <div
-            class="mt-1 grid gap-x-4 gap-y-0.5 text-micro text-[var(--fg-muted)] sm:grid-cols-2 xl:grid-cols-3"
+            class="mt-1 grid gap-x-4 gap-y-0.5 text-micro text-fg-muted sm:grid-cols-2 xl:grid-cols-3"
           >
             <div class="min-w-0 sm:col-span-1">
-              <span class="text-[var(--fg-muted)]">Created</span>
+              <span class="text-fg-muted">Created</span>
               {formatTimestamp(board.created_at) || "—"}
-              <span class="text-[var(--fg-subtle)]"> · </span>
+              <span class="text-fg-subtle"> · </span>
               {actorName(board.created_by)}
             </div>
             <div class="min-w-0 sm:col-span-1">
-              <span class="text-[var(--fg-muted)]">Trashed</span>
+              <span class="text-fg-muted">Trashed</span>
               {formatTimestamp(board.trashed_at) || "—"}
-              <span class="text-[var(--fg-subtle)]"> · </span>
+              <span class="text-fg-subtle"> · </span>
               {actorName(board.trashed_by)}
             </div>
             <div class="min-w-0 sm:col-span-2 xl:col-span-1">
-              <span class="text-[var(--fg-muted)]">Reason</span>
+              <span class="text-fg-muted">Reason</span>
               <span class="line-clamp-2">{trashReason(board)}</span>
             </div>
           </div>
@@ -1187,20 +1177,18 @@
 
 {#if !loading && activeTab === "cards" && cards.length > 0}
   <div
-    class="space-y-px rounded-md border border-[var(--line)] bg-[var(--bg-soft)] overflow-hidden"
+    class="space-y-px rounded-md border border-line bg-bg-soft overflow-hidden"
   >
     {#each cards as card, i (card.id)}
       {@const selected = trashSel.selectedIds.has(String(card.id).trim())}
-      {@const borderTop = i > 0 ? "border-t border-[var(--line)]" : ""}
+      {@const borderTop = i > 0 ? "border-t border-line" : ""}
       {#if trashSel.selectMode}
-        <div
-          class="transition-colors hover:bg-[var(--line-subtle)] {borderTop}"
-        >
+        <div class="transition-colors hover:bg-line-subtle {borderTop}">
           <div
             aria-label={`${selected ? "Deselect" : "Select"} ${String(card?.title ?? "").trim() || card.id}`}
             aria-pressed={selected}
-            class="flex cursor-pointer items-stretch outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-soft)] {selected
-              ? 'border-l-[3px] border-l-[var(--accent)] bg-[var(--accent)]/10'
+            class="flex cursor-pointer items-stretch outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-soft {selected
+              ? 'border-l-[3px] border-l-accent bg-accent-soft'
               : 'border-l-[3px] border-l-transparent'}"
             onclick={(e) =>
               trashSel.handleRowMouseEvent(
@@ -1222,71 +1210,71 @@
               class="pointer-events-none flex min-w-0 flex-1 flex-col gap-3 py-3 pr-4 sm:pr-5 pl-2"
             >
               <div class="flex flex-wrap items-center gap-2">
-                <span class="text-meta font-medium text-[var(--fg)]">
+                <span class="text-meta font-medium text-fg">
                   {String(card?.title ?? "").trim() || card.id}
                 </span>
                 {#if card.risk}
                   <span
-                    class="rounded bg-[var(--panel)] px-1.5 py-0.5 text-micro font-medium text-[var(--fg-muted)]"
+                    class="rounded bg-panel px-1.5 py-0.5 text-micro font-medium text-fg-muted"
                     >{String(card.risk).trim()}</span
                   >
                 {/if}
                 {#if card.resolution}
                   <span
-                    class="rounded bg-[var(--panel)] px-1.5 py-0.5 text-micro font-medium text-[var(--fg-muted)]"
+                    class="rounded bg-panel px-1.5 py-0.5 text-micro font-medium text-fg-muted"
                     >{String(card.resolution).trim()}</span
                   >
                 {/if}
               </div>
               {#if card.summary}
-                <p class="text-micro text-[var(--fg-muted)]">
+                <p class="text-micro text-fg-muted">
                   {card.summary}
                 </p>
               {/if}
               <div
-                class="grid gap-x-4 gap-y-1 text-micro text-[var(--fg-muted)] sm:grid-cols-2 xl:grid-cols-3"
+                class="grid gap-x-4 gap-y-1 text-micro text-fg-muted sm:grid-cols-2 xl:grid-cols-3"
               >
                 <div>
-                  <span class="text-[var(--fg-muted)]">Created</span>
+                  <span class="text-fg-muted">Created</span>
                   {formatTimestamp(card.created_at) || "—"}
-                  <span class="text-[var(--fg-subtle)]"> · </span>
+                  <span class="text-fg-subtle"> · </span>
                   {actorName(card.created_by)}
                 </div>
                 <div>
-                  <span class="text-[var(--fg-muted)]">Archived</span>
+                  <span class="text-fg-muted">Archived</span>
                   {formatTimestamp(card.archived_at) || "—"}
-                  <span class="text-[var(--fg-subtle)]"> · </span>
+                  <span class="text-fg-subtle"> · </span>
                   {actorName(card.archived_by)}
                 </div>
                 <div class="sm:col-span-2 xl:col-span-1">
-                  <span class="text-[var(--fg-muted)]">Trashed</span>
+                  <span class="text-fg-muted">Trashed</span>
                   {formatTimestamp(card.trashed_at) || "—"}
-                  <span class="text-[var(--fg-subtle)]"> · </span>
+                  <span class="text-fg-subtle"> · </span>
                   {actorName(card.trashed_by)}
                 </div>
                 <div class="sm:col-span-2 xl:col-span-1">
-                  <span class="text-[var(--fg-muted)]">Reason</span>
+                  <span class="text-fg-muted">Reason</span>
                   {trashReason(card)}
                 </div>
               </div>
               <div class="flex flex-wrap items-center gap-2 text-micro">
                 {#if card.board_ref}
                   <span
-                    class="rounded bg-[var(--panel)] px-1.5 py-0.5 font-medium text-[var(--fg-muted)]"
+                    class="rounded bg-panel px-1.5 py-0.5 font-medium text-fg-muted"
                   >
                     Board: {card.board_ref}
                   </span>
                 {/if}
                 {#if card.topic_ref}
                   <span
-                    class="rounded bg-[var(--panel)] px-1.5 py-0.5 font-medium text-[var(--fg-muted)]"
+                    class="rounded bg-panel px-1.5 py-0.5 font-medium text-fg-muted"
                   >
                     Topic: {card.topic_ref}
                   </span>
                 {/if}
                 {#if card.document_ref}
                   <span
-                    class="rounded bg-[var(--panel)] px-1.5 py-0.5 font-medium text-[var(--fg-muted)]"
+                    class="rounded bg-panel px-1.5 py-0.5 font-medium text-fg-muted"
                   >
                     Doc: {card.document_ref}
                   </span>
@@ -1308,80 +1296,80 @@
       {:else}
         <div class="flex flex-col {borderTop}">
           <a
-            class="group block px-4 py-2.5 text-left outline-none transition-colors hover:bg-[var(--line-subtle)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-inset focus-visible:ring-offset-0"
+            class="group block px-4 py-2.5 text-left outline-none transition-colors hover:bg-line-subtle focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset focus-visible:ring-offset-0"
             href={cardTrashNavigateHref(card)}
           >
             <div class="flex flex-wrap items-center gap-2">
-              <span class="text-meta font-medium text-[var(--fg)]">
+              <span class="text-meta font-medium text-fg">
                 {String(card?.title ?? "").trim() || card.id}
               </span>
               {#if card.risk}
                 <span
-                  class="rounded bg-[var(--panel)] px-1.5 py-0.5 text-micro font-medium text-[var(--fg-muted)]"
+                  class="rounded bg-panel px-1.5 py-0.5 text-micro font-medium text-fg-muted"
                   >{String(card.risk).trim()}</span
                 >
               {/if}
               {#if card.resolution}
                 <span
-                  class="rounded bg-[var(--panel)] px-1.5 py-0.5 text-micro font-medium text-[var(--fg-muted)]"
+                  class="rounded bg-panel px-1.5 py-0.5 text-micro font-medium text-fg-muted"
                   >{String(card.resolution).trim()}</span
                 >
               {/if}
             </div>
             {#if card.summary}
-              <p class="mt-0.5 line-clamp-2 text-micro text-[var(--fg-muted)]">
+              <p class="mt-0.5 line-clamp-2 text-micro text-fg-muted">
                 {card.summary}
               </p>
             {/if}
             <div
-              class="mt-1 grid gap-x-4 gap-y-0.5 text-micro text-[var(--fg-muted)] sm:grid-cols-2 xl:grid-cols-3"
+              class="mt-1 grid gap-x-4 gap-y-0.5 text-micro text-fg-muted sm:grid-cols-2 xl:grid-cols-3"
             >
               <div class="min-w-0 sm:col-span-1">
-                <span class="text-[var(--fg-muted)]">Created</span>
+                <span class="text-fg-muted">Created</span>
                 {formatTimestamp(card.created_at) || "—"}
-                <span class="text-[var(--fg-subtle)]"> · </span>
+                <span class="text-fg-subtle"> · </span>
                 {actorName(card.created_by)}
               </div>
               <div class="min-w-0 sm:col-span-1">
-                <span class="text-[var(--fg-muted)]">Archived</span>
+                <span class="text-fg-muted">Archived</span>
                 {formatTimestamp(card.archived_at) || "—"}
-                <span class="text-[var(--fg-subtle)]"> · </span>
+                <span class="text-fg-subtle"> · </span>
                 {actorName(card.archived_by)}
               </div>
               <div class="min-w-0 sm:col-span-2 xl:col-span-1">
-                <span class="text-[var(--fg-muted)]">Trashed</span>
+                <span class="text-fg-muted">Trashed</span>
                 {formatTimestamp(card.trashed_at) || "—"}
-                <span class="text-[var(--fg-subtle)]"> · </span>
+                <span class="text-fg-subtle"> · </span>
                 {actorName(card.trashed_by)}
               </div>
               <div class="min-w-0 sm:col-span-2 xl:col-span-1">
-                <span class="text-[var(--fg-muted)]">Reason</span>
+                <span class="text-fg-muted">Reason</span>
                 <span class="line-clamp-2">{trashReason(card)}</span>
               </div>
             </div>
           </a>
           {#if card.board_ref || card.topic_ref || card.document_ref || (Array.isArray(card.related_refs) && card.related_refs.length > 0)}
             <div
-              class="border-t border-[var(--line)] px-4 py-2 text-micro text-[var(--fg-muted)]"
+              class="border-t border-line px-4 py-2 text-micro text-fg-muted"
             >
               <div class="flex flex-wrap items-center gap-2">
                 {#if card.board_ref}
                   <span
-                    class="rounded bg-[var(--panel)] px-1.5 py-0.5 font-medium text-[var(--fg-muted)]"
+                    class="rounded bg-panel px-1.5 py-0.5 font-medium text-fg-muted"
                   >
                     Board: {card.board_ref}
                   </span>
                 {/if}
                 {#if card.topic_ref}
                   <span
-                    class="rounded bg-[var(--panel)] px-1.5 py-0.5 font-medium text-[var(--fg-muted)]"
+                    class="rounded bg-panel px-1.5 py-0.5 font-medium text-fg-muted"
                   >
                     Topic: {card.topic_ref}
                   </span>
                 {/if}
                 {#if card.document_ref}
                   <span
-                    class="rounded bg-[var(--panel)] px-1.5 py-0.5 font-medium text-[var(--fg-muted)]"
+                    class="rounded bg-panel px-1.5 py-0.5 font-medium text-fg-muted"
                   >
                     Doc: {card.document_ref}
                   </span>

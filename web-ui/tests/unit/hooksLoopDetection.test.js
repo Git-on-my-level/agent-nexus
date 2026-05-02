@@ -66,6 +66,7 @@ function makeNavRequest(pathname) {
       },
     }),
     route: { id: "/o/[organization]/w/[workspace]/login" },
+    isSubRequest: false,
   };
 }
 
@@ -79,6 +80,41 @@ function makeDataFetch(pathname) {
       },
     }),
     route: { id: "/o/[organization]/w/[workspace]/login" },
+    isSubRequest: false,
+  };
+}
+
+/** Synthetic browser navigation (tab document load). */
+function makeBrowserDocumentNavigation(pathname) {
+  return {
+    url: new URL(`https://anx.example.test${pathname}`),
+    request: new Request(`https://anx.example.test${pathname}`, {
+      method: "GET",
+      headers: {
+        accept: "text/html",
+        "sec-fetch-dest": "document",
+        "sec-fetch-mode": "navigate",
+        "sec-fetch-user": "?1",
+      },
+    }),
+    route: { id: "/o/[organization]/w/[workspace]/login" },
+    isSubRequest: false,
+  };
+}
+
+/** Server-delegated fetch: broad Accept mentioning html but no Sec-Fetch-*. */
+function makeDelegatedHtmlProbe(pathname) {
+  return {
+    url: new URL(`https://anx.example.test${pathname}`),
+    request: new Request(`https://anx.example.test${pathname}`, {
+      method: "GET",
+      headers: {
+        accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      },
+    }),
+    route: { id: "/o/[organization]/w/[workspace]/inbox" },
+    isSubRequest: true,
   };
 }
 
@@ -133,6 +169,53 @@ describe("hooks.server loop detection (dev mode)", () => {
       .find((line) => line.includes("ssr.request.loop_short_circuit"));
     expect(loopLog).toBeDefined();
     expect(loopLog).toMatch(/path="\/o\/my-org\/w\/my-ws\/login\/__data.json"/);
+  });
+
+  it("short-circuits duplicate browser navigations toward the SSR loop throttle", async () => {
+    const event = makeBrowserDocumentNavigation("/o/my-org/w/my-ws/login");
+    const resolve = vi.fn(
+      async () =>
+        new Response("<html></html>", {
+          status: 200,
+          headers: { "content-type": "text/html" },
+        }),
+    );
+
+    const responses = [];
+    for (let i = 0; i < 8; i += 1) {
+      responses.push(await handle({ event, resolve }));
+    }
+
+    expect(resolve).toHaveBeenCalledTimes(7);
+    expect(responses[responses.length - 1]?.status).toBe(503);
+
+    const loopLog = consoleWarn.mock.calls
+      .map((args) => String(args[0]))
+      .find((line) => line.includes("ssr.request.loop_short_circuit"));
+    expect(loopLog).toBeDefined();
+    expect(loopLog).toMatch(/path="\/o\/my-org\/w\/my-ws\/login"/);
+  });
+
+  it("does not mis-count server-delegated HTML Accept probes as navigations", async () => {
+    const event = makeDelegatedHtmlProbe("/o/my-org/w/my-ws/inbox");
+    const resolve = vi.fn(
+      async () =>
+        new Response("<html></html>", {
+          status: 200,
+          headers: { "content-type": "text/html" },
+        }),
+    );
+
+    for (let i = 0; i < 8; i += 1) {
+      await handle({ event, resolve });
+    }
+
+    expect(resolve).toHaveBeenCalledTimes(8);
+
+    const loopLog = consoleWarn.mock.calls
+      .map((args) => String(args[0]))
+      .find((line) => line.includes("ssr.request.loop_short_circuit"));
+    expect(loopLog).toBeUndefined();
   });
 
   it("does not flag loop_detected for a normal navigation rate", async () => {

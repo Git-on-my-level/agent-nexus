@@ -56,6 +56,18 @@ new markup. Use arbitrary `var()` utilities only where Tailwind cannot express
 the property, or while touching legacy code that has not yet been migrated. The
 unification plan tracks a migration away from mixed idioms.
 
+### Focus rings and `:focus-visible`
+
+- **Base layer:** `app.css` `@layer base` sets the default focus-visible outline
+  for interactive elements and native inputs.
+- **Text fields:** Use the `.ui-input` primitive (or semantic Tailwind with
+  `focus:border-accent`) so the focused border matches `--accent`. Avoid stacking
+  redundant `focus:ring-*` utilities on top of `.ui-input:focus`.
+- **Custom controls:** For non-native clickable chrome, follow `RefChip` /
+  workspace patterns: `focus-visible:outline-none` plus a short
+  `focus-visible:ring-2 focus-visible:ring-accent-solid/40` (or equivalent) so
+  keyboard users get a visible target.
+
 The current product accent is cyan/teal (`--accent`, `--accent-text`). A future
 brand change to indigo must be handled as a visible product change in `app.css`,
 `tailwind.config.cjs`, this guide, and `.cursorrules` together.

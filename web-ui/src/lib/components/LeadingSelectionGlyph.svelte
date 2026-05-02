@@ -20,7 +20,7 @@
   </span>
 {:else}
   <span
-    class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 border-[var(--line)] bg-[var(--bg-soft)]"
+    class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 border-line bg-bg-soft"
     aria-hidden="true"
   ></span>
 {/if}

@@ -5,6 +5,8 @@
 
   import CompactFilterBar from "$lib/components/CompactFilterBar.svelte";
   import EventRow from "$lib/components/EventRow.svelte";
+  import StateEmpty from "$lib/components/state/StateEmpty.svelte";
+  import StateError from "$lib/components/state/StateError.svelte";
   import { coreClient } from "$lib/coreClient";
   import { initializeAuthSession } from "$lib/authSession";
   import {
@@ -18,7 +20,7 @@
   } from "$lib/eventFilters";
   import { HOME_FEED_PRESET, normalizeEventRow } from "$lib/events/eventRows";
   import { datetimeLocalToIso, isoToDatetimeLocal } from "$lib/formatDate";
-  import { workspacePath } from "$lib/workspacePaths";
+  import { bindWorkspaceHref } from "$lib/workspacePaths";
 
   const EVENT_GROUP_LABELS = {
     messages: "Messages",
@@ -56,9 +58,9 @@
   let workspaceSlug = $derived($page.params.workspace);
   let hasActiveFilters = $derived(hasEventListFilters(filters));
 
-  function workspaceHref(pathname = "/") {
-    return workspacePath(organizationSlug, workspaceSlug, pathname);
-  }
+  let workspaceHref = $derived(
+    bindWorkspaceHref(organizationSlug, workspaceSlug),
+  );
 
   function rowFor(event) {
     return normalizeEventRow(event, { workspaceHref });
@@ -197,16 +199,16 @@
     class="mb-3 flex max-md:mb-2 flex-wrap items-center justify-between gap-2"
   >
     <div class="min-w-0">
-      <h1 class="text-subtitle font-semibold text-[var(--fg)]">Events</h1>
-      <p class="mt-0.5 text-meta text-[var(--fg-muted)]">
+      <h1 class="text-subtitle font-semibold text-fg">Events</h1>
+      <p class="mt-0.5 text-meta text-fg-muted">
         Full workspace event history.
       </p>
     </div>
     <div class="flex flex-wrap items-center justify-end gap-1.5">
       <button
         class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-micro font-medium transition-colors {hasActiveFilters
-          ? 'border-[var(--accent)]/40 bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/15'
-          : 'border-[var(--line)] bg-[var(--bg-soft)] text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]'}"
+          ? 'border-accent bg-accent-soft text-accent hover:bg-accent-soft'
+          : 'border-line bg-bg-soft text-fg-muted hover:bg-line-subtle'}"
         onclick={() => (filtersOpen = !filtersOpen)}
         type="button"
       >
@@ -239,41 +241,39 @@
           }}
         >
           <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
-            <label
-              class="text-micro font-medium text-[var(--fg-muted)] sm:col-span-2"
-            >
+            <label class="text-micro font-medium text-fg-muted sm:col-span-2">
               Preset
               <select
                 bind:value={filters.preset}
-                class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
+                class="mt-1 w-full rounded-md border border-line bg-bg-soft px-2.5 py-1.5 text-meta transition-colors focus:bg-panel"
               >
                 <option value="">All events</option>
                 <option value={HOME_FEED_PRESET}>Home feed</option>
               </select>
             </label>
             <label
-              class="text-micro font-medium text-[var(--fg-muted)] sm:col-span-2 lg:col-span-2"
+              class="text-micro font-medium text-fg-muted sm:col-span-2 lg:col-span-2"
             >
               Search
               <input
                 bind:value={filters.q}
-                class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
+                class="mt-1 w-full rounded-md border border-line bg-bg-soft px-2.5 py-1.5 text-meta transition-colors focus:bg-panel"
                 placeholder="Search"
               />
             </label>
-            <label class="text-micro font-medium text-[var(--fg-muted)]">
+            <label class="text-micro font-medium text-fg-muted">
               Type
               <input
                 bind:value={filters.type}
-                class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
+                class="mt-1 w-full rounded-md border border-line bg-bg-soft px-2.5 py-1.5 text-meta transition-colors focus:bg-panel"
                 placeholder="Type"
               />
             </label>
-            <label class="text-micro font-medium text-[var(--fg-muted)]">
+            <label class="text-micro font-medium text-fg-muted">
               Backing
               <select
                 bind:value={filters.backing_scope}
-                class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
+                class="mt-1 w-full rounded-md border border-line bg-bg-soft px-2.5 py-1.5 text-meta transition-colors focus:bg-panel"
               >
                 {#each EVENT_BACKING_SCOPE_VALUES as scope}
                   <option value={scope}
@@ -282,37 +282,37 @@
                 {/each}
               </select>
             </label>
-            <label class="text-micro font-medium text-[var(--fg-muted)]">
+            <label class="text-micro font-medium text-fg-muted">
               Topic
               <input
                 bind:value={filters.topic_id}
-                class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
+                class="mt-1 w-full rounded-md border border-line bg-bg-soft px-2.5 py-1.5 text-meta transition-colors focus:bg-panel"
                 placeholder="Topic ID"
               />
             </label>
-            <label class="text-micro font-medium text-[var(--fg-muted)]">
+            <label class="text-micro font-medium text-fg-muted">
               Actor
               <input
                 bind:value={filters.actor_id}
-                class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
+                class="mt-1 w-full rounded-md border border-line bg-bg-soft px-2.5 py-1.5 text-meta transition-colors focus:bg-panel"
                 placeholder="Actor ID"
               />
             </label>
-            <label class="text-micro font-medium text-[var(--fg-muted)]">
+            <label class="text-micro font-medium text-fg-muted">
               Since
               <input
                 value={eventDateInputs.since}
-                class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
+                class="mt-1 w-full rounded-md border border-line bg-bg-soft px-2.5 py-1.5 text-meta transition-colors focus:bg-panel"
                 type="datetime-local"
                 oninput={(event) =>
                   updateEventDateFilter("since", event.currentTarget.value)}
               />
             </label>
-            <label class="text-micro font-medium text-[var(--fg-muted)]">
+            <label class="text-micro font-medium text-fg-muted">
               Until
               <input
                 value={eventDateInputs.until}
-                class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
+                class="mt-1 w-full rounded-md border border-line bg-bg-soft px-2.5 py-1.5 text-meta transition-colors focus:bg-panel"
                 type="datetime-local"
                 oninput={(event) =>
                   updateEventDateFilter("until", event.currentTarget.value)}
@@ -320,17 +320,17 @@
             </label>
           </div>
           <div class="mt-3 text-micro">
-            <span class="font-medium text-[var(--fg-muted)]">Event groups</span>
+            <span class="font-medium text-fg-muted">Event groups</span>
             <fieldset
-              class="mt-1 flex flex-wrap gap-2 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-2"
+              class="mt-1 flex flex-wrap gap-2 rounded-md border border-line bg-bg-soft px-2.5 py-2"
             >
               {#each EVENT_GROUP_ORDER as group}
                 <label
-                  class="flex cursor-pointer items-center gap-1.5 text-meta text-[var(--fg)]"
+                  class="flex cursor-pointer items-center gap-1.5 text-meta text-fg"
                 >
                   <input
                     checked={(filters.event_group ?? []).includes(group)}
-                    class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--line)] bg-[var(--bg)] text-[var(--accent-hover)] focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-0"
+                    class="h-3.5 w-3.5 cursor-pointer rounded border-line bg-bg text-accent-hover focus:ring-2 focus:ring-accent focus:ring-offset-0"
                     type="checkbox"
                     onchange={() => toggleEventGroup(group)}
                   />
@@ -341,11 +341,11 @@
           </div>
           <div class="mt-3 flex gap-1.5">
             <button
-              class="cursor-pointer rounded-md bg-[var(--panel)] px-3 py-1.5 text-micro font-medium text-[var(--fg)] hover:bg-[var(--line)]"
+              class="cursor-pointer rounded-md bg-panel px-3 py-1.5 text-micro font-medium text-fg hover:bg-line"
               type="submit">Apply</button
             >
             <button
-              class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-micro font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]"
+              class="cursor-pointer rounded-md border border-line bg-bg-soft px-3 py-1.5 text-micro font-medium text-fg-muted hover:bg-line-subtle"
               onclick={() => void clearFilters()}
               type="button">Clear filters</button
             >
@@ -356,22 +356,23 @@
   {/if}
 
   {#if error}
-    <p class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
-      {error}
-    </p>
+    <StateError message={error} />
   {/if}
 
-  <section
-    class="overflow-hidden rounded-md border border-[var(--line)] bg-[var(--panel)]"
-  >
+  <section class="overflow-hidden rounded-md border border-line bg-panel">
     {#if loading}
-      <p class="px-4 py-5 text-meta text-[var(--fg-muted)]">Loading events…</p>
+      <p class="px-4 py-5 text-meta text-fg-muted">Loading events…</p>
     {:else if events.length === 0}
-      <p class="px-4 py-5 text-meta text-[var(--fg-muted)]">
-        No events match these filters.
-      </p>
+      <div class="px-4 py-5">
+        <StateEmpty
+          title="No events match these filters."
+          helper="Adjust filters or clear them to see more history."
+          actionLabel="Clear filters"
+          onclick={() => void clearFilters()}
+        />
+      </div>
     {:else}
-      <div class="divide-y divide-[var(--line)]">
+      <div class="divide-y divide-line">
         {#each events as event (event.id)}
           <EventRow row={rowFor(event)} inspectable />
         {/each}
@@ -381,7 +382,7 @@
 
   {#if pageInfo?.has_more}
     <button
-      class="rounded-md border border-[var(--line)] px-3 py-1.5 text-meta font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] disabled:opacity-60"
+      class="rounded-md border border-line px-3 py-1.5 text-meta font-medium text-fg-muted transition-colors hover:bg-line-subtle disabled:opacity-60"
       onclick={() => void showOlder()}
       disabled={loadingMore}
       type="button"

@@ -10,7 +10,7 @@
   import { coreClient } from "$lib/coreClient";
   import { kindLabel, kindDescription, kindColor } from "$lib/artifactKinds";
   import { formatTimestamp } from "$lib/formatDate";
-  import { workspacePath } from "$lib/workspacePaths";
+  import { bindWorkspaceHref } from "$lib/workspacePaths";
   import ProvenanceBadge from "$lib/components/ProvenanceBadge.svelte";
   import WorkspaceResourceTopRow from "$lib/components/WorkspaceResourceTopRow.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
@@ -104,9 +104,9 @@
     return 0;
   });
 
-  function workspaceHref(pathname = "/") {
-    return workspacePath(organizationSlug, workspaceSlug, pathname);
-  }
+  let workspaceHref = $derived(
+    bindWorkspaceHref(organizationSlug, workspaceSlug),
+  );
 
   let artifactHeaderTitle = $derived(
     String(artifact?.summary ?? "").trim() ||
@@ -274,18 +274,18 @@
 
 {#if loading}
   <nav
-    class="mb-2 flex min-w-0 items-center gap-1.5 text-micro text-[var(--fg-muted)]"
+    class="mb-2 flex min-w-0 items-center gap-1.5 text-micro text-fg-muted"
     aria-label="Breadcrumb"
   >
     <a
-      class="shrink-0 transition-colors hover:text-[var(--fg)]"
+      class="shrink-0 transition-colors hover:text-fg"
       href={workspaceHref("/artifacts")}>Artifacts</a
     >
-    <span class="shrink-0 text-[var(--fg-subtle)]">/</span>
-    <span class="min-w-0 truncate text-[var(--fg-muted)]">{artifactId}</span>
+    <span class="shrink-0 text-fg-subtle">/</span>
+    <span class="min-w-0 truncate text-fg-muted">{artifactId}</span>
   </nav>
   <div
-    class="mt-8 flex items-center justify-center gap-2 text-meta text-[var(--fg-muted)]"
+    class="mt-8 flex items-center justify-center gap-2 text-meta text-fg-muted"
   >
     <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
       <circle
@@ -306,15 +306,15 @@
   </div>
 {:else if loadError}
   <nav
-    class="mb-2 flex min-w-0 items-center gap-1.5 text-micro text-[var(--fg-muted)]"
+    class="mb-2 flex min-w-0 items-center gap-1.5 text-micro text-fg-muted"
     aria-label="Breadcrumb"
   >
     <a
-      class="shrink-0 transition-colors hover:text-[var(--fg)]"
+      class="shrink-0 transition-colors hover:text-fg"
       href={workspaceHref("/artifacts")}>Artifacts</a
     >
-    <span class="shrink-0 text-[var(--fg-subtle)]">/</span>
-    <span class="min-w-0 truncate text-[var(--fg-muted)]">{artifactId}</span>
+    <span class="shrink-0 text-fg-subtle">/</span>
+    <span class="min-w-0 truncate text-fg-muted">{artifactId}</span>
   </nav>
   <div class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
     {loadError}
@@ -322,7 +322,7 @@
 {:else if artifact}
   {#if artifact?.trashed_at}
     <div
-      class="trash-banner mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-meta text-danger-text"
+      class="trash-banner mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-danger bg-danger-soft px-3 py-2 text-meta text-danger-text"
     >
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2 font-semibold">
@@ -332,7 +332,7 @@
         {#if artifact.trash_reason}
           <p class="mt-2">Reason: {artifact.trash_reason}</p>
         {/if}
-        <p class="mt-1 text-micro text-danger-text/80">
+        <p class="mt-1 text-micro text-danger-text">
           Trashed {#if artifact.trashed_by}by {actorName(
               artifact.trashed_by,
             )}{/if}
@@ -342,7 +342,7 @@
         </p>
       </div>
       <button
-        class="shrink-0 cursor-pointer rounded-md border border-danger/40 bg-danger-soft px-2 py-1 text-micro font-medium text-danger-text hover:bg-danger/25 disabled:opacity-50"
+        class="shrink-0 cursor-pointer rounded-md border border-danger bg-danger-soft px-2 py-1 text-micro font-medium text-danger-text hover:bg-danger-soft disabled:opacity-50"
         disabled={lifecycleBusy}
         onclick={handleRestoreArtifact}
         type="button"
@@ -352,7 +352,7 @@
     </div>
   {:else if artifact?.archived_at}
     <div
-      class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-meta text-warn-text"
+      class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-warn bg-warn-soft px-3 py-2 text-meta text-warn-text"
     >
       <p class="min-w-0 flex-1">
         This artifact was archived on {formatTimestamp(artifact.archived_at) ||
@@ -361,7 +361,7 @@
           )}{/if}.
       </p>
       <button
-        class="shrink-0 cursor-pointer rounded-md border border-warn/40 bg-warn-soft px-2 py-1 text-micro font-medium text-warn-text hover:bg-warn/25 disabled:opacity-50"
+        class="shrink-0 cursor-pointer rounded-md border border-warn bg-warn-soft px-2 py-1 text-micro font-medium text-warn-text hover:bg-warn-soft disabled:opacity-50"
         disabled={lifecycleBusy}
         onclick={handleUnarchiveArtifact}
         type="button"
@@ -372,10 +372,10 @@
   {/if}
 
   {#snippet artifactDesktop()}
-    <h1 class="min-w-0 text-subtitle font-semibold text-[var(--fg)]">
+    <h1 class="min-w-0 text-subtitle font-semibold text-fg">
       {artifactHeaderTitle}
     </h1>
-    <p class="mt-0.5 text-meta text-[var(--fg-muted)]">
+    <p class="mt-0.5 text-meta text-fg-muted">
       {kindDescription(artifact.kind)}
     </p>
   {/snippet}
@@ -387,14 +387,13 @@
   >
     {#snippet breadcrumb()}
       <a
-        class="shrink-0 transition-colors hover:text-[var(--fg)]"
+        class="shrink-0 transition-colors hover:text-fg"
         href={workspaceHref("/artifacts")}>Artifacts</a
       >
-      <span class="shrink-0 text-[var(--fg-subtle)]">/</span>
+      <span class="shrink-0 text-fg-subtle">/</span>
       <div class="flex min-h-0 min-w-0 flex-1 items-center gap-1.5">
-        <span
-          class="min-w-0 shrink truncate text-[var(--fg-muted)]"
-          aria-current="page">{artifact?.summary || artifactId}</span
+        <span class="min-w-0 shrink truncate text-fg-muted" aria-current="page"
+          >{artifact?.summary || artifactId}</span
         >
         <span
           class="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium leading-none sm:py-0.5 sm:text-micro {kindColor(
@@ -426,29 +425,28 @@
   )}
 
   <div
-    class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-micro text-[var(--fg-muted)]"
+    class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-micro text-fg-muted"
   >
     <span>{formatTimestamp(artifact.created_at) || "—"}</span>
     <span>by {actorName(artifact.created_by)}</span>
     {#if isAttachmentArtifact}
-      <span class="text-[var(--fg-subtle)]">·</span>
-      <span class="font-mono text-[var(--fg-muted)]"
+      <span class="text-fg-subtle">·</span>
+      <span class="font-mono text-fg-muted"
         >{artifactContentType || "unknown"}</span
       >
       {#if attachmentByteSize > 0}
-        <span class="text-[var(--fg-subtle)]">·</span>
+        <span class="text-fg-subtle">·</span>
         <span>{formatBytes(attachmentByteSize)}</span>
       {/if}
       {#if attachmentFileName}
-        <span class="text-[var(--fg-subtle)]">·</span>
-        <span
-          class="min-w-0 truncate text-[var(--fg)]"
-          title={attachmentFileName}>{attachmentFileName}</span
+        <span class="text-fg-subtle">·</span>
+        <span class="min-w-0 truncate text-fg" title={attachmentFileName}
+          >{attachmentFileName}</span
         >
       {/if}
     {/if}
     {#if artifact.thread_id && artifactTopicHref}
-      <span class="text-[var(--fg-subtle)]">·</span>
+      <span class="text-fg-subtle">·</span>
       <a
         class="text-accent-text transition-colors hover:text-accent-text"
         href={workspaceHref(artifactTopicHref)}
@@ -504,7 +502,7 @@
 
   {#if contentLoadError}
     <div
-      class="mt-3 rounded-md border border-[var(--line)] px-3 py-2 text-micro text-[var(--fg-muted)]"
+      class="mt-3 rounded-md border border-line px-3 py-2 text-micro text-fg-muted"
     >
       Content unavailable for this artifact.
     </div>
@@ -527,16 +525,12 @@
   {/if}
 
   {#if cardArtifactContent}
-    <div
-      class="mt-4 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
-    >
-      <div class="border-b border-[var(--line)] px-4 py-2.5">
-        <h2 class="text-meta font-medium text-[var(--fg)]">
-          Card revision content
-        </h2>
+    <div class="mt-4 rounded-md border border-line bg-bg-soft">
+      <div class="border-b border-line px-4 py-2.5">
+        <h2 class="text-meta font-medium text-fg">Card revision content</h2>
       </div>
       <div class="px-4 py-3 text-meta">
-        <div class="flex flex-wrap gap-2 text-micro text-[var(--fg-muted)]">
+        <div class="flex flex-wrap gap-2 text-micro text-fg-muted">
           {#if cardArtifactCardRef}
             <RefLink
               humanize
@@ -557,25 +551,24 @@
           {/if}
         </div>
         {#if cardArtifactContent.title}
-          <p class="mt-3 text-base font-medium text-[var(--fg)]">
+          <p class="mt-3 text-base font-medium text-fg">
             {cardArtifactContent.title}
           </p>
         {/if}
         {#if cardArtifactContent.summary}
-          <div class="mt-2 leading-relaxed text-[var(--fg)]">
+          <div class="mt-2 leading-relaxed text-fg">
             <MarkdownRenderer source={cardArtifactContent.summary} />
           </div>
         {/if}
         {#if Array.isArray(cardArtifactContent.definition_of_done) && cardArtifactContent.definition_of_done.length > 0}
           <div class="mt-3">
-            <p class="text-micro font-medium text-[var(--fg-muted)]">
+            <p class="text-micro font-medium text-fg-muted">
               Definition of done
             </p>
-            <ul class="mt-1 space-y-0.5 text-[var(--fg-muted)]">
+            <ul class="mt-1 space-y-0.5 text-fg-muted">
               {#each cardArtifactContent.definition_of_done as item}
                 <li class="flex items-start gap-2">
-                  <span
-                    class="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-[var(--fg-muted)]"
+                  <span class="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-fg-muted"
                   ></span>
                   <span>{item}</span>
                 </li>
@@ -588,28 +581,22 @@
   {/if}
 
   {#if hasTextContent && artifact.kind !== "attachment"}
-    <div
-      class="mt-4 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
-    >
+    <div class="mt-4 rounded-md border border-line bg-bg-soft">
       <div
-        class="flex items-center justify-between border-b border-[var(--line)] px-4 py-2.5"
+        class="flex items-center justify-between border-b border-line px-4 py-2.5"
       >
-        <h2 class="text-meta font-medium text-[var(--fg)]">Text Content</h2>
-        <span class="text-micro text-[var(--fg-muted)]"
-          >{artifactContentType}</span
-        >
+        <h2 class="text-meta font-medium text-fg">Text Content</h2>
+        <span class="text-micro text-fg-muted">{artifactContentType}</span>
       </div>
       <pre
-        class="max-h-[30rem] overflow-auto whitespace-pre-wrap break-words px-4 py-3 font-mono text-micro leading-relaxed text-[var(--fg)]">{textContent}</pre>
+        class="max-h-[30rem] overflow-auto whitespace-pre-wrap break-words px-4 py-3 font-mono text-micro leading-relaxed text-fg">{textContent}</pre>
     </div>
   {/if}
 
   {#if nonThreadRefs.length > 0}
-    <details
-      class="mt-2 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
-    >
+    <details class="mt-2 rounded-md border border-line bg-bg-soft">
       <summary
-        class="cursor-pointer px-4 py-2.5 text-micro text-[var(--fg-muted)] hover:text-[var(--fg)]"
+        class="cursor-pointer px-4 py-2.5 text-micro text-fg-muted hover:text-fg"
         >Linked references ({nonThreadRefs.length})</summary
       >
       <div class="flex flex-wrap gap-1.5 px-4 pb-3 pt-1 text-micro">
@@ -627,30 +614,24 @@
   {/if}
 
   {#if artifact.content_hash}
-    <details
-      class="mt-2 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
-    >
+    <details class="mt-2 rounded-md border border-line bg-bg-soft">
       <summary
-        class="cursor-pointer px-4 py-2.5 text-micro text-[var(--fg-muted)] hover:text-[var(--fg)]"
+        class="cursor-pointer px-4 py-2.5 text-micro text-fg-muted hover:text-fg"
         >Content hash</summary
       >
-      <p
-        class="break-all px-4 pb-3 pt-1 font-mono text-micro text-[var(--fg-muted)]"
-      >
+      <p class="break-all px-4 pb-3 pt-1 font-mono text-micro text-fg-muted">
         {artifact.content_hash}
       </p>
     </details>
   {/if}
 
-  <details
-    class="mt-2 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
-  >
+  <details class="mt-2 rounded-md border border-line bg-bg-soft">
     <summary
-      class="cursor-pointer px-4 py-2.5 text-micro text-[var(--fg-muted)] hover:text-[var(--fg)]"
+      class="cursor-pointer px-4 py-2.5 text-micro text-fg-muted hover:text-fg"
       >Raw metadata — ID: {artifact.id}</summary
     >
     <pre
-      class="overflow-auto px-4 pb-3 text-micro text-[var(--fg-muted)]">{JSON.stringify(
+      class="overflow-auto px-4 pb-3 text-micro text-fg-muted">{JSON.stringify(
         artifact,
         null,
         2,
@@ -658,15 +639,13 @@
   </details>
 
   {#if artifactContent && !textContent && artifact.kind !== "attachment"}
-    <details
-      class="mt-2 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
-    >
+    <details class="mt-2 rounded-md border border-line bg-bg-soft">
       <summary
-        class="cursor-pointer px-4 py-2.5 text-micro text-[var(--fg-muted)] hover:text-[var(--fg)]"
+        class="cursor-pointer px-4 py-2.5 text-micro text-fg-muted hover:text-fg"
         >Raw content JSON</summary
       >
       <pre
-        class="overflow-auto px-4 pb-3 text-micro text-[var(--fg-muted)]">{JSON.stringify(
+        class="overflow-auto px-4 pb-3 text-micro text-fg-muted">{JSON.stringify(
           artifactContent,
           null,
           2,
@@ -674,7 +653,7 @@
     </details>
   {/if}
 {:else}
-  <div class="mt-8 text-center text-meta text-[var(--fg-muted)]">
+  <div class="mt-8 text-center text-meta text-fg-muted">
     Artifact not found.
   </div>
 {/if}

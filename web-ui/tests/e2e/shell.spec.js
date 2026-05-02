@@ -18,12 +18,16 @@ test("registers actor, unlocks shell, and performs a write", async ({
 }) => {
   const threadTitle = `E2E Thread ${Date.now()}`;
 
+  await page.addInitScript(() => {
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
+  });
+
   await page.goto(WS_HOME);
 
   await page.getByLabel("Display name").fill("E2E User");
   await page.getByRole("button", { name: "Create and continue" }).click();
 
-  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Inbox", exact: true }),
   ).toBeVisible();
@@ -49,7 +53,7 @@ test("registers actor, unlocks shell, and performs a write", async ({
   await expect(page.getByRole("link", { name: threadTitle })).toBeVisible();
 });
 
-test("renders a dashboard on workspace root and routes into inbox", async ({
+test("renders Home on workspace root and routes into inbox", async ({
   page,
 }) => {
   await page.addInitScript(() => {
@@ -59,31 +63,27 @@ test("renders a dashboard on workspace root and routes into inbox", async ({
 
   await page.goto(WS_HOME);
 
-  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Recent topics" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Recent Docs" }),
-  ).toBeVisible();
+    page.locator(
+      '[data-testid="home-unread-feed"], [data-testid="home-unread-empty"], [data-testid="home-unread-loading"]',
+    ),
+  ).toHaveCount(1);
 
-  await page.getByRole("link", { name: "Inbox", exact: true }).click();
+  await page.getByRole("link", { name: "Inbox", exact: true }).first().click();
   await expect(page).toHaveURL(/\/o\/local\/w\/local\/inbox$/);
   await expect(
     page.getByRole("heading", { name: "Inbox", exact: true }),
   ).toBeVisible();
 });
 
-test("shows partial-failure messaging when one dashboard source is unavailable", async ({
-  page,
-}) => {
+test("shows error when Home unread feed is unavailable", async ({ page }) => {
   await page.addInitScript(() => {
     window.localStorage.setItem("anx_ui_actor_id:local", "actor-ops-ai");
     window.localStorage.setItem("workspaceTourSeen.local", "1");
   });
 
-  await page.route(/\/topics(\?.*)?$/, async (route) => {
+  await page.route(/\/home\/unread(\?.*)?$/, async (route) => {
     if (route.request().method() !== "GET") {
       await route.continue();
       return;
@@ -98,19 +98,11 @@ test("shows partial-failure messaging when one dashboard source is unavailable",
 
   await page.goto(WS_HOME);
 
-  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
-  await expect(
-    page.getByText("Failed to load topics:", { exact: false }),
-  ).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Recent Docs" }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
+  await expect(page.getByRole("alert")).toBeVisible();
 });
 
-test("opens mobile drawer navigation and navigates between routes", async ({
-  page,
-}) => {
+test("mobile bottom navigation switches workspace routes", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.addInitScript(() => {
     window.localStorage.setItem("anx_ui_actor_id:local", "actor-ops-ai");
@@ -119,20 +111,13 @@ test("opens mobile drawer navigation and navigates between routes", async ({
 
   await page.goto(`${WS_HOME}/inbox`);
 
-  const drawer = page.getByRole("dialog", { name: "Navigation menu" });
-  await expect(drawer).toHaveCount(0);
+  const bottomNav = page.getByRole("navigation", {
+    name: "Primary navigation",
+  });
+  await bottomNav.getByRole("link", { name: "Topics" }).click();
 
-  await page.getByRole("button", { name: "Open navigation menu" }).click();
-  await expect(drawer).toBeVisible();
-
-  await page.keyboard.press("Escape");
-  await expect(drawer).toHaveCount(0);
-
-  await page.getByRole("button", { name: "Open navigation menu" }).click();
-  await drawer
-    .getByRole("link", { name: "Artifacts", exact: true })
-    .click({ force: true });
-
-  await expect(page).toHaveURL(/\/o\/local\/w\/local\/artifacts$/);
-  await expect(page.getByRole("heading", { name: "Artifacts" })).toBeVisible();
+  await expect(page).toHaveURL(/\/o\/local\/w\/local\/topics$/);
+  await expect(
+    page.getByRole("heading", { name: "Topics", exact: true }),
+  ).toBeVisible();
 });

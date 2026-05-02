@@ -21,7 +21,7 @@ test("mocked core smoke flow: inbox -> threads -> thread detail -> post message 
     {
       id: "evt-unknown-1",
       ts: "2026-03-03T09:00:00.000Z",
-      type: "exception_raised",
+      type: "e2e_unknown_event_stub",
       actor_id: actorId,
       thread_id: "thread-onboarding",
       refs: ["thread:thread-onboarding", "mystery:opaque-ref"],
@@ -249,19 +249,20 @@ test("mocked core smoke flow: inbox -> threads -> thread detail -> post message 
   await expect(
     page.getByRole("heading", { name: "Customer Onboarding Workflow" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Timeline" }).click();
+  await page.getByRole("tab", { name: "Timeline" }).click();
   const unknownEventRow = page.locator("#event-evt-unknown-1");
-  await expect(unknownEventRow).toContainText("Unknown event type");
+  await expect(unknownEventRow).toContainText(
+    "Unknown event should still render.",
+  );
   await unknownEventRow.getByText("Details").click();
   await expect(unknownEventRow).toContainText("opaque_field");
 
+  await page.getByRole("tab", { name: "Messages" }).click();
   await page.locator("#message-text").fill("Posted from headless smoke flow");
   await page.getByRole("button", { name: "Post" }).click();
 
   await expect.poll(() => postedCount).toBe(1);
   expect(timeline[0]?.thread_ref).toBe("thread:thread-onboarding");
   expect(timeline[0]?.thread_id).toBe("thread-onboarding");
-  await expect(
-    page.getByText("Message: Posted from headless smoke flow", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByText(/Posted from headless smoke flow/)).toBeVisible();
 });

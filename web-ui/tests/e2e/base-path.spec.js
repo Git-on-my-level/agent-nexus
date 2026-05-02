@@ -45,7 +45,7 @@ test("preserves a configured mount prefix in redirects and generated links", asy
   await expect(page).toHaveURL(
     new RegExp(`${APP_BASE_PATH}/o/local/w/local/?$`),
   );
-  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
 
   await expect(
     page.locator(`a[href="${appPath("/o/local/w/local/inbox")}"]`).first(),

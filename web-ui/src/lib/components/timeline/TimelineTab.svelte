@@ -4,6 +4,7 @@
   import { tick } from "svelte";
 
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
+  import { emptyTimelineConfirmModal } from "$lib/confirmModal.js";
   import { coreClient } from "$lib/coreClient";
   import {
     scrollAndHighlightTarget,
@@ -17,7 +18,7 @@
   } from "$lib/actorSession";
   import { formatTimestamp } from "$lib/formatDate";
   import ArchiveButton from "$lib/components/ArchiveButton.svelte";
-  import CompactRefLink from "$lib/components/CompactRefLink.svelte";
+  import RefLink from "$lib/components/RefLink.svelte";
   import LeadingSelectionGlyph from "$lib/components/LeadingSelectionGlyph.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import { buildPrimitiveRefRoutes } from "$lib/refLinkModel";
@@ -81,14 +82,7 @@
   let timelineSelectMode = $state(false);
   /** @type {Set<string>} */
   let selectedTimelineIds = $state(new Set());
-  let confirmModal = $state({
-    open: false,
-    action: "",
-    eventId: "",
-    eventRawType: "",
-    /** @type {string[] | null} */
-    bulkIds: null,
-  });
+  let confirmModal = $state(emptyTimelineConfirmModal());
   let lifecycleBusy = $state(false);
   let lifecycleError = $state("");
   let handledDeepLinkKey = $state("");
@@ -161,17 +155,6 @@
       ? "This message and all its replies will be archived. Toggle 'Show archived' to see them again."
       : "This event will be hidden from the timeline. You can show archived events to see it again.";
   });
-
-  /** @returns {{ open: false, action: string, eventId: string, eventRawType: string, bulkIds: null }} */
-  function emptyTimelineConfirmModal() {
-    return {
-      open: false,
-      action: "",
-      eventId: "",
-      eventRawType: "",
-      bulkIds: null,
-    };
-  }
 
   function timelineMetaFull(event) {
     return `${actorName(event.actor_id)} · ${formatTimestamp(event.ts) || "—"}`;
@@ -387,20 +370,18 @@
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div class="flex flex-wrap items-center gap-3">
         {#if archivedCount > 0}
-          <label
-            class="flex items-center gap-1.5 text-micro text-[var(--fg-muted)]"
-          >
+          <label class="flex items-center gap-1.5 text-micro text-fg-muted">
             <input
               type="checkbox"
               bind:checked={showArchived}
-              class="accent-[var(--accent)]"
+              class="accent-accent"
             />
             Show archived ({archivedCount})
           </label>
         {/if}
         <button
           aria-pressed={timelineSelectMode}
-          class="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] disabled:cursor-not-allowed disabled:opacity-50"
+          class="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-line bg-bg-soft px-2.5 text-micro font-medium text-fg-muted transition-colors hover:bg-line-subtle disabled:cursor-not-allowed disabled:opacity-50"
           disabled={lifecycleBusy || filteredTimeline.length === 0}
           onclick={toggleTimelineSelectMode}
           type="button"
@@ -410,7 +391,7 @@
       </div>
       <div class="min-h-[1rem] text-right" aria-live="polite">
         {#if timelineLoading && hasAnyTimelineEvents}
-          <p class="text-micro text-[var(--fg-muted)]">Syncing…</p>
+          <p class="text-micro text-fg-muted">Syncing…</p>
         {/if}
       </div>
     </div>
@@ -420,9 +401,9 @@
       {timelineError}
     </p>
   {:else if timelineLoading && !hasAnyTimelineEvents}
-    <p class="text-meta text-[var(--fg-muted)]">Loading timeline...</p>
+    <p class="text-meta text-fg-muted">Loading timeline...</p>
   {:else if !hasAnyTimelineEvents}
-    <p class="text-meta text-[var(--fg-muted)]">No events yet.</p>
+    <p class="text-meta text-fg-muted">No events yet.</p>
   {:else}
     <div class="flex min-w-0 flex-col gap-1">
       {#if timelineError}
@@ -489,7 +470,7 @@
         />
       {/if}
       <ul
-        class="flex min-w-0 flex-col divide-y divide-[var(--line)] overflow-hidden rounded-md border border-[var(--line)] bg-[var(--panel)]"
+        class="flex min-w-0 flex-col divide-y divide-line overflow-hidden rounded-md border border-line bg-panel"
       >
         {#each filteredTimeline as event (event.id)}
           {@const eventSelected = selectedTimelineIds.has(String(event.id))}
@@ -536,7 +517,7 @@
                   aria-hidden="true"
                 ></span>
                 <p
-                  class="min-w-0 flex-1 truncate font-semibold tracking-tight text-[var(--fg)] {compact
+                  class="min-w-0 flex-1 truncate font-semibold tracking-tight text-fg {compact
                     ? 'text-[11px] leading-tight'
                     : 'text-[12px]'}"
                   title={event.headline}
@@ -544,13 +525,13 @@
                   {event.headline}
                 </p>
                 <span
-                  class="max-w-[42%] shrink-0 truncate text-[11px] text-[var(--fg-muted)]"
+                  class="max-w-[42%] shrink-0 truncate text-[11px] text-fg-muted"
                   title={timelineMetaFull(event)}
                 >
                   {#if compact}
                     <span class="tabular-nums"
                       >{formatTimestamp(event.ts) || "—"}</span
-                    ><span class="text-[var(--fg-muted)]"
+                    ><span class="text-fg-muted"
                       >{" "}· {actorName(event.actor_id)}</span
                     >
                   {:else}
@@ -595,7 +576,7 @@
                   <div
                     class="flex min-w-0 flex-col {compact
                       ? 'gap-0 text-[11px]'
-                      : 'gap-0.5 text-[12px]'} leading-snug text-[var(--fg-muted)]"
+                      : 'gap-0.5 text-[12px]'} leading-snug text-fg-muted"
                   >
                     {#each event.changePreviewLines as line (line)}
                       <p class="break-words">{line}</p>
@@ -606,13 +587,13 @@
                     source={event.summary}
                     class="{compact
                       ? 'text-[11px] leading-snug'
-                      : 'text-[12px] leading-snug'} text-[var(--fg)] {compact
+                      : 'text-[12px] leading-snug'} text-fg {compact
                       ? 'line-clamp-2'
                       : ''}"
                   />
                 {:else if String(event.summary ?? "").trim() && String(event.summary ?? "").trim() !== event.headline}
                   <p
-                    class="whitespace-pre-wrap break-words leading-snug text-[var(--fg-muted)] {compact
+                    class="whitespace-pre-wrap break-words leading-snug text-fg-muted {compact
                       ? 'text-[11px] line-clamp-2'
                       : 'text-[12px]'}"
                   >
@@ -627,7 +608,7 @@
                       : 'mt-1.5'} [&_summary::-webkit-details-marker]:hidden"
                   >
                     <summary
-                      class="inline-flex cursor-pointer select-none items-center gap-1 text-[11px] text-[var(--fg-muted)] hover:text-[var(--fg)]"
+                      class="inline-flex cursor-pointer select-none items-center gap-1 text-[11px] text-fg-muted hover:text-fg"
                     >
                       <span
                         aria-hidden="true"
@@ -639,11 +620,12 @@
                     <ul
                       class="{compact
                         ? 'mt-1'
-                        : 'mt-1.5'} flex min-w-0 flex-col gap-1 border-l border-[var(--line)] pl-2"
+                        : 'mt-1.5'} flex min-w-0 flex-col gap-1 border-l border-line pl-2"
                     >
                       {#each event.refs as refValue (refValue)}
                         <li class="min-w-0">
-                          <CompactRefLink
+                          <RefLink
+                            variant="compact"
                             refValue={String(refValue)}
                             {threadId}
                             {boardId}
@@ -663,11 +645,11 @@
                 {#if !event.isKnownType}
                   <details class={compact ? "mt-0.5" : "mt-1.5"}>
                     <summary
-                      class="cursor-pointer text-[11px] text-[var(--fg-muted)] hover:text-[var(--fg)]"
+                      class="cursor-pointer text-[11px] text-fg-muted hover:text-fg"
                       >Details</summary
                     >
                     <pre
-                      class="mt-1 overflow-auto rounded bg-[var(--bg-soft)] p-2 text-[11px] text-[var(--fg-muted)]">{JSON.stringify(
+                      class="mt-1 overflow-auto rounded bg-bg-soft p-2 text-[11px] text-fg-muted">{JSON.stringify(
                         event.payload ?? {},
                         null,
                         2,

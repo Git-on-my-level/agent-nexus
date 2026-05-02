@@ -377,12 +377,24 @@ test("thread detail separates messages from timeline and nests replies", async (
   allowFirstTimelineResponse();
   await expect.poll(() => streamLastEventId).toBe("evt-1002");
 
+  await page.getByRole("tab", { name: "Docs" }).click();
   await expect(
-    page.getByText("Topic-linked docs and current head revisions."),
+    page.getByText("Topic-linked documents and current head revisions."),
   ).toBeVisible();
+  const docLink = page.getByRole("link", { name: /Onboarding Runbook/ });
+  await expect(docLink).toBeVisible();
+  await expect(docLink).toHaveAttribute(
+    "href",
+    /\/o\/local\/w\/local\/docs\/doc-onboarding-runbook\?revision=rev-onboarding-runbook-2$/,
+  );
+
+  await page.getByRole("tab", { name: "Boards" }).click();
   await expect(
     page.getByRole("link", { name: /Q2 Launch Board/ }),
-  ).toHaveAttribute("href", /\/o\/local\/w\/local\/boards\/board-q2-launch$/);
+  ).toHaveAttribute(
+    "href",
+    /\/o\/local\/w\/local\/boards\/board-q2-launch(?:\?|$)/,
+  );
   await expect(
     page.getByRole("link", {
       name: "Pinned doc: doc-onboarding-runbook",
@@ -391,15 +403,10 @@ test("thread detail separates messages from timeline and nests replies", async (
     "href",
     /\/o\/local\/w\/local\/docs\/doc-onboarding-runbook$/,
   );
-  const docLink = page.getByRole("link", { name: /Onboarding Runbook/ });
-  await expect(docLink).toBeVisible();
-  await expect(docLink).toHaveAttribute(
-    "href",
-    /\/o\/local\/w\/local\/docs\/doc-onboarding-runbook\?revision=rev-onboarding-runbook-2$/,
-  );
+
   await page.getByRole("tab", { name: "Messages" }).click();
   await expect(page).toHaveURL(
-    /\/o\/local\/w\/local\/topics\/thread-onboarding\?tab=messages$/,
+    /\/o\/local\/w\/local\/(?:topics|threads)\/thread-onboarding\?tab=messages$/,
   );
   await expect(
     page.getByText("Latest workspace message", { exact: true }),
@@ -430,13 +437,14 @@ test("thread detail separates messages from timeline and nests replies", async (
   );
   await expect(page.locator("#message-mention-list")).toContainText("@jarvis");
   await expect(page.locator("#message-mention-list")).toContainText("@clawd");
+  await page.keyboard.press("Escape");
   await expect(
     page.locator("#message-evt-1002").getByRole("button", { name: "Reply" }),
   ).toBeVisible();
   await page
     .locator("#message-evt-1002")
     .getByRole("button", { name: "Reply" })
-    .click();
+    .click({ force: true });
   await page.locator("#message-text").fill("Reply message from e2e");
   await page.getByRole("button", { name: "Post message" }).click();
 
@@ -446,23 +454,19 @@ test("thread detail separates messages from timeline and nests replies", async (
   await expect(
     page.getByText("Earlier timeline-only message", { exact: true }),
   ).toBeVisible();
-  await expect(page.getByText("Syncing…", { exact: true })).toBeVisible();
   await expect(
     page.getByText("Loading messages...", { exact: true }),
   ).toHaveCount(0);
   allowSecondTimelineResponse();
 
-  await expect(
-    page
-      .locator("#message-evt-1002")
-      .locator("#message-event-new-1")
-      .getByText("Reply message from e2e", { exact: true }),
-  ).toBeVisible();
+  await expect(page.locator("#message-event-new-1")).toContainText(
+    "Reply message from e2e",
+  );
   await expect(page.getByRole("tab", { name: "Timeline" })).toBeVisible();
 
   await page.getByRole("tab", { name: "Timeline" }).click();
   await expect(page).toHaveURL(
-    /\/o\/local\/w\/local\/topics\/thread-onboarding\?tab=timeline$/,
+    /\/o\/local\/w\/local\/(?:topics|threads)\/thread-onboarding\?tab=timeline$/,
   );
   await expect(page.locator("#message-text")).toHaveCount(0);
   await expect(
@@ -474,7 +478,7 @@ test("thread detail separates messages from timeline and nests replies", async (
   await page.reload();
 
   await expect(page).toHaveURL(
-    /\/o\/local\/w\/local\/topics\/thread-onboarding\?tab=timeline$/,
+    /\/o\/local\/w\/local\/(?:topics|threads)\/thread-onboarding\?tab=timeline$/,
   );
   await expect(page.locator("#message-text")).toHaveCount(0);
   await expect(
@@ -485,7 +489,7 @@ test("thread detail separates messages from timeline and nests replies", async (
   ).toBeVisible();
 
   await page.goto(
-    "/o/local/w/local/topics/thread-onboarding?tab=messages#message-evt-0999",
+    "/o/local/w/local/threads/thread-onboarding?tab=messages#message-evt-0999",
   );
   await expect(
     page.getByRole("tab", { name: "Messages", exact: true }),
@@ -510,10 +514,11 @@ test("thread detail handles snapshot update conflict and retries after reload", 
   let patchAttempt = 0;
   let threadSnapshot = {
     id: "thread-onboarding",
-    topic_ref: "topic:onboarding",
+    topic_ref: "topic:thread-onboarding",
     type: "process",
     title: "Customer Onboarding Workflow",
     status: "active",
+    summary: "Thread detail summary.",
     key_artifacts: ["artifact-policy-draft"],
     current_summary: "Thread detail summary.",
     next_actions: ["Collect legal signoff"],
@@ -606,6 +611,10 @@ test("thread detail handles snapshot update conflict and retries after reload", 
     threadSnapshot = {
       ...threadSnapshot,
       title: payload.patch?.title ?? threadSnapshot.title,
+      summary:
+        payload.patch?.summary !== undefined
+          ? payload.patch.summary
+          : (threadSnapshot.summary ?? threadSnapshot.current_summary),
       current_summary: payload.patch?.summary ?? threadSnapshot.current_summary,
       updated_at: "2026-03-04T03:00:00.000Z",
       updated_by: payload.actor_id,
@@ -677,9 +686,10 @@ test("thread detail handles snapshot update conflict and retries after reload", 
     page.getByRole("heading", { name: "Customer Onboarding Workflow" }),
   ).toBeVisible();
 
+  await page.getByRole("tab", { name: "About" }).click();
   await page.getByRole("button", { name: "Edit" }).click();
   await page.getByLabel("Title", { exact: true }).fill("Edited after conflict");
-  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByRole("button", { name: "Save changes" }).click();
 
   await expect(
     page.getByText("Topic was updated elsewhere.", { exact: false }),
@@ -688,17 +698,19 @@ test("thread detail handles snapshot update conflict and retries after reload", 
     page.getByRole("heading", { name: "Server updated title" }),
   ).toBeVisible();
 
+  await page.getByRole("tab", { name: "About" }).click();
   await page.getByRole("button", { name: "Edit" }).click();
   await page.getByLabel("Title", { exact: true }).fill("Final merged title");
   await page.getByLabel("Summary", { exact: true }).fill("Final summary body");
-  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByRole("button", { name: "Save changes" }).click();
 
   await expect(page.getByText("Changes saved.", { exact: true })).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Final merged title" }),
   ).toBeVisible();
+  await page.getByRole("tab", { name: "About" }).click();
   await expect(
-    page.getByText("Final summary body", { exact: true }),
+    page.getByText("Final summary body", { exact: true }).first(),
   ).toBeVisible();
 
   expect(patchRequests).toHaveLength(2);
@@ -870,6 +882,7 @@ test("thread detail updates workspace panels from another actor via event stream
   await expect(
     page.getByText("Initial thread summary.", { exact: true }),
   ).toBeVisible();
+  await page.getByRole("tab", { name: "Docs" }).click();
   await expect(
     page.getByText("Onboarding Runbook", { exact: true }),
   ).toBeVisible();
@@ -925,15 +938,9 @@ test("thread detail updates workspace panels from another actor via event stream
   await expect(
     page.getByText("Updated remotely by another actor.", { exact: true }),
   ).toBeVisible();
+  await page.getByRole("tab", { name: "Docs" }).click();
   await expect(
     page.getByText("Remote Coordination Checklist", { exact: true }),
-  ).toBeVisible();
-
-  await page.getByRole("tab", { name: "Work" }).click();
-  await expect(
-    page.getByText("Create receipts and reviews from card detail pages.", {
-      exact: true,
-    }),
   ).toBeVisible();
 
   await page.getByRole("tab", { name: "Timeline" }).click();

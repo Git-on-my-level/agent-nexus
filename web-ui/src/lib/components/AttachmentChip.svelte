@@ -18,7 +18,7 @@
     uploadProgress = null,
     /** @type {'inline' | 'compact' | 'block' | 'tight'} — `tight`: minimal row height (no sidebar download). */
     size = "inline",
-    /** Inside a bordered composer row (`CompactRefLink`); drop outer RefChip frame. */
+    /** Inside a bordered composer row (`RefLink` compact variant); drop outer RefChip frame. */
     groupedInRow = false,
     /** Extra classes on outer shell */
     class: clazz = "",
@@ -116,7 +116,7 @@
 
   let leadingScale = $derived(
     size === "block"
-      ? "h-14 w-14 shrink-0 rounded-md bg-[var(--bg-soft)]"
+      ? "h-14 w-14 shrink-0 rounded-md bg-bg-soft"
       : size === "tight"
         ? "h-3 w-3 shrink-0"
         : "h-4 w-4 shrink-0",
@@ -179,7 +179,7 @@
 {#if !suppressRender}
   {#snippet fileIcon()}
     <svg
-      class="text-[var(--fg-muted)]"
+      class="text-fg-muted"
       width={rowTight ? 12 : 16}
       height={rowTight ? 12 : 16}
       viewBox="0 0 24 24"
@@ -195,7 +195,7 @@
 
   {#snippet spinner()}
     <span
-      class="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-[var(--line-strong)] border-t-accent-solid"
+      class="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-line-strong border-t-accent-solid"
       aria-hidden="true"
     ></span>
   {/snippet}
@@ -215,18 +215,18 @@
         role="text"
         title={resolved?.raw ?? ""}
         class={groupedInRow
-          ? "!min-h-[26px] !rounded-none items-center gap-1.5 text-[var(--fg-muted)]"
-          : "items-center gap-1.5 text-[var(--fg-muted)]"}
+          ? "!min-h-[26px] !rounded-none items-center gap-1.5 text-fg-muted"
+          : "items-center gap-1.5 text-fg-muted"}
       >
         <span class="{leadingScale} flex items-center justify-center"
           >{@render spinner()}</span
         >
         <span class="min-w-0 flex-1">
-          <span class="block truncate font-medium text-[var(--fg)]"
+          <span class="block truncate font-medium text-fg"
             >Uploading… {truncatedName}</span
           >
           {#if uploadProgress && Number.isFinite(uploadProgress.loaded) && Number.isFinite(uploadProgress.total) && uploadProgress.total > 0}
-            <span class="text-micro text-[var(--fg-muted)]">
+            <span class="text-micro text-fg-muted">
               {formatBytes(uploadProgress.loaded)} / {formatBytes(
                 uploadProgress.total,
               )}
@@ -240,7 +240,7 @@
         navigable={false}
         accentText={false}
         title={resolved?.raw ?? ""}
-        class="attachment-chip-row items-stretch gap-0 p-0 focus-within:ring-2 focus-within:ring-accent-solid/40 {groupedInRow
+        class="attachment-chip-row items-stretch gap-0 p-0 focus-within:ring-2 focus-within:ring-accent-solid {groupedInRow
           ? '!rounded-none'
           : rowTight
             ? 'rounded-sm'
@@ -249,11 +249,11 @@
         {#if resolved?.isLink && resolved?.href}
           <a
             class="compact-ref-link attachment-chip-link inline-flex min-w-0 flex-1 items-center {groupedInRow
-              ? 'hover:bg-[var(--bg-soft)]'
-              : 'hover:border-[var(--line-strong)]'} {rowTight
+              ? 'hover:bg-bg-soft'
+              : 'hover:border-line-strong'} {rowTight
               ? 'gap-1 px-1 py-0 text-[11px] leading-none'
               : 'gap-1.5 px-1.5 py-0.5'} {state === 'missing'
-              ? 'text-[var(--fg-muted)]'
+              ? 'text-fg-muted'
               : 'text-accent-text hover:text-accent-text'}"
             href={resolved.href}
             rel={resolved.isExternal ? "noreferrer noopener" : undefined}
@@ -278,14 +278,14 @@
                 {#if !rowTight}
                   {#if size !== "compact"}
                     <span
-                      class="shrink-0 text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)]"
+                      class="shrink-0 text-micro font-medium uppercase tracking-wide text-fg-muted"
                     >
                       {#if typeBadge}{typeBadge}{/if}{#if typeBadge && sizeLine}
                         {" · "}{/if}{#if sizeLine}{sizeLine}{/if}
                     </span>
                   {:else if typeBadge}
                     <span
-                      class="shrink-0 text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)]"
+                      class="shrink-0 text-micro font-medium uppercase tracking-wide text-fg-muted"
                       >{typeBadge}</span
                     >
                   {/if}
@@ -295,8 +295,8 @@
           </a>
         {:else}
           <span
-            class="compact-ref-link inline-flex min-w-0 flex-1 items-center text-[var(--fg-muted)] {groupedInRow
-              ? 'rounded-sm hover:bg-[var(--bg-soft)]'
+            class="compact-ref-link inline-flex min-w-0 flex-1 items-center text-fg-muted {groupedInRow
+              ? 'rounded-sm hover:bg-bg-soft'
               : ''} {rowTight
               ? 'gap-1 px-1 py-0 text-[11px] leading-none'
               : 'gap-1.5 px-1.5 py-0.5'}"
@@ -318,7 +318,7 @@
         {#if browser && resolved?.isLink && resolved?.href && state === "ready" && !resolved?.isExternal && !rowTight}
           <button
             type="button"
-            class="hidden shrink-0 items-center justify-center border-l border-[var(--line)] px-2 text-accent-text hover:bg-[var(--bg-soft)] sm:flex"
+            class="hidden shrink-0 items-center justify-center border-l border-line px-2 text-accent-text hover:bg-bg-soft sm:flex"
             aria-label={`Download ${displayName}`}
             disabled={downloadBusy}
             onclick={handleDownload}

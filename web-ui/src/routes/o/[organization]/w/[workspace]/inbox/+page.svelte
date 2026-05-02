@@ -14,7 +14,7 @@
   import { coreClient } from "$lib/coreClient";
   import { threadTimelineEventHref } from "$lib/deepLinkTargets";
   import { formatAbsoluteDateTime } from "$lib/formatDate";
-  import { workspacePath } from "$lib/workspacePaths";
+  import { bindWorkspaceHref } from "$lib/workspacePaths";
   import {
     INBOX_CATEGORY_ORDER,
     INBOX_CATEGORY_LABELS,
@@ -103,9 +103,9 @@
     categoryFilter !== "all" || urgencyFilter !== "all",
   );
 
-  function workspaceHref(pathname = "/") {
-    return workspacePath(organizationSlug, workspaceSlug, pathname);
-  }
+  let workspaceHref = $derived(
+    bindWorkspaceHref(organizationSlug, workspaceSlug),
+  );
 
   function snippet(text, max = 140) {
     const s = String(text ?? "").trim();
@@ -362,15 +362,15 @@
 
   function urgencyCardClass(level) {
     const active = urgencyFilter === level;
-    if (active) return "ring-1 ring-[var(--accent)] border-[var(--accent)]";
-    return "border-[var(--line)] hover:border-[var(--fg-subtle)]";
+    if (active) return "ring-1 ring-accent border-accent";
+    return "border-line hover:border-fg-subtle";
   }
 
   function categoryBadgeClass(category) {
     if (category === "ask") return "text-accent-text";
     if (category === "escalate") return "text-warn-text";
     if (category === "review") return "text-sky-400";
-    return "text-[var(--fg-muted)]";
+    return "text-fg-muted";
   }
 
   function ageOnly(label) {
@@ -555,13 +555,14 @@
 </script>
 
 <div
-  class="mb-2 flex flex-wrap items-center justify-between gap-2 border-b border-[var(--line)] pb-2 sm:mb-3 sm:gap-3 sm:pb-3"
+  class="mb-2 flex flex-wrap items-center justify-between gap-2 border-b border-line pb-2 sm:mb-3 sm:gap-3 sm:pb-3"
+  data-testid="inbox-triage-header"
 >
   <div class="flex min-w-0 items-baseline gap-2">
-    <h1 class="text-subtitle font-semibold text-[var(--fg)]">Inbox</h1>
+    <h1 class="text-subtitle font-semibold text-fg">Inbox</h1>
     {#if inboxTab === "completed"}
       <span
-        class="text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)]"
+        class="text-micro font-medium uppercase tracking-wide text-fg-muted"
         data-testid="inbox-tab-scope"
       >
         Completed
@@ -572,8 +573,8 @@
     <button
       class="cursor-pointer inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-micro font-medium transition-colors {hasActiveFilters ||
       inboxTab === 'completed'
-        ? 'border-[var(--accent)]/40 bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/15'
-        : 'border-[var(--line)] bg-[var(--bg-soft)] text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]'}"
+        ? 'border-accent bg-accent-soft text-accent hover:bg-accent-soft'
+        : 'border-line bg-bg-soft text-fg-muted hover:bg-line-subtle'}"
       onclick={() => (filtersOpen = !filtersOpen)}
       type="button"
       data-testid="inbox-filters-toggle"
@@ -597,8 +598,8 @@
       <button
         type="button"
         class="cursor-pointer inline-flex h-7 items-center rounded-md border px-2.5 text-micro font-medium transition-colors {inboxSel.selectMode
-          ? 'border-[var(--accent)]/40 bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/15'
-          : 'border-[var(--line)] bg-[var(--bg-soft)] text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]'}"
+          ? 'border-accent bg-accent-soft text-accent hover:bg-accent-soft'
+          : 'border-line bg-bg-soft text-fg-muted hover:bg-line-subtle'}"
         onclick={() => inboxSel.toggleSelectMode()}
         disabled={inboxBulkBusy}
         data-testid="inbox-select-toggle"
@@ -611,13 +612,13 @@
 
 {#if respondedBanner && inboxTab === "open"}
   <div
-    class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-ok/40 bg-ok-soft px-3 py-2.5 text-meta text-ok-text"
+    class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-ok bg-ok-soft px-3 py-2.5 text-meta text-ok-text"
     role="status"
     data-testid="inbox-response-banner"
   >
     <div class="space-y-1">
       <div class="font-semibold">Response recorded.</div>
-      <div class="text-micro text-ok-text/90">
+      <div class="text-micro text-ok-text">
         {#if respondedBanner.notifyQueued}
           Notification queued for delivery.
         {:else if respondedBanner.notifyRecorded}
@@ -650,7 +651,7 @@
     </div>
     <button
       type="button"
-      class="shrink-0 text-micro font-medium text-ok-text/80 hover:text-ok-text"
+      class="shrink-0 text-micro font-medium text-ok-text hover:text-ok-text"
       onclick={() => void dismissRespondBanner()}
     >
       Dismiss
@@ -665,9 +666,9 @@
         class="flex flex-wrap items-end gap-3 sm:flex-nowrap sm:items-end sm:gap-4"
       >
         <label class="min-w-[9rem] flex-1 text-micro sm:min-w-[10rem]">
-          <span class="font-medium text-[var(--fg-muted)]">Status</span>
+          <span class="font-medium text-fg-muted">Status</span>
           <select
-            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
+            class="mt-1 w-full rounded-md border border-line bg-bg-soft px-2.5 py-1.5 text-meta transition-colors focus:bg-panel"
             value={inboxTab}
             onchange={(e) => void setStatus(e.currentTarget.value)}
             data-testid="inbox-status-filter"
@@ -678,9 +679,9 @@
         </label>
         {#if inboxTab === "open"}
           <label class="min-w-[10rem] flex-1 text-micro sm:min-w-[12rem]">
-            <span class="font-medium text-[var(--fg-muted)]">Category</span>
+            <span class="font-medium text-fg-muted">Category</span>
             <select
-              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
+              class="mt-1 w-full rounded-md border border-line bg-bg-soft px-2.5 py-1.5 text-meta transition-colors focus:bg-panel"
               value={categoryFilter}
               onchange={(e) => {
                 categoryFilter = e.currentTarget.value;
@@ -695,9 +696,9 @@
             </select>
           </label>
           <label class="min-w-[10rem] flex-1 text-micro sm:min-w-[12rem]">
-            <span class="font-medium text-[var(--fg-muted)]">Urgency</span>
+            <span class="font-medium text-fg-muted">Urgency</span>
             <select
-              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
+              class="mt-1 w-full rounded-md border border-line bg-bg-soft px-2.5 py-1.5 text-meta transition-colors focus:bg-panel"
               value={urgencyFilter}
               onchange={(e) => {
                 urgencyFilter = e.currentTarget.value;
@@ -723,9 +724,9 @@
           {/if}
         {:else}
           <label class="min-w-[10rem] flex-1 text-micro sm:min-w-[12rem]">
-            <span class="font-medium text-[var(--fg-muted)]">Kind</span>
+            <span class="font-medium text-fg-muted">Kind</span>
             <select
-              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
+              class="mt-1 w-full rounded-md border border-line bg-bg-soft px-2.5 py-1.5 text-meta transition-colors focus:bg-panel"
               bind:value={completedKindFilter}
               data-testid="inbox-completed-kind-filter"
             >
@@ -737,9 +738,9 @@
             </select>
           </label>
           <label class="min-w-[10rem] flex-1 text-micro sm:min-w-[12rem]">
-            <span class="font-medium text-[var(--fg-muted)]">Time window</span>
+            <span class="font-medium text-fg-muted">Time window</span>
             <select
-              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
+              class="mt-1 w-full rounded-md border border-line bg-bg-soft px-2.5 py-1.5 text-meta transition-colors focus:bg-panel"
               bind:value={completedWindowDays}
               data-testid="inbox-completed-window-filter"
             >
@@ -784,7 +785,7 @@
     {#snippet extraActions()}
       {#if bulkInboxSuggestEligible}
         <button
-          class="inline-flex h-7 cursor-pointer items-center rounded-md border border-[var(--accent)]/40 bg-[var(--accent)]/10 px-2.5 text-micro font-medium text-[var(--accent)] transition-colors hover:bg-[var(--accent)]/15 disabled:cursor-not-allowed disabled:opacity-50"
+          class="inline-flex h-7 cursor-pointer items-center rounded-md border border-accent bg-accent-soft px-2.5 text-micro font-medium text-accent transition-colors hover:bg-accent-soft disabled:cursor-not-allowed disabled:opacity-50"
           type="button"
           disabled={inboxBulkBusy}
           onclick={() => openInboxBulkConfirm("suggestion")}
@@ -794,7 +795,7 @@
       {/if}
       {#if bulkInboxReviewEligible}
         <button
-          class="inline-flex h-7 cursor-pointer items-center rounded-md border border-[var(--line)] bg-[var(--panel)] px-2.5 text-micro font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line)] disabled:cursor-not-allowed disabled:opacity-50"
+          class="inline-flex h-7 cursor-pointer items-center rounded-md border border-line bg-panel px-2.5 text-micro font-medium text-fg transition-colors hover:bg-line disabled:cursor-not-allowed disabled:opacity-50"
           type="button"
           disabled={inboxBulkBusy}
           onclick={() => openInboxBulkConfirm("approve")}
@@ -802,7 +803,7 @@
           Approve
         </button>
         <button
-          class="inline-flex h-7 cursor-pointer items-center rounded-md border border-[var(--line)] bg-[var(--panel)] px-2.5 text-micro font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line)] disabled:cursor-not-allowed disabled:opacity-50"
+          class="inline-flex h-7 cursor-pointer items-center rounded-md border border-line bg-panel px-2.5 text-micro font-medium text-fg transition-colors hover:bg-line disabled:cursor-not-allowed disabled:opacity-50"
           type="button"
           disabled={inboxBulkBusy}
           onclick={() => openInboxBulkConfirm("reject")}
@@ -822,9 +823,7 @@
     <button
       class="cursor-pointer inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-micro font-medium transition-colors sm:px-2.5 sm:py-1.5 {urgencyCardClass(
         'immediate',
-      )} {urgencySummary.immediate > 0
-        ? 'bg-danger-soft'
-        : 'bg-[var(--bg-soft)]'}"
+      )} {urgencySummary.immediate > 0 ? 'bg-danger-soft' : 'bg-bg-soft'}"
       onclick={() => setUrgencyFromCard("immediate")}
       type="button"
       data-testid="urgency-summary-immediate"
@@ -835,13 +834,13 @@
       <span
         class="tabular-nums {urgencySummary.immediate > 0
           ? 'text-danger-text'
-          : 'text-[var(--fg-subtle)]'}">{urgencySummary.immediate}</span
+          : 'text-fg-subtle'}">{urgencySummary.immediate}</span
       >
     </button>
     <button
       class="cursor-pointer inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-micro font-medium transition-colors sm:px-2.5 sm:py-1.5 {urgencyCardClass(
         'high',
-      )} {urgencySummary.high > 0 ? 'bg-warn/5' : 'bg-[var(--bg-soft)]'}"
+      )} {urgencySummary.high > 0 ? 'bg-warn-soft' : 'bg-bg-soft'}"
       onclick={() => setUrgencyFromCard("high")}
       type="button"
       data-testid="urgency-summary-high"
@@ -852,11 +851,11 @@
       <span
         class="tabular-nums {urgencySummary.high > 0
           ? 'text-warn-text'
-          : 'text-[var(--fg-subtle)]'}">{urgencySummary.high}</span
+          : 'text-fg-subtle'}">{urgencySummary.high}</span
       >
     </button>
     <button
-      class="cursor-pointer inline-flex shrink-0 items-center gap-1.5 rounded-md border bg-[var(--bg-soft)] px-2 py-1 text-micro font-medium transition-colors sm:px-2.5 sm:py-1.5 {urgencyCardClass(
+      class="cursor-pointer inline-flex shrink-0 items-center gap-1.5 rounded-md border bg-bg-soft px-2 py-1 text-micro font-medium transition-colors sm:px-2.5 sm:py-1.5 {urgencyCardClass(
         'normal',
       )}"
       onclick={() => setUrgencyFromCard("normal")}
@@ -865,10 +864,8 @@
     >
       <span class="inline-block h-1.5 w-1.5 rounded-full bg-fg-muted shrink-0"
       ></span>
-      <span class="text-[var(--fg-muted)]">Normal</span>
-      <span class="tabular-nums text-[var(--fg-subtle)]"
-        >{urgencySummary.normal}</span
-      >
+      <span class="text-fg-muted">Normal</span>
+      <span class="tabular-nums text-fg-subtle">{urgencySummary.normal}</span>
     </button>
   </div>
 {/if}
@@ -884,10 +881,10 @@
   {:else if !hasFilteredItems && totalItems > 0}
     <div class="mt-8 text-center py-12" data-testid="inbox-filter-empty-state">
       <div
-        class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[var(--panel)] mb-3"
+        class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-panel mb-3"
       >
         <svg
-          class="h-6 w-6 text-[var(--fg-subtle)]"
+          class="h-6 w-6 text-fg-subtle"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -900,10 +897,8 @@
           />
         </svg>
       </div>
-      <h2 class="text-body font-semibold text-[var(--fg)]">
-        No items match this view
-      </h2>
-      <p class="mt-1 text-meta text-[var(--fg-muted)]">
+      <h2 class="text-body font-semibold text-fg">No items match this view</h2>
+      <p class="mt-1 text-meta text-fg-muted">
         Try switching back to <span class="font-semibold">All</span> to see the full
         queue.
       </p>
@@ -928,14 +923,12 @@
             >
               {getInboxCategoryLabel(group.category)}
             </h2>
-            <span class="text-micro text-[var(--fg-subtle)] tabular-nums"
+            <span class="text-micro text-fg-subtle tabular-nums"
               >{group.items.length}</span
             >
           </div>
 
-          <div
-            class="overflow-hidden rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
-          >
+          <div class="overflow-hidden rounded-md border border-line bg-bg-soft">
             {#each group.items as item, rowIdx (item.id)}
               {@const flatIdx = openInboxFlatIndex(item)}
               {@const selected = inboxSel.selectedIds.has(
@@ -948,7 +941,7 @@
                 <div class="min-w-0 flex-1 px-3 py-2.5">
                   <div class="flex min-w-0 items-center gap-2">
                     <h3
-                      class="min-w-0 truncate text-meta font-semibold text-[var(--fg)]"
+                      class="min-w-0 truncate text-meta font-semibold text-fg"
                     >
                       {item.title}
                     </h3>
@@ -959,7 +952,7 @@
                           ? 'bg-danger-soft text-danger-text'
                           : item.urgency_level === 'high'
                             ? 'bg-warn-soft text-warn-text'
-                            : 'bg-[var(--line)] text-[var(--fg-muted)]'}"
+                            : 'bg-line text-fg-muted'}"
                       >
                         {item.urgency_label}
                       </span>
@@ -967,7 +960,7 @@
                     <div class="flex-1"></div>
                     {#if ageText}
                       <span
-                        class="shrink-0 text-micro tabular-nums text-[var(--fg-muted)]"
+                        class="shrink-0 text-micro tabular-nums text-fg-muted"
                         title={item.has_source_event_time
                           ? formatAbsoluteDateTime(item.source_event_time)
                           : undefined}
@@ -977,16 +970,15 @@
                     {/if}
                   </div>
                   <div
-                    class="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-micro text-[var(--fg-muted)]"
+                    class="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-micro text-fg-muted"
                   >
                     {#if subjectLabel}
                       <span class="min-w-0 truncate">{subjectLabel}</span>
-                      <span class="text-[var(--fg-subtle)]">·</span>
+                      <span class="text-fg-subtle">·</span>
                     {/if}
                     <span class="inline-flex min-w-0 items-center gap-1">
-                      <span class="text-[var(--fg-subtle)]">from</span>
-                      <span class="truncate font-mono text-[var(--fg)]"
-                        >{requester}</span
+                      <span class="text-fg-subtle">from</span>
+                      <span class="truncate font-mono text-fg">{requester}</span
                       >
                     </span>
                   </div>
@@ -995,13 +987,11 @@
 
               {#if inboxSel.selectMode}
                 <div
-                  class="flex cursor-pointer items-stretch border-l-[3px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-soft)] {urgencyBorderClass(
+                  class="flex cursor-pointer items-stretch border-l-[3px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-soft {urgencyBorderClass(
                     item.urgency_level,
-                  )} {rowIdx > 0
-                    ? 'border-t border-[var(--line)]'
-                    : ''} {selected
-                    ? 'border-l-[var(--accent)] bg-[var(--accent)]/10'
-                    : 'hover:bg-[var(--line-subtle)]'}"
+                  )} {rowIdx > 0 ? 'border-t border-line' : ''} {selected
+                    ? 'border-l-accent bg-accent-soft'
+                    : 'hover:bg-line-subtle'}"
                   aria-label={`${selected ? "Deselect" : "Select"} ${item.title}`}
                   aria-pressed={selected}
                   data-testid={`inbox-card-${item.id}`}
@@ -1039,9 +1029,9 @@
                 <a
                   href={askItemHref(item)}
                   data-testid={`inbox-card-${item.id}`}
-                  class="flex items-stretch border-l-[3px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-soft)] hover:bg-[var(--line-subtle)] {urgencyBorderClass(
+                  class="flex items-stretch border-l-[3px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-soft hover:bg-line-subtle {urgencyBorderClass(
                     item.urgency_level,
-                  )} {rowIdx > 0 ? 'border-t border-[var(--line)]' : ''}"
+                  )} {rowIdx > 0 ? 'border-t border-line' : ''}"
                 >
                   {@render rowBody()}
                 </a>
@@ -1063,33 +1053,31 @@
   <div class="space-y-2">
     {#each completedItems as row}
       <article
-        class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2.5 transition-colors hover:bg-[var(--panel)]"
+        class="rounded-md border border-line bg-bg-soft px-3 py-2.5 transition-colors hover:bg-panel"
         data-testid={`inbox-completed-card-${row.id}`}
       >
         <div class="flex flex-wrap items-center gap-2 text-micro">
           <span
-            class="inline-flex items-center rounded px-1.5 py-0.5 font-semibold tracking-wide bg-[var(--line)] text-[var(--fg-muted)]"
+            class="inline-flex items-center rounded px-1.5 py-0.5 font-semibold tracking-wide bg-line text-fg-muted"
           >
             {String(row.kind ?? "").toUpperCase()}
           </span>
           {#if row.responded_at}
-            <span class="text-[var(--fg-muted)] tabular-nums">
+            <span class="text-fg-muted tabular-nums">
               {formatAbsoluteDateTime(row.responded_at)}
             </span>
           {/if}
           {#if row.responding_actor_id}
-            <span class="text-[var(--fg-muted)]">
-              · <span class="font-mono text-[var(--fg)]"
-                >{row.responding_actor_id}</span
-              >
+            <span class="text-fg-muted">
+              · <span class="font-mono text-fg">{row.responding_actor_id}</span>
             </span>
           {/if}
         </div>
-        <h3 class="mt-1 text-meta font-semibold text-[var(--fg)] leading-snug">
+        <h3 class="mt-1 text-meta font-semibold text-fg leading-snug">
           {row.title}
         </h3>
         {#if row.response_text}
-          <p class="mt-1 text-micro text-[var(--fg-muted)] leading-snug">
+          <p class="mt-1 text-micro text-fg-muted leading-snug">
             {snippet(row.response_text)}
           </p>
         {/if}

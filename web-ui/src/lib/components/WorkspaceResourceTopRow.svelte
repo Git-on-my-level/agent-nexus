@@ -29,7 +29,7 @@
   class="mb-1 flex min-w-0 items-center justify-between gap-1.5 sm:gap-2 md:mb-2"
 >
   <nav
-    class="flex min-w-0 flex-1 items-center gap-1.5 text-meta text-[var(--fg-muted)]"
+    class="flex min-w-0 flex-1 items-center gap-1.5 text-meta text-fg-muted"
     aria-label={breadcrumbAriaLabel}
   >
     {@render breadcrumb()}

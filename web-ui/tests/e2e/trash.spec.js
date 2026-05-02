@@ -386,29 +386,76 @@ test("trash page restores archived topics, boards, cards, documents, and artifac
 
   await page.getByRole("tab", { name: /Topics/ }).click();
   await expect(page.getByText("Archived topic", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Restore" }).click();
+  await page.getByRole("button", { name: "Select" }).click();
+  await page.getByRole("button", { name: "Select Archived topic" }).click();
+  await page
+    .getByRole("toolbar", { name: "Bulk actions" })
+    .getByRole("button", { name: "Restore" })
+    .click();
+  await page
+    .getByRole("dialog", { name: "Restore selected" })
+    .getByRole("button", { name: "Restore" })
+    .click();
   await expect(page.getByText("Archived topic", { exact: true })).toHaveCount(
     0,
   );
 
   await page.getByRole("tab", { name: /Boards/ }).click();
   await expect(page.getByText("Archived board")).toBeVisible();
-  await page.getByRole("button", { name: "Restore" }).click();
+  await page.getByRole("button", { name: "Select" }).click();
+  await page.getByRole("button", { name: "Select Archived board" }).click();
+  await page
+    .getByRole("toolbar", { name: "Bulk actions" })
+    .getByRole("button", { name: "Restore" })
+    .click();
+  await page
+    .getByRole("dialog", { name: "Restore selected" })
+    .getByRole("button", { name: "Restore" })
+    .click();
   await expect(page.getByText("Archived board")).toHaveCount(0);
 
   await page.getByRole("tab", { name: /Cards/ }).click();
   await expect(page.getByText("Archived card", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Restore" }).click();
+  await page.getByRole("button", { name: "Select" }).click();
+  await page.getByRole("button", { name: "Select Archived card" }).click();
+  await page
+    .getByRole("toolbar", { name: "Bulk actions" })
+    .getByRole("button", { name: "Restore" })
+    .click();
+  await page
+    .getByRole("dialog", { name: "Restore selected" })
+    .getByRole("button", { name: "Restore" })
+    .click();
   await expect(page.getByText("Archived card", { exact: true })).toHaveCount(0);
 
   await page.getByRole("tab", { name: /^Docs/ }).click();
   await expect(page.getByText("Archived document")).toBeVisible();
-  await page.getByRole("button", { name: "Restore" }).click();
+  await page.getByRole("button", { name: "Select" }).click();
+  await page.getByRole("button", { name: "Select Archived document" }).click();
+  await page
+    .getByRole("toolbar", { name: "Bulk actions" })
+    .getByRole("button", { name: "Restore" })
+    .click();
+  await page
+    .getByRole("dialog", { name: "Restore selected" })
+    .getByRole("button", { name: "Restore" })
+    .click();
   await expect(page.getByText("Archived document")).toHaveCount(0);
 
   await page.getByRole("tab", { name: /Artifacts/ }).click();
   await expect(page.getByText("Archived evidence artifact")).toBeVisible();
-  await page.getByRole("button", { name: "Restore" }).click();
+  await page.getByRole("button", { name: "Select" }).click();
+  await page
+    .getByRole("button", { name: "Select Archived evidence artifact" })
+    .click();
+  await page
+    .getByRole("toolbar", { name: "Bulk actions" })
+    .getByRole("button", { name: "Restore" })
+    .click();
+  await page
+    .getByRole("dialog", { name: "Restore selected" })
+    .getByRole("button", { name: "Restore" })
+    .click();
   await expect(page.getByText("Archived evidence artifact")).toHaveCount(0);
 });
 
@@ -459,6 +506,20 @@ test("trash page purges a card after confirmation (human principal)", async ({
         actors: [
           { id: actorId, display_name: "Purge Tester", tags: ["human"] },
         ],
+      }),
+    });
+  });
+
+  await page.route(/\/meta\/handshake$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        schema_version: "0.6.0",
+        command_registry_digest: "e2e",
+        core_version: "test",
+        api_version: "0.2",
+        dev_actor_mode: true,
       }),
     });
   });
@@ -520,8 +581,16 @@ test("trash page purges a card after confirmation (human principal)", async ({
   await expect(
     page.getByText("Card pending purge", { exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Permanently delete" }).click();
-  await page.getByRole("button", { name: "Confirm permanent delete" }).click();
+  await page.getByRole("button", { name: "Select" }).click();
+  await page.getByRole("button", { name: "Select Card pending purge" }).click();
+  await page
+    .getByRole("toolbar", { name: "Bulk actions" })
+    .getByRole("button", { name: "Permanently delete" })
+    .click();
+  await page
+    .getByRole("dialog", { name: "Permanently delete" })
+    .getByRole("button", { name: "Permanently delete" })
+    .click();
   await expect(
     page.getByText("Card pending purge", { exact: true }),
   ).toHaveCount(0);

@@ -3,7 +3,6 @@
   import { page } from "$app/stores";
   import GuidedTypedRefsInput from "$lib/components/GuidedTypedRefsInput.svelte";
   import SearchableEntityPicker from "$lib/components/SearchableEntityPicker.svelte";
-  import SearchableMultiEntityPicker from "$lib/components/SearchableMultiEntityPicker.svelte";
   import Skeleton from "$lib/components/state/Skeleton.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
   import { actorRegistry } from "$lib/actorSession";
@@ -246,12 +245,12 @@
 <div class="mx-auto max-w-2xl">
   <div class="mb-6">
     <a
-      class="text-micro text-[var(--fg-muted)] transition-colors hover:text-[var(--fg)]"
+      class="text-micro text-fg-muted transition-colors hover:text-fg"
       href={boardHref()}
     >
       ← {board?.title || "Board"}
     </a>
-    <h1 class="mt-2 text-subtitle font-semibold text-[var(--fg)]">Add card</h1>
+    <h1 class="mt-2 text-subtitle font-semibold text-fg">Add card</h1>
   </div>
 
   {#if loading}
@@ -259,7 +258,7 @@
   {:else if loadError}
     <StateError message={loadError} onretry={loadBoard} />
   {:else if !board}
-    <p class="text-meta text-[var(--fg-muted)]">Board not found.</p>
+    <p class="text-meta text-fg-muted">Board not found.</p>
   {:else}
     {#if saveError}
       <div
@@ -276,17 +275,13 @@
       </div>
     {/if}
 
-    <div
-      class="space-y-5 rounded-md border border-[var(--line)] bg-[var(--panel)] p-5"
-    >
+    <div class="space-y-5 rounded-md border border-line bg-panel p-5">
       <div class="flex flex-col gap-3 sm:flex-row sm:items-start">
-        <label
-          class="min-w-0 flex-1 text-micro font-medium text-[var(--fg-muted)]"
-        >
+        <label class="min-w-0 flex-1 text-micro font-medium text-fg-muted">
           Card title
           <input
             autocomplete="off"
-            class="mt-1.5 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)] focus:border-[var(--accent)] focus:outline-none"
+            class="mt-1.5 w-full rounded-md border border-line bg-bg-soft px-3 py-2 text-meta text-fg focus:border-accent focus:outline-none"
             placeholder="Short label for the card"
             type="text"
             bind:value={titleValue}
@@ -294,12 +289,10 @@
             onkeydown={(e) => e.key === "Enter" && e.preventDefault()}
           />
         </label>
-        <label
-          class="shrink-0 text-micro font-medium text-[var(--fg-muted)] sm:pt-0.5"
-        >
+        <label class="shrink-0 text-micro font-medium text-fg-muted sm:pt-0.5">
           Column
           <select
-            class="mt-1.5 block w-full min-w-[9rem] rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)] focus:border-[var(--accent)] focus:outline-none"
+            class="mt-1.5 block w-full min-w-[9rem] rounded-md border border-line bg-bg-soft px-3 py-2 text-meta text-fg focus:border-accent focus:outline-none"
             bind:value={columnKey}
           >
             {#each board.column_schema as column (column.key)}
@@ -312,10 +305,10 @@
         </label>
       </div>
 
-      <label class="block text-micro font-medium text-[var(--fg-muted)]">
+      <label class="block text-micro font-medium text-fg-muted">
         Summary
         <textarea
-          class="mt-1.5 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)] focus:border-[var(--accent)] focus:outline-none"
+          class="mt-1.5 w-full rounded-md border border-line bg-bg-soft px-3 py-2 text-meta text-fg focus:border-accent focus:outline-none"
           placeholder="What this card is about (shown on the board)"
           rows="4"
           bind:value={summary}
@@ -324,7 +317,7 @@
 
       <div>
         <button
-          class="flex items-center gap-1.5 text-micro text-[var(--fg-muted)] transition-colors hover:text-[var(--fg)]"
+          class="flex items-center gap-1.5 text-micro text-fg-muted transition-colors hover:text-fg"
           type="button"
           aria-expanded={showMoreOptions}
           onclick={toggleMoreOptions}
@@ -350,7 +343,7 @@
 
         {#if showMoreOptions}
           <div
-            class="mt-3 space-y-3 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] p-3"
+            class="mt-3 space-y-3 rounded-md border border-line bg-bg-soft p-3"
           >
             <div class="grid gap-3 md:grid-cols-2">
               <SearchableEntityPicker
@@ -374,7 +367,8 @@
                 showManualEntry={false}
               />
 
-              <SearchableMultiEntityPicker
+              <SearchableEntityPicker
+                mode="multi"
                 bind:values={assignees}
                 helperText="Optional assignees for the card."
                 items={actorOptions}
@@ -383,10 +377,10 @@
                 showManualEntry={false}
               />
 
-              <label class="text-micro font-medium text-[var(--fg-muted)]">
+              <label class="text-micro font-medium text-fg-muted">
                 Risk
                 <select
-                  class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-meta text-[var(--fg)]"
+                  class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-1.5 text-meta text-fg"
                   bind:value={risk}
                 >
                   <option value="low">Low</option>
@@ -396,30 +390,26 @@
                 </select>
               </label>
 
-              <label class="text-micro font-medium text-[var(--fg-muted)]">
+              <label class="text-micro font-medium text-fg-muted">
                 Due date
                 <input
-                  class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-meta text-[var(--fg)]"
+                  class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-1.5 text-meta text-fg"
                   type="datetime-local"
                   bind:value={dueAt}
                 />
               </label>
 
-              <label
-                class="text-micro font-medium text-[var(--fg-muted)] md:col-span-2"
-              >
+              <label class="text-micro font-medium text-fg-muted md:col-span-2">
                 Definition of done
                 <textarea
-                  class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-meta text-[var(--fg)]"
+                  class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-1.5 text-meta text-fg"
                   rows="3"
                   bind:value={definitionOfDone}
                 ></textarea>
               </label>
 
               <div class="md:col-span-2">
-                <p class="text-micro font-medium text-[var(--fg-muted)]">
-                  Related refs
-                </p>
+                <p class="text-micro font-medium text-fg-muted">Related refs</p>
                 <GuidedTypedRefsInput
                   bind:value={relatedRefs}
                   {boardId}
@@ -435,7 +425,7 @@
               </div>
 
               <div class="md:col-span-2">
-                <p class="text-micro font-medium text-[var(--fg-muted)]">
+                <p class="text-micro font-medium text-fg-muted">
                   Resolution evidence
                 </p>
                 <GuidedTypedRefsInput
@@ -456,7 +446,7 @@
         {/if}
       </div>
 
-      <div class="flex flex-wrap gap-2 border-t border-[var(--line)] pt-4">
+      <div class="flex flex-wrap gap-2 border-t border-line pt-4">
         <button
           class="rounded-md bg-accent-solid px-4 py-2 text-meta font-medium text-white transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
           type="button"
@@ -466,7 +456,7 @@
           {saving ? "Adding…" : "Add card"}
         </button>
         <a
-          class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-4 py-2 text-meta font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
+          class="rounded-md border border-line bg-panel px-4 py-2 text-meta font-medium text-fg-muted transition-colors hover:bg-line-subtle hover:text-fg"
           href={boardHref()}
         >
           Cancel

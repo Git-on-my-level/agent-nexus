@@ -112,13 +112,13 @@
         />
       </svg>
     </div>
-    <h1 class="text-lg font-semibold text-[var(--fg)]">{heading}</h1>
+    <h1 class="text-subtitle font-semibold text-fg">{heading}</h1>
     {#if workspaceName && isCallbackSurface}
-      <p class="mt-1 text-[13px] font-medium text-[var(--fg-muted)]">
+      <p class="mt-1 text-meta font-medium text-fg-muted">
         {workspaceName}
       </p>
     {/if}
-    <p class="mt-2 text-[13px] text-[var(--fg-muted)]">{bodyText}</p>
+    <p class="mt-2 text-meta text-fg-muted">{bodyText}</p>
 
     {#if isCallbackSurface}
       <div
@@ -129,14 +129,14 @@
             variant="primary"
             type="button"
             onclick={tryAgain}
-            class="focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg)] focus-visible:outline-none"
+            class="focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
           >
             Try again
           </Button>
           <Button
             variant="secondary"
             href={dashboardHref || undefined}
-            class="focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg)] focus-visible:outline-none"
+            class="focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
             disabled={!dashboardHref}
           >
             Return to dashboard
@@ -145,7 +145,7 @@
           <Button
             variant="primary"
             href={dashboardHref || undefined}
-            class="focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg)] focus-visible:outline-none"
+            class="focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
             disabled={!dashboardHref}
           >
             Return to dashboard
@@ -160,7 +160,7 @@
           variant="primary"
           type="button"
           onclick={tryAgain}
-          class="focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg)] focus-visible:outline-none"
+          class="focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
         >
           Try again
         </Button>
@@ -168,14 +168,14 @@
           <Button
             variant="secondary"
             href={dashboardHref}
-            class="focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg)] focus-visible:outline-none"
+            class="focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
           >
             Return to dashboard
           </Button>
         {/if}
       </div>
     {:else if !friendly}
-      <p class="mt-3 text-[13px] text-[var(--fg-muted)]">
+      <p class="mt-3 text-[13px] text-fg-muted">
         The backend may be unavailable. Contact your administrator or check the
         service status.
       </p>
@@ -183,35 +183,33 @@
 
     {#if dev}
       <details
-        class="mt-6 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] p-4 text-left"
+        class="mt-6 rounded-md border border-line bg-bg-soft p-4 text-left"
         open
       >
-        <summary
-          class="cursor-pointer text-[12px] font-medium text-[var(--fg-muted)]"
-        >
+        <summary class="cursor-pointer text-[12px] font-medium text-fg-muted">
           Dev diagnostics
         </summary>
         <dl
-          class="mt-2 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-[12px] text-[var(--fg-muted)]"
+          class="mt-2 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-[12px] text-fg-muted"
         >
           <dt class="font-medium">Status</dt>
           <dd>
             <code
-              class="rounded-md bg-[var(--line)] px-1.5 py-0.5 text-[11px] font-medium"
+              class="rounded-md bg-line px-1.5 py-0.5 text-[11px] font-medium"
               >{status ?? "(none)"}</code
             >
           </dd>
           <dt class="font-medium">Code</dt>
           <dd>
             <code
-              class="rounded-md bg-[var(--line)] px-1.5 py-0.5 text-[11px] font-medium"
+              class="rounded-md bg-line px-1.5 py-0.5 text-[11px] font-medium"
               >{code ?? "(none)"}</code
             >
           </dd>
           <dt class="font-medium">URL</dt>
           <dd>
             <code
-              class="break-all rounded-md bg-[var(--line)] px-1.5 py-0.5 text-[11px] font-medium"
+              class="break-all rounded-md bg-line px-1.5 py-0.5 text-[11px] font-medium"
               >{$page.url?.pathname ?? "(unknown)"}{$page.url?.search ??
                 ""}</code
             >
@@ -219,20 +217,19 @@
           <dt class="font-medium">Route</dt>
           <dd>
             <code
-              class="rounded-md bg-[var(--line)] px-1.5 py-0.5 text-[11px] font-medium"
+              class="rounded-md bg-line px-1.5 py-0.5 text-[11px] font-medium"
               >{$page.route?.id ?? "(unknown)"}</code
             >
           </dd>
           <dt class="font-medium">Message</dt>
           <dd class="break-words">{errorObj?.message ?? "(none)"}</dd>
         </dl>
-        <p class="mt-3 text-[11px] text-[var(--fg-muted)]">
+        <p class="mt-3 text-[11px] text-fg-muted">
           A structured trace was logged to the dev terminal — search for <code
-            class="rounded-md bg-[var(--line)] px-1 text-[11px] font-medium"
-            >[anx]</code
+            class="rounded-md bg-line px-1 text-[11px] font-medium">[anx]</code
           >
           in your
-          <code class="rounded-md bg-[var(--line)] px-1 text-[11px] font-medium"
+          <code class="rounded-md bg-line px-1 text-[11px] font-medium"
             >make serve</code
           > output. This panel only renders in dev builds.
         </p>
@@ -241,30 +238,28 @@
 
     {#if !isCallbackSurface && !friendly}
       <details
-        class="mt-6 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] p-4 text-left"
+        class="mt-6 rounded-md border border-line bg-bg-soft p-4 text-left"
       >
-        <summary
-          class="cursor-pointer text-[12px] font-medium text-[var(--fg-muted)]"
-        >
+        <summary class="cursor-pointer text-[12px] font-medium text-fg-muted">
           Technical troubleshooting
         </summary>
         <ol
-          class="mt-2 list-decimal space-y-1.5 pl-5 text-[13px] text-[var(--fg-muted)]"
+          class="mt-2 list-decimal space-y-1.5 pl-5 text-[13px] text-fg-muted"
         >
           <li>
             Start the backend: <code
-              class="rounded-md bg-[var(--line)] px-1.5 py-0.5 text-[11px] font-medium"
+              class="rounded-md bg-line px-1.5 py-0.5 text-[11px] font-medium"
               >make serve</code
             >
             in
             <code
-              class="rounded-md bg-[var(--line)] px-1.5 py-0.5 text-[11px] font-medium"
+              class="rounded-md bg-line px-1.5 py-0.5 text-[11px] font-medium"
               >agent-nexus-core</code
             >
           </li>
           <li>
             Set <code
-              class="rounded-md bg-[var(--line)] px-1.5 py-0.5 text-[11px] font-medium"
+              class="rounded-md bg-line px-1.5 py-0.5 text-[11px] font-medium"
               >ANX_WORKSPACES='[&#123;"organizationSlug":"local","slug":"local","coreBaseUrl":"http://127.0.0.1:8000"&#125;]'</code
             >
           </li>

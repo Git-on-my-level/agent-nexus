@@ -22,9 +22,7 @@
 
 <div class="min-w-0 flex-1">
   <div class="inline-flex max-w-full min-w-0 items-center gap-x-2 gap-y-1">
-    <p
-      class="min-w-0 truncate text-meta font-medium text-[var(--fg)] {titleClass}"
-    >
+    <p class="min-w-0 truncate text-meta font-medium text-fg {titleClass}">
       {title}
     </p>
     {#if badges}
@@ -34,11 +32,11 @@
     {/if}
   </div>
   {#if text}
-    <p class="truncate text-micro text-[var(--fg-muted)]">
+    <p class="truncate text-micro text-fg-muted">
       {text}
     </p>
   {:else if emptyDescription}
-    <p class="hidden truncate text-micro text-[var(--fg-muted)] sm:block">
+    <p class="hidden truncate text-micro text-fg-muted sm:block">
       {emptyDescription}
     </p>
   {/if}

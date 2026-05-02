@@ -209,17 +209,17 @@
 </script>
 
 {#if $authenticatedAgent}
-  <main class="min-h-screen bg-[var(--bg)] px-4 py-6 text-[var(--fg)]">
+  <main class="min-h-screen bg-bg px-4 py-6 text-fg">
     <div
-      class="mx-auto flex max-w-xl items-center justify-center rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-4 py-6 text-meta"
+      class="mx-auto flex max-w-xl items-center justify-center rounded-md border border-line bg-bg-soft px-4 py-6 text-meta"
     >
       Opening workspace…
     </div>
   </main>
 {:else if loadingWorkspaceStatus}
-  <main class="min-h-screen bg-[var(--bg)] px-4 py-6 text-[var(--fg)]">
+  <main class="min-h-screen bg-bg px-4 py-6 text-fg">
     <div
-      class="mx-auto max-w-5xl rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-4 py-6"
+      class="mx-auto max-w-5xl rounded-md border border-line bg-bg-soft px-4 py-6"
       aria-busy="true"
       aria-label="Loading sign-in"
     >
@@ -227,25 +227,23 @@
     </div>
   </main>
 {:else}
-  <main class="min-h-screen bg-[var(--bg)] px-4 py-6 text-[var(--fg)]">
+  <main class="min-h-screen bg-bg px-4 py-6 text-fg">
     <div class="mx-auto flex max-w-5xl flex-col gap-4 lg:flex-row">
-      <section
-        class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] lg:w-[22rem]"
-      >
-        <div class="border-b border-[var(--line)] px-4 py-3">
+      <section class="rounded-md border border-line bg-bg-soft lg:w-[22rem]">
+        <div class="border-b border-line px-4 py-3">
           <p
-            class="text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)]"
+            class="text-micro font-medium uppercase tracking-wide text-fg-muted"
           >
             Sign in
           </p>
-          <h1 class="mt-1 text-subtitle font-semibold text-[var(--fg)]">
+          <h1 class="mt-1 text-subtitle font-semibold text-fg">
             {#if showDevLocalPasskeyBypass}
               Sign in
             {:else}
               Sign in with a passkey
             {/if}
           </h1>
-          <p class="mt-2 text-meta text-[var(--fg-muted)]">
+          <p class="mt-2 text-meta text-fg-muted">
             {#if showDevLocalPasskeyBypass}
               Dev sign-in is the default in local mode. Expand the section below
               if you need WebAuthn passkey authentication.
@@ -260,20 +258,20 @@
           {#if showDevLocalPasskeyBypass}
             <div class="space-y-3">
               <p
-                class="text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)]"
+                class="text-micro font-medium uppercase tracking-wide text-fg-muted"
               >
                 Local development
               </p>
-              <p class="text-micro text-[var(--fg-muted)]">
+              <p class="text-micro text-fg-muted">
                 Leave both fields blank to sign in as the seeded user.
               </p>
               <details class="mt-1">
                 <summary
-                  class="cursor-pointer text-micro text-[var(--fg-muted)] hover:text-[var(--fg)]"
+                  class="cursor-pointer text-micro text-fg-muted hover:text-fg"
                 >
                   Local sign-in help
                 </summary>
-                <p class="mt-2 text-micro text-[var(--fg-muted)]">
+                <p class="mt-2 text-micro text-fg-muted">
                   After a fresh <span class="font-mono">make serve</span> seed, empty
                   fields work when there is one passkey user. With several principals,
                   set principal username (Access) or exact display name.
@@ -281,14 +279,14 @@
               </details>
               <div>
                 <label
-                  class="block text-micro font-medium text-[var(--fg-muted)]"
+                  class="block text-micro font-medium text-fg-muted"
                   for="dev-login-username"
                 >
                   Principal username (optional)
                 </label>
                 <input
                   bind:value={devLoginUsername}
-                  class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 font-mono text-meta text-[var(--fg)]"
+                  class="mt-1 w-full rounded-md border border-line bg-bg-soft px-3 py-2 font-mono text-meta text-fg"
                   id="dev-login-username"
                   placeholder="you@team"
                   type="text"
@@ -296,14 +294,14 @@
               </div>
               <div>
                 <label
-                  class="block text-micro font-medium text-[var(--fg-muted)]"
+                  class="block text-micro font-medium text-fg-muted"
                   for="dev-login-display"
                 >
                   Display name (optional)
                 </label>
                 <input
                   bind:value={devLoginDisplayName}
-                  class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)]"
+                  class="mt-1 w-full rounded-md border border-line bg-bg-soft px-3 py-2 text-meta text-fg"
                   id="dev-login-display"
                   placeholder="Exact match when username is unknown"
                   type="text"
@@ -326,9 +324,9 @@
               {/if}
             </div>
 
-            <details class="mt-4 border-t border-[var(--line)] pt-3">
+            <details class="mt-4 border-t border-line pt-3">
               <summary
-                class="cursor-pointer text-micro font-medium text-[var(--fg-muted)] hover:text-[var(--fg)]"
+                class="cursor-pointer text-micro font-medium text-fg-muted hover:text-fg"
               >
                 Sign in with passkey
               </summary>
@@ -376,16 +374,14 @@
         </div>
       </section>
 
-      <section
-        class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] lg:flex-1"
-      >
-        <div class="border-b border-[var(--line)] px-4 py-3">
+      <section class="rounded-md border border-line bg-bg-soft lg:flex-1">
+        <div class="border-b border-line px-4 py-3">
           <p
-            class="text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)]"
+            class="text-micro font-medium uppercase tracking-wide text-fg-muted"
           >
             New to this workspace?
           </p>
-          <h2 class="mt-1 text-meta font-semibold text-[var(--fg)]">
+          <h2 class="mt-1 text-meta font-semibold text-fg">
             Join with an invite token
           </h2>
         </div>
@@ -399,14 +395,14 @@
         >
           <div>
             <label
-              class="block text-micro font-medium text-[var(--fg-muted)]"
+              class="block text-micro font-medium text-fg-muted"
               for="display-name"
             >
               Display name
             </label>
             <input
               bind:value={registrationName}
-              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)]"
+              class="mt-1 w-full rounded-md border border-line bg-bg-soft px-3 py-2 text-meta text-fg"
               id="display-name"
               maxlength="120"
               placeholder="Alex Chen"
@@ -416,14 +412,14 @@
 
           <div>
             <label
-              class="block text-micro font-medium text-[var(--fg-muted)]"
+              class="block text-micro font-medium text-fg-muted"
               for="invite-token"
             >
               Invite token
             </label>
             <input
               bind:value={registrationToken}
-              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 font-mono text-meta text-[var(--fg)]"
+              class="mt-1 w-full rounded-md border border-line bg-bg-soft px-3 py-2 font-mono text-meta text-fg"
               id="invite-token"
               placeholder="Paste your invite token"
               type="text"

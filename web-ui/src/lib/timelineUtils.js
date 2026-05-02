@@ -19,18 +19,18 @@ const EVENT_TYPE_LABELS = {
 export const KNOWN_EVENT_TYPES = new Set(Object.keys(EVENT_TYPE_LABELS));
 
 const EVENT_TYPE_DOT_CLASSES = {
-  message_posted: "bg-indigo-400",
-  card_created: "bg-emerald-400",
-  card_updated: "bg-amber-400",
-  card_moved: "bg-sky-400",
-  card_resolved: "bg-emerald-500",
-  exception_raised: "bg-red-400",
-  human_attention_requested: "bg-cyan-400",
-  human_attention_responded: "bg-teal-400",
+  message_posted: "bg-blue-400",
+  card_created: "bg-ok",
+  card_updated: "bg-warn",
+  card_moved: "bg-accent-text",
+  card_resolved: "bg-ok-text",
+  exception_raised: "bg-danger",
+  human_attention_requested: "bg-accent",
+  human_attention_responded: "bg-accent-solid",
 };
 
 export function eventTypeDotClass(type) {
-  return EVENT_TYPE_DOT_CLASSES[type] ?? "bg-gray-500";
+  return EVENT_TYPE_DOT_CLASSES[type] ?? "bg-fg-subtle";
 }
 
 function asObject(value) {

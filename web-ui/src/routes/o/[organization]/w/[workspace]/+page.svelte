@@ -4,12 +4,16 @@
   import { onDestroy, onMount } from "svelte";
 
   import EventRow from "$lib/components/EventRow.svelte";
+  import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
+  import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
+  import StateEmpty from "$lib/components/state/StateEmpty.svelte";
+  import StateError from "$lib/components/state/StateError.svelte";
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
   import { initializeAuthSession } from "$lib/authSession";
   import { normalizeEventRow } from "$lib/events/eventRows";
   import { replayWorkspaceTour } from "$lib/tourState";
-  import { workspacePath } from "$lib/workspacePaths";
+  import { bindWorkspaceHref } from "$lib/workspacePaths";
 
   const POLL_INTERVAL_MS = 30_000;
 
@@ -28,9 +32,9 @@
   let workspaceSlug = $derived($page.params.workspace);
   let groups = $derived(feed.groups ?? []);
 
-  function workspaceHref(pathname = "/") {
-    return workspacePath(organizationSlug, workspaceSlug, pathname);
-  }
+  let workspaceHref = $derived(
+    bindWorkspaceHref(organizationSlug, workspaceSlug),
+  );
 
   function priorityLabel(topic) {
     return String(topic?.priority ?? "").trim() || "P2";
@@ -136,24 +140,21 @@
   });
 </script>
 
-<div class="min-w-0 max-w-full space-y-5" data-tour="home">
-  <div class="flex flex-wrap items-start justify-between gap-3">
-    <div class="min-w-0">
-      <h1 class="text-subtitle font-semibold text-[var(--fg)]">Home</h1>
-      <p class="mt-0.5 text-meta text-[var(--fg-muted)]">
-        {#if loading && !feed.generated_at}
-          Loading unread activity…
-        {:else}
-          Updated {formatTimestamp(feed.generated_at) || "just now"} · {feed.unread_count ??
-            0}
-          unread across {feed.topic_count ?? 0} topics
-        {/if}
-      </p>
-    </div>
-    <div class="flex shrink-0 flex-wrap items-center gap-2">
+<WorkspacePageShell data-tour="home">
+  <WorkspacePageHeader title="Home">
+    {#snippet subtitle()}
+      {#if loading && !feed.generated_at}
+        Loading unread activity…
+      {:else}
+        Updated {formatTimestamp(feed.generated_at) || "just now"} · {feed.unread_count ??
+          0}
+        unread across {feed.topic_count ?? 0} topics
+      {/if}
+    {/snippet}
+    {#snippet actions()}
       {#if groups.length === 0}
         <button
-          class="rounded-md border border-[var(--line)] px-2.5 py-1.5 text-meta font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)]"
+          class="rounded-md border border-line px-2.5 py-1.5 text-meta font-medium text-fg-muted transition-colors hover:bg-bg-soft"
           onclick={() => replayWorkspaceTour()}
           type="button"
         >
@@ -161,7 +162,7 @@
         </button>
       {/if}
       <button
-        class="rounded-md border border-[var(--line)] px-2.5 py-1.5 text-meta font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] disabled:opacity-60"
+        class="rounded-md border border-line px-2.5 py-1.5 text-meta font-medium text-fg-muted transition-colors hover:bg-bg-soft disabled:opacity-60"
         onclick={markAllRead}
         disabled={loading || groups.length === 0 || markingTopicId === "*"}
         type="button"
@@ -169,58 +170,45 @@
         Mark all read
       </button>
       <button
-        class="rounded-md border border-[var(--line)] px-2.5 py-1.5 text-meta font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] disabled:opacity-60"
+        class="rounded-md border border-line px-2.5 py-1.5 text-meta font-medium text-fg-muted transition-colors hover:bg-bg-soft disabled:opacity-60"
         onclick={loadHome}
         disabled={loading}
         type="button"
       >
         Refresh
       </button>
-    </div>
-  </div>
+    {/snippet}
+  </WorkspacePageHeader>
 
   {#if error}
-    <p class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
-      {error}
-    </p>
+    <StateError message={error} />
   {/if}
 
   {#if loading && !feed.generated_at}
     <section
       data-testid="home-unread-loading"
-      class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-4 py-5"
+      class="rounded-md border border-line bg-panel px-4 py-5"
     >
-      <p class="text-meta text-[var(--fg-muted)]">Loading unread activity…</p>
+      <p class="text-meta text-fg-muted">Loading unread activity…</p>
     </section>
   {:else if groups.length === 0}
-    <section
-      data-testid="home-unread-empty"
-      class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-4 py-5"
-    >
-      <p class="text-meta font-medium text-[var(--fg)]">You're caught up.</p>
-      <p class="mt-1 text-meta text-[var(--fg-muted)]">
-        Browse <a
-          class="font-medium text-[var(--fg)] hover:underline"
-          href={workspaceHref("/events")}>Events</a
-        >
-        or
-        <a
-          class="font-medium text-[var(--fg)] hover:underline"
-          href={workspaceHref("/topics")}>Topics</a
-        >.
-      </p>
-    </section>
+    <div data-testid="home-unread-empty">
+      <StateEmpty
+        title="You're caught up."
+        helper="Use the sidebar to open Events or Topics, or take the tour when your inbox is empty."
+        actionLabel="Open Events"
+        actionHref={workspaceHref("/events")}
+      />
+    </div>
   {:else}
     <div class="space-y-3" data-testid="home-unread-feed">
       {#each groups as group (group.topic.id)}
-        <section
-          class="overflow-hidden rounded-md border border-[var(--line)] bg-[var(--panel)]"
-        >
+        <section class="overflow-hidden rounded-md border border-line bg-panel">
           <div
-            class="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--line)] px-3 py-2.5 sm:px-4"
+            class="flex flex-wrap items-center justify-between gap-3 border-b border-line px-3 py-2.5 sm:px-4"
           >
             <a
-              class="min-w-0 flex-1 font-semibold text-[var(--fg)] hover:underline"
+              class="min-w-0 flex-1 font-semibold text-fg hover:underline"
               href={workspaceHref(
                 `/topics/${encodeURIComponent(group.topic.id)}`,
               )}
@@ -229,12 +217,12 @@
             </a>
             <div class="flex shrink-0 items-center gap-2">
               <span
-                class="rounded bg-[var(--line)] px-1.5 py-0.5 text-micro font-medium text-[var(--fg-muted)]"
+                class="rounded bg-line px-1.5 py-0.5 text-micro font-medium text-fg-muted"
               >
                 {priorityLabel(group.topic)} · {group.unread_count} unread
               </span>
               <button
-                class="rounded-md border border-[var(--line)] px-2 py-1 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] disabled:opacity-60"
+                class="rounded-md border border-line px-2 py-1 text-micro font-medium text-fg-muted transition-colors hover:bg-line-subtle disabled:opacity-60"
                 onclick={() => markTopicRead(group.topic.id)}
                 disabled={markingTopicId === group.topic.id ||
                   markingTopicId === "*"}
@@ -244,20 +232,18 @@
               </button>
             </div>
           </div>
-          <div class="divide-y divide-[var(--line)]">
+          <div class="divide-y divide-line">
             {#each (group.events ?? []).slice(0, 5) as event (event.id)}
               <EventRow row={rowFor(event)} />
             {/each}
             {#if (group.events ?? []).length > 5}
               <details class="group">
                 <summary
-                  class="cursor-pointer px-3 py-2 text-meta font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)] sm:px-4"
+                  class="cursor-pointer px-3 py-2 text-meta font-medium text-fg-muted hover:bg-line-subtle sm:px-4"
                 >
                   Show all {group.events.length}
                 </summary>
-                <div
-                  class="divide-y divide-[var(--line)] border-t border-[var(--line)]"
-                >
+                <div class="divide-y divide-line border-t border-line">
                   {#each group.events.slice(5) as event (event.id)}
                     <EventRow row={rowFor(event)} />
                   {/each}
@@ -270,12 +256,12 @@
     </div>
   {/if}
 
-  <p class="text-meta text-[var(--fg-muted)]">
+  <p class="text-meta text-fg-muted">
     <a
-      class="font-medium text-[var(--fg)] hover:underline"
+      class="font-medium text-fg hover:underline"
       href={workspaceHref("/events")}
     >
       View full Events history
     </a>
   </p>
-</div>
+</WorkspacePageShell>

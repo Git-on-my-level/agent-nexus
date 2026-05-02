@@ -35,9 +35,7 @@
   let visible = $derived(
     Boolean(normalized) && (forceShow || normalized !== "active"),
   );
-  let tone = $derived(
-    TONE[normalized] ?? "text-[var(--fg-muted)] bg-[var(--line)]",
-  );
+  let tone = $derived(TONE[normalized] ?? "text-fg-muted bg-line");
   let text = $derived(
     label ||
       (normalized ? normalized[0].toUpperCase() + normalized.slice(1) : ""),

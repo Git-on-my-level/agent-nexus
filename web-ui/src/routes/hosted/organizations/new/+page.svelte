@@ -104,7 +104,7 @@
         disabled={busy}
         required
         placeholder="Acme Robotics"
-        class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-1.5 text-body text-fg placeholder:text-[var(--fg-subtle)]"
+        class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-1.5 text-body text-fg placeholder:text-fg-subtle"
       />
     </label>
 
@@ -125,7 +125,7 @@
           required
           placeholder="acme-robotics"
           pattern="[-a-z0-9]+"
-          class="w-full bg-transparent px-2.5 py-1.5 font-mono text-mono text-fg placeholder:text-[var(--fg-subtle)]"
+          class="w-full bg-transparent px-2.5 py-1.5 font-mono text-mono text-fg placeholder:text-fg-subtle"
         />
       </div>
       <span class="mt-1 block text-micro text-fg-subtle">

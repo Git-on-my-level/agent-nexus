@@ -25,7 +25,7 @@
     variant="secondary"
     size="compact"
     class={isResolveKind
-      ? "!h-7 !min-w-0 !border-0 !bg-transparent !px-1.5 hover:!bg-[var(--bg-soft)]"
+      ? "!h-7 !min-w-0 !border-0 !bg-transparent !px-1.5 hover:!bg-bg-soft"
       : ""}
     disabled={busy}
     onclick={onunarchive}

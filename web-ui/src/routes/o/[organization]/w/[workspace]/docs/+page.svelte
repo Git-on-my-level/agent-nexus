@@ -4,9 +4,11 @@
   import { coreClient } from "$lib/coreClient";
   import { filterTopLevelDocuments } from "$lib/documentVisibility";
   import { formatTimestamp } from "$lib/formatDate";
-  import { workspacePath } from "$lib/workspacePaths";
+  import { bindWorkspaceHref } from "$lib/workspacePaths";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import CompactFilterBar from "$lib/components/CompactFilterBar.svelte";
+  import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
+  import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
   import Skeleton from "$lib/components/state/Skeleton.svelte";
   import StateEmpty from "$lib/components/state/StateEmpty.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
@@ -15,6 +17,7 @@
   import WorkspaceListBulkToolbar from "$lib/components/WorkspaceListBulkToolbar.svelte";
   import LeadingSelectionGlyph from "$lib/components/LeadingSelectionGlyph.svelte";
   import LifecycleBadge from "$lib/components/LifecycleBadge.svelte";
+  import { closeConfirmModal, emptyConfirmModal } from "$lib/confirmModal.js";
   import { createWorkspaceListSelection } from "$lib/workspaceListSelection.svelte.js";
 
   const DOC_STATE_LABELS = {
@@ -40,12 +43,7 @@
   });
   let archiveBusyId = $state("");
   /** @type {{ open: boolean, action: string, entityId: string, bulkIds: string[] | null }} */
-  let confirmModal = $state({
-    open: false,
-    action: "",
-    entityId: "",
-    bulkIds: null,
-  });
+  let confirmModal = $state(emptyConfirmModal());
   let trashBusyId = $state("");
   let bulkBusy = $state(false);
 
@@ -66,9 +64,9 @@
     content: "",
   });
 
-  function workspaceHref(pathname = "/") {
-    return workspacePath(organizationSlug, workspaceSlug, pathname);
-  }
+  let workspaceHref = $derived(
+    bindWorkspaceHref(organizationSlug, workspaceSlug),
+  );
 
   $effect(() => {
     workspaceSlug;
@@ -298,7 +296,7 @@
     error = "";
     try {
       await coreClient.trashDocument(id, {});
-      confirmModal = { open: false, action: "", entityId: "", bulkIds: null };
+      confirmModal = emptyConfirmModal();
       await loadDocuments();
     } catch (e) {
       error = `Trash failed: ${e instanceof Error ? e.message : String(e)}`;
@@ -317,7 +315,7 @@
         await coreClient.archiveDocument(id, {});
       }
       clearDocSelection();
-      confirmModal = { open: false, action: "", entityId: "", bulkIds: null };
+      confirmModal = emptyConfirmModal();
       await loadDocuments();
     } catch (e) {
       error = `Archive failed: ${e instanceof Error ? e.message : String(e)}`;
@@ -354,7 +352,7 @@
         await coreClient.trashDocument(id, {});
       }
       clearDocSelection();
-      confirmModal = { open: false, action: "", entityId: "", bulkIds: null };
+      confirmModal = emptyConfirmModal();
       await loadDocuments();
     } catch (e) {
       error = `Trash failed: ${e instanceof Error ? e.message : String(e)}`;
@@ -367,7 +365,7 @@
     const bulkIds = confirmModal.bulkIds;
     const id = confirmModal.entityId;
     const action = confirmModal.action;
-    confirmModal = { open: false, action: "", entityId: "", bulkIds: null };
+    confirmModal = emptyConfirmModal();
     if (bulkIds && bulkIds.length > 0) {
       if (action === "archive") void bulkArchiveDocuments(bulkIds);
       else if (action === "trash") void bulkTrashDocuments(bulkIds);
@@ -409,67 +407,34 @@
   );
 </script>
 
-<div class="mb-3 flex max-md:mb-2 flex-wrap items-center justify-between gap-2">
-  <div>
-    <h1 class="text-subtitle font-semibold text-[var(--fg)]">Docs</h1>
-    {#if scopedThreadId}
-      <p class="mt-1 hidden text-micro text-[var(--fg-muted)] sm:block">
-        Scoped to backing thread
-        <RefLink refValue={`thread:${scopedThreadId}`} humanize showRaw />
-      </p>
-    {/if}
-  </div>
-  <div class="flex flex-wrap items-center justify-end gap-1.5">
-    <button
-      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] {!documents.length &&
-      !loading
-        ? 'opacity-50 pointer-events-none'
-        : ''}"
-      onclick={toggleSelectMode}
-      disabled={!documents.length && !loading}
-      type="button"
-      aria-pressed={docSel.selectMode}
-    >
-      {docSel.selectMode ? "Done" : "Select"}
-    </button>
-    <button
-      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-micro font-medium transition-colors {hasActiveFilters
-        ? 'border-[var(--accent)]/40 bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/15'
-        : 'border-[var(--line)] bg-[var(--bg-soft)] text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]'}"
-      onclick={() => {
-        if (!filtersOpen) {
-          docFiltersDraft = { ...docFiltersApplied };
-        }
-        filtersOpen = !filtersOpen;
-      }}
-      type="button"
-      data-testid="docs-filters-toggle"
-    >
-      <svg
-        class="h-3.5 w-3.5"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-        stroke-width="2"
+<WorkspacePageShell>
+  <WorkspacePageHeader title="Docs">
+    {#snippet actions()}
+      <button
+        class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-line bg-bg-soft px-2.5 py-1.5 text-micro font-medium text-fg-muted transition-colors hover:bg-line-subtle {!documents.length &&
+        !loading
+          ? 'opacity-50 pointer-events-none'
+          : ''}"
+        onclick={toggleSelectMode}
+        disabled={!documents.length && !loading}
+        type="button"
+        aria-pressed={docSel.selectMode}
       >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
-        />
-      </svg>
-      {hasActiveFilters ? "Filtered" : "Filters"}
-    </button>
-    <button
-      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-[var(--panel)] px-3 py-1.5 text-micro font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line)] disabled:cursor-not-allowed disabled:opacity-50"
-      disabled={Boolean(scopedThreadId)}
-      onclick={toggleCreate}
-      type="button"
-      title={scopedThreadId
-        ? "Clear the backing-thread scope to create a new document."
-        : "Create a new document"}
-    >
-      {#if !createOpen}
+        {docSel.selectMode ? "Done" : "Select"}
+      </button>
+      <button
+        class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-micro font-medium transition-colors {hasActiveFilters
+          ? 'border-accent bg-accent-soft text-accent hover:bg-accent-soft'
+          : 'border-line bg-bg-soft text-fg-muted hover:bg-line-subtle'}"
+        onclick={() => {
+          if (!filtersOpen) {
+            docFiltersDraft = { ...docFiltersApplied };
+          }
+          filtersOpen = !filtersOpen;
+        }}
+        type="button"
+        data-testid="docs-filters-toggle"
+      >
         <svg
           class="h-3.5 w-3.5"
           fill="none"
@@ -480,312 +445,341 @@
           <path
             stroke-linecap="round"
             stroke-linejoin="round"
-            d="M12 4v16m8-8H4"
+            d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
           />
         </svg>
-      {/if}
-      {createOpen ? "Cancel" : "New doc"}
-    </button>
-  </div>
-</div>
-
-{#if filtersOpen}
-  <CompactFilterBar testId="docs-filter-panel">
-    {#snippet children()}
-      <div class="grid gap-3">
-        <div class="text-micro">
-          <span class="font-medium text-[var(--fg-muted)]">Lifecycle</span>
-          <fieldset
-            class="mt-1 space-y-1 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-2"
-          >
-            {#each Object.entries(DOC_STATE_LABELS) as [value, label] (value)}
-              <label
-                class="flex cursor-pointer items-center gap-2 text-meta text-[var(--fg)]"
-              >
-                <input
-                  checked={(docFiltersDraft.states ?? ["active"]).includes(
-                    value,
-                  )}
-                  class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--line)] bg-[var(--bg)] text-[var(--accent-hover)] focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-0"
-                  type="checkbox"
-                  onchange={() => toggleDocLifecycleState(value)}
-                />
-                {label}
-              </label>
-            {/each}
-          </fieldset>
-        </div>
-      </div>
-      <div class="mt-3 flex flex-wrap gap-1.5">
-        <button
-          class="cursor-pointer rounded-md bg-[var(--panel)] px-3 py-1.5 text-micro font-medium text-[var(--fg)] hover:bg-[var(--line)]"
-          onclick={applyDocFilters}
-          type="button"
-        >
-          Apply
-        </button>
-        <button
-          class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-micro font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]"
-          onclick={resetDocFilters}
-          type="button"
-        >
-          Clear filters
-        </button>
-      </div>
-    {/snippet}
-  </CompactFilterBar>
-{/if}
-
-{#if scopedThreadId}
-  <div
-    class="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2"
-  >
-    <p class="text-micro text-[var(--fg-muted)]">
-      Showing only documents on this backing thread timeline.
-    </p>
-    <p class="hidden text-micro text-[var(--fg-muted)] sm:block">
-      Create from the unscoped docs view. New documents always get their own
-      backing thread.
-    </p>
-    <a
-      class="text-micro font-medium text-accent-text transition-colors hover:text-accent-text"
-      href={workspaceHref("/docs")}
-    >
-      Clear scope
-    </a>
-  </div>
-{/if}
-
-{#if createOpen}
-  <form
-    class="mb-4 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] p-4"
-    onsubmit={(e) => {
-      e.preventDefault();
-      void handleCreate();
-    }}
-  >
-    <h2 class="mb-3 text-meta font-semibold text-[var(--fg)]">New document</h2>
-    <p class="mb-3 text-micro text-[var(--fg-muted)]">
-      The title is saved together with the first revision. You can edit the body
-      and add more revisions afterward.
-    </p>
-    <div class="grid gap-3">
-      <label>
-        <span class="text-micro font-medium text-[var(--fg-muted)]"
-          >Title <span class="text-danger-text">*</span></span
-        >
-        <input
-          bind:value={draft.title}
-          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-meta text-[var(--fg)] placeholder:text-[var(--fg-subtle)]"
-          placeholder="Document title"
-          type="text"
-        />
-      </label>
-      <label>
-        <span class="text-micro font-medium text-[var(--fg-muted)]"
-          >Summary</span
-        >
-        <textarea
-          bind:value={draft.summary}
-          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-2 text-meta text-[var(--fg)] placeholder:text-[var(--fg-subtle)] resize-y"
-          placeholder="Optional short description for lists and the doc header"
-          rows="2"
-        ></textarea>
-      </label>
-      <label>
-        <span class="text-micro font-medium text-[var(--fg-muted)]"
-          >Head content (Markdown) <span class="text-danger-text">*</span></span
-        >
-        <textarea
-          bind:value={draft.content}
-          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-2 text-meta text-[var(--fg)] placeholder:text-[var(--fg-subtle)] font-mono leading-relaxed resize-y"
-          placeholder="# Document title&#10;&#10;Write your content here..."
-          rows="10"
-        ></textarea>
-      </label>
-    </div>
-
-    {#if createError}
-      <div
-        class="mt-3 rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
-        role="alert"
-      >
-        {createError}
-      </div>
-    {/if}
-    <div class="mt-3 flex items-center gap-2">
-      <button
-        class="cursor-pointer rounded-md bg-accent-solid px-3 py-1.5 text-micro font-medium text-white hover:bg-accent disabled:opacity-50"
-        disabled={creating}
-        type="submit"
-      >
-        {creating ? "Creating…" : "Create doc"}
+        {hasActiveFilters ? "Filtered" : "Filters"}
       </button>
       <button
-        class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-micro font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]"
+        class="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-panel px-3 py-1.5 text-micro font-medium text-fg transition-colors hover:bg-line disabled:cursor-not-allowed disabled:opacity-50"
+        disabled={Boolean(scopedThreadId)}
         onclick={toggleCreate}
         type="button"
+        title={scopedThreadId
+          ? "Clear the backing-thread scope to create a new document."
+          : "Create a new document"}
       >
-        Cancel
+        {#if !createOpen}
+          <svg
+            class="h-3.5 w-3.5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M12 4v16m8-8H4"
+            />
+          </svg>
+        {/if}
+        {createOpen ? "Cancel" : "New doc"}
       </button>
-    </div>
-  </form>
-{/if}
+    {/snippet}
+  </WorkspacePageHeader>
 
-{#if loading && documents.length === 0}
-  <Skeleton rows={6} />
-{:else if error}
-  <StateError
-    message={error}
-    onretry={() => void loadDocuments(true)}
-    {retrying}
-    class="mb-4"
-  />
-{:else if documents.length === 0}
-  <StateEmpty
-    title="No docs yet"
-    helper="Documents capture decisions, runbooks, and reference material. Each one keeps a full revision history."
-  />
-{/if}
+  {#if scopedThreadId}
+    <p class="-mt-2 mb-1 hidden text-micro text-fg-muted sm:block">
+      Scoped to backing thread
+      <RefLink refValue={`thread:${scopedThreadId}`} humanize showRaw />
+    </p>
+  {/if}
 
-{#snippet docRow(doc, index, showBorderTop)}
-  {@const selected = docSel.selectedIds.has(doc.id)}
-  {#if docSel.selectMode}
-    <div
-      aria-label={`${selected ? "Deselect" : "Select"} ${doc.title || doc.id}`}
-      aria-pressed={selected}
-      class="flex cursor-pointer items-stretch outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-soft)] {showBorderTop
-        ? 'border-t border-[var(--line)]'
-        : ''} {selected
-        ? 'border-l-[3px] border-l-[var(--accent)] bg-[var(--accent)]/10'
-        : 'border-l-[3px] border-l-transparent hover:bg-[var(--line-subtle)]'}"
-      onclick={(e) =>
-        docSel.handleRowMouseEvent(
-          e,
-          index,
-          documents.length,
-          docIdAtVisibleIndex,
-          docHrefAtVisibleIndex,
-        )}
-      onkeydown={(e) =>
-        docSel.handleRowKeyboardEvent(e, index, docIdAtVisibleIndex)}
-      role="button"
-      tabindex="0"
-    >
-      <div class="flex shrink-0 items-center self-stretch pl-2 sm:pl-3">
-        <LeadingSelectionGlyph {selected} />
-      </div>
-      <div
-        class="pointer-events-none flex min-w-0 flex-1 items-start gap-3 px-3 py-2.5 sm:px-4"
-      >
-        <WorkspaceResourceListRow
-          title={doc.title || doc.id}
-          description={doc.summary ?? ""}
-        >
-          {#snippet badges()}
-            <LifecycleBadge
-              state={doc.state}
-              label={DOC_STATE_LABELS[doc.state]}
-              forceShow={docsHaveMixedLifecycle}
-            />
-          {/snippet}
-        </WorkspaceResourceListRow>
-        <div
-          class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"
-        >
-          <span class="w-14 text-right text-[var(--fg-muted)]"
-            >{formatTimestamp(doc.updated_at) || "—"}</span
-          >
+  {#if filtersOpen}
+    <CompactFilterBar testId="docs-filter-panel">
+      {#snippet children()}
+        <div class="grid gap-3">
+          <div class="text-micro">
+            <span class="font-medium text-fg-muted">Lifecycle</span>
+            <fieldset
+              class="mt-1 space-y-1 rounded-md border border-line bg-bg-soft px-2.5 py-2"
+            >
+              {#each Object.entries(DOC_STATE_LABELS) as [value, label] (value)}
+                <label
+                  class="flex cursor-pointer items-center gap-2 text-meta text-fg"
+                >
+                  <input
+                    checked={(docFiltersDraft.states ?? ["active"]).includes(
+                      value,
+                    )}
+                    class="h-3.5 w-3.5 cursor-pointer rounded border-line bg-bg text-accent-hover focus:ring-2 focus:ring-accent focus:ring-offset-0"
+                    type="checkbox"
+                    onchange={() => toggleDocLifecycleState(value)}
+                  />
+                  {label}
+                </label>
+              {/each}
+            </fieldset>
+          </div>
         </div>
-      </div>
-    </div>
-  {:else}
+        <div class="mt-3 flex flex-wrap gap-1.5">
+          <button
+            class="cursor-pointer rounded-md bg-panel px-3 py-1.5 text-micro font-medium text-fg hover:bg-line"
+            onclick={applyDocFilters}
+            type="button"
+          >
+            Apply
+          </button>
+          <button
+            class="cursor-pointer rounded-md border border-line bg-bg-soft px-3 py-1.5 text-micro font-medium text-fg-muted hover:bg-line-subtle"
+            onclick={resetDocFilters}
+            type="button"
+          >
+            Clear filters
+          </button>
+        </div>
+      {/snippet}
+    </CompactFilterBar>
+  {/if}
+
+  {#if scopedThreadId}
     <div
-      class="flex items-stretch {showBorderTop
-        ? 'border-t border-[var(--line)]'
-        : ''}"
+      class="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-md border border-line bg-bg-soft px-3 py-2"
     >
+      <p class="text-micro text-fg-muted">
+        Showing only documents on this backing thread timeline.
+      </p>
+      <p class="hidden text-micro text-fg-muted sm:block">
+        Create from the unscoped docs view. New documents always get their own
+        backing thread.
+      </p>
       <a
-        class="flex min-w-0 flex-1 items-start gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--line-subtle)] sm:px-4"
-        href={workspaceHref(`/docs/${doc.id}`)}
+        class="text-micro font-medium text-accent-text transition-colors hover:text-accent-text"
+        href={workspaceHref("/docs")}
       >
-        <WorkspaceResourceListRow
-          title={doc.title || doc.id}
-          description={doc.summary ?? ""}
-        >
-          {#snippet badges()}
-            <LifecycleBadge
-              state={doc.state}
-              label={DOC_STATE_LABELS[doc.state]}
-              forceShow={docsHaveMixedLifecycle}
-            />
-          {/snippet}
-        </WorkspaceResourceListRow>
-        <div
-          class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"
-        >
-          <span class="w-14 text-right text-[var(--fg-muted)]"
-            >{formatTimestamp(doc.updated_at) || "—"}</span
-          >
-        </div>
+        Clear scope
       </a>
     </div>
   {/if}
-{/snippet}
 
-{#if !loading && documents.length > 0}
-  {#if docSel.selectMode}
-    <WorkspaceListBulkToolbar
-      {allVisibleSelected}
-      busy={bulkBusy}
-      canArchive={bulkCanArchive}
-      canTrash={bulkCanTrash}
-      canUnarchive={bulkCanUnarchive}
-      onArchive={() => {
-        const ids = idsForBulkArchive();
-        if (!ids.length) return;
-        confirmModal = {
-          open: true,
-          action: "archive",
-          entityId: "",
-          bulkIds: ids,
-        };
+  {#if createOpen}
+    <form
+      class="mb-4 rounded-md border border-line bg-bg-soft p-4"
+      onsubmit={(e) => {
+        e.preventDefault();
+        void handleCreate();
       }}
-      onClear={clearDocSelection}
-      onDeselectAll={clearDocSelection}
-      onSelectAll={selectAllVisibleDocs}
-      onTrash={() => {
-        const ids = idsForBulkTrash();
-        if (!ids.length) return;
-        confirmModal = {
-          open: true,
-          action: "trash",
-          entityId: "",
-          bulkIds: ids,
-        };
-      }}
-      onUnarchive={() => void bulkUnarchiveDocuments(idsForBulkUnarchive())}
-      selectionChromeActive={true}
-      selectedCount={docSel.selectedIds.size}
+    >
+      <h2 class="mb-3 text-meta font-semibold text-fg">New document</h2>
+      <p class="mb-3 text-micro text-fg-muted">
+        The title is saved together with the first revision. You can edit the
+        body and add more revisions afterward.
+      </p>
+      <div class="grid gap-3">
+        <label>
+          <span class="text-micro font-medium text-fg-muted"
+            >Title <span class="text-danger-text">*</span></span
+          >
+          <input
+            bind:value={draft.title}
+            class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-1.5 text-meta text-fg placeholder:text-fg-subtle"
+            placeholder="Document title"
+            type="text"
+          />
+        </label>
+        <label>
+          <span class="text-micro font-medium text-fg-muted">Summary</span>
+          <textarea
+            bind:value={draft.summary}
+            class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-2 text-meta text-fg placeholder:text-fg-subtle resize-y"
+            placeholder="Optional short description for lists and the doc header"
+            rows="2"
+          ></textarea>
+        </label>
+        <label>
+          <span class="text-micro font-medium text-fg-muted"
+            >Head content (Markdown) <span class="text-danger-text">*</span
+            ></span
+          >
+          <textarea
+            bind:value={draft.content}
+            class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-2 text-meta text-fg placeholder:text-fg-subtle font-mono leading-relaxed resize-y"
+            placeholder="# Document title&#10;&#10;Write your content here..."
+            rows="10"
+          ></textarea>
+        </label>
+      </div>
+
+      {#if createError}
+        <div
+          class="mt-3 rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
+          role="alert"
+        >
+          {createError}
+        </div>
+      {/if}
+      <div class="mt-3 flex items-center gap-2">
+        <button
+          class="cursor-pointer rounded-md bg-accent-solid px-3 py-1.5 text-micro font-medium text-white hover:bg-accent disabled:opacity-50"
+          disabled={creating}
+          type="submit"
+        >
+          {creating ? "Creating…" : "Create doc"}
+        </button>
+        <button
+          class="cursor-pointer rounded-md border border-line bg-bg-soft px-3 py-1.5 text-micro font-medium text-fg-muted hover:bg-line-subtle"
+          onclick={toggleCreate}
+          type="button"
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
+  {/if}
+
+  {#if loading && documents.length === 0}
+    <Skeleton rows={6} />
+  {:else if error}
+    <StateError
+      message={error}
+      onretry={() => void loadDocuments(true)}
+      {retrying}
+      class="mb-4"
+    />
+  {:else if documents.length === 0}
+    <StateEmpty
+      title="No docs yet"
+      helper="Documents capture decisions, runbooks, and reference material. Each one keeps a full revision history."
     />
   {/if}
-  <div
-    class="space-y-px rounded-md border border-[var(--line)] bg-[var(--bg-soft)] overflow-hidden"
-  >
-    {#each documents as doc, i}
-      {@render docRow(doc, i, i > 0)}
-    {/each}
-  </div>
-{/if}
 
-<ConfirmModal
-  open={confirmModal.open}
-  title={confirmModalTitle}
-  message={confirmModalMessage}
-  confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
-  variant={confirmModal.action === "trash" ? "danger" : "warning"}
-  busy={confirmModalBusy}
-  onconfirm={handleConfirm}
-  oncancel={() =>
-    (confirmModal = { open: false, action: "", entityId: "", bulkIds: null })}
-/>
+  {#snippet docRow(doc, index, showBorderTop)}
+    {@const selected = docSel.selectedIds.has(doc.id)}
+    {#if docSel.selectMode}
+      <div
+        aria-label={`${selected ? "Deselect" : "Select"} ${doc.title || doc.id}`}
+        aria-pressed={selected}
+        class="flex cursor-pointer items-stretch outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-soft {showBorderTop
+          ? 'border-t border-line'
+          : ''} {selected
+          ? 'border-l-[3px] border-l-accent bg-accent-soft'
+          : 'border-l-[3px] border-l-transparent hover:bg-line-subtle'}"
+        onclick={(e) =>
+          docSel.handleRowMouseEvent(
+            e,
+            index,
+            documents.length,
+            docIdAtVisibleIndex,
+            docHrefAtVisibleIndex,
+          )}
+        onkeydown={(e) =>
+          docSel.handleRowKeyboardEvent(e, index, docIdAtVisibleIndex)}
+        role="button"
+        tabindex="0"
+      >
+        <div class="flex shrink-0 items-center self-stretch pl-2 sm:pl-3">
+          <LeadingSelectionGlyph {selected} />
+        </div>
+        <div
+          class="pointer-events-none flex min-w-0 flex-1 items-start gap-3 px-3 py-2.5 sm:px-4"
+        >
+          <WorkspaceResourceListRow
+            title={doc.title || doc.id}
+            description={doc.summary ?? ""}
+          >
+            {#snippet badges()}
+              <LifecycleBadge
+                state={doc.state}
+                label={DOC_STATE_LABELS[doc.state]}
+                forceShow={docsHaveMixedLifecycle}
+              />
+            {/snippet}
+          </WorkspaceResourceListRow>
+          <div
+            class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"
+          >
+            <span class="w-14 text-right text-fg-muted"
+              >{formatTimestamp(doc.updated_at) || "—"}</span
+            >
+          </div>
+        </div>
+      </div>
+    {:else}
+      <div
+        class="flex items-stretch {showBorderTop ? 'border-t border-line' : ''}"
+      >
+        <a
+          class="flex min-w-0 flex-1 items-start gap-3 px-3 py-2.5 transition-colors hover:bg-line-subtle sm:px-4"
+          href={workspaceHref(`/docs/${doc.id}`)}
+        >
+          <WorkspaceResourceListRow
+            title={doc.title || doc.id}
+            description={doc.summary ?? ""}
+          >
+            {#snippet badges()}
+              <LifecycleBadge
+                state={doc.state}
+                label={DOC_STATE_LABELS[doc.state]}
+                forceShow={docsHaveMixedLifecycle}
+              />
+            {/snippet}
+          </WorkspaceResourceListRow>
+          <div
+            class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"
+          >
+            <span class="w-14 text-right text-fg-muted"
+              >{formatTimestamp(doc.updated_at) || "—"}</span
+            >
+          </div>
+        </a>
+      </div>
+    {/if}
+  {/snippet}
+
+  {#if !loading && documents.length > 0}
+    {#if docSel.selectMode}
+      <WorkspaceListBulkToolbar
+        {allVisibleSelected}
+        busy={bulkBusy}
+        canArchive={bulkCanArchive}
+        canTrash={bulkCanTrash}
+        canUnarchive={bulkCanUnarchive}
+        onArchive={() => {
+          const ids = idsForBulkArchive();
+          if (!ids.length) return;
+          confirmModal = {
+            open: true,
+            action: "archive",
+            entityId: "",
+            bulkIds: ids,
+          };
+        }}
+        onClear={clearDocSelection}
+        onDeselectAll={clearDocSelection}
+        onSelectAll={selectAllVisibleDocs}
+        onTrash={() => {
+          const ids = idsForBulkTrash();
+          if (!ids.length) return;
+          confirmModal = {
+            open: true,
+            action: "trash",
+            entityId: "",
+            bulkIds: ids,
+          };
+        }}
+        onUnarchive={() => void bulkUnarchiveDocuments(idsForBulkUnarchive())}
+        selectionChromeActive={true}
+        selectedCount={docSel.selectedIds.size}
+      />
+    {/if}
+    <div
+      class="space-y-px rounded-md border border-line bg-bg-soft overflow-hidden"
+    >
+      {#each documents as doc, i}
+        {@render docRow(doc, i, i > 0)}
+      {/each}
+    </div>
+  {/if}
+
+  <ConfirmModal
+    open={confirmModal.open}
+    title={confirmModalTitle}
+    message={confirmModalMessage}
+    confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
+    variant={confirmModal.action === "trash" ? "danger" : "warning"}
+    busy={confirmModalBusy}
+    onconfirm={handleConfirm}
+    oncancel={() => (confirmModal = closeConfirmModal(confirmModal))}
+  />
+</WorkspacePageShell>

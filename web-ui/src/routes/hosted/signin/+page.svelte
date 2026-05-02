@@ -5,6 +5,7 @@
   import { page } from "$app/stores";
 
   import Button from "$lib/components/Button.svelte";
+  import HostedNarrowLayout from "$lib/components/layout/HostedNarrowLayout.svelte";
   import {
     createHostedLaunchSession,
     startHostedOAuthFlow,
@@ -83,7 +84,7 @@
   <title>Sign in — ANX</title>
 </svelte:head>
 
-<div class="mx-auto max-w-md py-8">
+<HostedNarrowLayout>
   <div class="rounded-md border border-line bg-bg-soft px-6 py-6">
     <h1 class="text-display text-fg">Welcome back</h1>
     <p class="mt-1.5 text-meta text-fg-subtle">
@@ -132,4 +133,4 @@
       href={`/hosted/signup${continuationQuery}`}>Create an account</a
     >
   </p>
-</div>
+</HostedNarrowLayout>

@@ -86,13 +86,13 @@
   function threadStatusColor(status) {
     switch (status) {
       case "done":
-        return "text-[var(--fg)]";
+        return "text-fg";
       case "canceled":
-        return "text-[var(--fg-muted)]";
+        return "text-fg-muted";
       case "paused":
         return "text-warn-text";
       default:
-        return "text-[var(--fg)]";
+        return "text-fg";
     }
   }
 
@@ -129,11 +129,11 @@
 <div
   id={`card-${cardRowId}`}
   data-board-id={boardId || undefined}
-  class="group overflow-hidden rounded-md border border-[var(--line)] bg-[var(--panel)] transition-colors hover:border-[var(--line-strong)]"
+  class="group overflow-hidden rounded-md border border-line bg-panel transition-colors hover:border-line-strong"
 >
   <div
     aria-label={`Manage ${headerTitle}`}
-    class="cursor-pointer px-2.5 py-2 transition-colors hover:bg-[var(--line-subtle)]/20"
+    class="cursor-pointer px-2.5 py-2 transition-colors hover:bg-line-subtle"
     {onclick}
     onkeydown={handleCardKeydown}
     role="button"
@@ -163,7 +163,7 @@
           {#if assigneeVisible.length > 0}
             {#each assigneeVisible as name (name)}
               <span
-                class="max-w-[7rem] truncate rounded-md bg-[var(--line)] px-1 py-0.5 text-micro text-[var(--fg-muted)]"
+                class="max-w-[7rem] truncate rounded-md bg-line px-1 py-0.5 text-micro text-fg-muted"
                 title={name}
               >
                 {name}
@@ -171,7 +171,7 @@
             {/each}
             {#if assigneeMore > 0}
               <span
-                class="rounded-md bg-[var(--line)] px-1 py-0.5 text-micro text-[var(--fg-muted)]"
+                class="rounded-md bg-line px-1 py-0.5 text-micro text-fg-muted"
               >
                 +{assigneeMore} more
               </span>
@@ -182,7 +182,7 @@
             <span
               class="rounded-md px-1 py-0.5 text-micro {dueOverdue
                 ? 'bg-danger-soft text-danger-text'
-                : 'bg-[var(--line)] text-[var(--fg-muted)]'}"
+                : 'bg-line text-fg-muted'}"
             >
               Due {formatTimestamp(cardDueAt) || "—"}
             </span>
@@ -200,7 +200,7 @@
         </div>
 
         {#if showSummary}
-          <p class="mt-1 truncate text-micro text-[var(--fg-muted)]">
+          <p class="mt-1 truncate text-micro text-fg-muted">
             {summaryText}
           </p>
         {/if}

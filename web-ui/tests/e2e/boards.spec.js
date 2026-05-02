@@ -829,13 +829,8 @@ test("board UI supports create/edit and card mutation flows", async ({
     "Review Prep",
   );
 
-  const resolutionDetails = reviewPrepDialog
-    .locator("details")
-    .filter({ hasText: "Resolution refs" });
-  await resolutionDetails.locator("summary").click();
-  await resolutionDetails
-    .getByLabel("Add resolution ref")
-    .fill("event:review-signoff-1");
+  await reviewPrepDialog.getByRole("tab", { name: "Resolution" }).click();
+
   const waitRefsPatch = page.waitForResponse(
     (resp) =>
       resp.url().includes("/cards/") &&
@@ -843,7 +838,10 @@ test("board UI supports create/edit and card mutation flows", async ({
       resp.url().includes("thread-review"),
     { timeout: 15_000 },
   );
-  await resolutionDetails
+  await reviewPrepDialog
+    .getByLabel("Add resolution ref")
+    .fill("event:review-signoff-1");
+  await reviewPrepDialog
     .getByRole("button", { name: "Add ref", exact: true })
     .click();
   await waitRefsPatch;

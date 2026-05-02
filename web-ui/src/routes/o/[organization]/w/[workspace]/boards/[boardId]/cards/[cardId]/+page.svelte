@@ -12,7 +12,7 @@
   } from "$lib/boardUtils";
   import CardDetailModalInner from "$lib/components/CardDetailModalInner.svelte";
   import { coreClient } from "$lib/coreClient";
-  import { workspacePath } from "$lib/workspacePaths";
+  import { bindWorkspaceHref } from "$lib/workspacePaths";
   import { readEnumSearchParam } from "$lib/urlState";
 
   let { data } = $props();
@@ -74,9 +74,9 @@
     return lookupActorDisplayName(id, $actorRegistry, $principalRegistry);
   }
 
-  function workspaceHref(pathname = "/") {
-    return workspacePath(organizationSlug, workspaceSlug, pathname);
-  }
+  let workspaceHref = $derived(
+    bindWorkspaceHref(organizationSlug, workspaceSlug),
+  );
 
   async function closeCardPage() {
     await goto(workspaceHref(`/boards/${encodeURIComponent(boardId)}`));
@@ -222,7 +222,7 @@
 
 {#if loading}
   <div
-    class="mt-12 flex items-center justify-center gap-2 text-meta text-[var(--fg-muted)]"
+    class="mt-12 flex items-center justify-center gap-2 text-meta text-fg-muted"
   >
     <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
       <circle
@@ -291,12 +291,10 @@
     presentation="page"
   />
 {:else}
-  <div
-    class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-4 py-6"
-  >
-    <p class="text-meta font-medium text-[var(--fg)]">Card not found.</p>
+  <div class="rounded-md border border-line bg-panel px-4 py-6">
+    <p class="text-meta font-medium text-fg">Card not found.</p>
     <a
-      class="mt-3 inline-flex rounded-md border border-[var(--line)] px-3 py-1.5 text-meta text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
+      class="mt-3 inline-flex rounded-md border border-line px-3 py-1.5 text-meta text-fg-muted transition-colors hover:bg-line-subtle hover:text-fg"
       href={workspaceHref(`/boards/${encodeURIComponent(boardId)}`)}
     >
       Back to board

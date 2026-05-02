@@ -14,7 +14,7 @@
   import { authenticatedAgent, logoutAuthSession } from "$lib/authSession";
   import { hostedSession, loadHostedSession } from "$lib/hosted/session.js";
   import { settingsNavItems } from "$lib/navigation";
-  import { workspacePath } from "$lib/workspacePaths";
+  import { bindWorkspaceHref, workspacePath } from "$lib/workspacePaths";
   import { computeWorkspaceShellIdentity } from "$lib/workspaceShellIdentity.js";
 
   const navIconPathByType = {
@@ -39,9 +39,9 @@
       "/hosted/onboarding",
   );
 
-  function workspaceHref(path = "/") {
-    return workspacePath(organizationSlug, workspaceSlug, path);
-  }
+  let workspaceHref = $derived(
+    bindWorkspaceHref(organizationSlug, workspaceSlug),
+  );
 
   let selectedActorName = $derived.by(() => {
     const resolvedName = lookupActorDisplayName(
@@ -109,24 +109,22 @@
   <!-- Settings navigation -->
   <section>
     <p
-      class="mb-1.5 text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)] sm:mb-2"
+      class="mb-1.5 text-micro font-medium uppercase tracking-wide text-fg-muted sm:mb-2"
     >
       Settings
     </p>
-    <div
-      class="overflow-hidden rounded-md border border-[var(--line)] bg-[var(--panel)]"
-    >
+    <div class="overflow-hidden rounded-md border border-line bg-panel">
       {#each settingsNavItems as item, i}
         <a
-          class="flex items-center gap-2.5 px-3 py-2.5 text-meta font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line-subtle)] sm:gap-3 sm:px-4 sm:py-3 {i >
+          class="flex items-center gap-2.5 px-3 py-2.5 text-meta font-medium text-fg transition-colors hover:bg-line-subtle sm:gap-3 sm:px-4 sm:py-3 {i >
           0
-            ? 'border-t border-[var(--line)]'
+            ? 'border-t border-line'
             : ''}"
           href={workspaceHref(item.href)}
           data-tour={item.href === "/access" ? "access" : undefined}
         >
           <svg
-            class="h-4 w-4 shrink-0 text-[var(--fg-muted)]"
+            class="h-4 w-4 shrink-0 text-fg-muted"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -141,12 +139,12 @@
           </svg>
           <span class="flex-1">{item.label}</span>
           {#if item.hint}
-            <span class="hidden text-micro text-[var(--fg-muted)] sm:inline"
+            <span class="hidden text-micro text-fg-muted sm:inline"
               >{item.hint}</span
             >
           {/if}
           <svg
-            class="h-4 w-4 shrink-0 text-[var(--fg-muted)]"
+            class="h-4 w-4 shrink-0 text-fg-muted"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -167,19 +165,17 @@
   {#if hostedMode}
     <section>
       <p
-        class="mb-1.5 text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)] sm:mb-2"
+        class="mb-1.5 text-micro font-medium uppercase tracking-wide text-fg-muted sm:mb-2"
       >
         Account
       </p>
-      <div
-        class="overflow-hidden rounded-md border border-[var(--line)] bg-[var(--panel)]"
-      >
+      <div class="overflow-hidden rounded-md border border-line bg-panel">
         <a
-          class="flex items-center gap-2.5 px-3 py-2.5 text-meta font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line-subtle)] sm:gap-3 sm:px-4 sm:py-3"
+          class="flex items-center gap-2.5 px-3 py-2.5 text-meta font-medium text-fg transition-colors hover:bg-line-subtle sm:gap-3 sm:px-4 sm:py-3"
           href={hostedAccountPath}
         >
           <svg
-            class="h-4 w-4 shrink-0 text-[var(--fg-muted)]"
+            class="h-4 w-4 shrink-0 text-fg-muted"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -193,11 +189,11 @@
             />
           </svg>
           <span class="flex-1">Account</span>
-          <span class="hidden text-micro text-[var(--fg-muted)] sm:inline"
+          <span class="hidden text-micro text-fg-muted sm:inline"
             >Organizations, billing, all workspaces</span
           >
           <svg
-            class="h-4 w-4 shrink-0 text-[var(--fg-muted)]"
+            class="h-4 w-4 shrink-0 text-fg-muted"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -219,27 +215,23 @@
   {#if hasMultipleWorkspaces}
     <section>
       <p
-        class="mb-1.5 text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)] sm:mb-2"
+        class="mb-1.5 text-micro font-medium uppercase tracking-wide text-fg-muted sm:mb-2"
       >
         Workspace
       </p>
-      <div
-        class="overflow-hidden rounded-md border border-[var(--line)] bg-[var(--panel)]"
-      >
+      <div class="overflow-hidden rounded-md border border-line bg-panel">
         {#each workspaces as ws, i}
           {@const isCurrent = ws.slug === workspaceSlug}
           <button
-            class="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-meta transition-colors hover:bg-[var(--line-subtle)] sm:gap-3 sm:px-4 sm:py-3 {i >
+            class="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-meta transition-colors hover:bg-line-subtle sm:gap-3 sm:px-4 sm:py-3 {i >
             0
-              ? 'border-t border-[var(--line)]'
-              : ''} {isCurrent
-              ? 'font-medium text-[var(--fg)]'
-              : 'text-[var(--fg-muted)]'}"
+              ? 'border-t border-line'
+              : ''} {isCurrent ? 'font-medium text-fg' : 'text-fg-muted'}"
             onclick={() => switchWorkspace(ws.slug)}
             type="button"
           >
             <span
-              class="inline-grid h-6 w-6 shrink-0 place-items-center rounded bg-[var(--accent-solid)] text-[0.5625rem] font-bold text-white"
+              class="inline-grid h-6 w-6 shrink-0 place-items-center rounded bg-accent-solid text-[0.5625rem] font-bold text-white"
               aria-hidden="true"
             >
               {workspaceInitials(ws.label)}
@@ -247,7 +239,7 @@
             <span class="flex-1 truncate">{ws.label}</span>
             {#if isCurrent}
               <svg
-                class="h-3.5 w-3.5 shrink-0 text-[var(--accent)]"
+                class="h-3.5 w-3.5 shrink-0 text-accent"
                 fill="currentColor"
                 viewBox="0 0 20 20"
                 aria-hidden="true"
@@ -268,15 +260,13 @@
   <!-- Identity -->
   <section>
     <p
-      class="mb-1.5 text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)] sm:mb-2"
+      class="mb-1.5 text-micro font-medium uppercase tracking-wide text-fg-muted sm:mb-2"
     >
       Identity
     </p>
-    <div
-      class="overflow-hidden rounded-md border border-[var(--line)] bg-[var(--panel)]"
-    >
+    <div class="overflow-hidden rounded-md border border-line bg-panel">
       <div
-        class="flex items-center gap-2.5 border-b border-[var(--line)] px-3 py-2.5 sm:gap-3 sm:px-4 sm:py-3"
+        class="flex items-center gap-2.5 border-b border-line px-3 py-2.5 sm:gap-3 sm:px-4 sm:py-3"
       >
         <span
           class="inline-grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#4a5060] text-[0.625rem] font-bold text-white sm:h-8 sm:w-8"
@@ -285,24 +275,24 @@
           {initials}
         </span>
         <div class="min-w-0 flex-1">
-          <p class="truncate text-meta font-medium text-[var(--fg)]">
+          <p class="truncate text-meta font-medium text-fg">
             {shellIdentity.primaryLabel}
           </p>
           {#if shellIdentity.secondaryLabel}
             <p
-              class="truncate font-mono text-[0.6875rem] text-[var(--fg-subtle)]"
+              class="truncate font-mono text-[0.6875rem] text-fg-subtle"
               title={shellIdentity.secondaryLabel}
             >
               {shellIdentity.secondaryLabel}
             </p>
           {/if}
-          <p class="hidden text-micro text-[var(--fg-muted)] sm:block">
+          <p class="hidden text-micro text-fg-muted sm:block">
             {$authenticatedAgent ? "Authenticated principal" : "Dev actor mode"}
           </p>
         </div>
       </div>
       <button
-        class="flex w-full items-center gap-2 px-3 py-2.5 text-left text-meta font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)] sm:px-4 sm:py-3"
+        class="flex w-full items-center gap-2 px-3 py-2.5 text-left text-meta font-medium text-fg-muted transition-colors hover:bg-line-subtle hover:text-fg sm:px-4 sm:py-3"
         onclick={switchIdentity}
         type="button"
       >

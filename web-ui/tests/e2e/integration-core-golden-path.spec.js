@@ -332,25 +332,34 @@ test("golden path integration runs against a real anx-core", async ({
     page.getByRole("heading", { name: receiptSummary }),
   ).toBeVisible();
 
-  await page.getByLabel("Review outcome").selectOption("accept");
-  await page.getByLabel("Review notes").fill(reviewNotes);
-  await page
-    .getByLabel("Add review evidence ref")
-    .fill(`artifact:${receiptId}`);
-  await page.getByRole("button", { name: "Add review evidence ref" }).click();
-
-  const createReviewResponsePromise = page.waitForResponse((response) => {
-    return (
-      response.request().method() === "POST" &&
-      response.url().includes("/packets/reviews")
-    );
-  });
-
-  await page.getByRole("button", { name: "Submit review" }).click();
-
-  const createReviewResponse = await createReviewResponsePromise;
-  const createReviewBody = await createReviewResponse.json();
-  reviewId = String(createReviewBody?.artifact?.id ?? "");
+  // Receipt detail no longer hosts a review composer; assert the receipt in UI, then create the
+  // review via core (same contract as `core/scripts/smoke`).
+  reviewId = `rv-${runSuffix.replace(/[^a-z0-9]+/gi, "-").slice(0, 24)}`;
+  const reviewSummary = `Review (accept) for ${receiptId}`;
+  const createReviewBody = await postCoreJson(
+    request,
+    coreBaseUrl,
+    "/packets/reviews",
+    {
+      actor_id: actorId,
+      artifact: {
+        id: reviewId,
+        kind: "attachment",
+        summary: reviewSummary.slice(0, 120),
+        refs: [`card:${resolvedCardId}`, `artifact:${receiptId}`],
+        provenance: { sources: ["event:integration-e2e"] },
+      },
+      packet: {
+        review_id: reviewId,
+        subject_ref: `card:${resolvedCardId}`,
+        receipt_ref: `artifact:${receiptId}`,
+        outcome: "accept",
+        notes: reviewNotes,
+        evidence_refs: [`artifact:${receiptId}`],
+      },
+    },
+  );
+  reviewId = String(createReviewBody?.artifact?.id ?? reviewId).trim();
   expect(reviewId).toMatch(/^rv-/);
 
   const reviewArtifactsBody = await getUiJson(
@@ -371,8 +380,9 @@ test("golden path integration runs against a real anx-core", async ({
     ),
   ).toBe(true);
 
+  await page.goto(`/artifacts/${encodeURIComponent(reviewId)}`);
   await expect(
-    page.getByText("Review submitted.", { exact: true }),
+    page.getByRole("heading", { name: reviewSummary }),
   ).toBeVisible();
 
   await openThreadDetailFromNav(page, threadTitle);
@@ -486,9 +496,7 @@ test("golden path integration runs against a real anx-core", async ({
   await expect(reviewRef).toBeVisible();
   await reviewRef.click();
   await expect(
-    page.getByRole("heading", {
-      name: `Review (accept) for ${receiptId}`,
-    }),
+    page.getByRole("heading", { name: reviewSummary }),
   ).toBeVisible();
   await page.goBack();
 

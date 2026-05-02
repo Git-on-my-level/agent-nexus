@@ -10,7 +10,7 @@
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
   import { splitTypedRef } from "$lib/inboxUtils";
-  import { workspacePath } from "$lib/workspacePaths";
+  import { bindWorkspaceHref, workspacePath } from "$lib/workspacePaths";
   import {
     lookupActorDisplayName,
     actorRegistry,
@@ -254,9 +254,9 @@
     headContentType === "text" || headContentType === "",
   );
 
-  function workspaceHref(pathname = "/") {
-    return workspacePath(organizationSlug, workspaceSlug, pathname);
-  }
+  let workspaceHref = $derived(
+    bindWorkspaceHref(organizationSlug, workspaceSlug),
+  );
 
   async function setRequestedRevision(revisionId = "") {
     const next = String(revisionId ?? "").trim();
@@ -913,18 +913,18 @@
 
 {#if loading}
   <nav
-    class="mb-2 flex min-w-0 items-center gap-1.5 text-micro text-[var(--fg-muted)]"
+    class="mb-2 flex min-w-0 items-center gap-1.5 text-micro text-fg-muted"
     aria-label="Breadcrumb"
   >
     <a
-      class="shrink-0 transition-colors hover:text-[var(--fg)]"
+      class="shrink-0 transition-colors hover:text-fg"
       href={workspaceHref("/docs")}>Docs</a
     >
-    <span class="shrink-0 text-[var(--fg-subtle)]">/</span>
-    <span class="min-w-0 truncate text-[var(--fg-muted)]">{documentId}</span>
+    <span class="shrink-0 text-fg-subtle">/</span>
+    <span class="min-w-0 truncate text-fg-muted">{documentId}</span>
   </nav>
   <div
-    class="mt-8 flex items-center justify-center gap-2 text-meta text-[var(--fg-muted)]"
+    class="mt-8 flex items-center justify-center gap-2 text-meta text-fg-muted"
   >
     <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
       <circle
@@ -945,15 +945,15 @@
   </div>
 {:else if loadError}
   <nav
-    class="mb-2 flex min-w-0 items-center gap-1.5 text-micro text-[var(--fg-muted)]"
+    class="mb-2 flex min-w-0 items-center gap-1.5 text-micro text-fg-muted"
     aria-label="Breadcrumb"
   >
     <a
-      class="shrink-0 transition-colors hover:text-[var(--fg)]"
+      class="shrink-0 transition-colors hover:text-fg"
       href={workspaceHref("/docs")}>Docs</a
     >
-    <span class="shrink-0 text-[var(--fg-subtle)]">/</span>
-    <span class="min-w-0 truncate text-[var(--fg-muted)]">{documentId}</span>
+    <span class="shrink-0 text-fg-subtle">/</span>
+    <span class="min-w-0 truncate text-fg-muted">{documentId}</span>
   </nav>
   <div class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
     {loadError}
@@ -961,7 +961,7 @@
 {:else if document}
   {#if document.trashed_at}
     <div
-      class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-meta text-danger-text"
+      class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-danger bg-danger-soft px-3 py-2 text-meta text-danger-text"
     >
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2 font-semibold">
@@ -971,7 +971,7 @@
         {#if document.trash_reason}
           <p class="mt-2">Reason: {document.trash_reason}</p>
         {/if}
-        <p class="mt-1 text-micro text-danger-text/80">
+        <p class="mt-1 text-micro text-danger-text">
           Trashed {#if document.trashed_by}by {actorName(
               document.trashed_by,
             )}{/if}
@@ -992,7 +992,7 @@
     </div>
   {:else if document.archived_at}
     <div
-      class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-meta text-warn-text"
+      class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-warn bg-warn-soft px-3 py-2 text-meta text-warn-text"
     >
       <p class="min-w-0 flex-1">
         This document was archived on {formatTimestamp(document.archived_at) ||
@@ -1001,7 +1001,7 @@
           )}{/if}.
       </p>
       <button
-        class="shrink-0 cursor-pointer rounded-md border border-warn/40 bg-warn-soft px-2 py-1 text-micro font-medium text-warn-text hover:bg-warn/25 disabled:opacity-50"
+        class="shrink-0 cursor-pointer rounded-md border border-warn bg-warn-soft px-2 py-1 text-micro font-medium text-warn-text hover:bg-warn-soft disabled:opacity-50"
         disabled={docLifecycleBusy}
         onclick={handleUnarchiveDocument}
         type="button"
@@ -1012,14 +1012,14 @@
   {/if}
 
   {#snippet docDesktop()}
-    <h1 class="min-w-0 text-subtitle font-semibold text-[var(--fg)]">
+    <h1 class="min-w-0 text-subtitle font-semibold text-fg">
       {document.title || ""}{#if !document.title}<span
-          class="font-mono text-[var(--fg-muted)]">{document.id}</span
+          class="font-mono text-fg-muted">{document.id}</span
         >{/if}
     </h1>
     {#if String(document.summary ?? "").trim()}
       <p
-        class="line-clamp-3 text-[13px] text-[var(--fg-muted)]"
+        class="line-clamp-3 text-[13px] text-fg-muted"
         title={String(document.summary).trim()}
       >
         {String(document.summary).trim()}
@@ -1041,23 +1041,23 @@
         >
       {/if}
       {#if document.state}
-        <span class="text-[var(--fg-subtle)]">·</span>
+        <span class="text-fg-subtle">·</span>
       {/if}
-      <span class="text-[var(--fg-muted)]"
+      <span class="text-fg-muted"
         >v{displayedRevision?.revision_number ?? "\u2014"}</span
       >
-      <span class="text-[var(--fg-subtle)]">·</span>
-      <span class="text-[var(--fg-muted)]"
+      <span class="text-fg-subtle">·</span>
+      <span class="text-fg-muted"
         >{formatTimestamp(displayedRevision?.created_at) || "—"}</span
       >
-      <span class="text-[var(--fg-subtle)]">·</span>
-      <span class="text-[var(--fg-muted)]"
+      <span class="text-fg-subtle">·</span>
+      <span class="text-fg-muted"
         >by {actorName(displayedRevision?.created_by)}</span
       >
     </div>
     {#if documentTopicRefValue}
       <p
-        class="mt-0.5 flex flex-wrap items-baseline gap-x-1.5 text-micro text-[var(--fg-muted)]"
+        class="mt-0.5 flex flex-wrap items-baseline gap-x-1.5 text-micro text-fg-muted"
       >
         <span>Topic / thread</span>
         <RefLink
@@ -1095,13 +1095,13 @@
           >
             {#snippet breadcrumb()}
               <a
-                class="shrink-0 transition-colors hover:text-[var(--fg)]"
+                class="shrink-0 transition-colors hover:text-fg"
                 href={workspaceHref("/docs")}>Docs</a
               >
               {#if parentTopic}
-                <span class="shrink-0 text-[var(--fg-subtle)]">/</span>
+                <span class="shrink-0 text-fg-subtle">/</span>
                 <a
-                  class="min-w-0 max-w-[5.5rem] shrink truncate sm:max-w-[12rem] transition-colors hover:text-[var(--fg)]"
+                  class="min-w-0 max-w-[5.5rem] shrink truncate sm:max-w-[12rem] transition-colors hover:text-fg"
                   href={workspaceHref(
                     `/topics/${encodeURIComponent(parentTopic.id)}`,
                   )}
@@ -1110,10 +1110,10 @@
                   {parentTopic.title}
                 </a>
               {/if}
-              <span class="shrink-0 text-[var(--fg-subtle)]">/</span>
+              <span class="shrink-0 text-fg-subtle">/</span>
               <div class="flex min-h-0 min-w-0 flex-1 items-center gap-1.5">
                 <span
-                  class="min-w-0 shrink truncate text-[var(--fg-muted)]"
+                  class="min-w-0 shrink truncate text-fg-muted"
                   aria-current="page"
                   title={document?.title || documentId}
                 >
@@ -1169,7 +1169,7 @@
                   </Button>
                 {:else}
                   <span
-                    class="inline-flex max-w-[5rem] items-center gap-1 truncate rounded-md border border-[var(--line)] px-1.5 py-1 text-[10px] text-[var(--fg-muted)] sm:max-w-none sm:px-2.5 sm:py-1.5 sm:text-micro md:inline-flex"
+                    class="inline-flex max-w-[5rem] items-center gap-1 truncate rounded-md border border-line px-1.5 py-1 text-[10px] text-fg-muted sm:max-w-none sm:px-2.5 sm:py-1.5 sm:text-micro md:inline-flex"
                     title="Content type '{headContentType}' can only be updated via the CLI or API"
                   >
                     <svg
@@ -1233,12 +1233,12 @@
                   </button>
                   {#if moreActionsOpen}
                     <div
-                      class="absolute right-0 z-50 mt-1 min-w-[10rem] rounded-md border border-[var(--line)] bg-[var(--panel)] py-1 shadow-lg"
+                      class="absolute right-0 z-50 mt-1 min-w-[10rem] rounded-md border border-line bg-panel py-1 shadow-lg"
                       role="menu"
                     >
                       <a
                         role="menuitem"
-                        class="block w-full px-3 py-2 text-left text-micro text-[var(--fg)] hover:bg-[var(--line-subtle)]"
+                        class="block w-full px-3 py-2 text-left text-micro text-fg hover:bg-line-subtle"
                         href={workspaceHref(`/docs/${documentId}/edit`)}
                         onclick={closeMoreActions}
                       >
@@ -1247,7 +1247,7 @@
                       <button
                         type="button"
                         role="menuitem"
-                        class="block w-full px-3 py-2 text-left text-micro text-[var(--fg)] hover:bg-[var(--line-subtle)] md:hidden"
+                        class="block w-full px-3 py-2 text-left text-micro text-fg hover:bg-line-subtle md:hidden"
                         onclick={() => {
                           closeMoreActions();
                           void loadHistory();
@@ -1259,7 +1259,7 @@
                         <button
                           type="button"
                           role="menuitem"
-                          class="block w-full px-3 py-2 text-left text-micro text-[var(--fg)] hover:bg-[var(--line-subtle)] disabled:opacity-50"
+                          class="block w-full px-3 py-2 text-left text-micro text-fg hover:bg-line-subtle disabled:opacity-50"
                           disabled={docLifecycleBusy}
                           onclick={() => {
                             closeMoreActions();
@@ -1272,7 +1272,7 @@
                       <button
                         type="button"
                         role="menuitem"
-                        class="block w-full px-3 py-2 text-left text-micro text-danger-text hover:bg-[var(--line-subtle)] disabled:opacity-50"
+                        class="block w-full px-3 py-2 text-left text-micro text-danger-text hover:bg-line-subtle disabled:opacity-50"
                         disabled={docLifecycleBusy}
                         onclick={() => {
                           closeMoreActions();
@@ -1290,31 +1290,29 @@
 
           {#if editOpen}
             <form
-              class="mt-3 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] p-4"
+              class="mt-3 rounded-md border border-line bg-bg-soft p-4"
               onsubmit={(e) => {
                 e.preventDefault();
                 void handleSave();
               }}
             >
               <label class="mb-3 block">
-                <span class="text-micro font-medium text-[var(--fg-muted)]"
-                  >Title</span
-                >
+                <span class="text-micro font-medium text-fg-muted">Title</span>
                 <input
                   bind:value={editDraft.title}
-                  class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-meta text-[var(--fg)]"
+                  class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-1.5 text-meta text-fg"
                   type="text"
                 />
               </label>
 
               <label>
-                <span class="text-micro font-medium text-[var(--fg-muted)]"
+                <span class="text-micro font-medium text-fg-muted"
                   >Content (Markdown) <span class="text-danger-text">*</span
                   ></span
                 >
                 <textarea
                   bind:value={editDraft.content}
-                  class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-2 text-meta text-[var(--fg)] font-mono leading-relaxed resize-y"
+                  class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-2 text-meta text-fg font-mono leading-relaxed resize-y"
                   rows="20"
                 ></textarea>
               </label>
@@ -1346,7 +1344,7 @@
                   {saveError}
                 </div>
               {/if}
-              <p class="mt-2 text-micro text-[var(--fg-muted)]">
+              <p class="mt-2 text-micro text-fg-muted">
                 Base revision: <span class="font-mono"
                   >{headRevision?.revision_id ?? "—"}</span
                 > — optimistic concurrency is enforced.
@@ -1373,9 +1371,7 @@
 
           {#if !editOpen}
             <div class="mt-3 min-w-0">
-              <div
-                class="min-w-0 rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
-              >
+              <div class="min-w-0 rounded-md border border-line bg-bg-soft">
                 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
                 <div
                   bind:this={docBodyMarkdownRoot}
@@ -1387,17 +1383,17 @@
                   {#if displayedContent}
                     <MarkdownRenderer
                       source={displayedContent}
-                      class="text-meta leading-relaxed text-[var(--fg)]"
+                      class="text-meta leading-relaxed text-fg"
                     />
                   {:else}
-                    <p class="text-meta text-[var(--fg-muted)]">(No content)</p>
+                    <p class="text-meta text-fg-muted">(No content)</p>
                   {/if}
                 </div>
               </div>
             </div>
           {/if}
 
-          <div class="mt-6 border-t border-[var(--line)] pt-4">
+          <div class="mt-6 border-t border-line pt-4">
             <IdsIntegrityDisclosure
               rows={docIntegrityRows}
               rawJson={docRawJson}
@@ -1411,16 +1407,14 @@
             class="shrink-0 md:w-72 max-md:fixed max-md:inset-x-3 max-md:top-[5.75rem] max-md:z-40 max-md:w-auto"
           >
             <div
-              class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] shadow-lg md:sticky md:top-4"
+              class="rounded-md border border-line bg-bg-soft shadow-lg md:sticky md:top-4"
             >
               <div
-                class="flex items-center justify-between border-b border-[var(--line)] px-4 py-2.5 max-md:px-3"
+                class="flex items-center justify-between border-b border-line px-4 py-2.5 max-md:px-3"
               >
-                <h2 class="text-meta font-medium text-[var(--fg)]">
-                  Revision history
-                </h2>
+                <h2 class="text-meta font-medium text-fg">Revision history</h2>
                 <button
-                  class="cursor-pointer text-[var(--fg-muted)] hover:text-[var(--fg)]"
+                  class="cursor-pointer text-fg-muted hover:text-fg"
                   onclick={() => (historyOpen = false)}
                   type="button"
                   aria-label="Close history"
@@ -1443,7 +1437,7 @@
 
               {#if historyLoading}
                 <div
-                  class="flex items-center gap-2 px-4 py-4 text-micro text-[var(--fg-muted)]"
+                  class="flex items-center gap-2 px-4 py-4 text-micro text-fg-muted"
                 >
                   <svg
                     class="h-3.5 w-3.5 animate-spin"
@@ -1467,7 +1461,7 @@
                   Loading revision history...
                 </div>
               {:else if revisions.length === 0}
-                <p class="px-4 py-4 text-micro text-[var(--fg-muted)]">
+                <p class="px-4 py-4 text-micro text-fg-muted">
                   No earlier revisions found.
                 </p>
               {:else}
@@ -1480,10 +1474,10 @@
                     {@const isSelected =
                       displayedRevision?.revision_id === rev.revision_id}
                     <button
-                      class="w-full px-4 py-3 text-left transition-colors hover:bg-[var(--line-subtle)] max-md:px-3 max-md:py-2.5 {i >
+                      class="w-full px-4 py-3 text-left transition-colors hover:bg-line-subtle max-md:px-3 max-md:py-2.5 {i >
                       0
-                        ? 'border-t border-[var(--line)]'
-                        : ''} {isSelected ? 'bg-[var(--line-subtle)]' : ''}"
+                        ? 'border-t border-line'
+                        : ''} {isSelected ? 'bg-line-subtle' : ''}"
                       onclick={() => selectRevision(rev)}
                       type="button"
                     >
@@ -1494,26 +1488,26 @@
                               ? 'bg-ok-text'
                               : isSelected
                                 ? 'bg-accent-text'
-                                : 'bg-[var(--fg-subtle)]'}"
+                                : 'bg-fg-subtle'}"
                           ></div>
                           {#if i < revisions.length - 1}
                             <div
-                              class="absolute top-3 h-full w-px bg-[var(--line)]"
+                              class="absolute top-3 h-full w-px bg-line"
                             ></div>
                           {/if}
                         </div>
                         <div class="min-w-0 flex-1">
-                          <p class="text-meta font-medium text-[var(--fg)]">
+                          <p class="text-meta font-medium text-fg">
                             {#if isHead}Current version{:else}Version {rev.revision_number}{/if}
                           </p>
-                          <p class="text-micro text-[var(--fg-muted)]">
+                          <p class="text-micro text-fg-muted">
                             {formatTimestamp(rev.created_at)} · {actorName(
                               rev.created_by,
                             )}
                           </p>
                           {#if rev.revision_hash}
                             <p
-                              class="mt-0.5 truncate font-mono text-micro text-[var(--fg-muted)]"
+                              class="mt-0.5 truncate font-mono text-micro text-fg-muted"
                             >
                               {rev.revision_hash.slice(0, 12)}...
                             </p>
@@ -1568,7 +1562,7 @@
     >
       <button
         type="button"
-        class="pointer-events-auto inline-flex h-8 items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--panel)] pl-2 pr-2.5 text-micro font-medium text-[var(--fg)] shadow-md transition-colors hover:bg-[var(--bg-soft)]"
+        class="pointer-events-auto inline-flex h-8 items-center gap-1.5 rounded-full border border-line bg-panel pl-2 pr-2.5 text-micro font-medium text-fg shadow-md transition-colors hover:bg-bg-soft"
         onmousedown={(e) => {
           // Prevent the click from collapsing the user's selection before
           // we capture it. mousedown fires before mouseup → selectionchange.
@@ -1578,7 +1572,7 @@
         title="Comment on selection (⌘⌥M)"
       >
         <svg
-          class="h-3.5 w-3.5 text-[var(--accent)]"
+          class="h-3.5 w-3.5 text-accent"
           fill="none"
           stroke="currentColor"
           stroke-width="2"
@@ -1596,7 +1590,7 @@
     </div>
   {/if}
 {:else}
-  <div class="mt-8 text-center text-meta text-[var(--fg-muted)]">
+  <div class="mt-8 text-center text-meta text-fg-muted">
     Document not found.
   </div>
 {/if}

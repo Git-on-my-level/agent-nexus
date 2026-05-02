@@ -92,6 +92,7 @@ test("topics list filters and create flow use GET/POST /topics", async ({
       const created = {
         id: `topic-new-${createCount}`,
         type: "other",
+        state: "active",
         updated_at: "2026-03-04T00:00:00.000Z",
         provenance: { sources: ["event:ui"] },
         owner_refs: [],
@@ -127,7 +128,7 @@ test("topics list filters and create flow use GET/POST /topics", async ({
   ).toBeVisible();
 
   await page.getByRole("button", { name: "Filters" }).click();
-  await page.getByLabel("Search").fill("Onboarding");
+  await page.getByRole("searchbox", { name: "Search" }).fill("Onboarding");
   await page.getByRole("button", { name: "Apply" }).click();
 
   await expect
@@ -143,6 +144,20 @@ test("topics list filters and create flow use GET/POST /topics", async ({
   await expect(
     page.getByText("Incident Follow-up", { exact: true }),
   ).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Filters" }).click();
+  await page.getByRole("searchbox", { name: "Search" }).fill("");
+  await page.getByRole("button", { name: "Apply" }).click();
+
+  await expect
+    .poll(() => {
+      const latest = listRequestUrls.at(-1);
+      if (!latest) {
+        return "";
+      }
+      return new URL(latest).searchParams.get("q") ?? "";
+    })
+    .toBe("");
 
   await page.getByRole("button", { name: "New topic" }).click();
   await page.getByLabel("Title").fill("Freshly Created Thread");

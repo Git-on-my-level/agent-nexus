@@ -2,7 +2,7 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
   import { coreClient } from "$lib/coreClient";
-  import { workspacePath } from "$lib/workspacePaths";
+  import { bindWorkspaceHref } from "$lib/workspacePaths";
 
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
@@ -12,9 +12,9 @@
   let error = $state("");
   let activeLookupKey = $state("");
 
-  function workspaceHref(pathname = "/") {
-    return workspacePath(organizationSlug, workspaceSlug, pathname);
-  }
+  let workspaceHref = $derived(
+    bindWorkspaceHref(organizationSlug, workspaceSlug),
+  );
 
   function documentRevisionHref(documentId, targetRevisionId) {
     const baseHref = workspaceHref(
@@ -87,16 +87,14 @@
   }
 </script>
 
-<div
-  class="mx-auto max-w-2xl rounded-md border border-[var(--line)] bg-[var(--panel)] p-4"
->
+<div class="mx-auto max-w-2xl rounded-md border border-line bg-panel p-4">
   {#if loading}
-    <p class="text-meta text-[var(--fg-muted)]">Resolving document revision…</p>
+    <p class="text-meta text-fg-muted">Resolving document revision…</p>
   {:else if error}
     <div class="space-y-3">
       <p class="text-meta text-danger-text">{error}</p>
       <a
-        class="inline-flex rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-micro font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line-subtle)]"
+        class="inline-flex rounded-md border border-line bg-bg-soft px-3 py-1.5 text-micro font-medium text-fg transition-colors hover:bg-line-subtle"
         href={workspaceHref("/docs")}
       >
         Back to Docs

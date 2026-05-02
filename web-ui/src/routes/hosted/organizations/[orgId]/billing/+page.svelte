@@ -494,9 +494,9 @@
           ]}
           <article
             class="flex flex-col rounded-md border bg-bg-soft px-4 py-4 {isCurrent
-              ? 'border-accent/55 ring-1 ring-accent/25'
+              ? 'border-accent ring-1 ring-accent'
               : planCard.highlight
-                ? 'border-line ring-1 ring-accent/15'
+                ? 'border-line ring-1 ring-accent'
                 : 'border-line'}"
           >
             <div class="flex items-center justify-between">

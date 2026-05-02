@@ -61,10 +61,11 @@
   import { handleModEnterFormSubmit } from "$lib/formSubmitShortcut.js";
   import {
     appPath,
-    workspacePath,
+    bindWorkspaceHref,
     stripBasePath,
     stripWorkspacePath,
     WORKSPACE_HEADER,
+    workspacePath,
   } from "$lib/workspacePaths";
 
   let { children, data } = $props();
@@ -725,9 +726,9 @@
     return currentAppPath === href || currentAppPath.startsWith(`${href}/`);
   }
 
-  function workspaceHref(pathname = "/") {
-    return workspacePath(activeOrganizationSlug, activeWorkspaceSlug, pathname);
-  }
+  let workspaceHref = $derived(
+    bindWorkspaceHref(activeOrganizationSlug, activeWorkspaceSlug),
+  );
 
   async function switchWorkspace(nextWorkspaceSlug) {
     if (!nextWorkspaceSlug || nextWorkspaceSlug === activeWorkspaceSlug) {
@@ -1016,7 +1017,7 @@
                         >
                         {#if loadFailed}
                           <span
-                            class="workspace-switcher-option-desc text-[var(--fg-subtle)]"
+                            class="workspace-switcher-option-desc text-fg-subtle"
                             >(failed to load)</span
                           >
                         {:else if workspace.description}

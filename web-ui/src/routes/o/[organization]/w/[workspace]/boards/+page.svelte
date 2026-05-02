@@ -2,12 +2,15 @@
   import { page } from "$app/stores";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import CompactFilterBar from "$lib/components/CompactFilterBar.svelte";
+  import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
+  import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
   import Skeleton from "$lib/components/state/Skeleton.svelte";
   import StateEmpty from "$lib/components/state/StateEmpty.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
   import { coreClient } from "$lib/coreClient";
+  import { closeConfirmModal, emptyConfirmModal } from "$lib/confirmModal.js";
   import { formatTimestamp } from "$lib/formatDate";
-  import { workspacePath } from "$lib/workspacePaths";
+  import { bindWorkspaceHref } from "$lib/workspacePaths";
   import { BOARD_STATUS_LABELS, parseDelimitedValues } from "$lib/boardUtils";
   import WorkspaceResourceListRow from "$lib/components/WorkspaceResourceListRow.svelte";
   import WorkspaceListBulkToolbar from "$lib/components/WorkspaceListBulkToolbar.svelte";
@@ -38,12 +41,7 @@
   });
   let archiveBusyId = $state("");
   /** @type {{ open: boolean, action: string, entityId: string, bulkIds: string[] | null }} */
-  let confirmModal = $state({
-    open: false,
-    action: "",
-    entityId: "",
-    bulkIds: null,
-  });
+  let confirmModal = $state(emptyConfirmModal());
   let trashBusyId = $state("");
   let bulkBusy = $state(false);
 
@@ -51,9 +49,9 @@
 
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
-  function workspaceHref(pathname = "/") {
-    return workspacePath(organizationSlug, workspaceSlug, pathname);
-  }
+  let workspaceHref = $derived(
+    bindWorkspaceHref(organizationSlug, workspaceSlug),
+  );
 
   function sumCardsByColumn(cols) {
     if (!cols || typeof cols !== "object") return 0;
@@ -244,7 +242,7 @@
     error = "";
     try {
       await coreClient.trashBoard(id, {});
-      confirmModal = { open: false, action: "", entityId: "", bulkIds: null };
+      confirmModal = emptyConfirmModal();
       await loadBoards();
     } catch (e) {
       error = `Trash failed: ${e instanceof Error ? e.message : String(e)}`;
@@ -263,7 +261,7 @@
         await coreClient.archiveBoard(id, {});
       }
       clearBoardSelection();
-      confirmModal = { open: false, action: "", entityId: "", bulkIds: null };
+      confirmModal = emptyConfirmModal();
       await loadBoards();
     } catch (e) {
       error = `Archive failed: ${e instanceof Error ? e.message : String(e)}`;
@@ -300,7 +298,7 @@
         await coreClient.trashBoard(id, {});
       }
       clearBoardSelection();
-      confirmModal = { open: false, action: "", entityId: "", bulkIds: null };
+      confirmModal = emptyConfirmModal();
       await loadBoards();
     } catch (e) {
       error = `Trash failed: ${e instanceof Error ? e.message : String(e)}`;
@@ -313,7 +311,7 @@
     const bulkIds = confirmModal.bulkIds;
     const id = confirmModal.entityId;
     const action = confirmModal.action;
-    confirmModal = { open: false, action: "", entityId: "", bulkIds: null };
+    confirmModal = emptyConfirmModal();
     if (bulkIds && bulkIds.length > 0) {
       if (action === "archive") void bulkArchiveBoards(bulkIds);
       else if (action === "trash") void bulkTrashBoards(bulkIds);
@@ -384,232 +382,185 @@
   }
 </script>
 
-<div
-  class="mb-3 flex max-md:mb-2 flex-wrap items-center justify-between gap-2 sm:items-start sm:gap-4"
->
-  <div>
-    <h1 class="text-subtitle font-semibold text-[var(--fg)]">Boards</h1>
-  </div>
-
-  <div class="flex flex-wrap items-center gap-1.5 sm:gap-3">
-    <button
-      class="cursor-pointer inline-flex h-7 items-center gap-1.5 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] {boards.length ===
-        0 && !loading
-        ? 'pointer-events-none opacity-50'
-        : ''}"
-      onclick={toggleBoardSelectMode}
-      disabled={boards.length === 0 && !loading}
-      type="button"
-      aria-pressed={boardSel.selectMode}
-    >
-      {boardSel.selectMode ? "Done" : "Select"}
-    </button>
-    <button
-      class="cursor-pointer inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-micro font-medium transition-colors {hasActiveFilters
-        ? 'border-[var(--accent)]/40 bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/15'
-        : 'border-[var(--line)] bg-[var(--bg-soft)] text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]'}"
-      onclick={() => {
-        if (!filtersOpen) {
-          boardFiltersDraft = { ...boardFiltersApplied };
-        }
-        filtersOpen = !filtersOpen;
-      }}
-      type="button"
-      data-testid="boards-filters-toggle"
-    >
-      <svg
-        class="h-3.5 w-3.5"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-        stroke-width="2"
-      >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
-        />
-      </svg>
-      {hasActiveFilters ? "Filtered" : "Filters"}
-    </button>
-    <Button
-      variant="primary"
-      size="compact"
-      class="rounded-md"
-      href={workspaceHref("/boards/new")}
-    >
-      New board
-    </Button>
-  </div>
-</div>
-
-{#if filtersOpen}
-  <CompactFilterBar testId="boards-filter-panel">
-    {#snippet children()}
-      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <div class="text-micro">
-          <span class="font-medium text-[var(--fg-muted)]">Lifecycle</span>
-          <fieldset
-            class="mt-1 space-y-1 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-2"
-          >
-            {#each Object.entries(BOARD_STATUS_LABELS) as [value, label] (value)}
-              <label
-                class="flex cursor-pointer items-center gap-2 text-meta text-[var(--fg)]"
-              >
-                <input
-                  checked={(boardFiltersDraft.states ?? ["active"]).includes(
-                    value,
-                  )}
-                  class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--line)] bg-[var(--bg)] text-[var(--accent-hover)] focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-0"
-                  type="checkbox"
-                  onchange={() => toggleBoardLifecycleState(value)}
-                />
-                {label}
-              </label>
-            {/each}
-          </fieldset>
-        </div>
-        <label class="text-micro sm:col-span-2 lg:col-span-2">
-          <span class="font-medium text-[var(--fg-muted)]">Search</span>
-          <input
-            bind:value={boardFiltersDraft.q}
-            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
-            placeholder="Title or board id"
-            type="text"
-          />
-        </label>
-        <label class="text-micro sm:col-span-2 lg:col-span-2">
-          <span class="font-medium text-[var(--fg-muted)]"
-            >Owners (comma-separated ids)</span
-          >
-          <input
-            bind:value={boardFiltersDraft.owners}
-            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
-            placeholder="actor-ops-ai"
-            type="text"
-          />
-        </label>
-      </div>
-      <div class="mt-3 flex flex-wrap gap-1.5">
-        <button
-          class="cursor-pointer rounded-md bg-[var(--panel)] px-3 py-1.5 text-micro font-medium text-[var(--fg)] hover:bg-[var(--line)]"
-          onclick={applyBoardFilters}
-          type="button"
-        >
-          Apply
-        </button>
-        <button
-          class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-micro font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]"
-          onclick={resetBoardFilters}
-          type="button"
-        >
-          Clear filters
-        </button>
-      </div>
-    {/snippet}
-  </CompactFilterBar>
-{/if}
-
-{#if error}
-  <StateError
-    message={error}
-    onretry={() => void loadBoards(true)}
-    {retrying}
-    class="mb-4"
-  />
-{/if}
-
-{#if loading && boards.length === 0}
-  <Skeleton rows={8} />
-{:else if boards.length === 0 && !error}
-  <StateEmpty
-    title="No boards yet"
-    helper="Boards group cards into columns so the team can see what's planned, in flight, and done at a glance."
-    actionLabel="New board"
-    actionHref={workspaceHref("/boards/new")}
-  />
-{:else}
-  {#snippet boardRow(item, index, showBorderTop)}
-    {@const board = item.board}
-    {@const selected = boardSel.selectedIds.has(board.id)}
-    {#if boardSel.selectMode}
-      <div
-        aria-label={`${selected ? "Deselect" : "Select"} ${board.title || board.id}`}
-        aria-pressed={selected}
-        class="flex cursor-pointer items-stretch outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--panel)] {showBorderTop
-          ? 'border-t border-[var(--line)]'
-          : ''} {selected
-          ? 'border-l-[3px] border-l-[var(--accent)] bg-[var(--accent)]/10'
-          : 'border-l-[3px] border-l-transparent hover:bg-[var(--line-subtle)]'}"
-        onclick={(e) =>
-          boardSel.handleRowMouseEvent(
-            e,
-            index,
-            boards.length,
-            boardIdAtVisibleIndex,
-            boardHrefAtVisibleIndex,
-          )}
-        onkeydown={(e) =>
-          boardSel.handleRowKeyboardEvent(e, index, boardIdAtVisibleIndex)}
-        role="button"
-        tabindex="0"
-      >
-        <div class="flex shrink-0 items-center self-stretch pl-2 sm:pl-3">
-          <LeadingSelectionGlyph {selected} />
-        </div>
-        <div
-          class="pointer-events-none flex min-w-0 flex-1 items-start justify-between gap-3 px-3 py-2.5 sm:px-4"
-        >
-          <WorkspaceResourceListRow
-            title={board.title || board.id}
-            description={board.summary ?? ""}
-          >
-            {#snippet badges()}
-              <LifecycleBadge
-                state={board.state}
-                label={BOARD_STATUS_LABELS[board.state]}
-              />
-              {#if isBoardArchived(board) && board.state !== "archived"}
-                <LifecycleBadge state="archived" forceShow />
-              {/if}
-            {/snippet}
-          </WorkspaceResourceListRow>
-          <div
-            class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"
-          >
-            <span class="w-14 text-right text-[var(--fg-muted)]"
-              >{formatTimestamp(board.updated_at) || "—"}</span
-            >
-          </div>
-        </div>
-      </div>
-    {:else}
-      <div
-        class="flex items-stretch {showBorderTop
-          ? 'border-t border-[var(--line)]'
+<WorkspacePageShell>
+  <WorkspacePageHeader title="Boards">
+    {#snippet actions()}
+      <button
+        class="cursor-pointer inline-flex h-7 items-center gap-1.5 rounded-md border border-line bg-bg-soft px-2.5 text-micro font-medium text-fg-muted transition-colors hover:bg-line-subtle {boards.length ===
+          0 && !loading
+          ? 'pointer-events-none opacity-50'
           : ''}"
+        onclick={toggleBoardSelectMode}
+        disabled={boards.length === 0 && !loading}
+        type="button"
+        aria-pressed={boardSel.selectMode}
       >
-        <div
-          class="group relative min-w-0 flex-1 px-3 py-2.5 text-left transition-colors hover:bg-[var(--line-subtle)] sm:px-4"
+        {boardSel.selectMode ? "Done" : "Select"}
+      </button>
+      <button
+        class="cursor-pointer inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-micro font-medium transition-colors {hasActiveFilters
+          ? 'border-accent bg-accent-soft text-accent hover:bg-accent-soft'
+          : 'border-line bg-bg-soft text-fg-muted hover:bg-line-subtle'}"
+        onclick={() => {
+          if (!filtersOpen) {
+            boardFiltersDraft = { ...boardFiltersApplied };
+          }
+          filtersOpen = !filtersOpen;
+        }}
+        type="button"
+        data-testid="boards-filters-toggle"
+      >
+        <svg
+          class="h-3.5 w-3.5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          stroke-width="2"
         >
-          <a
-            aria-label={`Open board ${board.title || board.id}`}
-            class="absolute inset-0 z-0"
-            href={workspaceHref(`/boards/${board.id}`)}
-          ></a>
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+          />
+        </svg>
+        {hasActiveFilters ? "Filtered" : "Filters"}
+      </button>
+      <Button
+        variant="primary"
+        size="compact"
+        class="rounded-md"
+        href={workspaceHref("/boards/new")}
+      >
+        New board
+      </Button>
+    {/snippet}
+  </WorkspacePageHeader>
+
+  {#if filtersOpen}
+    <CompactFilterBar testId="boards-filter-panel">
+      {#snippet children()}
+        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div class="text-micro">
+            <span class="font-medium text-fg-muted">Lifecycle</span>
+            <fieldset
+              class="mt-1 space-y-1 rounded-md border border-line bg-bg-soft px-2.5 py-2"
+            >
+              {#each Object.entries(BOARD_STATUS_LABELS) as [value, label] (value)}
+                <label
+                  class="flex cursor-pointer items-center gap-2 text-meta text-fg"
+                >
+                  <input
+                    checked={(boardFiltersDraft.states ?? ["active"]).includes(
+                      value,
+                    )}
+                    class="h-3.5 w-3.5 cursor-pointer rounded border-line bg-bg text-accent-hover focus:ring-2 focus:ring-accent focus:ring-offset-0"
+                    type="checkbox"
+                    onchange={() => toggleBoardLifecycleState(value)}
+                  />
+                  {label}
+                </label>
+              {/each}
+            </fieldset>
+          </div>
+          <label class="text-micro sm:col-span-2 lg:col-span-2">
+            <span class="font-medium text-fg-muted">Search</span>
+            <input
+              bind:value={boardFiltersDraft.q}
+              class="mt-1 w-full rounded-md border border-line bg-bg-soft px-2.5 py-1.5 text-meta transition-colors focus:bg-panel"
+              placeholder="Title or board id"
+              type="text"
+            />
+          </label>
+          <label class="text-micro sm:col-span-2 lg:col-span-2">
+            <span class="font-medium text-fg-muted"
+              >Owners (comma-separated ids)</span
+            >
+            <input
+              bind:value={boardFiltersDraft.owners}
+              class="mt-1 w-full rounded-md border border-line bg-bg-soft px-2.5 py-1.5 text-meta transition-colors focus:bg-panel"
+              placeholder="actor-ops-ai"
+              type="text"
+            />
+          </label>
+        </div>
+        <div class="mt-3 flex flex-wrap gap-1.5">
+          <button
+            class="cursor-pointer rounded-md bg-panel px-3 py-1.5 text-micro font-medium text-fg hover:bg-line"
+            onclick={applyBoardFilters}
+            type="button"
+          >
+            Apply
+          </button>
+          <button
+            class="cursor-pointer rounded-md border border-line bg-bg-soft px-3 py-1.5 text-micro font-medium text-fg-muted hover:bg-line-subtle"
+            onclick={resetBoardFilters}
+            type="button"
+          >
+            Clear filters
+          </button>
+        </div>
+      {/snippet}
+    </CompactFilterBar>
+  {/if}
+
+  {#if error}
+    <StateError
+      message={error}
+      onretry={() => void loadBoards(true)}
+      {retrying}
+      class="mb-4"
+    />
+  {/if}
+
+  {#if loading && boards.length === 0}
+    <Skeleton rows={8} />
+  {:else if boards.length === 0 && !error}
+    <StateEmpty
+      title="No boards yet"
+      helper="Boards group cards into columns so the team can see what's planned, in flight, and done at a glance."
+      actionLabel="New board"
+      actionHref={workspaceHref("/boards/new")}
+    />
+  {:else}
+    {#snippet boardRow(item, index, showBorderTop)}
+      {@const board = item.board}
+      {@const selected = boardSel.selectedIds.has(board.id)}
+      {#if boardSel.selectMode}
+        <div
+          aria-label={`${selected ? "Deselect" : "Select"} ${board.title || board.id}`}
+          aria-pressed={selected}
+          class="flex cursor-pointer items-stretch outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-panel {showBorderTop
+            ? 'border-t border-line'
+            : ''} {selected
+            ? 'border-l-[3px] border-l-accent bg-accent-soft'
+            : 'border-l-[3px] border-l-transparent hover:bg-line-subtle'}"
+          onclick={(e) =>
+            boardSel.handleRowMouseEvent(
+              e,
+              index,
+              boards.length,
+              boardIdAtVisibleIndex,
+              boardHrefAtVisibleIndex,
+            )}
+          onkeydown={(e) =>
+            boardSel.handleRowKeyboardEvent(e, index, boardIdAtVisibleIndex)}
+          role="button"
+          tabindex="0"
+        >
+          <div class="flex shrink-0 items-center self-stretch pl-2 sm:pl-3">
+            <LeadingSelectionGlyph {selected} />
+          </div>
           <div
-            class="pointer-events-none relative z-10 flex min-w-0 items-start justify-between gap-3"
+            class="pointer-events-none flex min-w-0 flex-1 items-start justify-between gap-3 px-3 py-2.5 sm:px-4"
           >
             <WorkspaceResourceListRow
               title={board.title || board.id}
               description={board.summary ?? ""}
-              titleClass="group-hover:text-accent-text"
             >
               {#snippet badges()}
                 <LifecycleBadge
                   state={board.state}
                   label={BOARD_STATUS_LABELS[board.state]}
-                  forceShow={boardsHaveMixedLifecycle}
                 />
                 {#if isBoardArchived(board) && board.state !== "archived"}
                   <LifecycleBadge state="archived" forceShow />
@@ -619,67 +570,109 @@
             <div
               class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"
             >
-              <span class="w-14 text-right text-[var(--fg-muted)]"
+              <span class="w-14 text-right text-fg-muted"
                 >{formatTimestamp(board.updated_at) || "—"}</span
               >
             </div>
           </div>
         </div>
-      </div>
+      {:else}
+        <div
+          class="flex items-stretch {showBorderTop
+            ? 'border-t border-line'
+            : ''}"
+        >
+          <div
+            class="group relative min-w-0 flex-1 px-3 py-2.5 text-left transition-colors hover:bg-line-subtle sm:px-4"
+          >
+            <a
+              aria-label={`Open board ${board.title || board.id}`}
+              class="absolute inset-0 z-0"
+              href={workspaceHref(`/boards/${board.id}`)}
+            ></a>
+            <div
+              class="pointer-events-none relative z-10 flex min-w-0 items-start justify-between gap-3"
+            >
+              <WorkspaceResourceListRow
+                title={board.title || board.id}
+                description={board.summary ?? ""}
+                titleClass="group-hover:text-accent-text"
+              >
+                {#snippet badges()}
+                  <LifecycleBadge
+                    state={board.state}
+                    label={BOARD_STATUS_LABELS[board.state]}
+                    forceShow={boardsHaveMixedLifecycle}
+                  />
+                  {#if isBoardArchived(board) && board.state !== "archived"}
+                    <LifecycleBadge state="archived" forceShow />
+                  {/if}
+                {/snippet}
+              </WorkspaceResourceListRow>
+              <div
+                class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"
+              >
+                <span class="w-14 text-right text-fg-muted"
+                  >{formatTimestamp(board.updated_at) || "—"}</span
+                >
+              </div>
+            </div>
+          </div>
+        </div>
+      {/if}
+    {/snippet}
+    {#if boardSel.selectMode}
+      <WorkspaceListBulkToolbar
+        allVisibleSelected={allBoardsVisibleSelected}
+        busy={bulkBusy}
+        canArchive={bulkBoardsCanArchive}
+        canTrash={bulkBoardsCanTrash}
+        canUnarchive={bulkBoardsCanUnarchive}
+        onArchive={() => {
+          const ids = boardIdsForBulkArchive();
+          if (!ids.length) return;
+          confirmModal = {
+            open: true,
+            action: "archive",
+            entityId: "",
+            bulkIds: ids,
+          };
+        }}
+        onClear={clearBoardSelection}
+        onDeselectAll={clearBoardSelection}
+        onSelectAll={selectAllVisibleBoards}
+        onTrash={() => {
+          const ids = boardIdsForBulkTrash();
+          if (!ids.length) return;
+          confirmModal = {
+            open: true,
+            action: "trash",
+            entityId: "",
+            bulkIds: ids,
+          };
+        }}
+        onUnarchive={() => void bulkUnarchiveBoards(boardIdsForBulkUnarchive())}
+        selectionChromeActive={true}
+        selectedCount={boardSel.selectedIds.size}
+      />
     {/if}
-  {/snippet}
-  {#if boardSel.selectMode}
-    <WorkspaceListBulkToolbar
-      allVisibleSelected={allBoardsVisibleSelected}
-      busy={bulkBusy}
-      canArchive={bulkBoardsCanArchive}
-      canTrash={bulkBoardsCanTrash}
-      canUnarchive={bulkBoardsCanUnarchive}
-      onArchive={() => {
-        const ids = boardIdsForBulkArchive();
-        if (!ids.length) return;
-        confirmModal = {
-          open: true,
-          action: "archive",
-          entityId: "",
-          bulkIds: ids,
-        };
-      }}
-      onClear={clearBoardSelection}
-      onDeselectAll={clearBoardSelection}
-      onSelectAll={selectAllVisibleBoards}
-      onTrash={() => {
-        const ids = boardIdsForBulkTrash();
-        if (!ids.length) return;
-        confirmModal = {
-          open: true,
-          action: "trash",
-          entityId: "",
-          bulkIds: ids,
-        };
-      }}
-      onUnarchive={() => void bulkUnarchiveBoards(boardIdsForBulkUnarchive())}
-      selectionChromeActive={true}
-      selectedCount={boardSel.selectedIds.size}
-    />
+    <div
+      class="space-y-px overflow-hidden rounded-md border border-line bg-panel"
+    >
+      {#each boards as item, i}
+        {@render boardRow(item, i, i > 0)}
+      {/each}
+    </div>
   {/if}
-  <div
-    class="space-y-px overflow-hidden rounded-md border border-[var(--line)] bg-[var(--panel)]"
-  >
-    {#each boards as item, i}
-      {@render boardRow(item, i, i > 0)}
-    {/each}
-  </div>
-{/if}
 
-<ConfirmModal
-  open={confirmModal.open}
-  title={boardConfirmModalTitle}
-  message={boardConfirmModalMessage}
-  confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
-  variant={confirmModal.action === "trash" ? "danger" : "warning"}
-  busy={boardConfirmModalBusy}
-  onconfirm={handleConfirm}
-  oncancel={() =>
-    (confirmModal = { open: false, action: "", entityId: "", bulkIds: null })}
-/>
+  <ConfirmModal
+    open={confirmModal.open}
+    title={boardConfirmModalTitle}
+    message={boardConfirmModalMessage}
+    confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
+    variant={confirmModal.action === "trash" ? "danger" : "warning"}
+    busy={boardConfirmModalBusy}
+    onconfirm={handleConfirm}
+    oncancel={() => (confirmModal = closeConfirmModal(confirmModal))}
+  />
+</WorkspacePageShell>

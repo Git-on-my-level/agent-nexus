@@ -1,13 +1,11 @@
 import { expect, test } from "@playwright/test";
 
-test("submit review from receipt artifact and see payload + revise follow-up link", async ({
+test("receipt artifact detail shows heading, JSON preview, and topic link", async ({
   page,
 }) => {
   const actorId = "actor-review-e2e";
   const receiptId = "artifact-receipt-review-e2e";
   const cardRef = "card:e2e-onboarding-card";
-  let reviewPayload = null;
-  const timelineEvents = [];
 
   const receiptArtifact = {
     id: receiptId,
@@ -83,86 +81,20 @@ test("submit review from receipt artifact and see payload + revise follow-up lin
     });
   });
 
-  await page.route(/\/threads\/thread-onboarding\/timeline$/, async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ events: timelineEvents }),
-    });
-  });
-
-  await page.route(/\/(reviews|packets\/reviews)$/, async (route) => {
-    reviewPayload = JSON.parse(route.request().postData() ?? "{}");
-    const reviewId = reviewPayload.packet.review_id;
-    const subjectRef = String(reviewPayload.packet?.subject_ref ?? "");
-    const backingThreadId = "thread-onboarding";
-    const createdEvent = {
-      id: "event-review-1",
-      ts: "2026-03-04T06:10:00.000Z",
-      type: "review_completed",
-      actor_id: reviewPayload.actor_id,
-      thread_id: backingThreadId,
-      refs: [
-        `artifact:${reviewId}`,
-        `artifact:${reviewPayload.packet.receipt_id}`,
-        subjectRef,
-      ],
-      summary: `Review completed (${reviewPayload.packet.outcome})`,
-      payload: {
-        artifact_id: reviewId,
-        receipt_id: reviewPayload.packet.receipt_id,
-        outcome: reviewPayload.packet.outcome,
-      },
-      provenance: { sources: ["event:ui"] },
-    };
-    timelineEvents.push(createdEvent);
-
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        artifact: {
-          id: reviewId,
-          kind: "attachment",
-          thread_id: backingThreadId,
-          refs: reviewPayload.artifact.refs,
-          summary: reviewPayload.artifact.summary,
-        },
-        event: createdEvent,
-      }),
-    });
-  });
-
-  await page.goto(`/artifacts/${receiptId}`);
+  await page.goto(`/o/local/w/local/artifacts/${receiptId}`);
   await expect(
     page.getByRole("heading", { name: receiptArtifact.summary }),
   ).toBeVisible();
 
-  await page.getByLabel("Review outcome").selectOption("revise");
-  await page.getByLabel("Review notes").fill("Needs additional hardening.");
-  await page
-    .getByLabel("Add review evidence ref")
-    .fill("artifact:artifact-evidence-1");
-  await page.getByRole("button", { name: "Add review evidence ref" }).click();
-  await page.getByRole("button", { name: "Submit review" }).click();
-
-  await expect.poll(() => reviewPayload !== null).toBe(true);
-  expect(reviewPayload.packet).toMatchObject({
-    subject_ref: cardRef,
-    receipt_ref: `artifact:${receiptId}`,
-    receipt_id: receiptId,
-    outcome: "revise",
-    notes: "Needs additional hardening.",
-    evidence_refs: ["artifact:artifact-evidence-1"],
-  });
-  expect(reviewPayload.packet.review_id).toMatch(/^rv-/);
-  expect(reviewPayload.artifact.refs).toEqual([
-    cardRef,
-    `artifact:${receiptId}`,
-  ]);
+  await expect(
+    page.getByRole("link", { name: /Topic thread-onboarding/ }),
+  ).toBeVisible();
 
   await expect(
-    page.getByText("Review submitted.", { exact: true }),
+    page
+      .locator("pre")
+      .filter({ hasText: `"subject_ref"` })
+      .filter({ hasText: "e2e-onboarding-card" })
+      .first(),
   ).toBeVisible();
-  await expect(page.getByRole("link", { name: "Open topic" })).toBeVisible();
 });

@@ -92,27 +92,25 @@
 <div class="mx-auto max-w-lg">
   <div class="mb-6">
     <a
-      class="text-micro text-[var(--fg-muted)] transition-colors hover:text-[var(--fg)]"
+      class="text-micro text-fg-muted transition-colors hover:text-fg"
       href={documentDetailHref()}
     >
       ← Back to document
     </a>
-    <h1 class="mt-2 text-subtitle font-semibold text-[var(--fg)]">
-      Document settings
-    </h1>
-    <p class="mt-1 text-micro text-[var(--fg-muted)]">
+    <h1 class="mt-2 text-subtitle font-semibold text-fg">Document settings</h1>
+    <p class="mt-1 text-micro text-fg-muted">
       Update the short description shown on doc lists and in the header. This
       does not create a new revision.
     </p>
     {#if headRevision?.revision_number != null}
-      <p class="mt-1 text-micro text-[var(--fg-subtle)]">
+      <p class="mt-1 text-micro text-fg-subtle">
         Head revision: v{headRevision.revision_number}
       </p>
     {/if}
   </div>
 
   {#if loading}
-    <p class="text-micro text-[var(--fg-muted)]">Loading…</p>
+    <p class="text-micro text-fg-muted">Loading…</p>
   {:else if loadError}
     <div class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
       {loadError}
@@ -140,12 +138,12 @@
         </div>
       {/if}
 
-      <div class="rounded-md border border-[var(--line)] bg-[var(--panel)] p-5">
-        <label class="block text-meta font-medium text-[var(--fg)]">
+      <div class="rounded-md border border-line bg-panel p-5">
+        <label class="block text-meta font-medium text-fg">
           Short description
           <textarea
             bind:value={summaryDraft}
-            class="mt-2 w-full resize-y rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2.5 text-meta text-[var(--fg)] focus:border-[var(--accent)] focus:outline-none"
+            class="mt-2 w-full resize-y rounded-md border border-line bg-bg-soft px-3 py-2.5 text-meta text-fg focus:border-accent focus:outline-none"
             placeholder="Optional one-line description for lists and the doc header"
             rows="3"
           ></textarea>
@@ -161,7 +159,7 @@
             {saving ? "Saving…" : "Save"}
           </button>
           <a
-            class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-4 py-2 text-meta font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
+            class="rounded-md border border-line bg-panel px-4 py-2 text-meta font-medium text-fg-muted transition-colors hover:bg-line-subtle hover:text-fg"
             href={documentDetailHref()}
           >
             Cancel

@@ -17,7 +17,7 @@
     if (state === "active") return "text-ok-text bg-ok-soft";
     if (state === "archived") return "text-warn-text bg-warn-soft";
     if (state === "trashed") return "text-slate-300 bg-slate-500/10";
-    return "text-[var(--fg-muted)] bg-[var(--line)]";
+    return "text-fg-muted bg-line";
   }
 
   function columnLabel(key) {
@@ -44,13 +44,13 @@
   }
 </script>
 
-<section class="mt-4 rounded-md border border-[var(--line)] bg-[var(--panel)]">
+<section class="mt-4 rounded-md border border-line bg-panel">
   <div
-    class="flex items-center justify-between border-b border-[var(--line-subtle)] px-4 py-2.5"
+    class="flex items-center justify-between border-b border-line-subtle px-4 py-2.5"
   >
     <div>
-      <h2 class="text-micro font-medium text-[var(--fg-muted)]">Boards</h2>
-      <p class="mt-0.5 text-micro text-[var(--fg-muted)]">
+      <h2 class="text-micro font-medium text-fg-muted">Boards</h2>
+      <p class="mt-0.5 text-micro text-fg-muted">
         Boards owned by or tracking this topic.
       </p>
     </div>
@@ -63,21 +63,21 @@
   </div>
 
   {#if !hasAny}
-    <p class="px-4 py-3 text-meta text-[var(--fg-muted)]">
+    <p class="px-4 py-3 text-meta text-fg-muted">
       This topic isn't tracked on any boards yet.
     </p>
   {:else}
-    <div class="divide-y divide-[var(--line-subtle)]">
+    <div class="divide-y divide-line-subtle">
       {#if ownedBoards.length > 0}
-        <div class="divide-y divide-[var(--line-subtle)]">
+        <div class="divide-y divide-line-subtle">
           <div
-            class="text-micro font-semibold uppercase tracking-wide text-[var(--fg-muted)] px-4 pt-2.5 pb-1"
+            class="text-micro font-semibold uppercase tracking-wide text-fg-muted px-4 pt-2.5 pb-1"
           >
             Owned by this topic
           </div>
           {#each ownedBoards as board}
             <a
-              class="flex items-center justify-between gap-3 px-4 py-2.5 transition-colors hover:bg-[var(--bg-soft)]"
+              class="flex items-center justify-between gap-3 px-4 py-2.5 transition-colors hover:bg-bg-soft"
               href={workspacePath(
                 organizationSlug,
                 workspaceSlug,
@@ -85,7 +85,7 @@
               )}
             >
               <div class="flex min-w-0 items-center gap-2">
-                <span class="truncate text-meta font-medium text-[var(--fg)]">
+                <span class="truncate text-meta font-medium text-fg">
                   {board.title || board.id}
                 </span>
                 {#if board.state}
@@ -98,7 +98,7 @@
                   </span>
                 {/if}
               </div>
-              <div class="shrink-0 text-micro text-[var(--fg-muted)]">
+              <div class="shrink-0 text-micro text-fg-muted">
                 {board.card_count ?? 0} cards · {formatTimestamp(
                   board.updated_at,
                 ) || "—"}
@@ -109,9 +109,9 @@
       {/if}
 
       {#if boardMemberships.length > 0}
-        <div class="divide-y divide-[var(--line-subtle)]">
+        <div class="divide-y divide-line-subtle">
           <div
-            class="text-micro font-semibold uppercase tracking-wide text-[var(--fg-muted)] px-4 pt-2.5 pb-1"
+            class="text-micro font-semibold uppercase tracking-wide text-fg-muted px-4 pt-2.5 pb-1"
           >
             Appears as card on
           </div>
@@ -143,9 +143,7 @@
                     class="flex min-w-0 items-center gap-2 transition-colors hover:text-accent-text"
                     href={boardCardHref}
                   >
-                    <span
-                      class="truncate text-meta font-medium text-[var(--fg)]"
-                    >
+                    <span class="truncate text-meta font-medium text-fg">
                       {boardTitle}
                     </span>
                     {#if boardState}
@@ -159,18 +157,16 @@
                     {/if}
                     {#if columnKey}
                       <span
-                        class="shrink-0 rounded bg-[var(--line)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
+                        class="shrink-0 rounded bg-line px-1.5 py-0.5 text-micro text-fg-muted"
                       >
                         {columnLabel(columnKey)}
                       </span>
                     {/if}
                   </a>
-                  <span class="shrink-0 text-micro text-[var(--fg-muted)]">
-                    Card
-                  </span>
+                  <span class="shrink-0 text-micro text-fg-muted"> Card </span>
                 </div>
                 {#if pinnedDocumentId}
-                  <div class="mt-1.5 text-micro text-[var(--fg-muted)]">
+                  <div class="mt-1.5 text-micro text-fg-muted">
                     <a
                       class="text-accent-text transition-colors hover:text-accent-text"
                       href={pinnedDocumentHref(pinnedDocumentId)}

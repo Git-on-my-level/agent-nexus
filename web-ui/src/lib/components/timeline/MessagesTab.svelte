@@ -19,6 +19,7 @@
   import { enrichPrincipalsWithWakeRouting } from "$lib/principalWakeRouting.js";
   import AttachmentChip from "$lib/components/AttachmentChip.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
+  import { emptyMessageEventConfirmModal } from "$lib/confirmModal.js";
   import MessageItem from "$lib/components/timeline/MessageItem.svelte";
   import {
     eventRefsInclude,
@@ -134,7 +135,7 @@
   );
 
   let showArchived = $state(false);
-  let confirmModal = $state({ open: false, action: "", eventId: "" });
+  let confirmModal = $state(emptyMessageEventConfirmModal());
   let lifecycleBusy = $state(false);
   let lifecycleError = $state("");
 
@@ -634,7 +635,7 @@
   }
 
   function clearConfirmModal() {
-    confirmModal = { open: false, action: "", eventId: "" };
+    confirmModal = emptyMessageEventConfirmModal();
   }
 
   function handleConfirm() {
@@ -836,13 +837,11 @@
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div class="flex flex-wrap items-center gap-2 sm:gap-3">
           {#if archivedMessageCount > 0}
-            <label
-              class="flex items-center gap-1.5 text-micro text-[var(--fg-muted)]"
-            >
+            <label class="flex items-center gap-1.5 text-micro text-fg-muted">
               <input
                 type="checkbox"
                 bind:checked={showArchived}
-                class="accent-[var(--accent)]"
+                class="accent-accent"
               />
               Show archived ({archivedMessageCount})
             </label>
@@ -850,7 +849,7 @@
         </div>
         <div class="min-h-[1rem] text-right" aria-live="polite">
           {#if showSyncStatus}
-            <p class="text-micro text-[var(--fg-muted)]">Syncing…</p>
+            <p class="text-micro text-fg-muted">Syncing…</p>
           {/if}
         </div>
       </div>
@@ -860,15 +859,15 @@
         {timelineError}
       </p>
     {:else if timelineLoading && !hasAnyNonTrashedMessage}
-      <p class="text-meta text-[var(--fg-muted)]">Loading messages...</p>
+      <p class="text-meta text-fg-muted">Loading messages...</p>
     {:else if !hasAnyNonTrashedMessage}
-      <p class="py-6 text-center text-meta text-[var(--fg-muted)]">
+      <p class="py-6 text-center text-meta text-fg-muted">
         {String(discussionEmptyMessage ?? "").trim()
           ? String(discussionEmptyMessage)
           : "No messages yet. Post a message below to start the conversation."}
       </p>
     {:else if !hasMessages}
-      <p class="text-meta text-[var(--fg-muted)]">
+      <p class="text-meta text-fg-muted">
         No messages in view. Turn on Show archived to see archived messages.
       </p>
     {:else}
@@ -917,7 +916,7 @@
   </div>
 
   <form
-    class="msg-composer mt-4 rounded-md border border-[var(--line)] bg-[var(--panel)] p-3"
+    class="msg-composer mt-4 rounded-md border border-line bg-panel p-3"
     onsubmit={(e) => {
       e.preventDefault();
       void handlePostMessage();
@@ -940,10 +939,10 @@
       Google Docs' inline composer than a mini thread reply.
     -->
       <div
-        class="mb-2 flex items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-1.5"
+        class="mb-2 flex items-center gap-2 rounded-md border border-line bg-bg-soft px-2 py-1.5"
       >
         <svg
-          class="h-3.5 w-3.5 shrink-0 text-[var(--accent)]"
+          class="h-3.5 w-3.5 shrink-0 text-accent"
           fill="none"
           stroke="currentColor"
           stroke-width="2"
@@ -957,14 +956,14 @@
           />
         </svg>
         <span
-          class="min-w-0 flex-1 truncate text-meta italic text-[var(--fg)]"
+          class="min-w-0 flex-1 truncate text-meta italic text-fg"
           title={pendingSelectedQuote}
         >
           {pendingSelectedQuote}
         </span>
         {#if pendingIsQuoteOnly}
           <span
-            class="shrink-0 rounded bg-[var(--line-subtle)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
+            class="shrink-0 rounded bg-line-subtle px-1.5 py-0.5 text-micro text-fg-muted"
             title="Exact position not unique in this revision — comment is anchored by quote."
           >
             Quote only
@@ -972,7 +971,7 @@
         {/if}
         <button
           type="button"
-          class="shrink-0 cursor-pointer rounded p-0.5 text-[var(--fg-muted)] hover:bg-[var(--panel)] hover:text-[var(--fg)]"
+          class="shrink-0 cursor-pointer rounded p-0.5 text-fg-muted hover:bg-panel hover:text-fg"
           onclick={() => {
             onClearPendingDocumentPost?.();
           }}
@@ -1007,10 +1006,10 @@
       to" → composer → action.
     -->
       <div
-        class="mb-2 flex items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-1.5"
+        class="mb-2 flex items-center gap-2 rounded-md border border-line bg-bg-soft px-2 py-1.5"
       >
         <svg
-          class="h-3.5 w-3.5 shrink-0 text-[var(--accent)]"
+          class="h-3.5 w-3.5 shrink-0 text-accent"
           fill="none"
           stroke="currentColor"
           stroke-width="2"
@@ -1023,11 +1022,9 @@
             d="M9 14 4 9l5-5M4 9h11a5 5 0 0 1 5 5v0a5 5 0 0 1-5 5h-3"
           />
         </svg>
-        <span class="shrink-0 text-micro text-[var(--fg-muted)]">
-          Replying to
-        </span>
+        <span class="shrink-0 text-micro text-fg-muted"> Replying to </span>
         <span
-          class="min-w-0 flex-1 truncate text-meta italic text-[var(--fg)]"
+          class="min-w-0 flex-1 truncate text-meta italic text-fg"
           title={replyTargetMessage?.messageText || "message"}
         >
           {replyTargetMessage?.messageText
@@ -1036,7 +1033,7 @@
         </span>
         <button
           type="button"
-          class="shrink-0 cursor-pointer rounded p-0.5 text-[var(--fg-muted)] hover:bg-[var(--panel)] hover:text-[var(--fg)]"
+          class="shrink-0 cursor-pointer rounded p-0.5 text-fg-muted hover:bg-panel hover:text-fg"
           onclick={clearReplyTarget}
           title="Clear reply"
           aria-label="Clear reply target"
@@ -1063,7 +1060,7 @@
         bind:this={textareaRef}
         bind:value={messageText}
         aria-label="Message"
-        class="w-full min-h-[4.25rem] resize-y rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)]"
+        class="w-full min-h-[4.25rem] resize-y rounded-md border border-line bg-bg-soft px-3 py-2 text-meta text-fg"
         id="message-text"
         oninput={updateMentionFromTextarea}
         onclick={updateMentionFromTextarea}
@@ -1076,38 +1073,36 @@
       ></textarea>
       {#if mentionOpen}
         <div
-          class="absolute bottom-full left-0 right-0 z-20 mb-1 max-h-48 overflow-auto rounded-md border border-[var(--line)] bg-[var(--panel)] py-1"
+          class="absolute bottom-full left-0 right-0 z-20 mb-1 max-h-48 overflow-auto rounded-md border border-line bg-panel py-1"
           id="message-mention-list"
           role="listbox"
           aria-label="Agent handles"
         >
           {#if mentionLoading}
-            <p class="px-3 py-2 text-micro text-[var(--fg-muted)]">
-              Loading handles…
-            </p>
+            <p class="px-3 py-2 text-micro text-fg-muted">Loading handles…</p>
           {:else if mentionCandidates.length === 0}
             {#if mentionSignedIn}
-              <p class="px-3 py-2 text-micro text-[var(--fg-muted)]">
+              <p class="px-3 py-2 text-micro text-fg-muted">
                 No registered agents are taggable in this workspace. See Access
                 to check registration and presence.
               </p>
             {:else}
-              <p class="px-3 py-2 text-micro text-[var(--fg-muted)]">
+              <p class="px-3 py-2 text-micro text-fg-muted">
                 No agent handles in this workspace. Sign in or open Access to
                 manage agents.
               </p>
             {/if}
           {:else if filteredMentions.length === 0}
-            <p class="px-3 py-2 text-micro text-[var(--fg-muted)]">
+            <p class="px-3 py-2 text-micro text-fg-muted">
               No matching agents.
             </p>
           {:else}
             {#each filteredMentions as row, i (row.handle)}
               <button
                 type="button"
-                class="flex w-full cursor-pointer items-baseline gap-2 px-3 py-1.5 text-left text-micro hover:bg-[var(--bg-soft)] {i ===
+                class="flex w-full cursor-pointer items-baseline gap-2 px-3 py-1.5 text-left text-micro hover:bg-bg-soft {i ===
                 mentionHighlight
-                  ? 'bg-[var(--bg-soft)]'
+                  ? 'bg-bg-soft'
                   : ''}"
                 aria-selected={i === mentionHighlight}
                 role="option"
@@ -1116,12 +1111,8 @@
                   void insertMention(row.handle);
                 }}
               >
-                <span class="font-medium text-[var(--accent)]"
-                  >@{row.handle}</span
-                >
-                <span class="truncate text-[var(--fg-muted)]"
-                  >{row.displayLabel}</span
-                >
+                <span class="font-medium text-accent">@{row.handle}</span>
+                <span class="truncate text-fg-muted">{row.displayLabel}</span>
                 <span
                   class="shrink-0 rounded px-1.5 py-0.5 text-micro font-medium {row.presenceClass}"
                   title={row.presenceSummary}
@@ -1158,12 +1149,12 @@
           to write a comment. The single-word `@` hint keeps mentions
           discoverable for power users without dominating the composer.
         -->
-          <p class="msg-hint text-micro leading-snug text-[var(--fg-muted)]">
-            Tip: <code class="text-[var(--fg)]">@</code> mentions an agent · Esc clears
+          <p class="msg-hint text-micro leading-snug text-fg-muted">
+            Tip: <code class="text-fg">@</code> mentions an agent · Esc clears
           </p>
         {:else}
-          <p class="msg-hint text-micro leading-snug text-[var(--fg-muted)]">
-            Mention <code class="text-[var(--fg)]">@handle</code> to tag a
+          <p class="msg-hint text-micro leading-snug text-fg-muted">
+            Mention <code class="text-fg">@handle</code> to tag a
             <a
               class="text-accent-text hover:text-accent-text"
               href={workspacePath(organizationSlug, workspaceSlug, "/access")}
@@ -1173,7 +1164,7 @@
         {/if}
         {#if pendingAttachmentRefs.length > 0 || pendingAttachmentUpload}
           <div class="flex flex-wrap items-center gap-1.5 text-micro">
-            <span class="text-[var(--fg-muted)]">Attached</span>
+            <span class="text-fg-muted">Attached</span>
             {#if pendingAttachmentUpload}
               {@const pendingResolved = resolveRefLink(
                 "artifact:upload-pending",
@@ -1207,7 +1198,7 @@
               <span class="inline-flex max-w-full items-center gap-1">
                 <AttachmentChip resolved={composerResolved} size="compact" />
                 <button
-                  class="shrink-0 text-[var(--fg-muted)] hover:text-[var(--fg)]"
+                  class="shrink-0 text-fg-muted hover:text-fg"
                   type="button"
                   aria-label={`Remove ${ref}`}
                   onclick={() => {
@@ -1231,7 +1222,7 @@
       </div>
       <div class="msg-actions flex shrink-0 items-center justify-end gap-2">
         <label
-          class="inline-flex cursor-pointer items-center rounded border border-[var(--line)] bg-[var(--bg)] px-3 py-1 text-micro font-medium text-[var(--fg)] hover:bg-[var(--bg-soft)]"
+          class="inline-flex cursor-pointer items-center rounded border border-line bg-bg px-3 py-1 text-micro font-medium text-fg hover:bg-bg-soft"
         >
           {attachingFile ? "Uploading…" : "Attach file"}
           <input

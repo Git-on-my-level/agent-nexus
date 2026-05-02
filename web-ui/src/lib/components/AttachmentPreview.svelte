@@ -79,10 +79,10 @@
 </script>
 
 {#if contentLoadIssue(content)}
-  <p class="text-meta text-[var(--fg-muted)]">No preview available.</p>
+  <p class="text-meta text-fg-muted">No preview available.</p>
 {:else if isImage && objectUrl}
   <div
-    class="group relative overflow-hidden rounded-md border border-[var(--line)] bg-[var(--bg)]"
+    class="group relative overflow-hidden rounded-md border border-line bg-bg"
   >
     <a
       href={objectUrl}
@@ -100,40 +100,38 @@
       />
     </a>
     <a
-      class="absolute right-2 top-2 hidden rounded-md border border-[var(--line)] bg-[var(--bg)]/90 px-2 py-1 text-micro font-medium text-[var(--fg)] opacity-0 backdrop-blur transition-opacity hover:bg-[var(--bg-soft)] group-hover:opacity-100 sm:inline-flex"
+      class="absolute right-2 top-2 hidden rounded-md border border-line bg-bg px-2 py-1 text-micro font-medium text-fg opacity-0 backdrop-blur transition-opacity hover:bg-bg-soft group-hover:opacity-100 sm:inline-flex"
       href={objectUrl}
       download={fileName || "attachment"}>Download</a
     >
   </div>
 {:else if isMarkdown && textPreview}
-  <div class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] p-3">
+  <div class="rounded-md border border-line bg-bg-soft p-3">
     <MarkdownRenderer source={textPreview} />
   </div>
 {:else if isTextPlain && textPreview}
   <pre
-    class="max-h-[70vh] overflow-auto whitespace-pre-wrap rounded-md border border-[var(--line)] bg-[var(--bg-soft)] p-3 text-meta text-[var(--fg)]">{textPreview}</pre>
+    class="max-h-[70vh] overflow-auto whitespace-pre-wrap rounded-md border border-line bg-bg-soft p-3 text-meta text-fg">{textPreview}</pre>
 {:else if isJson}
   <div class="space-y-2">
     <div class="flex justify-end">
       {#if objectUrl}
         <a
-          class="inline-flex items-center rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-micro font-medium text-[var(--fg)] hover:bg-[var(--bg-soft)]"
+          class="inline-flex items-center rounded-md border border-line bg-bg px-3 py-1.5 text-micro font-medium text-fg hover:bg-bg-soft"
           href={objectUrl}
           download={fileName || "attachment.json"}>Download</a
         >
       {/if}
     </div>
     <pre
-      class="max-h-[70vh] overflow-auto whitespace-pre-wrap rounded-md border border-[var(--line)] bg-[var(--bg-soft)] p-3 text-meta text-[var(--fg)]">{jsonPreview.length >
+      class="max-h-[70vh] overflow-auto whitespace-pre-wrap rounded-md border border-line bg-bg-soft p-3 text-meta text-fg">{jsonPreview.length >
       textPreviewMaxChars
         ? `${jsonPreview.slice(0, textPreviewMaxChars)}\n\n… (truncated)`
         : jsonPreview}</pre>
   </div>
 {:else if isPdf}
   {#if featured && objectUrl}
-    <div
-      class="overflow-hidden rounded-md border border-[var(--line)] bg-[var(--bg)]"
-    >
+    <div class="overflow-hidden rounded-md border border-line bg-bg">
       <object
         data={objectUrl}
         type="application/pdf"
@@ -141,11 +139,11 @@
         aria-label={fileName || "PDF attachment"}
       >
         <div
-          class="flex flex-wrap items-center gap-3 p-4 text-meta text-[var(--fg-muted)]"
+          class="flex flex-wrap items-center gap-3 p-4 text-meta text-fg-muted"
         >
           <span>PDF preview unavailable.</span>
           <a
-            class="inline-flex items-center rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-micro font-medium text-[var(--fg)] hover:bg-[var(--bg-soft)]"
+            class="inline-flex items-center rounded-md border border-line bg-bg px-3 py-1.5 text-micro font-medium text-fg hover:bg-bg-soft"
             href={objectUrl}
             download={fileName || "attachment.pdf"}>Download</a
           >
@@ -153,16 +151,14 @@
       </object>
     </div>
   {:else}
-    <div
-      class="flex flex-wrap items-center gap-3 text-meta text-[var(--fg-muted)]"
-    >
+    <div class="flex flex-wrap items-center gap-3 text-meta text-fg-muted">
       <span>
         PDF attachment —
-        <span class="text-[var(--fg)]">{fileName || "download"}</span>.
+        <span class="text-fg">{fileName || "download"}</span>.
       </span>
       {#if objectUrl}
         <a
-          class="inline-flex items-center rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-micro font-medium text-[var(--fg)] hover:bg-[var(--bg-soft)]"
+          class="inline-flex items-center rounded-md border border-line bg-bg px-3 py-1.5 text-micro font-medium text-fg hover:bg-bg-soft"
           href={objectUrl}
           download={fileName || "attachment.pdf"}>Download</a
         >
@@ -170,9 +166,7 @@
     </div>
   {/if}
 {:else}
-  <div
-    class="flex flex-wrap items-center gap-3 text-meta text-[var(--fg-muted)]"
-  >
+  <div class="flex flex-wrap items-center gap-3 text-meta text-fg-muted">
     <span>
       Binary attachment ({displayContentType || "unknown"})
       {#if fileName}
@@ -182,7 +176,7 @@
     </span>
     {#if objectUrl}
       <a
-        class="inline-flex items-center rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-micro font-medium text-[var(--fg)] hover:bg-[var(--bg-soft)]"
+        class="inline-flex items-center rounded-md border border-line bg-bg px-3 py-1.5 text-micro font-medium text-fg hover:bg-bg-soft"
         href={objectUrl}
         download={fileName || "attachment"}>Download</a
       >

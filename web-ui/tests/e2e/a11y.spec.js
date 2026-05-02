@@ -69,7 +69,7 @@ test.describe("workspace route accessibility (requires anx-core)", () => {
     { path: "/o/local/w/local/trash", heading: "Trash" },
     { path: "/o/local/w/local/access", heading: "Select Actor Identity" },
     { path: "/o/local/w/local/more", heading: "More" },
-    { path: "/o/local/w/local", heading: "Dashboard" },
+    { path: "/o/local/w/local", heading: "Home" },
   ];
 
   for (const route of workspaceRoutes) {

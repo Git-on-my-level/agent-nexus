@@ -200,15 +200,15 @@ export function freshnessStatusLabel(status) {
 export function freshnessStatusTone(status) {
   switch (String(status ?? "").trim()) {
     case "current":
-      return "text-emerald-300 bg-emerald-500/10";
+      return "text-ok-text bg-ok-soft";
     case "pending":
-      return "text-amber-300 bg-amber-500/10";
+      return "text-warn-text bg-warn-soft";
     case "error":
-      return "text-red-300 bg-red-500/10";
+      return "text-danger-text bg-danger-soft";
     case "missing":
-      return "text-slate-300 bg-slate-500/10";
+      return "text-fg-muted bg-bg-soft";
     default:
-      return "text-[var(--fg-muted)] bg-[var(--line)]";
+      return "text-fg-muted bg-line";
   }
 }
 
@@ -224,21 +224,21 @@ export function cardStatusTagColor(status) {
       .replace(/[\s-]+/g, "_")
   ) {
     case "todo":
-      return "text-blue-400 bg-blue-500/10";
+      return "text-blue-400 bg-blue-400/10";
     case "in_progress":
-      return "text-amber-300 bg-amber-500/10";
+      return "text-warn-text bg-warn-soft";
     case "blocked":
-      return "text-red-400 bg-red-500/10";
+      return "text-danger-text bg-danger-soft";
     case "review":
-      return "text-purple-400 bg-purple-500/10";
+      return "text-accent-text bg-accent-soft";
     case "done":
-      return "text-emerald-400 bg-emerald-500/10";
+      return "text-ok-text bg-ok-soft";
     case "canceled":
     case "cancelled":
-      return "text-gray-500 bg-gray-500/10";
+      return "text-fg-muted bg-line";
     case "paused":
-      return "text-amber-400 bg-amber-400/10";
+      return "text-warn-text bg-warn-soft";
     default:
-      return "text-[var(--fg-muted)] bg-[var(--line)]";
+      return "text-fg-muted bg-line";
   }
 }

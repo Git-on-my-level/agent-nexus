@@ -2,9 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import { buildMockTopicWorkspaceFromThreadWorkspace } from "../../src/lib/devSeedData.js";
 
-test("thread work tab points operators to card-scoped receipts", async ({
-  page,
-}) => {
+test("thread Boards tab surfaces topic boards panel copy", async ({ page }) => {
   const actorId = "actor-receipt-e2e";
 
   await page.addInitScript((selectedActorId) => {
@@ -98,9 +96,9 @@ test("thread work tab points operators to card-scoped receipts", async ({
   });
 
   await page.goto("/o/local/w/local/threads/thread-onboarding");
-  await page.getByRole("button", { name: "Work" }).click();
+  await page.getByRole("tab", { name: "Boards" }).click();
   await expect(
-    page.getByText("Create receipts and reviews from card detail pages.", {
+    page.getByText("Boards owned by or tracking this topic.", {
       exact: true,
     }),
   ).toBeVisible();

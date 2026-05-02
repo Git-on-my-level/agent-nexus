@@ -98,6 +98,19 @@ export function workspacePath(
   return appPath(`${prefix}${normalizedPathname}`, basePath);
 }
 
+/**
+ * Returns `(pathname) => workspacePath(org, ws, pathname)` for use in routes and layouts.
+ * Recreate via `$derived(bindWorkspaceHref(...))` when slugs are reactive.
+ */
+export function bindWorkspaceHref(
+  organizationSlug,
+  workspaceSlug,
+  basePath = APP_BASE_PATH,
+) {
+  return (pathname = "/") =>
+    workspacePath(organizationSlug, workspaceSlug, pathname, basePath);
+}
+
 export function workspaceCompositeKey(organizationSlug, workspaceSlug) {
   const org = normalizeOrganizationSlug(organizationSlug);
   const ws = normalizeWorkspaceSlug(workspaceSlug);

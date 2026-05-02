@@ -36,5 +36,5 @@ export function documentLifecyclePillClass(state) {
   if (state === "archived") return "text-warn-text bg-warn-soft";
   if (state === "trashed") return "text-danger-text bg-danger-soft";
   if (state === "draft") return "text-warn-text bg-warn-soft";
-  return "text-[var(--fg-muted)] bg-[var(--line)]";
+  return "text-fg-muted bg-line";
 }

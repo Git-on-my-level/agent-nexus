@@ -162,7 +162,7 @@
   {#if open && hasItems}
     <div
       bind:this={menuPanelRef}
-      class="anx-ctx-menu fixed z-[200] min-w-[9rem] rounded-md border border-[var(--line)] bg-[var(--panel)] py-0.5 text-micro shadow-md"
+      class="anx-ctx-menu fixed z-[200] min-w-[9rem] rounded-md border border-line bg-panel py-0.5 text-micro shadow-md"
       style:left="{pos.x}px"
       style:top="{pos.y}px"
       role="menu"
@@ -170,9 +170,9 @@
       {#each items as item (item.key)}
         <button
           type="button"
-          class="block w-full cursor-pointer px-2.5 py-1.5 text-left text-meta hover:bg-[var(--bg-soft)] disabled:cursor-not-allowed disabled:opacity-50 {item.danger
+          class="block w-full cursor-pointer px-2.5 py-1.5 text-left text-meta hover:bg-bg-soft disabled:cursor-not-allowed disabled:opacity-50 {item.danger
             ? 'text-danger-text hover:text-danger-text'
-            : 'text-[var(--fg)]'}"
+            : 'text-fg'}"
           role="menuitem"
           disabled={item.disabled}
           onclick={() => {

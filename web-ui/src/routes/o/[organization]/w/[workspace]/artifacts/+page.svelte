@@ -17,7 +17,7 @@
   import { coreClient } from "$lib/coreClient";
   import { KIND_LABELS, kindLabel } from "$lib/artifactKinds";
   import { formatTimestamp } from "$lib/formatDate";
-  import { workspacePath } from "$lib/workspacePaths";
+  import { bindWorkspaceHref } from "$lib/workspacePaths";
   import {
     lookupActorDisplayName,
     actorRegistry,
@@ -31,18 +31,14 @@
   import WorkspaceListBulkToolbar from "$lib/components/WorkspaceListBulkToolbar.svelte";
   import AttachmentChip from "$lib/components/AttachmentChip.svelte";
   import { createWorkspaceListSelection } from "$lib/workspaceListSelection.svelte.js";
+  import { emptyConfirmModal } from "$lib/confirmModal.js";
   import { buildPrimitiveRefRoutes, resolveRefLink } from "$lib/refLinkModel";
 
   let artifacts = $state([]);
   let loading = $state(false);
   let error = $state("");
   let retrying = $state(false);
-  let confirmModal = $state({
-    open: false,
-    action: "",
-    entityId: "",
-    bulkIds: /** @type {string[] | null} */ (null),
-  });
+  let confirmModal = $state(emptyConfirmModal());
   let bulkBusy = $state(false);
 
   const artifactSel = createWorkspaceListSelection({
@@ -72,9 +68,9 @@
   });
   let hasActiveFilters = $derived(hasArtifactListFilters(filters));
 
-  function workspaceHref(pathname = "/") {
-    return workspacePath(organizationSlug, workspaceSlug, pathname);
-  }
+  let workspaceHref = $derived(
+    bindWorkspaceHref(organizationSlug, workspaceSlug),
+  );
 
   $effect(() => {
     const parsed = parseArtifactListSearchParams($page.url.searchParams);
@@ -368,10 +364,10 @@
 </script>
 
 <div class="mb-3 flex max-md:mb-2 flex-wrap items-center justify-between gap-2">
-  <h1 class="text-subtitle font-semibold text-[var(--fg)]">Artifacts</h1>
+  <h1 class="text-subtitle font-semibold text-fg">Artifacts</h1>
   <div class="flex flex-wrap items-center justify-end gap-1.5">
     <button
-      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] {!artifacts.length &&
+      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-line bg-bg-soft px-2.5 py-1.5 text-micro font-medium text-fg-muted transition-colors hover:bg-line-subtle {!artifacts.length &&
       !loading
         ? 'opacity-50 pointer-events-none'
         : ''}"
@@ -384,8 +380,8 @@
     </button>
     <button
       class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-micro font-medium transition-colors {hasActiveFilters
-        ? 'border-[var(--accent)]/40 bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/15'
-        : 'border-[var(--line)] bg-[var(--bg-soft)] text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]'}"
+        ? 'border-accent bg-accent-soft text-accent hover:bg-accent-soft'
+        : 'border-line bg-bg-soft text-fg-muted hover:bg-line-subtle'}"
       onclick={() => (filtersOpen = !filtersOpen)}
       type="button"
     >
@@ -418,11 +414,11 @@
         }}
       >
         <div class="grid gap-3 sm:grid-cols-2">
-          <label class="text-micro font-medium text-[var(--fg-muted)]">
+          <label class="text-micro font-medium text-fg-muted">
             Kind
             <select
               bind:value={filters.kind}
-              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
+              class="mt-1 w-full rounded-md border border-line bg-bg-soft px-2.5 py-1.5 text-meta transition-colors focus:bg-panel"
             >
               <option value="">All</option>
               {#each Object.entries(KIND_LABELS) as [value, label]}
@@ -430,40 +426,40 @@
               {/each}
             </select>
           </label>
-          <label class="text-micro font-medium text-[var(--fg-muted)]">
+          <label class="text-micro font-medium text-fg-muted">
             Backing
             <select
               bind:value={filters.backing_scope}
-              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
+              class="mt-1 w-full rounded-md border border-line bg-bg-soft px-2.5 py-1.5 text-meta transition-colors focus:bg-panel"
             >
               {#each ARTIFACT_BACKING_SCOPE_VALUES as value}
                 <option {value}>{ARTIFACT_BACKING_SCOPE_LABELS[value]}</option>
               {/each}
             </select>
           </label>
-          <label class="text-micro font-medium text-[var(--fg-muted)]">
+          <label class="text-micro font-medium text-fg-muted">
             Topic ID
             <input
               bind:value={filters.thread_id}
-              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
+              class="mt-1 w-full rounded-md border border-line bg-bg-soft px-2.5 py-1.5 text-meta transition-colors focus:bg-panel"
               placeholder="thread-onboarding"
             />
           </label>
-          <label class="text-micro font-medium text-[var(--fg-muted)]">
+          <label class="text-micro font-medium text-fg-muted">
             Created after
             <input
               value={dateInputs.created_after}
-              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
+              class="mt-1 w-full rounded-md border border-line bg-bg-soft px-2.5 py-1.5 text-meta transition-colors focus:bg-panel"
               type="datetime-local"
               oninput={(event) =>
                 updateDateFilter("created_after", event.currentTarget.value)}
             />
           </label>
-          <label class="text-micro font-medium text-[var(--fg-muted)]">
+          <label class="text-micro font-medium text-fg-muted">
             Created before
             <input
               value={dateInputs.created_before}
-              class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
+              class="mt-1 w-full rounded-md border border-line bg-bg-soft px-2.5 py-1.5 text-meta transition-colors focus:bg-panel"
               type="datetime-local"
               oninput={(event) =>
                 updateDateFilter("created_before", event.currentTarget.value)}
@@ -471,17 +467,17 @@
           </label>
         </div>
         <div class="mt-3 text-micro">
-          <span class="font-medium text-[var(--fg-muted)]">Lifecycle</span>
+          <span class="font-medium text-fg-muted">Lifecycle</span>
           <fieldset
-            class="mt-1 space-y-1 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-2"
+            class="mt-1 space-y-1 rounded-md border border-line bg-bg-soft px-2.5 py-2"
           >
             {#each Object.entries(ARTIFACT_LIFECYCLE_LABELS) as [value, label] (value)}
               <label
-                class="flex cursor-pointer items-center gap-2 text-meta text-[var(--fg)]"
+                class="flex cursor-pointer items-center gap-2 text-meta text-fg"
               >
                 <input
                   checked={(filters.states ?? ["active"]).includes(value)}
-                  class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--line)] bg-[var(--bg)] text-[var(--accent-hover)] focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-0"
+                  class="h-3.5 w-3.5 cursor-pointer rounded border-line bg-bg text-accent-hover focus:ring-2 focus:ring-accent focus:ring-offset-0"
                   type="checkbox"
                   onchange={() => toggleArtifactLifecycleState(value)}
                 />
@@ -492,11 +488,11 @@
         </div>
         <div class="mt-3 flex gap-1.5">
           <button
-            class="cursor-pointer rounded-md bg-[var(--panel)] px-3 py-1.5 text-micro font-medium text-[var(--fg)] hover:bg-[var(--line)]"
+            class="cursor-pointer rounded-md bg-panel px-3 py-1.5 text-micro font-medium text-fg hover:bg-line"
             type="submit">Apply</button
           >
           <button
-            class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-micro font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]"
+            class="cursor-pointer rounded-md border border-line bg-bg-soft px-3 py-1.5 text-micro font-medium text-fg-muted hover:bg-line-subtle"
             onclick={clearFilters}
             type="button">Clear filters</button
           >
@@ -560,21 +556,19 @@
     />
   {/if}
   <div
-    class="space-y-px rounded-md border border-[var(--line)] bg-[var(--bg-soft)] overflow-hidden"
+    class="space-y-px rounded-md border border-line bg-bg-soft overflow-hidden"
   >
     {#each artifacts as artifact, i}
       {@const selected = artifactSel.selectedIds.has(artifact.id)}
-      {@const borderTop = i > 0 ? "border-t border-[var(--line)]" : ""}
+      {@const borderTop = i > 0 ? "border-t border-line" : ""}
       {@const artifactRefCount = (artifact.refs ?? []).length}
       {#if artifactSel.selectMode}
-        <div
-          class="transition-colors hover:bg-[var(--line-subtle)] {borderTop}"
-        >
+        <div class="transition-colors hover:bg-line-subtle {borderTop}">
           <div
             aria-label={`${selected ? "Deselect" : "Select"} ${rowHeading(artifact)}`}
             aria-pressed={selected}
-            class="flex cursor-pointer items-stretch outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-soft)] {selected
-              ? 'border-l-[3px] border-l-[var(--accent)] bg-[var(--accent)]/10'
+            class="flex cursor-pointer items-stretch outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-soft {selected
+              ? 'border-l-[3px] border-l-accent bg-accent-soft'
               : 'border-l-[3px] border-l-transparent'}"
             onclick={(e) =>
               artifactSel.handleRowMouseEvent(
@@ -614,9 +608,7 @@
                         />
                       </div>
                     {:else}
-                      <p
-                        class="truncate text-meta font-medium text-[var(--fg)]"
-                      >
+                      <p class="truncate text-meta font-medium text-fg">
                         {rowHeading(artifact)}
                       </p>
                     {/if}
@@ -627,7 +619,7 @@
                       >
                     {/if}
                   </div>
-                  <p class="text-micro text-[var(--fg-muted)]">
+                  <p class="text-micro text-fg-muted">
                     {#if !isAttachmentListRow(artifact)}
                       <span class="font-medium">{kindLabel(artifact.kind)}</span
                       >
@@ -639,7 +631,7 @@
                   </p>
                 </div>
                 <div class="flex shrink-0 items-center gap-1">
-                  <span class="mr-1 text-micro text-[var(--fg-muted)]">
+                  <span class="mr-1 text-micro text-fg-muted">
                     {artifactRefCount}
                     {artifactRefCount === 1 ? "ref" : "refs"}
                   </span>
@@ -669,7 +661,7 @@
                     />
                   {/each}
                   {#if artifactRefCount > 3}
-                    <span class="text-micro text-[var(--fg-muted)]"
+                    <span class="text-micro text-fg-muted"
                       >+{artifact.refs.length - 3} more</span
                     >
                   {/if}
@@ -680,7 +672,7 @@
         </div>
       {:else}
         <div
-          class="px-3 py-2 transition-colors hover:bg-[var(--line-subtle)] sm:px-4 {borderTop}"
+          class="px-3 py-2 transition-colors hover:bg-line-subtle sm:px-4 {borderTop}"
         >
           <div class="flex items-start justify-between gap-3">
             {#if isAttachmentListRow(artifact)}
@@ -695,7 +687,7 @@
                     >Archived</span
                   >
                 {/if}
-                <p class="mt-1 text-micro text-[var(--fg-muted)]">
+                <p class="mt-1 text-micro text-fg-muted">
                   Created {formatTimestamp(artifact.created_at) || "—"} by {actorName(
                     artifact.created_by,
                   )}
@@ -703,11 +695,11 @@
               </div>
             {:else}
               <a
-                class="min-w-0 flex-1 outline-none rounded-sm focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-soft)]"
+                class="min-w-0 flex-1 outline-none rounded-sm focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-soft"
                 href={workspaceHref(`/artifacts/${artifact.id}`)}
               >
                 <div class="flex flex-wrap items-center gap-2">
-                  <p class="truncate text-meta font-medium text-[var(--fg)]">
+                  <p class="truncate text-meta font-medium text-fg">
                     {rowHeading(artifact)}
                   </p>
                   {#if isArtifactArchived(artifact)}
@@ -717,7 +709,7 @@
                     >
                   {/if}
                 </div>
-                <p class="text-micro text-[var(--fg-muted)]">
+                <p class="text-micro text-fg-muted">
                   <span class="font-medium">{kindLabel(artifact.kind)}</span>
                   · Created {formatTimestamp(artifact.created_at) || "—"} by {actorName(
                     artifact.created_by,
@@ -726,7 +718,7 @@
               </a>
             {/if}
             <span
-              class="shrink-0 tabular-nums text-micro text-[var(--fg-muted)]"
+              class="shrink-0 tabular-nums text-micro text-fg-muted"
               aria-hidden="true"
             >
               {artifactRefCount}
@@ -758,7 +750,7 @@
                 />
               {/each}
               {#if artifactRefCount > 3}
-                <span class="text-micro text-[var(--fg-muted)]"
+                <span class="text-micro text-fg-muted"
                   >+{artifact.refs.length - 3} more</span
                 >
               {/if}

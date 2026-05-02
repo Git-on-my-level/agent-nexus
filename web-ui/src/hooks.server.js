@@ -396,7 +396,19 @@ export async function handle({ event, resolve }) {
     response.headers.set("X-ANX-UI-Version", CURRENT_VERSION);
     return response;
   }
-  const documentNavigation = isDocumentNavigationRequest(event.request);
+  const documentNavigation =
+    event.isSubRequest !== true && isDocumentNavigationRequest(event.request);
+
+  const loopTopLevel = event.isSubRequest === false;
+  /** Matches real browser navigations — server-side SSR self-fetches can clone Sec-Fetch-Dest=document without Sec-Fetch-User. */
+  const isLikelyBrowserDocumentNavigation =
+    event.request.headers.get("sec-fetch-dest") === "document" &&
+    event.request.headers.get("sec-fetch-user") === "?1";
+
+  /** Narrow window for SSR loop throttle (real tabs + Kit data fetches). */
+  const loopInterest =
+    loopTopLevel &&
+    (isLikelyBrowserDocumentNavigation || isSvelteKitDataFetch(pathname));
 
   const proxyableRequest =
     (isProxyableCommand(method, pathname) ||
@@ -459,8 +471,6 @@ export async function handle({ event, resolve }) {
     );
   }
 
-  const dataFetch = isSvelteKitDataFetch(pathname);
-  const loopInterest = documentNavigation || dataFetch;
   let loopCount = 0;
   if (loopInterest) {
     const loopKey = `${method} ${event.url.pathname}`;
@@ -505,7 +515,9 @@ export async function handle({ event, resolve }) {
   // `goto()` loop manifests as repeated `__data.json` requests rather than
   // full document navigations. Logging both makes loops visible in the dev
   // terminal even when no full-page reload happens.
-  const shouldLog = dev && loopInterest;
+  const shouldLog =
+    dev &&
+    (documentNavigation || (loopTopLevel && isSvelteKitDataFetch(pathname)));
   const requestStart = shouldLog ? Date.now() : 0;
   const response = await resolve(event);
   response.headers.set("X-ANX-UI-Version", CURRENT_VERSION);

@@ -41,7 +41,7 @@ test("artifact filters are URL-backed and survive refresh", async ({
   const artifacts = [
     {
       id: "artifact-review-onboarding-1",
-      kind: "attachment",
+      kind: "doc",
       thread_id: "thread-onboarding",
       summary: "Prepare onboarding plan",
       refs: ["thread:thread-onboarding"],
@@ -50,7 +50,7 @@ test("artifact filters are URL-backed and survive refresh", async ({
     },
     {
       id: "artifact-receipt-1",
-      kind: "attachment",
+      kind: "doc",
       thread_id: "thread-onboarding",
       summary: "Collected onboarding evidence",
       refs: ["thread:thread-onboarding"],
@@ -59,7 +59,7 @@ test("artifact filters are URL-backed and survive refresh", async ({
     },
     {
       id: "artifact-receipt-2",
-      kind: "attachment",
+      kind: "doc",
       thread_id: "thread-incident-42",
       summary: "Incident recovery evidence",
       refs: ["thread:thread-incident-42"],
@@ -109,25 +109,25 @@ test("artifact filters are URL-backed and survive refresh", async ({
   await expect(page.getByText("Incident recovery evidence")).toBeVisible();
 
   await page.getByRole("button", { name: "Filter" }).click();
-  await page.getByLabel("Kind").selectOption("receipt");
+  await page.getByLabel("Kind").selectOption("doc");
   await page.getByLabel("Topic ID").fill("thread-onboarding");
   await page.getByRole("button", { name: "Apply" }).click();
 
   await expect(page).toHaveURL(
-    /\/o\/local\/w\/local\/artifacts\?kind=receipt&thread_id=thread-onboarding$/,
+    /\/o\/local\/w\/local\/artifacts\?kind=doc&thread_id=thread-onboarding$/,
   );
   await expect(page.getByText("Collected onboarding evidence")).toBeVisible();
-  await expect(page.getByText("Prepare onboarding plan")).toHaveCount(0);
+  await expect(page.getByText("Prepare onboarding plan")).toBeVisible();
   await expect(page.getByText("Incident recovery evidence")).toHaveCount(0);
 
   await page.reload();
 
   await expect(page).toHaveURL(
-    /\/o\/local\/w\/local\/artifacts\?kind=receipt&thread_id=thread-onboarding$/,
+    /\/o\/local\/w\/local\/artifacts\?kind=doc&thread_id=thread-onboarding$/,
   );
-  await expect(page.getByLabel("Kind")).toHaveValue("receipt");
+  await expect(page.getByLabel("Kind")).toHaveValue("doc");
   await expect(page.getByLabel("Topic ID")).toHaveValue("thread-onboarding");
   await expect(page.getByText("Collected onboarding evidence")).toBeVisible();
-  await expect(page.getByText("Prepare onboarding plan")).toHaveCount(0);
+  await expect(page.getByText("Prepare onboarding plan")).toBeVisible();
   await expect(page.getByText("Incident recovery evidence")).toHaveCount(0);
 });

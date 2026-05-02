@@ -1,8 +1,20 @@
 import { describe, expect, it } from "vitest";
 
-import { parseWorkspaceRouteSlugs } from "../../src/lib/workspacePaths.js";
+import {
+  bindWorkspaceHref,
+  parseWorkspaceRouteSlugs,
+  workspacePath,
+} from "../../src/lib/workspacePaths.js";
 
-describe("parseWorkspaceRouteSlugs (hosted /ws and UI /o/.../w/...)", () => {
+describe("bindWorkspaceHref", () => {
+  it("returns a function equivalent to workspacePath for the bound slugs", () => {
+    const href = bindWorkspaceHref("acme", "alpha", "");
+    expect(href("/inbox")).toBe(workspacePath("acme", "alpha", "/inbox", ""));
+    expect(href()).toBe(workspacePath("acme", "alpha", "/", ""));
+  });
+});
+
+describe("parseWorkspaceRouteSlugs", () => {
   it("parses /o/{org}/w/{workspace} and nested subpaths (UI shell)", () => {
     expect(parseWorkspaceRouteSlugs("/o/acme-corp/w/alpha")).toEqual({
       organizationSlug: "acme-corp",

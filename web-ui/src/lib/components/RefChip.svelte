@@ -19,18 +19,18 @@
   } = $props();
 
   const chipBase =
-    "ref-chip compact-ref-link inline-flex min-w-0 max-w-full gap-1 text-micro leading-tight focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-solid/40";
+    "ref-chip compact-ref-link inline-flex min-w-0 max-w-full gap-1 text-micro leading-tight focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-solid";
   let shell = $derived(
     embedded
       ? `${chipBase} min-h-[26px] flex-1 items-center rounded-none border-0 bg-transparent px-2 py-0`
-      : `${chipBase} items-baseline rounded border border-[var(--line)] bg-[var(--bg)] px-1.5 py-0.5`,
+      : `${chipBase} items-baseline rounded border border-line bg-bg px-1.5 py-0.5`,
   );
   let accentClasses = $derived(
     accentText
       ? embedded
         ? "text-accent-text hover:text-accent-text"
-        : "text-accent-text hover:border-[var(--line-strong)] hover:text-accent-text"
-      : "text-[var(--fg-muted)]",
+        : "text-accent-text hover:border-line-strong hover:text-accent-text"
+      : "text-fg-muted",
   );
 </script>
 

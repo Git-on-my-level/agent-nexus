@@ -15,7 +15,7 @@
   import { formatAbsoluteDateTime } from "$lib/formatDate";
   import { buildPrimitiveRefRoutes, resolveRefLink } from "$lib/refLinkModel";
   import { searchActors } from "$lib/searchHelpers";
-  import { workspacePath } from "$lib/workspacePaths";
+  import { bindWorkspaceHref } from "$lib/workspacePaths";
 
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
@@ -91,9 +91,9 @@
   });
 
   let isCompleted = $derived(String(item?.status ?? "").trim() === "completed");
-  function workspaceHref(pathname = "/") {
-    return workspacePath(organizationSlug, workspaceSlug, pathname);
-  }
+  let workspaceHref = $derived(
+    bindWorkspaceHref(organizationSlug, workspaceSlug),
+  );
 
   function completedTimelineHref(value = item) {
     const tid = String(value?.thread_id ?? "").trim();
@@ -372,7 +372,7 @@
   </div>
 
   {#if loading}
-    <div class="rounded border border-[var(--line)] bg-[var(--bg-soft)] p-4">
+    <div class="rounded border border-line bg-bg-soft p-4">
       <Skeleton rows={4} />
     </div>
   {:else if loadError && !item}
@@ -386,13 +386,13 @@
       <header class="space-y-2 max-md:space-y-1.5">
         <div class="flex flex-wrap items-center gap-2 text-micro">
           <span
-            class="rounded border border-[var(--line)] bg-[var(--panel)] px-2 py-0.5 font-semibold uppercase tracking-wide text-fg-muted"
+            class="rounded border border-line bg-panel px-2 py-0.5 font-semibold uppercase tracking-wide text-fg-muted"
           >
             {kindLabel(item)}
           </span>
           {#if item.severity}
             <span
-              class="rounded border border-danger/30 bg-danger-soft px-2 py-0.5 font-semibold uppercase tracking-wide text-danger-text"
+              class="rounded border border-danger bg-danger-soft px-2 py-0.5 font-semibold uppercase tracking-wide text-danger-text"
             >
               {item.severity}
             </span>
@@ -408,7 +408,7 @@
         </h1>
         {#if item.body}
           <div
-            class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-2 text-meta leading-relaxed text-fg"
+            class="rounded-md border border-line bg-panel px-3 py-2 text-meta leading-relaxed text-fg"
           >
             <MarkdownRenderer source={item.body} />
           </div>
@@ -434,7 +434,7 @@
 
       {#if isCompleted}
         <div
-          class="space-y-3 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-4 py-3 text-meta text-fg"
+          class="space-y-3 rounded-md border border-line bg-bg-soft px-4 py-3 text-meta text-fg"
           data-testid="inbox-completed-detail"
         >
           {#if item.original_request_missing}
@@ -493,7 +493,7 @@
           {#if itemKind(item) === "review"}
             <div class="flex flex-wrap gap-2">
               <button
-                class="rounded border border-[var(--line)] bg-[var(--panel)] px-3 py-1.5 text-meta font-semibold text-fg hover:bg-[var(--bg-soft)] disabled:opacity-50"
+                class="rounded border border-line bg-panel px-3 py-1.5 text-meta font-semibold text-fg hover:bg-bg-soft disabled:opacity-50"
                 type="button"
                 disabled={submitting}
                 onclick={() => void submitResponseWithText("Approved.")}
@@ -501,7 +501,7 @@
                 Approve
               </button>
               <button
-                class="rounded border border-[var(--line)] bg-[var(--panel)] px-3 py-1.5 text-meta font-semibold text-fg hover:bg-[var(--bg-soft)] disabled:opacity-50"
+                class="rounded border border-line bg-panel px-3 py-1.5 text-meta font-semibold text-fg hover:bg-bg-soft disabled:opacity-50"
                 type="button"
                 disabled={submitting}
                 onclick={() => void submitResponseWithText("Rejected.")}
@@ -523,9 +523,9 @@
                   {@const isRecommended = index === 0}
                   {@const isSelected = responseDraft.trim() === proposal.trim()}
                   <button
-                    class="group block w-full rounded border bg-[var(--panel)] px-3 py-2 text-left text-meta text-fg transition hover:bg-[var(--bg-soft)] max-md:px-2.5 max-md:py-1.5 max-md:text-micro max-md:leading-snug {isSelected
-                      ? 'border-[var(--accent)] ring-1 ring-[var(--accent)] bg-[var(--accent)]/5'
-                      : 'border-[var(--line)]'}"
+                    class="group block w-full rounded border bg-panel px-3 py-2 text-left text-meta text-fg transition hover:bg-bg-soft max-md:px-2.5 max-md:py-1.5 max-md:text-micro max-md:leading-snug {isSelected
+                      ? 'border-accent ring-1 ring-accent bg-accent-soft'
+                      : 'border-line'}"
                     type="button"
                     onclick={() => applyPreset(proposal)}
                   >
@@ -534,7 +534,7 @@
                     >
                       {#if isRecommended}
                         <span
-                          class="shrink-0 rounded border border-[var(--accent)]/40 bg-[var(--accent)]/15 px-2 py-0.5 text-micro font-semibold uppercase tracking-wide text-[var(--accent)] max-md:px-1.5 max-md:text-[11px]"
+                          class="shrink-0 rounded border border-accent bg-accent-soft px-2 py-0.5 text-micro font-semibold uppercase tracking-wide text-accent max-md:px-1.5 max-md:text-[11px]"
                         >
                           Recommended
                         </span>
@@ -554,7 +554,7 @@
             >
             <textarea
               id="human-response-input"
-              class="mt-2 min-h-[200px] w-full rounded border border-[var(--line)] bg-[var(--panel)] px-3 py-2 text-meta text-[var(--fg)] outline-none placeholder:text-[var(--fg-muted)] focus:ring-2 focus:ring-[var(--accent)] max-md:min-h-[140px]"
+              class="mt-2 min-h-[200px] w-full rounded border border-line bg-panel px-3 py-2 text-meta text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-accent max-md:min-h-[140px]"
               bind:value={responseDraft}
               onkeydown={handleTextareaKeydown}
               placeholder="Write the response the agent should rely on."
@@ -564,7 +564,7 @@
           <div class="space-y-2">
             <div class="flex flex-wrap items-center gap-2">
               <label
-                class="inline-flex cursor-pointer items-center rounded border border-[var(--line)] bg-[var(--panel)] px-3 py-1.5 text-micro font-medium text-fg hover:bg-[var(--bg-soft)]"
+                class="inline-flex cursor-pointer items-center rounded border border-line bg-panel px-3 py-1.5 text-micro font-medium text-fg hover:bg-bg-soft"
               >
                 {attachingResponseFile ? "Uploading…" : "Attach file"}
                 <input
@@ -633,7 +633,7 @@
           </div>
 
           <div
-            class="rounded border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta max-md:space-y-2"
+            class="rounded border border-line bg-bg-soft px-3 py-2 text-meta max-md:space-y-2"
           >
             <div
               class="flex flex-wrap items-center gap-x-3 gap-y-2 max-md:block"
@@ -642,12 +642,12 @@
                 >{notifyDescription()}</span
               >
               <div
-                class="ml-auto flex flex-wrap items-center gap-1 max-md:mt-2 max-md:grid max-md:grid-cols-3 max-md:rounded-md max-md:border max-md:border-[var(--line)] max-md:bg-[var(--panel)] max-md:p-1"
+                class="ml-auto flex flex-wrap items-center gap-1 max-md:mt-2 max-md:grid max-md:grid-cols-3 max-md:rounded-md max-md:border max-md:border-line max-md:bg-panel max-md:p-1"
               >
                 <button
                   class="rounded px-2 py-1 text-micro font-medium max-md:py-1.5 {notifyMode ===
                   'original'
-                    ? 'bg-[var(--accent)]/15 text-[var(--accent)]'
+                    ? 'bg-accent-soft text-accent'
                     : 'text-fg-muted hover:text-fg'}"
                   type="button"
                   disabled={notificationStatus().resolvable === false}
@@ -661,7 +661,7 @@
                 <button
                   class="rounded px-2 py-1 text-micro font-medium max-md:py-1.5 {notifyMode ===
                   'target'
-                    ? 'bg-[var(--accent)]/15 text-[var(--accent)]'
+                    ? 'bg-accent-soft text-accent'
                     : 'text-fg-muted hover:text-fg'}"
                   type="button"
                   onclick={() => {
@@ -674,7 +674,7 @@
                 <button
                   class="rounded px-2 py-1 text-micro font-medium max-md:py-1.5 {notifyMode ===
                   'none'
-                    ? 'bg-[var(--accent)]/15 text-[var(--accent)]'
+                    ? 'bg-accent-soft text-accent'
                     : 'text-fg-muted hover:text-fg'}"
                   type="button"
                   onclick={() => {
@@ -690,10 +690,10 @@
               <div class="relative mt-2">
                 {#if notifyTargetSelected}
                   <div
-                    class="flex items-center gap-2 rounded border border-[var(--line)] bg-[var(--panel)] px-2 py-1.5"
+                    class="flex items-center gap-2 rounded border border-line bg-panel px-2 py-1.5"
                   >
                     <span
-                      class="inline-flex items-center gap-1.5 rounded bg-[var(--accent)]/15 px-2 py-0.5 text-micro text-[var(--accent)]"
+                      class="inline-flex items-center gap-1.5 rounded bg-accent-soft px-2 py-0.5 text-micro text-accent"
                     >
                       @{notifyTargetSelected.display_name ||
                         notifyTargetSelected.id}
@@ -708,7 +708,7 @@
                   </div>
                 {:else}
                   <input
-                    class="w-full rounded border border-[var(--line)] bg-[var(--panel)] px-2 py-1.5 text-meta text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-[var(--accent)]"
+                    class="w-full rounded border border-line bg-panel px-2 py-1.5 text-meta text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-accent"
                     type="text"
                     placeholder="Search people or agents…"
                     value={notifyTargetQuery}
@@ -717,16 +717,16 @@
                   />
                   {#if notifyTargetMenuOpen && notifyTargetResults.length > 0}
                     <div
-                      class="absolute left-0 right-0 top-full z-10 mt-1 max-h-56 overflow-y-auto rounded border border-[var(--line)] bg-[var(--panel)] shadow-lg"
+                      class="absolute left-0 right-0 top-full z-10 mt-1 max-h-56 overflow-y-auto rounded border border-line bg-panel shadow-lg"
                     >
                       {#each notifyTargetResults as actor (actor.id)}
                         <button
-                          class="flex w-full items-center gap-2 px-3 py-2 text-left text-meta hover:bg-[var(--bg-soft)]"
+                          class="flex w-full items-center gap-2 px-3 py-2 text-left text-meta hover:bg-bg-soft"
                           type="button"
                           onclick={() => chooseNotifyTarget(actor)}
                         >
                           <span
-                            class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--accent)]/15 text-micro font-semibold text-[var(--accent)]"
+                            class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent-soft text-micro font-semibold text-accent"
                           >
                             {(actor.display_name || actor.id || "?")
                               .slice(0, 1)
@@ -752,7 +752,7 @@
 
           {#if submitError}
             <div
-              class="rounded border border-danger/40 bg-danger-soft px-3 py-2 text-meta text-danger-text"
+              class="rounded border border-danger bg-danger-soft px-3 py-2 text-meta text-danger-text"
               role="alert"
             >
               {submitError}

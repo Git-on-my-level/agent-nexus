@@ -142,13 +142,13 @@
 {/if}
 
 {#if topic}
-  <div class="mt-4 rounded-md border border-[var(--line)] bg-[var(--panel)]">
+  <div class="mt-4 rounded-md border border-line bg-panel">
     <div
-      class="flex items-center justify-between border-b border-[var(--line-subtle)] px-4 py-2.5"
+      class="flex items-center justify-between border-b border-line-subtle px-4 py-2.5"
     >
-      <h2 class="text-micro font-medium text-[var(--fg-muted)]">Details</h2>
+      <h2 class="text-micro font-medium text-fg-muted">Details</h2>
       <button
-        class="cursor-pointer rounded px-2 py-1 text-micro font-medium text-accent-text hover:bg-[var(--bg-soft)] hover:text-accent-text"
+        class="cursor-pointer rounded px-2 py-1 text-micro font-medium text-accent-text hover:bg-bg-soft hover:text-accent-text"
         onclick={editOpen ? cancelEdit : beginEdit}
         type="button"
       >
@@ -157,15 +157,15 @@
     </div>
 
     {#if !editOpen}
-      <div class="divide-y divide-[var(--line-subtle)]">
+      <div class="divide-y divide-line-subtle">
         {#if topic.summary || topic.current_summary}
           {@const summary = String(
             topic.summary ?? topic.current_summary ?? "",
           ).trim()}
           {#if summary}
             <div class="px-4 py-3">
-              <p class="text-micro text-[var(--fg-muted)]">Description</p>
-              <p class="mt-0.5 text-meta text-[var(--fg)] whitespace-pre-wrap">
+              <p class="text-micro text-fg-muted">Description</p>
+              <p class="mt-0.5 text-meta text-fg whitespace-pre-wrap">
                 {summary}
               </p>
             </div>
@@ -173,24 +173,24 @@
         {/if}
         {#if topic.state}
           <div class="px-4 py-3 text-micro">
-            <span class="text-[var(--fg-muted)]">State: </span><span
-              class="capitalize text-[var(--fg)]">{topic.state}</span
+            <span class="text-fg-muted">State: </span><span
+              class="capitalize text-fg">{topic.state}</span
             >
           </div>
         {/if}
       </div>
     {:else if topic.state}
       <div
-        class="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 py-2.5 text-micro text-[var(--fg-muted)]"
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 py-2.5 text-micro text-fg-muted"
       >
-        <span class="capitalize text-[var(--fg)]">State: {topic.state}</span>
+        <span class="capitalize text-fg">State: {topic.state}</span>
       </div>
     {/if}
 
     {#if (topic.next_actions ?? []).length > 0}
-      <div class="border-t border-[var(--line-subtle)] px-4 py-3">
-        <p class="text-micro text-[var(--fg-muted)]">Next actions</p>
-        <ul class="mt-1 list-inside list-disc text-meta text-[var(--fg)]">
+      <div class="border-t border-line-subtle px-4 py-3">
+        <p class="text-micro text-fg-muted">Next actions</p>
+        <ul class="mt-1 list-inside list-disc text-meta text-fg">
           {#each topic.next_actions ?? [] as action (action)}<li>
               {action}
             </li>{/each}
@@ -199,14 +199,12 @@
     {/if}
 
     {#if topicRefGroups.length > 0}
-      <div class="border-t border-[var(--line-subtle)] px-4 py-3">
-        <p class="text-micro text-[var(--fg-muted)]">Canonical refs</p>
+      <div class="border-t border-line-subtle px-4 py-3">
+        <p class="text-micro text-fg-muted">Canonical refs</p>
         <div class="mt-1 space-y-2 text-meta">
           {#each topicRefGroups as group (group.label)}
             <div class="flex flex-wrap items-baseline gap-2">
-              <span class="text-micro text-[var(--fg-muted)]"
-                >{group.label}</span
-              >
+              <span class="text-micro text-fg-muted">{group.label}</span>
               <div class="flex flex-wrap gap-2">
                 {#each group.refs as ref (ref)}
                   <RefLink
@@ -223,11 +221,11 @@
       </div>
     {/if}
 
-    <div class="border-t border-[var(--line-subtle)] px-4 py-2.5">
+    <div class="border-t border-line-subtle px-4 py-2.5">
       <ProvenanceBadge provenance={topic.provenance} />
     </div>
 
-    <div class="border-t border-[var(--line-subtle)] p-3">
+    <div class="border-t border-line-subtle p-3">
       <IdsIntegrityDisclosure
         rows={topicIntegrityRows}
         rawJson={topicRawJson}
@@ -238,7 +236,7 @@
 
   {#if editOpen && editDraft}
     <form
-      class="mt-3 border-t border-[var(--line)] p-4"
+      class="mt-3 border-t border-line p-4"
       onsubmit={(event) => {
         event.preventDefault();
         void handleSave();
@@ -250,18 +248,18 @@
           {editError}
         </p>{/if}
       <div class="grid gap-3">
-        <label class="text-micro font-medium text-[var(--fg-muted)]"
+        <label class="text-micro font-medium text-fg-muted"
           >Title <input
             bind:value={editDraft.title}
-            class="mt-1 w-full rounded border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta text-[var(--fg)]"
+            class="mt-1 w-full rounded border border-line bg-bg-soft px-2.5 py-1.5 text-meta text-fg"
             required
             type="text"
           /></label
         >
-        <label class="text-micro font-medium text-[var(--fg-muted)]"
+        <label class="text-micro font-medium text-fg-muted"
           >Summary <textarea
             bind:value={editDraft.summary}
-            class="mt-1 w-full rounded border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta text-[var(--fg)]"
+            class="mt-1 w-full rounded border border-line bg-bg-soft px-2.5 py-1.5 text-meta text-fg"
             rows="2"
           ></textarea></label
         >
@@ -275,7 +273,7 @@
           >{savingEdit ? "Saving..." : "Save changes"}</Button
         >
         <button
-          class="cursor-pointer rounded px-3 py-1.5 text-micro text-[var(--fg-muted)] hover:bg-[var(--bg-soft)]"
+          class="cursor-pointer rounded px-3 py-1.5 text-micro text-fg-muted hover:bg-bg-soft"
           onclick={cancelEdit}
           type="button">Cancel</button
         >

@@ -249,7 +249,7 @@
           disabled={busy}
           required
           maxlength={64}
-          class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-1.5 text-body text-fg placeholder:text-[var(--fg-subtle)]"
+          class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-1.5 text-body text-fg placeholder:text-fg-subtle"
         />
       </label>
       <p class="text-meta text-fg-subtle">

@@ -1,5 +1,81 @@
 import { expect, test } from "@playwright/test";
 
+/** Browser GET inbox.list calls resolve to pathname `/inbox` on the proxied core path (never the workspace SPA route `.../inbox`). */
+function isInboxListProjectionUrl(urlLike) {
+  const url =
+    typeof urlLike === "string"
+      ? new URL(urlLike)
+      : /** @type {URL} */ (urlLike);
+
+  const pathnameRaw =
+    url.pathname.endsWith("/") && url.pathname.length > 1
+      ? url.pathname.slice(0, -1)
+      : url.pathname;
+  const normalized = pathnameRaw || "/";
+  if (
+    /^\/o\/[^/]+\/w\/[^/]+\/inbox(?:\/|$)/.test(normalized) ||
+    /^\/ws\/[^/]+\/[^/]+\/inbox(?:\/|$)/.test(normalized)
+  ) {
+    return false;
+  }
+
+  // anx-core inbox.list resolves to pathname `/inbox` (possibly with trailing / stripped above).
+  // Avoid matching unrelated routes whose last segment is `…/inbox`.
+  return normalized === "/inbox";
+}
+
+function inboxItemIdRejectedForCoreMocks(idDecoded) {
+  const id = String(idDecoded ?? "").trim();
+  return id === "stream" || id.startsWith("__");
+}
+
+/**
+ * Core proxy paths for inbox.get / inbox.respond (same-origin after {@link appPath}).
+ * Do not use `…/w/…/inbox` tail matching — Kit data loads live there too.
+ */
+function isInboxSingleItemProjectionUrl(urlLike) {
+  const url =
+    typeof urlLike === "string"
+      ? new URL(urlLike)
+      : /** @type {URL} */ (urlLike);
+
+  const pathnameRaw =
+    url.pathname.endsWith("/") && url.pathname.length > 1
+      ? url.pathname.slice(0, -1)
+      : url.pathname;
+
+  if (!pathnameRaw.startsWith("/inbox/")) return false;
+  const after = pathnameRaw.slice("/inbox/".length);
+  if (!after || after.includes("/")) return false;
+  const id = decodeURIComponent(after);
+  return !inboxItemIdRejectedForCoreMocks(id);
+}
+
+/** Core POST inbox respond (`/inbox/{id}/respond`). */
+function isInboxRespondProjectionUrl(urlLike) {
+  const url =
+    typeof urlLike === "string"
+      ? new URL(urlLike)
+      : /** @type {URL} */ (urlLike);
+
+  const pathnameRaw =
+    url.pathname.endsWith("/") && url.pathname.length > 1
+      ? url.pathname.slice(0, -1)
+      : url.pathname;
+
+  const prefix = "/inbox/";
+  const suffix = "/respond";
+  if (!pathnameRaw.startsWith(prefix) || !pathnameRaw.endsWith(suffix)) {
+    return false;
+  }
+  const middle = pathnameRaw.slice(
+    prefix.length,
+    pathnameRaw.length - suffix.length,
+  );
+  if (!middle || middle.includes("/")) return false;
+  return !inboxItemIdRejectedForCoreMocks(decodeURIComponent(middle));
+}
+
 function hoursAgo(hours) {
   return new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
 }
@@ -59,9 +135,23 @@ test("inbox triage shows urgency summary and responding removes an item", async 
     });
   });
 
-  await page.route(/\/inbox\/([^/]+)\/respond(\?.*)?$/, async (route) => {
+  await page.route(isInboxRespondProjectionUrl, async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue();
+      return;
+    }
     const url = new URL(route.request().url());
-    const id = decodeURIComponent(url.pathname.split("/").at(-2) ?? "");
+    const pathnameRaw =
+      url.pathname.endsWith("/") && url.pathname.length > 1
+        ? url.pathname.slice(0, -1)
+        : url.pathname;
+    const prefix = "/inbox/";
+    const suffix = "/respond";
+    const middle = pathnameRaw.slice(
+      prefix.length,
+      pathnameRaw.length - suffix.length,
+    );
+    const id = decodeURIComponent(middle).trim();
     inboxItems = inboxItems.filter((item) => item.id !== id);
 
     await route.fulfill({
@@ -81,14 +171,20 @@ test("inbox triage shows urgency summary and responding removes an item", async 
     });
   });
 
-  await page.route(/\/inbox\/([^/?]+)(\?.*)?$/, async (route) => {
-    const request = route.request();
-    if (request.method() !== "GET") {
+  await page.route(isInboxSingleItemProjectionUrl, async (route) => {
+    if (route.request().method() !== "GET") {
       await route.continue();
       return;
     }
-    const url = new URL(request.url());
-    const id = decodeURIComponent(url.pathname.split("/").at(-1) ?? "");
+    const url = new URL(route.request().url());
+    const pathnameRaw =
+      url.pathname.endsWith("/") && url.pathname.length > 1
+        ? url.pathname.slice(0, -1)
+        : url.pathname;
+    const after = pathnameRaw.startsWith("/inbox/")
+      ? pathnameRaw.slice("/inbox/".length)
+      : "";
+    const id = decodeURIComponent(after).trim();
     const item = inboxItems.find((candidate) => candidate.id === id);
     await route.fulfill({
       status: item ? 200 : 404,
@@ -97,14 +193,14 @@ test("inbox triage shows urgency summary and responding removes an item", async 
     });
   });
 
-  await page.route(/\/inbox(?:\?.*)?$/, async (route) => {
-    const request = route.request();
-    if (request.resourceType() === "document") {
+  await page.route(isInboxListProjectionUrl, async (route, request) => {
+    if (request.method() !== "GET") {
       await route.continue();
       return;
     }
+
     inboxRequestCount += 1;
-    const url = new URL(route.request().url());
+    const url = new URL(request.url());
     const tabStatus = url.searchParams.get("status") ?? "open";
     if (tabStatus === "completed") {
       await route.fulfill({
@@ -143,9 +239,16 @@ test("inbox triage shows urgency summary and responding removes an item", async 
   const targetCard = page.getByTestId("inbox-card-inbox-001");
   await expect(targetCard).toBeVisible();
 
-  await targetCard.getByRole("link", { name: "Respond" }).click();
-  await page.getByLabel("Response").fill("Approved.");
+  await targetCard.click();
+  await expect(
+    page.getByRole("heading", {
+      name: "Approve onboarding exception handling",
+    }),
+  ).toBeVisible();
+
+  await page.getByLabel("Your response").fill("Approved.");
   await page.getByRole("button", { name: "Send response" }).click();
+  await expect(page).toHaveURL(/responded=/);
   await expect(targetCard).toHaveCount(0);
 });
 
@@ -185,12 +288,12 @@ test("inbox loads after hard refresh when workspace bootstrap is delayed", async
     });
   });
 
-  await page.route(/\/inbox(?:\?.*)?$/, async (route) => {
-    const request = route.request();
-    if (request.resourceType() === "document") {
+  await page.route(isInboxListProjectionUrl, async (route, request) => {
+    if (request.method() !== "GET") {
       await route.continue();
       return;
     }
+
     inboxRequestCount += 1;
     await route.fulfill({
       status: 200,
@@ -271,14 +374,14 @@ test("inbox urgency filters reduce visible cards", async ({ page }) => {
     });
   });
 
-  await page.route(/\/inbox(?:\?.*)?$/, async (route) => {
-    const request = route.request();
-    if (request.resourceType() === "document") {
+  await page.route(isInboxListProjectionUrl, async (route, request) => {
+    if (request.method() !== "GET") {
       await route.continue();
       return;
     }
+
     inboxRequestCount += 1;
-    const url = new URL(route.request().url());
+    const url = new URL(request.url());
     const tabStatus = url.searchParams.get("status") ?? "open";
     if (tabStatus === "completed") {
       await route.fulfill({
@@ -337,14 +440,14 @@ test("completed inbox tab renders history rows", async ({ page }) => {
     });
   });
 
-  await page.route(/\/inbox(?:\?.*)?$/, async (route) => {
-    const request = route.request();
-    if (request.resourceType() === "document") {
+  await page.route(isInboxListProjectionUrl, async (route, request) => {
+    if (request.method() !== "GET") {
       await route.continue();
       return;
     }
+
     inboxRequestCount += 1;
-    const url = new URL(route.request().url());
+    const url = new URL(request.url());
     const tabStatus = url.searchParams.get("status") ?? "open";
     if (tabStatus !== "completed") {
       await route.fulfill({

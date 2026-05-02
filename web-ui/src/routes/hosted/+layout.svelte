@@ -131,9 +131,9 @@
   }
 </script>
 
-<div class="min-h-screen bg-[var(--bg)] text-[var(--fg)]">
+<div class="min-h-screen bg-bg text-fg">
   <header
-    class="sticky top-0 z-30 border-b border-line bg-[var(--bg)]/95 backdrop-blur supports-[backdrop-filter]:bg-[var(--bg)]/80"
+    class="sticky top-0 z-30 border-b border-line bg-bg backdrop-blur supports-[backdrop-filter]:bg-bg"
   >
     <div
       class="mx-auto flex h-12 max-w-6xl items-center justify-between gap-4 px-4"

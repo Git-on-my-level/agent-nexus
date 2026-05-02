@@ -38,7 +38,6 @@
     createTimelineContext,
     setTimelineContext,
   } from "$lib/timelineContext";
-  import CompactRefLink from "$lib/components/CompactRefLink.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import IdsIntegrityDisclosure from "$lib/components/IdsIntegrityDisclosure.svelte";
   import GuidedTypedRefsInput from "$lib/components/GuidedTypedRefsInput.svelte";
@@ -47,7 +46,6 @@
   import RefLink from "$lib/components/RefLink.svelte";
   import ResourceShareMenu from "$lib/components/ResourceShareMenu.svelte";
   import SearchableEntityPicker from "$lib/components/SearchableEntityPicker.svelte";
-  import SearchableMultiEntityPicker from "$lib/components/SearchableMultiEntityPicker.svelte";
   import TimelineTab from "$lib/components/timeline/TimelineTab.svelte";
   import {
     diffCardRevisionAgainstParent,
@@ -896,7 +894,7 @@
 
 {#snippet cardActionsFooter()}
   <div
-    class="cdm-modal-actions-footer relative z-30 shrink-0 border-t border-[var(--line)] bg-[var(--panel)] px-4 py-2"
+    class="cdm-modal-actions-footer relative z-30 shrink-0 border-t border-line bg-panel px-4 py-2"
   >
     <div
       class="flex min-w-0 max-w-full flex-wrap items-center gap-2 md:flex-nowrap"
@@ -904,15 +902,14 @@
       <label
         class="flex min-w-0 flex-1 items-center gap-2 md:max-w-72 md:flex-none"
       >
-        <span
-          class="shrink-0 text-micro text-[var(--fg-muted)]"
-          aria-hidden="true">Column</span
+        <span class="shrink-0 text-micro text-fg-muted" aria-hidden="true"
+          >Column</span
         >
         <select
           bind:value={moveColumnKey}
           onchange={handleColumnSelectChange}
           aria-label="Column"
-          class="min-w-0 flex-1 cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-1 pr-7 text-meta text-[var(--fg)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+          class="min-w-0 flex-1 cursor-pointer rounded-md border border-line bg-bg-soft px-2 py-1 pr-7 text-meta text-fg focus:outline-none focus:ring-1 focus:ring-accent"
         >
           {#each board?.column_schema ?? [] as column (column.key)}
             <option
@@ -927,7 +924,7 @@
       </label>
       <button
         type="button"
-        class="shrink-0 rounded-md px-2 py-1 text-micro text-[var(--fg-muted)] transition-colors hover:bg-[var(--bg-soft)] hover:text-[var(--fg)] disabled:cursor-not-allowed disabled:opacity-40"
+        class="shrink-0 rounded-md px-2 py-1 text-micro text-fg-muted transition-colors hover:bg-bg-soft hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
         disabled={peerUpState.idx <= 0}
         onclick={handleMoveUpInColumn}
       >
@@ -938,8 +935,7 @@
 {/snippet}
 
 {#snippet propertyLabel(text)}
-  <span
-    class="cdm-prop-label shrink-0 select-none text-micro text-[var(--fg-muted)]"
+  <span class="cdm-prop-label shrink-0 select-none text-micro text-fg-muted"
     >{text}</span
   >
 {/snippet}
@@ -964,7 +960,7 @@
         </select>
         {#if isSaving("risk")}
           <span
-            class="inline-block size-2 animate-pulse rounded-full bg-[var(--accent)]"
+            class="inline-block size-2 animate-pulse rounded-full bg-accent"
             title="Saving…"
           ></span>
         {/if}
@@ -1001,7 +997,8 @@
         void persistAssigneesBlur();
       }}
     >
-      <SearchableMultiEntityPicker
+      <SearchableEntityPicker
+        mode="multi"
         bind:values={editAssignees}
         helperText=""
         items={assigneeActorOptions}
@@ -1010,9 +1007,7 @@
         showManualEntry={false}
       />
       {#if isSaving("assignees")}
-        <p class="mt-1 text-micro text-[var(--fg-muted)]">
-          Updating assignees…
-        </p>
+        <p class="mt-1 text-micro text-fg-muted">Updating assignees…</p>
       {/if}
       {#if fieldErrors.assignees}
         <p class="mt-1 text-micro text-danger-text">{fieldErrors.assignees}</p>
@@ -1039,7 +1034,7 @@
         showManualEntry={false}
       />
       {#if isSaving("document")}
-        <p class="mt-1 text-micro text-[var(--fg-muted)]">Updating document…</p>
+        <p class="mt-1 text-micro text-fg-muted">Updating document…</p>
       {/if}
       {#if fieldErrors.document}
         <p class="mt-1 text-micro text-danger-text">{fieldErrors.document}</p>
@@ -1050,9 +1045,7 @@
 
 {#snippet saveSpinner(kind)}
   {#if isSaving(kind)}
-    <span class="text-micro text-[var(--fg-muted)]" aria-live="polite"
-      >Saving…</span
-    >
+    <span class="text-micro text-fg-muted" aria-live="polite">Saving…</span>
   {/if}
 {/snippet}
 
@@ -1076,18 +1069,16 @@
     data-discussion-dock-host={linkedThreadId ? "" : undefined}
   >
     <div
-      class="sticky top-0 z-10 border-b border-[var(--line)] bg-[var(--panel)] px-4 pt-2 sm:px-6 sm:pt-2.5"
+      class="sticky top-0 z-10 border-b border-line bg-panel px-4 pt-2 sm:px-6 sm:pt-2.5"
     >
       <div class="flex items-center justify-between gap-3">
         <div class="min-w-0 flex-1">
           <h2 class="sr-only">{headerTitle}</h2>
           <div
-            class="flex min-w-0 items-baseline gap-1.5 text-micro text-[var(--fg-muted)]"
+            class="flex min-w-0 items-baseline gap-1.5 text-micro text-fg-muted"
           >
             <span>Board</span>
-            <span class="truncate text-[var(--fg)]"
-              >{board?.title ?? boardId}</span
-            >
+            <span class="truncate text-fg">{board?.title ?? boardId}</span>
           </div>
         </div>
         <div class="relative flex shrink-0 items-center gap-1">
@@ -1101,7 +1092,7 @@
               aria-expanded={cardMenuOpen}
               aria-haspopup="menu"
               onclick={() => (cardMenuOpen = !cardMenuOpen)}
-              class="shrink-0 rounded-md border border-[var(--line)] px-2 py-1.5 text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
+              class="shrink-0 rounded-md border border-line px-2 py-1.5 text-fg-muted transition-colors hover:bg-line-subtle hover:text-fg"
             >
               <span class="sr-only">More card actions</span>
               <svg
@@ -1117,7 +1108,7 @@
             </button>
             {#if cardMenuOpen}
               <div
-                class="absolute right-0 z-40 mt-1 min-w-[10rem] rounded-md border border-[var(--line)] bg-[var(--panel)] py-0.5 text-meta shadow-lg"
+                class="absolute right-0 z-40 mt-1 min-w-[10rem] rounded-md border border-line bg-panel py-0.5 text-meta shadow-lg"
                 role="menu"
                 tabindex="-1"
               >
@@ -1128,7 +1119,7 @@
                     cardMenuOpen = false;
                     removeCardConfirmOpen = true;
                   }}
-                  class="block w-full cursor-pointer px-3 py-1.5 text-left text-meta text-danger-text hover:bg-[var(--bg-soft)]"
+                  class="block w-full cursor-pointer px-3 py-1.5 text-left text-meta text-danger-text hover:bg-bg-soft"
                 >
                   Remove card
                 </button>
@@ -1137,7 +1128,7 @@
           </div>
           <button
             type="button"
-            class="shrink-0 rounded-md border border-[var(--line)] p-1.5 text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
+            class="shrink-0 rounded-md border border-line p-1.5 text-fg-muted transition-colors hover:bg-line-subtle hover:text-fg"
             onclick={() => onclose()}
             aria-label={presentation === "modal" ? "Close" : "Back to board"}
           >
@@ -1175,7 +1166,7 @@
       </div>
 
       <div
-        class="relative mt-3 flex flex-wrap gap-0 border-b border-[var(--line)]"
+        class="relative mt-3 flex flex-wrap gap-0 border-b border-line"
         aria-label="Card sections"
         role="tablist"
       >
@@ -1185,7 +1176,7 @@
           data-cdm-pane-tab="overview"
           tabindex={cdmDetailPane === "overview" ? 0 : -1}
           aria-selected={cdmDetailPane === "overview"}
-          class={`relative inline-flex cursor-pointer border-0 border-b-2 border-transparent bg-transparent px-3 py-2 text-meta font-medium transition-colors ${cdmDetailPane === "overview" ? "border-accent text-[var(--fg)]" : "text-[var(--fg-muted)] hover:text-[var(--fg)]"}`}
+          class={`relative inline-flex cursor-pointer border-0 border-b-2 border-transparent bg-transparent px-3 py-2 text-meta font-medium transition-colors ${cdmDetailPane === "overview" ? "border-accent text-fg" : "text-fg-muted hover:text-fg"}`}
           onpointerdown={() => pickDetailPane("overview")}
           onclick={() => pickDetailPane("overview")}
         >
@@ -1198,7 +1189,7 @@
           data-testid="cdm-tab-resolution"
           tabindex={cdmDetailPane === "resolution" ? 0 : -1}
           aria-selected={cdmDetailPane === "resolution"}
-          class={`relative inline-flex cursor-pointer border-0 border-b-2 border-transparent bg-transparent px-3 py-2 text-meta font-medium transition-colors ${cdmDetailPane === "resolution" ? "border-accent text-[var(--fg)]" : "text-[var(--fg-muted)] hover:text-[var(--fg)]"}`}
+          class={`relative inline-flex cursor-pointer border-0 border-b-2 border-transparent bg-transparent px-3 py-2 text-meta font-medium transition-colors ${cdmDetailPane === "resolution" ? "border-accent text-fg" : "text-fg-muted hover:text-fg"}`}
           onpointerdown={() => pickDetailPane("resolution")}
           onclick={() => pickDetailPane("resolution")}
         >
@@ -1211,7 +1202,7 @@
           data-testid="cdm-tab-timeline"
           tabindex={cdmDetailPane === "timeline" ? 0 : -1}
           aria-selected={cdmDetailPane === "timeline"}
-          class={`relative inline-flex cursor-pointer border-0 border-b-2 border-transparent bg-transparent px-3 py-2 text-meta font-medium transition-colors ${cdmDetailPane === "timeline" ? "border-accent text-[var(--fg)]" : "text-[var(--fg-muted)] hover:text-[var(--fg)]"}`}
+          class={`relative inline-flex cursor-pointer border-0 border-b-2 border-transparent bg-transparent px-3 py-2 text-meta font-medium transition-colors ${cdmDetailPane === "timeline" ? "border-accent text-fg" : "text-fg-muted hover:text-fg"}`}
           onpointerdown={() => pickDetailPane("timeline")}
           onclick={() => pickDetailPane("timeline")}
         >
@@ -1223,7 +1214,7 @@
           data-cdm-pane-tab="revisions"
           tabindex={cdmDetailPane === "revisions" ? 0 : -1}
           aria-selected={cdmDetailPane === "revisions"}
-          class={`relative inline-flex cursor-pointer border-0 border-b-2 border-transparent bg-transparent px-3 py-2 text-meta font-medium transition-colors ${cdmDetailPane === "revisions" ? "border-accent text-[var(--fg)]" : "text-[var(--fg-muted)] hover:text-[var(--fg)]"}`}
+          class={`relative inline-flex cursor-pointer border-0 border-b-2 border-transparent bg-transparent px-3 py-2 text-meta font-medium transition-colors ${cdmDetailPane === "revisions" ? "border-accent text-fg" : "text-fg-muted hover:text-fg"}`}
           onpointerdown={() => pickDetailPane("revisions")}
           onclick={() => pickDetailPane("revisions")}
         >
@@ -1243,7 +1234,7 @@
         >
           <!-- Main -->
           <div
-            class="order-1 flex min-h-0 min-w-0 flex-col gap-4 px-5 pb-4 pt-5 sm:px-8 sm:pt-7 md:border-r md:border-[var(--line)]"
+            class="order-1 flex min-h-0 min-w-0 flex-col gap-4 px-5 pb-4 pt-5 sm:px-8 sm:pt-7 md:border-r md:border-line"
           >
             {#if Object.keys(fieldErrors).length > 0}
               <div
@@ -1325,7 +1316,7 @@
                       class="markdown-rendered--card-content"
                     />
                   {:else}
-                    <span class="text-meta text-[var(--fg-muted)]"
+                    <span class="text-meta text-fg-muted"
                       >Write a description…</span
                     >
                   {/if}
@@ -1342,13 +1333,13 @@
             <section>
               <div class="mb-1 flex items-baseline justify-between gap-2">
                 <h3
-                  class="text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-muted)]"
+                  class="text-[11px] font-semibold uppercase tracking-wide text-fg-muted"
                 >
                   Attachments
                 </h3>
                 <div class="flex items-center gap-2">
                   <label
-                    class="inline-flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-0.5 text-micro text-[var(--fg-muted)] transition-colors hover:bg-[var(--bg-soft)] hover:text-[var(--fg)] {!cardAttachContextRefs.length ||
+                    class="inline-flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-0.5 text-micro text-fg-muted transition-colors hover:bg-bg-soft hover:text-fg {!cardAttachContextRefs.length ||
                     cardAttachBusy
                       ? 'pointer-events-none opacity-40'
                       : ''}"
@@ -1391,7 +1382,8 @@
                 <ul class="flex min-w-0 flex-wrap gap-1.5">
                   {#each relatedArtifactRefs as ref (ref)}
                     <li class="min-w-0 text-micro">
-                      <CompactRefLink
+                      <RefLink
+                        variant="compact"
                         refValue={ref}
                         threadId={linkedThreadId}
                         {boardId}
@@ -1404,9 +1396,7 @@
                   {/each}
                 </ul>
               {:else}
-                <p class="text-micro text-[var(--fg-muted)]">
-                  No attachments yet.
-                </p>
+                <p class="text-micro text-fg-muted">No attachments yet.</p>
               {/if}
               {#if cardAttachError}
                 <p class="mt-1 text-micro text-danger-text">
@@ -1418,7 +1408,7 @@
             <!-- References (collapsed group) -->
             <details class="cdm-disclosure" open={relatedRefsList.length > 0}>
               <summary
-                class="cursor-pointer text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-muted)] marker:text-[var(--fg-muted)] hover:text-[var(--fg)]"
+                class="cursor-pointer text-[11px] font-semibold uppercase tracking-wide text-fg-muted marker:text-fg-muted hover:text-fg"
               >
                 Related refs
               </summary>
@@ -1445,10 +1435,10 @@
 
             <!-- Mobile properties: between content and footer -->
             <details
-              class="order-2 -mx-5 mt-1 border-t border-[var(--line)] px-5 pt-3 sm:-mx-8 sm:px-8 md:hidden"
+              class="order-2 -mx-5 mt-1 border-t border-line px-5 pt-3 sm:-mx-8 sm:px-8 md:hidden"
             >
               <summary
-                class="cursor-pointer text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-muted)] marker:text-[var(--fg-muted)]"
+                class="cursor-pointer text-[11px] font-semibold uppercase tracking-wide text-fg-muted marker:text-fg-muted"
               >
                 Properties
               </summary>
@@ -1460,7 +1450,7 @@
             <!-- Advanced + meta -->
             <details class="cdm-disclosure">
               <summary
-                class="cursor-pointer text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-muted)] marker:text-[var(--fg-muted)] hover:text-[var(--fg)]"
+                class="cursor-pointer text-[11px] font-semibold uppercase tracking-wide text-fg-muted marker:text-fg-muted hover:text-fg"
               >
                 Advanced
               </summary>
@@ -1502,7 +1492,7 @@
             <!-- Compact meta footer -->
             {#if cardFreshness || derivedSummary?.latest_activity_at || nonZeroDerivedCounts.length > 0 || (cardInspectNav && cardTopicThreadRef && !duplicateTopicThreadNavLink) || membership?.updated_at}
               <div
-                class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[var(--line)] pt-3 text-micro text-[var(--fg-muted)]"
+                class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line pt-3 text-micro text-fg-muted"
               >
                 {#if cardInspectNav && cardTopicThreadRef && !duplicateTopicThreadNavLink}
                   <span class="flex items-baseline gap-1">
@@ -1550,7 +1540,7 @@
                 {#each nonZeroDerivedCounts as { label, count } (label)}
                   <span class="flex items-baseline gap-1">
                     <span>{label}</span>
-                    <span class="font-medium text-[var(--fg)]">{count}</span>
+                    <span class="font-medium text-fg">{count}</span>
                   </span>
                 {/each}
               </div>
@@ -1570,7 +1560,7 @@
           data-cdm-panel="resolution"
         >
           <div
-            class="order-1 flex min-h-0 min-w-0 flex-col gap-4 px-5 pb-4 pt-5 sm:px-8 sm:pt-7 md:border-r md:border-[var(--line)]"
+            class="order-1 flex min-h-0 min-w-0 flex-col gap-4 px-5 pb-4 pt-5 sm:px-8 sm:pt-7 md:border-r md:border-line"
           >
             {#if Object.keys(fieldErrors).length > 0}
               <div
@@ -1584,20 +1574,20 @@
 
             {#if doneColumnOptionDisabled && !membershipColumnIsDone}
               <p
-                class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-micro text-[var(--fg-muted)]"
+                class="rounded-md border border-line bg-bg-soft px-3 py-2 text-micro text-fg-muted"
               >
-                Moving to <span class="text-[var(--fg)]">Done</span> requires at
-                least one
-                <span class="font-mono text-[var(--fg)]">artifact:</span> or
-                <span class="font-mono text-[var(--fg)]">event:</span> ref in resolution
-                refs (for example uploaded evidence).
+                Moving to <span class="text-fg">Done</span> requires at least
+                one
+                <span class="font-mono text-fg">artifact:</span> or
+                <span class="font-mono text-fg">event:</span> ref in resolution refs
+                (for example uploaded evidence).
               </p>
             {/if}
 
             <!-- Definition of done -->
             <section>
               <h3
-                class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-muted)]"
+                class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-fg-muted"
               >
                 Definition of done
               </h3>
@@ -1643,9 +1633,7 @@
                       {/each}
                     </ul>
                   {:else}
-                    <span class="text-meta text-[var(--fg-muted)]"
-                      >Add criteria…</span
-                    >
+                    <span class="text-meta text-fg-muted">Add criteria…</span>
                   {/if}
                 </button>
               {/if}
@@ -1655,12 +1643,12 @@
             <section>
               <div class="mb-1 flex items-baseline justify-between gap-2">
                 <h3
-                  class="text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-muted)]"
+                  class="text-[11px] font-semibold uppercase tracking-wide text-fg-muted"
                 >
                   Evidence
                 </h3>
                 <label
-                  class="inline-flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-0.5 text-micro text-[var(--fg-muted)] transition-colors hover:bg-[var(--bg-soft)] hover:text-[var(--fg)] {!cardAttachContextRefs.length ||
+                  class="inline-flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-0.5 text-micro text-fg-muted transition-colors hover:bg-bg-soft hover:text-fg {!cardAttachContextRefs.length ||
                   cardAttachBusy
                     ? 'pointer-events-none opacity-40'
                     : ''}"
@@ -1703,7 +1691,8 @@
                 <ul class="flex min-w-0 flex-wrap gap-1.5">
                   {#each resolutionArtifactRefs as ref (ref)}
                     <li class="min-w-0 text-micro">
-                      <CompactRefLink
+                      <RefLink
+                        variant="compact"
                         refValue={ref}
                         threadId={linkedThreadId}
                         {boardId}
@@ -1716,9 +1705,7 @@
                   {/each}
                 </ul>
               {:else}
-                <p class="text-micro text-[var(--fg-muted)]">
-                  No evidence files yet.
-                </p>
+                <p class="text-micro text-fg-muted">No evidence files yet.</p>
               {/if}
               {#if cardAttachError}
                 <p class="mt-1 text-micro text-danger-text">
@@ -1729,7 +1716,7 @@
 
             <section>
               <h3
-                class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-muted)]"
+                class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-fg-muted"
               >
                 Resolution refs
               </h3>
@@ -1753,10 +1740,10 @@
             </section>
 
             <details
-              class="order-2 -mx-5 mt-1 border-t border-[var(--line)] px-5 pt-3 sm:-mx-8 sm:px-8 md:hidden"
+              class="order-2 -mx-5 mt-1 border-t border-line px-5 pt-3 sm:-mx-8 sm:px-8 md:hidden"
             >
               <summary
-                class="cursor-pointer text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-muted)] marker:text-[var(--fg-muted)]"
+                class="cursor-pointer text-[11px] font-semibold uppercase tracking-wide text-fg-muted marker:text-fg-muted"
               >
                 Properties
               </summary>
@@ -1777,34 +1764,32 @@
           {#if cardKey}
             <TimelineTab threadId={linkedThreadId} {boardId} compact />
           {:else}
-            <p class="text-meta text-[var(--fg-muted)]">No card identity.</p>
+            <p class="text-meta text-fg-muted">No card identity.</p>
           {/if}
         </div>
       {:else if cdmDetailPane === "revisions"}
         <div class="px-4 pb-4 pt-2" data-cdm-panel="revisions">
           <div class="mb-2 flex items-center justify-between gap-3">
-            <p
-              class="text-[11px] uppercase tracking-wide text-[var(--fg-muted)]"
-            >
+            <p class="text-[11px] uppercase tracking-wide text-fg-muted">
               Head revision {membership?.head_revision_number ?? ""}
             </p>
             <button
               type="button"
-              class="rounded-md px-1.5 py-0.5 text-[11px] text-[var(--fg-muted)] hover:bg-[var(--bg-soft)] hover:text-[var(--fg)]"
+              class="rounded-md px-1.5 py-0.5 text-[11px] text-fg-muted hover:bg-bg-soft hover:text-fg"
               onclick={() => loadCardRevisions(cardKey)}
             >
               Refresh
             </button>
           </div>
           {#if revisionsLoading}
-            <p class="text-meta text-[var(--fg-muted)]">Loading revisions...</p>
+            <p class="text-meta text-fg-muted">Loading revisions...</p>
           {:else if revisionsError}
             <p class="text-meta text-red-400">{revisionsError}</p>
           {:else if cardRevisions.length === 0}
-            <p class="text-meta text-[var(--fg-muted)]">No revisions found.</p>
+            <p class="text-meta text-fg-muted">No revisions found.</p>
           {:else}
             <ol
-              class="overflow-hidden rounded-md border border-[var(--line)] bg-[var(--panel)] divide-y divide-[var(--line)]"
+              class="overflow-hidden rounded-md border border-line bg-panel divide-y divide-line"
             >
               {#each cardRevisions as rev, i (String(rev?.revision_id ?? rev?.id ?? i))}
                 {@const parent = cardRevisions[i + 1] ?? null}
@@ -1818,20 +1803,18 @@
                   >
                     <div class="flex min-w-0 flex-1 items-baseline gap-1.5">
                       <span
-                        class="shrink-0 text-[12px] font-semibold tabular-nums text-[var(--fg)]"
+                        class="shrink-0 text-[12px] font-semibold tabular-nums text-fg"
                         >r{rev.revision_number}</span
                       >
                       <span
-                        class="min-w-0 flex-1 truncate text-[12px] text-[var(--fg-muted)]"
+                        class="min-w-0 flex-1 truncate text-[12px] text-fg-muted"
                       >
                         {#if parent == null}
                           Initial revision
                         {:else if delta.length === 0}
                           No tracked field changes
                         {:else}
-                          Changed <span class="text-[var(--fg)]"
-                            >{changedSummary}</span
-                          >
+                          Changed <span class="text-fg">{changedSummary}</span>
                         {/if}
                       </span>
                     </div>
@@ -1840,7 +1823,7 @@
                         class="inline-flex max-w-full min-w-0 items-center gap-1"
                       >
                         <span
-                          class="shrink-0 whitespace-nowrap text-[10px] leading-none text-[var(--fg-muted)]"
+                          class="shrink-0 whitespace-nowrap text-[10px] leading-none text-fg-muted"
                           >View:</span
                         >
                         <RefLink
@@ -1855,7 +1838,7 @@
                       </span>
                     {/if}
                     <span
-                      class="shrink-0 whitespace-nowrap text-[11px] tabular-nums text-[var(--fg-muted)]"
+                      class="shrink-0 whitespace-nowrap text-[11px] tabular-nums text-fg-muted"
                       >{actorName(rev.created_by)} · {formatTimestamp(
                         rev.created_at,
                       )}</span
@@ -1868,7 +1851,7 @@
                         <div class="min-w-0">
                           {#if delta.length > 1}
                             <p
-                              class="text-[10px] font-semibold uppercase tracking-wide text-[var(--fg-muted)]"
+                              class="text-[10px] font-semibold uppercase tracking-wide text-fg-muted"
                             >
                               {humanizeRevisionFieldKey(block.field)}
                             </p>
@@ -1880,8 +1863,7 @@
                                   ? 'text-ok-text'
                                   : 'text-danger-text'}"
                               >
-                                <span
-                                  class="select-none mr-1 text-[var(--fg-muted)]"
+                                <span class="select-none mr-1 text-fg-muted"
                                   >{ln.kind === "add" ? "+" : "−"}</span
                                 >{ln.text}
                               </p>
@@ -1896,9 +1878,6 @@
             </ol>
           {/if}
         </div>
-      {/if}
-      {#if presentation === "page"}
-        {@render cardActionsFooter()}
       {/if}
     </div>
 
@@ -1918,9 +1897,7 @@
       </div>
     {/if}
 
-    {#if presentation === "modal"}
-      {@render cardActionsFooter()}
-    {/if}
+    {@render cardActionsFooter()}
   </div>
 </div>
 
@@ -2149,7 +2126,9 @@
     }
 
     .cdm-page-panel {
-      min-height: calc(100dvh - 6.75rem);
+      height: calc(100dvh - 6.75rem);
+      min-height: 0;
+      max-height: calc(100dvh - 6.75rem);
       border-inline: 0;
       border-radius: 0;
     }

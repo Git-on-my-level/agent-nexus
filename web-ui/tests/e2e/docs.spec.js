@@ -143,7 +143,7 @@ test("create document flow — POST /docs and navigate to new document", async (
   });
   await expect(page).toHaveURL(/\/o\/local\/w\/local\/docs\/new-test-doc$/);
   await expect(
-    page.locator("section").getByRole("heading", { name: "New Test Document" }),
+    page.getByRole("heading", { name: "New Test Document" }).first(),
   ).toBeVisible();
 });
 
@@ -235,6 +235,38 @@ test("update document flow — PATCH /docs/:id creates a new revision", async ({
     });
   });
 
+  await page.route(/\/docs\/updatable-doc\/revisions$/, async (route) => {
+    const request = route.request();
+    if (request.method() !== "POST") {
+      await route.continue();
+      return;
+    }
+
+    const payload = JSON.parse(request.postData() ?? "{}");
+    updatePayload = payload;
+
+    if (payload.if_base_revision !== baseRevisionId) {
+      await route.fulfill({
+        status: 409,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: { code: "conflict", message: "Base revision mismatch." },
+        }),
+      });
+      return;
+    }
+
+    updateCount += 1;
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify({
+        document: updatedDoc,
+        revision: updatedRevision,
+      }),
+    });
+  });
+
   await page.route(/\/docs\/updatable-doc$/, async (route) => {
     const request = route.request();
     if (request.method() === "GET" && request.resourceType() === "document") {
@@ -254,53 +286,24 @@ test("update document flow — PATCH /docs/:id creates a new revision", async ({
       return;
     }
 
-    if (request.method() === "PATCH") {
-      const payload = JSON.parse(request.postData() ?? "{}");
-      updatePayload = payload;
-
-      if (payload.if_base_revision !== baseRevisionId) {
-        await route.fulfill({
-          status: 409,
-          contentType: "application/json",
-          body: JSON.stringify({
-            error: { code: "conflict", message: "Base revision mismatch." },
-          }),
-        });
-        return;
-      }
-
-      updateCount += 1;
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          document: updatedDoc,
-          revision: updatedRevision,
-        }),
-      });
-      return;
-    }
-
     await route.continue();
   });
 
   await page.goto("/o/local/w/local/docs/updatable-doc");
   await expect(page).toHaveURL(/\/o\/local\/w\/local\/docs\/updatable-doc$/);
   await expect(
-    page
-      .locator("section")
-      .getByRole("heading", { name: "Updatable Document" }),
+    page.getByRole("heading", { name: "Updatable Document" }).first(),
   ).toBeVisible();
   await expect(page.getByText("Original content.")).toBeVisible();
 
-  await page.getByRole("button", { name: "New revision" }).click();
+  await page.getByRole("button", { name: "Edit" }).click();
   await expect(
     page.getByRole("button", { name: "Save revision" }),
   ).toBeVisible();
 
   // The single textarea in the revision form (pre-filled with head content).
   await page
-    .getByRole("textbox", { name: "Head content (Markdown) *" })
+    .getByRole("textbox", { name: /Content \(Markdown\)/ })
     .fill("Revised content from E2E test.");
 
   await page.getByRole("button", { name: "Save revision" }).click();
@@ -314,12 +317,10 @@ test("update document flow — PATCH /docs/:id creates a new revision", async ({
   await expect(page.getByText("Revised content from E2E test.")).toBeVisible();
   // Check that revision number v2 is shown in the metadata span (exact match
   // to avoid matching hash fields like "hash-v2" or "rhash-v2").
-  await expect(
-    page.locator("section").getByText("v2", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByText("v2", { exact: true })).toBeVisible();
 });
 
-test("structured/binary content type — New revision button is hidden, CLI hint shown", async ({
+test("structured/binary content type — Edit button is hidden, CLI hint shown", async ({
   page,
 }) => {
   const actorId = "actor-docs-structured-e2e";
@@ -389,15 +390,11 @@ test("structured/binary content type — New revision button is hidden, CLI hint
 
   await page.goto("/o/local/w/local/docs/structured-doc");
   await expect(
-    page
-      .locator("section")
-      .getByRole("heading", { name: "Structured Document" }),
+    page.getByRole("heading", { name: "Structured Document" }).first(),
   ).toBeVisible();
 
-  // "New revision" button must not appear for structured content
-  await expect(page.getByRole("button", { name: "New revision" })).toHaveCount(
-    0,
-  );
+  // In-app revision editor must not appear for structured content
+  await expect(page.getByRole("button", { name: "Edit" })).toHaveCount(0);
   // CLI hint badge must appear instead
   await expect(page.getByText("structured — edit via CLI")).toBeVisible();
 });
@@ -453,6 +450,25 @@ test("update document conflict — 409 response shows error", async ({
     });
   });
 
+  await page.route(/\/docs\/conflict-doc\/revisions$/, async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue();
+      return;
+    }
+
+    await route.fulfill({
+      status: 409,
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: {
+          code: "conflict",
+          message:
+            "Base revision mismatch. Document was updated by another actor.",
+        },
+      }),
+    });
+  });
+
   await page.route(/\/docs\/conflict-doc$/, async (route) => {
     const request = route.request();
     if (request.method() === "GET" && request.resourceType() === "document") {
@@ -469,35 +485,20 @@ test("update document conflict — 409 response shows error", async ({
       return;
     }
 
-    if (request.method() === "PATCH") {
-      await route.fulfill({
-        status: 409,
-        contentType: "application/json",
-        body: JSON.stringify({
-          error: {
-            code: "conflict",
-            message:
-              "Base revision mismatch. Document was updated by another actor.",
-          },
-        }),
-      });
-      return;
-    }
-
     await route.continue();
   });
 
   await page.goto("/o/local/w/local/docs/conflict-doc");
   await expect(
-    page.locator("section").getByRole("heading", { name: "Conflict Document" }),
+    page.getByRole("heading", { name: "Conflict Document" }).first(),
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "New revision" }).click();
+  await page.getByRole("button", { name: "Edit" }).click();
   await expect(
     page.getByRole("button", { name: "Save revision" }),
   ).toBeVisible();
   await page
-    .getByRole("textbox", { name: "Head content (Markdown) *" })
+    .getByRole("textbox", { name: /Content \(Markdown\)/ })
     .fill("Some conflicting changes.");
   await page.getByRole("button", { name: "Save revision" }).click();
 
@@ -593,35 +594,43 @@ test("documents list redirects through the default workspace and loads revision 
     });
   });
 
-  await page.route(/\/docs\/product-constitution\/history$/, async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        document_id: "product-constitution",
-        revisions: [
-          {
-            revision_id: "rev-pc-1",
-            revision_number: 1,
-            created_at: "2026-02-15T10:00:00Z",
-            created_by: actorId,
-          },
-          {
-            revision_id: "rev-pc-2",
-            revision_number: 2,
-            created_at: "2026-02-28T16:00:00Z",
-            created_by: actorId,
-          },
-          {
-            revision_id: "rev-pc-3",
-            revision_number: 3,
-            created_at: "2026-03-08T14:30:00Z",
-            created_by: actorId,
-          },
-        ],
-      }),
-    });
-  });
+  await page.route(
+    /\/docs\/product-constitution\/revisions$/,
+    async (route) => {
+      const request = route.request();
+      if (request.method() !== "GET") {
+        await route.continue();
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          document_id: "product-constitution",
+          revisions: [
+            {
+              revision_id: "rev-pc-1",
+              revision_number: 1,
+              created_at: "2026-02-15T10:00:00Z",
+              created_by: actorId,
+            },
+            {
+              revision_id: "rev-pc-2",
+              revision_number: 2,
+              created_at: "2026-02-28T16:00:00Z",
+              created_by: actorId,
+            },
+            {
+              revision_id: "rev-pc-3",
+              revision_number: 3,
+              created_at: "2026-03-08T14:30:00Z",
+              created_by: actorId,
+            },
+          ],
+        }),
+      });
+    },
+  );
 
   await page.route(
     /\/docs\/product-constitution\/revisions\/rev-pc-2$/,
@@ -672,8 +681,13 @@ test("documents list redirects through the default workspace and loads revision 
   });
 
   await page.route(
-    /\/docs\/incident-response-playbook\/history$/,
+    /\/docs\/incident-response-playbook\/revisions$/,
     async (route) => {
+      const request = route.request();
+      if (request.method() !== "GET") {
+        await route.continue();
+        return;
+      }
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -715,10 +729,8 @@ test("documents list redirects through the default workspace and loads revision 
     page.getByRole("heading", { name: "Product Constitution", exact: true }),
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "Revision history" }).click();
-  await expect(
-    page.getByText("Current version", { exact: true }),
-  ).toBeVisible();
+  await page.getByRole("button", { name: "Revision history" }).first().click();
+  await expect(page.getByText("Current version")).toBeVisible();
   await page.getByRole("button", { name: /Version 2/ }).click();
   await expect(
     page.getByText("Viewing revision 2", { exact: false }),
@@ -728,7 +740,7 @@ test("documents list redirects through the default workspace and loads revision 
   ).toBeVisible();
 
   await page
-    .locator('nav[aria-label="Breadcrumb"]')
+    .getByRole("navigation", { name: /Breadcrumb and document status/ })
     .getByRole("link", { name: "Docs", exact: true })
     .click();
   await expect(page).toHaveURL(/\/o\/local\/w\/local\/docs$/);
@@ -739,7 +751,7 @@ test("documents list redirects through the default workspace and loads revision 
       exact: true,
     }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Revision history" }).click();
+  await page.getByRole("button", { name: "Revision history" }).first().click();
   await expect(page.getByText("Version 3", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Version 1", { exact: true })).toBeVisible();
 });

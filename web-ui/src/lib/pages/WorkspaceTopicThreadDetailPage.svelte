@@ -319,7 +319,7 @@
 -->
 {#if topicLoading}
   <TopicDetailHeader {threadId} {detailAsTopic} />
-  <p class="text-[13px] text-[var(--fg-muted)]">Loading...</p>
+  <p class="text-[13px] text-fg-muted">Loading...</p>
 {:else if topicError}
   <TopicDetailHeader {threadId} {detailAsTopic} />
   <p class="rounded-md bg-danger-soft px-3 py-2 text-[13px] text-danger-text">
@@ -327,7 +327,7 @@
   </p>
 {:else if !topic}
   <TopicDetailHeader {threadId} {detailAsTopic} />
-  <p class="text-[13px] text-[var(--fg-muted)]">
+  <p class="text-[13px] text-fg-muted">
     {detailAsTopic ? "Topic not found." : "Thread not found."}
   </p>
 {:else}
@@ -341,13 +341,13 @@
       <TopicDetailHeader {threadId} {detailAsTopic} />
 
       <div
-        class="mt-3 flex gap-0 border-b border-[var(--line)]"
+        class="mt-3 flex gap-0 border-b border-line"
         aria-label="Topic sections"
         role="tablist"
       >
         {#each [{ id: "messages", label: "Messages" }, { id: "about", label: "About" }, { id: "documents", label: "Docs", badge: documentCount }, { id: "boards", label: "Boards", badge: boardCount }, { id: "timeline", label: "Timeline" }] as tab (tab.id)}
           <button
-            class={`relative cursor-pointer px-3 py-2 text-[13px] font-medium transition-colors ${activeTab === tab.id ? "text-[var(--fg)]" : "text-[var(--fg-muted)] hover:text-[var(--fg)]"}`}
+            class={`relative cursor-pointer px-3 py-2 text-[13px] font-medium transition-colors ${activeTab === tab.id ? "text-fg" : "text-fg-muted hover:text-fg"}`}
             onclick={() => void setActiveTab(tab.id)}
             type="button"
             role="tab"
@@ -355,7 +355,7 @@
             tabindex={activeTab === tab.id ? 0 : -1}
           >
             {tab.label}{#if tab.badge !== undefined && tab.badge > 0}
-              <span class="ml-0.5 tabular-nums text-[var(--fg-muted)]"
+              <span class="ml-0.5 tabular-nums text-fg-muted"
                 >({tab.badge})</span
               >{/if}
             {#if activeTab === tab.id}

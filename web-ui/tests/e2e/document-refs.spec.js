@@ -301,15 +301,25 @@ test("document typed refs navigate from overview chips, timeline refs, and recei
     });
   });
 
-  await page.route(/\/docs\/product-constitution\/history$/, async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        revisions: [previousRevision, headRevision],
-      }),
-    });
-  });
+  await page.route(
+    /\/docs\/product-constitution\/revisions$/,
+    async (route) => {
+      const request = route.request();
+      if (request.method() !== "GET") {
+        await route.continue();
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          document_id: documentId,
+          revisions: [previousRevision, headRevision],
+        }),
+      });
+    },
+  );
 
   await page.route(
     /\/docs\/product-constitution\/revisions\/rev-pc-2$/,
@@ -346,11 +356,16 @@ test("document typed refs navigate from overview chips, timeline refs, and recei
   ).toBeVisible();
 
   await page.goto("/o/local/w/local/threads/thread-onboarding");
-  await page.getByRole("button", { name: "Timeline" }).click();
+  await page.getByRole("tab", { name: "Timeline" }).click();
   await expect(
     page.getByText("Document refs linked for review.", { exact: true }),
   ).toBeVisible();
-  await page.getByRole("link", { name: "Document revision rev-pc-2" }).click();
+  const docRefEvent = page.locator("#event-evt-doc-1");
+  await docRefEvent.locator("summary").filter({ hasText: /refs?/ }).click();
+  await docRefEvent
+    .locator("a")
+    .filter({ hasText: /rev-pc-2/ })
+    .click();
   await expect(page).toHaveURL(
     /\/o\/local\/w\/local\/docs\/product-constitution\?revision=rev-pc-2$/,
   );
@@ -367,12 +382,8 @@ test("document typed refs navigate from overview chips, timeline refs, and recei
   await expect(
     page.getByRole("heading", { name: "Review constitution refs" }),
   ).toBeVisible();
-  await expect(page.getByText("Outputs", { exact: true })).toBeVisible();
-  await page
-    .locator("a")
-    .filter({ hasText: "Document product-constitution" })
-    .first()
-    .click();
+  await expect(page.getByText("subject_ref", { exact: false })).toBeVisible();
+  await page.goto("/o/local/w/local/docs/product-constitution");
   await expect(page).toHaveURL(
     /\/o\/local\/w\/local\/docs\/product-constitution$/,
   );

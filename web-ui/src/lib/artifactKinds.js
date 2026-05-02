@@ -19,7 +19,7 @@ const KIND_COLORS = {
   attachment: "text-amber-300 bg-amber-500/10",
 };
 
-const FALLBACK_COLOR = "text-[var(--fg-muted)] bg-[var(--line)]";
+const FALLBACK_COLOR = "text-fg-muted bg-line";
 
 export function kindLabel(kind) {
   return KIND_LABELS[String(kind ?? "").trim()] ?? String(kind ?? "Artifact");

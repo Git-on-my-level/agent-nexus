@@ -1,7 +1,7 @@
 <script>
   import ArchiveButton from "$lib/components/ArchiveButton.svelte";
   import Self from "$lib/components/timeline/MessageItem.svelte";
-  import CompactRefLink from "$lib/components/CompactRefLink.svelte";
+  import RefLink from "$lib/components/RefLink.svelte";
   import ContextMenuHost from "$lib/components/ContextMenuHost.svelte";
   import CopyButton from "$lib/components/CopyButton.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
@@ -124,7 +124,7 @@
     if (tone === "warn") {
       return "bg-warn-soft text-warn-text";
     }
-    return "bg-[var(--line-subtle)] text-[var(--fg-muted)]";
+    return "bg-line-subtle text-fg-muted";
   });
 
   let isAnchoredComment = $derived(Boolean(docComment));
@@ -135,14 +135,14 @@
   // the accent — keeps reply trees readable.
   let articleClasses = $derived(
     [
-      "rounded-md border bg-[var(--panel)] px-3 py-1.5",
-      depth > 0 ? "bg-[var(--bg-soft)]" : "",
+      "rounded-md border bg-panel px-3 py-1.5",
+      depth > 0 ? "bg-bg-soft" : "",
       message.archived_at ? "opacity-60" : "",
       isAnchoredComment && depth === 0
-        ? "border-[var(--line)] border-l-2 border-l-[var(--accent)]"
-        : "border-[var(--line)]",
+        ? "border-line border-l-2 border-l-accent"
+        : "border-line",
       isBodyDocCommentHover || isBodyDocCommentFocus
-        ? "ring-1 ring-[var(--accent)] ring-offset-1 ring-offset-[var(--bg)]"
+        ? "ring-1 ring-accent ring-offset-1 ring-offset-bg"
         : "",
     ]
       .filter(Boolean)
@@ -203,7 +203,7 @@
     <div class="mb-1.5 flex min-w-0 w-full items-center gap-1.5">
       <div class="flex min-w-0 min-h-[1.25rem] flex-1 items-center gap-0.5">
         <span
-          class="min-w-0 max-w-full truncate font-mono text-[0.65rem] leading-tight text-[var(--fg-muted)]"
+          class="min-w-0 max-w-full truncate font-mono text-[0.65rem] leading-tight text-fg-muted"
           title={actorLine}
         >
           {actorDisplayLine}
@@ -214,8 +214,7 @@
           label="Copy author id"
           size="sm"
         />
-        <span
-          class="shrink-0 text-[0.65rem] leading-tight text-[var(--fg-muted)]"
+        <span class="shrink-0 text-[0.65rem] leading-tight text-fg-muted"
           >· {formatTimestamp(message.ts) || "—"}</span
         >
       </div>
@@ -231,7 +230,7 @@
         {/if}
         {#if !message.archived_at && !message.trashed_at}
           <button
-            class="inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded text-[var(--fg-muted)] transition-colors hover:bg-[var(--bg-soft)] hover:text-[var(--fg)]"
+            class="inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded text-fg-muted transition-colors hover:bg-bg-soft hover:text-fg"
             onclick={() => onReply(message.id)}
             type="button"
             title="Reply"
@@ -276,8 +275,8 @@
           class={[
             "mb-2 border-l-2 pl-2 pr-1 text-meta italic whitespace-pre-wrap [overflow-wrap:anywhere] break-words",
             quoteIsStale
-              ? "border-warn text-[var(--fg-muted)] line-through"
-              : "border-[var(--accent)] text-[var(--fg)]",
+              ? "border-warn text-fg-muted line-through"
+              : "border-accent text-fg",
             quoteIsLong && !quoteExpanded ? "line-clamp-4" : "",
           ].join(" ")}
           title={docComment.selected_text}
@@ -306,11 +305,11 @@
         {/if}
       {/if}
       <div
-        class="card-content-block text-meta text-[var(--fg)] [overflow-wrap:anywhere]"
+        class="card-content-block text-meta text-fg [overflow-wrap:anywhere]"
       >
         <MarkdownRenderer
           source={message.messageText || message.summary || "Untitled message"}
-          class="markdown-rendered--bubble text-meta text-[var(--fg)]"
+          class="markdown-rendered--bubble text-meta text-fg"
         />
       </div>
     </div>
@@ -318,7 +317,8 @@
     {#if message.displayRefs.length > 0}
       <div class="mt-2 flex min-w-0 flex-wrap gap-1.5 text-micro">
         {#each message.displayRefs as refValue (refValue)}
-          <CompactRefLink
+          <RefLink
+            variant="compact"
             {refValue}
             {threadId}
             humanize
@@ -331,9 +331,7 @@
     {/if}
 
     {#if message.children.length > 0 && depth < MAX_REPLY_DEPTH}
-      <div
-        class="mt-2 -mx-3 space-y-1.5 border-l border-[var(--line)] pl-2 sm:pl-2.5"
-      >
+      <div class="mt-2 -mx-3 space-y-1.5 border-l border-line pl-2 sm:pl-2.5">
         {#each message.children as child (child.id)}
           <Self
             message={child}

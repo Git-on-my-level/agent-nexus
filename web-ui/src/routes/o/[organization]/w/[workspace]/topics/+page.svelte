@@ -11,7 +11,7 @@
     parseTopicListSearchParams,
   } from "$lib/topicFilters";
   import { BOARD_LIFECYCLE_STATE_LABELS } from "$lib/boardUtils";
-  import { workspacePath } from "$lib/workspacePaths";
+  import { bindWorkspaceHref } from "$lib/workspacePaths";
   import { buildTopicCreatePayloadFromDraft } from "$lib/topicCreatePayload";
   import CompactFilterBar from "$lib/components/CompactFilterBar.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
@@ -72,9 +72,9 @@
     summary: "",
   });
 
-  function workspaceHref(pathname = "/") {
-    return workspacePath(organizationSlug, workspaceSlug, pathname);
-  }
+  let workspaceHref = $derived(
+    bindWorkspaceHref(organizationSlug, workspaceSlug),
+  );
 
   /** @param {string} ref */
   function topicSegmentFromTypedRef(ref) {
@@ -460,13 +460,13 @@
   class="mb-3 flex max-md:mb-2 flex-wrap items-center justify-between gap-2 sm:items-start sm:gap-4"
 >
   <div class="min-w-0 flex-1">
-    <h1 class="text-subtitle font-semibold text-[var(--fg)]">
+    <h1 class="text-subtitle font-semibold text-fg">
       {listSurface === "topics" ? "Topics" : "Threads"}
     </h1>
     {#if listSurface === "topics"}
       <!-- subtitle removed; heading is self-evident -->
     {:else}
-      <p class="mt-1 hidden text-micro text-[var(--fg-muted)] sm:block">
+      <p class="mt-1 hidden text-micro text-fg-muted sm:block">
         Diagnostic list of append-only backing threads (timelines). Not every
         thread is a topic; prefer
         <a
@@ -480,7 +480,7 @@
   <div class="flex flex-wrap items-center justify-end gap-1.5 sm:gap-1.5">
     {#if listSurface === "topics"}
       <button
-        class="cursor-pointer inline-flex h-7 items-center gap-1.5 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 text-micro font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] {topics.length ===
+        class="cursor-pointer inline-flex h-7 items-center gap-1.5 rounded-md border border-line bg-bg-soft px-2.5 text-micro font-medium text-fg-muted transition-colors hover:bg-line-subtle {topics.length ===
           0 && !loading
           ? 'pointer-events-none opacity-50'
           : ''}"
@@ -493,8 +493,8 @@
       </button>
       <button
         class="cursor-pointer inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-micro font-medium transition-colors {hasActiveFilters
-          ? 'border-[var(--accent)]/40 bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/15'
-          : 'border-[var(--line)] bg-[var(--bg-soft)] text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]'}"
+          ? 'border-accent bg-accent-soft text-accent hover:bg-accent-soft'
+          : 'border-line bg-bg-soft text-fg-muted hover:bg-line-subtle'}"
         onclick={() => (filtersOpen = !filtersOpen)}
         type="button"
         data-testid="topics-filters-toggle"
@@ -515,7 +515,7 @@
         {hasActiveFilters ? "Filtered" : "Filters"}
       </button>
       <button
-        class="cursor-pointer inline-flex h-7 items-center gap-1.5 rounded-md bg-[var(--panel)] px-3 text-micro font-medium text-[var(--fg)] transition-colors hover:bg-[var(--line)]"
+        class="cursor-pointer inline-flex h-7 items-center gap-1.5 rounded-md bg-panel px-3 text-micro font-medium text-fg transition-colors hover:bg-line"
         onclick={() => (createOpen = !createOpen)}
         type="button"
       >
@@ -539,8 +539,8 @@
     {:else}
       <button
         class="cursor-pointer inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-micro font-medium transition-colors {hasActiveFilters
-          ? 'border-[var(--accent)]/40 bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/15'
-          : 'border-[var(--line)] bg-[var(--bg-soft)] text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]'}"
+          ? 'border-accent bg-accent-soft text-accent hover:bg-accent-soft'
+          : 'border-line bg-bg-soft text-fg-muted hover:bg-line-subtle'}"
         onclick={() => (filtersOpen = !filtersOpen)}
         type="button"
         data-testid="topics-filters-toggle"
@@ -563,7 +563,7 @@
       <Button
         variant="secondary"
         size="compact"
-        class="rounded-md font-medium bg-[var(--panel)] hover:bg-[var(--line)]"
+        class="rounded-md font-medium bg-panel hover:bg-line"
         href={workspaceHref("/topics")}
       >
         Open topics
@@ -589,17 +589,17 @@
     {#snippet children()}
       <div class="grid gap-3 sm:grid-cols-2">
         <div class="text-micro">
-          <span class="font-medium text-[var(--fg-muted)]">Lifecycle</span>
+          <span class="font-medium text-fg-muted">Lifecycle</span>
           <fieldset
-            class="mt-1 space-y-1 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-2"
+            class="mt-1 space-y-1 rounded-md border border-line bg-bg-soft px-2.5 py-2"
           >
             {#each Object.entries(BOARD_LIFECYCLE_STATE_LABELS) as [value, label] (value)}
               <label
-                class="flex cursor-pointer items-center gap-2 text-meta text-[var(--fg)]"
+                class="flex cursor-pointer items-center gap-2 text-meta text-fg"
               >
                 <input
                   checked={(filters.states ?? ["active"]).includes(value)}
-                  class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--line)] bg-[var(--bg)] text-[var(--accent-hover)] focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-0"
+                  class="h-3.5 w-3.5 cursor-pointer rounded border-line bg-bg text-accent-hover focus:ring-2 focus:ring-accent focus:ring-offset-0"
                   type="checkbox"
                   onchange={() => toggleTopicLifecycleState(value)}
                 />
@@ -609,10 +609,10 @@
           </fieldset>
         </div>
         <label class="text-micro sm:col-span-1">
-          <span class="font-medium text-[var(--fg-muted)]">Search</span>
+          <span class="font-medium text-fg-muted">Search</span>
           <input
             bind:value={filters.q}
-            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-meta transition-colors focus:bg-[var(--panel)]"
+            class="mt-1 w-full rounded-md border border-line bg-bg-soft px-2.5 py-1.5 text-meta transition-colors focus:bg-panel"
             placeholder="Title or id…"
             type="search"
             autocomplete="off"
@@ -621,12 +621,12 @@
       </div>
       <div class="mt-3 flex gap-1.5">
         <button
-          class="cursor-pointer rounded-md bg-[var(--panel)] px-3 py-1.5 text-micro font-medium text-[var(--fg)] hover:bg-[var(--line)]"
+          class="cursor-pointer rounded-md bg-panel px-3 py-1.5 text-micro font-medium text-fg hover:bg-line"
           onclick={applyFilters}
           type="button">Apply</button
         >
         <button
-          class="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-micro font-medium text-[var(--fg-muted)] hover:bg-[var(--line-subtle)]"
+          class="cursor-pointer rounded-md border border-line bg-bg-soft px-3 py-1.5 text-micro font-medium text-fg-muted hover:bg-line-subtle"
           onclick={resetFilters}
           type="button">Clear filters</button
         >
@@ -637,7 +637,7 @@
 
 {#if listSurface === "topics" && createOpen}
   <form
-    class="mb-4 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] p-4"
+    class="mb-4 rounded-md border border-line bg-bg-soft p-4"
     onsubmit={(event) => {
       event.preventDefault();
       createTopic();
@@ -652,20 +652,20 @@
     {/if}
     <div class="grid gap-3">
       <label class="text-micro">
-        <span class="font-medium text-[var(--fg-muted)]">Title</span>
+        <span class="font-medium text-fg-muted">Title</span>
         <input
           bind:value={topicDraft.title}
-          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta transition-colors focus:bg-[var(--panel)]"
+          class="mt-1 w-full rounded-md border border-line bg-bg-soft px-3 py-2 text-meta transition-colors focus:bg-panel"
           placeholder="Topic title..."
           required
           type="text"
         />
       </label>
       <label class="text-micro">
-        <span class="font-medium text-[var(--fg-muted)]">Summary</span>
+        <span class="font-medium text-fg-muted">Summary</span>
         <textarea
           bind:value={topicDraft.summary}
-          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta transition-colors focus:bg-[var(--panel)]"
+          class="mt-1 w-full rounded-md border border-line bg-bg-soft px-3 py-2 text-meta transition-colors focus:bg-panel"
           placeholder="Brief description..."
           rows="2"
         ></textarea>
@@ -704,11 +704,11 @@
         <div
           aria-label={`${selected ? "Deselect" : "Select"} ${topic.title || topic.id}`}
           aria-pressed={selected}
-          class="flex cursor-pointer items-stretch outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-soft)] {showBorderTop
-            ? 'border-t border-[var(--line)]'
+          class="flex cursor-pointer items-stretch outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-soft {showBorderTop
+            ? 'border-t border-line'
             : ''} {selected
-            ? 'border-l-[3px] border-l-[var(--accent)] bg-[var(--accent)]/10'
-            : 'border-l-[3px] border-l-transparent hover:bg-[var(--line-subtle)]'}"
+            ? 'border-l-[3px] border-l-accent bg-accent-soft'
+            : 'border-l-[3px] border-l-transparent hover:bg-line-subtle'}"
           onclick={(e) =>
             topicSel.handleRowMouseEvent(
               e,
@@ -747,7 +747,7 @@
             <div
               class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"
             >
-              <span class="w-14 text-right text-[var(--fg-muted)]"
+              <span class="w-14 text-right text-fg-muted"
                 >{formatTimestamp(topic.updated_at) || "—"}</span
               >
             </div>
@@ -756,11 +756,11 @@
       {:else}
         <div
           class="flex items-stretch {showBorderTop
-            ? 'border-t border-[var(--line)]'
+            ? 'border-t border-line'
             : ''}"
         >
           <a
-            class="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--line-subtle)]"
+            class="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 transition-colors hover:bg-line-subtle"
             href={workspaceHref(`/topics/${encodeURIComponent(topic.id)}`)}
           >
             <WorkspaceResourceListRow
@@ -780,7 +780,7 @@
             <div
               class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"
             >
-              <span class="w-14 text-right text-[var(--fg-muted)]"
+              <span class="w-14 text-right text-fg-muted"
                 >{formatTimestamp(topic.updated_at) || "—"}</span
               >
             </div>
@@ -824,7 +824,7 @@
       />
     {/if}
     <div
-      class="space-y-px overflow-hidden rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
+      class="space-y-px overflow-hidden rounded-md border border-line bg-bg-soft"
     >
       {#each topics as topic, i}
         {@render topicRow(topic, i, i > 0)}
@@ -846,21 +846,17 @@
   />
 {:else}
   <div
-    class="space-y-px overflow-hidden rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
+    class="space-y-px overflow-hidden rounded-md border border-line bg-bg-soft"
   >
     {#each backingThreads as thread, i}
       {@const topicSeg = topicSegmentFromTypedRef(thread.topic_ref)}
-      <div
-        class="flex items-stretch {i > 0
-          ? 'border-t border-[var(--line)]'
-          : ''}"
-      >
+      <div class="flex items-stretch {i > 0 ? 'border-t border-line' : ''}">
         <a
-          class="flex min-w-0 flex-1 flex-col gap-0.5 px-3 py-2.5 transition-colors hover:bg-[var(--line-subtle)]"
+          class="flex min-w-0 flex-1 flex-col gap-0.5 px-3 py-2.5 transition-colors hover:bg-line-subtle"
           href={workspaceHref(`/threads/${encodeURIComponent(thread.id)}`)}
         >
           <div class="flex flex-wrap items-center gap-2">
-            <p class="truncate text-meta font-medium text-[var(--fg)]">
+            <p class="truncate text-meta font-medium text-fg">
               {thread.title || thread.id}
             </p>
             {#if thread.state === "archived"}
@@ -870,27 +866,25 @@
               >
             {/if}
           </div>
-          <p class="truncate font-mono text-micro text-[var(--fg-muted)]">
+          <p class="truncate font-mono text-micro text-fg-muted">
             {thread.id}
           </p>
           {#if topicSeg}
-            <p class="truncate text-micro text-[var(--fg-muted)]">
+            <p class="truncate text-micro text-fg-muted">
               Linked topic:
-              <span class="text-[var(--fg)]">{topicSeg}</span>
+              <span class="text-fg">{topicSeg}</span>
             </p>
           {:else}
-            <p class="truncate text-micro text-[var(--fg-muted)]">
+            <p class="truncate text-micro text-fg-muted">
               No topic ref (non-topic or internal timeline)
             </p>
           {/if}
-          <p class="text-micro text-[var(--fg-muted)]">
+          <p class="text-micro text-fg-muted">
             Updated {formatTimestamp(thread.updated_at) || "—"}
           </p>
         </a>
         {#if topicSeg}
-          <div
-            class="flex shrink-0 items-center border-l border-[var(--line)] px-2"
-          >
+          <div class="flex shrink-0 items-center border-l border-line px-2">
             <span class="text-micro font-medium">
               <RefLink refValue={`topic:${topicSeg}`} humanize showRaw />
             </span>

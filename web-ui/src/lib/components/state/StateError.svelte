@@ -26,7 +26,7 @@
   {/if}
   <p class="text-body text-danger-text {title ? 'mt-1' : ''}">{message}</p>
   {#if supportHint}
-    <p class="mt-2 text-meta text-danger-text/90">
+    <p class="mt-2 text-meta text-danger-text">
       Need help? <a
         class="font-medium underline-offset-2 hover:underline"
         href={supportHref}

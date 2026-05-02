@@ -5,7 +5,7 @@
 <div class="space-y-1.5 {className}" aria-hidden="true">
   {#each Array.from({ length: count }, (_, i) => i) as i (i)}
     <div
-      class="rounded-md border border-[var(--line)] border-l-[3px] border-l-transparent bg-[var(--bg-soft)] px-3 py-2.5"
+      class="rounded-md border border-line border-l-[3px] border-l-transparent bg-bg-soft px-3 py-2.5"
     >
       <div class="flex items-center gap-1.5">
         <div class="h-4 w-12 animate-pulse rounded bg-panel-hover"></div>

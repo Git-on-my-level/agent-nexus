@@ -7,6 +7,7 @@
   } from "$lib/authSession";
   import Button from "$lib/components/Button.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
+  import InlineAlert from "$lib/components/InlineAlert.svelte";
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
 
@@ -122,7 +123,7 @@
 
 <div class="mx-auto max-w-3xl sm:px-4 sm:py-6">
   <div class="mb-3 flex items-center justify-between gap-3 sm:mb-4">
-    <h1 class="text-body font-semibold text-[var(--fg)]">Secrets</h1>
+    <h1 class="text-subtitle font-semibold text-fg">Secrets</h1>
     {#if isHuman}
       <Button
         variant="primary"
@@ -135,31 +136,27 @@
     {/if}
   </div>
 
-  <p class="mb-4 hidden text-micro text-[var(--fg-muted)] sm:block">
+  <p class="mb-4 hidden text-micro text-fg-muted sm:block">
     Workspace credentials for agent use. Values are encrypted at rest. Reveals
     are logged in audit.
   </p>
 
   {#if pageError}
-    <div
-      class="mb-3 rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-micro text-danger-text"
-    >
+    <InlineAlert class="mb-3">
       {pageError}
-    </div>
+    </InlineAlert>
   {/if}
 
   {#if showCreateForm}
-    <div
-      class="mb-4 rounded-md border border-[var(--line)] bg-[var(--panel)] p-4"
-    >
-      <h2 class="mb-3 text-meta font-medium text-[var(--fg)]">Create secret</h2>
+    <div class="mb-4 rounded-md border border-line bg-panel p-4">
+      <h2 class="mb-3 text-meta font-medium text-fg">Create secret</h2>
       {#if createError}
-        <div class="mb-2 text-micro text-danger-text">{createError}</div>
+        <InlineAlert class="mb-2" variant="danger">{createError}</InlineAlert>
       {/if}
       <div class="space-y-3">
         <div>
           <label
-            class="mb-1 block text-micro font-medium text-[var(--fg-muted)]"
+            class="mb-1 block text-micro font-medium text-fg-muted"
             for="secret-name">Name</label
           >
           <input
@@ -167,12 +164,12 @@
             type="text"
             placeholder="OPENAI_API_KEY"
             bind:value={newName}
-            class="w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-meta text-[var(--fg)] placeholder:text-[var(--fg-subtle)] focus:border-[var(--accent)] focus:outline-none"
+            class="w-full rounded-md border border-line bg-bg px-3 py-1.5 text-meta text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none"
           />
         </div>
         <div>
           <label
-            class="mb-1 block text-micro font-medium text-[var(--fg-muted)]"
+            class="mb-1 block text-micro font-medium text-fg-muted"
             for="secret-value">Value</label
           >
           <input
@@ -180,12 +177,12 @@
             type="password"
             placeholder="sk-..."
             bind:value={newValue}
-            class="w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 font-mono text-meta text-[var(--fg)] placeholder:text-[var(--fg-subtle)] focus:border-[var(--accent)] focus:outline-none"
+            class="w-full rounded-md border border-line bg-bg px-3 py-1.5 font-mono text-meta text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none"
           />
         </div>
         <div>
           <label
-            class="mb-1 block text-micro font-medium text-[var(--fg-muted)]"
+            class="mb-1 block text-micro font-medium text-fg-muted"
             for="secret-desc">Description (optional)</label
           >
           <input
@@ -193,7 +190,7 @@
             type="text"
             placeholder="API key for the summarizer agent"
             bind:value={newDescription}
-            class="w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-meta text-[var(--fg)] placeholder:text-[var(--fg-subtle)] focus:border-[var(--accent)] focus:outline-none"
+            class="w-full rounded-md border border-line bg-bg px-3 py-1.5 text-meta text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none"
           />
         </div>
         <div class="flex justify-end gap-2">
@@ -216,60 +213,54 @@
   {/if}
 
   {#if loading}
-    <div class="py-8 text-center text-meta text-[var(--fg-muted)]">
+    <div class="py-8 text-center text-meta text-fg-muted">
       Loading secrets...
     </div>
   {:else if secrets.length === 0}
-    <div
-      class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-4 py-8 text-center"
-    >
-      <p class="text-meta text-[var(--fg-muted)]">No secrets configured.</p>
+    <div class="rounded-md border border-line bg-panel px-4 py-8 text-center">
+      <p class="text-meta text-fg-muted">No secrets configured.</p>
       {#if isHuman}
-        <p class="mt-1 text-micro text-[var(--fg-subtle)]">
+        <p class="mt-1 text-micro text-fg-subtle">
           Create a secret to store API keys and credentials for agent use.
         </p>
       {/if}
     </div>
   {:else}
-    <div
-      class="overflow-hidden rounded-md border border-[var(--line)] bg-[var(--bg-soft)]"
-    >
+    <div class="overflow-hidden rounded-md border border-line bg-bg-soft">
       {#each secrets as secret, i}
         {@const revealed = revealedSecrets[secret.id]}
         <div
           class="px-3 py-2.5 sm:px-4 sm:py-3 {i > 0
-            ? 'border-t border-[var(--line)]'
+            ? 'border-t border-line'
             : ''}"
         >
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2">
-                <span class="font-mono text-meta font-medium text-[var(--fg)]"
+                <span class="font-mono text-meta font-medium text-fg"
                   >{secret.name}</span
                 >
               </div>
               {#if secret.description}
-                <p
-                  class="mt-0.5 hidden text-micro text-[var(--fg-muted)] sm:block"
-                >
+                <p class="mt-0.5 hidden text-micro text-fg-muted sm:block">
                   {secret.description}
                 </p>
               {/if}
-              <p class="mt-0.5 text-micro text-[var(--fg-subtle)] sm:mt-1">
+              <p class="mt-0.5 text-micro text-fg-subtle sm:mt-1">
                 Updated {formatTimestamp(secret.updated_at)}
               </p>
             </div>
             <div class="flex shrink-0 items-center gap-1.5">
               {#if revealed}
                 <div
-                  class="flex items-center gap-1.5 rounded-md border border-[var(--line)] bg-[var(--bg)] px-2 py-1"
+                  class="flex items-center gap-1.5 rounded-md border border-line bg-bg px-2 py-1"
                 >
                   <code
-                    class="max-w-[200px] truncate font-mono text-micro text-[var(--fg)]"
+                    class="max-w-[200px] truncate font-mono text-micro text-fg"
                     >{revealed}</code
                   >
                   <button
-                    class="cursor-pointer text-micro text-[var(--accent)] hover:text-[var(--accent-hover)]"
+                    class="cursor-pointer text-micro text-accent hover:text-accent-hover"
                     onclick={() => copyToClipboard(revealed)}
                     type="button"
                     title="Copy"
@@ -277,7 +268,7 @@
                     Copy
                   </button>
                   <button
-                    class="cursor-pointer text-micro text-[var(--fg-muted)] hover:text-[var(--fg)]"
+                    class="cursor-pointer text-micro text-fg-muted hover:text-fg"
                     onclick={() => hideReveal(secret.id)}
                     type="button"
                   >
@@ -286,7 +277,7 @@
                 </div>
               {:else}
                 <button
-                  class="cursor-pointer rounded px-2 py-1 text-micro font-medium text-[var(--accent)] hover:bg-[var(--accent)]/10 disabled:opacity-50"
+                  class="cursor-pointer rounded px-2 py-1 text-micro font-medium text-accent hover:bg-accent-soft disabled:opacity-50"
                   disabled={revealingId === secret.id}
                   onclick={() => handleReveal(secret.id)}
                   type="button"

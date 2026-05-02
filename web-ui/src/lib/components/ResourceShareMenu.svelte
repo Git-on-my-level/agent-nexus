@@ -173,14 +173,14 @@
         </button>
         {#if menuOpen}
           <div
-            class="absolute right-0 z-50 mt-1 min-w-[11rem] rounded-md border border-[var(--line)] bg-[var(--panel)] py-1 shadow-lg"
+            class="absolute right-0 z-50 mt-1 min-w-[11rem] rounded-md border border-line bg-panel py-1 shadow-lg"
             role="menu"
           >
             {#if idCopyable}
               <button
                 type="button"
                 role="menuitem"
-                class="block w-full px-3 py-2 text-left text-micro text-[var(--fg)] hover:bg-[var(--line-subtle)]"
+                class="block w-full px-3 py-2 text-left text-micro text-fg hover:bg-line-subtle"
                 onclick={() => void copyId()}
               >
                 {menuItemCopied === "id" ? "Copied" : "Copy ID"}
@@ -190,7 +190,7 @@
               <button
                 type="button"
                 role="menuitem"
-                class="block w-full px-3 py-2 text-left text-micro text-[var(--fg)] hover:bg-[var(--line-subtle)]"
+                class="block w-full px-3 py-2 text-left text-micro text-fg hover:bg-line-subtle"
                 onclick={() => void copyHash()}
               >
                 {menuItemCopied === "hash" ? "Copied" : "Copy content hash"}
@@ -200,7 +200,7 @@
               <button
                 type="button"
                 role="menuitem"
-                class="block w-full px-3 py-2 text-left text-micro text-[var(--fg)] hover:bg-[var(--line-subtle)]"
+                class="block w-full px-3 py-2 text-left text-micro text-fg hover:bg-line-subtle"
                 onclick={() => void copyJson()}
               >
                 {menuItemCopied === "json" ? "Copied" : "Copy raw JSON"}

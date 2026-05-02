@@ -1789,6 +1789,93 @@
     background: rgba(255, 255, 255, 0.02);
   }
 
+  .ui-panel {
+    border-radius: var(--radius-md);
+    border: 1px solid var(--line);
+    background: var(--panel);
+    box-sizing: border-box;
+  }
+
+  .ui-input {
+    width: 100%;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--line);
+    background: var(--bg-soft);
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    color: var(--fg);
+    box-sizing: border-box;
+  }
+
+  .ui-input::placeholder {
+    color: var(--fg-subtle);
+  }
+
+  .ui-btn-ghost {
+    border-radius: var(--radius);
+    border: 1px solid var(--line);
+    background: var(--panel);
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    line-height: 1.3;
+    font-weight: 500;
+    color: var(--fg-muted);
+    cursor: pointer;
+    transition:
+      color 120ms ease,
+      background 120ms ease;
+  }
+
+  .ui-btn-ghost:hover {
+    color: var(--fg);
+    background: var(--bg-soft);
+  }
+
+  .ui-chip-meta {
+    display: inline-flex;
+    align-items: center;
+    border-radius: var(--radius-md);
+    background: var(--line);
+    padding: 0.125rem 0.25rem;
+    font-size: 0.75rem;
+    line-height: 1.3;
+    font-weight: 500;
+    color: var(--fg-muted);
+  }
+
+  .ui-inline-alert {
+    border-radius: var(--radius-md);
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8125rem;
+    line-height: 1.4;
+  }
+
+  .ui-inline-alert--danger {
+    background: var(--danger-soft);
+    color: var(--danger-text);
+  }
+
+  .ui-inline-alert--warn {
+    background: var(--warn-soft);
+    color: var(--warn-text);
+  }
+
+  .ui-banner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    background: var(--danger-soft);
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    color: var(--danger-text);
+  }
+
   .compact-ref-link {
     flex: 0 1 auto;
   }

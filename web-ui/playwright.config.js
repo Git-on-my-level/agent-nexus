@@ -1,7 +1,8 @@
 import { defineConfig } from "@playwright/test";
 
 const port = Number(process.env.PLAYWRIGHT_PORT ?? 4173);
-const basePathPort = Number(process.env.PLAYWRIGHT_BASE_PATH_PORT ?? 4174);
+// Default avoids clashing with a stray preview/other dev server on 4174.
+const basePathPort = Number(process.env.PLAYWRIGHT_BASE_PATH_PORT ?? 4176);
 const corePort = Number(process.env.PLAYWRIGHT_CORE_PORT ?? 8000);
 const appBasePath = process.env.PLAYWRIGHT_APP_BASE_PATH ?? "/anx";
 const preview =
@@ -53,7 +54,9 @@ const webServer = preview
         env: defaultWorkspaceEnv(),
         port,
         timeout: 120000,
-        reuseExistingServer: !process.env.CI,
+        // Always bounce Vite for e2e: hooks.server/ssr logic must match the checkout (reuse can serve stale SSR).
+        reuseExistingServer:
+          process.env.PLAYWRIGHT_REUSE_EXISTING_WEB_UI === "1",
       },
       {
         command: `pnpm exec vite dev --host 127.0.0.1 --port ${basePathPort}`,
@@ -63,7 +66,9 @@ const webServer = preview
         },
         port: basePathPort,
         timeout: 120000,
-        reuseExistingServer: !process.env.CI,
+        reuseExistingServer:
+          process.env.PLAYWRIGHT_REUSE_EXISTING_WEB_UI === "1" ||
+          !process.env.CI,
       },
     ];
 

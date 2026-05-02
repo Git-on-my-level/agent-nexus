@@ -133,12 +133,13 @@
   );
   let embeddedDockEff = $derived(dockPlacementEff === "embedded");
   let expandFillsParentEff = $derived(
-    expandFillsParent ?? (layout === "primary" ? true : false),
+    expandFillsParent ?? (layout === "primary" || embeddedDockEff),
   );
   let pinComposerNarrowEff = $derived(pinComposerNarrow ?? true);
   /**
    * Pin the composer inside a height-bounded flex column: topic Messages,
-   * board/doc drawers with `expandFillsParent`, and the discussion rail.
+   * board/doc drawers with `expandFillsParent`, embedded card drawers, and
+   * the discussion rail.
    */
   let pinComposerEff = $derived(
     layout === "primary" || (layout === "dock" && expandFillsParentEff),
@@ -410,11 +411,9 @@
     if (embeddedDockEff && dockLayoutHost) {
       const hostHeight = dockLayoutHost.getBoundingClientRect().height;
       if (Number.isFinite(hostHeight) && hostHeight > 0) {
-        // Embedded card/modal drawers must leave the card header reachable.
-        const hostMax = Math.max(
-          minH,
-          Math.min(hostHeight * 0.58, hostHeight - 180),
-        );
+        // Embedded card/modal drawers resize inside their host; leave enough
+        // chrome visible to collapse the drawer and use host actions.
+        const hostMax = Math.max(minH, hostHeight - 160);
         maxH = Math.min(maxH, hostMax);
       }
     }
@@ -456,7 +455,6 @@
     ptrStartX: 0,
     resizeActive: false,
     resizeStartH: 0,
-    resizeStartBottomY: 0,
     resizeCurrentH: 0,
     suppressClick: false,
   };
@@ -472,7 +470,6 @@
     headerGesture.resizeActive = false;
     const feedRect = feed.getBoundingClientRect();
     headerGesture.resizeStartH = feedRect.height;
-    headerGesture.resizeStartBottomY = feedRect.bottom;
     headerGesture.resizeCurrentH = feedRect.height;
   }
 
@@ -497,9 +494,7 @@
     }
     if (headerGesture.resizeActive) {
       const vh = window.innerHeight;
-      const rawNext = embeddedDockEff
-        ? headerGesture.resizeStartBottomY - e.clientY
-        : headerGesture.resizeStartH + dy;
+      const rawNext = headerGesture.resizeStartH + dy;
       const next = clampPanelHeight(rawNext, vh);
       headerGesture.resizeCurrentH = next;
       dockLayoutHost.style.setProperty(
@@ -572,6 +567,7 @@
   /** Topic dock: full-width on narrow but keep vertical padding; drawers stay flush when collapsible. */
   let openPanelPadding = $derived.by(() => {
     const base = "px-3 pb-3 pt-3";
+    if (embeddedDockEff) return "px-0 pb-0 pt-0";
     if (!narrowEdgeToEdge) return base;
     if (collapsibleEff) return `${base} max-lg:px-0 max-lg:pb-0 max-lg:pt-0`;
     /* Topic: keep side-to-side width; light vertical padding so the sheet doesn’t waste panel height. */
@@ -582,7 +578,7 @@
 {#if threadId}
   {#if showRailAside}
     <aside
-      class="dd-rail md:fixed md:inset-y-0 md:right-0 md:z-20 md:border-l md:border-[var(--line)] md:bg-[var(--panel)] {open
+      class="dd-rail md:fixed md:inset-y-0 md:right-0 md:z-20 md:border-l md:border-line md:bg-panel {open
         ? 'md:w-[var(--dd-rail-w)]'
         : 'md:w-16'}"
       style={open ? `--dd-rail-w:${railWidth}px` : undefined}
@@ -590,13 +586,13 @@
       {#if !open}
         <button
           type="button"
-          class="hidden md:flex md:h-dvh md:min-h-[20rem] md:w-full md:cursor-pointer md:flex-col md:items-center md:justify-start md:gap-3 md:px-2 md:py-4 md:text-[var(--fg-muted)] md:transition-colors md:hover:bg-[var(--panel-hover)] md:hover:text-[var(--fg)]"
+          class="hidden md:flex md:h-dvh md:min-h-[20rem] md:w-full md:cursor-pointer md:flex-col md:items-center md:justify-start md:gap-3 md:px-2 md:py-4 md:text-fg-muted md:transition-colors md:hover:bg-panel-hover md:hover:text-fg"
           aria-label={`Show ${label.toLowerCase()}${messageCount > 0 ? `, ${messageCount} ${messageCount === 1 ? "comment" : "comments"}` : ""}`}
           title={`Show ${label.toLowerCase()}`}
           onclick={() => setOpen(true)}
         >
           <span
-            class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--line)] bg-[var(--bg-soft)] text-[var(--accent-text)]"
+            class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-line bg-bg-soft text-accent-text"
             aria-hidden="true"
           >
             <svg
@@ -615,13 +611,13 @@
             </svg>
           </span>
           <span
-            class="mt-1 min-h-0 [writing-mode:vertical-rl] rotate-180 text-micro font-semibold tracking-normal text-[var(--fg)]"
+            class="mt-1 min-h-0 [writing-mode:vertical-rl] rotate-180 text-micro font-semibold tracking-normal text-fg"
           >
             Comments
           </span>
           {#if railBadgeText}
             <span
-              class="mt-1 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-[var(--accent-soft)] px-1 text-[0.65rem] font-semibold leading-none text-[var(--accent-text)]"
+              class="mt-1 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-accent-soft px-1 text-[0.65rem] font-semibold leading-none text-accent-text"
             >
               {railBadgeText}
             </span>
@@ -638,7 +634,7 @@
               aria-label="Drag to resize discussion panel"
               title="Drag to resize"
               class="group absolute inset-y-0 -left-1 z-[1] flex w-3 cursor-ew-resize touch-none select-none items-stretch pl-0.5 {railResizing
-                ? 'ring-1 ring-[var(--line)]'
+                ? 'ring-1 ring-line'
                 : ''}"
               onpointerdown={onRailResizePointerDown}
               onpointermove={onRailResizePointerMove}
@@ -647,7 +643,7 @@
               onlostpointercapture={() => endRailResize(null)}
             >
               <div
-                class="mx-auto h-full w-px bg-[var(--line)] transition-opacity group-hover:opacity-100 {railResizing
+                class="mx-auto h-full w-px bg-line transition-opacity group-hover:opacity-100 {railResizing
                   ? 'bg-accent-text opacity-100'
                   : 'opacity-60'}"
               ></div>
@@ -655,16 +651,14 @@
           </div>
           <div class="flex min-h-0 min-w-0 flex-1 flex-col">
             <div
-              class="flex shrink-0 items-center justify-between gap-1 border-b border-[var(--line)] px-3 py-1.5"
+              class="flex shrink-0 items-center justify-between gap-1 border-b border-line px-3 py-1.5"
             >
-              <h2
-                class="min-w-0 truncate text-micro font-medium text-[var(--fg)]"
-              >
+              <h2 class="min-w-0 truncate text-micro font-medium text-fg">
                 {label}
               </h2>
               <button
                 type="button"
-                class="inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-[var(--fg-muted)] transition-colors hover:bg-[var(--bg-soft)] hover:text-[var(--fg)]"
+                class="inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-bg-soft hover:text-fg"
                 onclick={() => setOpen(false)}
                 aria-label="Hide discussion"
                 title="Hide discussion"
@@ -712,7 +706,7 @@
   {:else}
     <div
       bind:this={surfaceEl}
-      class="dd-surface flex min-h-0 flex-col border-t border-[var(--line)] bg-[var(--panel)] {!collapsibleEff
+      class="dd-surface flex min-h-0 flex-col border-t border-line bg-panel {!collapsibleEff
         ? layout === 'rail'
           ? 'max-md:border-t-0 md:border-0 md:bg-transparent'
           : 'max-lg:border-t-0 lg:border-0 lg:bg-transparent'
@@ -732,7 +726,7 @@
         <!-- One bar: tap toggles; when expanded on fixed dock, vertical drag resizes. -->
         <button
           type="button"
-          class="flex w-full min-w-0 touch-manipulation items-center gap-2 py-2 text-left transition-colors hover:bg-[var(--line-subtle)] {narrowEdgeToEdge
+          class="flex w-full min-w-0 touch-manipulation items-center gap-2 py-2 text-left transition-colors hover:bg-line-subtle {narrowEdgeToEdge
             ? 'max-lg:px-4 px-3'
             : 'px-3'} {showResizeGrip
             ? 'cursor-ns-resize select-none touch-none'
@@ -750,7 +744,7 @@
           onpointercancel={onHeaderPointerCancel}
         >
           <svg
-            class="h-3.5 w-3.5 shrink-0 text-[var(--fg-muted)] transition-transform {open
+            class="h-3.5 w-3.5 shrink-0 text-fg-muted transition-transform {open
               ? 'rotate-180'
               : ''}"
             fill="none"
@@ -765,13 +759,11 @@
               d="M19 9l-7 7-7-7"
             />
           </svg>
-          <span
-            class="min-w-0 flex-1 truncate text-micro font-medium text-[var(--fg)]"
+          <span class="min-w-0 flex-1 truncate text-micro font-medium text-fg"
             >{label}</span
           >
           {#if messageCount > 0}
-            <span class="shrink-0 text-micro text-[var(--fg-muted)]"
-              >{messageCount}</span
+            <span class="shrink-0 text-micro text-fg-muted">{messageCount}</span
             >
           {/if}
         </button>
@@ -779,7 +771,7 @@
 
       {#if showOpen}
         <div
-          class="min-h-0 flex-1 border-t border-[var(--line)] {layout === 'rail'
+          class="min-h-0 flex-1 border-t border-line {layout === 'rail'
             ? `max-md:flex max-md:min-h-0 max-md:flex-col max-md:overflow-hidden ${!collapsibleEff ? 'max-md:border-t-0 md:border-0' : ''} ${expandFillsParentEff && showOpen ? 'max-md:max-h-none max-md:flex-1' : 'max-md:max-h-[min(72dvh,30rem)]'}`
             : `max-lg:flex max-lg:min-h-0 max-lg:flex-col max-lg:overflow-hidden ${!collapsibleEff ? 'max-lg:border-t-0 lg:border-0' : ''} ${expandFillsParentEff && showOpen ? 'max-lg:max-h-none max-lg:flex-1' : 'max-lg:max-h-[min(72dvh,30rem)]'}`} {layout ===
             'primary' ||

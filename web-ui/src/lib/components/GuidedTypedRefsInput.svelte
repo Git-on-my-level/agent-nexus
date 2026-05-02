@@ -2,7 +2,6 @@
   import { parseRef, renderRef } from "$lib/typedRefs";
   import Button from "$lib/components/Button.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
-  import CompactRefLink from "$lib/components/CompactRefLink.svelte";
   import { coreClient } from "$lib/coreClient";
   import { buildPrimitiveRefRoutes } from "$lib/refLinkModel";
 
@@ -207,14 +206,12 @@
 </script>
 
 {#if helperText}
-  <p class="mt-1 text-micro text-[var(--fg-muted)]">{helperText}</p>
+  <p class="mt-1 text-micro text-fg-muted">{helperText}</p>
 {/if}
 
-<div
-  class="mt-1.5 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] p-2.5"
->
+<div class="mt-1.5 rounded-md border border-line bg-bg-soft p-2.5">
   {#if refs.length === 0 && !pendingAttachUpload}
-    <p class="text-micro text-[var(--fg-muted)]">{emptyText}</p>
+    <p class="text-micro text-fg-muted">{emptyText}</p>
   {:else}
     <div class="flex flex-wrap gap-1.5">
       {#if pendingAttachUpload}
@@ -229,16 +226,17 @@
         />
       {/if}
       {#if chipListArtifactOnlyHidden && !pendingAttachUpload}
-        <p class="text-micro text-[var(--fg-muted)]">
+        <p class="text-micro text-fg-muted">
           {artifactOnlyRedirectHint}
         </p>
       {/if}
       {#each refsForChipList as refValue (refValue)}
         <span
-          class="inline-flex max-w-full min-h-[26px] items-stretch overflow-hidden rounded-md border border-[var(--line)] bg-[var(--bg)] text-micro"
+          class="inline-flex max-w-full min-h-[26px] items-stretch overflow-hidden rounded-md border border-line bg-bg text-micro"
         >
           <span class="flex min-w-0 flex-1 items-center">
-            <CompactRefLink
+            <RefLink
+              variant="compact"
               {refValue}
               {boardId}
               composerRowEmbed={true}
@@ -252,7 +250,7 @@
           </span>
           <button
             aria-label={`Remove ${refValue}`}
-            class="flex shrink-0 cursor-pointer items-center justify-center border-l border-[var(--line)] px-2 text-[var(--fg-muted)] transition-colors hover:bg-[var(--bg-soft)] hover:text-[var(--fg)] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-solid/40 focus-visible:ring-inset"
+            class="flex shrink-0 cursor-pointer items-center justify-center border-l border-line px-2 text-fg-muted transition-colors hover:bg-bg-soft hover:text-fg focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-solid focus-visible:ring-inset"
             onclick={() => removeRef(refValue)}
             type="button"
           >
@@ -267,7 +265,7 @@
     <input
       aria-label={addInputLabel}
       bind:value={candidateRef}
-      class="min-w-[14rem] flex-1 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)]"
+      class="min-w-[14rem] flex-1 rounded-md border border-line bg-bg-soft px-3 py-2 text-meta text-fg"
       onkeydown={(event) => {
         if (event.key === "Enter") {
           event.preventDefault();
@@ -282,7 +280,7 @@
     </Button>
     {#if !hideAttachFileControl && Array.isArray(attachContextRefs) && attachContextRefs.length > 0}
       <label
-        class="inline-flex cursor-pointer items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-2 text-micro text-[var(--fg)] hover:bg-[var(--bg-soft)]"
+        class="inline-flex cursor-pointer items-center gap-2 rounded-md border border-line bg-bg px-3 py-2 text-micro text-fg hover:bg-bg-soft"
       >
         <span>{attachBusy ? "Uploading…" : "Attach file"}</span>
         <input
@@ -307,7 +305,7 @@
   {#if normalizedSuggestions.length > 0}
     <div class="mt-2.5">
       <p
-        class="text-micro font-medium uppercase tracking-[0.06em] text-[var(--fg-muted)]"
+        class="text-micro font-medium uppercase tracking-[0.06em] text-fg-muted"
       >
         Quick picks
       </p>
@@ -339,16 +337,16 @@
 
   <div id="guided-refs-advanced">
     {#if showAdvanced}
-      <label class="mt-2 block text-micro font-medium text-[var(--fg-muted)]"
+      <label class="mt-2 block text-micro font-medium text-fg-muted"
         >{advancedLabel}
         <textarea
           aria-label={textareaAriaLabel}
           bind:value
-          class="mt-1.5 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)]"
+          class="mt-1.5 w-full rounded-md border border-line bg-bg-soft px-3 py-2 text-meta text-fg"
           rows={advancedRows}
         ></textarea></label
       >
-      <p class="mt-1 text-micro text-[var(--fg-muted)]">{advancedHint}</p>
+      <p class="mt-1 text-micro text-fg-muted">{advancedHint}</p>
     {/if}
   </div>
 </div>

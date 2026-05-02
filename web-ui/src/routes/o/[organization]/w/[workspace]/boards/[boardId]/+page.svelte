@@ -10,6 +10,7 @@
   import ResourceShareMenu from "$lib/components/ResourceShareMenu.svelte";
   import Button from "$lib/components/Button.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
+  import StateEmpty from "$lib/components/state/StateEmpty.svelte";
   import {
     actorRegistry,
     lookupActorDisplayName,
@@ -17,7 +18,7 @@
   } from "$lib/actorSession";
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
-  import { workspacePath } from "$lib/workspacePaths";
+  import { bindWorkspaceHref, workspacePath } from "$lib/workspacePaths";
   import {
     enrichInboxItem,
     formatInboxItemBoardPanelResourceLine,
@@ -83,9 +84,9 @@
       card.membership.column_key,
     );
   });
-  function workspaceHref(pathname = "/") {
-    return workspacePath(organizationSlug, workspaceSlug, pathname);
-  }
+  let workspaceHref = $derived(
+    bindWorkspaceHref(organizationSlug, workspaceSlug),
+  );
 
   /** Keeps `$page.url` aligned with shallow card query-param changes (`replaceState` alone can leave `$page` stale). */
   let boardCardDetailTab = $derived(
@@ -270,7 +271,7 @@
     if (state === "active") return "text-ok-text bg-ok-soft";
     if (state === "archived") return "text-warn-text bg-warn-soft";
     if (state === "trashed") return "text-slate-300 bg-slate-500/10";
-    return "text-[var(--fg-muted)] bg-[var(--line)]";
+    return "text-fg-muted bg-line";
   }
 
   function boardProjectionMessage(freshness) {
@@ -432,7 +433,7 @@
 
 {#if loading}
   <div
-    class="mt-12 flex items-center justify-center gap-2 text-meta text-[var(--fg-muted)]"
+    class="mt-12 flex items-center justify-center gap-2 text-meta text-fg-muted"
   >
     <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
       <circle
@@ -488,7 +489,7 @@
 
   {#if board.trashed_at}
     <div
-      class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-meta text-danger-text"
+      class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-danger bg-danger-soft px-3 py-2 text-meta text-danger-text"
     >
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2 font-semibold">
@@ -498,7 +499,7 @@
         {#if board.trash_reason}
           <p class="mt-2">Reason: {board.trash_reason}</p>
         {/if}
-        <p class="mt-1 text-micro text-danger-text/80">
+        <p class="mt-1 text-micro text-danger-text">
           Trashed {#if board.trashed_by}by {actorName(board.trashed_by)}{/if}
           {#if board.trashed_at}
             at {formatTimestamp(board.trashed_at)}
@@ -506,7 +507,7 @@
         </p>
       </div>
       <button
-        class="shrink-0 cursor-pointer rounded-md border border-danger/40 bg-danger-soft px-2 py-1 text-micro font-medium text-danger-text hover:bg-danger/25 disabled:opacity-50"
+        class="shrink-0 cursor-pointer rounded-md border border-danger bg-danger-soft px-2 py-1 text-micro font-medium text-danger-text hover:bg-danger-soft disabled:opacity-50"
         disabled={boardLifecycleBusy}
         onclick={handleRestoreBoard}
         type="button"
@@ -516,7 +517,7 @@
     </div>
   {:else if board.archived_at}
     <div
-      class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-meta text-warn-text"
+      class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-warn bg-warn-soft px-3 py-2 text-meta text-warn-text"
     >
       <p class="min-w-0 flex-1">
         This board was archived on {formatTimestamp(board.archived_at) ||
@@ -525,7 +526,7 @@
           )}{/if}.
       </p>
       <button
-        class="shrink-0 cursor-pointer rounded-md border border-warn/40 bg-warn-soft px-2 py-1 text-micro font-medium text-warn-text hover:bg-warn/25 disabled:opacity-50"
+        class="shrink-0 cursor-pointer rounded-md border border-warn bg-warn-soft px-2 py-1 text-micro font-medium text-warn-text hover:bg-warn-soft disabled:opacity-50"
         disabled={boardLifecycleBusy}
         onclick={handleUnarchiveBoard}
         type="button"
@@ -536,22 +537,22 @@
   {/if}
 
   {#snippet boardDesktop()}
-    <h1 class="min-w-0 text-subtitle font-semibold text-[var(--fg)]">
+    <h1 class="min-w-0 text-subtitle font-semibold text-fg">
       {board.title || board.id}
     </h1>
     {#if String(board.summary ?? "").trim()}
       <p
-        class="line-clamp-3 text-[13px] text-[var(--fg-muted)]"
+        class="line-clamp-3 text-[13px] text-fg-muted"
         title={String(board.summary).trim()}
       >
         {String(board.summary).trim()}
       </p>
     {/if}
     <div
-      class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-micro text-[var(--fg-muted)]"
+      class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-micro text-fg-muted"
     >
       {#if boardInspectNav && showBoardContextLink}
-        <span class="text-[var(--fg-muted)]"
+        <span class="text-fg-muted"
           >{boardInspectNav.kind === "topic" ? "Topic" : "Backing thread"}</span
         >
         <a
@@ -564,24 +565,24 @@
         >
           {contextLinkLabel}
         </a>
-        <span class="text-[var(--fg-subtle)]">·</span>
+        <span class="text-fg-subtle">·</span>
       {/if}
       <span>
         {workspace.board_summary?.card_count ?? workspace.cards?.count ?? 0}
         cards
       </span>
-      <span class="text-[var(--fg-subtle)]">·</span>
+      <span class="text-fg-subtle">·</span>
       <span>
         {workspace.board_summary?.resolved_card_count ?? 0} resolved
       </span>
-      <span class="text-[var(--fg-subtle)]">·</span>
+      <span class="text-fg-subtle">·</span>
       <span>
         {workspace.board_summary?.unresolved_card_count ?? 0} open
       </span>
-      <span class="text-[var(--fg-subtle)]">·</span>
+      <span class="text-fg-subtle">·</span>
       <span>Board updated {formatTimestamp(board.updated_at) || "—"}</span>
       {#if board.owners?.length > 0}
-        <span class="text-[var(--fg-subtle)]">·</span>
+        <span class="text-fg-subtle">·</span>
         <span
           >Owners {board.owners
             .map((owner) => actorName(owner))
@@ -603,13 +604,13 @@
         >
           {#snippet breadcrumb()}
             <a
-              class="shrink-0 text-[var(--fg-muted)] transition-colors hover:text-[var(--fg)]"
+              class="shrink-0 text-fg-muted transition-colors hover:text-fg"
               href={workspaceHref("/boards")}>Boards</a
             >
-            <span class="shrink-0 text-[var(--fg-subtle)]">/</span>
+            <span class="shrink-0 text-fg-subtle">/</span>
             <div class="flex min-h-0 min-w-0 flex-1 items-center gap-1.5">
               <span
-                class="min-w-0 shrink truncate text-[var(--fg-muted)]"
+                class="min-w-0 shrink truncate text-fg-muted"
                 aria-current="page">{board.title || boardId}</span
               >
               {#if board.state}
@@ -665,12 +666,12 @@
                 </button>
                 {#if boardMoreOpen}
                   <div
-                    class="absolute right-0 z-50 mt-1 min-w-[10rem] rounded-md border border-[var(--line)] bg-[var(--panel)] py-1 shadow-lg"
+                    class="absolute right-0 z-50 mt-1 min-w-[10rem] rounded-md border border-line bg-panel py-1 shadow-lg"
                     role="menu"
                   >
                     <a
                       role="menuitem"
-                      class="block w-full px-3 py-2 text-left text-micro text-[var(--fg)] hover:bg-[var(--line-subtle)]"
+                      class="block w-full px-3 py-2 text-left text-micro text-fg hover:bg-line-subtle"
                       href={workspaceHref(`/boards/${boardId}/edit`)}
                       onclick={closeBoardMore}
                     >
@@ -680,7 +681,7 @@
                       <button
                         type="button"
                         role="menuitem"
-                        class="block w-full px-3 py-2 text-left text-micro text-[var(--fg)] hover:bg-[var(--line-subtle)] disabled:opacity-50"
+                        class="block w-full px-3 py-2 text-left text-micro text-fg hover:bg-line-subtle disabled:opacity-50"
                         disabled={boardLifecycleBusy}
                         onclick={() => {
                           closeBoardMore();
@@ -693,7 +694,7 @@
                     <button
                       type="button"
                       role="menuitem"
-                      class="block w-full px-3 py-2 text-left text-micro text-danger-text hover:bg-[var(--line-subtle)] disabled:opacity-50"
+                      class="block w-full px-3 py-2 text-left text-micro text-danger-text hover:bg-line-subtle disabled:opacity-50"
                       disabled={boardLifecycleBusy}
                       onclick={() => {
                         closeBoardMore();
@@ -747,29 +748,24 @@
 
       <section class="mb-3">
         {#if boardIsEmpty}
-          <div
-            class="rounded-md border border-dashed border-[var(--line)] bg-[var(--panel)] px-6 py-16 text-center"
-          >
-            <p class="text-meta font-medium text-[var(--fg)]">
-              No cards on this board yet
-            </p>
-            <p class="mt-1 text-micro text-[var(--fg-muted)]">
-              Cards appear here when topics are added to the board's columns.
-            </p>
-          </div>
+          <StateEmpty
+            title="No cards on this board yet"
+            helper="Cards appear here when topics are added to the board's columns."
+            actionLabel="Create card"
+            actionHref={workspaceHref(`/boards/${boardId}/cards/new`)}
+            class="!border-dashed"
+          />
         {:else}
-          <div
-            class="mb-3 rounded-md border border-[var(--line)] bg-[var(--panel)]"
-          >
+          <div class="mb-3 rounded-md border border-line bg-panel">
             <button
-              class="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--line-subtle)]"
+              class="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-line-subtle"
               onclick={() => {
                 backlogOpen = !backlogOpen;
               }}
               type="button"
             >
               <svg
-                class="h-3.5 w-3.5 shrink-0 text-[var(--fg-muted)] transition-transform {backlogOpen
+                class="h-3.5 w-3.5 shrink-0 text-fg-muted transition-transform {backlogOpen
                   ? 'rotate-90'
                   : ''}"
                 fill="none"
@@ -777,18 +773,16 @@
                 stroke="currentColor"
                 stroke-width="2"><path d="M9 5l7 7-7 7" /></svg
               >
-              <span class="text-micro font-medium text-[var(--fg-muted)]"
-                >Backlog</span
-              >
+              <span class="text-micro font-medium text-fg-muted">Backlog</span>
               <span
-                class="rounded bg-[var(--line)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
+                class="rounded bg-line px-1.5 py-0.5 text-micro text-fg-muted"
                 >{backlogCards.length}</span
               >
             </button>
             {#if backlogOpen}
-              <div class="space-y-2 border-t border-[var(--line)] px-3 py-2">
+              <div class="space-y-2 border-t border-line px-3 py-2">
                 {#if backlogCards.length === 0}
-                  <p class="text-micro text-[var(--fg-muted)]">No cards</p>
+                  <p class="text-micro text-fg-muted">No cards</p>
                 {:else}
                   {#each backlogCards as cardItem (boardCardStableId(cardItem.membership))}
                     {@render renderCard(cardItem)}
@@ -803,14 +797,14 @@
               {@const cards = cardsByColumn[column.key] ?? []}
               {@const isBlocked = column.key === "blocked"}
               <div
-                class="flex min-w-[260px] flex-1 flex-col rounded-md bg-[var(--bg-soft)]"
+                class="flex min-w-[260px] flex-1 flex-col rounded-md bg-bg-soft"
               >
                 <div class="flex items-center justify-between px-3 py-2.5">
                   <h3
                     class="text-micro font-semibold uppercase tracking-wide {isBlocked &&
                     cards.length > 0
                       ? 'text-warn-text'
-                      : 'text-[var(--fg-muted)]'}"
+                      : 'text-fg-muted'}"
                   >
                     {column.title ||
                       boardColumnTitle(column.key, board.column_schema)}
@@ -819,7 +813,7 @@
                     class="min-w-[1.25rem] rounded px-1.5 py-0.5 text-center text-micro {isBlocked &&
                     cards.length > 0
                       ? 'bg-warn-soft text-warn-text'
-                      : 'bg-[var(--line)] text-[var(--fg-muted)]'}"
+                      : 'bg-line text-fg-muted'}"
                   >
                     {cards.length}
                   </span>
@@ -830,7 +824,7 @@
                 >
                   {#if cards.length === 0}
                     <div
-                      class="flex items-center justify-center rounded-md border border-dashed border-[var(--line)] px-3 py-10 text-micro text-[var(--fg-muted)]"
+                      class="flex items-center justify-center rounded-md border border-dashed border-line px-3 py-10 text-micro text-fg-muted"
                     >
                       No cards
                     </div>
@@ -844,16 +838,16 @@
             {/each}
           </div>
 
-          <div class="rounded-md border border-[var(--line)] bg-[var(--panel)]">
+          <div class="rounded-md border border-line bg-panel">
             <button
-              class="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--line-subtle)]"
+              class="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-line-subtle"
               onclick={() => {
                 doneOpen = !doneOpen;
               }}
               type="button"
             >
               <svg
-                class="h-3.5 w-3.5 shrink-0 text-[var(--fg-muted)] transition-transform {doneOpen
+                class="h-3.5 w-3.5 shrink-0 text-fg-muted transition-transform {doneOpen
                   ? 'rotate-90'
                   : ''}"
                 fill="none"
@@ -861,18 +855,16 @@
                 stroke="currentColor"
                 stroke-width="2"><path d="M9 5l7 7-7 7" /></svg
               >
-              <span class="text-micro font-medium text-[var(--fg-muted)]"
-                >Done</span
-              >
+              <span class="text-micro font-medium text-fg-muted">Done</span>
               <span
-                class="rounded bg-[var(--line)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
+                class="rounded bg-line px-1.5 py-0.5 text-micro text-fg-muted"
                 >{doneCards.length}</span
               >
             </button>
             {#if doneOpen}
-              <div class="space-y-2 border-t border-[var(--line)] px-3 py-2">
+              <div class="space-y-2 border-t border-line px-3 py-2">
                 {#if doneCards.length === 0}
-                  <p class="text-micro text-[var(--fg-muted)]">No cards</p>
+                  <p class="text-micro text-fg-muted">No cards</p>
                 {:else}
                   {#each doneCards as cardItem (boardCardStableId(cardItem.membership))}
                     {@render renderCard(cardItem)}
@@ -885,32 +877,28 @@
       </section>
 
       <div class="grid gap-3 lg:grid-cols-3">
-        <section
-          class="rounded-md border border-[var(--line)] bg-[var(--panel)]"
-        >
-          <div class="border-b border-[var(--line)] px-4 py-2.5">
-            <h2 class="text-meta font-medium text-[var(--fg)]">
-              Workspace docs
-            </h2>
+        <section class="rounded-md border border-line bg-panel">
+          <div class="border-b border-line px-4 py-2.5">
+            <h2 class="text-meta font-medium text-fg">Workspace docs</h2>
           </div>
           <div class="px-4 py-3">
             {#if (workspace.documents?.items ?? []).length === 0}
-              <p class="text-micro text-[var(--fg-muted)]">
+              <p class="text-micro text-fg-muted">
                 No linked doc lineages yet.
               </p>
             {:else}
               <div class="space-y-2">
                 {#each workspace.documents.items.slice(0, BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT) as document (document.id)}
                   <a
-                    class="block rounded border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-micro transition-colors hover:border-[var(--line-strong)]"
+                    class="block rounded border border-line bg-bg-soft px-3 py-2 text-micro transition-colors hover:border-line-strong"
                     href={workspaceHref(
                       `/docs/${encodeURIComponent(document.id)}`,
                     )}
                   >
-                    <div class="font-medium text-[var(--fg)]">
+                    <div class="font-medium text-fg">
                       {document.title || document.id}
                     </div>
-                    <div class="mt-1 text-micro text-[var(--fg-muted)]">
+                    <div class="mt-1 text-micro text-fg-muted">
                       Head v{document.head_revision_number ?? "—"} · Updated {formatTimestamp(
                         document.updated_at,
                       ) || "—"}
@@ -919,7 +907,7 @@
                 {/each}
               </div>
               {#if (workspace.documents?.items ?? []).length > BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT}
-                <p class="mt-2 text-micro text-[var(--fg-muted)]">
+                <p class="mt-2 text-micro text-fg-muted">
                   Showing {BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT} of {workspace
                     .documents.items.length}
                 </p>
@@ -928,19 +916,17 @@
           </div>
         </section>
 
-        <section
-          class="rounded-md border border-[var(--line)] bg-[var(--panel)]"
-        >
-          <div class="border-b border-[var(--line)] px-4 py-2.5">
-            <h2 class="text-meta font-medium text-[var(--fg)]">Review inbox</h2>
-            <p class="mt-1 text-micro text-[var(--fg-muted)]">
+        <section class="rounded-md border border-line bg-panel">
+          <div class="border-b border-line px-4 py-2.5">
+            <h2 class="text-meta font-medium text-fg">Review inbox</h2>
+            <p class="mt-1 text-micro text-fg-muted">
               Derived risk and decision signals for resources tied to this board
               (backing threads).
             </p>
           </div>
           <div class="px-4 py-3">
             {#if enrichedInboxItems.length === 0}
-              <p class="text-micro text-[var(--fg-muted)]">
+              <p class="text-micro text-fg-muted">
                 No active derived inbox items.
               </p>
             {:else}
@@ -948,13 +934,11 @@
                 {#each enrichedInboxItems.slice(0, BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT) as item (item.id)}
                   {@const inboxResourceLine =
                     formatInboxItemBoardPanelResourceLine(item)}
-                  <div
-                    class="rounded border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2"
-                  >
-                    <div class="text-micro font-medium text-[var(--fg)]">
+                  <div class="rounded border border-line bg-bg-soft px-3 py-2">
+                    <div class="text-micro font-medium text-fg">
                       {item.title || item.summary || item.id}
                     </div>
-                    <div class="mt-1 text-micro text-[var(--fg-muted)]">
+                    <div class="mt-1 text-micro text-fg-muted">
                       <span
                         class={item.urgency_level === "immediate"
                           ? "text-danger-text"
@@ -970,7 +954,7 @@
                 {/each}
               </div>
               {#if enrichedInboxItems.length > BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT}
-                <p class="mt-2 text-micro text-[var(--fg-muted)]">
+                <p class="mt-2 text-micro text-fg-muted">
                   Showing {BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT} of {enrichedInboxItems.length}
                 </p>
               {/if}
@@ -995,7 +979,7 @@
 
       {#if boardWarnings.length > 0}
         <section
-          class="mt-4 rounded-md border border-warn/20 bg-warn-soft px-4 py-3"
+          class="mt-4 rounded-md border border-warn bg-warn-soft px-4 py-3"
         >
           <h2 class="text-meta font-medium text-warn-text">Warnings</h2>
           <div class="mt-2 space-y-1.5">

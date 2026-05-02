@@ -4,6 +4,7 @@
   import { page } from "$app/stores";
 
   import Button from "$lib/components/Button.svelte";
+  import HostedNarrowLayout from "$lib/components/layout/HostedNarrowLayout.svelte";
   import { startHostedOAuthFlow } from "$lib/hosted/oauthFlow.js";
   import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
 
@@ -47,7 +48,7 @@
   <title>Create your account — Agent Nexus (ANX)</title>
 </svelte:head>
 
-<div class="mx-auto max-w-md py-8">
+<HostedNarrowLayout>
   <div class="rounded-md border border-line bg-bg-soft px-6 py-6">
     <h1 class="text-display text-fg">Create your account</h1>
     <p class="mt-1.5 text-meta text-fg-subtle">
@@ -62,7 +63,7 @@
           bind:value={inviteToken}
           disabled={Boolean(oauthBusyProvider)}
           placeholder="If your team sent a code, paste it here."
-          class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-1.5 text-body text-fg placeholder:text-[var(--fg-subtle)]"
+          class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-1.5 text-body text-fg placeholder:text-fg-subtle"
         />
       </label>
 
@@ -113,4 +114,4 @@
       href={`/hosted/signin${continuationQuery}`}>Sign in</a
     >
   </p>
-</div>
+</HostedNarrowLayout>

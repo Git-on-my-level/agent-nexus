@@ -18,7 +18,7 @@ export function cardResolutionTone(resolution) {
     case "superseded":
       return "text-amber-400 bg-amber-500/10";
     default:
-      return "text-[var(--fg-muted)] bg-[var(--line)]";
+      return "text-fg-muted bg-line";
   }
 }
 
