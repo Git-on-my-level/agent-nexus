@@ -203,13 +203,6 @@
       busy = false;
     }
   }
-
-  function handleKeydown(e) {
-    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-      e.preventDefault();
-      submit();
-    }
-  }
 </script>
 
 <svelte:head>
@@ -231,14 +224,12 @@
       </p>
     </div>
 
-    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <form
       class="mt-5 space-y-3"
       onsubmit={(e) => {
         e.preventDefault();
         submit();
       }}
-      onkeydown={handleKeydown}
     >
       <label class="block text-micro text-fg-muted">
         Workspace name
