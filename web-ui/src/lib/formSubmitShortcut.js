@@ -97,7 +97,7 @@ function hasTextShortcutOptOut(el) {
   if (!(el instanceof Element)) return false;
   return Boolean(
     el.closest(`[${TEXT_SHORTCUT_OPT_OUT}]`) ||
-      el.closest(`[${FORM_SUBMIT_SHORTCUT_OPT_OUT}]`),
+    el.closest(`[${FORM_SUBMIT_SHORTCUT_OPT_OUT}]`),
   );
 }
 
@@ -144,9 +144,17 @@ function isBlurCommitTextControl(el) {
   if (!el.isConnected) return false;
   if (el.tagName === "SELECT") return false;
 
-  if (el.isContentEditable) {
-    return el.getAttribute("contenteditable") !== "false";
+  const ceAttrRaw = el.getAttribute("contenteditable");
+  if (ceAttrRaw !== null) {
+    const ce = String(ceAttrRaw).trim().toLowerCase();
+    if (ce === "false") return false;
+    if (ce === "inherit") {
+      return el.isContentEditable === true;
+    }
+    // "", "true", "plaintext-only", etc. JSDOM omits `isContentEditable`; attribute still applies.
+    return true;
   }
+  if (el.isContentEditable) return true;
   if (el instanceof HTMLTextAreaElement) {
     return !el.disabled && !el.readOnly;
   }

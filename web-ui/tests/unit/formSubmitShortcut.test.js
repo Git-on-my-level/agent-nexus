@@ -2,7 +2,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ESCAPE_DISMISS_ATTR,
-  FORM_SUBMIT_SHORTCUT_OPT_OUT,
   TEXT_SHORTCUT_OPT_OUT,
   handleEscapeTextBlurCommit,
   handleModEnterBlurCommit,
@@ -38,10 +37,10 @@ describe("handleModEnterFormSubmit", () => {
     document.body.innerHTML = `
       <form id="f"><input type="text" id="t" /></form>
     `;
-    const form = /** @type {HTMLFormElement} */ (
-      document.getElementById("f")
+    const form = /** @type {HTMLFormElement} */ (document.getElementById("f"));
+    const input = /** @type {HTMLInputElement} */ (
+      document.getElementById("t")
     );
-    const input = /** @type {HTMLInputElement} */ (document.getElementById("t"));
     const submit = vi.fn((e) => e.preventDefault());
     form.addEventListener("submit", submit);
     const spy = vi.spyOn(form, "requestSubmit").mockImplementation(() => {});
@@ -87,9 +86,7 @@ describe("handleModEnterFormSubmit", () => {
     document.body.innerHTML = `
       <form id="f" data-anx-no-submit-shortcut><input type="text" id="t" /></form>
     `;
-    const form = /** @type {HTMLFormElement} */ (
-      document.getElementById("f")
-    );
+    const form = /** @type {HTMLFormElement} */ (document.getElementById("f"));
     vi.spyOn(form, "requestSubmit").mockImplementation(() => {});
     const input = document.getElementById("t");
     input.focus();
@@ -102,9 +99,7 @@ describe("handleModEnterFormSubmit", () => {
     document.body.innerHTML = `
       <form id="f"><input type="text" id="t" data-anx-no-submit-shortcut /></form>
     `;
-    const form = /** @type {HTMLFormElement} */ (
-      document.getElementById("f")
-    );
+    const form = /** @type {HTMLFormElement} */ (document.getElementById("f"));
     vi.spyOn(form, "requestSubmit").mockImplementation(() => {});
     const input = document.getElementById("t");
     input.focus();
@@ -120,7 +115,9 @@ describe("handleModEnterBlurCommit", () => {
         <textarea id="a"></textarea>
       </div>
     `;
-    const ta = /** @type {HTMLTextAreaElement} */ (document.getElementById("a"));
+    const ta = /** @type {HTMLTextAreaElement} */ (
+      document.getElementById("a")
+    );
     const blurSpy = vi.spyOn(ta, "blur");
     ta.focus();
     expect(document.activeElement).toBe(ta);
@@ -203,9 +200,9 @@ describe("handleEscapeTextBlurCommit", () => {
     const inp = document.getElementById("i");
     inp.focus();
     const ev = escapeEvent(inp);
-    expect(
-      handleEscapeTextBlurCommit(ev, { commandPaletteOpen: true }),
-    ).toBe(false);
+    expect(handleEscapeTextBlurCommit(ev, { commandPaletteOpen: true })).toBe(
+      false,
+    );
   });
   it("blurs control when ancestor has escape-dismiss blur", () => {
     document.body.innerHTML = `
@@ -213,9 +210,7 @@ describe("handleEscapeTextBlurCommit", () => {
         <input type="text" id="i" />
       </div>
     `;
-    const inp = /** @type {HTMLInputElement} */ (
-      document.getElementById("i")
-    );
+    const inp = /** @type {HTMLInputElement} */ (document.getElementById("i"));
     const blurSpy = vi.spyOn(inp, "blur");
     inp.focus();
     const ev = escapeEvent(inp);
