@@ -534,6 +534,7 @@ test("documents list redirects through the default workspace and loads revision 
       id: "incident-response-playbook",
       title: "Incident Response Playbook",
       status: "active",
+      thread_id: "thread-governance",
       head_revision_id: "rev-irp-2",
       head_revision_number: 2,
       updated_at: "2026-03-05T11:00:00Z",
@@ -654,6 +655,22 @@ test("documents list redirects through the default workspace and loads revision 
     },
   );
 
+  await page.route(
+    /\/threads\/thread-governance\/timeline(\?.*)?$/,
+    async (route) => {
+      const request = route.request();
+      if (request.method() !== "GET") {
+        await route.continue();
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ events: [] }),
+      });
+    },
+  );
+
   await page.route(/\/docs\/incident-response-playbook$/, async (route) => {
     const request = route.request();
     if (request.method() === "GET" && request.resourceType() === "document") {
@@ -754,4 +771,96 @@ test("documents list redirects through the default workspace and loads revision 
   await page.getByRole("button", { name: "Revision history" }).first().click();
   await expect(page.getByText("Version 3", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Version 1", { exact: true })).toBeVisible();
+});
+
+test("doc with thread — compact viewport uses bottom dock, not side rail", async ({
+  page,
+}) => {
+  const actorId = "actor-docs-compact-shell";
+  const threads = [
+    {
+      id: "thread-doc-threaded",
+      title: "Threaded Doc Thread",
+      status: "active",
+      type: "process",
+    },
+  ];
+  const doc = {
+    id: "threaded-doc",
+    title: "Threaded Policy",
+    status: "active",
+    thread_id: "thread-doc-threaded",
+    head_revision_id: "rev-td-1",
+    head_revision_number: 1,
+    updated_at: "2026-03-08T12:00:00Z",
+    updated_by: actorId,
+  };
+  const revision = {
+    revision_id: "rev-td-1",
+    revision_number: 1,
+    created_at: "2026-03-08T12:00:00Z",
+    created_by: actorId,
+    content_type: "text",
+    content_hash: "hash-td",
+    revision_hash: "rhash-td",
+    content: "# Threaded Policy\n\nBody.",
+  };
+
+  await page.addInitScript((selectedActorId) => {
+    window.localStorage.setItem("anx_ui_actor_id:local", selectedActorId);
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
+  }, actorId);
+
+  await page.route(/\/threads(\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ threads }),
+    });
+  });
+
+  await page.route(
+    /\/threads\/thread-doc-threaded\/timeline(\?.*)?$/,
+    async (route) => {
+      const request = route.request();
+      if (request.method() !== "GET") {
+        await route.continue();
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ events: [] }),
+      });
+    },
+  );
+
+  await page.route(/\/docs\/threaded-doc$/, async (route) => {
+    const request = route.request();
+    if (request.method() === "GET" && request.resourceType() === "document") {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ document: doc, revision }),
+    });
+  });
+
+  await page.setViewportSize({ width: 820, height: 900 });
+  await page.goto("/o/local/w/local/docs/threaded-doc");
+  await page.waitForLoadState("networkidle");
+
+  await expect(
+    page.locator(".shell-bottom-nav[aria-label='Primary navigation']"),
+  ).toBeVisible();
+  await expect(page.locator(".dd-rail")).toHaveCount(0);
+  const dockFeed = page.locator(".doc-detail-layout--with-rail .page-dock-feed");
+  await expect(dockFeed).toBeVisible();
+  await expect(dockFeed.locator(".dd-surface")).toBeVisible();
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(page.locator(".shell-bottom-nav")).toBeHidden();
+  await expect(page.locator(".dd-rail")).toBeVisible();
 });

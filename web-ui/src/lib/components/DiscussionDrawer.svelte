@@ -30,7 +30,7 @@
    *
    * `layout`:
    * - `dock` — bottom collapsible strip (default).
-   * - `rail` — tablet/desktop (`md`+) right aside with width resize; below uses dock chrome.
+   * - `rail` — full shell (`lg`+) right aside with width resize; below uses dock chrome.
    * - `primary` — full pane, always expanded (topic Messages).
    */
   let {
@@ -151,11 +151,11 @@
       : collapsibleEff,
   );
 
-  /** Side rail (Google Docs–style) from `md` up; bottom dock below that. */
+  /** Side rail (Google Docs–style) from `lg` up; bottom dock below that. */
   let isRailViewport = $state(false);
   onMount(() => {
     if (!browser) return;
-    const mq = window.matchMedia("(min-width: 768px)");
+    const mq = window.matchMedia("(min-width: 1024px)");
     isRailViewport = mq.matches;
     const onMq = () => {
       isRailViewport = mq.matches;
@@ -578,15 +578,15 @@
 {#if threadId}
   {#if showRailAside}
     <aside
-      class="dd-rail md:fixed md:inset-y-0 md:right-0 md:z-20 md:border-l md:border-line md:bg-panel {open
-        ? 'md:w-[var(--dd-rail-w)]'
-        : 'md:w-16'}"
+      class="dd-rail lg:fixed lg:inset-y-0 lg:right-0 lg:z-20 lg:border-l lg:border-line lg:bg-panel {open
+        ? 'lg:w-[var(--dd-rail-w)]'
+        : 'lg:w-16'}"
       style={open ? `--dd-rail-w:${railWidth}px` : undefined}
     >
       {#if !open}
         <button
           type="button"
-          class="hidden md:flex md:h-dvh md:min-h-[20rem] md:w-full md:cursor-pointer md:flex-col md:items-center md:justify-start md:gap-3 md:px-2 md:py-4 md:text-fg-muted md:transition-colors md:hover:bg-panel-hover md:hover:text-fg"
+          class="hidden lg:flex lg:h-dvh lg:min-h-[20rem] lg:w-full lg:cursor-pointer lg:flex-col lg:items-center lg:justify-start lg:gap-3 lg:px-2 lg:py-4 lg:text-fg-muted lg:transition-colors lg:hover:bg-panel-hover lg:hover:text-fg"
           aria-label={`Show ${label.toLowerCase()}${messageCount > 0 ? `, ${messageCount} ${messageCount === 1 ? "comment" : "comments"}` : ""}`}
           title={`Show ${label.toLowerCase()}`}
           onclick={() => setOpen(true)}
@@ -625,9 +625,9 @@
         </button>
       {:else}
         <div
-          class="flex w-full min-w-0 flex-col max-md:max-h-[min(70vh,44rem)] md:h-dvh md:max-h-dvh md:flex-row"
+          class="flex w-full min-w-0 flex-col max-lg:max-h-[min(70vh,44rem)] lg:h-dvh lg:max-h-dvh lg:flex-row"
         >
-          <div class="hidden shrink-0 md:relative md:block md:w-3">
+          <div class="hidden shrink-0 lg:relative lg:block lg:w-3">
             <div
               role="separator"
               aria-orientation="vertical"
@@ -707,18 +707,16 @@
     <div
       bind:this={surfaceEl}
       class="dd-surface flex min-h-0 flex-col border-t border-line bg-panel {!collapsibleEff
-        ? layout === 'rail'
-          ? 'max-md:border-t-0 md:border-0 md:bg-transparent'
-          : 'max-lg:border-t-0 lg:border-0 lg:bg-transparent'
+        ? 'max-lg:border-t-0 lg:border-0 lg:bg-transparent'
         : ''} {expandFillsParentEff && showOpen
         ? layout === 'rail'
-          ? 'max-md:flex max-md:h-full max-md:min-h-0 max-md:flex-1 max-md:flex-col max-md:overflow-hidden'
+          ? 'max-lg:flex max-lg:h-full max-lg:min-h-0 max-lg:flex-1 max-lg:flex-col max-lg:overflow-hidden'
           : 'max-lg:flex max-lg:h-full max-lg:min-h-0 max-lg:flex-1 max-lg:flex-col max-lg:overflow-hidden lg:flex lg:h-full lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-hidden'
         : ''} {(layout === 'primary' ||
         (layout === 'dock' && expandFillsParentEff)) &&
       showOpen
         ? 'lg:h-full lg:min-h-0 lg:flex-1 lg:overflow-hidden'
-        : ''} {layout === 'rail' ? 'md:hidden' : ''}"
+        : ''} {layout === 'rail' ? 'lg:hidden' : ''}"
       data-mobile-chat-expanded={showOpen ? "" : undefined}
       data-discussion-dock-placement={dockPlacementEff}
     >
@@ -772,7 +770,7 @@
       {#if showOpen}
         <div
           class="min-h-0 flex-1 border-t border-line {layout === 'rail'
-            ? `max-md:flex max-md:min-h-0 max-md:flex-col max-md:overflow-hidden ${!collapsibleEff ? 'max-md:border-t-0 md:border-0' : ''} ${expandFillsParentEff && showOpen ? 'max-md:max-h-none max-md:flex-1' : 'max-md:max-h-[min(72dvh,30rem)]'}`
+            ? `max-lg:flex max-lg:min-h-0 max-lg:flex-col max-lg:overflow-hidden ${!collapsibleEff ? 'max-lg:border-t-0 lg:border-0' : ''} ${expandFillsParentEff && showOpen ? 'max-lg:max-h-none max-lg:flex-1' : 'max-lg:max-h-[min(72dvh,30rem)]'}`
             : `max-lg:flex max-lg:min-h-0 max-lg:flex-col max-lg:overflow-hidden ${!collapsibleEff ? 'max-lg:border-t-0 lg:border-0' : ''} ${expandFillsParentEff && showOpen ? 'max-lg:max-h-none max-lg:flex-1' : 'max-lg:max-h-[min(72dvh,30rem)]'}`} {layout ===
             'primary' ||
           (layout === 'dock' && expandFillsParentEff)
@@ -783,7 +781,7 @@
         >
           <div
             class="min-h-0 w-full min-w-0 {layout === 'rail'
-              ? `max-md:min-h-0 max-md:flex-1 max-md:overflow-hidden md:max-h-[min(60vh,36rem)] md:overflow-y-auto md:pr-0.5 ${!collapsibleEff ? 'md:max-h-none md:overflow-visible md:pr-0' : ''}`
+              ? `max-lg:min-h-0 max-lg:flex-1 max-lg:overflow-hidden max-lg:max-h-[min(60vh,36rem)] max-lg:overflow-y-auto max-lg:pr-0.5 ${!collapsibleEff ? 'max-lg:max-h-none max-lg:overflow-visible max-lg:pr-0' : ''}`
               : layout === 'dock' && expandFillsParentEff
                 ? 'max-lg:min-h-0 max-lg:flex-1 max-lg:overflow-hidden lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-hidden lg:pr-0.5'
                 : `max-lg:min-h-0 max-lg:flex-1 max-lg:overflow-hidden lg:max-h-[min(60vh,36rem)] lg:overflow-y-auto lg:pr-0.5 ${!collapsibleEff ? 'lg:max-h-none lg:overflow-visible lg:pr-0' : ''}`} {layout ===
