@@ -59,3 +59,44 @@ export async function enrichPrincipalsWithWakeRouting(principalList) {
     wakeRouting: normalizeWakeRouting(principal?.wake_routing, principal),
   }));
 }
+
+/**
+ * @param {object | null | undefined} principal
+ * @returns {string}
+ */
+export function taggableWakeHandleForPrincipal(principal) {
+  if (
+    !principal ||
+    principal.revoked ||
+    String(principal.principal_kind ?? "") !== "agent"
+  ) {
+    return "";
+  }
+  const meta = normalizeWakeRouting(principal?.wake_routing, principal);
+  if (!meta.taggable) {
+    return "";
+  }
+  return String(principal?.username ?? "").trim();
+}
+
+/**
+ * @param {string} actorId
+ * @param {object[] | null | undefined} principals
+ * @returns {string}
+ */
+export function taggableWakeHandleForActorId(actorId, principals) {
+  const id = String(actorId ?? "").trim();
+  if (!id) {
+    return "";
+  }
+  for (const p of principals ?? []) {
+    if (String(p?.actor_id ?? "").trim() !== id) {
+      continue;
+    }
+    const h = taggableWakeHandleForPrincipal(p);
+    if (h) {
+      return h;
+    }
+  }
+  return "";
+}
