@@ -769,9 +769,7 @@
 
       {#if showOpen}
         <div
-          class="min-h-0 flex-1 border-t border-line {layout === 'rail'
-            ? `max-lg:flex max-lg:min-h-0 max-lg:flex-col max-lg:overflow-hidden ${!collapsibleEff ? 'max-lg:border-t-0 lg:border-0' : ''} ${expandFillsParentEff && showOpen ? 'max-lg:max-h-none max-lg:flex-1' : 'max-lg:max-h-[min(72dvh,30rem)]'}`
-            : `max-lg:flex max-lg:min-h-0 max-lg:flex-col max-lg:overflow-hidden ${!collapsibleEff ? 'max-lg:border-t-0 lg:border-0' : ''} ${expandFillsParentEff && showOpen ? 'max-lg:max-h-none max-lg:flex-1' : 'max-lg:max-h-[min(72dvh,30rem)]'}`} {layout ===
+          class="min-h-0 flex-1 border-t border-line {`max-lg:flex max-lg:min-h-0 max-lg:flex-col max-lg:overflow-hidden ${!collapsibleEff ? 'max-lg:border-t-0 lg:border-0' : ''} ${expandFillsParentEff && showOpen ? 'max-lg:max-h-none max-lg:flex-1' : 'max-lg:max-h-[min(72dvh,30rem)]'}`} {layout ===
             'primary' ||
           (layout === 'dock' && expandFillsParentEff)
             ? 'lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-hidden'
@@ -781,7 +779,7 @@
         >
           <div
             class="min-h-0 w-full min-w-0 {layout === 'rail'
-              ? `max-lg:min-h-0 max-lg:flex-1 max-lg:overflow-hidden max-lg:max-h-[min(60vh,36rem)] max-lg:overflow-y-auto max-lg:pr-0.5 ${!collapsibleEff ? 'max-lg:max-h-none max-lg:overflow-visible max-lg:pr-0' : ''}`
+              ? `max-lg:min-h-0 max-lg:flex-1 max-lg:overflow-hidden ${!collapsibleEff ? 'max-lg:max-h-none max-lg:overflow-visible max-lg:pr-0' : ''}`
               : layout === 'dock' && expandFillsParentEff
                 ? 'max-lg:min-h-0 max-lg:flex-1 max-lg:overflow-hidden lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-hidden lg:pr-0.5'
                 : `max-lg:min-h-0 max-lg:flex-1 max-lg:overflow-hidden lg:max-h-[min(60vh,36rem)] lg:overflow-y-auto lg:pr-0.5 ${!collapsibleEff ? 'lg:max-h-none lg:overflow-visible lg:pr-0' : ''}`} {layout ===
