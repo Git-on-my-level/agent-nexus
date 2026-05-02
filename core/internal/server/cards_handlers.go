@@ -368,7 +368,10 @@ func handlePatchCard(w http.ResponseWriter, r *http.Request, opts handlerOptions
 	}
 
 	if anyString(result.Card["updated_at"]) != anyString(beforeCard["updated_at"]) || anyString(result.Card["version"]) != anyString(beforeCard["version"]) {
-		emitCardLifecycleEventBestEffort(r.Context(), opts, actorID, buildCardUpdatedEvent(result.Board, beforeCard, result.Card, changedFields))
+		storedLifecycle, emitErr := emitCardLifecycleEvent(r.Context(), opts, actorID, buildCardUpdatedEvent(result.Board, beforeCard, result.Card, changedFields))
+		if emitErr == nil && storedLifecycle != nil {
+			enqueueCardAssigneeWakeBestEffort(r.Context(), opts, actorID, beforeCard, result.Card, result.Board, storedLifecycle)
+		}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"card": publicCardView(result.Card)})

@@ -597,7 +597,10 @@ func addBoardCardFromRaw(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		return
 	}
 
-	emitCardLifecycleEventBestEffort(r.Context(), opts, actorID, buildCardCreatedEvent(result.Board, result.Card))
+	storedLifecycle, emitErr := emitCardLifecycleEvent(r.Context(), opts, actorID, buildCardCreatedEvent(result.Board, result.Card))
+	if emitErr == nil && storedLifecycle != nil {
+		enqueueCardAssigneeWakeBestEffort(r.Context(), opts, actorID, nil, result.Card, result.Board, storedLifecycle)
+	}
 
 	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, idempotencyOp, actorID, req.RequestKey, replayRequest, http.StatusCreated, map[string]any{
 		"board": result.Board,
@@ -709,7 +712,10 @@ func handleBatchAddBoardCards(w http.ResponseWriter, r *http.Request, opts handl
 	}
 
 	for _, res := range results {
-		emitCardLifecycleEventBestEffort(r.Context(), opts, actorID, buildCardCreatedEvent(res.Board, res.Card))
+		storedLifecycle, emitErr := emitCardLifecycleEvent(r.Context(), opts, actorID, buildCardCreatedEvent(res.Board, res.Card))
+		if emitErr == nil && storedLifecycle != nil {
+			enqueueCardAssigneeWakeBestEffort(r.Context(), opts, actorID, nil, res.Card, res.Board, storedLifecycle)
+		}
 	}
 
 	finalBoard := results[len(results)-1].Board
@@ -812,7 +818,10 @@ func handleUpdateBoardCard(w http.ResponseWriter, r *http.Request, opts handlerO
 	}
 
 	if anyString(result.Card["updated_at"]) != anyString(beforeCard["updated_at"]) || anyString(result.Card["version"]) != anyString(beforeCard["version"]) {
-		emitCardLifecycleEventBestEffort(r.Context(), opts, actorID, buildCardUpdatedEvent(result.Board, beforeCard, result.Card, changedFields))
+		storedLifecycle, emitErr := emitCardLifecycleEvent(r.Context(), opts, actorID, buildCardUpdatedEvent(result.Board, beforeCard, result.Card, changedFields))
+		if emitErr == nil && storedLifecycle != nil {
+			enqueueCardAssigneeWakeBestEffort(r.Context(), opts, actorID, beforeCard, result.Card, result.Board, storedLifecycle)
+		}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"board": result.Board, "card": publicCardView(result.Card)})
@@ -1604,13 +1613,13 @@ func emitBoardLifecycleEventBestEffort(ctx context.Context, opts handlerOptions,
 	_ = emitBoardLifecycleEvent(ctx, opts, actorID, event)
 }
 
-func emitCardLifecycleEvent(ctx context.Context, opts handlerOptions, actorID string, event map[string]any) error {
+func emitCardLifecycleEvent(ctx context.Context, opts handlerOptions, actorID string, event map[string]any) (map[string]any, error) {
 	if opts.primitiveStore == nil || event == nil {
-		return nil
+		return nil, nil
 	}
 	stored, err := opts.primitiveStore.AppendEvent(ctx, actorID, event)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	threadIDs := []string{anyString(stored["thread_id"])}
 	payload, _ := stored["payload"].(map[string]any)
@@ -1627,11 +1636,11 @@ func emitCardLifecycleEvent(ctx context.Context, opts handlerOptions, actorID st
 	for _, threadID := range uniqueServerStrings(threadIDs) {
 		_ = refreshDerivedTopicProjection(ctx, opts, threadID, time.Now().UTC(), actorID)
 	}
-	return nil
+	return stored, nil
 }
 
 func emitCardLifecycleEventBestEffort(ctx context.Context, opts handlerOptions, actorID string, event map[string]any) {
-	_ = emitCardLifecycleEvent(ctx, opts, actorID, event)
+	_, _ = emitCardLifecycleEvent(ctx, opts, actorID, event)
 }
 
 func boardListItemsResponse(items []primitives.BoardListItem) []map[string]any {

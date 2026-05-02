@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -161,6 +162,129 @@ func TestNotificationsListReadAndDismissAreTargetScoped(t *testing.T) {
 	}, target.AccessToken, http.StatusConflict)
 	assertErrorCode(t, conflictResp, "conflict")
 	conflictResp.Body.Close()
+}
+
+func TestCardAssignmentEnqueuesAgentWakeupNotification(t *testing.T) {
+	t.Parallel()
+
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{
+		bootstrapToken:             testBootstrapToken,
+		allowUnauthenticatedWrites: true,
+	})
+
+	assignor := registerNotificationTestAgentWithBootstrap(t, env.server.URL, "assignor.agent")
+	targetInviteToken := createNotificationTestInvite(t, env.server.URL, assignor.AccessToken)
+	assignee := registerNotificationTestAgentWithInvite(t, env.server.URL, "assignee.agent", targetInviteToken)
+
+	threadID := integrationSeedThreadWithStore(t, env.primitiveStore, nil, assignor.ActorID, map[string]any{
+		"title":            "Board thread",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p2",
+		"tags":             []any{"board"},
+		"cadence":          "daily",
+		"next_check_in_at": "2026-03-06T00:00:00Z",
+		"current_summary":  "summary",
+		"next_actions":     []any{"check"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
+
+	createBoardResp := postJSONExpectStatus(t, env.server.URL+"/boards", fmt.Sprintf(`{
+		"actor_id":%q,
+		"board":{
+			"title":"Assignment board",
+			"refs":["thread:%s"]
+		}
+	}`, assignor.ActorID, threadID), http.StatusCreated)
+	defer createBoardResp.Body.Close()
+	var boardPayload struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(createBoardResp.Body).Decode(&boardPayload); err != nil {
+		t.Fatalf("decode board: %v", err)
+	}
+	boardID := asString(boardPayload.Board["id"])
+	boardUpdatedAt := asString(boardPayload.Board["updated_at"])
+
+	addCardResp := postJSONExpectStatus(t, env.server.URL+"/boards/"+boardID+"/cards", fmt.Sprintf(`{
+		"actor_id":%q,
+		"if_board_updated_at":%q,
+		"title":"Work item",
+		"related_refs":["thread:%s"],
+		"column_key":"ready"
+	}`, assignor.ActorID, boardUpdatedAt, threadID), http.StatusCreated)
+	defer addCardResp.Body.Close()
+	var addPayload struct {
+		Card map[string]any `json:"card"`
+	}
+	if err := json.NewDecoder(addCardResp.Body).Decode(&addPayload); err != nil {
+		t.Fatalf("decode card create: %v", err)
+	}
+	cardID := asString(addPayload.Card["id"])
+	cardUpdatedAt := asString(addPayload.Card["updated_at"])
+
+	assigneeRef := fmt.Sprintf("actor:%s", assignee.ActorID)
+	patchResp := patchJSONExpectStatus(t, env.server.URL+"/cards/"+cardID, fmt.Sprintf(`{
+		"actor_id":%q,
+		"if_updated_at":%q,
+		"patch":{"assignee_refs":[%q]}
+	}`, assignor.ActorID, cardUpdatedAt, assigneeRef), http.StatusOK)
+	var patchPayload struct {
+		Card map[string]any `json:"card"`
+	}
+	if err := json.NewDecoder(patchResp.Body).Decode(&patchPayload); err != nil {
+		t.Fatalf("decode patch card: %v", err)
+	}
+	patchResp.Body.Close()
+	cardThreadID := asString(patchPayload.Card["thread_id"])
+	if cardThreadID == "" {
+		t.Fatalf("expected card thread_id: %#v", patchPayload.Card)
+	}
+
+	notificationsResp := getJSONExpectStatusWithAuth(t, env.server.URL+"/agent-notifications?status=unread", assignee.AccessToken, http.StatusOK)
+	var notificationsPayload struct {
+		Items []map[string]any `json:"items"`
+	}
+	if err := json.NewDecoder(notificationsResp.Body).Decode(&notificationsPayload); err != nil {
+		t.Fatalf("decode notifications: %v", err)
+	}
+	notificationsResp.Body.Close()
+
+	if len(notificationsPayload.Items) != 1 {
+		t.Fatalf("expected one unread notification, got %#v", notificationsPayload.Items)
+	}
+	item := notificationsPayload.Items[0]
+	if asString(item["status"]) != notificationStatusUnread {
+		t.Fatalf("expected unread notification: %#v", item)
+	}
+	triggerEventID := asString(item["trigger_event_id"])
+	if triggerEventID == "" {
+		t.Fatalf("expected trigger_event_id: %#v", item)
+	}
+
+	timelineResp := getJSONExpectStatusWithAuth(t, env.server.URL+"/threads/"+cardThreadID+"/timeline", assignor.AccessToken, http.StatusOK)
+	defer timelineResp.Body.Close()
+	var timelinePayload struct {
+		Events []map[string]any `json:"events"`
+	}
+	if err := json.NewDecoder(timelineResp.Body).Decode(&timelinePayload); err != nil {
+		t.Fatalf("decode timeline: %v", err)
+	}
+	var matched bool
+	for _, ev := range timelinePayload.Events {
+		if asString(ev["id"]) != triggerEventID {
+			continue
+		}
+		if asString(ev["type"]) != "card_updated" {
+			t.Fatalf("expected card_updated for trigger id, got %#v", ev)
+		}
+		matched = true
+		break
+	}
+	if !matched {
+		t.Fatalf("timeline missing card_updated event id %s in %#v", triggerEventID, timelinePayload.Events)
+	}
 }
 
 type notificationTestAgent struct {
