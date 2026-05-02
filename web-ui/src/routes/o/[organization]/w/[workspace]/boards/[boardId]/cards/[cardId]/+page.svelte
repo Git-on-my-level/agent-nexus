@@ -6,7 +6,10 @@
     lookupActorDisplayName,
     principalRegistry,
   } from "$lib/actorSession";
-  import { boardCardStableId } from "$lib/boardUtils";
+  import {
+    boardCardStableId,
+    sortedColumnPeersStableIds,
+  } from "$lib/boardUtils";
   import CardDetailModalInner from "$lib/components/CardDetailModalInner.svelte";
   import { coreClient } from "$lib/coreClient";
   import { workspacePath } from "$lib/workspacePaths";
@@ -30,6 +33,18 @@
     return (
       items.find((item) => boardCardStableId(item?.membership) === cardId) ??
       null
+    );
+  });
+
+  let mobileCardDetailColumnPeers = $derived.by(() => {
+    const ws = workspace;
+    const card = selectedCard;
+    const b = ws?.board;
+    if (!ws?.cards || !card?.membership || !b) return [];
+    return sortedColumnPeersStableIds(
+      ws.cards,
+      b.column_schema,
+      card.membership.column_key,
     );
   });
 
@@ -103,11 +118,48 @@
       if_board_updated_at: workspace.board.updated_at,
       ...payload,
     };
-    if (
-      String(nextPayload.column_key ?? "").trim() === "done" &&
-      !nextPayload.resolution
-    ) {
-      nextPayload.resolution = "done";
+    const columnKey = String(nextPayload.column_key ?? "").trim();
+    if (columnKey === "done") {
+      const memb = cardItem?.membership ?? {};
+      const membRefs = [...(memb.resolution_refs ?? [])]
+        .map((r) => String(r ?? "").trim())
+        .filter(Boolean);
+      let res =
+        typeof nextPayload.resolution === "string"
+          ? String(nextPayload.resolution).trim().toLowerCase()
+          : "";
+      const membRes = String(memb.resolution ?? "")
+        .trim()
+        .toLowerCase();
+      if (!res) {
+        if (membRes === "done" || membRes === "canceled") {
+          nextPayload.resolution = membRes;
+          res = membRes;
+        } else {
+          nextPayload.resolution = "done";
+          res = "done";
+        }
+      } else if (res === "completed") {
+        nextPayload.resolution = "done";
+        res = "done";
+      }
+
+      const incomingRefs = Array.isArray(nextPayload.resolution_refs)
+        ? [...nextPayload.resolution_refs]
+            .map((r) => String(r ?? "").trim())
+            .filter(Boolean)
+        : [];
+      const mergedRefs = incomingRefs.length > 0 ? incomingRefs : [...membRefs];
+
+      if ((res === "done" || res === "canceled") && mergedRefs.length === 0) {
+        clearMutationMessages();
+        mutationError =
+          "Cannot move card to Done or Canceled: add at least one artifact or event resolution ref first.";
+        return;
+      }
+      if (incomingRefs.length === 0 && mergedRefs.length > 0) {
+        nextPayload.resolution_refs = mergedRefs;
+      }
     }
     await runBoardMutation(
       () => coreClient.moveBoardCard(boardId, id, nextPayload),
@@ -223,6 +275,7 @@
     {workspaceSlug}
     workspaceId={data?.workspaceId ?? ""}
     primaryTopic={workspace.primary_topic ?? null}
+    columnPeerStableIds={mobileCardDetailColumnPeers}
     {actorName}
     onclose={closeCardPage}
     onmovecard={moveCard}

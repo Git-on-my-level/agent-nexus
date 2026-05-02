@@ -75,9 +75,24 @@ describe("AttachmentChip", () => {
     expect(link?.getAttribute("aria-label") ?? "").toMatch(/Attachment/i);
   });
 
-  it("shows missing state when unrouted", () => {
+  it("shows missing state when unrouted and there is no artifact link", () => {
     const resolved = resolveRefLink("artifact:missing-uuid-here", {
       threadId: "",
+      boardId: "",
+      humanize: true,
+      artifactRoutesById: {},
+      eventRoutesById: {},
+      workspaceSlug: "",
+      organizationSlug: "",
+    });
+    const { container } = render(AttachmentChip, { resolved, size: "inline" });
+    expect(container.textContent ?? "").toMatch(/unavailable/i);
+  });
+
+  it("does not show unavailable when unrouted but artifact href resolves", () => {
+    const aid = "67a6bdba-51b2-4f3a-9c7d-ef1234567890";
+    const resolved = resolveRefLink(`artifact:${aid}`, {
+      threadId: "t1",
       boardId: "",
       humanize: true,
       artifactRoutesById: {},
@@ -85,11 +100,15 @@ describe("AttachmentChip", () => {
       workspaceSlug: "ws",
       organizationSlug: "org",
     });
+    expect(resolved.routed).toBeFalsy();
+    expect(resolved.isLink).toBe(true);
     const { container } = render(AttachmentChip, { resolved, size: "inline" });
-    expect(container.textContent ?? "").toMatch(/unavailable/i);
+    expect(container.textContent ?? "").not.toMatch(/unavailable/i);
+    const link = container.querySelector("a.attachment-chip-link");
+    expect(link?.getAttribute("href") ?? "").toContain(encodeURIComponent(aid));
   });
 
-  it("applies trashed styling when trashed_at present", () => {
+  it("renders nothing when trashed_at is set on merged metadata", () => {
     const resolved = resolvedAttachment(
       [
         {
@@ -107,7 +126,6 @@ describe("AttachmentChip", () => {
       resolved,
       size: "inline",
     });
-    const row = container.querySelector(".attachment-chip-row");
-    expect(row?.className ?? "").toContain("border-danger-soft");
+    expect(container.querySelector(".attachment-chip-root")).toBeFalsy();
   });
 });

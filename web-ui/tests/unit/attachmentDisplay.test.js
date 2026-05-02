@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   formatBytes,
+  isTrashedAttachmentMeta,
   middleTruncateFilename,
   shortMimeBadge,
 } from "../../src/lib/attachmentDisplay.js";
@@ -70,6 +71,30 @@ describe("attachmentDisplay", () => {
       expect(formatBytes(1536)).toBe("1.5 KB");
       expect(formatBytes(1024 * 1024)).toBe("1 MB");
       expect(formatBytes(Math.floor(1.5 * 1024 * 1024))).toBe("1.5 MB");
+    });
+  });
+
+  describe("isTrashedAttachmentMeta", () => {
+    it("is true when merged meta has trashed_at or trashedAt", () => {
+      expect(
+        isTrashedAttachmentMeta(
+          { attachmentMeta: { trashed_at: "2026-01-01T00:00:00Z" } },
+          null,
+        ),
+      ).toBe(true);
+      expect(
+        isTrashedAttachmentMeta(
+          { attachmentMeta: {} },
+          { trashedAt: "2026-01-01T00:00:00Z" },
+        ),
+      ).toBe(true);
+    });
+
+    it("is false when pending overlay has no trash field", () => {
+      expect(isTrashedAttachmentMeta({ attachmentMeta: {} }, null)).toBe(false);
+      expect(
+        isTrashedAttachmentMeta(null, { original_filename: "x.png" }),
+      ).toBe(false);
     });
   });
 });

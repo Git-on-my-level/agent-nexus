@@ -319,20 +319,21 @@ test("card detail modal Discussion drawer and Timeline tab render without reques
   });
 
   await expect(
-    dialog.getByRole("link", { name: "topic-modal-card" }),
+    dialog.getByRole("link", { name: /topic-modal-card/ }).first(),
   ).toHaveAttribute("href", "/o/local/w/local/topics/topic-modal-card");
-  await expect(dialog.getByRole("link", { name: /card-one/ })).toHaveAttribute(
-    "href",
-    `/o/local/w/local/boards/${boardId}?card=card-one`,
-  );
   await expect(
-    dialog.getByRole("link", { name: /artifact-modal-card/ }),
+    dialog.getByRole("link", { name: /card-one/ }).first(),
+  ).toHaveAttribute("href", `/o/local/w/local/boards/${boardId}?card=card-one`);
+  await expect(
+    dialog.getByRole("link", { name: /artifact-modal-card/ }).first(),
   ).toHaveAttribute("href", "/o/local/w/local/artifacts/artifact-modal-card");
 
   const tabCount = await dialog
     .locator('[aria-label="Card sections"] [role="tab"]')
     .count();
   expect(tabCount, "expected 3 section tabs in modal").toBe(3);
+
+  await expect(dialog.getByTestId("cdm-tab-timeline")).toHaveText(/timeline/i);
 
   const principalCountBefore = principalsRequestCount;
   const timelineCountBefore = timelineRequestCount;

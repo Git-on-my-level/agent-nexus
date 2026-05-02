@@ -23,7 +23,7 @@
   import TrashButton from "$lib/components/TrashButton.svelte";
   import { toTimelineView, eventTypeDotClass } from "$lib/timelineUtils";
 
-  let { threadId } = $props();
+  let { threadId, compact = false } = $props();
 
   const timelineCtx = getTimelineContext();
   const timelineStore = timelineCtx.store;
@@ -226,15 +226,17 @@
       <div class="flex min-w-0 flex-col gap-1">
         {#each filteredTimeline as event (event.id)}
           <div
-            class="rounded-md border border-[var(--line)] bg-[var(--panel)] px-4 py-2.5 {event.archived_at
-              ? 'opacity-60'
-              : ''}"
+            class="group rounded-md border border-[var(--line)] bg-[var(--panel)] {compact
+              ? 'px-2 py-1.5'
+              : 'px-4 py-2.5'} {event.archived_at ? 'opacity-60' : ''}"
             id={`event-${event.id}`}
           >
             <div class="flex items-start justify-between gap-3">
               <div class="flex min-w-0 flex-1 items-start gap-2.5">
                 <span
-                  class="mt-1.5 h-2 w-2 shrink-0 rounded-full {eventTypeDotClass(
+                  class="{compact
+                    ? 'mt-1 h-1.5 w-1.5'
+                    : 'mt-1.5 h-2 w-2'} shrink-0 rounded-full {eventTypeDotClass(
                     event.rawType,
                   )}"
                   title={event.typeLabel}
@@ -242,7 +244,9 @@
                 <div class="min-w-0 flex-1">
                   <MarkdownRenderer
                     source={event.summary}
-                    class="text-meta text-[var(--fg)]"
+                    class="{compact
+                      ? 'text-micro line-clamp-2'
+                      : 'text-meta'} text-[var(--fg)]"
                   />
                   <p class="mt-0.5 text-micro text-[var(--fg-muted)]">
                     {actorName(event.actor_id)} · {event.typeLabel} · {formatTimestamp(
@@ -251,7 +255,11 @@
                   </p>
                 </div>
               </div>
-              <div class="flex shrink-0 items-center gap-0.5">
+              <div
+                class="flex shrink-0 items-center gap-0.5 {compact
+                  ? 'opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100'
+                  : ''}"
+              >
                 <ArchiveButton
                   archived={Boolean(event.archived_at)}
                   busy={lifecycleBusy}
@@ -289,14 +297,32 @@
             {/if}
 
             {#if event.refs.length > 0}
-              <div class="mt-1.5 flex flex-wrap gap-1.5 text-micro">
-                {#each event.refs as refValue}<RefLink
-                    {refValue}
-                    {threadId}
-                    artifactRoutesById={routeMaps.artifactRoutesById}
-                    eventRoutesById={routeMaps.eventRoutesById}
-                  />{/each}
-              </div>
+              {#if compact}
+                <details class="mt-1.5">
+                  <summary
+                    class="cursor-pointer text-micro text-[var(--fg-muted)]"
+                  >
+                    {event.refs.length} refs…
+                  </summary>
+                  <div class="mt-1 flex flex-wrap gap-1.5 text-micro">
+                    {#each event.refs as refValue}<RefLink
+                        {refValue}
+                        {threadId}
+                        artifactRoutesById={routeMaps.artifactRoutesById}
+                        eventRoutesById={routeMaps.eventRoutesById}
+                      />{/each}
+                  </div>
+                </details>
+              {:else}
+                <div class="mt-1.5 flex flex-wrap gap-1.5 text-micro">
+                  {#each event.refs as refValue}<RefLink
+                      {refValue}
+                      {threadId}
+                      artifactRoutesById={routeMaps.artifactRoutesById}
+                      eventRoutesById={routeMaps.eventRoutesById}
+                    />{/each}
+                </div>
+              {/if}
             {/if}
 
             {#if !event.isKnownType}

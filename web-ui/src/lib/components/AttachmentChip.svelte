@@ -2,6 +2,7 @@
   import { browser } from "$app/environment";
   import {
     formatBytes,
+    isTrashedAttachmentMeta,
     middleTruncateFilename,
     shortMimeBadge,
   } from "$lib/attachmentDisplay.js";
@@ -39,12 +40,23 @@
 
   let state = $derived.by(() => {
     if (pending) return "pending";
-    const m = mergedMeta;
-    const trashed = m.trashed_at ?? m.trashedAt;
-    if (trashed) return "trashed";
-    if (!resolved?.routed && resolved?.prefix === "artifact") return "missing";
+    // `routed` means the id was in `artifactRoutesById` (timeline had metadata).
+    // Unrouted `artifact:` refs still get a direct `/artifacts/:id` href from
+    // `resolveRefLink`; only treat as missing when that href could not be built.
+    if (
+      !resolved?.routed &&
+      resolved?.prefix === "artifact" &&
+      !resolved?.isLink
+    ) {
+      return "missing";
+    }
     return "ready";
   });
+
+  /** Trashed attachments are omitted from message/topic attachment surfaces; restore clears `trashed_at` and the chip shows again. */
+  let suppressRender = $derived(
+    !pending && isTrashedAttachmentMeta(resolved, artifactOverlay),
+  );
 
   let displayName = $derived.by(() => {
     const m = mergedMeta;
@@ -150,150 +162,151 @@
   }
 </script>
 
-{#snippet fileIcon()}
-  <svg
-    class="text-[var(--fg-muted)]"
-    width="16"
-    height="16"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    stroke-width="2"
-    aria-hidden="true"
-  >
-    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-    <polyline points="14 2 14 8 20 8" />
-  </svg>
-{/snippet}
-
-{#snippet spinner()}
-  <span
-    class="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-[var(--line-strong)] border-t-accent-solid"
-    aria-hidden="true"
-  ></span>
-{/snippet}
-
-<span
-  class="attachment-chip-root compact-ref-link inline-flex min-w-0 max-w-full flex-col gap-0.5 {clazz}"
->
-  {#if pending}
-    <RefChip
-      navigable={false}
-      accentText={false}
-      ariaLabel={ariaLabelText}
-      ariaBusy="true"
-      role="text"
-      title={resolved?.raw ?? ""}
-      class="items-center gap-1.5 text-[var(--fg-muted)]"
+{#if !suppressRender}
+  {#snippet fileIcon()}
+    <svg
+      class="text-[var(--fg-muted)]"
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      aria-hidden="true"
     >
-      <span class="{leadingScale} flex items-center justify-center"
-        >{@render spinner()}</span
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+    </svg>
+  {/snippet}
+
+  {#snippet spinner()}
+    <span
+      class="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-[var(--line-strong)] border-t-accent-solid"
+      aria-hidden="true"
+    ></span>
+  {/snippet}
+
+  <span
+    class="attachment-chip-root compact-ref-link inline-flex min-w-0 max-w-full flex-col gap-0.5 {clazz}"
+  >
+    {#if pending}
+      <RefChip
+        navigable={false}
+        accentText={false}
+        ariaLabel={ariaLabelText}
+        ariaBusy="true"
+        role="text"
+        title={resolved?.raw ?? ""}
+        class="items-center gap-1.5 text-[var(--fg-muted)]"
       >
-      <span class="min-w-0 flex-1">
-        <span class="block truncate font-medium text-[var(--fg)]"
-          >Uploading… {truncatedName}</span
+        <span class="{leadingScale} flex items-center justify-center"
+          >{@render spinner()}</span
         >
-        {#if uploadProgress && Number.isFinite(uploadProgress.loaded) && Number.isFinite(uploadProgress.total) && uploadProgress.total > 0}
-          <span class="text-micro text-[var(--fg-muted)]">
-            {formatBytes(uploadProgress.loaded)} / {formatBytes(
-              uploadProgress.total,
-            )}
+        <span class="min-w-0 flex-1">
+          <span class="block truncate font-medium text-[var(--fg)]"
+            >Uploading… {truncatedName}</span
+          >
+          {#if uploadProgress && Number.isFinite(uploadProgress.loaded) && Number.isFinite(uploadProgress.total) && uploadProgress.total > 0}
+            <span class="text-micro text-[var(--fg-muted)]">
+              {formatBytes(uploadProgress.loaded)} / {formatBytes(
+                uploadProgress.total,
+              )}
+            </span>
+          {/if}
+        </span>
+      </RefChip>
+    {:else}
+      <RefChip
+        navigable={false}
+        accentText={false}
+        title={resolved?.raw ?? ""}
+        class="attachment-chip-row items-stretch gap-0 p-0 focus-within:ring-2 focus-within:ring-accent-solid/40 {state ===
+        'missing'
+          ? 'opacity-75'
+          : ''}"
+      >
+        {#if resolved?.isLink && resolved?.href}
+          <a
+            class="compact-ref-link attachment-chip-link inline-flex min-w-0 flex-1 items-center gap-1.5 px-1.5 py-0.5 hover:border-[var(--line-strong)] {state ===
+            'missing'
+              ? 'text-[var(--fg-muted)]'
+              : 'text-accent-text hover:text-accent-text'}"
+            href={resolved.href}
+            rel={resolved.isExternal ? "noreferrer noopener" : undefined}
+            target={resolved.isExternal ? "_blank" : undefined}
+            aria-label={ariaLabelText}
+          >
+            <span class="{leadingScale} flex items-center justify-center"
+              >{@render fileIcon()}</span
+            >
+            <span
+              class="flex min-w-0 flex-1 flex-col gap-0 sm:flex-row sm:items-baseline sm:gap-1.5"
+            >
+              {#if state === "missing"}
+                <span class="min-w-0 truncate font-medium">
+                  Artifact {compactArtifactId(artifactId)} — unavailable
+                </span>
+              {:else}
+                <span class="min-w-0 truncate font-medium">{truncatedName}</span
+                >
+                {#if size !== "compact"}
+                  <span
+                    class="shrink-0 text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)]"
+                  >
+                    {#if typeBadge}{typeBadge}{/if}{#if typeBadge && sizeLine}
+                      {" · "}{/if}{#if sizeLine}{sizeLine}{/if}
+                  </span>
+                {:else if typeBadge}
+                  <span
+                    class="shrink-0 text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)]"
+                    >{typeBadge}</span
+                  >
+                {/if}
+              {/if}
+            </span>
+          </a>
+        {:else}
+          <span
+            class="compact-ref-link inline-flex min-w-0 flex-1 items-center gap-1.5 px-1.5 py-0.5 text-[var(--fg-muted)]"
+            aria-label={ariaLabelText}
+          >
+            <span class="{leadingScale} flex items-center justify-center"
+              >{@render fileIcon()}</span
+            >
+            <span class="min-w-0 truncate">
+              {#if state === "missing"}
+                Artifact {compactArtifactId(artifactId)} — unavailable
+              {:else}
+                {truncatedName}
+              {/if}
+            </span>
           </span>
         {/if}
-      </span>
-    </RefChip>
-  {:else}
-    <RefChip
-      navigable={false}
-      accentText={false}
-      title={resolved?.raw ?? ""}
-      class="attachment-chip-row items-stretch gap-0 p-0 focus-within:ring-2 focus-within:ring-accent-solid/40 {state ===
-      'trashed'
-        ? 'border-danger-soft opacity-80'
-        : ''} {state === 'missing' ? 'opacity-75' : ''}"
-    >
-      {#if resolved?.isLink && resolved?.href}
-        <a
-          class="compact-ref-link attachment-chip-link inline-flex min-w-0 flex-1 items-center gap-1.5 px-1.5 py-0.5 hover:border-[var(--line-strong)] {state ===
-          'missing'
-            ? 'text-[var(--fg-muted)]'
-            : 'text-accent-text hover:text-accent-text'} {state === 'trashed'
-            ? 'line-through'
-            : ''}"
-          href={resolved.href}
-          rel={resolved.isExternal ? "noreferrer noopener" : undefined}
-          target={resolved.isExternal ? "_blank" : undefined}
-          aria-label={ariaLabelText}
-        >
-          <span class="{leadingScale} flex items-center justify-center"
-            >{@render fileIcon()}</span
-          >
-          <span
-            class="flex min-w-0 flex-1 flex-col gap-0 sm:flex-row sm:items-baseline sm:gap-1.5"
-          >
-            {#if state === "missing"}
-              <span class="min-w-0 truncate font-medium">
-                Artifact {compactArtifactId(artifactId)} — unavailable
-              </span>
-            {:else}
-              <span class="min-w-0 truncate font-medium">{truncatedName}</span>
-              {#if size !== "compact"}
-                <span
-                  class="shrink-0 text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)]"
-                >
-                  {#if typeBadge}{typeBadge}{/if}{#if typeBadge && sizeLine}
-                    {" · "}{/if}{#if sizeLine}{sizeLine}{/if}
-                </span>
-              {:else if typeBadge}
-                <span
-                  class="shrink-0 text-micro font-medium uppercase tracking-wide text-[var(--fg-muted)]"
-                  >{typeBadge}</span
-                >
-              {/if}
-            {/if}
-          </span>
-        </a>
-      {:else}
-        <span
-          class="compact-ref-link inline-flex min-w-0 flex-1 items-center gap-1.5 px-1.5 py-0.5 text-[var(--fg-muted)]"
-          aria-label={ariaLabelText}
-        >
-          <span class="{leadingScale} flex items-center justify-center"
-            >{@render fileIcon()}</span
-          >
-          <span class="min-w-0 truncate">
-            {#if state === "missing"}
-              Artifact {compactArtifactId(artifactId)} — unavailable
-            {:else}
-              {truncatedName}
-            {/if}
-          </span>
-        </span>
-      {/if}
 
-      {#if browser && resolved?.isLink && resolved?.href && state === "ready" && !resolved?.isExternal}
-        <button
-          type="button"
-          class="hidden shrink-0 items-center justify-center border-l border-[var(--line)] px-2 text-accent-text hover:bg-[var(--bg-soft)] sm:flex"
-          aria-label={`Download ${displayName}`}
-          disabled={downloadBusy}
-          onclick={handleDownload}
-        >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            aria-hidden="true"
+        {#if browser && resolved?.isLink && resolved?.href && state === "ready" && !resolved?.isExternal}
+          <button
+            type="button"
+            class="hidden shrink-0 items-center justify-center border-l border-[var(--line)] px-2 text-accent-text hover:bg-[var(--bg-soft)] sm:flex"
+            aria-label={`Download ${displayName}`}
+            disabled={downloadBusy}
+            onclick={handleDownload}
           >
-            <path
-              d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"
-            />
-          </svg>
-        </button>
-      {/if}
-    </RefChip>
-  {/if}
-</span>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              aria-hidden="true"
+            >
+              <path
+                d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"
+              />
+            </svg>
+          </button>
+        {/if}
+      </RefChip>
+    {/if}
+  </span>
+{/if}

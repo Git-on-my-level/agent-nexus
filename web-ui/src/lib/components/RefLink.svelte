@@ -2,6 +2,7 @@
   import { browser } from "$app/environment";
   import { page } from "$app/stores";
   import AttachmentChip from "$lib/components/AttachmentChip.svelte";
+  import { isTrashedAttachmentMeta } from "$lib/attachmentDisplay.js";
   import { coreClient } from "$lib/coreClient";
   import { eventRouteForRef } from "$lib/deepLinkTargets";
   import { buildPrimitiveRefRoutes, resolveRefLink } from "$lib/refLinkModel";
@@ -45,6 +46,12 @@
       (!resolved.routed || resolved.routedKind === "attachment"),
   );
 
+  let hideTrashedAttachment = $derived(
+    useAttachmentChip &&
+      !attachmentPending &&
+      isTrashedAttachmentMeta(resolved, attachmentOverlay),
+  );
+
   $effect(() => {
     if (!browser || resolved.prefix !== "event" || resolved.routed) return;
     const eventId = String(resolved.value ?? "").trim();
@@ -65,7 +72,7 @@
   });
 </script>
 
-{#if useAttachmentChip}
+{#if useAttachmentChip && !hideTrashedAttachment}
   <span class="inline-flex max-w-full flex-col gap-0.5 align-baseline">
     <AttachmentChip
       {resolved}
@@ -80,7 +87,7 @@
       >
     {/if}
   </span>
-{:else if resolved.isLink}
+{:else if useAttachmentChip && hideTrashedAttachment}{:else if resolved.isLink}
   <a
     class="inline-flex items-baseline gap-1 text-accent-text hover:text-accent-text"
     href={resolved.href}

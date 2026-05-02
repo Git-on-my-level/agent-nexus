@@ -9,6 +9,7 @@
     workspaceSlug = "",
     workspaceId = "",
     primaryTopic = null,
+    columnPeerStableIds = [],
     actorName = (id) => id,
     onclose = () => {},
     onmovecard = async () => {},
@@ -26,6 +27,7 @@
     {workspaceSlug}
     {workspaceId}
     {primaryTopic}
+    {columnPeerStableIds}
     {actorName}
     {onclose}
     {onmovecard}

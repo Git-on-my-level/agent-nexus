@@ -3,6 +3,7 @@
   import { page } from "$app/stores";
   import AttachmentChip from "$lib/components/AttachmentChip.svelte";
   import RefChip from "$lib/components/RefChip.svelte";
+  import { isTrashedAttachmentMeta } from "$lib/attachmentDisplay.js";
   import { coreClient } from "$lib/coreClient";
   import { eventRouteForRef } from "$lib/deepLinkTargets";
   import { buildPrimitiveRefRoutes, resolveRefLink } from "$lib/refLinkModel";
@@ -45,6 +46,12 @@
   let useAttachmentChip = $derived(
     resolved.prefix === "artifact" &&
       (!resolved.routed || resolved.routedKind === "attachment"),
+  );
+
+  let hideTrashedAttachment = $derived(
+    useAttachmentChip &&
+      !attachmentPending &&
+      isTrashedAttachmentMeta(resolved, attachmentOverlay),
   );
 
   $effect(() => {
@@ -107,7 +114,7 @@
   );
 </script>
 
-{#if useAttachmentChip}
+{#if useAttachmentChip && !hideTrashedAttachment}
   <AttachmentChip
     {resolved}
     artifactOverlay={attachmentOverlay}
@@ -115,7 +122,7 @@
     uploadProgress={attachmentUploadProgress}
     size={attachmentChipSize}
   />
-{:else if resolved.isLink}
+{:else if useAttachmentChip && hideTrashedAttachment}{:else if resolved.isLink}
   <RefChip
     href={resolved.href}
     external={resolved.isExternal}

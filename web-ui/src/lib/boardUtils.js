@@ -127,6 +127,38 @@ export function groupBoardWorkspaceCards(cardsSection, columnSchema = []) {
   return groups;
 }
 
+/**
+ * Stable ids for cards in a column, ordered by ascending `membership.rank` (numeric).
+ *
+ * @param {{ items?: unknown[] } | null | undefined} cardsSection
+ * @param {unknown[] | null | undefined} columnSchema
+ * @param {string | null | undefined} columnKey
+ * @returns {string[]}
+ */
+export function sortedColumnPeersStableIds(
+  cardsSection,
+  columnSchema,
+  columnKey,
+) {
+  const key = String(columnKey ?? "").trim();
+  if (!key) return [];
+
+  const grouped = groupBoardWorkspaceCards(cardsSection, columnSchema);
+  return [...(grouped[key] ?? [])]
+    .sort((left, right) => {
+      const a = Number.parseInt(String(left?.membership?.rank ?? "0"), 10);
+      const b = Number.parseInt(String(right?.membership?.rank ?? "0"), 10);
+      const safeA = Number.isFinite(a) ? a : 0;
+      const safeB = Number.isFinite(b) ? b : 0;
+      if (safeA !== safeB) return safeA - safeB;
+      return String(left?.membership?.created_at ?? "").localeCompare(
+        String(right?.membership?.created_at ?? ""),
+      );
+    })
+    .map((item) => boardCardStableId(item?.membership))
+    .filter(Boolean);
+}
+
 export function parseDelimitedValues(rawValue) {
   const seen = new Set();
   const values = [];

@@ -110,3 +110,21 @@ export function formatBytes(bytes) {
     value >= 10 || unit === 0 ? Math.round(value) : Number(value.toFixed(1));
   return `${rounded} ${units[unit]}`;
 }
+
+/**
+ * Whether merged attachment metadata marks the artifact as in trash (same rules as AttachmentChip).
+ * @param {{ attachmentMeta?: object } | null | undefined} resolved
+ * @param {object | null | undefined} artifactOverlay
+ */
+export function isTrashedAttachmentMeta(resolved, artifactOverlay) {
+  const base =
+    resolved?.attachmentMeta && typeof resolved.attachmentMeta === "object"
+      ? resolved.attachmentMeta
+      : {};
+  const over =
+    artifactOverlay && typeof artifactOverlay === "object"
+      ? artifactOverlay
+      : {};
+  const m = { ...base, ...over };
+  return Boolean(m.trashed_at ?? m.trashedAt);
+}

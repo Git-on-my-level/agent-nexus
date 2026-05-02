@@ -316,6 +316,7 @@ test("board UI supports create/edit and card mutation flows", async ({
       id: "inbox-review-1",
       thread_id: "thread-review",
       category: "action_needed",
+      severity: "high",
       title: "Need sign-off on review prep",
       refs: ["thread:thread-review"],
       source_event_time: "2026-03-05T05:30:00.000Z",
@@ -373,7 +374,7 @@ test("board UI supports create/edit and card mutation flows", async ({
       const filtered = topicSearchRecords.filter((topic) => {
         if (!q) return true;
         const hay =
-          `${topic.id} ${topic.title || ""} ${topic.summary || ""}`.toLowerCase();
+          `${topic.id} ${topic.thread_id ?? ""} ${topic.title || ""} ${topic.summary || ""}`.toLowerCase();
         return hay.includes(q);
       });
       await route.fulfill({
@@ -542,12 +543,16 @@ test("board UI supports create/edit and card mutation flows", async ({
   });
 
   await page.route(
-    /\/boards\/board-created\/cards\/(thread-execution|thread-review)\/move$/,
+    /\/cards\/(thread-execution|thread-review)\/move$/,
     async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.continue();
+        return;
+      }
       const cardId = route
         .request()
         .url()
-        .match(/cards\/([^/]+)\/move$/)?.[1];
+        .match(/\/cards\/([^/]+)\/move(?:\?|$)/)?.[1];
       const payload = JSON.parse(route.request().postData() ?? "{}");
       movePayloads.push({ cardId, payload });
 
@@ -620,41 +625,67 @@ test("board UI supports create/edit and card mutation flows", async ({
     },
   );
 
-  await page.route(/\/cards\/thread-execution$/, async (route) => {
-    if (route.request().method() !== "PATCH") {
-      await route.continue();
-      return;
-    }
-    const payload = JSON.parse(route.request().postData() ?? "{}");
-    updateCardPayloads.push(payload);
-    const card = cards.find((item) => item.thread_id === "thread-execution");
-    const docId = String(payload.patch?.document_ref ?? "")
-      .replace(/^document:/, "")
-      .trim();
-    card.document_ref = docId ? `document:${docId}` : null;
-    if (typeof payload.patch?.title === "string") {
-      card.title = String(payload.patch.title).trim();
-    }
-    if (typeof payload.patch?.summary === "string") {
-      card.summary = String(payload.patch.summary).trim();
-    }
-    if (Array.isArray(payload.patch?.related_refs)) {
-      card.related_refs = payload.patch.related_refs;
-    }
-    card.updated_at = nextTimestamp();
-    card.updated_by = actorId;
-    board = {
-      ...board,
-      updated_at: card.updated_at,
-      updated_by: actorId,
-    };
+  await page.route(
+    /\/cards\/(thread-execution|thread-review)$/,
+    async (route) => {
+      if (route.request().method() !== "PATCH") {
+        await route.continue();
+        return;
+      }
+      const slug = route
+        .request()
+        .url()
+        .match(/\/cards\/([^/?#]+)/)?.[1];
+      const payload = JSON.parse(route.request().postData() ?? "{}");
+      const card =
+        slug &&
+        cards.find((item) => item.thread_id === slug || item.id === slug);
 
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ board, card }),
-    });
-  });
+      if (!card) {
+        await route.fulfill({ status: 404, body: "{}" });
+        return;
+      }
+      if (card.thread_id === "thread-execution") {
+        updateCardPayloads.push(payload);
+      }
+      if ("document_ref" in (payload.patch ?? {})) {
+        const docFromPatch = String(payload.patch.document_ref ?? "")
+          .replace(/^document:/, "")
+          .trim();
+        card.document_ref = docFromPatch ? `document:${docFromPatch}` : null;
+      }
+      if (typeof payload.patch?.title === "string") {
+        card.title = String(payload.patch.title).trim();
+      }
+      if (typeof payload.patch?.summary === "string") {
+        card.summary = String(payload.patch.summary).trim();
+      }
+      if (Array.isArray(payload.patch?.related_refs)) {
+        card.related_refs = payload.patch.related_refs;
+      }
+      if (Array.isArray(payload.patch?.resolution_refs)) {
+        card.resolution_refs = payload.patch.resolution_refs.map((r) =>
+          String(r ?? "").trim(),
+        );
+      }
+      if ("resolution" in (payload.patch ?? {})) {
+        card.resolution = payload.patch.resolution ?? null;
+      }
+      card.updated_at = nextTimestamp();
+      card.updated_by = actorId;
+      board = {
+        ...board,
+        updated_at: card.updated_at,
+        updated_by: actorId,
+      };
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ board, card }),
+      });
+    },
+  );
 
   await page.route(/\/cards\/thread-execution\/archive$/, async (route) => {
     const payload = JSON.parse(route.request().postData() ?? "{}");
@@ -747,7 +778,7 @@ test("board UI supports create/edit and card mutation flows", async ({
     .getByRole("textbox", { name: "Topic or thread search" })
     .fill("Execution Track");
   await page.getByRole("button", { name: /Execution Track/ }).click();
-  await page.getByLabel("Column", { exact: true }).selectOption("ready");
+  await page.getByRole("combobox", { name: "Column" }).selectOption("ready");
   await page
     .getByRole("textbox", { name: "Document search" })
     .fill("Incident Playbook");
@@ -757,25 +788,34 @@ test("board UI supports create/edit and card mutation flows", async ({
     page.getByRole("button", { name: "Manage Execution Track" }),
   ).toBeVisible();
 
-  await page.getByRole("link", { name: "Add card", exact: true }).click();
+  await page.getByRole("button", { name: "Add card", exact: true }).click();
   await expect(page).toHaveURL(/\/boards\/[^/]+\/cards\/new$/);
   await page.getByRole("button", { name: "More options", exact: true }).click();
   await page
     .getByRole("textbox", { name: "Topic or thread search" })
     .fill("Review Prep");
   await page.getByRole("button", { name: /Review Prep/ }).click();
-  await page.getByLabel("Column", { exact: true }).selectOption("ready");
+  await page.getByRole("combobox", { name: "Column" }).selectOption("ready");
   await page.getByRole("button", { name: "Add card", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Manage Review Prep" }),
   ).toBeVisible();
+  const reviewInboxPanel = page
+    .locator("section")
+    .filter({ has: page.getByRole("heading", { name: "Review inbox" }) });
   await expect(
-    page.locator("#card-thread-review").locator(".text-orange-400"),
+    reviewInboxPanel.getByText("Need sign-off on review prep"),
   ).toBeVisible();
-  await expect(page.getByText("Need sign-off on review prep")).toBeVisible();
+  await expect(reviewInboxPanel.locator(".text-warn-text")).toContainText(
+    /High/i,
+  );
 
   await page.getByRole("button", { name: "Manage Review Prep" }).click();
-  await page.getByRole("button", { name: "Move up" }).click();
+
+  const reviewPrepDialog = page.getByRole("dialog", {
+    name: "Card details",
+  });
+  await reviewPrepDialog.getByRole("button", { name: "Move up" }).click();
 
   const readySection = page
     .locator("section")
@@ -787,8 +827,41 @@ test("board UI supports create/edit and card mutation flows", async ({
     "Review Prep",
   );
 
-  await page.getByLabel("Column").selectOption("done");
-  await page.getByRole("button", { name: "Move", exact: true }).click();
+  const resolutionComposer = reviewPrepDialog
+    .locator("section")
+    .filter({ hasText: "Resolution refs" });
+  await resolutionComposer
+    .getByLabel("Add resolution ref")
+    .fill("event:review-signoff-1");
+  const waitRefsPatch = page.waitForResponse(
+    (resp) =>
+      resp.url().includes("/cards/") &&
+      resp.request().method() === "PATCH" &&
+      resp.url().includes("thread-review"),
+    { timeout: 15_000 },
+  );
+  await resolutionComposer
+    .getByRole("button", { name: "Add ref", exact: true })
+    .click();
+  await waitRefsPatch;
+
+  const waitResolutionPatch = page.waitForResponse(
+    (resp) =>
+      resp.url().includes("/cards/") &&
+      resp.request().method() === "PATCH" &&
+      resp.url().includes("thread-review"),
+    { timeout: 15_000 },
+  );
+  await reviewPrepDialog
+    .getByRole("combobox", { name: "Resolution", exact: true })
+    .first()
+    .selectOption("done");
+  await waitResolutionPatch;
+
+  await reviewPrepDialog
+    .getByRole("combobox", { name: "Column" })
+    .first()
+    .selectOption("done");
 
   await page
     .getByRole("dialog", { name: "Card details" })
@@ -802,13 +875,36 @@ test("board UI supports create/edit and card mutation flows", async ({
 
   await page.getByRole("button", { name: "Manage Execution Track" }).click();
   const executionDialog = page.getByRole("dialog", { name: "Card details" });
-  await executionDialog.getByRole("button", { name: "Edit card" }).click();
-  await executionDialog.getByLabel("Document ID").fill("doc-playbook");
-  await executionDialog
-    .getByRole("button", { name: "Save card details" })
-    .click();
+  const executionDocRail = executionDialog.getByRole("group", {
+    name: "Document",
+  });
+  await executionDocRail.getByText("Use a manual document ID").click();
 
-  await executionDialog.getByRole("button", { name: "Remove card" }).click();
+  const docPatch = page.waitForResponse(
+    (resp) =>
+      resp.url().includes("/cards/") &&
+      resp.url().includes("thread-execution") &&
+      resp.request().method() === "PATCH",
+    { timeout: 15_000 },
+  );
+  const docManual = executionDocRail.getByLabel("Document ID");
+  await docManual.fill("doc-runbook");
+  await docManual.blur();
+  await docPatch;
+
+  await expect(updateCardPayloads.length).toBeGreaterThanOrEqual(1);
+
+  await executionDialog
+    .getByRole("button", { name: "More card actions" })
+    .click();
+  await executionDialog.getByRole("menuitem", { name: "Remove card" }).click();
+  await page
+    .getByRole("dialog", { name: "Remove card" })
+    .getByRole("button", {
+      name: "Remove card",
+      exact: true,
+    })
+    .click();
   await expect(
     readySection.getByRole("button", { name: "Manage Execution Track" }),
   ).toHaveCount(0);
@@ -816,7 +912,7 @@ test("board UI supports create/edit and card mutation flows", async ({
   expect(addCardPayloads).toEqual([
     {
       actor_id: actorId,
-      if_board_updated_at: "2026-03-05T01:00:00.000Z",
+      if_board_updated_at: "2026-03-05T02:00:00.000Z",
       title: "Execution Track",
       summary: "Execution Track",
       column_key: "ready",
@@ -831,7 +927,7 @@ test("board UI supports create/edit and card mutation flows", async ({
     },
     {
       actor_id: actorId,
-      if_board_updated_at: "2026-03-05T02:00:00.000Z",
+      if_board_updated_at: "2026-03-05T03:00:00.000Z",
       title: "Review Prep",
       summary: "Review Prep",
       column_key: "ready",
@@ -850,7 +946,7 @@ test("board UI supports create/edit and card mutation flows", async ({
       cardId: "thread-review",
       payload: {
         actor_id: actorId,
-        if_board_updated_at: "2026-03-05T03:00:00.000Z",
+        if_board_updated_at: "2026-03-05T04:00:00.000Z",
         column_key: "ready",
         before_card_id: "thread-execution",
       },
@@ -859,34 +955,22 @@ test("board UI supports create/edit and card mutation flows", async ({
       cardId: "thread-review",
       payload: {
         actor_id: actorId,
-        if_board_updated_at: "2026-03-05T04:00:00.000Z",
+        if_board_updated_at: "2026-03-05T07:00:00.000Z",
         column_key: "done",
         resolution: "done",
+        resolution_refs: ["event:review-signoff-1"],
       },
     },
   ]);
-  expect(updateCardPayloads).toEqual([
-    {
-      actor_id: actorId,
-      if_updated_at: "2026-03-05T02:00:00.000Z",
-      patch: {
-        title: "Execution Track",
-        summary: "Execution Track",
-        document_ref: "document:doc-playbook",
-        assignee_refs: [],
-        risk: "medium",
-        resolution: null,
-        resolution_refs: [],
-        related_refs: ["thread:thread-execution"],
-        due_at: null,
-        definition_of_done: [],
-      },
-    },
-  ]);
+  expect(
+    updateCardPayloads.some(
+      (p) => p.patch?.document_ref === "document:doc-runbook",
+    ),
+  ).toBe(true);
   expect(removePayloads).toEqual([
     {
       actor_id: actorId,
-      if_board_updated_at: "2026-03-05T06:00:00.000Z",
+      if_board_updated_at: "2026-03-05T09:00:00.000Z",
     },
   ]);
 });

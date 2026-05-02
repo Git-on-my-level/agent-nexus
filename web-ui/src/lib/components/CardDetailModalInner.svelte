@@ -3,11 +3,7 @@
   import { onMount } from "svelte";
   import { writable } from "svelte/store";
 
-  import {
-    actorRegistry,
-    lookupActorDisplayName,
-    principalRegistry,
-  } from "$lib/actorSession";
+  import { actorRegistry } from "$lib/actorSession";
   import {
     boardCardHeaderTitle,
     boardCardStableId,
@@ -17,12 +13,6 @@
     joinDelimitedValues,
     parseDelimitedValues,
   } from "$lib/boardUtils";
-  import {
-    cardResolutionLabel,
-    cardResolutionTone,
-    dueDateDisplay,
-    isOverdue,
-  } from "$lib/cardDisplayUtils";
   import { coreClient } from "$lib/coreClient";
   import {
     formatTimestamp,
@@ -43,7 +33,6 @@
     createTimelineContext,
     setTimelineContext,
   } from "$lib/timelineContext";
-  import Button from "$lib/components/Button.svelte";
   import CompactRefLink from "$lib/components/CompactRefLink.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import IdsIntegrityDisclosure from "$lib/components/IdsIntegrityDisclosure.svelte";
@@ -64,6 +53,8 @@
     workspaceId = "",
     /** @type {{ id?: string, title?: string } | null | undefined} */
     primaryTopic = null,
+    /** Stable ids of cards in this column (board order, same as the column stack). */
+    columnPeerStableIds = [],
     actorName,
     onclose,
     onmovecard,
@@ -96,6 +87,9 @@
   let revisionsError = $state("");
   let previousCardKey = $state("");
   let removeCardConfirmOpen = $state(false);
+  let cardMenuOpen = $state(false);
+  /** @type {HTMLElement | undefined} */
+  let cardActionsMenuEl = $state(undefined);
 
   let linkedThreadId = $derived(
     String(membership?.thread_id ?? backing?.thread_id ?? "").trim(),
@@ -104,22 +98,7 @@
 
   let cardInspectNav = $derived(boardCardInspectNav(membership, thread));
   let headerTitle = $derived(boardCardHeaderTitle(membership, thread));
-  let cardResolution = $derived(String(membership?.resolution ?? "").trim());
   let summaryText = $derived(String(membership?.summary ?? "").trim());
-
-  let assigneeRefs = $derived(
-    Array.isArray(membership?.assignee_refs) ? membership.assignee_refs : [],
-  );
-  let assigneeNames = $derived.by(() => {
-    const actors = $actorRegistry;
-    const principals = $principalRegistry;
-    return assigneeRefs.map((ref) => {
-      const id = String(ref ?? "")
-        .replace(/^actor:/, "")
-        .trim();
-      return lookupActorDisplayName(id, actors, principals);
-    });
-  });
 
   let cardTopicThreadRef = $derived.by(() => {
     const nav = cardInspectNav;
@@ -129,14 +108,58 @@
       : `thread:${nav.segment}`;
   });
 
+  /** Suppress redundant topic/thread row when already listed in Related refs composer. */
+  let duplicateTopicThreadNavLink = $derived.by(() => {
+    const ct = cardTopicThreadRef.trim();
+    if (!ct) return false;
+    return parseDelimitedValues(editRelatedRefs).includes(ct);
+  });
+
   let actorOptions = $derived(toActorPickerOptions($actorRegistry));
 
   let backingThreadId = $derived(String(board?.thread_id ?? "").trim());
 
-  let editOpen = $state(false);
-  let editAdvanced = $state(false);
-  let savingCard = $state(false);
-  let saveError = $state("");
+  /** @type {Set<string>} */
+  let savingFields = $state(new Set());
+  /** @type {Record<string, string>} */
+  let fieldErrors = $state({});
+  let summaryEditing = $state(false);
+  let dodEditing = $state(false);
+
+  /** @param {string} field */
+  function isSaving(field) {
+    return savingFields.has(field);
+  }
+
+  /** @param {string} field */
+  /** @param {boolean} active */
+  function setSaving(field, active) {
+    const next = new Set(savingFields);
+    if (active) next.add(field);
+    else next.delete(field);
+    savingFields = next;
+  }
+
+  /** @param {string} field */
+  function clearFieldErr(field) {
+    if (!(field in fieldErrors)) return;
+    const next = { ...fieldErrors };
+    delete next[field];
+    fieldErrors = next;
+  }
+
+  /** @param {string} field @param {string} msg */
+  function setFieldErr(field, msg) {
+    fieldErrors = { ...fieldErrors, [field]: msg };
+  }
+
+  /** @returns {string} */
+  function headRevisionIdFromMembership() {
+    return String(membership?.head_revision_ref ?? "")
+      .replace(/^card_revision:/, "")
+      .trim();
+  }
+
   let editTitle = $state("");
   let editSummary = $state("");
   let editThreadId = $state("");
@@ -209,12 +232,14 @@
     editDueAt = isoToDatetimeLocal(m.due_at ?? "");
     editDefinitionOfDone = joinDelimitedValues(m.definition_of_done ?? []);
     moveColumnKey = String(m.column_key ?? "").trim() || "backlog";
-    saveError = "";
   }
 
   $effect(() => {
     void cardItem;
-    editOpen = false;
+    summaryEditing = false;
+    dodEditing = false;
+    cardMenuOpen = false;
+    fieldErrors = {};
     syncCardDraftsFromItem(cardItem);
   });
 
@@ -225,6 +250,29 @@
   function handleColumnSelectChange() {
     if (moveColumnKey === currentMembershipColumnKey()) return;
     void onmovecard(cardItem, { column_key: moveColumnKey }, "Card moved.");
+  }
+
+  let peerUpState = $derived.by(() => {
+    const peers = columnPeerStableIds ?? [];
+    const idx = peers.findIndex((id) => id === cardKey);
+    return {
+      peers,
+      idx,
+      beforeId: idx > 0 ? String(peers[idx - 1] ?? "").trim() || "" : "",
+    };
+  });
+
+  function handleMoveUpInColumn() {
+    const { idx, beforeId } = peerUpState;
+    if (idx <= 0 || !beforeId) return;
+    void onmovecard(
+      cardItem,
+      {
+        column_key: currentMembershipColumnKey(),
+        before_card_id: beforeId,
+      },
+      "Card moved.",
+    );
   }
 
   $effect(() => {
@@ -278,169 +326,248 @@
     }));
   }
 
-  function buildCardPatch(m, draft) {
-    const patch = {};
-    const docDraft = draft.documentId.trim();
-    const nextDoc = docDraft ? `document:${docDraft}` : null;
-    const prevDocRaw = String(m.document_ref ?? "").trim();
-    const prevDoc = prevDocRaw || null;
-    if (nextDoc !== prevDoc) {
-      patch.document_ref = nextDoc;
+  /** @returns {Promise<string>} */
+  async function fallbackTitleWhenEmpty(trimmed) {
+    let resolved = trimmed;
+    const threadLookup = editThreadId.trim();
+    if (!resolved && threadLookup) {
+      try {
+        const topics = await searchTopicRecords(threadLookup);
+        const match =
+          topics.find(
+            (t) => backingThreadIdFromTopicRecord(t) === threadLookup,
+          ) ?? topics[0];
+        resolved = String(match?.title ?? "").trim() || threadLookup;
+      } catch {
+        resolved = threadLookup;
+      }
     }
-
-    const draftAssign = [...draft.assignees].map((x) => String(x).trim());
-    const memAssign = [...(m.assignee_refs ?? [])].map((x) => String(x).trim());
-    if (normalizeRefList(draftAssign) !== normalizeRefList(memAssign)) {
-      patch.assignee_refs = draftAssign;
-    }
-
-    if (draft.risk !== String(m.risk ?? "").trim()) {
-      patch.risk = draft.risk;
-    }
-
-    const resDraft = draft.resolution.trim() || null;
-    const resMem = String(m.resolution ?? "").trim() || null;
-    if (resDraft !== resMem) {
-      patch.resolution = resDraft;
-    }
-
-    const relDraft = parseDelimitedValues(draft.relatedRefs);
-    const relMem = [...(m.related_refs ?? [])].map((x) => String(x).trim());
-    if (normalizeRefList(relDraft) !== normalizeRefList(relMem)) {
-      patch.related_refs = relDraft;
-    }
-
-    const resRefDraft = parseDelimitedValues(draft.resolutionRefs);
-    const resRefMem = [...(m.resolution_refs ?? [])].map((x) =>
-      String(x).trim(),
-    );
-    if (normalizeRefList(resRefDraft) !== normalizeRefList(resRefMem)) {
-      patch.resolution_refs = resRefDraft;
-    }
-
-    const dueDraft = draft.dueAt.trim()
-      ? datetimeLocalToIso(draft.dueAt)
-      : null;
-    const dueMem = String(m.due_at ?? "").trim() || null;
-    if (dueDraft !== dueMem) {
-      patch.due_at = dueDraft;
-    }
-
-    return patch;
+    return resolved;
   }
 
-  async function handleSave() {
-    if (!membership) return;
-    savingCard = true;
-    saveError = "";
+  /** @returns {string[]} */
+  function relatedRefsForPersist() {
+    const arr = [...parseDelimitedValues(editRelatedRefs)];
+    const tid = String(editThreadId || membership?.thread_id || "").trim();
+    if (tid) {
+      const token = `thread:${tid}`;
+      if (!arr.includes(token)) arr.push(token);
+    }
+    return arr;
+  }
+
+  /** @param {Record<string, unknown>} patch */
+  /** @param {string} field */
+  async function persistMembershipPatch(patch, field) {
+    if (!membership || !cardItem || !Object.keys(patch).length) return;
+    setSaving(field, true);
+    clearFieldErr(field);
     try {
-      let resolvedTitle = editTitle.trim();
-      const threadId = editThreadId.trim();
-      if (!resolvedTitle && threadId) {
-        try {
-          const topics = await searchTopicRecords(threadId);
-          const match =
-            topics.find(
-              (t) => backingThreadIdFromTopicRecord(t) === threadId,
-            ) ?? topics[0];
-          resolvedTitle = String(match?.title ?? "").trim() || threadId;
-        } catch {
-          resolvedTitle = threadId;
-        }
-      }
-      if (!resolvedTitle) {
-        saveError = "Card title is required.";
-        return;
-      }
-
-      const related_refs = parseDelimitedValues(editRelatedRefs);
-      if (threadId) {
-        const token = `thread:${threadId}`;
-        if (!related_refs.includes(token)) {
-          related_refs.push(token);
-        }
-      }
-
-      const draft = {
-        title: resolvedTitle,
-        summary: editSummary.trim() || resolvedTitle,
-        documentId: editDocumentId,
-        assignees: editAssignees,
-        risk: editRisk,
-        resolution: editResolution,
-        resolutionRefs: editResolutionRefs,
-        relatedRefs: joinDelimitedValues(related_refs),
-        dueAt: editDueAt,
-        definitionOfDone: editDefinitionOfDone,
-      };
-
-      const patch = buildCardPatch(membership, draft);
-      const dodDraft = parseDelimitedValues(draft.definitionOfDone);
-      const dodMem = [...(membership.definition_of_done ?? [])].map((x) =>
-        String(x).trim(),
-      );
-      const contentPatch = {};
-      if (draft.title.trim() !== String(membership.title ?? "").trim()) {
-        contentPatch.title = draft.title.trim();
-      }
-      if (draft.summary.trim() !== String(membership.summary ?? "").trim()) {
-        contentPatch.summary = draft.summary.trim();
-      }
-      if (normalizeRefList(dodDraft) !== normalizeRefList(dodMem)) {
-        contentPatch.definition_of_done = dodDraft;
-      }
-      const contentPayload = {};
-      if (Object.keys(contentPatch).length > 0) {
-        const baseRevision = String(membership.head_revision_ref ?? "").replace(
-          /^card_revision:/,
-          "",
-        );
-        if (!baseRevision) {
-          saveError =
-            "Cannot determine base card revision. Refresh the board and try again.";
-          return;
-        }
-        contentPayload.if_base_revision = baseRevision;
-        contentPayload.revision = contentPatch;
-      }
-      if (Object.keys(patch).length > 0) {
-        await onsavecard(cardItem, patch);
-      }
-      if (Object.keys(contentPayload).length > 0) {
-        await onrevisecard(cardItem, contentPayload);
-      }
-      if (
-        Object.keys(patch).length === 0 &&
-        Object.keys(contentPayload).length === 0
-      ) {
-        cardAttachError = "";
-        editOpen = false;
-        return;
-      }
-
+      await onsavecard(cardItem, patch);
       cardRevisions = [];
       cardAttachError = "";
-      editOpen = false;
     } catch (e) {
-      saveError = e instanceof Error ? e.message : String(e ?? "Save failed");
+      setFieldErr(
+        field,
+        e instanceof Error ? e.message : String(e ?? "Save failed"),
+      );
     } finally {
-      savingCard = false;
+      setSaving(field, false);
     }
   }
 
-  function beginEdit() {
-    syncCardDraftsFromItem(cardItem);
-    saveError = "";
-    cardAttachError = "";
-    editAdvanced = false;
-    editOpen = true;
+  /** @param {Record<string, unknown>} rev */
+  /** @param {string} field */
+  async function persistRevisionPatch(rev, field) {
+    if (!membership || !cardItem || !Object.keys(rev).length) return;
+    const base = headRevisionIdFromMembership();
+    if (!base) {
+      setFieldErr(
+        field,
+        "Cannot determine base card revision. Refresh the board and try again.",
+      );
+      return;
+    }
+    setSaving(field, true);
+    clearFieldErr(field);
+    try {
+      await onrevisecard(cardItem, { if_base_revision: base, revision: rev });
+      cardRevisions = [];
+      cardAttachError = "";
+    } catch (e) {
+      setFieldErr(
+        field,
+        e instanceof Error ? e.message : String(e ?? "Save failed"),
+      );
+    } finally {
+      setSaving(field, false);
+    }
   }
 
-  function cancelEdit() {
-    syncCardDraftsFromItem(cardItem);
-    saveError = "";
-    cardAttachError = "";
-    editOpen = false;
+  async function commitTitleField() {
+    if (!membership) return;
+    let t = editTitle.trim();
+    t = await fallbackTitleWhenEmpty(t);
+    if (!t) {
+      setFieldErr("title", "Card title is required.");
+      syncCardDraftsFromItem(cardItem);
+      return;
+    }
+    editTitle = t;
+    if (t === String(membership.title ?? "").trim()) {
+      clearFieldErr("title");
+      return;
+    }
+    await persistRevisionPatch({ title: t }, "title");
+  }
+
+  async function commitSummaryField() {
+    summaryEditing = false;
+    if (!membership) return;
+    const s =
+      editSummary.trim() ||
+      editTitle.trim() ||
+      (await fallbackTitleWhenEmpty(""));
+    if (!s) {
+      setFieldErr("summary", "Summary cannot be empty.");
+      return;
+    }
+    if (s === String(membership.summary ?? "").trim()) {
+      clearFieldErr("summary");
+      return;
+    }
+    await persistRevisionPatch({ summary: s }, "summary");
+  }
+
+  async function commitDodField() {
+    dodEditing = false;
+    if (!membership) return;
+    const dodDraft = parseDelimitedValues(editDefinitionOfDone);
+    const dodMem = [...(membership.definition_of_done ?? [])].map((x) =>
+      String(x).trim(),
+    );
+    if (normalizeRefList(dodDraft) === normalizeRefList(dodMem)) {
+      clearFieldErr("definition_of_done");
+      return;
+    }
+    await persistRevisionPatch(
+      { definition_of_done: dodDraft },
+      "definition_of_done",
+    );
+  }
+
+  async function flushRelatedRefsToServer() {
+    if (!membership) return;
+    const relDraft = relatedRefsForPersist();
+    const relMem = [...(membership.related_refs ?? [])].map((x) =>
+      String(x).trim(),
+    );
+    if (normalizeRefList(relDraft) === normalizeRefList(relMem)) return;
+    await persistMembershipPatch({ related_refs: relDraft }, "related_refs");
+  }
+
+  async function flushResolutionRefsToServer() {
+    if (!membership) return;
+    const draft = parseDelimitedValues(editResolutionRefs);
+    const mem = [...(membership.resolution_refs ?? [])].map((x) =>
+      String(x).trim(),
+    );
+    if (normalizeRefList(draft) === normalizeRefList(mem)) return;
+    await persistMembershipPatch({ resolution_refs: draft }, "resolution_refs");
+  }
+
+  let relatedSaveTimer = 0;
+  let resolutionRefSaveTimer = 0;
+
+  $effect(() => {
+    if (cdmDetailPane !== "overview" || !membership) return;
+    void editRelatedRefs;
+    void membership.related_refs;
+    window.clearTimeout(relatedSaveTimer);
+    relatedSaveTimer = window.setTimeout(
+      () => void flushRelatedRefsToServer(),
+      550,
+    );
+    return () => window.clearTimeout(relatedSaveTimer);
+  });
+
+  $effect(() => {
+    if (cdmDetailPane !== "overview" || !membership) return;
+    void editResolutionRefs;
+    void membership.resolution_refs;
+    window.clearTimeout(resolutionRefSaveTimer);
+    resolutionRefSaveTimer = window.setTimeout(
+      () => void flushResolutionRefsToServer(),
+      550,
+    );
+    return () => window.clearTimeout(resolutionRefSaveTimer);
+  });
+
+  $effect(() => {
+    if (!cardMenuOpen || !browser) return;
+    /** @param {PointerEvent} ev */
+    function onDoc(ev) {
+      const t = /** @type {Node | undefined} */ (ev.target ?? undefined);
+      const el = cardActionsMenuEl;
+      if (!t || !(el instanceof HTMLElement)) cardMenuOpen = false;
+      else if (!el.contains(t)) cardMenuOpen = false;
+    }
+    const id = window.requestAnimationFrame(() => {
+      document.addEventListener("pointerdown", onDoc, true);
+    });
+    return () => {
+      window.cancelAnimationFrame(id);
+      document.removeEventListener("pointerdown", onDoc, true);
+    };
+  });
+
+  async function persistResolutionImmediate() {
+    await persistMembershipPatch(
+      {
+        resolution: editResolution.trim() || null,
+      },
+      "resolution",
+    );
+  }
+
+  async function persistRiskImmediate() {
+    await persistMembershipPatch({ risk: editRisk }, "risk");
+  }
+
+  async function persistDueBlur() {
+    if (!membership) return;
+    const dueDraft = editDueAt.trim() ? datetimeLocalToIso(editDueAt) : null;
+    const dueMem = String(membership.due_at ?? "").trim() || null;
+    if (dueDraft === dueMem) return;
+    await persistMembershipPatch({ due_at: dueDraft }, "due");
+  }
+
+  async function persistDocumentBlur() {
+    if (!membership) return;
+    const docDraft = editDocumentId.trim();
+    const nextDoc = docDraft ? `document:${docDraft}` : null;
+    const prevDocRaw = String(membership.document_ref ?? "").trim();
+    const prevDoc = prevDocRaw || null;
+    if (nextDoc === prevDoc) return;
+    await persistMembershipPatch({ document_ref: nextDoc }, "document");
+  }
+
+  async function persistAssigneesBlur() {
+    if (!membership) return;
+    const draftAssign = [...editAssignees].map((x) => String(x).trim());
+    const memAssign = [...(membership.assignee_refs ?? [])].map((x) =>
+      String(x).trim(),
+    );
+    if (normalizeRefList(draftAssign) === normalizeRefList(memAssign)) return;
+    await persistMembershipPatch({ assignee_refs: draftAssign }, "assignees");
+  }
+
+  async function persistThreadBlur() {
+    if (!membership) return;
+    const next = editThreadId.trim();
+    const prev = String(membership.thread_id ?? "").trim();
+    if (next === prev) return;
+    await persistMembershipPatch({ thread_id: next }, "thread");
   }
 
   function handleBackdropClick(e) {
@@ -454,6 +581,25 @@
   ) {
     cdmDetailPane = pane;
   }
+
+  $effect(() => {
+    if (!browser || presentation !== "modal") return;
+    /** @param {KeyboardEvent} e */
+    function onDocKeydown(e) {
+      if (e.key !== "Escape") return;
+      if (cardMenuOpen) {
+        e.preventDefault();
+        e.stopPropagation();
+        cardMenuOpen = false;
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      onclose();
+    }
+    document.addEventListener("keydown", onDocKeydown, true);
+    return () => document.removeEventListener("keydown", onDocKeydown, true);
+  });
 
   onMount(() => {
     if (!browser) return;
@@ -469,17 +615,7 @@
       document.body.style.top = `-${scrollY}px`;
       document.body.style.width = "100%";
     }
-    function onKeydown(e) {
-      if (presentation !== "modal") return;
-      if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopPropagation();
-        onclose();
-      }
-    }
-    document.addEventListener("keydown", onKeydown, true);
     return () => {
-      document.removeEventListener("keydown", onKeydown, true);
       if (presentation !== "modal") return;
       for (const [property, value] of Object.entries(previousBodyStyle)) {
         document.body.style[property] = value;
@@ -523,29 +659,7 @@
     });
   });
 
-  let cardAttachmentRefsView = $derived.by(() => {
-    const a = typedRefsOnlyWithPrefix(dedupedRelatedRefs, "artifact:");
-    const b = typedRefsOnlyWithPrefix(resolutionRefsList, "artifact:");
-    return [...new Set([...a, ...b])];
-  });
-
-  /** Related / resolution rows omit artifact refs; those render only under Attachments. */
-  function withoutArtifactRefs(refs) {
-    return (refs ?? [])
-      .map((x) => String(x ?? "").trim())
-      .filter((x) => x && !x.startsWith("artifact:"));
-  }
-
-  let dedupedRelatedRefsView = $derived.by(() =>
-    withoutArtifactRefs(dedupedRelatedRefs),
-  );
-
-  let resolutionRefsView = $derived.by(() =>
-    withoutArtifactRefs(resolutionRefsList),
-  );
-
-  let cardEditArtifactRefs = $derived.by(() => {
-    if (!editOpen) return [];
+  let editedArtifactRefs = $derived.by(() => {
     const a = typedRefsOnlyWithPrefix(
       parseDelimitedValues(editRelatedRefs),
       "artifact:",
@@ -580,8 +694,10 @@
       const ref = `artifact:${id}`;
       if (target === "related") {
         editRelatedRefs = mergeTypedRefField(editRelatedRefs, ref);
+        await flushRelatedRefsToServer();
       } else {
         editResolutionRefs = mergeTypedRefField(editResolutionRefs, ref);
+        await flushResolutionRefsToServer();
       }
     } catch (e) {
       cardAttachError =
@@ -632,12 +748,10 @@
   $effect(() => {
     if (!browser) return;
     const fromServer = [...dedupedRelatedRefs, ...resolutionRefsList];
-    const fromDraft = editOpen
-      ? [
-          ...parseDelimitedValues(editRelatedRefs),
-          ...parseDelimitedValues(editResolutionRefs),
-        ]
-      : [];
+    const fromDraft = [
+      ...parseDelimitedValues(editRelatedRefs),
+      ...parseDelimitedValues(editResolutionRefs),
+    ];
     const ids = artifactIdsFromTypedRefs([
       ...new Set([...fromServer, ...fromDraft]),
     ]);
@@ -727,25 +841,23 @@
 
 {#snippet cardActionsFooter()}
   <div
-    class="shrink-0 border-t border-[var(--line)] bg-[var(--panel)] px-4 py-3"
+    class="shrink-0 border-t border-[var(--line)] bg-[var(--panel)] px-4 py-2"
   >
     <div
-      class="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-end md:justify-between"
+      class="flex min-w-0 max-w-full flex-wrap items-center gap-2 md:flex-nowrap"
     >
-      <div
-        class="flex min-w-0 max-w-full items-stretch rounded-md border border-[var(--line)] bg-[var(--bg-soft)] md:w-60"
+      <label
+        class="flex min-w-0 flex-1 items-center gap-2 md:max-w-72 md:flex-none"
       >
         <span
-          class="flex shrink-0 items-center border-r border-[var(--line)] px-2.5 py-1.5 text-micro text-[var(--fg-muted)]"
-          aria-hidden="true"
+          class="shrink-0 text-micro text-[var(--fg-muted)]"
+          aria-hidden="true">Column</span
         >
-          Column
-        </span>
         <select
           bind:value={moveColumnKey}
           onchange={handleColumnSelectChange}
           aria-label="Column"
-          class="min-w-0 flex-1 cursor-pointer rounded-r-md border-0 bg-transparent px-2 py-1.5 pr-7 text-meta text-[var(--fg)] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[var(--accent)]"
+          class="min-w-0 flex-1 cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-1 pr-7 text-meta text-[var(--fg)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
         >
           {#each board?.column_schema ?? [] as column (column.key)}
             <option value={column.key}>
@@ -754,37 +866,185 @@
             </option>
           {/each}
         </select>
-      </div>
-      <div class="flex flex-wrap items-center gap-2">
-        {#if editOpen}
-          <Button
-            variant="primary"
-            size="compact"
-            disabled={savingCard}
-            onclick={() => void handleSave()}
-          >
-            {savingCard ? "Saving…" : "Save card details"}
-          </Button>
-          <Button variant="secondary" size="compact" onclick={cancelEdit}>
-            Cancel
-          </Button>
-        {:else}
-          <Button variant="secondary" size="compact" onclick={beginEdit}>
-            Edit card
-          </Button>
-        {/if}
-        <Button
-          variant="destructive"
-          size="compact"
-          onclick={() => {
-            removeCardConfirmOpen = true;
-          }}
-        >
-          Remove card
-        </Button>
-      </div>
+      </label>
+      <button
+        type="button"
+        class="shrink-0 rounded-md px-2 py-1 text-micro text-[var(--fg-muted)] transition-colors hover:bg-[var(--bg-soft)] hover:text-[var(--fg)] disabled:cursor-not-allowed disabled:opacity-40"
+        disabled={peerUpState.idx <= 0}
+        onclick={handleMoveUpInColumn}
+      >
+        Move up
+      </button>
     </div>
   </div>
+{/snippet}
+
+{#snippet propertyLabel(text)}
+  <span
+    class="cdm-prop-label shrink-0 select-none text-micro text-[var(--fg-muted)]"
+    >{text}</span
+  >
+{/snippet}
+
+{#snippet propertiesRail()}
+  <aside class="cdm-rail flex flex-col gap-0.5">
+    <div class="cdm-prop-row">
+      {@render propertyLabel("Status")}
+      <div class="flex min-w-0 flex-1 items-center gap-1">
+        <select
+          bind:value={editResolution}
+          onchange={() => void persistResolutionImmediate()}
+          aria-label="Resolution"
+          class="cdm-prop-control"
+          disabled={isSaving("resolution")}
+        >
+          <option value="">Open</option>
+          <option value="done">Done</option>
+          <option value="canceled">Canceled</option>
+        </select>
+        {#if isSaving("resolution")}
+          <span class="sr-only">Saving resolution</span>
+          <span
+            class="inline-block size-2 animate-pulse rounded-full bg-[var(--accent)]"
+            title="Saving…"
+          ></span>
+        {/if}
+      </div>
+    </div>
+    {#if fieldErrors.resolution}
+      <p class="px-2 text-micro text-danger-text">{fieldErrors.resolution}</p>
+    {/if}
+
+    <div class="cdm-prop-row">
+      {@render propertyLabel("Priority")}
+      <div class="flex min-w-0 flex-1 items-center gap-1">
+        <select
+          id={`cdm-risk-${cardKey}`}
+          bind:value={editRisk}
+          onchange={() => void persistRiskImmediate()}
+          aria-label="Risk"
+          class="cdm-prop-control"
+          disabled={isSaving("risk")}
+        >
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+          <option value="critical">Critical</option>
+        </select>
+        {#if isSaving("risk")}
+          <span
+            class="inline-block size-2 animate-pulse rounded-full bg-[var(--accent)]"
+            title="Saving…"
+          ></span>
+        {/if}
+      </div>
+    </div>
+    {#if fieldErrors.risk}
+      <p class="px-2 text-micro text-danger-text">{fieldErrors.risk}</p>
+    {/if}
+
+    <div class="cdm-prop-row">
+      {@render propertyLabel("Due")}
+      <input
+        id={`cdm-due-${cardKey}`}
+        bind:value={editDueAt}
+        onblur={() => void persistDueBlur()}
+        aria-label="Due date"
+        class="cdm-prop-control"
+        type="datetime-local"
+        disabled={isSaving("due")}
+      />
+    </div>
+    {#if fieldErrors.due}
+      <p class="px-2 text-micro text-danger-text">{fieldErrors.due}</p>
+    {/if}
+
+    <div
+      class="cdm-prop-stack"
+      role="group"
+      aria-label="Assignees"
+      onfocusout={(e) => {
+        const r = /** @type {HTMLElement | null} */ (e.relatedTarget);
+        if (!(e.currentTarget instanceof HTMLElement)) return;
+        if (r?.nodeType === 1 && e.currentTarget.contains(r)) return;
+        void persistAssigneesBlur();
+      }}
+    >
+      <SearchableMultiEntityPicker
+        bind:values={editAssignees}
+        advancedLabel="Add a manual assignee ID"
+        helperText=""
+        items={actorOptions}
+        label="Assignees"
+        manualLabel="Assignee ID"
+        manualPlaceholder="actor-ops-ai"
+        placeholder="Search people"
+      />
+      {#if isSaving("assignees")}
+        <p class="mt-1 text-micro text-[var(--fg-muted)]">
+          Updating assignees…
+        </p>
+      {/if}
+      {#if fieldErrors.assignees}
+        <p class="mt-1 text-micro text-danger-text">{fieldErrors.assignees}</p>
+      {/if}
+    </div>
+
+    <div
+      class="cdm-prop-stack"
+      role="group"
+      aria-label="Document"
+      onfocusout={(e) => {
+        const r = /** @type {HTMLElement | null} */ (e.relatedTarget);
+        if (!(e.currentTarget instanceof HTMLElement)) return;
+        if (r?.nodeType === 1 && e.currentTarget.contains(r)) return;
+        void persistDocumentBlur();
+      }}
+    >
+      <SearchableEntityPicker
+        bind:value={editDocumentId}
+        advancedLabel="Use a manual document ID"
+        helperText=""
+        label="Document"
+        manualLabel="Document ID"
+        manualPlaceholder="onboarding-guide-v1"
+        placeholder="Link a document"
+        searchFn={searchDocumentOptions}
+      />
+      {#if isSaving("document")}
+        <p class="mt-1 text-micro text-[var(--fg-muted)]">Updating document…</p>
+      {/if}
+      {#if fieldErrors.document}
+        <p class="mt-1 text-micro text-danger-text">{fieldErrors.document}</p>
+      {/if}
+    </div>
+
+    <div class="cdm-prop-row hidden md:flex">
+      {@render propertyLabel("Column")}
+      <select
+        id={`cdm-col-rail-${cardKey}`}
+        bind:value={moveColumnKey}
+        onchange={handleColumnSelectChange}
+        class="cdm-prop-control"
+        aria-label="Column"
+      >
+        {#each board?.column_schema ?? [] as column (column.key)}
+          <option value={column.key}>
+            {column.title ||
+              boardColumnTitle(column.key, board?.column_schema ?? [])}
+          </option>
+        {/each}
+      </select>
+    </div>
+  </aside>
+{/snippet}
+
+{#snippet saveSpinner(kind)}
+  {#if isSaving(kind)}
+    <span class="text-micro text-[var(--fg-muted)]" aria-live="polite"
+      >Saving…</span
+    >
+  {/if}
 {/snippet}
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -804,54 +1064,66 @@
       ? "cdm-panel"
       : "cdm-panel cdm-page-panel page-dock-layout page-dock-layout--mobile-only page-dock-layout--fixed-mobile-chat"}
   >
-    <div class="sticky top-0 z-10 bg-[var(--panel)] px-3 pt-2 sm:px-4 sm:pt-3">
-      <div class="flex items-start justify-between gap-3">
+    <div
+      class="sticky top-0 z-10 border-b border-[var(--line)] bg-[var(--panel)] px-4 pt-2 sm:px-6 sm:pt-2.5"
+    >
+      <div class="flex items-center justify-between gap-3">
         <div class="min-w-0 flex-1">
-          <div class="flex flex-wrap items-center gap-2">
-            <h2 class="truncate text-subtitle font-semibold text-[var(--fg)]">
-              {headerTitle}
-            </h2>
-            <span
-              class="rounded-md px-1.5 py-0.5 text-micro font-medium {cardResolutionTone(
-                cardResolution,
-              )}"
+          <h2 class="sr-only">{headerTitle}</h2>
+          <div
+            class="flex min-w-0 items-baseline gap-1.5 text-micro text-[var(--fg-muted)]"
+          >
+            <span>Board</span>
+            <span class="truncate text-[var(--fg)]"
+              >{board?.title ?? boardId}</span
             >
-              {cardResolutionLabel(cardResolution)}
-            </span>
-            {#if membership?.due_at}
-              <span
-                class="rounded-md px-1.5 py-0.5 text-micro {isOverdue(
-                  membership.due_at,
-                )
-                  ? 'bg-danger-soft text-danger-text'
-                  : 'bg-[var(--line)] text-[var(--fg-muted)]'}"
-              >
-                Due {dueDateDisplay(membership.due_at) || "—"}
-              </span>
-            {/if}
-          </div>
-          {#if assigneeNames.length > 0}
-            <div class="mt-2 flex flex-wrap items-center gap-1">
-              <span class="text-micro text-[var(--fg-muted)]">Assigned</span>
-              {#each assigneeNames as name (name)}
-                <span
-                  class="max-w-[10rem] truncate rounded-md bg-[var(--line)] px-1.5 py-0.5 text-micro text-[var(--fg-muted)]"
-                  title={name}
-                >
-                  {name}
-                </span>
-              {/each}
-            </div>
-          {/if}
-          <div class="mt-2 text-micro text-[var(--fg-muted)]">
-            <span class="text-[var(--fg-muted)]">Board</span>
-            {board?.title ?? boardId}
           </div>
         </div>
-        <div class="flex shrink-0 items-center gap-1">
+        <div class="relative flex shrink-0 items-center gap-1">
           {#if cardKey}
             <ResourceShareMenu resourceId={cardKey} rawRecord={cardItem} />
           {/if}
+          <div class="relative" bind:this={cardActionsMenuEl}>
+            <button
+              type="button"
+              aria-label="More card actions"
+              aria-expanded={cardMenuOpen}
+              aria-haspopup="menu"
+              onclick={() => (cardMenuOpen = !cardMenuOpen)}
+              class="shrink-0 rounded-md border border-[var(--line)] px-2 py-1.5 text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
+            >
+              <span class="sr-only">More card actions</span>
+              <svg
+                class="h-4 w-4"
+                fill="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <circle cx="5" cy="12" r="1.75" />
+                <circle cx="12" cy="12" r="1.75" />
+                <circle cx="19" cy="12" r="1.75" />
+              </svg>
+            </button>
+            {#if cardMenuOpen}
+              <div
+                class="absolute right-0 z-40 mt-1 min-w-[10rem] rounded-md border border-[var(--line)] bg-[var(--panel)] py-0.5 text-meta shadow-lg"
+                role="menu"
+                tabindex="-1"
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  onclick={() => {
+                    cardMenuOpen = false;
+                    removeCardConfirmOpen = true;
+                  }}
+                  class="block w-full cursor-pointer px-3 py-1.5 text-left text-meta text-danger-text hover:bg-[var(--bg-soft)]"
+                >
+                  Remove card
+                </button>
+              </div>
+            {/if}
+          </div>
           <button
             type="button"
             class="shrink-0 rounded-md border border-[var(--line)] p-1.5 text-[var(--fg-muted)] transition-colors hover:bg-[var(--line-subtle)] hover:text-[var(--fg)]"
@@ -945,81 +1217,194 @@
         : "cdm-scroll page-dock-scroll"}
     >
       {#if cdmDetailPane === "overview"}
-        <div class="p-4" data-cdm-panel="overview">
-          {#if editOpen}
-            <div class="space-y-3">
-              {#if saveError}
-                <p
-                  class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
+        <div
+          class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_18rem]"
+          data-cdm-panel="overview"
+        >
+          <!-- Main -->
+          <div
+            class="order-1 flex min-h-0 min-w-0 flex-col gap-4 px-5 pb-4 pt-5 sm:px-8 sm:pt-7 md:border-r md:border-[var(--line)]"
+          >
+            {#if Object.keys(fieldErrors).length > 0}
+              <div
+                class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
+              >
+                {#each Object.entries(fieldErrors) as [fid, ferr] (`${fid}:${ferr}`)}
+                  <div>{ferr}</div>
+                {/each}
+              </div>
+            {/if}
+
+            <!-- Title -->
+            <div>
+              <input
+                bind:value={editTitle}
+                onblur={() => void commitTitleField()}
+                onkeydown={(ev) => {
+                  if (ev.key === "Enter") {
+                    ev.preventDefault();
+                    ev.currentTarget.blur();
+                  } else if (ev.key === "Escape") {
+                    ev.preventDefault();
+                    syncCardDraftsFromItem(cardItem);
+                    ev.currentTarget.blur();
+                  }
+                }}
+                placeholder="Untitled card"
+                class="cdm-title-input"
+                aria-label="Card title"
+                disabled={isSaving("title")}
+              />
+              {#if isSaving("title") || fieldErrors.title}
+                <div class="mt-1 flex flex-wrap items-center gap-2 text-micro">
+                  {@render saveSpinner("title")}
+                  {#if fieldErrors.title}<span class="text-danger-text"
+                      >{fieldErrors.title}</span
+                    >{/if}
+                </div>
+              {/if}
+            </div>
+
+            <!-- Summary (description) -->
+            <section>
+              {#if summaryEditing}
+                <!-- svelte-ignore a11y_autofocus -->
+                <textarea
+                  autofocus
+                  bind:value={editSummary}
+                  onblur={() => void commitSummaryField()}
+                  onkeydown={(ev) => {
+                    if ((ev.ctrlKey || ev.metaKey) && ev.key === "Enter") {
+                      ev.preventDefault();
+                      ev.currentTarget.blur();
+                    } else if (ev.key === "Escape") {
+                      ev.preventDefault();
+                      syncCardDraftsFromItem(cardItem);
+                      summaryEditing = false;
+                    }
+                  }}
+                  class="cdm-prose-input min-h-[7rem]"
+                  aria-label="Card summary"
+                  placeholder="Write a description…"
+                  disabled={isSaving("summary")}
+                ></textarea>
+                <div class="mt-1 flex min-h-[0.75rem]">
+                  {@render saveSpinner("summary")}
+                </div>
+              {:else}
+                <button
+                  type="button"
+                  class="cdm-prose-display group w-full cursor-text rounded-sm text-left"
+                  onclick={() => (summaryEditing = true)}
+                  disabled={isSaving("summary")}
+                  aria-label="Edit summary"
                 >
-                  {saveError}
+                  {#if showSummary}
+                    <MarkdownRenderer
+                      source={summaryText}
+                      class="markdown-rendered--card-content"
+                    />
+                  {:else}
+                    <span class="text-meta text-[var(--fg-muted)]"
+                      >Write a description…</span
+                    >
+                  {/if}
+                </button>
+              {/if}
+              {#if fieldErrors.summary}
+                <p class="mt-1 text-micro text-danger-text">
+                  {fieldErrors.summary}
                 </p>
               {/if}
-              <label
-                class="block text-micro font-medium text-[var(--fg-muted)]"
-              >
-                Title
-                <input
-                  bind:value={editTitle}
-                  class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)] focus:border-[var(--accent)] focus:outline-none"
-                  type="text"
-                />
-              </label>
+            </section>
 
-              <label
-                class="block text-micro font-medium text-[var(--fg-muted)]"
+            <!-- Definition of done -->
+            <section>
+              <h3
+                class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-muted)]"
               >
-                Summary
+                Definition of done
+              </h3>
+              {#if dodEditing}
+                <!-- svelte-ignore a11y_autofocus -->
                 <textarea
-                  bind:value={editSummary}
-                  class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-meta text-[var(--fg)] focus:border-[var(--accent)] focus:outline-none"
-                  rows="3"
+                  autofocus
+                  bind:value={editDefinitionOfDone}
+                  onblur={() => void commitDodField()}
+                  onkeydown={(ev) => {
+                    if (ev.key === "Escape") {
+                      ev.preventDefault();
+                      syncCardDraftsFromItem(cardItem);
+                      dodEditing = false;
+                    }
+                  }}
+                  class="cdm-prose-input min-h-[5rem]"
+                  aria-label="Definition of done (one idea per line)"
+                  disabled={isSaving("definition_of_done")}
+                  placeholder="One criterion per line"
                 ></textarea>
-              </label>
+                {@render saveSpinner("definition_of_done")}
+                {#if fieldErrors.definition_of_done}
+                  <p class="mt-1 text-micro text-danger-text">
+                    {fieldErrors.definition_of_done}
+                  </p>
+                {/if}
+              {:else}
+                <button
+                  type="button"
+                  class="cdm-prose-display w-full cursor-text rounded-sm text-left"
+                  onclick={() => (dodEditing = true)}
+                  disabled={isSaving("definition_of_done")}
+                  aria-label="Edit definition of done"
+                >
+                  {#if dodItems.length > 0}
+                    <ul class="list-inside list-disc space-y-1 text-meta">
+                      {#each dodItems as line (line)}
+                        <li>{line}</li>
+                      {/each}
+                    </ul>
+                  {:else}
+                    <span class="text-meta text-[var(--fg-muted)]"
+                      >Add criteria…</span
+                    >
+                  {/if}
+                </button>
+              {/if}
+            </section>
 
-              <div class="flex flex-wrap gap-3">
-                <label class="text-micro font-medium text-[var(--fg-muted)]">
-                  Resolution
-                  <select
-                    bind:value={editResolution}
-                    class="mt-1 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-meta text-[var(--fg)]"
-                  >
-                    <option value="">Open</option>
-                    <option value="done">Done</option>
-                    <option value="canceled">Canceled</option>
-                  </select>
-                </label>
-
-                <label class="text-micro font-medium text-[var(--fg-muted)]">
-                  Due date
-                  <input
-                    bind:value={editDueAt}
-                    class="mt-1 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-meta text-[var(--fg)]"
-                    type="datetime-local"
-                  />
-                </label>
-              </div>
-
-              <div
-                class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] p-3"
-              >
-                <p class="text-micro font-medium text-[var(--fg-muted)]">
+            <!-- Attachments: minimal inline strip -->
+            <section>
+              <div class="mb-1 flex items-baseline justify-between gap-2">
+                <h3
+                  class="text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-muted)]"
+                >
                   Attachments
-                </p>
-                <p class="mt-1 text-micro text-[var(--fg-muted)]">
-                  Upload files as artifact refs. Choose whether each file
-                  supports general context (related) or resolution evidence.
-                </p>
-                <div class="mt-2 flex flex-wrap gap-2">
+                </h3>
+                <div class="flex items-center gap-2">
                   <label
-                    class="inline-flex h-7 cursor-pointer items-center justify-center rounded bg-accent-solid px-3 text-micro font-medium text-white transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50 {!cardAttachContextRefs.length
-                      ? 'pointer-events-none opacity-50'
+                    class="inline-flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-0.5 text-micro text-[var(--fg-muted)] transition-colors hover:bg-[var(--bg-soft)] hover:text-[var(--fg)] {!cardAttachContextRefs.length ||
+                    cardAttachBusy
+                      ? 'pointer-events-none opacity-40'
                       : ''}"
                   >
+                    <svg
+                      class="h-3 w-3"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      aria-hidden="true"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M12 4v16m8-8H4"
+                      />
+                    </svg>
                     <span
                       >{cardAttachBusy === "related"
                         ? "Uploading…"
-                        : "Attach file (related)"}</span
+                        : "Add"}</span
                     >
                     <input
                       class="sr-only"
@@ -1035,14 +1420,16 @@
                     />
                   </label>
                   <label
-                    class="inline-flex h-7 cursor-pointer items-center justify-center rounded border border-[var(--line)] bg-transparent px-3 text-micro font-normal text-[var(--fg)] transition-colors hover:bg-[var(--line-subtle)] disabled:cursor-not-allowed disabled:opacity-50 {!cardAttachContextRefs.length
-                      ? 'pointer-events-none opacity-50'
+                    class="inline-flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-0.5 text-micro text-[var(--fg-muted)] transition-colors hover:bg-[var(--bg-soft)] hover:text-[var(--fg)] {!cardAttachContextRefs.length ||
+                    cardAttachBusy
+                      ? 'pointer-events-none opacity-40'
                       : ''}"
+                    title="Attach as resolution evidence"
                   >
                     <span
                       >{cardAttachBusy === "resolution"
                         ? "Uploading…"
-                        : "Attach file (resolution evidence)"}</span
+                        : "+ Evidence"}</span
                     >
                     <input
                       class="sr-only"
@@ -1058,368 +1445,212 @@
                     />
                   </label>
                 </div>
-                {#if !cardAttachContextRefs.length}
-                  <p class="mt-1.5 text-micro text-[var(--fg-muted)]">
-                    Save the card once if attachments are unavailable (card id
-                    required for upload context).
-                  </p>
-                {/if}
-                {#if cardAttachError}
-                  <p class="mt-1.5 text-micro text-danger-text">
-                    {cardAttachError}
-                  </p>
-                {/if}
-                {#if cardEditArtifactRefs.length > 0}
-                  <ul class="mt-2 flex min-w-0 flex-wrap gap-1.5">
-                    {#each cardEditArtifactRefs as ref (ref)}
-                      <li class="min-w-0 text-micro">
-                        <CompactRefLink
-                          refValue={ref}
-                          threadId={linkedThreadId}
-                          {boardId}
-                          humanize
-                          showRaw
-                          labelHints={refLabelHints}
-                          artifactRoutesById={modalArtifactRoutesById}
-                        />
-                      </li>
-                    {/each}
-                  </ul>
-                {/if}
               </div>
-
-              <button
-                type="button"
-                class="flex items-center gap-1.5 text-micro text-[var(--fg-muted)] transition-colors hover:text-[var(--fg)]"
-                onclick={() => (editAdvanced = !editAdvanced)}
-              >
-                <svg
-                  class="h-3.5 w-3.5 transition-transform {editAdvanced
-                    ? 'rotate-90'
-                    : ''}"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  stroke-width="2"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M9 5l7 7-7 7"
-                  />
-                </svg>
-                {editAdvanced ? "Fewer options" : "More options"}
-              </button>
-
-              {#if editAdvanced}
-                <div
-                  class="space-y-3 rounded-md border border-[var(--line)] bg-[var(--bg-soft)] p-3"
-                >
-                  <div class="grid gap-3 md:grid-cols-2">
-                    <SearchableEntityPicker
-                      bind:value={editThreadId}
-                      advancedLabel="Use a manual thread ID"
-                      disabledIds={[backingThreadId].filter(Boolean)}
-                      helperText="Optional: pick a topic or paste a thread ID."
-                      label="Topic or thread"
-                      manualLabel="Thread ID"
-                      manualPlaceholder="thread-onboarding"
-                      placeholder="Search topics by title or ID"
-                      searchFn={searchThreadOptions}
-                    />
-                    <SearchableEntityPicker
-                      bind:value={editDocumentId}
-                      advancedLabel="Use a manual document ID"
-                      helperText="Optional document lineage on the card."
-                      label="Document"
-                      manualLabel="Document ID"
-                      manualPlaceholder="onboarding-guide-v1"
-                      placeholder="Search documents by title, ID, or timeline ID"
-                      searchFn={searchDocumentOptions}
-                    />
-                    <SearchableMultiEntityPicker
-                      bind:values={editAssignees}
-                      advancedLabel="Add a manual assignee ID"
-                      helperText="Optional assignees."
-                      items={actorOptions}
-                      label="Assignees"
-                      manualLabel="Assignee ID"
-                      manualPlaceholder="actor-ops-ai"
-                      placeholder="Search actors by name, ID, or tags"
-                    />
-                    <label
-                      class="text-micro font-medium text-[var(--fg-muted)]"
-                    >
-                      Risk
-                      <select
-                        bind:value={editRisk}
-                        class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-meta text-[var(--fg)]"
-                      >
-                        <option value="low">Low</option>
-                        <option value="medium">Medium</option>
-                        <option value="high">High</option>
-                        <option value="critical">Critical</option>
-                      </select>
-                    </label>
-                    <label
-                      class="text-micro font-medium text-[var(--fg-muted)] md:col-span-2"
-                    >
-                      Definition of done
-                      <textarea
-                        bind:value={editDefinitionOfDone}
-                        class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-meta text-[var(--fg)]"
-                        rows="3"
-                      ></textarea>
-                    </label>
-                    <div class="md:col-span-2">
-                      <p class="text-micro font-medium text-[var(--fg-muted)]">
-                        Related refs
-                      </p>
-                      <GuidedTypedRefsInput
-                        bind:value={editRelatedRefs}
-                        {boardId}
+              {#if editedArtifactRefs.length > 0}
+                <ul class="flex min-w-0 flex-wrap gap-1.5">
+                  {#each editedArtifactRefs as ref (ref)}
+                    <li class="min-w-0 text-micro">
+                      <CompactRefLink
+                        refValue={ref}
                         threadId={linkedThreadId}
-                        artifactRoutesById={modalArtifactRoutesById}
-                        addInputLabel="Add related ref"
-                        addInputPlaceholder="topic:summer-menu-rollout"
-                        addButtonLabel="Add ref"
-                        emptyText="No related refs yet."
-                        helperText="Typed refs (topic:, document:, thread:, …)."
-                        textareaAriaLabel="Card related refs"
-                      />
-                    </div>
-                    <div class="md:col-span-2">
-                      <p class="text-micro font-medium text-[var(--fg-muted)]">
-                        Resolution evidence
-                      </p>
-                      <GuidedTypedRefsInput
-                        bind:value={editResolutionRefs}
                         {boardId}
-                        threadId={linkedThreadId}
+                        humanize
+                        showRaw
+                        labelHints={refLabelHints}
                         artifactRoutesById={modalArtifactRoutesById}
-                        addInputLabel="Add resolution ref"
-                        addInputPlaceholder="artifact:supporting-context"
-                        addButtonLabel="Add ref"
-                        emptyText="No resolution evidence yet."
-                        helperText="Refs that evidence resolution."
-                        textareaAriaLabel="Card resolution refs"
                       />
-                    </div>
-                  </div>
-                </div>
-              {/if}
-            </div>
-          {:else}
-            <div class="space-y-4 text-meta text-[var(--fg)]">
-              {#if showSummary}
-                <section>
-                  <h3
-                    class="mb-1.5 text-micro font-medium text-[var(--fg-muted)]"
-                  >
-                    Summary
-                  </h3>
-                  <div
-                    class="card-content-block rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2"
-                  >
-                    <MarkdownRenderer
-                      source={summaryText}
-                      class="markdown-rendered--card-content"
-                    />
-                  </div>
-                </section>
-              {/if}
-
-              {#if dodItems.length > 0}
-                <section>
-                  <h3
-                    class="mb-1.5 text-micro font-medium text-[var(--fg-muted)]"
-                  >
-                    Definition of done
-                  </h3>
-                  <ul class="list-inside list-disc space-y-1 text-micro">
-                    {#each dodItems as line (line)}
-                      <li>{line}</li>
-                    {/each}
-                  </ul>
-                </section>
-              {/if}
-
-              <section>
-                <h3
-                  class="mb-1.5 text-micro font-medium text-[var(--fg-muted)]"
-                >
-                  Attachments
-                </h3>
-                {#if cardAttachmentRefsView.length > 0}
-                  <ul class="flex min-w-0 flex-wrap gap-1.5">
-                    {#each cardAttachmentRefsView as ref (ref)}
-                      <li class="min-w-0 text-micro">
-                        <CompactRefLink
-                          refValue={ref}
-                          threadId={linkedThreadId}
-                          {boardId}
-                          humanize
-                          showRaw
-                          labelHints={refLabelHints}
-                          artifactRoutesById={modalArtifactRoutesById}
-                        />
-                      </li>
-                    {/each}
-                  </ul>
-                {:else}
-                  <p class="text-micro text-[var(--fg-muted)]">
-                    No file attachments. Use Edit card to upload.
-                  </p>
-                {/if}
-              </section>
-
-              {#if dedupedRelatedRefsView.length > 0}
-                <section>
-                  <h3
-                    class="mb-1.5 text-micro font-medium text-[var(--fg-muted)]"
-                  >
-                    Related refs
-                  </h3>
-                  <ul class="flex min-w-0 flex-wrap gap-1.5">
-                    {#each dedupedRelatedRefsView as ref (ref)}
-                      <li class="min-w-0 text-micro">
-                        <CompactRefLink
-                          refValue={ref}
-                          threadId={linkedThreadId}
-                          {boardId}
-                          humanize
-                          showRaw
-                          labelHints={refLabelHints}
-                          artifactRoutesById={modalArtifactRoutesById}
-                        />
-                      </li>
-                    {/each}
-                  </ul>
-                </section>
-              {/if}
-
-              {#if resolutionRefsView.length > 0}
-                <section>
-                  <h3
-                    class="mb-1.5 text-micro font-medium text-[var(--fg-muted)]"
-                  >
-                    Resolution refs
-                  </h3>
-                  <ul class="flex min-w-0 flex-wrap gap-1.5">
-                    {#each resolutionRefsView as ref (ref)}
-                      <li class="min-w-0 text-micro">
-                        <CompactRefLink
-                          refValue={ref}
-                          threadId={linkedThreadId}
-                          {boardId}
-                          humanize
-                          showRaw
-                          labelHints={refLabelHints}
-                          artifactRoutesById={modalArtifactRoutesById}
-                        />
-                      </li>
-                    {/each}
-                  </ul>
-                </section>
-              {/if}
-
-              <section class="space-y-2 text-micro">
-                <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-                  <span class="flex items-center gap-1.5">
-                    <span class="text-[var(--fg-muted)]">Risk</span>
-                    <span class="font-medium capitalize text-[var(--fg)]">
-                      {String(membership?.risk ?? "—")}
-                    </span>
-                  </span>
-                  {#if cardFreshness}
-                    <span class="flex items-center gap-1.5">
-                      <span class="text-[var(--fg-muted)]">Projection</span>
-                      <span
-                        class="rounded-md px-1.5 py-0.5 font-medium {freshnessStatusTone(
-                          cardFreshness.status,
-                        )}"
-                      >
-                        {freshnessStatusLabel(cardFreshness.status)}
-                      </span>
-                      {#if cardFreshness.generated_at}
-                        <span class="text-[var(--fg-muted)]">
-                          · {formatTimestamp(cardFreshness.generated_at)}
-                        </span>
-                      {/if}
-                    </span>
-                  {/if}
-                  {#if derivedSummary?.latest_activity_at}
-                    <span class="flex items-center gap-1.5">
-                      <span class="text-[var(--fg-muted)]">Activity</span>
-                      <span class="text-[var(--fg)]">
-                        {formatTimestamp(derivedSummary.latest_activity_at) ||
-                          "—"}
-                      </span>
-                    </span>
-                  {/if}
-                </div>
-                {#if nonZeroDerivedCounts.length > 0}
-                  <div class="flex flex-wrap gap-1.5">
-                    {#each nonZeroDerivedCounts as { label, count } (label)}
-                      <span
-                        class="rounded-md bg-[var(--line)] px-1.5 py-0.5 text-micro"
-                      >
-                        <span class="text-[var(--fg-muted)]">{label}</span>
-                        <span class="font-medium text-[var(--fg)]">
-                          {count}
-                        </span>
-                      </span>
-                    {/each}
-                  </div>
-                {/if}
-              </section>
-
-              {#if cardInspectNav && cardTopicThreadRef}
-                <div
-                  class="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-micro"
-                >
-                  <span class="text-[var(--fg-muted)]"
-                    >{cardInspectNav.kind === "topic"
-                      ? "Topic"
-                      : "Thread"}</span
-                  >
-                  <RefLink
-                    refValue={cardTopicThreadRef}
-                    threadId={linkedThreadId}
-                    {boardId}
-                    humanize
-                    showRaw
-                    labelHints={refLabelHints}
-                    artifactRoutesById={modalArtifactRoutesById}
-                  />
-                </div>
-              {/if}
-
-              {#if membership?.updated_at}
+                    </li>
+                  {/each}
+                </ul>
+              {:else}
                 <p class="text-micro text-[var(--fg-muted)]">
-                  Card updated {formatTimestamp(membership.updated_at)}
-                  {#if membership?.updated_by}
-                    <span class="text-[var(--fg-muted)]">
-                      · {actorName(membership.updated_by)}
-                    </span>
-                  {/if}
+                  No attachments yet.
                 </p>
               {/if}
+              {#if cardAttachError}
+                <p class="mt-1 text-micro text-danger-text">
+                  {cardAttachError}
+                </p>
+              {/if}
+            </section>
 
+            <!-- References (collapsed group) -->
+            <details class="cdm-disclosure" open={relatedRefsList.length > 0}>
+              <summary
+                class="cursor-pointer text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-muted)] marker:text-[var(--fg-muted)] hover:text-[var(--fg)]"
+              >
+                Related refs
+              </summary>
               <div class="mt-2">
+                <GuidedTypedRefsInput
+                  bind:value={editRelatedRefs}
+                  {boardId}
+                  threadId={linkedThreadId}
+                  artifactRoutesById={modalArtifactRoutesById}
+                  addInputLabel="Add related ref"
+                  addInputPlaceholder="topic:summer-menu-rollout"
+                  addButtonLabel="Add ref"
+                  emptyText="No related refs yet."
+                  helperText=""
+                  textareaAriaLabel="Card related refs"
+                  fieldError={fieldErrors.related_refs}
+                  attachContextRefs={cardAttachContextRefs}
+                />
+              </div>
+            </details>
+
+            <details
+              class="cdm-disclosure"
+              open={resolutionRefsList.length > 0}
+            >
+              <summary
+                class="cursor-pointer text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-muted)] marker:text-[var(--fg-muted)] hover:text-[var(--fg)]"
+              >
+                Resolution refs
+              </summary>
+              <div class="mt-2">
+                <GuidedTypedRefsInput
+                  bind:value={editResolutionRefs}
+                  {boardId}
+                  threadId={linkedThreadId}
+                  artifactRoutesById={modalArtifactRoutesById}
+                  addInputLabel="Add resolution ref"
+                  addInputPlaceholder="artifact:supporting-context"
+                  addButtonLabel="Add ref"
+                  emptyText="No resolution refs yet."
+                  helperText=""
+                  textareaAriaLabel="Card resolution refs"
+                  fieldError={fieldErrors.resolution_refs}
+                  attachContextRefs={cardAttachContextRefs}
+                />
+              </div>
+            </details>
+
+            <!-- Mobile properties: between content and footer -->
+            <details
+              class="order-2 -mx-5 mt-1 border-t border-[var(--line)] px-5 pt-3 sm:-mx-8 sm:px-8 md:hidden"
+            >
+              <summary
+                class="cursor-pointer text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-muted)] marker:text-[var(--fg-muted)]"
+              >
+                Properties
+              </summary>
+              <div class="mt-2">
+                {@render propertiesRail()}
+              </div>
+            </details>
+
+            <!-- Advanced + meta -->
+            <details class="cdm-disclosure">
+              <summary
+                class="cursor-pointer text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-muted)] marker:text-[var(--fg-muted)] hover:text-[var(--fg)]"
+              >
+                Advanced
+              </summary>
+              <div
+                class="mt-3 space-y-3"
+                role="group"
+                aria-label="Topic or thread"
+                onfocusout={(e) => {
+                  const r = /** @type {HTMLElement | null} */ (e.relatedTarget);
+                  if (!(e.currentTarget instanceof HTMLElement)) return;
+                  if (r?.nodeType === 1 && e.currentTarget.contains(r)) return;
+                  void persistThreadBlur();
+                }}
+              >
+                <SearchableEntityPicker
+                  bind:value={editThreadId}
+                  advancedLabel="Use a manual thread ID"
+                  disabledIds={[backingThreadId].filter(Boolean)}
+                  helperText="Changing this updates the card threading context."
+                  label="Topic or thread"
+                  manualLabel="Thread ID"
+                  manualPlaceholder="thread-onboarding"
+                  placeholder="Search topics by title or ID"
+                  searchFn={searchThreadOptions}
+                />
+                {#if fieldErrors.thread}
+                  <p class="text-micro text-danger-text">
+                    {fieldErrors.thread}
+                  </p>
+                {/if}
                 <IdsIntegrityDisclosure
                   rows={cardIntegrityRows}
                   rawJson={cardRawJson}
                   rawJsonCopyLabel="Copy card JSON"
                 />
               </div>
-            </div>
-          {/if}
+            </details>
+
+            <!-- Compact meta footer -->
+            {#if cardFreshness || derivedSummary?.latest_activity_at || nonZeroDerivedCounts.length > 0 || (cardInspectNav && cardTopicThreadRef && !duplicateTopicThreadNavLink) || membership?.updated_at}
+              <div
+                class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[var(--line)] pt-3 text-micro text-[var(--fg-muted)]"
+              >
+                {#if cardInspectNav && cardTopicThreadRef && !duplicateTopicThreadNavLink}
+                  <span class="flex items-baseline gap-1">
+                    <span
+                      >{cardInspectNav.kind === "topic"
+                        ? "Topic"
+                        : "Thread"}</span
+                    >
+                    <RefLink
+                      refValue={cardTopicThreadRef}
+                      threadId={linkedThreadId}
+                      {boardId}
+                      humanize
+                      showRaw
+                      labelHints={refLabelHints}
+                      artifactRoutesById={modalArtifactRoutesById}
+                    />
+                  </span>
+                {/if}
+                {#if cardFreshness}
+                  <span class="flex items-center gap-1">
+                    <span>Projection</span>
+                    <span
+                      class="rounded-md px-1 font-medium {freshnessStatusTone(
+                        cardFreshness.status,
+                      )}">{freshnessStatusLabel(cardFreshness.status)}</span
+                    >
+                  </span>
+                {/if}
+                {#if derivedSummary?.latest_activity_at}
+                  <span
+                    >Activity {formatTimestamp(
+                      derivedSummary.latest_activity_at,
+                    ) || "—"}</span
+                  >
+                {/if}
+                {#if membership?.updated_at}
+                  <span
+                    >Updated {formatTimestamp(
+                      membership.updated_at,
+                    )}{#if membership?.updated_by}
+                      · {actorName(membership.updated_by)}{/if}</span
+                  >
+                {/if}
+                {#each nonZeroDerivedCounts as { label, count } (label)}
+                  <span class="flex items-baseline gap-1">
+                    <span>{label}</span>
+                    <span class="font-medium text-[var(--fg)]">{count}</span>
+                  </span>
+                {/each}
+              </div>
+            {/if}
+          </div>
+
+          <!-- Desktop rail -->
+          <div
+            class="order-2 hidden min-w-0 px-5 pb-4 pt-5 sm:px-6 md:block md:overflow-visible"
+          >
+            {@render propertiesRail()}
+          </div>
         </div>
       {:else if cdmDetailPane === "timeline"}
         <div class="px-4 pb-4 pt-1" data-cdm-panel="timeline">
           {#if linkedThreadId}
-            <TimelineTab threadId={linkedThreadId} />
+            <TimelineTab threadId={linkedThreadId} compact />
           {:else}
             <p class="text-meta text-[var(--fg-muted)]">
               This card has no backing thread; timeline requires a linked
@@ -1550,13 +1781,141 @@
     max-height: min(90vh, 900px);
     max-height: min(90dvh, 900px);
     width: 100%;
-    max-width: 42rem;
+    max-width: 60rem;
     flex-direction: column;
     overflow: hidden;
-    border-radius: 0.375rem;
+    border-radius: 0.5rem;
     border: 1px solid var(--line);
     background: var(--panel);
     box-shadow: var(--shadow-modal);
+  }
+
+  /* ---- Notion-style title input ---- */
+  :global(.cdm-title-input) {
+    display: block;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    padding: 0.125rem 0.25rem;
+    margin-left: -0.25rem;
+    font-size: 22px;
+    font-weight: 600;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+    color: var(--fg);
+    border-radius: 0.25rem;
+  }
+  :global(.cdm-title-input::placeholder) {
+    color: var(--fg-muted);
+    font-weight: 600;
+  }
+  :global(.cdm-title-input:focus) {
+    outline: none;
+    background: var(--bg-soft);
+  }
+
+  /* ---- Notion-style prose editor (summary, DoD) ---- */
+  :global(.cdm-prose-input) {
+    display: block;
+    width: 100%;
+    border: 0;
+    background: var(--bg-soft);
+    padding: 0.5rem 0.625rem;
+    margin-left: -0.625rem;
+    margin-right: -0.625rem;
+    color: var(--fg);
+    font-size: 13px;
+    line-height: 1.55;
+    border-radius: 0.375rem;
+    resize: vertical;
+  }
+  :global(.cdm-prose-input::placeholder) {
+    color: var(--fg-muted);
+  }
+  :global(.cdm-prose-input:focus) {
+    outline: none;
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+
+  :global(.cdm-prose-display) {
+    display: block;
+    border: 0;
+    background: transparent;
+    padding: 0.25rem 0.375rem;
+    margin-left: -0.375rem;
+    margin-right: -0.375rem;
+    color: var(--fg);
+    font-size: 13px;
+    line-height: 1.55;
+    transition: background-color 120ms ease;
+  }
+  :global(.cdm-prose-display:hover:not(:disabled)) {
+    background: var(--bg-soft);
+  }
+
+  /* ---- Right-rail property rows (Linear-style compact) ---- */
+  :global(.cdm-rail) {
+    font-size: 12px;
+  }
+  :global(.cdm-prop-row) {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0;
+    min-height: 2rem;
+  }
+  :global(.cdm-prop-label) {
+    width: 5.5rem;
+    flex-shrink: 0;
+  }
+  :global(.cdm-prop-control) {
+    flex: 1;
+    min-width: 0;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--fg);
+    font-size: 12px;
+    padding: 0.25rem 0.375rem;
+    border-radius: 0.25rem;
+    transition:
+      background 120ms ease,
+      border-color 120ms ease;
+  }
+  :global(.cdm-prop-control:hover:not(:disabled)) {
+    background: var(--bg-soft);
+  }
+  :global(.cdm-prop-control:focus) {
+    outline: none;
+    background: var(--bg-soft);
+    border-color: var(--accent);
+  }
+  :global(.cdm-prop-stack) {
+    padding: 0.5rem 0;
+    border-top: 1px dashed var(--line);
+    margin-top: 0.25rem;
+  }
+  :global(.cdm-prop-stack:first-of-type) {
+    border-top: 0;
+    margin-top: 0;
+  }
+
+  :global(.cdm-disclosure > summary) {
+    list-style: none;
+    user-select: none;
+  }
+  :global(.cdm-disclosure > summary::-webkit-details-marker) {
+    display: none;
+  }
+  :global(.cdm-disclosure > summary)::before {
+    content: "▸";
+    display: inline-block;
+    margin-right: 0.375rem;
+    transition: transform 120ms ease;
+    color: var(--fg-muted);
+    font-size: 9px;
+  }
+  :global(.cdm-disclosure[open] > summary)::before {
+    transform: rotate(90deg);
   }
 
   .cdm-scroll {
