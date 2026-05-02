@@ -1066,8 +1066,8 @@
   {/if}
   <div
     class={presentation === "modal"
-      ? "cdm-panel"
-      : "cdm-panel cdm-page-panel page-dock-layout page-dock-layout--mobile-only page-dock-layout--fixed-mobile-chat"}
+      ? "cdm-panel page-dock-layout--embedded-modal-chat"
+      : "cdm-panel cdm-page-panel page-dock-layout page-dock-layout--mobile-only page-dock-layout--fixed-mobile-chat page-dock-layout--card-page-chat"}
   >
     <div
       class="sticky top-0 z-10 border-b border-[var(--line)] bg-[var(--panel)] px-4 pt-2 sm:px-6 sm:pt-2.5"
@@ -1216,11 +1216,7 @@
       >
     </div>
 
-    <div
-      class={presentation === "modal"
-        ? "cdm-scroll"
-        : "cdm-scroll page-dock-scroll"}
-    >
+    <div class="cdm-scroll page-dock-scroll">
       {#if cdmDetailPane === "overview"}
         <div
           class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_18rem]"
@@ -1661,14 +1657,16 @@
           {/if}
         </div>
       {:else if cdmDetailPane === "revisions"}
-        <div class="space-y-3 px-4 pb-4 pt-3" data-cdm-panel="revisions">
-          <div class="flex items-center justify-between gap-3">
-            <p class="text-meta text-[var(--fg-muted)]">
+        <div class="px-4 pb-4 pt-2" data-cdm-panel="revisions">
+          <div class="mb-2 flex items-center justify-between gap-3">
+            <p
+              class="text-[11px] uppercase tracking-wide text-[var(--fg-muted)]"
+            >
               Head revision {membership?.head_revision_number ?? ""}
             </p>
             <button
               type="button"
-              class="rounded-md border border-[var(--line)] px-2 py-1 text-micro text-[var(--fg-muted)] hover:text-[var(--fg)]"
+              class="rounded-md px-1.5 py-0.5 text-[11px] text-[var(--fg-muted)] hover:bg-[var(--bg-soft)] hover:text-[var(--fg)]"
               onclick={() => loadCardRevisions(cardKey)}
             >
               Refresh
@@ -1681,100 +1679,124 @@
           {:else if cardRevisions.length === 0}
             <p class="text-meta text-[var(--fg-muted)]">No revisions found.</p>
           {:else}
-            <ol class="space-y-2">
+            <ol
+              class="overflow-hidden rounded-md border border-[var(--line)] bg-[var(--panel)] divide-y divide-[var(--line)]"
+            >
               {#each cardRevisions as rev, i (String(rev?.revision_id ?? rev?.id ?? i))}
                 {@const parent = cardRevisions[i + 1] ?? null}
                 {@const delta = diffCardRevisionAgainstParent(parent, rev)}
-                <li class="rounded-md border border-[var(--line)] p-3">
-                  <div class="flex items-start justify-between gap-3">
-                    <div class="min-w-0 flex-1">
-                      <p class="text-meta font-medium text-[var(--fg)]">
-                        Revision {rev.revision_number}
-                      </p>
-                      <p class="text-micro text-[var(--fg-muted)]">
-                        {formatTimestamp(rev.created_at)} by {actorName(
-                          rev.created_by,
-                        )}
-                      </p>
+                {@const changedSummary = delta
+                  .map((d) => humanizeRevisionFieldKey(d.field))
+                  .join(", ")}
+                <li class="px-3 py-2">
+                  <div class="flex min-w-0 items-baseline gap-2">
+                    <span
+                      class="shrink-0 text-[12px] font-semibold tabular-nums text-[var(--fg)]"
+                      >r{rev.revision_number}</span
+                    >
+                    <span
+                      class="min-w-0 flex-1 truncate text-[12px] text-[var(--fg-muted)]"
+                    >
                       {#if parent == null}
-                        <p class="mt-1 text-micro text-[var(--fg-muted)]">
-                          Initial revision.
-                        </p>
+                        Initial revision
                       {:else if delta.length === 0}
-                        <p class="mt-1 text-micro text-[var(--fg-muted)]">
-                          No tracked field changes vs previous.
-                        </p>
+                        No tracked field changes
                       {:else}
-                        <p class="mt-1 text-micro text-[var(--fg-muted)]">
-                          Changed: {delta
-                            .map((d) => humanizeRevisionFieldKey(d.field))
-                            .join(", ")}
-                        </p>
-                        <div
-                          class="mt-2 space-y-2 rounded-md border border-[var(--line-subtle)] bg-[var(--bg-soft)] p-2"
+                        Changed <span class="text-[var(--fg)]"
+                          >{changedSummary}</span
                         >
-                          {#each delta as block (block.field)}
-                            <div>
-                              <p
-                                class="text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-muted)]"
-                              >
-                                {humanizeRevisionFieldKey(block.field)}
-                              </p>
-                              {#each block.lines as ln, li (li + ln.kind)}
-                                <p
-                                  class="break-words font-mono text-[11px] {ln.kind ===
-                                  'add'
-                                    ? 'text-ok-text'
-                                    : 'text-danger-text'}"
-                                >
-                                  {ln.kind === "add" ? "+" : "−"}{ln.text}
-                                </p>
-                              {/each}
-                            </div>
-                          {/each}
-                        </div>
                       {/if}
-                    </div>
+                    </span>
+                    <span
+                      class="shrink-0 text-[11px] tabular-nums text-[var(--fg-muted)]"
+                      >{actorName(rev.created_by)} · {formatTimestamp(
+                        rev.created_at,
+                      )}</span
+                    >
                     {#if rev.artifact_ref}
-                      <RefLink
-                        refValue={String(rev.artifact_ref)}
-                        threadId={linkedThreadId}
-                        {boardId}
-                        humanize
-                        showRaw
-                        labelHints={refLabelHints}
-                        artifactRoutesById={modalArtifactRoutesById}
-                      />
+                      <span class="shrink-0 text-[11px]">
+                        <RefLink
+                          refValue={String(rev.artifact_ref)}
+                          threadId={linkedThreadId}
+                          {boardId}
+                          humanize
+                          labelHints={refLabelHints}
+                          artifactRoutesById={modalArtifactRoutesById}
+                        />
+                      </span>
                     {/if}
                   </div>
-                  <details class="group mt-2">
+
+                  {#if delta.length > 0}
+                    <div class="mt-1 pl-6 space-y-1">
+                      {#each delta as block (block.field)}
+                        <div class="min-w-0">
+                          {#if delta.length > 1}
+                            <p
+                              class="text-[10px] font-semibold uppercase tracking-wide text-[var(--fg-muted)]"
+                            >
+                              {humanizeRevisionFieldKey(block.field)}
+                            </p>
+                          {/if}
+                          <div class="font-mono text-[11px] leading-snug">
+                            {#each block.lines as ln, li (li + ln.kind)}
+                              <p
+                                class="break-words {ln.kind === 'add'
+                                  ? 'text-ok-text'
+                                  : 'text-danger-text'}"
+                              >
+                                <span
+                                  class="select-none mr-1 text-[var(--fg-muted)]"
+                                  >{ln.kind === "add" ? "+" : "−"}</span
+                                >{ln.text}
+                              </p>
+                            {/each}
+                          </div>
+                        </div>
+                      {/each}
+                    </div>
+                  {/if}
+
+                  <details class="group mt-1.5 pl-6">
                     <summary
-                      class="cursor-pointer text-micro text-[var(--fg-muted)] hover:text-[var(--fg)]"
+                      class="inline-flex cursor-pointer select-none items-center gap-1 text-[11px] text-[var(--fg-muted)] hover:text-[var(--fg)] [&::-webkit-details-marker]:hidden"
                     >
+                      <span
+                        aria-hidden="true"
+                        class="inline-block transition-transform group-open:rotate-90"
+                        >▸</span
+                      >
                       Full content
                     </summary>
                     <div
-                      class="mt-2 space-y-2 border-t border-[var(--line)] pt-2"
+                      class="mt-1.5 -ml-6 rounded-md border border-[var(--line-subtle)] bg-[var(--bg-soft)] px-3 py-2 space-y-2"
                     >
                       {#if rev.title}
-                        <p class="text-meta font-medium text-[var(--fg)]">
+                        <p class="text-[13px] font-medium text-[var(--fg)]">
                           {rev.title}
                         </p>
                       {/if}
                       {#if rev.summary}
                         <MarkdownRenderer
                           source={String(rev.summary)}
-                          class="markdown-rendered--card-content text-meta text-[var(--fg-muted)]"
+                          class="markdown-rendered--card-content text-meta text-[var(--fg)]"
                         />
                       {/if}
                       {#if Array.isArray(rev.definition_of_done) && rev.definition_of_done.length}
-                        <ul
-                          class="list-inside list-disc text-[12px] text-[var(--fg-muted)]"
-                        >
-                          {#each rev.definition_of_done as line (line)}
-                            <li>{line}</li>
-                          {/each}
-                        </ul>
+                        <div>
+                          <p
+                            class="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--fg-muted)]"
+                          >
+                            Definition of done
+                          </p>
+                          <ul
+                            class="list-inside list-disc text-[12px] text-[var(--fg)]"
+                          >
+                            {#each rev.definition_of_done as line (line)}
+                              <li>{line}</li>
+                            {/each}
+                          </ul>
+                        </div>
                       {/if}
                     </div>
                   </details>
@@ -1790,7 +1812,7 @@
     </div>
 
     {#if linkedThreadId}
-      <div class={presentation === "modal" ? "contents" : "page-dock-feed"}>
+      <div class="page-dock-feed">
         <DiscussionDrawer
           layout="dock"
           threadId={linkedThreadId}
@@ -2005,6 +2027,156 @@
    */
   :global(.cdm-panel:has([data-mobile-chat-expanded])) .cdm-scroll {
     min-height: min(52dvh, 28rem);
+  }
+
+  /*
+   * Modal card details: DiscussionDrawer mounts inside the modal instead of under
+   * `page-dock-layout--fixed-mobile-chat`, so the shared viewport-fixed dock chrome
+   * never applies (and the header-drag resize gesture was inactive). Use the same
+   * `--mobile-chat-panel-height` contract with an in-flow bottom feed so Column /
+   * Move up stay below discussion.
+   */
+  :global(.cdm-panel.page-dock-layout--embedded-modal-chat) {
+    min-height: 0;
+    --mobile-chat-panel-height: min(42dvh, 22rem);
+  }
+
+  :global(.cdm-panel.page-dock-layout--embedded-modal-chat .page-dock-feed) {
+    position: relative;
+    z-index: 10;
+    flex: 0 0 auto;
+    width: 100%;
+    margin: 0;
+    margin-top: 0;
+    box-sizing: border-box;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: none;
+  }
+
+  :global(
+    .cdm-panel.page-dock-layout--embedded-modal-chat
+      .page-dock-feed:not(:has([data-mobile-chat-expanded]))
+  ) {
+    max-height: none;
+    height: auto;
+  }
+
+  :global(
+    .cdm-panel.page-dock-layout--embedded-modal-chat
+      .page-dock-feed:has([data-mobile-chat-expanded])
+  ) {
+    height: var(--mobile-chat-panel-height);
+    max-height: var(--mobile-chat-panel-height);
+  }
+
+  :global(
+    .cdm-panel.page-dock-layout--embedded-modal-chat .page-dock-feed > *
+  ) {
+    display: flex;
+    min-height: 0;
+    flex: 0 1 auto;
+    flex-direction: column;
+  }
+
+  :global(
+    .cdm-panel.page-dock-layout--embedded-modal-chat
+      .page-dock-feed:has([data-mobile-chat-expanded])
+      > *
+  ) {
+    flex: 1 1 auto;
+    height: 100%;
+    max-height: 100%;
+    min-height: 0;
+  }
+
+  /*
+   * Full-page card: discussion stays `layout="dock"` at every width. Classes
+   * `page-dock-layout--mobile-only` + `--fixed-mobile-chat` are meant for surfaces
+   * that switch off the viewport dock from `md` up (document → rail); cards never
+   * do that, so the shared app.css dock-height rules omit `mobile-only` from
+   * tablet/desktop and the Messages region collapses to blank. Reinstate the
+   * `--mobile-chat-panel-height` feed + scroll flex wiring for `md+` only (<md
+   * keeps global viewport dock rules unchanged).
+   */
+  @media (min-width: 768px) {
+    /*
+     * `mobile-only` sets `display:block` from `md` up — correct for docs (rail +
+     * in-flow dock), but disables flex stacking for docked scroll + sheet.
+     */
+    :global(.cdm-page-panel.page-dock-layout.page-dock-layout--card-page-chat) {
+      display: flex;
+      flex-direction: column;
+    }
+
+    :global(
+      .cdm-page-panel.page-dock-layout--card-page-chat.page-dock-layout--fixed-mobile-chat
+    ) {
+      --mobile-chat-panel-height: min(42dvh, 22rem);
+    }
+
+    :global(
+      .cdm-page-panel.page-dock-layout--card-page-chat .page-dock-scroll
+    ) {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-x: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    :global(.cdm-page-panel.page-dock-layout--card-page-chat .page-dock-feed) {
+      flex: 0 0 auto;
+      position: relative;
+      z-index: 10;
+      width: 100%;
+      margin: 0;
+      margin-top: 0;
+      box-sizing: border-box;
+      box-shadow: none;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    :global(
+      .cdm-page-panel.page-dock-layout--card-page-chat
+        .page-dock-feed:not(:has([data-mobile-chat-expanded]))
+    ) {
+      max-height: none;
+      height: auto;
+    }
+
+    :global(
+      .cdm-page-panel.page-dock-layout--card-page-chat
+        .page-dock-feed:has([data-mobile-chat-expanded])
+    ) {
+      height: var(--mobile-chat-panel-height);
+      max-height: var(--mobile-chat-panel-height);
+    }
+
+    :global(
+      .cdm-page-panel.page-dock-layout--card-page-chat .page-dock-feed > *
+    ) {
+      display: flex;
+      min-height: 0;
+      flex: 0 1 auto;
+      flex-direction: column;
+    }
+
+    :global(
+      .cdm-page-panel.page-dock-layout--card-page-chat
+        .page-dock-feed:has([data-mobile-chat-expanded])
+        > *
+    ) {
+      flex: 1 1 auto;
+      height: 100%;
+      max-height: 100%;
+      min-height: 0;
+    }
   }
 
   .cdm-page {

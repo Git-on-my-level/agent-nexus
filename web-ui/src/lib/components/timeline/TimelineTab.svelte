@@ -19,7 +19,6 @@
   import ArchiveButton from "$lib/components/ArchiveButton.svelte";
   import CompactRefLink from "$lib/components/CompactRefLink.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
-  import RefLink from "$lib/components/RefLink.svelte";
   import { buildPrimitiveRefRoutes } from "$lib/refLinkModel";
   import TrashButton from "$lib/components/TrashButton.svelte";
   import {
@@ -241,66 +240,38 @@
           {lifecycleError}
         </p>
       {/if}
-      <div class="flex min-w-0 flex-col gap-1">
+      <ul
+        class="flex min-w-0 flex-col divide-y divide-[var(--line)] overflow-hidden rounded-md border border-[var(--line)] bg-[var(--panel)]"
+      >
         {#each filteredTimeline as event (event.id)}
-          <div
-            class="group rounded-md border border-[var(--line)] bg-[var(--panel)] {compact
-              ? 'px-2 py-1.5'
-              : 'px-4 py-2.5'} {event.archived_at ? 'opacity-60' : ''}"
+          <li
+            class="group relative {compact
+              ? 'px-2.5 py-2'
+              : 'px-3 py-2.5'} {event.archived_at ? 'opacity-60' : ''}"
             id={`event-${event.id}`}
           >
-            <div class="flex items-start justify-between gap-3">
-              <div class="flex min-w-0 flex-1 items-start gap-2.5">
-                <span
-                  class="{compact
-                    ? 'mt-1 h-1.5 w-1.5'
-                    : 'mt-1.5 h-2 w-2'} shrink-0 rounded-full {eventTypeDotClass(
-                    event.rawType,
-                  )}"
-                  title={event.typeLabel}
-                ></span>
-                <div class="min-w-0 flex-1">
-                  <p
-                    class="{compact
-                      ? 'text-micro'
-                      : 'text-[13px]'} font-medium text-[var(--fg)]"
-                  >
-                    {event.typeLabel}
-                  </p>
-                  {#if event.changePreviewLines?.length}
-                    <ul
-                      class="mt-0.5 list-inside list-disc space-y-0.5 text-[12px] text-[var(--fg-muted)]"
-                    >
-                      {#each event.changePreviewLines as line (line)}
-                        <li class="break-words">{line}</li>
-                      {/each}
-                    </ul>
-                  {:else if event.useMarkdownSummary}
-                    <MarkdownRenderer
-                      source={event.summary}
-                      class="{compact
-                        ? 'text-micro line-clamp-3'
-                        : 'text-meta'} mt-0.5 text-[var(--fg)]"
-                    />
-                  {:else if String(event.summary ?? "").trim()}
-                    <p
-                      class="{compact
-                        ? 'text-micro line-clamp-2'
-                        : 'text-[12px]'} mt-0.5 whitespace-pre-wrap break-words text-[var(--fg-muted)]"
-                    >
-                      {String(event.summary ?? "").trim()}
-                    </p>
-                  {/if}
-                  <p class="mt-0.5 text-micro text-[var(--fg-muted)]">
-                    {actorName(event.actor_id)} · {formatTimestamp(event.ts) ||
-                      "—"}
-                  </p>
-                </div>
-              </div>
+            <div class="flex min-w-0 items-baseline gap-2">
+              <span
+                class="relative top-px h-1.5 w-1.5 shrink-0 rounded-full {eventTypeDotClass(
+                  event.rawType,
+                )}"
+                title={event.typeLabel}
+                aria-hidden="true"
+              ></span>
+              <p
+                class="min-w-0 flex-1 truncate text-[12px] font-semibold tracking-tight text-[var(--fg)]"
+                title={event.headline}
+              >
+                {event.headline}
+              </p>
+              <span
+                class="shrink-0 text-[11px] tabular-nums text-[var(--fg-muted)]"
+                title={`${actorName(event.actor_id)} · ${formatTimestamp(event.ts) || "—"}`}
+              >
+                {actorName(event.actor_id)} · {formatTimestamp(event.ts) || "—"}
+              </span>
               <div
-                class="flex shrink-0 items-center gap-0.5 {compact
-                  ? 'opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100'
-                  : ''}"
+                class="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
               >
                 <ArchiveButton
                   archived={Boolean(event.archived_at)}
@@ -327,27 +298,48 @@
               </div>
             </div>
 
-            {#if event.changedFields.length > 0}
-              <div class="mt-1.5 flex flex-wrap gap-1 text-micro">
-                {#each event.changedFields as field}
-                  <span
-                    class="rounded bg-[var(--line)] px-1.5 py-0.5 text-[var(--fg-muted)]"
-                    >{field}</span
-                  >
-                {/each}
-              </div>
-            {/if}
+            <div class="mt-1 pl-3.5">
+              {#if event.changePreviewLines?.length}
+                <div
+                  class="flex min-w-0 flex-col gap-0.5 text-[12px] leading-snug text-[var(--fg-muted)]"
+                >
+                  {#each event.changePreviewLines as line (line)}
+                    <p class="break-words">{line}</p>
+                  {/each}
+                </div>
+              {:else if event.useMarkdownSummary}
+                <MarkdownRenderer
+                  source={event.summary}
+                  class="text-[12px] leading-snug text-[var(--fg)] {compact
+                    ? 'line-clamp-3'
+                    : ''}"
+                />
+              {:else if String(event.summary ?? "").trim() && String(event.summary ?? "").trim() !== event.headline}
+                <p
+                  class="whitespace-pre-wrap break-words text-[12px] leading-snug text-[var(--fg-muted)] {compact
+                    ? 'line-clamp-2'
+                    : ''}"
+                >
+                  {String(event.summary ?? "").trim()}
+                </p>
+              {/if}
 
-            {#if event.refs.length > 0}
-              {#if compact}
-                <details class="mt-1.5">
+              {#if event.refs.length > 0}
+                <details
+                  class="mt-1.5 [&_summary::-webkit-details-marker]:hidden"
+                >
                   <summary
-                    class="cursor-pointer text-micro text-[var(--fg-muted)]"
+                    class="inline-flex cursor-pointer select-none items-center gap-1 text-[11px] text-[var(--fg-muted)] hover:text-[var(--fg)]"
                   >
-                    {event.refs.length} refs…
+                    <span
+                      aria-hidden="true"
+                      class="inline-block transition-transform">▸</span
+                    >
+                    {event.refs.length}
+                    {event.refs.length === 1 ? "ref" : "refs"}
                   </summary>
                   <ul
-                    class="mt-1.5 flex min-w-0 flex-col gap-1 border-t border-[var(--line)] pt-1.5"
+                    class="mt-1.5 flex min-w-0 flex-col gap-1 border-l border-[var(--line)] pl-2"
                   >
                     {#each event.refs as refValue (refValue)}
                       <li class="min-w-0">
@@ -366,41 +358,26 @@
                     {/each}
                   </ul>
                 </details>
-              {:else}
-                <div class="mt-1.5 flex flex-wrap gap-1.5 text-micro">
-                  {#each event.refs as refValue}
-                    <RefLink
-                      refValue={String(refValue)}
-                      {threadId}
-                      {boardId}
-                      humanize
-                      showRaw
-                      {labelHints}
-                      artifactRoutesById={routeMaps.artifactRoutesById}
-                      eventRoutesById={routeMaps.eventRoutesById}
-                    />
-                  {/each}
-                </div>
               {/if}
-            {/if}
 
-            {#if !event.isKnownType}
-              <details class="mt-1.5">
-                <summary
-                  class="cursor-pointer text-micro text-[var(--fg-muted)]"
-                  >Details</summary
-                >
-                <pre
-                  class="mt-1 overflow-auto rounded bg-[var(--bg-soft)] p-2 text-micro text-[var(--fg-muted)]">{JSON.stringify(
-                    event.payload ?? {},
-                    null,
-                    2,
-                  )}</pre>
-              </details>
-            {/if}
-          </div>
+              {#if !event.isKnownType}
+                <details class="mt-1.5">
+                  <summary
+                    class="cursor-pointer text-[11px] text-[var(--fg-muted)] hover:text-[var(--fg)]"
+                    >Details</summary
+                  >
+                  <pre
+                    class="mt-1 overflow-auto rounded bg-[var(--bg-soft)] p-2 text-[11px] text-[var(--fg-muted)]">{JSON.stringify(
+                      event.payload ?? {},
+                      null,
+                      2,
+                    )}</pre>
+                </details>
+              {/if}
+            </div>
+          </li>
         {/each}
-      </div>
+      </ul>
     </div>
   {/if}
 </div>

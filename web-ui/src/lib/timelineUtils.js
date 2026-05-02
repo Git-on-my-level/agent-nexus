@@ -20,10 +20,10 @@ export const KNOWN_EVENT_TYPES = new Set(Object.keys(EVENT_TYPE_LABELS));
 
 const EVENT_TYPE_DOT_CLASSES = {
   message_posted: "bg-indigo-400",
-  card_created: "bg-purple-400",
-  card_updated: "bg-purple-400",
-  card_moved: "bg-purple-400",
-  card_resolved: "bg-purple-400",
+  card_created: "bg-emerald-400",
+  card_updated: "bg-amber-400",
+  card_moved: "bg-sky-400",
+  card_resolved: "bg-emerald-500",
   exception_raised: "bg-red-400",
   human_attention_requested: "bg-cyan-400",
   human_attention_responded: "bg-teal-400",
@@ -285,6 +285,48 @@ export function buildTimelineEventChangePreview(event, ctx = {}) {
     .map((l) => clipLine(l, PREVIEW_LINE_MAX));
 }
 
+/**
+ * Builds a short, change-focused headline for a timeline event so the row is
+ * scannable without reading every preview line. Falls back to the type label.
+ *
+ * @param {Record<string, unknown>} event
+ * @returns {string}
+ */
+export function buildTimelineEventHeadline(event) {
+  const type = String(event?.type ?? "");
+  const payload = payloadObject(event);
+  const baseLabel = EVENT_TYPE_LABELS[type] ?? "Event";
+
+  if (
+    type === "card_updated" ||
+    type === "topic_updated" ||
+    type === "board_updated"
+  ) {
+    const fields = changedFieldsFromPayload(payload);
+    if (fields.length === 1) {
+      return `${baseLabel} · ${fieldTitle(fields[0])}`;
+    }
+    if (fields.length > 1) {
+      return `${baseLabel} · ${fields.length} fields`;
+    }
+    return baseLabel;
+  }
+
+  if (type === "card_moved") {
+    const from = String(payload.from_column_key ?? "").trim();
+    const to = String(payload.column_key ?? "").trim();
+    if (from && to) return `${baseLabel} · ${from} → ${to}`;
+    if (to) return `${baseLabel} · → ${to}`;
+    return baseLabel;
+  }
+
+  if (type === "card_created" && payload.title) {
+    return `${baseLabel} · ${clipLine(payload.title, 60)}`;
+  }
+
+  return baseLabel;
+}
+
 export function timelineEventUsesMarkdownSummary(type) {
   return (
     type === "message_posted" ||
@@ -330,6 +372,7 @@ export function toTimelineViewEvent(event, options = {}) {
     refs,
     isKnownType,
     typeLabel: EVENT_TYPE_LABELS[type] ?? "Unknown event type",
+    headline: buildTimelineEventHeadline(event),
     rawType: type,
     changedFields,
     changePreviewLines,

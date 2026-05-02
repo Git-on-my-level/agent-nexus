@@ -374,10 +374,12 @@
 
   let surfaceEl = $state(/** @type {HTMLDivElement | null} */ (null));
 
+  /** Narrow dock: persists `--mobile-chat-panel-height`; viewport-fixed layouts or modal-embedded chrome. */
+  const DOCK_HEIGHT_HOST_SELECTOR =
+    ".page-dock-layout--fixed-mobile-chat, .page-dock-layout--embedded-modal-chat";
+
   let dockLayoutHost = $derived(
-    browser && surfaceEl
-      ? surfaceEl.closest(".page-dock-layout--fixed-mobile-chat")
-      : null,
+    browser && surfaceEl ? surfaceEl.closest(DOCK_HEIGHT_HOST_SELECTOR) : null,
   );
 
   let heightLsKey = $derived.by(() => {
