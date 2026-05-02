@@ -1405,7 +1405,7 @@
             </section>
 
             <!-- References (collapsed group) -->
-            <details class="cdm-disclosure" open={relatedRefsList.length > 0}>
+            <details open={relatedRefsList.length > 0}>
               <summary
                 class="cursor-pointer text-[11px] font-semibold uppercase tracking-wide text-fg-muted marker:text-fg-muted hover:text-fg"
               >
@@ -1447,7 +1447,7 @@
             </details>
 
             <!-- Advanced + meta -->
-            <details class="cdm-disclosure">
+            <details>
               <summary
                 class="cursor-pointer text-[11px] font-semibold uppercase tracking-wide text-fg-muted marker:text-fg-muted hover:text-fg"
               >
@@ -2067,25 +2067,6 @@
   :global(.cdm-prop-stack:first-of-type) {
     border-top: 0;
     margin-top: 0;
-  }
-
-  :global(.cdm-disclosure > summary) {
-    list-style: none;
-    user-select: none;
-  }
-  :global(.cdm-disclosure > summary::-webkit-details-marker) {
-    display: none;
-  }
-  :global(.cdm-disclosure > summary)::before {
-    content: "▸";
-    display: inline-block;
-    margin-right: 0.375rem;
-    transition: transform 120ms ease;
-    color: var(--fg-muted);
-    font-size: 9px;
-  }
-  :global(.cdm-disclosure[open] > summary)::before {
-    transform: rotate(90deg);
   }
 
   .cdm-scroll {

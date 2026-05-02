@@ -12,6 +12,7 @@ import {
   sleep,
   waitForCore,
 } from "../../scripts/seed-core-lib.mjs";
+import { listDevSeedThreadRefViolations } from "../src/lib/devWorkspaceFixtures.js";
 import { getDevSeedScenarioConfig } from "./dev-seed-scenarios.mjs";
 
 const coreBaseUrl = normalizeBaseUrl(
@@ -61,6 +62,14 @@ const seedPersonas = Array.isArray(scenarioConfig.personas)
   ? scenarioConfig.personas
   : [];
 const defaultActorId = seed.actors[0]?.id ?? scenarioConfig.defaultActorId;
+
+const threadRefViolations = listDevSeedThreadRefViolations(seed);
+if (threadRefViolations.length > 0) {
+  failWithPrefix(
+    "seed-core-from-mock failed",
+    `dev seed thread ref integrity:\n${threadRefViolations.join("\n")}`,
+  );
+}
 
 function normalizeSeedCardResolution(raw) {
   const s = String(raw ?? "").trim();
@@ -435,8 +444,14 @@ async function seedTopics() {
     const actorId = pickActorId(
       sourceTopic.updated_by ?? sourceTopic.created_by,
     );
+    const requestedBackingThreadId = String(
+      sourceTopic.thread_id ?? sourceTopic.id ?? "",
+    ).trim();
     const topicPayload = {
       id: sourceTopic.id,
+      ...(requestedBackingThreadId
+        ? { thread_id: requestedBackingThreadId }
+        : {}),
       type: sourceTopic.type ?? "other",
       title: sourceTopic.title,
       summary:
@@ -458,10 +473,10 @@ async function seedTopics() {
 
     const created = response?.topic;
     const newId = String(created?.id ?? "").trim();
-    const backingThreadId = String(
+    const createdBackingThreadId = String(
       created?.thread_id ?? created?.id ?? "",
     ).trim();
-    if (!newId || !backingThreadId) {
+    if (!newId || !createdBackingThreadId) {
       throw new Error(`Topic create returned incomplete data for ${sourceTopic.title}`);
     }
 
@@ -471,7 +486,7 @@ async function seedTopics() {
     if (topicAlias && topicAlias !== sourceTopicId) {
       topicIdMap.set(topicAlias, newId);
     }
-    threadIdMap.set(String(sourceTopic.id ?? "").trim(), backingThreadId);
+    threadIdMap.set(String(sourceTopic.id ?? "").trim(), createdBackingThreadId);
   }
 }
 

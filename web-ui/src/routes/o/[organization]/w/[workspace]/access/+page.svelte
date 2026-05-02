@@ -1050,29 +1050,13 @@
           >
         {/if}
       </h2>
-      <details class="principals-help mb-2 text-micro text-fg-muted">
+      <details class="mb-2 text-micro text-fg-muted">
         <summary
-          class="inline-flex cursor-pointer items-center gap-1 rounded text-fg-muted hover:text-fg"
+          class="cursor-pointer rounded text-fg-muted marker:text-fg-muted hover:text-fg"
         >
-          <svg
-            class="principals-help__chevron h-3 w-3 transition-transform"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            stroke-width="2.5"
-            aria-hidden="true"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              d="M9 5l7 7-7 7"
-            />
-          </svg>
-          <span>
-            Tag agents with
-            <code class="rounded bg-line px-1 py-px">@handle</code>
-            to wake them. How wake routing works
-          </span>
+          Tag agents with
+          <code class="rounded bg-line px-1 py-px">@handle</code>
+          to wake them. How wake routing works
         </summary>
         <div class="mt-2 space-y-1.5 pl-4">
           <p class="flex items-start gap-2">
@@ -1508,16 +1492,6 @@
 />
 
 <style>
-  .principals-help summary {
-    list-style: none;
-  }
-  .principals-help summary::-webkit-details-marker {
-    display: none;
-  }
-  .principals-help[open] :global(.principals-help__chevron) {
-    transform: rotate(90deg);
-  }
-
   :global(#access-create-invite.access-invite-pulse) {
     animation: access-invite-pulse-anim 1.4s ease-out;
   }

@@ -2097,6 +2097,154 @@ function cleanDevSeedEvent(event) {
   };
 }
 
+/**
+ * Backing thread ids present in this seed snapshot (fixture threads, or topic.thread_id).
+ * Used to validate `thread:` typed refs before seeding core or in unit tests.
+ */
+function backingThreadIdsForDevSeed(seed) {
+  if (Array.isArray(seed?.threads) && seed.threads.length > 0) {
+    return new Set(
+      seed.threads.map((t) => String(t?.id ?? "").trim()).filter(Boolean),
+    );
+  }
+  return new Set(
+    (Array.isArray(seed?.topics) ? seed.topics : [])
+      .map((t) => String(t?.thread_id ?? "").trim())
+      .filter(Boolean),
+  );
+}
+
+function pushUnknownThreadRefViolation(
+  violations,
+  where,
+  refValue,
+  backingIds,
+) {
+  const raw = String(refValue ?? "").trim();
+  if (!raw.startsWith("thread:")) {
+    return;
+  }
+  const id = raw.slice("thread:".length).trim();
+  if (!id || backingIds.has(id)) {
+    return;
+  }
+  violations.push(
+    `${where}: unknown thread ref ${raw} (not a seeded backing thread id)`,
+  );
+}
+
+function scanRefArray(violations, where, refs, backingIds) {
+  if (!Array.isArray(refs)) {
+    return;
+  }
+  for (const ref of refs) {
+    pushUnknownThreadRefViolation(violations, where, ref, backingIds);
+  }
+}
+
+/**
+ * Returns human-readable violations when `thread:…` refs (or thread_id fields)
+ * point at ids that are not backing threads in this seed. Run under CI and in
+ * `seed-core-from-mock` so broken links are caught before runtime.
+ *
+ * @param {Record<string, unknown>} seed
+ * @returns {string[]}
+ */
+export function listDevSeedThreadRefViolations(seed) {
+  if (!seed || typeof seed !== "object") {
+    return ["listDevSeedThreadRefViolations: seed is missing"];
+  }
+
+  const backingIds = backingThreadIdsForDevSeed(seed);
+  if (backingIds.size === 0) {
+    return ["dev seed has no topics/threads — cannot validate thread refs"];
+  }
+
+  const violations = [];
+
+  for (const topic of seed.topics ?? []) {
+    const id = String(topic?.id ?? "").trim() || "unknown-topic";
+    scanRefArray(violations, `topic:${id}`, topic?.related_refs, backingIds);
+    const tid = String(topic?.thread_id ?? "").trim();
+    if (tid && !backingIds.has(tid)) {
+      violations.push(
+        `topic:${id}: thread_id ${tid} is not a seeded backing thread id`,
+      );
+    }
+  }
+
+  for (const card of seed.cards ?? []) {
+    const id = String(card?.id ?? "").trim() || "unknown-card";
+    scanRefArray(violations, `card:${id}`, card?.related_refs, backingIds);
+    scanRefArray(violations, `card:${id}`, card?.resolution_refs, backingIds);
+    const tid = String(card?.thread_id ?? "").trim();
+    if (tid && !backingIds.has(tid)) {
+      violations.push(
+        `card:${id}: thread_id ${tid} is not a seeded backing thread id`,
+      );
+    }
+  }
+
+  for (const event of seed.events ?? []) {
+    const id = String(event?.id ?? "").trim() || "unknown-event";
+    scanRefArray(violations, `event:${id}`, event?.refs, backingIds);
+    const tid = String(event?.thread_id ?? "").trim();
+    if (tid && !backingIds.has(tid)) {
+      violations.push(
+        `event:${id}: thread_id ${tid} is not a seeded backing thread id`,
+      );
+    }
+  }
+
+  for (const board of seed.boards ?? []) {
+    const id = String(board?.id ?? "").trim() || "unknown-board";
+    scanRefArray(violations, `board:${id}`, board?.refs, backingIds);
+    scanRefArray(violations, `board:${id}`, board?.pinned_refs, backingIds);
+    const tid = String(board?.thread_id ?? "").trim();
+    if (tid && !backingIds.has(tid)) {
+      violations.push(
+        `board:${id}: thread_id ${tid} is not a seeded backing thread id`,
+      );
+    }
+  }
+
+  for (const art of seed.artifacts ?? []) {
+    const id = String(art?.id ?? "").trim() || "unknown-artifact";
+    scanRefArray(violations, `artifact:${id}`, art?.refs, backingIds);
+    const packet =
+      art?.packet && typeof art.packet === "object" ? art.packet : null;
+    if (packet) {
+      pushUnknownThreadRefViolation(
+        violations,
+        `artifact:${id}.packet`,
+        packet.subject_ref,
+        backingIds,
+      );
+    }
+  }
+
+  for (const packet of seed.packets ?? []) {
+    const id = String(packet?.id ?? "").trim() || "unknown-packet";
+    pushUnknownThreadRefViolation(
+      violations,
+      `packet:${id}`,
+      packet?.subject_ref,
+      backingIds,
+    );
+    const art = packet?.artifact;
+    if (art && typeof art === "object") {
+      scanRefArray(violations, `packet:${id}.artifact`, art.refs, backingIds);
+    }
+  }
+
+  for (const doc of seed.documents ?? []) {
+    const id = String(doc?.id ?? "").trim() || "unknown-document";
+    scanRefArray(violations, `document:${id}`, doc?.refs, backingIds);
+  }
+
+  return violations;
+}
+
 export function getDevSeedData() {
   const exportedArtifacts = artifacts.filter(keepDevSeedArtifact);
   const exportedEvents = events.map(cleanDevSeedEvent).filter(Boolean);

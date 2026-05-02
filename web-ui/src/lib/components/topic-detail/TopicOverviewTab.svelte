@@ -203,9 +203,11 @@
         <p class="text-micro text-fg-muted">Canonical refs</p>
         <div class="mt-1 space-y-2 text-meta">
           {#each topicRefGroups as group (group.label)}
-            <div class="flex flex-wrap items-baseline gap-2">
-              <span class="text-micro text-fg-muted">{group.label}</span>
-              <div class="flex flex-wrap gap-2">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="shrink-0 text-micro text-fg-muted"
+                >{group.label}</span
+              >
+              <div class="flex min-w-0 flex-wrap items-center gap-2">
                 {#each group.refs as ref (ref)}
                   <RefLink
                     refValue={ref}

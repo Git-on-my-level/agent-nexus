@@ -602,18 +602,10 @@
                 {/if}
 
                 {#if event.refs.length > 0}
-                  <details
-                    class="{compact
-                      ? 'mt-0.5'
-                      : 'mt-1.5'} [&_summary::-webkit-details-marker]:hidden"
-                  >
+                  <details class={compact ? "mt-0.5" : "mt-1.5"}>
                     <summary
-                      class="inline-flex cursor-pointer select-none items-center gap-1 text-[11px] text-fg-muted hover:text-fg"
+                      class="cursor-pointer select-none text-[11px] text-fg-muted hover:text-fg"
                     >
-                      <span
-                        aria-hidden="true"
-                        class="inline-block transition-transform">▸</span
-                      >
                       {event.refs.length}
                       {event.refs.length === 1 ? "ref" : "refs"}
                     </summary>
