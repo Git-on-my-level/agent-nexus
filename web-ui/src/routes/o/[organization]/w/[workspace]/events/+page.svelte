@@ -374,7 +374,7 @@
     {:else}
       <div class="divide-y divide-line">
         {#each events as event (event.id)}
-          <EventRow row={rowFor(event)} inspectable />
+          <EventRow row={rowFor(event)} />
         {/each}
       </div>
     {/if}

@@ -259,7 +259,8 @@ export function buildTimelineEventChangePreview(event, ctx = {}) {
   if (type === "card_moved") {
     const from = String(payload.from_column_key ?? "").trim();
     const to = String(payload.column_key ?? "").trim();
-    if (from || to) {
+    // Headline already shows column transitions when `to` is set; avoid duplicating.
+    if (from && !to) {
       lines.push(`Column: ${from || "—"} → ${to || "—"}`);
     }
     const bTh = String(payload.before_thread_id ?? "").trim();
@@ -272,7 +273,7 @@ export function buildTimelineEventChangePreview(event, ctx = {}) {
   }
 
   if (type === "card_created") {
-    if (payload.title) lines.push(`Title: ${clipLine(payload.title, 80)}`);
+    // Title is already in the row headline when present; skip redundant preview line.
     if (payload.column_key) {
       lines.push(`Column: ${String(payload.column_key)}`);
     }

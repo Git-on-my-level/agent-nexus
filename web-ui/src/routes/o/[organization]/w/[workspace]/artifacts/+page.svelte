@@ -643,20 +643,22 @@
                 >
                   {#if artifact.thread_id}
                     <RefLink
+                      variant="compact"
                       humanize
                       labelHints={{
                         [`thread:${artifact.thread_id}`]: "Thread (timeline)",
                       }}
                       refValue={`thread:${artifact.thread_id}`}
-                      showRaw
+                      showRaw={false}
                       threadId={artifact.thread_id}
                     />
                   {/if}
                   {#each refPreview(artifact) as refValue}
                     <RefLink
+                      variant="compact"
                       humanize
                       {refValue}
-                      showRaw
+                      showRaw={false}
                       threadId={artifact.thread_id}
                     />
                   {/each}
@@ -732,20 +734,22 @@
             >
               {#if artifact.thread_id}
                 <RefLink
+                  variant="compact"
                   humanize
                   labelHints={{
                     [`thread:${artifact.thread_id}`]: "Thread (timeline)",
                   }}
                   refValue={`thread:${artifact.thread_id}`}
-                  showRaw
+                  showRaw={false}
                   threadId={artifact.thread_id}
                 />
               {/if}
               {#each refPreview(artifact) as refValue}
                 <RefLink
+                  variant="compact"
                   humanize
                   {refValue}
-                  showRaw
+                  showRaw={false}
                   threadId={artifact.thread_id}
                 />
               {/each}

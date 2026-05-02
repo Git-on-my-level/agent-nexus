@@ -177,6 +177,60 @@ describe("timeline utils", () => {
     expect(view.changePreviewLines[0]).toMatch(/Title/i);
   });
 
+  it("does not repeat card title in change preview when headline already shows it", () => {
+    const view = toTimelineViewEvent(
+      {
+        id: "evt-created",
+        type: "card_created",
+        payload: {
+          title: "My card",
+          column_key: "backlog",
+          summary: "Short summary",
+        },
+      },
+      { threadId: "thread-1" },
+    );
+    expect(view.headline).toContain("My card");
+    expect(view.changePreviewLines.some((l) => l.startsWith("Title:"))).toBe(
+      false,
+    );
+    expect(view.changePreviewLines.some((l) => l.startsWith("Column:"))).toBe(
+      true,
+    );
+    expect(view.changePreviewLines.some((l) => l.startsWith("Summary:"))).toBe(
+      true,
+    );
+  });
+
+  it("does not repeat column move in preview when headline already shows it", () => {
+    const view = toTimelineViewEvent(
+      {
+        id: "evt-moved",
+        type: "card_moved",
+        payload: { from_column_key: "backlog", column_key: "doing" },
+      },
+      { threadId: "thread-1" },
+    );
+    expect(view.headline).toContain("backlog");
+    expect(view.changePreviewLines.some((l) => l.startsWith("Column:"))).toBe(
+      false,
+    );
+  });
+
+  it("keeps column line when only the source column is present", () => {
+    const view = toTimelineViewEvent(
+      {
+        id: "evt-moved-partial",
+        type: "card_moved",
+        payload: { from_column_key: "backlog", column_key: "" },
+      },
+      { threadId: "thread-1" },
+    );
+    expect(view.changePreviewLines.some((l) => l.startsWith("Column:"))).toBe(
+      true,
+    );
+  });
+
   it("normalizes document revision list input for label hints", () => {
     const hints = buildTimelineRefLabelHints(
       {},
