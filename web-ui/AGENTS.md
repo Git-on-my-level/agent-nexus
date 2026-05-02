@@ -56,7 +56,20 @@ It gives operators fast, glanceable visibility into the shared workspace maintai
 - Routing and **core proxy** behavior must preserve the single-source-of-truth model (no in-UI synthetic core APIs) and startup compatibility checks.
 - Presentation changes should preserve glanceability and safe fallback behavior for unknown data.
 
-## Validation
+## Keyboard text affordances
+
+Treat **Command (⌘) and Control (Ctrl)** as equivalent for modifier shortcuts: use `(event.metaKey || event.ctrlKey)` in any local key handlers.
+
+**Global handlers** live in `src/lib/formSubmitShortcut.js` and are wired from `src/routes/+layout.svelte` (after palette toggle, each step skips if `event.defaultPrevented`; workspace picker closes on Escape before escape-blur runs):
+
+- **Layer A — form submit:** `handleModEnterFormSubmit`. ⌘/Ctrl+Enter on a text-like control inside a `<form>` calls `requestSubmit()`. Opt out: `data-anx-no-submit-shortcut` on the form or focused control.
+- **Layer B — blur commit:** `handleModEnterBlurCommit`. On controls (or ancestors) tagged `data-anx-mod-enter-commit="blur"`, ⌘/Ctrl+Enter blurs so `onblur` can persist. Opt out: `data-anx-no-text-shortcut` or `data-anx-no-submit-shortcut` on the focused control or an ancestor.
+- **Escape blur (sparse):** `handleEscapeTextBlurCommit`. Only when `data-anx-escape-dismiss="blur"` is present; same opt-outs as Layer B. Prefer discarding drafts via the action below instead of inferring from the DOM.
+
+**Component-owned Escape:** `use:inlineEditEscape` from `src/lib/actions/inlineEditEscape.js` on the node. Use for inline edits that must revert Svelte state (stopPropagation by default so global escape-blur does not run). Provides `onRevert`, `onAfter`, `update`, `destroy`.
+
+**Inbox respond form:** The response composer is a `<form>` with a submit control; ⌘/Ctrl+Enter uses Layer A (`requestSubmit` → `onsubmit` → `submitResponse()`). No per-field Mod+Enter handler is required.
+
 - `make -C web-ui check`
 - `./scripts/test`
 - Add or update unit and e2e coverage for affected operator flows.

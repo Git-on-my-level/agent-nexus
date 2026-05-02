@@ -204,13 +204,6 @@
     }
   }
 
-  function handleKeydown(e) {
-    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-      e.preventDefault();
-      submit();
-    }
-  }
-</script>
 
 <svelte:head>
   <title>New workspace · Agent Nexus</title>
@@ -238,7 +231,6 @@
         e.preventDefault();
         submit();
       }}
-      onkeydown={handleKeydown}
     >
       <label class="block text-micro text-fg-muted">
         Workspace name

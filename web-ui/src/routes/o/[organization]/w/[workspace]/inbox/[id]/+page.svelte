@@ -203,13 +203,6 @@
     return `Notify ${requesterLabel()}`;
   }
 
-  function handleTextareaKeydown(event) {
-    if (event.key !== "Enter" || !event.metaKey) return;
-    event.preventDefault();
-    void submitResponse();
-  }
-
-  async function loadItem() {
     loading = true;
     loadError = "";
     submitError = "";
@@ -556,7 +549,6 @@
               id="human-response-input"
               class="mt-2 min-h-[200px] w-full rounded border border-line bg-panel px-3 py-2 text-meta text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-accent max-md:min-h-[140px]"
               bind:value={responseDraft}
-              onkeydown={handleTextareaKeydown}
               placeholder="Write the response the agent should rely on."
             ></textarea>
           </div>

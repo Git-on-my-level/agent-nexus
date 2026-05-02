@@ -313,11 +313,52 @@ describe("Onboarding workspace page — keyboard shortcut", () => {
       expect(input).toBeTruthy();
     });
 
-    const form = container.querySelector("form");
-    form.dispatchEvent(
+    const input = container.querySelector("input[type='text']");
+    /** @type {HTMLInputElement} */ (input).focus();
+
+    input.dispatchEvent(
       new KeyboardEvent("keydown", {
         key: "Enter",
         metaKey: true,
+        bubbles: true,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(hostedCpFetch).toHaveBeenCalledWith(
+        "workspaces",
+        expect.objectContaining({
+          method: "POST",
+        }),
+      );
+    });
+  });
+
+  it("submits the form on Ctrl+Enter", async () => {
+    hostedCpFetch.mockImplementation((path, init) => {
+      if (init?.method === "POST") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ workspace: { id: "ws1", slug: "main" } }),
+        });
+      }
+      return Promise.resolve(emptyWorkspaceList);
+    });
+
+    const { container } = render(OnboardingWorkspacePage);
+
+    await waitFor(() => {
+      const input = container.querySelector("input[type='text']");
+      expect(input).toBeTruthy();
+    });
+
+    const input = container.querySelector("input[type='text']");
+    /** @type {HTMLInputElement} */ (input).focus();
+
+    input.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        ctrlKey: true,
         bubbles: true,
       }),
     );
