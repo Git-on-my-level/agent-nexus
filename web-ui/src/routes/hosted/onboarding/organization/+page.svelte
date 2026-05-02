@@ -154,7 +154,7 @@
       busy = false;
     }
   }
-
+</script>
 
 <svelte:head>
   <title>Name your organization · Agent Nexus</title>

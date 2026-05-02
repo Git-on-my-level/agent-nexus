@@ -203,7 +203,7 @@
       busy = false;
     }
   }
-
+</script>
 
 <svelte:head>
   <title>New workspace · Agent Nexus</title>

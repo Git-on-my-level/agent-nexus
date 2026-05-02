@@ -203,6 +203,7 @@
     return `Notify ${requesterLabel()}`;
   }
 
+  async function loadItem() {
     loading = true;
     loadError = "";
     submitError = "";
