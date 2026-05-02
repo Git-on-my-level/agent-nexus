@@ -1071,19 +1071,19 @@
   {/snippet}
 
   <!--
-    Mobile (max-lg): wrap body + discussion drawer in a `page-dock-layout`
-    so the drawer sits inline at the viewport bottom (matching boards / topic).
-    `--mobile-only` falls back to natural flow on desktop where the drawer
-    becomes a side aside.
+    Compact shell (&lt;1024px / max-lg): `page-dock-layout` pins discussion at the
+    bottom like boards / topic. From `lg` up the shell is full-width with a
+    fixed right rail (`DiscussionDrawer layout="rail"`); `--mobile-only` releases
+    the dock at that breakpoint only.
   -->
   <div
-    class="doc-detail-layout flex flex-col gap-0 md:flex-row md:items-start md:gap-0 {document.thread_id
+    class="doc-detail-layout flex flex-col gap-0 lg:flex-row lg:items-start lg:gap-0 {document.thread_id
       ? 'doc-detail-layout--with-rail page-dock-layout page-dock-layout--mobile-only page-dock-layout--fixed-mobile-chat'
       : ''}"
   >
     <div
       class="doc-detail-main min-w-0 flex-1 {document.thread_id
-        ? 'page-dock-scroll md:pt-6 md:pb-10'
+        ? 'page-dock-scroll lg:pt-6 lg:pb-10'
         : ''}"
     >
       <div class="doc-detail-content-row flex gap-4">
@@ -1169,7 +1169,7 @@
                   </Button>
                 {:else}
                   <span
-                    class="inline-flex max-w-[5rem] items-center gap-1 truncate rounded-md border border-line px-1.5 py-1 text-[10px] text-fg-muted sm:max-w-none sm:px-2.5 sm:py-1.5 sm:text-micro md:inline-flex"
+                    class="inline-flex max-w-[5rem] items-center gap-1 truncate rounded-md border border-line px-1.5 py-1 text-[10px] text-fg-muted sm:max-w-none sm:px-2.5 sm:py-1.5 sm:text-micro lg:inline-flex"
                     title="Content type '{headContentType}' can only be updated via the CLI or API"
                   >
                     <svg
@@ -1189,7 +1189,7 @@
                   </span>
                 {/if}
                 <Button
-                  class="max-md:hidden"
+                  class="max-lg:hidden"
                   variant="secondary"
                   size="compact"
                   onclick={loadHistory}
@@ -1247,7 +1247,7 @@
                       <button
                         type="button"
                         role="menuitem"
-                        class="block w-full px-3 py-2 text-left text-micro text-fg hover:bg-line-subtle md:hidden"
+                        class="block w-full px-3 py-2 text-left text-micro text-fg hover:bg-line-subtle lg:hidden"
                         onclick={() => {
                           closeMoreActions();
                           void loadHistory();
@@ -1404,13 +1404,13 @@
 
         {#if historyOpen}
           <aside
-            class="shrink-0 md:w-72 max-md:fixed max-md:inset-x-3 max-md:top-[5.75rem] max-md:z-40 max-md:w-auto"
+            class="shrink-0 lg:w-72 max-lg:fixed max-lg:inset-x-3 max-lg:top-[5.75rem] max-lg:z-40 max-lg:w-auto"
           >
             <div
-              class="rounded-md border border-line bg-bg-soft shadow-lg md:sticky md:top-4"
+              class="rounded-md border border-line bg-bg-soft shadow-lg lg:sticky lg:top-4"
             >
               <div
-                class="flex items-center justify-between border-b border-line px-4 py-2.5 max-md:px-3"
+                class="flex items-center justify-between border-b border-line px-4 py-2.5 max-lg:px-3"
               >
                 <h2 class="text-meta font-medium text-fg">Revision history</h2>
                 <button
@@ -1466,7 +1466,7 @@
                 </p>
               {:else}
                 <div
-                  class="max-h-[calc(100vh-12rem)] overflow-y-auto max-md:max-h-[min(58dvh,28rem)]"
+                  class="max-h-[calc(100vh-12rem)] overflow-y-auto max-lg:max-h-[min(58dvh,28rem)]"
                 >
                   {#each revisions as rev, i}
                     {@const isHead =
@@ -1474,7 +1474,7 @@
                     {@const isSelected =
                       displayedRevision?.revision_id === rev.revision_id}
                     <button
-                      class="w-full px-4 py-3 text-left transition-colors hover:bg-line-subtle max-md:px-3 max-md:py-2.5 {i >
+                      class="w-full px-4 py-3 text-left transition-colors hover:bg-line-subtle max-lg:px-3 max-lg:py-2.5 {i >
                       0
                         ? 'border-t border-line'
                         : ''} {isSelected ? 'bg-line-subtle' : ''}"
@@ -1525,11 +1525,11 @@
     </div>
     {#if document.thread_id}
       <!--
-        On mobile this lives inside `page-dock-feed` (sticky bottom of dock
-        layout). On desktop the rail renders its own `<aside>` and `lg:contents`
-        passes the aside through the flex-row parent unchanged.
+        On compact widths the feed holds the dock; from `lg` up `lg:contents`
+        lets the rail aside participate in the row flow while fixed positioning
+        handles layout.
       -->
-      <div class="page-dock-feed md:contents">
+      <div class="page-dock-feed lg:contents">
         <DocumentDiscussionRail
           doc={document}
           {workspaceSlug}

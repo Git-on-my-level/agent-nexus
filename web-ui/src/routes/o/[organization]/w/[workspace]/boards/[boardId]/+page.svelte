@@ -116,7 +116,7 @@
   function openCardDetailModal(cardItem) {
     const id = boardCardStableId(cardItem?.membership);
     if (!id) return;
-    if (browser && window.matchMedia?.("(max-width: 767px)")?.matches) {
+    if (browser && window.matchMedia?.("(max-width: 1023px)")?.matches) {
       void goto(
         workspaceHref(
           `/boards/${encodeURIComponent(boardId)}/cards/${encodeURIComponent(id)}`,

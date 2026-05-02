@@ -2109,7 +2109,7 @@
     box-shadow: none;
   }
 
-  @media (max-width: 767px) {
+  @media (max-width: 1023px) {
     .cdm-backdrop {
       align-items: stretch;
       padding: max(0.75rem, env(safe-area-inset-top, 0px))

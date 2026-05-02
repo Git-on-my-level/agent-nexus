@@ -8,7 +8,8 @@
     wraps **current title** (`min-w-0 shrink truncate`, no `flex-1` on the
     title) with **badges** (`shrink-0`) so pills sit tight to the right of the
     text instead of at the end of a stretched title cell.
-  - Optional `desktop` snippet: wrapped in `hidden md:flex` for full title,
+  - Optional `desktop` snippet: wrapped in `hidden lg:flex` for full title
+    (full shell only; compact shell reuses the crumb row),
     summary, and long metadata lines that are redundant with the crumb row on
     narrow viewports.
 
@@ -26,7 +27,7 @@
 </script>
 
 <div
-  class="mb-1 flex min-w-0 items-center justify-between gap-1.5 sm:gap-2 md:mb-2"
+  class="mb-1 flex min-w-0 items-center justify-between gap-1.5 sm:gap-2 lg:mb-2"
 >
   <nav
     class="flex min-w-0 flex-1 items-center gap-1.5 text-meta text-fg-muted"
@@ -43,7 +44,7 @@
 
 {#if desktop}
   <div
-    class="mt-0 hidden max-w-full flex-col gap-1.5 md:flex"
+    class="mt-0 hidden max-w-full flex-col gap-1.5 lg:flex"
     aria-label={desktopAriaLabel}
   >
     {@render desktop()}
