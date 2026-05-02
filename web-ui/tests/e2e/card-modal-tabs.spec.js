@@ -404,16 +404,36 @@ test("card detail modal Discussion drawer and Timeline tab render without reques
   await expect(
     dialog.getByRole("link", { name: /card-one/ }).first(),
   ).toHaveAttribute("href", `/o/local/w/local/boards/${boardId}?card=card-one`);
-  await expect(
-    dialog.getByRole("link", { name: /artifact-modal-card/ }).first(),
-  ).toHaveAttribute("href", "/o/local/w/local/artifacts/artifact-modal-card");
 
   const tabCount = await dialog
     .locator('[aria-label="Card sections"] [role="tab"]')
     .count();
-  expect(tabCount, "expected 3 section tabs in modal").toBe(3);
+  expect(tabCount, "expected 4 section tabs in modal").toBe(4);
 
-  await expect(dialog.getByTestId("cdm-tab-timeline")).toHaveText(/timeline/i);
+  await expect(dialog.getByTestId("cdm-tab-resolution")).toHaveText(
+    /resolution/i,
+  );
+
+  await dialog.getByTestId("cdm-tab-resolution").click();
+  await expect(page).toHaveURL(/tab=resolution/);
+  await expect(dialog.getByTestId("cdm-section-tab-val")).toHaveText(
+    "resolution",
+    { timeout: 15_000 },
+  );
+  await expect(
+    dialog
+      .locator('[data-cdm-panel="resolution"]')
+      .getByText("Definition of done", { exact: false }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByRole("link", { name: /artifact-modal-card/ }).first(),
+  ).toHaveAttribute("href", "/o/local/w/local/artifacts/artifact-modal-card");
+
+  await dialog.getByRole("tab", { name: /^Overview\b/i }).click();
+  await expect(dialog.getByTestId("cdm-section-tab-val")).toHaveText(
+    "overview",
+    { timeout: 5_000 },
+  );
 
   const principalCountBefore = principalsRequestCount;
   const timelineCountBefore = timelineRequestCount;
@@ -445,6 +465,7 @@ test("card detail modal Discussion drawer and Timeline tab render without reques
     "timeline",
     { timeout: 15_000 },
   );
+
   await expect(dialog.getByText(/Card updated/i).first()).toBeVisible();
   await expect(dialog.getByText(/Title:/i).first()).toBeVisible();
 

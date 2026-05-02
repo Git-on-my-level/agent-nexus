@@ -22,7 +22,7 @@ Voice and tone: direct, unambiguous, operator-grade. Avoid consumer-app softness
 
 **Flat and monochromatic.** Single-level card surfaces with dividers, not nested card stacks. Color is reserved strictly for semantic status (error, warning, success, info, urgency). Never use color for decoration.
 
-**Accent**: indigo — `#6366f1` (strong, brand mark, CTAs) / `#818cf8` (links, focus rings). This is the only "brand" hue. Do not introduce other hues for brand purposes.
+**Accent**: cyan/teal in the current runtime contract — `#22d3ee` (`--accent`, focus rings) / `#5eead4` (`--accent-text`, links) / `#155e75` (`--accent-solid`, filled accent actions). This is the only brand hue family. Do not introduce other hues for brand purposes unless you are doing a coordinated token migration.
 
 **Anti-references:**
 - **Jira / enterprise bloat** — no cluttered toolbars, heavy form-heavy workflows, or badge-everywhere information hierarchy.
@@ -34,23 +34,33 @@ Voice and tone: direct, unambiguous, operator-grade. Avoid consumer-app softness
 
 2. **Provenance is first-class.** Evidence-backed state and inferred state are fundamentally different. The UI must make this distinction visible at all times — different colors, labels, or icons — never collapsing them into a single undifferentiated display.
 
-3. **Flat and readable over layered and clever.** Prefer a single bordered container with dividers over nested card hierarchies. Prefer explicit pixel type sizes (`text-[13px]`, `text-[12px]`, `text-[11px]`) over Tailwind utility shorthands (`text-sm`, `text-xs`). Prefer `rounded-md` consistently over mixing radii.
+3. **Flat and readable over layered and clever.** Prefer a single bordered container with dividers over nested card hierarchies. Prefer the project type scale (`text-micro`, `text-meta`, `text-body`, `text-subtitle`, `text-title`) over Tailwind utility shorthands (`text-sm`, `text-xs`). Prefer `rounded-md` consistently over mixing radii.
 
 4. **Graceful forward-compatibility.** Unknown event types, artifact kinds, ref prefixes, and object fields must stay visible — never hidden, never silently dropped. The UI is one client among many and must degrade safely when anx-core introduces newer data.
 
 5. **Intervention, not orchestration.** The UI surfaces human decisions, acknowledgments, reviews, and snapshot edits. It does not automate, orchestrate agents, or maintain its own source of truth. Design affordances that make safe, explicit human action easy, and that surface the evidence behind every consequential state change.
 
+### Unification Decisions
+
+- Keep the current cyan/teal token contract for this migration; do not mix in an indigo rebrand.
+- Prefer semantic Tailwind keys (`bg-panel`, `border-line`, `text-fg-muted`) for new and touched markup.
+- Do not keep backwards-compatible wrappers for internal UI components during the unification. Replace call sites directly and delete obsolete APIs in the same change.
+- Use CSS primitives for pure visual recipes; use Svelte components for structure, slots, and behavior.
+- Keep common card/discussion controls visible as compact footer or action-row affordances rather than hiding them behind menus.
+- Layout shells are styling-only and must not own fetching, resource semantics, or core writes.
+
 ### Token Quick Reference
 
 | Purpose | Value |
 |---|---|
-| Page background | `#0e1015` / `bg-gray-50` / `var(--ui-bg)` |
-| Panel / card surface | `#181a21` / `bg-gray-100` / `var(--ui-panel)` |
-| Standard border | `#262a33` / `border-gray-200` / `var(--ui-border)` |
-| Primary text | `#e2e5eb` / `text-gray-900` / `var(--ui-text)` |
-| Muted text | `#8e939c` / `text-gray-500` / `var(--ui-text-muted)` |
-| Accent (links, focus) | `#818cf8` / `var(--ui-accent)` |
-| Accent strong (CTAs) | `#6366f1` / `var(--ui-accent-strong)` |
+| Page background | `#0b0d12` / `bg-bg` / `var(--bg)` |
+| Muted page/inset surface | `#11141b` / `bg-bg-soft` / `var(--bg-soft)` |
+| Panel / card surface | `#161922` / `bg-panel` / `var(--panel)` |
+| Standard border | `#2a2f3d` / `border-line` / `var(--line)` |
+| Primary text | `#e8ebf1` / `text-fg` / `var(--fg)` |
+| Muted text | `#a1a7b4` / `text-fg-muted` / `var(--fg-muted)` |
+| Accent (focus) | `#22d3ee` / `border-accent` / `var(--accent)` |
+| Accent text (links) | `#5eead4` / `text-accent-text` / `var(--accent-text)` |
 | Base font size | `13px` |
 | Font family | Inter, system UI stack |
 | Default radius | `rounded-md` |

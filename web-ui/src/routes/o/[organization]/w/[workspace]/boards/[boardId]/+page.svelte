@@ -43,7 +43,7 @@
 
   let { data } = $props();
 
-  const CARD_MODAL_TABS = ["overview", "timeline", "revisions"];
+  const CARD_MODAL_TABS = ["overview", "resolution", "timeline", "revisions"];
 
   let workspace = $state(null);
   let loading = $state(false);

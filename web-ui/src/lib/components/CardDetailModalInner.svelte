@@ -71,7 +71,7 @@
     onrevisecard = async () => {},
     onremovecard,
     presentation = "modal",
-    /** When set (overview|timeline|revisions), syncs active tab from URL. */
+    /** When set (overview|resolution|timeline|revisions), syncs active tab from URL. */
     requestedDetailTab = "",
     onDetailTabChange = undefined,
   } = $props();
@@ -95,7 +95,7 @@
   let thread = $derived(backing?.thread);
   let cdmDetailPane = $state("overview");
 
-  const CDM_TAB = new Set(["overview", "timeline", "revisions"]);
+  const CDM_TAB = new Set(["overview", "resolution", "timeline", "revisions"]);
 
   /** @param {string} tab */
   function normalizeIncomingTab(tab) {
@@ -251,6 +251,11 @@
     const items = parseDelimitedValues(existingRaw);
     if (items.includes(r)) return existingRaw;
     return joinDelimitedValues([...items, r]);
+  }
+
+  /** True when ref draft autosave should run (not on timeline/revisions). */
+  function cdmPaneAllowsRefDraftAutosave(pane) {
+    return pane === "overview" || pane === "resolution";
   }
 
   function typedRefsOnlyWithPrefix(refs, prefix) {
@@ -521,7 +526,7 @@
   let resolutionRefSaveTimer = 0;
 
   $effect(() => {
-    if (cdmDetailPane !== "overview" || !membership) return;
+    if (!cdmPaneAllowsRefDraftAutosave(cdmDetailPane) || !membership) return;
     void editRelatedRefs;
     void membership.related_refs;
     window.clearTimeout(relatedSaveTimer);
@@ -533,7 +538,7 @@
   });
 
   $effect(() => {
-    if (cdmDetailPane !== "overview" || !membership) return;
+    if (!cdmPaneAllowsRefDraftAutosave(cdmDetailPane) || !membership) return;
     void editResolutionRefs;
     void membership.resolution_refs;
     window.clearTimeout(resolutionRefSaveTimer);
@@ -609,7 +614,7 @@
   }
 
   function pickDetailPane(
-    /** @type {"overview" | "timeline" | "revisions"} */ pane,
+    /** @type {"overview" | "resolution" | "timeline" | "revisions"} */ pane,
   ) {
     cdmDetailPane = pane;
     onDetailTabChange?.(pane);
@@ -710,17 +715,16 @@
     });
   });
 
-  let editedArtifactRefs = $derived.by(() => {
-    const a = typedRefsOnlyWithPrefix(
-      parseDelimitedValues(editRelatedRefs),
-      "artifact:",
-    );
-    const b = typedRefsOnlyWithPrefix(
+  let relatedArtifactRefs = $derived.by(() =>
+    typedRefsOnlyWithPrefix(parseDelimitedValues(editRelatedRefs), "artifact:"),
+  );
+
+  let resolutionArtifactRefs = $derived.by(() =>
+    typedRefsOnlyWithPrefix(
       parseDelimitedValues(editResolutionRefs),
       "artifact:",
-    );
-    return [...new Set([...a, ...b])];
-  });
+    ),
+  );
 
   /**
    * @param {Event & { currentTarget: HTMLInputElement }} event
@@ -892,7 +896,7 @@
 
 {#snippet cardActionsFooter()}
   <div
-    class="cdm-modal-actions-footer relative z-20 shrink-0 border-t border-[var(--line)] bg-[var(--panel)] px-4 py-2"
+    class="cdm-modal-actions-footer relative z-30 shrink-0 border-t border-[var(--line)] bg-[var(--panel)] px-4 py-2"
   >
     <div
       class="flex min-w-0 max-w-full flex-wrap items-center gap-2 md:flex-nowrap"
@@ -1068,7 +1072,8 @@
     class={presentation === "modal"
       ? "cdm-panel page-dock-layout--embedded-modal-chat"
       : "cdm-panel cdm-page-panel page-dock-layout page-dock-layout--mobile-only page-dock-layout--fixed-mobile-chat page-dock-layout--card-page-chat"}
-    data-discussion-dock-host={presentation === "modal" ? "" : undefined}
+    data-card-detail-presentation={presentation}
+    data-discussion-dock-host={linkedThreadId ? "" : undefined}
   >
     <div
       class="sticky top-0 z-10 border-b border-[var(--line)] bg-[var(--panel)] px-4 pt-2 sm:px-6 sm:pt-2.5"
@@ -1185,6 +1190,19 @@
           onclick={() => pickDetailPane("overview")}
         >
           Overview
+        </button>
+        <button
+          type="button"
+          role="tab"
+          data-cdm-pane-tab="resolution"
+          data-testid="cdm-tab-resolution"
+          tabindex={cdmDetailPane === "resolution" ? 0 : -1}
+          aria-selected={cdmDetailPane === "resolution"}
+          class={`relative inline-flex cursor-pointer border-0 border-b-2 border-transparent bg-transparent px-3 py-2 text-meta font-medium transition-colors ${cdmDetailPane === "resolution" ? "border-accent text-[var(--fg)]" : "text-[var(--fg-muted)] hover:text-[var(--fg)]"}`}
+          onpointerdown={() => pickDetailPane("resolution")}
+          onclick={() => pickDetailPane("resolution")}
+        >
+          Resolution
         </button>
         <button
           type="button"
@@ -1320,61 +1338,7 @@
               {/if}
             </section>
 
-            <!-- Definition of done -->
-            <section>
-              <h3
-                class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-muted)]"
-              >
-                Definition of done
-              </h3>
-              {#if dodEditing}
-                <!-- svelte-ignore a11y_autofocus -->
-                <textarea
-                  autofocus
-                  bind:value={editDefinitionOfDone}
-                  onblur={() => void commitDodField()}
-                  onkeydown={(ev) => {
-                    if (ev.key === "Escape") {
-                      ev.preventDefault();
-                      syncCardDraftsFromItem(cardItem);
-                      dodEditing = false;
-                    }
-                  }}
-                  class="cdm-prose-input min-h-[5rem]"
-                  aria-label="Definition of done (one idea per line)"
-                  disabled={isSaving("definition_of_done")}
-                  placeholder="One criterion per line"
-                ></textarea>
-                {@render saveSpinner("definition_of_done")}
-                {#if fieldErrors.definition_of_done}
-                  <p class="mt-1 text-micro text-danger-text">
-                    {fieldErrors.definition_of_done}
-                  </p>
-                {/if}
-              {:else}
-                <button
-                  type="button"
-                  class="cdm-prose-display w-full cursor-text rounded-sm text-left"
-                  onclick={() => (dodEditing = true)}
-                  disabled={isSaving("definition_of_done")}
-                  aria-label="Edit definition of done"
-                >
-                  {#if dodItems.length > 0}
-                    <ul class="list-inside list-disc space-y-1 text-meta">
-                      {#each dodItems as line (line)}
-                        <li>{line}</li>
-                      {/each}
-                    </ul>
-                  {:else}
-                    <span class="text-meta text-[var(--fg-muted)]"
-                      >Add criteria…</span
-                    >
-                  {/if}
-                </button>
-              {/if}
-            </section>
-
-            <!-- Attachments: minimal inline strip -->
+            <!-- Supporting attachments (related refs only) -->
             <section>
               <div class="mb-1 flex items-baseline justify-between gap-2">
                 <h3
@@ -1421,36 +1385,11 @@
                       type="file"
                     />
                   </label>
-                  <label
-                    class="inline-flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-0.5 text-micro text-[var(--fg-muted)] transition-colors hover:bg-[var(--bg-soft)] hover:text-[var(--fg)] {!cardAttachContextRefs.length ||
-                    cardAttachBusy
-                      ? 'pointer-events-none opacity-40'
-                      : ''}"
-                    title="Attach as resolution evidence"
-                  >
-                    <span
-                      >{cardAttachBusy === "resolution"
-                        ? "Uploading…"
-                        : "+ Evidence"}</span
-                    >
-                    <input
-                      class="sr-only"
-                      accept={CARD_ATTACHMENT_ACCEPT}
-                      disabled={Boolean(cardAttachBusy) ||
-                        !cardAttachContextRefs.length}
-                      onchange={(e) =>
-                        void handleCardAttachPick(
-                          /** @type {any} */ (e),
-                          "resolution",
-                        )}
-                      type="file"
-                    />
-                  </label>
                 </div>
               </div>
-              {#if editedArtifactRefs.length > 0}
+              {#if relatedArtifactRefs.length > 0}
                 <ul class="flex min-w-0 flex-wrap gap-1.5">
-                  {#each editedArtifactRefs as ref (ref)}
+                  {#each relatedArtifactRefs as ref (ref)}
                     <li class="min-w-0 text-micro">
                       <CompactRefLink
                         refValue={ref}
@@ -1499,36 +1438,6 @@
                   helperText=""
                   textareaAriaLabel="Card related refs"
                   fieldError={fieldErrors.related_refs}
-                  attachContextRefs={cardAttachContextRefs}
-                />
-              </div>
-            </details>
-
-            <details
-              class="cdm-disclosure"
-              open={resolutionRefsList.length > 0}
-            >
-              <summary
-                class="cursor-pointer text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-muted)] marker:text-[var(--fg-muted)] hover:text-[var(--fg)]"
-              >
-                Resolution refs
-              </summary>
-              <div class="mt-2">
-                <GuidedTypedRefsInput
-                  bind:value={editResolutionRefs}
-                  {boardId}
-                  threadId={linkedThreadId}
-                  artifactRoutesById={modalArtifactRoutesById}
-                  labelHints={refLabelHints}
-                  suppressArtifactChipList={true}
-                  hideAttachFileControl={true}
-                  addInputLabel="Add resolution ref"
-                  addInputPlaceholder="artifact:supporting-context"
-                  addButtonLabel="Add ref"
-                  emptyText="No resolution refs yet."
-                  helperText=""
-                  textareaAriaLabel="Card resolution refs"
-                  fieldError={fieldErrors.resolution_refs}
                   attachContextRefs={cardAttachContextRefs}
                 />
               </div>
@@ -1649,6 +1558,214 @@
           </div>
 
           <!-- Desktop rail -->
+          <div
+            class="order-2 hidden min-w-0 px-5 pb-4 pt-5 sm:px-6 md:block md:overflow-visible"
+          >
+            {@render propertiesRail()}
+          </div>
+        </div>
+      {:else if cdmDetailPane === "resolution"}
+        <div
+          class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_18rem]"
+          data-cdm-panel="resolution"
+        >
+          <div
+            class="order-1 flex min-h-0 min-w-0 flex-col gap-4 px-5 pb-4 pt-5 sm:px-8 sm:pt-7 md:border-r md:border-[var(--line)]"
+          >
+            {#if Object.keys(fieldErrors).length > 0}
+              <div
+                class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
+              >
+                {#each Object.entries(fieldErrors) as [fid, ferr] (`${fid}:${ferr}`)}
+                  <div>{ferr}</div>
+                {/each}
+              </div>
+            {/if}
+
+            {#if doneColumnOptionDisabled && !membershipColumnIsDone}
+              <p
+                class="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-micro text-[var(--fg-muted)]"
+              >
+                Moving to <span class="text-[var(--fg)]">Done</span> requires at
+                least one
+                <span class="font-mono text-[var(--fg)]">artifact:</span> or
+                <span class="font-mono text-[var(--fg)]">event:</span> ref in resolution
+                refs (for example uploaded evidence).
+              </p>
+            {/if}
+
+            <!-- Definition of done -->
+            <section>
+              <h3
+                class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-muted)]"
+              >
+                Definition of done
+              </h3>
+              {#if dodEditing}
+                <!-- svelte-ignore a11y_autofocus -->
+                <textarea
+                  autofocus
+                  bind:value={editDefinitionOfDone}
+                  onblur={() => void commitDodField()}
+                  onkeydown={(ev) => {
+                    if ((ev.ctrlKey || ev.metaKey) && ev.key === "Enter") {
+                      ev.preventDefault();
+                      ev.currentTarget.blur();
+                    } else if (ev.key === "Escape") {
+                      ev.preventDefault();
+                      syncCardDraftsFromItem(cardItem);
+                      dodEditing = false;
+                    }
+                  }}
+                  class="cdm-prose-input cdm-prose-input--section-align min-h-[5rem]"
+                  aria-label="Definition of done (one idea per line)"
+                  disabled={isSaving("definition_of_done")}
+                  placeholder="One criterion per line"
+                ></textarea>
+                {@render saveSpinner("definition_of_done")}
+                {#if fieldErrors.definition_of_done}
+                  <p class="mt-1 text-micro text-danger-text">
+                    {fieldErrors.definition_of_done}
+                  </p>
+                {/if}
+              {:else}
+                <button
+                  type="button"
+                  class="cdm-prose-display cdm-prose-display--section-align w-full cursor-text rounded-sm text-left"
+                  onclick={() => (dodEditing = true)}
+                  disabled={isSaving("definition_of_done")}
+                  aria-label="Edit definition of done"
+                >
+                  {#if dodItems.length > 0}
+                    <ul class="list-inside list-disc space-y-1 text-meta">
+                      {#each dodItems as line (line)}
+                        <li>{line}</li>
+                      {/each}
+                    </ul>
+                  {:else}
+                    <span class="text-meta text-[var(--fg-muted)]"
+                      >Add criteria…</span
+                    >
+                  {/if}
+                </button>
+              {/if}
+            </section>
+
+            <!-- Evidence (resolution artifact refs) -->
+            <section>
+              <div class="mb-1 flex items-baseline justify-between gap-2">
+                <h3
+                  class="text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-muted)]"
+                >
+                  Evidence
+                </h3>
+                <label
+                  class="inline-flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-0.5 text-micro text-[var(--fg-muted)] transition-colors hover:bg-[var(--bg-soft)] hover:text-[var(--fg)] {!cardAttachContextRefs.length ||
+                  cardAttachBusy
+                    ? 'pointer-events-none opacity-40'
+                    : ''}"
+                  title="Upload file as resolution evidence"
+                >
+                  <svg
+                    class="h-3 w-3"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    aria-hidden="true"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M12 4v16m8-8H4"
+                    />
+                  </svg>
+                  <span
+                    >{cardAttachBusy === "resolution"
+                      ? "Uploading…"
+                      : "+ Evidence"}</span
+                  >
+                  <input
+                    class="sr-only"
+                    accept={CARD_ATTACHMENT_ACCEPT}
+                    disabled={Boolean(cardAttachBusy) ||
+                      !cardAttachContextRefs.length}
+                    onchange={(e) =>
+                      void handleCardAttachPick(
+                        /** @type {any} */ (e),
+                        "resolution",
+                      )}
+                    type="file"
+                  />
+                </label>
+              </div>
+              {#if resolutionArtifactRefs.length > 0}
+                <ul class="flex min-w-0 flex-wrap gap-1.5">
+                  {#each resolutionArtifactRefs as ref (ref)}
+                    <li class="min-w-0 text-micro">
+                      <CompactRefLink
+                        refValue={ref}
+                        threadId={linkedThreadId}
+                        {boardId}
+                        humanize
+                        showRaw
+                        labelHints={refLabelHints}
+                        artifactRoutesById={modalArtifactRoutesById}
+                      />
+                    </li>
+                  {/each}
+                </ul>
+              {:else}
+                <p class="text-micro text-[var(--fg-muted)]">
+                  No evidence files yet.
+                </p>
+              {/if}
+              {#if cardAttachError}
+                <p class="mt-1 text-micro text-danger-text">
+                  {cardAttachError}
+                </p>
+              {/if}
+            </section>
+
+            <section>
+              <h3
+                class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-muted)]"
+              >
+                Resolution refs
+              </h3>
+              <GuidedTypedRefsInput
+                bind:value={editResolutionRefs}
+                {boardId}
+                threadId={linkedThreadId}
+                artifactRoutesById={modalArtifactRoutesById}
+                labelHints={refLabelHints}
+                suppressArtifactChipList={true}
+                hideAttachFileControl={true}
+                addInputLabel="Add resolution ref"
+                addInputPlaceholder="artifact:supporting-context"
+                addButtonLabel="Add ref"
+                emptyText="No resolution refs yet."
+                helperText=""
+                textareaAriaLabel="Card resolution refs"
+                fieldError={fieldErrors.resolution_refs}
+                attachContextRefs={cardAttachContextRefs}
+              />
+            </section>
+
+            <details
+              class="order-2 -mx-5 mt-1 border-t border-[var(--line)] px-5 pt-3 sm:-mx-8 sm:px-8 md:hidden"
+            >
+              <summary
+                class="cursor-pointer text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-muted)] marker:text-[var(--fg-muted)]"
+              >
+                Properties
+              </summary>
+              <div class="mt-2">
+                {@render propertiesRail()}
+              </div>
+            </details>
+          </div>
+
           <div
             class="order-2 hidden min-w-0 px-5 pb-4 pt-5 sm:px-6 md:block md:overflow-visible"
           >
@@ -1789,12 +1906,13 @@
       <div class="page-dock-feed">
         <DiscussionDrawer
           layout="dock"
+          dockPlacement="embedded"
           threadId={linkedThreadId}
           {workspaceId}
           {workspaceSlug}
           label="Discussion"
           storageKey={`card-discussion:${cardKey}`}
-          expandFillsParent
+          resizeStorageKey={`card-discussion-v2:${cardKey}`}
           narrowEdgeToEdge
         />
       </div>
@@ -1904,6 +2022,12 @@
     box-shadow: 0 0 0 1px var(--accent);
   }
 
+  /* Under explicit section headings (e.g. Definition of done); keep flush with Evidence / refs. */
+  :global(.cdm-prose-input--section-align) {
+    margin-left: 0;
+    margin-right: 0;
+  }
+
   :global(.cdm-prose-display) {
     display: block;
     border: 0;
@@ -1918,6 +2042,11 @@
   }
   :global(.cdm-prose-display:hover:not(:disabled)) {
     background: var(--bg-soft);
+  }
+
+  :global(.cdm-prose-display--section-align) {
+    margin-left: 0;
+    margin-right: 0;
   }
 
   /* ---- Right-rail property rows (Linear-style compact) ---- */
@@ -1992,194 +2121,6 @@
     overscroll-behavior-y: contain;
     overflow-y: auto;
     scroll-padding-block-start: 0.5rem;
-  }
-
-  /*
-   * Expanded discussion dock shares flex space with the overview; without a
-   * floor, the overview scrollport can become too short and the top of the
-   * form feels clipped when "More options" is open.
-   */
-  :global(.cdm-panel:has([data-mobile-chat-expanded])) .cdm-scroll {
-    min-height: min(52dvh, 28rem);
-  }
-
-  /*
-   * Card modal discussion: mirror doc mobile (`page-dock-layout--fixed-mobile-chat`)
-   * — absolute bottom sheet + scroll padding — but anchored to `.cdm-panel`,
-   * not the viewport. In-flow flex + tall Revisions content fight for height and
-   * collapse the Messages scrollport to ~0. `data-discussion-dock-host` is the
-   * DiscussionDrawer resize / `--mobile-chat-panel-height` host (avoids relying
-   * only on class-based closest()).
-   */
-  :global(.cdm-panel[data-discussion-dock-host]) {
-    position: relative;
-    min-height: 0;
-    --mobile-chat-panel-height: min(42dvh, 22rem);
-    --cdm-modal-discussion-footer-clearance: 3.5rem;
-  }
-
-  :global(.cdm-panel[data-discussion-dock-host] .cdm-scroll.page-dock-scroll) {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-x: hidden;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  :global(
-    .cdm-panel[data-discussion-dock-host]:has([data-mobile-chat-expanded])
-      .cdm-scroll.page-dock-scroll
-  ) {
-    padding-bottom: calc(
-      var(--mobile-chat-panel-height) +
-        var(--cdm-modal-discussion-footer-clearance) + 0.5rem
-    );
-  }
-
-  :global(
-    .cdm-panel[data-discussion-dock-host]:not(:has([data-mobile-chat-expanded]))
-      .cdm-scroll.page-dock-scroll
-  ) {
-    padding-bottom: calc(5.5rem + var(--cdm-modal-discussion-footer-clearance));
-  }
-
-  :global(.cdm-panel[data-discussion-dock-host] .page-dock-feed) {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: var(--cdm-modal-discussion-footer-clearance);
-    z-index: 15;
-    width: 100%;
-    max-width: 100%;
-    margin: 0;
-    flex: unset;
-    box-sizing: border-box;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.24);
-  }
-
-  :global(
-    .cdm-panel[data-discussion-dock-host]
-      .page-dock-feed:not(:has([data-mobile-chat-expanded]))
-  ) {
-    max-height: none;
-    height: auto;
-  }
-
-  :global(
-    .cdm-panel[data-discussion-dock-host]
-      .page-dock-feed:has([data-mobile-chat-expanded])
-  ) {
-    height: var(--mobile-chat-panel-height);
-    max-height: var(--mobile-chat-panel-height);
-  }
-
-  :global(.cdm-panel[data-discussion-dock-host] .page-dock-feed > *) {
-    display: flex;
-    min-height: 0;
-    flex: 0 1 auto;
-    flex-direction: column;
-  }
-
-  :global(
-    .cdm-panel[data-discussion-dock-host]
-      .page-dock-feed:has([data-mobile-chat-expanded])
-      > *
-  ) {
-    flex: 1 1 auto;
-    height: 100%;
-    max-height: 100%;
-    min-height: 0;
-  }
-
-  /*
-   * Full-page card: discussion stays `layout="dock"` at every width. Classes
-   * `page-dock-layout--mobile-only` + `--fixed-mobile-chat` are meant for surfaces
-   * that switch off the viewport dock from `md` up (document → rail); cards never
-   * do that, so the shared app.css dock-height rules omit `mobile-only` from
-   * tablet/desktop and the Messages region collapses to blank. Reinstate the
-   * `--mobile-chat-panel-height` feed + scroll flex wiring for `md+` only (<md
-   * keeps global viewport dock rules unchanged).
-   */
-  @media (min-width: 768px) {
-    /*
-     * `mobile-only` sets `display:block` from `md` up — correct for docs (rail +
-     * in-flow dock), but disables flex stacking for docked scroll + sheet.
-     */
-    :global(.cdm-page-panel.page-dock-layout.page-dock-layout--card-page-chat) {
-      display: flex;
-      flex-direction: column;
-    }
-
-    :global(
-      .cdm-page-panel.page-dock-layout--card-page-chat.page-dock-layout--fixed-mobile-chat
-    ) {
-      --mobile-chat-panel-height: min(42dvh, 22rem);
-    }
-
-    :global(
-      .cdm-page-panel.page-dock-layout--card-page-chat .page-dock-scroll
-    ) {
-      flex: 1 1 auto;
-      min-height: 0;
-      overflow-x: hidden;
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
-    }
-
-    :global(.cdm-page-panel.page-dock-layout--card-page-chat .page-dock-feed) {
-      flex: 0 0 auto;
-      position: relative;
-      z-index: 10;
-      width: 100%;
-      margin: 0;
-      margin-top: 0;
-      box-sizing: border-box;
-      box-shadow: none;
-      min-height: 0;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-
-    :global(
-      .cdm-page-panel.page-dock-layout--card-page-chat
-        .page-dock-feed:not(:has([data-mobile-chat-expanded]))
-    ) {
-      max-height: none;
-      height: auto;
-    }
-
-    :global(
-      .cdm-page-panel.page-dock-layout--card-page-chat
-        .page-dock-feed:has([data-mobile-chat-expanded])
-    ) {
-      height: var(--mobile-chat-panel-height);
-      max-height: var(--mobile-chat-panel-height);
-    }
-
-    :global(
-      .cdm-page-panel.page-dock-layout--card-page-chat .page-dock-feed > *
-    ) {
-      display: flex;
-      min-height: 0;
-      flex: 0 1 auto;
-      flex-direction: column;
-    }
-
-    :global(
-      .cdm-page-panel.page-dock-layout--card-page-chat
-        .page-dock-feed:has([data-mobile-chat-expanded])
-        > *
-    ) {
-      flex: 1 1 auto;
-      height: 100%;
-      max-height: 100%;
-      min-height: 0;
-    }
   }
 
   .cdm-page {

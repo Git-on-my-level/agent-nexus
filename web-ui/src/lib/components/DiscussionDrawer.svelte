@@ -50,6 +50,12 @@
     /** Visual / structural mode; see module comment. Escape hatches below override when set. */
     layout = "dock",
     /**
+     * Dock placement for collapsible bottom drawers:
+     * - `viewport`: fixed/sticky page dock controlled by app.css (doc mobile, board feed).
+     * - `embedded`: in-flow dock inside a bounded host such as the card modal.
+     */
+    dockPlacement = "viewport",
+    /**
      * Namespace for rail width persistence (`discussion-drawer-w:…`).
      * Defaults to `storageKey` when empty.
      */
@@ -122,6 +128,10 @@
   } = $props();
 
   let collapsibleEff = $derived(collapsible ?? layout !== "primary");
+  let dockPlacementEff = $derived(
+    layout === "dock" && dockPlacement === "embedded" ? "embedded" : "viewport",
+  );
+  let embeddedDockEff = $derived(dockPlacementEff === "embedded");
   let expandFillsParentEff = $derived(
     expandFillsParent ?? (layout === "primary" ? true : false),
   );
@@ -391,20 +401,44 @@
     return "";
   });
 
-  function clampPanelHeight(px, viewportH) {
+  function dockHeightBounds(viewportH) {
     const v =
       viewportH || (typeof window !== "undefined" ? window.innerHeight : 640);
     const minH = Math.min(Math.max(v * 0.26, 168), v * 0.42);
-    const maxH = Math.max(v * 0.55, v - 56);
+    let maxH = Math.max(v * 0.55, v - 56);
+
+    if (embeddedDockEff && dockLayoutHost) {
+      const hostHeight = dockLayoutHost.getBoundingClientRect().height;
+      if (Number.isFinite(hostHeight) && hostHeight > 0) {
+        // Embedded card/modal drawers must leave the card header reachable.
+        const hostMax = Math.max(
+          minH,
+          Math.min(hostHeight * 0.58, hostHeight - 180),
+        );
+        maxH = Math.min(maxH, hostMax);
+      }
+    }
+
+    return { minH, maxH: Math.max(minH, maxH) };
+  }
+
+  function clampPanelHeight(px, viewportH) {
+    const { minH, maxH } = dockHeightBounds(viewportH);
     return Math.round(Math.min(maxH, Math.max(minH, px)));
   }
 
   $effect(() => {
     if (!browser || !dockLayoutHost || !heightLsKey) return;
     const raw = localStorage.getItem(heightLsKey);
-    if (!raw) return;
+    if (!raw) {
+      dockLayoutHost.style.removeProperty("--mobile-chat-panel-height");
+      return;
+    }
     const n = Number.parseInt(raw, 10);
-    if (!Number.isFinite(n) || n < 1) return;
+    if (!Number.isFinite(n) || n < 1) {
+      dockLayoutHost.style.removeProperty("--mobile-chat-panel-height");
+      return;
+    }
     dockLayoutHost.style.setProperty(
       "--mobile-chat-panel-height",
       `${clampPanelHeight(n)}px`,
@@ -422,6 +456,8 @@
     ptrStartX: 0,
     resizeActive: false,
     resizeStartH: 0,
+    resizeStartBottomY: 0,
+    resizeCurrentH: 0,
     suppressClick: false,
   };
 
@@ -434,7 +470,10 @@
     headerGesture.ptrStartY = e.clientY;
     headerGesture.ptrStartX = e.clientX;
     headerGesture.resizeActive = false;
-    headerGesture.resizeStartH = feed.getBoundingClientRect().height;
+    const feedRect = feed.getBoundingClientRect();
+    headerGesture.resizeStartH = feedRect.height;
+    headerGesture.resizeStartBottomY = feedRect.bottom;
+    headerGesture.resizeCurrentH = feedRect.height;
   }
 
   /** @param {PointerEvent & { currentTarget: HTMLButtonElement }} e */
@@ -458,7 +497,11 @@
     }
     if (headerGesture.resizeActive) {
       const vh = window.innerHeight;
-      const next = clampPanelHeight(headerGesture.resizeStartH + dy, vh);
+      const rawNext = embeddedDockEff
+        ? headerGesture.resizeStartBottomY - e.clientY
+        : headerGesture.resizeStartH + dy;
+      const next = clampPanelHeight(rawNext, vh);
+      headerGesture.resizeCurrentH = next;
       dockLayoutHost.style.setProperty(
         "--mobile-chat-panel-height",
         `${next}px`,
@@ -480,7 +523,9 @@
       headerGesture.resizeActive = false;
       const feed = surfaceEl?.closest(".page-dock-feed");
       if (feed && dockLayoutHost && heightLsKey) {
-        const h = clampPanelHeight(feed.getBoundingClientRect().height);
+        const h = clampPanelHeight(
+          headerGesture.resizeCurrentH || feed.getBoundingClientRect().height,
+        );
         dockLayoutHost.style.setProperty(
           "--mobile-chat-panel-height",
           `${h}px`,
@@ -681,6 +726,7 @@
         ? 'lg:h-full lg:min-h-0 lg:flex-1 lg:overflow-hidden'
         : ''} {layout === 'rail' ? 'md:hidden' : ''}"
       data-mobile-chat-expanded={showOpen ? "" : undefined}
+      data-discussion-dock-placement={dockPlacementEff}
     >
       {#if collapsibleEff}
         <!-- One bar: tap toggles; when expanded on fixed dock, vertical drag resizes. -->
@@ -777,3 +823,120 @@
     </div>
   {/if}
 {/if}
+
+<style>
+  /*
+   * Embedded dock placement is the shared "doc mobile chat, but inside a
+   * bounded surface" mode. Hosts provide `data-discussion-dock-host`; this
+   * component owns the feed/surface flex wiring so card-like surfaces do not
+   * copy a local draggable chat layout.
+   */
+  :global(
+    [data-discussion-dock-host]:has([data-discussion-dock-placement="embedded"])
+  ) {
+    position: relative;
+    min-height: 0;
+    --mobile-chat-panel-height: min(32dvh, 19rem);
+  }
+
+  :global(
+    [data-discussion-dock-host]:has([data-discussion-dock-placement="embedded"])
+      .page-dock-scroll
+  ) {
+    position: relative;
+    z-index: 0;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 0.75rem;
+  }
+
+  :global(
+    [data-discussion-dock-host]:has([data-discussion-dock-placement="embedded"])
+      .page-dock-feed
+  ) {
+    position: relative;
+    left: 0;
+    right: 0;
+    bottom: auto;
+    isolation: isolate;
+    z-index: 25;
+    display: flex;
+    width: 100%;
+    max-width: 100%;
+    min-height: 0;
+    flex-direction: column;
+    box-sizing: border-box;
+    margin: 0;
+    overflow: hidden;
+    box-shadow: none;
+  }
+
+  :global(
+    [data-discussion-dock-host]:has([data-discussion-dock-placement="embedded"])
+      .page-dock-feed:has(
+        [data-discussion-dock-placement="embedded"]:not(
+          [data-mobile-chat-expanded]
+        )
+      )
+  ) {
+    height: auto;
+    max-height: none;
+  }
+
+  :global(
+    [data-discussion-dock-host]:has([data-discussion-dock-placement="embedded"])
+      .page-dock-feed:has(
+        [data-discussion-dock-placement="embedded"][data-mobile-chat-expanded]
+      )
+  ) {
+    height: var(--mobile-chat-panel-height);
+    max-height: var(--mobile-chat-panel-height);
+  }
+
+  :global(
+    [data-discussion-dock-host]:has([data-discussion-dock-placement="embedded"])
+      .page-dock-feed
+      > *
+  ) {
+    display: flex;
+    min-height: 0;
+    flex: 0 1 auto;
+    flex-direction: column;
+  }
+
+  :global(
+    [data-discussion-dock-host]:has([data-discussion-dock-placement="embedded"])
+      .page-dock-feed:has(
+        [data-discussion-dock-placement="embedded"][data-mobile-chat-expanded]
+      )
+      > *
+  ) {
+    height: 100%;
+    max-height: 100%;
+    min-height: 0;
+    flex: 1 1 auto;
+  }
+
+  :global(
+    [data-discussion-dock-host]:has([data-discussion-dock-placement="embedded"])
+      .page-dock-feed
+      [data-discussion-dock-placement="embedded"]
+  ) {
+    min-height: 0;
+    flex: 0 1 auto;
+    background: var(--panel);
+  }
+
+  :global(
+    [data-discussion-dock-host]:has([data-discussion-dock-placement="embedded"])
+      .page-dock-feed
+      [data-discussion-dock-placement="embedded"][data-mobile-chat-expanded]
+  ) {
+    height: 100%;
+    max-height: 100%;
+    flex: 1 1 auto;
+  }
+</style>
