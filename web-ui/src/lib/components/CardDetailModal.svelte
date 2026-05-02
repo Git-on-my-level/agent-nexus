@@ -11,6 +11,8 @@
     primaryTopic = null,
     columnPeerStableIds = [],
     actorName = (id) => id,
+    requestedDetailTab = "",
+    onDetailTabChange = undefined,
     onclose = () => {},
     onmovecard = async () => {},
     onsavecard = async () => {},
@@ -29,6 +31,8 @@
     {primaryTopic}
     {columnPeerStableIds}
     {actorName}
+    {requestedDetailTab}
+    {onDetailTabChange}
     {onclose}
     {onmovecard}
     {onsavecard}

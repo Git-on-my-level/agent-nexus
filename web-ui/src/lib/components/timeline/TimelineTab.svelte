@@ -17,13 +17,19 @@
   } from "$lib/actorSession";
   import { formatTimestamp } from "$lib/formatDate";
   import ArchiveButton from "$lib/components/ArchiveButton.svelte";
+  import CompactRefLink from "$lib/components/CompactRefLink.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
   import { buildPrimitiveRefRoutes } from "$lib/refLinkModel";
   import TrashButton from "$lib/components/TrashButton.svelte";
-  import { toTimelineView, eventTypeDotClass } from "$lib/timelineUtils";
+  import {
+    buildTimelineRefLabelHints,
+    normalizeDocumentRevisionsInput,
+    toTimelineView,
+    eventTypeDotClass,
+  } from "$lib/timelineUtils";
 
-  let { threadId, compact = false } = $props();
+  let { threadId, boardId = "", compact = false } = $props();
 
   const timelineCtx = getTimelineContext();
   const timelineStore = timelineCtx.store;
@@ -31,6 +37,9 @@
   let timelineArtifacts = $derived($timelineStore.timelineArtifacts ?? []);
   let timelineCards = $derived($timelineStore.timelineCards ?? []);
   let timelineDocuments = $derived($timelineStore.timelineDocuments ?? []);
+  let timelineDocumentRevisions = $derived(
+    $timelineStore.timelineDocumentRevisions ?? [],
+  );
   let timelineLoading = $derived($timelineStore.timelineLoading);
   let timelineError = $derived($timelineStore.timelineError);
 
@@ -47,12 +56,21 @@
       threadId,
     }),
   );
+  let labelHints = $derived(
+    buildTimelineRefLabelHints(
+      timelineArtifacts,
+      timelineDocuments,
+      normalizeDocumentRevisionsInput(timelineDocumentRevisions),
+    ),
+  );
   let timelineView = $derived(
     toTimelineView(timeline, {
       threadId,
       artifacts: timelineArtifacts,
       cards: timelineCards,
       documents: timelineDocuments,
+      documentRevisions: timelineDocumentRevisions,
+      labelHints,
       routeMaps,
     }),
   );
@@ -242,16 +260,40 @@
                   title={event.typeLabel}
                 ></span>
                 <div class="min-w-0 flex-1">
-                  <MarkdownRenderer
-                    source={event.summary}
+                  <p
                     class="{compact
-                      ? 'text-micro line-clamp-2'
-                      : 'text-meta'} text-[var(--fg)]"
-                  />
+                      ? 'text-micro'
+                      : 'text-[13px]'} font-medium text-[var(--fg)]"
+                  >
+                    {event.typeLabel}
+                  </p>
+                  {#if event.changePreviewLines?.length}
+                    <ul
+                      class="mt-0.5 list-inside list-disc space-y-0.5 text-[12px] text-[var(--fg-muted)]"
+                    >
+                      {#each event.changePreviewLines as line (line)}
+                        <li class="break-words">{line}</li>
+                      {/each}
+                    </ul>
+                  {:else if event.useMarkdownSummary}
+                    <MarkdownRenderer
+                      source={event.summary}
+                      class="{compact
+                        ? 'text-micro line-clamp-3'
+                        : 'text-meta'} mt-0.5 text-[var(--fg)]"
+                    />
+                  {:else if String(event.summary ?? "").trim()}
+                    <p
+                      class="{compact
+                        ? 'text-micro line-clamp-2'
+                        : 'text-[12px]'} mt-0.5 whitespace-pre-wrap break-words text-[var(--fg-muted)]"
+                    >
+                      {String(event.summary ?? "").trim()}
+                    </p>
+                  {/if}
                   <p class="mt-0.5 text-micro text-[var(--fg-muted)]">
-                    {actorName(event.actor_id)} · {event.typeLabel} · {formatTimestamp(
-                      event.ts,
-                    ) || "—"}
+                    {actorName(event.actor_id)} · {formatTimestamp(event.ts) ||
+                      "—"}
                   </p>
                 </div>
               </div>
@@ -304,23 +346,40 @@
                   >
                     {event.refs.length} refs…
                   </summary>
-                  <div class="mt-1 flex flex-wrap gap-1.5 text-micro">
-                    {#each event.refs as refValue}<RefLink
-                        {refValue}
-                        {threadId}
-                        artifactRoutesById={routeMaps.artifactRoutesById}
-                        eventRoutesById={routeMaps.eventRoutesById}
-                      />{/each}
-                  </div>
+                  <ul
+                    class="mt-1.5 flex min-w-0 flex-col gap-1 border-t border-[var(--line)] pt-1.5"
+                  >
+                    {#each event.refs as refValue (refValue)}
+                      <li class="min-w-0">
+                        <CompactRefLink
+                          refValue={String(refValue)}
+                          {threadId}
+                          {boardId}
+                          humanize
+                          showRaw
+                          {labelHints}
+                          artifactRoutesById={routeMaps.artifactRoutesById}
+                          eventRoutesById={routeMaps.eventRoutesById}
+                          attachmentChipSize="compact"
+                        />
+                      </li>
+                    {/each}
+                  </ul>
                 </details>
               {:else}
                 <div class="mt-1.5 flex flex-wrap gap-1.5 text-micro">
-                  {#each event.refs as refValue}<RefLink
-                      {refValue}
+                  {#each event.refs as refValue}
+                    <RefLink
+                      refValue={String(refValue)}
                       {threadId}
+                      {boardId}
+                      humanize
+                      showRaw
+                      {labelHints}
                       artifactRoutesById={routeMaps.artifactRoutesById}
                       eventRoutesById={routeMaps.eventRoutesById}
-                    />{/each}
+                    />
+                  {/each}
                 </div>
               {/if}
             {/if}

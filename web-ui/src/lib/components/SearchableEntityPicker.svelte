@@ -7,6 +7,8 @@
     advancedLabel = "Use a manual ID instead",
     manualLabel = "Manual ID",
     manualPlaceholder = "Enter an ID",
+    /** When false, hides raw ID entry (search only). */
+    showManualEntry = true,
     value = $bindable(""),
     items = [],
     disabledIds = [],
@@ -239,31 +241,33 @@
     {/if}
   </div>
 
-  <details class="rounded-md border border-[var(--line)] bg-[var(--panel)]">
-    <summary
-      class="cursor-pointer px-3 py-2 text-micro text-[var(--fg-muted)] hover:text-[var(--fg)]"
-    >
-      {advancedLabel}
-    </summary>
-    <div class="space-y-2 border-t border-[var(--line)] px-3 py-3">
-      <label class="block text-micro font-medium text-[var(--fg-muted)]">
-        {manualLabel}
-        <input
-          aria-label={manualLabel}
-          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)] placeholder:text-[var(--fg-subtle)]"
-          oninput={(event) => {
-            selectedItemOverride = null;
-            value = event.currentTarget.value.trim();
-          }}
-          placeholder={manualPlaceholder}
-          type="text"
-          value={manualValue()}
-        />
-      </label>
-      <p class="text-micro text-[var(--fg-muted)]">
-        Use this only for expert or debugging cases when the normal picker is
-        not enough.
-      </p>
-    </div>
-  </details>
+  {#if showManualEntry}
+    <details class="rounded-md border border-[var(--line)] bg-[var(--panel)]">
+      <summary
+        class="cursor-pointer px-3 py-2 text-micro text-[var(--fg-muted)] hover:text-[var(--fg)]"
+      >
+        {advancedLabel}
+      </summary>
+      <div class="space-y-2 border-t border-[var(--line)] px-3 py-3">
+        <label class="block text-micro font-medium text-[var(--fg-muted)]">
+          {manualLabel}
+          <input
+            aria-label={manualLabel}
+            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)] placeholder:text-[var(--fg-subtle)]"
+            oninput={(event) => {
+              selectedItemOverride = null;
+              value = event.currentTarget.value.trim();
+            }}
+            placeholder={manualPlaceholder}
+            type="text"
+            value={manualValue()}
+          />
+        </label>
+        <p class="text-micro text-[var(--fg-muted)]">
+          Use this only for expert or debugging cases when the normal picker is
+          not enough.
+        </p>
+      </div>
+    </details>
+  {/if}
 </div>

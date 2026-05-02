@@ -39,9 +39,11 @@
     groupBoardWorkspaceCards,
     sortedColumnPeersStableIds,
   } from "$lib/boardUtils";
-  import { withUpdatedSearchParams } from "$lib/urlState";
+  import { readEnumSearchParam, withUpdatedSearchParams } from "$lib/urlState";
 
   let { data } = $props();
+
+  const CARD_MODAL_TABS = ["overview", "timeline", "revisions"];
 
   let workspace = $state(null);
   let loading = $state(false);
@@ -86,6 +88,10 @@
   }
 
   /** Keeps `$page.url` aligned with shallow card query-param changes (`replaceState` alone can leave `$page` stale). */
+  let boardCardDetailTab = $derived(
+    readEnumSearchParam($page.url.searchParams, "tab", CARD_MODAL_TABS, ""),
+  );
+
   function navigateBoardCardParam(updates = {}) {
     const next = withUpdatedSearchParams($page.url, updates);
     void goto(next, {
@@ -93,6 +99,17 @@
       keepFocus: true,
       noScroll: true,
     });
+  }
+
+  function handleBoardCardDetailTabChange(tab) {
+    const t = String(tab ?? "").trim();
+    if (t === "overview" || t === "") {
+      navigateBoardCardParam({ tab: "" });
+      return;
+    }
+    if (CARD_MODAL_TABS.includes(t)) {
+      navigateBoardCardParam({ tab: t });
+    }
   }
 
   function openCardDetailModal(cardItem) {
@@ -107,12 +124,12 @@
       return;
     }
     detailModalCard = cardItem;
-    navigateBoardCardParam({ card: id });
+    navigateBoardCardParam({ card: id, tab: "" });
   }
 
   function closeCardDetailModal() {
     detailModalCard = null;
-    navigateBoardCardParam({ card: "" });
+    navigateBoardCardParam({ card: "", tab: "" });
   }
 
   async function loadWorkspace() {
@@ -292,6 +309,14 @@
 
   $effect(() => {
     const cardParam = String($page.url.searchParams.get("card") ?? "").trim();
+    const tabParam = String($page.url.searchParams.get("tab") ?? "").trim();
+    if (!cardParam && tabParam) {
+      navigateBoardCardParam({ tab: "" });
+    }
+  });
+
+  $effect(() => {
+    const cardParam = String($page.url.searchParams.get("card") ?? "").trim();
     if (previousCardUrlParam && !cardParam) {
       detailModalCard = null;
     }
@@ -313,7 +338,7 @@
       detailModalCard = match;
     } else {
       detailModalCard = null;
-      navigateBoardCardParam({ card: "" });
+      navigateBoardCardParam({ card: "", tab: "" });
     }
   });
 
@@ -1018,6 +1043,8 @@
   primaryTopic={workspace?.primary_topic ?? null}
   columnPeerStableIds={cardDetailColumnPeerIds}
   {actorName}
+  requestedDetailTab={boardCardDetailTab}
+  onDetailTabChange={handleBoardCardDetailTabChange}
   onclose={closeCardDetailModal}
   onmovecard={moveCard}
   onsavecard={saveCardDetails}

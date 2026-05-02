@@ -69,6 +69,8 @@ function initialState() {
     timelineArtifacts: [],
     timelineCards: [],
     timelineDocuments: [],
+    timelineDocumentRevisions: [],
+    timelineThreads: [],
     timelineLoading: false,
     timelineError: "",
     /** When true, workspace/timeline loads use topic-scoped APIs for the route id. */
@@ -264,6 +266,8 @@ function createTopicDetailStore() {
           timelineArtifacts: [],
           timelineCards: [],
           timelineDocuments: [],
+          timelineDocumentRevisions: [],
+          timelineThreads: [],
           timelineThreadId: "",
         });
       }
@@ -304,6 +308,10 @@ function createTopicDetailStore() {
         timelineArtifacts: coerceTimelineResourceList(result?.artifacts),
         timelineCards: coerceTimelineResourceList(result?.cards),
         timelineDocuments: coerceTimelineResourceList(result?.documents),
+        timelineDocumentRevisions: coerceTimelineResourceList(
+          result?.document_revisions ?? result?.documentRevisions,
+        ),
+        timelineThreads: coerceTimelineResourceList(result?.threads),
       });
     } catch (e) {
       if (requestSeq !== timelineRequestSeq) {
@@ -320,6 +328,10 @@ function createTopicDetailStore() {
         timelineDocuments: canReuseTimeline
           ? currentState.timelineDocuments
           : [],
+        timelineDocumentRevisions: canReuseTimeline
+          ? currentState.timelineDocumentRevisions
+          : [],
+        timelineThreads: canReuseTimeline ? currentState.timelineThreads : [],
       });
     } finally {
       if (requestSeq === timelineRequestSeq) {
@@ -397,6 +409,8 @@ function createTopicDetailStore() {
       timelineArtifacts: [],
       timelineCards: [],
       timelineDocuments: [],
+      timelineDocumentRevisions: [],
+      timelineThreads: [],
       timelineThreadId: threadId || "",
     });
   }

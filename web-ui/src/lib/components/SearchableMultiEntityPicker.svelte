@@ -8,6 +8,12 @@
     manualLabel = "Manual ID",
     manualPlaceholder = "Enter an ID",
     addManualLabel = "Add ID",
+    /** When false, hides raw ID entry (search + suggestions only). */
+    showManualEntry = true,
+    /** Max rows when the search box is empty. */
+    idleSuggestionLimit = 3,
+    /** Max rows when the user is searching. */
+    searchResultLimit = 12,
     values = $bindable([]),
     items = [],
   } = $props();
@@ -23,13 +29,15 @@
       return matched ?? { id, title: id, subtitle: "Manual ID" };
     }),
   );
+  let availableItems = $derived(
+    (items ?? []).filter((item) => !selectedIdSet.has(String(item.id))),
+  );
+
   let filteredItems = $derived.by(() => {
     const needle = query.trim().toLowerCase();
-    const available = (items ?? []).filter(
-      (item) => !selectedIdSet.has(String(item.id)),
-    );
+    const available = availableItems;
     if (!needle) {
-      return available.slice(0, 8);
+      return available.slice(0, idleSuggestionLimit);
     }
 
     return available
@@ -45,8 +53,14 @@
           .toLowerCase();
         return haystack.includes(needle);
       })
-      .slice(0, 8);
+      .slice(0, searchResultLimit);
   });
+
+  let showIdleSearchHint = $derived(
+    !query.trim() &&
+      availableItems.length > idleSuggestionLimit &&
+      filteredItems.length > 0,
+  );
 
   function addValue(id) {
     const next = String(id ?? "").trim();
@@ -142,32 +156,40 @@
     {/if}
   </div>
 
-  <details class="rounded-md border border-[var(--line)] bg-[var(--panel)]">
-    <summary
-      class="cursor-pointer px-3 py-2 text-micro text-[var(--fg-muted)] hover:text-[var(--fg)]"
-    >
-      {advancedLabel}
-    </summary>
-    <div
-      class="space-y-2 border-t border-[var(--line)] px-3 py-3 md:flex md:items-end md:gap-2 md:space-y-0"
-    >
-      <label class="block flex-1 text-micro font-medium text-[var(--fg-muted)]">
-        {manualLabel}
-        <input
-          aria-label={manualLabel}
-          bind:value={manualEntry}
-          class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)] placeholder:text-[var(--fg-subtle)]"
-          placeholder={manualPlaceholder}
-          type="text"
-        />
-      </label>
-      <button
-        class="rounded-md bg-accent-solid px-3 py-2 text-micro font-medium text-white transition-colors hover:bg-accent"
-        onclick={() => addValue(manualEntry)}
-        type="button"
+  {#if showIdleSearchHint}
+    <p class="text-micro text-[var(--fg-muted)]">Type to search for more.</p>
+  {/if}
+
+  {#if showManualEntry}
+    <details class="rounded-md border border-[var(--line)] bg-[var(--panel)]">
+      <summary
+        class="cursor-pointer px-3 py-2 text-micro text-[var(--fg-muted)] hover:text-[var(--fg)]"
       >
-        {addManualLabel}
-      </button>
-    </div>
-  </details>
+        {advancedLabel}
+      </summary>
+      <div
+        class="space-y-2 border-t border-[var(--line)] px-3 py-3 md:flex md:items-end md:gap-2 md:space-y-0"
+      >
+        <label
+          class="block flex-1 text-micro font-medium text-[var(--fg-muted)]"
+        >
+          {manualLabel}
+          <input
+            aria-label={manualLabel}
+            bind:value={manualEntry}
+            class="mt-1 w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-meta text-[var(--fg)] placeholder:text-[var(--fg-subtle)]"
+            placeholder={manualPlaceholder}
+            type="text"
+          />
+        </label>
+        <button
+          class="rounded-md bg-accent-solid px-3 py-2 text-micro font-medium text-white transition-colors hover:bg-accent"
+          onclick={() => addValue(manualEntry)}
+          type="button"
+        >
+          {addManualLabel}
+        </button>
+      </div>
+    </details>
+  {/if}
 </div>

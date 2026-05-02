@@ -1477,14 +1477,33 @@ func buildBoardUpdatedEvent(previousBoard, updatedBoard, patch map[string]any) m
 
 func buildCardCreatedEvent(board, card map[string]any) map[string]any {
 	payload := map[string]any{
-		"board_id":      anyString(board["id"]),
-		"card_id":       anyString(card["id"]),
-		"thread_id":     nullableStringValue(anyString(card["thread_id"])),
-		"column_key":    anyString(card["column_key"]),
-		"status":        nullableStringValue(anyString(card["status"])),
-		"assignee_refs": cardAssigneeRefsAny(card),
-		"document_ref":  nullableStringValue(documentRefForPublicCard(card)),
-		"related_refs":  typedRefStringsToAnyList(cardRelatedRefs(card)),
+		"board_id":           anyString(board["id"]),
+		"card_id":            anyString(card["id"]),
+		"thread_id":          nullableStringValue(anyString(card["thread_id"])),
+		"column_key":         anyString(card["column_key"]),
+		"status":             nullableStringValue(anyString(card["status"])),
+		"title":              nullableStringValue(anyString(card["title"])),
+		"summary":            nullableStringValue(strings.TrimSpace(anyString(card["summary"]))),
+		"assignee_refs":      cardAssigneeRefsAny(card),
+		"document_ref":       nullableStringValue(documentRefForPublicCard(card)),
+		"related_refs":       typedRefStringsToAnyList(cardRelatedRefs(card)),
+		"definition_of_done": stringSliceAsAnyList(card["definition_of_done"]),
+		"resolution_refs":    stringSliceAsAnyList(card["resolution_refs"]),
+		"risk":               publicCardRisk(card),
+	}
+	if res := strings.TrimSpace(anyString(card["resolution"])); res != "" {
+		payload["resolution"] = res
+	} else {
+		payload["resolution"] = nil
+	}
+	if v, ok := card["due_at"]; ok {
+		if s := strings.TrimSpace(anyString(v)); s != "" {
+			payload["due_at"] = v
+		} else {
+			payload["due_at"] = nil
+		}
+	} else {
+		payload["due_at"] = nil
 	}
 	return buildCardLifecycleEvent("card_created", board, card, payload, "Card created: "+cardDisplayName(card))
 }
@@ -1506,6 +1525,18 @@ func buildCardUpdatedEvent(board, previousCard, updatedCard map[string]any, chan
 		case "related_refs":
 			payload["previous_related_refs"] = mergeRelatedRefsForPublicView(previousCard)
 			payload["related_refs"] = mergeRelatedRefsForPublicView(updatedCard)
+		case "resolution_refs":
+			payload["previous_resolution_refs"] = stringSliceAsAnyList(previousCard["resolution_refs"])
+			payload["resolution_refs"] = stringSliceAsAnyList(updatedCard["resolution_refs"])
+		case "definition_of_done":
+			payload["previous_definition_of_done"] = stringSliceAsAnyList(previousCard["definition_of_done"])
+			payload["definition_of_done"] = stringSliceAsAnyList(updatedCard["definition_of_done"])
+		case "resolution":
+			payload["previous_resolution"] = nullableResolutionValue(previousCard["resolution"])
+			payload["resolution"] = nullableResolutionValue(updatedCard["resolution"])
+		case "risk":
+			payload["previous_risk"] = publicCardRisk(previousCard)
+			payload["risk"] = publicCardRisk(updatedCard)
 		default:
 			payload["previous_"+field] = nullableStringValue(anyString(previousCard[field]))
 			payload[field] = nullableStringValue(anyString(updatedCard[field]))
@@ -1543,6 +1574,8 @@ func buildCardMovedEvent(board, previousCard, updatedCard map[string]any, before
 	payload := map[string]any{
 		"board_id":         anyString(board["id"]),
 		"card_id":          anyString(updatedCard["id"]),
+		"title":            nullableStringValue(anyString(updatedCard["title"])),
+		"summary":          nullableStringValue(strings.TrimSpace(anyString(updatedCard["summary"]))),
 		"from_column_key":  nullableStringValue(anyString(previousCard["column_key"])),
 		"column_key":       nullableStringValue(anyString(updatedCard["column_key"])),
 		"before_card_id":   nullableStringValue(strings.TrimSpace(beforeCardID)),
@@ -2375,6 +2408,14 @@ func nullableStringValue(value string) any {
 	return value
 }
 
+func nullableResolutionValue(raw any) any {
+	s := strings.TrimSpace(anyString(raw))
+	if s == "" {
+		return nil
+	}
+	return s
+}
+
 func boardDisplayName(board map[string]any) string {
 	if title := strings.TrimSpace(anyString(board["title"])); title != "" {
 		return title
@@ -2386,8 +2427,17 @@ func boardDisplayName(board map[string]any) string {
 }
 
 func cardDisplayName(card map[string]any) string {
-	if threadID := strings.TrimSpace(anyString(card["thread_id"])); threadID != "" {
-		return threadID
+	if card == nil {
+		return "card"
+	}
+	if title := strings.TrimSpace(anyString(card["title"])); title != "" {
+		return title
+	}
+	if summary := strings.TrimSpace(anyString(card["summary"])); summary != "" {
+		return summary
+	}
+	if id := strings.TrimSpace(anyString(card["id"])); id != "" {
+		return id
 	}
 	return "card"
 }

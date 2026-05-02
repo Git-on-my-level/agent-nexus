@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildTimelineRefLabelHints,
+  normalizeDocumentRevisionsInput,
   toTimelineView,
   toTimelineViewEvent,
 } from "../../src/lib/timelineUtils.js";
@@ -154,6 +155,37 @@ describe("timeline utils", () => {
       { threadId: "thread-1" },
     );
     expect(sameTs.map((e) => e.id)).toEqual(["evt-b", "evt-a"]);
+  });
+
+  it("extracts changed_fields and preview lines for card_updated", () => {
+    const view = toTimelineViewEvent(
+      {
+        id: "evt-c",
+        type: "card_updated",
+        summary: "Card updated: X",
+        payload: {
+          changed_fields: ["title"],
+          previous_title: "A",
+          title: "B",
+          card_id: "c1",
+        },
+      },
+      { threadId: "thread-1" },
+    );
+    expect(view.changedFields).toEqual(["title"]);
+    expect(view.changePreviewLines.length).toBeGreaterThan(0);
+    expect(view.changePreviewLines[0]).toMatch(/Title/i);
+  });
+
+  it("normalizes document revision list input for label hints", () => {
+    const hints = buildTimelineRefLabelHints(
+      {},
+      { d1: { id: "d1", title: "Doc" } },
+      normalizeDocumentRevisionsInput([
+        { revision_id: "rv1", document_id: "d1", revision_number: 2 },
+      ]),
+    );
+    expect(hints["document_revision:rv1"]).toBe("Doc revision 2");
   });
 
   it("builds label hints from timeline expansions", () => {

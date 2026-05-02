@@ -107,6 +107,32 @@ func handleGetCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, 
 	handleGetBoardCard(w, r, opts, "", cardID)
 }
 
+// cardTimelineEventMatches returns true if the event belongs to the card's lifecycle
+// (refs include card:<id> or payload.card_id matches).
+func cardTimelineEventMatches(event map[string]any, cardID string) bool {
+	cardID = strings.TrimSpace(cardID)
+	if event == nil || cardID == "" {
+		return false
+	}
+	eventType := strings.TrimSpace(anyString(event["type"]))
+	if !strings.HasPrefix(eventType, "card_") {
+		return false
+	}
+	wantRef := "card:" + cardID
+	if refs, err := extractStringSlice(event["refs"]); err == nil {
+		for _, ref := range refs {
+			if strings.TrimSpace(ref) == wantRef {
+				return true
+			}
+		}
+	}
+	payload, _ := event["payload"].(map[string]any)
+	if payload != nil && strings.TrimSpace(anyString(payload["card_id"])) == cardID {
+		return true
+	}
+	return false
+}
+
 func handleGetCardTimeline(w http.ResponseWriter, r *http.Request, opts handlerOptions, cardID string) {
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
@@ -129,8 +155,7 @@ func handleGetCardTimeline(w http.ResponseWriter, r *http.Request, opts handlerO
 		return
 	}
 
-	exp, err := expandThreadTimeline(r.Context(), opts, threadID)
-	if err != nil {
+	if _, err := opts.primitiveStore.GetThread(r.Context(), threadID); err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "thread not found")
 			return
@@ -139,7 +164,27 @@ func handleGetCardTimeline(w http.ResponseWriter, r *http.Request, opts handlerO
 		return
 	}
 
-	cardIDs := map[string]struct{}{strings.TrimSpace(cardID): {}}
+	events, err := opts.primitiveStore.ListEventsByThread(r.Context(), threadID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load card timeline")
+		return
+	}
+
+	cardID = strings.TrimSpace(cardID)
+	filtered := make([]map[string]any, 0, len(events))
+	for _, event := range events {
+		if cardTimelineEventMatches(event, cardID) {
+			filtered = append(filtered, event)
+		}
+	}
+
+	exp, err := hydrateTimelineExpansion(r.Context(), opts, filtered)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load card timeline")
+		return
+	}
+
+	cardIDs := map[string]struct{}{cardID: {}}
 	threadIDs := map[string]struct{}{threadID: {}}
 	for _, event := range exp.Events {
 		refs, err := extractStringSlice(event["refs"])
@@ -194,12 +239,13 @@ func handleGetCardTimeline(w http.ResponseWriter, r *http.Request, opts handlerO
 	threads = dedupeAndSortResourceMaps(threads)
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"card":      publicCardView(card),
-		"events":    exp.Events,
-		"artifacts": mapsByIDToSortedSlice(exp.Artifacts),
-		"cards":     cards,
-		"documents": mapsByIDToSortedSlice(exp.Documents),
-		"threads":   threads,
+		"card":               publicCardView(card),
+		"events":             exp.Events,
+		"artifacts":          mapsByIDToSortedSlice(exp.Artifacts),
+		"cards":              cards,
+		"documents":          mapsByIDToSortedSlice(exp.Documents),
+		"document_revisions": mapsByIDToSortedSlice(exp.DocumentRevisions),
+		"threads":            threads,
 	})
 }
 

@@ -185,7 +185,27 @@ test("card detail modal Discussion drawer and Timeline tab render without reques
     generated_at: generatedAt,
   };
 
-  const timelineEvents = [
+  const cardTimelineEvents = [
+    {
+      id: "evt-card-upd",
+      ts: "2026-03-03T10:00:00.000Z",
+      type: "card_updated",
+      actor_id: actorId,
+      thread_id: cardThreadId,
+      refs: [`thread:${cardThreadId}`, `board:${boardId}`, "card:card-one"],
+      summary: "Card updated: Modal Tab Card",
+      payload: {
+        card_id: "card-one",
+        board_id: boardId,
+        changed_fields: ["title"],
+        previous_title: "Old",
+        title: "Modal Tab Card",
+      },
+      provenance: { sources: ["event:ui"] },
+    },
+  ];
+
+  const threadTimelineEvents = [
     {
       id: "evt-modal-1",
       ts: "2026-03-03T10:00:00.000Z",
@@ -198,6 +218,15 @@ test("card detail modal Discussion drawer and Timeline tab render without reques
       provenance: { sources: ["event:ui"] },
     },
   ];
+
+  const cardTimelineBody = JSON.stringify({
+    events: cardTimelineEvents,
+    artifacts: {},
+    documents: {},
+    document_revisions: {},
+    cards: [],
+    threads: [],
+  });
 
   await page.addInitScript((selectedActorId) => {
     window.localStorage.setItem("anx_ui_actor_id:local", selectedActorId);
@@ -271,6 +300,20 @@ test("card detail modal Discussion drawer and Timeline tab render without reques
 
   await page.route(
     (url) =>
+      url.pathname.includes(`/cards/card-one/timeline`) ||
+      url.pathname.endsWith(`/cards/card-one/timeline`),
+    async (route) => {
+      timelineRequestCount += 1;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: cardTimelineBody,
+      });
+    },
+  );
+
+  await page.route(
+    (url) =>
       url.pathname.includes(`/threads/${cardThreadId}/timeline`) ||
       url.pathname.endsWith(`/threads/${cardThreadId}/timeline`),
     async (route) => {
@@ -278,7 +321,44 @@ test("card detail modal Discussion drawer and Timeline tab render without reques
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ events: timelineEvents }),
+        body: JSON.stringify({ events: threadTimelineEvents }),
+      });
+    },
+  );
+
+  await page.route(
+    (url) =>
+      url.pathname.includes(`/cards/card-one/revisions`) ||
+      url.pathname.endsWith(`/cards/card-one/revisions`),
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          card_id: "card-one",
+          revisions: [
+            {
+              revision_id: "rev-2",
+              revision_number: 2,
+              title: "Modal Tab Card",
+              summary: "summary v2",
+              artifact_ref: "artifact:artifact-modal-card",
+              created_at: "2026-03-06T00:00:00.000Z",
+              created_by: actorId,
+              definition_of_done: [],
+            },
+            {
+              revision_id: "rev-1",
+              revision_number: 1,
+              title: "Older",
+              summary: "summary v1",
+              artifact_ref: "artifact:artifact-modal-card",
+              created_at: "2026-03-05T00:00:00.000Z",
+              created_by: actorId,
+              definition_of_done: [],
+            },
+          ],
+        }),
       });
     },
   );
@@ -360,12 +440,22 @@ test("card detail modal Discussion drawer and Timeline tab render without reques
   ).toBeVisible();
 
   await dialog.getByTestId("cdm-tab-timeline").click();
+  await expect(page).toHaveURL(/tab=timeline/);
   await expect(dialog.getByTestId("cdm-section-tab-val")).toHaveText(
     "timeline",
     { timeout: 15_000 },
   );
+  await expect(dialog.getByText(/Card updated/i).first()).toBeVisible();
+  await expect(dialog.getByText(/Title:/i).first()).toBeVisible();
+
+  await dialog.getByRole("tab", { name: /^Revisions\b/i }).click();
+  await expect(page).toHaveURL(/tab=revisions/);
+  await expect(dialog.getByTestId("cdm-section-tab-val")).toHaveText(
+    "revisions",
+    { timeout: 15_000 },
+  );
   await expect(
-    dialog.getByText("hello from modal card thread", { exact: false }),
+    dialog.getByText("Full content", { exact: true }).first(),
   ).toBeVisible();
 
   const principalsDelta = principalsRequestCount - principalCountBefore;
@@ -374,7 +464,7 @@ test("card detail modal Discussion drawer and Timeline tab render without reques
   expect(
     timelineDelta,
     `expected bounded thread timeline fetches after tab switches, got ${timelineDelta}`,
-  ).toBeLessThanOrEqual(6);
+  ).toBeLessThanOrEqual(20);
 
   expect(
     principalsDelta,

@@ -145,6 +145,14 @@ func expandThreadTimeline(ctx context.Context, opts handlerOptions, threadID str
 		return out, err
 	}
 
+	return hydrateTimelineExpansion(ctx, opts, events)
+}
+
+// hydrateTimelineExpansion loads artifacts, documents, and document revisions
+// referenced by the given events (order preserved).
+func hydrateTimelineExpansion(ctx context.Context, opts handlerOptions, events []map[string]any) (threadTimelineExpansion, error) {
+	var out threadTimelineExpansion
+
 	artifactIDs, documentIDs, documentRevisionIDs := collectTimelineReferencedObjectIDs(events)
 
 	artifacts := make(map[string]map[string]any, len(artifactIDs))

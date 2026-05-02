@@ -875,8 +875,6 @@ test("board UI supports create/edit and card mutation flows", async ({
   const executionDocRail = executionDialog.getByRole("group", {
     name: "Document",
   });
-  await executionDocRail.getByText("Use a manual document ID").click();
-
   const docPatch = page.waitForResponse(
     (resp) =>
       resp.url().includes("/cards/") &&
@@ -884,9 +882,15 @@ test("board UI supports create/edit and card mutation flows", async ({
       resp.request().method() === "PATCH",
     { timeout: 15_000 },
   );
-  const docManual = executionDocRail.getByLabel("Document ID");
-  await docManual.fill("doc-runbook");
-  await docManual.blur();
+  await executionDocRail
+    .getByRole("textbox", { name: "Document search" })
+    .fill("Launch Runbook");
+  await executionDocRail
+    .getByRole("button", { name: /Launch Runbook/ })
+    .click();
+  await executionDocRail
+    .getByRole("textbox", { name: "Document search" })
+    .blur();
   await docPatch;
 
   await expect(updateCardPayloads.length).toBeGreaterThanOrEqual(1);

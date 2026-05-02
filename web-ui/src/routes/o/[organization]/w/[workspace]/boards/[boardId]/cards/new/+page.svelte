@@ -15,6 +15,11 @@
     searchTopics as searchTopicRecords,
     topicSearchResultToPickerOption,
   } from "$lib/searchHelpers";
+  import {
+    orderPickerOptionsByRecent,
+    readRecentAssigneeIds,
+    touchRecentAssigneeIds,
+  } from "$lib/recentAssignees.js";
   import { toActorPickerOptions } from "$lib/systemActor.js";
   import { workspacePath } from "$lib/workspacePaths";
 
@@ -47,7 +52,12 @@
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
   let boardId = $derived($page.params.boardId);
-  let actorOptions = $derived(toActorPickerOptions($actorRegistry));
+  let actorOptions = $derived(
+    orderPickerOptionsByRecent(
+      toActorPickerOptions($actorRegistry),
+      readRecentAssigneeIds(),
+    ),
+  );
   let backingThreadId = $derived(board ? boardBackingThreadId(board) : "");
   let attachContextRefs = $derived(
     [
@@ -197,6 +207,7 @@
           .map((item) => item.trim())
           .filter(Boolean),
       });
+      touchRecentAssigneeIds(assignees);
       await goto(boardHref());
     } catch (e) {
       if (e?.status === 409) {
@@ -356,24 +367,20 @@
 
               <SearchableEntityPicker
                 bind:value={documentId}
-                advancedLabel="Use a manual document ID"
                 helperText="Optional: surface a doc lineage on the card."
                 label="Document"
-                manualLabel="Document ID"
-                manualPlaceholder="onboarding-guide-v1"
                 placeholder="Search documents by title, ID, or timeline ID"
                 searchFn={searchDocumentOptions}
+                showManualEntry={false}
               />
 
               <SearchableMultiEntityPicker
                 bind:values={assignees}
-                advancedLabel="Add a manual assignee ID"
                 helperText="Optional assignees for the card."
                 items={actorOptions}
                 label="Assignees"
-                manualLabel="Assignee ID"
-                manualPlaceholder="actor-ops-ai"
-                placeholder="Search actors by name, ID, or tags"
+                placeholder="Search people and agents"
+                showManualEntry={false}
               />
 
               <label class="text-micro font-medium text-[var(--fg-muted)]">

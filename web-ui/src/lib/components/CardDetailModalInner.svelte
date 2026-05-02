@@ -27,6 +27,11 @@
     documentSearchPickerSubtitle,
   } from "$lib/searchHelpers";
   import { buildPrimitiveRefRoutes } from "$lib/refLinkModel";
+  import {
+    orderPickerOptionsByRecent,
+    readRecentAssigneeIds,
+    touchRecentAssigneeIds,
+  } from "$lib/recentAssignees.js";
   import { toActorPickerOptions } from "$lib/systemActor.js";
   import { boardCardInspectNav } from "$lib/topicRouteUtils";
   import {
@@ -44,6 +49,10 @@
   import SearchableEntityPicker from "$lib/components/SearchableEntityPicker.svelte";
   import SearchableMultiEntityPicker from "$lib/components/SearchableMultiEntityPicker.svelte";
   import TimelineTab from "$lib/components/timeline/TimelineTab.svelte";
+  import {
+    diffCardRevisionAgainstParent,
+    humanizeRevisionFieldKey,
+  } from "$lib/textDiff.js";
 
   let {
     cardItem,
@@ -62,6 +71,9 @@
     onrevisecard = async () => {},
     onremovecard,
     presentation = "modal",
+    /** When set (overview|timeline|revisions), syncs active tab from URL. */
+    requestedDetailTab = "",
+    onDetailTabChange = undefined,
   } = $props();
 
   const timelineWorkspaceSlug = writable("");
@@ -82,11 +94,17 @@
   let derived = $derived(cardItem?.derived);
   let thread = $derived(backing?.thread);
   let cdmDetailPane = $state("overview");
-  let cardRevisions = $state([]);
-  let revisionsLoading = $state(false);
-  let revisionsError = $state("");
+
+  const CDM_TAB = new Set(["overview", "timeline", "revisions"]);
+
+  /** @param {string} tab */
+  function normalizeIncomingTab(tab) {
+    const t = String(tab ?? "").trim();
+    return CDM_TAB.has(t) ? t : "overview";
+  }
+
   let previousCardKey = $state("");
-  let removeCardConfirmOpen = $state(false);
+
   let cardMenuOpen = $state(false);
   /** @type {HTMLElement | undefined} */
   let cardActionsMenuEl = $state(undefined);
@@ -95,6 +113,26 @@
     String(membership?.thread_id ?? backing?.thread_id ?? "").trim(),
   );
   let cardKey = $derived(boardCardStableId(membership));
+
+  $effect(() => {
+    if (!cardKey) {
+      cdmDetailPane = "overview";
+      previousCardKey = "";
+      return;
+    }
+    const nextTab = normalizeIncomingTab(requestedDetailTab);
+    if (cardKey !== previousCardKey) {
+      previousCardKey = cardKey;
+      cdmDetailPane = nextTab;
+      return;
+    }
+    cdmDetailPane = nextTab;
+  });
+
+  let cardRevisions = $state([]);
+  let revisionsLoading = $state(false);
+  let revisionsError = $state("");
+  let removeCardConfirmOpen = $state(false);
 
   let cardInspectNav = $derived(boardCardInspectNav(membership, thread));
   let headerTitle = $derived(boardCardHeaderTitle(membership, thread));
@@ -115,7 +153,12 @@
     return parseDelimitedValues(editRelatedRefs).includes(ct);
   });
 
-  let actorOptions = $derived(toActorPickerOptions($actorRegistry));
+  let assigneeSuggestVersion = $state(0);
+  let assigneeActorOptions = $derived.by(() => {
+    void assigneeSuggestVersion;
+    const base = toActorPickerOptions($actorRegistry);
+    return orderPickerOptionsByRecent(base, readRecentAssigneeIds());
+  });
 
   let backingThreadId = $derived(String(board?.thread_id ?? "").trim());
 
@@ -274,20 +317,8 @@
   }
 
   $effect(() => {
-    if (!cardKey) {
-      cdmDetailPane = "overview";
-      previousCardKey = "";
-      return;
-    }
-    if (cardKey !== previousCardKey) {
-      cdmDetailPane = "overview";
-      previousCardKey = cardKey;
-    }
-  });
-
-  $effect(() => {
     if (cdmDetailPane !== "timeline") return;
-    if (linkedThreadId) void timelineApi.loadTimeline(linkedThreadId);
+    if (cardKey) void timelineApi.loadTimeline(cardKey, { asCard: true });
   });
 
   $effect(() => {
@@ -300,7 +331,11 @@
     revisionsError = "";
     try {
       const result = await coreClient.getCardHistory(cardId);
-      cardRevisions = (result.revisions ?? []).slice().reverse();
+      const rows = Array.isArray(result.revisions) ? result.revisions : [];
+      cardRevisions = [...rows].sort(
+        (a, b) =>
+          Number(b?.revision_number ?? 0) - Number(a?.revision_number ?? 0),
+      );
     } catch (e) {
       revisionsError = e instanceof Error ? e.message : String(e);
       cardRevisions = [];
@@ -362,6 +397,14 @@
     clearFieldErr(field);
     try {
       await onsavecard(cardItem, patch);
+      if (
+        field === "assignees" &&
+        browser &&
+        Array.isArray(patch.assignee_refs)
+      ) {
+        touchRecentAssigneeIds(patch.assignee_refs);
+        assigneeSuggestVersion += 1;
+      }
       cardRevisions = [];
       cardAttachError = "";
     } catch (e) {
@@ -569,6 +612,7 @@
     /** @type {"overview" | "timeline" | "revisions"} */ pane,
   ) {
     cdmDetailPane = pane;
+    onDetailTabChange?.(pane);
   }
 
   $effect(() => {
@@ -955,13 +999,11 @@
     >
       <SearchableMultiEntityPicker
         bind:values={editAssignees}
-        advancedLabel="Add a manual assignee ID"
         helperText=""
-        items={actorOptions}
+        items={assigneeActorOptions}
         label="Assignees"
-        manualLabel="Assignee ID"
-        manualPlaceholder="actor-ops-ai"
-        placeholder="Search people"
+        placeholder="Search people and agents"
+        showManualEntry={false}
       />
       {#if isSaving("assignees")}
         <p class="mt-1 text-micro text-[var(--fg-muted)]">
@@ -986,13 +1028,11 @@
     >
       <SearchableEntityPicker
         bind:value={editDocumentId}
-        advancedLabel="Use a manual document ID"
         helperText=""
         label="Document"
-        manualLabel="Document ID"
-        manualPlaceholder="onboarding-guide-v1"
         placeholder="Link a document"
         searchFn={searchDocumentOptions}
+        showManualEntry={false}
       />
       {#if isSaving("document")}
         <p class="mt-1 text-micro text-[var(--fg-muted)]">Updating document…</p>
@@ -1000,27 +1040,6 @@
       {#if fieldErrors.document}
         <p class="mt-1 text-micro text-danger-text">{fieldErrors.document}</p>
       {/if}
-    </div>
-
-    <div class="cdm-prop-row hidden md:flex">
-      {@render propertyLabel("Column")}
-      <select
-        id={`cdm-col-rail-${cardKey}`}
-        bind:value={moveColumnKey}
-        onchange={handleColumnSelectChange}
-        class="cdm-prop-control"
-        aria-label="Column"
-      >
-        {#each board?.column_schema ?? [] as column (column.key)}
-          <option
-            value={column.key}
-            disabled={column.key === "done" && doneColumnOptionDisabled}
-          >
-            {column.title ||
-              boardColumnTitle(column.key, board?.column_schema ?? [])}
-          </option>
-        {/each}
-      </select>
     </div>
   </aside>
 {/snippet}
@@ -1635,13 +1654,10 @@
         </div>
       {:else if cdmDetailPane === "timeline"}
         <div class="px-4 pb-4 pt-1" data-cdm-panel="timeline">
-          {#if linkedThreadId}
-            <TimelineTab threadId={linkedThreadId} compact />
+          {#if cardKey}
+            <TimelineTab threadId={linkedThreadId} {boardId} compact />
           {:else}
-            <p class="text-meta text-[var(--fg-muted)]">
-              This card has no backing thread; timeline requires a linked
-              thread.
-            </p>
+            <p class="text-meta text-[var(--fg-muted)]">No card identity.</p>
           {/if}
         </div>
       {:else if cdmDetailPane === "revisions"}
@@ -1666,10 +1682,12 @@
             <p class="text-meta text-[var(--fg-muted)]">No revisions found.</p>
           {:else}
             <ol class="space-y-2">
-              {#each cardRevisions as rev}
+              {#each cardRevisions as rev, i (String(rev?.revision_id ?? rev?.id ?? i))}
+                {@const parent = cardRevisions[i + 1] ?? null}
+                {@const delta = diffCardRevisionAgainstParent(parent, rev)}
                 <li class="rounded-md border border-[var(--line)] p-3">
                   <div class="flex items-start justify-between gap-3">
-                    <div>
+                    <div class="min-w-0 flex-1">
                       <p class="text-meta font-medium text-[var(--fg)]">
                         Revision {rev.revision_number}
                       </p>
@@ -1678,21 +1696,88 @@
                           rev.created_by,
                         )}
                       </p>
+                      {#if parent == null}
+                        <p class="mt-1 text-micro text-[var(--fg-muted)]">
+                          Initial revision.
+                        </p>
+                      {:else if delta.length === 0}
+                        <p class="mt-1 text-micro text-[var(--fg-muted)]">
+                          No tracked field changes vs previous.
+                        </p>
+                      {:else}
+                        <p class="mt-1 text-micro text-[var(--fg-muted)]">
+                          Changed: {delta
+                            .map((d) => humanizeRevisionFieldKey(d.field))
+                            .join(", ")}
+                        </p>
+                        <div
+                          class="mt-2 space-y-2 rounded-md border border-[var(--line-subtle)] bg-[var(--bg-soft)] p-2"
+                        >
+                          {#each delta as block (block.field)}
+                            <div>
+                              <p
+                                class="text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-muted)]"
+                              >
+                                {humanizeRevisionFieldKey(block.field)}
+                              </p>
+                              {#each block.lines as ln, li (li + ln.kind)}
+                                <p
+                                  class="break-words font-mono text-[11px] {ln.kind ===
+                                  'add'
+                                    ? 'text-ok-text'
+                                    : 'text-danger-text'}"
+                                >
+                                  {ln.kind === "add" ? "+" : "−"}{ln.text}
+                                </p>
+                              {/each}
+                            </div>
+                          {/each}
+                        </div>
+                      {/if}
                     </div>
                     {#if rev.artifact_ref}
-                      <RefLink refValue={rev.artifact_ref} />
+                      <RefLink
+                        refValue={String(rev.artifact_ref)}
+                        threadId={linkedThreadId}
+                        {boardId}
+                        humanize
+                        showRaw
+                        labelHints={refLabelHints}
+                        artifactRoutesById={modalArtifactRoutesById}
+                      />
                     {/if}
                   </div>
-                  {#if rev.title}
-                    <p class="mt-2 text-meta font-medium text-[var(--fg)]">
-                      {rev.title}
-                    </p>
-                  {/if}
-                  {#if rev.summary}
-                    <div class="mt-2 text-meta text-[var(--fg-muted)]">
-                      <MarkdownRenderer source={rev.summary} />
+                  <details class="group mt-2">
+                    <summary
+                      class="cursor-pointer text-micro text-[var(--fg-muted)] hover:text-[var(--fg)]"
+                    >
+                      Full content
+                    </summary>
+                    <div
+                      class="mt-2 space-y-2 border-t border-[var(--line)] pt-2"
+                    >
+                      {#if rev.title}
+                        <p class="text-meta font-medium text-[var(--fg)]">
+                          {rev.title}
+                        </p>
+                      {/if}
+                      {#if rev.summary}
+                        <MarkdownRenderer
+                          source={String(rev.summary)}
+                          class="markdown-rendered--card-content text-meta text-[var(--fg-muted)]"
+                        />
+                      {/if}
+                      {#if Array.isArray(rev.definition_of_done) && rev.definition_of_done.length}
+                        <ul
+                          class="list-inside list-disc text-[12px] text-[var(--fg-muted)]"
+                        >
+                          {#each rev.definition_of_done as line (line)}
+                            <li>{line}</li>
+                          {/each}
+                        </ul>
+                      {/if}
                     </div>
-                  {/if}
+                  </details>
                 </li>
               {/each}
             </ol>

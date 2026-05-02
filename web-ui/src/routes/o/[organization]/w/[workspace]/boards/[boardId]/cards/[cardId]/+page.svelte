@@ -13,8 +13,11 @@
   import CardDetailModalInner from "$lib/components/CardDetailModalInner.svelte";
   import { coreClient } from "$lib/coreClient";
   import { workspacePath } from "$lib/workspacePaths";
+  import { readEnumSearchParam } from "$lib/urlState";
 
   let { data } = $props();
+
+  const CARD_PAGE_TABS = ["overview", "timeline", "revisions"];
 
   let workspace = $state(null);
   let loading = $state(false);
@@ -27,6 +30,25 @@
   let workspaceSlug = $derived($page.params.workspace);
   let boardId = $derived($page.params.boardId);
   let cardId = $derived($page.params.cardId);
+
+  let cardPageDetailTab = $derived(
+    readEnumSearchParam($page.url.searchParams, "tab", CARD_PAGE_TABS, ""),
+  );
+
+  function handleCardPageDetailTabChange(tab) {
+    const t = String(tab ?? "").trim();
+    const u = new URL($page.url.href);
+    if (t === "overview" || t === "") {
+      u.searchParams.delete("tab");
+    } else if (CARD_PAGE_TABS.includes(t)) {
+      u.searchParams.set("tab", t);
+    }
+    void goto(`${u.pathname}${u.search}`, {
+      replaceState: true,
+      keepFocus: true,
+      noScroll: true,
+    });
+  }
 
   let selectedCard = $derived.by(() => {
     const items = workspace?.cards?.items ?? [];
@@ -259,6 +281,8 @@
     primaryTopic={workspace.primary_topic ?? null}
     columnPeerStableIds={mobileCardDetailColumnPeers}
     {actorName}
+    requestedDetailTab={cardPageDetailTab}
+    onDetailTabChange={handleCardPageDetailTabChange}
     onclose={closeCardPage}
     onmovecard={moveCard}
     onsavecard={saveCardDetails}
