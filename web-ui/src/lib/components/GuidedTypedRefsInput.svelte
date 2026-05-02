@@ -261,11 +261,11 @@
     </div>
   {/if}
 
-  <div class="mt-2 flex flex-wrap gap-2">
+  <div class="mt-2 flex flex-wrap items-center gap-2">
     <input
       aria-label={addInputLabel}
       bind:value={candidateRef}
-      class="min-w-[14rem] flex-1 rounded-md border border-line bg-bg-soft px-3 py-2 text-meta text-fg"
+      class="box-border h-9 min-w-[14rem] flex-1 rounded-md border border-line bg-bg-soft px-3 py-0 text-meta leading-snug text-fg"
       onkeydown={(event) => {
         if (event.key === "Enter") {
           event.preventDefault();
@@ -275,12 +275,17 @@
       placeholder={addInputPlaceholder}
       type="text"
     />
-    <Button variant="secondary" size="compact" onclick={addCandidate}>
+    <Button
+      variant="secondary"
+      size="compact"
+      class="!h-9 min-h-9 shrink-0"
+      onclick={addCandidate}
+    >
       {addButtonLabel}
     </Button>
     {#if !hideAttachFileControl && Array.isArray(attachContextRefs) && attachContextRefs.length > 0}
       <label
-        class="inline-flex cursor-pointer items-center gap-2 rounded-md border border-line bg-bg px-3 py-2 text-micro text-fg hover:bg-bg-soft"
+        class="inline-flex h-9 min-h-9 cursor-pointer items-center gap-2 rounded-md border border-line bg-bg px-3 text-micro text-fg hover:bg-bg-soft"
       >
         <span>{attachBusy ? "Uploading…" : "Attach file"}</span>
         <input

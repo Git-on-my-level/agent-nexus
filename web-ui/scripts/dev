@@ -13,5 +13,7 @@ if [[ -z "${ANX_CORE_BASE_URL:-}" && -z "${ANX_CONTROL_BASE_URL:-}" ]]; then
 	export ANX_CORE_BASE_URL="http://127.0.0.1:8000"
 fi
 
-pnpm install
+# Non-TTY runs (e.g. some IDE task terminals) hit ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY
+# unless installs are non-interactive; scope to install only so Vite does not see CI=true.
+CI=true pnpm install
 exec pnpm exec vite dev --host 0.0.0.0 --port "${PORT:-5173}"

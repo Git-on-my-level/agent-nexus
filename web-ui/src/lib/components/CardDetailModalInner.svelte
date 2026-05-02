@@ -838,9 +838,7 @@
     };
   });
 
-  let showSummary = $derived(
-    Boolean(summaryText) && summaryText !== headerTitle,
-  );
+  let showSummary = $derived(Boolean(summaryText));
 
   let cardIntegrityRows = $derived.by(() => {
     const m = membership;
@@ -1670,7 +1668,7 @@
                   <span
                     >{cardAttachBusy === "resolution"
                       ? "Uploading…"
-                      : "+ Evidence"}</span
+                      : "Evidence"}</span
                   >
                   <input
                     class="sr-only"

@@ -2300,7 +2300,6 @@ const boardCards = [
   {
     id: "card-pricing-audit",
     board_id: "board-summer-menu",
-    thread_id: "thread-pricing-glitch",
     column_key: "review",
     rank: "0002",
     resolution: null,
