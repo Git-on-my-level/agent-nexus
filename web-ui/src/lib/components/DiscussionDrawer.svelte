@@ -3,6 +3,8 @@
   import { onMount } from "svelte";
   import { writable } from "svelte/store";
 
+  /** @typedef {'messages' | 'secondary'} DiscussionSideTab */
+
   /** Inert store so `$derived` / `$state` can subscribe when the drawer uses `useParentTimelineContext`. */
   const emptyTimelineStore = writable({
     timeline: [],
@@ -125,7 +127,42 @@
      * Messages) do not resize and ignore this.
      */
     resizeStorageKey = "",
+    /**
+     * Optional second body (e.g. document revisions). When set, header shows
+     * Discussion vs this tab; only one panel is visible at a time.
+     */
+    secondaryPanel = undefined,
+    secondaryTabLabel = "Revisions",
+    /** @type {DiscussionSideTab} */
+    sideTab = "messages",
+    onSideTabChange = undefined,
+    /**
+     * Optional: run when expanding the rail from the collapsed strip with the
+     * secondary tab selected (e.g. load revision list). Errors are ignored.
+     */
+    prepareSecondaryPanel = undefined,
   } = $props();
+
+  let hasSecondaryPanel = $derived(typeof secondaryPanel === "function");
+
+  /** @param {DiscussionSideTab} tab */
+  function pickSideTab(tab) {
+    if (!hasSecondaryPanel) return;
+    if (tab === "secondary" || tab === "messages") {
+      onSideTabChange?.(tab);
+    }
+  }
+
+  function openRailCollapsed(/** @type {DiscussionSideTab} */ tab) {
+    setOpen(true);
+    pickSideTab(tab);
+  }
+
+  function openRailCollapsedSecondary() {
+    setOpen(true);
+    pickSideTab("secondary");
+    void Promise.resolve(prepareSecondaryPanel?.()).catch(() => {});
+  }
 
   let collapsibleEff = $derived(collapsible ?? layout !== "primary");
   let dockPlacementEff = $derived(
@@ -459,7 +496,36 @@
     suppressClick: false,
   };
 
-  /** @param {PointerEvent & { currentTarget: HTMLButtonElement }} e */
+  /** @param {EventTarget | null} t */
+  function dualDockResizeExemptTarget(t) {
+    if (!(t instanceof Element)) return false;
+    if (t.closest("[data-dd-dock-chevron]")) return true;
+    if (t.closest('button[role="tab"]')) return true;
+    return false;
+  }
+
+  /** @param {PointerEvent & { currentTarget: HTMLElement }} e */
+  function onDualDockHeaderPointerDown(e) {
+    if (dualDockResizeExemptTarget(e.target)) return;
+    onHeaderPointerDown(e);
+  }
+
+  /** @param {PointerEvent & { currentTarget: HTMLElement }} e */
+  function onDualDockHeaderPointerMove(e) {
+    onHeaderPointerMove(e);
+  }
+
+  /** @param {PointerEvent & { currentTarget: HTMLElement }} e */
+  function onDualDockHeaderPointerUp(e) {
+    onHeaderPointerUp(e);
+  }
+
+  /** @param {PointerEvent & { currentTarget: HTMLElement }} e */
+  function onDualDockHeaderPointerCancel(e) {
+    onHeaderPointerCancel(e);
+  }
+
+  /** @param {PointerEvent & { currentTarget: HTMLElement }} e */
   function onHeaderPointerDown(e) {
     if (e.button !== 0 || !showResizeGrip || !dockLayoutHost) return;
     const feed = surfaceEl?.closest(".page-dock-feed");
@@ -473,7 +539,7 @@
     headerGesture.resizeCurrentH = feedRect.height;
   }
 
-  /** @param {PointerEvent & { currentTarget: HTMLButtonElement }} e */
+  /** @param {PointerEvent & { currentTarget: HTMLElement }} e */
   function onHeaderPointerMove(e) {
     if (
       headerGesture.ptrId !== e.pointerId ||
@@ -504,7 +570,7 @@
     }
   }
 
-  /** @param {PointerEvent & { currentTarget: HTMLButtonElement }} e */
+  /** @param {PointerEvent & { currentTarget: HTMLElement }} e */
   function onHeaderPointerUp(e) {
     if (headerGesture.ptrId !== e.pointerId) return;
     headerGesture.ptrId = null;
@@ -539,7 +605,7 @@
     }
   }
 
-  /** @param {PointerEvent & { currentTarget: HTMLButtonElement }} e */
+  /** @param {PointerEvent & { currentTarget: HTMLElement }} e */
   function onHeaderPointerCancel(e) {
     if (headerGesture.ptrId !== e.pointerId) return;
     headerGesture.ptrId = null;
@@ -584,45 +650,126 @@
       style={open ? `--dd-rail-w:${railWidth}px` : undefined}
     >
       {#if !open}
-        <button
-          type="button"
-          class="hidden lg:flex lg:h-dvh lg:min-h-[20rem] lg:w-full lg:cursor-pointer lg:flex-col lg:items-center lg:justify-start lg:gap-3 lg:px-2 lg:py-4 lg:text-fg-muted lg:transition-colors lg:hover:bg-panel-hover lg:hover:text-fg"
-          aria-label={`Show ${label.toLowerCase()}${messageCount > 0 ? `, ${messageCount} ${messageCount === 1 ? "comment" : "comments"}` : ""}`}
-          title={`Show ${label.toLowerCase()}`}
-          onclick={() => setOpen(true)}
-        >
-          <span
-            class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-line bg-bg-soft text-accent-text"
-            aria-hidden="true"
+        {#if hasSecondaryPanel}
+          <div
+            class="hidden min-h-0 lg:flex lg:h-dvh lg:min-h-[20rem] lg:w-full lg:flex-col lg:items-stretch"
+            role="group"
+            aria-label={`Open ${label.toLowerCase()} or ${secondaryTabLabel.toLowerCase()} panel`}
           >
-            <svg
-              class="h-4 w-4"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              viewBox="0 0 24 24"
+            <button
+              type="button"
+              class="flex min-h-0 flex-1 cursor-pointer flex-col items-center justify-center gap-2 px-2 py-3 text-fg-muted transition-colors hover:bg-panel-hover hover:text-fg"
+              aria-label={`Show ${label.toLowerCase()}${messageCount > 0 ? `, ${messageCount} ${messageCount === 1 ? "comment" : "comments"}` : ""}`}
+              title={label}
+              onclick={() => openRailCollapsed("messages")}
+            >
+              <span
+                class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-line bg-bg-soft text-accent-text"
+                aria-hidden="true"
+              >
+                <svg
+                  class="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M8 12h8M8 8h8m-8 8h5m-9 3.5V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-5 3.5Z"
+                  />
+                </svg>
+              </span>
+              <span
+                class="min-h-0 [writing-mode:vertical-rl] rotate-180 text-micro font-semibold tracking-normal text-fg"
+              >
+                {label}
+              </span>
+              {#if railBadgeText}
+                <span
+                  class="inline-flex min-h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-accent-soft px-1 text-[0.65rem] font-semibold leading-none text-accent-text"
+                >
+                  {railBadgeText}
+                </span>
+              {/if}
+            </button>
+            <div class="h-px w-full shrink-0 bg-line" role="separator"></div>
+            <button
+              type="button"
+              class="flex min-h-0 flex-1 cursor-pointer flex-col items-center justify-center gap-2 px-2 py-3 text-fg-muted transition-colors hover:bg-panel-hover hover:text-fg"
+              aria-label={`Show ${secondaryTabLabel.toLowerCase()}`}
+              title={secondaryTabLabel}
+              onclick={() => openRailCollapsedSecondary()}
+            >
+              <span
+                class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-line bg-bg-soft text-fg-muted"
+                aria-hidden="true"
+              >
+                <svg
+                  class="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+              </span>
+              <span
+                class="min-h-0 [writing-mode:vertical-rl] rotate-180 text-micro font-semibold tracking-normal text-fg"
+              >
+                {secondaryTabLabel}
+              </span>
+            </button>
+          </div>
+        {:else}
+          <button
+            type="button"
+            class="hidden lg:flex lg:h-dvh lg:min-h-[20rem] lg:w-full lg:cursor-pointer lg:flex-col lg:items-center lg:justify-start lg:gap-3 lg:px-2 lg:py-4 lg:text-fg-muted lg:transition-colors lg:hover:bg-panel-hover lg:hover:text-fg"
+            aria-label={`Show ${label.toLowerCase()}${messageCount > 0 ? `, ${messageCount} ${messageCount === 1 ? "comment" : "comments"}` : ""}`}
+            title={`Show ${label.toLowerCase()}`}
+            onclick={() => setOpen(true)}
+          >
+            <span
+              class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-line bg-bg-soft text-accent-text"
               aria-hidden="true"
             >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M8 12h8M8 8h8m-8 8h5m-9 3.5V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-5 3.5Z"
-              />
-            </svg>
-          </span>
-          <span
-            class="mt-1 min-h-0 [writing-mode:vertical-rl] rotate-180 text-micro font-semibold tracking-normal text-fg"
-          >
-            Comments
-          </span>
-          {#if railBadgeText}
-            <span
-              class="mt-1 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-accent-soft px-1 text-[0.65rem] font-semibold leading-none text-accent-text"
-            >
-              {railBadgeText}
+              <svg
+                class="h-4 w-4"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M8 12h8M8 8h8m-8 8h5m-9 3.5V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-5 3.5Z"
+                />
+              </svg>
             </span>
-          {/if}
-        </button>
+            <span
+              class="mt-1 min-h-0 [writing-mode:vertical-rl] rotate-180 text-micro font-semibold tracking-normal text-fg"
+            >
+              Comments
+            </span>
+            {#if railBadgeText}
+              <span
+                class="mt-1 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-accent-soft px-1 text-[0.65rem] font-semibold leading-none text-accent-text"
+              >
+                {railBadgeText}
+              </span>
+            {/if}
+          </button>
+        {/if}
       {:else}
         <div
           class="flex w-full min-w-0 flex-col max-lg:max-h-[min(70vh,44rem)] lg:h-dvh lg:max-h-dvh lg:flex-row"
@@ -653,9 +800,42 @@
             <div
               class="flex shrink-0 items-center justify-between gap-1 border-b border-line px-3 py-1.5"
             >
-              <h2 class="min-w-0 truncate text-micro font-medium text-fg">
-                {label}
-              </h2>
+              {#if hasSecondaryPanel}
+                <div
+                  class="flex min-w-0 flex-1 items-center gap-0.5"
+                  role="tablist"
+                  aria-label="Document sidebar panels"
+                >
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={sideTab === "messages"}
+                    class="min-w-0 flex-1 rounded-md px-2 py-1 text-center text-micro font-medium transition-colors {sideTab ===
+                    'messages'
+                      ? 'bg-line-subtle text-fg'
+                      : 'text-fg-muted hover:bg-bg-soft hover:text-fg'}"
+                    onclick={() => pickSideTab("messages")}
+                  >
+                    {label}
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={sideTab === "secondary"}
+                    class="min-w-0 flex-1 rounded-md px-2 py-1 text-center text-micro font-medium transition-colors {sideTab ===
+                    'secondary'
+                      ? 'bg-line-subtle text-fg'
+                      : 'text-fg-muted hover:bg-bg-soft hover:text-fg'}"
+                    onclick={() => pickSideTab("secondary")}
+                  >
+                    {secondaryTabLabel}
+                  </button>
+                </div>
+              {:else}
+                <h2 class="min-w-0 truncate text-micro font-medium text-fg">
+                  {label}
+                </h2>
+              {/if}
               <button
                 type="button"
                 class="inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-bg-soft hover:text-fg"
@@ -680,24 +860,32 @@
               </button>
             </div>
             <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <MessagesTab
-                {threadId}
-                postRouteScopeId={postRouteScopeId || threadId}
-                onMessagePost={handleMessagePost}
-                workspaceId={String(workspaceId ?? "")}
-                {subjectRefFilter}
-                {extraPostRefs}
-                discussionEmptyMessage={emptyMessage}
-                {pendingDocumentComment}
-                {onPendingDocumentPostConsumed}
-                {onClearPendingDocumentPost}
-                {currentDocumentContent}
-                {archiveLabelKind}
-                {onDocumentTextAnchorContextChange}
-                pinComposer={true}
-                pinComposerNarrow={false}
-                pinComposerAlignThreadEnd={pinComposerAlignThreadEndResolved}
-              />
+              {#if !hasSecondaryPanel || sideTab === "messages"}
+                <MessagesTab
+                  {threadId}
+                  postRouteScopeId={postRouteScopeId || threadId}
+                  onMessagePost={handleMessagePost}
+                  workspaceId={String(workspaceId ?? "")}
+                  {subjectRefFilter}
+                  {extraPostRefs}
+                  discussionEmptyMessage={emptyMessage}
+                  {pendingDocumentComment}
+                  {onPendingDocumentPostConsumed}
+                  {onClearPendingDocumentPost}
+                  {currentDocumentContent}
+                  {archiveLabelKind}
+                  {onDocumentTextAnchorContextChange}
+                  pinComposer={true}
+                  pinComposerNarrow={false}
+                  pinComposerAlignThreadEnd={pinComposerAlignThreadEndResolved}
+                />
+              {:else if secondaryPanel}
+                <div
+                  class="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden"
+                >
+                  {@render secondaryPanel()}
+                </div>
+              {/if}
             </div>
           </div>
         </div>
@@ -721,50 +909,162 @@
       data-discussion-dock-placement={dockPlacementEff}
     >
       {#if collapsibleEff}
-        <!-- One bar: tap toggles; when expanded on fixed dock, vertical drag resizes. -->
-        <button
-          type="button"
-          class="flex w-full min-w-0 touch-manipulation items-center gap-2 py-2 text-left transition-colors hover:bg-line-subtle {narrowEdgeToEdge
-            ? 'max-lg:px-4 px-3'
-            : 'px-3'} {showResizeGrip
-            ? 'cursor-ns-resize select-none touch-none'
-            : ''}"
-          aria-expanded={open}
-          aria-label={showResizeGrip
-            ? `${label}. Tap to collapse, or drag vertically to resize.`
-            : open
-              ? `${label}. Tap to collapse.`
-              : `${label}. Tap to expand.`}
-          onclick={onHeaderClick}
-          onpointerdown={onHeaderPointerDown}
-          onpointermove={onHeaderPointerMove}
-          onpointerup={onHeaderPointerUp}
-          onpointercancel={onHeaderPointerCancel}
-        >
-          <svg
-            class="h-3.5 w-3.5 shrink-0 text-fg-muted transition-transform {open
-              ? 'rotate-180'
+        {#if hasSecondaryPanel}
+          <div
+            role="group"
+            aria-label="Discussion panel header"
+            class="flex w-full min-w-0 touch-manipulation items-center gap-1 py-2 {narrowEdgeToEdge
+              ? 'max-lg:px-4 px-3'
+              : 'px-3'} {showResizeGrip
+              ? 'cursor-ns-resize select-none max-lg:touch-none'
               : ''}"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            stroke-width="2"
-            aria-hidden="true"
+            title={showResizeGrip
+              ? "Drag up or down to resize the panel (try the grip or the empty area)"
+              : undefined}
+            onpointerdown={showResizeGrip
+              ? onDualDockHeaderPointerDown
+              : undefined}
+            onpointermove={showResizeGrip
+              ? onDualDockHeaderPointerMove
+              : undefined}
+            onpointerup={showResizeGrip ? onDualDockHeaderPointerUp : undefined}
+            onpointercancel={showResizeGrip
+              ? onDualDockHeaderPointerCancel
+              : undefined}
           >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              d="M19 9l-7 7-7-7"
-            />
-          </svg>
-          <span class="min-w-0 flex-1 truncate text-micro font-medium text-fg"
-            >{label}</span
-          >
-          {#if messageCount > 0}
-            <span class="shrink-0 text-micro text-fg-muted">{messageCount}</span
+            <button
+              type="button"
+              data-dd-dock-chevron
+              class="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-line-subtle"
+              aria-expanded={open}
+              aria-label={showResizeGrip
+                ? `${label}. Tap to collapse, or drag elsewhere on the bar to resize.`
+                : open
+                  ? `${label}. Tap to collapse.`
+                  : `${label}. Tap to expand.`}
+              onclick={onHeaderClick}
             >
-          {/if}
-        </button>
+              <svg
+                class="h-3.5 w-3.5 shrink-0 transition-transform {open
+                  ? 'rotate-180'
+                  : ''}"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="2"
+                aria-hidden="true"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M19 9l-7 7-7-7"
+                />
+              </svg>
+            </button>
+            {#if showResizeGrip}
+              <span
+                class="flex shrink-0 flex-col items-center justify-center gap-1 px-0.5 opacity-60"
+                aria-hidden="true"
+              >
+                <span class="h-0.5 w-6 rounded-full bg-fg-muted"></span>
+                <span class="h-0.5 w-6 rounded-full bg-fg-muted"></span>
+                <span class="h-0.5 w-6 rounded-full bg-fg-muted"></span>
+              </span>
+            {/if}
+            <div
+              class="flex min-w-0 flex-1 items-center gap-0.5"
+              role="tablist"
+              aria-label="Document sidebar panels"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={sideTab === "messages"}
+                class="min-w-0 flex-1 rounded-md px-2 py-1.5 text-center text-micro font-medium transition-colors {sideTab ===
+                'messages'
+                  ? 'bg-line-subtle text-fg'
+                  : 'text-fg-muted hover:bg-bg-soft hover:text-fg'}"
+                onclick={() => {
+                  if (!open) setOpen(true);
+                  pickSideTab("messages");
+                }}
+              >
+                {label}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={sideTab === "secondary"}
+                class="min-w-0 flex-1 rounded-md px-2 py-1.5 text-center text-micro font-medium transition-colors {sideTab ===
+                'secondary'
+                  ? 'bg-line-subtle text-fg'
+                  : 'text-fg-muted hover:bg-bg-soft hover:text-fg'}"
+                onclick={() => {
+                  if (!open) setOpen(true);
+                  pickSideTab("secondary");
+                }}
+              >
+                {secondaryTabLabel}
+              </button>
+            </div>
+            <span
+              class="inline-flex min-h-8 min-w-[2.25rem] shrink-0 items-center justify-end tabular-nums text-micro text-fg-muted"
+              aria-label={sideTab === "messages" && messageCount > 0
+                ? `${messageCount} comments`
+                : undefined}
+            >
+              {#if sideTab === "messages" && messageCount > 0}
+                {messageCount > 99 ? "99+" : String(messageCount)}
+              {/if}
+            </span>
+          </div>
+        {:else}
+          <!-- One bar: tap toggles; when expanded on fixed dock, vertical drag resizes. -->
+          <button
+            type="button"
+            class="flex w-full min-w-0 touch-manipulation items-center gap-2 py-2 text-left transition-colors hover:bg-line-subtle {narrowEdgeToEdge
+              ? 'max-lg:px-4 px-3'
+              : 'px-3'} {showResizeGrip
+              ? 'cursor-ns-resize select-none touch-none'
+              : ''}"
+            aria-expanded={open}
+            aria-label={showResizeGrip
+              ? `${label}. Tap to collapse, or drag vertically to resize.`
+              : open
+                ? `${label}. Tap to collapse.`
+                : `${label}. Tap to expand.`}
+            onclick={onHeaderClick}
+            onpointerdown={onHeaderPointerDown}
+            onpointermove={onHeaderPointerMove}
+            onpointerup={onHeaderPointerUp}
+            onpointercancel={onHeaderPointerCancel}
+          >
+            <svg
+              class="h-3.5 w-3.5 shrink-0 text-fg-muted transition-transform {open
+                ? 'rotate-180'
+                : ''}"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+              aria-hidden="true"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M19 9l-7 7-7-7"
+              />
+            </svg>
+            <span class="min-w-0 flex-1 truncate text-micro font-medium text-fg"
+              >{label}</span
+            >
+            {#if messageCount > 0}
+              <span class="shrink-0 text-micro text-fg-muted"
+                >{messageCount}</span
+              >
+            {/if}
+          </button>
+        {/if}
       {/if}
 
       {#if showOpen}
@@ -787,24 +1087,32 @@
               ? 'lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-hidden'
               : ''}"
           >
-            <MessagesTab
-              {threadId}
-              postRouteScopeId={postRouteScopeId || threadId}
-              onMessagePost={handleMessagePost}
-              {workspaceId}
-              {subjectRefFilter}
-              {extraPostRefs}
-              {pendingDocumentComment}
-              {onPendingDocumentPostConsumed}
-              {onClearPendingDocumentPost}
-              {currentDocumentContent}
-              {archiveLabelKind}
-              {onDocumentTextAnchorContextChange}
-              discussionEmptyMessage={emptyMessage}
-              pinComposer={pinComposerEff}
-              pinComposerNarrow={pinComposerNarrowEff}
-              pinComposerAlignThreadEnd={pinComposerAlignThreadEndResolved}
-            />
+            {#if !hasSecondaryPanel || sideTab === "messages"}
+              <MessagesTab
+                {threadId}
+                postRouteScopeId={postRouteScopeId || threadId}
+                onMessagePost={handleMessagePost}
+                {workspaceId}
+                {subjectRefFilter}
+                {extraPostRefs}
+                {pendingDocumentComment}
+                {onPendingDocumentPostConsumed}
+                {onClearPendingDocumentPost}
+                {currentDocumentContent}
+                {archiveLabelKind}
+                {onDocumentTextAnchorContextChange}
+                discussionEmptyMessage={emptyMessage}
+                pinComposer={pinComposerEff}
+                pinComposerNarrow={pinComposerNarrowEff}
+                pinComposerAlignThreadEnd={pinComposerAlignThreadEndResolved}
+              />
+            {:else if secondaryPanel}
+              <div
+                class="min-h-0 min-w-0 max-lg:flex-1 max-lg:overflow-y-auto lg:h-full lg:min-h-0 lg:overflow-y-auto"
+              >
+                {@render secondaryPanel()}
+              </div>
+            {/if}
           </div>
         </div>
       {/if}

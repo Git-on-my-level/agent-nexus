@@ -51,6 +51,10 @@
   let loadError = $state("");
   let loadedDocumentId = $state("");
   let historyOpen = $state(false);
+  /** When the doc has a thread, revisions share the discussion rail (`discussion` vs `revisions`). */
+  let docRailSidePanel = $state(
+    /** @type {'discussion' | 'revisions'} */ ("discussion"),
+  );
   /**
    * Per polish §P5 the breadcrumb shows the parent topic when the document is
    * anchored to a topic ref. We cache `{id, title}` here and only fetch when
@@ -323,6 +327,7 @@
     selectedRevision = null;
     historyLoading = false;
     historyOpen = false;
+    docRailSidePanel = "discussion";
     editOpen = false;
     try {
       const result = await coreClient.getDocument(targetId);
@@ -340,12 +345,27 @@
     }
   }
 
-  async function loadHistory() {
-    if (!documentId || revisions.length > 0) {
+  async function openRevisionHistoryNoThread() {
+    if (!documentId || document?.thread_id) return;
+    if (revisions.length > 0) {
       historyOpen = !historyOpen;
       return;
     }
     historyOpen = true;
+    historyLoading = true;
+    try {
+      const result = await coreClient.getDocumentHistory(documentId);
+      revisions = (result.revisions ?? []).slice().reverse();
+    } catch {
+      revisions = [];
+    } finally {
+      historyLoading = false;
+    }
+  }
+
+  /** Fetch revision list when opening the rail Revisions tab (threaded docs). */
+  async function ensureRevisionHistoryForRail() {
+    if (!documentId || revisions.length > 0) return;
     historyLoading = true;
     try {
       const result = await coreClient.getDocumentHistory(documentId);
@@ -432,6 +452,7 @@
     saveError = "";
     editOpen = true;
     historyOpen = false;
+    docRailSidePanel = "discussion";
   }
 
   function closeEdit() {
@@ -821,6 +842,7 @@
       }
       e.preventDefault();
       docCommentBodyFocus.set(ids);
+      docRailSidePanel = "discussion";
       discussionOpenSignal += 1;
       void tick().then(() => {
         if (typeof window === "undefined") return;
@@ -900,6 +922,7 @@
       end_offset: fields.end_offset,
       anchor_status: fields.anchor_status,
     };
+    docRailSidePanel = "discussion";
     discussionOpenSignal += 1;
     // Stop the floating pill from lingering over the freshly-cleared
     // selection while the operator is now writing in the rail.
@@ -1010,6 +1033,83 @@
       </button>
     </div>
   {/if}
+
+  {#snippet docRevisionPanelBody()}
+    {#snippet revisionRows()}
+      {#each revisions as rev, i}
+        {@const isHead = rev.revision_id === headRevision?.revision_id}
+        {@const isSelected = displayedRevision?.revision_id === rev.revision_id}
+        <button
+          class="w-full px-3 py-3 text-left transition-colors hover:bg-line-subtle {i >
+          0
+            ? 'border-t border-line'
+            : ''} {isSelected ? 'bg-line-subtle' : ''}"
+          onclick={() => selectRevision(rev)}
+          type="button"
+        >
+          <div class="flex items-center gap-2">
+            <div class="relative flex flex-col items-center">
+              <div
+                class="h-2.5 w-2.5 rounded-full {isHead
+                  ? 'bg-ok-text'
+                  : isSelected
+                    ? 'bg-accent-text'
+                    : 'bg-fg-subtle'}"
+              ></div>
+              {#if i < revisions.length - 1}
+                <div class="absolute top-3 h-full w-px bg-line"></div>
+              {/if}
+            </div>
+            <div class="min-w-0 flex-1">
+              <p class="text-meta font-medium text-fg">
+                {#if isHead}Current version{:else}Version {rev.revision_number}{/if}
+              </p>
+              <p class="text-micro text-fg-muted">
+                {formatTimestamp(rev.created_at)} · {actorName(rev.created_by)}
+              </p>
+              {#if rev.revision_hash}
+                <p class="mt-0.5 truncate font-mono text-micro text-fg-muted">
+                  {rev.revision_hash.slice(0, 12)}...
+                </p>
+              {/if}
+            </div>
+          </div>
+        </button>
+      {/each}
+    {/snippet}
+    {#if historyLoading}
+      <div class="flex items-center gap-2 px-3 py-4 text-micro text-fg-muted">
+        <svg class="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+          <circle
+            class="opacity-25"
+            cx="12"
+            cy="12"
+            r="10"
+            stroke="currentColor"
+            stroke-width="4"
+          ></circle>
+          <path
+            class="opacity-75"
+            fill="currentColor"
+            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+          ></path>
+        </svg>
+        Loading revision history...
+      </div>
+    {:else if revisions.length === 0}
+      <p class="px-3 py-4 text-micro text-fg-muted">
+        No earlier revisions found.
+      </p>
+    {:else if document.thread_id}
+      {@render revisionRows()}
+    {:else}
+      <div
+        class="max-h-[calc(100vh-12rem)] overflow-y-auto max-lg:max-h-[min(58dvh,28rem)]"
+      >
+        {@render revisionRows()}
+      </div>
+    {/if}
+  {/snippet}
 
   {#snippet docDesktop()}
     <h1 class="min-w-0 text-subtitle font-semibold text-fg">
@@ -1188,28 +1288,6 @@
                     {headContentType} — edit via CLI
                   </span>
                 {/if}
-                <Button
-                  class="max-lg:hidden"
-                  variant="secondary"
-                  size="compact"
-                  onclick={loadHistory}
-                  type="button"
-                >
-                  <svg
-                    class="h-3.5 w-3.5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    stroke-width="2"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                  Revision history
-                </Button>
                 <div bind:this={moreActionsRoot} class="relative">
                   <button
                     type="button"
@@ -1244,17 +1322,19 @@
                       >
                         Settings
                       </a>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        class="block w-full px-3 py-2 text-left text-micro text-fg hover:bg-line-subtle lg:hidden"
-                        onclick={() => {
-                          closeMoreActions();
-                          void loadHistory();
-                        }}
-                      >
-                        Revision history
-                      </button>
+                      {#if !document.thread_id}
+                        <button
+                          type="button"
+                          role="menuitem"
+                          class="block w-full px-3 py-2 text-left text-micro text-fg hover:bg-line-subtle"
+                          onclick={() => {
+                            closeMoreActions();
+                            void openRevisionHistoryNoThread();
+                          }}
+                        >
+                          Revision history
+                        </button>
+                      {/if}
                       {#if !document.archived_at}
                         <button
                           type="button"
@@ -1402,7 +1482,7 @@
           </div>
         </div>
 
-        {#if historyOpen}
+        {#if historyOpen && !document.thread_id}
           <aside
             class="shrink-0 lg:w-72 max-lg:fixed max-lg:inset-x-3 max-lg:top-[5.75rem] max-lg:z-40 max-lg:w-auto"
           >
@@ -1435,89 +1515,7 @@
                 </button>
               </div>
 
-              {#if historyLoading}
-                <div
-                  class="flex items-center gap-2 px-4 py-4 text-micro text-fg-muted"
-                >
-                  <svg
-                    class="h-3.5 w-3.5 animate-spin"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      class="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      stroke-width="4"
-                    ></circle>
-                    <path
-                      class="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
-                  </svg>
-                  Loading revision history...
-                </div>
-              {:else if revisions.length === 0}
-                <p class="px-4 py-4 text-micro text-fg-muted">
-                  No earlier revisions found.
-                </p>
-              {:else}
-                <div
-                  class="max-h-[calc(100vh-12rem)] overflow-y-auto max-lg:max-h-[min(58dvh,28rem)]"
-                >
-                  {#each revisions as rev, i}
-                    {@const isHead =
-                      rev.revision_id === headRevision?.revision_id}
-                    {@const isSelected =
-                      displayedRevision?.revision_id === rev.revision_id}
-                    <button
-                      class="w-full px-4 py-3 text-left transition-colors hover:bg-line-subtle max-lg:px-3 max-lg:py-2.5 {i >
-                      0
-                        ? 'border-t border-line'
-                        : ''} {isSelected ? 'bg-line-subtle' : ''}"
-                      onclick={() => selectRevision(rev)}
-                      type="button"
-                    >
-                      <div class="flex items-center gap-2">
-                        <div class="relative flex flex-col items-center">
-                          <div
-                            class="h-2.5 w-2.5 rounded-full {isHead
-                              ? 'bg-ok-text'
-                              : isSelected
-                                ? 'bg-accent-text'
-                                : 'bg-fg-subtle'}"
-                          ></div>
-                          {#if i < revisions.length - 1}
-                            <div
-                              class="absolute top-3 h-full w-px bg-line"
-                            ></div>
-                          {/if}
-                        </div>
-                        <div class="min-w-0 flex-1">
-                          <p class="text-meta font-medium text-fg">
-                            {#if isHead}Current version{:else}Version {rev.revision_number}{/if}
-                          </p>
-                          <p class="text-micro text-fg-muted">
-                            {formatTimestamp(rev.created_at)} · {actorName(
-                              rev.created_by,
-                            )}
-                          </p>
-                          {#if rev.revision_hash}
-                            <p
-                              class="mt-0.5 truncate font-mono text-micro text-fg-muted"
-                            >
-                              {rev.revision_hash.slice(0, 12)}...
-                            </p>
-                          {/if}
-                        </div>
-                      </div>
-                    </button>
-                  {/each}
-                </div>
-              {/if}
+              {@render docRevisionPanelBody()}
             </div>
           </aside>
         {/if}
@@ -1532,6 +1530,9 @@
       <div class="page-dock-feed lg:contents">
         <DocumentDiscussionRail
           doc={document}
+          bind:docSidePanel={docRailSidePanel}
+          revisionPanel={docRevisionPanelBody}
+          prepareRevisionHistory={ensureRevisionHistoryForRail}
           {workspaceSlug}
           workspaceId={data?.workspaceId ?? ""}
           openSignal={discussionOpenSignal}

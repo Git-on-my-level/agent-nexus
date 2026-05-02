@@ -9,6 +9,12 @@
     doc,
     workspaceSlug = "",
     workspaceId = "",
+    /**
+     * `discussion` — MessagesTab. `revisions` — document history (mutually exclusive).
+     */
+    docSidePanel = $bindable("discussion"),
+    /** Body for the revisions tab; same chrome as discussion (DiscussionDrawer). */
+    revisionPanel = undefined,
     /** Increment to force the rail open (e.g. when starting a text comment from the doc body). */
     openSignal = 0,
     /** Set when the operator is composing a document text comment anchored to a selection. */
@@ -23,6 +29,8 @@
      */
     currentDocumentContent = "",
     onDocumentTextAnchorContextChange = undefined,
+    /** When opening Revisions from the collapsed rail, fetch history if needed. */
+    prepareRevisionHistory = undefined,
   } = $props();
 
   let threadId = $derived(String(doc?.thread_id ?? "").trim());
@@ -54,6 +62,10 @@
   // they need it. Mod+Opt+M matches Google Docs' comment shortcut.
   const DOC_DISCUSSION_EMPTY =
     "No comments yet. Select text in the doc and press ⌘⌥M (Ctrl+Alt+M) to comment, or write a freeform note below.";
+
+  let drawerSideTab = $derived(
+    docSidePanel === "revisions" ? "secondary" : "messages",
+  );
 </script>
 
 {#if threadId && docId}
@@ -77,5 +89,12 @@
     {openSignal}
     expandFillsParent
     narrowEdgeToEdge
+    secondaryPanel={revisionPanel}
+    secondaryTabLabel="Revisions"
+    sideTab={drawerSideTab}
+    onSideTabChange={(t) => {
+      docSidePanel = t === "secondary" ? "revisions" : "discussion";
+    }}
+    prepareSecondaryPanel={prepareRevisionHistory}
   />
 {/if}
