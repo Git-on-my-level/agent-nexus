@@ -2230,7 +2230,7 @@ Inputs:
   - body `card.topic_ref` (string)
   - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get --board-id <board-id>`, `anx boards workspace --board-id <board-id>`, or the latest board mutation response.
   - body `request_key` (string)
-  Enum values: card.column_key: backlog, blocked, done, in_progress, ready, review; card.resolution: canceled, done; card.risk: critical, high, low, medium
+  Enum values: card.column_key: backlog, blocked, done, in_progress, ready, review; card.resolution: done; card.risk: critical, high, low, medium
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2704,7 +2704,7 @@ Inputs:
   - body `patch.resolution_refs` (list<any>)
   - body `patch.risk` (string)
   - body `patch.topic_ref` (string)
-  Enum values: patch.resolution: canceled, done; patch.risk: critical, high, low, medium
+  Enum values: patch.resolution: done; patch.risk: critical, high, low, medium
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -4232,7 +4232,7 @@ Local Help: cards resolve
 - JSON body: `{ column_key: "done", resolution, resolution_refs, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.
 - Examples:
   - `anx cards resolve --card <card-id> --resolution-ref event:<event-id>`
-  - `anx cards resolve --card <card-id> --resolution canceled --resolution-ref artifact:<artifact-id>`
+  - `anx cards resolve --card <card-id> --resolution-ref event:<event-id>`
 
 Flags:
   --card <card-id>             Card id or unique prefix to resolve.

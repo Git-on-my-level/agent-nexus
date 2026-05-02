@@ -579,11 +579,13 @@ test("board UI supports create/edit and card mutation flows", async ({
 
       movingCard.column_key = payload.column_key;
       if (payload.column_key === "done") {
-        movingCard.resolution =
-          payload.resolution === "canceled" ? "canceled" : "done";
+        movingCard.resolution = "done";
         movingCard.resolution_refs = Array.isArray(payload.resolution_refs)
           ? payload.resolution_refs
           : [];
+      } else {
+        movingCard.resolution = null;
+        movingCard.resolution_refs = [];
       }
       const targetCards = groupedCards[payload.column_key];
       let insertIndex = targetCards.length;
@@ -827,10 +829,11 @@ test("board UI supports create/edit and card mutation flows", async ({
     "Review Prep",
   );
 
-  const resolutionComposer = reviewPrepDialog
-    .locator("section")
+  const resolutionDetails = reviewPrepDialog
+    .locator("details")
     .filter({ hasText: "Resolution refs" });
-  await resolutionComposer
+  await resolutionDetails.locator("summary").click();
+  await resolutionDetails
     .getByLabel("Add resolution ref")
     .fill("event:review-signoff-1");
   const waitRefsPatch = page.waitForResponse(
@@ -840,28 +843,22 @@ test("board UI supports create/edit and card mutation flows", async ({
       resp.url().includes("thread-review"),
     { timeout: 15_000 },
   );
-  await resolutionComposer
+  await resolutionDetails
     .getByRole("button", { name: "Add ref", exact: true })
     .click();
   await waitRefsPatch;
 
-  const waitResolutionPatch = page.waitForResponse(
+  const waitMoveDone = page.waitForResponse(
     (resp) =>
-      resp.url().includes("/cards/") &&
-      resp.request().method() === "PATCH" &&
-      resp.url().includes("thread-review"),
+      resp.url().includes("/cards/thread-review/move") &&
+      resp.request().method() === "POST",
     { timeout: 15_000 },
   );
-  await reviewPrepDialog
-    .getByRole("combobox", { name: "Resolution", exact: true })
-    .first()
-    .selectOption("done");
-  await waitResolutionPatch;
-
   await reviewPrepDialog
     .getByRole("combobox", { name: "Column" })
     .first()
     .selectOption("done");
+  await waitMoveDone;
 
   await page
     .getByRole("dialog", { name: "Card details" })
@@ -955,9 +952,8 @@ test("board UI supports create/edit and card mutation flows", async ({
       cardId: "thread-review",
       payload: {
         actor_id: actorId,
-        if_board_updated_at: "2026-03-05T07:00:00.000Z",
+        if_board_updated_at: "2026-03-05T06:00:00.000Z",
         column_key: "done",
-        resolution: "done",
         resolution_refs: ["event:review-signoff-1"],
       },
     },
@@ -970,7 +966,7 @@ test("board UI supports create/edit and card mutation flows", async ({
   expect(removePayloads).toEqual([
     {
       actor_id: actorId,
-      if_board_updated_at: "2026-03-05T09:00:00.000Z",
+      if_board_updated_at: "2026-03-05T08:00:00.000Z",
     },
   ]);
 });
@@ -1194,6 +1190,14 @@ test("board edit conflict reloads latest state and allows retry", async ({
       await route.continue();
       return;
     }
+    if (request.method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ board }),
+      });
+      return;
+    }
 
     const payload = JSON.parse(request.postData() ?? "{}");
     patchPayloads.push(payload);
@@ -1235,21 +1239,27 @@ test("board edit conflict reloads latest state and allows retry", async ({
     page.getByRole("heading", { name: "Conflict Board" }),
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "Edit" }).click();
-  await page.getByLabel("Board title").fill("Conflict Board Edited");
-  await page.getByRole("button", { name: "Save board" }).click();
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("menuitem", { name: "Settings" }).click();
+  await expect(page).toHaveURL(/\/boards\/board-conflict\/edit$/);
+  await expect(
+    page.getByRole("heading", { name: "Board settings" }),
+  ).toBeVisible();
+
+  await page.getByLabel("Title", { exact: true }).fill("Conflict Board Edited");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
 
   await expect(
     page.getByText("Board was updated elsewhere.", { exact: false }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Server board title" }),
-  ).toBeVisible();
+  await expect(page.getByLabel("Title", { exact: true })).toHaveValue(
+    "Server board title",
+  );
 
-  await page.getByLabel("Board title").fill("Recovered Board Title");
-  await page.getByRole("button", { name: "Save board" }).click();
+  await page.getByLabel("Title", { exact: true }).fill("Recovered Board Title");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
 
-  await expect(page.getByText("Board updated.", { exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/boards\/board-conflict$/);
   await expect(
     page.getByRole("heading", { name: "Recovered Board Title" }),
   ).toBeVisible();
@@ -1260,9 +1270,7 @@ test("board edit conflict reloads latest state and allows retry", async ({
       if_updated_at: "2026-03-04T00:00:00.000Z",
       patch: {
         title: "Conflict Board Edited",
-        document_refs: ["document:doc-runbook"],
-        owners: [actorId],
-        pinned_refs: [],
+        summary: "",
       },
     },
     {
@@ -1270,9 +1278,7 @@ test("board edit conflict reloads latest state and allows retry", async ({
       if_updated_at: "2026-03-04T02:00:00.000Z",
       patch: {
         title: "Recovered Board Title",
-        document_refs: ["document:doc-runbook"],
-        owners: [actorId],
-        pinned_refs: [],
+        summary: "",
       },
     },
   ]);

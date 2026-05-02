@@ -451,6 +451,10 @@ func prepareBoardCardInsert(input AddBoardCardInput) (boardCardInsertPrep, error
 	if input.Resolution != nil {
 		resolution = normalizeIncomingCardResolution(strings.TrimSpace(*input.Resolution))
 	}
+	resolutionRefs := uniqueSortedStrings(input.ResolutionRefs)
+	if columnKey == "done" && resolution == "" && len(resolutionRefs) > 0 {
+		resolution = "done"
+	}
 	if err := validateCardResolution(resolution, true); err != nil {
 		return boardCardInsertPrep{}, invalidBoardRequestError(err)
 	}
@@ -458,8 +462,13 @@ func prepareBoardCardInsert(input AddBoardCardInput) (boardCardInsertPrep, error
 		if err := validateCardResolution(resolution, false); err != nil {
 			return boardCardInsertPrep{}, invalidBoardRequestError(err)
 		}
+		if len(resolutionRefs) == 0 {
+			return boardCardInsertPrep{}, invalidBoardRequest("done column requires resolution_refs")
+		}
+		if !containsTypedRefPrefix(resolutionRefs, "artifact") && !containsTypedRefPrefix(resolutionRefs, "event") {
+			return boardCardInsertPrep{}, invalidBoardRequest("resolution_refs must include at least one artifact: or event: ref for resolution done")
+		}
 	}
-	resolutionRefs := uniqueSortedStrings(input.ResolutionRefs)
 	resolutionRefsJSON, err := json.Marshal(resolutionRefs)
 	if err != nil {
 		return boardCardInsertPrep{}, fmt.Errorf("marshal card resolution refs: %w", err)
@@ -1747,6 +1756,47 @@ func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifie
 		nextRisk = canonicalBoardCardRisk(*input.Risk)
 	}
 
+	if strings.TrimSpace(cardRow.ColumnKey) == "done" && nextResolution == "" {
+		var refs []string
+		if err := json.Unmarshal([]byte(nextResolutionRefsJSON), &refs); err == nil && len(uniqueSortedStrings(refs)) > 0 {
+			nextResolution = "done"
+		}
+	}
+	columnKey := strings.TrimSpace(cardRow.ColumnKey)
+	if columnKey == "done" {
+		if err := validateCardResolution(nextResolution, false); err != nil {
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
+			return BoardCardMutationResult{}, invalidBoardRequestError(err)
+		}
+		var refs []string
+		if err := json.Unmarshal([]byte(nextResolutionRefsJSON), &refs); err != nil {
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
+			return BoardCardMutationResult{}, fmt.Errorf("unmarshal resolution refs: %w", err)
+		}
+		refs = uniqueSortedStrings(refs)
+		if len(refs) == 0 {
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
+			return BoardCardMutationResult{}, invalidBoardRequest("done column requires resolution_refs")
+		}
+		if !containsTypedRefPrefix(refs, "artifact") && !containsTypedRefPrefix(refs, "event") {
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
+			return BoardCardMutationResult{}, invalidBoardRequest("resolution_refs must include at least one artifact: or event: ref for resolution done")
+		}
+	} else if nextResolution != "" {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
+		return BoardCardMutationResult{}, invalidBoardRequest("resolution must be null when column_key is not done")
+	}
+
 	if nextParentThread != "" {
 		if err := ensureThreadExists(ctx, tx, nextParentThread); err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
@@ -2936,16 +2986,22 @@ func (s *Store) computeBoardSummaries(ctx context.Context, boards []boardRow, ty
 }
 
 // BoardCardIsOpenWorkItem is the single definition of “open work” for board cards:
-// any non-done column is open; in the done column, open until resolution is terminal (done or canceled).
+// any non-done column is open; in the done column, open until resolution is done.
 func BoardCardIsOpenWorkItem(columnKey, resolution string) bool {
 	if strings.TrimSpace(columnKey) != "done" {
 		return true
 	}
 	res := normalizeIncomingCardResolution(strings.TrimSpace(resolution))
-	return res != "done" && res != "canceled"
+	return res != "done"
 }
 
 func boardCardRowCountsAsOpenWorkItem(card boardCardRow) bool {
+	if card.TrashedAt.Valid && strings.TrimSpace(card.TrashedAt.String) != "" {
+		return false
+	}
+	if card.ArchivedAt.Valid && strings.TrimSpace(card.ArchivedAt.String) != "" {
+		return false
+	}
 	res := ""
 	if card.Resolution.Valid {
 		res = card.Resolution.String
@@ -4444,7 +4500,7 @@ func canonicalizeCardResolutionForAPI(raw string) any {
 		return nil
 	}
 	switch s {
-	case "done", "canceled":
+	case "done":
 		return s
 	default:
 		return nil
@@ -4469,20 +4525,33 @@ func validateCardResolution(raw string, allowEmpty bool) error {
 		return nil
 	}
 	switch value {
-	case "done", "canceled":
+	case "done":
 		return nil
 	default:
-		return fmt.Errorf("card.resolution must be null, done, or canceled")
+		return fmt.Errorf("card.resolution must be null or done")
 	}
 }
 
 func resolveBoardCardMoveResolution(cardRow boardCardRow, columnKey string, input MoveBoardCardInput) (string, string, bool, error) {
 	columnKey = strings.TrimSpace(columnKey)
 	currentResolution := normalizeIncomingCardResolution(strings.TrimSpace(cardRow.Resolution.String))
-	if input.Resolution == nil {
+	effectiveResolution := input.Resolution
+	if effectiveResolution == nil && columnKey == "done" && input.ResolutionRefs != nil {
+		rr := uniqueSortedStrings(*input.ResolutionRefs)
+		if len(rr) > 0 {
+			done := "done"
+			effectiveResolution = &done
+		}
+	}
+	if effectiveResolution == nil {
 		if columnKey != "done" {
-			if currentResolution != "" {
-				return "", "", false, invalidBoardRequest("resolution must be null when column_key is not done")
+			hasRefs := len(decodeJSONListOrEmpty(cardRow.ResolutionRefsJSON)) > 0
+			if currentResolution != "" || hasRefs {
+				emptyRefs, err := json.Marshal([]string{})
+				if err != nil {
+					return "", "", false, fmt.Errorf("marshal cleared resolution refs: %w", err)
+				}
+				return "", string(emptyRefs), true, nil
 			}
 			return "", "", false, nil
 		}
@@ -4495,7 +4564,7 @@ func resolveBoardCardMoveResolution(cardRow boardCardRow, columnKey string, inpu
 		return "", "", false, invalidBoardRequest("resolution is required when column_key is done")
 	}
 
-	nextResolution := normalizeIncomingCardResolution(strings.TrimSpace(*input.Resolution))
+	nextResolution := normalizeIncomingCardResolution(strings.TrimSpace(*effectiveResolution))
 	if err := validateCardResolution(nextResolution, false); err != nil {
 		return "", "", false, invalidBoardRequestError(err)
 	}
@@ -4520,10 +4589,8 @@ func resolveBoardCardMoveResolution(cardRow boardCardRow, columnKey string, inpu
 		if !containsTypedRefPrefix(resolutionRefs, "artifact") && !containsTypedRefPrefix(resolutionRefs, "event") {
 			return "", "", false, invalidBoardRequest("resolution_refs must include at least one artifact: or event: ref for resolution done")
 		}
-	case "canceled":
-		if !containsTypedRefPrefix(resolutionRefs, "event") {
-			return "", "", false, invalidBoardRequest("resolution_refs must include at least one event: ref for resolution canceled")
-		}
+	default:
+		return "", "", false, invalidBoardRequest("resolution must be done")
 	}
 	resolutionRefsJSON, err := json.Marshal(resolutionRefs)
 	if err != nil {

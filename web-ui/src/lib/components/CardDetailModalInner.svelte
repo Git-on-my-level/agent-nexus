@@ -166,7 +166,6 @@
   let editDocumentId = $state("");
   let editAssignees = $state([]);
   let editRisk = $state("medium");
-  let editResolution = $state("");
   let editResolutionRefs = $state("");
   let editRelatedRefs = $state("");
   let editDueAt = $state("");
@@ -226,7 +225,6 @@
     editDocumentId = documentIdFromRef(m.document_ref);
     editAssignees = [...(m.assignee_refs ?? [])].map((x) => String(x).trim());
     editRisk = String(m.risk ?? "medium").trim() || "medium";
-    editResolution = String(m.resolution ?? "").trim();
     editResolutionRefs = joinDelimitedValues(m.resolution_refs ?? []);
     editRelatedRefs = joinDelimitedValues(m.related_refs ?? []);
     editDueAt = isoToDatetimeLocal(m.due_at ?? "");
@@ -521,15 +519,6 @@
     };
   });
 
-  async function persistResolutionImmediate() {
-    await persistMembershipPatch(
-      {
-        resolution: editResolution.trim() || null,
-      },
-      "resolution",
-    );
-  }
-
   async function persistRiskImmediate() {
     await persistMembershipPatch({ risk: editRisk }, "risk");
   }
@@ -645,6 +634,24 @@
     Array.isArray(membership?.resolution_refs)
       ? membership.resolution_refs
       : [],
+  );
+
+  /** Matches server rule for completing work in the done lane. */
+  function refIsTerminalEvidence(ref) {
+    const s = String(ref ?? "")
+      .trim()
+      .toLowerCase();
+    return s.startsWith("artifact:") || s.startsWith("event:");
+  }
+  let membershipColumnIsDone = $derived(
+    currentMembershipColumnKey() === "done",
+  );
+  let hasTerminalEvidenceDraft = $derived.by(() => {
+    if (resolutionRefsList.some(refIsTerminalEvidence)) return true;
+    return parseDelimitedValues(editResolutionRefs).some(refIsTerminalEvidence);
+  });
+  let doneColumnOptionDisabled = $derived(
+    !membershipColumnIsDone && !hasTerminalEvidenceDraft,
   );
 
   let dedupedRelatedRefs = $derived.by(() => {
@@ -860,7 +867,10 @@
           class="min-w-0 flex-1 cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-1 pr-7 text-meta text-[var(--fg)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
         >
           {#each board?.column_schema ?? [] as column (column.key)}
-            <option value={column.key}>
+            <option
+              value={column.key}
+              disabled={column.key === "done" && doneColumnOptionDisabled}
+            >
               {column.title ||
                 boardColumnTitle(column.key, board?.column_schema ?? [])}
             </option>
@@ -888,33 +898,6 @@
 
 {#snippet propertiesRail()}
   <aside class="cdm-rail flex flex-col gap-0.5">
-    <div class="cdm-prop-row">
-      {@render propertyLabel("Status")}
-      <div class="flex min-w-0 flex-1 items-center gap-1">
-        <select
-          bind:value={editResolution}
-          onchange={() => void persistResolutionImmediate()}
-          aria-label="Resolution"
-          class="cdm-prop-control"
-          disabled={isSaving("resolution")}
-        >
-          <option value="">Open</option>
-          <option value="done">Done</option>
-          <option value="canceled">Canceled</option>
-        </select>
-        {#if isSaving("resolution")}
-          <span class="sr-only">Saving resolution</span>
-          <span
-            class="inline-block size-2 animate-pulse rounded-full bg-[var(--accent)]"
-            title="Saving…"
-          ></span>
-        {/if}
-      </div>
-    </div>
-    {#if fieldErrors.resolution}
-      <p class="px-2 text-micro text-danger-text">{fieldErrors.resolution}</p>
-    {/if}
-
     <div class="cdm-prop-row">
       {@render propertyLabel("Priority")}
       <div class="flex min-w-0 flex-1 items-center gap-1">
@@ -1029,7 +1012,10 @@
         aria-label="Column"
       >
         {#each board?.column_schema ?? [] as column (column.key)}
-          <option value={column.key}>
+          <option
+            value={column.key}
+            disabled={column.key === "done" && doneColumnOptionDisabled}
+          >
             {column.title ||
               boardColumnTitle(column.key, board?.column_schema ?? [])}
           </option>

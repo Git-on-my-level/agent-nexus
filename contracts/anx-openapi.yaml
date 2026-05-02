@@ -4733,8 +4733,8 @@ components:
         resolution:
           type: string
           nullable: true
-          enum: [done, canceled]
-          description: Null while the card is active; terminal `done` or `canceled` when resolved.
+          enum: [done]
+          description: Null while the card is active; `done` when completed in the done column (abandonment uses trash/archive).
         resolution_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
@@ -4984,7 +4984,7 @@ components:
         resolution:
           type: string
           nullable: true
-          enum: [done, canceled]
+          enum: [done]
         resolution_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
@@ -5018,7 +5018,7 @@ components:
         resolution:
           type: string
           nullable: true
-          enum: [done, canceled]
+          enum: [done]
         resolution_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
@@ -5059,7 +5059,7 @@ components:
           description: Insert immediately after this card id in column_key; mutually exclusive with before_card_id.
         resolution:
           type: string
-          enum: [done, canceled]
+          enum: [done]
         resolution_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
@@ -5248,7 +5248,7 @@ components:
         resolution:
           type: string
           nullable: true
-          enum: [done, canceled]
+          enum: [done]
         resolution_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }

@@ -180,25 +180,6 @@
       const membRefs = [...(memb.resolution_refs ?? [])]
         .map((r) => String(r ?? "").trim())
         .filter(Boolean);
-      let res =
-        typeof nextPayload.resolution === "string"
-          ? String(nextPayload.resolution).trim().toLowerCase()
-          : "";
-      const membRes = String(memb.resolution ?? "")
-        .trim()
-        .toLowerCase();
-      if (!res) {
-        if (membRes === "done" || membRes === "canceled") {
-          nextPayload.resolution = membRes;
-          res = membRes;
-        } else {
-          nextPayload.resolution = "done";
-          res = "done";
-        }
-      } else if (res === "completed") {
-        nextPayload.resolution = "done";
-        res = "done";
-      }
 
       const incomingRefs = Array.isArray(nextPayload.resolution_refs)
         ? [...nextPayload.resolution_refs]
@@ -207,12 +188,13 @@
         : [];
       const mergedRefs = incomingRefs.length > 0 ? incomingRefs : [...membRefs];
 
-      if ((res === "done" || res === "canceled") && mergedRefs.length === 0) {
+      if (mergedRefs.length === 0) {
         clearMutationMessages();
         mutationError =
-          "Cannot move card to Done or Canceled: add at least one artifact or event resolution ref first.";
+          "Cannot move card to Done: add at least one artifact or event resolution ref first.";
         return;
       }
+      delete nextPayload.resolution;
       if (incomingRefs.length === 0 && mergedRefs.length > 0) {
         nextPayload.resolution_refs = mergedRefs;
       }

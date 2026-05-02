@@ -387,10 +387,37 @@ func TestBoardStoreMoveCardResolutionTransitions(t *testing.T) {
 	}
 	afterDoneBoardUpdatedAt := movedDone.Board["updated_at"].(string)
 
+	reopened, err := store.MoveBoardCard(ctx, "actor-3", boardID, cardThreadA, primitives.MoveBoardCardInput{
+		ColumnKey:        "review",
+		IfBoardUpdatedAt: &afterDoneBoardUpdatedAt,
+	})
+	if err != nil {
+		t.Fatalf("reopen done card: %v", err)
+	}
+	if reopened.Card["column_key"] != "review" {
+		t.Fatalf("expected review after reopen, got %#v", reopened.Card["column_key"])
+	}
+	if r := reopened.Card["resolution"]; r != nil && r != "" {
+		t.Fatalf("expected cleared resolution after reopen, got %#v", r)
+	}
+	if rr := reopened.Card["resolution_refs"]; rr != nil {
+		switch v := rr.(type) {
+		case []any:
+			if len(v) > 0 {
+				t.Fatalf("expected cleared resolution_refs after reopen, got %#v", rr)
+			}
+		case []string:
+			if len(v) > 0 {
+				t.Fatalf("expected cleared resolution_refs after reopen, got %#v", rr)
+			}
+		}
+	}
+	afterReopenBoardUpdatedAt := reopened.Board["updated_at"].(string)
+
 	addedB, err := store.AddBoardCard(ctx, "actor-2", boardID, primitives.AddBoardCardInput{
 		ParentThreadID:   cardThreadB,
 		ColumnKey:        "ready",
-		IfBoardUpdatedAt: &afterDoneBoardUpdatedAt,
+		IfBoardUpdatedAt: &afterReopenBoardUpdatedAt,
 	})
 	if err != nil {
 		t.Fatalf("add board card B: %v", err)
@@ -398,17 +425,14 @@ func TestBoardStoreMoveCardResolutionTransitions(t *testing.T) {
 	afterAddBoardUpdatedAt := addedB.Board["updated_at"].(string)
 
 	cancelRefs := []string{"event:card-canceled-1"}
-	movedCanceled, err := store.MoveBoardCard(ctx, "actor-3", boardID, cardThreadB, primitives.MoveBoardCardInput{
+	_, err = store.MoveBoardCard(ctx, "actor-3", boardID, cardThreadB, primitives.MoveBoardCardInput{
 		ColumnKey:        "done",
 		Resolution:       stringPtr("canceled"),
 		ResolutionRefs:   &cancelRefs,
 		IfBoardUpdatedAt: &afterAddBoardUpdatedAt,
 	})
-	if err != nil {
-		t.Fatalf("move canceled card with evidence: %v", err)
-	}
-	if movedCanceled.Card["resolution"] != "canceled" {
-		t.Fatalf("unexpected canceled resolution result: %#v", movedCanceled.Card)
+	if !errors.Is(err, primitives.ErrInvalidBoardRequest) {
+		t.Fatalf("expected canceled resolution rejected with ErrInvalidBoardRequest, got %v", err)
 	}
 }
 
@@ -1034,7 +1058,6 @@ func TestBoardCardIsOpenWorkItem(t *testing.T) {
 		{"in_progress", "", true},
 		{"done", "", true},
 		{"done", "done", false},
-		{"done", "canceled", false},
 		{"done", "completed", false},
 		{"backlog", "unresolved", true},
 	}

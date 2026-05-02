@@ -865,10 +865,28 @@ func TestBoardCardCreateRejectsInvalidResolutionCombinations(t *testing.T) {
 	resp = postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
 		"actor_id":"actor-1",
 		"if_board_updated_at":"`+boardUpdatedAt+`",
-		"title":"Member card",
+		"title":"Member card done refs only",
 		"related_refs":["thread:`+memberThreadID+`"],
 		"column_key":"done",
 		"resolution_refs":["event:done-1"]
+	}`, http.StatusCreated)
+	defer resp.Body.Close()
+	var goodDonePayload struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&goodDonePayload); err != nil {
+		t.Fatalf("decode done refs card response: %v", err)
+	}
+	afterGoodDone := asString(goodDonePayload.Board["updated_at"])
+
+	resp = postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+afterGoodDone+`",
+		"title":"Member card canceled",
+		"related_refs":["thread:`+memberThreadID+`"],
+		"column_key":"done",
+		"resolution":"canceled",
+		"resolution_refs":["event:canceled-1"]
 	}`, http.StatusBadRequest)
 	defer resp.Body.Close()
 	assertErrorCode(t, resp, "invalid_request")
@@ -1489,7 +1507,6 @@ func TestCardMoveResolutionTransitionsAndEvents(t *testing.T) {
 		"actor_id":"actor-1",
 		"if_board_updated_at":"`+asString(addPayload.Board["updated_at"])+`",
 		"column_key":"done",
-		"resolution":"done",
 		"resolution_refs":["event:card-completion-1"]
 	}`, http.StatusOK)
 	defer doneMoveResp.Body.Close()
@@ -1541,18 +1558,9 @@ func TestCardMoveResolutionTransitionsAndEvents(t *testing.T) {
 		"column_key":"done",
 		"resolution":"canceled",
 		"resolution_refs":["event:card-canceled-1"]
-	}`, http.StatusOK)
+	}`, http.StatusBadRequest)
 	defer cancelMoveResp.Body.Close()
-	var cancelMovePayload struct {
-		Board map[string]any `json:"board"`
-		Card  map[string]any `json:"card"`
-	}
-	if err := json.NewDecoder(cancelMoveResp.Body).Decode(&cancelMovePayload); err != nil {
-		t.Fatalf("decode canceled move response: %v", err)
-	}
-	if asString(cancelMovePayload.Card["resolution"]) != "canceled" {
-		t.Fatalf("expected canceled resolution, got %#v", cancelMovePayload.Card["resolution"])
-	}
+	assertErrorCode(t, cancelMoveResp, "invalid_request")
 
 	boardTimelineResp, err := http.Get(h.baseURL + "/threads/" + boardID + "/timeline")
 	if err != nil {

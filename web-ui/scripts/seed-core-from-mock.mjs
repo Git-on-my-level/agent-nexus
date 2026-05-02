@@ -70,7 +70,7 @@ function normalizeSeedCardResolution(raw) {
   if (s === "completed") {
     return "done";
   }
-  if (s === "done" || s === "canceled") {
+  if (s === "done") {
     return s;
   }
   return "";

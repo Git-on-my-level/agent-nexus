@@ -840,7 +840,7 @@ func (a *App) parseCardResolveInput(ctx context.Context, args []string, cfg conf
 	var resolutionRefFlags trackedStrings
 	fs.Var(&cardIDFlag, "card", "Card id")
 	fs.Var(&cardIDFlag, "card-id", "Card id")
-	fs.Var(&resolutionFlag, "resolution", "Resolution value: done or canceled")
+	fs.Var(&resolutionFlag, "resolution", "Resolution value: done (abandon work with trash, not resolution)")
 	fs.Var(&resolutionRefFlags, "resolution-ref", "Evidence event/artifact typed ref (repeatable)")
 	fs.Var(&ifBoardUpdatedAtFlag, "if-board-updated-at", "Board updated_at concurrency token; discovered when omitted")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")

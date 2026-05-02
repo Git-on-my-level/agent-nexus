@@ -1668,7 +1668,6 @@
             "name": "card.resolution",
             "type": "string",
             "enum_values": [
-              "canceled",
               "done"
             ]
           },
@@ -2520,7 +2519,6 @@
             "name": "card.resolution",
             "type": "string",
             "enum_values": [
-              "canceled",
               "done"
             ]
           },
@@ -2745,7 +2743,6 @@
             "name": "move.resolution",
             "type": "string",
             "enum_values": [
-              "canceled",
               "done"
             ]
           },
@@ -2757,7 +2754,6 @@
             "name": "resolution",
             "type": "string",
             "enum_values": [
-              "canceled",
               "done"
             ]
           },
@@ -2859,7 +2855,6 @@
             "name": "patch.resolution",
             "type": "string",
             "enum_values": [
-              "canceled",
               "done"
             ]
           },

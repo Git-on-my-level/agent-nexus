@@ -1662,7 +1662,6 @@ export const commandRegistry = [
                     "name": "card.resolution",
                     "type": "string",
                     "enum_values": [
-                        "canceled",
                         "done"
                     ]
                 },
@@ -2514,7 +2513,6 @@ export const commandRegistry = [
                     "name": "card.resolution",
                     "type": "string",
                     "enum_values": [
-                        "canceled",
                         "done"
                     ]
                 },
@@ -2739,7 +2737,6 @@ export const commandRegistry = [
                     "name": "move.resolution",
                     "type": "string",
                     "enum_values": [
-                        "canceled",
                         "done"
                     ]
                 },
@@ -2751,7 +2748,6 @@ export const commandRegistry = [
                     "name": "resolution",
                     "type": "string",
                     "enum_values": [
-                        "canceled",
                         "done"
                     ]
                 },
@@ -2853,7 +2849,6 @@ export const commandRegistry = [
                     "name": "patch.resolution",
                     "type": "string",
                     "enum_values": [
-                        "canceled",
                         "done"
                     ]
                 },

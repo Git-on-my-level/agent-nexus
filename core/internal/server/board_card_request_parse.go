@@ -267,6 +267,12 @@ func validateBoardCardCreateResolutionInput(resolution *string, resolutionRefs [
 		}
 	}
 	if resolution == nil && len(resolutionRefs) > 0 {
+		if strings.TrimSpace(columnKey) == "done" {
+			if err := validateMoveCardResolutionRefs("done", resolutionRefs); err != nil {
+				return err
+			}
+			return nil
+		}
 		return errors.New("resolution_refs require resolution")
 	}
 	return nil

@@ -513,6 +513,12 @@ func addBoardCardFromRaw(w http.ResponseWriter, r *http.Request, opts handlerOpt
 	if !ok {
 		return
 	}
+	if opts.contract != nil && len(req.ResolutionRefs) > 0 {
+		if err := schema.ValidateTypedRefs(opts.contract, req.ResolutionRefs); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+	}
 
 	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
 	if !ok {
@@ -683,6 +689,12 @@ func handleBatchAddBoardCards(w http.ResponseWriter, r *http.Request, opts handl
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid_request", fmt.Sprintf("items[%d]: %s", i, err.Error()))
 			return
+		}
+		if opts.contract != nil && len(m.ResolutionRefs) > 0 {
+			if err := schema.ValidateTypedRefs(opts.contract, m.ResolutionRefs); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_request", fmt.Sprintf("items[%d]: %s", i, err.Error()))
+				return
+			}
 		}
 		if strings.TrimSpace(batchRequestKey) != "" && strings.TrimSpace(m.CardID) == "" {
 			m.CardID = deriveRequestScopedID("boards.cards.batch_create", actorID, fmt.Sprintf("%s#%d", batchRequestKey, i), "cd")
@@ -867,6 +879,7 @@ func handleMoveCardMutation(w http.ResponseWriter, r *http.Request, opts handler
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
+	req.ResolutionRefs = uniqueSortedStrings(req.ResolutionRefs)
 	if req.Resolution != nil {
 		normalizedResolution := strings.TrimSpace(*req.Resolution)
 		if normalizedResolution == "completed" || normalizedResolution == "superseded" {
@@ -881,7 +894,10 @@ func handleMoveCardMutation(w http.ResponseWriter, r *http.Request, opts handler
 		}
 		req.Resolution = &normalizedResolution
 	}
-	req.ResolutionRefs = uniqueSortedStrings(req.ResolutionRefs)
+	if req.Resolution == nil && strings.TrimSpace(req.ColumnKey) == "done" && len(req.ResolutionRefs) > 0 {
+		normalized := "done"
+		req.Resolution = &normalized
+	}
 	if req.Resolution == nil && len(req.ResolutionRefs) > 0 {
 		writeError(w, http.StatusBadRequest, "invalid_request", "resolution_refs require resolution")
 		return
@@ -2091,10 +2107,10 @@ func validateCardResolution(resolution string, allowEmpty bool) error {
 		return nil
 	}
 	switch value {
-	case "done", "canceled":
+	case "done":
 		return nil
 	default:
-		return errors.New("resolution must be one of: done, canceled")
+		return errors.New("resolution must be done")
 	}
 }
 
@@ -2111,12 +2127,8 @@ func validateMoveCardResolutionRefs(resolution string, resolutionRefs []string) 
 		if !containsTypedRefPrefix(resolutionRefs, "artifact") && !containsTypedRefPrefix(resolutionRefs, "event") {
 			return errors.New("resolution_refs must include at least one artifact: or event: ref for resolution done")
 		}
-	case "canceled":
-		if !containsTypedRefPrefix(resolutionRefs, "event") {
-			return errors.New("resolution_refs must include at least one event: ref for resolution canceled")
-		}
 	default:
-		return errors.New("resolution must be one of: done, canceled")
+		return errors.New("resolution must be done")
 	}
 	return nil
 }

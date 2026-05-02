@@ -19,9 +19,9 @@ enums:
   card_resolution:
     enum_policy: strict
     description: >
-      Terminal resolution for a card. Null/absent while the card is active; only
-      `done` or `canceled` when resolved.
-    values: [done, canceled]
+      Terminal resolution for a card in the done column. Null/absent while the
+      card is active. Abandoned work uses card trash/archive, not resolution.
+    values: [done]
 
   agent_notification_status:
     enum_policy: strict
@@ -442,7 +442,7 @@ resources:
       due_at: { type: datetime, required: false, description: "Optional due instant for the work item." }
       definition_of_done: { type: "list<string>", required: false, description: "Acceptance lines for completing the card." }
       risk: { type: string, required: true, ref: enums.work_item_risk }
-      resolution: { type: string, required: false, ref: enums.card_resolution, description: "Null while active; `done` or `canceled` when terminal." }
+      resolution: { type: string, required: false, ref: enums.card_resolution, description: "Null while active; `done` only when the card is in the done column with evidence in resolution_refs." }
       resolution_refs: { type: "list<typed_ref>", required: true }
       related_refs: { type: "list<typed_ref>", required: true }
       created_at: { type: datetime, required: true }
@@ -640,7 +640,6 @@ grounding_rules:
       mutation.
     fields:
       - "card.resolution -> done"
-      - "card.resolution -> canceled"
       - "any shipped/sent/deployed assertion"
 
   interpretive_fields:

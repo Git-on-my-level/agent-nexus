@@ -839,19 +839,17 @@ const events = [
   {
     id: "evt-price-012",
     ts: new Date(now - 7 * 24 * 60 * 60 * 1000 + 30 * 60 * 1000).toISOString(),
-    type: "card_resolved",
+    type: "card_trashed",
     actor_id: "actor-ops-ai",
     thread_id: "thread-pricing-glitch",
     refs: [
       "thread:thread-pricing-glitch",
       "board:board-summer-menu",
       "card:card-pricing-audit",
-      "event:evt-price-008",
     ],
     summary:
-      "Card resolved: full pricing audit canceled after root cause confirmed.",
+      "Card trashed: full pricing audit abandoned after root cause confirmed.",
     payload: {
-      resolution: "canceled",
       reason:
         "Root cause confirmed as a single stale cache entry from March 3rd menu push. " +
         "A full historical audit is not warranted. Decision made per evt-price-008.",
@@ -1776,7 +1774,7 @@ function deepClone(value) {
 
 function cardResolutionFromRow(card) {
   const explicit = String(card?.resolution ?? "").trim();
-  if (explicit === "done" || explicit === "canceled") {
+  if (explicit === "done") {
     return explicit;
   }
   if (explicit === "completed") {
@@ -2019,6 +2017,8 @@ function buildCanonicalCardSeed(card) {
     updated_at: card?.updated_at ?? card?.created_at ?? null,
     updated_by: card?.updated_by ?? card?.created_by ?? "unknown",
     provenance: deepClone(card?.provenance ?? { sources: [] }),
+    trashed_at: card?.trashed_at ?? null,
+    trash_reason: card?.trash_reason ?? null,
   };
 }
 
@@ -2300,11 +2300,16 @@ const boardCards = [
   {
     id: "card-pricing-audit",
     board_id: "board-summer-menu",
-    column_key: "done",
+    thread_id: "thread-pricing-glitch",
+    column_key: "review",
     rank: "0002",
-    resolution: "canceled",
-    resolution_refs: ["event:evt-price-008"],
-    summary: "Full historical pricing audit for March (canceled)",
+    resolution: null,
+    resolution_refs: [],
+    trashed_at: new Date(
+      now - 7 * 24 * 60 * 60 * 1000 + 30 * 60 * 1000,
+    ).toISOString(),
+    trash_reason: "Abandoned: root cause confirmed; full audit not warranted.",
+    summary: "Full historical pricing audit for March (abandoned)",
     related_refs: ["thread:thread-pricing-glitch"],
     created_at: new Date(now - 10 * 24 * 60 * 60 * 1000).toISOString(),
     created_by: "actor-ops-ai",

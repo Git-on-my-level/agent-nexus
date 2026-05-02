@@ -27,7 +27,8 @@ describe("dev seed fixtures", () => {
     expect(maintenance?.state).toBe("archived");
     expect(pricing?.state).toBe("archived");
     const pricingAudit = seed.cards.find((c) => c.id === "card-pricing-audit");
-    expect(pricingAudit?.resolution).toBe("canceled");
+    expect(pricingAudit?.resolution).toBeNull();
+    expect(pricingAudit?.trashed_at).toBeTruthy();
     expect(seed.boards[0]).toMatchObject({
       id: "board-product-launch",
       thread_id: "thread-q2-initiative",

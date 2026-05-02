@@ -687,6 +687,9 @@ func deriveHumanAttentionInboxItem(event map[string]any) (derivedInboxItem, bool
 }
 
 func boardCardCountsAsOpenWorkItem(card map[string]any) bool {
+	if strings.TrimSpace(anyString(card["trashed_at"])) != "" || strings.TrimSpace(anyString(card["archived_at"])) != "" {
+		return false
+	}
 	return primitives.BoardCardIsOpenWorkItem(anyString(card["column_key"]), anyString(card["resolution"]))
 }
 

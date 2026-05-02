@@ -107,8 +107,6 @@
   function boardCardRowStatus(m, t) {
     const resolution = String(m?.resolution ?? "").trim();
     if (resolution === "done" || resolution === "completed") return "done";
-    if (resolution === "canceled" || resolution === "cancelled")
-      return "canceled";
     if (resolution === "superseded") return "paused";
     if (t) return getThreadStatus(t);
     if (String(m?.column_key ?? "").trim() === "done") return "done";

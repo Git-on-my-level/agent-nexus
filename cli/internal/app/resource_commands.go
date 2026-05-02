@@ -3608,7 +3608,7 @@ func (a *App) parseBoardCardCreateInput(ctx context.Context, args []string, cfg 
 	fs.Var(&beforeCardIDFlag, "before-card-id", "Place before this card id in the target column")
 	fs.Var(&afterCardIDFlag, "after-card-id", "Place after this card id in the target column")
 	fs.Var(&assigneeRefFlags, "assignee-ref", "Assignee actor typed reference (repeatable)")
-	fs.Var(&resolutionFlag, "resolution", "Terminal resolution when column is done (done or canceled)")
+	fs.Var(&resolutionFlag, "resolution", "Terminal resolution when column is done (done only; use trash to abandon work)")
 	fs.Var(&documentRefFlag, "document-ref", "Document typed reference")
 	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
 	if err := fs.Parse(args); err != nil {
@@ -3810,7 +3810,7 @@ func (a *App) parseBoardCardUpdateInput(ctx context.Context, args []string, cfg 
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
 	fs.Var(&ifUpdatedAtFlag, "if-updated-at", "Card updated_at concurrency token")
 	fs.Var(&assigneeRefFlags, "assignee-ref", "Assignee actor typed reference (repeatable)")
-	fs.Var(&resolutionFlag, "resolution", "Terminal resolution (done or canceled); card must already be in the done column (use `anx cards move` to change columns)")
+	fs.Var(&resolutionFlag, "resolution", "Terminal resolution (done only); card must already be in the done column (use `anx cards move` to change columns)")
 	fs.Var(&documentRefFlag, "document-ref", "Document typed reference")
 	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
 	fs.Var(&clearDocumentRefFlag, "clear-document-ref", "Clear the document ref")

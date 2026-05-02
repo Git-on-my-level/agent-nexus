@@ -20,11 +20,10 @@ func TestValidateBoardCardCreateResolutionInput(t *testing.T) {
 		wantErr        string
 	}{
 		{
-			name:           "rejects resolution refs without resolution",
+			name:           "accepts resolution refs without explicit resolution in done column",
 			resolution:     nil,
 			resolutionRefs: []string{"event:done-1"},
 			columnKey:      "done",
-			wantErr:        "resolution_refs require resolution",
 		},
 		{
 			name:           "rejects resolution outside done column",
@@ -54,10 +53,11 @@ func TestValidateBoardCardCreateResolutionInput(t *testing.T) {
 			columnKey:      "done",
 		},
 		{
-			name:           "accepts valid canceled resolution",
+			name:           "rejects canceled resolution",
 			resolution:     ptr("canceled"),
 			resolutionRefs: []string{"event:canceled-1"},
 			columnKey:      "done",
+			wantErr:        "resolution must be done",
 		},
 	}
 

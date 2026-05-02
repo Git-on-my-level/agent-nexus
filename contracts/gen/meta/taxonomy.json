@@ -42,7 +42,6 @@
     "card_resolution": {
       "enum_policy": "strict",
       "values": [
-        "canceled",
         "done"
       ]
     },

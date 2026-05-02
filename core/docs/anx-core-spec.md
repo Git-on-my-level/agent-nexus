@@ -128,9 +128,8 @@ A first-class board work item anchored to a board and optionally linked to a top
 **Fields:** per `anx-schema.yaml` → `resources.card`
 
 **Restricted transitions:**
-- `resolution → done` requires a typed reference to a receipt artifact (`artifact:<id>`) or a decision event (`event:<id>`).
-- `resolution → canceled` requires a typed reference to a decision event (`event:<id>`).
-- anx-core MUST reject these transitions if the required reference is missing.
+- Placing a card in the **done** lane with terminal completion (`resolution → done`) requires a typed reference to a receipt artifact (`artifact:<id>`) or a decision event (`event:<id>`). Operators drive this via `column_key` and `resolution_refs`; abandonment or “won’t do” is modeled with **card trash**, not a second resolution value.
+- anx-core MUST reject completion to done if the required reference is missing.
 
 ---
 
@@ -276,8 +275,7 @@ The `inferred` label indicates the system generated or updated a value without d
 
 ### 8.2 Restricted updates
 The following MUST NOT be updated without a typed reference to a receipt artifact or decision event:
-- `card.resolution → done` (requires `artifact:<receipt_id>` OR `event:<decision_event_id>`)
-- `card.resolution → canceled` (requires `event:<decision_event_id>`)
+- `card.resolution → done` when completing work in the **done** lane (requires `artifact:<receipt_id>` OR `event:<decision_event_id>` via `resolution_refs`)
 - Any "metric improved" claim
 - Any "shipped/sent/deployed" assertion
 
@@ -293,8 +291,10 @@ The following MAY be updated without receipts:
   `archived_at` / `trashed_at` timestamps.
 - Archive, trash, and restore are explicit lifecycle operations that emit
   dedicated events. Clients MUST NOT patch a mutable topic or board status.
-- Card work progress is represented by `column_key` plus nullable
-  `resolution`, not by a separate status enum.
+- Card work progress is represented primarily by `column_key`; when a card is
+  in the **done** lane, nullable `resolution` is **`done`** only and reflects
+  terminal completion backed by `resolution_refs`. Abandonment uses trash
+  lifecycle fields, not a `canceled` resolution.
 
 These fields SHOULD include provenance indicating who updated them and on what basis.
 

@@ -155,6 +155,7 @@ Options:
   --out <dir>           Output directory              (default: .qa-captures)
   --routes <list>       Comma-separated route names   (default: curated list)
                         Available: home,inbox,topics,boards,docs,artifacts,trash,access
+                        When set, detail discovery only follows matching list types (e.g. boards → board detail only).
   --detail-limit <n>    When detail discovery runs, max captures per collection (default: 1)
   --full-page           Capture full scrollable page  (default)
   --no-full-page        Capture viewport only
@@ -243,7 +244,24 @@ async function discoverDetailPages(page, opts) {
     },
   ];
 
-  for (const collection of collections) {
+  const routeNameToDetailCollection = {
+    topics: "topic-detail",
+    boards: "board-detail",
+    docs: "doc-detail",
+    artifacts: "artifact-detail",
+  };
+  let activeCollections = collections;
+  if (opts.routes?.length) {
+    const allowedNames = new Set(
+      opts.routes.map((r) => routeNameToDetailCollection[r]).filter(Boolean),
+    );
+    activeCollections =
+      allowedNames.size > 0
+        ? collections.filter((c) => allowedNames.has(c.name))
+        : [];
+  }
+
+  for (const collection of activeCollections) {
     try {
       await page.goto(`${opts.baseUrl}${collection.listPath}`, {
         waitUntil: "load",
@@ -798,7 +816,11 @@ async function main() {
     if (opts.routes?.length && listRoutes.length === 0) {
       const requested = opts.routes.join(", ");
       console.error(
-        `\nNo routes matched --routes ${requested}. Expected one or more of: ${getDefaultRoutes(opts).map((r) => r.name).join(", ")}`,
+        `\nNo routes matched --routes ${requested}. Expected one or more of: ${getDefaultRoutes(
+          opts,
+        )
+          .map((r) => r.name)
+          .join(", ")}`,
       );
       process.exit(1);
     }

@@ -728,6 +728,38 @@ var migrations = []migration{
 			`CREATE INDEX IF NOT EXISTS idx_agent_wakeups_status_created ON agent_wakeups (status, created_at DESC, wakeup_id DESC);`,
 		},
 	},
+	{
+		Version:    22,
+		Statements: []string{},
+		AfterApply: applyMigration22TrashCanceledResolutionCards,
+	},
+}
+
+func applyMigration22TrashCanceledResolutionCards(ctx context.Context, tx *sql.Tx) error {
+	ok, err := sqliteTableExists(ctx, tx, "cards")
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return nil
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	_, err = tx.ExecContext(ctx, `
+UPDATE cards SET
+  trashed_at = ?,
+  trashed_by = 'schema_migration',
+  trash_reason = 'migrated_from_canceled_resolution',
+  resolution = NULL,
+  resolution_refs_json = '[]',
+  archived_at = NULL,
+  archived_by = NULL
+WHERE (LOWER(COALESCE(resolution, '')) IN ('canceled', 'cancelled'))
+  AND (trashed_at IS NULL OR TRIM(trashed_at) = '')`,
+		now)
+	if err != nil {
+		return fmt.Errorf("migration 22 trash canceled resolution cards: %w", err)
+	}
+	return nil
 }
 
 func sqliteTableExists(ctx context.Context, tx *sql.Tx, name string) (bool, error) {

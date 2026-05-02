@@ -3,9 +3,6 @@ export function cardResolutionLabel(resolution) {
     case "done":
     case "completed":
       return "Done";
-    case "canceled":
-    case "cancelled":
-      return "Canceled";
     case "superseded":
       return "Superseded";
     default:
@@ -18,9 +15,6 @@ export function cardResolutionTone(resolution) {
     case "done":
     case "completed":
       return "text-emerald-400 bg-emerald-500/10";
-    case "canceled":
-    case "cancelled":
-      return "text-slate-400 bg-slate-500/10";
     case "superseded":
       return "text-amber-400 bg-amber-500/10";
     default:

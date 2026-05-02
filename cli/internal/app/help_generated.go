@@ -208,7 +208,7 @@ var localHelperTopics = []localHelperTopic{
 		Composition: "Builds a focused `cards.move` request that both moves and records terminal resolution evidence.",
 		Examples: []string{
 			"anx cards resolve --card <card-id> --resolution-ref event:<event-id>",
-			"anx cards resolve --card <card-id> --resolution canceled --resolution-ref artifact:<artifact-id>",
+			"anx cards resolve --card <card-id> --resolution-ref event:<event-id>",
 		},
 		Flags: []localHelperFlag{
 			{Name: "--card <card-id>", Description: "Card id or unique prefix to resolve."},

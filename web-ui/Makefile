@@ -42,6 +42,8 @@ qa-baseline: ## Capture committed QA baseline (set QA_VISUAL_CORE_PORT if :8000 
 	node scripts/qa-capture.mjs --baseline
 
 qa-diff: ## Diff current UI against tests/fixtures/qa-visual-baseline/
+	@# Runs vite build + preview; mock core binds :8000 by default. If `make serve` uses 8000, run:
+	@#   QA_VISUAL_CORE_PORT=18079 $(MAKE) qa-diff
 	$(PNPM) run qa:diff
 
 qa-viewports: ## Dashboard + inbox at key breakpoints (requires running dev server)

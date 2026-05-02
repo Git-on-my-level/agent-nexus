@@ -219,7 +219,7 @@ func enrichInvalidRequestByMessage(msg string) (string, map[string]any) {
 		return "Pagination `cursor` must be the opaque string from a previous list response (or omit it to start from the beginning). Do not invent or truncate cursor values.",
 			map[string]any{"kind": "invalid_pagination", "field": "cursor"}
 	case "resolution_refs require resolution":
-		return "You sent `resolution_refs` without `resolution`. Either set `resolution` (done/canceled) together with refs, or clear `resolution_refs`. See `anx boards cards create --help` / `anx cards patch --help`.",
+		return "You sent `resolution_refs` without a valid move to the done column. Add evidence refs, move the card to `done`, or clear `resolution_refs`. See `anx boards cards create --help` / `anx cards patch --help`.",
 			map[string]any{"kind": "resolution_workflow", "field": "resolution_refs", "help_cli": "anx cards patch --help"}
 	case "resolution requires column_key done":
 		return "To set `resolution`, the card must be in column_key `done` (move it with `anx cards move` or `anx boards cards move` first).",
@@ -227,6 +227,12 @@ func enrichInvalidRequestByMessage(msg string) (string, map[string]any) {
 	case "resolution_refs are required when resolution is set":
 		return "When `resolution` is set, include non-empty `resolution_refs` consistent with that resolution. See `anx cards patch --help` for the JSON shape.",
 			map[string]any{"kind": "resolution_workflow", "field": "resolution_refs", "help_cli": "anx cards patch --help"}
+	case "resolution is required when column_key is done":
+		return "Moving into column_key `done` requires terminal evidence. Put at least one `artifact:` or `event:` ref in `resolution_refs` on the move payload (core sets `resolution` to done). See `anx cards move --help`.",
+			map[string]any{"kind": "resolution_workflow", "field": "resolution_refs", "help_cli": "anx cards move --help"}
+	case "done column requires resolution_refs":
+		return "Cards in column_key `done` need non-empty `resolution_refs` with at least one `artifact:` or `event:` ref. See `anx boards cards create --help` / `anx cards move --help`.",
+			map[string]any{"kind": "resolution_workflow", "field": "resolution_refs", "help_cli": "anx boards cards create --help"}
 	case "reason is required":
 		return "This trash/archive-style request requires a non-empty `reason` string in the JSON body. See the command help (for example `anx cards trash --help`) and pass `--reason` or include `reason` in stdin JSON.",
 			map[string]any{"kind": "missing_required_field", "field": "reason", "help_cli": "anx cards trash --help"}
