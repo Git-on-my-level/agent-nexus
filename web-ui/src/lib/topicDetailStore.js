@@ -71,6 +71,7 @@ function initialState() {
     timelineDocuments: [],
     timelineDocumentRevisions: [],
     timelineThreads: [],
+    timelineNotificationReceipts: {},
     timelineLoading: false,
     timelineError: "",
     /** When true, workspace/timeline loads use topic-scoped APIs for the route id. */
@@ -204,7 +205,11 @@ function createTopicDetailStore() {
         const timelineStale =
           prevTimelineScope !== "" && prevTimelineScope !== threadId;
         timelinePatch = timelineStale
-          ? { timeline: [], timelineThreadId: "" }
+          ? {
+              timeline: [],
+              timelineNotificationReceipts: {},
+              timelineThreadId: "",
+            }
           : {};
       } else {
         const context =
@@ -230,6 +235,7 @@ function createTopicDetailStore() {
               timelineDocuments: Array.isArray(context.documents)
                 ? context.documents
                 : [],
+              timelineNotificationReceipts: {},
               timelineThreadId: Array.isArray(context.recent_events)
                 ? threadId
                 : "",
@@ -268,6 +274,7 @@ function createTopicDetailStore() {
           timelineDocuments: [],
           timelineDocumentRevisions: [],
           timelineThreads: [],
+          timelineNotificationReceipts: {},
           timelineThreadId: "",
         });
       }
@@ -312,6 +319,12 @@ function createTopicDetailStore() {
           result?.document_revisions ?? result?.documentRevisions,
         ),
         timelineThreads: coerceTimelineResourceList(result?.threads),
+        timelineNotificationReceipts:
+          result?.notification_receipts &&
+          typeof result.notification_receipts === "object" &&
+          !Array.isArray(result.notification_receipts)
+            ? result.notification_receipts
+            : {},
       });
     } catch (e) {
       if (requestSeq !== timelineRequestSeq) {
@@ -332,6 +345,9 @@ function createTopicDetailStore() {
           ? currentState.timelineDocumentRevisions
           : [],
         timelineThreads: canReuseTimeline ? currentState.timelineThreads : [],
+        timelineNotificationReceipts: canReuseTimeline
+          ? currentState.timelineNotificationReceipts
+          : {},
       });
     } finally {
       if (requestSeq === timelineRequestSeq) {
@@ -411,6 +427,7 @@ function createTopicDetailStore() {
       timelineDocuments: [],
       timelineDocumentRevisions: [],
       timelineThreads: [],
+      timelineNotificationReceipts: {},
       timelineThreadId: threadId || "",
     });
   }

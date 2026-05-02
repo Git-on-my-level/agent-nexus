@@ -96,6 +96,43 @@ func TestNotificationsListReadAndDismissAreTargetScoped(t *testing.T) {
 		t.Fatalf("expected unread notification, got %#v", notificationsPayload.Items[0])
 	}
 
+	timelineResp := getJSONExpectStatusWithAuth(t, env.server.URL+"/threads/"+threadID+"/timeline", sender.AccessToken, http.StatusOK)
+	var timelinePayload struct {
+		NotificationReceipts map[string][]map[string]any `json:"notification_receipts"`
+	}
+	if err := json.NewDecoder(timelineResp.Body).Decode(&timelinePayload); err != nil {
+		t.Fatalf("decode timeline receipts response: %v", err)
+	}
+	timelineResp.Body.Close()
+	receipts := timelinePayload.NotificationReceipts[triggerEventID]
+	if len(receipts) != 1 {
+		t.Fatalf("expected one notification receipt for trigger event, got %#v", timelinePayload.NotificationReceipts)
+	}
+	if got := asString(receipts[0]["delivery_status"]); got != primitives.AgentWakeupStatusRequested {
+		t.Fatalf("expected requested delivery receipt, got %#v", receipts[0])
+	}
+	if got := asString(receipts[0]["notification_status"]); got != notificationStatusUnread {
+		t.Fatalf("expected unread notification receipt, got %#v", receipts[0])
+	}
+
+	postJSONExpectStatusWithAuth(t, env.server.URL+"/agent-wakeups/claim", map[string]any{
+		"wakeup_id":          wakeupID,
+		"bridge_instance_id": "bridge-test-1",
+	}, target.AccessToken, http.StatusOK).Body.Close()
+
+	claimedTimelineResp := getJSONExpectStatusWithAuth(t, env.server.URL+"/threads/"+threadID+"/timeline", sender.AccessToken, http.StatusOK)
+	if err := json.NewDecoder(claimedTimelineResp.Body).Decode(&timelinePayload); err != nil {
+		t.Fatalf("decode claimed timeline receipts response: %v", err)
+	}
+	claimedTimelineResp.Body.Close()
+	receipts = timelinePayload.NotificationReceipts[triggerEventID]
+	if len(receipts) != 1 || asString(receipts[0]["delivery_status"]) != primitives.AgentWakeupStatusClaimed {
+		t.Fatalf("expected claimed notification receipt, got %#v", receipts)
+	}
+	if asString(receipts[0]["claimed_at"]) == "" {
+		t.Fatalf("expected claimed_at notification receipt timestamp, got %#v", receipts[0])
+	}
+
 	postJSONExpectStatusWithAuth(t, env.server.URL+"/events", map[string]any{
 		"event": map[string]any{
 			"type":      "agent_notification_read",

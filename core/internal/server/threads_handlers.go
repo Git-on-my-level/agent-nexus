@@ -128,10 +128,11 @@ func normalizedQueryValues(raw []string) []string {
 }
 
 type threadTimelineExpansion struct {
-	Events            []map[string]any
-	Artifacts         map[string]map[string]any
-	Documents         map[string]map[string]any
-	DocumentRevisions map[string]map[string]any
+	Events               []map[string]any
+	Artifacts            map[string]map[string]any
+	Documents            map[string]map[string]any
+	DocumentRevisions    map[string]map[string]any
+	NotificationReceipts map[string][]map[string]any
 }
 
 func expandThreadTimeline(ctx context.Context, opts handlerOptions, threadID string) (threadTimelineExpansion, error) {
@@ -145,7 +146,16 @@ func expandThreadTimeline(ctx context.Context, opts handlerOptions, threadID str
 		return out, err
 	}
 
-	return hydrateTimelineExpansion(ctx, opts, events)
+	out, err = hydrateTimelineExpansion(ctx, opts, events)
+	if err != nil {
+		return out, err
+	}
+	receipts, err := deriveAgentNotificationReceiptsByEvent(ctx, opts, threadID)
+	if err != nil {
+		return out, err
+	}
+	out.NotificationReceipts = receipts
+	return out, nil
 }
 
 // hydrateTimelineExpansion loads artifacts, documents, and document revisions
@@ -232,10 +242,11 @@ func handleThreadTimeline(w http.ResponseWriter, r *http.Request, opts handlerOp
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"events":             exp.Events,
-		"artifacts":          exp.Artifacts,
-		"documents":          exp.Documents,
-		"document_revisions": exp.DocumentRevisions,
+		"events":                exp.Events,
+		"artifacts":             exp.Artifacts,
+		"documents":             exp.Documents,
+		"document_revisions":    exp.DocumentRevisions,
+		"notification_receipts": exp.NotificationReceipts,
 	})
 }
 

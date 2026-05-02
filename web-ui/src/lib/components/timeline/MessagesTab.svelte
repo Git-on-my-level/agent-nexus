@@ -128,6 +128,9 @@
   let timelineArtifacts = $derived($timelineStore.timelineArtifacts ?? []);
   let timelineCards = $derived($timelineStore.timelineCards ?? []);
   let timelineDocuments = $derived($timelineStore.timelineDocuments ?? []);
+  let timelineNotificationReceipts = $derived(
+    $timelineStore.timelineNotificationReceipts ?? {},
+  );
   let timelineLoading = $derived($timelineStore.timelineLoading);
   let timelineError = $derived($timelineStore.timelineError);
   let workspaceSlug = $derived($timelineWorkspaceSlug);
@@ -191,6 +194,7 @@
       cards: timelineCards,
       documents: timelineDocuments,
       routeMaps,
+      notificationReceiptsByEventId: timelineNotificationReceipts,
     }),
   );
   let allMessages = $derived(flattenMessageThreadView(messageThreads));

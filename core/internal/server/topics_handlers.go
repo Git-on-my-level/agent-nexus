@@ -387,14 +387,19 @@ func buildTopicTimelinePayload(ctx context.Context, opts handlerOptions, topicID
 	if err != nil {
 		return nil, err
 	}
+	receipts, err := deriveAgentNotificationReceiptsByEvent(ctx, opts, primaryThreadID)
+	if err != nil {
+		return nil, err
+	}
 
 	return map[string]any{
-		"topic":     topic,
-		"events":    events,
-		"artifacts": artifacts,
-		"cards":     bundle.Cards,
-		"documents": bundle.Documents,
-		"threads":   bundle.Threads,
+		"topic":                 topic,
+		"events":                events,
+		"artifacts":             artifacts,
+		"cards":                 bundle.Cards,
+		"documents":             bundle.Documents,
+		"threads":               bundle.Threads,
+		"notification_receipts": receipts,
 	}, nil
 }
 

@@ -37,6 +37,9 @@ type agentNotificationItem struct {
 	CreatedAt        string
 	ReadAt           string
 	DismissedAt      string
+	ClaimedAt        string
+	CompletedAt      string
+	FailedAt         string
 	RequestEventID   string
 	ReadEventID      string
 	DismissEventID   string
@@ -303,6 +306,31 @@ func deriveAgentNotifications(ctx context.Context, opts handlerOptions, actorID 
 	return items, nil
 }
 
+func deriveAgentNotificationReceiptsByEvent(ctx context.Context, opts handlerOptions, threadID string) (map[string][]map[string]any, error) {
+	threadID = strings.TrimSpace(threadID)
+	if opts.primitiveStore == nil || threadID == "" {
+		return map[string][]map[string]any{}, nil
+	}
+	wakeups, err := opts.primitiveStore.ListAgentWakeups(ctx, primitives.AgentWakeupListFilter{
+		ThreadID: threadID,
+		Order:    "asc",
+	})
+	if err != nil {
+		return nil, err
+	}
+	receipts := make(map[string][]map[string]any)
+	for _, wakeup := range wakeups {
+		eventID := strings.TrimSpace(wakeup.TriggerEventID)
+		if eventID == "" {
+			continue
+		}
+		item := agentNotificationFromWakeup(wakeup).toMap()
+		item["notification_status"] = item["status"]
+		receipts[eventID] = append(receipts[eventID], item)
+	}
+	return receipts, nil
+}
+
 func loadAgentNotificationByWakeupID(ctx context.Context, opts handlerOptions, actorID string, wakeupID string) (*agentNotificationItem, error) {
 	items, err := deriveAgentNotifications(ctx, opts, actorID)
 	if err != nil {
@@ -327,6 +355,9 @@ func loadAgentNotificationByWakeupID(ctx context.Context, opts handlerOptions, a
 			CreatedAt:        strings.TrimSpace(anyString(item["created_at"])),
 			ReadAt:           strings.TrimSpace(anyString(item["read_at"])),
 			DismissedAt:      strings.TrimSpace(anyString(item["dismissed_at"])),
+			ClaimedAt:        strings.TrimSpace(anyString(item["claimed_at"])),
+			CompletedAt:      strings.TrimSpace(anyString(item["completed_at"])),
+			FailedAt:         strings.TrimSpace(anyString(item["failed_at"])),
 			RequestEventID:   strings.TrimSpace(anyString(item["request_event_id"])),
 			BridgeInstanceID: strings.TrimSpace(anyString(item["bridge_instance_id"])),
 			DeliveryStatus:   strings.TrimSpace(anyString(item["delivery_status"])),
@@ -412,6 +443,9 @@ func agentNotificationFromWakeup(wakeup primitives.AgentWakeup) *agentNotificati
 		CreatedAt:        wakeup.CreatedAt,
 		ReadAt:           wakeup.ReadAt,
 		DismissedAt:      wakeup.DismissedAt,
+		ClaimedAt:        wakeup.ClaimedAt,
+		CompletedAt:      wakeup.CompletedAt,
+		FailedAt:         wakeup.FailedAt,
 		RequestEventID:   wakeup.TriggerEventID,
 		BridgeInstanceID: wakeup.BridgeInstanceID,
 		DeliveryStatus:   wakeup.Status,
@@ -442,6 +476,15 @@ func (n *agentNotificationItem) toMap() map[string]any {
 	}
 	if n.DismissedAt != "" {
 		item["dismissed_at"] = n.DismissedAt
+	}
+	if n.ClaimedAt != "" {
+		item["claimed_at"] = n.ClaimedAt
+	}
+	if n.CompletedAt != "" {
+		item["completed_at"] = n.CompletedAt
+	}
+	if n.FailedAt != "" {
+		item["failed_at"] = n.FailedAt
 	}
 	if n.ReadEventID != "" {
 		item["read_event_id"] = n.ReadEventID

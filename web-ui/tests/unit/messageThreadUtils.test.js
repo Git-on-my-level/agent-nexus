@@ -293,4 +293,35 @@ describe("message thread utils", () => {
     );
     expect(threads[0].displayRefs).toEqual([]);
   });
+
+  it("attaches notification receipts to the triggering message", () => {
+    const receipts = [
+      {
+        wakeup_id: "wake-1",
+        target_handle: "hermes-m2",
+        delivery_status: "claimed",
+        notification_status: "unread",
+      },
+    ];
+    const threads = toMessageThreadView(
+      [
+        {
+          id: "m-receipt",
+          ts: "2026-04-20T10:00:00.000Z",
+          type: "message_posted",
+          thread_id: "thread-1",
+          actor_id: "a1",
+          refs: ["thread:thread-1"],
+          payload: { text: "@hermes-m2 please check this" },
+        },
+      ],
+      {
+        threadId: "thread-1",
+        notificationReceiptsByEventId: {
+          "m-receipt": receipts,
+        },
+      },
+    );
+    expect(threads[0].notificationReceipts).toEqual(receipts);
+  });
 });

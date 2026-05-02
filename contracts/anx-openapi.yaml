@@ -259,7 +259,7 @@ paths:
       x-anx-why: Load chronological evidence and related resources for one topic.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ topic, events, artifacts, cards, documents, threads }`."
+      x-anx-output-envelope: "Returns `{ topic, events, artifacts, cards, documents, threads, notification_receipts }`."
       x-anx-error-codes: [auth_required, invalid_token, not_found]
       x-anx-concepts: [topics, timeline]
       x-anx-stability: beta
@@ -600,7 +600,7 @@ paths:
       x-anx-why: Retrieve event history plus typed-ref expansions for one backing thread.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ thread, events, artifacts, topics, cards, documents }`."
+      x-anx-output-envelope: "Returns `{ thread, events, artifacts, topics, cards, documents, notification_receipts }`."
       x-anx-error-codes: [auth_required, invalid_token, not_found]
       x-anx-concepts: [threads, timeline]
       x-anx-stability: beta
@@ -5452,6 +5452,12 @@ components:
         threads:
           type: array
           items: { $ref: '#/components/schemas/Thread' }
+        notification_receipts:
+          type: object
+          description: Agent wake notification receipts keyed by triggering event id.
+          additionalProperties:
+            type: array
+            items: { $ref: '#/components/schemas/AgentNotificationReceipt' }
       required: [topic, events, artifacts, cards, documents, threads]
 
     CardTimelineResponse:
@@ -5531,7 +5537,44 @@ components:
         documents:
           type: array
           items: { $ref: '#/components/schemas/Document' }
+        notification_receipts:
+          type: object
+          description: Agent wake notification receipts keyed by triggering event id.
+          additionalProperties:
+            type: array
+            items: { $ref: '#/components/schemas/AgentNotificationReceipt' }
       required: [thread, events, artifacts, topics, cards, documents]
+
+    AgentNotificationReceipt:
+      type: object
+      description: Sender/operator-visible projection of an agent wake notification.
+      properties:
+        notification_id: { type: string }
+        wakeup_id: { type: string }
+        status:
+          type: string
+          description: Notification read state for compatibility with agent notification rows.
+          enum: [unread, read, dismissed]
+        notification_status:
+          type: string
+          description: Notification read state.
+          enum: [unread, read, dismissed]
+        delivery_status:
+          type: string
+          description: Bridge delivery state for the wake.
+          enum: [requested, claimed, completed, failed]
+        target_handle: { type: string }
+        target_actor_id: { type: string }
+        thread_id: { type: string }
+        trigger_event_id: { type: string }
+        created_at: { type: string, format: date-time }
+        claimed_at: { type: string, format: date-time }
+        completed_at: { type: string, format: date-time }
+        failed_at: { type: string, format: date-time }
+        read_at: { type: string, format: date-time }
+        dismissed_at: { type: string, format: date-time }
+        failure_reason: { type: string }
+      required: [notification_id, wakeup_id, status, notification_status, delivery_status, target_handle, target_actor_id, thread_id, trigger_event_id, created_at]
 
     ThreadWorkspaceResponse:
       type: object

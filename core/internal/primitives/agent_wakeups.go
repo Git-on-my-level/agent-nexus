@@ -48,6 +48,7 @@ type AgentWakeup struct {
 
 type AgentWakeupListFilter struct {
 	TargetActorID        string
+	ThreadID             string
 	Statuses             []string
 	NotificationStatuses []string
 	Order                string
@@ -107,6 +108,10 @@ func (s *Store) ListAgentWakeups(ctx context.Context, filter AgentWakeupListFilt
 	if actorID := strings.TrimSpace(filter.TargetActorID); actorID != "" {
 		clauses = append(clauses, "target_actor_id = ?")
 		args = append(args, actorID)
+	}
+	if threadID := strings.TrimSpace(filter.ThreadID); threadID != "" {
+		clauses = append(clauses, "thread_id = ?")
+		args = append(args, threadID)
 	}
 	if len(filter.Statuses) > 0 {
 		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(filter.Statuses)), ",")

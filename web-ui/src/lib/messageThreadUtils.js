@@ -112,10 +112,19 @@ function decorateMessageEvent(event, options = {}) {
   const messageIdsInThread = options.messageIdsInThread;
   const parentEventId = extractParentEventId(event, messageIdsInThread);
   const threadId = String(options.threadId ?? event?.thread_id ?? "").trim();
+  const eventId = String(event?.id ?? "").trim();
   const documentComment = extractDocumentComment(event);
   const suppressDisplayDocumentId = String(
     options.suppressDisplayDocumentId ?? "",
   ).trim();
+  const receiptMap =
+    options.notificationReceiptsByEventId &&
+    typeof options.notificationReceiptsByEventId === "object"
+      ? options.notificationReceiptsByEventId
+      : {};
+  const notificationReceipts = Array.isArray(receiptMap[eventId])
+    ? receiptMap[eventId]
+    : [];
 
   // When an event is an anchored document text comment, hide the duplicate
   // `document:<id>` and `document_revision:<id>` ref chips from the rendered
@@ -137,6 +146,7 @@ function decorateMessageEvent(event, options = {}) {
     parentEventId,
     messageText: extractMessageText(event),
     documentComment,
+    notificationReceipts,
     displayRefs: view.refs.filter((refValue) => {
       const ref = String(refValue ?? "");
       if (threadId && ref === `thread:${threadId}`) {
