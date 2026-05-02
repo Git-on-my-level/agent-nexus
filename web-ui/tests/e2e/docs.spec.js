@@ -856,7 +856,9 @@ test("doc with thread — compact viewport uses bottom dock, not side rail", asy
     page.locator(".shell-bottom-nav[aria-label='Primary navigation']"),
   ).toBeVisible();
   await expect(page.locator(".dd-rail")).toHaveCount(0);
-  const dockFeed = page.locator(".doc-detail-layout--with-rail .page-dock-feed");
+  const dockFeed = page.locator(
+    ".doc-detail-layout--with-rail .page-dock-feed",
+  );
   await expect(dockFeed).toBeVisible();
   await expect(dockFeed.locator(".dd-surface")).toBeVisible();
 
