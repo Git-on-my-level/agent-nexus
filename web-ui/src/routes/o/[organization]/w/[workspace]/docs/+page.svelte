@@ -17,8 +17,10 @@
   import WorkspaceListBulkToolbar from "$lib/components/WorkspaceListBulkToolbar.svelte";
   import LeadingSelectionGlyph from "$lib/components/LeadingSelectionGlyph.svelte";
   import LifecycleBadge from "$lib/components/LifecycleBadge.svelte";
+  import InlineWorkspaceMetricStrip from "$lib/components/InlineWorkspaceMetricStrip.svelte";
   import { closeConfirmModal, emptyConfirmModal } from "$lib/confirmModal.js";
   import { createWorkspaceListSelection } from "$lib/workspaceListSelection.svelte.js";
+  import { documentListMetricItems } from "$lib/workspaceRowMetrics.js";
 
   const DOC_STATE_LABELS = {
     active: "Active",
@@ -674,24 +676,37 @@
         <div
           class="pointer-events-none flex min-w-0 flex-1 items-start gap-3 px-3 py-2.5 sm:px-4"
         >
-          <WorkspaceResourceListRow
-            title={doc.title || doc.id}
-            description={doc.summary ?? ""}
-          >
-            {#snippet badges()}
-              <LifecycleBadge
-                state={doc.state}
-                label={DOC_STATE_LABELS[doc.state]}
-                forceShow={docsHaveMixedLifecycle}
-              />
-            {/snippet}
-          </WorkspaceResourceListRow>
-          <div
-            class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"
-          >
-            <span class="w-14 text-right text-fg-muted"
-              >{formatTimestamp(doc.updated_at) || "—"}</span
-            >
+          <div class="min-w-0 flex-1">
+            <div class="flex min-w-0 items-start justify-between gap-3">
+              <WorkspaceResourceListRow
+                title={doc.title || doc.id}
+                description={doc.summary ?? ""}
+              >
+                {#snippet badges()}
+                  <LifecycleBadge
+                    state={doc.state}
+                    label={DOC_STATE_LABELS[doc.state]}
+                    forceShow={docsHaveMixedLifecycle}
+                  />
+                  {#if doc.head_revision_number != null}
+                    <span
+                      class="font-mono text-micro tabular-nums text-fg-subtle"
+                      title="Head revision"
+                    >
+                      v{doc.head_revision_number}
+                    </span>
+                  {/if}
+                {/snippet}
+              </WorkspaceResourceListRow>
+              <div
+                class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"
+              >
+                <span class="w-14 text-right text-fg-muted"
+                  >{formatTimestamp(doc.updated_at) || "—"}</span
+                >
+              </div>
+            </div>
+            <InlineWorkspaceMetricStrip items={documentListMetricItems(doc)} />
           </div>
         </div>
       </div>
@@ -703,24 +718,38 @@
           class="flex min-w-0 flex-1 items-start gap-3 px-3 py-2.5 transition-colors hover:bg-line-subtle sm:px-4"
           href={workspaceHref(`/docs/${doc.id}`)}
         >
-          <WorkspaceResourceListRow
-            title={doc.title || doc.id}
-            description={doc.summary ?? ""}
-          >
-            {#snippet badges()}
-              <LifecycleBadge
-                state={doc.state}
-                label={DOC_STATE_LABELS[doc.state]}
-                forceShow={docsHaveMixedLifecycle}
-              />
-            {/snippet}
-          </WorkspaceResourceListRow>
-          <div
-            class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"
-          >
-            <span class="w-14 text-right text-fg-muted"
-              >{formatTimestamp(doc.updated_at) || "—"}</span
-            >
+          <div class="min-w-0 flex-1">
+            <div class="flex min-w-0 items-start justify-between gap-3">
+              <WorkspaceResourceListRow
+                title={doc.title || doc.id}
+                description={doc.summary ?? ""}
+                titleClass="group-hover/row:text-accent-text transition-colors"
+              >
+                {#snippet badges()}
+                  <LifecycleBadge
+                    state={doc.state}
+                    label={DOC_STATE_LABELS[doc.state]}
+                    forceShow={docsHaveMixedLifecycle}
+                  />
+                  {#if doc.head_revision_number != null}
+                    <span
+                      class="font-mono text-micro tabular-nums text-fg-subtle"
+                      title="Head revision"
+                    >
+                      v{doc.head_revision_number}
+                    </span>
+                  {/if}
+                {/snippet}
+              </WorkspaceResourceListRow>
+              <div
+                class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"
+              >
+                <span class="w-14 text-right text-fg-muted"
+                  >{formatTimestamp(doc.updated_at) || "—"}</span
+                >
+              </div>
+            </div>
+            <InlineWorkspaceMetricStrip items={documentListMetricItems(doc)} />
           </div>
         </a>
       </div>

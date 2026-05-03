@@ -23,8 +23,10 @@
   import WorkspaceListBulkToolbar from "$lib/components/WorkspaceListBulkToolbar.svelte";
   import LeadingSelectionGlyph from "$lib/components/LeadingSelectionGlyph.svelte";
   import LifecycleBadge from "$lib/components/LifecycleBadge.svelte";
+  import InlineWorkspaceMetricStrip from "$lib/components/InlineWorkspaceMetricStrip.svelte";
   import Button from "$lib/components/Button.svelte";
   import { createWorkspaceListSelection } from "$lib/workspaceListSelection.svelte.js";
+  import { topicListLinkedMetricItems } from "$lib/workspaceRowMetrics.js";
 
   const defaultFilters = {
     states: ["active"],
@@ -728,28 +730,35 @@
             <LeadingSelectionGlyph {selected} />
           </div>
           <div
-            class="pointer-events-none flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5"
+            class="pointer-events-none flex min-w-0 flex-1 items-start gap-3 px-3 py-2.5"
           >
-            <WorkspaceResourceListRow
-              title={topic.title}
-              description={topic.current_summary ?? topic.summary ?? ""}
-            >
-              {#snippet badges()}
-                <LifecycleBadge
-                  state={topic.state}
-                  forceShow={topicsHaveMixedLifecycle}
-                />
-                {#if isTopicArchived(topic) && topic.state !== "archived"}
-                  <LifecycleBadge state="archived" forceShow />
-                {/if}
-              {/snippet}
-            </WorkspaceResourceListRow>
-            <div
-              class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"
-            >
-              <span class="w-14 text-right text-fg-muted"
-                >{formatTimestamp(topic.updated_at) || "—"}</span
-              >
+            <div class="min-w-0 flex-1">
+              <div class="flex min-w-0 items-start justify-between gap-3">
+                <WorkspaceResourceListRow
+                  title={topic.title}
+                  description={topic.current_summary ?? topic.summary ?? ""}
+                >
+                  {#snippet badges()}
+                    <LifecycleBadge
+                      state={topic.state}
+                      forceShow={topicsHaveMixedLifecycle}
+                    />
+                    {#if isTopicArchived(topic) && topic.state !== "archived"}
+                      <LifecycleBadge state="archived" forceShow />
+                    {/if}
+                  {/snippet}
+                </WorkspaceResourceListRow>
+                <div
+                  class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"
+                >
+                  <span class="w-14 text-right text-fg-muted"
+                    >{formatTimestamp(topic.updated_at) || "—"}</span
+                  >
+                </div>
+              </div>
+              <InlineWorkspaceMetricStrip
+                items={topicListLinkedMetricItems(topic)}
+              />
             </div>
           </div>
         </div>
@@ -760,29 +769,37 @@
             : ''}"
         >
           <a
-            class="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 transition-colors hover:bg-line-subtle"
+            class="flex min-w-0 flex-1 items-start gap-3 px-3 py-2.5 transition-colors hover:bg-line-subtle"
             href={workspaceHref(`/topics/${encodeURIComponent(topic.id)}`)}
           >
-            <WorkspaceResourceListRow
-              title={topic.title}
-              description={topic.current_summary ?? topic.summary ?? ""}
-            >
-              {#snippet badges()}
-                <LifecycleBadge
-                  state={topic.state}
-                  forceShow={topicsHaveMixedLifecycle}
-                />
-                {#if isTopicArchived(topic) && topic.state !== "archived"}
-                  <LifecycleBadge state="archived" forceShow />
-                {/if}
-              {/snippet}
-            </WorkspaceResourceListRow>
-            <div
-              class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"
-            >
-              <span class="w-14 text-right text-fg-muted"
-                >{formatTimestamp(topic.updated_at) || "—"}</span
-              >
+            <div class="min-w-0 flex-1">
+              <div class="flex min-w-0 items-start justify-between gap-3">
+                <WorkspaceResourceListRow
+                  title={topic.title}
+                  description={topic.current_summary ?? topic.summary ?? ""}
+                  titleClass="group-hover/row:text-accent-text transition-colors"
+                >
+                  {#snippet badges()}
+                    <LifecycleBadge
+                      state={topic.state}
+                      forceShow={topicsHaveMixedLifecycle}
+                    />
+                    {#if isTopicArchived(topic) && topic.state !== "archived"}
+                      <LifecycleBadge state="archived" forceShow />
+                    {/if}
+                  {/snippet}
+                </WorkspaceResourceListRow>
+                <div
+                  class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"
+                >
+                  <span class="w-14 text-right text-fg-muted"
+                    >{formatTimestamp(topic.updated_at) || "—"}</span
+                  >
+                </div>
+              </div>
+              <InlineWorkspaceMetricStrip
+                items={topicListLinkedMetricItems(topic)}
+              />
             </div>
           </a>
         </div>

@@ -335,6 +335,12 @@ resources:
       trashed_at: { type: datetime, required: false }
       trashed_by: { type: string, required: false }
       trash_reason: { type: string, required: false }
+      timeline_message_count:
+        type: integer
+        required: false
+        description: >
+          Derived `/topics` list enrichment: non-trashed `message_posted` timeline events on
+          `thread_id`; omitted elsewhere; clients treat omission as zero.
 
   document:
     description: >
@@ -368,6 +374,24 @@ resources:
       updated_at: { type: datetime, required: true }
       updated_by: { type: string, required: true }
       provenance: { type: object, required: true, ref: provenance }
+      revision_count:
+        type: integer
+        required: false
+        description: >
+          Derived `/documents` list enrichment: count of immutable rows in revision lineage for this document.
+      head_revision_character_count:
+        type: integer
+        required: false
+        description: >
+          Derived list enrichment only: approximate Unicode scalar values (decoded UTF-8 rune count)
+          for the durable head revision body. Omitted when the blob is large or unreadable.
+      timeline_message_count:
+        type: integer
+        required: false
+        description: >
+          Derived `/documents` list enrichment when backing `thread_id` is present (`message_posted`
+          timeline, excluding trashed events). Not returned from document-by-id payloads; clients treat
+          omission as zero for list rows.
 
   document_revision:
     description: >

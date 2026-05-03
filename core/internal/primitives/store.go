@@ -2107,6 +2107,82 @@ func (s *Store) ListEventsByThread(ctx context.Context, threadID string) ([]map[
 	return events, nil
 }
 
+// BatchCountMessagePostedEventsByThreadIDs counts timeline message_posted events per backing thread.
+// Rows with a non-null trashed_at are excluded. Every requested distinct thread ID gets a map entry,
+// zero when no qualifying events exist or when thread_id matches no rows (including empty thread IDs).
+func (s *Store) BatchCountMessagePostedEventsByThreadIDs(ctx context.Context, threadIDs []string) (map[string]int, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("primitives store database is not initialized")
+	}
+
+	uniq := make([]string, 0, len(threadIDs))
+	seen := make(map[string]struct{}, len(threadIDs))
+	for _, raw := range threadIDs {
+		id := strings.TrimSpace(raw)
+		if id == "" {
+			continue
+		}
+		if _, dup := seen[id]; dup {
+			continue
+		}
+		seen[id] = struct{}{}
+		uniq = append(uniq, id)
+	}
+
+	out := make(map[string]int, len(uniq)+1)
+	for _, id := range uniq {
+		out[id] = 0
+	}
+	if len(uniq) == 0 {
+		return out, nil
+	}
+
+	ph := strings.Repeat("?,", len(uniq))
+	ph = ph[:len(ph)-1]
+	args := make([]any, 0, len(uniq)+1)
+	args = append(args, "message_posted")
+	for _, id := range uniq {
+		args = append(args, id)
+	}
+
+	q := fmt.Sprintf(
+		`SELECT trim(COALESCE(thread_id,'')) AS tid, COUNT(*) FROM events
+			WHERE type = ?
+			  AND COALESCE(trim(thread_id),'') <> ''
+			  AND COALESCE(trim(trashed_at),'') = ''
+			  AND trim(COALESCE(thread_id,'')) IN (%s)
+			GROUP BY tid`,
+		ph,
+	)
+
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("batch count message_posted events: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var tid string
+		var n int64
+		if err := rows.Scan(&tid, &n); err != nil {
+			return nil, fmt.Errorf("scan message_posted counts: %w", err)
+		}
+		key := strings.TrimSpace(tid)
+		if key == "" {
+			continue
+		}
+		if _, ok := out[key]; !ok {
+			continue
+		}
+		out[key] = int(n)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate message_posted counts: %w", err)
+	}
+
+	return out, nil
+}
+
 func (s *Store) ListRecentEventsByThread(ctx context.Context, threadID string, limit int) ([]map[string]any, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("primitives store database is not initialized")
@@ -2190,6 +2266,8 @@ func prepareEventForInsert(actorID string, event map[string]any) (preparedEvent,
 
 	typeValue, _ := body["type"].(string)
 	threadID, _ := body["thread_id"].(string)
+	threadID = strings.TrimSpace(threadID)
+	body["thread_id"] = threadID
 	refs, err := normalizeStringSlice(body["refs"])
 	if err != nil {
 		return preparedEvent{}, fmt.Errorf("event.refs: %w", err)

@@ -153,6 +153,72 @@ func TestListEventsWithoutLimitReturnsAllMatchingRows(t *testing.T) {
 	}
 }
 
+func TestBatchCountMessagePostedEventsByThreadIDs(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	store := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+
+	threadA := "thread-bc-a"
+	threadB := "thread-bc-b"
+	ts := time.Date(2026, 4, 17, 9, 0, 0, 0, time.UTC).Format(time.RFC3339Nano)
+
+	appendMsg := func(threadID string) string {
+		t.Helper()
+		event, err := store.AppendEvent(ctx, "actor-batch", map[string]any{
+			"type":      "message_posted",
+			"ts":        ts,
+			"thread_id": threadID,
+			"refs":      []any{"thread:" + threadID},
+			"payload":   map[string]any{"text": "hello"},
+		})
+		if err != nil {
+			t.Fatalf("append message to %s: %v", threadID, err)
+		}
+		id, _ := event["id"].(string)
+		if id == "" {
+			t.Fatalf("append message to %s returned no id: %#v", threadID, event)
+		}
+		return id
+	}
+
+	for range 4 {
+		appendMsg(threadA)
+	}
+	whitespaceEventID := appendMsg(threadB)
+	if _, err := workspace.DB().ExecContext(ctx, `UPDATE events SET thread_id = ? WHERE id = ?`, "  "+threadB+"  ", whitespaceEventID); err != nil {
+		t.Fatalf("rewrite event thread_id with whitespace: %v", err)
+	}
+
+	counts, err := store.BatchCountMessagePostedEventsByThreadIDs(ctx, []string{threadA, threadB, "", "missing-thread", threadA})
+	if err != nil {
+		t.Fatalf("batch count: %v", err)
+	}
+	if got := counts[threadA]; got != 4 {
+		t.Fatalf("thread-a count=%d want 4", got)
+	}
+	if got := counts[threadB]; got != 1 {
+		t.Fatalf("thread-b count=%d want 1", got)
+	}
+	if got := counts["missing-thread"]; got != 0 {
+		t.Fatalf("missing-thread count=%d want 0", got)
+	}
+
+	z, err := store.BatchCountMessagePostedEventsByThreadIDs(ctx, []string{})
+	if err != nil {
+		t.Fatalf("empty batch: %v", err)
+	}
+	if len(z) != 0 {
+		t.Fatalf("expected empty map for empty ids, got %d keys", len(z))
+	}
+}
+
 func TestListEventsPageKeysetPaginationNoSkipsOrDuplicates(t *testing.T) {
 	t.Parallel()
 
@@ -617,6 +683,63 @@ func TestUpdateDocumentRejectsRevisionQuotaExceeded(t *testing.T) {
 	}
 	if violation.Code != "workspace_quota_exceeded" || violation.Metric != "revision_count" {
 		t.Fatalf("unexpected quota violation: %#v", violation)
+	}
+}
+
+func TestListDocumentsEmbedsListOnlyMetrics(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	store := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+
+	document, _, err := store.CreateDocument(ctx, "actor-1", map[string]any{
+		"id":        "doc-list-metrics",
+		"thread_id": "thread-doc-list-metrics",
+		"title":     "List metrics",
+	}, "hé\n", "text", nil)
+	if err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+
+	_, err = store.AppendEvent(ctx, "actor-1", map[string]any{
+		"type":      "message_posted",
+		"thread_id": "thread-doc-list-metrics",
+		"refs":      []string{"thread:thread-doc-list-metrics"},
+		"payload":   map[string]any{"text": "hello"},
+	})
+	if err != nil {
+		t.Fatalf("append document timeline message: %v", err)
+	}
+
+	documents, _, err := store.ListDocuments(ctx, primitives.DocumentListFilter{States: []string{"active"}})
+	if err != nil {
+		t.Fatalf("list documents: %v", err)
+	}
+
+	var got map[string]any
+	for _, doc := range documents {
+		if doc["id"] == document["id"] {
+			got = doc
+			break
+		}
+	}
+	if got == nil {
+		t.Fatalf("document %s not returned from list", document["id"])
+	}
+	if got["revision_count"] != 1 {
+		t.Fatalf("revision_count=%#v want 1", got["revision_count"])
+	}
+	if got["timeline_message_count"] != 1 {
+		t.Fatalf("timeline_message_count=%#v want 1", got["timeline_message_count"])
+	}
+	if got["head_revision_character_count"] != 3 {
+		t.Fatalf("head_revision_character_count=%#v want 3", got["head_revision_character_count"])
 	}
 }
 

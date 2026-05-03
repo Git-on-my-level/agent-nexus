@@ -4617,6 +4617,11 @@ components:
         trashed_at: { type: string, format: date-time }
         trashed_by: { type: string }
         trash_reason: { type: string }
+        timeline_message_count:
+          type: integer
+          description: >
+            Derived GET /topics enrichment: count of timeline `message_posted` rows on `thread_id`
+            excluding trashed events. Omitted on single-topic GET; clients treat absence as zero.
       required:
         [id, state, title, summary, owner_refs, document_refs, board_refs, related_refs,
          created_at, created_by, updated_at, updated_by, provenance]
@@ -4643,6 +4648,22 @@ components:
         updated_at: { type: string, format: date-time }
         updated_by: { type: string }
         provenance: { $ref: '#/components/schemas/Provenance' }
+        revision_count:
+          type: integer
+          description: >
+            Derived GET /documents list enrichment: rows in revision lineage (`document_revisions`)
+            for this document id.
+        head_revision_character_count:
+          type: integer
+          description: >
+            List-only enrichment: approximate Unicode scalar count (UTF-8 text runes) of the decoded
+            head revision body. Omitted when the body exceeds a server-defined size cap (~1 MiB) or blob
+            bytes are unavailable; clients show a placeholder instead.
+        timeline_message_count:
+          type: integer
+          description: >
+            List-only enrichment: timeline `message_posted` counts on backing `thread_id`,
+            excluding trashed events (same derivation as `/topics`).
       required:
         [id, title, subject_ref, head_revision_ref, state, refs, created_at, created_by, updated_at, updated_by, provenance]
 

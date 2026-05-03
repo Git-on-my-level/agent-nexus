@@ -37,6 +37,8 @@ type topicRow struct {
 	TrashedAt      sql.NullString
 	TrashedBy      sql.NullString
 	TrashReason    sql.NullString
+	// ListTopics only (GetTopic clears via Scan column omission).
+	ListTimelineMsgCount sql.NullInt64
 }
 
 // topicRefBuckets holds topic typed-ref lists reconstructed from ref_edges (not from extensions_json).
@@ -309,6 +311,11 @@ func (r topicRow) toMap(buckets topicRefBuckets) (map[string]any, error) {
 
 	out["state"] = canonicalLifecycleState(r.ArchivedAt, r.TrashedAt)
 
+	if r.ThreadID.Valid && strings.TrimSpace(r.ThreadID.String) != "" &&
+		r.ListTimelineMsgCount.Valid {
+		out["timeline_message_count"] = int(r.ListTimelineMsgCount.Int64)
+	}
+
 	return out, nil
 }
 
@@ -349,6 +356,7 @@ func (s *Store) ListTopics(ctx context.Context, filter TopicListFilter) ([]map[s
 			&row.TrashedAt,
 			&row.TrashedBy,
 			&row.TrashReason,
+			&row.ListTimelineMsgCount,
 		); err != nil {
 			return nil, "", fmt.Errorf("scan topic row: %w", err)
 		}
@@ -1067,27 +1075,43 @@ func topicLifecycleEventType(action string) string {
 }
 
 func buildListTopicsQuery(filter TopicListFilter) (string, []any) {
-	query := `SELECT id, title, summary, thread_id, extensions_json, provenance_json, created_at, created_by, updated_at, updated_by, archived_at, archived_by, trashed_at, trashed_by, trash_reason
-		FROM topics
-		WHERE 1=1`
+	inner := `SELECT id, title, summary, thread_id, extensions_json, provenance_json, created_at, created_by, updated_at, updated_by, archived_at, archived_by, trashed_at, trashed_by, trash_reason FROM topics WHERE 1=1`
 	args := make([]any, 0, 8)
-	query += ` AND ` + LifecycleStatesOrGroup("archived_at", "trashed_at", filter.States)
+	inner += ` AND ` + LifecycleStatesOrGroup("archived_at", "trashed_at", filter.States)
 	if q := strings.TrimSpace(filter.Query); q != "" {
 		pattern := "%" + strings.ToLower(q) + "%"
-		query += ` AND (LOWER(id) LIKE ? OR LOWER(COALESCE(title, '')) LIKE ? OR LOWER(COALESCE(summary, '')) LIKE ?)`
+		inner += ` AND (LOWER(id) LIKE ? OR LOWER(COALESCE(title, '')) LIKE ? OR LOWER(COALESCE(summary, '')) LIKE ?)`
 		args = append(args, pattern, pattern, pattern)
 	}
-	query += ` ORDER BY updated_at DESC, id ASC`
+	inner += ` ORDER BY updated_at DESC, id ASC`
 	if filter.Limit != nil && *filter.Limit > 0 {
-		query += ` LIMIT ?`
+		inner += ` LIMIT ?`
 		args = append(args, *filter.Limit+1)
 		if filter.Cursor != "" {
 			if offset, err := decodeCursor(filter.Cursor); err == nil && offset > 0 {
-				query += ` OFFSET ?`
+				inner += ` OFFSET ?`
 				args = append(args, offset)
 			}
 		}
 	}
+
+	// Aggregate message_posted only for backing threads appearing on this page (avoids full-table scans).
+	query := `WITH topic_page AS (` + inner + `)
+SELECT tp.id, tp.title, tp.summary, tp.thread_id, tp.extensions_json, tp.provenance_json,
+	tp.created_at, tp.created_by, tp.updated_at, tp.updated_by, tp.archived_at, tp.archived_by,
+	tp.trashed_at, tp.trashed_by, tp.trash_reason,
+	COALESCE(mc.msg_cnt, 0) AS timeline_message_count
+FROM topic_page tp
+LEFT JOIN (
+	SELECT trim(COALESCE(e.thread_id,'')) AS tid, COUNT(*) AS msg_cnt FROM events e
+	WHERE e.type = 'message_posted'
+	  AND COALESCE(trim(e.thread_id),'') <> ''
+	  AND COALESCE(trim(e.trashed_at),'') = ''
+	  AND trim(COALESCE(e.thread_id,'')) IN (
+		SELECT DISTINCT trim(COALESCE(thread_id,'')) FROM topic_page WHERE COALESCE(trim(thread_id),'') <> ''
+	  )
+	GROUP BY tid
+) mc ON trim(COALESCE(tp.thread_id,'')) = mc.tid`
 	return query, args
 }
 

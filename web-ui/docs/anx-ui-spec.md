@@ -159,6 +159,8 @@ A dedicated surface showing items that need operator attention.
 
 A filterable list of topics (the UI may still expose thread-indexed routes for inspection; the operator-facing noun is **topic**).
 
+Topic, document, and board list rows SHOULD use compact inline metrics for scanability. Zero values may be shown when the metric set is stable across rows, but list-only API enrichments such as `timeline_message_count`, `revision_count`, and `head_revision_character_count` remain read hints: the UI must tolerate missing fields and degrade them to zero or an unavailable placeholder rather than treating them as durable editable state.
+
 **Filters:** lifecycle `state` (`active`, `archived`, `trashed`), archive/trash visibility flags, and search (`q`).
 
 Each row shows: title, lifecycle state, summary, and last activity timestamp.

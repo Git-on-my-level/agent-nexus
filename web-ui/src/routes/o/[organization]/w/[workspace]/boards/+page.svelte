@@ -12,6 +12,8 @@
   import { formatTimestamp } from "$lib/formatDate";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import { BOARD_STATUS_LABELS, parseDelimitedValues } from "$lib/boardUtils";
+  import InlineWorkspaceMetricStrip from "$lib/components/InlineWorkspaceMetricStrip.svelte";
+  import { boardListColumnMetricItems } from "$lib/workspaceRowMetrics.js";
   import WorkspaceResourceListRow from "$lib/components/WorkspaceResourceListRow.svelte";
   import WorkspaceListBulkToolbar from "$lib/components/WorkspaceListBulkToolbar.svelte";
   import LeadingSelectionGlyph from "$lib/components/LeadingSelectionGlyph.svelte";
@@ -577,6 +579,12 @@
           </div>
         </div>
       {:else}
+        {@const columnMetrics = boardListColumnMetricItems(
+          board,
+          item.listStats,
+        )}
+        {@const totalCards = Number(item.listStats?.card_count ?? 0)}
+        {@const boardsMetricFooter = `${totalCards} card${totalCards === 1 ? "" : "s"}`}
         <div
           class="flex items-stretch {showBorderTop
             ? 'border-t border-line'
@@ -593,28 +601,36 @@
             <div
               class="pointer-events-none relative z-10 flex min-w-0 items-start justify-between gap-3"
             >
-              <WorkspaceResourceListRow
-                title={board.title || board.id}
-                description={board.summary ?? ""}
-                titleClass="group-hover:text-accent-text"
-              >
-                {#snippet badges()}
-                  <LifecycleBadge
-                    state={board.state}
-                    label={BOARD_STATUS_LABELS[board.state]}
-                    forceShow={boardsHaveMixedLifecycle}
-                  />
-                  {#if isBoardArchived(board) && board.state !== "archived"}
-                    <LifecycleBadge state="archived" forceShow />
-                  {/if}
-                {/snippet}
-              </WorkspaceResourceListRow>
-              <div
-                class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"
-              >
-                <span class="w-14 text-right text-fg-muted"
-                  >{formatTimestamp(board.updated_at) || "—"}</span
-                >
+              <div class="min-w-0 flex-1">
+                <div class="flex min-w-0 items-start justify-between gap-3">
+                  <WorkspaceResourceListRow
+                    title={board.title || board.id}
+                    description={board.summary ?? ""}
+                    titleClass="group-hover:text-accent-text transition-colors"
+                  >
+                    {#snippet badges()}
+                      <LifecycleBadge
+                        state={board.state}
+                        label={BOARD_STATUS_LABELS[board.state]}
+                        forceShow={boardsHaveMixedLifecycle}
+                      />
+                      {#if isBoardArchived(board) && board.state !== "archived"}
+                        <LifecycleBadge state="archived" forceShow />
+                      {/if}
+                    {/snippet}
+                  </WorkspaceResourceListRow>
+                  <div
+                    class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"
+                  >
+                    <span class="w-14 text-right text-fg-muted"
+                      >{formatTimestamp(board.updated_at) || "—"}</span
+                    >
+                  </div>
+                </div>
+                <InlineWorkspaceMetricStrip
+                  items={columnMetrics}
+                  footer={boardsMetricFooter}
+                />
               </div>
             </div>
           </div>
