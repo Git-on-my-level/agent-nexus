@@ -20,25 +20,31 @@
 
 {#if items.length > 0}
   <div
-    class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-micro text-fg-muted"
+    class="mt-1.5 grid grid-cols-3 gap-x-2 gap-y-1 text-micro text-fg-muted sm:flex sm:flex-wrap sm:items-center sm:gap-x-3"
   >
     {#each items as item (item.key ?? item.label)}
-      <span class="inline-flex items-center gap-1.5">
+      {@const value =
+        item.displayValue != null ? item.displayValue : String(item.count ?? 0)}
+      {@const isZero =
+        item.displayValue == null && Number(item.count ?? 0) === 0}
+      <span class="inline-flex min-w-0 items-center gap-1.5">
         <span
-          class="h-1.5 w-1.5 rounded-full {item.dotClass}"
+          class="h-1.5 w-1.5 shrink-0 rounded-full {item.dotClass} {isZero
+            ? 'opacity-40'
+            : ''}"
           aria-hidden="true"
         ></span>
-        <span class="text-fg"
-          >{#if item.displayValue != null}{item.displayValue}{:else}{String(
-              item.count ?? 0,
-            )}{/if}</span
+        <span class={isZero ? "text-fg-muted" : "text-fg"}>{value}</span>
+        <span class="truncate {isZero ? 'text-fg-subtle' : ''}"
+          >{item.label}</span
         >
-        <span>{item.label}</span>
       </span>
     {/each}
     {#if footer}
-      <span class="text-fg-subtle">·</span>
-      <span>{footer}</span>
+      <span class="hidden sm:inline text-fg-subtle">·</span>
+      <span class="col-span-3 text-fg-subtle sm:col-span-1 sm:text-fg-muted"
+        >{footer}</span
+      >
     {/if}
   </div>
 {/if}
