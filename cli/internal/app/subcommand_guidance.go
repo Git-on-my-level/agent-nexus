@@ -115,8 +115,8 @@ var actorsSubcommandSpec = subcommandSpec{
 
 var metaSubcommandSpec = subcommandSpec{
 	command:  "meta",
-	valid:    []string{"health", "readyz", "version", "handshake", "ops", "commands", "command", "concepts", "concept", "docs", "doc", "skill"},
-	examples: []string{"anx meta health", "anx meta readyz", "anx meta commands", "anx meta command --command-id threads.list", "anx meta docs", "anx meta doc agent-guide", "anx meta skill cursor --write-dir ~/.cursor/skills/anx-cli-onboard"},
+	valid:    []string{"health", "livez", "readyz", "version", "handshake", "ops", "commands", "command", "concepts", "concept", "docs", "doc", "skill"},
+	examples: []string{"anx meta health", "anx meta livez", "anx meta readyz", "anx meta commands", "anx meta command --command-id threads.list", "anx meta docs", "anx meta doc agent-guide", "anx meta skill cursor --write-dir ~/.cursor/skills/anx-cli-onboard"},
 }
 
 var metaOpsSubcommandSpec = subcommandSpec{

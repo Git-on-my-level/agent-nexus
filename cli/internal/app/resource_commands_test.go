@@ -2804,6 +2804,132 @@ func TestMessageCommandInvalidFlagsBeatAmbiguousProfileResolution(t *testing.T) 
 	}
 }
 
+func TestPreConfigUsagePreflightBeatsAmbiguousProfileResolution(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeAgentProfile(t, home, "agent-b", `{"agent":"agent-b","actor_id":"actor_b","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+
+	tests := []struct {
+		name        string
+		args        []string
+		command     string
+		code        string
+		messagePart string
+	}{
+		{
+			name:        "generated list invalid flag",
+			args:        []string{"boards", "list", "--definitely-not-a-flag"},
+			command:     "boards list",
+			code:        "invalid_flags",
+			messagePart: "definitely-not-a-flag",
+		},
+		{
+			name:        "local helper lifecycle conflict",
+			args:        []string{"events", "list", "--include-archived", "--archived-only"},
+			command:     "events list",
+			code:        "invalid_flags",
+			messagePart: "include-archived",
+		},
+		{
+			name:        "nested domain unknown subcommand",
+			args:        []string{"topics", "frobnicate"},
+			command:     "topics",
+			code:        "unknown_subcommand",
+			messagePart: "frobnicate",
+		},
+		{
+			name:        "threads unknown subcommand",
+			args:        []string{"threads", "frobnicate"},
+			command:     "threads",
+			code:        "unknown_subcommand",
+			messagePart: "frobnicate",
+		},
+		{
+			name:        "unknown root command",
+			args:        []string{"frobnicate"},
+			command:     "frobnicate",
+			code:        "unknown_command",
+			messagePart: "frobnicate",
+		},
+		{
+			name:        "import execute invalid flag",
+			args:        []string{"import", "apply", "--plan", "plan.json", "--execute", "--unknown"},
+			command:     "import apply",
+			code:        "invalid_flags",
+			messagePart: "unknown",
+		},
+		{
+			name:        "config lenient invalid flag",
+			args:        []string{"config", "use", "agent-a", "--unknown"},
+			command:     "config use",
+			code:        "invalid_flags",
+			messagePart: "unknown",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			raw := runCLIForTest(t, home, nil, nil, append([]string{"--json"}, tt.args...))
+			payload := assertEnvelopeError(t, raw)
+			if got := anyStringValue(payload["command"]); got != tt.command {
+				t.Fatalf("expected command %q, got %#v", tt.command, payload)
+			}
+			errObj, _ := payload["error"].(map[string]any)
+			if got := anyStringValue(errObj["code"]); got != tt.code {
+				t.Fatalf("expected %s before config resolution, got %#v", tt.code, payload)
+			}
+			if got := anyStringValue(errObj["message"]); !strings.Contains(got, tt.messagePart) {
+				t.Fatalf("expected message to contain %q, got %#v", tt.messagePart, payload)
+			}
+		})
+	}
+}
+
+func TestPreConfigUsagePreflightMirrorsGoFlagSpelling(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeAgentProfile(t, home, "agent-b", `{"agent":"agent-b","actor_id":"actor_b","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+
+	raw := runCLIForTest(t, home, nil, nil, []string{
+		"--json",
+		"boards", "list", "-limit", "10",
+	})
+	payload := assertEnvelopeError(t, raw)
+	if got := anyStringValue(payload["command"]); got != "boards list" {
+		t.Fatalf("expected boards list config error command, got %#v", payload)
+	}
+	errObj, _ := payload["error"].(map[string]any)
+	if got := anyStringValue(errObj["code"]); got != "config_resolution_failed" {
+		t.Fatalf("expected single-dash flag to pass preflight and reach config resolution, got %#v", payload)
+	}
+}
+
+func TestConfigResolutionErrorsUsePreflightCommandIdentity(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeAgentProfile(t, home, "agent-b", `{"agent":"agent-b","actor_id":"actor_b","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+
+	raw := runCLIForTest(t, home, nil, nil, []string{
+		"--json",
+		"events", "list", "--max-events", "1",
+	})
+	payload := assertEnvelopeError(t, raw)
+	if got := anyStringValue(payload["command"]); got != "events list" {
+		t.Fatalf("expected events list config error command, got %#v", payload)
+	}
+	errObj, _ := payload["error"].(map[string]any)
+	if got := anyStringValue(errObj["code"]); got != "config_resolution_failed" {
+		t.Fatalf("expected config_resolution_failed, got %#v", payload)
+	}
+}
+
 func TestBoardCommands(t *testing.T) {
 	t.Parallel()
 

@@ -1,7 +1,6 @@
 package app
 
 import (
-	"flag"
 	"fmt"
 	"strings"
 
@@ -9,124 +8,517 @@ import (
 )
 
 func preflightConfigIndependentUsage(args []string) (string, error) {
-	if len(args) < 2 || hasHelpToken(args) {
+	if len(args) == 0 || hasHelpToken(args) {
 		return "", nil
 	}
-	resource := strings.TrimSpace(args[0])
-	sub := strings.TrimSpace(args[1])
-	commandName := resource + " " + sub
-	commandArgs := args[2:]
+	if rewritten, ok := applyCommandShapeCompatibilityAlias(args); ok {
+		args = rewritten
+	}
+	if err := preflightKnownCommandShape(args); err != nil {
+		return preflightShapeCommandName(args), err
+	}
+	commandName, commandArgs, ok := matchPreflightFlagSpec(args)
+	if !ok {
+		return preflightInferredCommandName(args), nil
+	}
+	if err := preflightFlagUsage(commandArgs, preflightFlagSpecs()[commandName]); err != nil {
+		return commandName, err
+	}
+	return commandName, nil
+}
 
-	switch resource {
+type preflightFlagKind int
+
+const (
+	preflightFlagString preflightFlagKind = iota
+	preflightFlagBool
+)
+
+type preflightFlagSpec struct {
+	kind preflightFlagKind
+}
+
+func preflightKnownCommandShape(args []string) error {
+	root := strings.TrimSpace(args[0])
+	if _, ok := preflightRootCommands()[root]; !ok {
+		return errnorm.Usage("unknown_command", fmt.Sprintf("unknown command %q", root))
+	}
+
+	switch root {
+	case "api":
+		return preflightSubcommand(args[1:], apiSubcommandSpec)
+	case "auth":
+		if err := preflightSubcommand(args[1:], authSubcommandSpec); err != nil {
+			return err
+		}
+		if len(args) >= 3 {
+			switch authSubcommandSpec.normalize(args[1]) {
+			case "invites":
+				return preflightSubcommand(args[2:], authInvitesSubcommandSpec)
+			case "bootstrap":
+				return preflightSubcommand(args[2:], authBootstrapSubcommandSpec)
+			case "principals":
+				return preflightSubcommand(args[2:], authPrincipalsSubcommandSpec)
+			case "audit":
+				return preflightSubcommand(args[2:], authAuditSubcommandSpec)
+			}
+		}
+	case "bridge":
+		return preflightSubcommand(args[1:], bridgeSubcommandSpec)
+	case "config":
+		return preflightSubcommand(args[1:], configSubcommandSpec)
+	case "meta":
+		if err := preflightSubcommand(args[1:], metaSubcommandSpec); err != nil {
+			return err
+		}
+		if len(args) >= 3 && metaSubcommandSpec.normalize(args[1]) == "ops" {
+			return preflightSubcommand(args[2:], metaOpsSubcommandSpec)
+		}
+	case "notifications":
+		return preflightSubcommand(args[1:], notificationsSubcommandSpec)
+	case "import":
+		return preflightSubcommand(args[1:], importSubcommandSpec)
+	case "draft":
+		return preflightSubcommand(args[1:], draftSubcommandSpec)
+	case "provenance":
+		return preflightSubcommand(args[1:], provenanceSubcommandSpec)
+	case "human":
+		return preflightHumanSubcommand(args[1:])
+	case "secret":
+		return preflightSubcommand(args[1:], secretSubcommandSpec)
+	case "workspace":
+		return preflightWorkspaceSubcommand(args[1:])
+	case "actors":
+		return preflightSubcommand(args[1:], actorsSubcommandSpec)
+	case "threads":
+		return preflightThreadsSubcommand(args[1:])
 	case "topics":
-		switch sub {
-		case "message":
-			return commandName, preflightMessageWriteFlags(commandName, commandArgs, "topic")
-		case "reply":
-			return commandName, preflightMessageReplyFlags(commandName, commandArgs, "topic")
-		case "messages":
-			return commandName, preflightMessagesListFlags(commandName, commandArgs, "topic")
+		return preflightSubcommand(args[1:], topicsSubcommandSpec)
+	case "ref-edges":
+		return preflightSubcommand(args[1:], refEdgesSubcommandSpec)
+	case "cards":
+		return preflightSubcommand(args[1:], cardsSubcommandSpec)
+	case "artifacts":
+		return preflightSubcommand(args[1:], artifactsSubcommandSpec)
+	case "boards":
+		if err := preflightSubcommand(args[1:], boardsSubcommandSpec); err != nil {
+			return err
+		}
+		if len(args) >= 3 && boardsSubcommandSpec.normalize(args[1]) == "cards" {
+			return preflightSubcommand(args[2:], boardsCardsSubcommandSpec)
 		}
 	case "docs":
-		switch sub {
-		case "message":
-			return commandName, preflightMessageWriteFlags(commandName, commandArgs, "document")
-		case "reply":
-			return commandName, preflightMessageReplyFlags(commandName, commandArgs, "document")
-		case "messages":
-			return commandName, preflightMessagesListFlags(commandName, commandArgs, "document")
+		if err := preflightSubcommand(args[1:], docsSubcommandSpec); err != nil {
+			return err
 		}
-	case "cards":
-		switch sub {
-		case "message":
-			return commandName, preflightMessageWriteFlags(commandName, commandArgs, "card")
-		case "reply":
-			return commandName, preflightMessageReplyFlags(commandName, commandArgs, "card")
-		case "messages":
-			return commandName, preflightMessagesListFlags(commandName, commandArgs, "card")
+		if len(args) >= 3 && docsSubcommandSpec.normalize(args[1]) == "revision" {
+			return preflightSubcommand(args[2:], docsRevisionSubcommandSpec)
 		}
-	case "threads":
-		switch sub {
-		case "message":
-			return commandName, preflightMessageWriteFlags(commandName, commandArgs, "thread")
-		case "reply":
-			return commandName, preflightMessageReplyFlags(commandName, commandArgs, "thread")
-		}
-	}
-	return "", nil
-}
-
-func preflightMessageWriteFlags(commandName string, args []string, idFlagName string) error {
-	_, args = popLeadingPositional(args)
-	fs := newSilentFlagSet(commandName)
-	var idFlag, bodyFlag, bodyFileFlag, summaryFlag, actorIDFlag trackedString
-	var refFlags trackedStrings
-	var dryRunFlag trackedBool
-	registerMessageTargetFlags(fs, idFlagName, &idFlag)
-	fs.Var(&bodyFlag, "body", "Message body text")
-	fs.Var(&bodyFileFlag, "body-file", "Load message body text from a local file")
-	fs.Var(&summaryFlag, "summary", "Optional short event summary")
-	fs.Var(&actorIDFlag, "actor-id", "Actor id; defaults from the active profile")
-	fs.Var(&refFlags, "ref", "Additional typed ref to attach to the message, repeatable")
-	fs.Var(&dryRunFlag, "dry-run", "Validate and render request without sending the mutation")
-	if err := fs.Parse(args); err != nil {
-		return errnorm.Usage("invalid_flags", err.Error())
+	case "events":
+		return preflightSubcommand(args[1:], eventsSubcommandSpec)
+	case "inbox":
+		return preflightSubcommand(args[1:], inboxSubcommandSpec)
+	case "derived":
+		return preflightSubcommand(args[1:], derivedSubcommandSpec)
 	}
 	return nil
 }
 
-func preflightMessageReplyFlags(commandName string, args []string, idFlagName string) error {
-	_, filtered, err := extractReplyTarget(args, commandName)
-	if err != nil {
-		return err
+func preflightSubcommand(args []string, spec subcommandSpec) error {
+	if len(args) == 0 || isHelpToken(args[0]) {
+		return nil
 	}
-	return preflightMessageWriteFlags(commandName, filtered, idFlagName)
+	raw := strings.TrimSpace(args[0])
+	normalized := spec.normalize(raw)
+	for _, valid := range spec.valid {
+		if normalized == valid {
+			return nil
+		}
+	}
+	return spec.unknownError(raw)
 }
 
-func preflightMessagesListFlags(commandName string, args []string, idFlagName string) error {
-	_, args = popLeadingPositional(args)
-	fs := newSilentFlagSet(commandName)
-	var idFlag, actorIDFlag trackedString
-	var maxEventsFlag trackedInt
-	var mineFlag, fullIDFlag trackedBool
-	var includeArchived, archivedOnly, includeTrashed, trashedOnly bool
-	registerMessageTargetFlags(fs, idFlagName, &idFlag)
-	fs.Var(&actorIDFlag, "actor-id", "Filter to one actor id")
-	fs.Var(&mineFlag, "mine", "Filter to messages authored by active profile actor_id")
-	fs.Var(&fullIDFlag, "full-id", "Render full event ids in default text output")
-	fs.Var(&maxEventsFlag, "max-events", "Return at most N most-recent matching messages")
-	fs.BoolVar(&includeArchived, "include-archived", false, "Include archived events")
-	fs.BoolVar(&archivedOnly, "archived-only", false, "Show only archived events")
-	fs.BoolVar(&includeTrashed, "include-trashed", false, "Include trashed events")
-	fs.BoolVar(&trashedOnly, "trashed-only", false, "Show only trashed events")
-	if err := fs.Parse(args); err != nil {
-		return errnorm.Usage("invalid_flags", err.Error())
+func preflightThreadsSubcommand(args []string) error {
+	if len(args) == 0 || isHelpToken(args[0]) {
+		return nil
 	}
-	if err := validateLifecycleFilterFlags(includeArchived, archivedOnly, includeTrashed, trashedOnly); err != nil {
-		return err
+	if strings.TrimSpace(args[0]) == "patch" {
+		return nil
 	}
-	return nil
+	return preflightSubcommand(args, threadsSubcommandSpec)
 }
 
-func registerMessageTargetFlags(fs interface {
-	Var(value flag.Value, name string, usage string)
-}, idFlagName string, target *trackedString) {
-	switch idFlagName {
-	case "topic":
-		fs.Var(target, "topic", "Topic id")
-		fs.Var(target, "topic-id", "Topic id")
-	case "document":
-		fs.Var(target, "document", "Document id")
-		fs.Var(target, "document-id", "Document id")
-	case "card":
-		fs.Var(target, "card", "Card id")
-		fs.Var(target, "card-id", "Card id")
-	case "thread":
-		fs.Var(target, "thread", "Thread id")
-		fs.Var(target, "thread-id", "Thread id")
+func preflightHumanSubcommand(args []string) error {
+	if len(args) == 0 || isHelpToken(args[0]) {
+		return nil
+	}
+	sub := strings.TrimSpace(args[0])
+	switch sub {
+	case "ask", "review", "escalate":
+		return nil
 	default:
-		panic(fmt.Sprintf("unknown message target flag %q", idFlagName))
+		return errnorm.Usage("unknown_subcommand", fmt.Sprintf("unknown human subcommand %q; valid subcommands: ask, review, escalate; examples: `anx human ask --question 'Need approval?'`", sub))
 	}
+}
+
+func preflightWorkspaceSubcommand(args []string) error {
+	if len(args) == 0 || isHelpToken(args[0]) {
+		return nil
+	}
+	sub := strings.TrimSpace(args[0])
+	if sub == "summary" {
+		return nil
+	}
+	return errnorm.Usage("unknown_subcommand", fmt.Sprintf("unknown workspace subcommand %q; valid subcommands: summary; examples: `anx workspace summary`", sub))
+}
+
+func preflightShapeCommandName(args []string) string {
+	if len(args) == 0 {
+		return "root"
+	}
+	root := strings.TrimSpace(args[0])
+	switch root {
+	case "auth":
+		if len(args) >= 3 {
+			sub := authSubcommandSpec.normalize(args[1])
+			if sub == "invites" || sub == "bootstrap" || sub == "principals" || sub == "audit" {
+				return strings.Join(args[:2], " ")
+			}
+		}
+	case "boards":
+		if len(args) >= 3 && boardsSubcommandSpec.normalize(args[1]) == "cards" {
+			return "boards cards"
+		}
+	case "docs":
+		if len(args) >= 3 && docsSubcommandSpec.normalize(args[1]) == "revision" {
+			return "docs revision"
+		}
+	case "meta":
+		if len(args) >= 3 && metaSubcommandSpec.normalize(args[1]) == "ops" {
+			return "meta ops"
+		}
+	}
+	return root
+}
+
+func preflightInferredCommandName(args []string) string {
+	if len(args) == 0 {
+		return ""
+	}
+	for width := preflightMinInt(len(args), 3); width >= 1; width-- {
+		path := strings.Join(args[:width], " ")
+		if _, ok := preflightFlagSpecs()[path]; ok {
+			return path
+		}
+	}
+	if len(args) >= 2 && !strings.HasPrefix(args[1], "-") {
+		return strings.Join(args[:2], " ")
+	}
+	return strings.TrimSpace(args[0])
+}
+
+func matchPreflightFlagSpec(args []string) (string, []string, bool) {
+	specs := preflightFlagSpecs()
+	for width := preflightMinInt(len(args), 3); width >= 1; width-- {
+		path := strings.Join(args[:width], " ")
+		if _, ok := specs[path]; ok {
+			return path, args[width:], true
+		}
+	}
+	return "", nil, false
+}
+
+func preflightFlagUsage(args []string, spec map[string]preflightFlagSpec) error {
+	seen := map[string]bool{}
+	for i := 0; i < len(args); i++ {
+		arg := strings.TrimSpace(args[i])
+		if arg == "" {
+			continue
+		}
+		if arg == "--" {
+			break
+		}
+		if !strings.HasPrefix(arg, "-") {
+			continue
+		}
+		name, value, hasValue := strings.Cut(strings.TrimLeft(arg, "-"), "=")
+		name = strings.TrimSpace(name)
+		flagSpec, ok := spec[name]
+		if !ok {
+			return errnorm.Usage("invalid_flags", fmt.Sprintf("flag provided but not defined: -%s", name))
+		}
+		seen[name] = true
+		switch flagSpec.kind {
+		case preflightFlagBool:
+			if hasValue {
+				if _, err := strconvParseBool(value); err != nil {
+					return errnorm.Usage("invalid_flags", fmt.Sprintf("invalid boolean value %q for --%s", value, name))
+				}
+			}
+		default:
+			if !hasValue {
+				if i+1 >= len(args) || (strings.HasPrefix(args[i+1], "-") && !looksLikeNegativeNumericFlagValue(args[i+1])) {
+					return errnorm.Usage("invalid_flags", fmt.Sprintf("flag needs an argument: -%s", name))
+				}
+				i++
+			}
+		}
+	}
+	return validateLifecycleFilterFlags(seen["include-archived"], seen["archived-only"], seen["include-trashed"], seen["trashed-only"])
+}
+
+func preflightRootCommands() map[string]struct{} {
+	return map[string]struct{}{
+		"version": {}, "doctor": {}, "update": {}, "bridge": {}, "auth": {}, "config": {}, "meta": {}, "notifications": {},
+		"import": {}, "draft": {}, "provenance": {}, "human": {}, "secret": {}, "workspace": {}, "concepts": {}, "primitives": {},
+		"actors": {}, "threads": {}, "topics": {}, "ref-edges": {}, "cards": {}, "artifacts": {}, "boards": {}, "docs": {}, "events": {},
+		"inbox": {}, "derived": {}, "api": {}, "help": {}, "--help": {}, "-h": {},
+	}
+}
+
+func preflightFlagSpecs() map[string]map[string]preflightFlagSpec {
+	specs := map[string]map[string]preflightFlagSpec{}
+	for _, topic := range localHelperTopics {
+		flags := map[string]preflightFlagSpec{}
+		for _, flag := range topic.Flags {
+			name, kind, ok := parseLocalHelperFlagSpec(flag.Name)
+			if ok {
+				flags[name] = preflightFlagSpec{kind: kind}
+			}
+		}
+		if len(flags) > 0 {
+			specs[strings.Join(strings.Fields(topic.Path), " ")] = flags
+		}
+	}
+	for path, flags := range manualPreflightFlagSpecs() {
+		current := specs[path]
+		if current == nil {
+			current = map[string]preflightFlagSpec{}
+			specs[path] = current
+		}
+		for name, spec := range flags {
+			current[name] = spec
+		}
+	}
+	return specs
+}
+
+func parseLocalHelperFlagSpec(raw string) (string, preflightFlagKind, bool) {
+	parts := strings.Fields(strings.TrimSpace(raw))
+	if len(parts) == 0 {
+		return "", preflightFlagString, false
+	}
+	name := strings.TrimPrefix(strings.TrimSpace(parts[0]), "--")
+	if name == "" || strings.HasPrefix(name, "-") {
+		return "", preflightFlagString, false
+	}
+	if len(parts) == 1 {
+		return name, preflightFlagBool, true
+	}
+	return name, preflightFlagString, true
+}
+
+func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
+	boolFlag := preflightFlagSpec{kind: preflightFlagBool}
+	valueFlag := preflightFlagSpec{kind: preflightFlagString}
+	lifecycle := map[string]preflightFlagSpec{
+		"include-archived": boolFlag,
+		"archived-only":    boolFlag,
+		"include-trashed":  boolFlag,
+		"trashed-only":     boolFlag,
+	}
+	listFlags := map[string]preflightFlagSpec{
+		"state":   valueFlag,
+		"q":       valueFlag,
+		"limit":   valueFlag,
+		"cursor":  valueFlag,
+		"full-id": boolFlag,
+	}
+	merge := func(maps ...map[string]preflightFlagSpec) map[string]preflightFlagSpec {
+		out := map[string]preflightFlagSpec{}
+		for _, flags := range maps {
+			for name, spec := range flags {
+				out[name] = spec
+			}
+		}
+		return out
+	}
+	return map[string]map[string]preflightFlagSpec{
+		"api call": {
+			"method":    valueFlag,
+			"path":      valueFlag,
+			"from-file": valueFlag,
+			"header":    valueFlag,
+			"raw":       boolFlag,
+		},
+		"auth register": {
+			"username":          valueFlag,
+			"bootstrap-token":   valueFlag,
+			"invite-token":      valueFlag,
+			"existing-actor-id": valueFlag,
+		},
+		"auth update-username": {
+			"username": valueFlag,
+		},
+		"auth invites create": {
+			"kind": valueFlag,
+		},
+		"auth invites revoke": {
+			"invite-id": valueFlag,
+		},
+		"auth principals list": {
+			"limit":        valueFlag,
+			"cursor":       valueFlag,
+			"taggable":     boolFlag,
+			"handles-only": boolFlag,
+		},
+		"auth audit list": {
+			"limit":  valueFlag,
+			"cursor": valueFlag,
+		},
+		"import scan": {
+			"input":                valueFlag,
+			"out":                  valueFlag,
+			"max-preview-bytes":    valueFlag,
+			"max-text-cache-bytes": valueFlag,
+		},
+		"import dedupe": {
+			"inventory": valueFlag,
+			"out":       valueFlag,
+		},
+		"import plan": {
+			"inventory":           valueFlag,
+			"dedupe":              valueFlag,
+			"out":                 valueFlag,
+			"source-name":         valueFlag,
+			"collector-threshold": valueFlag,
+		},
+		"import apply": {
+			"plan":    valueFlag,
+			"out":     valueFlag,
+			"execute": boolFlag,
+		},
+		"topics list": merge(listFlags, lifecycle),
+		"docs list": merge(map[string]preflightFlagSpec{
+			"thread-id": valueFlag,
+			"q":         valueFlag,
+			"limit":     valueFlag,
+			"cursor":    valueFlag,
+		}, lifecycle),
+		"boards list": merge(listFlags, map[string]preflightFlagSpec{
+			"owner": valueFlag,
+		}, lifecycle),
+		"cards list": merge(map[string]preflightFlagSpec{
+			"board-id": valueFlag,
+			"board":    valueFlag,
+			"state":    valueFlag,
+			"q":        valueFlag,
+			"limit":    valueFlag,
+			"cursor":   valueFlag,
+			"full-id":  boolFlag,
+		}, lifecycle),
+		"actors list": {
+			"q":      valueFlag,
+			"limit":  valueFlag,
+			"cursor": valueFlag,
+		},
+		"threads list": {
+			"state":       valueFlag,
+			"topic-ref":   valueFlag,
+			"purpose":     valueFlag,
+			"q":           valueFlag,
+			"limit":       valueFlag,
+			"cursor":      valueFlag,
+			"full-id":     boolFlag,
+			"with-counts": boolFlag,
+		},
+		"artifacts list": merge(map[string]preflightFlagSpec{
+			"kind":    valueFlag,
+			"ref":     valueFlag,
+			"state":   valueFlag,
+			"q":       valueFlag,
+			"limit":   valueFlag,
+			"cursor":  valueFlag,
+			"full-id": boolFlag,
+		}, lifecycle),
+		"events get": {
+			"id":       valueFlag,
+			"event-id": valueFlag,
+		},
+		"events list": merge(map[string]preflightFlagSpec{
+			"thread-id":     valueFlag,
+			"type":          valueFlag,
+			"types":         valueFlag,
+			"event-group":   valueFlag,
+			"backing-scope": valueFlag,
+			"actor-id":      valueFlag,
+			"mine":          boolFlag,
+			"full-id":       boolFlag,
+			"max-events":    valueFlag,
+			"max":           valueFlag,
+		}, lifecycle),
+		"events explain": {
+			"type": valueFlag,
+		},
+		"events archive": {
+			"event-id": valueFlag,
+			"dry-run":  boolFlag,
+		},
+		"events unarchive": {
+			"event-id": valueFlag,
+			"dry-run":  boolFlag,
+		},
+		"events trash": {
+			"event-id": valueFlag,
+			"dry-run":  boolFlag,
+		},
+		"events restore": {
+			"event-id": valueFlag,
+			"dry-run":  boolFlag,
+		},
+		"inbox list": {
+			"thread-id": valueFlag,
+			"type":      valueFlag,
+			"full-id":   boolFlag,
+		},
+		"inbox get": {
+			"id":            valueFlag,
+			"inbox-item-id": valueFlag,
+			"full-id":       boolFlag,
+		},
+		"inbox respond": {
+			"from-file":     valueFlag,
+			"inbox-item-id": valueFlag,
+			"response-text": valueFlag,
+			"notify-mode":   valueFlag,
+			"actor-id":      valueFlag,
+		},
+		"auth list":         {},
+		"auth default":      {},
+		"config use":        {},
+		"config unset":      {},
+		"workspace summary": {"full-id": boolFlag},
+	}
+}
+
+func preflightMinInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func looksLikeNegativeNumericFlagValue(raw string) bool {
+	raw = strings.TrimSpace(raw)
+	if len(raw) < 2 || raw[0] != '-' {
+		return false
+	}
+	for _, r := range raw[1:] {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func hasHelpToken(args []string) bool {

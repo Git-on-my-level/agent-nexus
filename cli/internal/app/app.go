@@ -127,8 +127,9 @@ func (a *App) Run(args []string) int {
 		isAPICallHelpOnly(remaining) ||
 		isTrailingHelpOnlyInvocation(remaining)
 
-	if commandName, usageErr := preflightConfigIndependentUsage(remaining); usageErr != nil {
-		return a.renderError(resolveMachineCommandIdentity(commandName), jsonMode, usageErr)
+	preflightCommandName, usageErr := preflightConfigIndependentUsage(remaining)
+	if usageErr != nil {
+		return a.renderError(resolveMachineCommandIdentity(preflightCommandName), jsonMode, usageErr)
 	}
 
 	resolved, err := config.Resolve(overrides, config.Environment{
@@ -145,7 +146,11 @@ func (a *App) Run(args []string) int {
 				details["reason"] = "ambiguous_agent_profile"
 			}
 			wrapped := errnorm.WithDetails(errnorm.Wrap(errnorm.KindLocal, "config_resolution_failed", "failed to resolve cli config", err), details)
-			return a.renderError(resolveMachineCommandIdentity("root"), jsonMode, wrapped)
+			configErrorCommand := strings.TrimSpace(preflightCommandName)
+			if configErrorCommand == "" {
+				configErrorCommand = "root"
+			}
+			return a.renderError(resolveMachineCommandIdentity(configErrorCommand), jsonMode, wrapped)
 		}
 	}
 

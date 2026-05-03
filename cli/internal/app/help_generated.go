@@ -761,6 +761,7 @@ Use this group to inspect CLI/runtime metadata and to print the bundled runtime 
 
 Core commands:
   meta health     Inspect overall CLI/runtime health.
+  meta livez      Check liveness.
   meta readyz     Check readiness.
   meta version    Print version information.
 
