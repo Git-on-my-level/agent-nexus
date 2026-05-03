@@ -13,16 +13,16 @@ import (
 var topicsSubcommandSpec = subcommandSpec{
 	command: "topics",
 	valid: []string{
-		"list", "get", "create", "patch", "discuss", "timeline", "workspace",
+		"list", "get", "create", "patch", "message", "messages", "reply", "timeline", "workspace",
 		"archive", "unarchive", "trash", "restore",
 	},
-	examples: []string{"anx topics list", "anx topics create --title \"Launch\" --summary \"Coordinate launch work\"", "anx topics discuss --topic <topic-id> --message-file message.md", "anx topics workspace --topic-id <topic-id>", "anx topics archive --topic-id <topic-id>"},
+	examples: []string{"anx topics list", "anx topics create --title \"Launch\" --summary \"Coordinate launch work\"", "anx topics message <topic-id> --body-file message.md", "anx topics messages <topic-id>", "anx topics reply <topic-id> --to <message-id> --body-file reply.md", "anx topics workspace --topic-id <topic-id>", "anx topics archive --topic-id <topic-id>"},
 }
 
 var cardsSubcommandSpec = subcommandSpec{
 	command:  "cards",
-	valid:    []string{"list", "get", "create", "revise", "history", "revision", "patch", "move", "assign", "resolve", "reopen", "archive", "trash", "purge", "restore", "timeline"},
-	examples: []string{"anx cards list", "anx cards create --board <board-id> --title \"Implement login\" --content-file card.md", "anx cards revise --card <card-id> --content-file card.md", "anx cards history --card-id <card-id>", "anx cards assign --card <card-id> --assignee-ref actor:<actor-id>", "anx cards resolve --card <card-id> --resolution-ref event:<event-id>", "anx cards move --card-id <card-id> --column review", "anx cards get --card-id <card-id>"},
+	valid:    []string{"list", "get", "create", "message", "messages", "reply", "revise", "history", "revision", "patch", "move", "assign", "resolve", "reopen", "archive", "trash", "purge", "restore", "timeline"},
+	examples: []string{"anx cards list", "anx cards create --board <board-id> --title \"Implement login\" --content-file card.md", "anx cards message <card-id> --body-file update.md", "anx cards messages <card-id>", "anx cards reply <card-id> --to <message-id> --body-file reply.md", "anx cards revise --card <card-id> --content-file card.md", "anx cards history --card-id <card-id>", "anx cards assign --card <card-id> --assignee-ref actor:<actor-id>", "anx cards resolve --card <card-id> --resolution-ref event:<event-id>", "anx cards move --card-id <card-id> --column review", "anx cards get --card-id <card-id>"},
 }
 
 func (a *App) runTopicsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
@@ -120,19 +120,35 @@ func (a *App) runTopicsCommand(ctx context.Context, args []string, cfg config.Re
 		}
 		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "topics patch", "topics.patch", "topic_id", id, topicIDLookupSpec, nil, body)
 		return result, "topics patch", callErr
-	case "discuss":
-		body, dryRun, err := a.parseTopicDiscussInput(ctx, args[1:], cfg, "topics discuss")
+	case "message":
+		body, target, dryRun, err := a.parseTopicMessageInput(ctx, args[1:], cfg, "topics message", "")
 		if err != nil {
-			return nil, "topics discuss", err
+			return nil, "topics message", err
 		}
-		if err := validateEventsCreateInput(body, "topics discuss"); err != nil {
-			return nil, "topics discuss", err
+		if err := validateEventsCreateInput(body, "topics message"); err != nil {
+			return nil, "topics message", err
 		}
 		if dryRun {
-			return dryRunResult("topics discuss", "events.create", nil, nil, body), "topics discuss", nil
+			return dryRunResult("topics message", "events.create", nil, nil, body), "topics message", nil
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "topics discuss", "events.create", nil, nil, body)
-		return result, "topics discuss", callErr
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "topics message", "events.create", nil, nil, body)
+		return decorateThreadMessageWriteResult(result, callErr, cfg, "topics.message", target), "topics message", callErr
+	case "messages":
+		result, err := a.runTopicMessagesCommand(ctx, args[1:], cfg)
+		return result, "topics messages", err
+	case "reply":
+		body, target, dryRun, err := a.parseTopicReplyInput(ctx, args[1:], cfg, "topics reply")
+		if err != nil {
+			return nil, "topics reply", err
+		}
+		if err := validateEventsCreateInput(body, "topics reply"); err != nil {
+			return nil, "topics reply", err
+		}
+		if dryRun {
+			return dryRunResult("topics reply", "events.create", nil, nil, body), "topics reply", nil
+		}
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "topics reply", "events.create", nil, nil, body)
+		return decorateThreadMessageWriteResult(result, callErr, cfg, "topics.reply", target), "topics reply", callErr
 	case "timeline":
 		id, err := parseIDArg(args[1:], "topic-id", "topic id")
 		if err != nil {
@@ -247,6 +263,35 @@ func (a *App) runCardsCommand(ctx context.Context, args []string, cfg config.Res
 		}
 		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "cards timeline", "cards.timeline", "card_id", id, cardIDLookupSpec, nil, nil)
 		return result, "cards timeline", callErr
+	case "message":
+		body, card, dryRun, err := a.parseCardMessageInput(ctx, args[1:], cfg, "cards message", "")
+		if err != nil {
+			return nil, "cards message", err
+		}
+		if err := validateEventsCreateInput(body, "cards message"); err != nil {
+			return nil, "cards message", err
+		}
+		if dryRun {
+			return dryRunResult("cards message", "events.create", nil, nil, body), "cards message", nil
+		}
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "cards message", "events.create", nil, nil, body)
+		return a.decorateMessageWriteResult(result, callErr, cfg, "cards.message", card), "cards message", callErr
+	case "messages":
+		result, err := a.runCardMessagesCommand(ctx, args[1:], cfg)
+		return result, "cards messages", err
+	case "reply":
+		body, card, dryRun, err := a.parseCardReplyInput(ctx, args[1:], cfg, "cards reply")
+		if err != nil {
+			return nil, "cards reply", err
+		}
+		if err := validateEventsCreateInput(body, "cards reply"); err != nil {
+			return nil, "cards reply", err
+		}
+		if dryRun {
+			return dryRunResult("cards reply", "events.create", nil, nil, body), "cards reply", nil
+		}
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "cards reply", "events.create", nil, nil, body)
+		return a.decorateMessageWriteResult(result, callErr, cfg, "cards.reply", card), "cards reply", callErr
 	case "history":
 		id, err := parseIDArg(args[1:], "card-id", "card id")
 		if err != nil {
@@ -430,72 +475,6 @@ func (a *App) parseTopicCreateInput(args []string, cfg config.Resolved, commandN
 		return nil, false, err
 	}
 	return body, dryRunFlag.set && dryRunFlag.value, nil
-}
-
-func (a *App) parseTopicDiscussInput(ctx context.Context, args []string, cfg config.Resolved, commandName string) (map[string]any, bool, error) {
-	fs := newSilentFlagSet(commandName)
-	var topicFlag, messageFileFlag, summaryFlag, actorIDFlag trackedString
-	var refFlags trackedStrings
-	var dryRunFlag trackedBool
-	fs.Var(&topicFlag, "topic", "Topic id to discuss")
-	fs.Var(&topicFlag, "topic-id", "Topic id to discuss")
-	fs.Var(&messageFileFlag, "message-file", "Load the discussion message text from a local file")
-	fs.Var(&summaryFlag, "summary", "Optional short event summary")
-	fs.Var(&actorIDFlag, "actor-id", "Actor id")
-	fs.Var(&refFlags, "ref", "Additional typed ref to attach to the message, repeatable")
-	fs.Var(&dryRunFlag, "dry-run", "Validate and render request without sending the mutation")
-	if err := fs.Parse(args); err != nil {
-		return nil, false, errnorm.Usage("invalid_flags", err.Error())
-	}
-	positionals := fs.Args()
-	topicID := strings.TrimSpace(topicFlag.value)
-	if topicID == "" && len(positionals) > 0 {
-		topicID = strings.TrimSpace(positionals[0])
-		positionals = positionals[1:]
-	}
-	if len(positionals) > 0 {
-		return nil, false, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
-	}
-	if err := validateID(topicID, "topic id"); err != nil {
-		return nil, false, err
-	}
-	message, err := a.readTextFlagFile(messageFileFlag.value, commandName, "--message-file")
-	if err != nil {
-		return nil, false, err
-	}
-	topic, err := a.fetchTopicBody(ctx, cfg, topicID)
-	if err != nil {
-		return nil, false, err
-	}
-	threadID := strings.TrimSpace(anyString(topic["thread_id"]))
-	if threadID == "" {
-		return nil, false, errnorm.Usage("invalid_request", "topic response did not include thread_id for discussion")
-	}
-	actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
-	if err != nil {
-		return nil, false, err
-	}
-	if actorID == "" {
-		actorID = strings.TrimSpace(cfg.ActorID)
-	}
-	if actorID == "" {
-		return nil, false, errnorm.Usage("invalid_request", "`anx topics discuss` requires an actor_id; pass --actor-id or use a profile with actor_id")
-	}
-	refs := append([]string{"topic:" + topicID, "thread:" + threadID}, normalizedStringsOrEmpty(refFlags.values)...)
-	event := map[string]any{
-		"type":       "message_posted",
-		"actor_id":   actorID,
-		"thread_id":  threadID,
-		"thread_ref": "thread:" + threadID,
-		"refs":       uniqueStrings(refs),
-		"summary":    firstNonEmpty(strings.TrimSpace(summaryFlag.value), truncatePreview(message)),
-		"payload": map[string]any{
-			"kind": "topic_discussion_message",
-			"text": message,
-		},
-		"provenance": map[string]any{"sources": []any{"event:anx-cli"}},
-	}
-	return map[string]any{"actor_id": actorID, "event": event}, dryRunFlag.set && dryRunFlag.value, nil
 }
 
 func (a *App) parseCardCreateInput(args []string, cfg config.Resolved, commandName string) (map[string]any, bool, error) {

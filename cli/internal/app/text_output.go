@@ -64,8 +64,14 @@ func formatCommandSummary(commandID string, body any) string {
 		return formatTopicTimeline(body)
 	case "cards.timeline":
 		return formatCardTimeline(body)
+	case "cards.messages":
+		return formatCardsMessages(body)
 	case "topics.workspace":
 		return formatTopicWorkspace(body)
+	case "cards.message", "cards.reply":
+		return messageWriteText(body, "Card")
+	case "threads.message", "threads.reply":
+		return messageWriteText(body, "Thread")
 	case "cards.get", "cards.patch", "cards.move", "cards.revisions.create", "cards.archive", "cards.trash", "cards.restore":
 		if board := extractNestedMap(body, "board"); board != nil && extractNestedMap(body, "card") != nil {
 			return formatBoardCardMutationResult(body)
@@ -116,8 +122,14 @@ func formatCommandSummary(commandID string, body any) string {
 		return formatPrettyBody(body)
 	case "docs.content":
 		return formatDocumentContentRecord(body)
-	case "docs.comments":
-		return formatDocsComments(body)
+	case "docs.message", "docs.reply":
+		return messageWriteText(body, "Document")
+	case "docs.messages":
+		return formatDocMessages(body)
+	case "topics.message", "topics.reply":
+		return messageWriteText(body, "Topic")
+	case "topics.messages":
+		return formatTopicMessages(body)
 	case "docs.revision.get", "docs.revisions.get", "cards.revisions.get":
 		return formatRevisionRecord(extractNestedMap(body, "revision"))
 	case "provenance.walk":
@@ -1266,6 +1278,9 @@ func displayIDWithMode(item map[string]any, fullID bool) string {
 
 func renderEventListItemWithMode(item map[string]any, fullID bool) string {
 	summary := firstNonEmpty(anyString(item["summary_preview"]), anyString(item["summary"]), anyString(item["created_at"]))
+	if replyTo := eventReplyTarget(item); replyTo != "" {
+		summary = strings.TrimSpace(summary + " (reply_to: " + shortID(replyTo) + ")")
+	}
 	prefix := ""
 	if anyString(item["trashed_at"]) != "" {
 		prefix = "[TRASHED] "
@@ -1273,6 +1288,11 @@ func renderEventListItemWithMode(item map[string]any, fullID bool) string {
 		prefix = "[ARCHIVED] "
 	}
 	return compactSummary(displayEventID(item, fullID), prefix+anyString(item["type"]), summary)
+}
+
+func eventReplyTarget(item map[string]any) string {
+	payload := asMap(item["payload"])
+	return strings.TrimSpace(anyString(payload["reply_to_event_id"]))
 }
 
 func displayEventID(item map[string]any, fullID bool) string {

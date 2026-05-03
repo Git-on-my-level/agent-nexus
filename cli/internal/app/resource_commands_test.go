@@ -1193,7 +1193,7 @@ func TestDocsContentCommand(t *testing.T) {
 	}
 }
 
-func TestDocsCommentsCommand(t *testing.T) {
+func TestDocsMessagesCommand(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1259,49 +1259,45 @@ func TestDocsCommentsCommand(t *testing.T) {
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
 		"--base-url", server.URL,
-		"docs", "comments",
+		"docs", "messages",
 		"--document-id", "doc_1",
 	})
 	payload := assertEnvelopeOK(t, raw)
-	if got := anyStringValue(payload["command"]); got != "docs comments" {
+	if got := anyStringValue(payload["command"]); got != "docs messages" {
 		t.Fatalf("unexpected command label: %#v", payload)
 	}
 	flat, _ := payload["data"].(map[string]any)
-	comments, _ := flat["comments"].([]any)
-	if len(comments) != 1 {
-		t.Fatalf("expected 1 non-trashed document comment, got %d: %#v", len(comments), flat)
+	events, _ := flat["events"].([]any)
+	if len(events) != 1 {
+		t.Fatalf("expected 1 non-trashed document message, got %d: %#v", len(events), flat)
 	}
-	first, _ := comments[0].(map[string]any)
-	comment, _ := first["comment"].(map[string]any)
-	if anyStringValue(comment["event_id"]) != "ev_1" {
+	first, _ := events[0].(map[string]any)
+	if anyStringValue(first["id"]) != "ev_1" {
 		t.Fatalf("unexpected row: %#v", first)
-	}
-	if anyStringValue(comment["text"]) != "Please expand" {
-		t.Fatalf("expected comment text, got %#v", comment)
 	}
 
 	// --include-trashed: expect trashed event as well
 	raw2 := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
 		"--base-url", server.URL,
-		"docs", "comments",
+		"docs", "messages",
 		"--document-id", "doc_1",
 		"--include-trashed",
 	})
 	p2 := assertEnvelopeOK(t, raw2)
 	f2, _ := p2["data"].(map[string]any)
-	c2, _ := f2["comments"].([]any)
+	c2, _ := f2["events"].([]any)
 	if len(c2) != 2 {
 		t.Fatalf("expected 2 with include-trashed, got %d", len(c2))
 	}
 
 	textOut := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--base-url", server.URL,
-		"docs", "comments",
+		"docs", "messages",
 		"doc_1",
 	})
-	if !strings.Contains(textOut, "ev_1") || !strings.Contains(textOut, "Line two") {
-		t.Fatalf("expected default text for docs comments, got:\n%s", textOut)
+	if !strings.Contains(textOut, "ev_1") || !strings.Contains(textOut, "Document messages") {
+		t.Fatalf("expected default text for docs messages, got:\n%s", textOut)
 	}
 }
 
@@ -1740,7 +1736,7 @@ func TestEventsExplainListMode(t *testing.T) {
 	if !strings.Contains(raw, "Inbox Lifecycle: Inbox lifecycle facts, usually emitted by higher-level commands.") {
 		t.Fatalf("expected inbox lifecycle group in explain output, got %q", raw)
 	}
-	if !strings.Contains(raw, "- message_posted: Use for direct communication that belongs on a backing thread; prefer topic/card/board surfaces as the primary operator nouns.") {
+	if !strings.Contains(raw, "- message_posted: Use for low-level communication records that belong on a backing thread; prefer topic/document/card message commands for ordinary discussion.") {
 		t.Fatalf("expected message_posted communication guidance in explain output, got %q", raw)
 	}
 	if !strings.Contains(raw, "- human_attention_requested: Use the human command group to ask for operator attention, review, or escalation.") {
@@ -1829,7 +1825,7 @@ func TestEventsExplainMessagePostedGuidance(t *testing.T) {
 	if !strings.Contains(raw, "Group: Communication") {
 		t.Fatalf("expected group heading in explain output, got %q", raw)
 	}
-	if !strings.Contains(raw, "Usage hint: Use for direct communication that belongs on a backing thread; prefer topic/card/board surfaces as the primary operator nouns.") {
+	if !strings.Contains(raw, "Usage hint: Use for low-level communication records that belong on a backing thread; prefer topic/document/card message commands for ordinary discussion.") {
 		t.Fatalf("expected usage hint in explain output, got %q", raw)
 	}
 	if !strings.Contains(raw, "Use this type for messages, replies, or important non-structured information that should read like direct communication on a backing thread.") {
@@ -2488,7 +2484,7 @@ func TestCardsFileFirstWorkflowCommands(t *testing.T) {
 	}
 }
 
-func TestTopicsBoardsNoJSONAndDiscussWorkflow(t *testing.T) {
+func TestTopicsBoardsNoJSONAndMessageWorkflow(t *testing.T) {
 	t.Parallel()
 
 	const (
@@ -2498,7 +2494,7 @@ func TestTopicsBoardsNoJSONAndDiscussWorkflow(t *testing.T) {
 		profileActor = "actor_cli_model_profile"
 	)
 
-	var topicCreateSeen, boardCreateSeen, discussSeen bool
+	var topicCreateSeen, boardCreateSeen, messageSeen bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
@@ -2540,23 +2536,14 @@ func TestTopicsBoardsNoJSONAndDiscussWorkflow(t *testing.T) {
 		case r.Method == http.MethodPost && r.URL.Path == "/events":
 			var payload map[string]any
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-				t.Fatalf("decode topics discuss event body: %v", err)
+				t.Fatalf("decode topics message event body: %v", err)
 			}
 			event, _ := payload["event"].(map[string]any)
 			if got := anyStringValue(event["type"]); got != "message_posted" {
 				t.Fatalf("expected message_posted, got %#v", payload)
 			}
-			if got := anyStringValue(event["actor_id"]); got != profileActor {
-				t.Fatalf("expected profile actor_id, got %#v", payload)
-			}
-			if got := anyStringValue(event["thread_id"]); got != topicThread {
-				t.Fatalf("expected topic backing thread, got %#v", payload)
-			}
-			payloadMap, _ := event["payload"].(map[string]any)
-			if got := anyStringValue(payloadMap["text"]); got != "Discussion from disk" {
-				t.Fatalf("expected message file content, got %#v", payload)
-			}
-			discussSeen = true
+			assertMessagePostedMutation(t, payload, profileActor, topicThread, []string{"topic:" + topicID, "thread:" + topicThread}, "Discussion from disk")
+			messageSeen = true
 			w.WriteHeader(http.StatusCreated)
 			_, _ = w.Write([]byte(`{"event":{"id":"event_discuss_1","type":"message_posted","thread_id":"` + topicThread + `"}}`))
 		default:
@@ -2597,21 +2584,223 @@ func TestTopicsBoardsNoJSONAndDiscussWorkflow(t *testing.T) {
 		t.Fatalf("expected boards.create command_id, got %#v", boardPayload)
 	}
 
-	discussPayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
+	messagePayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
 		"--json", "--base-url", server.URL, "--agent", "agent-model",
-		"topics", "discuss", "--topic", topicID, "--message-file", messageFile, "--actor-id", profileActor,
+		"topics", "message", topicID, "--body-file", messageFile, "--actor-id", profileActor,
 	}))
-	if got := anyStringValue(discussPayload["command"]); got != "topics discuss" {
-		t.Fatalf("expected topics discuss command, got %#v", discussPayload)
+	if got := anyStringValue(messagePayload["command"]); got != "topics message" {
+		t.Fatalf("expected topics message command, got %#v", messagePayload)
 	}
-	if got := anyStringValue(discussPayload["command_id"]); got != "events.create" {
-		t.Fatalf("expected events.create command_id, got %#v", discussPayload)
+	if got := anyStringValue(messagePayload["command_id"]); got != "events.create" {
+		t.Fatalf("expected events.create command_id, got %#v", messagePayload)
 	}
 
-	for name, seen := range map[string]bool{"topic_create": topicCreateSeen, "board_create": boardCreateSeen, "discuss": discussSeen} {
+	for name, seen := range map[string]bool{"topic_create": topicCreateSeen, "board_create": boardCreateSeen, "message": messageSeen} {
 		if !seen {
 			t.Fatalf("expected %s request to be observed", name)
 		}
+	}
+}
+
+func TestCardsMessageBuildsThreadScopedEvent(t *testing.T) {
+	t.Parallel()
+
+	const (
+		cardID       = "card_message_123456"
+		boardID      = "board_message_123456"
+		threadID     = "thread_card_message_123456"
+		profileActor = "actor_profile_message"
+		eventID      = "event_message_123456"
+	)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/cards/"+cardID:
+			_, _ = w.Write([]byte(`{"card":{"id":"` + cardID + `","title":"Message card","thread_id":"` + threadID + `","board_ref":"board:` + boardID + `"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/events":
+			var posted map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&posted); err != nil {
+				t.Fatalf("decode cards message body: %v", err)
+			}
+			assertMessagePostedMutation(t, posted, profileActor, threadID, []string{"card:" + cardID, "thread:" + threadID, "board:" + boardID}, "Implemented via domain command.")
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"event":{"id":"` + eventID + `","type":"message_posted","thread_id":"` + threadID + `","refs":["card:` + cardID + `","thread:` + threadID + `","board:` + boardID + `"]}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-message", `{"agent":"agent-message","actor_id":"`+profileActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+
+	raw := runCLIForTest(t, home, nil, nil, []string{
+		"--json", "--base-url", server.URL, "--agent", "agent-message",
+		"cards", "message", cardID, "--body", "Implemented via domain command.",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	if got := anyStringValue(payload["command"]); got != "cards message" {
+		t.Fatalf("expected cards message command, got %#v", payload)
+	}
+	if got := anyStringValue(payload["command_id"]); got != "events.create" {
+		t.Fatalf("expected events.create command_id, got %#v", payload)
+	}
+	data, _ := payload["data"].(map[string]any)
+	if got := anyStringValue(data["card_id"]); got != cardID {
+		t.Fatalf("expected card_id in response data, got %#v", data)
+	}
+	if got := anyStringValue(data["thread_id"]); got != threadID {
+		t.Fatalf("expected thread_id in response data, got %#v", data)
+	}
+
+	textOut := runCLIForTest(t, home, nil, nil, []string{
+		"--base-url", server.URL, "--agent", "agent-message",
+		"cards", "message", cardID, "--body", "Implemented via domain command.",
+	})
+	if !strings.Contains(textOut, "Message posted.") || !strings.Contains(textOut, "Card: Message card") || !strings.Contains(textOut, "Thread: "+threadID) {
+		t.Fatalf("expected domain text output, got:\n%s", textOut)
+	}
+}
+
+func TestCardsMessagesListsMessageEventsForCardThread(t *testing.T) {
+	t.Parallel()
+
+	const (
+		cardID   = "card_messages_123456"
+		threadID = "thread_messages_123456"
+	)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/cards/"+cardID:
+			_, _ = w.Write([]byte(`{"card":{"id":"` + cardID + `","title":"List messages","thread_id":"` + threadID + `","board_ref":"board:board_messages"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/"+threadID+"/timeline":
+			_, _ = w.Write([]byte(`{"thread_id":"` + threadID + `","events":[
+				{"id":"event_1","thread_id":"` + threadID + `","type":"message_posted","summary":"first"},
+				{"id":"event_2","thread_id":"` + threadID + `","type":"card_moved","summary":"moved"},
+				{"id":"event_3","thread_id":"` + threadID + `","type":"message_posted","summary":"second","payload":{"reply_to_event_id":"event_1"}}
+			],"artifacts":{}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, nil, nil, []string{
+		"--json", "--base-url", server.URL,
+		"cards", "messages", cardID, "--max-events", "1",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+	if got := anyStringValue(data["card_id"]); got != cardID {
+		t.Fatalf("expected card_id, got %#v", data)
+	}
+	events, _ := data["events"].([]any)
+	if len(events) != 1 {
+		t.Fatalf("expected one message event after filtering/limit, got %#v", data)
+	}
+	event, _ := events[0].(map[string]any)
+	if got := anyStringValue(event["id"]); got != "event_3" {
+		t.Fatalf("expected latest message event, got %#v", data)
+	}
+
+	textOut := runCLIForTest(t, home, nil, nil, []string{
+		"--base-url", server.URL,
+		"cards", "messages", cardID, "--max-events", "1",
+	})
+	if !strings.Contains(textOut, "reply_to: "+shortID("event_1")) {
+		t.Fatalf("expected reply target in message list text, got:\n%s", textOut)
+	}
+}
+
+func TestCardsReplyRequiresTargetMessageOnCardThread(t *testing.T) {
+	t.Parallel()
+
+	const (
+		cardID       = "card_reply_123456"
+		threadID     = "thread_reply_123456"
+		profileActor = "actor_profile_reply"
+	)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/cards/"+cardID:
+			_, _ = w.Write([]byte(`{"card":{"id":"` + cardID + `","title":"Reply card","thread_id":"` + threadID + `","board_ref":"board:board_reply"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/"+threadID+"/timeline":
+			_, _ = w.Write([]byte(`{"thread_id":"` + threadID + `","events":[{"id":"event_parent_123456","thread_id":"` + threadID + `","type":"message_posted","summary":"parent"}],"artifacts":{}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/events":
+			var posted map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&posted); err != nil {
+				t.Fatalf("decode cards reply body: %v", err)
+			}
+			event, _ := posted["event"].(map[string]any)
+			payload, _ := event["payload"].(map[string]any)
+			if got := anyStringValue(payload["reply_to_event_id"]); got != "event_parent_123456" {
+				t.Fatalf("expected reply_to_event_id, got %#v", posted)
+			}
+			if !containsString(stringList(event["refs"]), "event:event_parent_123456") {
+				t.Fatalf("expected parent event ref, got %#v", posted)
+			}
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"event":{"id":"event_reply_123456","type":"message_posted","thread_id":"` + threadID + `"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-reply", `{"agent":"agent-reply","actor_id":"`+profileActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	raw := runCLIForTest(t, home, nil, nil, []string{
+		"--json", "--base-url", server.URL, "--agent", "agent-reply",
+		"cards", "reply", cardID, "--to", "event_parent_123456", "--body", "Reply from CLI",
+	})
+	assertEnvelopeOK(t, raw)
+}
+
+func TestEventsValidateRejectsThreadRefOnlyMessage(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, nil, strings.NewReader(`{"event":{"type":"message_posted","summary":"hello","thread_ref":"thread:thread_1","refs":["thread:thread_1"],"provenance":{"sources":["manual"]}}}`), []string{
+		"--json",
+		"events", "validate",
+	})
+	payload := assertEnvelopeError(t, raw)
+	errObj, _ := payload["error"].(map[string]any)
+	if got := anyStringValue(errObj["message"]); !strings.Contains(got, "event.thread_id is required") {
+		t.Fatalf("expected thread_id validation message, got %#v", payload)
+	}
+	if got := anyStringValue(errObj["hint"]); !strings.Contains(got, "anx cards message") {
+		t.Fatalf("expected domain command hint, got %#v", payload)
+	}
+}
+
+func TestMessageCommandInvalidFlagsBeatAmbiguousProfileResolution(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeAgentProfile(t, home, "agent-b", `{"agent":"agent-b","actor_id":"actor_b","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+
+	raw := runCLIForTest(t, home, nil, nil, []string{
+		"--json",
+		"topics", "message", "topic_123", "--message-file", "note.md",
+	})
+	payload := assertEnvelopeError(t, raw)
+	if got := anyStringValue(payload["command"]); got != "topics message" {
+		t.Fatalf("expected topics message error command, got %#v", payload)
+	}
+	errObj, _ := payload["error"].(map[string]any)
+	if got := anyStringValue(errObj["code"]); got != "invalid_flags" {
+		t.Fatalf("expected invalid_flags before config resolution, got %#v", payload)
+	}
+	if got := anyStringValue(errObj["message"]); !strings.Contains(got, "message-file") {
+		t.Fatalf("expected removed flag in error message, got %#v", payload)
 	}
 }
 
@@ -4131,6 +4320,39 @@ type failingStdinReader struct{}
 
 func (failingStdinReader) Read(p []byte) (int, error) {
 	return 0, io.ErrUnexpectedEOF
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func assertMessagePostedMutation(t *testing.T, posted map[string]any, wantActorID string, wantThreadID string, wantRefs []string, wantText string) {
+	t.Helper()
+	event, _ := posted["event"].(map[string]any)
+	if got := anyStringValue(event["type"]); got != "message_posted" {
+		t.Fatalf("expected message_posted, got %#v", posted)
+	}
+	if got := anyStringValue(event["actor_id"]); got != wantActorID {
+		t.Fatalf("expected actor_id %q, got %#v", wantActorID, posted)
+	}
+	if got := anyStringValue(event["thread_id"]); got != wantThreadID {
+		t.Fatalf("expected thread_id %q, got %#v", wantThreadID, posted)
+	}
+	refs := stringList(event["refs"])
+	for _, want := range wantRefs {
+		if !containsString(refs, want) {
+			t.Fatalf("expected ref %q in %#v", want, refs)
+		}
+	}
+	payload, _ := event["payload"].(map[string]any)
+	if got := anyStringValue(payload["text"]); got != wantText {
+		t.Fatalf("expected message text %q, got %#v", wantText, posted)
+	}
 }
 
 func TestInboxRespondSkipsStdinWhenInboxItemIDFromFlags(t *testing.T) {

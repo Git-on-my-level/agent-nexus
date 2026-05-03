@@ -177,11 +177,13 @@ var eventTypeGroupDescriptions = map[string]string{
 
 var knownEventTypeGuidance = []eventTypeGuidance{
 	{
-		Type:    "message_posted",
-		Group:   "Communication",
-		Summary: "Use for direct communication that belongs on a backing thread; prefer topic/card/board surfaces as the primary operator nouns.",
+		Type:             "message_posted",
+		Group:            "Communication",
+		PreferredCommand: "anx cards|topics|docs message|reply, or anx threads message|reply",
+		Summary:          "Use for low-level communication records that belong on a backing thread; prefer topic/document/card message commands for ordinary discussion.",
 		Constraints: []string{
 			"thread_id is required when posting directly to a backing thread timeline.",
+			"Use domain commands such as `anx cards message <card-id>`, `anx topics message <topic-id>`, or `anx docs message <document-id>` for ordinary discussion; they fill actor_id, thread_id, and refs.",
 			"Use this type for messages, replies, or important non-structured information that should read like direct communication on a backing thread.",
 			`event.refs may include "event:<parent_event_id>" for replies and "artifact:<artifact_id>" mentions.`,
 		},
@@ -651,6 +653,32 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 			nil,
 		)
 		return result, "threads get", callErr
+	case "message":
+		body, target, dryRun, err := a.parseThreadMessageInput(ctx, args[1:], cfg, "threads message", "")
+		if err != nil {
+			return nil, "threads message", err
+		}
+		if err := validateEventsCreateInput(body, "threads message"); err != nil {
+			return nil, "threads message", err
+		}
+		if dryRun {
+			return dryRunResult("threads message", "events.create", nil, nil, body), "threads message", nil
+		}
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "threads message", "events.create", nil, nil, body)
+		return decorateThreadMessageWriteResult(result, callErr, cfg, "threads.message", target), "threads message", callErr
+	case "reply":
+		body, target, dryRun, err := a.parseThreadReplyInput(ctx, args[1:], cfg, "threads reply")
+		if err != nil {
+			return nil, "threads reply", err
+		}
+		if err := validateEventsCreateInput(body, "threads reply"); err != nil {
+			return nil, "threads reply", err
+		}
+		if dryRun {
+			return dryRunResult("threads reply", "events.create", nil, nil, body), "threads reply", nil
+		}
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "threads reply", "events.create", nil, nil, body)
+		return decorateThreadMessageWriteResult(result, callErr, cfg, "threads.reply", target), "threads reply", callErr
 	case "create":
 		return nil, "threads create", threadsMutationUnsupportedErr("create")
 	case "patch":
@@ -1840,9 +1868,35 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 	case "content":
 		result, callErr := a.runDocsContentCommand(ctx, args[1:], cfg)
 		return result, "docs content", callErr
-	case "comments":
-		result, callErr := a.runDocsCommentsCommand(ctx, args[1:], cfg)
-		return result, "docs comments", callErr
+	case "message":
+		body, target, dryRun, err := a.parseDocMessageInput(ctx, args[1:], cfg, "docs message", "")
+		if err != nil {
+			return nil, "docs message", err
+		}
+		if err := validateEventsCreateInput(body, "docs message"); err != nil {
+			return nil, "docs message", err
+		}
+		if dryRun {
+			return dryRunResult("docs message", "events.create", nil, nil, body), "docs message", nil
+		}
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "docs message", "events.create", nil, nil, body)
+		return decorateThreadMessageWriteResult(result, callErr, cfg, "docs.message", target), "docs message", callErr
+	case "messages":
+		result, callErr := a.runDocMessagesCommand(ctx, args[1:], cfg)
+		return result, "docs messages", callErr
+	case "reply":
+		body, target, dryRun, err := a.parseDocReplyInput(ctx, args[1:], cfg, "docs reply")
+		if err != nil {
+			return nil, "docs reply", err
+		}
+		if err := validateEventsCreateInput(body, "docs reply"); err != nil {
+			return nil, "docs reply", err
+		}
+		if dryRun {
+			return dryRunResult("docs reply", "events.create", nil, nil, body), "docs reply", nil
+		}
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "docs reply", "events.create", nil, nil, body)
+		return decorateThreadMessageWriteResult(result, callErr, cfg, "docs.reply", target), "docs reply", callErr
 	case "revise":
 		result, callErr := a.runDocsReviseCommand(ctx, args[1:], cfg)
 		return result, "docs revise", callErr
@@ -2417,193 +2471,17 @@ func (a *App) runDocsContentCommand(ctx context.Context, args []string, cfg conf
 	return result, nil
 }
 
-// runDocsCommentsCommand lists message_posted events on the document's backing
-// thread with payload.kind=document_text_comment and a document: ref, for agent workflows.
-func (a *App) runDocsCommentsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
-	fs := newSilentFlagSet("docs comments")
-	var documentIDFlag trackedString
-	var includeArchived, archivedOnly, includeTrashed, trashedOnly bool
-	fs.Var(&documentIDFlag, "document-id", "Document id")
-	fs.BoolVar(&includeArchived, "include-archived", false, "Include archived comment events")
-	fs.BoolVar(&archivedOnly, "archived-only", false, "Show only archived comment events")
-	fs.BoolVar(&includeTrashed, "include-trashed", false, "Include trashed comment events")
-	fs.BoolVar(&trashedOnly, "trashed-only", false, "Show only trashed comment events")
-	if err := fs.Parse(args); err != nil {
-		return nil, errnorm.Usage("invalid_flags", err.Error())
-	}
-	if err := validateLifecycleFilterFlags(includeArchived, archivedOnly, includeTrashed, trashedOnly); err != nil {
+func (a *App) fetchDocumentBody(ctx context.Context, cfg config.Resolved, documentID string) (map[string]any, error) {
+	result, err := a.invokeTypedJSONWithIDResolution(ctx, cfg, "docs get", "docs.get", "document_id", documentID, documentIDLookupSpec, nil, nil)
+	if err != nil {
 		return nil, err
 	}
-	positionals := fs.Args()
-	id := strings.TrimSpace(documentIDFlag.value)
-	if id == "" && len(positionals) > 0 {
-		id = strings.TrimSpace(positionals[0])
-		positionals = positionals[1:]
+	body := extractNestedMap(asMap(result.Data), "body")
+	document := extractNestedMap(body, "document")
+	if len(document) == 0 {
+		return nil, errnorm.Usage("invalid_request", "docs get response did not include document metadata")
 	}
-	if err := validateID(id, "document id"); err != nil {
-		return nil, err
-	}
-	if len(positionals) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx docs comments`")
-	}
-
-	getRes, getErr := a.invokeTypedJSONWithIDResolution(
-		ctx, cfg, "docs get", "docs.get", "document_id", id, documentIDLookupSpec, nil, nil,
-	)
-	if getErr != nil {
-		return nil, getErr
-	}
-	getData := asMap(getRes.Data)
-	getBody := asMap(getData["body"])
-	document := extractNestedMap(getBody, "document")
-	if document == nil {
-		document = asMap(getBody["document"])
-	}
-	threadID := strings.TrimSpace(anyString(document["thread_id"]))
-	if threadID == "" {
-		return nil, errnorm.Usage("invalid_response", "document has no thread_id")
-	}
-	wantDocID := strings.TrimSpace(anyString(document["id"]))
-	if wantDocID == "" {
-		wantDocID = id
-	}
-
-	timelineRes, tlErr := a.invokeTypedJSONWithIDResolution(
-		ctx, cfg, "docs comments", "threads.timeline", "thread_id", threadID, threadIDLookupSpec, nil, nil,
-	)
-	if tlErr != nil {
-		return nil, tlErr
-	}
-	tlData := asMap(timelineRes.Data)
-	tlBody := asMap(tlData["body"])
-	rawEvents := asSlice(tlBody["events"])
-	filtered := filterDocumentTextCommentEvents(rawEvents, wantDocID)
-	filtered = filterEventsByLifecycleState(filtered, includeArchived, archivedOnly, includeTrashed, trashedOnly)
-	sortEventsByCreatedAt(filtered)
-
-	commentRows := make([]any, 0, len(filtered))
-	for _, raw := range filtered {
-		event := asMap(raw)
-		if event == nil {
-			continue
-		}
-		norm := normalizeDocumentTextCommentRow(event)
-		commentRows = append(commentRows, map[string]any{
-			"event":   raw,
-			"comment": norm,
-		})
-	}
-
-	outBody := map[string]any{
-		"document":    document,
-		"document_id": wantDocID,
-		"thread_id":   threadID,
-		"comments":    commentRows,
-		"returned":    len(commentRows),
-	}
-	if includeArchived {
-		outBody["include_archived"] = true
-	}
-	if archivedOnly {
-		outBody["archived_only"] = true
-	}
-	if includeTrashed {
-		outBody["include_trashed"] = true
-	}
-	if trashedOnly {
-		outBody["trashed_only"] = true
-	}
-
-	getData = asMap(getRes.Data) // re-read
-	statusCode := intValue(getData["status_code"])
-	if statusCode == 0 {
-		statusCode = intValue(tlData["status_code"])
-	}
-	if statusCode == 0 {
-		statusCode = http.StatusOK
-	}
-	headers := headerValues(getData["headers"])
-	if len(headers) == 0 {
-		headers = headerValues(tlData["headers"])
-	}
-
-	resultData := map[string]any{
-		"status_code": statusCode,
-		"headers":     headers,
-		"body":        outBody,
-	}
-	result := &commandResult{Data: resultData}
-	result.Text = formatTypedCommandText(
-		"docs.comments",
-		statusCode,
-		headers,
-		outBody,
-		cfg.Verbose,
-		cfg.Headers,
-	)
-	return result, nil
-}
-
-func filterDocumentTextCommentEvents(events []any, wantDocID string) []any {
-	wantRef := "document:" + strings.TrimSpace(wantDocID)
-	out := make([]any, 0, len(events))
-	for _, raw := range events {
-		ev := asMap(raw)
-		if ev == nil {
-			continue
-		}
-		if strings.TrimSpace(anyString(ev["type"])) != "message_posted" {
-			continue
-		}
-		payload := asMap(ev["payload"])
-		if payload == nil {
-			continue
-		}
-		if strings.TrimSpace(anyString(payload["kind"])) != "document_text_comment" {
-			continue
-		}
-		refs := asSlice(ev["refs"])
-		found := false
-		for _, r := range refs {
-			if strings.TrimSpace(anyString(r)) == wantRef {
-				found = true
-				break
-			}
-		}
-		if !found {
-			continue
-		}
-		if dcm := asMap(payload["document_comment"]); dcm != nil {
-			if got := strings.TrimSpace(anyString(dcm["document_id"])); got != "" && got != wantDocID {
-				continue
-			}
-		}
-		out = append(out, raw)
-	}
-	return out
-}
-
-func normalizeDocumentTextCommentRow(event map[string]any) map[string]any {
-	payload := asMap(event["payload"])
-	var text string
-	var dc map[string]any
-	if payload != nil {
-		text = strings.TrimSpace(anyString(payload["text"]))
-		dc = asMap(payload["document_comment"])
-	}
-	if dc == nil {
-		dc = map[string]any{}
-	}
-	return map[string]any{
-		"event_id":       strings.TrimSpace(anyString(event["id"])),
-		"text":           text,
-		"selected_quote": strings.TrimSpace(anyString(dc["selected_text"])),
-		"revision_id":    strings.TrimSpace(anyString(dc["revision_id"])),
-		"content_hash":   strings.TrimSpace(anyString(dc["content_hash"])),
-		"anchor_status":  strings.TrimSpace(anyString(dc["anchor_status"])),
-		"actor_id":       strings.TrimSpace(anyString(event["actor_id"])),
-		"ts":             strings.TrimSpace(anyString(event["ts"])),
-	}
+	return document, nil
 }
 
 func (a *App) runEventsListCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
@@ -6061,11 +5939,14 @@ func validateEventsCreateInput(body any, commandName string) error {
 		return errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object", commandName))
 	}
 
+	if err := validateEventsCreateBody(body); err != nil {
+		return err
+	}
 	issues := validateDraftBody("events.create", payload)
 	if len(issues) > 0 {
 		return errnorm.Usage("invalid_request", fmt.Sprintf("events payload failed local validation: %s", strings.Join(issues, "; ")))
 	}
-	return validateEventsCreateBody(body)
+	return nil
 }
 
 // normalizeDocsMutationContentType maps common MIME-style aliases to the canonical

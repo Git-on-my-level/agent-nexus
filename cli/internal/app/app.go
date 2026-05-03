@@ -127,6 +127,10 @@ func (a *App) Run(args []string) int {
 		isAPICallHelpOnly(remaining) ||
 		isTrailingHelpOnlyInvocation(remaining)
 
+	if commandName, usageErr := preflightConfigIndependentUsage(remaining); usageErr != nil {
+		return a.renderError(resolveMachineCommandIdentity(commandName), jsonMode, usageErr)
+	}
+
 	resolved, err := config.Resolve(overrides, config.Environment{
 		Getenv:      a.Getenv,
 		UserHomeDir: a.UserHomeDir,

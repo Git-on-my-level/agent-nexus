@@ -65,7 +65,7 @@ func agentGuideSections() []guideSection {
 				"- `docs` are the long-lived narrative layer. Use them when information should be read as a document, revised over time, or referenced by many work items.",
 				"- `boards` are coordination views. Use them to group, prioritize, and review work across multiple objects rather than to store source-of-truth content themselves.",
 				"- `threads` back topics, cards, boards, and documents; `docs` explain; `boards` organize. Keep those roles distinct.",
-				"- Before you revise a long-lived `doc` on an operator’s behalf, run `anx docs comments --document-id <id>` to read any anchored line-level discussion on that document’s backing thread (and use `--json` when a script or agent is consuming the output).",
+				"- Before you revise a long-lived `doc` on an operator’s behalf, run `anx docs messages <document-id>` to read document discussion on that document’s backing thread (and use `--json` when a script or agent is consuming the output).",
 			},
 		},
 		{
@@ -77,7 +77,7 @@ func agentGuideSections() []guideSection {
 				"4. Make the smallest valid mutation.",
 				"5. Verify via read commands, timeline, stream, or resulting state.",
 				"",
-				"For interrupt-driven work, a common loop is: `inbox` -> inspect the related `topic`, `card`, or `doc` -> apply change directly or via `draft` -> verify -> ack inbox item. Reach for `threads ...` only when you need backing-thread diagnostics.",
+				"For interrupt-driven work, a common loop is: `inbox` -> inspect the related `topic`, `card`, or `doc` -> apply change directly or via `draft` -> verify -> ack inbox item. When leaving a domain update, use `anx topics message <topic-id> --body-file update.md`, `anx docs message <document-id> --body-file update.md`, or `anx cards message <card-id> --body-file update.md`; reach for raw `events create` only for contract-level writes or unusual integrations.",
 			},
 		},
 		{

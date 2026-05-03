@@ -117,11 +117,18 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `secret exec` (command): Reveal multiple secrets by name
 - `secret update` (command): Update secret value
 - `topics create` (local-helper): Create a topic from plain flags, or from advanced JSON.
-- `topics discuss` (local-helper): Post a topic-centered discussion message from a local text file.
+- `topics message` (local-helper): Post a message to a Topic conversation without hand-authoring event JSON.
+- `topics messages` (local-helper): List messages from a Topic conversation.
+- `topics reply` (local-helper): Reply to an existing Topic message.
 - `boards create` (local-helper): Create an active-work Board from flags, optionally tied to a Topic.
 - `docs create` (local-helper): Create a durable document lineage, with a file-first text-doc path for agents.
 - `cards create` (local-helper): Create a board work card from flags plus a local prose file, or from advanced JSON.
+- `cards message` (local-helper): Post a message to a Card conversation without hand-authoring event JSON.
+- `cards messages` (local-helper): List message_posted events from a Card conversation.
+- `cards reply` (local-helper): Reply to an existing Card message.
 - `cards revise` (local-helper): Revise a card title and/or summary/body from local files without hand-authoring patch JSON.
+- `threads message` (local-helper): Escape hatch: post a message directly to a backing thread.
+- `threads reply` (local-helper): Escape hatch: reply to an existing message on a backing thread.
 - `cards move` (local-helper): Move a card to another board column using Card workflow language.
 - `cards assign` (local-helper): Replace card assignees with explicit actor refs, or clear them.
 - `cards resolve` (local-helper): Resolve a card into the done column with evidence refs.
@@ -137,7 +144,9 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `workspace summary` (local-helper): First-run workspace orientation: boards plus compact card/doc/inbox counts.
 - `docs revise` (local-helper): Revise a durable document from a local file or JSON body; stages a diff proposal by default.
 - `docs content` (local-helper): Show the current document content together with authoritative head revision metadata.
-- `docs comments` (local-helper): List line-level document text comments from the document backing thread timeline.
+- `docs messages` (local-helper): List messages from a Document conversation.
+- `docs message` (local-helper): Post a message to a Document conversation without hand-authoring event JSON.
+- `docs reply` (local-helper): Reply to an existing Document message.
 - `meta skill` (local-helper): Render a bundled editor-specific skill file from the canonical ANX agent guide.
 - `bridge install` (local-helper): Install `anx-agent-bridge` into a dedicated Python 3.11+ virtualenv and expose a PATH wrapper.
 - `bridge import-auth` (local-helper): Copy an existing `anx` profile and key into the bridge agent home auth state.
@@ -316,7 +325,7 @@ Higher-level concepts
 - `docs` are the long-lived narrative layer. Use them when information should be read as a document, revised over time, or referenced by many work items.
 - `boards` are coordination views. Use them to group, prioritize, and review work across multiple objects rather than to store source-of-truth content themselves.
 - `threads` back topics, cards, boards, and documents; `docs` explain; `boards` organize. Keep those roles distinct.
-- Before you revise a long-lived `doc` on an operator’s behalf, run `anx docs comments --document-id <id>` to read any anchored line-level discussion on that document’s backing thread (and use `--json` when a script or agent is consuming the output).
+- Before you revise a long-lived `doc` on an operator’s behalf, run `anx docs messages <document-id>` to read document discussion on that document’s backing thread (and use `--json` when a script or agent is consuming the output).
 
 
 Standard workflow
@@ -327,7 +336,7 @@ Standard workflow
 4. Make the smallest valid mutation.
 5. Verify via read commands, timeline, stream, or resulting state.
 
-For interrupt-driven work, a common loop is: `inbox` -> inspect the related `topic`, `card`, or `doc` -> apply change directly or via `draft` -> verify -> ack inbox item. Reach for `threads ...` only when you need backing-thread diagnostics.
+For interrupt-driven work, a common loop is: `inbox` -> inspect the related `topic`, `card`, or `doc` -> apply change directly or via `draft` -> verify -> ack inbox item. When leaving a domain update, use `anx topics message <topic-id> --body-file update.md`, `anx docs message <document-id> --body-file update.md`, or `anx cards message <card-id> --body-file update.md`; reach for raw `events create` only for contract-level writes or unusual integrations.
 
 
 Configuration
@@ -1259,7 +1268,9 @@ Commands:
 
 Primary operator coordination:
   topics create           Create a topic from plain flags or advanced JSON.
-  topics discuss          Post a topic-centered discussion message from `--message-file`.
+  topics message          Post a topic conversation message.
+  topics messages         List topic conversation messages.
+  topics reply            Reply to a specific topic message.
   topics workspace        Load the topic workspace (cards, docs, backing threads, inbox).
   topics list / topics get   Discover and resolve topic ids (`--state`, `--q`, pagination, archive/trash visibility flags).
   Tip: use Topics for discussion/current context; use Boards for active work and Docs for durable knowledge. Start triage with `anx topics workspace --topic-id <topic-id>`.
@@ -1352,7 +1363,9 @@ Commands:
 
 Local inspection helpers:
   docs content             Show current document content with revision metadata.
-  docs comments          List anchored document text comments on the backing thread timeline.
+  docs message             Post a document conversation message.
+  docs messages            List document conversation messages.
+  docs reply               Reply to a specific document message.
   Mutation flow:
   docs create              Create durable context from flags plus `--content-file`, or from advanced JSON.
   docs revise              Revise from `--content-file`; stages a diff proposal by default, or direct-writes with `--apply`.
@@ -1389,12 +1402,15 @@ Commands:
 
 Agent-facing Card workflow:
   cards create             Create a board work card from flags plus `--content-file`.
+  cards message            Post a card conversation update without event JSON.
+  cards messages           List card conversation messages.
+  cards reply              Reply to a specific card message.
   cards revise             Revise card title/body from `--content-file`; discovers `if_base_revision` when omitted.
   cards move               Move workflow column; discovers the parent board concurrency token when omitted.
   cards assign             Replace or clear assignees.
   cards resolve            Move to done with resolution evidence refs.
   cards reopen             Move a resolved card back to active workflow.
-  Tip: use `boards workspace` to inspect the board around cards. Use raw JSON `cards patch` only for metadata fields not covered by a domain verb.
+  Tip: use `cards message <card-id> --body-file update.md` for ordinary status updates. Use raw `events create` only for contract-level writes or unusual integrations.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1418,11 +1434,13 @@ Commands:
   threads timeline         Get backing thread timeline
   threads workspace        Get backing thread workspace projection (diagnostic)
 
-Read-only backing-thread diagnostics (tooling):
+Read-only backing-thread diagnostics and direct thread messages:
+  threads message         Post directly to a backing thread; prefer domain commands like `anx cards message` or `anx topics message`.
+  threads reply           Reply to an existing message on a backing thread.
   threads workspace       Diagnostic workspace projection (context + inbox + related threads).
   threads inspect          Smaller diagnostic bundle (context + inbox).
   threads timeline         Backing thread timeline and expansions.
-  Tip: prefer `anx topics workspace` for normal operator coordination. Use `anx threads workspace --full-id` when you need the backing-thread projection with full ids in default text; use `--state active` to discover backing threads by lifecycle state. For a minimal `{thread}` read, use `anx threads get` (contract: `threads.inspect`).
+  Tip: prefer domain commands like `anx cards message <card-id>` for normal authoring and `anx topics workspace --topic-id <topic-id>` for primary coordination reads. Use `anx threads workspace --full-id` when you need the backing-thread projection with full ids in default text; use `--state active` to discover backing threads by lifecycle state. For a minimal `{thread}` read, use `anx threads get` (contract: `threads.inspect`).
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1454,6 +1472,7 @@ Local inspection helpers:
   events explain           Explain known event-type conventions and local validation constraints.
   events validate          Validate an events.create payload from stdin/--from-file without sending a request.
   Tip: use `--mine` or `--actor-id <id>` to audit one actor; add `--full-id` for copy/paste IDs.
+  Raw `events create` is a contract escape hatch. For ordinary discussion, use `anx topics message <topic-id>`, `anx docs message <document-id>`, or `anx cards message <card-id>` instead of hand-authoring a `message_posted` event.
   For details: `anx events explain <event-type>`
 
 Global flags:
@@ -4001,24 +4020,25 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
-## `topics discuss`
+## `topics message`
 
-Post a topic-centered discussion message from a local text file.
+Post a message to a Topic conversation without hand-authoring event JSON.
 
 ```text
-Local Help: topics discuss
+Local Help: topics message
 
 - Kind: `local helper`
-- Summary: Post a topic-centered discussion message from a local text file.
-- Composition: Fetches the Topic to discover its backing thread, then writes a visible `message_posted` event to that thread. Use this for discussion; use Boards/Cards for active work and Docs for durable knowledge.
+- Summary: Post a message to a Topic conversation without hand-authoring event JSON.
+- Composition: Fetches the Topic to discover its backing thread, then writes a visible `message_posted` event to that thread.
 - JSON body: Builds an `events.create` body with `event.type=message_posted`, topic/thread refs, and payload text.
 - Examples:
-  - `anx topics discuss --topic <topic-id> --message-file message.md`
-  - `anx topics discuss --topic <topic-id> --message-file message.md --summary "Decision context"`
+  - `anx topics message <topic-id> --body-file message.md`
+  - `anx topics message <topic-id> --body "Decision context"`
 
 Flags:
-  --topic <topic-id>           Topic id or unique prefix to discuss.
-  --message-file <path>        Load discussion message text from a local file.
+  --topic <topic-id>           Topic id or unique prefix to message.
+  --body <text>                Message body text.
+  --body-file <path>           Load message body text from a local file.
   --summary <text>             Optional short event summary.
   --ref <typed-ref>            Additional typed ref, repeatable.
   --actor-id <actor-id>        Actor id; defaults from the active profile when available.
@@ -4027,7 +4047,68 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx topics discuss ... ; anx --json topics discuss ... ; anx topics discuss ... --json (last two: JSON envelope on stdout)
+  Examples: anx topics message ... ; anx --json topics message ... ; anx topics message ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `topics messages`
+
+List messages from a Topic conversation.
+
+```text
+Local Help: topics messages
+
+- Kind: `local helper`
+- Summary: List messages from a Topic conversation.
+- Composition: Fetches the Topic, then reads its backing thread timeline and filters to messages attached to that topic.
+- JSON body: Fetches the Topic backing thread and returns an `events.list`-style filtered timeline slice with topic metadata.
+- Examples:
+  - `anx topics messages <topic-id>`
+  - `anx topics messages <topic-id> --max-events 5 --mine`
+
+Flags:
+  --topic <topic-id>           Topic id or unique prefix whose messages should be listed.
+  --max-events <n>             Return at most N most-recent matching messages.
+  --mine                       Filter to messages authored by the active profile actor_id.
+  --actor-id <actor-id>        Filter to one actor id.
+  --full-id                    Render full event ids in default text output.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx topics messages ... ; anx --json topics messages ... ; anx topics messages ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `topics reply`
+
+Reply to an existing Topic message.
+
+```text
+Local Help: topics reply
+
+- Kind: `local helper`
+- Summary: Reply to an existing Topic message.
+- Composition: Fetches the Topic and validates the target message exists on its backing thread before posting the reply.
+- JSON body: Builds an `events.create` body like `topics message` and adds `payload.reply_to_event_id` plus an `event:<id>` ref.
+- Examples:
+  - `anx topics reply <topic-id> --to <message-id> --body "Confirmed"`
+  - `anx topics reply <topic-id> --to <message-id> --body-file reply.md`
+
+Flags:
+  --topic <topic-id>           Topic id or unique prefix to reply on.
+  --to <message-id>            Message/event id or unique prefix being replied to.
+  --body <text>                Reply body text.
+  --body-file <path>           Load reply body text from a local file.
+  --summary <text>             Optional short event summary.
+  --ref <typed-ref>            Additional typed ref, repeatable.
+  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --dry-run                    Validate and render the request without sending it.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx topics reply ... ; anx --json topics reply ... ; anx topics reply ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4133,6 +4214,100 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
+## `cards message`
+
+Post a message to a Card conversation without hand-authoring event JSON.
+
+```text
+Local Help: cards message
+
+- Kind: `local helper`
+- Summary: Post a message to a Card conversation without hand-authoring event JSON.
+- Composition: Fetches the Card to discover its backing thread and board, then writes a visible `message_posted` event. Use this for card status updates, implementation notes, and ordinary discussion.
+- JSON body: Builds an `events.create` body with `event.type=message_posted`, card/thread/board refs, profile actor, and payload text.
+- Examples:
+  - `anx cards message <card-id> --body "Implemented in 0729e75"`
+  - `anx cards message <card-id> --body-file update.md`
+  - `cat update.md | anx cards message <card-id>`
+
+Flags:
+  --card <card-id>             Card id or unique prefix to message.
+  --body <text>                Message body text.
+  --body-file <path>           Load message body text from a local file.
+  --summary <text>             Optional short event summary.
+  --ref <typed-ref>            Additional typed ref, repeatable.
+  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --dry-run                    Validate and render the request without sending it.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx cards message ... ; anx --json cards message ... ; anx cards message ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `cards messages`
+
+List message_posted events from a Card conversation.
+
+```text
+Local Help: cards messages
+
+- Kind: `local helper`
+- Summary: List message_posted events from a Card conversation.
+- Composition: Fetches the Card, then reads its backing thread timeline and filters to ordinary messages. Use `cards timeline` when you need lifecycle events too.
+- JSON body: Fetches the Card backing thread and returns an `events.list`-style filtered timeline slice with card metadata.
+- Examples:
+  - `anx cards messages <card-id>`
+  - `anx cards messages <card-id> --max-events 5 --mine`
+  - `anx cards messages --card <card-id> --full-id`
+
+Flags:
+  --card <card-id>             Card id or unique prefix whose messages should be listed.
+  --max-events <n>             Return at most N most-recent matching messages.
+  --mine                       Filter to messages authored by the active profile actor_id.
+  --actor-id <actor-id>        Filter to one actor id.
+  --full-id                    Render full event ids in default text output.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx cards messages ... ; anx --json cards messages ... ; anx cards messages ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `cards reply`
+
+Reply to an existing Card message.
+
+```text
+Local Help: cards reply
+
+- Kind: `local helper`
+- Summary: Reply to an existing Card message.
+- Composition: Fetches the Card and validates the target message exists on its backing thread before posting the reply.
+- JSON body: Builds an `events.create` body like `cards message` and adds `payload.reply_to_event_id` plus an `event:<id>` ref.
+- Examples:
+  - `anx cards reply <card-id> --to <message-id> --body "Confirmed"`
+  - `anx cards reply <card-id> --to <message-id> --body-file reply.md`
+
+Flags:
+  --card <card-id>             Card id or unique prefix to reply on.
+  --to <message-id>            Message/event id or unique prefix being replied to.
+  --body <text>                Reply body text.
+  --body-file <path>           Load reply body text from a local file.
+  --summary <text>             Optional short event summary.
+  --ref <typed-ref>            Additional typed ref, repeatable.
+  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --dry-run                    Validate and render the request without sending it.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx cards reply ... ; anx --json cards reply ... ; anx cards reply ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
 ## `cards revise`
 
 Revise a card title and/or summary/body from local files without hand-authoring patch JSON.
@@ -4160,6 +4335,69 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards revise ... ; anx --json cards revise ... ; anx cards revise ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `threads message`
+
+Escape hatch: post a message directly to a backing thread.
+
+```text
+Local Help: threads message
+
+- Kind: `local helper`
+- Summary: Escape hatch: post a message directly to a backing thread.
+- Composition: Writes directly to a backing thread. Prefer domain commands such as `cards message`, `topics message`, or `docs message` when you are working from a Card, Topic, or Doc.
+- JSON body: Builds an `events.create` body with `event.type=message_posted`, `event.thread_id`, thread ref, profile actor, and payload text.
+- Examples:
+  - `anx threads message <thread-id> --body-file note.md`
+  - `anx threads message <thread-id> --body "Diagnostic note"`
+
+Flags:
+  --thread <thread-id>         Thread id or unique prefix to message.
+  --body <text>                Message body text.
+  --body-file <path>           Load message body text from a local file.
+  --summary <text>             Optional short event summary.
+  --ref <typed-ref>            Additional typed ref, repeatable.
+  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --dry-run                    Validate and render the request without sending it.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx threads message ... ; anx --json threads message ... ; anx threads message ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `threads reply`
+
+Escape hatch: reply to an existing message on a backing thread.
+
+```text
+Local Help: threads reply
+
+- Kind: `local helper`
+- Summary: Escape hatch: reply to an existing message on a backing thread.
+- Composition: Validates the target message exists on the thread before posting the reply.
+- JSON body: Builds an `events.create` body like `threads message` and adds `payload.reply_to_event_id` plus an `event:<id>` ref.
+- Examples:
+  - `anx threads reply <thread-id> --to <message-id> --body "Confirmed"`
+  - `anx threads reply <thread-id> --to <message-id> --body-file reply.md`
+
+Flags:
+  --thread <thread-id>         Thread id or unique prefix to reply on.
+  --to <message-id>            Message/event id or unique prefix being replied to.
+  --body <text>                Reply body text.
+  --body-file <path>           Load reply body text from a local file.
+  --summary <text>             Optional short event summary.
+  --ref <typed-ref>            Additional typed ref, repeatable.
+  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --dry-run                    Validate and render the request without sending it.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx threads reply ... ; anx --json threads reply ... ; anx threads reply ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4576,23 +4814,27 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
-## `docs comments`
+## `docs messages`
 
-List line-level document text comments from the document backing thread timeline.
+List messages from a Document conversation.
 
 ```text
-Local Help: docs comments
+Local Help: docs messages
 
 - Kind: `local helper`
-- Summary: List line-level document text comments from the document backing thread timeline.
-- Composition: Resolves the document with `docs get`, fetches the backing thread via `threads.timeline`, and filters `message_posted` events for this document with `payload.kind` `document_text_comment`.
-- JSON body: `document`, `document_id`, `thread_id`, `comments` (each: `event`, `comment`), `returned`
+- Summary: List messages from a Document conversation.
+- Composition: Fetches the Document, then reads its backing thread timeline and filters to messages attached to that document.
+- JSON body: Fetches the Document backing thread and returns an `events.list`-style filtered timeline slice with document metadata.
 - Examples:
-  - `anx docs comments --document-id <document-id>`
-  - `anx docs comments <document-id>`
+  - `anx docs messages --document-id <document-id>`
+  - `anx docs messages <document-id>`
 
 Flags:
   --document-id <document-id>  Document id or unique alias.
+  --max-events <n>             Return at most N most-recent matching messages.
+  --mine                       Filter to messages authored by the active profile actor_id.
+  --actor-id <actor-id>        Filter to one actor id.
+  --full-id                    Render full event ids in default text output.
   --include-archived           Include archived message events.
   --archived-only              Show only archived message events.
   --include-trashed            Include trashed message events.
@@ -4601,7 +4843,70 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx docs comments ... ; anx --json docs comments ... ; anx docs comments ... --json (last two: JSON envelope on stdout)
+  Examples: anx docs messages ... ; anx --json docs messages ... ; anx docs messages ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `docs message`
+
+Post a message to a Document conversation without hand-authoring event JSON.
+
+```text
+Local Help: docs message
+
+- Kind: `local helper`
+- Summary: Post a message to a Document conversation without hand-authoring event JSON.
+- Composition: Fetches the Document to discover its backing thread, then writes a visible `message_posted` event attached to that document.
+- JSON body: Builds an `events.create` body with `event.type=message_posted`, document/thread refs, profile actor, and payload text.
+- Examples:
+  - `anx docs message <document-id> --body-file note.md`
+  - `anx docs message <document-id> --body "Reviewed the current revision"`
+
+Flags:
+  --document-id <document-id>  Document id or unique alias to message.
+  --body <text>                Message body text.
+  --body-file <path>           Load message body text from a local file.
+  --summary <text>             Optional short event summary.
+  --ref <typed-ref>            Additional typed ref, repeatable.
+  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --dry-run                    Validate and render the request without sending it.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx docs message ... ; anx --json docs message ... ; anx docs message ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `docs reply`
+
+Reply to an existing Document message.
+
+```text
+Local Help: docs reply
+
+- Kind: `local helper`
+- Summary: Reply to an existing Document message.
+- Composition: Fetches the Document and validates the target message exists on its backing thread before posting the reply.
+- JSON body: Builds an `events.create` body like `docs message` and adds `payload.reply_to_event_id` plus an `event:<id>` ref.
+- Examples:
+  - `anx docs reply <document-id> --to <message-id> --body "Confirmed"`
+  - `anx docs reply <document-id> --to <message-id> --body-file reply.md`
+
+Flags:
+  --document-id <document-id>  Document id or unique alias to reply on.
+  --to <message-id>            Message/event id or unique prefix being replied to.
+  --body <text>                Reply body text.
+  --body-file <path>           Load reply body text from a local file.
+  --summary <text>             Optional short event summary.
+  --ref <typed-ref>            Additional typed ref, repeatable.
+  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --dry-run                    Validate and render the request without sending it.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx docs reply ... ; anx --json docs reply ... ; anx docs reply ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 

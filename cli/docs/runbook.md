@@ -180,13 +180,16 @@ anx --agent agent-a events list --thread-id thread_123 --thread-id thread_456 --
 anx --agent agent-a provenance walk --from event:event_123 --depth 2
 anx --agent agent-a topics get --topic-id topic_123
 anx --agent agent-a topics create --title "Launch" --summary "Coordinate launch work"
-anx --agent agent-a topics discuss --topic topic_123 --message-file message.md
+anx --agent agent-a topics message topic_123 --body-file message.md
+anx --agent agent-a topics messages topic_123 --max-events 10
 anx --agent agent-a topics workspace --topic-id topic_123 --full-id
 # Backing-thread reads (tooling/diagnostics; prefer topics workspace for operator triage)
 anx --agent agent-a threads inspect --thread-id thread_123 --max-events 50 --full-id
 anx --agent agent-a threads context --state active --full-id
 anx --agent agent-a threads workspace --thread-id thread_123 --full-id
 anx --agent agent-a docs content --document-id product-constitution
+anx --agent agent-a docs message product-constitution --body-file note.md
+anx --agent agent-a docs messages product-constitution --max-events 10
 anx --agent agent-a artifacts inspect --artifact-id artifact_123
 anx --agent agent-a workspace summary
 anx --agent agent-a boards list --state active
@@ -207,7 +210,13 @@ Board activity uses `board:<board-id>` typed refs on emitted events. When
 debugging board flows, inspect `boards workspace` and, when needed, the
 read-only backing-thread timeline or `threads workspace` diagnostic projection.
 Use `boards cards ...` only when you specifically need the board-scoped raw API
-shape; the agent-facing Card workflow is `cards create/revise/move/assign/resolve/reopen`.
+shape. The agent-facing conversation verbs are `topics message/messages/reply`,
+`docs message/messages/reply`, and
+`cards create/message/messages/reply/revise/move/assign/resolve/reopen`. For
+ordinary domain conversation updates, prefer `anx <domain> message <id>
+--body-file update.md`; the CLI fills the backing `thread_id`, domain/thread
+refs, and profile actor. Use raw `events create` only for contract-level writes
+or unusual integrations.
 
 Draft/commit flow:
 

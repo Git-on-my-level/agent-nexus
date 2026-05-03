@@ -61,6 +61,12 @@ func validateEventsCreateBody(body any) error {
 
 func validatePreflightEventRefRule(eventType string, event map[string]any, refs []string, payload map[string]any, rule registry.EventRefRule) error {
 	threadID, _ := event["thread_id"].(string)
+	threadRef := strings.TrimSpace(anyString(event["thread_ref"]))
+	if eventType == "message_posted" && strings.TrimSpace(threadID) == "" && threadRef != "" {
+		err := errnorm.Usage("invalid_request", "event.thread_id is required for thread-scoped message_posted events; thread_ref alone does not attach the message to a visible timeline")
+		err.Hint = "Use event.thread_id for thread-scoped messages, or use `anx topics message`, `anx docs message`, `anx cards message`, or `anx threads message` so the CLI fills the backing thread and refs."
+		return err
+	}
 	if strings.EqualFold(strings.TrimSpace(rule.ThreadID), "required") && strings.TrimSpace(threadID) == "" {
 		return errnorm.Usage("invalid_request", fmt.Sprintf("event.thread_id is required for event.type=%q", eventType))
 	}
