@@ -5295,6 +5295,7 @@ components:
         cards:
           type: array
           items: { $ref: '#/components/schemas/Card' }
+        markdown_hygiene: { $ref: '#/components/schemas/MarkdownHygiene' }
       required: [board, cards]
 
     PatchCardRequest:
@@ -5437,10 +5438,40 @@ components:
           items: { $ref: '#/components/schemas/RefEdge' }
       required: [ref_edges]
 
+    MarkdownHygieneWarning:
+      type: object
+      properties:
+        field:
+          type: string
+          description: Request field path whose markdown was normalized.
+        code:
+          type: string
+          description: Stable warning code for the conservative normalization rule.
+        message:
+          type: string
+          description: Human-readable summary of the normalization.
+      required: [field, code, message]
+
+    MarkdownHygiene:
+      type: object
+      description: >
+        Present only on mutation responses when core conservatively normalized documented
+        prose/markdown fields before storage. Core does not recursively rewrite arbitrary
+        JSON strings.
+      properties:
+        warnings:
+          type: array
+          items: { $ref: '#/components/schemas/MarkdownHygieneWarning' }
+        changed_fields:
+          type: array
+          items: { type: string }
+      required: [warnings]
+
     TopicResponse:
       type: object
       properties:
         topic: { $ref: '#/components/schemas/Topic' }
+        markdown_hygiene: { $ref: '#/components/schemas/MarkdownHygiene' }
       required: [topic]
 
     TopicsResponse:
@@ -5632,6 +5663,7 @@ components:
       properties:
         document: { $ref: '#/components/schemas/Document' }
         revision: { $ref: '#/components/schemas/DocumentRevision' }
+        markdown_hygiene: { $ref: '#/components/schemas/MarkdownHygiene' }
       required: [document, revision]
 
     DocumentRevisionsResponse:
@@ -5671,6 +5703,7 @@ components:
       properties:
         board: { $ref: '#/components/schemas/Board' }
         summary: { $ref: '#/components/schemas/BoardSummary' }
+        markdown_hygiene: { $ref: '#/components/schemas/MarkdownHygiene' }
       required: [board, summary]
 
     BoardCardsResponse:
@@ -5710,6 +5743,7 @@ components:
       type: object
       properties:
         card: { $ref: '#/components/schemas/Card' }
+        markdown_hygiene: { $ref: '#/components/schemas/MarkdownHygiene' }
       required: [card]
 
     CardWithRevisionResponse:
@@ -5717,6 +5751,7 @@ components:
       properties:
         card: { $ref: '#/components/schemas/Card' }
         revision: { $ref: '#/components/schemas/CardRevision' }
+        markdown_hygiene: { $ref: '#/components/schemas/MarkdownHygiene' }
       required: [card, revision]
 
     CardRevisionsResponse:
@@ -5748,6 +5783,7 @@ components:
       properties:
         board: { $ref: '#/components/schemas/Board' }
         card: { $ref: '#/components/schemas/Card' }
+        markdown_hygiene: { $ref: '#/components/schemas/MarkdownHygiene' }
       required: [board, card]
 
     RestoreArchivedCardRequest:
@@ -5784,6 +5820,7 @@ components:
       type: object
       properties:
         event: { $ref: '#/components/schemas/Event' }
+        markdown_hygiene: { $ref: '#/components/schemas/MarkdownHygiene' }
       required: [event]
 
     EventsResponse:
@@ -5935,6 +5972,7 @@ components:
         notify:
           type: object
           additionalProperties: true
+        markdown_hygiene: { $ref: '#/components/schemas/MarkdownHygiene' }
       required: [event, notify]
 
     ArtifactsListResponse:

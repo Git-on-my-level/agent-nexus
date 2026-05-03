@@ -328,6 +328,15 @@ func handleCreateCardRevision(w http.ResponseWriter, r *http.Request, opts handl
 	if req.Revision.DefinitionOfDone != nil {
 		dod = &req.Revision.DefinitionOfDone
 	}
+	var hygiene markdownHygieneCollector
+	if req.Summary != nil {
+		summary := *req.Summary
+		if !hygiene.normalizeField(w, "revision.summary", &summary) {
+			return
+		}
+		summary = strings.TrimSpace(summary)
+		req.Summary = &summary
+	}
 	result, revision, err := opts.primitiveStore.CreateCardRevision(r.Context(), actorID, cardID, primitives.CreateCardRevisionInput{
 		Title:            req.Title,
 		Summary:          req.Summary,
@@ -347,7 +356,7 @@ func handleCreateCardRevision(w http.ResponseWriter, r *http.Request, opts handl
 		}
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"board": result.Board, "card": publicCardView(result.Card), "revision": revision})
+	writeJSON(w, http.StatusCreated, hygiene.attach(map[string]any{"board": result.Board, "card": publicCardView(result.Card), "revision": revision}))
 }
 
 func handlePatchCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, cardID string) {
@@ -386,6 +395,15 @@ func handlePatchCard(w http.ResponseWriter, r *http.Request, opts handlerOptions
 	if !ok {
 		return
 	}
+	var hygiene markdownHygieneCollector
+	if patchInput.Body != nil {
+		body := *patchInput.Body
+		if !hygiene.normalizeField(w, "patch.summary", &body) {
+			return
+		}
+		body = strings.TrimSpace(body)
+		patchInput.Body = &body
+	}
 	patchInput.IfBoardUpdatedAt = &ifUpdatedAt
 
 	beforeCard, err := loadBoardCardForEvent(r.Context(), opts, "", cardID)
@@ -420,7 +438,7 @@ func handlePatchCard(w http.ResponseWriter, r *http.Request, opts handlerOptions
 		}
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"card": publicCardView(result.Card)})
+	writeJSON(w, http.StatusOK, hygiene.attach(map[string]any{"card": publicCardView(result.Card)}))
 }
 
 func handleMoveCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, cardID string) {

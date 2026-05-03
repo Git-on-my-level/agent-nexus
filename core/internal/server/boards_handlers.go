@@ -98,6 +98,10 @@ func handleCreateBoard(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		req.Board["id"] = deriveRequestScopedID("boards.create", actorID, req.RequestKey, "bd")
 		derivedBoardID = true
 	}
+	var hygiene markdownHygieneCollector
+	if !hygiene.normalizeMapString(w, "board.summary", req.Board, "summary") {
+		return
+	}
 
 	replayStatus, replayPayload, replayed, err := readIdempotencyReplay(r.Context(), opts.primitiveStore, "boards.create", actorID, req.RequestKey, req)
 	if writeIdempotencyError(w, err) {
@@ -126,7 +130,7 @@ func handleCreateBoard(w http.ResponseWriter, r *http.Request, opts handlerOptio
 			if loadErr == nil {
 				summary, summaryErr := opts.primitiveStore.GetBoardSummary(r.Context(), boardID)
 				if summaryErr == nil {
-					response := map[string]any{"board": existing, "summary": summary}
+					response := hygiene.attach(map[string]any{"board": existing, "summary": summary})
 					status, payload, replayErr := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "boards.create", actorID, req.RequestKey, req, http.StatusCreated, response)
 					if writeIdempotencyError(w, replayErr) {
 						return
@@ -138,7 +142,7 @@ func handleCreateBoard(w http.ResponseWriter, r *http.Request, opts handlerOptio
 					writeJSON(w, status, payload)
 					return
 				}
-				response := map[string]any{"board": existing}
+				response := hygiene.attach(map[string]any{"board": existing})
 				status, payload, replayErr := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "boards.create", actorID, req.RequestKey, req, http.StatusCreated, response)
 				if writeIdempotencyError(w, replayErr) {
 					return
@@ -173,6 +177,7 @@ func handleCreateBoard(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	if summaryErr == nil {
 		response["summary"] = summary
 	}
+	response = hygiene.attach(response)
 	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "boards.create", actorID, req.RequestKey, req, http.StatusCreated, response)
 	if writeIdempotencyError(w, err) {
 		return
@@ -255,6 +260,10 @@ func handleUpdateBoard(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	}
 
 	patchInput := prepareBoardWriteMap(req.Patch)
+	var hygiene markdownHygieneCollector
+	if !hygiene.normalizeMapString(w, "patch.summary", patchInput, "summary") {
+		return
+	}
 	if err := validateBoardPatchRequest(opts.contract, patchInput); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
@@ -282,7 +291,7 @@ func handleUpdateBoard(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	if summaryErr == nil {
 		response["summary"] = summary
 	}
-	writeJSON(w, http.StatusOK, response)
+	writeJSON(w, http.StatusOK, hygiene.attach(response))
 }
 
 func writeBoardLifecycleStoreError(w http.ResponseWriter, err error) bool {
@@ -519,6 +528,15 @@ func addBoardCardFromRaw(w http.ResponseWriter, r *http.Request, opts handlerOpt
 			return
 		}
 	}
+	var hygiene markdownHygieneCollector
+	if req.Body != "" {
+		body := req.Body
+		if !hygiene.normalizeField(w, "card.summary", &body) {
+			return
+		}
+		req.Body = strings.TrimSpace(body)
+		setAddBoardCardRawSummary(raw, req.Body)
+	}
 
 	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
 	if !ok {
@@ -575,7 +593,7 @@ func addBoardCardFromRaw(w http.ResponseWriter, r *http.Request, opts handlerOpt
 				req.Refs,
 				req.Risk,
 			) {
-				response := map[string]any{"board": existingBoard, "card": existingCard}
+				response := hygiene.attach(map[string]any{"board": existingBoard, "card": existingCard})
 				status, payload, replayErr := persistIdempotencyReplay(r.Context(), opts.primitiveStore, idempotencyOp, actorID, req.RequestKey, replayRequest, http.StatusCreated, response)
 				if writeIdempotencyError(w, replayErr) {
 					return
@@ -608,10 +626,10 @@ func addBoardCardFromRaw(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		enqueueCardAssigneeWakeBestEffort(r.Context(), opts, actorID, nil, result.Card, result.Board, storedLifecycle)
 	}
 
-	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, idempotencyOp, actorID, req.RequestKey, replayRequest, http.StatusCreated, map[string]any{
+	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, idempotencyOp, actorID, req.RequestKey, replayRequest, http.StatusCreated, hygiene.attach(map[string]any{
 		"board": result.Board,
 		"card":  result.Card,
-	})
+	}))
 	if writeIdempotencyError(w, err) {
 		return
 	}
@@ -665,20 +683,8 @@ func handleBatchAddBoardCards(w http.ResponseWriter, r *http.Request, opts handl
 		return
 	}
 
-	replayStatus, replayPayload, replayed, err := readIdempotencyReplay(r.Context(), opts.primitiveStore, "boards.cards.batch_add", actorID, batchRequestKey, raw)
-	if writeIdempotencyError(w, err) {
-		return
-	}
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load idempotency replay")
-		return
-	}
-	if replayed {
-		writeJSON(w, replayStatus, normalizeBatchBoardCardCreatePayload(replayPayload))
-		return
-	}
-
 	inputs := make([]primitives.AddBoardCardInput, 0, len(list))
+	var hygiene markdownHygieneCollector
 	for i, elem := range list {
 		itemMap, ok := elem.(map[string]any)
 		if !ok {
@@ -696,12 +702,33 @@ func handleBatchAddBoardCards(w http.ResponseWriter, r *http.Request, opts handl
 				return
 			}
 		}
+		if m.Body != "" {
+			body := m.Body
+			if !hygiene.normalizeField(w, fmt.Sprintf("items[%d].card.summary", i), &body) {
+				return
+			}
+			m.Body = strings.TrimSpace(body)
+			setAddBoardCardRawSummary(itemMap, m.Body)
+		}
 		if strings.TrimSpace(batchRequestKey) != "" && strings.TrimSpace(m.CardID) == "" {
 			m.CardID = deriveRequestScopedID("boards.cards.batch_create", actorID, fmt.Sprintf("%s#%d", batchRequestKey, i), "cd")
 		}
 		in := addBoardCardStoreInput(m)
 		in.IfBoardUpdatedAt = nil
 		inputs = append(inputs, in)
+	}
+
+	replayStatus, replayPayload, replayed, err := readIdempotencyReplay(r.Context(), opts.primitiveStore, "boards.cards.batch_add", actorID, batchRequestKey, raw)
+	if writeIdempotencyError(w, err) {
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load idempotency replay")
+		return
+	}
+	if replayed {
+		writeJSON(w, replayStatus, normalizeBatchBoardCardCreatePayload(replayPayload))
+		return
 	}
 
 	results, err := opts.primitiveStore.CreateBoardCardsBatch(r.Context(), actorID, boardID, ifBoardTok, inputs)
@@ -739,6 +766,7 @@ func handleBatchAddBoardCards(w http.ResponseWriter, r *http.Request, opts handl
 		"board": finalBoard,
 		"cards": cardPayloads,
 	}
+	response = hygiene.attach(response)
 	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "boards.cards.batch_add", actorID, batchRequestKey, raw, http.StatusCreated, response)
 	if writeIdempotencyError(w, err) {
 		return
@@ -780,6 +808,15 @@ func handleUpdateBoardCard(w http.ResponseWriter, r *http.Request, opts handlerO
 	if !ok {
 		return
 	}
+	var hygiene markdownHygieneCollector
+	if patchInput.Body != nil {
+		body := *patchInput.Body
+		if !hygiene.normalizeField(w, "patch.summary", &body) {
+			return
+		}
+		body = strings.TrimSpace(body)
+		patchInput.Body = &body
+	}
 	patchInput.IfBoardUpdatedAt = &ifBoardUpdatedAt
 
 	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
@@ -810,7 +847,7 @@ func handleUpdateBoardCard(w http.ResponseWriter, r *http.Request, opts handlerO
 			writeError(w, http.StatusConflict, "conflict", "board has been updated; refresh and retry")
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"board": currentBoard, "card": publicCardView(beforeCard)})
+		writeJSON(w, http.StatusOK, hygiene.attach(map[string]any{"board": currentBoard, "card": publicCardView(beforeCard)}))
 		return
 	}
 
@@ -836,7 +873,7 @@ func handleUpdateBoardCard(w http.ResponseWriter, r *http.Request, opts handlerO
 		}
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"board": result.Board, "card": publicCardView(result.Card)})
+	writeJSON(w, http.StatusOK, hygiene.attach(map[string]any{"board": result.Board, "card": publicCardView(result.Card)}))
 }
 
 func handleMoveBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, boardID, cardKey string) {

@@ -61,6 +61,11 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 		writeError(w, http.StatusBadRequest, "invalid_request", "response_text is required")
 		return
 	}
+	var hygiene markdownHygieneCollector
+	if !hygiene.normalizeField(w, "response_text", &responseText) {
+		return
+	}
+	responseText = strings.TrimSpace(responseText)
 
 	item, err := resolveInboxItemByVariants(r.Context(), opts.primitiveStore, effectiveItemID)
 	if err != nil {
@@ -202,7 +207,7 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 		},
 	}
 
-	writeJSON(w, http.StatusCreated, response)
+	writeJSON(w, http.StatusCreated, hygiene.attach(response))
 }
 
 func resolveInboxItemByVariants(ctx context.Context, store PrimitiveStore, inboxItemID string) (primitives.DerivedInboxItem, error) {

@@ -107,6 +107,10 @@ func handleCreateTopic(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	if strings.TrimSpace(req.RequestKey) != "" && firstNonEmptyString(req.Topic["id"]) == "" {
 		req.Topic["id"] = deriveRequestScopedID("topics.create", actorID, req.RequestKey, "tp")
 	}
+	var hygiene markdownHygieneCollector
+	if !hygiene.normalizeMapString(w, "topic.summary", req.Topic, "summary") {
+		return
+	}
 
 	replayStatus, replayPayload, replayed, err := readIdempotencyReplay(r.Context(), opts.primitiveStore, "topics.create", actorID, req.RequestKey, req)
 	if writeIdempotencyError(w, err) {
@@ -133,7 +137,7 @@ func handleCreateTopic(w http.ResponseWriter, r *http.Request, opts handlerOptio
 			if topicID != "" {
 				existing, loadErr := opts.primitiveStore.GetTopic(r.Context(), topicID)
 				if loadErr == nil {
-					response := map[string]any{"topic": existing}
+					response := hygiene.attach(map[string]any{"topic": existing})
 					status, payload, replayErr := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "topics.create", actorID, req.RequestKey, req, http.StatusCreated, response)
 					if writeIdempotencyError(w, replayErr) {
 						return
@@ -164,9 +168,9 @@ func handleCreateTopic(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{primaryThreadID}, time.Now().UTC())
 	}
 
-	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "topics.create", actorID, req.RequestKey, req, http.StatusCreated, map[string]any{
+	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "topics.create", actorID, req.RequestKey, req, http.StatusCreated, hygiene.attach(map[string]any{
 		"topic": result.Topic,
-	})
+	}))
 	if writeIdempotencyError(w, err) {
 		return
 	}
@@ -230,6 +234,10 @@ func handlePatchTopic(w http.ResponseWriter, r *http.Request, opts handlerOption
 	if !ok {
 		return
 	}
+	var hygiene markdownHygieneCollector
+	if !hygiene.normalizeMapString(w, "patch.summary", req.Patch, "summary") {
+		return
+	}
 
 	if err := validateTopicWriteInput(opts.contract, req.Patch, false); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
@@ -255,7 +263,7 @@ func handlePatchTopic(w http.ResponseWriter, r *http.Request, opts handlerOption
 		enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{primaryThreadID}, time.Now().UTC())
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"topic": result.Topic})
+	writeJSON(w, http.StatusOK, hygiene.attach(map[string]any{"topic": result.Topic}))
 }
 
 func handleArchiveTopic(w http.ResponseWriter, r *http.Request, opts handlerOptions, topicID string) {

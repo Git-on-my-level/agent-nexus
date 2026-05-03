@@ -382,3 +382,18 @@ func addBoardCardStoreInput(m addBoardCardMerged) primitives.AddBoardCardInput {
 		IfBoardUpdatedAt: m.IfBoardUpdatedAt,
 	}
 }
+
+func setAddBoardCardRawSummary(raw map[string]any, summary string) {
+	if raw == nil {
+		return
+	}
+	if cardObj, ok := raw["card"].(map[string]any); ok && cardObj != nil {
+		if _, exists := cardObj["summary"]; exists {
+			cardObj["summary"] = summary
+			return
+		}
+	}
+	if _, exists := raw["summary"]; exists {
+		raw["summary"] = summary
+	}
+}

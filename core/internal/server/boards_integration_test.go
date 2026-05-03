@@ -1692,6 +1692,60 @@ func TestBoardBatchCreateCardsOneConcurrencyToken(t *testing.T) {
 	defer staleResp.Body.Close()
 }
 
+func TestBoardBatchCreateCardsMarkdownHygieneIdempotencyReplay(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	createBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
+		"actor_id":"actor-1",
+		"board":{"title":"Batch Markdown Board"}
+	}`, http.StatusCreated)
+	defer createBoardResp.Body.Close()
+
+	var createBoardPayload struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(createBoardResp.Body).Decode(&createBoardPayload); err != nil {
+		t.Fatalf("decode create board response: %v", err)
+	}
+	boardID := asString(createBoardPayload.Board["id"])
+	boardTok := asString(createBoardPayload.Board["updated_at"])
+
+	batchBody := `{
+		"actor_id":"actor-1",
+		"request_key":"batch-md-1",
+		"if_board_updated_at":"` + boardTok + `",
+		"items":[
+			{"title":"Card A","summary":"###Card\nA→B","column_key":"ready"}
+		]
+	}`
+	firstResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards/batch", batchBody, http.StatusCreated)
+	defer firstResp.Body.Close()
+	var firstPayload map[string]any
+	if err := json.NewDecoder(firstResp.Body).Decode(&firstPayload); err != nil {
+		t.Fatalf("decode first batch response: %v", err)
+	}
+	cards := firstPayload["cards"].([]any)
+	firstCard := cards[0].(map[string]any)
+	if got := asString(firstCard["summary"]); got != "### Card\n\nA → B" {
+		t.Fatalf("expected normalized card summary, got %q", got)
+	}
+
+	replayResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards/batch", batchBody, http.StatusCreated)
+	defer replayResp.Body.Close()
+	var replayPayload map[string]any
+	if err := json.NewDecoder(replayResp.Body).Decode(&replayPayload); err != nil {
+		t.Fatalf("decode replay batch response: %v", err)
+	}
+	replayCards := replayPayload["cards"].([]any)
+	replayCard := replayCards[0].(map[string]any)
+	if asString(replayCard["id"]) != asString(firstCard["id"]) {
+		t.Fatalf("expected idempotency replay to return original card id")
+	}
+}
+
 func createBoardThreadViaHTTP(t *testing.T, h primitivesTestHarness, title string) string {
 	t.Helper()
 	return integrationSeedThread(t, h, "actor-1", map[string]any{

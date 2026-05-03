@@ -18,6 +18,7 @@ var defaultErrorMetadata = map[string]errorMetadata{
 	"conflict":                   {Recoverable: true, Hint: "Reload current state and retry with a fresh concurrency token."},
 	"dev_actor_mode_required":    {Recoverable: true, Hint: "This endpoint is disabled outside dedicated development/test builds."},
 	"invalid_json":               {Recoverable: true, Hint: "Provide valid JSON request body and retry."},
+	"invalid_markdown":           {Recoverable: true, Hint: "Remove unsupported control characters or split extremely long markdown lines before retrying."},
 	"invalid_request":            {Recoverable: true, Hint: "Fix request shape/fields and retry."},
 	"invalid_token":              {Recoverable: true, Hint: "Refresh or rotate credentials, then retry."},
 	"key_mismatch":               {Recoverable: true, Hint: "Rotate key material and retry token exchange."},

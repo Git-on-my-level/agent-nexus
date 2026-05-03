@@ -19,6 +19,7 @@ The schema of objects is defined by `../contracts/anx-schema.yaml`.
   - `request_too_large` with HTTP `413` and a `request_body.limit_bytes` detail when the request body exceeds the configured limit.
   - `workspace_quota_exceeded` with HTTP `507` and a `quota` detail object containing `metric`, `limit`, `current`, and `projected` when a workspace write would exceed configured storage or count limits.
   - `rate_limited` with HTTP `429`, a `Retry-After` header, and a `rate_limit` detail object containing `bucket` and `retry_after_seconds`.
+- Core conservatively normalizes documented user-visible markdown/prose fields before storage, including event summaries/message text, topic/board/card/document summaries, document markdown content, card revision summaries, and inbox response text. Mutation responses include `markdown_hygiene` only when normalization produced warnings; core does not recursively rewrite arbitrary JSON strings. Hard markdown hygiene failures use `invalid_markdown` only for unsupported control characters or extremely long single lines.
 - Create-heavy write endpoints accept optional `request_key` for replay-safe retries.
   - Reusing the same `request_key` with the same request body replays the original successful response instead of creating duplicates.
   - Reusing the same `request_key` with a different request body returns `409 Conflict`.

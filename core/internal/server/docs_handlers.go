@@ -115,6 +115,13 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 	if strings.TrimSpace(req.RequestKey) != "" && firstNonEmptyString(req.Document["document_id"], req.Document["id"]) == "" {
 		req.Document["document_id"] = deriveRequestScopedID("docs.create", actorID, req.RequestKey, "dc")
 	}
+	var hygiene markdownHygieneCollector
+	if !hygiene.normalizeMapString(w, "document.summary", req.Document, "summary") {
+		return
+	}
+	if !normalizeAnyMarkdownContent(w, &hygiene, "content", req.ContentType, &req.Content) {
+		return
+	}
 	replayStatus, replayPayload, replayed, err := readIdempotencyReplay(r.Context(), opts.primitiveStore, "docs.create", actorID, req.RequestKey, req)
 	if writeIdempotencyError(w, err) {
 		return
@@ -157,10 +164,10 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 			documentID := firstNonEmptyString(req.Document["document_id"], req.Document["id"])
 			existingDocument, existingRevision, loadErr := opts.primitiveStore.GetDocument(r.Context(), documentID)
 			if loadErr == nil {
-				response := map[string]any{
+				response := hygiene.attach(map[string]any{
 					"document": existingDocument,
 					"revision": existingRevision,
-				}
+				})
 				status, payload, replayErr := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "docs.create", actorID, req.RequestKey, req, http.StatusCreated, response)
 				if writeIdempotencyError(w, replayErr) {
 					return
@@ -186,10 +193,10 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 	}
 	enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{documentBackingThreadID(document)}, time.Now().UTC())
 
-	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "docs.create", actorID, req.RequestKey, req, http.StatusCreated, map[string]any{
+	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "docs.create", actorID, req.RequestKey, req, http.StatusCreated, hygiene.attach(map[string]any{
 		"document": document,
 		"revision": revision,
-	})
+	}))
 	if writeIdempotencyError(w, err) {
 		return
 	}
@@ -258,6 +265,10 @@ func handlePatchDocument(w http.ResponseWriter, r *http.Request, opts handlerOpt
 	if !ok {
 		return
 	}
+	var hygiene markdownHygieneCollector
+	if !hygiene.normalizeMapString(w, "patch.summary", req.Patch, "summary") {
+		return
+	}
 	document, revision, err := opts.primitiveStore.PatchDocument(r.Context(), actorID, documentID, req.Patch, req.IfUpdatedAt)
 	if err != nil {
 		switch {
@@ -275,10 +286,10 @@ func handlePatchDocument(w http.ResponseWriter, r *http.Request, opts handlerOpt
 	if threadID := documentBackingThreadID(document); threadID != "" {
 		enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{threadID}, time.Now().UTC())
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	writeJSON(w, http.StatusOK, hygiene.attach(map[string]any{
 		"document": document,
 		"revision": revision,
-	})
+	}))
 }
 
 // handleCreateDocumentRevision serves POST /docs/{document_id}/revisions.
@@ -466,6 +477,15 @@ func handleUpdateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 	if !ok {
 		return
 	}
+	var hygiene markdownHygieneCollector
+	if req.Document != nil {
+		if !hygiene.normalizeMapString(w, "document.summary", req.Document, "summary") {
+			return
+		}
+	}
+	if !normalizeAnyMarkdownContent(w, &hygiene, "content", req.ContentType, &req.Content) {
+		return
+	}
 
 	previousDocument, _, err := opts.primitiveStore.GetDocument(r.Context(), documentID)
 	if err != nil {
@@ -515,10 +535,10 @@ func handleUpdateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 	}
 	enqueueTopicProjectionsBestEffort(r.Context(), opts, threadIDs, refreshNow)
 
-	writeJSON(w, successStatus, map[string]any{
+	writeJSON(w, successStatus, hygiene.attach(map[string]any{
 		"document": document,
 		"revision": revision,
-	})
+	}))
 }
 
 func handleListDocumentHistory(w http.ResponseWriter, r *http.Request, opts handlerOptions, documentID string) {

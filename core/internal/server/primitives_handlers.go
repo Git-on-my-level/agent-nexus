@@ -49,6 +49,24 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	if strings.TrimSpace(req.RequestKey) != "" && firstNonEmptyString(req.Event["id"]) == "" {
 		req.Event["id"] = deriveRequestScopedID("events.create", actorID, req.RequestKey, "ev")
 	}
+	var hygiene markdownHygieneCollector
+	if !hygiene.normalizeMapString(w, "event.summary", req.Event, "summary") {
+		return
+	}
+	if strings.TrimSpace(anyString(req.Event["type"])) == "message_posted" {
+		if payload, ok := req.Event["payload"].(map[string]any); ok {
+			if !hygiene.normalizeMapString(w, "event.payload.text", payload, "text") {
+				return
+			}
+		}
+	}
+	if strings.TrimSpace(anyString(req.Event["type"])) == "human_attention_requested" {
+		if payload, ok := req.Event["payload"].(map[string]any); ok {
+			if !hygiene.normalizeMapString(w, "event.payload.body", payload, "body") {
+				return
+			}
+		}
+	}
 	replayStatus, replayPayload, replayed, err := readIdempotencyReplay(r.Context(), opts.primitiveStore, "events.create", actorID, req.RequestKey, req)
 	if writeIdempotencyError(w, err) {
 		return
@@ -111,7 +129,7 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 			existing, loadErr := opts.primitiveStore.GetEvent(r.Context(), eventID)
 			if loadErr == nil {
 				response := map[string]any{"event": existing}
-				status, payload, replayErr := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "events.create", actorID, req.RequestKey, req, http.StatusCreated, response)
+				status, payload, replayErr := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "events.create", actorID, req.RequestKey, req, http.StatusCreated, hygiene.attach(response))
 				if writeIdempotencyError(w, replayErr) {
 					return
 				}
@@ -132,7 +150,7 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	}
 	enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{anyString(stored["thread_id"])}, time.Now().UTC())
 
-	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "events.create", actorID, req.RequestKey, req, http.StatusCreated, map[string]any{"event": stored})
+	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "events.create", actorID, req.RequestKey, req, http.StatusCreated, hygiene.attach(map[string]any{"event": stored}))
 	if writeIdempotencyError(w, err) {
 		return
 	}

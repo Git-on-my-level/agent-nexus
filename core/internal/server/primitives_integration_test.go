@@ -216,6 +216,123 @@ func TestPrimitivesCRUDRoundTrip(t *testing.T) {
 	}
 }
 
+func TestMarkdownHygieneNormalizesEventAndIdempotencyReplay(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-md","display_name":"Markdown Actor","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	body := `{
+		"actor_id":"actor-md",
+		"request_key":"markdown-event-1",
+		"event":{
+			"type":"message_posted",
+			"thread_id":"thread-md",
+			"refs":["thread:thread-md"],
+			"summary":"###Summary",
+			"payload":{"text":"###Title\nBody A→B\n\n\n\n` + "|a|b|\\n|---|---|\\n|1|2|" + `","untouched":"2kanbans"},
+			"provenance":{"sources":["inferred"]}
+		}
+	}`
+	first := postJSONExpectStatus(t, h.baseURL+"/events", body, http.StatusCreated)
+	defer first.Body.Close()
+	var firstPayload map[string]any
+	if err := json.NewDecoder(first.Body).Decode(&firstPayload); err != nil {
+		t.Fatalf("decode first response: %v", err)
+	}
+	assertMarkdownHygienePresent(t, firstPayload, "event.payload.text")
+	event := firstPayload["event"].(map[string]any)
+	if got := anyString(event["summary"]); got != "### Summary" {
+		t.Fatalf("summary normalized: got %q", got)
+	}
+	payload := event["payload"].(map[string]any)
+	if got := anyString(payload["text"]); got != "### Title\n\nBody A → B\n\n| a | b |\n| --- | --- |\n| 1 | 2 |" {
+		t.Fatalf("payload text normalized:\n%q", got)
+	}
+	if got := anyString(payload["untouched"]); got != "2kanbans" {
+		t.Fatalf("unexpected arbitrary payload rewrite: %q", got)
+	}
+
+	second := postJSONExpectStatus(t, h.baseURL+"/events", body, http.StatusCreated)
+	defer second.Body.Close()
+	var replayPayload map[string]any
+	if err := json.NewDecoder(second.Body).Decode(&replayPayload); err != nil {
+		t.Fatalf("decode replay response: %v", err)
+	}
+	assertMarkdownHygienePresent(t, replayPayload, "event.payload.text")
+	if anyString(replayPayload["event"].(map[string]any)["id"]) != anyString(event["id"]) {
+		t.Fatalf("expected idempotency replay to return same event id")
+	}
+}
+
+func TestMarkdownHygieneNormalizesTopicDocumentAndCardWrites(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-md","display_name":"Markdown Actor","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	topicResp := postJSONExpectStatus(t, h.baseURL+"/topics", `{
+		"actor_id":"actor-md",
+		"topic":{"title":"Markdown topic","summary":"##Topic\nAlready","owner_refs":[],"document_refs":[],"board_refs":[],"related_refs":[],"provenance":{"sources":["inferred"]}}
+	}`, http.StatusCreated)
+	defer topicResp.Body.Close()
+	var topicPayload map[string]any
+	if err := json.NewDecoder(topicResp.Body).Decode(&topicPayload); err != nil {
+		t.Fatalf("decode topic response: %v", err)
+	}
+	assertMarkdownHygienePresent(t, topicPayload, "topic.summary")
+	topic := topicPayload["topic"].(map[string]any)
+	if got := anyString(topic["summary"]); got != "## Topic\n\nAlready" {
+		t.Fatalf("topic summary normalized: %q", got)
+	}
+
+	docResp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
+		"actor_id":"actor-md",
+		"document":{"title":"Markdown doc","summary":"###Doc"},
+		"content":"###Body\nA→B",
+		"content_type":"text",
+		"refs":["topic:`+anyString(topic["id"])+`"]
+	}`, http.StatusCreated)
+	defer docResp.Body.Close()
+	var docPayload map[string]any
+	if err := json.NewDecoder(docResp.Body).Decode(&docPayload); err != nil {
+		t.Fatalf("decode doc response: %v", err)
+	}
+	assertMarkdownHygienePresent(t, docPayload, "content")
+	document := docPayload["document"].(map[string]any)
+	if got := anyString(document["summary"]); got != "### Doc" {
+		t.Fatalf("document summary normalized: %q", got)
+	}
+
+	boardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
+		"actor_id":"actor-md",
+		"board":{"title":"Markdown board","summary":"###Board"}
+	}`, http.StatusCreated)
+	defer boardResp.Body.Close()
+	var boardPayload map[string]any
+	if err := json.NewDecoder(boardResp.Body).Decode(&boardPayload); err != nil {
+		t.Fatalf("decode board response: %v", err)
+	}
+	boardID := anyString(boardPayload["board"].(map[string]any)["id"])
+	boardUpdatedAt := anyString(boardPayload["board"].(map[string]any)["updated_at"])
+
+	cardResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
+		"actor_id":"actor-md",
+		"if_board_updated_at":"`+boardUpdatedAt+`",
+		"card":{"title":"Markdown card","summary":"###Card\nA→B"},
+		"column_key":"ready"
+	}`, http.StatusCreated)
+	defer cardResp.Body.Close()
+	var cardPayload map[string]any
+	if err := json.NewDecoder(cardResp.Body).Decode(&cardPayload); err != nil {
+		t.Fatalf("decode card response: %v", err)
+	}
+	assertMarkdownHygienePresent(t, cardPayload, "card.summary")
+	if got := anyString(cardPayload["card"].(map[string]any)["summary"]); got != "### Card\n\nA → B" {
+		t.Fatalf("card summary normalized: %q", got)
+	}
+}
+
 func TestListEventsFiltersByEventType(t *testing.T) {
 	t.Parallel()
 
@@ -3997,4 +4114,23 @@ func TestBoardPurgeLifecycle(t *testing.T) {
 	if getResp.StatusCode != http.StatusNotFound {
 		t.Fatalf("expected 404 after purge, got %d", getResp.StatusCode)
 	}
+}
+
+func assertMarkdownHygienePresent(t *testing.T, payload map[string]any, field string) {
+	t.Helper()
+	raw, ok := payload["markdown_hygiene"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected markdown_hygiene in payload: %#v", payload)
+	}
+	warnings, ok := raw["warnings"].([]any)
+	if !ok || len(warnings) == 0 {
+		t.Fatalf("expected markdown_hygiene warnings: %#v", raw)
+	}
+	for _, item := range warnings {
+		warning, ok := item.(map[string]any)
+		if ok && anyString(warning["field"]) == field {
+			return
+		}
+	}
+	t.Fatalf("expected markdown_hygiene warning for %s, got %#v", field, warnings)
 }
