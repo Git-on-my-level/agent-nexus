@@ -2307,7 +2307,7 @@ func TestCardsFileFirstWorkflowCommands(t *testing.T) {
 			w.WriteHeader(http.StatusCreated)
 			_, _ = w.Write([]byte(`{"card":{"id":"` + cardID + `","board_id":"` + boardID + `","title":"Implement login","summary":"Card body from disk\n","column_key":"backlog","head_revision_ref":"card_revision:` + revisionID + `","head_revision_number":1,"updated_at":"` + cardUpdated + `"}}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/cards/"+cardID:
-			_, _ = w.Write([]byte(`{"card":{"id":"` + cardID + `","board_id":"` + boardID + `","title":"Implement login","summary":"Old body","column_key":"backlog","head_revision_ref":"card_revision:` + revisionID + `","head_revision_number":1,"updated_at":"` + cardUpdated + `"}}`))
+			_, _ = w.Write([]byte(`{"card":{"id":"` + cardID + `","board_ref":"board:` + boardID + `","title":"Implement login","summary":"Old body","column_key":"backlog","head_revision_ref":"card_revision:` + revisionID + `","head_revision_number":1,"updated_at":"` + cardUpdated + `"}}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/cards/"+cardID+"/revisions":
 			historySeen = true
 			_, _ = w.Write([]byte(`{"card_id":"` + cardID + `","revisions":[{"revision_id":"` + revisionID + `","revision_number":1},{"revision_id":"` + revisionID2 + `","revision_number":2}]}`))
@@ -3281,6 +3281,13 @@ func TestWorkspaceSummaryTextAndJSON(t *testing.T) {
 	if !strings.Contains(text, "Workspace summary") || !strings.Contains(text, "counts: boards=1 cards=2 documents=1 inbox_items=1") || !strings.Contains(text, "Launch") {
 		t.Fatalf("unexpected workspace summary text:\n%s", text)
 	}
+	bareText := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--base-url", server.URL,
+		"workspace",
+	})
+	if !strings.Contains(bareText, "Workspace summary") || !strings.Contains(bareText, "counts: boards=1 cards=2 documents=1 inbox_items=1") {
+		t.Fatalf("expected bare workspace to default to summary, got:\n%s", bareText)
+	}
 
 	payload := assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
@@ -3297,6 +3304,137 @@ func TestWorkspaceSummaryTextAndJSON(t *testing.T) {
 	}
 	if strings.TrimSpace(anyStringValue(data["generated_at"])) == "" {
 		t.Fatalf("expected generated_at, got %#v", payload)
+	}
+}
+
+func TestWorkspaceSummaryEmptyStateIncludesNextStepHint(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/boards":
+			_, _ = w.Write([]byte(`{"boards":[]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/cards":
+			_, _ = w.Write([]byte(`{"cards":[]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/docs":
+			_, _ = w.Write([]byte(`{"documents":[]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
+			_, _ = w.Write([]byte(`{"items":[]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	text := runCLIForTest(t, t.TempDir(), map[string]string{}, nil, []string{
+		"--base-url", server.URL,
+		"workspace",
+	})
+	if !strings.Contains(text, "Next: create coordination with `anx topics create --title <title>`") {
+		t.Fatalf("expected empty workspace next-step hint, got:\n%s", text)
+	}
+}
+
+func TestCreateCommandsResolveShortBoardAndTopicIDs(t *testing.T) {
+	t.Parallel()
+
+	const canonicalBoardID = "board_1234567890abcdef"
+	const shortBoardID = "board_1234"
+	const canonicalTopicID = "topic_1234567890abcdef"
+	const shortTopicID = "topic_1234"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/boards":
+			_, _ = w.Write([]byte(`{"boards":[{"board":{"id":"` + canonicalBoardID + `","title":"Ops Board","state":"active"},"summary":{"card_count":0}}]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/topics":
+			_, _ = w.Write([]byte(`{"topics":[{"id":"` + canonicalTopicID + `","title":"Ops Topic","state":"active"}]}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/boards":
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode board create body: %v", err)
+			}
+			board, _ := payload["board"].(map[string]any)
+			wantRef := "topic:" + canonicalTopicID
+			if got := anyStringValue(board["primary_topic_ref"]); got != wantRef {
+				t.Fatalf("expected resolved primary_topic_ref %q, got %#v", wantRef, payload)
+			}
+			refs := asSlice(board["pinned_refs"])
+			if len(refs) != 1 || anyStringValue(refs[0]) != wantRef {
+				t.Fatalf("expected resolved pinned topic ref %q, got %#v", wantRef, payload)
+			}
+			_, _ = w.Write([]byte(`{"board":{"id":"board_created","title":"CLI board","primary_topic_ref":"` + wantRef + `"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/cards":
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode card create body: %v", err)
+			}
+			if got := anyStringValue(payload["board_id"]); got != canonicalBoardID {
+				t.Fatalf("expected resolved board_id %q, got %#v", canonicalBoardID, payload)
+			}
+			_, _ = w.Write([]byte(`{"card":{"id":"card_created","board_id":"` + canonicalBoardID + `","title":"Card","column_key":"backlog"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	contentFile := filepath.Join(home, "card.md")
+	if err := os.WriteFile(contentFile, []byte("Card body\n"), 0o600); err != nil {
+		t.Fatalf("write card content file: %v", err)
+	}
+
+	assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"boards", "create",
+		"--topic", shortTopicID,
+		"--title", "CLI board",
+	}))
+	assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"cards", "create",
+		"--board", shortBoardID,
+		"--title", "Card",
+		"--content-file", contentFile,
+	}))
+}
+
+func TestGlobalCardGetResolvesShortIDOnBoardCardNotFound(t *testing.T) {
+	t.Parallel()
+
+	const canonicalCardID = "card_1234567890abcdef"
+	const shortCardID = "card_12345"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/cards/"+shortCardID:
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"code":"not_found","message":"board card not found"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/cards":
+			_, _ = w.Write([]byte(`{"cards":[{"id":"` + canonicalCardID + `","title":"Fix CLI card discovery","column_key":"backlog"}]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/cards/"+canonicalCardID:
+			_, _ = w.Write([]byte(`{"card":{"id":"` + canonicalCardID + `","title":"Fix CLI card discovery","column_key":"backlog"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"cards", "get", shortCardID,
+	}))
+	data, _ := payload["data"].(map[string]any)
+	card, _ := data["card"].(map[string]any)
+	if got := anyStringValue(card["id"]); got != canonicalCardID {
+		t.Fatalf("expected short card id to resolve to %q, got %#v", canonicalCardID, payload)
 	}
 }
 

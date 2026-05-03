@@ -985,7 +985,13 @@ func (a *App) ensureCardMoveConcurrency(ctx context.Context, cfg config.Resolved
 	}
 	boardID := strings.TrimSpace(anyString(card["board_id"]))
 	if boardID == "" {
-		return errnorm.Usage("invalid_request", "`if_board_updated_at` is required because the card response did not include board_id")
+		boardRef := strings.TrimSpace(anyString(card["board_ref"]))
+		if strings.HasPrefix(boardRef, "board:") {
+			boardID = strings.TrimSpace(strings.TrimPrefix(boardRef, "board:"))
+		}
+	}
+	if boardID == "" {
+		return errnorm.Usage("invalid_request", "`if_board_updated_at` is required because the card response did not include board_id or board_ref")
 	}
 	boardResult, err := a.invokeTypedJSONWithIDResolution(ctx, cfg, "boards get", "boards.get", "board_id", boardID, boardIDLookupSpec, nil, nil)
 	if err != nil {
@@ -1066,6 +1072,13 @@ func (a *App) normalizeCardMutationBody(ctx context.Context, cfg config.Resolved
 		if card == nil {
 			return nil
 		}
+		if rawBoardID := strings.TrimSpace(anyString(body["board_id"])); rawBoardID != "" && shouldResolveDisplayedShortID(rawBoardID) {
+			resolvedBoard, err := a.resolveMaybeBoardID(ctx, cfg, rawBoardID)
+			if err != nil {
+				return err
+			}
+			body["board_id"] = resolvedBoard
+		}
 		if err := a.normalizeMutationFields(ctx, cfg, body, []mutationFieldSpec{
 			{key: "board_ref", kind: mutationFieldTypedRef},
 		}); err != nil {
@@ -1144,10 +1157,12 @@ func (a *App) normalizeMutationCommandBodyLegacy(ctx context.Context, cfg config
 	switch commandID {
 	case "boards.create":
 		return a.normalizeMutationFields(ctx, cfg, nestedMutationMap(body, "board"), []mutationFieldSpec{
+			{key: "primary_topic_ref", kind: mutationFieldTypedRef},
 			{key: "pinned_refs", kind: mutationFieldTypedRefList},
 		})
 	case "boards.patch":
 		return a.normalizeMutationFields(ctx, cfg, nestedMutationMap(body, "patch"), []mutationFieldSpec{
+			{key: "primary_topic_ref", kind: mutationFieldTypedRef},
 			{key: "pinned_refs", kind: mutationFieldTypedRefList},
 		})
 	case "cards.create":

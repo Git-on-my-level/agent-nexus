@@ -27,6 +27,27 @@ func TestFormatBoardCardRemoveResult_WithCardThreadBacked(t *testing.T) {
 	}
 }
 
+func TestFormatBoardCardCreateResult_IsConciseAndShowsCardShortID(t *testing.T) {
+	t.Parallel()
+	body := map[string]any{
+		"board": map[string]any{"updated_at": "2026-03-08T00:00:00Z"},
+		"card": map[string]any{
+			"id":         "card_1234567890abcdef",
+			"thread_id":  "thread_1234567890abcdef",
+			"title":      "Fix CLI card discovery",
+			"column_key": "backlog",
+			"rank":       "a",
+		},
+	}
+	got := formatCommandSummary("cards.create", body)
+	if strings.Contains(got, `"card"`) || strings.Contains(got, "thread_1234567890abcdef") {
+		t.Fatalf("expected concise text create output, got:\n%s", got)
+	}
+	if !strings.Contains(got, "Card created:") || !strings.Contains(got, "- card: card_12345 — Fix CLI card discovery") || !strings.Contains(got, "thread: thread_123") {
+		t.Fatalf("expected card short id create output, got:\n%s", got)
+	}
+}
+
 func TestFormatBoardCardsList_LeadsWithCanonicalCardShortIDAndTitle(t *testing.T) {
 	t.Parallel()
 	body := map[string]any{
@@ -66,6 +87,41 @@ func TestFormatBoardCardsList_FullIDUsesCanonicalCardID(t *testing.T) {
 	got := formatBoardCardsList(body)
 	if !strings.Contains(got, "- card_1234567890abcdef :: backlog :: Fix CLI card discovery :: thread=thread_1234567890abcdef") {
 		t.Fatalf("expected full canonical card id in full-id mode, got:\n%s", got)
+	}
+}
+
+func TestFormatBoardWorkspaceRendersNestedBackingThreadCards(t *testing.T) {
+	t.Parallel()
+	body := map[string]any{
+		"board": map[string]any{
+			"id":    "board_1234567890abcdef",
+			"title": "Ops Board",
+			"state": "active",
+		},
+		"cards": map[string]any{
+			"items": []any{
+				map[string]any{
+					"card": map[string]any{
+						"id":         "card_1234567890abcdef",
+						"title":      "Fix CLI card discovery",
+						"column_key": "backlog",
+					},
+					"backing": map[string]any{
+						"thread": map[string]any{
+							"id":    "thread_1234567890abcdef",
+							"title": "Fix CLI card discovery",
+						},
+					},
+				},
+			},
+		},
+	}
+	got := formatBoardWorkspace(body)
+	if strings.Contains(got, "- (empty)") {
+		t.Fatalf("expected card title instead of empty row, got:\n%s", got)
+	}
+	if !strings.Contains(got, "- card_12345 :: Fix CLI card discovery :: thread=thread_123") {
+		t.Fatalf("expected nested backing thread card row led by card id, got:\n%s", got)
 	}
 }
 

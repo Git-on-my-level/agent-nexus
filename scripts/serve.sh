@@ -143,8 +143,12 @@ if [[ "${ANX_DEV_BLOB_BACKEND}" == "s3" ]]; then
 	export ANX_LOCAL_MINIO_STARTED=1
 fi
 
-if [ "$RESET_DEV_WORKSPACE" = "1" ] && [ "$SEED_CORE" = "1" ]; then
-	echo "Clearing dev workspace (mock seed will repopulate): ${CORE_WORKSPACE_ROOT}"
+if [ "$RESET_DEV_WORKSPACE" = "1" ]; then
+	if [ "$SEED_CORE" = "1" ]; then
+		echo "Clearing dev workspace (mock seed will repopulate): ${CORE_WORKSPACE_ROOT}"
+	else
+		echo "Clearing dev workspace (SEED_CORE=0 will leave it empty): ${CORE_WORKSPACE_ROOT}"
+	fi
 	rm -rf "${CORE_WORKSPACE_ROOT}"
 	if [[ "${ANX_DEV_BLOB_BACKEND:-}" == "s3" && "${ANX_LOCAL_MINIO_STARTED:-}" == "1" ]]; then
 		# shellcheck source=/dev/null

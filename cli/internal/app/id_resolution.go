@@ -65,6 +65,7 @@ func commandSupportsMutationIDResolution(commandID string) bool {
 		"topics.patch",
 		"boards.create",
 		"boards.patch",
+		"cards.create",
 		"boards.cards.add",
 		"boards.cards.create",
 		"boards.cards.batch_add",

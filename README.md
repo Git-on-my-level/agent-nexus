@@ -120,6 +120,7 @@ Release/operations docs:
 
 Useful `make serve` toggles:
 
+- `RESET_DEV_WORKSPACE=1` (default): clear local core state before startup, producing an empty workspace when combined with `SEED_CORE=0`
 - `SEED_CORE=0`: skip seeding
 - `FORCE_SEED=1`: seed even when marker data is already present
 - `DEV_SEED_SCENARIO=kids-lemonade-stand`: use the alternate lemonade dev seed scenario with all checked-in chapters applied in order

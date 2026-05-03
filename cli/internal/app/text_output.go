@@ -72,6 +72,8 @@ func formatCommandSummary(commandID string, body any) string {
 		return messageWriteText(body, "Card")
 	case "threads.message", "threads.reply":
 		return messageWriteText(body, "Thread")
+	case "cards.create":
+		return formatBoardCardCreateResult(body)
 	case "cards.get", "cards.patch", "cards.move", "cards.revisions.create", "cards.archive", "cards.trash", "cards.restore":
 		if board := extractNestedMap(body, "board"); board != nil && extractNestedMap(body, "card") != nil {
 			return formatBoardCardMutationResult(body)
@@ -1609,11 +1611,23 @@ func appendBoardCardsByColumn(lines []string, cards []any) []string {
 
 func renderBoardCardItem(cardWrapper map[string]any) string {
 	thread := asMap(cardWrapper["thread"])
+	if thread == nil {
+		backing := asMap(cardWrapper["backing"])
+		thread = asMap(backing["thread"])
+	}
+	card := asMap(cardWrapper["card"])
 	summary := asMap(cardWrapper["summary"])
 	pinnedDoc := cardWrapper["pinned_document"]
 
+	cardID := displayID(card)
 	threadID := displayID(thread)
 	threadTitle := anyString(thread["title"])
+	if cardID == "" || cardID == "(empty)" {
+		cardID = threadID
+	}
+	if threadTitle == "" {
+		threadTitle = firstNonEmpty(anyString(card["title"]), anyString(card["summary"]))
+	}
 
 	badges := make([]string, 0, 8)
 	if summary != nil {
@@ -1657,7 +1671,11 @@ func renderBoardCardItem(cardWrapper map[string]any) string {
 		badgeStr = " [" + strings.Join(badges, ", ") + "]"
 	}
 
-	return compactSummary(threadID, threadTitle) + badgeStr
+	row := compactSummary(cardID, threadTitle)
+	if threadID != "" && threadID != "(empty)" && threadID != cardID {
+		row += " :: thread=" + threadID
+	}
+	return row + badgeStr
 }
 
 func formatBoardCardsList(body any) string {
@@ -1770,6 +1788,38 @@ func formatBoardCardBoardAndCardSummary(body any, headline string) string {
 
 func formatBoardCardMutationResult(body any) string {
 	return formatBoardCardBoardAndCardSummary(body, "Card updated:")
+}
+
+func formatBoardCardCreateResult(body any) string {
+	board := extractNestedMap(body, "board")
+	card := extractNestedMap(body, "card")
+	if card == nil {
+		return formatPrettyBody(body)
+	}
+	lines := []string{"Card created:"}
+	if board != nil {
+		lines = appendScalar(lines, "board_updated_at", board, "updated_at")
+	}
+	cardID := shortID(anyString(card["id"]))
+	title := strings.TrimSpace(anyString(card["title"]))
+	subject := cardID
+	if title != "" && title != cardID {
+		if subject != "" {
+			subject += " — " + title
+		} else {
+			subject = title
+		}
+	}
+	if subject == "" {
+		subject = "card"
+	}
+	lines = append(lines, "- card: "+subject)
+	if threadID := shortID(anyString(card["thread_id"])); threadID != "" && threadID != cardID {
+		lines = append(lines, "  thread: "+threadID)
+	}
+	lines = append(lines, "  column: "+anyString(card["column_key"]))
+	lines = append(lines, "  rank: "+anyString(card["rank"]))
+	return strings.Join(lines, "\n")
 }
 
 func formatBoardCardsBatchCreateResult(body any) string {

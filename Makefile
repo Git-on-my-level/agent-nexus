@@ -15,8 +15,9 @@ CORE_BASE_URL ?= http://$(CORE_HOST):$(CORE_PORT)
 ACTIONLINT_BIN := $(CURDIR)/.bin/actionlint
 # Local SQLite + artifacts for anx-core (same default as core/Makefile).
 CORE_WORKSPACE_ROOT ?= $(CURDIR)/$(CORE_DIR)/.anx-workspace
-# When 1 (default), `make serve` removes CORE_WORKSPACE_ROOT before starting core if SEED_CORE=1,
-# so each dev session starts from an empty workspace and mock seed does not stack on old data.
+# When 1 (default), `make serve` removes CORE_WORKSPACE_ROOT before starting core,
+# so each dev session starts from an empty workspace. With SEED_CORE=0 this yields
+# an empty core; with SEED_CORE=1 the mock seed repopulates the fresh workspace.
 RESET_DEV_WORKSPACE ?= 1
 SEED_CORE ?= 1
 FORCE_SEED ?= 0

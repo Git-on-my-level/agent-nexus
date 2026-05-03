@@ -71,7 +71,7 @@ var (
 		listCommand:    "cards list",
 		listCommandID:  "cards.list",
 		listField:      "cards",
-		notFoundHints:  []string{"card not found"},
+		notFoundHints:  []string{"card not found", "board card not found"},
 	}
 	artifactIDLookupSpec = resourceIDLookupSpec{
 		idLabel:        "artifact id",
@@ -358,8 +358,11 @@ func (a *App) runTypedResource(ctx context.Context, resource string, args []stri
 }
 
 func (a *App) runWorkspaceCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
-	if len(args) == 0 || isHelpToken(args[0]) {
-		return nil, "workspace", errnorm.Usage("missing_subcommand", "`anx workspace` requires subcommand `summary`")
+	if len(args) == 0 {
+		args = []string{"summary"}
+	}
+	if isHelpToken(args[0]) {
+		return nil, "workspace", errnorm.Usage("missing_subcommand", "`anx workspace` defaults to `summary`; run `anx workspace summary` explicitly for help examples")
 	}
 	sub := strings.TrimSpace(args[0])
 	if sub != "summary" {
@@ -477,6 +480,7 @@ func formatWorkspaceSummary(data map[string]any) string {
 	}
 	if len(boards) == 0 {
 		lines = append(lines, "- (none)")
+		lines = append(lines, "Next: create coordination with `anx topics create --title <title>` or inspect help with `anx concepts`.")
 	}
 	if warnings := asSlice(data["warnings"]); len(warnings) > 0 {
 		lines = append(lines, "warnings:")
