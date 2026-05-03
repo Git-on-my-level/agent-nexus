@@ -183,10 +183,15 @@ async function detectSeededState() {
   }
 
   const [docsBody, cardsBody, eventsBody] = await Promise.all([
-    needsDocumentRevisionCheck ? request("GET", "/docs") : Promise.resolve(null),
+    needsDocumentRevisionCheck
+      ? request("GET", "/docs")
+      : Promise.resolve(null),
     needsCardCheck ? request("GET", "/cards") : Promise.resolve(null),
     needsEventCheck
-      ? request("GET", `/events?limit=${Math.max(expectedSeedEventIDs().length + 20, 200)}`)
+      ? request(
+          "GET",
+          `/events?limit=${Math.max(expectedSeedEventIDs().length + 20, 200)}`,
+        )
       : Promise.resolve(null),
   ]);
 
@@ -254,9 +259,7 @@ function expectedSeedCards() {
 
 function expectedSeedEventIDs() {
   return Array.isArray(seed.events)
-    ? seed.events
-        .map((event) => String(event?.id ?? "").trim())
-        .filter(Boolean)
+    ? seed.events.map((event) => String(event?.id ?? "").trim()).filter(Boolean)
     : [];
 }
 
@@ -275,7 +278,9 @@ function hasExpectedCards(cardsBody) {
     actualCards.map((card) => String(card?.id ?? "").trim()).filter(Boolean),
   );
   const actualSummaries = new Set(
-    actualCards.map((card) => String(card?.summary ?? "").trim()).filter(Boolean),
+    actualCards
+      .map((card) => String(card?.summary ?? "").trim())
+      .filter(Boolean),
   );
 
   return expectedCards.every((card) => {
@@ -304,7 +309,11 @@ function hasExpectedEvents(eventsBody) {
 
 async function hasExpectedIdentityRegistrations() {
   const bundle = await readDevIdentityBundle();
-  if (!bundle || !Array.isArray(bundle.personas) || bundle.personas.length === 0) {
+  if (
+    !bundle ||
+    !Array.isArray(bundle.personas) ||
+    bundle.personas.length === 0
+  ) {
     return false;
   }
 
@@ -317,10 +326,15 @@ async function hasExpectedIdentityRegistrations() {
 
   let accessToken = "";
   try {
-    const tokenResponse = await requestJson(coreBaseUrl, "POST", "/auth/token", {
-      grant_type: "refresh_token",
-      refresh_token: probePersona.refresh_token,
-    });
+    const tokenResponse = await requestJson(
+      coreBaseUrl,
+      "POST",
+      "/auth/token",
+      {
+        grant_type: "refresh_token",
+        refresh_token: probePersona.refresh_token,
+      },
+    );
     accessToken = String(tokenResponse?.tokens?.access_token ?? "").trim();
   } catch {
     return false;
@@ -477,7 +491,9 @@ async function seedTopics() {
       created?.thread_id ?? created?.id ?? "",
     ).trim();
     if (!newId || !createdBackingThreadId) {
-      throw new Error(`Topic create returned incomplete data for ${sourceTopic.title}`);
+      throw new Error(
+        `Topic create returned incomplete data for ${sourceTopic.title}`,
+      );
     }
 
     const sourceTopicId = String(sourceTopic.id ?? "").trim();
@@ -486,7 +502,10 @@ async function seedTopics() {
     if (topicAlias && topicAlias !== sourceTopicId) {
       topicIdMap.set(topicAlias, newId);
     }
-    threadIdMap.set(String(sourceTopic.id ?? "").trim(), createdBackingThreadId);
+    threadIdMap.set(
+      String(sourceTopic.id ?? "").trim(),
+      createdBackingThreadId,
+    );
   }
 }
 
@@ -548,7 +567,10 @@ async function seedDocuments() {
       : {};
 
   for (const sourceDocument of sourceDocuments) {
-    if (sourceDocument?.document && typeof sourceDocument.document === "object") {
+    if (
+      sourceDocument?.document &&
+      typeof sourceDocument.document === "object"
+    ) {
       await seedInlineDocument(sourceDocument);
       continue;
     }
@@ -660,8 +682,7 @@ async function seedDocuments() {
             sourceDocument.trashed_by ?? sourceDocument.updated_by,
           ),
           reason:
-            sourceDocument.trash_reason ??
-            "Trashed while seeding mock data.",
+            sourceDocument.trash_reason ?? "Trashed while seeding mock data.",
         },
       );
     }
@@ -732,8 +753,7 @@ async function trashSeedArtifactIfNeeded(sourceArtifact) {
     actor_id: pickActorId(
       sourceArtifact.trashed_by ?? sourceArtifact.created_by,
     ),
-    reason:
-      sourceArtifact.trash_reason ?? "Trashed while seeding mock data.",
+    reason: sourceArtifact.trash_reason ?? "Trashed while seeding mock data.",
   });
 }
 
@@ -875,10 +895,14 @@ async function seedBoards() {
       const mappedAssigneeRefs = seedCardAssigneeRefs(sourceCard);
       const rawTopicRef = String(sourceCard.topic_ref ?? "").trim();
       let mappedTopicRef = rawTopicRef
-        ? mapRef(rawTopicRef.includes(":") ? rawTopicRef : `topic:${rawTopicRef}`)
+        ? mapRef(
+            rawTopicRef.includes(":") ? rawTopicRef : `topic:${rawTopicRef}`,
+          )
         : "";
       const rawRelatedRefs = Array.isArray(sourceCard.related_refs)
-        ? sourceCard.related_refs.map((entry) => String(entry ?? "").trim()).filter(Boolean)
+        ? sourceCard.related_refs
+            .map((entry) => String(entry ?? "").trim())
+            .filter(Boolean)
         : [];
       const rawSelfBoardRef = `board:${String(sourceCard.board_id ?? newBoardId).trim()}`;
 
@@ -886,11 +910,16 @@ async function seedBoards() {
         ? mapRefs(sourceCard.related_refs)
         : [];
       const explicitBoardCard =
-        Boolean(String(sourceCard.id ?? "").trim()) || Boolean(cardSummaryForWrite);
+        Boolean(String(sourceCard.id ?? "").trim()) ||
+        Boolean(cardSummaryForWrite);
       if (explicitBoardCard) {
-        mappedRelatedRefs = mappedRelatedRefs.filter((ref) => ref !== rawSelfBoardRef);
+        mappedRelatedRefs = mappedRelatedRefs.filter(
+          (ref) => ref !== rawSelfBoardRef,
+        );
       }
-      const rawThreadRefs = rawRelatedRefs.filter((ref) => ref.startsWith("thread:"));
+      const rawThreadRefs = rawRelatedRefs.filter((ref) =>
+        ref.startsWith("thread:"),
+      );
       if (!mappedTopicRef && explicitBoardCard && rawThreadRefs.length === 1) {
         const rawThreadID = rawThreadRefs[0].slice("thread:".length);
         const inferredTopicID = mapTopicId(rawThreadID);
@@ -899,7 +928,9 @@ async function seedBoards() {
           topicIdMap.has(topicRefAliasFromThreadLikeId(rawThreadID));
         if (inferredTopicID && hasTopicForThread) {
           mappedTopicRef = `topic:${inferredTopicID}`;
-          mappedRelatedRefs = mappedRelatedRefs.filter((ref) => !ref.startsWith("thread:"));
+          mappedRelatedRefs = mappedRelatedRefs.filter(
+            (ref) => !ref.startsWith("thread:"),
+          );
         }
       }
       const boardCardRelatedRefs =
@@ -911,7 +942,9 @@ async function seedBoards() {
         actor_id: pickActorId(sourceCard.created_by ?? sourceCard.updated_by),
         column_key: columnKey,
         ...(mappedTopicRef ? { topic_ref: mappedTopicRef } : {}),
-        ...(pinnedDocumentId ? { pinned_document_id: pinnedDocumentId } : {}),
+        ...(pinnedDocumentId
+          ? { document_ref: `document:${pinnedDocumentId}` }
+          : {}),
         ...(cardSummaryForWrite
           ? {
               summary: cardSummaryForWrite,
@@ -964,7 +997,9 @@ async function seedBoards() {
               ...(sourceCard.priority
                 ? { priority: String(sourceCard.priority) }
                 : {}),
-              ...(sourceCard.status ? { status: String(sourceCard.status) } : {}),
+              ...(sourceCard.status
+                ? { status: String(sourceCard.status) }
+                : {}),
             },
           );
         }
@@ -984,9 +1019,20 @@ async function seedBoards() {
       currentBoard = addResponse?.board ?? currentBoard;
       const created = addResponse?.card;
       const createdCardId = String(created?.id ?? "").trim();
+      const createdCardThreadId = String(created?.thread_id ?? "").trim();
       const sourceCardId = String(sourceCard.id ?? "").trim();
       if (sourceCardId && createdCardId) {
         cardIdMap.set(sourceCardId, createdCardId);
+      }
+      for (const sourceThreadAlias of [
+        sourceCardId,
+        sourceCard.message_thread_id,
+        sourceCard.backing_thread_alias,
+      ]) {
+        const alias = String(sourceThreadAlias ?? "").trim();
+        if (alias && createdCardThreadId) {
+          threadIdMap.set(alias, createdCardThreadId);
+        }
       }
       const nextAnchor =
         createdCardId ||
@@ -1173,7 +1219,11 @@ function mapRefs(values) {
 }
 
 function uniqueSeedRefs(values) {
-  return [...new Set((values ?? []).map((entry) => String(entry ?? "").trim()).filter(Boolean))];
+  return [
+    ...new Set(
+      (values ?? []).map((entry) => String(entry ?? "").trim()).filter(Boolean),
+    ),
+  ];
 }
 
 function seedCardAssigneeRefs(sourceCard) {
@@ -1361,7 +1411,9 @@ async function requestAuthJson(
   if (!okStatuses.includes(response.status)) {
     const message =
       parsed?.error?.message ?? rawText ?? `${method} ${requestPath} failed`;
-    throw new Error(`${method} ${requestPath} -> ${response.status}: ${message}`);
+    throw new Error(
+      `${method} ${requestPath} -> ${response.status}: ${message}`,
+    );
   }
   return parsed;
 }
@@ -1388,8 +1440,7 @@ async function seedDevFixtureIdentities() {
   );
   const defaultHumanPersona = personas.find(
     (p) =>
-      String(p.principal_kind).toLowerCase() === "human" &&
-      p.default === true,
+      String(p.principal_kind).toLowerCase() === "human" && p.default === true,
   );
   if (!defaultHumanPersona && !scenarioConfig?.noDefaultHuman) {
     const hasAnyHuman = personas.some(

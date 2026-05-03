@@ -25,7 +25,7 @@ DEV_SEED_SCENARIO ?= default
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup check serve lint test format contract-gen contract-check contract-check-committed workflow-check version-sync version-check e2e-smoke hosted-smoke hosted-ops-test hosted-ops-smoke cli-check cli-build cli-integration-test http-record-test http-record-run http-record-compile http-record-replay bridge-setup bridge-doctor bridge-test release-check release-patch platform-constraints core-% bridge-% web-ui-% web-ui-static-ci
+.PHONY: help setup check serve lint test format contract-gen contract-check contract-check-committed workflow-check version-sync version-check e2e-smoke hosted-smoke hosted-ops-test hosted-ops-smoke cli-check cli-build cli-integration-test scenario-validate dev-profile-homes http-record-test http-record-run http-record-compile http-record-replay bridge-setup bridge-doctor bridge-test release-check release-patch platform-constraints core-% bridge-% web-ui-% web-ui-static-ci
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z0-9_.-]+:.*##/ {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -100,6 +100,12 @@ cli-build: ## Build CLI binary
 
 cli-integration-test: ## Run CLI real-binary integration tests (non-default)
 	cd $(CLI_DIR) && go test -tags=integration ./integration/...
+
+scenario-validate: ## Validate seeded scenario counts against a running core
+	ANX_CORE_BASE_URL="$(CORE_BASE_URL)" ANX_DEV_SEED_SCENARIO="$(DEV_SEED_SCENARIO)" ./scripts/anx-scenario-validate
+
+dev-profile-homes: ## Materialize local CLI HOME dirs for seeded dev personas
+	ANX_CORE_BASE_URL="$(CORE_BASE_URL)" ./scripts/anx-dev-profile-homes
 
 http-record-test: ## Run tests for the local HTTP recording proxy
 	cd $(HTTP_RECORD_DIR) && go test ./...

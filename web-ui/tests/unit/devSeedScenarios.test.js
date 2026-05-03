@@ -93,8 +93,80 @@ describe("dev seed scenarios", () => {
     ).toBe(true);
   });
 
+  it("exposes the game dev studio scenario with required seeded-test coverage", async () => {
+    const mod = await import("../../scripts/dev-seed-scenarios.mjs");
+    const scenario = mod.getDevSeedScenarioConfig("game-dev-studio");
+    const seed = scenario.getSeedData();
+
+    expect(scenario).toMatchObject({
+      detectActorId: "actor-gds-producer",
+      detectTopicTitle: "Vertical Slice: Combat + Hub Demo",
+      detectBoardTitle: "Studio Production Board",
+      requireBoards: true,
+    });
+    expect(scenario.personas.map((persona) => persona.actor_id)).toEqual([
+      "actor-gds-producer",
+      "actor-gds-gameplay",
+      "actor-gds-art",
+      "actor-gds-narrative",
+      "actor-gds-qa",
+    ]);
+    expect(scenario.personas[0]).toMatchObject({
+      principal_kind: "human",
+      default: true,
+    });
+    expect(seed.topics).toHaveLength(4);
+    expect(seed.boards).toHaveLength(3);
+    expect(seed.documents).toHaveLength(5);
+    expect(seed.cards.length).toBeGreaterThanOrEqual(10);
+
+    const messageEvents = seed.events.filter(
+      (event) => event.type === "message_posted",
+    );
+    const surfaceCounts = countMessageSurfaces(messageEvents);
+    expect(messageEvents.length).toBeGreaterThanOrEqual(100);
+    expect(surfaceCounts.topic).toBeGreaterThan(0);
+    expect(surfaceCounts.document).toBeGreaterThan(0);
+    expect(surfaceCounts.card).toBeGreaterThan(0);
+    expect(surfaceCounts.topicReplies).toBeGreaterThan(0);
+    expect(surfaceCounts.documentReplies).toBeGreaterThan(0);
+    expect(surfaceCounts.cardReplies).toBeGreaterThan(0);
+  });
+
   it("returns null for an unknown scenario", async () => {
     const mod = await import("../../scripts/dev-seed-scenarios.mjs");
     expect(mod.getDevSeedScenarioConfig("nope")).toBeNull();
   });
 });
+
+function countMessageSurfaces(events) {
+  return events.reduce(
+    (counts, event) => {
+      const payload = event.payload ?? {};
+      const kind = String(payload.subject_kind ?? payload.kind ?? "");
+      const surface = kind.includes("document")
+        ? "document"
+        : kind.includes("card")
+          ? "card"
+          : kind.includes("topic")
+            ? "topic"
+            : "";
+      if (!surface) {
+        return counts;
+      }
+      counts[surface] += 1;
+      if (payload.reply_to_event_id) {
+        counts[`${surface}Replies`] += 1;
+      }
+      return counts;
+    },
+    {
+      topic: 0,
+      document: 0,
+      card: 0,
+      topicReplies: 0,
+      documentReplies: 0,
+      cardReplies: 0,
+    },
+  );
+}

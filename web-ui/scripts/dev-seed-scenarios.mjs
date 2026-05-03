@@ -1,5 +1,12 @@
 import { getScenarioSeedConfig } from "../../cli/dogfood/pi/seed/scenario-seeds.mjs";
-import { DEV_FIXTURE_PERSONAS, getDevSeedData } from "../src/lib/devSeedData.js";
+import {
+  DEV_FIXTURE_PERSONAS,
+  getDevSeedData,
+} from "../src/lib/devSeedData.js";
+import {
+  GAME_DEV_STUDIO_PERSONAS,
+  getGameDevStudioSeedData,
+} from "./game-dev-studio-seed-data.mjs";
 
 const KIDS_LEMONADE_STAND_PERSONAS = [
   {
@@ -70,6 +77,15 @@ const scenarioConfigs = {
     requireBoards: true,
     personas: KIDS_LEMONADE_STAND_PERSONAS,
     getSeedData: getKidsLemonadeStandSeedForWebUi,
+  },
+  "game-dev-studio": {
+    defaultActorId: "actor-gds-producer",
+    detectActorId: "actor-gds-producer",
+    detectTopicTitle: "Vertical Slice: Combat + Hub Demo",
+    detectBoardTitle: "Studio Production Board",
+    requireBoards: true,
+    personas: GAME_DEV_STUDIO_PERSONAS,
+    getSeedData: getGameDevStudioSeedData,
   },
 };
 

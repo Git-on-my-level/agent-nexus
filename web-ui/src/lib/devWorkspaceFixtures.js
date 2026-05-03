@@ -2107,11 +2107,32 @@ function backingThreadIdsForDevSeed(seed) {
       seed.threads.map((t) => String(t?.id ?? "").trim()).filter(Boolean),
     );
   }
-  return new Set(
+  const ids = new Set(
     (Array.isArray(seed?.topics) ? seed.topics : [])
       .map((t) => String(t?.thread_id ?? "").trim())
       .filter(Boolean),
   );
+  for (const document of Array.isArray(seed?.documents) ? seed.documents : []) {
+    const threadID = String(
+      document?.document?.thread_id ?? document?.thread_id ?? "",
+    ).trim();
+    if (threadID) {
+      ids.add(threadID);
+    }
+  }
+  for (const card of Array.isArray(seed?.cards) ? seed.cards : []) {
+    for (const alias of [
+      card?.message_thread_id,
+      card?.backing_thread_alias,
+      card?.id,
+    ]) {
+      const threadID = String(alias ?? "").trim();
+      if (threadID) {
+        ids.add(threadID);
+      }
+    }
+  }
+  return ids;
 }
 
 function pushUnknownThreadRefViolation(

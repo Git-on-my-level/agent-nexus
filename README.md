@@ -124,7 +124,21 @@ Useful `make serve` toggles:
 - `SEED_CORE=0`: skip seeding
 - `FORCE_SEED=1`: seed even when marker data is already present
 - `DEV_SEED_SCENARIO=kids-lemonade-stand`: use the alternate lemonade dev seed scenario with all checked-in chapters applied in order
+- `DEV_SEED_SCENARIO=game-dev-studio`: use the realistic game-studio scenario with 4 topics, 3 boards, 5 docs, 10+ cards, and 100+ topic/doc/card messages
 - `ANX_DEV_SEED_IDENTITIES=0`: skip registering fixture principals during seed (bootstrap stays available for manual `anx auth register --bootstrap-token`; no auto-generated `cli/dogfood-resources/invites.generated.json` or `web-ui/.dev/local-identities.json` refresh)
+
+Validate the running seeded scenario with:
+
+```bash
+DEV_SEED_SCENARIO=game-dev-studio make scenario-validate
+```
+
+Materialize temporary CLI profile homes for seeded agent personas with:
+
+```bash
+make dev-profile-homes
+HOME="$PWD/.tmp/anx-dev-profile-homes/leo" anx --agent leo auth whoami
+```
 
 ## Local HTTP Recording
 
