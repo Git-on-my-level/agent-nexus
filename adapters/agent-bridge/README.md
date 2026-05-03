@@ -25,9 +25,11 @@ adapter_kind = "hermes"
 kind = "hermes"
 ```
 
-The bundled adapter starts Hermes over ACP stdio through the same subprocess isolation used by custom adapters, creates or resumes an ACP session, collects streamed text from `session/update` notifications, and returns the response through the stable bridge JSON contract. It discovers the Hermes binary from `HERMES_BIN`, `[adapter].hermes_bin`, or `hermes` on `PATH`. Optional controls: `HERMES_ARGS` / `[adapter].hermes_args`, `HERMES_CWD` / `[adapter].hermes_cwd`, `HERMES_INTERACTIVE` / `[adapter].interactive`, and `[adapter].command` when you need to override the Python module entrypoint.
+The bundled adapter starts Hermes over ACP stdio through the same subprocess isolation used by custom adapters, creates or resumes an ACP session, collects only user-visible ACP `agent_message_chunk` text from the active prompt turn, and returns the response through the stable bridge JSON contract. ACP `agent_thought_chunk`, tool updates, plans, usage, and session history replay are intentionally ignored so internal Hermes reasoning/progress never leaks into ANX `message_posted` replies. It discovers the Hermes binary from `HERMES_BIN`, `[adapter].hermes_bin`, or `hermes` on `PATH`. Optional controls: `HERMES_ARGS` / `[adapter].hermes_args`, `HERMES_CWD` / `[adapter].hermes_cwd`, `HERMES_INTERACTIVE` / `[adapter].interactive`, and `[adapter].command` when you need to override the Python module entrypoint.
 
-### `subprocess` (recommended)
+Do not wrap Hermes CLI output with a generic `subprocess` adapter unless you are deliberately maintaining a custom integration. Flattened Hermes stdout/stderr responses cannot reliably distinguish final answer text from reasoning/progress artifacts; use `kind = "hermes"` for Hermes wake handling.
+
+### `subprocess` (recommended for custom non-Hermes adapters)
 
 The bridge runs `[adapter].command` with:
 
@@ -149,7 +151,7 @@ Minimum config contract:
 - `agent.toml` `[auth] state_path` optional; defaults to `profiles/default.json`
 - `wake.toml` with one or more `[[workspaces]]` entries; this is the local wake subscription source
 - bridge `[runtime] state_dir` optional; defaults under the agent home
-- **Hermes ACP:** generated as `[adapter] kind = "hermes"`, optional `command`, `hermes_bin`, `hermes_args`, `hermes_cwd`, `interactive`
+- **Hermes ACP:** generated as `[adapter] kind = "hermes"`, optional `command`, `hermes_bin`, `hermes_args`, `hermes_cwd`, `interactive`; this is the supported Hermes path because ACP separates final answer chunks from thought/tool updates
 - **Subprocess:** `[adapter] kind = "subprocess"`, `command` (argv array), optional `cwd`, `env`, `timeout_seconds`, `doctor_timeout_seconds`, `doctor_command`
 
 ### JSON contract (subprocess)

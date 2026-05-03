@@ -1025,6 +1025,8 @@ state_dir = %q
 kind = "hermes"
 timeout_seconds = 900
 doctor_timeout_seconds = 60
+# Hermes wake handling should use ACP so final answers stay separated from
+# internal thought/tool progress before ANX message_posted writeback.
 # Optional overrides:
 # command = ["python3", "-m", "anx_agent_bridge.adapters.hermes_acp"]
 # hermes_bin = "/path/to/hermes"

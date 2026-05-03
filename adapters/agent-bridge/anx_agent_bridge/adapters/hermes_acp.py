@@ -98,9 +98,12 @@ async def _dispatch(request: dict[str, Any], settings: dict[str, Any]) -> dict[s
             session_id = await _load_session(conn, cwd, existing_session_id)
         else:
             session_id = await _new_session(conn, cwd)
+        collector.start_response_collection()
         prompt_response = await _prompt(conn, session_id, prompt_text, acp_mod)
 
-    response_text = collector.response_text().strip() or _extract_response_text(prompt_response).strip()
+    response_text = collector.response_text().strip()
+    if not collector.has_response_chunks():
+        response_text = _extract_response_text(prompt_response).strip()
     if not response_text:
         response_text = "Hermes completed the ACP turn without returning text."
     return {
@@ -120,8 +123,11 @@ class _HermesClient:
     def __init__(self, *, allow_first_permission: bool) -> None:
         self.allow_first_permission = allow_first_permission
         self._chunks: list[str] = []
+        self._collecting_response = False
 
     async def session_update(self, session_id: str, update: Any, **kwargs: Any) -> None:
+        if not self._collecting_response:
+            return
         text = _session_update_text(update)
         if text:
             self._chunks.append(text)
@@ -136,6 +142,16 @@ class _HermesClient:
 
     def response_text(self) -> str:
         return "".join(self._chunks)
+
+    def has_response_chunks(self) -> bool:
+        return bool(self._chunks)
+
+    def start_response_collection(self) -> None:
+        # ACP session/load may replay prior assistant history as agent_message_chunk.
+        # Wake writeback must contain only the new prompt turn, so collection starts
+        # after session setup and immediately before session/prompt.
+        self._chunks.clear()
+        self._collecting_response = True
 
 
 def _resolve_hermes_bin(settings: dict[str, Any]) -> str:
@@ -322,14 +338,14 @@ def _session_update_text(update: Any) -> str:
     if not isinstance(data, dict):
         return ""
     kind = _clean_string(data.get("sessionUpdate") or data.get("session_update"))
-    if kind and kind not in {"agent_message_chunk", "agentMessageChunk"}:
+    if kind not in {"agent_message_chunk", "agentMessageChunk"}:
         return ""
     content = data.get("content")
     if isinstance(content, dict):
         if _clean_string(content.get("type")) == "text":
-            return _clean_string(content.get("text"))
+            return _text_value(content.get("text"))
         return ""
-    return _clean_string(data.get("text"))
+    return _text_value(data.get("text"))
 
 
 def _extract_response_text(response: Any) -> str:
@@ -407,6 +423,12 @@ def _clean_string(value: Any) -> str:
     if value is None:
         return ""
     return str(value).strip()
+
+
+def _text_value(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value)
 
 
 def _print_response(payload: dict[str, Any]) -> None:
