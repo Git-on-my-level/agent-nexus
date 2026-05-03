@@ -129,6 +129,63 @@
 
   let isAnchoredComment = $derived(Boolean(docComment));
 
+  function receiptStatusLabel(receipt) {
+    const delivery = String(receipt?.delivery_status ?? "").trim();
+    const notification = String(
+      receipt?.notification_status ?? receipt?.status ?? "",
+    ).trim();
+    if (delivery === "failed") return "Failed";
+    if (delivery === "completed") return "Processed";
+    if (delivery === "claimed") return "Bridge triggered";
+    if (notification === "dismissed") return "Dismissed";
+    return "Queued";
+  }
+
+  function receiptToneClass(receipt) {
+    const delivery = String(receipt?.delivery_status ?? "").trim();
+    if (delivery === "failed") return "bg-danger-soft text-danger-text";
+    if (delivery === "claimed" || delivery === "completed") {
+      return "bg-ok-soft text-ok-text";
+    }
+    return "bg-line-subtle text-fg-muted";
+  }
+
+  function receiptTitle(receipt) {
+    const parts = [];
+    const delivery = String(receipt?.delivery_status ?? "").trim();
+    const notification = String(
+      receipt?.notification_status ?? receipt?.status ?? "",
+    ).trim();
+    if (delivery) parts.push(`delivery: ${delivery}`);
+    if (notification) parts.push(`notification: ${notification}`);
+    if (receipt?.claimed_at) parts.push(`claimed: ${receipt.claimed_at}`);
+    if (receipt?.completed_at) parts.push(`completed: ${receipt.completed_at}`);
+    if (receipt?.failed_at) parts.push(`failed: ${receipt.failed_at}`);
+    if (receipt?.failure_reason) parts.push(String(receipt.failure_reason));
+    return parts.join(" | ");
+  }
+
+  let notificationReceipts = $derived.by(() => {
+    const receipts = Array.isArray(message?.notificationReceipts)
+      ? message.notificationReceipts
+      : [];
+    return receipts
+      .map((receipt) => {
+        const handle = String(receipt?.target_handle ?? "").trim();
+        const actorId = String(receipt?.target_actor_id ?? "").trim();
+        const wakeupId = String(receipt?.wakeup_id ?? "").trim();
+        return {
+          receipt,
+          key: wakeupId || `${actorId}:${handle}`,
+          handle,
+          label: receiptStatusLabel(receipt),
+          toneClass: receiptToneClass(receipt),
+          title: receiptTitle(receipt),
+        };
+      })
+      .filter((row) => row.handle || row.key);
+  });
+
   // Faint accent left-border on the whole card visually links the comment
   // to the document selection it is anchored to. Replies (`depth > 0`)
   // inherit the conversation context from the parent and don't repeat
@@ -326,6 +383,23 @@
             {artifactRoutesById}
             {eventRoutesById}
           />
+        {/each}
+      </div>
+    {/if}
+
+    {#if notificationReceipts.length > 0}
+      <div class="mt-2 flex min-w-0 flex-wrap gap-1.5 text-micro">
+        {#each notificationReceipts as row (row.key)}
+          <span
+            class={[
+              "inline-flex min-w-0 max-w-full items-center gap-1 rounded px-1.5 py-0.5",
+              row.toneClass,
+            ].join(" ")}
+            title={row.title}
+          >
+            <span class="truncate">@{row.handle || "agent"}</span>
+            <span class="shrink-0">{row.label}</span>
+          </span>
         {/each}
       </div>
     {/if}

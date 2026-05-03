@@ -16,7 +16,10 @@
     messageTargetFromHash,
     scrollAndHighlightTarget,
   } from "$lib/deepLinkTargets";
-  import { enrichPrincipalsWithWakeRouting } from "$lib/principalWakeRouting.js";
+  import {
+    enrichPrincipalsWithWakeRouting,
+    taggableWakeHandleForActorId,
+  } from "$lib/principalWakeRouting.js";
   import AttachmentChip from "$lib/components/AttachmentChip.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import { emptyMessageEventConfirmModal } from "$lib/confirmModal.js";
@@ -125,6 +128,9 @@
   let timelineArtifacts = $derived($timelineStore.timelineArtifacts ?? []);
   let timelineCards = $derived($timelineStore.timelineCards ?? []);
   let timelineDocuments = $derived($timelineStore.timelineDocuments ?? []);
+  let timelineNotificationReceipts = $derived(
+    $timelineStore.timelineNotificationReceipts ?? {},
+  );
   let timelineLoading = $derived($timelineStore.timelineLoading);
   let timelineError = $derived($timelineStore.timelineError);
   let workspaceSlug = $derived($timelineWorkspaceSlug);
@@ -188,6 +194,7 @@
       cards: timelineCards,
       documents: timelineDocuments,
       routeMaps,
+      notificationReceiptsByEventId: timelineNotificationReceipts,
     }),
   );
   let allMessages = $derived(flattenMessageThreadView(messageThreads));
@@ -212,10 +219,19 @@
 
   let messageText = $state("");
   let replyToEventId = $state("");
+  /** Handle for an @ mention we prepended for the current reply target (strip when clearing reply). */
+  let replyAutoMentionHandle = $state("");
   let replyTargetMessage = $derived(
     replyToEventId
-      ? (allMessages.find((message) => message.id === replyToEventId) ?? null)
+      ? (allMessages.find(
+          (message) => String(message?.id ?? "") === replyToEventId,
+        ) ?? null)
       : null,
+  );
+  let replyChipDetailTitle = $derived(
+    replyAutoMentionHandle
+      ? `Notifying @${replyAutoMentionHandle} is pre-filled; delete that mention from the message to skip wake.`
+      : "",
   );
   let postingMessage = $state(false);
   let postMessageError = $state("");
@@ -614,11 +630,63 @@
     }
   }
 
-  function setReplyTarget(eventId) {
-    replyToEventId = eventId;
+  function stripLeadingAutoMentionPrefix(text, handle) {
+    const h = String(handle ?? "").trim();
+    if (!h) return String(text ?? "");
+    const prefix = `@${h} `;
+    const t = String(text ?? "");
+    return t.startsWith(prefix) ? t.slice(prefix.length) : t;
+  }
+
+  async function setReplyTarget(eventId) {
+    const id = String(eventId ?? "").trim();
+    const msg = id
+      ? (allMessages.find((m) => String(m?.id ?? "") === id) ?? null)
+      : null;
+    const authorActorId = String(msg?.actor_id ?? "").trim();
+
+    let text = messageText;
+    if (replyAutoMentionHandle) {
+      text = stripLeadingAutoMentionPrefix(text, replyAutoMentionHandle);
+    }
+
+    replyToEventId = id;
+
+    const fromCandidate = mentionCandidates.find(
+      (c) => String(c.actorId ?? "").trim() === authorActorId,
+    );
+    const handle =
+      String(fromCandidate?.handle ?? "").trim() ||
+      taggableWakeHandleForActorId(authorActorId, get(principalRegistry));
+
+    replyAutoMentionHandle = handle;
+
+    if (handle) {
+      const prefix = `@${handle} `;
+      if (!text.startsWith(prefix)) {
+        text = prefix + text;
+      }
+    }
+
+    messageText = text;
+    await tick();
+    const el = textareaRef;
+    if (!el || !browser) return;
+    el.focus();
+    const caret = handle
+      ? Math.min(`@${handle} `.length, text.length)
+      : text.length;
+    el.setSelectionRange(caret, caret);
   }
 
   function clearReplyTarget() {
+    if (replyAutoMentionHandle) {
+      messageText = stripLeadingAutoMentionPrefix(
+        messageText,
+        replyAutoMentionHandle,
+      );
+    }
+    replyAutoMentionHandle = "";
     replyToEventId = "";
   }
 
@@ -746,6 +814,7 @@
       });
       messageText = "";
       replyToEventId = "";
+      replyAutoMentionHandle = "";
       pendingAttachmentRefs = [];
       pendingComposerArtifactsByRef = {};
       attachmentError = "";
@@ -1007,6 +1076,7 @@
     -->
       <div
         class="mb-2 flex items-center gap-2 rounded-md border border-line bg-bg-soft px-2 py-1.5"
+        title={replyChipDetailTitle || undefined}
       >
         <svg
           class="h-3.5 w-3.5 shrink-0 text-accent"

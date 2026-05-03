@@ -46,6 +46,7 @@
     timelineDocuments: $s.timelineDocuments ?? [],
     timelineDocumentRevisions: $s.timelineDocumentRevisions ?? [],
     timelineThreads: $s.timelineThreads ?? [],
+    timelineNotificationReceipts: $s.timelineNotificationReceipts ?? {},
   }));
 
   const timelineWorkspaceSlug = derived(page, ($p) =>

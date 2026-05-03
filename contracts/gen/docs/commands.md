@@ -1336,7 +1336,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Why: Retrieve event history plus typed-ref expansions for one backing thread.
 - Concepts: `threads`, `timeline`
 - Error codes: `auth_required`, `invalid_token`, `not_found`
-- Output: Returns `{ thread, events, artifacts, topics, cards, documents }`.
+- Output: Returns `{ thread, events, artifacts, topics, cards, documents, notification_receipts }`.
 
 ## `threads.workspace`
 
@@ -1433,7 +1433,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Why: Load chronological evidence and related resources for one topic.
 - Concepts: `topics`, `timeline`
 - Error codes: `auth_required`, `invalid_token`, `not_found`
-- Output: Returns `{ topic, events, artifacts, cards, documents, threads }`.
+- Output: Returns `{ topic, events, artifacts, cards, documents, threads, notification_receipts }`.
 
 ## `topics.trash`
 

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { enrichPrincipalsWithWakeRouting } from "../../src/lib/principalWakeRouting.js";
+import {
+  enrichPrincipalsWithWakeRouting,
+  taggableWakeHandleForActorId,
+} from "../../src/lib/principalWakeRouting.js";
 
 describe("principalWakeRouting", () => {
   it("maps backend online wake routing into the UI badge model", async () => {
@@ -71,5 +74,31 @@ describe("principalWakeRouting", () => {
         },
       },
     ]);
+  });
+
+  it("returns a wake handle only for taggable agents", () => {
+    const principals = [
+      {
+        actor_id: "agent-1",
+        principal_kind: "agent",
+        username: "zara",
+        wake_routing: {
+          taggable: true,
+          state: "online",
+        },
+      },
+      {
+        actor_id: "agent-2",
+        principal_kind: "agent",
+        username: "ghost",
+        wake_routing: {
+          taggable: false,
+          state: "unregistered",
+        },
+      },
+    ];
+    expect(taggableWakeHandleForActorId("agent-1", principals)).toBe("zara");
+    expect(taggableWakeHandleForActorId("agent-2", principals)).toBe("");
+    expect(taggableWakeHandleForActorId("missing", principals)).toBe("");
   });
 });

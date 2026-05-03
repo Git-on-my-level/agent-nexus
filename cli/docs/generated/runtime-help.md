@@ -1758,7 +1758,7 @@ Generated Help: topics timeline
 - Stability: `beta`
 - Input mode: `none`
 - Why: Load chronological evidence and related resources for one topic.
-- Output: Returns `{ topic, events, artifacts, cards, documents, threads }`.
+- Output: Returns `{ topic, events, artifacts, cards, documents, threads, notification_receipts }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `topics`, `timeline`
 - Adjacent commands: `topics archive`, `topics create`, `topics get`, `topics list`, `topics patch`, `topics restore`, `topics trash`, `topics unarchive`, `topics workspace`
@@ -2930,7 +2930,7 @@ Generated Help: threads timeline
 - Stability: `beta`
 - Input mode: `none`
 - Why: Retrieve event history plus typed-ref expansions for one backing thread.
-- Output: Returns `{ thread, events, artifacts, topics, cards, documents }`.
+- Output: Returns `{ thread, events, artifacts, topics, cards, documents, notification_receipts }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `threads`, `timeline`
 - Adjacent commands: `threads context`, `threads inspect`, `threads list`, `threads workspace`

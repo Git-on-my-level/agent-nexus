@@ -5537,7 +5537,7 @@ export const commandRegistry = [
         "streaming": {
             "mode": "none"
         },
-        "output_envelope": "Returns `{ thread, events, artifacts, topics, cards, documents }`.",
+        "output_envelope": "Returns `{ thread, events, artifacts, topics, cards, documents, notification_receipts }`.",
         "error_codes": [
             "auth_required",
             "invalid_token",
@@ -5966,7 +5966,7 @@ export const commandRegistry = [
         "streaming": {
             "mode": "none"
         },
-        "output_envelope": "Returns `{ topic, events, artifacts, cards, documents, threads }`.",
+        "output_envelope": "Returns `{ topic, events, artifacts, cards, documents, threads, notification_receipts }`.",
         "error_codes": [
             "auth_required",
             "invalid_token",

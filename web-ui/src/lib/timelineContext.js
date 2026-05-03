@@ -21,6 +21,7 @@ function expansionFromTimelineResult(res) {
       timelineDocuments: [],
       timelineDocumentRevisions: [],
       timelineThreads: [],
+      timelineNotificationReceipts: {},
     };
   }
   return {
@@ -31,6 +32,12 @@ function expansionFromTimelineResult(res) {
       res.document_revisions ?? res.documentRevisions,
     ),
     timelineThreads: coerceTimelineResourceList(res.threads),
+    timelineNotificationReceipts:
+      res.notification_receipts &&
+      typeof res.notification_receipts === "object" &&
+      !Array.isArray(res.notification_receipts)
+        ? res.notification_receipts
+        : {},
   };
 }
 
@@ -44,6 +51,7 @@ export function createTimelineContext(coreClient) {
     timelineDocuments: [],
     timelineDocumentRevisions: [],
     timelineThreads: [],
+    timelineNotificationReceipts: {},
   });
 
   let loadSeq = 0;

@@ -340,6 +340,7 @@ var migrations = []migration{
 			);`,
 			`CREATE INDEX IF NOT EXISTS idx_agent_wakeups_target_status_created ON agent_wakeups (target_actor_id, notification_status, created_at DESC, wakeup_id DESC);`,
 			`CREATE INDEX IF NOT EXISTS idx_agent_wakeups_status_created ON agent_wakeups (status, created_at DESC, wakeup_id DESC);`,
+			`CREATE INDEX IF NOT EXISTS idx_agent_wakeups_thread_trigger_created ON agent_wakeups (thread_id, created_at ASC, wakeup_id ASC);`,
 
 			`CREATE TABLE IF NOT EXISTS passkey_credentials (
 				credential_id TEXT PRIMARY KEY,
@@ -726,12 +727,19 @@ var migrations = []migration{
 			);`,
 			`CREATE INDEX IF NOT EXISTS idx_agent_wakeups_target_status_created ON agent_wakeups (target_actor_id, notification_status, created_at DESC, wakeup_id DESC);`,
 			`CREATE INDEX IF NOT EXISTS idx_agent_wakeups_status_created ON agent_wakeups (status, created_at DESC, wakeup_id DESC);`,
+			`CREATE INDEX IF NOT EXISTS idx_agent_wakeups_thread_trigger_created ON agent_wakeups (thread_id, created_at ASC, wakeup_id ASC);`,
 		},
 	},
 	{
 		Version:    22,
 		Statements: []string{},
 		AfterApply: applyMigration22TrashCanceledResolutionCards,
+	},
+	{
+		Version: 23,
+		Statements: []string{
+			`CREATE INDEX IF NOT EXISTS idx_agent_wakeups_thread_trigger_created ON agent_wakeups (thread_id, created_at ASC, wakeup_id ASC);`,
+		},
 	},
 }
 
