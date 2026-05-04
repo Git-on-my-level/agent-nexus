@@ -552,7 +552,128 @@ function buildEvents() {
     });
     minute += 5;
   }
+  events.push(...buildHomeFeedDiversityEvents());
   return events;
+}
+
+function isoMinutesFromBase(offsetMinutes) {
+  return new Date(
+    baseTime + Number(offsetMinutes) * 60 * 1000,
+  ).toISOString();
+}
+
+/**
+ * Non-message home_feed event types so Home shows doc/board/card/topic lifecycle
+ * rows (not only "Message"). Posted after conversational seed traffic so timelines
+ * stay ordered as newest-last during seeding.
+ */
+function buildHomeFeedDiversityEvents() {
+  let t = 520;
+  const nextMinute = () => {
+    t += 1;
+    return t;
+  };
+
+  return [
+    {
+      id: "evt-gds-docrev-art-001",
+      ts: isoMinutesFromBase(nextMinute()),
+      type: "document_revised",
+      actor_id: "actor-gds-art",
+      thread_id: "thread-gds-art-pipeline",
+      refs: [
+        "thread:thread-gds-art-pipeline",
+        "topic:gds-art-pipeline",
+        "document:gds-art-bible",
+        "document_revision:rev-seed-gds-art-bible-9",
+        "artifact:art-seed-gds-art-bible-9",
+      ],
+      summary: "Art bible tightened for capture overlays and focus rings",
+      payload: {
+        document_id: "gds-art-bible",
+        revision_id: "rev-seed-gds-art-bible-9",
+        artifact_id: "art-seed-gds-art-bible-9",
+        revision_number: 9,
+        title: "Art Direction and UI Kit Notes",
+      },
+      provenance: { sources: ["seed:game-dev-studio"] },
+    },
+    {
+      id: "evt-gds-docrev-launch-001",
+      ts: isoMinutesFromBase(nextMinute()),
+      type: "document_revised",
+      actor_id: "actor-gds-qa",
+      thread_id: "thread-gds-launch",
+      refs: [
+        "thread:thread-gds-launch",
+        "topic:gds-launch",
+        "document:gds-launch-checklist",
+        "document_revision:rev-seed-gds-launch-9",
+        "artifact:art-seed-gds-launch-9",
+      ],
+      summary: "Launch checklist revision: demo-day rollback and smoke matrix",
+      payload: {
+        document_id: "gds-launch-checklist",
+        revision_id: "rev-seed-gds-launch-9",
+        artifact_id: "art-seed-gds-launch-9",
+        revision_number: 9,
+        title: "Launch Readiness and QA Checklist",
+      },
+      provenance: { sources: ["seed:game-dev-studio"] },
+    },
+    {
+      id: "evt-gds-card-move-launch-001",
+      ts: isoMinutesFromBase(nextMinute()),
+      type: "card_moved",
+      actor_id: "actor-gds-qa",
+      thread_id: "thread-gds-launch",
+      refs: [
+        "topic:gds-launch",
+        "thread:thread-gds-launch",
+        "board:board-gds-launch",
+        "card:card-gds-bug-bash",
+      ],
+      summary: "Bug bash card moved to review on Launch Readiness Board",
+      payload: {
+        board_id: "board-gds-launch",
+        card_id: "card-gds-bug-bash",
+        title: "Run QA bug bash and triage release blockers",
+        from_column_key: "in_progress",
+        column_key: "review",
+      },
+      provenance: { sources: ["seed:game-dev-studio"] },
+    },
+    {
+      id: "evt-gds-card-move-board-001",
+      ts: isoMinutesFromBase(nextMinute()),
+      type: "card_moved",
+      actor_id: "actor-gds-producer",
+      thread_id: "",
+      refs: ["board:board-gds-launch", "card:card-gds-photo-mode-backlog"],
+      summary: "Photo-mode wishlist card promoted to ready on Launch Readiness Board",
+      payload: {
+        board_id: "board-gds-launch",
+        card_id: "card-gds-photo-mode-backlog",
+        title: "Evaluate photo-mode toggle for post-demo wishlist",
+        from_column_key: "backlog",
+        column_key: "ready",
+      },
+      provenance: { sources: ["seed:game-dev-studio"] },
+    },
+    {
+      id: "evt-gds-topic-update-vertical-001",
+      ts: isoMinutesFromBase(nextMinute()),
+      type: "topic_updated",
+      actor_id: "actor-gds-producer",
+      thread_id: "thread-gds-vertical-slice",
+      refs: ["topic:gds-vertical-slice"],
+      summary: "Vertical slice topic refreshed for demo capture constraints",
+      payload: {
+        changed_fields: ["summary", "related_refs", "provenance"],
+      },
+      provenance: { sources: ["seed:game-dev-studio"] },
+    },
+  ];
 }
 
 function addConversation(

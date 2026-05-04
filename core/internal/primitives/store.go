@@ -2874,7 +2874,34 @@ func (s *Store) loadBoardGroups(ctx context.Context, lookup *homeGroupLookup) er
 	return nil
 }
 
+func homeCardEventPrefersBoardGroup(eventType string) bool {
+	switch strings.TrimSpace(strings.ToLower(eventType)) {
+	case "card_created", "card_moved", "card_resolved", "card_archived", "card_trashed":
+		return true
+	default:
+		return false
+	}
+}
+
+func homeBoardGroupRefFromRefs(refs []string, lookup *homeGroupLookup) string {
+	for _, ref := range refs {
+		if strings.HasPrefix(ref, "board:") {
+			boardRef := "board:" + strings.TrimSpace(strings.TrimPrefix(ref, "board:"))
+			if _, ok := lookup.groupByRef[boardRef]; ok {
+				return boardRef
+			}
+		}
+	}
+	return ""
+}
+
 func homeGroupForEvent(event map[string]any, lookup *homeGroupLookup) string {
+	eventType, _ := event["type"].(string)
+	if homeCardEventPrefersBoardGroup(eventType) {
+		if boardRef := homeBoardGroupRefFromRefs(anyStringSlice(event["refs"]), lookup); boardRef != "" {
+			return boardRef
+		}
+	}
 	for _, ref := range anyStringSlice(event["refs"]) {
 		if strings.HasPrefix(ref, "topic:") {
 			topicRef := "topic:" + strings.TrimSpace(strings.TrimPrefix(ref, "topic:"))
@@ -2896,13 +2923,8 @@ func homeGroupForEvent(event map[string]any, lookup *homeGroupLookup) string {
 			}
 		}
 	}
-	for _, ref := range anyStringSlice(event["refs"]) {
-		if strings.HasPrefix(ref, "board:") {
-			boardRef := "board:" + strings.TrimSpace(strings.TrimPrefix(ref, "board:"))
-			if _, ok := lookup.groupByRef[boardRef]; ok {
-				return boardRef
-			}
-		}
+	if boardRef := homeBoardGroupRefFromRefs(anyStringSlice(event["refs"]), lookup); boardRef != "" {
+		return boardRef
 	}
 	return ""
 }

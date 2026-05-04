@@ -338,7 +338,7 @@
       ? "page-dock-layout page-dock-layout--fixed-mobile-chat page-dock-layout--topic-messages"
       : ""}
   >
-    <div class={isMessagesTab ? "page-dock-head" : "contents"}>
+    <div class={isMessagesTab ? "page-dock-head max-lg:px-4" : "contents"}>
       <TopicDetailHeader {threadId} {detailAsTopic} />
 
       <div
@@ -393,7 +393,7 @@
     {/if}
 
     {#if activeTab === "messages"}
-      <div class="page-dock-feed lg:pt-3" role="tabpanel" tabindex="0">
+      <div class="page-dock-feed" role="tabpanel" tabindex="0">
         <DiscussionDrawer
           layout="primary"
           threadId={String(topic.id)}

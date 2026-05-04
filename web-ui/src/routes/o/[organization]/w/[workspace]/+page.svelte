@@ -17,6 +17,37 @@
 
   const POLL_INTERVAL_MS = 30_000;
 
+  /** Shown under Topic groups (messages, topic lifecycle, human attention). */
+  const TOPIC_HOME_EVENT_TYPES = new Set([
+    "message_posted",
+    "topic_priority_changed",
+    "topic_lifecycle_changed",
+    "topic_updated",
+    "topic_archived",
+    "topic_restored",
+    "topic_trashed",
+    "human_attention_requested",
+    "human_attention_responded",
+  ]);
+
+  const BOARD_HOME_EVENT_TYPES = new Set([
+    "card_created",
+    "card_moved",
+    "card_closed",
+    "card_resolved",
+    "card_restored",
+    "card_archived",
+    "card_trashed",
+  ]);
+
+  const DOCUMENT_HOME_EVENT_TYPES = new Set([
+    "document_created",
+    "document_revision_created",
+    "document_revised",
+    "document_trashed",
+    "document_restored",
+  ]);
+
   let loading = $state(true);
   let error = $state("");
   let feed = $state({
@@ -36,6 +67,124 @@
     bindWorkspaceHref(organizationSlug, workspaceSlug),
   );
 
+  /** Compact pill (matches unread / priority styling). */
+  const inlineBadgeClass =
+    "shrink-0 rounded bg-line px-1.5 py-0.5 text-micro font-medium text-fg-muted";
+
+  function filterEventsForHomeSection(events, typeSet) {
+    return (events ?? []).filter((e) =>
+      typeSet.has(String(e?.type ?? "").trim()),
+    );
+  }
+
+  function documentIdFromEvent(event) {
+    const refs = Array.isArray(event?.refs) ? event.refs : [];
+    for (const r of refs) {
+      const s = String(r ?? "").trim();
+      if (s.startsWith("document:")) return s.slice("document:".length);
+    }
+    const payload =
+      event?.payload && typeof event.payload === "object" ? event.payload : {};
+    return String(payload.document_id ?? payload.documentId ?? "").trim();
+  }
+
+  let topicFeedGroups = $derived.by(() => {
+    const raw = groups.filter((g) => String(g?.group_type ?? "") === "topic");
+    return raw
+      .map((g) => {
+        const displayEvents = filterEventsForHomeSection(
+          g.events,
+          TOPIC_HOME_EVENT_TYPES,
+        );
+        return { ...g, displayEvents };
+      })
+      .filter((g) => (g.displayEvents ?? []).length > 0);
+  });
+
+  let boardFeedGroups = $derived.by(() => {
+    const raw = groups.filter((g) => String(g?.group_type ?? "") === "board");
+    return raw
+      .map((g) => {
+        const displayEvents = filterEventsForHomeSection(
+          g.events,
+          BOARD_HOME_EVENT_TYPES,
+        );
+        return { ...g, displayEvents };
+      })
+      .filter((g) => (g.displayEvents ?? []).length > 0);
+  });
+
+  let docFeedSections = $derived.by(() => {
+    const map = new Map();
+    for (const group of groups) {
+      const groupRef = String(group?.group_ref ?? "").trim();
+      for (const event of group.events ?? []) {
+        const t = String(event?.type ?? "").trim();
+        if (!DOCUMENT_HOME_EVENT_TYPES.has(t)) continue;
+        const docId = documentIdFromEvent(event);
+        if (!docId) continue;
+        let row = map.get(docId);
+        if (!row) {
+          row = {
+            docId,
+            events: [],
+            title: "",
+            sourceGroupRefs: new Set(),
+          };
+          map.set(docId, row);
+        }
+        row.events.push(event);
+        if (groupRef) row.sourceGroupRefs.add(groupRef);
+        const payload =
+          event?.payload && typeof event.payload === "object"
+            ? event.payload
+            : {};
+        const title = String(
+          payload.title ?? payload.document_title ?? "",
+        ).trim();
+        if (title && !row.title) row.title = title;
+      }
+    }
+    const list = [...map.values()].map((row) => {
+      const sorted = [...row.events].sort((a, b) =>
+        String(b.ts ?? "").localeCompare(String(a.ts ?? "")),
+      );
+      return {
+        docId: row.docId,
+        title: row.title || row.docId,
+        events: sorted,
+        newest_event: sorted[0] ?? null,
+        sourceGroupRefs: [...row.sourceGroupRefs],
+      };
+    });
+    list.sort((a, b) =>
+      String(b.newest_event?.ts ?? "").localeCompare(
+        String(a.newest_event?.ts ?? ""),
+      ),
+    );
+    return list;
+  });
+
+  /** Topic/board rows plus any workspace group that only appears via document sections. */
+  let markAllReadTargets = $derived.by(() => {
+    const refSet = new Set();
+    for (const g of topicFeedGroups) {
+      refSet.add(String(g.group_ref ?? "").trim());
+    }
+    for (const g of boardFeedGroups) {
+      refSet.add(String(g.group_ref ?? "").trim());
+    }
+    for (const s of docFeedSections) {
+      for (const r of s.sourceGroupRefs ?? []) {
+        if (String(r ?? "").trim()) refSet.add(String(r).trim());
+      }
+    }
+    return [...refSet]
+      .filter(Boolean)
+      .map((ref) => groups.find((g) => String(g?.group_ref ?? "") === ref))
+      .filter(Boolean);
+  });
+
   function priorityLabel(group) {
     return String(group?.priority ?? "").trim() || "P2";
   }
@@ -43,10 +192,11 @@
   function groupLabel(group) {
     const name = String(group?.display_name ?? "").trim();
     if (!name) return group?.group_ref ?? "Untitled";
-    const type = group?.group_type ?? "";
-    if (type === "topic") return name;
-    if (type === "board") return name + " (board)";
     return name;
+  }
+
+  function docSectionHref(section) {
+    return workspaceHref(`/docs/${encodeURIComponent(section.docId)}`);
   }
 
   function groupHref(group) {
@@ -119,7 +269,8 @@
   }
 
   async function markAllRead() {
-    const group_refs = groups
+    const targets = markAllReadTargets;
+    const group_refs = targets
       .map((group) => String(group?.group_ref ?? "").trim())
       .filter(Boolean);
     if (group_refs.length === 0) return;
@@ -129,7 +280,7 @@
       await coreClient.markHomeRead({
         group_refs,
         group_cursors: Object.fromEntries(
-          groups
+          targets
             .map((group) => [
               String(group?.group_ref ?? "").trim(),
               {
@@ -146,6 +297,43 @@
         err instanceof Error
           ? err.message
           : String(err ?? "Failed to mark all read.");
+    } finally {
+      markingGroupRef = "";
+    }
+  }
+
+  /** Document sections are views on topic/board groups; mark those groups read at once. */
+  async function markDocSectionRead(section) {
+    const refs = (section.sourceGroupRefs ?? [])
+      .map((r) => String(r ?? "").trim())
+      .filter(Boolean);
+    if (refs.length === 0) return;
+    const key = `doc:${section.docId}`;
+    markingGroupRef = key;
+    error = "";
+    try {
+      await coreClient.markHomeRead({
+        group_refs: refs,
+        group_cursors: Object.fromEntries(
+          refs
+            .map((ref) => {
+              const g = groups.find(
+                (entry) => String(entry?.group_ref ?? "") === ref,
+              );
+              return [
+                ref,
+                { ts: g?.newest_event?.ts, id: g?.newest_event?.id },
+              ];
+            })
+            .filter(([ref, cursor]) => ref && cursor.ts && cursor.id),
+        ),
+      });
+      await loadHome();
+    } catch (err) {
+      error =
+        err instanceof Error
+          ? err.message
+          : String(err ?? "Failed to mark read.");
     } finally {
       markingGroupRef = "";
     }
@@ -168,8 +356,7 @@
         Loading unread activity…
       {:else}
         Updated {formatTimestamp(feed.generated_at) || "just now"} · {feed.unread_count ??
-          0}
-        unread across {feed.group_count ?? 0} groups
+          0} unread across {feed.group_count ?? 0} groups
       {/if}
     {/snippet}
     {#snippet actions()}
@@ -185,7 +372,9 @@
       <button
         class="rounded-md border border-line px-2.5 py-1.5 text-meta font-medium text-fg-muted transition-colors hover:bg-bg-soft disabled:opacity-60"
         onclick={markAllRead}
-        disabled={loading || groups.length === 0 || markingGroupRef === "*"}
+        disabled={loading ||
+          markAllReadTargets.length === 0 ||
+          Boolean(markingGroupRef)}
         type="button"
       >
         Mark all read
@@ -223,28 +412,31 @@
     </div>
   {:else}
     <div class="space-y-3" data-testid="home-unread-feed">
-      {#each groups as group (group.group_ref)}
+      {#each topicFeedGroups as group (group.group_ref)}
         <section class="overflow-hidden rounded-md border border-line bg-panel">
-          <div
-            class="flex flex-wrap items-center justify-between gap-3 border-b border-line px-3 py-2.5 sm:px-4"
-          >
-            <a
-              class="min-w-0 flex-1 font-semibold text-fg hover:underline"
-              href={groupHref(group)}
-            >
-              {groupLabel(group)}
-            </a>
-            <div class="flex shrink-0 items-center gap-2">
-              <span
-                class="rounded bg-line px-1.5 py-0.5 text-micro font-medium text-fg-muted"
+          <div class="space-y-2 border-b border-line px-3 py-2.5 sm:px-4">
+            <div class="min-w-0">
+              <a
+                class="block break-words font-semibold text-fg hover:underline"
+                href={groupHref(group)}
               >
-                {priorityLabel(group)} · {group.unread_count} unread
-              </span>
+                {groupLabel(group)}
+              </a>
+            </div>
+            <div class="flex flex-wrap items-center gap-y-2 gap-x-2">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class={inlineBadgeClass}>Topic</span>
+                <span
+                  class={inlineBadgeClass}
+                  title="Unread events tied to this topic (may include document activity shown in Doc sections below until marked read)."
+                >
+                  {priorityLabel(group)} · {group.unread_count} unread
+                </span>
+              </div>
               <button
-                class="rounded-md border border-line px-2 py-1 text-micro font-medium text-fg-muted transition-colors hover:bg-line-subtle disabled:opacity-60"
+                class="ml-auto shrink-0 rounded-md border border-line px-2 py-1 text-micro font-medium text-fg-muted transition-colors hover:bg-line-subtle disabled:opacity-60"
                 onclick={() => markGroupRead(group.group_ref)}
-                disabled={markingGroupRef === group.group_ref ||
-                  markingGroupRef === "*"}
+                disabled={Boolean(markingGroupRef)}
                 type="button"
               >
                 Mark read
@@ -252,18 +444,127 @@
             </div>
           </div>
           <div class="divide-y divide-line">
-            {#each (group.events ?? []).slice(0, 5) as event (event.id)}
+            {#each group.displayEvents.slice(0, 5) as event (event.id)}
               <EventRow row={rowFor(event)} />
             {/each}
-            {#if (group.events ?? []).length > 5}
+            {#if group.displayEvents.length > 5}
               <details class="group">
                 <summary
                   class="cursor-pointer px-3 py-2 text-meta font-medium text-fg-muted hover:bg-line-subtle sm:px-4"
                 >
-                  Show all {group.events.length}
+                  Show all {group.displayEvents.length}
                 </summary>
                 <div class="divide-y divide-line border-t border-line">
-                  {#each group.events.slice(5) as event (event.id)}
+                  {#each group.displayEvents.slice(5) as event (event.id)}
+                    <EventRow row={rowFor(event)} />
+                  {/each}
+                </div>
+              </details>
+            {/if}
+          </div>
+          {#if group.unread_count > group.displayEvents.length}
+            <p
+              class="border-t border-line bg-bg-soft px-3 py-2 text-micro text-fg-muted sm:px-4"
+            >
+              {group.unread_count - group.displayEvents.length} more unread for this
+              topic appears in the Doc sections below.
+            </p>
+          {/if}
+        </section>
+      {/each}
+
+      {#each boardFeedGroups as group (group.group_ref)}
+        <section class="overflow-hidden rounded-md border border-line bg-panel">
+          <div class="space-y-2 border-b border-line px-3 py-2.5 sm:px-4">
+            <div class="min-w-0">
+              <a
+                class="block break-words font-semibold text-fg hover:underline"
+                href={groupHref(group)}
+              >
+                {groupLabel(group)}
+              </a>
+            </div>
+            <div class="flex flex-wrap items-center gap-y-2 gap-x-2">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class={inlineBadgeClass}>Board</span>
+                <span class={inlineBadgeClass}>{group.unread_count} unread</span
+                >
+              </div>
+              <button
+                class="ml-auto shrink-0 rounded-md border border-line px-2 py-1 text-micro font-medium text-fg-muted transition-colors hover:bg-line-subtle disabled:opacity-60"
+                onclick={() => markGroupRead(group.group_ref)}
+                disabled={Boolean(markingGroupRef)}
+                type="button"
+              >
+                Mark read
+              </button>
+            </div>
+          </div>
+          <div class="divide-y divide-line">
+            {#each group.displayEvents.slice(0, 5) as event (event.id)}
+              <EventRow row={rowFor(event)} />
+            {/each}
+            {#if group.displayEvents.length > 5}
+              <details class="group">
+                <summary
+                  class="cursor-pointer px-3 py-2 text-meta font-medium text-fg-muted hover:bg-line-subtle sm:px-4"
+                >
+                  Show all {group.displayEvents.length}
+                </summary>
+                <div class="divide-y divide-line border-t border-line">
+                  {#each group.displayEvents.slice(5) as event (event.id)}
+                    <EventRow row={rowFor(event)} />
+                  {/each}
+                </div>
+              </details>
+            {/if}
+          </div>
+        </section>
+      {/each}
+
+      {#each docFeedSections as section (section.docId)}
+        <section class="overflow-hidden rounded-md border border-line bg-panel">
+          <div class="space-y-2 border-b border-line px-3 py-2.5 sm:px-4">
+            <div class="min-w-0">
+              <a
+                class="block break-words font-semibold text-fg hover:underline"
+                href={docSectionHref(section)}
+              >
+                {section.title}
+              </a>
+            </div>
+            <div class="flex flex-wrap items-center gap-y-2 gap-x-2">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class={inlineBadgeClass}>Doc</span>
+                <span class={inlineBadgeClass}
+                  >{section.events.length} unread</span
+                >
+              </div>
+              <button
+                class="ml-auto shrink-0 rounded-md border border-line px-2 py-1 text-micro font-medium text-fg-muted transition-colors hover:bg-line-subtle disabled:opacity-60"
+                onclick={() => markDocSectionRead(section)}
+                disabled={Boolean(markingGroupRef) ||
+                  (section.sourceGroupRefs?.length ?? 0) === 0}
+                title="Marks the owning topic or board group read for Home (includes other unread in that group)."
+                type="button"
+              >
+                Mark read
+              </button>
+            </div>
+          </div>
+          <div class="divide-y divide-line">
+            {#each section.events.slice(0, 5) as event (event.id)}
+              <EventRow row={rowFor(event)} />
+            {/each}
+            {#if section.events.length > 5}
+              <details class="group">
+                <summary
+                  class="cursor-pointer px-3 py-2 text-meta font-medium text-fg-muted hover:bg-line-subtle sm:px-4"
+                >
+                  Show all {section.events.length}
+                </summary>
+                <div class="divide-y divide-line border-t border-line">
+                  {#each section.events.slice(5) as event (event.id)}
                     <EventRow row={rowFor(event)} />
                   {/each}
                 </div>

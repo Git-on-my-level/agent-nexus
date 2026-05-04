@@ -183,6 +183,9 @@ describe("dev seed scenarios", () => {
     expect(surfaceCounts.topicReplies).toBeGreaterThan(0);
     expect(surfaceCounts.documentReplies).toBeGreaterThan(0);
     expect(surfaceCounts.cardReplies).toBeGreaterThan(0);
+    expect(seed.events.some((e) => e.type === "document_revised")).toBe(true);
+    expect(seed.events.some((e) => e.type === "card_moved")).toBe(true);
+    expect(seed.events.some((e) => e.type === "topic_updated")).toBe(true);
   });
 
   it("returns null for an unknown scenario", async () => {

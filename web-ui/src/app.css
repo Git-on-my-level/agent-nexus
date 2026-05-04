@@ -1110,19 +1110,14 @@
     }
 
     /*
-     * Topic Messages is already the active page content, not an auxiliary
-     * drawer. Give its fixed mobile chat dock the full slot below the mobile
-     * chrome + topic tabs so it matches board/doc chat pinning without the
-     * mid-page composer gap.
+     * Topic Messages (narrow): chat column is in-flow under the sticky header
+     * and tabs — not a viewport-fixed sheet — so the panel meets the tab bar
+     * with no magic `100dvh - …` gap.
      */
-    .page-dock-layout--fixed-mobile-chat.page-dock-layout--topic-messages {
-      --mobile-chat-panel-height: calc(100dvh - 9.75rem);
-    }
 
     /**
-     * Topic Messages: the fixed dock sits above in-flow content in paint order.
-     * Elevate + stick the header and section tabs (z-index above the feed’s 15)
-     * so they stay visible and tappable; solid bg avoids chat showing through.
+     * Topic Messages: header + section tabs stick above the chat column.
+     * Solid bg avoids content showing through while scrolling the message list.
      */
     .page-dock-layout--topic-messages .page-dock-head {
       position: sticky;
@@ -1149,7 +1144,7 @@
     }
 
     .shell-main-scroll:has(.page-dock-layout--topic-messages) > .shell-content {
-      flex: 1 1 auto;
+      flex: 1 1 0%;
       min-height: 0;
       display: flex;
       flex-direction: column;
@@ -1169,29 +1164,44 @@
       position: fixed;
       left: 0;
       right: 0;
-      bottom: 0;
+      top: 6.25rem;
+      bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
       z-index: 15;
       width: 100%;
       max-width: 100%;
       display: flex;
       flex-direction: column;
       box-sizing: border-box;
-      height: var(--mobile-chat-panel-height);
-      max-height: var(--mobile-chat-panel-height);
       min-height: 0;
+      height: auto;
+      max-height: none;
       margin: 0;
-      padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+      padding-bottom: 0;
       overflow: hidden;
+      box-shadow: none;
+      pointer-events: auto;
     }
 
     .page-dock-layout--fixed-mobile-chat.page-dock-layout--topic-messages
-      .page-dock-feed:has([data-mobile-chat-expanded])
+      .page-dock-feed
       > * {
-      flex: 1 1 auto;
-      min-height: 0;
+      flex: 1 1 0%;
       height: 100%;
-      max-height: 100%;
+      min-height: 0;
       align-self: stretch;
+    }
+
+    .page-dock-layout--topic-messages .dd-surface,
+    .page-dock-layout--topic-messages .dd-surface > div,
+    .page-dock-layout--topic-messages .dd-surface > div > div,
+    .page-dock-layout--topic-messages .msgtab-wrap--pin {
+      display: flex;
+      flex: 1 1 auto;
+      flex-direction: column;
+      height: 100%;
+      min-height: 0;
+      max-height: 100%;
+      overflow: hidden;
     }
 
     @media (max-width: 639px) {
@@ -1209,6 +1219,7 @@
     }
 
     /* Topic: composer sits in-flow above bottom nav — don’t reserve nav height twice. */
+    .page-dock-layout--topic-messages .msgtab-wrap--pin .msg-composer,
     .page-dock-layout--topic-messages .msgtab-wrap--pin-narrow .msg-composer {
       padding-bottom: 0.75rem;
     }
@@ -1289,22 +1300,24 @@
     }
 
     /*
-     * Card detail page: the in-flow status footer is intentionally elevated for
-     * normal scrolling, but expanded discussion is a fixed dock and must cover it.
+     * Topic Messages owns a fixed viewport slot from tabs to bottom nav. The
+     * generic mobile drawer clamp above is for auxiliary sheets; if it wins
+     * here, the composer floats mid-screen with empty space below.
      */
-    .page-dock-layout--fixed-mobile-chat.page-dock-layout--card-page-chat
-      .page-dock-feed {
-      z-index: 35;
+    .page-dock-layout--fixed-mobile-chat.page-dock-layout--topic-messages
+      .page-dock-feed:has([data-mobile-chat-expanded]) {
+      height: auto;
+      max-height: none;
     }
 
     /*
-     * Topic: keep fixed height for both collapsed and expanded — generic rules
-     * use height:auto when collapsed.
+     * Card detail page: keep the discussion dock above in-flow page chrome but
+     * below the shell bottom nav. Otherwise the nav clearance reads as empty
+     * space below the composer on mobile.
      */
-    .page-dock-layout--fixed-mobile-chat.page-dock-layout--topic-messages
-      .page-dock-feed:not(:has([data-mobile-chat-expanded])) {
-      height: var(--mobile-chat-panel-height);
-      max-height: var(--mobile-chat-panel-height);
+    .page-dock-layout--fixed-mobile-chat.page-dock-layout--card-page-chat
+      .page-dock-feed {
+      z-index: 19;
     }
   }
 

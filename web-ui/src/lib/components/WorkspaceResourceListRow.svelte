@@ -4,7 +4,7 @@
    * @type {{
    *   title: string,
    *   description?: string,
-   *   emptyDescription?: string,
+   *   emptyDescription?: string, // shown only when description is empty; default none
    *   badges?: import('svelte').Snippet,
    *   titleClass?: string,
    * }}
@@ -12,7 +12,7 @@
   let {
     title,
     description = "",
-    emptyDescription = "No description provided.",
+    emptyDescription = "",
     badges,
     titleClass = "",
   } = $props();
