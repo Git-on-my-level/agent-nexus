@@ -159,19 +159,25 @@ seed_workspace_fixture() {
   curl -fsS \
     -H 'content-type: application/json' \
     -X POST \
-    -d '{"actor_id":"anx-core","thread":{"id":"thread-hosted-ops","title":"Hosted ops restore drill","type":"incident","status":"active","priority":"p2","tags":["hosted","ops"],"cadence":"daily","current_summary":"Seed data for hosted restore verification","next_actions":["validate backup restore"],"key_artifacts":[],"provenance":{"sources":["event:hosted-ops-test"]}}}' \
-    "http://127.0.0.1:${listen_port}/threads" >/dev/null
+    -d '{"actor":{"id":"hosted-ops-agent","display_name":"Hosted Ops Agent","created_at":"2026-03-04T10:00:00Z"}}' \
+    "http://127.0.0.1:${listen_port}/actors" >/dev/null
 
   curl -fsS \
     -H 'content-type: application/json' \
     -X POST \
-    -d '{"actor_id":"anx-core","artifact":{"kind":"evidence","thread_id":"thread-hosted-ops","refs":["thread:thread-hosted-ops","url:https://example.test/ops-bundle"]},"content":"ops-bundle-blob","content_type":"text"}' \
+    -d '{"actor_id":"hosted-ops-agent","topic":{"thread_id":"thread-hosted-ops","title":"Hosted ops restore drill","summary":"Seed data for hosted restore verification","cadence":"daily","owner_refs":[],"document_refs":[],"board_refs":[],"related_refs":[],"provenance":{"sources":["event:hosted-ops-test"]}}}' \
+    "http://127.0.0.1:${listen_port}/topics" >/dev/null
+
+  curl -fsS \
+    -H 'content-type: application/json' \
+    -X POST \
+    -d '{"actor_id":"hosted-ops-agent","artifact":{"kind":"attachment","thread_id":"thread-hosted-ops","refs":["thread:thread-hosted-ops","url:https://example.test/ops-bundle"]},"content":"ops-bundle-blob","content_type":"text"}' \
     "http://127.0.0.1:${listen_port}/artifacts" >/dev/null
 
   curl -fsS \
     -H 'content-type: application/json' \
     -X POST \
-    -d '{"actor_id":"anx-core","document":{"document_id":"ops-runbook","thread_id":"thread-hosted-ops","title":"Hosted Ops Runbook"},"refs":["thread:thread-hosted-ops"],"content":"restore drill document body","content_type":"text"}' \
+    -d '{"actor_id":"hosted-ops-agent","document":{"document_id":"ops-runbook","title":"Hosted Ops Runbook"},"refs":["thread:thread-hosted-ops"],"content":"restore drill document body","content_type":"text"}' \
     "http://127.0.0.1:${listen_port}/docs" >/dev/null
 
   stop_background_process "$server_pid"

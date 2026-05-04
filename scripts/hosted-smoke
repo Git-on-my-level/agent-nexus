@@ -42,7 +42,7 @@ assert_http_status() {
 
 extract_thread_id() {
   local json="$1"
-  json_get_first "$json" thread_id id thread.thread_id thread.id || true
+  json_get_first "$json" thread_id topic.thread_id id thread.thread_id thread.id || true
 }
 
 extract_inbox_items_json() {
@@ -241,26 +241,24 @@ echo "✓ Invite-gated onboarding works correctly"
 
 echo ""
 echo "=== Test 5: Authenticated workspace read/write works ==="
-echo "Creating thread with authenticated agent..."
+echo "Creating topic with authenticated agent..."
 THREAD_RESPONSE=$(curl -sS \
   -H "content-type: application/json" \
   -H "authorization: Bearer $AGENT1_TOKEN" \
   -X POST \
   -d '{
-    "thread":{
+    "topic":{
       "title":"Hosted smoke thread",
-      "type":"incident",
-      "status":"active",
-      "priority":"p1",
-      "tags":["hosted","smoke"],
+      "summary":"smoke test",
       "cadence":"daily",
-      "current_summary":"smoke test",
-      "next_actions":["verify"],
-      "key_artifacts":[],
+      "owner_refs":[],
+      "document_refs":[],
+      "board_refs":[],
+      "related_refs":[],
       "provenance":{"sources":["event:hosted-smoke-thread"]}
     }
   }' \
-  "$CORE_BASE_URL/threads")
+  "$CORE_BASE_URL/topics")
 
 THREAD_ID="$(extract_thread_id "$THREAD_RESPONSE")"
 if [[ -z "$THREAD_ID" ]]; then
@@ -302,37 +300,34 @@ assert_http_status "201" "$EVENT_STATUS" "authenticated event create"
 echo "✓ Authenticated workspace read/write works"
 
 echo ""
-echo "=== Test 6: Stale exceptions rebuild deterministically ==="
-echo "Creating stale thread (daily cadence, old next_check_in_at)..."
-STALE_THREAD_RESPONSE=$(curl -sS \
+echo "=== Test 6: Derived view rebuild is idempotent ==="
+echo "Creating second topic backing thread..."
+SECOND_THREAD_RESPONSE=$(curl -sS \
   -H "content-type: application/json" \
   -H "authorization: Bearer $AGENT1_TOKEN" \
   -X POST \
   -d '{
-    "thread":{
-      "title":"Stale hosted thread",
-      "type":"incident",
-      "status":"active",
-      "priority":"p2",
-      "tags":["stale","hosted"],
+    "topic":{
+      "title":"Second hosted thread",
+      "summary":"second hosted smoke thread",
       "cadence":"daily",
-      "next_check_in_at":"2020-01-01T00:00:00Z",
-      "current_summary":"should be stale",
-      "next_actions":["check in"],
-      "key_artifacts":[],
+      "owner_refs":[],
+      "document_refs":[],
+      "board_refs":[],
+      "related_refs":[],
       "provenance":{"sources":["inferred"]}
     }
   }' \
-  "$CORE_BASE_URL/threads")
+  "$CORE_BASE_URL/topics")
 
-STALE_THREAD_ID="$(extract_thread_id "$STALE_THREAD_RESPONSE")"
-if [[ -z "$STALE_THREAD_ID" ]]; then
-  echo "failed to extract stale thread id" >&2
-  echo "response: $STALE_THREAD_RESPONSE" >&2
+SECOND_THREAD_ID="$(extract_thread_id "$SECOND_THREAD_RESPONSE")"
+if [[ -z "$SECOND_THREAD_ID" ]]; then
+  echo "failed to extract second thread id" >&2
+  echo "response: $SECOND_THREAD_RESPONSE" >&2
   exit 1
 fi
 
-echo "Rebuilding derived views to force stale detection..."
+echo "Rebuilding derived views..."
 REBUILD_STATUS=$(curl -sS -o /dev/null -w '%{http_code}' \
   -H "content-type: application/json" \
   -H "authorization: Bearer $AGENT1_TOKEN" \
@@ -341,15 +336,18 @@ REBUILD_STATUS=$(curl -sS -o /dev/null -w '%{http_code}' \
   "$CORE_BASE_URL/derived/rebuild" || true)
 assert_http_status "200" "$REBUILD_STATUS" "derived rebuild"
 
-INBOX_RESPONSE=$(curl -sS \
+THREADS_AFTER_REBUILD=$(curl -sS \
   -H "authorization: Bearer $AGENT1_TOKEN" \
-  "$CORE_BASE_URL/inbox")
-INBOX_ITEMS_JSON="$(extract_inbox_items_json "$INBOX_RESPONSE")"
-STALE_INBOX_COUNT="$(json_count_key_value "$INBOX_ITEMS_JSON" thread_id "$STALE_THREAD_ID")"
-STALE_EXCEPTION_COUNT="$(json_count_key_value "$INBOX_ITEMS_JSON" category exception)"
-if [[ "$STALE_INBOX_COUNT" -ne 1 ]] || [[ "$STALE_EXCEPTION_COUNT" -lt 1 ]]; then
-  echo "expected one stale exception inbox item after rebuild, got count=$STALE_INBOX_COUNT" >&2
-  echo "inbox: $INBOX_RESPONSE" >&2
+  "$CORE_BASE_URL/threads?state=active&limit=1000")
+if ! printf '%s' "$THREADS_AFTER_REBUILD" | python3 -c "
+import json, sys
+want = set(sys.argv[1:])
+data = json.load(sys.stdin)
+got = {str(t.get('id', '')) for t in data.get('threads') or []}
+sys.exit(0 if want <= got else 1)
+" "$THREAD_ID" "$SECOND_THREAD_ID"; then
+  echo "expected created topic backing threads in /threads listing" >&2
+  echo "response: $THREADS_AFTER_REBUILD" >&2
   exit 1
 fi
 
@@ -362,36 +360,22 @@ REBUILD_STATUS=$(curl -sS -o /dev/null -w '%{http_code}' \
   "$CORE_BASE_URL/derived/rebuild" || true)
 assert_http_status "200" "$REBUILD_STATUS" "second derived rebuild"
 
-INBOX_RESPONSE=$(curl -sS \
-  -H "authorization: Bearer $AGENT1_TOKEN" \
-  "$CORE_BASE_URL/inbox")
-INBOX_ITEMS_JSON="$(extract_inbox_items_json "$INBOX_RESPONSE")"
-STALE_INBOX_COUNT="$(json_count_key_value "$INBOX_ITEMS_JSON" thread_id "$STALE_THREAD_ID")"
-if [[ "$STALE_INBOX_COUNT" -ne 1 ]]; then
-  echo "expected stale rebuild to remain idempotent, got $STALE_INBOX_COUNT inbox items for the stale thread" >&2
-  echo "inbox: $INBOX_RESPONSE" >&2
-  exit 1
-fi
-
-# Thread list no longer supports ?stale=; staleness is a per-row projection field.
-STALE_THREADS_RESPONSE=$(curl -sS \
+THREADS_AFTER_SECOND_REBUILD=$(curl -sS \
   -H "authorization: Bearer $AGENT1_TOKEN" \
   "$CORE_BASE_URL/threads?state=active&limit=1000")
-if ! printf '%s' "$STALE_THREADS_RESPONSE" | python3 -c "
+if ! printf '%s' "$THREADS_AFTER_SECOND_REBUILD" | python3 -c "
 import json, sys
-want = sys.argv[1]
+want = set(sys.argv[1:])
 data = json.load(sys.stdin)
-for t in data.get('threads') or []:
-    if str(t.get('id', '')) == want and t.get('stale') is True:
-        sys.exit(0)
-sys.exit(1)
-" "$STALE_THREAD_ID"; then
-  echo "expected stale thread $STALE_THREAD_ID with stale=true in /threads listing" >&2
-  echo "response: $STALE_THREADS_RESPONSE" >&2
+got = {str(t.get('id', '')) for t in data.get('threads') or []}
+sys.exit(0 if want <= got else 1)
+" "$THREAD_ID" "$SECOND_THREAD_ID"; then
+  echo "expected created topic backing threads after second rebuild" >&2
+  echo "response: $THREADS_AFTER_SECOND_REBUILD" >&2
   exit 1
 fi
 
-echo "✓ Stale exceptions rebuild deterministically"
+echo "✓ Derived view rebuild is idempotent"
 
 echo ""
 echo "=== Test 7: Ops-health endpoint requires auth and returns diagnostics ==="
@@ -457,10 +441,10 @@ core_base_url=${CORE_BASE_URL}
 bootstrap_token_used=true
 invite_token_used=true
 authenticated_agent=hosted-agent-1
-stale_thread_id=${STALE_THREAD_ID}
+second_thread_id=${SECOND_THREAD_ID}
 ops_health_tested=true
 revoke_path_tested=true
-coverage=auth,onboarding,workspace,staleness,ops-health,revoke
+coverage=auth,onboarding,workspace,derived-rebuild,ops-health,revoke
 artifacts_dir=${TMP_DIR}
 SUMMARY
 

@@ -701,6 +701,8 @@ start_core_server() {
   fi
 
   (
+    export ANX_ENABLE_DEV_ACTOR_MODE="$dev_actor_mode"
+    export ANX_ALLOW_UNAUTHENTICATED_WRITES="$allow_unauthenticated_writes"
     export ANX_ALLOW_LOOPBACK_VERIFICATION_READS="$allow_loopback_verification_reads"
     case "$bootstrap_token_mode" in
       unset)
