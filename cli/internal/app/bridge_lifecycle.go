@@ -509,17 +509,18 @@ func loadBridgeManagedConfig(configPath string) (bridgeManagedConfig, error) {
 	if err != nil {
 		return bridgeManagedConfig{}, errnorm.Wrap(errnorm.KindLocal, "bridge_config_read_failed", "failed to read bridge config", err)
 	}
-	runtimeKind, runCommand, displayName, err := inferBridgeRuntimeKind(string(content), absPath)
+	var root map[string]any
+	if err := toml.Unmarshal(content, &root); err != nil {
+		return bridgeManagedConfig{}, errnorm.Wrap(errnorm.KindLocal, "bridge_config_toml_invalid", "bridge config is not valid TOML", err)
+	}
+	runtimeKind, runCommand, displayName, err := inferBridgeRuntimeKind(root, absPath)
 	if err != nil {
 		return bridgeManagedConfig{}, err
 	}
 	managerDir := bridgeManagerDir(absPath)
 	autoManaged := false
-	var root map[string]any
-	if parseErr := toml.Unmarshal(content, &root); parseErr == nil {
-		if bridgeRoot := bridgeTomlTable(root, "bridge"); bridgeRoot != nil {
-			autoManaged = asBool(bridgeRoot["managed_package_auto_update"])
-		}
+	if bridgeRoot := bridgeTomlTable(root, "bridge"); bridgeRoot != nil {
+		autoManaged = asBool(bridgeRoot["managed_package_auto_update"])
 	}
 	return bridgeManagedConfig{
 		RuntimeKind:              runtimeKind,
@@ -533,44 +534,11 @@ func loadBridgeManagedConfig(configPath string) (bridgeManagedConfig, error) {
 	}, nil
 }
 
-func inferBridgeRuntimeKind(content string, configPath string) (runtimeKind string, runCommand string, displayName string, err error) {
-	if strings.TrimSpace(bridgeConfigStringValue(content, "", "agent_home")) != "" || bridgeConfigHasTopLevelKey(content, "agent_home") {
+func inferBridgeRuntimeKind(root map[string]any, configPath string) (runtimeKind string, runCommand string, displayName string, err error) {
+	if _, ok := root["agent_home"]; ok {
 		return "agent", "bridge", filepath.Base(configPath), nil
 	}
 	return "", "", "", errnorm.Usage("invalid_request", "bridge config must contain top-level agent_home")
-}
-
-func bridgeConfigHasTopLevelKey(content string, key string) bool {
-	currentSection := ""
-	for _, line := range strings.Split(content, "\n") {
-		if matches := bridgeSectionHeaderPattern.FindStringSubmatch(line); len(matches) == 2 {
-			currentSection = matches[1]
-			continue
-		}
-		if currentSection != "" {
-			continue
-		}
-		name, _, ok := parseBridgeConfigAssignment(line)
-		if ok && name == key {
-			return true
-		}
-	}
-	return false
-}
-
-func bridgeConfigHasSection(content string, section string) bool {
-	target := "[" + section + "]"
-	for _, line := range strings.Split(content, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == target {
-			return true
-		}
-		matches := bridgeSectionHeaderPattern.FindStringSubmatch(line)
-		if len(matches) == 2 && matches[1] == section {
-			return true
-		}
-	}
-	return false
 }
 
 func bridgeManagerDir(configPath string) string {
