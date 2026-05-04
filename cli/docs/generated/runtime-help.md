@@ -1369,7 +1369,7 @@ Local inspection helpers:
   Mutation flow:
   docs create              Create durable context from flags plus `--content-file`, or from advanced JSON.
   docs revise              Revise from `--content-file`; stages a diff proposal by default, or direct-writes with `--apply`.
-  Tip: agents should draft Markdown locally and pass `--content-file <path>`. `docs revise --document-id <id> --content-file <path>` discovers the base revision and returns an apply command for the staged proposal.
+  Tip: agents should draft Markdown locally and pass `--content-file <path>`. `docs revise <id> --content-file <path>` discovers the base revision and returns an apply command for the staged proposal.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2248,7 +2248,7 @@ Inputs:
   - body `card.risk` (string)
   - body `card.summary` (string)
   - body `card.topic_ref` (string)
-  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get --board-id <board-id>`, `anx boards workspace --board-id <board-id>`, or the latest board mutation response.
+  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get <board-id>`, `anx boards workspace <board-id>`, or the latest board mutation response.
   - body `request_key` (string)
   Enum values: card.column_key: backlog, blocked, done, in_progress, ready, review; card.resolution: done; card.risk: critical, high, low, medium
 
@@ -2282,7 +2282,7 @@ Inputs:
   - body `items` (list<any>)
   Optional:
   - body `actor_id` (string): Defaults from the active CLI profile when omitted. Non-empty `--actor-id` overrides `actor_id` in the JSON body.
-  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get --board-id <board-id>`, `anx boards workspace --board-id <board-id>`, or the latest board mutation response. You may pass `--if-board-updated-at` instead of embedding it in JSON.
+  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get <board-id>`, `anx boards workspace <board-id>`, or the latest board mutation response. You may pass `--if-board-updated-at` instead of embedding it in JSON.
   - body `request_key` (string): Idempotency key for the whole batch. Non-empty `--request-key` overrides `request_key` in the JSON body.
 
 CLI input:
@@ -2755,7 +2755,7 @@ Inputs:
   - path `card_id`
   Optional:
   - body `actor_id` (string)
-  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get --board-id <board-id>`, `anx boards workspace --board-id <board-id>`, or the latest board mutation response.
+  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get <board-id>`, `anx boards workspace <board-id>`, or the latest board mutation response.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2787,7 +2787,7 @@ Inputs:
   - body `reason` (string)
   Optional:
   - body `actor_id` (string)
-  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get --board-id <board-id>`, `anx boards workspace --board-id <board-id>`, or the latest board mutation response.
+  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get <board-id>`, `anx boards workspace <board-id>`, or the latest board mutation response.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2848,7 +2848,7 @@ Inputs:
   - path `card_id`
   Optional:
   - body `actor_id` (string)
-  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get --board-id <board-id>`, `anx boards workspace --board-id <board-id>`, or the latest board mutation response.
+  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get <board-id>`, `anx boards workspace <board-id>`, or the latest board mutation response.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -4037,7 +4037,7 @@ Local Help: topics message
   - `anx topics message <topic-id> --body "Decision context"`
 
 Flags:
-  --topic <topic-id>           Topic id or unique prefix to message.
+  <topic-id>                   Topic id or unique prefix to message.
   --thread <thread-id>         Backing thread id for thread-scoped message fallback.
   --thread-id <thread-id>      Backing thread id for thread-scoped message fallback.
   --body <text>                Message body text.
@@ -4070,7 +4070,7 @@ Local Help: topics messages
   - `anx topics messages <topic-id> --max-events 5 --mine`
 
 Flags:
-  --topic <topic-id>           Topic id or unique prefix whose messages should be listed.
+  <topic-id>                   Topic id or unique prefix whose messages should be listed.
   --max-events <n>             Return at most N most-recent matching messages.
   --mine                       Filter to messages authored by the active profile actor_id.
   --actor-id <actor-id>        Filter to one actor id.
@@ -4099,7 +4099,7 @@ Local Help: topics reply
   - `anx topics reply <topic-id> --to <message-id> --body-file reply.md`
 
 Flags:
-  --topic <topic-id>           Topic id or unique prefix to reply on.
+  <topic-id>                   Topic id or unique prefix to reply on.
   --thread <thread-id>         Backing thread id for thread-scoped reply fallback.
   --thread-id <thread-id>      Backing thread id for thread-scoped reply fallback.
   --to <message-id>            Message/event id or unique prefix being replied to.
@@ -4236,7 +4236,7 @@ Local Help: cards message
   - `cat update.md | anx cards message <card-id>`
 
 Flags:
-  --card <card-id>             Card id or unique prefix to message.
+  <card-id>                    Card id or unique prefix to message.
   --body <text>                Message body text.
   --body-file <path>           Load message body text from a local file.
   --summary <text>             Optional short event summary.
@@ -4265,10 +4265,10 @@ Local Help: cards messages
 - Examples:
   - `anx cards messages <card-id>`
   - `anx cards messages <card-id> --max-events 5 --mine`
-  - `anx cards messages --card <card-id> --full-id`
+  - `anx cards messages <card-id> --full-id`
 
 Flags:
-  --card <card-id>             Card id or unique prefix whose messages should be listed.
+  <card-id>                    Card id or unique prefix whose messages should be listed.
   --max-events <n>             Return at most N most-recent matching messages.
   --mine                       Filter to messages authored by the active profile actor_id.
   --actor-id <actor-id>        Filter to one actor id.
@@ -4297,7 +4297,7 @@ Local Help: cards reply
   - `anx cards reply <card-id> --to <message-id> --body-file reply.md`
 
 Flags:
-  --card <card-id>             Card id or unique prefix to reply on.
+  <card-id>                    Card id or unique prefix to reply on.
   --to <message-id>            Message/event id or unique prefix being replied to.
   --body <text>                Reply body text.
   --body-file <path>           Load reply body text from a local file.
@@ -4325,12 +4325,12 @@ Local Help: cards revise
 - Composition: Fetches the card when needed for optimistic concurrency, then sends `cards.revisions.create` with `summary` from `--content-file` and optional `title`.
 - JSON body: `{ if_base_revision, revision: { title?, summary?, definition_of_done? }, actor_id? }`; discovers `if_base_revision` from `cards get` when omitted.
 - Examples:
-  - `anx cards revise --card <card-id> --content-file card.md`
-  - `anx cards revise --card <card-id> --title "Updated title" --content-file card.md`
-  - `anx cards revise --card <card-id> --from-file card-revision.json`
+  - `anx cards revise <card-id> --content-file card.md`
+  - `anx cards revise <card-id> --title "Updated title" --content-file card.md`
+  - `anx cards revise <card-id> --from-file card-revision.json`
 
 Flags:
-  --card <card-id>             Card id or unique prefix to revise.
+  <card-id>                    Card id or unique prefix to revise.
   --content-file <path>        Load revised card summary/body text from a local file.
   --title <text>               Optional revised card title.
   --if-base-revision <revision-id> Base card revision id; discovered when omitted.
@@ -4359,7 +4359,7 @@ Local Help: threads message
   - `anx threads message <thread-id> --body "Diagnostic note"`
 
 Flags:
-  --thread <thread-id>         Thread id or unique prefix to message.
+  <thread-id>                  Thread id or unique prefix to message.
   --body <text>                Message body text.
   --body-file <path>           Load message body text from a local file.
   --summary <text>             Optional short event summary.
@@ -4390,7 +4390,7 @@ Local Help: threads reply
   - `anx threads reply <thread-id> --to <message-id> --body-file reply.md`
 
 Flags:
-  --thread <thread-id>         Thread id or unique prefix to reply on.
+  <thread-id>                  Thread id or unique prefix to reply on.
   --to <message-id>            Message/event id or unique prefix being replied to.
   --body <text>                Reply body text.
   --body-file <path>           Load reply body text from a local file.
@@ -4418,11 +4418,11 @@ Local Help: cards move
 - Composition: Fetches the card and parent board when needed for optimistic concurrency, then sends `cards.move`.
 - JSON body: `{ column_key, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.
 - Examples:
-  - `anx cards move --card <card-id> --column review`
-  - `anx cards move --card <card-id> --column blocked --if-board-updated-at <updated-at>`
+  - `anx cards move <card-id> --column review`
+  - `anx cards move <card-id> --column blocked --if-board-updated-at <updated-at>`
 
 Flags:
-  --card <card-id>             Card id or unique prefix to move.
+  <card-id>                    Card id or unique prefix to move.
   --column <key>               Target board column.
   --if-board-updated-at <timestamp> Board optimistic concurrency token; discovered when omitted.
   --from-file <path>           Advanced JSON move request body from file.
@@ -4446,11 +4446,11 @@ Local Help: cards assign
 - Composition: Builds a focused `cards.patch` request for the Card ownership field.
 - JSON body: `{ patch: { assignee_refs }, if_updated_at, actor_id? }`; discovers `if_updated_at` from `cards get` when omitted.
 - Examples:
-  - `anx cards assign --card <card-id> --assignee-ref actor:<actor-id>`
-  - `anx cards assign --card <card-id> --clear`
+  - `anx cards assign <card-id> --assignee-ref actor:<actor-id>`
+  - `anx cards assign <card-id> --clear`
 
 Flags:
-  --card <card-id>             Card id or unique prefix to assign.
+  <card-id>                    Card id or unique prefix to assign.
   --assignee-ref <typed-ref>   Assignee actor typed ref, repeatable.
   --clear                      Clear all assignees.
   --if-updated-at <timestamp>  Card optimistic concurrency token; discovered when omitted.
@@ -4474,11 +4474,11 @@ Local Help: cards resolve
 - Composition: With `--body` or `--body-file`, posts a card message first and passes its `event:<id>` as terminal resolution evidence.
 - JSON body: `{ column_key: "done", resolution, resolution_refs, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.
 - Examples:
-  - `anx cards resolve --card <card-id> --body-file evidence.md`
-  - `anx cards resolve --card <card-id> --resolution-ref event:<event-id>`
+  - `anx cards resolve <card-id> --body-file evidence.md`
+  - `anx cards resolve <card-id> --resolution-ref event:<event-id>`
 
 Flags:
-  --card <card-id>             Card id or unique prefix to resolve.
+  <card-id>                    Card id or unique prefix to resolve.
   --resolution-ref <typed-ref> Evidence event/artifact typed ref, repeatable.
   --body <text>                Post inline evidence to the card thread before resolving.
   --body-file <path>           Load evidence text from a file before resolving.
@@ -4506,11 +4506,11 @@ Local Help: cards reopen
 - Composition: Builds a focused `cards.move` request. The default reopened column is `ready`.
 - JSON body: `{ column_key, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.
 - Examples:
-  - `anx cards reopen --card <card-id>`
-  - `anx cards reopen --card <card-id> --column backlog`
+  - `anx cards reopen <card-id>`
+  - `anx cards reopen <card-id> --column backlog`
 
 Flags:
-  --card <card-id>             Card id or unique prefix to reopen.
+  <card-id>                    Card id or unique prefix to reopen.
   --column <key>               Target reopened column; defaults to ready.
   --if-board-updated-at <timestamp> Board optimistic concurrency token; discovered when omitted.
 
@@ -4702,11 +4702,11 @@ Local Help: boards workspace
 - Composition: Resolves a board by id, fetches the projection workspace with per-card thread backing and renders cards grouped by canonical column order (backlog, ready, in_progress, blocked, review, done).
 - JSON body: `board_id`, `board`, `primary_topic`, `cards`, `documents`, `inbox`, `board_summary`, `projection_freshness`, `board_summary_freshness`, `warnings`, `section_kinds`, `generated_at`
 - Examples:
-  - `anx boards workspace --board-id <board-id>`
-  - `anx boards workspace --board-id board_product_launch`
+  - `anx boards workspace <board-id>`
+  - `anx boards workspace board_product_launch`
 
 Flags:
-  --board-id <board-id>        Board id or unique prefix to load.
+  <board-id>                   Board id or unique prefix to load.
 
 
 Global flags:
@@ -4727,12 +4727,11 @@ Local Help: boards cards list
 - Composition: Fetches the raw card list for a board ordered by canonical column sequence and per-column rank. Default text leads with canonical card ids and titles; thread ids are secondary context.
 - JSON body: `board_id`, `cards`
 - Examples:
-  - `anx boards cards list --board-id <board-id>`
   - `anx boards cards list <board-id>`
   - `anx boards cards list <board-id> --full-id`
 
 Flags:
-  --board-id <board-id>        Board id or unique prefix to list cards for.
+  <board-id>                   Board id or unique prefix to list cards for.
   --full-id                    Render full card ids in default text output.
 
 
@@ -4776,14 +4775,13 @@ Local Help: docs revise
 - Composition: Fetches the current document revision, discovers the base revision when omitted, computes a local diff, and stages a proposal. Add `--apply` to direct-write the revision; use `--apply --proposal-id <id>` to apply a staged proposal.
 - JSON body: Proposal mode returns `proposal_id`, `target_command_id`, `path`, `body`, `diff`, `apply_command`; `--apply` sends the revision immediately or applies a staged proposal.
 - Examples:
-  - `anx docs revise --document-id <document-id> --content-file notes.md`
+  - `anx docs revise <document-id> --content-file notes.md`
   - `anx docs revise --apply --proposal-id <proposal-id>`
-  - `anx docs revise --apply --document-id <document-id> --content-file notes.md`
-  - `cat revision.json | anx docs revise --document-id <document-id>`
+  - `anx docs revise --apply <document-id> --content-file notes.md`
+  - `cat revision.json | anx docs revise <document-id>`
 
 Flags:
-  --document-id <document-id>  Document id to revise.
-  --document <document-id>     Same as --document-id.
+  <document-id>                Document id to revise.
   --content-file <path>        Load revised Markdown/text content from a local file.
   --from-file <path>           Advanced JSON revision body from a file.
   --actor-id <actor-id>        Actor id; defaults from the active profile when available.
@@ -4810,11 +4808,10 @@ Local Help: docs content
 - Composition: Loads `docs get`, then renders the current revision content and metadata in one operator-friendly response.
 - JSON body: `document`, `revision`, `content`, `status_code`, `headers`
 - Examples:
-  - `anx docs content --document-id <document-id>`
   - `anx docs content <document-id-or-alias>`
 
 Flags:
-  --document-id <document-id>  Document id or unique alias to inspect.
+  <document-id>                Document id or unique alias to inspect.
 
 
 Global flags:
@@ -4835,11 +4832,11 @@ Local Help: docs messages
 - Composition: Fetches the Document, then reads its backing thread timeline and filters to messages attached to that document.
 - JSON body: Fetches the Document backing thread and returns an `events.list`-style filtered timeline slice with document metadata.
 - Examples:
-  - `anx docs messages --document-id <document-id>`
   - `anx docs messages <document-id>`
+  - `anx docs messages <document-id> --max-events 5 --mine`
 
 Flags:
-  --document-id <document-id>  Document id or unique alias.
+  <document-id>                Document id or unique alias.
   --max-events <n>             Return at most N most-recent matching messages.
   --mine                       Filter to messages authored by the active profile actor_id.
   --actor-id <actor-id>        Filter to one actor id.
@@ -4872,7 +4869,7 @@ Local Help: docs message
   - `anx docs message <document-id> --body "Reviewed the current revision"`
 
 Flags:
-  --document-id <document-id>  Document id or unique alias to message.
+  <document-id>                Document id or unique alias to message.
   --body <text>                Message body text.
   --body-file <path>           Load message body text from a local file.
   --summary <text>             Optional short event summary.
@@ -4903,7 +4900,7 @@ Local Help: docs reply
   - `anx docs reply <document-id> --to <message-id> --body-file reply.md`
 
 Flags:
-  --document-id <document-id>  Document id or unique alias to reply on.
+  <document-id>                Document id or unique alias to reply on.
   --to <message-id>            Message/event id or unique prefix being replied to.
   --body <text>                Reply body text.
   --body-file <path>           Load reply body text from a local file.

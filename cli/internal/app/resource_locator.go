@@ -19,6 +19,7 @@ type resourceLocator struct {
 }
 
 func parseRawIDArg(args []string, idFlag string, idLabel string) (string, error) {
+	leadingID, args := popLeadingPositional(args)
 	fs := newSilentFlagSet(idLabel)
 	var idArgFlag trackedString
 	fs.Var(&idArgFlag, idFlag, idLabel)
@@ -26,7 +27,7 @@ func parseRawIDArg(args []string, idFlag string, idLabel string) (string, error)
 		return "", errnorm.Usage("invalid_flags", err.Error())
 	}
 	positionals := fs.Args()
-	id := strings.TrimSpace(idArgFlag.value)
+	id := firstNonEmpty(strings.TrimSpace(idArgFlag.value), leadingID)
 	if id == "" && len(positionals) > 0 {
 		id = strings.TrimSpace(positionals[0])
 		positionals = positionals[1:]
