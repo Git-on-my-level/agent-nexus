@@ -88,6 +88,10 @@ func preflightKnownCommandShape(args []string) error {
 		return preflightSubcommand(args[1:], secretSubcommandSpec)
 	case "workspace":
 		return preflightWorkspaceSubcommand(args[1:])
+	case "read":
+		return nil
+	case "url":
+		return nil
 	case "actors":
 		return preflightSubcommand(args[1:], actorsSubcommandSpec)
 	case "threads":
@@ -270,7 +274,7 @@ func preflightFlagUsage(args []string, spec map[string]preflightFlagSpec) error 
 func preflightRootCommands() map[string]struct{} {
 	return map[string]struct{}{
 		"version": {}, "doctor": {}, "update": {}, "bridge": {}, "auth": {}, "config": {}, "meta": {}, "notifications": {},
-		"import": {}, "draft": {}, "provenance": {}, "human": {}, "secret": {}, "workspace": {}, "concepts": {}, "primitives": {},
+		"import": {}, "draft": {}, "provenance": {}, "human": {}, "secret": {}, "workspace": {}, "read": {}, "url": {}, "concepts": {}, "primitives": {},
 		"actors": {}, "threads": {}, "topics": {}, "ref-edges": {}, "cards": {}, "artifacts": {}, "boards": {}, "docs": {}, "events": {},
 		"inbox": {}, "derived": {}, "api": {}, "help": {}, "--help": {}, "-h": {},
 	}

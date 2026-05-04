@@ -641,7 +641,7 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 		result, err := a.invokeTypedJSON(ctx, cfg, "threads list", "threads.list", nil, query, nil)
 		return result, "threads list", err
 	case "get":
-		id, err := parseIDArg(args[1:], "thread-id", "thread id")
+		id, err := parseResourceIDArg(args[1:], "thread-id", "thread id", "thread")
 		if err != nil {
 			return nil, "threads get", err
 		}
@@ -1092,7 +1092,7 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 		result, err := a.invokeTypedJSON(ctx, cfg, "artifacts list", "artifacts.list", nil, query, nil)
 		return result, "artifacts list", err
 	case "get":
-		id, err := parseIDArg(args[1:], "artifact-id", "artifact id")
+		id, err := parseResourceIDArg(args[1:], "artifact-id", "artifact id", "artifact")
 		if err != nil {
 			return nil, "artifacts get", err
 		}
@@ -1114,7 +1114,7 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 			return nil, "artifacts create", err
 		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "artifacts create", "artifacts.create", nil, nil, body)
-		return result, "artifacts create", callErr
+		return addResourceURLToResult(cfg, "artifacts.create", result), "artifacts create", callErr
 	case "content":
 		fs := newSilentFlagSet("artifacts content")
 		var artifactIDFlag trackedString
@@ -1391,9 +1391,9 @@ func (a *App) runBoardsCommand(ctx context.Context, args []string, cfg config.Re
 			return dryRunResult("boards create", "boards.create", nil, nil, body), "boards create", nil
 		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "boards create", "boards.create", nil, nil, body)
-		return result, "boards create", callErr
+		return addResourceURLToResult(cfg, "boards.create", result), "boards create", callErr
 	case "get":
-		id, err := parseIDArg(args[1:], "board-id", "board id")
+		id, err := parseResourceIDArg(args[1:], "board-id", "board id", "board")
 		if err != nil {
 			return nil, "boards get", err
 		}
@@ -1430,7 +1430,7 @@ func (a *App) runBoardsCommand(ctx context.Context, args []string, cfg config.Re
 		)
 		return result, "boards patch", callErr
 	case "workspace":
-		id, err := parseIDArg(args[1:], "board-id", "board id")
+		id, err := parseResourceIDArg(args[1:], "board-id", "board id", "board")
 		if err != nil {
 			return nil, "boards workspace", err
 		}
@@ -1731,7 +1731,7 @@ func (a *App) runBoardCardsCommand(ctx context.Context, args []string, cfg confi
 			ensureEmptyListDefaults(bodyMap, "card", []string{"assignee_refs", "resolution_refs", "related_refs"})
 		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "boards cards create", "boards.cards.create", map[string]string{"board_id": boardID}, nil, body)
-		return result, "boards cards create", callErr
+		return addResourceURLToResult(cfg, "boards.cards.create", result), "boards cards create", callErr
 	case "create-batch":
 		boardID, body, err := a.parseBoardBatchCardCreateInput(ctx, args[1:], cfg, "boards cards create-batch")
 		if err != nil {
@@ -1851,9 +1851,9 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 			return dryRunResult("docs create", "docs.create", nil, nil, body), "docs create", nil
 		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "docs create", "docs.create", nil, nil, body)
-		return result, "docs create", callErr
+		return addResourceURLToResult(cfg, "docs.create", result), "docs create", callErr
 	case "get":
-		id, err := parseIDArg(args[1:], "document-id", "document id")
+		id, err := parseResourceIDArg(args[1:], "document-id", "document id", "document")
 		if err != nil {
 			return nil, "docs get", err
 		}
@@ -1905,7 +1905,7 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 		result, callErr := a.runDocsReviseCommand(ctx, args[1:], cfg)
 		return result, "docs revise", callErr
 	case "history":
-		id, err := parseIDArg(args[1:], "document-id", "document id")
+		id, err := parseResourceIDArg(args[1:], "document-id", "document id", "document")
 		if err != nil {
 			return nil, "docs history", err
 		}
@@ -2361,7 +2361,7 @@ func (a *App) runEventsCommand(ctx context.Context, args []string, cfg config.Re
 }
 
 func (a *App) runArtifactsInspectCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
-	id, err := parseIDArg(args, "artifact-id", "artifact id")
+	id, err := parseResourceIDArg(args, "artifact-id", "artifact id", "artifact")
 	if err != nil {
 		return nil, err
 	}
@@ -2433,7 +2433,7 @@ func (a *App) runArtifactsInspectCommand(ctx context.Context, args []string, cfg
 }
 
 func (a *App) runDocsContentCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
-	id, err := parseIDArg(args, "document-id", "document id")
+	id, err := parseResourceIDArg(args, "document-id", "document id", "document")
 	if err != nil {
 		return nil, err
 	}
@@ -4160,20 +4160,9 @@ func (a *App) resolveMaybeThreadID(ctx context.Context, cfg config.Resolved, raw
 }
 
 func parseIDArg(args []string, idFlag string, idLabel string) (string, error) {
-	fs := newSilentFlagSet(idLabel)
-	var idArgFlag trackedString
-	fs.Var(&idArgFlag, idFlag, idLabel)
-	if err := fs.Parse(args); err != nil {
-		return "", errnorm.Usage("invalid_flags", err.Error())
-	}
-	positionals := fs.Args()
-	id := strings.TrimSpace(idArgFlag.value)
-	if id == "" && len(positionals) > 0 {
-		id = strings.TrimSpace(positionals[0])
-		positionals = positionals[1:]
-	}
-	if len(positionals) > 0 {
-		return "", errnorm.Usage("invalid_args", "too many positional arguments")
+	id, err := parseRawIDArg(args, idFlag, idLabel)
+	if err != nil {
+		return "", err
 	}
 	if err := validateID(id, idLabel); err != nil {
 		return "", err
