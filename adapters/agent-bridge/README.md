@@ -8,7 +8,7 @@ This package implements three things:
 
 1. **Wake registration metadata** stored on the authenticated ANX principal
 2. **Bridge readiness check-ins** via `POST /agent-bridge/check-in` plus `PATCH /agents/me` registration fields (no workspace event log entry)
-3. **Pluggable local adapters** that consume agent notifications / wake queue deliveries and invoke code you write (subprocess JSON, the bundled Hermes ACP subprocess adapter, or optional in-process Python plugin)
+3. **Pluggable local adapters** that consume agent notifications / wake queue deliveries and invoke code you write (subprocess JSON, the bundled Hermes ACP/OpenClaw subprocess adapters, or optional in-process Python plugin)
 
 ## Adapter kinds
 
@@ -28,6 +28,23 @@ kind = "hermes"
 The bundled adapter starts Hermes over ACP stdio through the same subprocess isolation used by custom adapters, creates or resumes an ACP session, collects only user-visible ACP `agent_message_chunk` text from the active prompt turn, and returns the response through the stable bridge JSON contract. ACP `agent_thought_chunk`, tool updates, plans, usage, and session history replay are intentionally ignored so internal Hermes reasoning/progress never leaks into ANX `message_posted` replies. It discovers the Hermes binary from `HERMES_BIN`, `[adapter].hermes_bin`, or `hermes` on `PATH`. Optional controls: `HERMES_ARGS` / `[adapter].hermes_args`, `HERMES_CWD` / `[adapter].hermes_cwd`, `HERMES_INTERACTIVE` / `[adapter].interactive`, and `[adapter].command` when you need to override the Python module entrypoint.
 
 Do not wrap Hermes CLI output with a generic `subprocess` adapter unless you are deliberately maintaining a custom integration. Flattened Hermes stdout/stderr responses cannot reliably distinguish final answer text from reasoning/progress artifacts; use `kind = "hermes"` for Hermes wake handling.
+
+### `openclaw` (recommended for OpenClaw operators)
+
+`anx bridge init-config --kind openclaw` writes a config that uses the bundled adapter:
+
+```toml
+[bridge]
+driver_kind = "openclaw"
+adapter_kind = "openclaw"
+
+[adapter]
+kind = "openclaw"
+```
+
+The bundled adapter calls `openclaw agent --session-id anx-<id> --message <prompt> --json` synchronously and returns the final visible response through the stable bridge JSON contract. It creates a fresh OpenClaw session id per wake because targeting a shared or main OpenClaw session can block when that session is already busy. It discovers `openclaw` from `OPENCLAW_BIN`, `[adapter].openclaw_bin`, or `openclaw` on `PATH`, and discovers `anx` from `ANX_CLI_BIN`, `[adapter].anx_cli_bin`, or `anx` on `PATH`. Config generation writes absolute binary paths when it can detect them, which avoids OpenClaw gateway PATH differences.
+
+Doctor mode checks `openclaw gateway status`. Response extraction prefers the last meaningful payload text in the OpenClaw JSON envelope, then falls back to final visible text fields.
 
 ### `subprocess` (recommended for custom non-Hermes adapters)
 
@@ -152,6 +169,7 @@ Minimum config contract:
 - `wake.toml` with one or more `[[workspaces]]` entries; this is the local wake subscription source
 - bridge `[runtime] state_dir` optional; defaults under the agent home
 - **Hermes ACP:** generated as `[adapter] kind = "hermes"`, optional `command`, `hermes_bin`, `hermes_args`, `hermes_cwd`, `interactive`; this is the supported Hermes path because ACP separates final answer chunks from thought/tool updates
+- **OpenClaw:** generated as `[adapter] kind = "openclaw"`, optional `command`, `openclaw_bin`, `anx_cli_bin`, `openclaw_timeout_seconds`; this is the supported OpenClaw path because it uses isolated wake sessions and extracts the final response from OpenClaw JSON
 - **Subprocess:** `[adapter] kind = "subprocess"`, `command` (argv array), optional `cwd`, `env`, `timeout_seconds`, `doctor_timeout_seconds`, `doctor_command`
 
 ### JSON contract (subprocess)
@@ -170,7 +188,7 @@ Minimum config contract:
 ## First-time operator path
 
 1. `anx bridge install` and `anx-agent-bridge --version`
-2. For Hermes, `anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --handle <handle>`
+2. For Hermes, `anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --handle <handle>`; for OpenClaw, use `anx bridge init-config --kind openclaw --output ./bridge.toml --agent-home ./.anx --handle <handle>`
 3. If workspace discovery fails, rerun init-config with `--workspace-id <id>`; use the durable workspace id, never a slug or UI path segment.
 4. For custom adapters, use `--kind subprocess` or `--kind python-plugin`; validate subprocess adapters with `anx-agent-bridge adapter contract --config ./bridge.toml`
 5. `anx bridge import-auth --config ./bridge.toml --from-profile <agent>` when auth exists
@@ -184,6 +202,7 @@ Minimum config contract:
 - `anx_agent_bridge/bridge.py` - wake claim, adapter dispatch, reply/failure writeback
 - `anx_agent_bridge/adapters/adapter_contract.py` - JSON schemas and sample payloads
 - `anx_agent_bridge/adapters/hermes_acp.py` - bundled Hermes ACP subprocess adapter
+- `anx_agent_bridge/adapters/openclaw.py` - bundled OpenClaw subprocess adapter
 - `anx_agent_bridge/adapters/subprocess_adapter.py` - generic subprocess runner
 - `anx_agent_bridge/adapters/python_plugin.py` - explicit module loader
 - `anx_agent_bridge/adapters/deterministic_ack.py` - test-only canned replies

@@ -1,0 +1,23 @@
+agent_home = ".anx/openclaw"
+wake_config = "wake.toml"
+
+[bridge]
+driver_kind = "openclaw"
+adapter_kind = "openclaw"
+resume_policy = "resume_or_create"
+status = "pending"
+checkin_interval_seconds = 60
+checkin_ttl_seconds = 300
+
+[runtime]
+state_dir = "run/openclaw"
+
+[adapter]
+kind = "openclaw"
+timeout_seconds = 900
+doctor_timeout_seconds = 60
+# Prefer absolute paths because OpenClaw gateway environments may not inherit
+# the interactive shell PATH used during setup.
+# openclaw_bin = "/opt/homebrew/bin/openclaw"
+# anx_cli_bin = "/Users/you/.local/bin/anx"
+openclaw_timeout_seconds = 300

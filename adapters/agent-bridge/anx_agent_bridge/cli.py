@@ -167,8 +167,35 @@ def build_adapter(config: LoadedConfig):
             doctor_command=None,
             adapter_raw=dict(config.adapter.raw),
         )
+    if kind == "openclaw":
+        command = config.adapter.get_list("command")
+        if not command:
+            command = [sys.executable, "-m", "anx_agent_bridge.adapters.openclaw"]
+        cwd = config.adapter.get_str("cwd", "")
+        if cwd:
+            cwd_path = Path(cwd).expanduser()
+            if not cwd_path.is_absolute():
+                cwd_path = (config.config_dir / cwd_path).resolve()
+            cwd = str(cwd_path)
+        else:
+            cwd = str(config.config_dir)
+        env_raw = config.adapter.raw.get("env")
+        env_str: dict[str, str] | None = None
+        if isinstance(env_raw, dict):
+            env_str = {str(k): str(v) for k, v in env_raw.items()}
+        return SubprocessAdapter(
+            command=command,
+            handle=config.agent.handle,
+            workspace_id=config.anx.workspace_id,
+            cwd=cwd,
+            env=env_str,
+            dispatch_timeout_seconds=config.adapter.get_int("timeout_seconds", 900),
+            doctor_timeout_seconds=config.adapter.get_int("doctor_timeout_seconds", 60),
+            doctor_command=None,
+            adapter_raw=dict(config.adapter.raw),
+        )
     raise ValueError(
-        f"Unsupported adapter kind: {kind!r}; use hermes, subprocess, python_plugin, or deterministic_ack (tests only)"
+        f"Unsupported adapter kind: {kind!r}; use hermes, openclaw, subprocess, python_plugin, or deterministic_ack (tests only)"
     )
 
 

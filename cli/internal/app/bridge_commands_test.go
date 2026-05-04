@@ -108,6 +108,39 @@ func TestRenderBridgeHermesTemplate(t *testing.T) {
 	}
 }
 
+func TestRenderBridgeOpenClawTemplate(t *testing.T) {
+	rendered, handle, err := renderBridgeConfigTemplate(bridgeTemplateParams{
+		Kind:          "openclaw",
+		BaseURL:       "https://anx.example",
+		WorkspaceIDs:  []string{"ws_main"},
+		WorkspaceName: "Main",
+		Handle:        "myagent",
+		OpenClawBin:   "/opt/homebrew/bin/openclaw",
+		ANXCLIBin:     "/Users/example/.local/bin/anx",
+	})
+	if err != nil {
+		t.Fatalf("renderBridgeConfigTemplate: %v", err)
+	}
+	if handle != "myagent" {
+		t.Fatalf("expected handle myagent, got %q", handle)
+	}
+	if !strings.Contains(rendered, `driver_kind = "openclaw"`) || !strings.Contains(rendered, `adapter_kind = "openclaw"`) {
+		t.Fatalf("expected openclaw bridge metadata output=%s", rendered)
+	}
+	if !strings.Contains(rendered, `kind = "openclaw"`) {
+		t.Fatalf("expected openclaw adapter kind output=%s", rendered)
+	}
+	if !strings.Contains(rendered, `openclaw_bin = "/opt/homebrew/bin/openclaw"`) || !strings.Contains(rendered, `anx_cli_bin = "/Users/example/.local/bin/anx"`) {
+		t.Fatalf("expected binary paths output=%s", rendered)
+	}
+	if !strings.Contains(rendered, `command = ["python3", "-m", "anx_agent_bridge.adapters.openclaw"]`) {
+		t.Fatalf("expected optional openclaw module command hint output=%s", rendered)
+	}
+	if !strings.Contains(rendered, "fresh --session-id") {
+		t.Fatalf("expected isolated session comment output=%s", rendered)
+	}
+}
+
 func TestBridgeInstallPackageSpecDefaultsToRepoSubdirectory(t *testing.T) {
 	spec := bridgeInstallPackageSpec("v0.0.6")
 	if !strings.Contains(spec, "agent-nexus.git@v0.0.6#subdirectory=adapters/agent-bridge") {
@@ -523,6 +556,37 @@ func TestBridgeInitConfigHermesWritesBundledAdapter(t *testing.T) {
 	body := string(content)
 	if !strings.Contains(body, `adapter_kind = "hermes"`) || !strings.Contains(body, `kind = "hermes"`) {
 		t.Fatalf("expected hermes adapter config, content=%s", body)
+	}
+}
+
+func TestBridgeInitConfigOpenClawWritesBundledAdapter(t *testing.T) {
+	dir := t.TempDir()
+	outputPath := filepath.Join(dir, "agent.toml")
+	app := New()
+	result, err := app.runBridgeInitConfig(context.Background(), []string{
+		"--kind", "openclaw",
+		"--output", outputPath,
+		"--workspace-id", "ws_main",
+		"--handle", "myagent",
+		"--openclaw-bin", "/opt/homebrew/bin/openclaw",
+		"--anx-cli-bin", "/Users/example/.local/bin/anx",
+	}, config.Resolved{})
+	if err != nil {
+		t.Fatalf("runBridgeInitConfig: %v", err)
+	}
+	if !strings.Contains(result.Text, "OpenClaw gateway") {
+		t.Fatalf("expected openclaw doctor next step in output=%s", result.Text)
+	}
+	content, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("read output config: %v", err)
+	}
+	body := string(content)
+	if !strings.Contains(body, `adapter_kind = "openclaw"`) || !strings.Contains(body, `kind = "openclaw"`) {
+		t.Fatalf("expected openclaw adapter config, content=%s", body)
+	}
+	if !strings.Contains(body, `openclaw_bin = "/opt/homebrew/bin/openclaw"`) || !strings.Contains(body, `anx_cli_bin = "/Users/example/.local/bin/anx"`) {
+		t.Fatalf("expected openclaw binary config, content=%s", body)
 	}
 }
 

@@ -7,6 +7,7 @@ from anx_agent_bridge import __version__
 from anx_agent_bridge import cli as cli_module
 from anx_agent_bridge.cli import build_adapter, build_parser
 from anx_agent_bridge.config import ANXConfig, AdapterConfig, AgentConfig, LoadedConfig
+from anx_agent_bridge.adapters.subprocess_adapter import SubprocessAdapter
 from anx_agent_bridge.registry import RegistrationStatusResult
 
 
@@ -111,6 +112,28 @@ def test_build_adapter_hermes_uses_bundled_module(tmp_path: Path):
     assert adapter.command[-2:] == ["-m", "anx_agent_bridge.adapters.hermes_acp"]
     assert adapter.dispatch_timeout_seconds == 900
     assert adapter.adapter_raw["kind"] == "hermes"
+
+
+def test_build_adapter_openclaw_uses_bundled_module(tmp_path: Path):
+    cfg = LoadedConfig(
+        anx=ANXConfig(base_url="http://127.0.0.1:8000", workspace_id="ws_1", workspace_name="Main"),
+        agent=AgentConfig(
+            handle="openclaw",
+            driver_kind="openclaw",
+            adapter_kind="openclaw",
+            state_dir=tmp_path / "state",
+        ),
+        adapter=AdapterConfig(raw={"kind": "openclaw"}),
+        auth_state_path=tmp_path / "auth.json",
+        config_dir=tmp_path,
+    )
+
+    adapter = build_adapter(cfg)
+
+    assert isinstance(adapter, SubprocessAdapter)
+    assert adapter.command[-2:] == ["-m", "anx_agent_bridge.adapters.openclaw"]
+    assert adapter.dispatch_timeout_seconds == 900
+    assert adapter.adapter_raw["kind"] == "openclaw"
 
 
 def test_adapter_contract_subcommand_is_available():

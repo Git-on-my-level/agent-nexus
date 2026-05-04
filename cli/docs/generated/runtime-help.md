@@ -462,10 +462,11 @@ Config generation
 Generate minimal configs from the CLI:
 
   anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --handle <handle>
+  anx bridge init-config --kind openclaw --output ./bridge.toml --agent-home ./.anx --handle <handle> --openclaw-bin /opt/homebrew/bin/openclaw
   anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --handle <handle> --adapter-entrypoint ./adapter.py
   anx bridge init-config --kind python-plugin --output ./bridge.toml --agent-home ./.anx --workspace-id <workspace-id> --workspace-id <workspace-id-2> --handle <handle> --plugin-module my_bridge --plugin-factory build_adapter
 
-Use `--kind hermes` for the bundled Hermes ACP subprocess adapter. Use `subprocess` or `python-plugin` when you own a custom adapter implementation.
+Use `--kind hermes` for the bundled Hermes ACP subprocess adapter and `--kind openclaw` for the bundled OpenClaw subprocess adapter. Use `subprocess` or `python-plugin` when you own a custom adapter implementation.
 
 This scaffolds an explicit agent home:
 
@@ -501,6 +502,10 @@ First-time agent-host path
 2. Render the bridge runtime config and agent home. For Hermes ACP:
 
   anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --handle <handle>
+
+  For OpenClaw:
+
+  anx bridge init-config --kind openclaw --output ./bridge.toml --agent-home ./.anx --handle <handle> --openclaw-bin /opt/homebrew/bin/openclaw
 
   For a custom subprocess adapter, render the config and then inspect the JSON contract with `anx-agent-bridge adapter contract --config ./bridge.toml`:
 
@@ -638,6 +643,10 @@ Preferred path when you are using `anx-agent-bridge`
 2. Generate the agent config. For Hermes ACP, use the bundled adapter:
 
   anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --handle <handle>
+
+  For OpenClaw, use the bundled adapter:
+
+  anx bridge init-config --kind openclaw --output ./bridge.toml --agent-home ./.anx --handle <handle> --openclaw-bin /opt/homebrew/bin/openclaw
 
   For custom adapters, use subprocess JSON or python_plugin:
 
@@ -1153,7 +1162,7 @@ Subcommands
 Recommended order
 
 1. `anx bridge install`
-2. `anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --handle <handle> --adapter-entrypoint ./adapter.py` (add `--workspace-id <workspace-id>` only if discovery fails or you need an explicit binding)
+2. `anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --handle <handle>`, `--kind openclaw`, or `--kind subprocess --adapter-entrypoint ./adapter.py` (add `--workspace-id <workspace-id>` only if discovery fails or you need an explicit binding)
 3. `anx bridge workspace-id --handle <handle>` if a wake registration already exists and you want to reuse its bindings
 4. `anx bridge import-auth --config ./bridge.toml --from-profile <agent>` when matching `anx` auth already exists
 5. `anx-agent-bridge auth register ...` for the agent principal when auth does not already exist
@@ -5019,11 +5028,12 @@ Local Help: bridge init-config
 - JSON body: `kind`, `output`, `agent_home`, `workspace_ids`, `workspace_id_source`, `handle`, `content`
 - Examples:
   - `anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --handle myagent`
+  - `anx bridge init-config --kind openclaw --output ./bridge.toml --agent-home ./.anx --handle myagent --openclaw-bin /opt/homebrew/bin/openclaw`
   - `anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --handle myagent --adapter-entrypoint ./adapter.py`
   - `anx bridge init-config --kind python-plugin --output ./bridge.toml --agent-home ./.anx --workspace-id ws_main --workspace-id ws_ops --handle myagent --plugin-module my_bridge --plugin-factory build_adapter`
 
 Flags:
-  --kind <hermes|subprocess|python-plugin> Template kind to render.
+  --kind <hermes|openclaw|subprocess|python-plugin> Template kind to render.
   --output <path>              Write the rendered TOML to a file. Omit to print it.
   --agent-home <dir>           Agent home directory for identity, auth, wake config, state, and logs. Default: ./.anx.
   --base-url <url>             ANX base URL for agent.toml identity and wake.toml workspace entries.
@@ -5033,6 +5043,8 @@ Flags:
   --handle <name>              Agent handle (required); must match the principal username for bridge-managed registration.
   --auth-state-path <path>     Optional agent-home-relative auth state path override.
   --state-dir <path>           Optional agent-home-relative bridge state directory.
+  --openclaw-bin <path>        OpenClaw template: absolute path for `[adapter].openclaw_bin`; auto-detected when omitted.
+  --anx-cli-bin <path>         OpenClaw template: absolute path for `[adapter].anx_cli_bin`; auto-detected when omitted.
   --adapter-entrypoint <path>  Subprocess template: script path used as the second element of `[adapter].command` after python3.
   --plugin-module <module>     python-plugin template: Python module for `[adapter].plugin_module`.
   --plugin-factory <callable>  python-plugin template: factory name for `[adapter].plugin_factory`.

@@ -67,6 +67,10 @@ Preferred path when you are using <<tick>>anx-agent-bridge<<tick>>
 
   anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --handle <handle>
 
+  For OpenClaw, use the bundled adapter:
+
+  anx bridge init-config --kind openclaw --output ./bridge.toml --agent-home ./.anx --handle <handle> --openclaw-bin /opt/homebrew/bin/openclaw
+
   For custom adapters, use subprocess JSON or python_plugin:
 
   anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --handle <handle> --adapter-entrypoint ./adapter.py

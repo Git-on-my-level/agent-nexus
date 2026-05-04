@@ -100,11 +100,12 @@ func init() {
 			Composition: "Local helper. Renders a bridge runtime config that references an explicit agent home, plus agent.toml and wake.toml when --output is used. If --workspace-id is omitted, discovers the durable workspace id from the active profile or core handshake.",
 			Examples: []string{
 				"anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --handle myagent",
+				"anx bridge init-config --kind openclaw --output ./bridge.toml --agent-home ./.anx --handle myagent --openclaw-bin /opt/homebrew/bin/openclaw",
 				"anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --handle myagent --adapter-entrypoint ./adapter.py",
 				"anx bridge init-config --kind python-plugin --output ./bridge.toml --agent-home ./.anx --workspace-id ws_main --workspace-id ws_ops --handle myagent --plugin-module my_bridge --plugin-factory build_adapter",
 			},
 			Flags: []localHelperFlag{
-				{Name: "--kind <hermes|subprocess|python-plugin>", Description: "Template kind to render."},
+				{Name: "--kind <hermes|openclaw|subprocess|python-plugin>", Description: "Template kind to render."},
 				{Name: "--output <path>", Description: "Write the rendered TOML to a file. Omit to print it."},
 				{Name: "--agent-home <dir>", Description: "Agent home directory for identity, auth, wake config, state, and logs. Default: ./.anx."},
 				{Name: "--base-url <url>", Description: "ANX base URL for agent.toml identity and wake.toml workspace entries."},
@@ -114,6 +115,8 @@ func init() {
 				{Name: "--handle <name>", Description: "Agent handle (required); must match the principal username for bridge-managed registration."},
 				{Name: "--auth-state-path <path>", Description: "Optional agent-home-relative auth state path override."},
 				{Name: "--state-dir <path>", Description: "Optional agent-home-relative bridge state directory."},
+				{Name: "--openclaw-bin <path>", Description: "OpenClaw template: absolute path for `[adapter].openclaw_bin`; auto-detected when omitted."},
+				{Name: "--anx-cli-bin <path>", Description: "OpenClaw template: absolute path for `[adapter].anx_cli_bin`; auto-detected when omitted."},
 				{Name: "--adapter-entrypoint <path>", Description: "Subprocess template: script path used as the second element of `[adapter].command` after python3."},
 				{Name: "--plugin-module <module>", Description: "python-plugin template: Python module for `[adapter].plugin_module`."},
 				{Name: "--plugin-factory <callable>", Description: "python-plugin template: factory name for `[adapter].plugin_factory`."},
@@ -224,7 +227,7 @@ Subcommands
 Recommended order
 
 1. `+"`anx bridge install`"+`
-2. `+"`anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --handle <handle> --adapter-entrypoint ./adapter.py`"+` (add `+"`--workspace-id <workspace-id>`"+` only if discovery fails or you need an explicit binding)
+2. `+"`anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --handle <handle>`"+`, `+"`--kind openclaw`"+`, or `+"`--kind subprocess --adapter-entrypoint ./adapter.py`"+` (add `+"`--workspace-id <workspace-id>`"+` only if discovery fails or you need an explicit binding)
 3. `+"`anx bridge workspace-id --handle <handle>`"+` if a wake registration already exists and you want to reuse its bindings
 4. `+"`anx bridge import-auth --config ./bridge.toml --from-profile <agent>`"+` when matching `+"`anx`"+` auth already exists
 5. `+"`anx-agent-bridge auth register ...`"+` for the agent principal when auth does not already exist
@@ -306,9 +309,9 @@ func (a *App) runBridgeInstall(ctx context.Context, args []string) (*commandResu
 		"Python: " + result.PythonRuntime.Command + " (" + result.PythonRuntime.Version + ")",
 		"Installed ref: " + result.PackageRef,
 		"Version: " + result.VersionLine,
-		"Next step: anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --handle <handle> --adapter-entrypoint ./adapter.py",
+		"Next step: anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --handle <handle>",
 		"Add --workspace-id <workspace-id> only if discovery fails or you need an explicit binding.",
-		"Alternative: --kind python-plugin with --plugin-module and --plugin-factory for in-process Python adapters.",
+		"Alternatives: --kind openclaw for OpenClaw, --kind subprocess with --adapter-entrypoint for custom JSON adapters, or --kind python-plugin with --plugin-module and --plugin-factory for in-process Python adapters.",
 		"Next step: anx bridge doctor --config ./bridge.toml once the bridge has checked in",
 	}
 	if !bridgePathContains(a.Getenv, result.BinDir) {
@@ -459,10 +462,12 @@ func (a *App) runBridgeInitConfig(ctx context.Context, args []string, cfg config
 	var authStateFlag trackedString
 	var stateDirFlag trackedString
 	var adapterEntryFlag trackedString
+	var openclawBinFlag trackedString
+	var anxCLIBinFlag trackedString
 	var pluginModuleFlag trackedString
 	var pluginFactoryFlag trackedString
 	var managedBridgeAutoFlag trackedBool
-	fs.Var(&kindFlag, "kind", "Template kind: hermes, subprocess, or python-plugin")
+	fs.Var(&kindFlag, "kind", "Template kind: hermes, openclaw, subprocess, or python-plugin")
 	fs.Var(&outputFlag, "output", "Write the rendered TOML to a file")
 	fs.Var(&agentHomeFlag, "agent-home", "Directory for this local agent identity")
 	fs.Var(&baseURLFlag, "base-url", "ANX base URL")
@@ -472,6 +477,8 @@ func (a *App) runBridgeInitConfig(ctx context.Context, args []string, cfg config
 	fs.Var(&handleFlag, "handle", "Agent handle for bridge templates")
 	fs.Var(&authStateFlag, "auth-state-path", "Auth state path")
 	fs.Var(&stateDirFlag, "state-dir", "Agent state dir")
+	fs.Var(&openclawBinFlag, "openclaw-bin", "OpenClaw template: absolute path for [adapter].openclaw_bin; auto-detected when omitted")
+	fs.Var(&anxCLIBinFlag, "anx-cli-bin", "OpenClaw template: absolute path for [adapter].anx_cli_bin; auto-detected when omitted")
 	fs.Var(&adapterEntryFlag, "adapter-entrypoint", "Subprocess template: path for [adapter].command after python3")
 	fs.Var(&pluginModuleFlag, "plugin-module", "python-plugin template: plugin_module value")
 	fs.Var(&pluginFactoryFlag, "plugin-factory", "python-plugin template: plugin_factory value")
@@ -537,6 +544,8 @@ func (a *App) runBridgeInitConfig(ctx context.Context, args []string, cfg config
 		AuthStatePath:            strings.TrimSpace(authStateFlag.value),
 		StateDir:                 strings.TrimSpace(stateDirFlag.value),
 		AdapterEntrypoint:        strings.TrimSpace(adapterEntryFlag.value),
+		OpenClawBin:              bridgeInitConfigOpenClawBin(strings.TrimSpace(openclawBinFlag.value)),
+		ANXCLIBin:                bridgeInitConfigANXCLIBin(strings.TrimSpace(anxCLIBinFlag.value)),
 		PluginModule:             strings.TrimSpace(pluginModuleFlag.value),
 		PluginFactory:            strings.TrimSpace(pluginFactoryFlag.value),
 		ManagedPackageAutoUpdate: managedAuto,
@@ -750,7 +759,7 @@ func (a *App) runBridgeWorkspaceID(ctx context.Context, args []string, cfg confi
 			repeated = append(repeated, "--workspace-id "+workspaceID)
 		}
 		lines = append(lines, "Next step: anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx "+strings.Join(repeated, " ")+" --handle "+handle)
-		lines = append(lines, "Or: --kind subprocess with --adapter-entrypoint for a custom JSON adapter, or --kind python-plugin with --plugin-module and --plugin-factory.")
+		lines = append(lines, "Or: --kind openclaw for OpenClaw, --kind subprocess with --adapter-entrypoint for a custom JSON adapter, or --kind python-plugin with --plugin-module and --plugin-factory.")
 	}
 	return &commandResult{
 		Text: strings.Join(lines, "\n"),
@@ -1028,6 +1037,8 @@ type bridgeTemplateParams struct {
 	AuthStatePath            string
 	StateDir                 string
 	AdapterEntrypoint        string
+	OpenClawBin              string
+	ANXCLIBin                string
 	PluginModule             string
 	PluginFactory            string
 	ManagedPackageAutoUpdate bool
@@ -1054,11 +1065,36 @@ func normalizeBridgeInitConfigKind(kind string) string {
 		return "python_plugin"
 	case "hermes":
 		return "hermes"
+	case "openclaw":
+		return "openclaw"
 	case "subprocess":
 		return "subprocess"
 	default:
 		return k
 	}
+}
+
+func bridgeInitConfigOpenClawBin(raw string) string {
+	if strings.TrimSpace(raw) != "" {
+		return raw
+	}
+	if path, err := exec.LookPath("openclaw"); err == nil {
+		return path
+	}
+	return ""
+}
+
+func bridgeInitConfigANXCLIBin(raw string) string {
+	if strings.TrimSpace(raw) != "" {
+		return raw
+	}
+	if exe, err := os.Executable(); err == nil && filepath.IsAbs(exe) {
+		return exe
+	}
+	if path, err := exec.LookPath("anx"); err == nil {
+		return path
+	}
+	return ""
 }
 
 func renderBridgeConfigTemplate(params bridgeTemplateParams) (string, string, error) {
@@ -1096,6 +1132,46 @@ doctor_timeout_seconds = 60
 # cwd = "."
 # interactive = false
 `, agentHome, bridgeTomlSnippetManagedAutoUpdate(params.ManagedPackageAutoUpdate), stateDir)) + "\n", handle, nil
+	case "openclaw":
+		handle := firstNonEmptyString(params.Handle, "<handle>")
+		stateDir := firstNonEmptyString(params.StateDir, "run/"+handle)
+		var openclawBinLine string
+		if strings.TrimSpace(params.OpenClawBin) != "" {
+			openclawBinLine = fmt.Sprintf("openclaw_bin = %q\n", strings.TrimSpace(params.OpenClawBin))
+		} else {
+			openclawBinLine = "# openclaw_bin = \"/absolute/path/to/openclaw\"\n"
+		}
+		var anxCLIBinLine string
+		if strings.TrimSpace(params.ANXCLIBin) != "" {
+			anxCLIBinLine = fmt.Sprintf("anx_cli_bin = %q\n", strings.TrimSpace(params.ANXCLIBin))
+		} else {
+			anxCLIBinLine = "# anx_cli_bin = \"/absolute/path/to/anx\"\n"
+		}
+		return strings.TrimSpace(fmt.Sprintf(`
+agent_home = %q
+wake_config = "wake.toml"
+
+[bridge]
+driver_kind = "openclaw"
+adapter_kind = "openclaw"
+resume_policy = "resume_or_create"
+status = "pending"
+checkin_interval_seconds = 60
+checkin_ttl_seconds = 300%s
+
+[runtime]
+state_dir = %q
+
+[adapter]
+kind = "openclaw"
+timeout_seconds = 900
+doctor_timeout_seconds = 60
+%s%sopenclaw_timeout_seconds = 300
+# OpenClaw wake handling uses a fresh --session-id for each wake so a busy
+# gateway/main session cannot deadlock agent delivery.
+# Optional override:
+# command = ["python3", "-m", "anx_agent_bridge.adapters.openclaw"]
+`, agentHome, bridgeTomlSnippetManagedAutoUpdate(params.ManagedPackageAutoUpdate), stateDir, openclawBinLine, anxCLIBinLine)) + "\n", handle, nil
 	case "subprocess":
 		handle := firstNonEmptyString(params.Handle, "<handle>")
 		stateDir := firstNonEmptyString(params.StateDir, "run/"+handle)
@@ -1147,13 +1223,16 @@ plugin_module = %q
 plugin_factory = %q
 `, agentHome, bridgeTomlSnippetManagedAutoUpdate(params.ManagedPackageAutoUpdate), stateDir, mod, fac)) + "\n", handle, nil
 	default:
-		return "", "", errnorm.Usage("invalid_request", "unknown bridge config kind; use hermes, subprocess, or python-plugin")
+		return "", "", errnorm.Usage("invalid_request", "unknown bridge config kind; use hermes, openclaw, subprocess, or python-plugin")
 	}
 }
 
 func bridgeInitConfigNextStep(kind string, outputPath string) string {
-	if normalizeBridgeInitConfigKind(kind) == "hermes" {
+	switch normalizeBridgeInitConfigKind(kind) {
+	case "hermes":
 		return "Next: run `anx bridge doctor --config " + outputPath + "` to verify Hermes and ACP readiness."
+	case "openclaw":
+		return "Next: run `anx bridge doctor --config " + outputPath + "` to verify OpenClaw gateway readiness."
 	}
 	return "Next: implement your adapter (subprocess JSON or python_plugin), then `anx-agent-bridge adapter contract --config " + outputPath + "`."
 }

@@ -53,10 +53,11 @@ Config generation
 Generate minimal configs from the CLI:
 
   anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --handle <handle>
+  anx bridge init-config --kind openclaw --output ./bridge.toml --agent-home ./.anx --handle <handle> --openclaw-bin /opt/homebrew/bin/openclaw
   anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --handle <handle> --adapter-entrypoint ./adapter.py
   anx bridge init-config --kind python-plugin --output ./bridge.toml --agent-home ./.anx --workspace-id <workspace-id> --workspace-id <workspace-id-2> --handle <handle> --plugin-module my_bridge --plugin-factory build_adapter
 
-Use <<tick>>--kind hermes<<tick>> for the bundled Hermes ACP subprocess adapter. Use <<tick>>subprocess<<tick>> or <<tick>>python-plugin<<tick>> when you own a custom adapter implementation.
+Use <<tick>>--kind hermes<<tick>> for the bundled Hermes ACP subprocess adapter and <<tick>>--kind openclaw<<tick>> for the bundled OpenClaw subprocess adapter. Use <<tick>>subprocess<<tick>> or <<tick>>python-plugin<<tick>> when you own a custom adapter implementation.
 
 This scaffolds an explicit agent home:
 
@@ -92,6 +93,10 @@ First-time agent-host path
 2. Render the bridge runtime config and agent home. For Hermes ACP:
 
   anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --handle <handle>
+
+  For OpenClaw:
+
+  anx bridge init-config --kind openclaw --output ./bridge.toml --agent-home ./.anx --handle <handle> --openclaw-bin /opt/homebrew/bin/openclaw
 
   For a custom subprocess adapter, render the config and then inspect the JSON contract with <<tick>>anx-agent-bridge adapter contract --config ./bridge.toml<<tick>>:
 
