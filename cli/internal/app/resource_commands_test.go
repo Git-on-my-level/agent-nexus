@@ -1301,6 +1301,63 @@ func TestDocsMessagesCommand(t *testing.T) {
 	}
 }
 
+func TestDocsMessageBuildsThreadScopedEventFromDocumentBackingThread(t *testing.T) {
+	t.Parallel()
+
+	const (
+		documentID   = "doc_message_123456"
+		threadID     = "thread_doc_message_123456"
+		profileActor = "actor_profile_doc_message"
+		eventID      = "event_doc_message_123456"
+	)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/docs/"+documentID:
+			_, _ = w.Write([]byte(`{"document":{"id":"` + documentID + `","title":"Message doc","thread_id":"` + threadID + `"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/events":
+			var posted map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&posted); err != nil {
+				t.Fatalf("decode docs message body: %v", err)
+			}
+			assertMessagePostedMutation(t, posted, profileActor, threadID, []string{"document:" + documentID, "thread:" + threadID}, "Reviewed via domain command.")
+			event, _ := posted["event"].(map[string]any)
+			payload, _ := event["payload"].(map[string]any)
+			if got := anyStringValue(payload["kind"]); got != "document_message" {
+				t.Fatalf("expected document_message payload kind, got %#v", posted)
+			}
+			if got := anyStringValue(payload["subject_ref"]); got != "document:"+documentID {
+				t.Fatalf("expected document subject_ref, got %#v", posted)
+			}
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"event":{"id":"` + eventID + `","type":"message_posted","thread_id":"` + threadID + `","refs":["document:` + documentID + `","thread:` + threadID + `"]}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-doc-message", `{"agent":"agent-doc-message","actor_id":"`+profileActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+
+	raw := runCLIForTest(t, home, nil, nil, []string{
+		"--json", "--base-url", server.URL, "--agent", "agent-doc-message",
+		"docs", "message", documentID, "--body", "Reviewed via domain command.",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	if got := anyStringValue(payload["command"]); got != "docs message" {
+		t.Fatalf("expected docs message command, got %#v", payload)
+	}
+	if got := anyStringValue(payload["command_id"]); got != "events.create" {
+		t.Fatalf("expected events.create command_id, got %#v", payload)
+	}
+	data, _ := payload["data"].(map[string]any)
+	if got := anyStringValue(data["thread_id"]); got != threadID {
+		t.Fatalf("expected response thread_id %q, got %#v", threadID, data)
+	}
+}
+
 func TestDocsCreateDryRunValidatesPayloadBeforeSuccess(t *testing.T) {
 	t.Parallel()
 
