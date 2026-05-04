@@ -76,8 +76,7 @@ If this agent or machine also needs the per-agent wake bridge runtime, bootstrap
 ```bash
 # requires Python 3.11+ and git on PATH
 anx bridge install
-anx bridge workspace-id --handle <handle>
-anx bridge init-config --kind subprocess --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py
+anx bridge init-config --kind subprocess --output ./agent.toml --handle <handle> --adapter-entrypoint ./adapter.py
 anx bridge import-auth --config ./agent.toml --from-profile <agent>
 anx bridge start --config ./agent.toml
 anx bridge status --config ./agent.toml
@@ -86,6 +85,8 @@ anx bridge logs --config ./agent.toml
 anx bridge restart --config ./agent.toml
 anx bridge stop --config ./agent.toml
 ```
+
+`anx bridge init-config` discovers the durable workspace id from the active profile or core handshake. Add `--workspace-id <workspace-id>` only when discovery fails or you need an explicit binding.
 
 After `init-config`, edit `[adapter].command` if your adapter is not a Python script, and run `anx-agent-bridge adapter contract --config ./agent.toml` to see the JSON your process must accept. `anx bridge import-auth` rewrites the default local `base_url` in that config when the imported profile points at a different Agent Nexus deployment.
 

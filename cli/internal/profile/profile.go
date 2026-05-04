@@ -28,6 +28,7 @@ type Profile struct {
 	ActorID              string `json:"actor_id,omitempty"`
 	KeyID                string `json:"key_id,omitempty"`
 	PrivateKeyPath       string `json:"private_key_path,omitempty"`
+	WorkspaceID          string `json:"workspace_id,omitempty"`
 	AccessToken          string `json:"access_token,omitempty"`
 	RefreshToken         string `json:"refresh_token,omitempty"`
 	TokenType            string `json:"token_type,omitempty"`

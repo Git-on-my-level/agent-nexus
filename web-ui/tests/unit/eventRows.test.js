@@ -45,4 +45,25 @@ describe("event row helpers", () => {
     expect(row.detail).toBe("Raw summary");
     expect(row.href).toBe("/w/events#evt-x");
   });
+
+  it("links card lifecycle rows to the owning board and card modal", () => {
+    const row = normalizeEventRow(
+      {
+        id: "evt-card-moved",
+        type: "card_moved",
+        refs: ["board:board-1", "card:card-1"],
+        payload: {
+          from_column_key: "review",
+          column_key: "done",
+          title: "CLI Domain Standardization",
+        },
+      },
+      { workspaceHref },
+    );
+
+    expect(row.label).toBe("Card moved");
+    expect(row.detail).toBe("review -> done");
+    expect(row.sourceLabel).toBe("CLI Domain Standardization");
+    expect(row.href).toBe("/w/boards/board-1?card=card-1");
+  });
 });

@@ -47,7 +47,8 @@ How agents discover it
 - Read this topic with <<tick>>anx meta doc wake-routing<<tick>>.
 - Read the preferred runtime path with <<tick>>anx meta doc agent-bridge<<tick>>.
 - Use <<tick>>anx help bridge<<tick>> to bootstrap the per-agent bridge runtime from the main CLI.
-- Use <<tick>>anx bridge workspace-id --handle <handle><<tick>> when an existing registration is the easiest source of truth for the durable workspace id.
+- Let <<tick>>anx bridge init-config<<tick>> discover the durable workspace id from the active profile or core handshake; pass <<tick>>--workspace-id<<tick>> only when discovery fails or you need an explicit binding.
+- Use <<tick>>anx bridge workspace-id --handle <handle><<tick>> when an existing registration is the easiest source of truth for enabled bindings.
 - Use <<tick>>anx bridge import-auth --config ./bridge.toml --from-profile <agent><<tick>> when matching <<tick>>anx<<tick>> auth already exists.
 - Use <<tick>>anx notifications list --status unread<<tick>> to inspect queued notifications with the main CLI.
 - Use <<tick>>anx notifications dismiss --wakeup-id <wakeup-id><<tick>> to dismiss a notification so it no longer wakes the bridge.
@@ -62,23 +63,23 @@ Preferred path when you are using <<tick>>anx-agent-bridge<<tick>>
 
   anx bridge install
 
-2. Confirm the workspace deployment's <<tick>>anx-core<<tick>> config and note the durable workspace id it uses.
+2. Generate the agent config. For Hermes ACP, use the bundled adapter:
 
-3. Generate the agent config. For Hermes ACP, use the bundled adapter:
-
-  anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --workspace-id <workspace-id> --handle <handle>
+  anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --handle <handle>
 
   For custom adapters, use subprocess JSON or python_plugin:
 
-  anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py
+  anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --handle <handle> --adapter-entrypoint ./adapter.py
+
+  Add <<tick>>--workspace-id <workspace-id><<tick>> only if discovery fails or you need an explicit binding.
 
   Inspect the exact stdin/stdout JSON contract with <<tick>>anx-agent-bridge adapter contract --config ./bridge.toml<<tick>>.
 
-4. If matching <<tick>>anx<<tick>> auth already exists, import it into the agent home:
+3. If matching <<tick>>anx<<tick>> auth already exists, import it into the agent home:
 
   anx bridge import-auth --config ./bridge.toml --from-profile <agent>
 
-5. Register auth and write the initial pending registration when auth does not already exist:
+4. Register auth and write the initial pending registration when auth does not already exist:
 
   anx-agent-bridge auth register --config ./bridge.toml --invite-token <token> --apply-registration
 
@@ -86,23 +87,23 @@ Preferred path when you are using <<tick>>anx-agent-bridge<<tick>>
 
   anx-agent-bridge registration apply --config ./bridge.toml
 
-6. Start the target bridge:
+5. Start the target bridge:
 
   anx bridge start --config ./bridge.toml
 
-7. Verify the bridge has checked in before expecting immediate delivery:
+6. Verify the bridge has checked in before expecting immediate delivery:
 
   anx bridge status --config ./bridge.toml
   anx bridge doctor --config ./bridge.toml
   anx-agent-bridge registration status --config ./bridge.toml
 
-8. Pull or dismiss queued notifications directly when needed:
+7. Pull or dismiss queued notifications directly when needed:
 
   anx notifications list --status unread
   anx-agent-bridge notifications list --config ./bridge.toml --status unread
   anx notifications dismiss --wakeup-id <wakeup-id>
 
-9. If the bridge is online but tagged delivery still does not work, ask the workspace operator to inspect the embedded wake-routing sidecar in <<tick>>anx-core<<tick>>.
+8. If the bridge is online but tagged delivery still does not work, ask the workspace operator to inspect the embedded wake-routing sidecar in <<tick>>anx-core<<tick>>.
 
 Generic ANX CLI lifecycle
 
@@ -116,8 +117,9 @@ If you are writing registration state manually, update the agent principal regis
 
 2. Resolve the durable workspace id you want to enable:
 
-  - If an existing registration is available, start with <<tick>>anx bridge workspace-id --handle <handle><<tick>>.
-  - If the workspace deployment already documents the configured <<tick>>workspace_id<<tick>>, copy that exact value.
+  - In the common single-workspace path, use <<tick>>anx bridge init-config<<tick>> and let it discover the id from the active profile or core handshake.
+  - If an existing registration is available, use <<tick>>anx bridge workspace-id --handle <handle><<tick>> to inspect enabled bindings.
+  - If the workspace deployment documents the configured <<tick>>workspace_id<<tick>>, copy that exact value as the explicit override.
   - If your deployment is driven by control-plane workspace records, copy the durable workspace id from that record, not the slug.
   - The bundled example value <<tick>>ws_main<<tick>> is only a sample.
   - Do not use a workspace slug or URL path segment. If you cannot determine the real value, stop and ask the operator.

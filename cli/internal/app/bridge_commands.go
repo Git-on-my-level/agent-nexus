@@ -96,11 +96,11 @@ func init() {
 		localHelperTopic{
 			Path:        "bridge init-config",
 			Summary:     "Write a bridge runtime config plus an agent home with wake subscriptions.",
-			JSONShape:   "`kind`, `output`, `agent_home`, `workspace_ids`, `handle`, `content`",
-			Composition: "Pure local helper. Renders a bridge runtime config that references an explicit agent home, plus agent.toml and wake.toml when --output is used.",
+			JSONShape:   "`kind`, `output`, `agent_home`, `workspace_ids`, `workspace_id_source`, `handle`, `content`",
+			Composition: "Local helper. Renders a bridge runtime config that references an explicit agent home, plus agent.toml and wake.toml when --output is used. If --workspace-id is omitted, discovers the durable workspace id from the active profile or core handshake.",
 			Examples: []string{
-				"anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --workspace-id ws_main --handle myagent",
-				"anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --workspace-id ws_main --handle myagent --adapter-entrypoint ./adapter.py",
+				"anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --handle myagent",
+				"anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --handle myagent --adapter-entrypoint ./adapter.py",
 				"anx bridge init-config --kind python-plugin --output ./bridge.toml --agent-home ./.anx --workspace-id ws_main --workspace-id ws_ops --handle myagent --plugin-module my_bridge --plugin-factory build_adapter",
 			},
 			Flags: []localHelperFlag{
@@ -108,7 +108,7 @@ func init() {
 				{Name: "--output <path>", Description: "Write the rendered TOML to a file. Omit to print it."},
 				{Name: "--agent-home <dir>", Description: "Agent home directory for identity, auth, wake config, state, and logs. Default: ./.anx."},
 				{Name: "--base-url <url>", Description: "ANX base URL for agent.toml identity and wake.toml workspace entries."},
-				{Name: "--workspace-id <id>", Description: "Durable ANX workspace id. Repeat for multi-workspace agents; do not use slugs."},
+				{Name: "--workspace-id <id>", Description: "Durable ANX workspace id. Optional when the active profile/core handshake exposes one; repeat for multi-workspace agents; do not use slugs."},
 				{Name: "--workspace-name <name>", Description: "Display name for the first wake workspace."},
 				{Name: "--workspace-url <url>", Description: "Optional URL for the first wake workspace."},
 				{Name: "--handle <name>", Description: "Agent handle (required); must match the principal username for bridge-managed registration."},
@@ -164,7 +164,7 @@ func (a *App) runBridgeCommand(ctx context.Context, args []string, cfg config.Re
 		result, err := a.runBridgeImportAuth(args[1:], cfg)
 		return result, "bridge import-auth", err
 	case "init-config":
-		result, err := a.runBridgeInitConfig(args[1:], cfg)
+		result, err := a.runBridgeInitConfig(ctx, args[1:], cfg)
 		return result, "bridge init-config", err
 	case "workspace-id":
 		result, err := a.runBridgeWorkspaceID(ctx, args[1:], cfg)
@@ -224,8 +224,8 @@ Subcommands
 Recommended order
 
 1. `+"`anx bridge install`"+`
-2. `+"`anx bridge workspace-id --handle <handle>`"+` if a registration already exists and you need the real durable workspace id
-3. `+"`anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py`"+`
+2. `+"`anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --handle <handle> --adapter-entrypoint ./adapter.py`"+` (add `+"`--workspace-id <workspace-id>`"+` only if discovery fails or you need an explicit binding)
+3. `+"`anx bridge workspace-id --handle <handle>`"+` if a wake registration already exists and you want to reuse its bindings
 4. `+"`anx bridge import-auth --config ./bridge.toml --from-profile <agent>`"+` when matching `+"`anx`"+` auth already exists
 5. `+"`anx-agent-bridge auth register ...`"+` for the agent principal when auth does not already exist
 6. `+"`anx bridge start --config ./bridge.toml`"+`
@@ -306,7 +306,8 @@ func (a *App) runBridgeInstall(ctx context.Context, args []string) (*commandResu
 		"Python: " + result.PythonRuntime.Command + " (" + result.PythonRuntime.Version + ")",
 		"Installed ref: " + result.PackageRef,
 		"Version: " + result.VersionLine,
-		"Next step: anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py",
+		"Next step: anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --handle <handle> --adapter-entrypoint ./adapter.py",
+		"Add --workspace-id <workspace-id> only if discovery fails or you need an explicit binding.",
 		"Alternative: --kind python-plugin with --plugin-module and --plugin-factory for in-process Python adapters.",
 		"Next step: anx bridge doctor --config ./bridge.toml once the bridge has checked in",
 	}
@@ -445,7 +446,7 @@ func (a *App) runBridgeImportAuth(args []string, cfg config.Resolved) (*commandR
 	}, nil
 }
 
-func (a *App) runBridgeInitConfig(args []string, cfg config.Resolved) (*commandResult, error) {
+func (a *App) runBridgeInitConfig(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
 	fs := newSilentFlagSet("bridge init-config")
 	var kindFlag trackedString
 	var outputFlag trackedString
@@ -465,7 +466,7 @@ func (a *App) runBridgeInitConfig(args []string, cfg config.Resolved) (*commandR
 	fs.Var(&outputFlag, "output", "Write the rendered TOML to a file")
 	fs.Var(&agentHomeFlag, "agent-home", "Directory for this local agent identity")
 	fs.Var(&baseURLFlag, "base-url", "ANX base URL")
-	fs.Var(&workspaceIDFlags, "workspace-id", "Durable ANX workspace id; repeat for multi-workspace agents")
+	fs.Var(&workspaceIDFlags, "workspace-id", "Durable ANX workspace id; optional when the active profile/core handshake exposes one; repeat for multi-workspace agents")
 	fs.Var(&workspaceNameFlag, "workspace-name", "Display name for the workspace")
 	fs.Var(&workspaceURLFlag, "workspace-url", "Workspace URL shown in listings")
 	fs.Var(&handleFlag, "handle", "Agent handle for bridge templates")
@@ -486,14 +487,6 @@ func (a *App) runBridgeInitConfig(args []string, cfg config.Resolved) (*commandR
 	if baseURL == "" {
 		baseURL = cfg.BaseURL
 	}
-	workspaceIDs := uniqueNonEmptyStrings(workspaceIDFlags.values)
-	if len(workspaceIDs) == 0 {
-		return nil, errnorm.Usage("invalid_request", "at least one --workspace-id is required; use durable workspace ids, not slugs")
-	}
-	workspaceName := strings.TrimSpace(workspaceNameFlag.value)
-	if workspaceName == "" {
-		workspaceName = "Main"
-	}
 	handle := strings.TrimSpace(handleFlag.value)
 	if handle == "" {
 		return nil, errnorm.Usage("invalid_request", "--handle is required")
@@ -505,6 +498,27 @@ func (a *App) runBridgeInitConfig(args []string, cfg config.Resolved) (*commandR
 		if strings.TrimSpace(pluginFactoryFlag.value) == "" {
 			return nil, errnorm.Usage("invalid_request", "--plugin-factory is required for python-plugin template")
 		}
+	}
+	discoveryCfg := cfg
+	discoveryCfg.BaseURL = baseURL
+	if baseURLFlag.set {
+		// A caller-provided base URL means the generated bridge config targets
+		// that deployment, so a cached workspace id from the active profile may
+		// be stale. Discover from the requested core unless the caller supplied
+		// --workspace-id explicitly.
+		discoveryCfg.WorkspaceID = ""
+	}
+	workspaceIDs := uniqueNonEmptyStrings(workspaceIDFlags.values)
+	if len(workspaceIDs) == 0 {
+		discovered, err := a.discoverBridgeWorkspaceIDs(ctx, discoveryCfg)
+		if err != nil {
+			return nil, err
+		}
+		workspaceIDs = discovered
+	}
+	workspaceName := strings.TrimSpace(workspaceNameFlag.value)
+	if workspaceName == "" {
+		workspaceName = "Main"
 	}
 
 	agentHome := strings.TrimSpace(agentHomeFlag.value)
@@ -582,14 +596,62 @@ func (a *App) runBridgeInitConfig(args []string, cfg config.Resolved) (*commandR
 	return &commandResult{
 		Text: text,
 		Data: map[string]any{
-			"kind":          kind,
-			"output":        outputPath,
-			"agent_home":    agentHome,
-			"workspace_ids": workspaceIDs,
-			"handle":        handle,
-			"content":       rendered,
+			"kind":                kind,
+			"output":              outputPath,
+			"agent_home":          agentHome,
+			"workspace_ids":       workspaceIDs,
+			"workspace_id_source": bridgeWorkspaceIDSource(workspaceIDFlags.values, discoveryCfg),
+			"handle":              handle,
+			"content":             rendered,
 		},
 	}, nil
+}
+
+func (a *App) discoverBridgeWorkspaceIDs(ctx context.Context, cfg config.Resolved) ([]string, error) {
+	if workspaceID := strings.TrimSpace(cfg.WorkspaceID); workspaceID != "" {
+		return []string{workspaceID}, nil
+	}
+	client, err := httpclient.New(cfg)
+	if err != nil {
+		return nil, errnorm.Wrap(errnorm.KindLocal, "http_client_init_failed", "failed to initialize HTTP client for workspace discovery", err)
+	}
+	callCtx, cancel := httpclient.WithTimeout(ctx, cfg.Timeout)
+	defer cancel()
+	resp, err := client.RawCall(callCtx, httpclient.RawRequest{Method: http.MethodGet, Path: "/meta/handshake"})
+	if err != nil {
+		return nil, errnorm.WithDetails(
+			errnorm.Wrap(errnorm.KindNetwork, "bridge_workspace_discovery_failed", "failed to discover workspace id from core handshake; pass --workspace-id explicitly", err),
+			map[string]any{"base_url": cfg.BaseURL},
+		)
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		return nil, errnorm.WithDetails(
+			errnorm.FromHTTPFailure(resp.StatusCode, resp.Body),
+			map[string]any{"hint": "failed to discover workspace id from core handshake; pass --workspace-id explicitly"},
+		)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(resp.Body, &payload); err != nil {
+		return nil, errnorm.Wrap(errnorm.KindRemote, "invalid_response", "core handshake response is not valid JSON", err)
+	}
+	workspaceID := strings.TrimSpace(anyString(payload["workspace_id"]))
+	if workspaceID == "" {
+		return nil, errnorm.WithDetails(
+			errnorm.Local("bridge_workspace_discovery_missing", "core handshake did not expose workspace_id; pass --workspace-id explicitly"),
+			map[string]any{"base_url": cfg.BaseURL},
+		)
+	}
+	return []string{workspaceID}, nil
+}
+
+func bridgeWorkspaceIDSource(explicit []string, cfg config.Resolved) string {
+	if len(uniqueNonEmptyStrings(explicit)) > 0 {
+		return "flag"
+	}
+	if strings.TrimSpace(cfg.WorkspaceID) != "" {
+		return "profile"
+	}
+	return "handshake"
 }
 
 func (a *App) runBridgeWorkspaceID(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {

@@ -43,6 +43,7 @@ type Profile struct {
 	KeyID                string `json:"key_id,omitempty"`
 	Username             string `json:"username,omitempty"`
 	PrivateKeyPath       string `json:"private_key_path,omitempty"`
+	WorkspaceID          string `json:"workspace_id,omitempty"`
 	Revoked              bool   `json:"revoked,omitempty"`
 	CoreInstanceID       string `json:"core_instance_id,omitempty"`
 }
@@ -64,6 +65,7 @@ type Resolved struct {
 	KeyID                string
 	Username             string
 	PrivateKeyPath       string
+	WorkspaceID          string
 	Revoked              bool
 	CoreInstanceID       string
 	ProfilePath          string
@@ -231,6 +233,7 @@ func Resolve(overrides Overrides, env Environment) (Resolved, error) {
 		resolved.KeyID = strings.TrimSpace(profile.KeyID)
 		resolved.Username = strings.TrimSpace(profile.Username)
 		resolved.PrivateKeyPath = strings.TrimSpace(profile.PrivateKeyPath)
+		resolved.WorkspaceID = strings.TrimSpace(profile.WorkspaceID)
 		resolved.Revoked = profile.Revoked
 		resolved.CoreInstanceID = strings.TrimSpace(profile.CoreInstanceID)
 	}

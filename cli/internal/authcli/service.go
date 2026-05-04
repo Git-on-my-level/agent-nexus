@@ -257,6 +257,7 @@ func (s *Service) RegisterWithToken(ctx context.Context, username, bootstrapToke
 		TokenType:            firstNonEmpty(payload.Tokens.TokenType, "Bearer"),
 		AccessTokenExpiresAt: accessExpiry,
 		CoreInstanceID:       anyString(handshake["core_instance_id"]),
+		WorkspaceID:          anyString(handshake["workspace_id"]),
 	}
 	if err := profile.Save(s.cfg.ProfilePath, prof); err != nil {
 		return RegisterResult{}, errnorm.Wrap(errnorm.KindLocal, "profile_persist_failed", "failed to persist profile", err)

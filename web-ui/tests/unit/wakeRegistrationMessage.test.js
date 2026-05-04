@@ -15,7 +15,10 @@ describe("wakeRegistrationMessage", () => {
     );
     expect(message).toContain("anx bridge install");
     expect(message).toContain(
-      "anx bridge init-config --kind '<bridge-kind>' --output ./agent.toml --workspace-id ws-team-alpha --handle m4-hermes",
+      "anx bridge init-config --kind '<bridge-kind>' --output ./agent.toml --handle m4-hermes",
+    );
+    expect(message).toContain(
+      "If workspace discovery fails, rerun init-config with --workspace-id ws-team-alpha.",
     );
     expect(message).toContain(
       "anx bridge import-auth --config ./agent.toml --from-profile '<anx-profile>'",
@@ -35,7 +38,9 @@ describe("wakeRegistrationMessage", () => {
     const message = buildWakeRegistrationMessage("", "", "");
 
     expect(message).toContain("<ANX_CORE_BASE_URL>");
-    expect(message).toContain("--workspace-id <workspace-id>");
+    expect(message).toContain(
+      "If workspace discovery fails, rerun init-config with --workspace-id <workspace-id>.",
+    );
     expect(message).toContain("--handle <handle>");
     expect(message).toContain("--from-profile '<anx-profile>'");
     expect(message).toContain("@<handle>'s wake registration");

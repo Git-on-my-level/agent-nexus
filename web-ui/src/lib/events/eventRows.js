@@ -22,6 +22,8 @@ export const HOME_FEED_EVENT_TYPES = new Set([
   "document_created",
   "document_revision_created",
   "document_revised",
+  "document_trashed",
+  "document_restored",
 ]);
 
 function asText(value) {
@@ -72,6 +74,11 @@ export function normalizeEventRow(
     payload.cardId,
     refId(event, "card"),
   );
+  const boardId = firstText(
+    payload.board_id,
+    payload.boardId,
+    refId(event, "board"),
+  );
   const documentId = firstText(
     payload.document_id,
     payload.documentId,
@@ -85,6 +92,12 @@ export function normalizeEventRow(
   const topicHref = topicId
     ? workspaceHref(`/topics/${encodeURIComponent(topicId)}`)
     : "";
+  const cardHref =
+    cardId && boardId
+      ? workspaceHref(
+          `/boards/${encodeURIComponent(boardId)}?card=${encodeURIComponent(cardId)}`,
+        )
+      : "";
 
   let label = type || "Event";
   let detail = asText(event?.summary);
@@ -112,16 +125,12 @@ export function normalizeEventRow(
       event?.summary,
     );
     sourceLabel = firstText(payload.title, payload.card_title, cardId);
-    href = cardId
-      ? workspaceHref(`/boards?card=${encodeURIComponent(cardId)}`)
-      : href;
+    href = cardHref || href;
   } else if (type === "card_created") {
     label = "Card created";
     detail = firstText(payload.title, payload.card_title, event?.summary);
     sourceLabel = firstText(payload.title, payload.card_title, cardId);
-    href = cardId
-      ? workspaceHref(`/boards?card=${encodeURIComponent(cardId)}`)
-      : href;
+    href = cardHref || href;
   } else if (
     ["card_closed", "card_resolved", "card_archived", "card_trashed"].includes(
       type,
@@ -130,16 +139,12 @@ export function normalizeEventRow(
     label = "Card closed";
     detail = firstText(payload.title, payload.card_title, event?.summary);
     sourceLabel = firstText(payload.title, payload.card_title, cardId);
-    href = cardId
-      ? workspaceHref(`/boards?card=${encodeURIComponent(cardId)}`)
-      : href;
+    href = cardHref || href;
   } else if (type === "card_restored") {
     label = "Card restored";
     detail = firstText(payload.title, payload.card_title, event?.summary);
     sourceLabel = firstText(payload.title, payload.card_title, cardId);
-    href = cardId
-      ? workspaceHref(`/boards?card=${encodeURIComponent(cardId)}`)
-      : href;
+    href = cardHref || href;
   } else if (type === "topic_priority_changed") {
     label = "Priority";
     detail = firstText(
@@ -179,6 +184,8 @@ export function normalizeEventRow(
       "document_created",
       "document_revision_created",
       "document_revised",
+      "document_trashed",
+      "document_restored",
     ].includes(type)
   ) {
     label = "Doc";

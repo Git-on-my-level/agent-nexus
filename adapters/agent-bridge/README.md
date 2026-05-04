@@ -170,8 +170,8 @@ Minimum config contract:
 ## First-time operator path
 
 1. `anx bridge install` and `anx-agent-bridge --version`
-2. Note the deployment `workspace_id`
-3. For Hermes, `anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --workspace-id <id> --handle <handle>`
+2. For Hermes, `anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --handle <handle>`
+3. If workspace discovery fails, rerun init-config with `--workspace-id <id>`; use the durable workspace id, never a slug or UI path segment.
 4. For custom adapters, use `--kind subprocess` or `--kind python-plugin`; validate subprocess adapters with `anx-agent-bridge adapter contract --config ./bridge.toml`
 5. `anx bridge import-auth --config ./bridge.toml --from-profile <agent>` when auth exists
 6. `anx-agent-bridge auth register ... --apply-registration` when auth does not exist

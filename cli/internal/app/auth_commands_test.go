@@ -53,6 +53,9 @@ func TestAuthRegisterLifecycleCommands(t *testing.T) {
 	if storedProfile.AgentID == "" || storedProfile.KeyID == "" || storedProfile.AccessToken == "" || storedProfile.RefreshToken == "" {
 		t.Fatalf("unexpected stored profile: %#v", storedProfile)
 	}
+	if storedProfile.WorkspaceID != "ws_fake" {
+		t.Fatalf("expected workspace id from handshake in profile, got %q", storedProfile.WorkspaceID)
+	}
 	expectedKeyPath := filepath.Join(home, ".config", "anx", "keys", "agent-a.ed25519")
 	if storedProfile.PrivateKeyPath != expectedKeyPath {
 		t.Fatalf("unexpected private key path: got %s want %s", storedProfile.PrivateKeyPath, expectedKeyPath)
@@ -997,7 +1000,7 @@ func (f *fakeAuthCore) handle(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	switch {
 	case r.Method == http.MethodGet && r.URL.Path == "/meta/handshake":
-		_, _ = w.Write([]byte(`{"core_instance_id":"fake-core","min_cli_version":"0.1.0"}`))
+		_, _ = w.Write([]byte(`{"core_instance_id":"fake-core","workspace_id":"ws_fake","min_cli_version":"0.1.0"}`))
 		return
 	case r.Method == http.MethodPost && r.URL.Path == "/auth/agents/register":
 		var req map[string]any

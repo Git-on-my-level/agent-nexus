@@ -52,8 +52,8 @@ Config generation
 
 Generate minimal configs from the CLI:
 
-  anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --workspace-id <workspace-id> --handle <handle>
-  anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py
+  anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --handle <handle>
+  anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --handle <handle> --adapter-entrypoint ./adapter.py
   anx bridge init-config --kind python-plugin --output ./bridge.toml --agent-home ./.anx --workspace-id <workspace-id> --workspace-id <workspace-id-2> --handle <handle> --plugin-module my_bridge --plugin-factory build_adapter
 
 Use <<tick>>--kind hermes<<tick>> for the bundled Hermes ACP subprocess adapter. Use <<tick>>subprocess<<tick>> or <<tick>>python-plugin<<tick>> when you own a custom adapter implementation.
@@ -75,8 +75,10 @@ That is the guardrail for live delivery: the bridge still needs to check in befo
 Workspace id source of truth
 
 - <<tick>><workspace-id><<tick>> must be the durable workspace id for the deployment, not a slug and not a UI path segment.
-- If the agent already has wake registration metadata, use <<tick>>anx bridge workspace-id --handle <handle><<tick>> to read its enabled workspace bindings first.
-- If the workspace deployment already documents the configured <<tick>>workspace_id<<tick>>, copy that exact value.
+- In the common single-workspace path, <<tick>>anx bridge init-config<<tick>> discovers the id from the active profile or core handshake.
+- If discovery fails, pass <<tick>>--workspace-id <workspace-id><<tick>> explicitly.
+- If the agent already has wake registration metadata, use <<tick>>anx bridge workspace-id --handle <handle><<tick>> to read its enabled workspace bindings.
+- If the workspace deployment documents the configured <<tick>>workspace_id<<tick>>, copy that exact value as the explicit override.
 - If the deployment is driven by control-plane workspace records, copy the durable <<tick>>workspace_id<<tick>> from that workspace record, not the slug.
 - The bundled example value <<tick>>ws_main<<tick>> is only a sample.
 - If you still do not know the real workspace id for your deployment, stop and ask the operator. Do not guess.
@@ -89,11 +91,13 @@ First-time agent-host path
 
 2. Render the bridge runtime config and agent home. For Hermes ACP:
 
-  anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --workspace-id <workspace-id> --handle <handle>
+  anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --handle <handle>
 
   For a custom subprocess adapter, render the config and then inspect the JSON contract with <<tick>>anx-agent-bridge adapter contract --config ./bridge.toml<<tick>>:
 
-  anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py
+  anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --handle <handle> --adapter-entrypoint ./adapter.py
+
+  Add <<tick>>--workspace-id <workspace-id><<tick>> only if discovery fails or you need an explicit binding.
 
 3. If a matching <<tick>>anx<<tick>> profile already exists for the target principal, import it into the agent home:
 

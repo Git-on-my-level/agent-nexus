@@ -38,11 +38,20 @@ func handshakePayload(opts handlerOptions, schemaVersion string) (map[string]any
 		"recommended_cli_version": strings.TrimSpace(opts.recommendedCLIVersion),
 		"cli_download_url":        strings.TrimSpace(opts.cliDownloadURL),
 		"core_instance_id":        strings.TrimSpace(opts.coreInstanceID),
+		"workspace_id":            effectiveWorkspaceID(opts.workspaceID),
 		"dev_actor_mode":          opts.enableDevActorMode,
 		"human_auth_mode":         humanAuthMode,
 		"workspace_access_mode":   strings.TrimSpace(opts.workspaceAccessMode),
 	}
 	return payload, nil
+}
+
+func effectiveWorkspaceID(workspaceID string) string {
+	workspaceID = strings.TrimSpace(workspaceID)
+	if workspaceID == "" {
+		return "ws_main"
+	}
+	return workspaceID
 }
 
 func versionPayload(opts handlerOptions, schemaVersion string) (map[string]any, error) {

@@ -7,6 +7,7 @@
     size = "sm",
     /** Icon + checkmark only — no "Copy"/"Copied" text (compact toolbars). */
     iconOnly = false,
+    icon = "copy",
   } = $props();
 
   let copied = $state(false);
@@ -50,6 +51,24 @@
     </svg>
     {#if !iconOnly}
       Copied
+    {/if}
+  {:else if icon === "link"}
+    <svg
+      class="h-3 w-3"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      stroke-width="2"
+      aria-hidden="true"
+    >
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="M13.5 6H15a3 3 0 0 1 0 6h-3m-1.5 6H9a3 3 0 0 1 0-6h3m-2 0h4"
+      />
+    </svg>
+    {#if !iconOnly}
+      Copy
     {/if}
   {:else}
     <svg

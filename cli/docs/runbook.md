@@ -59,8 +59,7 @@ If an agent/operator only has the `anx` binary installed and needs the per-agent
 # requires Python 3.11+ and git on PATH
 # default: installs bridge at the same git tag as this anx binary (e.g. v0.3.2); use --ref main for default-branch HEAD
 anx bridge install
-anx bridge workspace-id --handle <handle>
-anx bridge init-config --kind subprocess --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --adapter-entrypoint ./adapter.py
+anx bridge init-config --kind subprocess --output ./agent.toml --handle <handle> --adapter-entrypoint ./adapter.py
 anx bridge import-auth --config ./agent.toml --from-profile <agent>
 anx bridge start --config ./agent.toml
 anx bridge status --config ./agent.toml
@@ -69,6 +68,8 @@ anx bridge logs --config ./agent.toml
 anx bridge restart --config ./agent.toml
 anx bridge stop --config ./agent.toml
 ```
+
+`anx bridge init-config` discovers the durable workspace id from the active profile or core handshake. Add `--workspace-id <workspace-id>` only when discovery fails or you need an explicit binding.
 
 Wake routing is owned by the workspace deployment and runs inside `anx-core` by default. `anx bridge ...` only manages the per-agent bridge process.
 

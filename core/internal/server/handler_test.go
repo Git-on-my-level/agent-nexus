@@ -148,7 +148,7 @@ func TestVersionEndpointIncludesWorkspaceAccessModeWhenReadOnly(t *testing.T) {
 func TestHandshakeIncludesCommandRegistryDigest(t *testing.T) {
 	t.Parallel()
 
-	handler := NewHandler("0.2.2")
+	handler := NewHandler("0.2.2", WithWorkspaceID("ws_test_handshake"))
 	req := httptest.NewRequest(http.MethodGet, "/meta/handshake", nil)
 	rr := httptest.NewRecorder()
 
@@ -173,6 +173,9 @@ func TestHandshakeIncludesCommandRegistryDigest(t *testing.T) {
 	}
 	if payload["human_auth_mode"] != "workspace_local" {
 		t.Fatalf("expected human_auth_mode=workspace_local by default, got %#v", payload["human_auth_mode"])
+	}
+	if payload["workspace_id"] != "ws_test_handshake" {
+		t.Fatalf("unexpected workspace_id: got %#v", payload["workspace_id"])
 	}
 	if payload["workspace_access_mode"] != WorkspaceAccessModeReadWrite {
 		t.Fatalf("unexpected workspace_access_mode: got %#v", payload["workspace_access_mode"])

@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"agent-nexus-cli/internal/buildinfo"
 	"agent-nexus-cli/internal/config"
@@ -477,7 +478,7 @@ func TestBridgeInitConfigSubprocessUsesAdapterEntrypoint(t *testing.T) {
 	dir := t.TempDir()
 	outputPath := filepath.Join(dir, "agent.toml")
 	app := New()
-	result, err := app.runBridgeInitConfig([]string{
+	result, err := app.runBridgeInitConfig(context.Background(), []string{
 		"--kind", "subprocess",
 		"--output", outputPath,
 		"--workspace-id", "ws_main",
@@ -503,7 +504,7 @@ func TestBridgeInitConfigHermesWritesBundledAdapter(t *testing.T) {
 	dir := t.TempDir()
 	outputPath := filepath.Join(dir, "agent.toml")
 	app := New()
-	result, err := app.runBridgeInitConfig([]string{
+	result, err := app.runBridgeInitConfig(context.Background(), []string{
 		"--kind", "hermes",
 		"--output", outputPath,
 		"--workspace-id", "ws_main",
@@ -525,9 +526,120 @@ func TestBridgeInitConfigHermesWritesBundledAdapter(t *testing.T) {
 	}
 }
 
+func TestBridgeInitConfigDiscoversWorkspaceIDFromProfile(t *testing.T) {
+	dir := t.TempDir()
+	outputPath := filepath.Join(dir, "agent.toml")
+	app := New()
+	result, err := app.runBridgeInitConfig(context.Background(), []string{
+		"--kind", "hermes",
+		"--output", outputPath,
+		"--handle", "myagent",
+	}, config.Resolved{WorkspaceID: "ws_profile"})
+	if err != nil {
+		t.Fatalf("runBridgeInitConfig: %v", err)
+	}
+	data, _ := result.Data.(map[string]any)
+	if data == nil {
+		t.Fatalf("unexpected result data: %#v", result.Data)
+	}
+	if data["workspace_id_source"] != "profile" {
+		t.Fatalf("expected profile workspace source, got %#v", data["workspace_id_source"])
+	}
+	content, err := os.ReadFile(filepath.Join(dir, ".anx", "wake.toml"))
+	if err != nil {
+		t.Fatalf("read wake config: %v", err)
+	}
+	if !strings.Contains(string(content), `id = "ws_profile"`) {
+		t.Fatalf("expected discovered workspace id in wake config, content=%s", content)
+	}
+}
+
+func TestBridgeInitConfigDiscoversWorkspaceIDFromHandshake(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/meta/handshake" {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"workspace_id":"ws_handshake"}`))
+	}))
+	defer server.Close()
+
+	dir := t.TempDir()
+	outputPath := filepath.Join(dir, "agent.toml")
+	app := New()
+	result, err := app.runBridgeInitConfig(context.Background(), []string{
+		"--kind", "subprocess",
+		"--output", outputPath,
+		"--handle", "myagent",
+	}, config.Resolved{BaseURL: server.URL, Timeout: time.Second})
+	if err != nil {
+		t.Fatalf("runBridgeInitConfig: %v", err)
+	}
+	data, _ := result.Data.(map[string]any)
+	if data == nil {
+		t.Fatalf("unexpected result data: %#v", result.Data)
+	}
+	if data["workspace_id_source"] != "handshake" {
+		t.Fatalf("expected handshake workspace source, got %#v", data["workspace_id_source"])
+	}
+	content, err := os.ReadFile(filepath.Join(dir, ".anx", "wake.toml"))
+	if err != nil {
+		t.Fatalf("read wake config: %v", err)
+	}
+	if !strings.Contains(string(content), `id = "ws_handshake"`) {
+		t.Fatalf("expected discovered workspace id in wake config, content=%s", content)
+	}
+}
+
+func TestBridgeInitConfigBaseURLOverrideDiscoversFromTargetCore(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/meta/handshake" {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"workspace_id":"ws_override"}`))
+	}))
+	defer server.Close()
+
+	dir := t.TempDir()
+	outputPath := filepath.Join(dir, "agent.toml")
+	app := New()
+	result, err := app.runBridgeInitConfig(context.Background(), []string{
+		"--kind", "hermes",
+		"--output", outputPath,
+		"--base-url", server.URL,
+		"--handle", "myagent",
+	}, config.Resolved{
+		BaseURL:     "http://stale.example.test",
+		WorkspaceID: "ws_stale_profile",
+		Timeout:     time.Second,
+	})
+	if err != nil {
+		t.Fatalf("runBridgeInitConfig: %v", err)
+	}
+	data, _ := result.Data.(map[string]any)
+	if data == nil {
+		t.Fatalf("unexpected result data: %#v", result.Data)
+	}
+	if data["workspace_id_source"] != "handshake" {
+		t.Fatalf("expected handshake workspace source, got %#v", data["workspace_id_source"])
+	}
+	content, err := os.ReadFile(filepath.Join(dir, ".anx", "wake.toml"))
+	if err != nil {
+		t.Fatalf("read wake config: %v", err)
+	}
+	body := string(content)
+	if !strings.Contains(body, `id = "ws_override"`) {
+		t.Fatalf("expected override workspace id in wake config, content=%s", body)
+	}
+	if strings.Contains(body, "ws_stale_profile") {
+		t.Fatalf("did not expect stale profile workspace id in wake config, content=%s", body)
+	}
+}
+
 func TestBridgeInitConfigPythonPluginRequiresPluginFlags(t *testing.T) {
 	app := New()
-	_, err := app.runBridgeInitConfig([]string{
+	_, err := app.runBridgeInitConfig(context.Background(), []string{
 		"--kind", "python-plugin",
 		"--output", filepath.Join(t.TempDir(), "agent.toml"),
 		"--workspace-id", "ws_main",
@@ -539,14 +651,23 @@ func TestBridgeInitConfigPythonPluginRequiresPluginFlags(t *testing.T) {
 }
 
 func TestBridgeInitConfigRequiresHandle(t *testing.T) {
+	called := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		t.Fatalf("unexpected discovery request before usage validation: %s %s", r.Method, r.URL.Path)
+	}))
+	defer server.Close()
+
 	app := New()
-	_, err := app.runBridgeInitConfig([]string{
+	_, err := app.runBridgeInitConfig(context.Background(), []string{
 		"--kind", "subprocess",
 		"--output", filepath.Join(t.TempDir(), "agent.toml"),
-		"--workspace-id", "ws_main",
-	}, config.Resolved{})
+	}, config.Resolved{BaseURL: server.URL, Timeout: time.Second})
 	if err == nil {
 		t.Fatal("expected error when --handle missing")
+	}
+	if called {
+		t.Fatal("expected --handle validation before workspace discovery")
 	}
 }
 
@@ -554,7 +675,7 @@ func TestBridgeInitConfigPythonPluginWritesModule(t *testing.T) {
 	dir := t.TempDir()
 	outputPath := filepath.Join(dir, "agent.toml")
 	app := New()
-	result, err := app.runBridgeInitConfig([]string{
+	result, err := app.runBridgeInitConfig(context.Background(), []string{
 		"--kind", "python-plugin",
 		"--output", outputPath,
 		"--workspace-id", "ws_main",

@@ -1,11 +1,15 @@
 <script>
-  import ArchiveButton from "$lib/components/ArchiveButton.svelte";
+  import { browser } from "$app/environment";
+  import { page } from "$app/stores";
+
   import Self from "$lib/components/timeline/MessageItem.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
   import ContextMenuHost from "$lib/components/ContextMenuHost.svelte";
   import CopyButton from "$lib/components/CopyButton.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
+  import MessageActions from "$lib/components/timeline/MessageActions.svelte";
   import { formatTimestamp } from "$lib/formatDate";
+  import { resolveRefLink } from "$lib/refLinkModel.js";
   import {
     docCommentBodyFocus,
     docCommentBodyHover,
@@ -44,6 +48,8 @@
      * replies so `liveAnchorStatus` is derived consistently.
      */
     getLiveAnchorStatusForMessage = null,
+    organizationSlug = "",
+    workspaceSlug = "",
   } = $props();
 
   let resolvedLiveAnchorStatus = $derived(
@@ -221,100 +227,82 @@
     return `${name.slice(0, 20)}…`;
   });
 
-  let contextMenuItems = $derived(
-    onTrash && !message.trashed_at
-      ? [
-          {
-            key: "trash",
-            label: "Move to trash",
-            danger: true,
-            disabled: Boolean(lifecycleBusy),
-            onSelect: () => onTrash?.(message.id),
-          },
-        ]
-      : [],
-  );
+  let messageHref = $derived.by(() => {
+    const org = String(
+      organizationSlug || $page.params.organization || "",
+    ).trim();
+    const ws = String(workspaceSlug || $page.params.workspace || "").trim();
+    const id = String(message?.id ?? "").trim();
+    if (!org || !ws || !id) return "";
+    const href = resolveRefLink(`event:${id}`, {
+      eventRoutesById,
+      threadId,
+      workspaceSlug: ws,
+      organizationSlug: org,
+    }).href;
+    if (!href || !browser) return href;
+    return new URL(href, window.location.origin).toString();
+  });
 </script>
 
-<ContextMenuHost
-  disabled={!onTrash || Boolean(message.trashed_at)}
-  items={contextMenuItems}
+<MessageActions
+  {message}
+  {onReply}
+  {onArchive}
+  {onTrash}
+  {onUnarchive}
+  {lifecycleBusy}
+  {archiveLabelKind}
 >
-  <article
-    class={articleClasses}
-    id={`message-${message.id}`}
-    data-anchored-comment={isAnchoredComment ? "1" : undefined}
-    data-anchor-document-id={docComment?.document_id || undefined}
-    data-anchor-revision-id={docComment?.revision_id || undefined}
-    onmouseenter={docComment
-      ? () => {
-          docCommentBodyHover.set([String(message.id)]);
-        }
-      : undefined}
-    onmouseleave={docComment
-      ? () => {
-          docCommentBodyHover.set(null);
-        }
-      : undefined}
-  >
-    <div class="mb-1.5 flex min-w-0 w-full items-center gap-1.5">
-      <div class="flex min-w-0 min-h-[1.25rem] flex-1 items-center gap-0.5">
-        <span
-          class="min-w-0 max-w-full truncate font-mono text-[0.65rem] leading-tight text-fg-muted"
-          title={actorLine}
-        >
-          {actorDisplayLine}
-        </span>
-        <CopyButton
-          value={actorLine}
-          iconOnly
-          label="Copy author id"
-          size="sm"
-        />
-        <span class="shrink-0 text-[0.65rem] leading-tight text-fg-muted"
-          >· {formatTimestamp(message.ts) || "—"}</span
-        >
-      </div>
-      <div class="flex shrink-0 items-center gap-0.5">
-        {#if !message.trashed_at && ((!message.archived_at && onArchive) || (message.archived_at && onUnarchive))}
-          <ArchiveButton
-            archived={Boolean(message.archived_at)}
-            busy={lifecycleBusy}
-            kind={archiveLabelKind}
-            onarchive={() => onArchive?.(message.id)}
-            onunarchive={() => onUnarchive?.(message.id)}
-          />
-        {/if}
-        {#if !message.archived_at && !message.trashed_at}
-          <button
-            class="inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded text-fg-muted transition-colors hover:bg-bg-soft hover:text-fg"
-            onclick={() => onReply(message.id)}
-            type="button"
-            title="Reply"
-            aria-label="Reply"
-          >
-            <svg
-              class="h-3.5 w-3.5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              stroke-width="2"
-              aria-hidden="true"
+  {#snippet children(contextMenuItems, visibleActions)}
+    <ContextMenuHost
+      disabled={contextMenuItems.length === 0}
+      items={contextMenuItems}
+    >
+      <article
+        class={articleClasses}
+        id={`message-${message.id}`}
+        data-anchored-comment={isAnchoredComment ? "1" : undefined}
+        data-anchor-document-id={docComment?.document_id || undefined}
+        data-anchor-revision-id={docComment?.revision_id || undefined}
+        onmouseenter={docComment
+          ? () => {
+              docCommentBodyHover.set([String(message.id)]);
+            }
+          : undefined}
+        onmouseleave={docComment
+          ? () => {
+              docCommentBodyHover.set(null);
+            }
+          : undefined}
+      >
+        <div class="mb-1.5 flex min-w-0 w-full items-center gap-1.5">
+          <div class="flex min-w-0 min-h-[1.25rem] flex-1 items-center gap-0.5">
+            <span
+              class="min-w-0 max-w-full truncate font-mono text-[0.65rem] leading-tight text-fg-muted"
+              title={actorLine}
             >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M3 10h10a5 5 0 0 1 0 10M3 10l4-4M3 10l4 4"
-              />
-            </svg>
-          </button>
-        {/if}
-      </div>
-    </div>
+              {actorDisplayLine}
+            </span>
+            <CopyButton
+              value={messageHref}
+              iconOnly
+              icon="link"
+              label="Copy message link"
+              size="sm"
+            />
+            <span class="shrink-0 text-[0.65rem] leading-tight text-fg-muted"
+              >· {formatTimestamp(message.ts) || "—"}</span
+            >
+          </div>
+          <div class="flex shrink-0 items-center gap-0.5">
+            {@render visibleActions()}
+          </div>
+        </div>
 
-    <div class="min-w-0">
-      {#if docComment}
-        <!--
+        <div class="min-w-0">
+          {#if docComment}
+            <!--
           Quote-led layout: the blockquote itself communicates "this is anchored
           to selected text"; we drop the redundant "Selected in document" label
           and the dense engineering metadata line. Status is silent in the
@@ -328,102 +316,110 @@
           rather than wrapping. The clamp + Show more affordance keeps very
           long quotes from dominating the card.
         -->
-        <blockquote
-          class={[
-            "mb-2 border-l-2 pl-2 pr-1 text-meta italic whitespace-pre-wrap [overflow-wrap:anywhere] break-words",
-            quoteIsStale
-              ? "border-warn text-fg-muted line-through"
-              : "border-accent text-fg",
-            quoteIsLong && !quoteExpanded ? "line-clamp-4" : "",
-          ].join(" ")}
-          title={docComment.selected_text}
-        >
-          {docComment.selected_text}
-        </blockquote>
-        {#if quoteIsLong}
-          <button
-            type="button"
-            class="mb-2 -mt-1 cursor-pointer text-micro text-accent-text hover:underline"
-            onclick={() => (quoteExpanded = !quoteExpanded)}
+            <blockquote
+              class={[
+                "mb-2 border-l-2 pl-2 pr-1 text-meta italic whitespace-pre-wrap [overflow-wrap:anywhere] break-words",
+                quoteIsStale
+                  ? "border-warn text-fg-muted line-through"
+                  : "border-accent text-fg",
+                quoteIsLong && !quoteExpanded ? "line-clamp-4" : "",
+              ].join(" ")}
+              title={docComment.selected_text}
+            >
+              {docComment.selected_text}
+            </blockquote>
+            {#if quoteIsLong}
+              <button
+                type="button"
+                class="mb-2 -mt-1 cursor-pointer text-micro text-accent-text hover:underline"
+                onclick={() => (quoteExpanded = !quoteExpanded)}
+              >
+                {quoteExpanded ? "Show less" : "Show more"}
+              </button>
+            {/if}
+            {#if anchorStatusChip}
+              <p
+                class={[
+                  "mb-2 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-micro",
+                  chipToneClass,
+                ].join(" ")}
+                title={anchorStatusChip.title}
+              >
+                {anchorStatusChip.label}
+              </p>
+            {/if}
+          {/if}
+          <div
+            class="card-content-block text-meta text-fg [overflow-wrap:anywhere]"
           >
-            {quoteExpanded ? "Show less" : "Show more"}
-          </button>
+            <MarkdownRenderer
+              source={message.messageText ||
+                message.summary ||
+                "Untitled message"}
+              class="markdown-rendered--bubble text-meta text-fg"
+            />
+          </div>
+        </div>
+
+        {#if message.displayRefs.length > 0}
+          <div class="mt-2 flex min-w-0 flex-wrap gap-1.5 text-micro">
+            {#each message.displayRefs as refValue (refValue)}
+              <RefLink
+                variant="compact"
+                {refValue}
+                {threadId}
+                humanize
+                showRaw
+                {artifactRoutesById}
+                {eventRoutesById}
+              />
+            {/each}
+          </div>
         {/if}
-        {#if anchorStatusChip}
-          <p
-            class={[
-              "mb-2 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-micro",
-              chipToneClass,
-            ].join(" ")}
-            title={anchorStatusChip.title}
-          >
-            {anchorStatusChip.label}
-          </p>
+
+        {#if notificationReceipts.length > 0}
+          <div class="mt-2 flex min-w-0 flex-wrap gap-1.5 text-micro">
+            {#each notificationReceipts as row (row.key)}
+              <span
+                class={[
+                  "inline-flex min-w-0 max-w-full items-center gap-1 rounded px-1.5 py-0.5",
+                  row.toneClass,
+                ].join(" ")}
+                title={row.title}
+              >
+                <span class="truncate">@{row.handle || "agent"}</span>
+                <span class="shrink-0">{row.label}</span>
+              </span>
+            {/each}
+          </div>
         {/if}
-      {/if}
-      <div
-        class="card-content-block text-meta text-fg [overflow-wrap:anywhere]"
-      >
-        <MarkdownRenderer
-          source={message.messageText || message.summary || "Untitled message"}
-          class="markdown-rendered--bubble text-meta text-fg"
-        />
-      </div>
-    </div>
 
-    {#if message.displayRefs.length > 0}
-      <div class="mt-2 flex min-w-0 flex-wrap gap-1.5 text-micro">
-        {#each message.displayRefs as refValue (refValue)}
-          <RefLink
-            variant="compact"
-            {refValue}
-            {threadId}
-            humanize
-            showRaw
-            {artifactRoutesById}
-            {eventRoutesById}
-          />
-        {/each}
-      </div>
-    {/if}
-
-    {#if notificationReceipts.length > 0}
-      <div class="mt-2 flex min-w-0 flex-wrap gap-1.5 text-micro">
-        {#each notificationReceipts as row (row.key)}
-          <span
-            class={[
-              "inline-flex min-w-0 max-w-full items-center gap-1 rounded px-1.5 py-0.5",
-              row.toneClass,
-            ].join(" ")}
-            title={row.title}
+        {#if message.children.length > 0 && depth < MAX_REPLY_DEPTH}
+          <div
+            class="mt-2 -mx-3 space-y-1.5 border-l border-line pl-2 sm:pl-2.5"
           >
-            <span class="truncate">@{row.handle || "agent"}</span>
-            <span class="shrink-0">{row.label}</span>
-          </span>
-        {/each}
-      </div>
-    {/if}
-
-    {#if message.children.length > 0 && depth < MAX_REPLY_DEPTH}
-      <div class="mt-2 -mx-3 space-y-1.5 border-l border-line pl-2 sm:pl-2.5">
-        {#each message.children as child (child.id)}
-          <Self
-            message={child}
-            {threadId}
-            {actorName}
-            {onReply}
-            {onArchive}
-            {onTrash}
-            {onUnarchive}
-            {lifecycleBusy}
-            {archiveLabelKind}
-            {artifactRoutesById}
-            {eventRoutesById}
-            {getLiveAnchorStatusForMessage}
-            depth={depth + 1}
-          />
-        {/each}
-      </div>
-    {/if}
-  </article>
-</ContextMenuHost>
+            {#each message.children as child (child.id)}
+              <Self
+                message={child}
+                {threadId}
+                {actorName}
+                {onReply}
+                {onArchive}
+                {onTrash}
+                {onUnarchive}
+                {lifecycleBusy}
+                {archiveLabelKind}
+                {artifactRoutesById}
+                {eventRoutesById}
+                {getLiveAnchorStatusForMessage}
+                {organizationSlug}
+                {workspaceSlug}
+                depth={depth + 1}
+              />
+            {/each}
+          </div>
+        {/if}
+      </article>
+    </ContextMenuHost>
+  {/snippet}
+</MessageActions>

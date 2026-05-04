@@ -4481,8 +4481,8 @@ components:
         Compatibility handshake from GET /meta/handshake; fields include
         core_version, api_version, schema_version, command_registry_digest,
         min_cli_version, recommended_cli_version, cli_download_url,
-        core_instance_id, dev_actor_mode, human_auth_mode, and optional
-        workspace_service_identity_id.
+        core_instance_id, workspace_id, dev_actor_mode, human_auth_mode, and
+        optional workspace_service_identity_id.
 
     TypedRef:
       type: string

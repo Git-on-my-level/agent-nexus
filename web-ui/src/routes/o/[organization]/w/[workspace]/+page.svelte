@@ -10,43 +10,18 @@
   import StateError from "$lib/components/state/StateError.svelte";
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
+  import {
+    BOARD_HOME_EVENT_TYPES,
+    DOCUMENT_HOME_EVENT_TYPES,
+    TOPIC_HOME_EVENT_TYPES,
+    filterEventsForHomeSection,
+  } from "$lib/homeEventSections";
   import { initializeAuthSession } from "$lib/authSession";
   import { normalizeEventRow } from "$lib/events/eventRows";
   import { replayWorkspaceTour } from "$lib/tourState";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
 
   const POLL_INTERVAL_MS = 30_000;
-
-  /** Shown under Topic groups (messages, topic lifecycle, human attention). */
-  const TOPIC_HOME_EVENT_TYPES = new Set([
-    "message_posted",
-    "topic_priority_changed",
-    "topic_lifecycle_changed",
-    "topic_updated",
-    "topic_archived",
-    "topic_restored",
-    "topic_trashed",
-    "human_attention_requested",
-    "human_attention_responded",
-  ]);
-
-  const BOARD_HOME_EVENT_TYPES = new Set([
-    "card_created",
-    "card_moved",
-    "card_closed",
-    "card_resolved",
-    "card_restored",
-    "card_archived",
-    "card_trashed",
-  ]);
-
-  const DOCUMENT_HOME_EVENT_TYPES = new Set([
-    "document_created",
-    "document_revision_created",
-    "document_revised",
-    "document_trashed",
-    "document_restored",
-  ]);
 
   let loading = $state(true);
   let error = $state("");
@@ -70,12 +45,6 @@
   /** Compact pill (matches unread / priority styling). */
   const inlineBadgeClass =
     "shrink-0 rounded bg-line px-1.5 py-0.5 text-micro font-medium text-fg-muted";
-
-  function filterEventsForHomeSection(events, typeSet) {
-    return (events ?? []).filter((e) =>
-      typeSet.has(String(e?.type ?? "").trim()),
-    );
-  }
 
   function documentIdFromEvent(event) {
     const refs = Array.isArray(event?.refs) ? event.refs : [];
