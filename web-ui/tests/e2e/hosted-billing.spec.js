@@ -18,9 +18,7 @@ function mockTierEnvelope(
     artifact_capacity: row.cap,
     included_storage_gb: row.gb,
     included_storage_bytes:
-      typeof row.bytes === "number"
-        ? row.bytes
-        : row.gb * (1024 * 1024 * 1024),
+      typeof row.bytes === "number" ? row.bytes : row.gb * (1024 * 1024 * 1024),
   });
   switch (tier) {
     case "starter":

@@ -92,9 +92,7 @@ function qaHostedUsagePlanEnvelope({
     artifact_capacity: artifactCap,
     included_storage_gb: gb,
     included_storage_bytes:
-      typeof storageBytes === "number"
-        ? storageBytes
-        : gb * 1024 * 1024 * 1024,
+      typeof storageBytes === "number" ? storageBytes : gb * 1024 * 1024 * 1024,
   };
 }
 
