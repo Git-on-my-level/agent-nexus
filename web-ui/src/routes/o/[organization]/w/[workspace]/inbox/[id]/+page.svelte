@@ -44,6 +44,8 @@
   let notifyTargetSearchTimer = null;
   let notifyTargetSearchSeq = 0;
   let notifyTargetMenuOpen = $state(false);
+  let inboxLoadSeq = 0;
+  let loadedInboxRouteKey = $state("");
 
   const KIND_LABELS = {
     ask: "Ask",
@@ -110,8 +112,12 @@
     });
   }
 
-  function draftStorageKey() {
-    return `anx.human-response.draft:${workspaceSlug}:${inboxItemID}`;
+  function inboxRouteKey(workspace = workspaceSlug, id = inboxItemID) {
+    return `${String(workspace ?? "").trim()}:${String(id ?? "").trim()}`;
+  }
+
+  function draftStorageKey(workspace = workspaceSlug, id = inboxItemID) {
+    return `anx.human-response.draft:${workspace}:${id}`;
   }
 
   function itemKind(value = item) {
@@ -168,14 +174,38 @@
     notifyTargetResults = [];
   }
 
-  function handleNotifyTargetInput(event) {
-    const value = event.currentTarget.value;
-    notifyTargetQuery = value;
-    notifyTargetMenuOpen = true;
+  function clearNotifyTargetSearchTimer() {
     if (notifyTargetSearchTimer) {
       clearTimeout(notifyTargetSearchTimer);
       notifyTargetSearchTimer = null;
     }
+  }
+
+  function resetRouteLocalState() {
+    clearNotifyTargetSearchTimer();
+    notifyTargetSearchSeq += 1;
+    loadError = "";
+    submitError = "";
+    responseDraft = "";
+    notifyMode = "original";
+    notifyTargetActorID = "";
+    notifyTargetAgentID = "";
+    notifyTargetQuery = "";
+    notifyTargetResults = [];
+    notifyTargetSelected = null;
+    notifyTargetMenuOpen = false;
+    attachingResponseFile = false;
+    pendingResponseAttachmentUpload = null;
+    responseAttachmentError = "";
+    responseAttachmentRefs = [];
+    responseComposerArtifactsByRef = {};
+  }
+
+  function handleNotifyTargetInput(event) {
+    const value = event.currentTarget.value;
+    notifyTargetQuery = value;
+    notifyTargetMenuOpen = true;
+    clearNotifyTargetSearchTimer();
     const needle = value.trim();
     if (!needle) {
       notifyTargetResults = [];
@@ -203,33 +233,43 @@
     return `Notify ${requesterLabel()}`;
   }
 
-  async function loadItem() {
+  async function loadItem(
+    workspace = workspaceSlug,
+    id = inboxItemID,
+    seq = ++inboxLoadSeq,
+  ) {
+    const routeKey = inboxRouteKey(workspace, id);
     loading = true;
-    loadError = "";
-    submitError = "";
+    resetRouteLocalState();
     item = null;
+    loadedInboxRouteKey = "";
 
     try {
-      const response = await coreClient.getInboxItem(inboxItemID);
+      const response = await coreClient.getInboxItem(id);
+      if (seq !== inboxLoadSeq || routeKey !== inboxRouteKey()) return;
       const loaded = response.item ?? null;
       if (!loaded) {
         loadError = "Inbox item not found.";
         return;
       }
       item = loaded;
+      loadedInboxRouteKey = routeKey;
       notifyMode =
         notificationStatus(loaded).resolvable === false ? "none" : "original";
       if (browser) {
-        const cached = localStorage.getItem(draftStorageKey());
+        const cached = localStorage.getItem(draftStorageKey(workspace, id));
         if (cached != null) responseDraft = cached;
       }
     } catch (error) {
+      if (seq !== inboxLoadSeq || routeKey !== inboxRouteKey()) return;
       loadError =
         error instanceof Error
           ? `Failed to load inbox item: ${error.message}`
           : String(error);
     } finally {
-      loading = false;
+      if (seq === inboxLoadSeq && routeKey === inboxRouteKey()) {
+        loading = false;
+      }
     }
   }
 
@@ -343,15 +383,28 @@
   }
 
   onMount(() => {
-    void loadItem();
     autosaveInterval = setInterval(() => {
-      if (!browser || !item || isCompleted) return;
+      if (
+        !browser ||
+        !item ||
+        isCompleted ||
+        loadedInboxRouteKey !== inboxRouteKey()
+      ) {
+        return;
+      }
       localStorage.setItem(draftStorageKey(), String(responseDraft ?? ""));
     }, 2000);
   });
 
+  $effect(() => {
+    const workspace = workspaceSlug;
+    const id = inboxItemID;
+    void loadItem(workspace, id);
+  });
+
   onDestroy(() => {
     if (autosaveInterval != null) clearInterval(autosaveInterval);
+    clearNotifyTargetSearchTimer();
   });
 </script>
 
