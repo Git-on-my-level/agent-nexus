@@ -9,7 +9,11 @@ from typing import Any
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 
+from .anx_client import ANXClientError
 from .util import atomic_write_json, read_json_file, utc_now_iso
+
+
+REFRESH_TOKEN_FALLBACK_CODES = frozenset({"invalid_grant", "invalid_token"})
 
 
 @dataclass(slots=True)
@@ -146,6 +150,9 @@ class AuthManager:
     def has_valid_access_token(self, skew_seconds: int = 30) -> bool:
         return bool(self.state and self.state.access_token and self.state.expires_at_epoch > (time.time() + skew_seconds))
 
+    def _should_fallback_from_refresh_error(self, exc: ANXClientError) -> bool:
+        return exc.status_code in {400, 401} and exc.code in REFRESH_TOKEN_FALLBACK_CODES
+
     def refresh(self, client: "ANXClient") -> AuthState:
         state = self.require_state()
         payload: dict[str, Any]
@@ -156,7 +163,9 @@ class AuthManager:
             }
             try:
                 response = client.raw_request("POST", "/auth/token", json_body=payload, authenticated=False)
-            except Exception:
+            except ANXClientError as exc:
+                if not self._should_fallback_from_refresh_error(exc):
+                    raise
                 response = client.raw_request("POST", "/auth/token", json_body=self.assertion_payload(), authenticated=False)
         else:
             response = client.raw_request("POST", "/auth/token", json_body=self.assertion_payload(), authenticated=False)
