@@ -2098,7 +2098,8 @@ function cleanDevSeedEvent(event) {
 }
 
 /**
- * Backing thread ids present in this seed snapshot (fixture threads, or topic.thread_id).
+ * Backing thread ids present in this seed snapshot (fixture threads, topic.thread_id,
+ * document backing_thread_id, or legacy document thread_id).
  * Used to validate `thread:` typed refs before seeding core or in unit tests.
  */
 function backingThreadIdsForDevSeed(seed) {
@@ -2114,7 +2115,11 @@ function backingThreadIdsForDevSeed(seed) {
   );
   for (const document of Array.isArray(seed?.documents) ? seed.documents : []) {
     const threadID = String(
-      document?.document?.thread_id ?? document?.thread_id ?? "",
+      document?.document?.thread_id ??
+        document?.backing_thread_id ??
+        document?.document_thread_id ??
+        document?.thread_id ??
+        "",
     ).trim();
     if (threadID) {
       ids.add(threadID);

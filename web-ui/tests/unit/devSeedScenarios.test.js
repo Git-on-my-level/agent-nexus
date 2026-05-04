@@ -118,6 +118,11 @@ describe("dev seed scenarios", () => {
     expect(seed.topics).toHaveLength(4);
     expect(seed.boards).toHaveLength(3);
     expect(seed.documents).toHaveLength(5);
+    expect(
+      seed.documents.every((document) =>
+        String(document.backing_thread_id ?? "").startsWith("thread-gds-doc-"),
+      ),
+    ).toBe(true);
     expect(seed.cards.length).toBeGreaterThanOrEqual(10);
     expect(seed.cards.some((card) => card.column_key === "backlog")).toBe(true);
     expect(seed.cards.some((card) => card.column_key === "done")).toBe(true);
@@ -130,10 +135,26 @@ describe("dev seed scenarios", () => {
     const messageEvents = seed.events.filter(
       (event) => event.type === "message_posted",
     );
+    const documentMessages = messageEvents.filter(
+      (event) => event.payload?.subject_kind === "document",
+    );
+    const documentBackingThreads = new Set(
+      seed.documents.map((document) => document.backing_thread_id),
+    );
     const surfaceCounts = countMessageSurfaces(messageEvents);
     expect(messageEvents.length).toBeGreaterThanOrEqual(100);
     expect(surfaceCounts.topic).toBeGreaterThan(0);
     expect(surfaceCounts.document).toBeGreaterThanOrEqual(50);
+    expect(
+      documentMessages.every(
+        (event) => event.payload?.kind === "document_message",
+      ),
+    ).toBe(true);
+    expect(
+      documentMessages.every((event) =>
+        documentBackingThreads.has(event.thread_id),
+      ),
+    ).toBe(true);
     expect(surfaceCounts.card).toBeGreaterThan(0);
     expect(surfaceCounts.topicReplies).toBeGreaterThan(0);
     expect(surfaceCounts.documentReplies).toBeGreaterThan(0);

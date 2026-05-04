@@ -598,7 +598,14 @@ async function seedDocuments() {
     const actorId = pickActorId(
       firstRevision.created_by ?? sourceDocument.created_by,
     );
-    const rawDocumentTopicRef = String(sourceDocument.thread_id ?? "").trim();
+    const requestedBackingThreadId = String(
+      sourceDocument.backing_thread_id ??
+        sourceDocument.document_thread_id ??
+        "",
+    ).trim();
+    const rawDocumentTopicRef = String(
+      sourceDocument.topic_ref ?? sourceDocument.thread_id ?? "",
+    ).trim();
     const topicRef = rawDocumentTopicRef
       ? mapRef(
           rawDocumentTopicRef.includes(":")
@@ -614,6 +621,9 @@ async function seedDocuments() {
         actor_id: actorId,
         document: {
           id: documentId,
+          ...(requestedBackingThreadId
+            ? { thread_id: requestedBackingThreadId }
+            : {}),
           title: sourceDocument.title,
           slug: sourceDocument.slug,
           labels: sourceDocument.labels,

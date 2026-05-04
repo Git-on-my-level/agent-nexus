@@ -145,7 +145,8 @@ const documents = [
     id: "gds-studio-brief",
     title: "Moonshot Tactics Vertical Slice Brief",
     slug: "moonshot-tactics-vertical-slice-brief",
-    thread_id: "thread-gds-doc-brief",
+    backing_thread_id: "thread-gds-doc-brief",
+    topic_ref: "gds-vertical-slice",
     created_by: "actor-gds-producer",
     revisions: [
       [
@@ -169,7 +170,8 @@ const documents = [
     id: "gds-combat-spec",
     title: "Combat Feel and Enemy AI Spec",
     slug: "combat-feel-enemy-ai-spec",
-    thread_id: "thread-gds-doc-combat",
+    backing_thread_id: "thread-gds-doc-combat",
+    topic_ref: "gds-core-loop",
     created_by: "actor-gds-gameplay",
     revisions: [
       [
@@ -188,7 +190,8 @@ const documents = [
     id: "gds-narrative-bible",
     title: "Hub Quest and Audio Notes",
     slug: "hub-quest-audio-notes",
-    thread_id: "thread-gds-doc-narrative",
+    backing_thread_id: "thread-gds-doc-narrative",
+    topic_ref: "gds-core-loop",
     created_by: "actor-gds-narrative",
     revisions: [
       [
@@ -207,7 +210,8 @@ const documents = [
     id: "gds-art-bible",
     title: "Art Direction and UI Kit Notes",
     slug: "art-direction-ui-kit-notes",
-    thread_id: "thread-gds-doc-art",
+    backing_thread_id: "thread-gds-doc-art",
+    topic_ref: "gds-art-pipeline",
     created_by: "actor-gds-art",
     revisions: [
       [
@@ -226,7 +230,8 @@ const documents = [
     id: "gds-launch-checklist",
     title: "Launch Readiness and QA Checklist",
     slug: "launch-readiness-qa-checklist",
-    thread_id: "thread-gds-doc-launch",
+    backing_thread_id: "thread-gds-doc-launch",
+    topic_ref: "gds-launch",
     created_by: "actor-gds-qa",
     revisions: [
       [
@@ -436,7 +441,8 @@ export function getGameDevStudioSeedData() {
       id: document.id,
       title: document.title,
       slug: document.slug,
-      thread_id: document.thread_id,
+      backing_thread_id: document.backing_thread_id,
+      topic_ref: document.topic_ref,
       created_by: document.created_by,
     })),
     documentRevisions: Object.fromEntries(
@@ -510,7 +516,7 @@ function buildEvents() {
   for (const document of documents) {
     addConversation(events, {
       idPrefix: `evt-gds-doc-${document.id.replace(/^gds-/, "")}`,
-      threadId: document.thread_id,
+      threadId: document.backing_thread_id,
       subjectKind: "document",
       subjectId: document.id,
       subjectRef: `document:${document.id}`,
@@ -525,7 +531,6 @@ function buildEvents() {
       ],
       summaryNoun: document.title,
       minuteStart: minute,
-      documentId: document.id,
     });
     minute += 12;
   }
@@ -562,7 +567,6 @@ function addConversation(
     actors,
     summaryNoun,
     minuteStart,
-    documentId = "",
   },
 ) {
   let parentId = "";
@@ -584,14 +588,6 @@ function addConversation(
       subject_ref: subjectRef,
       ...(isReply ? { reply_to_event_id: parentId } : {}),
     };
-    if (subjectKind === "document") {
-      payload.kind = "document_text_comment";
-      payload.document_comment = {
-        document_id: documentId,
-        anchor_text: documentAnchor(index),
-        comment_kind: isReply ? "reply" : "note",
-      };
-    }
     events.push({
       id,
       ts: new Date(baseTime + (minuteStart + index) * 60 * 1000).toISOString(),
@@ -622,16 +618,4 @@ function messageText(subjectKind, summaryNoun, actorId, index, isReply) {
     return `${opener} ${summaryNoun}. ${role} marked the paragraph that affects demo readiness, named the blocking assumption, and left a concrete edit for the next revision.`;
   }
   return `${opener} ${summaryNoun}. ${role} recorded scope, risk, and next action ${index}; the note references the shared slice plan so the studio can coordinate across boards and docs.`;
-}
-
-function documentAnchor(index) {
-  const anchors = [
-    "Vertical slice goal",
-    "Release gate",
-    "Player verbs",
-    "Quest premise",
-    "Readability rule",
-    "P0 gates",
-  ];
-  return anchors[(index - 1) % anchors.length];
 }
