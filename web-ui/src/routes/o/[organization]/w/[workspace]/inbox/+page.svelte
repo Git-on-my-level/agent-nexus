@@ -45,6 +45,9 @@
   let completedKindFilter = $state("all");
   let completedWindowDays = $state(30);
   let lastReloadKey = $state("");
+  let activeOpenInboxLoadToken = 0;
+  let activeCompletedResetLoadToken = 0;
+  let activeCompletedPageLoadToken = 0;
 
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
@@ -259,6 +262,8 @@
   }
 
   async function loadOpenInbox(isRetry = false) {
+    const loadKey = currentReloadKey();
+    const loadToken = ++activeOpenInboxLoadToken;
     loading = true;
     error = "";
     retrying = isRetry;
@@ -267,18 +272,40 @@
       const response = await coreClient.listInboxItems({
         status: "open",
       });
+      if (
+        loadToken !== activeOpenInboxLoadToken ||
+        loadKey !== currentReloadKey()
+      ) {
+        return;
+      }
       items = response.items ?? [];
     } catch (loadError) {
+      if (
+        loadToken !== activeOpenInboxLoadToken ||
+        loadKey !== currentReloadKey()
+      ) {
+        return;
+      }
       const reason =
         loadError instanceof Error ? loadError.message : String(loadError);
       error = `Failed to load inbox: ${reason}`;
     } finally {
-      loading = false;
-      retrying = false;
+      if (
+        loadToken === activeOpenInboxLoadToken &&
+        loadKey === currentReloadKey()
+      ) {
+        loading = false;
+        retrying = false;
+      }
     }
   }
 
   async function loadCompletedInbox(reset = true) {
+    const loadKey = currentReloadKey();
+    const resetToken = reset
+      ? ++activeCompletedResetLoadToken
+      : activeCompletedResetLoadToken;
+    const pageToken = ++activeCompletedPageLoadToken;
     if (reset) {
       completedLoading = true;
       completedNextCursor = "";
@@ -300,6 +327,13 @@
         query.cursor = completedNextCursor;
       }
       const response = await coreClient.listInboxItems(query);
+      if (
+        resetToken !== activeCompletedResetLoadToken ||
+        pageToken !== activeCompletedPageLoadToken ||
+        loadKey !== currentReloadKey()
+      ) {
+        return;
+      }
       const rows = response.items ?? [];
       completedNextCursor = String(response.next_cursor ?? "").trim();
       if (reset) {
@@ -308,12 +342,25 @@
         completedItems = [...completedItems, ...rows];
       }
     } catch (loadError) {
+      if (
+        resetToken !== activeCompletedResetLoadToken ||
+        pageToken !== activeCompletedPageLoadToken ||
+        loadKey !== currentReloadKey()
+      ) {
+        return;
+      }
       const reason =
         loadError instanceof Error ? loadError.message : String(loadError);
       error = `Failed to load completed inbox: ${reason}`;
     } finally {
-      completedLoading = false;
-      completedLoadingMore = false;
+      if (
+        resetToken === activeCompletedResetLoadToken &&
+        pageToken === activeCompletedPageLoadToken &&
+        loadKey === currentReloadKey()
+      ) {
+        completedLoading = false;
+        completedLoadingMore = false;
+      }
     }
   }
 

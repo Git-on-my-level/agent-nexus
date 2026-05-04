@@ -35,6 +35,7 @@
   let boardFiltersDraft = $state({ ...defaultBoardListFilters });
   let boardFiltersApplied = $state({ ...defaultBoardListFilters });
   let boardListGeneration = $state(0);
+  let activeBoardListLoadToken = 0;
   let hasActiveFilters = $derived.by(() => {
     const f = boardFiltersApplied;
     const st = f.states ?? ["active"];
@@ -100,6 +101,9 @@
   }
 
   async function loadBoards(isRetry = false) {
+    const loadToken = ++activeBoardListLoadToken;
+    const loadWorkspaceSlug = workspaceSlug;
+    const loadGeneration = boardListGeneration;
     loading = true;
     error = "";
     retrying = isRetry;
@@ -113,12 +117,32 @@
       const q = f.q.trim();
       if (q) filters.q = q;
       const data = await coreClient.listBoards(filters);
+      if (
+        loadToken !== activeBoardListLoadToken ||
+        loadWorkspaceSlug !== workspaceSlug ||
+        loadGeneration !== boardListGeneration
+      ) {
+        return;
+      }
       boards = (data.boards ?? []).map(normalizeBoardListRow);
     } catch (e) {
+      if (
+        loadToken !== activeBoardListLoadToken ||
+        loadWorkspaceSlug !== workspaceSlug ||
+        loadGeneration !== boardListGeneration
+      ) {
+        return;
+      }
       error = `Failed to load boards: ${e instanceof Error ? e.message : String(e)}`;
     } finally {
-      loading = false;
-      retrying = false;
+      if (
+        loadToken === activeBoardListLoadToken &&
+        loadWorkspaceSlug === workspaceSlug &&
+        loadGeneration === boardListGeneration
+      ) {
+        loading = false;
+        retrying = false;
+      }
     }
   }
 

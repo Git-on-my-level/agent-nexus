@@ -39,6 +39,7 @@
   let filtersOpen = $state(false);
   let docFiltersDraft = $state({ ...defaultDocListFilters });
   let docFiltersApplied = $state({ ...defaultDocListFilters });
+  let activeDocumentListLoadToken = 0;
   let hasActiveFilters = $derived.by(() => {
     const st = docFiltersApplied.states ?? ["active"];
     return !(st.length === 1 && String(st[0]) === "active");
@@ -130,6 +131,9 @@
   }
 
   async function loadDocuments(isRetry = false) {
+    const loadToken = ++activeDocumentListLoadToken;
+    const loadWorkspaceSlug = workspaceSlug;
+    const loadScopedThreadId = scopedThreadId;
     loading = true;
     error = "";
     retrying = isRetry;
@@ -141,12 +145,32 @@
       const threadFromUrl = String(scopedThreadId ?? "").trim();
       if (threadFromUrl) filters.thread_id = threadFromUrl;
       const data = await coreClient.listDocuments(filters);
+      if (
+        loadToken !== activeDocumentListLoadToken ||
+        loadWorkspaceSlug !== workspaceSlug ||
+        loadScopedThreadId !== scopedThreadId
+      ) {
+        return;
+      }
       documents = filterTopLevelDocuments(data.documents);
     } catch (e) {
+      if (
+        loadToken !== activeDocumentListLoadToken ||
+        loadWorkspaceSlug !== workspaceSlug ||
+        loadScopedThreadId !== scopedThreadId
+      ) {
+        return;
+      }
       error = `Failed to load documents: ${e instanceof Error ? e.message : String(e)}`;
     } finally {
-      loading = false;
-      retrying = false;
+      if (
+        loadToken === activeDocumentListLoadToken &&
+        loadWorkspaceSlug === workspaceSlug &&
+        loadScopedThreadId === scopedThreadId
+      ) {
+        loading = false;
+        retrying = false;
+      }
     }
   }
 
