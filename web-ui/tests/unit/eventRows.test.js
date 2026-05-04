@@ -66,4 +66,28 @@ describe("event row helpers", () => {
     expect(row.sourceLabel).toBe("CLI Domain Standardization");
     expect(row.href).toBe("/w/boards/board-1?card=card-1");
   });
+
+  it.each([
+    ["card_closed", "Card closed"],
+    ["card_resolved", "Card resolved"],
+    ["card_archived", "Card archived"],
+    ["card_trashed", "Card trashed"],
+  ])("labels %s lifecycle rows distinctly", (type, label) => {
+    const row = normalizeEventRow(
+      {
+        id: `evt-${type}`,
+        type,
+        refs: ["board:board-1", "card:card-1"],
+        payload: {
+          title: "CLI Domain Standardization",
+        },
+      },
+      { workspaceHref },
+    );
+
+    expect(row.label).toBe(label);
+    expect(row.detail).toBe("CLI Domain Standardization");
+    expect(row.sourceLabel).toBe("CLI Domain Standardization");
+    expect(row.href).toBe("/w/boards/board-1?card=card-1");
+  });
 });
