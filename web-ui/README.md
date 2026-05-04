@@ -58,3 +58,29 @@ WebAuthn constraints.
 From `agent-nexus/`: `make -C web-ui check` runs lint and unit tests. Use
 `pnpm run dev` (in `web-ui/`) for the Vite dev server, and `pnpm run test:e2e`
 for Playwright.
+
+### Focused screenshots
+
+Use `scripts/capture-screenshot.mjs` to capture specific routes from a running
+web-ui server. The script is output-directory agnostic; pass `--out` for the
+folder you want, then move or attach the PNGs from there.
+
+```bash
+pnpm run screenshot -- \
+  --capture signin=/hosted/signin \
+  --out .screenshots
+```
+
+For the topic Messages fixture used when a live core is not running:
+
+```bash
+ANX_WORKSPACES='[{"organizationSlug":"local","slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"}]' \
+ANX_UI_SKIP_CORE_SCHEMA_CHECK=1 \
+pnpm exec vite dev --host 127.0.0.1 --port 5173
+
+pnpm run screenshot -- \
+  --fixture topic-messages \
+  --capture signin=/hosted/signin \
+  --capture messages='/o/local/w/local/topics/0ae18e22-f?qa=1' \
+  --out .screenshots
+```

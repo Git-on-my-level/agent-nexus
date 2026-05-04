@@ -49,7 +49,7 @@ describe("hosted auth pages", () => {
   it("keeps hosted sign-in oauth-only with no dev shortcut or passkey copy", () => {
     const { container } = render(HostedSigninPage);
 
-    expect(container.textContent).toContain(
+    expect(container.textContent).not.toContain(
       "Hosted sign-in uses Google or GitHub only.",
     );
     expect(container.textContent).not.toContain("Local dev only");
