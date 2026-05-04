@@ -5177,7 +5177,10 @@ Local Help: bridge restart
 
 Flags:
   --config <path>              Managed config to restart.
+  --install-dir <dir>          Root directory for the managed bridge virtualenv.
+  --bin-dir <dir>              Directory where the managed `anx-agent-bridge` wrapper should exist.
   --force                      Force-kill during the stop phase if needed.
+  --timeout-seconds <n>        How long to wait after SIGTERM before failing or force-killing.
 
 
 Global flags:

@@ -3208,6 +3208,34 @@ func TestPreConfigUsagePreflightBeatsAmbiguousProfileResolution(t *testing.T) {
 			code:        "invalid_flags",
 			messagePart: "unknown",
 		},
+		{
+			name:        "notifications list unknown flag",
+			args:        []string{"notifications", "list", "--unknown"},
+			command:     "notifications list",
+			code:        "invalid_flags",
+			messagePart: "unknown",
+		},
+		{
+			name:        "notifications list missing status value",
+			args:        []string{"notifications", "list", "--status"},
+			command:     "notifications list",
+			code:        "invalid_flags",
+			messagePart: "status",
+		},
+		{
+			name:        "notifications read missing wakeup id value",
+			args:        []string{"notifications", "read", "--wakeup-id"},
+			command:     "notifications read",
+			code:        "invalid_flags",
+			messagePart: "wakeup-id",
+		},
+		{
+			name:        "notifications dismiss missing wakeup id value",
+			args:        []string{"notifications", "dismiss", "--wakeup-id"},
+			command:     "notifications dismiss",
+			code:        "invalid_flags",
+			messagePart: "wakeup-id",
+		},
 	}
 
 	for _, tt := range tests {
@@ -3226,6 +3254,25 @@ func TestPreConfigUsagePreflightBeatsAmbiguousProfileResolution(t *testing.T) {
 				t.Fatalf("expected message to contain %q, got %#v", tt.messagePart, payload)
 			}
 		})
+	}
+}
+
+func TestPreConfigUsagePreflightAcceptsBridgeRestartParserFlags(t *testing.T) {
+	t.Parallel()
+
+	command, err := preflightConfigIndependentUsage([]string{
+		"bridge", "restart",
+		"--config", "./bridge.toml",
+		"--install-dir", "/tmp/anx-bridge",
+		"--bin-dir", "/tmp/anx-bin",
+		"--timeout-seconds", "5",
+		"--force",
+	})
+	if err != nil {
+		t.Fatalf("expected bridge restart parser flags to pass preflight, got %v", err)
+	}
+	if command != "bridge restart" {
+		t.Fatalf("expected bridge restart command, got %q", command)
 	}
 }
 

@@ -380,6 +380,16 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			"limit":  valueFlag,
 			"cursor": valueFlag,
 		},
+		"notifications list": {
+			"status": valueFlag,
+			"order":  valueFlag,
+		},
+		"notifications read": {
+			"wakeup-id": valueFlag,
+		},
+		"notifications dismiss": {
+			"wakeup-id": valueFlag,
+		},
 		"import scan": {
 			"input":                valueFlag,
 			"out":                  valueFlag,

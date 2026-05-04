@@ -68,7 +68,10 @@ func init() {
 			},
 			Flags: []localHelperFlag{
 				{Name: "--config <path>", Description: "Managed config to restart."},
+				{Name: "--install-dir <dir>", Description: "Root directory for the managed bridge virtualenv."},
+				{Name: "--bin-dir <dir>", Description: "Directory where the managed `anx-agent-bridge` wrapper should exist."},
 				{Name: "--force", Description: "Force-kill during the stop phase if needed."},
+				{Name: "--timeout-seconds <n>", Description: "How long to wait after SIGTERM before failing or force-killing."},
 			},
 		},
 		localHelperTopic{
