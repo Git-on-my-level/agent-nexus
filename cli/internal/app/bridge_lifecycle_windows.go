@@ -33,7 +33,7 @@ func loadBridgeManagedConfig(configPath string) (bridgeManagedConfig, error) {
 	return bridgeManagedConfig{}, errnorm.New(errnorm.KindLocal, "not_supported", "bridge commands are not supported on Windows")
 }
 
-func inferBridgeRuntimeKind(content string, configPath string) (runtimeKind string, runCommand string, displayName string, err error) {
+func inferBridgeRuntimeKind(root map[string]any, configPath string) (runtimeKind string, runCommand string, displayName string, err error) {
 	return "", "", "", errnorm.New(errnorm.KindLocal, "not_supported", "bridge commands are not supported on Windows")
 }
 
