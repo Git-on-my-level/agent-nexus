@@ -92,3 +92,26 @@ state_path = ".state/router-state.json"
 
     assert loaded.agent is not None
     assert loaded.auth_state_path.name == "default.json"
+
+
+def test_load_config_does_not_create_auth_or_state_directories(tmp_path: Path):
+    write_agent_home(tmp_path)
+    config_path = tmp_path / "bridge.toml"
+    config_path.write_text(
+        """
+agent_home = ".anx"
+
+[runtime]
+state_dir = "run/default"
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    loaded = load_config(config_path)
+
+    assert loaded.auth_state_path == tmp_path / ".anx" / "profiles" / "default.json"
+    assert loaded.agent is not None
+    assert loaded.agent.state_dir == tmp_path / ".anx" / "run" / "default"
+    assert not (tmp_path / ".anx" / "profiles").exists()
+    assert not (tmp_path / ".anx" / "run").exists()

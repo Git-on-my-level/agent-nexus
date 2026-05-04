@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .util import ensure_dir, parse_bool
+from .util import parse_bool
 
 
 @dataclass(slots=True)
@@ -107,7 +107,6 @@ def _expand_path(base_dir: Path, value: str | None, default: str) -> Path:
     path = Path(expanded)
     if not path.is_absolute():
         path = (base_dir / path).resolve()
-    ensure_dir(path.parent if path.suffix else path)
     return path
 
 
