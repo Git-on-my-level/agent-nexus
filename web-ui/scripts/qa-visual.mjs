@@ -614,16 +614,56 @@ function createWorkspaceScenario(mode) {
   }
 }
 
-function topicForEvent(event) {
+function homeGroupForEvent(event) {
   const refs = Array.isArray(event?.refs) ? event.refs : [];
   const topicRef = refs.find((ref) => String(ref).startsWith("topic:"));
   if (topicRef) {
     const topicId = topicRef.slice("topic:".length);
-    return QA_TOPICS.find((topic) => topic.id === topicId) ?? null;
+    const topic = QA_TOPICS.find((t) => t.id === topicId);
+    if (topic) {
+      return {
+        group_ref: `topic:${topicId}`,
+        group_type: "topic",
+        display_name: topic.title || topicId,
+        priority: topic.priority || "",
+      };
+    }
   }
   const threadId = String(event?.thread_id ?? "").trim();
-  if (!threadId) return null;
-  return QA_TOPICS.find((topic) => topic.thread_id === threadId) ?? null;
+  if (threadId) {
+    const topic = QA_TOPICS.find((t) => t.thread_id === threadId);
+    if (topic) {
+      return {
+        group_ref: `topic:${topic.id}`,
+        group_type: "topic",
+        display_name: topic.title || topic.id,
+        priority: topic.priority || "",
+      };
+    }
+    const board = QA_BOARDS.find((b) => b.thread_id === threadId);
+    if (board) {
+      return {
+        group_ref: `board:${board.id}`,
+        group_type: "board",
+        display_name: board.title || board.id,
+        priority: "",
+      };
+    }
+  }
+  const boardRef = refs.find((ref) => String(ref).startsWith("board:"));
+  if (boardRef) {
+    const boardId = boardRef.slice("board:".length);
+    const board = QA_BOARDS.find((b) => b.id === boardId);
+    if (board) {
+      return {
+        group_ref: `board:${boardId}`,
+        group_type: "board",
+        display_name: board.title || boardId,
+        priority: "",
+      };
+    }
+  }
+  return null;
 }
 
 function qaHomeUnreadResponse(homeState) {
@@ -637,14 +677,14 @@ function qaHomeUnreadResponse(homeState) {
       : QA_EVENTS.filter((event) => {
           if (!QA_HOME_FEED_TYPES.has(String(event.type))) return false;
           if (Date.parse(event.ts) < minTimestamp) return false;
-          return Boolean(topicForEvent(event));
+          return Boolean(homeGroupForEvent(event));
         });
   const groupMap = new Map();
   for (const event of events) {
-    const topic = topicForEvent(event);
-    if (!topic) continue;
-    const group = groupMap.get(topic.id) ?? {
-      topic,
+    const groupMeta = homeGroupForEvent(event);
+    if (!groupMeta) continue;
+    const group = groupMap.get(groupMeta.group_ref) ?? {
+      ...groupMeta,
       events: [],
       unread_count: 0,
       newest_event: null,
@@ -658,22 +698,27 @@ function qaHomeUnreadResponse(homeState) {
     ) {
       group.newest_event = event;
     }
-    groupMap.set(topic.id, group);
+    groupMap.set(groupMeta.group_ref, group);
   }
   const groups = Array.from(groupMap.values())
     .map((group) => ({
-      ...group,
+      group_ref: group.group_ref,
+      group_type: group.group_type,
+      display_name: group.display_name,
+      priority: group.priority,
       events: group.events.sort((left, right) => {
         const tsDelta = Date.parse(right.ts) - Date.parse(left.ts);
         return tsDelta || String(right.id).localeCompare(String(left.id));
       }),
+      unread_count: group.unread_count,
+      newest_event: group.newest_event,
     }))
     .sort((left, right) => {
       const tsDelta =
         Date.parse(right.newest_event?.ts ?? "") -
         Date.parse(left.newest_event?.ts ?? "");
       return (
-        tsDelta || String(left.topic.id).localeCompare(String(right.topic.id))
+        tsDelta || String(left.group_ref).localeCompare(String(right.group_ref))
       );
     });
   return {
@@ -682,7 +727,7 @@ function qaHomeUnreadResponse(homeState) {
       (count, group) => count + group.unread_count,
       0,
     ),
-    topic_count: groups.length,
+    group_count: groups.length,
     generated_at: QA_FIXED_NOW_ISO,
   };
 }
@@ -1181,7 +1226,7 @@ async function handleWorkspaceApiRoute(
     await route.fulfill(
       jsonResponse(200, {
         ok: true,
-        marked_topic_ids: [],
+        group_count: 0,
         generated_at: QA_FIXED_NOW_ISO,
       }),
     );
