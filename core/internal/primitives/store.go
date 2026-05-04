@@ -164,6 +164,7 @@ type Store struct {
 	db       *sql.DB
 	blob     blob.Backend
 	blobRoot string
+	dbPath   string
 	quota    WorkspaceQuota
 	quotaMu  sync.Mutex
 }
@@ -202,9 +203,16 @@ func (s *Store) AppendEvent(ctx context.Context, actorID string, event map[strin
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("primitives store database is not initialized")
 	}
+	if s.quota.enabled() {
+		s.quotaMu.Lock()
+		defer s.quotaMu.Unlock()
+	}
 
 	prepared, err := prepareEventForInsert(actorID, event)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.checkWorkspaceWriteQuota(ctx, 0, quotaWriteDelta{dbBytes: int64(len(prepared.PayloadJSON) + len(prepared.RefsJSON) + 512)}, blobLedgerWritePlan{}); err != nil {
 		return nil, err
 	}
 	if err := insertPreparedEvent(ctx, s.db, prepared); err != nil {

@@ -81,6 +81,7 @@ function qaHostedUsagePlanEnvelope({
   wl,
   artifactCap,
   storageGb,
+  storageBytes,
 }) {
   const gb = Number(storageGb);
   return {
@@ -90,7 +91,10 @@ function qaHostedUsagePlanEnvelope({
     max_artifacts_per_workspace: artifactCap,
     artifact_capacity: artifactCap,
     included_storage_gb: gb,
-    included_storage_bytes: gb * 1024 * 1024 * 1024,
+    included_storage_bytes:
+      typeof storageBytes === "number"
+        ? storageBytes
+        : gb * 1024 * 1024 * 1024,
   };
 }
 
@@ -182,6 +186,7 @@ export const QA_HOSTED_BILLING_SUMMARY = {
       wl: 1,
       artifactCap: 1000,
       storageGb: 1,
+      storageBytes: 256 * 1024 * 1024,
     }),
     team: qaHostedUsagePlanEnvelope({
       id: "team",

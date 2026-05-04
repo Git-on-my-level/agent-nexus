@@ -8,7 +8,7 @@ function mockTierEnvelope(
   tier,
 ) {
   const base = (
-    /** @type {{ id: string; display: string; wl: number; cap: number; gb: number }} */
+    /** @type {{ id: string; display: string; wl: number; cap: number; gb: number; bytes?: number }} */
     row,
   ) => ({
     id: row.id,
@@ -18,9 +18,9 @@ function mockTierEnvelope(
     artifact_capacity: row.cap,
     included_storage_gb: row.gb,
     included_storage_bytes:
-      typeof row.gb === "number"
-        ? row.gb * (1024 * 1024 * 1024)
-        : Number(row.gb),
+      typeof row.bytes === "number"
+        ? row.bytes
+        : row.gb * (1024 * 1024 * 1024),
   });
   switch (tier) {
     case "starter":
@@ -30,6 +30,7 @@ function mockTierEnvelope(
         wl: 1,
         cap: 1000,
         gb: 1,
+        bytes: 256 * 1024 * 1024,
       });
     case "team":
       return base({
@@ -113,7 +114,7 @@ test.describe("hosted billing routes (mocked CP API)", () => {
                   max_artifacts_per_workspace: 1000,
                   artifact_capacity: 1000,
                   included_storage_gb: 1,
-                  included_storage_bytes: 1024 * 1024 * 1024,
+                  included_storage_bytes: 256 * 1024 * 1024,
                 },
                 usage: {
                   workspace_count: 1,
@@ -125,7 +126,7 @@ test.describe("hosted billing routes (mocked CP API)", () => {
                 quota: {
                   workspaces_remaining: 0,
                   artifacts_remaining: 958,
-                  storage_bytes_remaining: 1024 * 1024 * 1024 - 9_400_000,
+                  storage_bytes_remaining: 256 * 1024 * 1024 - 9_400_000,
                   storage_gb_remaining: 0,
                 },
                 workspaces: [],
@@ -165,7 +166,7 @@ test.describe("hosted billing routes (mocked CP API)", () => {
                 max_artifacts_per_workspace: 1000,
                 artifact_capacity: 1000,
                 included_storage_gb: 1,
-                included_storage_bytes: 1024 * 1024 * 1024,
+                included_storage_bytes: 256 * 1024 * 1024,
               },
               usage: {
                 workspace_count: 1,
@@ -177,7 +178,7 @@ test.describe("hosted billing routes (mocked CP API)", () => {
               quota: {
                 workspaces_remaining: 0,
                 artifacts_remaining: 958,
-                storage_bytes_remaining: 1024 * 1024 * 1024 - 9_400_000,
+                storage_bytes_remaining: 256 * 1024 * 1024 - 9_400_000,
                 storage_gb_remaining: 0,
               },
               workspaces: [
@@ -240,8 +241,8 @@ test.describe("hosted billing routes (mocked CP API)", () => {
     await page.goto(`/hosted/organizations/${encodeURIComponent(orgId)}/usage`);
     await expect(page.getByRole("heading", { name: "Usage" })).toBeVisible();
     await expect(page.getByText("Free")).toBeVisible();
-    await expect(page.getByText("9.0 MB / 1 GB")).toBeVisible();
-    await expect(page.getByText("1015 MB remaining")).toBeVisible();
+    await expect(page.getByText("9.0 MB / 256 MB")).toBeVisible();
+    await expect(page.getByText("247 MB remaining")).toBeVisible();
   });
 
   test("billing page shows configuration panel when Stripe incomplete", async ({

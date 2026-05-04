@@ -1357,7 +1357,7 @@ func TestHostedModeProtectsWorkspaceReadsAndBlocksLegacyActorFlows(t *testing.T)
 	if !ok || summaryUsage == nil {
 		t.Fatal("expected usage section in v1 usage summary payload")
 	}
-	for _, key := range []string{"artifact_count", "artifact_bytes", "document_count", "blob_count", "blob_bytes", "event_count", "agent_count"} {
+	for _, key := range []string{"artifact_count", "artifact_bytes", "document_count", "blob_count", "blob_bytes", "db_bytes", "storage_bytes", "event_count", "agent_count"} {
 		if _, exists := summaryUsage[key]; !exists {
 			t.Fatalf("expected key %q in v1 usage summary payload", key)
 		}

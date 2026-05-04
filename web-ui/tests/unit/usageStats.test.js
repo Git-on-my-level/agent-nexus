@@ -10,14 +10,14 @@ describe("hosted usage stats", () => {
   it("formats small storage in byte units instead of rounding to 1 GB", () => {
     const metric = storageMetric(
       { storage_bytes: 9_400_000, storage_gb: 1 },
-      { included_storage_bytes: 1024 * 1024 * 1024, included_storage_gb: 1 },
-      { storage_bytes_remaining: 1024 * 1024 * 1024 - 9_400_000 },
+      { included_storage_bytes: 256 * 1024 * 1024, included_storage_gb: 1 },
+      { storage_bytes_remaining: 256 * 1024 * 1024 - 9_400_000 },
     );
 
     expect(metric.displayUsed).toBe("9.0 MB");
-    expect(metric.displayTotal).toBe("1 GB");
-    expect(metric.displayRemaining).toBe("1015 MB");
-    expect(pct(metric.used, metric.total)).toBe(1);
+    expect(metric.displayTotal).toBe("256 MB");
+    expect(metric.displayRemaining).toBe("247 MB");
+    expect(pct(metric.used, metric.total)).toBe(4);
   });
 
   it("falls back to legacy GB fields when byte fields are absent", () => {

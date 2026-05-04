@@ -350,7 +350,13 @@ func main() {
 	authStore := auth.NewStore(workspace.DB(), authStoreOpts...)
 	passkeySessionStore := auth.NewPasskeySessionStore(auth.DefaultPasskeySessionTTL)
 	defer passkeySessionStore.Close()
-	primitiveStore := primitives.NewStore(workspace.DB(), blobBackendImpl, effectiveBlobRoot, primitives.WithWorkspaceQuota(workspaceQuota))
+	primitiveStore := primitives.NewStore(
+		workspace.DB(),
+		blobBackendImpl,
+		effectiveBlobRoot,
+		primitives.WithWorkspaceQuota(workspaceQuota),
+		primitives.WithDatabasePath(workspace.Layout().DatabasePath),
+	)
 	projectionMaintainer := server.NewProjectionMaintainer(server.ProjectionMaintainerConfig{
 		PrimitiveStore:    primitiveStore,
 		Contract:          contract,

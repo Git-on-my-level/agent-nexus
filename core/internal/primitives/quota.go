@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 )
@@ -12,6 +13,8 @@ import (
 type Option func(*Store)
 
 type WorkspaceQuota struct {
+	// MaxBlobBytes is the historical env/JSON name. Enforcement now applies it
+	// to combined storage bytes when a database path is configured.
 	MaxBlobBytes   int64 `json:"max_blob_bytes"`
 	MaxArtifacts   int64 `json:"max_artifacts"`
 	MaxDocuments   int64 `json:"max_documents"`
@@ -47,6 +50,12 @@ func WithWorkspaceQuota(quota WorkspaceQuota) Option {
 	}
 }
 
+func WithDatabasePath(path string) Option {
+	return func(store *Store) {
+		store.dbPath = strings.TrimSpace(path)
+	}
+}
+
 func (q WorkspaceQuota) enabled() bool {
 	return q.MaxBlobBytes > 0 || q.MaxArtifacts > 0 || q.MaxDocuments > 0 || q.MaxRevisions > 0 || q.MaxUploadBytes > 0
 }
@@ -55,16 +64,19 @@ type quotaWriteDelta struct {
 	artifacts int64
 	documents int64
 	revisions int64
+	dbBytes   int64
 }
 
 type workspaceUsage struct {
 	blobBytes     int64
 	blobObjects   int64
+	dbBytes       int64
 	artifacts     int64
 	documents     int64
 	revisions     int64
 	docRevisions  int64
 	cardRevisions int64
+	events        int64
 }
 
 type WorkspaceUsageSummary struct {
@@ -81,11 +93,14 @@ type WorkspaceUsageV1Summary struct {
 type WorkspaceUsage struct {
 	BlobBytes         int64 `json:"blob_bytes"`
 	BlobObjects       int64 `json:"blob_objects"`
+	DatabaseBytes     int64 `json:"db_bytes"`
+	StorageBytes      int64 `json:"storage_bytes"`
 	Artifacts         int64 `json:"artifact_count"`
 	Documents         int64 `json:"document_count"`
 	Revisions         int64 `json:"revision_count"`
 	DocumentRevisions int64 `json:"document_revision_count"`
 	CardRevisions     int64 `json:"card_revision_count"`
+	EventCount        int64 `json:"event_count"`
 }
 
 type WorkspaceUsageV1 struct {
@@ -94,6 +109,8 @@ type WorkspaceUsageV1 struct {
 	DocumentCount int64   `json:"document_count"`
 	BlobCount     int64   `json:"blob_count"`
 	BlobBytes     int64   `json:"blob_bytes"`
+	DatabaseBytes int64   `json:"db_bytes"`
+	StorageBytes  int64   `json:"storage_bytes"`
 	EventCount    int64   `json:"event_count"`
 	AgentCount    int64   `json:"agent_count"`
 	LastActiveAt  *string `json:"last_active_at,omitempty"`
@@ -120,13 +137,13 @@ func (s *Store) checkWorkspaceWriteQuota(ctx context.Context, uploadBytes int64,
 	}
 
 	if s.quota.MaxBlobBytes > 0 {
-		projected := usage.blobBytes + blobPlan.growthBytes()
+		projected := usage.storageBytes() + blobPlan.growthBytes() + delta.dbBytes
 		if projected > s.quota.MaxBlobBytes {
 			return &QuotaViolation{
 				Code:      "workspace_quota_exceeded",
-				Metric:    "blob_bytes",
+				Metric:    "storage_bytes",
 				Limit:     s.quota.MaxBlobBytes,
-				Current:   usage.blobBytes,
+				Current:   usage.storageBytes(),
 				Projected: projected,
 			}
 		}
@@ -185,8 +202,12 @@ func (s *Store) currentWorkspaceUsage(ctx context.Context, includeBlobBytes bool
 		usage.blobBytes = blobUsage.Bytes
 		usage.blobObjects = blobUsage.Objects
 	}
+	dbBytes, err := s.databaseUsageBytes()
+	if err != nil {
+		return workspaceUsage{}, fmt.Errorf("measure database usage: %w", err)
+	}
+	usage.dbBytes = dbBytes
 
-	var err error
 	if usage.artifacts, err = countTableRows(ctx, s.db, "artifacts"); err != nil {
 		return workspaceUsage{}, err
 	}
@@ -199,9 +220,16 @@ func (s *Store) currentWorkspaceUsage(ctx context.Context, includeBlobBytes bool
 	if usage.cardRevisions, err = countTableRows(ctx, s.db, "card_revisions"); err != nil {
 		return workspaceUsage{}, err
 	}
+	if usage.events, err = countTableRows(ctx, s.db, "events"); err != nil {
+		return workspaceUsage{}, err
+	}
 	usage.revisions = usage.docRevisions + usage.cardRevisions
 
 	return usage, nil
+}
+
+func (u workspaceUsage) storageBytes() int64 {
+	return u.blobBytes + u.dbBytes
 }
 
 func (s *Store) GetWorkspaceUsageSummary(ctx context.Context) (WorkspaceUsageSummary, error) {
@@ -216,11 +244,14 @@ func (s *Store) GetWorkspaceUsageSummary(ctx context.Context) (WorkspaceUsageSum
 		Usage: WorkspaceUsage{
 			BlobBytes:         usage.blobBytes,
 			BlobObjects:       usage.blobObjects,
+			DatabaseBytes:     usage.dbBytes,
+			StorageBytes:      usage.storageBytes(),
 			Artifacts:         usage.artifacts,
 			Documents:         usage.documents,
 			Revisions:         usage.revisions,
 			DocumentRevisions: usage.docRevisions,
 			CardRevisions:     usage.cardRevisions,
+			EventCount:        usage.events,
 		},
 		Quota:       s.quota,
 		GeneratedAt: time.Now().UTC().Format(time.RFC3339Nano),
@@ -261,6 +292,8 @@ func (s *Store) GetWorkspaceUsageV1Summary(ctx context.Context) (WorkspaceUsageV
 			DocumentCount: usage.documents,
 			BlobCount:     usage.blobObjects,
 			BlobBytes:     usage.blobBytes,
+			DatabaseBytes: usage.dbBytes,
+			StorageBytes:  usage.storageBytes(),
 			EventCount:    eventCount,
 			AgentCount:    agentCount,
 			LastActiveAt:  lastActiveAt,
@@ -324,6 +357,28 @@ func loadLastWorkspaceActivityAt(ctx context.Context, db *sql.DB) (*string, erro
 		return nil, nil
 	}
 	return &value, nil
+}
+
+func (s *Store) databaseUsageBytes() (int64, error) {
+	dbPath := strings.TrimSpace(s.dbPath)
+	if dbPath == "" {
+		return 0, nil
+	}
+	var total int64
+	for _, path := range []string{dbPath, dbPath + "-wal", dbPath + "-shm"} {
+		info, err := os.Stat(path)
+		if err == nil {
+			if !info.IsDir() {
+				total += info.Size()
+			}
+			continue
+		}
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		return 0, err
+	}
+	return total, nil
 }
 
 func isQuotaViolationCode(err error, code string) bool {

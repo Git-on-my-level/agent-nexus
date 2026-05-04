@@ -41,7 +41,7 @@ variables.
 | WebAuthn RP display name | n/a | `ANX_WEBAUTHN_RP_DISPLAY_NAME` | `Agent Nexus` |
 | CORS allowed origins | n/a | `ANX_CORS_ALLOWED_ORIGINS` | unset (CORS disabled) |
 | Enforce local workspace quotas on writes | `--enforce-local-quotas` | `ANX_ENFORCE_LOCAL_QUOTAS` | `true` |
-| Workspace blob quota | n/a | `ANX_WORKSPACE_MAX_BLOB_BYTES` | `1073741824` |
+| Workspace storage quota (blob bytes plus SQLite bytes when measurable) | n/a | `ANX_WORKSPACE_MAX_BLOB_BYTES` | `1073741824` |
 | Workspace artifact quota | n/a | `ANX_WORKSPACE_MAX_ARTIFACTS` | `100000` |
 | Workspace document quota | n/a | `ANX_WORKSPACE_MAX_DOCUMENTS` | `50000` |
 | Workspace revision quota | n/a | `ANX_WORKSPACE_MAX_REVISIONS` | `250000` |

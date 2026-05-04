@@ -801,6 +801,7 @@ func TestWorkspaceUsageSummaryInitializesBlobLedgerFromCanonicalState(t *testing
 		workspace.DB(),
 		blob.NewObjectStoreBackend(workspace.Layout().ArtifactContentDir),
 		workspace.Layout().ArtifactContentDir,
+		primitives.WithDatabasePath(workspace.Layout().DatabasePath),
 	)
 
 	if _, err := store.CreateArtifact(context.Background(), "actor-1", map[string]any{
@@ -815,6 +816,15 @@ func TestWorkspaceUsageSummaryInitializesBlobLedgerFromCanonicalState(t *testing
 		"title": "Summary doc",
 	}, "bravo", "text", nil); err != nil {
 		t.Fatalf("create document: %v", err)
+	}
+	if _, err := store.AppendEvent(context.Background(), "actor-1", map[string]any{
+		"id":        "event-summary",
+		"type":      "message_posted",
+		"thread_id": "thread-1",
+		"refs":      []string{"thread:thread-1"},
+		"payload":   map[string]any{"text": "hello"},
+	}); err != nil {
+		t.Fatalf("append event: %v", err)
 	}
 
 	if _, err := workspace.DB().Exec(`DELETE FROM blob_usage_ledger`); err != nil {
@@ -842,6 +852,15 @@ func TestWorkspaceUsageSummaryInitializesBlobLedgerFromCanonicalState(t *testing
 	}
 	if summary.Usage.BlobBytes != int64(len("alpha")+len("bravo")) {
 		t.Fatalf("unexpected blob bytes: got %d", summary.Usage.BlobBytes)
+	}
+	if summary.Usage.EventCount < 1 {
+		t.Fatalf("expected event count to be tracked, got %d", summary.Usage.EventCount)
+	}
+	if summary.Usage.DatabaseBytes <= 0 {
+		t.Fatalf("expected database bytes to be measured, got %d", summary.Usage.DatabaseBytes)
+	}
+	if summary.Usage.StorageBytes != summary.Usage.BlobBytes+summary.Usage.DatabaseBytes {
+		t.Fatalf("expected storage bytes to equal blob+db bytes, got storage=%d blob=%d db=%d", summary.Usage.StorageBytes, summary.Usage.BlobBytes, summary.Usage.DatabaseBytes)
 	}
 }
 
