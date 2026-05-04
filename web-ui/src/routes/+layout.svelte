@@ -41,7 +41,6 @@
   import { hostedSession, loadHostedSession } from "$lib/hosted/session.js";
   import { coreClient } from "$lib/coreClient";
   import { computeWorkspaceShellIdentity } from "$lib/workspaceShellIdentity.js";
-  import { DEV_FIXTURE_PERSONAS } from "$lib/devWorkspaceFixtures.js";
   import {
     getShellContentConfig,
     isMoreHubActivePath,
@@ -446,21 +445,23 @@
     void loadDevFixturePersonas();
   });
 
-  async function loadDevFixturePersonas() {
+  async function loadDevFixturePersonas(workspaceSlug = activeWorkspaceSlug) {
     try {
       const response = await fetch(appPath("/auth/dev/identities"), {
-        headers: { [WORKSPACE_HEADER]: activeWorkspaceSlug },
+        headers: { [WORKSPACE_HEADER]: workspaceSlug },
       });
       if (!response.ok) {
         devFixturePersonas = [];
-        return;
+        return devFixturePersonas;
       }
       const payload = await response.json();
       devFixturePersonas = Array.isArray(payload.personas)
         ? payload.personas
         : [];
+      return devFixturePersonas;
     } catch {
       devFixturePersonas = [];
+      return devFixturePersonas;
     }
   }
 
@@ -506,7 +507,11 @@
     if (!browser || !$devActorMode || !activeWorkspaceSlug) {
       return;
     }
-    const personaId = DEV_FIXTURE_PERSONAS.find(
+    const personas =
+      devFixturePersonas.length > 0
+        ? devFixturePersonas
+        : await loadDevFixturePersonas(activeWorkspaceSlug);
+    const personaId = personas.find(
       (p) => p.actor_id === actorId && p.principal_kind === "human",
     )?.persona_id;
     if (!personaId) {
@@ -536,6 +541,9 @@
       const handshake = await coreClient.getHandshake();
       const devActorModeEnabled = handshake.dev_actor_mode === true;
       setDevActorMode(devActorModeEnabled);
+      if (devActorModeEnabled) {
+        await loadDevFixturePersonas(workspaceSlug);
+      }
 
       if (devActorModeEnabled && !agent) {
         try {
@@ -583,7 +591,8 @@
       // Hosted/prod often has dev_actor_mode false; skipping here left principals
       // without registry entries and showed "Unknown actor" for signed-in users.
       if (devActorModeEnabled || agent) {
-        await refreshActors(workspaceSlug);
+        const actors = await refreshActors(workspaceSlug);
+        reconcileDevActorSelection(workspaceSlug, agent, actors);
       } else {
         actorError = "";
         loadingActors = false;
@@ -605,13 +614,59 @@
 
     try {
       const response = await coreClient.listActors();
-      replaceActorRegistry(response.actors ?? [], workspaceSlug);
+      const actors = response.actors ?? [];
+      replaceActorRegistry(actors, workspaceSlug);
+      return actors;
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       actorError = `Failed to load actors: ${reason}`;
       replaceActorRegistry([], workspaceSlug);
+      return [];
     } finally {
       loadingActors = false;
+    }
+  }
+
+  function actorRegistryHasActor(actorId, actors = []) {
+    const wanted = String(actorId ?? "").trim();
+    if (!wanted) {
+      return false;
+    }
+    return actors.some(
+      (actor) => String(actor?.id ?? actor?.actor_id ?? "").trim() === wanted,
+    );
+  }
+
+  function defaultHumanActorIdFromDevFixtures() {
+    return (
+      devFixturePersonas.find(
+        (persona) =>
+          String(persona?.principal_kind ?? "").toLowerCase() === "human" &&
+          persona?.default === true,
+      )?.actor_id ?? ""
+    );
+  }
+
+  function reconcileDevActorSelection(workspaceSlug, agent, actors) {
+    const authenticatedActorId = String(agent?.actor_id ?? "").trim();
+    if (actorRegistryHasActor(authenticatedActorId, actors)) {
+      chooseActor(authenticatedActorId, localStorage, workspaceSlug);
+      return;
+    }
+
+    const storedActorId = String(get(selectedActorId) ?? "").trim();
+    if (actorRegistryHasActor(storedActorId, actors)) {
+      return;
+    }
+
+    const defaultActorId = defaultHumanActorIdFromDevFixtures();
+    if (actorRegistryHasActor(defaultActorId, actors)) {
+      chooseActor(defaultActorId, localStorage, workspaceSlug);
+      return;
+    }
+
+    if (storedActorId) {
+      clearSelectedActor(localStorage, workspaceSlug);
     }
   }
 
