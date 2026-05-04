@@ -493,6 +493,19 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			"notify-mode":   valueFlag,
 			"actor-id":      valueFlag,
 		},
+		// parsers accept --card-id alongside --card; helper catalog lists --card only
+		"cards move": {
+			"card-id": valueFlag,
+		},
+		"cards assign": {
+			"card-id": valueFlag,
+		},
+		"cards resolve": {
+			"card-id": valueFlag,
+		},
+		"cards reopen": {
+			"card-id": valueFlag,
+		},
 		"auth list":         {},
 		"auth default":      {},
 		"config use":        {},
