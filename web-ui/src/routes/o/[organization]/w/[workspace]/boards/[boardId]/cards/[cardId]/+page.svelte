@@ -25,6 +25,8 @@
   let mutationNotice = $state("");
   let mutationError = $state("");
   let conflictWarning = $state("");
+  let cardLoadRequestId = 0;
+  let loadedCardRouteKey = $state("");
 
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
@@ -82,16 +84,56 @@
     await goto(workspaceHref(`/boards/${encodeURIComponent(boardId)}`));
   }
 
-  async function loadWorkspace() {
+  function cardRouteKey(targetBoardId = boardId, targetCardId = cardId) {
+    return [organizationSlug, workspaceSlug, targetBoardId, targetCardId].map(
+      (v) => String(v ?? ""),
+    );
+  }
+
+  function serializeCardRouteKey(routeKey) {
+    return routeKey.join("\u001f");
+  }
+
+  function isCurrentCardLoad(requestId, routeKey) {
+    const current = cardRouteKey();
+    return (
+      requestId === cardLoadRequestId &&
+      routeKey.every((segment, index) => segment === current[index])
+    );
+  }
+
+  async function loadWorkspace(targetBoardId = boardId, targetCardId = cardId) {
+    if (!targetBoardId || !targetCardId) return;
+    const requestId = ++cardLoadRequestId;
+    const routeKey = cardRouteKey(targetBoardId, targetCardId);
+    const serializedRouteKey = serializeCardRouteKey(routeKey);
+    const routeChanged =
+      loadedCardRouteKey && loadedCardRouteKey !== serializedRouteKey;
     loading = true;
     error = "";
+    loadedCardRouteKey = serializedRouteKey;
+    if (
+      routeChanged ||
+      String(workspace?.board?.id ?? "") !== String(targetBoardId) ||
+      boardCardStableId(selectedCard?.membership) !== String(targetCardId)
+    ) {
+      workspace = null;
+      mutationNotice = "";
+      mutationError = "";
+      conflictWarning = "";
+    }
     try {
-      workspace = await coreClient.getBoardWorkspace(boardId);
+      const loadedWorkspace = await coreClient.getBoardWorkspace(targetBoardId);
+      if (!isCurrentCardLoad(requestId, routeKey)) return;
+      workspace = loadedWorkspace;
     } catch (e) {
+      if (!isCurrentCardLoad(requestId, routeKey)) return;
       error = `Failed to load card: ${e instanceof Error ? e.message : String(e)}`;
       workspace = null;
     } finally {
-      loading = false;
+      if (isCurrentCardLoad(requestId, routeKey)) {
+        loading = false;
+      }
     }
   }
 
@@ -112,7 +154,7 @@
       "Board was updated elsewhere. Reloaded latest board state. Reapply your change.";
     mutationNotice = "";
     mutationError = "";
-    await loadWorkspace();
+    await loadWorkspace(boardId, cardId);
   }
 
   async function runBoardMutation(action, successMessage) {
@@ -120,7 +162,7 @@
 
     try {
       await action();
-      await loadWorkspace();
+      await loadWorkspace(boardId, cardId);
       mutationNotice = successMessage;
     } catch (e) {
       if (e?.status === 409) {
@@ -214,8 +256,11 @@
   }
 
   $effect(() => {
-    if (workspaceSlug && boardId) {
-      void loadWorkspace();
+    if (workspaceSlug && boardId && cardId) {
+      const routeKey = serializeCardRouteKey(cardRouteKey(boardId, cardId));
+      if (routeKey !== loadedCardRouteKey) {
+        void loadWorkspace(boardId, cardId);
+      }
     }
   });
 </script>
