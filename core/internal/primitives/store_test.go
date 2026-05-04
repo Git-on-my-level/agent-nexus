@@ -831,6 +831,38 @@ func TestListDocumentsEmbedsListOnlyMetrics(t *testing.T) {
 	}
 }
 
+func TestDocumentRefsCorruptionReturnsError(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	store := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+	document, _, err := store.CreateDocument(ctx, "actor-1", map[string]any{
+		"id":    "doc-corrupt-refs",
+		"title": "Corrupt refs",
+	}, "body", "text", []string{"thread:thread-corrupt-refs"})
+	if err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+	documentID := document["id"].(string)
+
+	if _, err := workspace.DB().ExecContext(ctx, `UPDATE documents SET refs_json = ? WHERE id = ?`, `{not-json`, documentID); err != nil {
+		t.Fatalf("corrupt document refs_json: %v", err)
+	}
+
+	if _, _, err := store.GetDocument(ctx, documentID); err == nil || !strings.Contains(err.Error(), "decode document.refs") {
+		t.Fatalf("expected get document refs decode error, got %v", err)
+	}
+	if _, _, err := store.ListDocuments(ctx, primitives.DocumentListFilter{States: []string{"active"}}); err == nil || !strings.Contains(err.Error(), "decode document.refs") {
+		t.Fatalf("expected list document refs decode error, got %v", err)
+	}
+}
+
 func TestCreateArtifactConflictDoesNotLeakStagedContent(t *testing.T) {
 	t.Parallel()
 

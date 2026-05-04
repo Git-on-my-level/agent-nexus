@@ -164,7 +164,11 @@ func (s *Store) ListDocuments(ctx context.Context, filter DocumentListFilter) ([
 		); err != nil {
 			return nil, "", fmt.Errorf("scan document row: %w", err)
 		}
-		documents = append(documents, row.toMap())
+		document, mapErr := row.toMap()
+		if mapErr != nil {
+			return nil, "", mapErr
+		}
+		documents = append(documents, document)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, "", fmt.Errorf("iterate document rows: %w", err)
@@ -650,7 +654,7 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		return nil, nil, fmt.Errorf("commit document create transaction: %w", err)
 	}
 
-	docMap := documentRow{
+	docMap, err := documentRow{
 		ID:              documentID,
 		ThreadID:        nullableString(threadID),
 		Title:           nullableString(title),
@@ -666,6 +670,9 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		UpdatedAt:       now,
 		UpdatedBy:       actorID,
 	}.toMap()
+	if err != nil {
+		return nil, nil, err
+	}
 
 	revisionMap := applyDocumentRevisionAliases(map[string]any{
 		"document_id":      documentID,
@@ -698,7 +705,11 @@ func (s *Store) GetDocument(ctx context.Context, documentID string) (map[string]
 	if err != nil {
 		return nil, nil, err
 	}
-	return doc.toMap(), revision, nil
+	docMap, err := doc.toMap()
+	if err != nil {
+		return nil, nil, err
+	}
+	return docMap, revision, nil
 }
 
 func (s *Store) PatchDocument(ctx context.Context, actorID, documentID string, patch map[string]any, ifUpdatedAt *string) (map[string]any, map[string]any, error) {
@@ -794,8 +805,14 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 	nextTitle := nullStringValue(doc.Title)
 	nextSlug := nullStringValue(doc.Slug)
 	nextSummary := strings.TrimSpace(doc.Summary)
-	nextSupersedes := decodeJSONListOrEmpty(doc.SupersedesJSON)
-	nextDocRefs := decodeJSONListOrEmpty(doc.RefsJSON)
+	nextSupersedes, err := decodeStoredJSONList(doc.SupersedesJSON, "document.supersedes")
+	if err != nil {
+		return nil, nil, err
+	}
+	nextDocRefs, err := decodeStoredJSONList(doc.RefsJSON, "document.refs")
+	if err != nil {
+		return nil, nil, err
+	}
 	nextDocProvJSON := strings.TrimSpace(doc.ProvenanceJSON)
 	if nextDocProvJSON == "" {
 		nextDocProvJSON = inferredProvenanceJSON()
@@ -1118,7 +1135,7 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		return nil, nil, fmt.Errorf("commit document update transaction: %w", err)
 	}
 
-	docMap := documentRow{
+	docMap, err := documentRow{
 		ID:              documentID,
 		ThreadID:        nullableString(nextThreadID),
 		Title:           nullableString(nextTitle),
@@ -1134,6 +1151,9 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		UpdatedAt:       now,
 		UpdatedBy:       actorID,
 	}.toMap()
+	if err != nil {
+		return nil, nil, err
+	}
 
 	revisionMap := applyDocumentRevisionAliases(map[string]any{
 		"document_id":      documentID,
@@ -1248,7 +1268,11 @@ func (s *Store) TrashDocument(ctx context.Context, actorID string, documentID st
 		if err != nil {
 			return nil, nil, err
 		}
-		return doc.toMap(), revision, nil
+		docMap, err := doc.toMap()
+		if err != nil {
+			return nil, nil, err
+		}
+		return docMap, revision, nil
 	}
 
 	revision, err := s.loadDocumentRevision(ctx, documentID, doc.HeadRevisionID, true)
@@ -1309,7 +1333,11 @@ func (s *Store) TrashDocument(ctx context.Context, actorID string, documentID st
 	doc.ArchivedAt = sql.NullString{}
 	doc.ArchivedBy = sql.NullString{}
 
-	return doc.toMap(), revision, nil
+	docMap, err := doc.toMap()
+	if err != nil {
+		return nil, nil, err
+	}
+	return docMap, revision, nil
 }
 
 func (s *Store) ArchiveDocument(ctx context.Context, actorID, documentID string) (map[string]any, map[string]any, error) {
@@ -1337,7 +1365,11 @@ func (s *Store) ArchiveDocument(ctx context.Context, actorID, documentID string)
 		if err != nil {
 			return nil, nil, err
 		}
-		return doc.toMap(), revision, nil
+		docMap, err := doc.toMap()
+		if err != nil {
+			return nil, nil, err
+		}
+		return docMap, revision, nil
 	}
 
 	revision, err := s.loadDocumentRevision(ctx, documentID, doc.HeadRevisionID, true)
@@ -1356,7 +1388,11 @@ func (s *Store) ArchiveDocument(ctx context.Context, actorID, documentID string)
 
 	doc.ArchivedAt = nullableString(now)
 	doc.ArchivedBy = nullableString(actorID)
-	return doc.toMap(), revision, nil
+	docMap, err := doc.toMap()
+	if err != nil {
+		return nil, nil, err
+	}
+	return docMap, revision, nil
 }
 
 func (s *Store) UnarchiveDocument(ctx context.Context, actorID, documentID string) (map[string]any, map[string]any, error) {
@@ -1395,7 +1431,11 @@ func (s *Store) UnarchiveDocument(ctx context.Context, actorID, documentID strin
 
 	doc.ArchivedAt = sql.NullString{}
 	doc.ArchivedBy = sql.NullString{}
-	return doc.toMap(), revision, nil
+	docMap, err := doc.toMap()
+	if err != nil {
+		return nil, nil, err
+	}
+	return docMap, revision, nil
 }
 
 func (s *Store) RestoreDocument(ctx context.Context, actorID, documentID string, reason string) (map[string]any, map[string]any, error) {
@@ -1473,7 +1513,11 @@ func (s *Store) RestoreDocument(ctx context.Context, actorID, documentID string,
 	doc.TrashedAt = sql.NullString{}
 	doc.TrashedBy = sql.NullString{}
 	doc.TrashReason = sql.NullString{}
-	return doc.toMap(), revision, nil
+	docMap, err := doc.toMap()
+	if err != nil {
+		return nil, nil, err
+	}
+	return docMap, revision, nil
 }
 
 func (s *Store) PurgeDocument(ctx context.Context, documentID string) error {
@@ -1725,7 +1769,10 @@ func (s *Store) loadDocumentRevision(ctx context.Context, documentID string, rev
 		return nil, fmt.Errorf("query document revision: %w", err)
 	}
 
-	refs := decodeJSONListOrEmpty(refsJSON)
+	refs, err := decodeStoredJSONList(refsJSON, "document_revision.refs")
+	if err != nil {
+		return nil, err
+	}
 	artifact, err := decodeArtifactMetadataJSON(artifactMetaJSON)
 	if err != nil {
 		return nil, fmt.Errorf("decode document revision artifact: %w", err)
@@ -1779,12 +1826,20 @@ func (s *Store) loadDocumentRevision(ctx context.Context, documentID string, rev
 	return revision, nil
 }
 
-func (r documentRow) toMap() map[string]any {
+func (r documentRow) toMap() (map[string]any, error) {
+	supersedes, err := decodeStoredJSONList(r.SupersedesJSON, "document.supersedes")
+	if err != nil {
+		return nil, err
+	}
+	refs, err := decodeStoredJSONList(r.RefsJSON, "document.refs")
+	if err != nil {
+		return nil, err
+	}
 	state := canonicalLifecycleState(r.ArchivedAt, r.TrashedAt)
 	out := map[string]any{
 		"id":                   r.ID,
 		"state":                state,
-		"supersedes":           decodeJSONListOrEmpty(r.SupersedesJSON),
+		"supersedes":           supersedes,
 		"head_revision_id":     r.HeadRevisionID,
 		"head_revision_ref":    "document_revision:" + r.HeadRevisionID,
 		"head_revision_number": r.HeadRevisionNum,
@@ -1823,7 +1878,7 @@ func (r documentRow) toMap() map[string]any {
 	if r.Slug.Valid && strings.TrimSpace(r.Slug.String) != "" {
 		out["slug"] = r.Slug.String
 	}
-	out["refs"] = decodeJSONListOrEmpty(r.RefsJSON)
+	out["refs"] = refs
 	provenance := map[string]any{}
 	if strings.TrimSpace(r.ProvenanceJSON) != "" {
 		if err := json.Unmarshal([]byte(r.ProvenanceJSON), &provenance); err != nil {
@@ -1857,7 +1912,7 @@ func (r documentRow) toMap() map[string]any {
 		out["timeline_message_count"] = int(r.ListTimelineMessageCount.Int64)
 	}
 
-	return out
+	return out, nil
 }
 
 func canonicalDocumentSubjectRef(threadID string) string {
@@ -2202,15 +2257,18 @@ func anyStringValue(raw any) string {
 	return strings.TrimSpace(text)
 }
 
-func decodeJSONListOrEmpty(raw string) []string {
+func decodeStoredJSONList(raw string, field string) ([]string, error) {
 	values := make([]string, 0)
 	if strings.TrimSpace(raw) == "" {
-		return values
+		return values, nil
 	}
 	if err := json.Unmarshal([]byte(raw), &values); err != nil {
-		return []string{}
+		return nil, fmt.Errorf("decode %s: %w", field, err)
 	}
-	return values
+	if values == nil {
+		values = []string{}
+	}
+	return values, nil
 }
 
 func nullableString(raw string) sql.NullString {

@@ -142,7 +142,10 @@ func boardRowToAPI(ctx context.Context, q sqlRowsQuerier, row boardRow) (map[str
 	}
 	typedRefs := typedMap[row.ID]
 	if len(typedRefs) == 0 {
-		typedRefs = decodeJSONListOrEmpty(row.RefsJSON)
+		typedRefs, err = decodeStoredJSONList(row.RefsJSON, "board.refs")
+		if err != nil {
+			return nil, err
+		}
 	}
 	cardRefs := cardMap[row.ID]
 	if cardRefs == nil {
@@ -158,7 +161,10 @@ func boardEffectiveTypedRefsForPatch(ctx context.Context, q sqlRowsQuerier, row 
 	}
 	refs := typedMap[row.ID]
 	if len(refs) == 0 {
-		refs = decodeJSONListOrEmpty(row.RefsJSON)
+		refs, err = decodeStoredJSONList(row.RefsJSON, "board.refs")
+		if err != nil {
+			return nil, err
+		}
 	}
 	return refs, nil
 }
@@ -248,6 +254,7 @@ type boardCardInsertPrep struct {
 	Refs                 []string
 	RefsJSON             []byte
 	DueAt                *string
+	DefinitionOfDone     []string
 	DefinitionOfDoneJSON []byte
 	Assignee             *string
 	PinnedDocumentID     *string
@@ -368,7 +375,11 @@ func (s *Store) insertCardRevisionTx(ctx context.Context, tx *sql.Tx, actorID, c
 	); err != nil {
 		return fmt.Errorf("insert card artifact: %w", err)
 	}
-	if err := replaceRefEdges(ctx, tx, "artifact", revision.ArtifactID, typedRefEdgeTargets(refEdgeTypeRef, decodeJSONListOrEmpty(revision.RefsJSON))); err != nil {
+	revisionRefs, err := decodeStoredJSONList(revision.RefsJSON, "card_revision.refs")
+	if err != nil {
+		return err
+	}
+	if err := replaceRefEdges(ctx, tx, "artifact", revision.ArtifactID, typedRefEdgeTargets(refEdgeTypeRef, revisionRefs)); err != nil {
 		return err
 	}
 	if err := s.applyBlobLedgerWritePlanTx(ctx, tx, revision.BlobPlan); err != nil {
@@ -392,7 +403,7 @@ func (s *Store) insertCardRevisionTx(ctx context.Context, tx *sql.Tx, actorID, c
 	); err != nil {
 		return fmt.Errorf("insert card revision: %w", err)
 	}
-	if err := replaceRefEdges(ctx, tx, "card_revision", revision.RevisionID, typedRefEdgeTargets(refEdgeTypeRef, decodeJSONListOrEmpty(revision.RefsJSON))); err != nil {
+	if err := replaceRefEdges(ctx, tx, "card_revision", revision.RevisionID, typedRefEdgeTargets(refEdgeTypeRef, revisionRefs)); err != nil {
 		return err
 	}
 	return nil
@@ -493,6 +504,7 @@ func prepareBoardCardInsert(input AddBoardCardInput) (boardCardInsertPrep, error
 		Refs:                 refs,
 		RefsJSON:             refsJSON,
 		DueAt:                dueAt,
+		DefinitionOfDone:     definitionOfDone,
 		DefinitionOfDoneJSON: definitionOfDoneJSON,
 		Assignee:             assignee,
 		PinnedDocumentID:     pinnedDocumentID,
@@ -518,6 +530,7 @@ func (s *Store) execBoardCardInsert(ctx context.Context, tx *sql.Tx, boardRow bo
 	resolutionStr := prep.Resolution
 	refs := prep.Refs
 	refsJSON := prep.RefsJSON
+	definitionOfDone := prep.DefinitionOfDone
 	definitionOfDoneJSON := prep.DefinitionOfDoneJSON
 	resolutionRefsJSON := prep.ResolutionRefsJSON
 	backingThreadID := prep.BackingThreadID
@@ -566,7 +579,7 @@ func (s *Store) execBoardCardInsert(ctx context.Context, tx *sql.Tx, boardRow bo
 	if err := ensureCardBackingThreadTx(ctx, tx, actorID, cardID, backingThreadID, title, now); err != nil {
 		return boardRow, boardCardRow{}, nil, err
 	}
-	revision, stagedContent, err := s.prepareCardRevisionInsert(ctx, actorID, cardID, 1, sql.NullString{}, backingThreadID, title, body, decodeJSONListOrEmpty(string(definitionOfDoneJSON)), refs)
+	revision, stagedContent, err := s.prepareCardRevisionInsert(ctx, actorID, cardID, 1, sql.NullString{}, backingThreadID, title, body, definitionOfDone, refs)
 	if err != nil {
 		return boardRow, boardCardRow{}, nil, err
 	}
@@ -1092,7 +1105,10 @@ func (s *Store) UpdateBoard(ctx context.Context, actorID, boardID string, patch 
 	if _, exists := patch["labels"]; exists {
 		return nil, invalidBoardRequest("board.labels is not supported")
 	}
-	nextOwners := decodeJSONListOrEmpty(currentRow.OwnersJSON)
+	nextOwners, err := decodeStoredJSONList(currentRow.OwnersJSON, "board.owners")
+	if err != nil {
+		return nil, err
+	}
 	if rawOwners, exists := patch["owners"]; exists {
 		nextOwners, err = normalizeStringSlice(rawOwners)
 		if err != nil {
@@ -1281,7 +1297,10 @@ func (s *Store) ListBoards(ctx context.Context, filter BoardListFilter) ([]Board
 	for _, row := range boardRows {
 		typedRefs := typedByBoard[row.ID]
 		if len(typedRefs) == 0 {
-			typedRefs = decodeJSONListOrEmpty(row.RefsJSON)
+			typedRefs, err = decodeStoredJSONList(row.RefsJSON, "board.refs")
+			if err != nil {
+				return nil, "", err
+			}
 		}
 		cardRefs := cardByBoard[row.ID]
 		if cardRefs == nil {
@@ -2633,7 +2652,11 @@ func (s *Store) listBoardCardHistoryTx(ctx context.Context, q sqlRowsQuerier, ca
 		if scanErr != nil {
 			return nil, scanErr
 		}
-		out = append(out, versionRow.toMap())
+		version, mapErr := versionRow.toMap()
+		if mapErr != nil {
+			return nil, mapErr
+		}
+		out = append(out, version)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate board card history: %w", err)
@@ -2707,7 +2730,11 @@ func (s *Store) CreateCardRevision(ctx context.Context, actorID, cardID string, 
 	if input.Summary != nil {
 		nextSummary = strings.TrimSpace(*input.Summary)
 	}
-	nextDefinition := decodeJSONListOrEmpty(cardRow.DefinitionOfDoneJSON)
+	nextDefinition, err := decodeStoredJSONList(cardRow.DefinitionOfDoneJSON, "card.definition_of_done")
+	if err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, nil, err
+	}
 	if input.DefinitionOfDone != nil {
 		nextDefinition = uniqueSortedStrings(*input.DefinitionOfDone)
 	}
@@ -2722,7 +2749,12 @@ func (s *Store) CreateCardRevision(ctx context.Context, actorID, cardID string, 
 	}
 	prevRevision := sql.NullString{String: baseRevisionID, Valid: baseRevisionID != ""}
 	threadID := strings.TrimSpace(firstNonEmpty(cardRow.ThreadID.String, cardRow.ParentThreadID.String))
-	revision, stagedContent, err := s.prepareCardRevisionInsert(ctx, actorID, cardRow.CardID, nextRevisionNumber, prevRevision, threadID, nextTitle, nextSummary, nextDefinition, decodeJSONListOrEmpty(cardRow.RefsJSON))
+	nextRefs, err := decodeStoredJSONList(cardRow.RefsJSON, "card.refs")
+	if err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, nil, err
+	}
+	revision, stagedContent, err := s.prepareCardRevisionInsert(ctx, actorID, cardRow.CardID, nextRevisionNumber, prevRevision, threadID, nextTitle, nextSummary, nextDefinition, nextRefs)
 	if err != nil {
 		_ = tx.Rollback()
 		return BoardCardMutationResult{}, nil, err
@@ -2964,7 +2996,10 @@ func (s *Store) computeBoardSummaries(ctx context.Context, boards []boardRow, ty
 
 		refs := typedRefsByBoard[board.ID]
 		if len(refs) == 0 {
-			refs = decodeJSONListOrEmpty(board.RefsJSON)
+			refs, err = decodeStoredJSONList(board.RefsJSON, "board.refs")
+			if err != nil {
+				return nil, err
+			}
 		}
 		summaries[board.ID] = map[string]any{
 			"card_count":            len(cards),
@@ -4169,7 +4204,6 @@ func (r boardRow) boardToMapWithRefData(typedRefs, cardRefs []string) (map[strin
 		"title":         r.Title,
 		"summary":       strings.TrimSpace(r.Summary),
 		"state":         canonicalLifecycleState(r.ArchivedAt, r.TrashedAt),
-		"owners":        decodeJSONListOrEmpty(r.OwnersJSON),
 		"thread_id":     r.ThreadID,
 		"refs":          typedRefs,
 		"card_refs":     cardRefs,
@@ -4179,6 +4213,11 @@ func (r boardRow) boardToMapWithRefData(typedRefs, cardRefs []string) (map[strin
 		"updated_at":    r.UpdatedAt,
 		"updated_by":    r.UpdatedBy,
 	}
+	owners, err := decodeStoredJSONList(r.OwnersJSON, "board.owners")
+	if err != nil {
+		return nil, err
+	}
+	m["owners"] = owners
 	if documentRefs := boardDocumentRefsFromRefs(typedRefs); len(documentRefs) > 0 {
 		m["document_refs"] = documentRefs
 	}
@@ -4199,9 +4238,18 @@ func (r boardCardRow) toMap() (map[string]any, error) {
 			return nil, fmt.Errorf("decode board card provenance: %w", err)
 		}
 	}
-	definitionOfDone := decodeJSONListOrEmpty(r.DefinitionOfDoneJSON)
-	resolutionRefs := decodeJSONListOrEmpty(r.ResolutionRefsJSON)
-	refs := decodeJSONListOrEmpty(r.RefsJSON)
+	definitionOfDone, err := decodeStoredJSONList(r.DefinitionOfDoneJSON, "card.definition_of_done")
+	if err != nil {
+		return nil, err
+	}
+	resolutionRefs, err := decodeStoredJSONList(r.ResolutionRefsJSON, "card.resolution_refs")
+	if err != nil {
+		return nil, err
+	}
+	refs, err := decodeStoredJSONList(r.RefsJSON, "card.refs")
+	if err != nil {
+		return nil, err
+	}
 	threadID := strings.TrimSpace(firstNonEmpty(r.ThreadID.String, r.ParentThreadID.String))
 	assigneeRefs := boardCardAssigneeRefs(r.Assignee.String)
 	relatedRefs := boardCardRelatedRefs(refs, r.ParentThreadID.String)
@@ -4240,13 +4288,26 @@ func (r boardCardRow) toMap() (map[string]any, error) {
 	return m, nil
 }
 
-func (r boardCardVersionRow) toMap() map[string]any {
+func (r boardCardVersionRow) toMap() (map[string]any, error) {
 	provenance := map[string]any{}
 	if strings.TrimSpace(r.ProvenanceJSON) != "" {
-		_ = json.Unmarshal([]byte(r.ProvenanceJSON), &provenance)
+		if err := json.Unmarshal([]byte(r.ProvenanceJSON), &provenance); err != nil {
+			return nil, fmt.Errorf("decode board card revision provenance: %w", err)
+		}
 	}
 	threadID := strings.TrimSpace(firstNonEmpty(r.ThreadID.String, r.ParentThreadID.String))
-	refs := decodeJSONListOrEmpty(r.RefsJSON)
+	refs, err := decodeStoredJSONList(r.RefsJSON, "card_revision.refs")
+	if err != nil {
+		return nil, err
+	}
+	definitionOfDone, err := decodeStoredJSONList(r.DefinitionOfDoneJSON, "card_revision.definition_of_done")
+	if err != nil {
+		return nil, err
+	}
+	resolutionRefs, err := decodeStoredJSONList(r.ResolutionRefsJSON, "card_revision.resolution_refs")
+	if err != nil {
+		return nil, err
+	}
 	return map[string]any{
 		"id":                 r.RevisionID,
 		"revision_id":        r.RevisionID,
@@ -4264,18 +4325,18 @@ func (r boardCardVersionRow) toMap() map[string]any {
 		"document_ref":       boardTypedRefOrNil("document", r.PinnedDocumentID.String),
 		"risk":               canonicalBoardCardRisk(r.Risk),
 		"due_at":             nullableBoardString(r.DueAt.String),
-		"definition_of_done": decodeJSONListOrEmpty(r.DefinitionOfDoneJSON),
+		"definition_of_done": definitionOfDone,
 		"assignee_refs":      boardCardAssigneeRefs(r.Assignee.String),
 		"related_refs":       boardCardRelatedRefs(refs, r.ParentThreadID.String),
 		"column_key":         r.ColumnKey,
 		"rank":               r.Rank,
 		"resolution":         canonicalizeCardResolutionForAPI(r.Resolution.String),
-		"resolution_refs":    decodeJSONListOrEmpty(r.ResolutionRefsJSON),
+		"resolution_refs":    resolutionRefs,
 		"refs":               refs,
 		"created_at":         r.CreatedAt,
 		"created_by":         r.CreatedBy,
 		"provenance":         provenance,
-	}
+	}, nil
 }
 
 func boardCardAssigneeRefs(rawAssignee string) []string {
@@ -4545,7 +4606,11 @@ func resolveBoardCardMoveResolution(cardRow boardCardRow, columnKey string, inpu
 	}
 	if effectiveResolution == nil {
 		if columnKey != "done" {
-			hasRefs := len(decodeJSONListOrEmpty(cardRow.ResolutionRefsJSON)) > 0
+			resolutionRefs, err := decodeStoredJSONList(cardRow.ResolutionRefsJSON, "card.resolution_refs")
+			if err != nil {
+				return "", "", false, err
+			}
+			hasRefs := len(resolutionRefs) > 0
 			if currentResolution != "" || hasRefs {
 				emptyRefs, err := json.Marshal([]string{})
 				if err != nil {
