@@ -74,6 +74,21 @@ func normalizeResourceIDInput(raw string, expectedKind string, idLabel string) (
 	return raw, nil
 }
 
+// resourceLocatorScanStart returns the index of the first path segment after the
+// workspace prefix (/o/<org>/w/<workspace> or /ws/<org>/<workspace>), matching
+// webWorkspaceBaseURL. When no prefix is found, 0 preserves legacy URL parsing.
+func resourceLocatorScanStart(segments []string) int {
+	if len(segments) >= 3 && segments[0] == "ws" {
+		return 3
+	}
+	for idx := 0; idx+3 < len(segments); idx++ {
+		if segments[idx] == "o" && segments[idx+2] == "w" {
+			return idx + 4
+		}
+	}
+	return 0
+}
+
 func parseResourceLocator(raw string) (resourceLocator, bool, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" || !strings.Contains(raw, "://") {
@@ -84,7 +99,9 @@ func parseResourceLocator(raw string) (resourceLocator, bool, error) {
 		return resourceLocator{}, false, errnorm.Usage("invalid_request", fmt.Sprintf("invalid ANX URL %q", raw))
 	}
 	segments := normalizedPathSegments(parsed.Path)
-	for idx, segment := range segments {
+	scanFrom := resourceLocatorScanStart(segments)
+	for idx := scanFrom; idx < len(segments); idx++ {
+		segment := segments[idx]
 		switch segment {
 		case "boards":
 			if idx+1 >= len(segments) {
