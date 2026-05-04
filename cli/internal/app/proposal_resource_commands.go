@@ -102,6 +102,7 @@ type docsReviseInput struct {
 }
 
 func (a *App) parseDocsReviseInput(args []string) (docsReviseInput, error) {
+	leadingDocumentID, args := popLeadingPositional(args)
 	fs := newSilentFlagSet("docs revise")
 	var documentIDFlag, proposalIDFlag, fromFileFlag, contentFileFlag, actorIDFlag trackedString
 	var applyFlag, proposeFlag trackedBool
@@ -117,7 +118,7 @@ func (a *App) parseDocsReviseInput(args []string) (docsReviseInput, error) {
 		return docsReviseInput{}, errnorm.Usage("invalid_flags", err.Error())
 	}
 	positionals := fs.Args()
-	documentID := strings.TrimSpace(documentIDFlag.value)
+	documentID := firstNonEmpty(strings.TrimSpace(documentIDFlag.value), leadingDocumentID)
 	if documentID == "" && len(positionals) > 0 && strings.TrimSpace(proposalIDFlag.value) == "" {
 		documentID = strings.TrimSpace(positionals[0])
 		positionals = positionals[1:]

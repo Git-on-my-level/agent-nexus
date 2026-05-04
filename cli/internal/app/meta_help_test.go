@@ -582,6 +582,55 @@ func TestDocsCreateHelpUsesFileFirstLocalHelp(t *testing.T) {
 	}
 }
 
+func TestDomainHelperHelpUsesCanonicalPositionalTargets(t *testing.T) {
+	t.Parallel()
+
+	for _, surface := range agentDomainSurfaces() {
+		for _, command := range surface.Commands {
+			t.Run(command.Path, func(t *testing.T) {
+				output := runHelpCommand(t, append([]string{"help"}, strings.Fields(command.Path)...)...)
+				want := append([]string{command.Target}, command.Examples...)
+				if command.Path == "cards resolve" {
+					want = append(want, "terminal resolution evidence")
+				}
+				for _, want := range want {
+					if !strings.Contains(output, want) {
+						t.Fatalf("expected %q in output=%s", want, output)
+					}
+				}
+				for _, forbid := range command.ForbidHelp {
+					if strings.Contains(output, forbid) {
+						t.Fatalf("unexpected legacy target shape %q in output=%s", forbid, output)
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestDomainSurfaceKeepsEvidenceScopedToCardResolution(t *testing.T) {
+	t.Parallel()
+
+	for _, surface := range agentDomainSurfaces() {
+		for _, command := range surface.Commands {
+			output := runHelpCommand(t, append([]string{"help"}, strings.Fields(command.Path)...)...)
+			if command.Path == "cards resolve" {
+				for _, want := range []string{"--resolution-ref <typed-ref>", "evidence"} {
+					if !strings.Contains(output, want) {
+						t.Fatalf("expected card resolution evidence help %q in output=%s", want, output)
+					}
+				}
+				continue
+			}
+			for _, forbidden := range []string{"Evidence event/artifact", "terminal resolution evidence"} {
+				if strings.Contains(output, forbidden) {
+					t.Fatalf("unexpected evidence surface in %s help output=%s", command.Path, output)
+				}
+			}
+		}
+	}
+}
+
 func TestRunCommitmentsHelpIsRemoved(t *testing.T) {
 	t.Parallel()
 
@@ -936,6 +985,12 @@ func TestRunGeneratedHelpResolvesDerivedDocsAndArtifactCommands(t *testing.T) {
 	}
 	if !strings.Contains(docsRevise, "--apply") || !strings.Contains(docsRevise, "--proposal-id") {
 		t.Fatalf("expected docs revise apply/proposal flags output=%s", docsRevise)
+	}
+	if !strings.Contains(docsRevise, "anx docs revise <document-id> --apply --content-file notes.md") {
+		t.Fatalf("expected docs revise apply example to keep positional target before flags output=%s", docsRevise)
+	}
+	if strings.Contains(docsRevise, "anx docs revise --apply <document-id> --content-file notes.md") {
+		t.Fatalf("unexpected docs revise example with flags before positional target output=%s", docsRevise)
 	}
 
 	artifactInspect := runHelpCommand(t, "help", "artifacts", "inspect")

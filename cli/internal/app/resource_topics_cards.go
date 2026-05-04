@@ -16,13 +16,13 @@ var topicsSubcommandSpec = subcommandSpec{
 		"list", "get", "create", "patch", "message", "messages", "reply", "timeline", "workspace",
 		"archive", "unarchive", "trash", "restore",
 	},
-	examples: []string{"anx topics list", "anx topics create --title \"Launch\" --summary \"Coordinate launch work\"", "anx topics message <topic-id> --body-file message.md", "anx topics messages <topic-id>", "anx topics reply <topic-id> --to <message-id> --body-file reply.md", "anx topics workspace --topic-id <topic-id>", "anx topics archive --topic-id <topic-id>"},
+	examples: []string{"anx topics list", "anx topics create --title \"Launch\" --summary \"Coordinate launch work\"", "anx topics message <topic-id> --body-file message.md", "anx topics messages <topic-id>", "anx topics reply <topic-id> --to <message-id> --body-file reply.md", "anx topics workspace <topic-id>", "anx topics archive <topic-id>"},
 }
 
 var cardsSubcommandSpec = subcommandSpec{
 	command:  "cards",
 	valid:    []string{"list", "get", "create", "message", "messages", "reply", "revise", "history", "revision", "patch", "move", "assign", "resolve", "reopen", "archive", "trash", "purge", "restore", "timeline"},
-	examples: []string{"anx cards list", "anx cards create --board <board-id> --title \"Implement login\" --content-file card.md", "anx cards message <card-id> --body-file update.md", "anx cards messages <card-id>", "anx cards reply <card-id> --to <message-id> --body-file reply.md", "anx cards revise --card <card-id> --content-file card.md", "anx cards history --card-id <card-id>", "anx cards assign --card <card-id> --assignee-ref actor:<actor-id>", "anx cards resolve --card <card-id> --body-file evidence.md", "anx cards move --card-id <card-id> --column review", "anx cards get --card-id <card-id>"},
+	examples: []string{"anx cards list", "anx cards create --board <board-id> --title \"Implement login\" --content-file card.md", "anx cards message <card-id> --body-file update.md", "anx cards messages <card-id>", "anx cards reply <card-id> --to <message-id> --body-file reply.md", "anx cards revise <card-id> --content-file card.md", "anx cards history <card-id>", "anx cards assign <card-id> --assignee-ref actor:<actor-id>", "anx cards resolve <card-id> --body-file evidence.md", "anx cards move <card-id> --column review", "anx cards get <card-id>"},
 }
 
 func (a *App) runTopicsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
@@ -625,6 +625,7 @@ func (a *App) parseCardCreateInput(args []string, cfg config.Resolved, commandNa
 }
 
 func (a *App) parseCardReviseInput(ctx context.Context, args []string, cfg config.Resolved, commandName string) (string, map[string]any, error) {
+	leadingCardID, args := popLeadingPositional(args)
 	fs := newSilentFlagSet(commandName)
 	var cardIDFlag, contentFileFlag, titleFlag, ifBaseRevisionFlag, actorIDFlag, fromFileFlag trackedString
 	fs.Var(&cardIDFlag, "card", "Card id")
@@ -638,7 +639,7 @@ func (a *App) parseCardReviseInput(ctx context.Context, args []string, cfg confi
 		return "", nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	positionals := fs.Args()
-	cardID := strings.TrimSpace(cardIDFlag.value)
+	cardID := firstNonEmpty(strings.TrimSpace(cardIDFlag.value), leadingCardID)
 	if cardID == "" && len(positionals) > 0 {
 		cardID = strings.TrimSpace(positionals[0])
 		positionals = positionals[1:]
@@ -732,6 +733,7 @@ func parseCardRevisionGetInput(args []string, commandName string) (string, strin
 }
 
 func (a *App) parseCardAssignInput(ctx context.Context, args []string, cfg config.Resolved, commandName string) (string, map[string]any, error) {
+	leadingCardID, args := popLeadingPositional(args)
 	fs := newSilentFlagSet(commandName)
 	var cardIDFlag, ifUpdatedAtFlag, actorIDFlag trackedString
 	var assigneeRefFlags trackedStrings
@@ -745,7 +747,7 @@ func (a *App) parseCardAssignInput(ctx context.Context, args []string, cfg confi
 	if err := fs.Parse(args); err != nil {
 		return "", nil, errnorm.Usage("invalid_flags", err.Error())
 	}
-	cardID, err := parseCardIDFromFlagOrPositionals(cardIDFlag.value, fs.Args(), commandName)
+	cardID, err := parseCardIDFromFlagOrPositionals(firstNonEmpty(cardIDFlag.value, leadingCardID), fs.Args(), commandName)
 	if err != nil {
 		return "", nil, err
 	}
@@ -774,6 +776,7 @@ func (a *App) parseCardAssignInput(ctx context.Context, args []string, cfg confi
 }
 
 func (a *App) parseCardMoveInput(ctx context.Context, args []string, cfg config.Resolved, commandName string) (string, map[string]any, error) {
+	leadingCardID, args := popLeadingPositional(args)
 	fs := newSilentFlagSet(commandName)
 	var cardIDFlag, columnFlag, ifBoardUpdatedAtFlag, actorIDFlag, fromFileFlag trackedString
 	fs.Var(&cardIDFlag, "card", "Card id")
@@ -785,7 +788,7 @@ func (a *App) parseCardMoveInput(ctx context.Context, args []string, cfg config.
 	if err := fs.Parse(args); err != nil {
 		return "", nil, errnorm.Usage("invalid_flags", err.Error())
 	}
-	cardID, err := parseCardIDFromFlagOrPositionals(cardIDFlag.value, fs.Args(), commandName)
+	cardID, err := parseCardIDFromFlagOrPositionals(firstNonEmpty(cardIDFlag.value, leadingCardID), fs.Args(), commandName)
 	if err != nil {
 		return "", nil, err
 	}
@@ -923,6 +926,7 @@ func (a *App) postCardResolveEvidence(ctx context.Context, cfg config.Resolved, 
 }
 
 func (a *App) parseCardReopenInput(ctx context.Context, args []string, cfg config.Resolved, commandName string) (string, map[string]any, error) {
+	leadingCardID, args := popLeadingPositional(args)
 	fs := newSilentFlagSet(commandName)
 	var cardIDFlag, columnFlag, ifBoardUpdatedAtFlag, actorIDFlag trackedString
 	fs.Var(&cardIDFlag, "card", "Card id")
@@ -933,7 +937,7 @@ func (a *App) parseCardReopenInput(ctx context.Context, args []string, cfg confi
 	if err := fs.Parse(args); err != nil {
 		return "", nil, errnorm.Usage("invalid_flags", err.Error())
 	}
-	cardID, err := parseCardIDFromFlagOrPositionals(cardIDFlag.value, fs.Args(), commandName)
+	cardID, err := parseCardIDFromFlagOrPositionals(firstNonEmpty(cardIDFlag.value, leadingCardID), fs.Args(), commandName)
 	if err != nil {
 		return "", nil, err
 	}
@@ -1014,7 +1018,7 @@ func (a *App) ensureCardPatchConcurrency(ctx context.Context, cfg config.Resolve
 		body["if_updated_at"] = updatedAt
 	}
 	if strings.TrimSpace(anyString(body["if_updated_at"])) == "" {
-		return errnorm.Usage("invalid_request", "`if_updated_at` is required; run `anx cards get --card-id "+cardID+"` and retry with --if-updated-at <updated_at>")
+		return errnorm.Usage("invalid_request", "`if_updated_at` is required; run `anx cards get "+cardID+"` and retry with --if-updated-at <updated_at>")
 	}
 	return finalizeOptionalMutationBodyActorID(body, cfg)
 }
@@ -1036,7 +1040,7 @@ func (a *App) ensureCardRevisionBase(ctx context.Context, cfg config.Resolved, c
 		body["if_base_revision"] = baseRevision
 	}
 	if strings.TrimSpace(anyString(body["if_base_revision"])) == "" {
-		return errnorm.Usage("invalid_request", "`if_base_revision` is required; run `anx cards get --card-id "+cardID+"` and retry with --if-base-revision <revision_id>")
+		return errnorm.Usage("invalid_request", "`if_base_revision` is required; run `anx cards get "+cardID+"` and retry with --if-base-revision <revision_id>")
 	}
 	return finalizeOptionalMutationBodyActorID(body, cfg)
 }

@@ -77,7 +77,7 @@ var localHelperTopics = []localHelperTopic{
 			"anx topics message <topic-id> --body \"Decision context\"",
 		},
 		Flags: []localHelperFlag{
-			{Name: "--topic <topic-id>", Description: "Topic id or unique prefix to message."},
+			{Name: "<topic-id>", Description: "Topic id or unique prefix to message."},
 			{Name: "--thread <thread-id>", Description: "Backing thread id for thread-scoped message fallback."},
 			{Name: "--thread-id <thread-id>", Description: "Backing thread id for thread-scoped message fallback."},
 			{Name: "--body <text>", Description: "Message body text."},
@@ -98,7 +98,7 @@ var localHelperTopics = []localHelperTopic{
 			"anx topics messages <topic-id> --max-events 5 --mine",
 		},
 		Flags: []localHelperFlag{
-			{Name: "--topic <topic-id>", Description: "Topic id or unique prefix whose messages should be listed."},
+			{Name: "<topic-id>", Description: "Topic id or unique prefix whose messages should be listed."},
 			{Name: "--max-events <n>", Description: "Return at most N most-recent matching messages."},
 			{Name: "--mine", Description: "Filter to messages authored by the active profile actor_id."},
 			{Name: "--actor-id <actor-id>", Description: "Filter to one actor id."},
@@ -115,7 +115,7 @@ var localHelperTopics = []localHelperTopic{
 			"anx topics reply <topic-id> --to <message-id> --body-file reply.md",
 		},
 		Flags: []localHelperFlag{
-			{Name: "--topic <topic-id>", Description: "Topic id or unique prefix to reply on."},
+			{Name: "<topic-id>", Description: "Topic id or unique prefix to reply on."},
 			{Name: "--thread <thread-id>", Description: "Backing thread id for thread-scoped reply fallback."},
 			{Name: "--thread-id <thread-id>", Description: "Backing thread id for thread-scoped reply fallback."},
 			{Name: "--to <message-id>", Description: "Message/event id or unique prefix being replied to."},
@@ -204,7 +204,7 @@ var localHelperTopics = []localHelperTopic{
 			"cat update.md | anx cards message <card-id>",
 		},
 		Flags: []localHelperFlag{
-			{Name: "--card <card-id>", Description: "Card id or unique prefix to message."},
+			{Name: "<card-id>", Description: "Card id or unique prefix to message."},
 			{Name: "--body <text>", Description: "Message body text."},
 			{Name: "--body-file <path>", Description: "Load message body text from a local file."},
 			{Name: "--summary <text>", Description: "Optional short event summary."},
@@ -221,10 +221,10 @@ var localHelperTopics = []localHelperTopic{
 		Examples: []string{
 			"anx cards messages <card-id>",
 			"anx cards messages <card-id> --max-events 5 --mine",
-			"anx cards messages --card <card-id> --full-id",
+			"anx cards messages <card-id> --full-id",
 		},
 		Flags: []localHelperFlag{
-			{Name: "--card <card-id>", Description: "Card id or unique prefix whose messages should be listed."},
+			{Name: "<card-id>", Description: "Card id or unique prefix whose messages should be listed."},
 			{Name: "--max-events <n>", Description: "Return at most N most-recent matching messages."},
 			{Name: "--mine", Description: "Filter to messages authored by the active profile actor_id."},
 			{Name: "--actor-id <actor-id>", Description: "Filter to one actor id."},
@@ -241,7 +241,7 @@ var localHelperTopics = []localHelperTopic{
 			"anx cards reply <card-id> --to <message-id> --body-file reply.md",
 		},
 		Flags: []localHelperFlag{
-			{Name: "--card <card-id>", Description: "Card id or unique prefix to reply on."},
+			{Name: "<card-id>", Description: "Card id or unique prefix to reply on."},
 			{Name: "--to <message-id>", Description: "Message/event id or unique prefix being replied to."},
 			{Name: "--body <text>", Description: "Reply body text."},
 			{Name: "--body-file <path>", Description: "Load reply body text from a local file."},
@@ -257,12 +257,12 @@ var localHelperTopics = []localHelperTopic{
 		JSONShape:   "`{ if_base_revision, revision: { title?, summary?, definition_of_done? }, actor_id? }`; discovers `if_base_revision` from `cards get` when omitted.",
 		Composition: "Fetches the card when needed for optimistic concurrency, then sends `cards.revisions.create` with `summary` from `--content-file` and optional `title`.",
 		Examples: []string{
-			"anx cards revise --card <card-id> --content-file card.md",
-			"anx cards revise --card <card-id> --title \"Updated title\" --content-file card.md",
-			"anx cards revise --card <card-id> --from-file card-revision.json",
+			"anx cards revise <card-id> --content-file card.md",
+			"anx cards revise <card-id> --title \"Updated title\" --content-file card.md",
+			"anx cards revise <card-id> --from-file card-revision.json",
 		},
 		Flags: []localHelperFlag{
-			{Name: "--card <card-id>", Description: "Card id or unique prefix to revise."},
+			{Name: "<card-id>", Description: "Card id or unique prefix to revise."},
 			{Name: "--content-file <path>", Description: "Load revised card summary/body text from a local file."},
 			{Name: "--title <text>", Description: "Optional revised card title."},
 			{Name: "--if-base-revision <revision-id>", Description: "Base card revision id; discovered when omitted."},
@@ -279,7 +279,7 @@ var localHelperTopics = []localHelperTopic{
 			"anx threads message <thread-id> --body \"Diagnostic note\"",
 		},
 		Flags: []localHelperFlag{
-			{Name: "--thread <thread-id>", Description: "Thread id or unique prefix to message."},
+			{Name: "<thread-id>", Description: "Thread id or unique prefix to message."},
 			{Name: "--body <text>", Description: "Message body text."},
 			{Name: "--body-file <path>", Description: "Load message body text from a local file."},
 			{Name: "--summary <text>", Description: "Optional short event summary."},
@@ -298,7 +298,7 @@ var localHelperTopics = []localHelperTopic{
 			"anx threads reply <thread-id> --to <message-id> --body-file reply.md",
 		},
 		Flags: []localHelperFlag{
-			{Name: "--thread <thread-id>", Description: "Thread id or unique prefix to reply on."},
+			{Name: "<thread-id>", Description: "Thread id or unique prefix to reply on."},
 			{Name: "--to <message-id>", Description: "Message/event id or unique prefix being replied to."},
 			{Name: "--body <text>", Description: "Reply body text."},
 			{Name: "--body-file <path>", Description: "Load reply body text from a local file."},
@@ -314,11 +314,11 @@ var localHelperTopics = []localHelperTopic{
 		JSONShape:   "`{ column_key, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.",
 		Composition: "Fetches the card and parent board when needed for optimistic concurrency, then sends `cards.move`.",
 		Examples: []string{
-			"anx cards move --card <card-id> --column review",
-			"anx cards move --card <card-id> --column blocked --if-board-updated-at <updated-at>",
+			"anx cards move <card-id> --column review",
+			"anx cards move <card-id> --column blocked --if-board-updated-at <updated-at>",
 		},
 		Flags: []localHelperFlag{
-			{Name: "--card <card-id>", Description: "Card id or unique prefix to move."},
+			{Name: "<card-id>", Description: "Card id or unique prefix to move."},
 			{Name: "--column <key>", Description: "Target board column."},
 			{Name: "--if-board-updated-at <timestamp>", Description: "Board optimistic concurrency token; discovered when omitted."},
 			{Name: "--from-file <path>", Description: "Advanced JSON move request body from file."},
@@ -330,11 +330,11 @@ var localHelperTopics = []localHelperTopic{
 		JSONShape:   "`{ patch: { assignee_refs }, if_updated_at, actor_id? }`; discovers `if_updated_at` from `cards get` when omitted.",
 		Composition: "Builds a focused `cards.patch` request for the Card ownership field.",
 		Examples: []string{
-			"anx cards assign --card <card-id> --assignee-ref actor:<actor-id>",
-			"anx cards assign --card <card-id> --clear",
+			"anx cards assign <card-id> --assignee-ref actor:<actor-id>",
+			"anx cards assign <card-id> --clear",
 		},
 		Flags: []localHelperFlag{
-			{Name: "--card <card-id>", Description: "Card id or unique prefix to assign."},
+			{Name: "<card-id>", Description: "Card id or unique prefix to assign."},
 			{Name: "--assignee-ref <typed-ref>", Description: "Assignee actor typed ref, repeatable."},
 			{Name: "--clear", Description: "Clear all assignees."},
 			{Name: "--if-updated-at <timestamp>", Description: "Card optimistic concurrency token; discovered when omitted."},
@@ -346,11 +346,11 @@ var localHelperTopics = []localHelperTopic{
 		JSONShape:   "`{ column_key: \"done\", resolution, resolution_refs, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.",
 		Composition: "With `--body` or `--body-file`, posts a card message first and passes its `event:<id>` as terminal resolution evidence.",
 		Examples: []string{
-			"anx cards resolve --card <card-id> --body-file evidence.md",
-			"anx cards resolve --card <card-id> --resolution-ref event:<event-id>",
+			"anx cards resolve <card-id> --body-file evidence.md",
+			"anx cards resolve <card-id> --resolution-ref event:<event-id>",
 		},
 		Flags: []localHelperFlag{
-			{Name: "--card <card-id>", Description: "Card id or unique prefix to resolve."},
+			{Name: "<card-id>", Description: "Card id or unique prefix to resolve."},
 			{Name: "--resolution-ref <typed-ref>", Description: "Evidence event/artifact typed ref, repeatable."},
 			{Name: "--body <text>", Description: "Post inline evidence to the card thread before resolving."},
 			{Name: "--body-file <path>", Description: "Load evidence text from a file before resolving."},
@@ -366,11 +366,11 @@ var localHelperTopics = []localHelperTopic{
 		JSONShape:   "`{ column_key, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.",
 		Composition: "Builds a focused `cards.move` request. The default reopened column is `ready`.",
 		Examples: []string{
-			"anx cards reopen --card <card-id>",
-			"anx cards reopen --card <card-id> --column backlog",
+			"anx cards reopen <card-id>",
+			"anx cards reopen <card-id> --column backlog",
 		},
 		Flags: []localHelperFlag{
-			{Name: "--card <card-id>", Description: "Card id or unique prefix to reopen."},
+			{Name: "<card-id>", Description: "Card id or unique prefix to reopen."},
 			{Name: "--column <key>", Description: "Target reopened column; defaults to ready."},
 			{Name: "--if-board-updated-at <timestamp>", Description: "Board optimistic concurrency token; discovered when omitted."},
 		},
@@ -478,11 +478,11 @@ var localHelperTopics = []localHelperTopic{
 		JSONShape:   "`board_id`, `board`, `primary_topic`, `cards`, `documents`, `inbox`, `board_summary`, `projection_freshness`, `board_summary_freshness`, `warnings`, `section_kinds`, `generated_at`",
 		Composition: "Resolves a board by id, fetches the projection workspace with per-card thread backing and renders cards grouped by canonical column order (backlog, ready, in_progress, blocked, review, done).",
 		Examples: []string{
-			"anx boards workspace --board-id <board-id>",
-			"anx boards workspace --board-id board_product_launch",
+			"anx boards workspace <board-id>",
+			"anx boards workspace board_product_launch",
 		},
 		Flags: []localHelperFlag{
-			{Name: "--board-id <board-id>", Description: "Board id or unique prefix to load."},
+			{Name: "<board-id>", Description: "Board id or unique prefix to load."},
 		},
 	},
 	{
@@ -491,12 +491,11 @@ var localHelperTopics = []localHelperTopic{
 		JSONShape:   "`board_id`, `cards`",
 		Composition: "Fetches the raw card list for a board ordered by canonical column sequence and per-column rank. Default text leads with canonical card ids and titles; thread ids are secondary context.",
 		Examples: []string{
-			"anx boards cards list --board-id <board-id>",
 			"anx boards cards list <board-id>",
 			"anx boards cards list <board-id> --full-id",
 		},
 		Flags: []localHelperFlag{
-			{Name: "--board-id <board-id>", Description: "Board id or unique prefix to list cards for."},
+			{Name: "<board-id>", Description: "Board id or unique prefix to list cards for."},
 			{Name: "--full-id", Description: "Render full card ids in default text output."},
 		},
 	},
@@ -516,14 +515,13 @@ var localHelperTopics = []localHelperTopic{
 		JSONShape:   "Proposal mode returns `proposal_id`, `target_command_id`, `path`, `body`, `diff`, `apply_command`; `--apply` sends the revision immediately or applies a staged proposal.",
 		Composition: "Fetches the current document revision, discovers the base revision when omitted, computes a local diff, and stages a proposal. Add `--apply` to direct-write the revision; use `--apply --proposal-id <id>` to apply a staged proposal.",
 		Examples: []string{
-			"anx docs revise --document-id <document-id> --content-file notes.md",
+			"anx docs revise <document-id> --content-file notes.md",
 			"anx docs revise --apply --proposal-id <proposal-id>",
-			"anx docs revise --apply --document-id <document-id> --content-file notes.md",
-			"cat revision.json | anx docs revise --document-id <document-id>",
+			"anx docs revise <document-id> --apply --content-file notes.md",
+			"cat revision.json | anx docs revise <document-id>",
 		},
 		Flags: []localHelperFlag{
-			{Name: "--document-id <document-id>", Description: "Document id to revise."},
-			{Name: "--document <document-id>", Description: "Same as --document-id."},
+			{Name: "<document-id>", Description: "Document id to revise."},
 			{Name: "--content-file <path>", Description: "Load revised Markdown/text content from a local file."},
 			{Name: "--from-file <path>", Description: "Advanced JSON revision body from a file."},
 			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
@@ -538,11 +536,10 @@ var localHelperTopics = []localHelperTopic{
 		JSONShape:   "`document`, `revision`, `content`, `status_code`, `headers`",
 		Composition: "Loads `docs get`, then renders the current revision content and metadata in one operator-friendly response.",
 		Examples: []string{
-			`anx docs content --document-id <document-id>`,
 			`anx docs content <document-id-or-alias>`,
 		},
 		Flags: []localHelperFlag{
-			{Name: "--document-id <document-id>", Description: "Document id or unique alias to inspect."},
+			{Name: "<document-id>", Description: "Document id or unique alias to inspect."},
 		},
 	},
 	{
@@ -551,11 +548,11 @@ var localHelperTopics = []localHelperTopic{
 		JSONShape:   "Fetches the Document backing thread and returns an `events.list`-style filtered timeline slice with document metadata.",
 		Composition: "Fetches the Document, then reads its backing thread timeline and filters to messages attached to that document.",
 		Examples: []string{
-			`anx docs messages --document-id <document-id>`,
 			`anx docs messages <document-id>`,
+			`anx docs messages <document-id> --max-events 5 --mine`,
 		},
 		Flags: []localHelperFlag{
-			{Name: "--document-id <document-id>", Description: "Document id or unique alias."},
+			{Name: "<document-id>", Description: "Document id or unique alias."},
 			{Name: "--max-events <n>", Description: "Return at most N most-recent matching messages."},
 			{Name: "--mine", Description: "Filter to messages authored by the active profile actor_id."},
 			{Name: "--actor-id <actor-id>", Description: "Filter to one actor id."},
@@ -576,7 +573,7 @@ var localHelperTopics = []localHelperTopic{
 			`anx docs message <document-id> --body "Reviewed the current revision"`,
 		},
 		Flags: []localHelperFlag{
-			{Name: "--document-id <document-id>", Description: "Document id or unique alias to message."},
+			{Name: "<document-id>", Description: "Document id or unique alias to message."},
 			{Name: "--body <text>", Description: "Message body text."},
 			{Name: "--body-file <path>", Description: "Load message body text from a local file."},
 			{Name: "--summary <text>", Description: "Optional short event summary."},
@@ -595,7 +592,7 @@ var localHelperTopics = []localHelperTopic{
 			`anx docs reply <document-id> --to <message-id> --body-file reply.md`,
 		},
 		Flags: []localHelperFlag{
-			{Name: "--document-id <document-id>", Description: "Document id or unique alias to reply on."},
+			{Name: "<document-id>", Description: "Document id or unique alias to reply on."},
 			{Name: "--to <message-id>", Description: "Message/event id or unique prefix being replied to."},
 			{Name: "--body <text>", Description: "Reply body text."},
 			{Name: "--body-file <path>", Description: "Load reply body text from a local file."},
@@ -946,7 +943,7 @@ func localGroupHelpSupplement(topic string) string {
   Mutation flow:
   docs create              Create durable context from flags plus ` + "`--content-file`" + `, or from advanced JSON.
   docs revise              Revise from ` + "`--content-file`" + `; stages a diff proposal by default, or direct-writes with ` + "`--apply`" + `.
-  Tip: agents should draft Markdown locally and pass ` + "`--content-file <path>`" + `. ` + "`docs revise --document-id <id> --content-file <path>`" + ` discovers the base revision and returns an apply command for the staged proposal.`)
+  Tip: agents should draft Markdown locally and pass ` + "`--content-file <path>`" + `. ` + "`docs revise <id> --content-file <path>`" + ` discovers the base revision and returns an apply command for the staged proposal.`)
 	case "meta":
 		return strings.TrimSpace(`Shipped reference docs:
   meta docs               Print the bundled Markdown runtime reference.
@@ -1167,15 +1164,15 @@ func fieldHelpText(commandID string, name string) string {
 	name = strings.TrimSpace(name)
 	switch {
 	case name == "if_board_updated_at" && commandID == "boards.cards.batch_add":
-		return "Optimistic concurrency token. Copy `board.updated_at` from `anx boards get --board-id <board-id>`, `anx boards workspace --board-id <board-id>`, or the latest board mutation response. You may pass `--if-board-updated-at` instead of embedding it in JSON."
+		return "Optimistic concurrency token. Copy `board.updated_at` from `anx boards get <board-id>`, `anx boards workspace <board-id>`, or the latest board mutation response. You may pass `--if-board-updated-at` instead of embedding it in JSON."
 	case name == "if_board_updated_at":
-		return "Optimistic concurrency token. Copy `board.updated_at` from `anx boards get --board-id <board-id>`, `anx boards workspace --board-id <board-id>`, or the latest board mutation response."
+		return "Optimistic concurrency token. Copy `board.updated_at` from `anx boards get <board-id>`, `anx boards workspace <board-id>`, or the latest board mutation response."
 	case name == "actor_id" && commandID == "boards.cards.batch_add":
 		return "Defaults from the active CLI profile when omitted. Non-empty `--actor-id` overrides `actor_id` in the JSON body."
 	case name == "request_key" && commandID == "boards.cards.batch_add":
 		return "Idempotency key for the whole batch. Non-empty `--request-key` overrides `request_key` in the JSON body."
 	case name == "if_base_revision":
-		return "Optimistic concurrency token. Copy the current head revision id from `anx docs get --document-id <document-id>` before updating."
+		return "Optimistic concurrency token. Copy the current head revision id from `anx docs get <document-id>` before updating."
 	case strings.HasPrefix(name, "if_"):
 		return "Optimistic concurrency token. Read the latest value from the corresponding read command before mutating."
 	case commandID == "inbox.get" && name == "inbox_item_id":

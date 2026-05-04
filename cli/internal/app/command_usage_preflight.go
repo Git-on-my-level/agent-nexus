@@ -497,19 +497,30 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			"notify-mode":   valueFlag,
 			"actor-id":      valueFlag,
 		},
-		// parsers accept --card-id alongside --card; helper catalog lists --card only
-		"cards move": {
-			"card-id": valueFlag,
-		},
-		"cards assign": {
-			"card-id": valueFlag,
-		},
-		"cards resolve": {
-			"card-id": valueFlag,
-		},
-		"cards reopen": {
-			"card-id": valueFlag,
-		},
+		// Compatibility target flags stay accepted even though help teaches positional targets.
+		"topics message": {"topic": valueFlag, "topic-id": valueFlag},
+		"topics messages": merge(map[string]preflightFlagSpec{
+			"topic":    valueFlag,
+			"topic-id": valueFlag,
+		}, lifecycle),
+		"topics reply":      {"topic": valueFlag, "topic-id": valueFlag},
+		"docs content":      {"document-id": valueFlag},
+		"docs message":      {"document": valueFlag, "document-id": valueFlag},
+		"docs messages":     {"document": valueFlag, "document-id": valueFlag},
+		"docs reply":        {"document": valueFlag, "document-id": valueFlag},
+		"docs revise":       {"document": valueFlag, "document-id": valueFlag},
+		"cards message":     {"card": valueFlag, "card-id": valueFlag},
+		"cards messages":    {"card": valueFlag, "card-id": valueFlag},
+		"cards reply":       {"card": valueFlag, "card-id": valueFlag},
+		"cards revise":      {"card": valueFlag, "card-id": valueFlag},
+		"cards move":        {"card": valueFlag, "card-id": valueFlag},
+		"cards assign":      {"card": valueFlag, "card-id": valueFlag},
+		"cards resolve":     {"card": valueFlag, "card-id": valueFlag},
+		"cards reopen":      {"card": valueFlag, "card-id": valueFlag},
+		"threads message":   {"thread": valueFlag, "thread-id": valueFlag},
+		"threads reply":     {"thread": valueFlag, "thread-id": valueFlag},
+		"boards workspace":  {"board-id": valueFlag},
+		"boards cards list": {"board-id": valueFlag},
 		"auth list":         {},
 		"auth default":      {},
 		"config use":        {},

@@ -2611,7 +2611,7 @@ func TestCardsFileFirstWorkflowCommands(t *testing.T) {
 
 	revisePayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
 		"--json", "--base-url", server.URL, "--agent", "agent-cards",
-		"cards", "revise", "--card", cardID, "--content-file", revisedFile,
+		"cards", "revise", cardID, "--content-file", revisedFile,
 	}))
 	if got := anyStringValue(revisePayload["command"]); got != "cards revise" {
 		t.Fatalf("expected cards revise command, got %#v", revisePayload)
@@ -2638,7 +2638,7 @@ func TestCardsFileFirstWorkflowCommands(t *testing.T) {
 
 	assignPayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
 		"--json", "--base-url", server.URL, "--agent", "agent-cards",
-		"cards", "assign", "--card", cardID, "--assignee-ref", "actor:actor_owner",
+		"cards", "assign", cardID, "--assignee-ref", "actor:actor_owner",
 	}))
 	if got := anyStringValue(assignPayload["command"]); got != "cards assign" {
 		t.Fatalf("expected cards assign command, got %#v", assignPayload)
@@ -2646,7 +2646,7 @@ func TestCardsFileFirstWorkflowCommands(t *testing.T) {
 
 	movePayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
 		"--json", "--base-url", server.URL, "--agent", "agent-cards",
-		"cards", "move", "--card", cardID, "--column", "review",
+		"cards", "move", cardID, "--column", "review",
 	}))
 	if got := anyStringValue(movePayload["command"]); got != "cards move" {
 		t.Fatalf("expected cards move command, got %#v", movePayload)
@@ -2654,7 +2654,7 @@ func TestCardsFileFirstWorkflowCommands(t *testing.T) {
 
 	resolvePayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
 		"--json", "--base-url", server.URL, "--agent", "agent-cards",
-		"cards", "resolve", "--card", cardID, "--resolution-ref", "event:event_done",
+		"cards", "resolve", cardID, "--resolution-ref", "event:event_done",
 	}))
 	if got := anyStringValue(resolvePayload["command"]); got != "cards resolve" {
 		t.Fatalf("expected cards resolve command, got %#v", resolvePayload)
@@ -2665,7 +2665,7 @@ func TestCardsFileFirstWorkflowCommands(t *testing.T) {
 
 	reopenPayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
 		"--json", "--base-url", server.URL, "--agent", "agent-cards",
-		"cards", "reopen", "--card", cardID,
+		"cards", "reopen", cardID,
 	}))
 	if got := anyStringValue(reopenPayload["command"]); got != "cards reopen" {
 		t.Fatalf("expected cards reopen command, got %#v", reopenPayload)
@@ -3179,6 +3179,27 @@ func TestPreConfigUsagePreflightBeatsAmbiguousProfileResolution(t *testing.T) {
 			command:     "import apply",
 			code:        "invalid_flags",
 			messagePart: "unknown",
+		},
+		{
+			name:        "docs content unsupported document alias",
+			args:        []string{"docs", "content", "--document", "doc_123"},
+			command:     "docs content",
+			code:        "invalid_flags",
+			messagePart: "document",
+		},
+		{
+			name:        "boards workspace unsupported board alias",
+			args:        []string{"boards", "workspace", "--board", "board_123"},
+			command:     "boards workspace",
+			code:        "invalid_flags",
+			messagePart: "board",
+		},
+		{
+			name:        "boards cards list unsupported board alias",
+			args:        []string{"boards", "cards", "list", "--board", "board_123"},
+			command:     "boards cards list",
+			code:        "invalid_flags",
+			messagePart: "board",
 		},
 		{
 			name:        "config lenient invalid flag",
@@ -5992,7 +6013,7 @@ func TestDocsRevisionSubcommandRequiredGuidance(t *testing.T) {
 	if !strings.Contains(message, "expected one of: get") {
 		t.Fatalf("expected valid subcommands in required message, got %q", message)
 	}
-	if !strings.Contains(message, "`anx docs revision get --document-id <document-id> --revision-id <revision-id>`") {
+	if !strings.Contains(message, "`anx docs revision get <document-id> <revision-id>`") {
 		t.Fatalf("expected usage examples in required message, got %q", message)
 	}
 }

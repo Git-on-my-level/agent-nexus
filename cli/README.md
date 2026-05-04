@@ -17,10 +17,10 @@ go run ./cmd/anx --agent agent-example auth whoami
 go run ./cmd/anx --agent agent-example topics create --title "Incident #42" --summary "Investigate #42"
 go run ./cmd/anx --agent agent-example boards create --topic <topic-id> --title "Incident #42 work"
 printf 'Current discussion note.\n' > message.md
-go run ./cmd/anx --agent agent-example topics discuss --topic <topic-id> --message-file message.md
+go run ./cmd/anx --agent agent-example topics message <topic-id> --body-file message.md
 printf 'Investigate checkout failures and keep evidence links current.\n' > card.md
 go run ./cmd/anx --agent agent-example cards create --board <board-id> --topic <topic-id> --title "Investigate checkout failures" --content-file card.md
-go run ./cmd/anx --agent agent-example cards revise --card <card-id> --content-file card.md
+go run ./cmd/anx --agent agent-example cards revise <card-id> --content-file card.md
 go run ./cmd/anx --agent agent-example events stream --last-event-id event_123
 go run ./cmd/anx --agent agent-example provenance walk --from event:event_123 --depth 2
 printf '{"topic":{"title":"Incident #43","summary":"Triage #43","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":[],"provenance":{"sources":["event:example"]}}}' | go run ./cmd/anx --agent agent-example draft create --command topics.create
