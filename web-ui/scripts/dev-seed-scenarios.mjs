@@ -51,6 +51,25 @@ const kidsLemonadeStandScenarioConfig = getScenarioSeedConfig(
   "kids-lemonade-stand",
 );
 
+const opsLemonadeScenario = {
+  defaultActorId: "actor-ops-ai",
+  detectActorId: "actor-ops-ai",
+  detectTopicTitle: "Emergency: Lemon Supply Disruption",
+  requireBoards: true,
+  personas: DEV_FIXTURE_PERSONAS,
+  getSeedData: getDevSeedData,
+};
+
+const gameDevStudioScenario = {
+  defaultActorId: "actor-gds-producer",
+  detectActorId: "actor-gds-producer",
+  detectTopicTitle: "Vertical Slice: Combat + Hub Demo",
+  detectBoardTitle: "Studio Production Board",
+  requireBoards: true,
+  personas: GAME_DEV_STUDIO_PERSONAS,
+  getSeedData: getGameDevStudioSeedData,
+};
+
 /**
  * Dev seed scenario registry.
  *
@@ -61,14 +80,8 @@ const kidsLemonadeStandScenarioConfig = getScenarioSeedConfig(
  * its config entry to suppress the seed-time warning.
  */
 const scenarioConfigs = {
-  default: {
-    defaultActorId: "actor-ops-ai",
-    detectActorId: "actor-ops-ai",
-    detectTopicTitle: "Emergency: Lemon Supply Disruption",
-    requireBoards: true,
-    personas: DEV_FIXTURE_PERSONAS,
-    getSeedData: getDevSeedData,
-  },
+  default: gameDevStudioScenario,
+  "ops-lemonade": opsLemonadeScenario,
   "kids-lemonade-stand": {
     defaultActorId: kidsLemonadeStandScenarioConfig.defaultActorId,
     detectActorId: kidsLemonadeStandScenarioConfig.detectActorId,
@@ -78,15 +91,7 @@ const scenarioConfigs = {
     personas: KIDS_LEMONADE_STAND_PERSONAS,
     getSeedData: getKidsLemonadeStandSeedForWebUi,
   },
-  "game-dev-studio": {
-    defaultActorId: "actor-gds-producer",
-    detectActorId: "actor-gds-producer",
-    detectTopicTitle: "Vertical Slice: Combat + Hub Demo",
-    detectBoardTitle: "Studio Production Board",
-    requireBoards: true,
-    personas: GAME_DEV_STUDIO_PERSONAS,
-    getSeedData: getGameDevStudioSeedData,
-  },
+  "game-dev-studio": gameDevStudioScenario,
 };
 
 export function getDevSeedScenarioConfig(name) {

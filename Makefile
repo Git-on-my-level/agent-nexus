@@ -21,7 +21,7 @@ CORE_WORKSPACE_ROOT ?= $(CURDIR)/$(CORE_DIR)/.anx-workspace
 RESET_DEV_WORKSPACE ?= 1
 SEED_CORE ?= 1
 FORCE_SEED ?= 0
-DEV_SEED_SCENARIO ?= default
+DEV_SEED_SCENARIO ?= game-dev-studio
 
 .DEFAULT_GOAL := help
 

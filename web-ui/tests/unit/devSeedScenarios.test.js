@@ -1,18 +1,42 @@
 import { describe, expect, it } from "vitest";
 
 describe("dev seed scenarios", () => {
-  it("keeps the existing default scenario intact", async () => {
+  it("uses the game dev studio scenario as the default", async () => {
     const mod = await import("../../scripts/dev-seed-scenarios.mjs");
     const scenario = mod.getDevSeedScenarioConfig("default");
+
+    expect(scenario).toMatchObject({
+      detectActorId: "actor-gds-producer",
+      detectTopicTitle: "Vertical Slice: Combat + Hub Demo",
+      detectBoardTitle: "Studio Production Board",
+      requireBoards: true,
+    });
+    expect(scenario.personas[0]).toMatchObject({
+      principal_kind: "human",
+      default: true,
+    });
+
+    const seed = scenario.getSeedData();
+    expect(seed.topics).toHaveLength(4);
+    expect(seed.boards).toHaveLength(3);
+    expect(seed.documents).toHaveLength(5);
+    expect(seed.cards.length).toBeGreaterThanOrEqual(10);
+  });
+
+  it("keeps the old ops lemonade scenario available by explicit name", async () => {
+    const mod = await import("../../scripts/dev-seed-scenarios.mjs");
+    const scenario = mod.getDevSeedScenarioConfig("ops-lemonade");
 
     expect(scenario).toMatchObject({
       detectActorId: "actor-ops-ai",
       detectTopicTitle: "Emergency: Lemon Supply Disruption",
       requireBoards: true,
     });
-    expect(scenario.personas.length).toBeGreaterThan(0);
 
     const seed = scenario.getSeedData();
+    expect(seed.topics.map((topic) => topic.title)).toContain(
+      "Emergency: Lemon Supply Disruption",
+    );
     expect(seed.boards.length).toBeGreaterThan(0);
     expect(seed.cards.length).toBeGreaterThan(0);
   });
