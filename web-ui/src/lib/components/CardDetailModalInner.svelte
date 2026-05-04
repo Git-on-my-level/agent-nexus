@@ -13,6 +13,10 @@
     joinDelimitedValues,
     parseDelimitedValues,
   } from "$lib/boardUtils";
+  import {
+    cardDiscussionDockHostEnabled,
+    cardDiscussionDockPlacement,
+  } from "$lib/cardDiscussionDock";
   import { coreClient } from "$lib/coreClient";
   import {
     formatTimestamp,
@@ -110,6 +114,15 @@
 
   let linkedThreadId = $derived(
     String(membership?.thread_id ?? backing?.thread_id ?? "").trim(),
+  );
+  // Full-page cards already use the viewport dock host; embedded mode is only
+  // for modals. Mixing both makes mobile drag-resize feel damped by the flex
+  // scroll reservation around the feed.
+  let discussionDockPlacement = $derived(
+    cardDiscussionDockPlacement(presentation),
+  );
+  let discussionDockHostEnabled = $derived(
+    cardDiscussionDockHostEnabled(presentation, linkedThreadId),
   );
   let cardKey = $derived(boardCardStableId(membership));
 
@@ -1065,7 +1078,7 @@
       ? "cdm-panel page-dock-layout--embedded-modal-chat"
       : "cdm-panel cdm-page-panel page-dock-layout page-dock-layout--mobile-only page-dock-layout--fixed-mobile-chat page-dock-layout--card-page-chat"}
     data-card-detail-presentation={presentation}
-    data-discussion-dock-host={linkedThreadId ? "" : undefined}
+    data-discussion-dock-host={discussionDockHostEnabled ? "" : undefined}
   >
     <div
       class="sticky top-0 z-10 border-b border-line bg-panel px-4 pt-2 sm:px-6 sm:pt-2.5"
@@ -1876,13 +1889,16 @@
           {/if}
         </div>
       {/if}
+      {#if presentation === "page"}
+        {@render cardActionsFooter()}
+      {/if}
     </div>
 
     {#if linkedThreadId}
       <div class="page-dock-feed">
         <DiscussionDrawer
           layout="dock"
-          dockPlacement="embedded"
+          dockPlacement={discussionDockPlacement}
           threadId={linkedThreadId}
           {workspaceId}
           {workspaceSlug}
@@ -1895,7 +1911,9 @@
       </div>
     {/if}
 
-    {@render cardActionsFooter()}
+    {#if presentation === "modal"}
+      {@render cardActionsFooter()}
+    {/if}
   </div>
 </div>
 
