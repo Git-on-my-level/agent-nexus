@@ -892,9 +892,30 @@ export function createAnxCoreClient(options = {}) {
         generated.homeUnread({ query: readerQuery() }),
       ),
     markHomeRead: (payload) =>
-      invokeJSON("home.read", () =>
-        generated.homeRead({ body: withActorId(payload) }),
-      ),
+      invokeJSON("home.read", () => {
+        const body = { ...payload };
+        if (body.topic_id) {
+          body.group_ref = body.group_ref ?? `topic:${body.topic_id}`;
+          delete body.topic_id;
+        }
+        if (body.topic_ids) {
+          body.group_refs =
+            body.group_refs ?? body.topic_ids.map((id) => `topic:${id}`);
+          delete body.topic_ids;
+        }
+        if (body.topic_cursors) {
+          body.group_cursors =
+            body.group_cursors ??
+            Object.fromEntries(
+              Object.entries(body.topic_cursors).map(([id, cursor]) => [
+                `topic:${id}`,
+                cursor,
+              ]),
+            );
+          delete body.topic_cursors;
+        }
+        return generated.homeRead({ body: withActorId(body) });
+      }),
     getEvent: (eventId) =>
       invokeJSON("events.get", () =>
         generated.eventsGet({ event_id: String(eventId) }),

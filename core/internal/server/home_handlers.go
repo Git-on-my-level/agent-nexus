@@ -27,7 +27,10 @@ func handleGetHomeUnread(w http.ResponseWriter, r *http.Request, opts handlerOpt
 	payloadGroups := make([]map[string]any, 0, len(groups))
 	for _, group := range groups {
 		payloadGroups = append(payloadGroups, map[string]any{
-			"topic":        group.Topic,
+			"group_ref":    group.GroupRef,
+			"group_type":   group.GroupType,
+			"display_name": group.DisplayName,
+			"priority":     group.Priority,
 			"unread_count": group.UnreadCount,
 			"newest_event": group.NewestEvent,
 			"events":       group.Events,
@@ -36,7 +39,7 @@ func handleGetHomeUnread(w http.ResponseWriter, r *http.Request, opts handlerOpt
 	writeJSON(w, http.StatusOK, map[string]any{
 		"groups":       payloadGroups,
 		"unread_count": unreadCount,
-		"topic_count":  len(payloadGroups),
+		"group_count":  len(payloadGroups),
 		"generated_at": time.Now().UTC().Format(time.RFC3339Nano),
 	})
 }
@@ -49,16 +52,16 @@ func handleMarkHomeRead(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	var req struct {
 		ReaderID                  string   `json:"reader_id"`
 		ActorID                   string   `json:"actor_id"`
-		TopicID                   string   `json:"topic_id"`
-		TopicIDs                  []string `json:"topic_ids"`
+		GroupRef                  string   `json:"group_ref"`
+		GroupRefs                 []string `json:"group_refs"`
 		ExpectedNewestEventCursor struct {
 			TS string `json:"ts"`
 			ID string `json:"id"`
 		} `json:"expected_newest_event_cursor"`
-		TopicCursors map[string]struct {
+		GroupCursors map[string]struct {
 			TS string `json:"ts"`
 			ID string `json:"id"`
-		} `json:"topic_cursors"`
+		} `json:"group_cursors"`
 	}
 	if !decodeJSONBody(w, r, &req) {
 		return
@@ -67,31 +70,31 @@ func handleMarkHomeRead(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	if !ok {
 		return
 	}
-	topicIDs := append([]string{}, req.TopicIDs...)
-	if strings.TrimSpace(req.TopicID) != "" {
-		topicIDs = append(topicIDs, strings.TrimSpace(req.TopicID))
+	groupRefs := append([]string{}, req.GroupRefs...)
+	if strings.TrimSpace(req.GroupRef) != "" {
+		groupRefs = append(groupRefs, strings.TrimSpace(req.GroupRef))
 	}
-	if len(topicIDs) == 0 {
-		writeError(w, http.StatusBadRequest, "invalid_request", "topic_id or topic_ids is required")
+	if len(groupRefs) == 0 {
+		writeError(w, http.StatusBadRequest, "invalid_request", "group_ref or group_refs is required")
 		return
 	}
 	expected := map[string]primitives.EventCursor{}
-	if strings.TrimSpace(req.TopicID) != "" &&
+	if strings.TrimSpace(req.GroupRef) != "" &&
 		strings.TrimSpace(req.ExpectedNewestEventCursor.TS) != "" &&
 		strings.TrimSpace(req.ExpectedNewestEventCursor.ID) != "" {
-		expected[strings.TrimSpace(req.TopicID)] = primitives.EventCursor{
+		expected[strings.TrimSpace(req.GroupRef)] = primitives.EventCursor{
 			TS: strings.TrimSpace(req.ExpectedNewestEventCursor.TS),
 			ID: strings.TrimSpace(req.ExpectedNewestEventCursor.ID),
 		}
 	}
-	for topicID, cursor := range req.TopicCursors {
-		topicID = strings.TrimSpace(topicID)
-		if topicID == "" || strings.TrimSpace(cursor.TS) == "" || strings.TrimSpace(cursor.ID) == "" {
+	for groupRef, cursor := range req.GroupCursors {
+		groupRef = strings.TrimSpace(groupRef)
+		if groupRef == "" || strings.TrimSpace(cursor.TS) == "" || strings.TrimSpace(cursor.ID) == "" {
 			continue
 		}
-		expected[topicID] = primitives.EventCursor{TS: strings.TrimSpace(cursor.TS), ID: strings.TrimSpace(cursor.ID)}
+		expected[groupRef] = primitives.EventCursor{TS: strings.TrimSpace(cursor.TS), ID: strings.TrimSpace(cursor.ID)}
 	}
-	if err := opts.primitiveStore.MarkHomeReadAt(r.Context(), readerID, topicIDs, expected); err != nil {
+	if err := opts.primitiveStore.MarkHomeReadAt(r.Context(), readerID, groupRefs, expected); err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to mark home activity read")
 		return
 	}
@@ -103,7 +106,7 @@ func handleMarkHomeRead(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":           true,
 		"unread_count": unreadCount,
-		"topic_count":  len(groups),
+		"group_count":  len(groups),
 	})
 }
 

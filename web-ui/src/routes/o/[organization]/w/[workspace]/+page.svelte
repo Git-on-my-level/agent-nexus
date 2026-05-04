@@ -22,10 +22,10 @@
   let feed = $state({
     groups: [],
     unread_count: 0,
-    topic_count: 0,
+    group_count: 0,
     generated_at: "",
   });
-  let markingTopicId = $state("");
+  let markingGroupRef = $state("");
   let pollTimer;
 
   let organizationSlug = $derived($page.params.organization);
@@ -36,12 +36,31 @@
     bindWorkspaceHref(organizationSlug, workspaceSlug),
   );
 
-  function priorityLabel(topic) {
-    return String(topic?.priority ?? "").trim() || "P2";
+  function priorityLabel(group) {
+    return String(group?.priority ?? "").trim() || "P2";
   }
 
-  function topicTitle(topic) {
-    return String(topic?.title ?? topic?.id ?? "Untitled topic").trim();
+  function groupLabel(group) {
+    const name = String(group?.display_name ?? "").trim();
+    if (!name) return group?.group_ref ?? "Untitled";
+    const type = group?.group_type ?? "";
+    if (type === "topic") return name;
+    if (type === "board") return name + " (board)";
+    return name;
+  }
+
+  function groupHref(group) {
+    const type = group?.group_type ?? "";
+    const ref = group?.group_ref ?? "";
+    if (type === "topic") {
+      const id = ref.replace(/^topic:/, "");
+      return workspaceHref(`/topics/${encodeURIComponent(id)}`);
+    }
+    if (type === "board") {
+      const id = ref.replace(/^board:/, "");
+      return workspaceHref(`/boards/${encodeURIComponent(id)}`);
+    }
+    return workspaceHref("/events");
   }
 
   function rowFor(event) {
@@ -71,16 +90,18 @@
     }
   }
 
-  async function markTopicRead(topicId) {
-    const id = String(topicId ?? "").trim();
-    if (!id) return;
-    const group = groups.find((entry) => String(entry?.topic?.id ?? "") === id);
+  async function markGroupRead(groupRef) {
+    const ref = String(groupRef ?? "").trim();
+    if (!ref) return;
+    const group = groups.find(
+      (entry) => String(entry?.group_ref ?? "") === ref,
+    );
     const newest = group?.newest_event;
-    markingTopicId = id;
+    markingGroupRef = ref;
     error = "";
     try {
       await coreClient.markHomeRead({
-        topic_id: id,
+        group_ref: ref,
         expected_newest_event_cursor: {
           ts: newest?.ts,
           id: newest?.id,
@@ -91,32 +112,32 @@
       error =
         err instanceof Error
           ? err.message
-          : String(err ?? "Failed to mark topic read.");
+          : String(err ?? "Failed to mark read.");
     } finally {
-      markingTopicId = "";
+      markingGroupRef = "";
     }
   }
 
   async function markAllRead() {
-    const topic_ids = groups
-      .map((group) => String(group?.topic?.id ?? "").trim())
+    const group_refs = groups
+      .map((group) => String(group?.group_ref ?? "").trim())
       .filter(Boolean);
-    if (topic_ids.length === 0) return;
-    markingTopicId = "*";
+    if (group_refs.length === 0) return;
+    markingGroupRef = "*";
     error = "";
     try {
       await coreClient.markHomeRead({
-        topic_ids,
-        topic_cursors: Object.fromEntries(
+        group_refs,
+        group_cursors: Object.fromEntries(
           groups
             .map((group) => [
-              String(group?.topic?.id ?? "").trim(),
+              String(group?.group_ref ?? "").trim(),
               {
                 ts: group?.newest_event?.ts,
                 id: group?.newest_event?.id,
               },
             ])
-            .filter(([topicId, cursor]) => topicId && cursor.ts && cursor.id),
+            .filter(([groupRef, cursor]) => groupRef && cursor.ts && cursor.id),
         ),
       });
       await loadHome();
@@ -126,7 +147,7 @@
           ? err.message
           : String(err ?? "Failed to mark all read.");
     } finally {
-      markingTopicId = "";
+      markingGroupRef = "";
     }
   }
 
@@ -148,7 +169,7 @@
       {:else}
         Updated {formatTimestamp(feed.generated_at) || "just now"} · {feed.unread_count ??
           0}
-        unread across {feed.topic_count ?? 0} topics
+        unread across {feed.group_count ?? 0} groups
       {/if}
     {/snippet}
     {#snippet actions()}
@@ -164,7 +185,7 @@
       <button
         class="rounded-md border border-line px-2.5 py-1.5 text-meta font-medium text-fg-muted transition-colors hover:bg-bg-soft disabled:opacity-60"
         onclick={markAllRead}
-        disabled={loading || groups.length === 0 || markingTopicId === "*"}
+        disabled={loading || groups.length === 0 || markingGroupRef === "*"}
         type="button"
       >
         Mark all read
@@ -202,30 +223,28 @@
     </div>
   {:else}
     <div class="space-y-3" data-testid="home-unread-feed">
-      {#each groups as group (group.topic.id)}
+      {#each groups as group (group.group_ref)}
         <section class="overflow-hidden rounded-md border border-line bg-panel">
           <div
             class="flex flex-wrap items-center justify-between gap-3 border-b border-line px-3 py-2.5 sm:px-4"
           >
             <a
               class="min-w-0 flex-1 font-semibold text-fg hover:underline"
-              href={workspaceHref(
-                `/topics/${encodeURIComponent(group.topic.id)}`,
-              )}
+              href={groupHref(group)}
             >
-              {topicTitle(group.topic)}
+              {groupLabel(group)}
             </a>
             <div class="flex shrink-0 items-center gap-2">
               <span
                 class="rounded bg-line px-1.5 py-0.5 text-micro font-medium text-fg-muted"
               >
-                {priorityLabel(group.topic)} · {group.unread_count} unread
+                {priorityLabel(group)} · {group.unread_count} unread
               </span>
               <button
                 class="rounded-md border border-line px-2 py-1 text-micro font-medium text-fg-muted transition-colors hover:bg-line-subtle disabled:opacity-60"
-                onclick={() => markTopicRead(group.topic.id)}
-                disabled={markingTopicId === group.topic.id ||
-                  markingTopicId === "*"}
+                onclick={() => markGroupRead(group.group_ref)}
+                disabled={markingGroupRef === group.group_ref ||
+                  markingGroupRef === "*"}
                 type="button"
               >
                 Mark read

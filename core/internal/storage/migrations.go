@@ -741,6 +741,21 @@ var migrations = []migration{
 			`CREATE INDEX IF NOT EXISTS idx_agent_wakeups_thread_trigger_created ON agent_wakeups (thread_id, created_at ASC, wakeup_id ASC);`,
 		},
 	},
+	{
+		Version: 24,
+		Statements: []string{
+			`CREATE TABLE IF NOT EXISTS home_read_cursors (
+				reader_id TEXT NOT NULL,
+				group_ref TEXT NOT NULL,
+				last_read_event_ts TEXT NOT NULL,
+				last_read_event_id TEXT NOT NULL,
+				updated_at TEXT NOT NULL,
+				PRIMARY KEY (reader_id, group_ref)
+			);`,
+			`CREATE INDEX IF NOT EXISTS idx_home_read_cursors_reader ON home_read_cursors (reader_id, group_ref);`,
+		},
+		AfterApply: applyMigration24HomeGroupCursors,
+	},
 }
 
 func applyMigration22TrashCanceledResolutionCards(ctx context.Context, tx *sql.Tx) error {
@@ -766,6 +781,28 @@ WHERE (LOWER(COALESCE(resolution, '')) IN ('canceled', 'cancelled'))
 		now)
 	if err != nil {
 		return fmt.Errorf("migration 22 trash canceled resolution cards: %w", err)
+	}
+	return nil
+}
+
+func applyMigration24HomeGroupCursors(ctx context.Context, tx *sql.Tx) error {
+	ok, err := sqliteTableExists(ctx, tx, "home_topic_read_cursors")
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return nil
+	}
+	_, err = tx.ExecContext(ctx, `
+		INSERT OR IGNORE INTO home_read_cursors (reader_id, group_ref, last_read_event_ts, last_read_event_id, updated_at)
+		SELECT reader_id, 'topic:' || topic_id, last_read_event_ts, last_read_event_id, updated_at
+		FROM home_topic_read_cursors`)
+	if err != nil {
+		return fmt.Errorf("migration 24 migrate topic cursors: %w", err)
+	}
+	_, err = tx.ExecContext(ctx, `DROP TABLE IF EXISTS home_topic_read_cursors`)
+	if err != nil {
+		return fmt.Errorf("migration 24 drop old table: %w", err)
 	}
 	return nil
 }

@@ -4503,12 +4503,12 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/home/read",
     "operation_id": "markHomeRead",
     "summary": "Mark Home activity read",
-    "why": "Advance durable per-topic Home read cursors for the authenticated operator.",
+    "why": "Advance durable per-group Home read cursors for the authenticated operator.",
     "input_mode": "json-body",
     "streaming": {
       "mode": "none"
     },
-    "output_envelope": "Returns `{ ok, unread_count, topic_count }`.",
+    "output_envelope": "Returns `{ ok, unread_count, group_count }`.",
     "error_codes": [
       "auth_required",
       "invalid_request",
@@ -4536,20 +4536,20 @@ export const commandRegistry: CommandSpec[] = [
           "type": "datetime"
         },
         {
-          "name": "reader_id",
-          "type": "string"
-        },
-        {
-          "name": "topic_cursors",
+          "name": "group_cursors",
           "type": "object"
         },
         {
-          "name": "topic_id",
+          "name": "group_ref",
           "type": "string"
         },
         {
-          "name": "topic_ids",
+          "name": "group_refs",
           "type": "list\u003cstring\u003e"
+        },
+        {
+          "name": "reader_id",
+          "type": "string"
         }
       ]
     },
@@ -4563,12 +4563,12 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/home/unread",
     "operation_id": "getHomeUnread",
     "summary": "Get Home unread activity",
-    "why": "Load unread high-signal workspace activity grouped by topic for the authenticated operator.",
+    "why": "Load unread high-signal workspace activity grouped by typed group (topic, board, etc.) for the authenticated operator.",
     "input_mode": "none",
     "streaming": {
       "mode": "none"
     },
-    "output_envelope": "Returns `{ groups, unread_count, topic_count, generated_at }`.",
+    "output_envelope": "Returns `{ groups, unread_count, group_count, generated_at }`.",
     "error_codes": [
       "auth_required",
       "invalid_token"
