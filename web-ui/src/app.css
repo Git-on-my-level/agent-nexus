@@ -62,6 +62,38 @@
   color-scheme: dark;
 }
 
+/*
+ * iOS Safari auto-zooms focused text controls below 16px. Keep the dense UI
+ * typography elsewhere, but raise mobile text-entry controls to the threshold
+ * instead of disabling user zoom in the viewport meta tag.
+ */
+@media (hover: none) and (pointer: coarse) {
+  input:not([type]),
+  input[type="date"],
+  input[type="datetime-local"],
+  input[type="email"],
+  input[type="month"],
+  input[type="number"],
+  input[type="password"],
+  input[type="search"],
+  input[type="tel"],
+  input[type="text"],
+  input[type="time"],
+  input[type="url"],
+  input[type="week"],
+  select,
+  textarea,
+  .actor-gate-input-row input,
+  .shell-dev-persona-select,
+  .ui-input,
+  .cdm-prose-input,
+  .text-meta:is(input, select, textarea),
+  .text-micro:is(input, select, textarea),
+  .text-mono:is(input, select, textarea) {
+    font-size: 16px !important;
+  }
+}
+
 :root[data-qa="1"] {
   --font-sans: "Inter", sans-serif;
   --font-mono: "IBM Plex Mono", monospace;
