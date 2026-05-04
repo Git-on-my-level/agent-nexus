@@ -33,7 +33,7 @@ It owns the canonical organizational record, validates and records state transit
 - Runtime and deployment guidance: `docs/runbook.md`
 
 ## High-Value Invariants
-- Events are append-only. Corrections are new records, not edits in place.
+- Event identity, ordering, refs, and payload content are append-only. Corrections are new records, not edits in place. Event lifecycle visibility fields (`archived_at`, `archived_by`, `trashed_at`, `trashed_by`, `trash_reason`) are the bounded mutable exception used for filtered views.
 - Topic, card, board, and document updates use patch semantics: omitted fields are preserved, and list-valued fields are replaced only when explicitly present.
 - Unknown fields and unknown open-enum values must round-trip safely unless the shared contract says otherwise.
 - Restricted state transitions must remain evidence-backed.

@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -461,6 +462,104 @@ func TestListEventsFiltersByGroupAndBackingScope(t *testing.T) {
 	if len(backing.Events) != 1 || anyString(backing.Events[0]["type"]) != "document_created" {
 		t.Fatalf("unexpected backing events: %#v", backing.Events)
 	}
+}
+
+func TestEventLifecycleHTTPPreservesAppendOnlyEventContent(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-2","display_name":"Actor Two","created_at":"2026-03-04T10:01:00Z"}}`, http.StatusCreated).Body.Close()
+
+	createResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
+		"actor_id":"actor-1",
+		"event":{
+			"type":"message_posted",
+			"thread_id":"thread-http-lifecycle",
+			"refs":["thread:thread-http-lifecycle"],
+			"summary":"original summary",
+			"payload":{"text":"original text"},
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated)
+	defer createResp.Body.Close()
+	var created map[string]map[string]any
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create event: %v", err)
+	}
+	original := created["event"]
+	eventID := anyString(original["id"])
+	if eventID == "" {
+		t.Fatalf("created event has no id: %#v", original)
+	}
+
+	assertEventContent := func(step string, ev map[string]any) {
+		t.Helper()
+		for _, key := range []string{"id", "type", "ts", "actor_id", "thread_id", "summary"} {
+			if ev[key] != original[key] {
+				t.Fatalf("%s changed %s: got %#v want %#v", step, key, ev[key], original[key])
+			}
+		}
+		if !reflect.DeepEqual(ev["refs"], original["refs"]) {
+			t.Fatalf("%s changed refs: got %#v want %#v", step, ev["refs"], original["refs"])
+		}
+		if !reflect.DeepEqual(ev["payload"], original["payload"]) {
+			t.Fatalf("%s changed payload: got %#v want %#v", step, ev["payload"], original["payload"])
+		}
+	}
+	decodeLifecycleResp := func(step string, resp *http.Response) map[string]any {
+		t.Helper()
+		defer resp.Body.Close()
+		var body map[string]map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			t.Fatalf("decode %s response: %v", step, err)
+		}
+		ev := body["event"]
+		if ev == nil {
+			t.Fatalf("%s response missing event: %#v", step, body)
+		}
+		assertEventContent(step, ev)
+		return ev
+	}
+
+	archived := decodeLifecycleResp("archive", postJSONExpectStatus(t, h.baseURL+"/events/"+eventID+"/archive", `{"actor_id":"actor-2"}`, http.StatusOK))
+	if archived["archived_at"] == nil || archived["archived_by"] != "actor-2" {
+		t.Fatalf("archive response missing lifecycle fields: %#v", archived)
+	}
+
+	trashed := decodeLifecycleResp("trash", postJSONExpectStatus(t, h.baseURL+"/events/"+eventID+"/trash", `{"actor_id":"actor-2","reason":"hide"}`, http.StatusOK))
+	if trashed["trashed_at"] == nil || trashed["trashed_by"] != "actor-2" || trashed["trash_reason"] != "hide" {
+		t.Fatalf("trash response missing lifecycle fields: %#v", trashed)
+	}
+	if _, ok := trashed["archived_at"]; ok {
+		t.Fatalf("trash response should clear archive fields: %#v", trashed)
+	}
+
+	restored := decodeLifecycleResp("restore", postJSONExpectStatus(t, h.baseURL+"/events/"+eventID+"/restore", `{"actor_id":"actor-2"}`, http.StatusOK))
+	if _, ok := restored["trashed_at"]; ok {
+		t.Fatalf("restore response should clear trash fields: %#v", restored)
+	}
+
+	listResp, err := http.Get(h.baseURL + "/events?thread_id=thread-http-lifecycle")
+	if err != nil {
+		t.Fatalf("list events: %v", err)
+	}
+	defer listResp.Body.Close()
+	if listResp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(listResp.Body)
+		t.Fatalf("list events status=%d body=%s", listResp.StatusCode, string(bodyBytes))
+	}
+	var listed struct {
+		Events []map[string]any `json:"events"`
+	}
+	if err := json.NewDecoder(listResp.Body).Decode(&listed); err != nil {
+		t.Fatalf("decode list events: %v", err)
+	}
+	if len(listed.Events) != 1 {
+		t.Fatalf("event lifecycle operations should not append event rows, got %d events: %#v", len(listed.Events), listed.Events)
+	}
+	assertEventContent("list after lifecycle", listed.Events[0])
 }
 
 func TestListArtifactsFiltersByBackingScope(t *testing.T) {
