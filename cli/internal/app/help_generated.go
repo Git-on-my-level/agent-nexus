@@ -517,7 +517,7 @@ var localHelperTopics = []localHelperTopic{
 		Examples: []string{
 			"anx docs revise <document-id> --content-file notes.md",
 			"anx docs revise --apply --proposal-id <proposal-id>",
-			"anx docs revise --apply <document-id> --content-file notes.md",
+			"anx docs revise <document-id> --apply --content-file notes.md",
 			"cat revision.json | anx docs revise <document-id>",
 		},
 		Flags: []localHelperFlag{
