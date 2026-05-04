@@ -1,0 +1,273 @@
+# x-anx Validation Report
+
+Generated from `contracts/anx-openapi.yaml`.
+
+- OpenAPI version: `3.1.0`
+- Contract version: `0.6.0`
+- Command operations: `124`
+- Baseline-allowed required-field gaps: `126`
+- Missing recommended examples: `124`
+
+## Baseline gap counts
+
+- `x-anx-agent-notes`: `117`
+- `x-anx-cli-path`: `3`
+- `x-anx-concepts`: `1`
+- `x-anx-error-codes`: `4`
+- `x-anx-stability`: `1`
+
+## Baseline-allowed required-field gaps
+
+- `actors.create` `POST /actors` missing `x-anx-agent-notes`
+- `actors.list` `GET /actors` missing `x-anx-agent-notes`
+- `agent.notification-receipts.stream` `GET /agent-notification-receipts/stream` missing `x-anx-agent-notes`
+- `agent.notification-receipts.stream` `GET /agent-notification-receipts/stream` missing `x-anx-cli-path`
+- `agent.notifications.dismiss` `POST /agent-notifications/dismiss` missing `x-anx-agent-notes`
+- `agent.notifications.list` `GET /agent-notifications` missing `x-anx-agent-notes`
+- `agent.notifications.read` `POST /agent-notifications/read` missing `x-anx-agent-notes`
+- `agents.me.get` `GET /agents/me` missing `x-anx-agent-notes`
+- `agents.me.keys.rotate` `POST /agents/me/keys/rotate` missing `x-anx-agent-notes`
+- `agents.me.patch` `PATCH /agents/me` missing `x-anx-agent-notes`
+- `agents.me.revoke` `POST /agents/me/revoke` missing `x-anx-agent-notes`
+- `artifacts.archive` `POST /artifacts/{artifact_id}/archive` missing `x-anx-agent-notes`
+- `artifacts.content` `GET /artifacts/{artifact_id}/content` missing `x-anx-agent-notes`
+- `artifacts.create` `POST /artifacts` missing `x-anx-agent-notes`
+- `artifacts.get` `GET /artifacts/{artifact_id}` missing `x-anx-agent-notes`
+- `artifacts.list` `GET /artifacts` missing `x-anx-agent-notes`
+- `artifacts.purge` `POST /artifacts/{artifact_id}/purge` missing `x-anx-agent-notes`
+- `artifacts.restore` `POST /artifacts/{artifact_id}/restore` missing `x-anx-agent-notes`
+- `artifacts.trash` `POST /artifacts/{artifact_id}/trash` missing `x-anx-agent-notes`
+- `artifacts.unarchive` `POST /artifacts/{artifact_id}/unarchive` missing `x-anx-agent-notes`
+- `auth.agents.register` `POST /auth/agents/register` missing `x-anx-agent-notes`
+- `auth.audit.list` `GET /auth/audit` missing `x-anx-agent-notes`
+- `auth.bootstrap.status` `GET /auth/bootstrap/status` missing `x-anx-agent-notes`
+- `auth.bootstrap.status` `GET /auth/bootstrap/status` missing `x-anx-error-codes`
+- `auth.invites.create` `POST /auth/invites` missing `x-anx-agent-notes`
+- `auth.invites.list` `GET /auth/invites` missing `x-anx-agent-notes`
+- `auth.invites.revoke` `POST /auth/invites/{invite_id}/revoke` missing `x-anx-agent-notes`
+- `auth.passkey.dev.login` `POST /auth/passkey/dev/login` missing `x-anx-agent-notes`
+- `auth.passkey.dev.register` `POST /auth/passkey/dev/register` missing `x-anx-agent-notes`
+- `auth.passkey.login.options` `POST /auth/passkey/login/options` missing `x-anx-agent-notes`
+- `auth.passkey.login.verify` `POST /auth/passkey/login/verify` missing `x-anx-agent-notes`
+- `auth.passkey.register.options` `POST /auth/passkey/register/options` missing `x-anx-agent-notes`
+- `auth.passkey.register.verify` `POST /auth/passkey/register/verify` missing `x-anx-agent-notes`
+- `auth.principals.list` `GET /auth/principals` missing `x-anx-agent-notes`
+- `auth.principals.revoke` `POST /auth/principals/{principal_id}/revoke` missing `x-anx-agent-notes`
+- `auth.token` `POST /auth/token` missing `x-anx-agent-notes`
+- `boards.archive` `POST /boards/{board_id}/archive` missing `x-anx-agent-notes`
+- `boards.cards.batch_add` `POST /boards/{board_id}/cards/batch` missing `x-anx-agent-notes`
+- `boards.cards.create` `POST /boards/{board_id}/cards` missing `x-anx-agent-notes`
+- `boards.cards.get` `GET /boards/{board_id}/cards/{card_id}` missing `x-anx-agent-notes`
+- `boards.cards.list` `GET /boards/{board_id}/cards` missing `x-anx-agent-notes`
+- `boards.create` `POST /boards` missing `x-anx-agent-notes`
+- `boards.get` `GET /boards/{board_id}` missing `x-anx-agent-notes`
+- `boards.list` `GET /boards` missing `x-anx-agent-notes`
+- `boards.patch` `PATCH /boards/{board_id}` missing `x-anx-agent-notes`
+- `boards.purge` `POST /boards/{board_id}/purge` missing `x-anx-agent-notes`
+- `boards.restore` `POST /boards/{board_id}/restore` missing `x-anx-agent-notes`
+- `boards.trash` `POST /boards/{board_id}/trash` missing `x-anx-agent-notes`
+- `boards.unarchive` `POST /boards/{board_id}/unarchive` missing `x-anx-agent-notes`
+- `boards.workspace` `GET /boards/{board_id}/workspace` missing `x-anx-agent-notes`
+- `cards.archive` `POST /cards/{card_id}/archive` missing `x-anx-agent-notes`
+- `cards.create` `POST /cards` missing `x-anx-agent-notes`
+- `cards.get` `GET /cards/{card_id}` missing `x-anx-agent-notes`
+- `cards.list` `GET /cards` missing `x-anx-agent-notes`
+- `cards.move` `POST /cards/{card_id}/move` missing `x-anx-agent-notes`
+- `cards.patch` `PATCH /cards/{card_id}` missing `x-anx-agent-notes`
+- `cards.purge` `POST /cards/{card_id}/purge` missing `x-anx-agent-notes`
+- `cards.restore` `POST /cards/{card_id}/restore` missing `x-anx-agent-notes`
+- `cards.revisions.create` `POST /cards/{card_id}/revisions` missing `x-anx-agent-notes`
+- `cards.revisions.get` `GET /cards/{card_id}/revisions/{revision_id}` missing `x-anx-agent-notes`
+- `cards.revisions.list` `GET /cards/{card_id}/revisions` missing `x-anx-agent-notes`
+- `cards.timeline` `GET /cards/{card_id}/timeline` missing `x-anx-agent-notes`
+- `cards.trash` `POST /cards/{card_id}/trash` missing `x-anx-agent-notes`
+- `derived.rebuild` `POST /derived/rebuild` missing `x-anx-agent-notes`
+- `docs.archive` `POST /docs/{document_id}/archive` missing `x-anx-agent-notes`
+- `docs.create` `POST /docs` missing `x-anx-agent-notes`
+- `docs.get` `GET /docs/{document_id}` missing `x-anx-agent-notes`
+- `docs.list` `GET /docs` missing `x-anx-agent-notes`
+- `docs.patch` `PATCH /docs/{document_id}` missing `x-anx-agent-notes`
+- `docs.purge` `POST /docs/{document_id}/purge` missing `x-anx-agent-notes`
+- `docs.restore` `POST /docs/{document_id}/restore` missing `x-anx-agent-notes`
+- `docs.revisions.create` `POST /docs/{document_id}/revisions` missing `x-anx-agent-notes`
+- `docs.revisions.get` `GET /docs/{document_id}/revisions/{revision_id}` missing `x-anx-agent-notes`
+- `docs.revisions.list` `GET /docs/{document_id}/revisions` missing `x-anx-agent-notes`
+- `docs.trash` `POST /docs/{document_id}/trash` missing `x-anx-agent-notes`
+- `docs.unarchive` `POST /docs/{document_id}/unarchive` missing `x-anx-agent-notes`
+- `events.archive` `POST /events/{event_id}/archive` missing `x-anx-agent-notes`
+- `events.create` `POST /events` missing `x-anx-agent-notes`
+- `events.get` `GET /events/{event_id}` missing `x-anx-agent-notes`
+- `events.list` `GET /events` missing `x-anx-agent-notes`
+- `events.restore` `POST /events/{event_id}/restore` missing `x-anx-agent-notes`
+- `events.stream` `GET /events/stream` missing `x-anx-agent-notes`
+- `events.trash` `POST /events/{event_id}/trash` missing `x-anx-agent-notes`
+- `events.unarchive` `POST /events/{event_id}/unarchive` missing `x-anx-agent-notes`
+- `home.read` `POST /home/read` missing `x-anx-agent-notes`
+- `home.read` `POST /home/read` missing `x-anx-cli-path`
+- `home.unread` `GET /home/unread` missing `x-anx-agent-notes`
+- `home.unread` `GET /home/unread` missing `x-anx-cli-path`
+- `inbox.get` `GET /inbox/{inbox_id}` missing `x-anx-agent-notes`
+- `inbox.list` `GET /inbox` missing `x-anx-agent-notes`
+- `inbox.list` `GET /inbox` missing `x-anx-concepts`
+- `inbox.list` `GET /inbox` missing `x-anx-stability`
+- `inbox.respond` `POST /inbox/{inbox_id}/respond` missing `x-anx-agent-notes`
+- `inbox.stream` `GET /inbox/stream` missing `x-anx-agent-notes`
+- `meta.commands.get` `GET /meta/commands/{command_id}` missing `x-anx-agent-notes`
+- `meta.commands.list` `GET /meta/commands` missing `x-anx-agent-notes`
+- `meta.concepts.get` `GET /meta/concepts/{concept_name}` missing `x-anx-agent-notes`
+- `meta.concepts.list` `GET /meta/concepts` missing `x-anx-agent-notes`
+- `meta.handshake` `GET /meta/handshake` missing `x-anx-agent-notes`
+- `meta.health` `GET /health` missing `x-anx-agent-notes`
+- `meta.health` `GET /health` missing `x-anx-error-codes`
+- `meta.livez` `GET /livez` missing `x-anx-agent-notes`
+- `meta.livez` `GET /livez` missing `x-anx-error-codes`
+- `meta.readyz` `GET /readyz` missing `x-anx-agent-notes`
+- `meta.version` `GET /version` missing `x-anx-agent-notes`
+- `meta.version` `GET /version` missing `x-anx-error-codes`
+- `ops.blob.usage.rebuild` `POST /ops/blob-usage/rebuild` missing `x-anx-agent-notes`
+- `ops.health` `GET /ops/health` missing `x-anx-agent-notes`
+- `ops.usage.summary` `GET /ops/usage-summary` missing `x-anx-agent-notes`
+- `ref_edges.list` `GET /ref-edges` missing `x-anx-agent-notes`
+- `secrets.list` `GET /secrets` missing `x-anx-agent-notes`
+- `threads.context` `GET /threads/{thread_id}/context` missing `x-anx-agent-notes`
+- `threads.inspect` `GET /threads/{thread_id}` missing `x-anx-agent-notes`
+- `threads.list` `GET /threads` missing `x-anx-agent-notes`
+- `threads.timeline` `GET /threads/{thread_id}/timeline` missing `x-anx-agent-notes`
+- `threads.workspace` `GET /threads/{thread_id}/workspace` missing `x-anx-agent-notes`
+- `topics.archive` `POST /topics/{topic_id}/archive` missing `x-anx-agent-notes`
+- `topics.get` `GET /topics/{topic_id}` missing `x-anx-agent-notes`
+- `topics.list` `GET /topics` missing `x-anx-agent-notes`
+- `topics.patch` `PATCH /topics/{topic_id}` missing `x-anx-agent-notes`
+- `topics.restore` `POST /topics/{topic_id}/restore` missing `x-anx-agent-notes`
+- `topics.timeline` `GET /topics/{topic_id}/timeline` missing `x-anx-agent-notes`
+- `topics.trash` `POST /topics/{topic_id}/trash` missing `x-anx-agent-notes`
+- `topics.unarchive` `POST /topics/{topic_id}/unarchive` missing `x-anx-agent-notes`
+- `topics.workspace` `GET /topics/{topic_id}/workspace` missing `x-anx-agent-notes`
+- `usage.summary.v1` `GET /v1/usage/summary` missing `x-anx-agent-notes`
+
+## Missing recommended examples
+
+- `actors.create` `POST /actors`
+- `actors.list` `GET /actors`
+- `agent.notification-receipts.stream` `GET /agent-notification-receipts/stream`
+- `agent.notifications.dismiss` `POST /agent-notifications/dismiss`
+- `agent.notifications.list` `GET /agent-notifications`
+- `agent.notifications.read` `POST /agent-notifications/read`
+- `agents.me.get` `GET /agents/me`
+- `agents.me.keys.rotate` `POST /agents/me/keys/rotate`
+- `agents.me.patch` `PATCH /agents/me`
+- `agents.me.revoke` `POST /agents/me/revoke`
+- `artifacts.archive` `POST /artifacts/{artifact_id}/archive`
+- `artifacts.attachments.create` `POST /artifacts/attachments`
+- `artifacts.content` `GET /artifacts/{artifact_id}/content`
+- `artifacts.create` `POST /artifacts`
+- `artifacts.get` `GET /artifacts/{artifact_id}`
+- `artifacts.list` `GET /artifacts`
+- `artifacts.purge` `POST /artifacts/{artifact_id}/purge`
+- `artifacts.restore` `POST /artifacts/{artifact_id}/restore`
+- `artifacts.trash` `POST /artifacts/{artifact_id}/trash`
+- `artifacts.unarchive` `POST /artifacts/{artifact_id}/unarchive`
+- `auth.agents.register` `POST /auth/agents/register`
+- `auth.audit.list` `GET /auth/audit`
+- `auth.bootstrap.status` `GET /auth/bootstrap/status`
+- `auth.invites.create` `POST /auth/invites`
+- `auth.invites.list` `GET /auth/invites`
+- `auth.invites.revoke` `POST /auth/invites/{invite_id}/revoke`
+- `auth.passkey.dev.login` `POST /auth/passkey/dev/login`
+- `auth.passkey.dev.register` `POST /auth/passkey/dev/register`
+- `auth.passkey.login.options` `POST /auth/passkey/login/options`
+- `auth.passkey.login.verify` `POST /auth/passkey/login/verify`
+- `auth.passkey.register.options` `POST /auth/passkey/register/options`
+- `auth.passkey.register.verify` `POST /auth/passkey/register/verify`
+- `auth.principals.list` `GET /auth/principals`
+- `auth.principals.revoke` `POST /auth/principals/{principal_id}/revoke`
+- `auth.token` `POST /auth/token`
+- `boards.archive` `POST /boards/{board_id}/archive`
+- `boards.cards.batch_add` `POST /boards/{board_id}/cards/batch`
+- `boards.cards.create` `POST /boards/{board_id}/cards`
+- `boards.cards.get` `GET /boards/{board_id}/cards/{card_id}`
+- `boards.cards.list` `GET /boards/{board_id}/cards`
+- `boards.create` `POST /boards`
+- `boards.get` `GET /boards/{board_id}`
+- `boards.list` `GET /boards`
+- `boards.patch` `PATCH /boards/{board_id}`
+- `boards.purge` `POST /boards/{board_id}/purge`
+- `boards.restore` `POST /boards/{board_id}/restore`
+- `boards.trash` `POST /boards/{board_id}/trash`
+- `boards.unarchive` `POST /boards/{board_id}/unarchive`
+- `boards.workspace` `GET /boards/{board_id}/workspace`
+- `cards.archive` `POST /cards/{card_id}/archive`
+- `cards.create` `POST /cards`
+- `cards.get` `GET /cards/{card_id}`
+- `cards.list` `GET /cards`
+- `cards.move` `POST /cards/{card_id}/move`
+- `cards.patch` `PATCH /cards/{card_id}`
+- `cards.purge` `POST /cards/{card_id}/purge`
+- `cards.restore` `POST /cards/{card_id}/restore`
+- `cards.revisions.create` `POST /cards/{card_id}/revisions`
+- `cards.revisions.get` `GET /cards/{card_id}/revisions/{revision_id}`
+- `cards.revisions.list` `GET /cards/{card_id}/revisions`
+- `cards.timeline` `GET /cards/{card_id}/timeline`
+- `cards.trash` `POST /cards/{card_id}/trash`
+- `derived.rebuild` `POST /derived/rebuild`
+- `docs.archive` `POST /docs/{document_id}/archive`
+- `docs.create` `POST /docs`
+- `docs.get` `GET /docs/{document_id}`
+- `docs.list` `GET /docs`
+- `docs.patch` `PATCH /docs/{document_id}`
+- `docs.purge` `POST /docs/{document_id}/purge`
+- `docs.restore` `POST /docs/{document_id}/restore`
+- `docs.revisions.create` `POST /docs/{document_id}/revisions`
+- `docs.revisions.get` `GET /docs/{document_id}/revisions/{revision_id}`
+- `docs.revisions.list` `GET /docs/{document_id}/revisions`
+- `docs.trash` `POST /docs/{document_id}/trash`
+- `docs.unarchive` `POST /docs/{document_id}/unarchive`
+- `events.archive` `POST /events/{event_id}/archive`
+- `events.create` `POST /events`
+- `events.get` `GET /events/{event_id}`
+- `events.list` `GET /events`
+- `events.restore` `POST /events/{event_id}/restore`
+- `events.stream` `GET /events/stream`
+- `events.trash` `POST /events/{event_id}/trash`
+- `events.unarchive` `POST /events/{event_id}/unarchive`
+- `home.read` `POST /home/read`
+- `home.unread` `GET /home/unread`
+- `inbox.get` `GET /inbox/{inbox_id}`
+- `inbox.list` `GET /inbox`
+- `inbox.respond` `POST /inbox/{inbox_id}/respond`
+- `inbox.stream` `GET /inbox/stream`
+- `meta.commands.get` `GET /meta/commands/{command_id}`
+- `meta.commands.list` `GET /meta/commands`
+- `meta.concepts.get` `GET /meta/concepts/{concept_name}`
+- `meta.concepts.list` `GET /meta/concepts`
+- `meta.handshake` `GET /meta/handshake`
+- `meta.health` `GET /health`
+- `meta.livez` `GET /livez`
+- `meta.readyz` `GET /readyz`
+- `meta.version` `GET /version`
+- `ops.blob.usage.rebuild` `POST /ops/blob-usage/rebuild`
+- `ops.health` `GET /ops/health`
+- `ops.usage.summary` `GET /ops/usage-summary`
+- `ref_edges.list` `GET /ref-edges`
+- `secrets.create` `POST /secrets`
+- `secrets.delete` `DELETE /secrets/{secret_id}`
+- `secrets.list` `GET /secrets`
+- `secrets.reveal` `POST /secrets/{secret_id}/reveal`
+- `secrets.reveal-batch` `POST /secrets/reveal-batch`
+- `secrets.update` `PUT /secrets/{secret_id}`
+- `threads.context` `GET /threads/{thread_id}/context`
+- `threads.inspect` `GET /threads/{thread_id}`
+- `threads.list` `GET /threads`
+- `threads.timeline` `GET /threads/{thread_id}/timeline`
+- `threads.workspace` `GET /threads/{thread_id}/workspace`
+- `topics.archive` `POST /topics/{topic_id}/archive`
+- `topics.create` `POST /topics`
+- `topics.get` `GET /topics/{topic_id}`
+- `topics.list` `GET /topics`
+- `topics.patch` `PATCH /topics/{topic_id}`
+- `topics.restore` `POST /topics/{topic_id}/restore`
+- `topics.timeline` `GET /topics/{topic_id}/timeline`
+- `topics.trash` `POST /topics/{topic_id}/trash`
+- `topics.unarchive` `POST /topics/{topic_id}/unarchive`
+- `topics.workspace` `GET /topics/{topic_id}/workspace`
+- `usage.summary.v1` `GET /v1/usage/summary`

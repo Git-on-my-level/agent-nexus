@@ -48,6 +48,7 @@ if [[ "${COMMITTED_CHECK}" == true ]]; then
     cli/docs/generated/command-groups.md
     cli/docs/generated/concepts.md
     cli/docs/generated/x-anx-authoring.md
+    cli/docs/generated/x-anx-validation.md
     web-ui/src/lib/generated/event_ref_rules.json
     web-ui/src/lib/generated/taxonomy.json
   )

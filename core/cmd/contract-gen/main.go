@@ -57,6 +57,25 @@ type operation struct {
 	RequestBody *requestBody `yaml:"requestBody"`
 }
 
+type xAnxValidationBaseline struct {
+	KnownMissing map[string][]string `yaml:"known_missing"`
+}
+
+type xAnxValidationReport struct {
+	CommandCount        int
+	AllowedMissing      []xAnxValidationIssue
+	MissingExamples     []xAnxValidationIssue
+	AllowedMissingCount map[string]int
+}
+
+type xAnxValidationIssue struct {
+	CommandID string
+	Method    string
+	Path      string
+	Field     string
+	Detail    string
+}
+
 type requestBody struct {
 	Required bool                 `yaml:"required"`
 	Content  map[string]mediaType `yaml:"content"`
@@ -320,6 +339,7 @@ func main() {
 		goModule          = flag.String("go-module", "agent-nexus-contracts-go-client", "Go module path for generated Go client")
 		tsPackage         = flag.String("ts-package", "agent-nexus-contracts-ts-client", "package name for generated TS client")
 		emitEventRefRules = flag.Bool("emit-event-ref-rules", true, "whether to emit event reference rules metadata from the schema contract")
+		xAnxBaselinePath  = flag.String("x-anx-baseline", "", "path to x-anx validation baseline yaml (defaults to openapi sibling)")
 	)
 	flag.Parse()
 
@@ -335,6 +355,18 @@ func main() {
 
 	if strings.TrimSpace(doc.OpenAPI) == "" {
 		exitf("openapi version is missing")
+	}
+	baselinePath := strings.TrimSpace(*xAnxBaselinePath)
+	if baselinePath == "" {
+		baselinePath = filepath.Join(filepath.Dir(*openAPIPath), "x-anx-validation-baseline.yaml")
+	}
+	baseline, err := loadXAnxValidationBaseline(baselinePath)
+	if err != nil {
+		exitf("load x-anx validation baseline: %v", err)
+	}
+	validationReport, err := validateXAnxAuthoring(doc, baseline)
+	if err != nil {
+		exitf("validate x-anx command metadata: %v", err)
 	}
 
 	schemaRaw, err := os.ReadFile(*schemaPath)
@@ -367,9 +399,271 @@ func main() {
 		config.TSPackage = "agent-nexus-contracts-ts-client"
 	}
 
-	if err := generateAll(*outDir, doc, commands, schemaDoc, config); err != nil {
+	if err := generateAll(*outDir, doc, commands, schemaDoc, config, validationReport); err != nil {
 		exitf("generate artifacts: %v", err)
 	}
+}
+
+func loadXAnxValidationBaseline(path string) (xAnxValidationBaseline, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return xAnxValidationBaseline{}, err
+	}
+	var baseline xAnxValidationBaseline
+	if err := yaml.Unmarshal(raw, &baseline); err != nil {
+		return xAnxValidationBaseline{}, err
+	}
+	if baseline.KnownMissing == nil {
+		baseline.KnownMissing = map[string][]string{}
+	}
+	return baseline, nil
+}
+
+func validateXAnxAuthoring(doc openAPIDocument, baseline xAnxValidationBaseline) (xAnxValidationReport, error) {
+	report := xAnxValidationReport{
+		AllowedMissingCount: map[string]int{},
+	}
+	baselineSet := map[string]struct{}{}
+	baselineSeen := map[string]struct{}{}
+	for field, commandIDs := range baseline.KnownMissing {
+		field = strings.TrimSpace(field)
+		for _, commandID := range commandIDs {
+			key := xAnxBaselineKey(field, commandID)
+			if key == "" {
+				continue
+			}
+			if _, ok := baselineSet[key]; ok {
+				return report, fmt.Errorf("duplicate x-anx baseline entry: %s", key)
+			}
+			baselineSet[key] = struct{}{}
+		}
+	}
+
+	var failures []string
+	forEachCommandOperation(doc, func(path, method string, op *operation) {
+		report.CommandCount++
+		commandID := strings.TrimSpace(op.CommandID)
+		for _, field := range requiredXAnxFields() {
+			if !xAnxFieldPresent(op, field) {
+				issue := xAnxValidationIssue{CommandID: commandID, Method: method, Path: path, Field: field}
+				key := xAnxBaselineKey(field, commandID)
+				if _, ok := baselineSet[key]; ok {
+					baselineSeen[key] = struct{}{}
+					report.AllowedMissing = append(report.AllowedMissing, issue)
+					report.AllowedMissingCount[field]++
+					continue
+				}
+				failures = append(failures, formatXAnxIssue(issue, "missing required field"))
+			}
+		}
+		for _, issue := range validateXAnxAllowedValues(path, method, op) {
+			failures = append(failures, formatXAnxIssue(issue, issue.Detail))
+		}
+		if len(compactExamples(op.Examples)) == 0 {
+			report.MissingExamples = append(report.MissingExamples, xAnxValidationIssue{
+				CommandID: commandID,
+				Method:    method,
+				Path:      path,
+				Field:     "x-anx-examples",
+			})
+		}
+	})
+
+	for key := range baselineSet {
+		if _, ok := baselineSeen[key]; !ok {
+			failures = append(failures, fmt.Sprintf("stale x-anx baseline entry: %s", key))
+		}
+	}
+	sort.Strings(failures)
+	sort.Slice(report.AllowedMissing, func(i, j int) bool {
+		return xAnxIssueLess(report.AllowedMissing[i], report.AllowedMissing[j])
+	})
+	sort.Slice(report.MissingExamples, func(i, j int) bool {
+		return xAnxIssueLess(report.MissingExamples[i], report.MissingExamples[j])
+	})
+	if len(failures) > 0 {
+		return report, fmt.Errorf("%d issue(s):\n%s", len(failures), strings.Join(failures, "\n"))
+	}
+	return report, nil
+}
+
+func forEachCommandOperation(doc openAPIDocument, fn func(path, method string, op *operation)) {
+	paths := make([]string, 0, len(doc.Paths))
+	for path := range doc.Paths {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	for _, path := range paths {
+		item := doc.Paths[path]
+		for _, pair := range []struct {
+			method string
+			op     *operation
+		}{
+			{method: "GET", op: item.Get},
+			{method: "POST", op: item.Post},
+			{method: "PUT", op: item.Put},
+			{method: "PATCH", op: item.Patch},
+			{method: "DELETE", op: item.Delete},
+		} {
+			if pair.op == nil || strings.TrimSpace(pair.op.CommandID) == "" {
+				continue
+			}
+			fn(path, pair.method, pair.op)
+		}
+	}
+}
+
+func requiredXAnxFields() []string {
+	return []string{
+		"x-anx-command-id",
+		"x-anx-cli-path",
+		"x-anx-why",
+		"x-anx-input-mode",
+		"x-anx-streaming",
+		"x-anx-output-envelope",
+		"x-anx-error-codes",
+		"x-anx-concepts",
+		"x-anx-stability",
+		"x-anx-surface",
+		"x-anx-agent-notes",
+	}
+}
+
+func xAnxFieldPresent(op *operation, field string) bool {
+	switch field {
+	case "x-anx-command-id":
+		return strings.TrimSpace(op.CommandID) != ""
+	case "x-anx-cli-path":
+		return strings.TrimSpace(op.CLIPath) != ""
+	case "x-anx-why":
+		return strings.TrimSpace(op.Why) != ""
+	case "x-anx-input-mode":
+		return strings.TrimSpace(op.InputMode) != ""
+	case "x-anx-streaming":
+		return op.Streaming != nil
+	case "x-anx-output-envelope":
+		return strings.TrimSpace(op.Output) != ""
+	case "x-anx-error-codes":
+		return len(compactStrings(op.ErrorCodes)) > 0
+	case "x-anx-concepts":
+		return len(compactStrings(op.Concepts)) > 0
+	case "x-anx-stability":
+		return strings.TrimSpace(op.Stability) != ""
+	case "x-anx-surface":
+		return strings.TrimSpace(op.Surface) != ""
+	case "x-anx-agent-notes":
+		return strings.TrimSpace(op.AgentNotes) != ""
+	default:
+		return false
+	}
+}
+
+func validateXAnxAllowedValues(path, method string, op *operation) []xAnxValidationIssue {
+	commandID := strings.TrimSpace(op.CommandID)
+	var issues []xAnxValidationIssue
+	if value := strings.TrimSpace(op.InputMode); value != "" && !stringInSet(value, allowedXAnxInputModes()) {
+		issues = append(issues, xAnxValidationIssue{CommandID: commandID, Method: method, Path: path, Field: "x-anx-input-mode", Detail: fmt.Sprintf("invalid value %q; expected one of %s", value, strings.Join(sortedSetValues(allowedXAnxInputModes()), "|"))})
+	}
+	if value := strings.TrimSpace(op.Stability); value != "" && !stringInSet(value, allowedXAnxStabilityValues()) {
+		issues = append(issues, xAnxValidationIssue{CommandID: commandID, Method: method, Path: path, Field: "x-anx-stability", Detail: fmt.Sprintf("invalid value %q; expected one of %s", value, strings.Join(sortedSetValues(allowedXAnxStabilityValues()), "|"))})
+	}
+	if value := strings.TrimSpace(op.Surface); value != "" && !stringInSet(value, allowedXAnxSurfaceValues()) {
+		issues = append(issues, xAnxValidationIssue{CommandID: commandID, Method: method, Path: path, Field: "x-anx-surface", Detail: fmt.Sprintf("invalid value %q; expected one of %s", value, strings.Join(sortedSetValues(allowedXAnxSurfaceValues()), "|"))})
+	}
+	if mode, ok := xAnxStreamingMode(op.Streaming); ok && mode != "" && !stringInSet(mode, allowedXAnxStreamingModes()) {
+		issues = append(issues, xAnxValidationIssue{CommandID: commandID, Method: method, Path: path, Field: "x-anx-streaming.mode", Detail: fmt.Sprintf("invalid value %q; expected one of %s", mode, strings.Join(sortedSetValues(allowedXAnxStreamingModes()), "|"))})
+	}
+	return issues
+}
+
+func allowedXAnxInputModes() map[string]struct{} {
+	return map[string]struct{}{
+		"none":           {},
+		"query":          {},
+		"json-body":      {},
+		"raw-stream":     {},
+		"file-and-body":  {},
+		"multipart-form": {},
+	}
+}
+
+func allowedXAnxStabilityValues() map[string]struct{} {
+	return map[string]struct{}{
+		"experimental": {},
+		"beta":         {},
+		"stable":       {},
+	}
+}
+
+func allowedXAnxSurfaceValues() map[string]struct{} {
+	return map[string]struct{}{
+		"canonical":  {},
+		"projection": {},
+		"diagnostic": {},
+		"utility":    {},
+	}
+}
+
+func allowedXAnxStreamingModes() map[string]struct{} {
+	return map[string]struct{}{
+		"none": {},
+		"sse":  {},
+	}
+}
+
+func xAnxStreamingMode(value any) (string, bool) {
+	if value == nil {
+		return "", false
+	}
+	if m, ok := value.(map[string]any); ok {
+		mode, _ := m["mode"].(string)
+		return strings.TrimSpace(mode), true
+	}
+	if m, ok := value.(map[any]any); ok {
+		mode, _ := m["mode"].(string)
+		return strings.TrimSpace(mode), true
+	}
+	return "", false
+}
+
+func stringInSet(value string, set map[string]struct{}) bool {
+	_, ok := set[value]
+	return ok
+}
+
+func sortedSetValues(set map[string]struct{}) []string {
+	values := make([]string, 0, len(set))
+	for value := range set {
+		values = append(values, value)
+	}
+	sort.Strings(values)
+	return values
+}
+
+func xAnxBaselineKey(field, commandID string) string {
+	field = strings.TrimSpace(field)
+	commandID = strings.TrimSpace(commandID)
+	if field == "" || commandID == "" {
+		return ""
+	}
+	return field + ":" + commandID
+}
+
+func formatXAnxIssue(issue xAnxValidationIssue, detail string) string {
+	return fmt.Sprintf("%s %s %s (%s): %s", issue.Method, issue.Path, issue.CommandID, issue.Field, detail)
+}
+
+func xAnxIssueLess(left, right xAnxValidationIssue) bool {
+	if left.CommandID != right.CommandID {
+		return left.CommandID < right.CommandID
+	}
+	if left.Field != right.Field {
+		return left.Field < right.Field
+	}
+	if left.Method != right.Method {
+		return left.Method < right.Method
+	}
+	return left.Path < right.Path
 }
 
 func collectCommands(doc openAPIDocument, schemaDoc anxSchemaDocument) []command {
@@ -919,7 +1213,7 @@ func sortedUniqueStrings(values []string) []string {
 	return out
 }
 
-func generateAll(outDir string, doc openAPIDocument, commands []command, schemaDoc anxSchemaDocument, config generatorConfig) error {
+func generateAll(outDir string, doc openAPIDocument, commands []command, schemaDoc anxSchemaDocument, config generatorConfig, validationReport xAnxValidationReport) error {
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return err
 	}
@@ -951,6 +1245,9 @@ func generateAll(outDir string, doc openAPIDocument, commands []command, schemaD
 		return err
 	}
 	if err := writeXAnxAuthoringMarkdown(filepath.Join(outDir, "docs", "x-anx-authoring.md")); err != nil {
+		return err
+	}
+	if err := writeXAnxValidationMarkdown(filepath.Join(outDir, "docs", "x-anx-validation.md"), doc, validationReport, config.SourceLabel); err != nil {
 		return err
 	}
 	if err := writeGoClient(filepath.Join(outDir, "go"), commands, config.GoModule); err != nil {
@@ -1253,12 +1550,12 @@ func writeXAnxAuthoringMarkdown(path string) error {
 
 The OpenAPI contract uses `+"`x-anx-*`"+` extensions as the single source for CLI/help/meta/doc generation.
 
-Required for every command operation:
+Required now for every command operation:
 
 - `+"`x-anx-command-id`"+`: stable id (for example `+"`threads.list`"+`)
 - `+"`x-anx-cli-path`"+`: CLI path (for example `+"`threads list`"+`)
 - `+"`x-anx-why`"+`: non-empty purpose/decision boundary
-- `+"`x-anx-input-mode`"+`: one of `+"`none|json-body|raw-stream|file-and-body|multipart-form`"+`
+- `+"`x-anx-input-mode`"+`: one of `+"`none|query|json-body|raw-stream|file-and-body|multipart-form`"+`
 - `+"`x-anx-streaming`"+`: streaming metadata object
 - `+"`x-anx-output-envelope`"+`: output notes for CLI consumers
 - `+"`x-anx-error-codes`"+`: stable semantic error code list
@@ -1267,11 +1564,18 @@ Required for every command operation:
 - `+"`x-anx-surface`"+`: one of `+"`canonical|projection|diagnostic|utility`"+`
 - `+"`x-anx-agent-notes`"+`: idempotency/retry caveats
 
-Recommended:
+Generator enforcement:
+
+- invalid enum values fail immediately
+- missing required-now fields fail unless listed in `+"`contracts/x-anx-validation-baseline.yaml`"+`
+- baseline entries are temporary migration debt and must be removed when fixed
+
+Recommended/backlog:
 
 - include at least one `+"`x-anx-examples`"+` command per operation
 - keep `+"`x-anx-command-id`"+` immutable once published
 - keep concept labels lower-case and dash-separated
+- use `+"`contracts/gen/docs/x-anx-validation.md`"+` to audit baseline debt and missing examples
 
 Surface classification:
 
@@ -1281,6 +1585,54 @@ Surface classification:
 - `+"`utility`"+`: meta/handshake, auth bootstrap, rebuild/repair, and similar non-domain endpoints
 `) + "\n"
 	return os.WriteFile(path, []byte(content), 0o644)
+}
+
+func writeXAnxValidationMarkdown(path string, doc openAPIDocument, report xAnxValidationReport, sourceLabel string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	var b strings.Builder
+	b.WriteString("# x-anx Validation Report\n\n")
+	b.WriteString(fmt.Sprintf("Generated from `%s`.\n\n", sourceLabel))
+	b.WriteString(fmt.Sprintf("- OpenAPI version: `%s`\n", doc.OpenAPI))
+	b.WriteString(fmt.Sprintf("- Contract version: `%s`\n", strings.TrimSpace(doc.Info.Version)))
+	b.WriteString(fmt.Sprintf("- Command operations: `%d`\n", report.CommandCount))
+	b.WriteString(fmt.Sprintf("- Baseline-allowed required-field gaps: `%d`\n", len(report.AllowedMissing)))
+	b.WriteString(fmt.Sprintf("- Missing recommended examples: `%d`\n\n", len(report.MissingExamples)))
+
+	if len(report.AllowedMissingCount) > 0 {
+		b.WriteString("## Baseline gap counts\n\n")
+		fields := make([]string, 0, len(report.AllowedMissingCount))
+		for field := range report.AllowedMissingCount {
+			fields = append(fields, field)
+		}
+		sort.Strings(fields)
+		for _, field := range fields {
+			b.WriteString(fmt.Sprintf("- `%s`: `%d`\n", field, report.AllowedMissingCount[field]))
+		}
+		b.WriteString("\n")
+	}
+
+	b.WriteString("## Baseline-allowed required-field gaps\n\n")
+	if len(report.AllowedMissing) == 0 {
+		b.WriteString("None.\n\n")
+	} else {
+		for _, issue := range report.AllowedMissing {
+			b.WriteString(fmt.Sprintf("- `%s` `%s %s` missing `%s`\n", issue.CommandID, issue.Method, issue.Path, issue.Field))
+		}
+		b.WriteString("\n")
+	}
+
+	b.WriteString("## Missing recommended examples\n\n")
+	if len(report.MissingExamples) == 0 {
+		b.WriteString("None.\n")
+	} else {
+		for _, issue := range report.MissingExamples {
+			b.WriteString(fmt.Sprintf("- `%s` `%s %s`\n", issue.CommandID, issue.Method, issue.Path))
+		}
+	}
+
+	return os.WriteFile(path, []byte(b.String()), 0o644)
 }
 
 func writeGoClient(goOutDir string, commands []command, modulePath string) error {

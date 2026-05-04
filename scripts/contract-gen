@@ -34,3 +34,4 @@ cp contracts/gen/docs/commands.md cli/docs/generated/commands.md
 cp contracts/gen/docs/command-groups.md cli/docs/generated/command-groups.md
 cp contracts/gen/docs/concepts.md cli/docs/generated/concepts.md
 cp contracts/gen/docs/x-anx-authoring.md cli/docs/generated/x-anx-authoring.md
+cp contracts/gen/docs/x-anx-validation.md cli/docs/generated/x-anx-validation.md
