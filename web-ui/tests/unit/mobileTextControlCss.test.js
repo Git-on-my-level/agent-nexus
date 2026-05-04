@@ -21,7 +21,7 @@ describe("mobile text control CSS", () => {
     const css = appCss();
 
     expect(css).toMatch(
-      /@media\s*\(hover:\s*none\)\s*and\s*\(pointer:\s*coarse\)\s*\{[\s\S]*?input\[type="text"\],[\s\S]*?textarea,[\s\S]*?\.ui-input,[\s\S]*?\.cdm-prose-input,[\s\S]*?font-size:\s*16px\s*!important;/,
+      /@supports\s*\(-webkit-touch-callout:\s*none\)\s*\{[\s\S]*?@media\s*\(hover:\s*none\)\s*and\s*\(pointer:\s*coarse\)\s*and\s*\(max-width:\s*1023px\)\s*\{[\s\S]*?input\[type="text"\],[\s\S]*?textarea,[\s\S]*?\.ui-input,[\s\S]*?\.cdm-prose-input,[\s\S]*?font-size:\s*16px\s*!important;/,
     );
   });
 
