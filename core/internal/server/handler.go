@@ -130,8 +130,8 @@ type PrimitiveStore interface {
 	ListEvents(ctx context.Context, filter primitives.EventListFilter) ([]map[string]any, error)
 	ListEventsPage(ctx context.Context, filter primitives.EventListFilter) (primitives.EventPage, error)
 	ListHomeUnread(ctx context.Context, readerID string) ([]primitives.HomeUnreadGroup, int, error)
-	MarkHomeRead(ctx context.Context, readerID string, topicIDs []string) error
-	MarkHomeReadAt(ctx context.Context, readerID string, topicIDs []string, expected map[string]primitives.EventCursor) error
+	MarkHomeRead(ctx context.Context, readerID string, groupRefs []string) error
+	MarkHomeReadAt(ctx context.Context, readerID string, groupRefs []string, expected map[string]primitives.EventCursor) error
 	ListHumanAttentionRespondedPage(ctx context.Context, params primitives.HumanAttentionRespondedPageParams) ([]map[string]any, error)
 	TrashArtifact(ctx context.Context, actorID string, artifactID string, reason string) (map[string]any, error)
 	ArchiveArtifact(ctx context.Context, actorID string, artifactID string) (map[string]any, error)

@@ -997,10 +997,10 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `json-body`
-- Why: Advance durable per-topic Home read cursors for the authenticated operator.
+- Why: Advance durable per-group Home read cursors for the authenticated operator.
 - Concepts: `home`, `events`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
-- Output: Returns `{ ok, unread_count, topic_count }`.
+- Output: Returns `{ ok, unread_count, group_count }`.
 
 ## `home.unread`
 
@@ -1009,10 +1009,10 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `none`
-- Why: Load unread high-signal workspace activity grouped by topic for the authenticated operator.
+- Why: Load unread high-signal workspace activity grouped by typed group (topic, board, etc.) for the authenticated operator.
 - Concepts: `home`, `events`
 - Error codes: `auth_required`, `invalid_token`
-- Output: Returns `{ groups, unread_count, topic_count, generated_at }`.
+- Output: Returns `{ groups, unread_count, group_count, generated_at }`.
 
 ## `inbox.get`
 

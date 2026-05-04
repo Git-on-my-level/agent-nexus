@@ -2236,10 +2236,10 @@ paths:
       tags: [home]
       x-anx-surface: canonical
       x-anx-command-id: home.unread
-      x-anx-why: Load unread high-signal workspace activity grouped by topic for the authenticated operator.
+      x-anx-why: Load unread high-signal workspace activity grouped by typed group (topic, board, etc.) for the authenticated operator.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ groups, unread_count, topic_count, generated_at }`."
+      x-anx-output-envelope: "Returns `{ groups, unread_count, group_count, generated_at }`."
       x-anx-error-codes: [auth_required, invalid_token]
       x-anx-concepts: [home, events]
       x-anx-stability: beta
@@ -2265,10 +2265,10 @@ paths:
       tags: [home]
       x-anx-surface: canonical
       x-anx-command-id: home.read
-      x-anx-why: Advance durable per-topic Home read cursors for the authenticated operator.
+      x-anx-why: Advance durable per-group Home read cursors for the authenticated operator.
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ ok, unread_count, topic_count }`."
+      x-anx-output-envelope: "Returns `{ ok, unread_count, group_count }`."
       x-anx-error-codes: [auth_required, invalid_request, invalid_token]
       x-anx-concepts: [home, events, write]
       x-anx-stability: beta
@@ -5846,20 +5846,23 @@ components:
           type: array
           items: { $ref: '#/components/schemas/HomeUnreadGroup' }
         unread_count: { type: integer, minimum: 0 }
-        topic_count: { type: integer, minimum: 0 }
+        group_count: { type: integer, minimum: 0 }
         generated_at: { type: string, format: date-time }
-      required: [groups, unread_count, topic_count, generated_at]
+      required: [groups, unread_count, group_count, generated_at]
 
     HomeUnreadGroup:
       type: object
       properties:
-        topic: { $ref: '#/components/schemas/Topic' }
+        group_ref: { type: string, description: "Typed ref identifying the group, e.g. topic:<id> or board:<id>." }
+        group_type: { type: string, description: "Group type: topic, board, document, or workspace." }
+        display_name: { type: string }
+        priority: { type: string, description: "Priority label for sorting (P0/P1/P2 or empty)." }
         unread_count: { type: integer, minimum: 0 }
         newest_event: { $ref: '#/components/schemas/Event' }
         events:
           type: array
           items: { $ref: '#/components/schemas/Event' }
-      required: [topic, unread_count, newest_event, events]
+      required: [group_ref, group_type, display_name, unread_count, newest_event, events]
 
     MarkHomeReadRequest:
       type: object
@@ -5870,19 +5873,20 @@ components:
         actor_id:
           type: string
           description: Development legacy actor-mode alias for reader_id.
-        topic_id: { type: string }
-        topic_ids:
+        group_ref: { type: string, description: "Single group typed ref, e.g. topic:<id> or board:<id>." }
+        group_refs:
           type: array
           items: { type: string }
+          description: Batch of group typed refs to mark read.
         expected_newest_event_cursor:
           type: object
           properties:
             ts: { type: string, format: date-time }
             id: { type: string }
           required: [ts, id]
-        topic_cursors:
+        group_cursors:
           type: object
-          description: Optional race-safe per-topic newest event cursors for batch mark-read.
+          description: Optional race-safe per-group newest event cursors for batch mark-read.
           additionalProperties:
             type: object
             properties:
@@ -5890,15 +5894,15 @@ components:
               id: { type: string }
             required: [ts, id]
       anyOf:
-        - required: [topic_id]
-        - required: [topic_ids]
+        - required: [group_ref]
+        - required: [group_refs]
 
     MarkHomeReadResponse:
       type: object
       properties:
         ok: { type: boolean }
         unread_count: { type: integer, minimum: 0 }
-        topic_count: { type: integer, minimum: 0 }
+        group_count: { type: integer, minimum: 0 }
       required: [ok]
 
     ArtifactResponse:

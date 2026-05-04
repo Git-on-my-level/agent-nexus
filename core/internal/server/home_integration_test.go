@@ -75,13 +75,19 @@ func TestHomeUnreadGroupsEligibleEventsAndMarksRead(t *testing.T) {
 	var unread struct {
 		Groups      []map[string]any `json:"groups"`
 		UnreadCount int              `json:"unread_count"`
-		TopicCount  int              `json:"topic_count"`
+		GroupCount  int              `json:"group_count"`
 	}
 	if err := json.NewDecoder(unreadResp.Body).Decode(&unread); err != nil {
 		t.Fatalf("decode unread: %v", err)
 	}
-	if unread.UnreadCount != 1 || unread.TopicCount != 1 || len(unread.Groups) != 1 {
+	if unread.UnreadCount != 1 || unread.GroupCount != 1 || len(unread.Groups) != 1 {
 		t.Fatalf("expected one unread Home event, got %#v", unread)
+	}
+	if unread.Groups[0]["group_ref"] != "topic:"+topicID {
+		t.Fatalf("expected group_ref topic:%s, got %v", topicID, unread.Groups[0]["group_ref"])
+	}
+	if unread.Groups[0]["group_type"] != "topic" {
+		t.Fatalf("expected group_type topic, got %v", unread.Groups[0]["group_type"])
 	}
 	newest, _ := unread.Groups[0]["newest_event"].(map[string]any)
 
@@ -99,7 +105,7 @@ func TestHomeUnreadGroupsEligibleEventsAndMarksRead(t *testing.T) {
 
 	postJSONExpectStatus(t, h.baseURL+"/home/read", `{
 		"reader_id":"reader-home",
-		"topic_id":"`+topicID+`",
+		"group_ref":"topic:`+topicID+`",
 		"expected_newest_event_cursor":{"ts":"`+asString(newest["ts"])+`","id":"`+asString(newest["id"])+`"}
 	}`, http.StatusOK).Body.Close()
 
@@ -110,16 +116,16 @@ func TestHomeUnreadGroupsEligibleEventsAndMarksRead(t *testing.T) {
 	defer emptyResp.Body.Close()
 	var afterRace struct {
 		UnreadCount int `json:"unread_count"`
-		TopicCount  int `json:"topic_count"`
+		GroupCount  int `json:"group_count"`
 	}
 	if err := json.NewDecoder(emptyResp.Body).Decode(&afterRace); err != nil {
 		t.Fatalf("decode empty unread: %v", err)
 	}
-	if afterRace.UnreadCount != 1 || afterRace.TopicCount != 1 {
+	if afterRace.UnreadCount != 1 || afterRace.GroupCount != 1 {
 		t.Fatalf("expected post-render event to remain unread after cursor mark read, got %#v", afterRace)
 	}
 
-	postJSONExpectStatus(t, h.baseURL+"/home/read", `{"reader_id":"reader-home","topic_id":"`+topicID+`"}`, http.StatusOK).Body.Close()
+	postJSONExpectStatus(t, h.baseURL+"/home/read", `{"reader_id":"reader-home","group_ref":"topic:`+topicID+`"}`, http.StatusOK).Body.Close()
 }
 
 func TestEventsHomeFeedPresetMatchesHomeEligibility(t *testing.T) {

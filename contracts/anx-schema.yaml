@@ -165,14 +165,18 @@ primitives:
       summary, refs, and payload.
     home_feed:
       preset_id: home_feed
-      topic_ownership: >
-        Home resolves direct `topic:<id>` refs first, then `thread:<id>` or
-        event.thread_id through topic.thread_id. Events that cannot be assigned
-        to a topic are excluded from Home and remain visible on Events.
+      group_ownership: >
+        Home resolves events to typed groups. Resolution order:
+        1. Direct `topic:<id>` ref → topic group.
+        2. `thread:<id>` or event.thread_id through topic or board backing thread → owning group.
+        3. `board:<id>` ref → board group.
+        Events that cannot be assigned to any group are excluded from Home and
+        remain visible on Events.
       reader_scope: >
-        Read cursors are keyed by authenticated principal plus topic. Development
-        legacy actor mode may pass a reader id explicitly for local operation.
-      cursor: "Per-topic `(last_read_event_ts, last_read_event_id)`; id breaks equal-timestamp ties."
+        Read cursors are keyed by authenticated principal plus group_ref (a typed
+        ref string such as "topic:<id>" or "board:<id>"). Development legacy
+        actor mode may pass a reader id explicitly for local operation.
+      cursor: "Per-group `(last_read_event_ts, last_read_event_id)` keyed by group_ref; id breaks equal-timestamp ties."
       eligible_types:
         message_posted:
           family: message

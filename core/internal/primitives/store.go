@@ -21,6 +21,7 @@ import (
 	"github.com/google/uuid"
 
 	"agent-nexus-core/internal/blob"
+	"agent-nexus-core/internal/schema"
 )
 
 var ErrNotFound = errors.New("not found")
@@ -99,7 +100,10 @@ type EventPage struct {
 }
 
 type HomeUnreadGroup struct {
-	Topic       map[string]any
+	GroupRef    string
+	GroupType   string
+	DisplayName string
+	Priority    string
 	UnreadCount int
 	NewestEvent map[string]any
 	Events      []map[string]any
@@ -2535,17 +2539,17 @@ func (s *Store) ListHomeUnread(ctx context.Context, readerID string) ([]HomeUnre
 		return nil, 0, fmt.Errorf("reader_id is required")
 	}
 
-	topicByID, threadToTopicID, err := s.homeTopicLookup(ctx)
+	lookup, err := s.homeGroupLookup(ctx)
 	if err != nil {
 		return nil, 0, err
 	}
-	cursorByTopic, err := s.homeReadCursors(ctx, readerID)
+	cursorByGroup, err := s.homeReadCursors(ctx, readerID)
 	if err != nil {
 		return nil, 0, err
 	}
-	sinceBoundOK, sinceTS, sinceExclusiveID := homeUnreadSinceLowerBound(topicByID, cursorByTopic)
+	sinceBoundOK, sinceTS, sinceExclusiveID := homeUnreadSinceLowerBound(lookup.groupByRef, cursorByGroup)
 
-	groupByTopic := map[string]*HomeUnreadGroup{}
+	groupByRef := map[string]*HomeUnreadGroup{}
 	for cursor := ""; ; {
 		f := EventListFilter{Preset: "home_feed", Limit: 200, Cursor: cursor}
 		if sinceBoundOK && cursor == "" {
@@ -2557,21 +2561,27 @@ func (s *Store) ListHomeUnread(ctx context.Context, readerID string) ([]HomeUnre
 			return nil, 0, err
 		}
 		for _, event := range eventsPage.Events {
-			topicID := homeTopicIDForEvent(event, threadToTopicID)
-			if topicID == "" {
+			groupRef := homeGroupForEvent(event, lookup)
+			if groupRef == "" {
 				continue
 			}
-			if !homeEventAfterCursor(event, cursorByTopic[topicID]) {
+			if !homeEventAfterCursor(event, cursorByGroup[groupRef]) {
 				continue
 			}
-			topic := topicByID[topicID]
-			if topic == nil {
+			meta := lookup.groupByRef[groupRef]
+			if meta == nil {
 				continue
 			}
-			group := groupByTopic[topicID]
+			group := groupByRef[groupRef]
 			if group == nil {
-				group = &HomeUnreadGroup{Topic: topic, NewestEvent: event}
-				groupByTopic[topicID] = group
+				group = &HomeUnreadGroup{
+					GroupRef:    groupRef,
+					GroupType:   meta.groupType,
+					DisplayName: meta.displayName,
+					Priority:    meta.priority,
+					NewestEvent: event,
+				}
+				groupByRef[groupRef] = group
 			}
 			group.Events = append(group.Events, event)
 			group.UnreadCount++
@@ -2582,9 +2592,9 @@ func (s *Store) ListHomeUnread(ctx context.Context, readerID string) ([]HomeUnre
 		cursor = eventsPage.NextCursor
 	}
 
-	groups := make([]HomeUnreadGroup, 0, len(groupByTopic))
+	groups := make([]HomeUnreadGroup, 0, len(groupByRef))
 	total := 0
-	for _, group := range groupByTopic {
+	for _, group := range groupByRef {
 		total += group.UnreadCount
 		groups = append(groups, *group)
 	}
@@ -2594,11 +2604,11 @@ func (s *Store) ListHomeUnread(ctx context.Context, readerID string) ([]HomeUnre
 		leftTS := anyStringValue(left.NewestEvent["ts"])
 		rightTS := anyStringValue(right.NewestEvent["ts"])
 		if leftTS == rightTS {
-			return anyStringValue(left.Topic["id"]) < anyStringValue(right.Topic["id"])
+			return left.GroupRef < right.GroupRef
 		}
 		if homeNearTied(leftTS, rightTS) {
-			lp := homePriorityRank(anyStringValue(left.Topic["priority"]))
-			rp := homePriorityRank(anyStringValue(right.Topic["priority"]))
+			lp := homePriorityRank(left.Priority)
+			rp := homePriorityRank(right.Priority)
 			if lp != rp {
 				return lp < rp
 			}
@@ -2608,11 +2618,11 @@ func (s *Store) ListHomeUnread(ctx context.Context, readerID string) ([]HomeUnre
 	return groups, total, nil
 }
 
-func (s *Store) MarkHomeRead(ctx context.Context, readerID string, topicIDs []string) error {
-	return s.MarkHomeReadAt(ctx, readerID, topicIDs, nil)
+func (s *Store) MarkHomeRead(ctx context.Context, readerID string, groupRefs []string) error {
+	return s.MarkHomeReadAt(ctx, readerID, groupRefs, nil)
 }
 
-func (s *Store) MarkHomeReadAt(ctx context.Context, readerID string, topicIDs []string, expected map[string]EventCursor) error {
+func (s *Store) MarkHomeReadAt(ctx context.Context, readerID string, groupRefs []string, expected map[string]EventCursor) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("primitives store database is not initialized")
 	}
@@ -2621,14 +2631,14 @@ func (s *Store) MarkHomeReadAt(ctx context.Context, readerID string, topicIDs []
 		return fmt.Errorf("reader_id is required")
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	for _, topicID := range dedupeStrings(topicIDs) {
-		topicID = strings.TrimSpace(topicID)
-		if topicID == "" {
+	for _, groupRef := range dedupeStrings(groupRefs) {
+		groupRef = strings.TrimSpace(groupRef)
+		if groupRef == "" {
 			continue
 		}
-		cursor := expected[topicID]
+		cursor := expected[groupRef]
 		if strings.TrimSpace(cursor.TS) == "" || strings.TrimSpace(cursor.ID) == "" {
-			event, err := s.newestHomeEventForTopic(ctx, topicID)
+			event, err := s.newestHomeEventForGroup(ctx, groupRef)
 			if err != nil {
 				return err
 			}
@@ -2637,27 +2647,44 @@ func (s *Store) MarkHomeReadAt(ctx context.Context, readerID string, topicIDs []
 			}
 			cursor = EventCursor{TS: anyStringValue(event["ts"]), ID: anyStringValue(event["id"])}
 		}
-		if _, err := s.db.ExecContext(ctx, `INSERT INTO home_topic_read_cursors(
-				reader_id, topic_id, last_read_event_ts, last_read_event_id, updated_at
+		if _, err := s.db.ExecContext(ctx, `INSERT INTO home_read_cursors(
+				reader_id, group_ref, last_read_event_ts, last_read_event_id, updated_at
 			) VALUES (?, ?, ?, ?, ?)
-			ON CONFLICT(reader_id, topic_id) DO UPDATE SET
+			ON CONFLICT(reader_id, group_ref) DO UPDATE SET
 				last_read_event_ts = excluded.last_read_event_ts,
 				last_read_event_id = excluded.last_read_event_id,
 				updated_at = excluded.updated_at
-			WHERE excluded.last_read_event_ts > home_topic_read_cursors.last_read_event_ts
+			WHERE excluded.last_read_event_ts > home_read_cursors.last_read_event_ts
 				OR (
-					excluded.last_read_event_ts = home_topic_read_cursors.last_read_event_ts
-					AND excluded.last_read_event_id > home_topic_read_cursors.last_read_event_id
+					excluded.last_read_event_ts = home_read_cursors.last_read_event_ts
+					AND excluded.last_read_event_id > home_read_cursors.last_read_event_id
 				)`,
-			readerID, topicID, strings.TrimSpace(cursor.TS), strings.TrimSpace(cursor.ID), now); err != nil {
+			readerID, groupRef, strings.TrimSpace(cursor.TS), strings.TrimSpace(cursor.ID), now); err != nil {
 			return fmt.Errorf("upsert home read cursor: %w", err)
 		}
 	}
 	return nil
 }
 
-func (s *Store) newestHomeEventForTopic(ctx context.Context, topicID string) (map[string]any, error) {
-	events, err := s.ListEvents(ctx, EventListFilter{Preset: "home_feed", TopicID: topicID, Limit: 1})
+func (s *Store) newestHomeEventForGroup(ctx context.Context, groupRef string) (map[string]any, error) {
+	f := EventListFilter{Preset: "home_feed", Limit: 1}
+	prefix, id, _ := schema.SplitTypedRef(groupRef)
+	switch prefix {
+	case "topic":
+		f.TopicID = id
+	case "thread":
+		f.ThreadID = id
+	default:
+		events, err := s.ListEvents(ctx, f)
+		if err != nil {
+			return nil, err
+		}
+		if len(events) == 0 {
+			return nil, nil
+		}
+		return events[0], nil
+	}
+	events, err := s.ListEvents(ctx, f)
 	if err != nil {
 		return nil, err
 	}
@@ -2673,77 +2700,148 @@ type homeReadCursor struct {
 }
 
 func (s *Store) homeReadCursors(ctx context.Context, readerID string) (map[string]homeReadCursor, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT topic_id, last_read_event_ts, last_read_event_id FROM home_topic_read_cursors WHERE reader_id = ?`, readerID)
+	rows, err := s.db.QueryContext(ctx, `SELECT group_ref, last_read_event_ts, last_read_event_id FROM home_read_cursors WHERE reader_id = ?`, readerID)
 	if err != nil {
 		return nil, fmt.Errorf("query home read cursors: %w", err)
 	}
 	defer rows.Close()
 	out := map[string]homeReadCursor{}
 	for rows.Next() {
-		var topicID, ts, id string
-		if err := rows.Scan(&topicID, &ts, &id); err != nil {
+		var groupRef, ts, id string
+		if err := rows.Scan(&groupRef, &ts, &id); err != nil {
 			return nil, fmt.Errorf("scan home read cursor: %w", err)
 		}
-		out[topicID] = homeReadCursor{TS: ts, ID: id}
+		out[groupRef] = homeReadCursor{TS: ts, ID: id}
 	}
 	return out, rows.Err()
 }
 
-func (s *Store) homeTopicLookup(ctx context.Context) (map[string]map[string]any, map[string]string, error) {
+type homeGroupMeta struct {
+	groupRef    string
+	groupType   string
+	displayName string
+	priority    string
+}
+
+type homeGroupLookup struct {
+	groupByRef       map[string]*homeGroupMeta
+	threadToGroupRef map[string]string
+	boardToGroupRef  map[string]string
+}
+
+func (s *Store) homeGroupLookup(ctx context.Context) (*homeGroupLookup, error) {
+	lookup := &homeGroupLookup{
+		groupByRef:       map[string]*homeGroupMeta{},
+		threadToGroupRef: map[string]string{},
+		boardToGroupRef:  map[string]string{},
+	}
+
+	if err := s.loadTopicGroups(ctx, lookup); err != nil {
+		return nil, err
+	}
+	if err := s.loadBoardGroups(ctx, lookup); err != nil {
+		return nil, err
+	}
+	return lookup, nil
+}
+
+func (s *Store) loadTopicGroups(ctx context.Context, lookup *homeGroupLookup) error {
 	rows, err := s.db.QueryContext(ctx, `SELECT id, title, summary, thread_id, updated_at, extensions_json, archived_at, trashed_at FROM topics WHERE COALESCE(trashed_at, '') = ''`)
 	if err != nil {
-		return nil, nil, fmt.Errorf("query home topics: %w", err)
+		return fmt.Errorf("query home topics: %w", err)
 	}
 	defer rows.Close()
-	topicByID := map[string]map[string]any{}
-	threadToTopicID := map[string]string{}
 	for rows.Next() {
 		var id, updatedAt, extensionsJSON string
-		var title, summary, threadID, archivedAt, trashedAt sql.NullString
-		if err := rows.Scan(&id, &title, &summary, &threadID, &updatedAt, &extensionsJSON, &archivedAt, &trashedAt); err != nil {
-			return nil, nil, fmt.Errorf("scan home topic: %w", err)
+		var title, summary, threadID sql.NullString
+		var discardArchivedAt, discardTrashedAt sql.NullString
+		if err := rows.Scan(&id, &title, &summary, &threadID, &updatedAt, &extensionsJSON, &discardArchivedAt, &discardTrashedAt); err != nil {
+			return fmt.Errorf("scan home topic: %w", err)
 		}
 		var extensions map[string]any
 		_ = json.Unmarshal([]byte(extensionsJSON), &extensions)
 		if extensions == nil {
 			extensions = map[string]any{}
 		}
-		state := LifecycleStateFromTimestampStrings(nullStringValue(archivedAt), nullStringValue(trashedAt))
-		topic := map[string]any{
-			"id":         id,
-			"title":      firstNonEmptyString(title.String, id),
-			"summary":    summary.String,
-			"state":      state,
-			"status":     state,
-			"lifecycle":  state,
-			"priority":   firstNonEmptyString(anyStringValue(extensions["priority"]), anyStringValue(extensions["filter_priority"])),
-			"updated_at": updatedAt,
+		priority := firstNonEmptyString(anyStringValue(extensions["priority"]), anyStringValue(extensions["filter_priority"]))
+		groupRef := "topic:" + id
+		meta := &homeGroupMeta{
+			groupRef:    groupRef,
+			groupType:   "topic",
+			displayName: firstNonEmptyString(title.String, id),
+			priority:    priority,
 		}
+		lookup.groupByRef[groupRef] = meta
 		if threadID.Valid && strings.TrimSpace(threadID.String) != "" {
-			topic["thread_id"] = threadID.String
-			threadToTopicID[threadID.String] = id
+			lookup.threadToGroupRef[threadID.String] = groupRef
 		}
-		topicByID[id] = topic
 	}
 	if err := rows.Err(); err != nil {
-		return nil, nil, fmt.Errorf("iterate home topics: %w", err)
+		return fmt.Errorf("iterate home topics: %w", err)
 	}
-	return topicByID, threadToTopicID, nil
+	return nil
 }
 
-func homeTopicIDForEvent(event map[string]any, threadToTopicID map[string]string) string {
+func (s *Store) loadBoardGroups(ctx context.Context, lookup *homeGroupLookup) error {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, title, thread_id FROM boards WHERE COALESCE(trashed_at, '') = ''`)
+	if err != nil {
+		return fmt.Errorf("query home boards: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, title, threadID string
+		if err := rows.Scan(&id, &title, &threadID); err != nil {
+			return fmt.Errorf("scan home board: %w", err)
+		}
+		groupRef := "board:" + id
+		meta := &homeGroupMeta{
+			groupRef:    groupRef,
+			groupType:   "board",
+			displayName: firstNonEmptyString(strings.TrimSpace(title), id),
+			priority:    "",
+		}
+		lookup.groupByRef[groupRef] = meta
+		threadID = strings.TrimSpace(threadID)
+		if threadID != "" {
+			lookup.boardToGroupRef[id] = groupRef
+			if _, exists := lookup.threadToGroupRef[threadID]; !exists {
+				lookup.threadToGroupRef[threadID] = groupRef
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate home boards: %w", err)
+	}
+	return nil
+}
+
+func homeGroupForEvent(event map[string]any, lookup *homeGroupLookup) string {
 	for _, ref := range anyStringSlice(event["refs"]) {
 		if strings.HasPrefix(ref, "topic:") {
-			return strings.TrimSpace(strings.TrimPrefix(ref, "topic:"))
+			topicRef := "topic:" + strings.TrimSpace(strings.TrimPrefix(ref, "topic:"))
+			if _, ok := lookup.groupByRef[topicRef]; ok {
+				return topicRef
+			}
 		}
 	}
 	if threadID := strings.TrimSpace(anyStringValue(event["thread_id"])); threadID != "" {
-		return threadToTopicID[threadID]
+		if groupRef, ok := lookup.threadToGroupRef[threadID]; ok {
+			return groupRef
+		}
 	}
 	for _, ref := range anyStringSlice(event["refs"]) {
 		if strings.HasPrefix(ref, "thread:") {
-			if topicID := threadToTopicID[strings.TrimSpace(strings.TrimPrefix(ref, "thread:"))]; topicID != "" {
-				return topicID
+			threadID := strings.TrimSpace(strings.TrimPrefix(ref, "thread:"))
+			if groupRef, ok := lookup.threadToGroupRef[threadID]; ok {
+				return groupRef
+			}
+		}
+	}
+	for _, ref := range anyStringSlice(event["refs"]) {
+		if strings.HasPrefix(ref, "board:") {
+			boardRef := "board:" + strings.TrimSpace(strings.TrimPrefix(ref, "board:"))
+			if _, ok := lookup.groupByRef[boardRef]; ok {
+				return boardRef
 			}
 		}
 	}
@@ -2761,12 +2859,12 @@ func homeEventAfterCursor(event map[string]any, cursor homeReadCursor) bool {
 
 // homeUnreadSinceLowerBound returns a global lower bound on events that can still be home-unread
 // when every topic has a read cursor: strictly after the lexicographically smallest (ts, id) cursor.
-func homeUnreadSinceLowerBound(topicByID map[string]map[string]any, cursorByTopic map[string]homeReadCursor) (ok bool, ts string, exclusiveID string) {
-	if len(topicByID) == 0 {
+func homeUnreadSinceLowerBound(groupByRef map[string]*homeGroupMeta, cursorByGroup map[string]homeReadCursor) (ok bool, ts string, exclusiveID string) {
+	if len(groupByRef) == 0 {
 		return false, "", ""
 	}
-	for topicID := range topicByID {
-		c := cursorByTopic[topicID]
+	for groupRef := range groupByRef {
+		c := cursorByGroup[groupRef]
 		if strings.TrimSpace(c.TS) == "" || strings.TrimSpace(c.ID) == "" {
 			return false, "", ""
 		}
