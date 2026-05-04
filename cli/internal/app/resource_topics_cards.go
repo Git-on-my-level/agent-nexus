@@ -22,7 +22,7 @@ var topicsSubcommandSpec = subcommandSpec{
 var cardsSubcommandSpec = subcommandSpec{
 	command:  "cards",
 	valid:    []string{"list", "get", "create", "message", "messages", "reply", "revise", "history", "revision", "patch", "move", "assign", "resolve", "reopen", "archive", "trash", "purge", "restore", "timeline"},
-	examples: []string{"anx cards list", "anx cards create --board <board-id> --title \"Implement login\" --content-file card.md", "anx cards message <card-id> --body-file update.md", "anx cards messages <card-id>", "anx cards reply <card-id> --to <message-id> --body-file reply.md", "anx cards revise --card <card-id> --content-file card.md", "anx cards history --card-id <card-id>", "anx cards assign --card <card-id> --assignee-ref actor:<actor-id>", "anx cards resolve --card <card-id> --resolution-ref event:<event-id>", "anx cards move --card-id <card-id> --column review", "anx cards get --card-id <card-id>"},
+	examples: []string{"anx cards list", "anx cards create --board <board-id> --title \"Implement login\" --content-file card.md", "anx cards message <card-id> --body-file update.md", "anx cards messages <card-id>", "anx cards reply <card-id> --to <message-id> --body-file reply.md", "anx cards revise --card <card-id> --content-file card.md", "anx cards history --card-id <card-id>", "anx cards assign --card <card-id> --assignee-ref actor:<actor-id>", "anx cards resolve --card <card-id> --body-file evidence.md", "anx cards move --card-id <card-id> --column review", "anx cards get --card-id <card-id>"},
 }
 
 func (a *App) runTopicsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
@@ -341,11 +341,25 @@ func (a *App) runCardsCommand(ctx context.Context, args []string, cfg config.Res
 		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "cards assign", "cards.patch", "card_id", id, cardIDLookupSpec, nil, body)
 		return result, "cards assign", callErr
 	case "resolve":
-		id, body, err := a.parseCardResolveInput(ctx, args[1:], cfg, "cards resolve")
+		plan, err := a.parseCardResolveInput(args[1:], cfg, "cards resolve")
 		if err != nil {
 			return nil, "cards resolve", err
 		}
-		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "cards resolve", "cards.move", "card_id", id, cardIDLookupSpec, nil, body)
+		if plan.hasEvidenceMessage {
+			ref, err := a.postCardResolveEvidence(ctx, cfg, plan)
+			if err != nil {
+				return nil, "cards resolve", err
+			}
+			plan.resolutionRefs = normalizeStringFilters(append(plan.resolutionRefs, ref))
+			plan.moveBody["resolution_refs"] = plan.resolutionRefs
+		}
+		if len(plan.resolutionRefs) == 0 {
+			return nil, "cards resolve", errnorm.Usage("invalid_request", "`anx cards resolve` requires at least one --resolution-ref, --body, or --body-file")
+		}
+		if err := a.ensureCardMoveConcurrency(ctx, cfg, plan.cardID, plan.moveBody); err != nil {
+			return nil, "cards resolve", err
+		}
+		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "cards resolve", "cards.move", "card_id", plan.cardID, cardIDLookupSpec, nil, plan.moveBody)
 		return result, "cards resolve", callErr
 	case "reopen":
 		id, body, err := a.parseCardReopenInput(ctx, args[1:], cfg, "cards reopen")
@@ -813,28 +827,39 @@ func (a *App) parseCardMoveInput(ctx context.Context, args []string, cfg config.
 	return cardID, body, nil
 }
 
-func (a *App) parseCardResolveInput(ctx context.Context, args []string, cfg config.Resolved, commandName string) (string, map[string]any, error) {
+type cardResolvePlan struct {
+	cardID             string
+	moveBody           map[string]any
+	resolutionRefs     []string
+	evidenceBody       string
+	evidenceSummary    string
+	evidenceActorIDRaw string
+	hasEvidenceMessage bool
+}
+
+func (a *App) parseCardResolveInput(args []string, cfg config.Resolved, commandName string) (cardResolvePlan, error) {
+	leadingCardID, args := popLeadingPositional(args)
 	fs := newSilentFlagSet(commandName)
-	var cardIDFlag, resolutionFlag, ifBoardUpdatedAtFlag, actorIDFlag trackedString
+	var cardIDFlag, resolutionFlag, ifBoardUpdatedAtFlag, actorIDFlag, bodyFlag, bodyFileFlag, summaryFlag trackedString
 	var resolutionRefFlags trackedStrings
 	fs.Var(&cardIDFlag, "card", "Card id")
 	fs.Var(&cardIDFlag, "card-id", "Card id")
 	fs.Var(&resolutionFlag, "resolution", "Resolution value: done (abandon work with trash, not resolution)")
 	fs.Var(&resolutionRefFlags, "resolution-ref", "Evidence event/artifact typed ref (repeatable)")
+	fs.Var(&bodyFlag, "body", "Post this evidence body to the card thread before resolving")
+	fs.Var(&bodyFileFlag, "body-file", "Load evidence body text from a local file before resolving")
+	fs.Var(&summaryFlag, "summary", "Optional short evidence event summary")
 	fs.Var(&ifBoardUpdatedAtFlag, "if-board-updated-at", "Board updated_at concurrency token; discovered when omitted")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
 	if err := fs.Parse(args); err != nil {
-		return "", nil, errnorm.Usage("invalid_flags", err.Error())
+		return cardResolvePlan{}, errnorm.Usage("invalid_flags", err.Error())
 	}
-	cardID, err := parseCardIDFromFlagOrPositionals(cardIDFlag.value, fs.Args(), commandName)
+	cardID, err := parseCardIDFromFlagOrPositionals(firstNonEmpty(cardIDFlag.value, leadingCardID), fs.Args(), commandName)
 	if err != nil {
-		return "", nil, err
+		return cardResolvePlan{}, err
 	}
 	resolution := firstNonEmpty(strings.TrimSpace(resolutionFlag.value), "done")
 	refs := normalizeStringFilters(resolutionRefFlags.values)
-	if len(refs) == 0 {
-		return "", nil, errnorm.Usage("invalid_request", "`anx cards resolve` requires at least one --resolution-ref")
-	}
 	body := map[string]any{
 		"column_key":      "done",
 		"resolution":      resolution,
@@ -845,15 +870,56 @@ func (a *App) parseCardResolveInput(ctx context.Context, args []string, cfg conf
 	}
 	actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
 	if err != nil {
-		return "", nil, err
+		return cardResolvePlan{}, err
 	}
 	if actorID != "" {
 		body["actor_id"] = actorID
 	}
-	if err := a.ensureCardMoveConcurrency(ctx, cfg, cardID, body); err != nil {
-		return "", nil, err
+	bodyText := ""
+	hasBodyFlag := strings.TrimSpace(bodyFlag.value) != "" || strings.TrimSpace(bodyFileFlag.value) != ""
+	if hasBodyFlag {
+		bodyText, err = a.readExplicitMessageText(bodyFlag.value, bodyFileFlag.value, commandName)
+		if err != nil {
+			return cardResolvePlan{}, err
+		}
 	}
-	return cardID, body, nil
+	return cardResolvePlan{
+		cardID:             cardID,
+		moveBody:           body,
+		resolutionRefs:     refs,
+		evidenceBody:       bodyText,
+		evidenceSummary:    summaryFlag.value,
+		evidenceActorIDRaw: actorIDFlag.value,
+		hasEvidenceMessage: hasBodyFlag,
+	}, nil
+}
+
+func (a *App) postCardResolveEvidence(ctx context.Context, cfg config.Resolved, plan cardResolvePlan) (string, error) {
+	card, err := a.fetchCardBody(ctx, cfg, plan.cardID)
+	if err != nil {
+		return "", err
+	}
+	target, err := cardMessageTarget(card, plan.cardID)
+	if err != nil {
+		return "", err
+	}
+	body, err := buildMessagePostedBody(cfg, plan.evidenceActorIDRaw, target, plan.evidenceBody, plan.evidenceSummary, nil, "")
+	if err != nil {
+		return "", err
+	}
+	if err := validateEventsCreateInput(body, "cards resolve"); err != nil {
+		return "", err
+	}
+	result, err := a.invokeTypedJSON(ctx, cfg, "cards resolve", "events.create", nil, nil, body)
+	if err != nil {
+		return "", err
+	}
+	event := extractNestedMap(extractNestedMap(asMap(result.Data), "body"), "event")
+	eventID := strings.TrimSpace(anyString(event["id"]))
+	if eventID == "" {
+		return "", errnorm.Usage("invalid_response", "cards resolve evidence event response did not include event id")
+	}
+	return "event:" + eventID, nil
 }
 
 func (a *App) parseCardReopenInput(ctx context.Context, args []string, cfg config.Resolved, commandName string) (string, map[string]any, error) {

@@ -383,6 +383,7 @@ func formatCardRecord(card map[string]any) string {
 	lines = appendScalar(lines, "thread_id", card, "thread_id")
 	lines = appendScalar(lines, "document_ref", card, "document_ref")
 	lines = appendScalar(lines, "column_key", card, "column_key")
+	lines = appendScalar(lines, "status", card, "status")
 	lines = appendScalar(lines, "rank", card, "rank")
 	lines = appendScalar(lines, "risk", card, "risk")
 	lines = appendScalar(lines, "resolution", card, "resolution")
@@ -395,6 +396,7 @@ func formatCardRecord(card map[string]any) string {
 		lines = appendScalar(lines, "trashed_by", card, "trashed_by")
 		lines = appendScalar(lines, "trash_reason", card, "trash_reason")
 	}
+	lines = appendScalar(lines, "created_at", card, "created_at")
 	lines = appendScalar(lines, "updated_at", card, "updated_at")
 	return strings.Join(lines, "\n")
 }

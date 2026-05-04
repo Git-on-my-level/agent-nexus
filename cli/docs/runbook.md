@@ -200,7 +200,7 @@ anx --agent agent-a cards create --board board_product_launch --topic topic_123 
 anx --agent agent-a cards revise --card card_789 --content-file card.md
 anx --agent agent-a cards assign --card card_789 --assignee-ref actor:agent-a
 anx --agent agent-a cards move --card card_789 --column review
-anx --agent agent-a cards resolve --card card_789 --resolution-ref event:event_123
+anx --agent agent-a cards resolve --card card_789 --body-file evidence.md
 # Packet APIs are subject-based: `packet.subject_ref` must be `card:<card-id>`.
 anx --agent agent-a receipts create --from-file receipt.json
 anx --agent agent-a reviews create --from-file review.json
