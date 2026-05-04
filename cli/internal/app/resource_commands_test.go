@@ -3181,6 +3181,27 @@ func TestPreConfigUsagePreflightBeatsAmbiguousProfileResolution(t *testing.T) {
 			messagePart: "unknown",
 		},
 		{
+			name:        "docs content unsupported document alias",
+			args:        []string{"docs", "content", "--document", "doc_123"},
+			command:     "docs content",
+			code:        "invalid_flags",
+			messagePart: "document",
+		},
+		{
+			name:        "boards workspace unsupported board alias",
+			args:        []string{"boards", "workspace", "--board", "board_123"},
+			command:     "boards workspace",
+			code:        "invalid_flags",
+			messagePart: "board",
+		},
+		{
+			name:        "boards cards list unsupported board alias",
+			args:        []string{"boards", "cards", "list", "--board", "board_123"},
+			command:     "boards cards list",
+			code:        "invalid_flags",
+			messagePart: "board",
+		},
+		{
 			name:        "config lenient invalid flag",
 			args:        []string{"config", "use", "agent-a", "--unknown"},
 			command:     "config use",

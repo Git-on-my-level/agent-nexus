@@ -986,6 +986,12 @@ func TestRunGeneratedHelpResolvesDerivedDocsAndArtifactCommands(t *testing.T) {
 	if !strings.Contains(docsRevise, "--apply") || !strings.Contains(docsRevise, "--proposal-id") {
 		t.Fatalf("expected docs revise apply/proposal flags output=%s", docsRevise)
 	}
+	if !strings.Contains(docsRevise, "anx docs revise <document-id> --apply --content-file notes.md") {
+		t.Fatalf("expected docs revise apply example to keep positional target before flags output=%s", docsRevise)
+	}
+	if strings.Contains(docsRevise, "anx docs revise --apply <document-id> --content-file notes.md") {
+		t.Fatalf("unexpected docs revise example with flags before positional target output=%s", docsRevise)
+	}
 
 	artifactInspect := runHelpCommand(t, "help", "artifacts", "inspect")
 	if !strings.Contains(artifactInspect, "Local Help: artifacts inspect") {
