@@ -1,11 +1,14 @@
 package server
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
+	"time"
 
 	"agent-nexus-core/internal/primitives"
 )
@@ -324,6 +327,176 @@ func TestCardAssignmentEnqueuesAgentWakeupNotification(t *testing.T) {
 	}
 }
 
+func TestAgentNotificationReceiptsStreamTracksWakeupStatus(t *testing.T) {
+	t.Parallel()
+
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{
+		bootstrapToken: testBootstrapToken,
+	})
+
+	sender := registerNotificationTestAgentWithBootstrap(t, env.server.URL, "receipt.sender")
+	targetInviteToken := createNotificationTestInvite(t, env.server.URL, sender.AccessToken)
+	target := registerNotificationTestAgentWithInvite(t, env.server.URL, "receipt.target", targetInviteToken)
+
+	threadID := integrationSeedThreadWithStore(t, env.primitiveStore, nil, sender.ActorID, map[string]any{
+		"title":            "Receipt stream thread",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p2",
+		"tags":             []any{"notifications"},
+		"cadence":          "daily",
+		"next_check_in_at": "2026-03-06T00:00:00Z",
+		"current_summary":  "summary",
+		"next_actions":     []any{"check"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
+	otherThreadID := integrationSeedThreadWithStore(t, env.primitiveStore, nil, sender.ActorID, map[string]any{
+		"title":            "Other receipt stream thread",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p2",
+		"tags":             []any{"notifications"},
+		"cadence":          "daily",
+		"next_check_in_at": "2026-03-06T00:00:00Z",
+		"current_summary":  "summary",
+		"next_actions":     []any{"check"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
+
+	triggerEventID := seedReceiptStreamMessageEvent(t, env.server.URL, sender.AccessToken, threadID, "@receipt.target please check this")
+	otherTriggerEventID := seedReceiptStreamMessageEvent(t, env.server.URL, sender.AccessToken, otherThreadID, "@receipt.target not this thread")
+
+	wakeupID := "wake-receipt-stream-1"
+	seedReceiptStreamWakeup(t, env.primitiveStore, primitives.AgentWakeup{
+		WakeupID:       wakeupID,
+		Status:         primitives.AgentWakeupStatusRequested,
+		TargetHandle:   target.Username,
+		TargetActorID:  target.ActorID,
+		WorkspaceID:    "ws_main",
+		WorkspaceName:  "Main",
+		ThreadID:       threadID,
+		TriggerEventID: triggerEventID,
+		TriggerText:    "@receipt.target please check this",
+		Refs:           []string{"thread:" + threadID, "event:" + triggerEventID, "artifact:" + wakeupID},
+	})
+	seedReceiptStreamWakeup(t, env.primitiveStore, primitives.AgentWakeup{
+		WakeupID:       "wake-receipt-stream-other",
+		Status:         primitives.AgentWakeupStatusRequested,
+		TargetHandle:   target.Username,
+		TargetActorID:  target.ActorID,
+		WorkspaceID:    "ws_main",
+		WorkspaceName:  "Main",
+		ThreadID:       otherThreadID,
+		TriggerEventID: otherTriggerEventID,
+		TriggerText:    "@receipt.target not this thread",
+		Refs:           []string{"thread:" + otherThreadID, "event:" + otherTriggerEventID, "artifact:wake-receipt-stream-other"},
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, env.server.URL+"/agent-notification-receipts/stream?thread_id="+threadID, nil)
+	if err != nil {
+		t.Fatalf("build receipt stream request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+sender.AccessToken)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("open receipt stream: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("open receipt stream status=%d", resp.StatusCode)
+	}
+	reader := bufio.NewReader(resp.Body)
+
+	initial := readNotificationReceiptSSE(t, reader)
+	if initial.ID == "" || !strings.HasPrefix(initial.ID, "receipt:"+wakeupID+"@") {
+		t.Fatalf("expected deterministic receipt event id, got %#v", initial)
+	}
+	if initial.Receipt["wakeup_id"] != wakeupID || initial.Receipt["trigger_event_id"] != triggerEventID {
+		t.Fatalf("expected target-thread receipt, got %#v", initial.Receipt)
+	}
+	if got := asString(initial.Receipt["delivery_status"]); got != primitives.AgentWakeupStatusRequested {
+		t.Fatalf("expected requested receipt, got %#v", initial.Receipt)
+	}
+
+	postJSONExpectStatusWithAuth(t, env.server.URL+"/agent-wakeups/claim", map[string]any{
+		"wakeup_id":          wakeupID,
+		"bridge_instance_id": "bridge-receipt-stream",
+	}, target.AccessToken, http.StatusOK).Body.Close()
+	claimed := readNotificationReceiptSSE(t, reader)
+	if got := asString(claimed.Receipt["delivery_status"]); got != primitives.AgentWakeupStatusClaimed {
+		t.Fatalf("expected claimed receipt, got %#v", claimed.Receipt)
+	}
+	if claimed.ID == initial.ID {
+		t.Fatalf("expected digest event id to change after claim, got %q", claimed.ID)
+	}
+	if asString(claimed.Receipt["claimed_at"]) == "" {
+		t.Fatalf("expected claimed_at receipt timestamp, got %#v", claimed.Receipt)
+	}
+
+	postJSONExpectStatusWithAuth(t, env.server.URL+"/agent-wakeups/complete", map[string]any{
+		"wakeup_id":          wakeupID,
+		"bridge_instance_id": "bridge-receipt-stream",
+	}, target.AccessToken, http.StatusOK).Body.Close()
+	completed := readNotificationReceiptSSE(t, reader)
+	if got := asString(completed.Receipt["delivery_status"]); got != primitives.AgentWakeupStatusCompleted {
+		t.Fatalf("expected completed receipt, got %#v", completed.Receipt)
+	}
+
+	failedWakeupID := "wake-receipt-stream-failed"
+	seedReceiptStreamWakeup(t, env.primitiveStore, primitives.AgentWakeup{
+		WakeupID:       failedWakeupID,
+		Status:         primitives.AgentWakeupStatusRequested,
+		TargetHandle:   target.Username,
+		TargetActorID:  target.ActorID,
+		WorkspaceID:    "ws_main",
+		WorkspaceName:  "Main",
+		ThreadID:       threadID,
+		TriggerEventID: triggerEventID,
+		TriggerText:    "@receipt.target please check this",
+		Refs:           []string{"thread:" + threadID, "event:" + triggerEventID, "artifact:" + failedWakeupID},
+	})
+	added := readNotificationReceiptSSE(t, reader)
+	if added.Receipt["wakeup_id"] != failedWakeupID {
+		t.Fatalf("expected newly added failed wakeup receipt, got %#v", added.Receipt)
+	}
+	postJSONExpectStatusWithAuth(t, env.server.URL+"/agent-wakeups/claim", map[string]any{
+		"wakeup_id":          failedWakeupID,
+		"bridge_instance_id": "bridge-receipt-stream",
+	}, target.AccessToken, http.StatusOK).Body.Close()
+	readNotificationReceiptSSE(t, reader)
+	postJSONExpectStatusWithAuth(t, env.server.URL+"/agent-wakeups/fail", map[string]any{
+		"wakeup_id":          failedWakeupID,
+		"bridge_instance_id": "bridge-receipt-stream",
+		"error":              "bridge failed",
+	}, target.AccessToken, http.StatusOK).Body.Close()
+	failed := readNotificationReceiptSSE(t, reader)
+	if got := asString(failed.Receipt["delivery_status"]); got != primitives.AgentWakeupStatusFailed {
+		t.Fatalf("expected failed receipt, got %#v", failed.Receipt)
+	}
+	if got := asString(failed.Receipt["failure_reason"]); got != "bridge failed" {
+		t.Fatalf("expected failure reason, got %#v", failed.Receipt)
+	}
+}
+
+func TestNotificationReceiptRecordsAfterIDResumesAfterCursor(t *testing.T) {
+	records := []notificationReceiptStreamRecord{
+		{eventID: "receipt:wake-1@aaa", wakeupID: "wake-1", digest: "aaa"},
+		{eventID: "receipt:wake-2@bbb", wakeupID: "wake-2", digest: "bbb"},
+	}
+	got := notificationReceiptRecordsAfterID(records, "receipt:wake-2@bbb")
+	if len(got) != 0 {
+		t.Fatalf("expected no replay when cursor is latest record, got %#v", got)
+	}
+	got = notificationReceiptRecordsAfterID(records, "receipt:wake-1@aaa")
+	if len(got) != 1 || got[0].eventID != "receipt:wake-2@bbb" {
+		t.Fatalf("expected records after first id, got %#v", got)
+	}
+}
+
 type notificationTestAgent struct {
 	AccessToken string
 	ActorID     string
@@ -402,4 +575,110 @@ func createNotificationTestInvite(t *testing.T, serverURL string, accessToken st
 		t.Fatal("expected invite token")
 	}
 	return payload.Token
+}
+
+func seedReceiptStreamMessageEvent(t *testing.T, serverURL string, accessToken string, threadID string, text string) string {
+	t.Helper()
+	resp := postJSONExpectStatusWithAuth(t, serverURL+"/events", map[string]any{
+		"event": map[string]any{
+			"type":      "message_posted",
+			"thread_id": threadID,
+			"summary":   text,
+			"refs":      []string{"thread:" + threadID},
+			"payload": map[string]any{
+				"text": text,
+			},
+			"provenance": map[string]any{"sources": []string{"inferred"}},
+		},
+	}, accessToken, http.StatusCreated)
+	defer resp.Body.Close()
+	var payload struct {
+		Event map[string]any `json:"event"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode source event response: %v", err)
+	}
+	eventID := asString(payload.Event["id"])
+	if eventID == "" {
+		t.Fatal("expected seeded message event id")
+	}
+	return eventID
+}
+
+func seedReceiptStreamWakeup(t *testing.T, store PrimitiveStore, wakeup primitives.AgentWakeup) {
+	t.Helper()
+	if _, err := store.UpsertAgentWakeup(context.Background(), wakeup); err != nil {
+		t.Fatalf("seed receipt stream wakeup: %v", err)
+	}
+}
+
+type notificationReceiptSSE struct {
+	ID      string
+	Receipt map[string]any
+}
+
+func readNotificationReceiptSSE(t *testing.T, reader *bufio.Reader) notificationReceiptSSE {
+	t.Helper()
+	deadline := time.After(5 * time.Second)
+	for {
+		type result struct {
+			record notificationReceiptSSE
+			err    error
+		}
+		ch := make(chan result, 1)
+		go func() {
+			record, err := readNotificationReceiptSSEOnce(reader)
+			ch <- result{record: record, err: err}
+		}()
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for notification receipt SSE")
+		case got := <-ch:
+			if got.err != nil {
+				t.Fatalf("read notification receipt SSE: %v", got.err)
+			}
+			if got.record.Receipt != nil {
+				return got.record
+			}
+		}
+	}
+}
+
+func readNotificationReceiptSSEOnce(reader *bufio.Reader) (notificationReceiptSSE, error) {
+	var id string
+	var eventName string
+	var dataLines []string
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return notificationReceiptSSE{}, err
+		}
+		line = strings.TrimRight(line, "\r\n")
+		if line == "" {
+			break
+		}
+		if strings.HasPrefix(line, ":") {
+			continue
+		}
+		field, value, _ := strings.Cut(line, ":")
+		value = strings.TrimPrefix(value, " ")
+		switch field {
+		case "id":
+			id = value
+		case "event":
+			eventName = value
+		case "data":
+			dataLines = append(dataLines, value)
+		}
+	}
+	if eventName != "notification_receipt" || len(dataLines) == 0 {
+		return notificationReceiptSSE{}, nil
+	}
+	var payload struct {
+		Receipt map[string]any `json:"receipt"`
+	}
+	if err := json.Unmarshal([]byte(strings.Join(dataLines, "\n")), &payload); err != nil {
+		return notificationReceiptSSE{}, err
+	}
+	return notificationReceiptSSE{ID: id, Receipt: payload.Receipt}, nil
 }

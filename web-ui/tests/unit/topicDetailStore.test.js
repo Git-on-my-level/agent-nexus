@@ -494,4 +494,96 @@ describe("topicDetailStore", () => {
       documents: [],
     });
   });
+
+  it("patches streamed receipts by trigger event and wakeup id", () => {
+    topicDetailStore.reset();
+    topicDetailStore.setTimeline([], "thread-1");
+
+    topicDetailStore.patchNotificationReceipt({
+      wakeup_id: "wake-1",
+      trigger_event_id: "event-1",
+      delivery_status: "requested",
+    });
+    topicDetailStore.patchNotificationReceipt({
+      wakeup_id: "wake-2",
+      trigger_event_id: "event-1",
+      delivery_status: "requested",
+    });
+    topicDetailStore.patchNotificationReceipt({
+      wakeup_id: "wake-1",
+      trigger_event_id: "event-1",
+      delivery_status: "completed",
+    });
+
+    const receipts = get(topicDetailStore).timelineNotificationReceipts;
+    expect(receipts["event-1"]).toEqual([
+      {
+        wakeup_id: "wake-1",
+        trigger_event_id: "event-1",
+        delivery_status: "completed",
+      },
+      {
+        wakeup_id: "wake-2",
+        trigger_event_id: "event-1",
+        delivery_status: "requested",
+      },
+    ]);
+  });
+
+  it("does not let a stale timeline response downgrade a streamed receipt", async () => {
+    topicDetailStore.reset();
+    topicDetailStore.setTimeline([], "thread-1");
+    topicDetailStore.patchNotificationReceipt({
+      wakeup_id: "wake-1",
+      trigger_event_id: "event-1",
+      delivery_status: "completed",
+      completed_at: "2026-05-04T08:02:00Z",
+    });
+    coreClientMocks.listThreadTimeline.mockResolvedValueOnce({
+      events: [{ id: "event-1", type: "message_posted" }],
+      notification_receipts: {
+        "event-1": [
+          {
+            wakeup_id: "wake-1",
+            trigger_event_id: "event-1",
+            delivery_status: "requested",
+            created_at: "2026-05-04T08:00:00Z",
+          },
+        ],
+      },
+    });
+
+    await topicDetailStore.loadTimeline("thread-1");
+
+    expect(
+      get(topicDetailStore).timelineNotificationReceipts["event-1"][0],
+    ).toMatchObject({
+      wakeup_id: "wake-1",
+      delivery_status: "completed",
+    });
+  });
+
+  it("does not let a stale streamed receipt downgrade fresher timeline state", () => {
+    topicDetailStore.reset();
+    topicDetailStore.setTimeline([], "thread-1");
+    topicDetailStore.patchNotificationReceipt({
+      wakeup_id: "wake-1",
+      trigger_event_id: "event-1",
+      delivery_status: "completed",
+      completed_at: "2026-05-04T08:02:00Z",
+    });
+    topicDetailStore.patchNotificationReceipt({
+      wakeup_id: "wake-1",
+      trigger_event_id: "event-1",
+      delivery_status: "requested",
+      created_at: "2026-05-04T08:00:00Z",
+    });
+
+    expect(
+      get(topicDetailStore).timelineNotificationReceipts["event-1"][0],
+    ).toMatchObject({
+      wakeup_id: "wake-1",
+      delivery_status: "completed",
+    });
+  });
 });

@@ -105,6 +105,89 @@ function createTopicDetailStore() {
     return String(routeId ?? "").trim();
   }
 
+  function receiptDeliveryRank(receipt) {
+    const delivery = String(receipt?.delivery_status ?? "").trim();
+    if (delivery === "completed" || delivery === "failed") return 2;
+    if (delivery === "claimed") return 1;
+    if (delivery === "requested") return 0;
+    return -1;
+  }
+
+  function receiptNotificationRank(receipt) {
+    const notification = String(
+      receipt?.notification_status ?? receipt?.status ?? "",
+    ).trim();
+    if (notification === "dismissed") return 2;
+    if (notification === "read") return 1;
+    if (notification === "unread") return 0;
+    return -1;
+  }
+
+  function receiptLatestTimestamp(receipt) {
+    return [
+      receipt?.created_at,
+      receipt?.claimed_at,
+      receipt?.completed_at,
+      receipt?.failed_at,
+      receipt?.read_at,
+      receipt?.dismissed_at,
+    ]
+      .map((value) => String(value ?? "").trim())
+      .filter(Boolean)
+      .sort()
+      .at(-1);
+  }
+
+  function fresherReceipt(left, right) {
+    const leftDeliveryRank = receiptDeliveryRank(left);
+    const rightDeliveryRank = receiptDeliveryRank(right);
+    if (leftDeliveryRank !== rightDeliveryRank) {
+      return leftDeliveryRank > rightDeliveryRank ? left : right;
+    }
+    const leftNotificationRank = receiptNotificationRank(left);
+    const rightNotificationRank = receiptNotificationRank(right);
+    if (leftNotificationRank !== rightNotificationRank) {
+      return leftNotificationRank > rightNotificationRank ? left : right;
+    }
+    return String(receiptLatestTimestamp(left) ?? "") >=
+      String(receiptLatestTimestamp(right) ?? "")
+      ? left
+      : right;
+  }
+
+  function mergeNotificationReceiptMaps(current, incoming) {
+    const currentMap =
+      current && typeof current === "object" && !Array.isArray(current)
+        ? current
+        : {};
+    const incomingMap =
+      incoming && typeof incoming === "object" && !Array.isArray(incoming)
+        ? incoming
+        : {};
+    const eventIds = new Set([
+      ...Object.keys(currentMap),
+      ...Object.keys(incomingMap),
+    ]);
+    const nextMap = {};
+    for (const eventId of eventIds) {
+      const byWakeup = new Map();
+      for (const receipt of [
+        ...(Array.isArray(incomingMap[eventId]) ? incomingMap[eventId] : []),
+        ...(Array.isArray(currentMap[eventId]) ? currentMap[eventId] : []),
+      ]) {
+        const wakeupId = String(receipt?.wakeup_id ?? "").trim();
+        if (!wakeupId) continue;
+        const existing = byWakeup.get(wakeupId);
+        byWakeup.set(
+          wakeupId,
+          existing ? fresherReceipt(existing, receipt) : receipt,
+        );
+      }
+      nextMap[eventId] = Array.from(byWakeup.values());
+    }
+    return nextMap;
+  }
+
   async function loadWorkspace(routeId, opts = {}) {
     if (typeof opts.asTopic === "boolean") {
       detailAsTopic = opts.asTopic;
@@ -309,6 +392,13 @@ function createTopicDetailStore() {
       if (requestSeq !== timelineRequestSeq) {
         return;
       }
+      const incomingNotificationReceipts =
+        result?.notification_receipts &&
+        typeof result.notification_receipts === "object" &&
+        !Array.isArray(result.notification_receipts)
+          ? result.notification_receipts
+          : {};
+      const latestState = get(store);
       patchState({
         timelineThreadId: threadId,
         timeline: nextTimeline,
@@ -319,12 +409,12 @@ function createTopicDetailStore() {
           result?.document_revisions ?? result?.documentRevisions,
         ),
         timelineThreads: coerceTimelineResourceList(result?.threads),
-        timelineNotificationReceipts:
-          result?.notification_receipts &&
-          typeof result.notification_receipts === "object" &&
-          !Array.isArray(result.notification_receipts)
-            ? result.notification_receipts
+        timelineNotificationReceipts: mergeNotificationReceiptMaps(
+          latestState.timelineThreadId === threadId
+            ? latestState.timelineNotificationReceipts
             : {},
+          incomingNotificationReceipts,
+        ),
       });
     } catch (e) {
       if (requestSeq !== timelineRequestSeq) {
@@ -432,6 +522,41 @@ function createTopicDetailStore() {
     });
   }
 
+  function patchNotificationReceipt(receipt) {
+    if (!receipt || typeof receipt !== "object") return;
+    const eventId = String(receipt.trigger_event_id ?? "").trim();
+    const wakeupId = String(receipt.wakeup_id ?? "").trim();
+    if (!eventId || !wakeupId) return;
+
+    update((state) => {
+      const currentMap =
+        state.timelineNotificationReceipts &&
+        typeof state.timelineNotificationReceipts === "object" &&
+        !Array.isArray(state.timelineNotificationReceipts)
+          ? state.timelineNotificationReceipts
+          : {};
+      const currentReceipts = Array.isArray(currentMap[eventId])
+        ? currentMap[eventId]
+        : [];
+      const nextReceipts = [...currentReceipts];
+      const index = nextReceipts.findIndex(
+        (item) => String(item?.wakeup_id ?? "").trim() === wakeupId,
+      );
+      if (index >= 0) {
+        nextReceipts[index] = fresherReceipt(nextReceipts[index], receipt);
+      } else {
+        nextReceipts.push(receipt);
+      }
+      return {
+        ...state,
+        timelineNotificationReceipts: {
+          ...currentMap,
+          [eventId]: nextReceipts,
+        },
+      };
+    });
+  }
+
   function reset() {
     detailAsTopic = false;
     queuedRefreshFlags = null;
@@ -451,6 +576,7 @@ function createTopicDetailStore() {
     setTopic,
     setDocuments,
     setTimeline,
+    patchNotificationReceipt,
     reset,
   };
 }

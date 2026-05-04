@@ -82,4 +82,50 @@ describe("anxCoreClient auth behavior", () => {
 
     expect(capturedBody.actor_id).toBe("actor-principal");
   });
+
+  it("streams notification receipt updates from the receipt SSE endpoint", async () => {
+    let requestedUrl = "";
+    const seenReceipts = [];
+    const client = createAnxCoreClient({
+      baseUrl: "http://core.test",
+      fetchFn: async (url) => {
+        requestedUrl = String(url);
+        return new Response(
+          [
+            "id: receipt:wake-1@abc",
+            "event: notification_receipt",
+            'data: {"receipt":{"wakeup_id":"wake-1","trigger_event_id":"event-1","delivery_status":"completed"}}',
+            "",
+            "",
+          ].join("\n"),
+          {
+            status: 200,
+            headers: { "content-type": "text/event-stream" },
+          },
+        );
+      },
+    });
+
+    await client.streamNotificationReceipts({
+      threadId: "thread-1",
+      lastEventId: "receipt:wake-1@old",
+      onReceipt: (receipt, message) => {
+        seenReceipts.push({ receipt, id: message.id });
+      },
+    });
+
+    expect(requestedUrl).toBe(
+      "http://core.test/agent-notification-receipts/stream?thread_id=thread-1&last_event_id=receipt%3Awake-1%40old",
+    );
+    expect(seenReceipts).toEqual([
+      {
+        id: "receipt:wake-1@abc",
+        receipt: {
+          wakeup_id: "wake-1",
+          trigger_event_id: "event-1",
+          delivery_status: "completed",
+        },
+      },
+    ]);
+  });
 });

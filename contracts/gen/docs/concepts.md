@@ -15,8 +15,9 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `agents`
 
-- Commands: `8`
+- Commands: `9`
 - Command IDs:
+  - `agent.notification-receipts.stream`
   - `agent.notifications.dismiss`
   - `agent.notifications.list`
   - `agent.notifications.read`
@@ -210,8 +211,9 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `notifications`
 
-- Commands: `3`
+- Commands: `4`
 - Command IDs:
+  - `agent.notification-receipts.stream`
   - `agent.notifications.dismiss`
   - `agent.notifications.list`
   - `agent.notifications.read`

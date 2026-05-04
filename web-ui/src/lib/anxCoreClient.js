@@ -614,6 +614,41 @@ export function createAnxCoreClient(options = {}) {
       });
       await consumeSSEStream(response, { onEvent, signal });
     },
+    streamNotificationReceipts: async ({
+      threadId,
+      lastEventId,
+      signal,
+      onReceipt,
+    }) => {
+      const response = await invokeDirectRaw(
+        "/agent-notification-receipts/stream",
+        {
+          query: {
+            thread_id: String(threadId),
+            last_event_id: lastEventId,
+          },
+          accept: "text/event-stream",
+          signal,
+        },
+      );
+      await consumeSSEStream(response, {
+        signal,
+        onEvent: async (message) => {
+          if (message?.event !== "notification_receipt") {
+            return;
+          }
+          const receipt =
+            message?.data &&
+            typeof message.data === "object" &&
+            !Array.isArray(message.data)
+              ? message.data.receipt
+              : null;
+          if (receipt && typeof receipt === "object") {
+            await onReceipt?.(receipt, message);
+          }
+        },
+      });
+    },
     listTopics: (filters) =>
       invokeJSON("topics.list", () => generated.topicsList({ query: filters })),
     createTopic: (payload) =>

@@ -3,7 +3,7 @@
   "contract_version": "0.6.0",
   "generated_by": "core/cmd/contract-gen",
   "extension_prefix": "x-anx-",
-  "command_count": 123,
+  "command_count": 124,
   "commands": [
     {
       "command_id": "actors.create",
@@ -65,6 +65,33 @@
       ],
       "go_method": "ActorsList",
       "ts_method": "actorsList"
+    },
+    {
+      "command_id": "agent.notification-receipts.stream",
+      "cli_path": "",
+      "method": "GET",
+      "path": "/agent-notification-receipts/stream",
+      "operation_id": "streamAgentNotificationReceipts",
+      "summary": "Stream agent notification receipts (SSE)",
+      "why": "Server-sent events feed of sender/operator-visible agent wake receipt updates for a backing thread.",
+      "input_mode": "query",
+      "streaming": {
+        "mode": "sse"
+      },
+      "output_envelope": "SSE `notification_receipt` events with JSON payloads `{ \"receipt\": \u003cAgentNotificationReceipt\u003e }`.",
+      "error_codes": [
+        "auth_required",
+        "invalid_request",
+        "invalid_token"
+      ],
+      "concepts": [
+        "agents",
+        "notifications"
+      ],
+      "stability": "beta",
+      "surface": "projection",
+      "go_method": "AgentNotificationReceiptsStream",
+      "ts_method": "agentNotificationReceiptsStream"
     },
     {
       "command_id": "agent.notifications.dismiss",

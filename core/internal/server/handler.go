@@ -2378,6 +2378,23 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		})).ServeHTTP(w, r)
 	})
 
+	registerStreamRoute("agent-notification-receipts", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+			return
+		}
+		handleAgentNotificationReceiptsStream(w, r, opts)
+	})
+	registerRoute("/agent-notification-receipts/stream", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+			return
+		}
+		stream.Wrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			handleAgentNotificationReceiptsStream(w, r, opts)
+		})).ServeHTTP(w, r)
+	})
+
 	registerRoute("/agent-notifications", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")

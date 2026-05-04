@@ -4070,6 +4070,48 @@ paths:
         '401':
           $ref: '#/components/responses/ErrorResponse'
 
+  /agent-notification-receipts/stream:
+    get:
+      operationId: streamAgentNotificationReceipts
+      summary: Stream agent notification receipts (SSE)
+      tags: [agents, notifications]
+      x-anx-surface: projection
+      x-anx-command-id: agent.notification-receipts.stream
+      x-anx-why: Server-sent events feed of sender/operator-visible agent wake receipt updates for a backing thread.
+      x-anx-input-mode: query
+      x-anx-streaming: { mode: sse }
+      x-anx-output-envelope: "SSE `notification_receipt` events with JSON payloads `{ \"receipt\": <AgentNotificationReceipt> }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token]
+      x-anx-concepts: [agents, notifications]
+      x-anx-stability: beta
+      parameters:
+        - name: thread_id
+          in: query
+          required: true
+          description: Backing thread whose agent notification receipts should be streamed.
+          schema: { type: string }
+        - name: last_event_id
+          in: query
+          required: false
+          description: Resume after this receipt stream event id (alternative to `Last-Event-ID` header).
+          schema: { type: string }
+        - name: Last-Event-ID
+          in: header
+          required: false
+          description: SSE standard resume header (alternative to `last_event_id` query).
+          schema: { type: string }
+      responses:
+        '200':
+          description: Agent notification receipt SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
   /agent-notifications:
     get:
       operationId: listAgentNotifications

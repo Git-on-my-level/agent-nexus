@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `123`
+- Commands: `124`
 
 ## `actors.create`
 
@@ -29,6 +29,18 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `actors`, `auth`
 - Error codes: `auth_required`, `invalid_token`
 - Output: Returns `{ actors, next_cursor? }`.
+
+## `agent.notification-receipts.stream`
+
+- CLI path: ``
+- HTTP: `GET /agent-notification-receipts/stream`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `query`
+- Why: Server-sent events feed of sender/operator-visible agent wake receipt updates for a backing thread.
+- Concepts: `agents`, `notifications`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Output: SSE `notification_receipt` events with JSON payloads `{ "receipt": <AgentNotificationReceipt> }`.
 
 ## `agent.notifications.dismiss`
 

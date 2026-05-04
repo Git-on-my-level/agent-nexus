@@ -278,6 +278,81 @@ func handleInboxStream(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	}
 }
 
+func handleAgentNotificationReceiptsStream(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+
+	threadID := strings.TrimSpace(r.URL.Query().Get("thread_id"))
+	if threadID == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "thread_id is required")
+		return
+	}
+
+	lastEventID := resolveLastEventID(r)
+	controller, flusher, ok := prepareSSE(w)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "stream_unavailable", "streaming is not supported by this server")
+		return
+	}
+
+	lastDigestByWakeup := map[string]string{}
+	firstPoll := true
+	ticker := time.NewTicker(opts.streamPollInterval)
+	defer ticker.Stop()
+
+	for {
+		wakeups, err := opts.primitiveStore.ListAgentWakeups(r.Context(), primitives.AgentWakeupListFilter{
+			ThreadID: threadID,
+			Order:    "asc",
+		})
+		if err != nil {
+			writeSSEErrorEvent(controller, w, flusher, "internal_error", "failed to load agent notification receipts for stream")
+			return
+		}
+		allRecords := buildAgentNotificationReceiptStreamRecords(wakeups)
+		records := allRecords
+		if firstPoll {
+			records = notificationReceiptRecordsAfterID(records, lastEventID)
+			firstPoll = false
+		}
+
+		sentAny := false
+		currentDigestByWakeup := make(map[string]string, len(allRecords))
+		for _, record := range allRecords {
+			currentDigestByWakeup[record.wakeupID] = record.digest
+		}
+		for _, record := range records {
+			previousDigest, seen := lastDigestByWakeup[record.wakeupID]
+			if seen && previousDigest == record.digest {
+				continue
+			}
+
+			if err := writeSSEEvent(controller, w, record.eventID, "notification_receipt", map[string]any{"receipt": record.data}); err != nil {
+				clearSSEWriteDeadline(controller)
+				return
+			}
+			sentAny = true
+		}
+		lastDigestByWakeup = currentDigestByWakeup
+
+		if !sentAny {
+			if err := writeSSEKeepalive(controller, w); err != nil {
+				clearSSEWriteDeadline(controller)
+				return
+			}
+		}
+		flushSSE(controller, flusher)
+
+		select {
+		case <-r.Context().Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
 type inboxStreamRecord struct {
 	eventID string
 	itemID  string
@@ -306,6 +381,55 @@ func buildInboxStreamRecords(items []derivedInboxItem) []inboxStreamRecord {
 			digest:  digest,
 			data:    payload,
 		})
+	}
+	return records
+}
+
+type notificationReceiptStreamRecord struct {
+	eventID  string
+	wakeupID string
+	digest   string
+	data     map[string]any
+}
+
+func buildAgentNotificationReceiptStreamRecords(wakeups []primitives.AgentWakeup) []notificationReceiptStreamRecord {
+	records := make([]notificationReceiptStreamRecord, 0, len(wakeups))
+	for _, wakeup := range wakeups {
+		wakeupID := strings.TrimSpace(wakeup.WakeupID)
+		if wakeupID == "" {
+			continue
+		}
+
+		payload := agentNotificationFromWakeup(wakeup).toMap()
+		payload["notification_status"] = payload["status"]
+		dataBytes, err := json.Marshal(payload)
+		if err != nil {
+			continue
+		}
+		sum := sha1.Sum(dataBytes)
+		digest := fmt.Sprintf("%x", sum[:8])
+		records = append(records, notificationReceiptStreamRecord{
+			eventID:  "receipt:" + wakeupID + "@" + digest,
+			wakeupID: wakeupID,
+			digest:   digest,
+			data:     payload,
+		})
+	}
+	return records
+}
+
+func notificationReceiptRecordsAfterID(records []notificationReceiptStreamRecord, lastEventID string) []notificationReceiptStreamRecord {
+	lastEventID = strings.TrimSpace(lastEventID)
+	if lastEventID == "" {
+		return records
+	}
+	for index, record := range records {
+		if record.eventID == lastEventID {
+			if index+1 >= len(records) {
+				return []notificationReceiptStreamRecord{}
+			}
+			return records[index+1:]
+		}
 	}
 	return records
 }

@@ -151,7 +151,11 @@
       return;
     }
 
-    const coordination = { stopStream: () => {}, reconcileTimer: null };
+    const coordination = {
+      stopEventStream: () => {},
+      stopReceiptStream: () => {},
+      reconcileTimer: null,
+    };
     let cancelled = false;
 
     void (async () => {
@@ -166,11 +170,13 @@
       const state = get(topicDetailStore);
       const streamThreadId = String(state.topic?.id ?? "").trim() || routeId;
       const latestKnownEventId = getLatestKnownEventId(state.timeline);
-      coordination.stopStream = startThreadEventStream(
+      coordination.stopEventStream = startThreadEventStream(
         streamThreadId,
         routeId,
         latestKnownEventId,
       );
+      coordination.stopReceiptStream =
+        startNotificationReceiptStream(streamThreadId);
       coordination.reconcileTimer = setInterval(
         () =>
           topicDetailStore.queueRefreshTopicDetail(routeId, {
@@ -183,7 +189,8 @@
 
     return () => {
       cancelled = true;
-      coordination.stopStream();
+      coordination.stopEventStream();
+      coordination.stopReceiptStream();
       if (coordination.reconcileTimer) {
         clearInterval(coordination.reconcileTimer);
       }
@@ -278,6 +285,53 @@
         });
       } catch (error) {
         if (error?.name === "AbortError" || stopped) {
+          return;
+        }
+        if (error?.status === 401 || error?.status === 403) {
+          return;
+        }
+      }
+
+      if (!stopped) {
+        reconnectTimer = setTimeout(connect, STREAM_RECONNECT_DELAY_MS);
+      }
+    };
+
+    void connect();
+
+    return () => {
+      stopped = true;
+      controller?.abort();
+      clearTimeout(reconnectTimer);
+    };
+  }
+
+  function startNotificationReceiptStream(streamThreadId) {
+    let stopped = false;
+    let reconnectTimer;
+    let controller = null;
+    let lastEventId = "";
+
+    const connect = async () => {
+      if (stopped) return;
+      controller = new AbortController();
+      try {
+        await coreClient.streamNotificationReceipts({
+          threadId: streamThreadId,
+          lastEventId,
+          signal: controller.signal,
+          onReceipt: (receipt, message) => {
+            if (message?.id) {
+              lastEventId = message.id;
+            }
+            topicDetailStore.patchNotificationReceipt(receipt);
+          },
+        });
+      } catch (error) {
+        if (error?.name === "AbortError" || stopped) {
+          return;
+        }
+        if (error?.status === 401 || error?.status === 403) {
           return;
         }
       }

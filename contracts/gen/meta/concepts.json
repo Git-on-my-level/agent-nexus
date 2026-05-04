@@ -77,8 +77,9 @@
     },
     {
       "name": "agents",
-      "command_count": 8,
+      "command_count": 9,
       "command_ids": [
+        "agent.notification-receipts.stream",
         "agent.notifications.dismiss",
         "agent.notifications.list",
         "agent.notifications.read",
@@ -89,6 +90,33 @@
         "auth.agents.register"
       ],
       "commands": [
+        {
+          "command_id": "agent.notification-receipts.stream",
+          "cli_path": "",
+          "method": "GET",
+          "path": "/agent-notification-receipts/stream",
+          "operation_id": "streamAgentNotificationReceipts",
+          "summary": "Stream agent notification receipts (SSE)",
+          "why": "Server-sent events feed of sender/operator-visible agent wake receipt updates for a backing thread.",
+          "input_mode": "query",
+          "streaming": {
+            "mode": "sse"
+          },
+          "output_envelope": "SSE `notification_receipt` events with JSON payloads `{ \"receipt\": \u003cAgentNotificationReceipt\u003e }`.",
+          "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token"
+          ],
+          "concepts": [
+            "agents",
+            "notifications"
+          ],
+          "stability": "beta",
+          "surface": "projection",
+          "go_method": "AgentNotificationReceiptsStream",
+          "ts_method": "agentNotificationReceiptsStream"
+        },
         {
           "command_id": "agent.notifications.dismiss",
           "cli_path": "agent notifications dismiss",
@@ -6789,13 +6817,41 @@
     },
     {
       "name": "notifications",
-      "command_count": 3,
+      "command_count": 4,
       "command_ids": [
+        "agent.notification-receipts.stream",
         "agent.notifications.dismiss",
         "agent.notifications.list",
         "agent.notifications.read"
       ],
       "commands": [
+        {
+          "command_id": "agent.notification-receipts.stream",
+          "cli_path": "",
+          "method": "GET",
+          "path": "/agent-notification-receipts/stream",
+          "operation_id": "streamAgentNotificationReceipts",
+          "summary": "Stream agent notification receipts (SSE)",
+          "why": "Server-sent events feed of sender/operator-visible agent wake receipt updates for a backing thread.",
+          "input_mode": "query",
+          "streaming": {
+            "mode": "sse"
+          },
+          "output_envelope": "SSE `notification_receipt` events with JSON payloads `{ \"receipt\": \u003cAgentNotificationReceipt\u003e }`.",
+          "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token"
+          ],
+          "concepts": [
+            "agents",
+            "notifications"
+          ],
+          "stability": "beta",
+          "surface": "projection",
+          "go_method": "AgentNotificationReceiptsStream",
+          "ts_method": "agentNotificationReceiptsStream"
+        },
         {
           "command_id": "agent.notifications.dismiss",
           "cli_path": "agent notifications dismiss",

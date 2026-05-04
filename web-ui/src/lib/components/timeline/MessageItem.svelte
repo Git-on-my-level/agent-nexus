@@ -135,40 +135,105 @@
 
   let isAnchoredComment = $derived(Boolean(docComment));
 
+  const RECEIPT_DELIVERY_STAGE_INDEX = {
+    requested: 0,
+    claimed: 1,
+    completed: 2,
+    failed: 2,
+  };
+
+  function receiptValue(value) {
+    return String(value ?? "").trim();
+  }
+
+  function receiptStageState(done, failed = false) {
+    if (failed) return "failed";
+    return done ? "done" : "pending";
+  }
+
   function receiptStatusLabel(receipt) {
     const delivery = String(receipt?.delivery_status ?? "").trim();
     const notification = String(
       receipt?.notification_status ?? receipt?.status ?? "",
     ).trim();
     if (delivery === "failed") return "Failed";
+    if (notification === "dismissed") return "Dismissed";
+    if (notification === "read") return "Seen";
     if (delivery === "completed") return "Processed";
     if (delivery === "claimed") return "Bridge triggered";
-    if (notification === "dismissed") return "Dismissed";
     return "Queued";
   }
 
-  function receiptToneClass(receipt) {
+  function receiptDeliveryProgress(receipt) {
     const delivery = String(receipt?.delivery_status ?? "").trim();
-    if (delivery === "failed") return "bg-danger-soft text-danger-text";
-    if (delivery === "claimed" || delivery === "completed") {
-      return "bg-ok-soft text-ok-text";
+    if (Object.hasOwn(RECEIPT_DELIVERY_STAGE_INDEX, delivery)) {
+      return RECEIPT_DELIVERY_STAGE_INDEX[delivery];
     }
-    return "bg-line-subtle text-fg-muted";
+    return receiptValue(receipt?.created_at) ? 0 : -1;
   }
 
-  function receiptTitle(receipt) {
-    const parts = [];
+  function receiptLifecycleStages(receipt) {
     const delivery = String(receipt?.delivery_status ?? "").trim();
     const notification = String(
       receipt?.notification_status ?? receipt?.status ?? "",
     ).trim();
-    if (delivery) parts.push(`delivery: ${delivery}`);
-    if (notification) parts.push(`notification: ${notification}`);
-    if (receipt?.claimed_at) parts.push(`claimed: ${receipt.claimed_at}`);
-    if (receipt?.completed_at) parts.push(`completed: ${receipt.completed_at}`);
-    if (receipt?.failed_at) parts.push(`failed: ${receipt.failed_at}`);
-    if (receipt?.failure_reason) parts.push(String(receipt.failure_reason));
-    return parts.join(" | ");
+    const progress = receiptDeliveryProgress(receipt);
+    const readDone =
+      notification === "read" || receiptValue(receipt?.read_at) !== "";
+    const dismissed =
+      notification === "dismissed" ||
+      receiptValue(receipt?.dismissed_at) !== "";
+
+    return [
+      {
+        key: "requested",
+        label: "Wake requested",
+        status: receiptStageState(progress >= 0),
+        timestamp: receiptValue(receipt?.created_at),
+      },
+      {
+        key: "claimed",
+        label: "Bridge claimed",
+        status: receiptStageState(progress >= 1),
+        timestamp: receiptValue(receipt?.claimed_at),
+      },
+      {
+        key: "processed",
+        label: delivery === "failed" ? "Processing failed" : "Processed",
+        status: receiptStageState(progress >= 2, delivery === "failed"),
+        timestamp: receiptValue(
+          delivery === "failed" ? receipt?.failed_at : receipt?.completed_at,
+        ),
+        detail:
+          delivery === "failed" ? receiptValue(receipt?.failure_reason) : "",
+      },
+      {
+        key: "seen",
+        label: dismissed ? "Dismissed" : "Seen",
+        status: receiptStageState(readDone || dismissed),
+        timestamp: receiptValue(
+          dismissed ? receipt?.dismissed_at : receipt?.read_at,
+        ),
+      },
+    ];
+  }
+
+  function receiptIconToneClass(receipt) {
+    const delivery = String(receipt?.delivery_status ?? "").trim();
+    if (delivery === "failed") return "text-danger-text";
+    return "text-ok-text";
+  }
+
+  function receiptStageMarkerClass(stage) {
+    if (stage.status === "failed") return "text-danger-text";
+    if (stage.status === "done") return "text-ok-text";
+    return "text-fg-subtle opacity-45";
+  }
+
+  function receiptStageDotClass(stage) {
+    if (stage.status === "failed") return "bg-danger";
+    if (stage.status === "done") return "bg-ok";
+    return "bg-line-strong";
   }
 
   let notificationReceipts = $derived.by(() => {
@@ -185,8 +250,8 @@
           key: wakeupId || `${actorId}:${handle}`,
           handle,
           label: receiptStatusLabel(receipt),
-          toneClass: receiptToneClass(receipt),
-          title: receiptTitle(receipt),
+          iconToneClass: receiptIconToneClass(receipt),
+          stages: receiptLifecycleStages(receipt),
         };
       })
       .filter((row) => row.handle || row.key);
@@ -294,6 +359,95 @@
             <span class="shrink-0 text-[0.65rem] leading-tight text-fg-muted"
               >· {formatTimestamp(message.ts) || "—"}</span
             >
+            {#if notificationReceipts.length > 0}
+              <span class="ml-1 flex shrink-0 items-center gap-1 text-micro">
+                {#each notificationReceipts as row (row.key)}
+                  <button
+                    type="button"
+                    class="group/receipt relative inline-flex cursor-default items-center gap-1 rounded border-0 bg-transparent px-0.5 py-0 outline-none focus-visible:ring-1 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-panel"
+                    aria-label={`@${row.handle || "agent"} ${row.label}`}
+                  >
+                    <span
+                      class={[
+                        "flex shrink-0 items-center",
+                        row.iconToneClass,
+                      ].join(" ")}
+                      aria-hidden="true"
+                    >
+                      {#each row.stages as stage, index (stage.key)}
+                        <svg
+                          class={[
+                            "h-3 w-3 shrink-0",
+                            index > 0 ? "-ml-1" : "",
+                            receiptStageMarkerClass(stage),
+                          ].join(" ")}
+                          fill="none"
+                          viewBox="0 0 16 16"
+                          stroke="currentColor"
+                          stroke-width="2"
+                        >
+                          {#if stage.status === "failed"}
+                            <path
+                              stroke-linecap="round"
+                              d="M5 5l6 6M11 5l-6 6"
+                            />
+                          {:else}
+                            <path
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              d="M3.5 8.5 6.5 11.5 12.5 4.5"
+                            />
+                          {/if}
+                        </svg>
+                      {/each}
+                    </span>
+                    <span class="max-w-20 truncate text-fg-muted">
+                      {row.label}
+                    </span>
+                    <span
+                      class="pointer-events-none absolute left-0 top-full z-40 mt-2 w-64 rounded-md border border-line bg-panel p-3 text-left text-micro text-fg opacity-0 shadow-menu transition group-hover/receipt:opacity-100 group-focus/receipt:opacity-100"
+                    >
+                      <span class="mb-2 block font-medium text-fg">
+                        @{row.handle || "agent"} lifecycle
+                      </span>
+                      <span class="block space-y-2">
+                        {#each row.stages as stage (stage.key)}
+                          <span class="grid grid-cols-[0.75rem_1fr] gap-2">
+                            <span
+                              class={[
+                                "mt-1 h-2 w-2 rounded-full",
+                                receiptStageDotClass(stage),
+                              ].join(" ")}
+                            ></span>
+                            <span class="min-w-0">
+                              <span class="block font-medium text-fg">
+                                {stage.label}
+                              </span>
+                              <span class="block text-fg-muted">
+                                {#if stage.timestamp}
+                                  {formatTimestamp(stage.timestamp)}
+                                {:else if stage.status === "pending"}
+                                  Pending
+                                {:else if stage.status === "failed"}
+                                  Failed
+                                {:else}
+                                  Complete
+                                {/if}
+                              </span>
+                              {#if stage.detail}
+                                <span class="block text-danger-text">
+                                  {stage.detail}
+                                </span>
+                              {/if}
+                            </span>
+                          </span>
+                        {/each}
+                      </span>
+                    </span>
+                  </button>
+                {/each}
+              </span>
+            {/if}
           </div>
           <div class="flex shrink-0 items-center gap-0.5">
             {@render visibleActions()}
@@ -373,23 +527,6 @@
                 {artifactRoutesById}
                 {eventRoutesById}
               />
-            {/each}
-          </div>
-        {/if}
-
-        {#if notificationReceipts.length > 0}
-          <div class="mt-2 flex min-w-0 flex-wrap gap-1.5 text-micro">
-            {#each notificationReceipts as row (row.key)}
-              <span
-                class={[
-                  "inline-flex min-w-0 max-w-full items-center gap-1 rounded px-1.5 py-0.5",
-                  row.toneClass,
-                ].join(" ")}
-                title={row.title}
-              >
-                <span class="truncate">@{row.handle || "agent"}</span>
-                <span class="shrink-0">{row.label}</span>
-              </span>
             {/each}
           </div>
         {/if}

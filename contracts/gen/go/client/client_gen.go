@@ -55,6 +55,15 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:  []string{"actors.create"},
 	},
 	{
+		CommandID: "agent.notification-receipts.stream",
+		CLIPath:   "",
+		Method:    "GET",
+		Path:      "/agent-notification-receipts/stream",
+		InputMode: "query",
+		Stability: "beta",
+		Concepts:  []string{"agents", "notifications"},
+	},
+	{
 		CommandID: "agent.notifications.dismiss",
 		CLIPath:   "agent notifications dismiss",
 		Group:     "agent",
@@ -1566,6 +1575,10 @@ func (c *Client) ActorsCreate(ctx context.Context, opts RequestOptions) (*http.R
 
 func (c *Client) ActorsList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "actors.list", nil, opts)
+}
+
+func (c *Client) AgentNotificationReceiptsStream(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "agent.notification-receipts.stream", nil, opts)
 }
 
 func (c *Client) AgentNotificationsDismiss(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {

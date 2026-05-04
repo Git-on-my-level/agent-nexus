@@ -106,6 +106,33 @@ export const commandRegistry: CommandSpec[] = [
     "ts_method": "actorsList"
   },
   {
+    "command_id": "agent.notification-receipts.stream",
+    "cli_path": "",
+    "method": "GET",
+    "path": "/agent-notification-receipts/stream",
+    "operation_id": "streamAgentNotificationReceipts",
+    "summary": "Stream agent notification receipts (SSE)",
+    "why": "Server-sent events feed of sender/operator-visible agent wake receipt updates for a backing thread.",
+    "input_mode": "query",
+    "streaming": {
+      "mode": "sse"
+    },
+    "output_envelope": "SSE `notification_receipt` events with JSON payloads `{ \"receipt\": \u003cAgentNotificationReceipt\u003e }`.",
+    "error_codes": [
+      "auth_required",
+      "invalid_request",
+      "invalid_token"
+    ],
+    "concepts": [
+      "agents",
+      "notifications"
+    ],
+    "stability": "beta",
+    "surface": "projection",
+    "go_method": "AgentNotificationReceiptsStream",
+    "ts_method": "agentNotificationReceiptsStream"
+  },
+  {
     "command_id": "agent.notifications.dismiss",
     "cli_path": "agent notifications dismiss",
     "group": "agent",
@@ -6297,6 +6324,10 @@ export class AnxClient {
 
   actorsList(options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("actors.list", {}, options);
+  }
+
+  agentNotificationReceiptsStream(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("agent.notification-receipts.stream", {}, options);
   }
 
   agentNotificationsDismiss(options: RequestOptions = {}): Promise<InvokeResult> {
