@@ -35,6 +35,7 @@ describe("hosted /api/session", () => {
       "cp_secret",
       expect.objectContaining({
         path: "/",
+        maxAge: 60 * 60 * 24 * 30,
         httpOnly: true,
         sameSite: "lax",
         secure: true,

@@ -1165,7 +1165,11 @@
     right: 0;
     bottom: auto;
     isolation: isolate;
-    z-index: 25;
+    /*
+     * The expanded embedded dock can visually overlap modal chrome below it
+     * (for example the card status row), so it must sit above the modal footer.
+     */
+    z-index: 35;
     display: flex;
     width: 100%;
     max-width: 100%;

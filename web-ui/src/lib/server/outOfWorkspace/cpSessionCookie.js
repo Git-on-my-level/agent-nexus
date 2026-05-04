@@ -3,6 +3,7 @@ import { dev } from "$app/environment";
 import {
   CP_ACCESS_TOKEN_COOKIE,
   CP_DEV_ACCESS_TOKEN_COOKIE,
+  CP_TOKEN_MAX_AGE_SEC,
 } from "$lib/hosted/cpSessionConstants.js";
 
 export {
@@ -51,4 +52,26 @@ export function readHostedControlPlaneAccessToken(event, env = {}) {
     return fromEnv;
   }
   return readHostedControlPlaneProxyBearer(event);
+}
+
+/**
+ * Refresh the browser cookie's idle lifetime after a successful hosted
+ * control-plane request. The database session remains authoritative; this only
+ * prevents the shell cookie from expiring earlier than the renewed server row.
+ *
+ * @param {import('@sveltejs/kit').RequestEvent} event
+ * @param {string} token
+ */
+export function renewHostedControlPlaneSessionCookie(event, token) {
+  const normalized = String(token ?? "").trim();
+  if (!normalized || dev || typeof event?.cookies?.set !== "function") {
+    return;
+  }
+  event.cookies.set(CP_ACCESS_TOKEN_COOKIE, normalized, {
+    path: "/",
+    maxAge: CP_TOKEN_MAX_AGE_SEC,
+    httpOnly: true,
+    sameSite: "lax",
+    secure: true,
+  });
 }

@@ -1382,6 +1382,15 @@
     }
 
     /*
+     * Card detail page: the in-flow status footer is intentionally elevated for
+     * normal scrolling, but expanded discussion is a fixed dock and must cover it.
+     */
+    .page-dock-layout--fixed-mobile-chat.page-dock-layout--card-page-chat
+      .page-dock-feed {
+      z-index: 35;
+    }
+
+    /*
      * Topic: keep fixed height for both collapsed and expanded — generic rules
      * use height:auto when collapsed.
      */

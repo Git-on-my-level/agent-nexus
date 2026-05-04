@@ -328,6 +328,19 @@ test("card detail modal Discussion drawer and Timeline tab render without reques
 
   await page.route(
     (url) =>
+      url.pathname.includes(`/threads/${backingThreadId}/timeline`) ||
+      url.pathname.endsWith(`/threads/${backingThreadId}/timeline`),
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ events: [] }),
+      });
+    },
+  );
+
+  await page.route(
+    (url) =>
       url.pathname.includes(`/cards/card-one/revisions`) ||
       url.pathname.endsWith(`/cards/card-one/revisions`),
     async (route) => {
@@ -450,6 +463,20 @@ test("card detail modal Discussion drawer and Timeline tab render without reques
   await expect(dialog.getByRole("textbox", { name: "Message" })).toBeVisible({
     timeout: 15_000,
   });
+  await expect
+    .poll(
+      async () =>
+        dialog.evaluate((root) => {
+          const feed = root.querySelector(".page-dock-feed");
+          const footer = root.querySelector(".cdm-modal-actions-footer");
+          return {
+            feed: Number.parseInt(getComputedStyle(feed).zIndex, 10),
+            footer: Number.parseInt(getComputedStyle(footer).zIndex, 10),
+          };
+        }),
+      { timeout: 5_000 },
+    )
+    .toEqual({ feed: 35, footer: 30 });
 
   await expect
     .poll(() => timelineRequestCount, { timeout: 10_000 })
@@ -491,4 +518,28 @@ test("card detail modal Discussion drawer and Timeline tab render without reques
     principalsDelta,
     `expected bounded /auth/principals fetches (mention + layout), got ${principalsDelta}`,
   ).toBeLessThanOrEqual(24);
+
+  await page.setViewportSize({ width: 768, height: 1024 });
+  await page.goto(`/o/local/w/local/boards/${boardId}/cards/card-one`);
+  await page.waitForLoadState("networkidle");
+
+  const cardPage = page.getByTestId("card-detail-page");
+  await expect(cardPage).toBeVisible();
+  await expect(cardPage.getByRole("textbox", { name: "Message" })).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect
+    .poll(
+      async () =>
+        cardPage.evaluate((root) => {
+          const feed = root.querySelector(".page-dock-feed");
+          const footer = root.querySelector(".cdm-modal-actions-footer");
+          return {
+            feed: Number.parseInt(getComputedStyle(feed).zIndex, 10),
+            footer: Number.parseInt(getComputedStyle(footer).zIndex, 10),
+          };
+        }),
+      { timeout: 5_000 },
+    )
+    .toEqual({ feed: 35, footer: 30 });
 });

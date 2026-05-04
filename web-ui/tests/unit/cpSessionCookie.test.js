@@ -103,3 +103,41 @@ describe("readHostedControlPlaneAccessToken", () => {
     expect(readHostedControlPlaneAccessToken(event, {})).toBe("sess");
   });
 });
+
+describe("renewHostedControlPlaneSessionCookie", () => {
+  it("refreshes the production HttpOnly cookie max age", async () => {
+    const { renewHostedControlPlaneSessionCookie } = await loadModule(false);
+    const event = {
+      cookies: {
+        set: vi.fn(),
+      },
+    };
+
+    renewHostedControlPlaneSessionCookie(event, "sess");
+
+    expect(event.cookies.set).toHaveBeenCalledWith(
+      "anx_cp_access_token",
+      "sess",
+      expect.objectContaining({
+        path: "/",
+        maxAge: 60 * 60 * 24 * 30,
+        httpOnly: true,
+        sameSite: "lax",
+        secure: true,
+      }),
+    );
+  });
+
+  it("does not write HttpOnly cookies from vite dev", async () => {
+    const { renewHostedControlPlaneSessionCookie } = await loadModule(true);
+    const event = {
+      cookies: {
+        set: vi.fn(),
+      },
+    };
+
+    renewHostedControlPlaneSessionCookie(event, "sess");
+
+    expect(event.cookies.set).not.toHaveBeenCalled();
+  });
+});
