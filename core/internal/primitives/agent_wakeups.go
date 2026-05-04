@@ -255,7 +255,11 @@ func scanAgentWakeup(row agentWakeupScanner) (AgentWakeup, error) {
 	if err != nil {
 		return AgentWakeup{}, fmt.Errorf("scan agent wakeup: %w", err)
 	}
-	_ = json.Unmarshal([]byte(refsJSON), &wakeup.Refs)
+	refs, err := decodeStoredJSONList(refsJSON, "agent_wakeup.refs")
+	if err != nil {
+		return AgentWakeup{}, err
+	}
+	wakeup.Refs = refs
 	wakeup.ClaimedAt = claimedAt.String
 	wakeup.CompletedAt = completedAt.String
 	wakeup.FailedAt = failedAt.String

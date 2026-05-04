@@ -204,6 +204,57 @@ func TestNotificationsListReadAndDismissAreTargetScoped(t *testing.T) {
 	conflictResp.Body.Close()
 }
 
+func TestAgentWakeupRefsCorruptionFailsNotificationReads(t *testing.T) {
+	t.Parallel()
+
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{
+		bootstrapToken: testBootstrapToken,
+	})
+
+	sender := registerNotificationTestAgentWithBootstrap(t, env.server.URL, "corrupt.sender")
+	targetInviteToken := createNotificationTestInvite(t, env.server.URL, sender.AccessToken)
+	target := registerNotificationTestAgentWithInvite(t, env.server.URL, "corrupt.target", targetInviteToken)
+
+	threadID := integrationSeedThreadWithStore(t, env.primitiveStore, nil, sender.ActorID, map[string]any{
+		"title":            "Corrupt notification refs thread",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p2",
+		"tags":             []any{"notifications"},
+		"cadence":          "daily",
+		"next_check_in_at": "2026-03-06T00:00:00Z",
+		"current_summary":  "summary",
+		"next_actions":     []any{"check"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
+	triggerEventID := seedReceiptStreamMessageEvent(t, env.server.URL, sender.AccessToken, threadID, "@corrupt.target please check this")
+	wakeupID := "wake-corrupt-notification-refs"
+	seedReceiptStreamWakeup(t, env.primitiveStore, primitives.AgentWakeup{
+		WakeupID:       wakeupID,
+		Status:         primitives.AgentWakeupStatusRequested,
+		TargetHandle:   target.Username,
+		TargetActorID:  target.ActorID,
+		WorkspaceID:    "ws_main",
+		WorkspaceName:  "Main",
+		ThreadID:       threadID,
+		TriggerEventID: triggerEventID,
+		TriggerText:    "@corrupt.target please check this",
+		Refs:           []string{"thread:" + threadID, "event:" + triggerEventID, "artifact:" + wakeupID},
+	})
+	if _, err := env.workspace.DB().ExecContext(context.Background(), `UPDATE agent_wakeups SET refs_json = ? WHERE wakeup_id = ?`, `{not-json`, wakeupID); err != nil {
+		t.Fatalf("corrupt wakeup refs_json: %v", err)
+	}
+
+	timelineResp := getJSONExpectStatusWithAuth(t, env.server.URL+"/threads/"+threadID+"/timeline", sender.AccessToken, http.StatusInternalServerError)
+	assertErrorCode(t, timelineResp, "internal_error")
+	timelineResp.Body.Close()
+
+	notificationsResp := getJSONExpectStatusWithAuth(t, env.server.URL+"/agent-notifications?status=unread", target.AccessToken, http.StatusInternalServerError)
+	assertErrorCode(t, notificationsResp, "internal_error")
+	notificationsResp.Body.Close()
+}
+
 func TestCardAssignmentEnqueuesAgentWakeupNotification(t *testing.T) {
 	t.Parallel()
 
