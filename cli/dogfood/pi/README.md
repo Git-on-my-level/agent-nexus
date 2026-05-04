@@ -108,8 +108,11 @@ Scenario command-shape guidance:
 - use `anx threads workspace --thread-id <thread-id>` for backing-thread review
 - add `--include-related-event-content --verbose` when you need the full related-thread workspace content in one command
 - use `anx cards get --card-id <card-id>` when a card listed in workspace needs full detail
+- use `anx topics message <topic-id> --body-file <path>` and `anx topics reply <topic-id> --to <message-id> --body-file <path>` for ordinary topic conversation
+- use `anx docs message <document-id> --body-file <path>` and `anx docs reply <document-id> --to <message-id> --body-file <path>` for document conversation
+- use `anx cards message <card-id> --body-file <path>` and `anx cards reply <card-id> --to <message-id> --body-file <path>` for card conversation
 - document revisions use one command: `anx docs revise --document-id <document-id> --content-file <path>` stages a diff proposal by default, and the returned apply command uses `anx docs revise --apply --proposal-id <proposal-id>`
 - use `anx docs revise --apply --document-id <document-id> --content-file <path>` only when you want to write the new revision immediately without staging a proposal
-- use `anx events validate --from-file <path>` when you want a local payload check before `anx events create`
-- use `anx events create --from-file <path> --dry-run` when you want the exact create request preview without sending it
-- use `message_posted` for visible thread chat and replies, then use a doc, topic, or card update for the higher-signal role summary
+- use `anx events validate --from-file <path>` only when you need a local payload check for an unusual raw event
+- use `anx events create --from-file <path> --dry-run` only when you need the exact raw event create request preview without sending it
+- use raw `anx events create` only for unusual contract-level records; ordinary messages must go through topic/doc/card message commands so the CLI fills actor_id, backing thread_id, and refs

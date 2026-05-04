@@ -45,7 +45,7 @@ export const scenarioConfigs = {
           "BriskPay can tolerate staged artifact timeline work if support noise drops immediately.",
           "Do not promise implementation details. Your job is to preserve customer truth and closure criteria.",
         ],
-        deliverable: "Publish one message_posted on the main thread that summarizes customer impact, must-have fixes for Friday, and what can wait one week.",
+        deliverable: "Publish one domain message on the main topic that summarizes customer impact, must-have fixes for Friday, and what can wait one week.",
         eventSummary: "Support recommendation: customer-critical fixes for Friday pilot rescue",
         eventThreadKeys: ["main", "feedback"],
         eventIncludeDocument: false,
@@ -63,7 +63,7 @@ export const scenarioConfigs = {
           "Duplicate escalation thread creation is moderate risk but can still fit as a narrow pilot-path fix.",
           "Artifact timeline visibility is not a safe Friday fix; recommend a documented follow-up instead of pretending it is solved.",
         ],
-        deliverable: "Publish one message_posted on the main thread with the minimum safe fix set, explicit out-of-scope items, and the technical risks.",
+        deliverable: "Publish one domain message on the main topic with the minimum safe fix set, explicit out-of-scope items, and the technical risks.",
         eventSummary: "Delivery recommendation: minimum safe Friday scope for pilot rescue",
         eventThreadKeys: ["main", "delivery"],
         eventIncludeDocument: false,
@@ -81,7 +81,7 @@ export const scenarioConfigs = {
           "Your job is sequencing and risk ownership, not product scope definition.",
           "A good answer names the exact gate, the owner for each dependency, and the slip condition.",
         ],
-        deliverable: "Publish one message_posted on the main thread with the launch gate, ownership, and the exact condition that would force a one-week slip.",
+        deliverable: "Publish one domain message on the main topic with the launch gate, ownership, and the exact condition that would force a one-week slip.",
         eventSummary: "Project manager recommendation: Friday pilot gate and ownership plan",
         eventThreadKeys: ["main", "delivery"],
         eventIncludeDocument: false,
@@ -97,9 +97,9 @@ export const scenarioConfigs = {
         privateContext: [
           "You can approve a limited Friday pilot rescue, but you cannot promise a platform rewrite this week.",
           "Your recommendation should explicitly separate Friday scope from follow-up scope.",
-          "Before posting the final event, re-read the main thread context and wait until support, delivery, and project management have each posted a recommendation.",
+          "Before posting the final domain message, re-read the main thread context and wait until support, delivery, and project management have each posted a recommendation.",
         ],
-        deliverable: "Update the `northwave-pilot-rescue-brief` document, then publish the final message_posted on the main thread referencing that document and making a clear go/no-go recommendation.",
+        deliverable: "Update the `northwave-pilot-rescue-brief` document, then publish the final domain message on the main topic referencing that document and making a clear go/no-go recommendation.",
         eventSummary: "Product decision: final NorthWave pilot rescue recommendation",
         eventThreadKeys: ["main", "feedback", "delivery"],
         eventIncludeDocument: true,
@@ -162,10 +162,10 @@ export const scenarioConfigs = {
           "Your personal plot thread: prove that being organized is cool by creating the mission board early, getting the team to reply to each other in messages, and steering the stand through the afternoon rush without sounding like a tiny consultant.",
           "The big flexible plot: there might be a rival cookie table popping up nearby, the soccer crowd is coming later, and someone keeps floating a surprise mint special. Keep the team coordinated around those moving pieces without needing perfect timing.",
           "Create the shared board early, post a kickoff message, add at most one coordination card, and keep nudging the others to reply in-thread instead of only publishing formal updates.",
-          "Update your plan doc once after the first round of messages, then refine it again before the final message_posted if the plan changed.",
-          "Before you publish the final message_posted, wait until the other two roles have posted at least one message each, created or updated their own task cards, and updated their role documents.",
+          "Update your plan doc once after the first round of messages, then refine it again before the final domain message if the plan changed.",
+          "Before you publish the final domain message, wait until the other two roles have posted at least one message each, created or updated their own task cards, and updated their role documents.",
         ],
-        deliverable: "Create the shared mission board, post a kickoff message on the main thread, add at most one coordination card, reply to at least one teammate message, update `kid-boss-lemonade-plan` during the run and refine it again if the plan changes, and then publish the final message_posted with the day's plan and one helpful suggestion for each kid.",
+        deliverable: "Create the shared mission board, post a kickoff message on the main topic, add at most one coordination card, reply to at least one teammate message, update `kid-boss-lemonade-plan` during the run and refine it again if the plan changes, and then publish the final domain message with the day's plan and one helpful suggestion for each kid.",
         eventSummary: "Boss kid plan: today's lemonade stand game plan and helpful reminders",
         eventThreadKeys: ["main", "sales", "backoffice"],
         eventIncludeDocument: true,
@@ -184,12 +184,12 @@ export const scenarioConfigs = {
         privateContext: [
           "You are Ruby, the sales kid. Be playful, upbeat, and a little dramatic about making the stand look exciting.",
           "Your personal plot thread: figure out the best sign joke, test whether the surprise mint special helps or hurts, and collect enough real reactions to boss the sign into shape.",
-          "Talk to the other kids in message_posted events, not just formal summary notes. Ask Theo about timing and ask Milo to pick a final sign direction.",
+          "Talk to the other kids with domain message commands, not just formal summary notes. Ask Theo about timing and ask Milo to pick a final sign direction.",
           "Create or update one task card on the shared board that is clearly tied to the sales thread rather than the shared main thread.",
           "Update your notebook doc after you learn something useful, then refine it again near the end if the pitch or mint plan changed.",
           "You are helping a kids' lemonade stand have a good day, not writing a launch memo.",
         ],
-        deliverable: "Post at least one main-thread message and one reply, create or update one sales task card on the shared board, update `kid-sales-pitch-notebook` during the run and refine it again if the pitch changes, and publish one message_posted on the main thread with your best sales ideas, what customers seem to like, and one or two playful improvements for the sign or pitch.",
+        deliverable: "Post at least one main-topic message and one reply, create or update one sales task card on the shared board, update `kid-sales-pitch-notebook` during the run and refine it again if the pitch changes, and publish one domain message on the main topic with your best sales ideas, what customers seem to like, and one or two playful improvements for the sign or pitch.",
         eventSummary: "Sales kid update: sidewalk pitch ideas and what customers are liking",
         eventThreadKeys: ["main", "sales"],
         eventIncludeDocument: true,
@@ -213,7 +213,7 @@ export const scenarioConfigs = {
           "Update your prep log after you decide the batch timing, then refine it again near the end if the supply or mint plan changed.",
           "Helpful output sounds like batch timing, restock warnings, prep shortcuts, and what the boss kid should stop forgetting.",
         ],
-        deliverable: "Post at least one main-thread message and one reply, create or update one prep task card on the shared board, update `kid-prep-notebook` during the run and refine it again if the prep plan changes, and publish one message_posted on the main thread with the prep plan, supply risks, and the most important behind-the-stand tasks for the next few hours.",
+        deliverable: "Post at least one main-topic message and one reply, create or update one prep task card on the shared board, update `kid-prep-notebook` during the run and refine it again if the prep plan changes, and publish one domain message on the main topic with the prep plan, supply risks, and the most important behind-the-stand tasks for the next few hours.",
         eventSummary: "Backoffice kid update: prep timing, supply stash, and kitchen needs",
         eventThreadKeys: ["main", "backoffice"],
         eventIncludeDocument: true,
@@ -496,7 +496,7 @@ Read workflow state:
 - Minimal backing thread record (optional): \`anx threads get --thread-id <thread-id>\` (same contract read as \`threads.inspect\`)
 - List recent thread events: \`anx events list --thread-id <thread-id> --max-events 10 --full-id\`
 - List recent thread messages only: \`anx events list --thread-id <thread-id> --type message_posted --max-events 10 --full-id\`
-- Explain how visible thread messages should be authored: \`anx events explain message_posted\`
+- Explain the low-level message event contract only when debugging raw events: \`anx events explain message_posted\`
 - List inbox items: \`anx inbox list\`
 - List artifacts: \`anx artifacts list --thread-id <thread-id>\`
 - Read artifact metadata: \`anx artifacts get --artifact-id <artifact-id>\`
@@ -511,21 +511,24 @@ Read workflow state:
 - Revise a document immediately (no proposal): \`anx docs revise --apply --document-id <document-id> --from-file doc-revision-template.json\`
 
 Write workflow state:
-- Topics are the primary mutable coordination resource; \`anx threads patch\`, \`anx threads apply\`, and other thread mutation commands are not supported.
-- Create a visible thread message: \`anx events create --from-file message-template.json\`
-- Reply to a message thread item: \`anx events create --from-file reply-template.json\`
+- Topics, docs, cards, and boards are the primary mutable resources; \`anx threads patch\`, \`anx threads apply\`, and other thread mutation commands are not supported.
+- Write ordinary topic conversation with: \`anx topics message <topic-id> --body-file message.md\`
+- Reply in ordinary topic conversation with: \`anx topics reply <topic-id> --to <message-id> --body-file reply.md\`
+- Write document conversation with: \`anx docs message <document-id> --body-file message.md\`
+- Reply in document conversation with: \`anx docs reply <document-id> --to <message-id> --body-file reply.md\`
+- Write card conversation with: \`anx cards message <card-id> --body-file message.md\`
+- Reply in card conversation with: \`anx cards reply <card-id> --to <message-id> --body-file reply.md\`
 - Update a topic in one step: \`anx topics patch --topic-id <topic-id> --from-file topic-patch.json\`
 - Create a shared board from stdin: \`cat board-template.json | anx boards create --json\`
 - Create a new card from local prose: \`anx cards create --board <board-id> --topic <topic-id> --title "Concrete task" --content-file card.md --ref thread:<role-thread-id>\`
 - Revise a card from local prose: \`anx cards revise --card <card-id> --content-file card-revision.md\`
 - Assign, move, or resolve cards with domain verbs: \`anx cards assign\`, \`anx cards move\`, \`anx cards resolve\`.
-- Validate an event before sending it: \`anx events validate --from-file event-template.json\`
-- Dry-run an event create without sending it: \`anx events create --from-file event-template.json --dry-run\`
-- Edit \`event-template.json\` in place, then create the event: \`anx events create --from-file event-template.json\`
+- Validate a raw event before sending it: \`anx events validate --from-file event-template.json\`
+- Dry-run raw event create without sending it: \`anx events create --from-file event-template.json --dry-run\`
+- Use raw \`anx events create\` only for unusual contract-level records; ordinary messages must use the topic/doc/card message commands above so the CLI fills actor_id, backing thread_id, and refs.
 
-Working event types for this scenario:
-- \`message_posted\` for visible messages and replies
-- \`message_posted\` for your higher-signal role summary
+Raw event types for exceptional contract-level records:
+- \`message_posted\` exists underneath domain message commands, but do not hand-author it for ordinary topic/doc/card conversation.
 `;
 }
 
@@ -1101,7 +1104,7 @@ function targetsGuide(role, targets) {
     "Use these resolved IDs directly. Do not spend turns rediscovering them.",
     "",
     "Prefer topic workspace, cards, and boards for coordination; thread commands below are diagnostic (backing-thread tooling).",
-    "Use `message_posted` events for in-thread chat and replies; use doc, topic, or card updates for durable summaries if the scenario asks for more than live coordination.",
+    "Use `anx topics message`, `anx docs message`, or `anx cards message` for chat and replies; raw `events create` is only for unusual contract-level records.",
     "",
     `Shared goal thread: ${targets.mainThread.id}`,
     `Shared goal title: ${targets.mainThread.title}`,
@@ -1168,7 +1171,9 @@ function targetsGuide(role, targets) {
     "Message coordination checklist:",
     `- kickoff messages live on the main thread ${targets.mainThread.id}`,
     `- list current visible messages with: anx events list --thread-id ${targets.mainThread.id} --type message_posted --max-events 10 --full-id`,
-    "- reply by adding `event:<message_event_id>` to `reply-template.json` refs before creating it",
+    `- post kickoff messages with: anx topics message ${targets.topic?.id ?? "<topic-id>"} --body-file message.md`,
+    `- reply with: anx topics reply ${targets.topic?.id ?? "<topic-id>"} --to <message_event_id> --body-file reply.md`,
+    "- use docs/card message commands instead when the conversation belongs on a document or card",
   );
   if (role.requireDocsRevision) {
     lines.push(
@@ -1672,13 +1677,13 @@ Environment:
 - Command guide: ./COMMANDS.md
 - Scenario targets: ./TARGETS.md
 - Role context: ./ROLE_CONTEXT.md
-- Message template for the main thread: ./message-template.json
-- Reply template for the main thread: ./reply-template.json
-- Event template: ./event-template.json
+- Message body draft for the main topic command: ./message.md
+- Reply body draft for the main topic command: ./reply.md
+- Raw event template for exceptional contract-level records only: ./event-template.json
 - Board template: ./board-template.json
 - Card body template: ./card.md
 ${existingRoleCard ? `- Existing role card: ${existingRoleCard.id} (revise with ./card-revision.md)\n` : ""}
-${primaryThreadHasOwnTemplates ? "- Primary-thread message template: ./primary-thread-message-template.json\n- Primary-thread reply template: ./primary-thread-reply-template.json" : ""}
+${primaryThreadHasOwnTemplates ? "- Primary-thread raw event templates are present only for low-level debugging; prefer topic/doc/card message commands.\n" : ""}
 ${continuationFiles.join("\n")}
 - Document revision template (if present): ./doc-revision-template.json
 - Result template: ./result-template.md
@@ -1697,6 +1702,8 @@ ${continuationFiles.join("\n")}
   );
   writeFile(path.join(workspaceDir, "TARGETS.md"), targetsGuide(role, targets));
   writeFile(path.join(workspaceDir, "ROLE_CONTEXT.md"), privateContextGuide(role));
+  writeFile(path.join(workspaceDir, "message.md"), role.messageSeed ?? `Update from ${role.name}.\n`);
+  writeFile(path.join(workspaceDir, "reply.md"), role.replySeed ?? `Reply from ${role.name}.\n`);
   writeFile(path.join(workspaceDir, "message-template.json"), messageTemplate(role, targets));
   writeFile(path.join(workspaceDir, "reply-template.json"), replyTemplate(role, targets));
   if (primaryThreadHasOwnTemplates) {
@@ -1724,8 +1731,8 @@ ${continuationFiles.join("\n")}
     ? `Read CHAPTER.md and CHAPTER_STATE.md first. Continue the existing scenario state from ${chapterID}. Do not recreate the board, docs, cards, or identities that already exist unless the chapter explicitly tells you to do so. Prefer adding new messages, new replies, card moves or updates, and new document revisions over creating duplicate resources.`
     : "";
   const prompt = role.requireDocsRevision
-    ? `Read SCENARIO.md, COMMANDS.md, TARGETS.md, and ROLE_CONTEXT.md. ${continuationPrompt} Execute your role with the real anx CLI. Use message-template.json for a kickoff message on the main thread, use reply-template.json for at least one reply to another kid's message, and use message_posted rather than static summary notes for conversational updates.${primaryThreadHasOwnTemplates ? " Also use primary-thread-message-template.json for at least one role-thread update when the chapter asks for richer thread activity." : ""} If you are the boss kid, create the shared board early from board-template.json only if it does not already exist, add at most one coordination card from card.md with \`anx cards create --content-file\` if you do not already own one, and make the board visible to the others. ${existingRoleCard ? `If your role card ${existingRoleCard.id} already exists, revise it with card-revision.md via \`anx cards revise --card ${existingRoleCard.id} --content-file card-revision.md\` instead of creating a duplicate.` : "If you need a new card, keep it tied to its intended role thread instead of attaching everything to the shared main thread."} Revise doc-revision-template.json in place, stage the document revision with \`anx docs revise\`, inspect the diff, apply it with the returned \`anx docs revise --apply --proposal-id <proposal-id>\`, then post your final message_posted from event-template.json. Use \`anx events list --thread-id ${targets.mainThread.id} --type message_posted --max-events 10 --full-id\` to find reply targets. Write result.md and then give a short final summary.`
-    : `Read SCENARIO.md, COMMANDS.md, TARGETS.md, and ROLE_CONTEXT.md. ${continuationPrompt} Execute your role with the real anx CLI. Use message-template.json for a kickoff message on the main thread, use reply-template.json for at least one reply to another kid's message, and create or inspect board work when the scenario asks for it.${primaryThreadHasOwnTemplates ? " Also use primary-thread-message-template.json for at least one role-thread update when the chapter asks for richer thread activity." : ""} ${existingRoleCard ? `Your role card ${existingRoleCard.id} already exists, so revise it with card-revision.md via \`anx cards revise --card ${existingRoleCard.id} --content-file card-revision.md\` instead of creating a duplicate.` : "Create one role-specific task card from card.md with `anx cards create --content-file` after the board exists, and keep that card tied to your primary role thread rather than the shared main thread."} Use \`anx events list --thread-id ${targets.mainThread.id} --type message_posted --max-events 10 --full-id\` to find reply targets. After the conversational work is done, edit event-template.json in place, create the final message_posted from that file, write result.md, and then give a short final summary.`;
+    ? `Read SCENARIO.md, COMMANDS.md, TARGETS.md, and ROLE_CONTEXT.md. ${continuationPrompt} Execute your role with the real anx CLI. Use \`anx topics message ${targets.topic?.id ?? "<topic-id>"} --body-file message.md\` for a kickoff message, and use \`anx topics reply ${targets.topic?.id ?? "<topic-id>"} --to <message-id> --body-file reply.md\` for at least one reply. If the conversation belongs on a document or card, use \`anx docs message/reply\` or \`anx cards message/reply\` instead. Do not hand-author ordinary message_posted events with \`anx events create\`.${primaryThreadHasOwnTemplates ? " Ignore raw primary-thread event templates unless you are debugging the low-level event contract." : ""} If you are the boss kid, create the shared board early from board-template.json only if it does not already exist, add at most one coordination card from card.md with \`anx cards create --content-file\` if you do not already own one, and make the board visible to the others. ${existingRoleCard ? `If your role card ${existingRoleCard.id} already exists, revise it with card-revision.md via \`anx cards revise --card ${existingRoleCard.id} --content-file card-revision.md\` instead of creating a duplicate.` : "If you need a new card, keep it tied to its intended role thread instead of attaching everything to the shared main thread."} Revise doc-revision-template.json in place, stage the document revision with \`anx docs revise\`, inspect the diff, apply it with the returned \`anx docs revise --apply --proposal-id <proposal-id>\`, then post a final topic/doc/card message with the appropriate domain message command. Use \`anx topics messages ${targets.topic?.id ?? "<topic-id>"} --max-events 10 --full-id\` to find reply targets. Write result.md and then give a short final summary.`
+    : `Read SCENARIO.md, COMMANDS.md, TARGETS.md, and ROLE_CONTEXT.md. ${continuationPrompt} Execute your role with the real anx CLI. Use \`anx topics message ${targets.topic?.id ?? "<topic-id>"} --body-file message.md\` for a kickoff message, and use \`anx topics reply ${targets.topic?.id ?? "<topic-id>"} --to <message-id> --body-file reply.md\` for at least one reply. If the conversation belongs on a document or card, use \`anx docs message/reply\` or \`anx cards message/reply\` instead. Do not hand-author ordinary message_posted events with \`anx events create\`.${primaryThreadHasOwnTemplates ? " Ignore raw primary-thread event templates unless you are debugging the low-level event contract." : ""} ${existingRoleCard ? `Your role card ${existingRoleCard.id} already exists, so revise it with card-revision.md via \`anx cards revise --card ${existingRoleCard.id} --content-file card-revision.md\` instead of creating a duplicate.` : "Create one role-specific task card from card.md with `anx cards create --content-file` after the board exists, and keep that card tied to your primary role thread rather than the shared main thread."} Use \`anx topics messages ${targets.topic?.id ?? "<topic-id>"} --max-events 10 --full-id\` to find reply targets. After the conversational work is done, post the final update with the appropriate topic/doc/card message command, write result.md, and then give a short final summary.`;
 
   const piArgs = [
     "--print",
