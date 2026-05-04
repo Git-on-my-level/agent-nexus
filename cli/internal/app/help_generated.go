@@ -636,6 +636,8 @@ Core Commands:
   provenance    Walk refs/provenance links as a deterministic graph
   secret        Manage workspace secrets for agent credential injection
   workspace     Summarize workspace boards and counts for first-run orientation
+  read          Read an ANX resource from a URL or typed ref
+  url           Print a shareable ANX URL for a resource
   api call      Perform an arbitrary HTTP API request
   help [topic]  Show onboarding help or generated command help
 `) + "\n")

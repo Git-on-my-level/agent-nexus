@@ -91,7 +91,7 @@ func (a *App) runTopicsCommand(ctx context.Context, args []string, cfg config.Re
 		}
 		return result, "topics list", nil
 	case "get":
-		id, err := parseIDArg(args[1:], "topic-id", "topic id")
+		id, err := parseResourceIDArg(args[1:], "topic-id", "topic id", "topic")
 		if err != nil {
 			return nil, "topics get", err
 		}
@@ -109,7 +109,7 @@ func (a *App) runTopicsCommand(ctx context.Context, args []string, cfg config.Re
 			return dryRunResult("topics create", "topics.create", nil, nil, body), "topics create", nil
 		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "topics create", "topics.create", nil, nil, body)
-		return result, "topics create", callErr
+		return addResourceURLToResult(cfg, "topics.create", result), "topics create", callErr
 	case "patch":
 		id, body, dryRun, err := a.parseIDAndBodyInputWithOptions(args[1:], "topic-id", "topic id", "topics patch", jsonBodyInputOptions{allowDryRun: true})
 		if err != nil {
@@ -150,14 +150,14 @@ func (a *App) runTopicsCommand(ctx context.Context, args []string, cfg config.Re
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "topics reply", "events.create", nil, nil, body)
 		return decorateThreadMessageWriteResult(result, callErr, cfg, "topics.reply", target), "topics reply", callErr
 	case "timeline":
-		id, err := parseIDArg(args[1:], "topic-id", "topic id")
+		id, err := parseResourceIDArg(args[1:], "topic-id", "topic id", "topic")
 		if err != nil {
 			return nil, "topics timeline", err
 		}
 		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "topics timeline", "topics.timeline", "topic_id", id, topicIDLookupSpec, nil, nil)
 		return result, "topics timeline", callErr
 	case "workspace":
-		id, err := parseIDArg(args[1:], "topic-id", "topic id")
+		id, err := parseResourceIDArg(args[1:], "topic-id", "topic id", "topic")
 		if err != nil {
 			return nil, "topics workspace", err
 		}
@@ -248,16 +248,16 @@ func (a *App) runCardsCommand(ctx context.Context, args []string, cfg config.Res
 			return dryRunResult("cards create", "cards.create", nil, nil, body), "cards create", nil
 		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "cards create", "cards.create", nil, nil, body)
-		return result, "cards create", callErr
+		return addResourceURLToResult(cfg, "cards.create", result), "cards create", callErr
 	case "get":
-		id, err := parseIDArg(args[1:], "card-id", "card id")
+		id, err := parseResourceIDArg(args[1:], "card-id", "card id", "card")
 		if err != nil {
 			return nil, "cards get", err
 		}
 		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "cards get", "cards.get", "card_id", id, cardIDLookupSpec, nil, nil)
 		return result, "cards get", callErr
 	case "timeline":
-		id, err := parseIDArg(args[1:], "card-id", "card id")
+		id, err := parseResourceIDArg(args[1:], "card-id", "card id", "card")
 		if err != nil {
 			return nil, "cards timeline", err
 		}
@@ -293,7 +293,7 @@ func (a *App) runCardsCommand(ctx context.Context, args []string, cfg config.Res
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "cards reply", "events.create", nil, nil, body)
 		return a.decorateMessageWriteResult(result, callErr, cfg, "cards.reply", card), "cards reply", callErr
 	case "history":
-		id, err := parseIDArg(args[1:], "card-id", "card id")
+		id, err := parseResourceIDArg(args[1:], "card-id", "card id", "card")
 		if err != nil {
 			return nil, "cards history", err
 		}

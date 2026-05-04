@@ -184,6 +184,152 @@ func TestRefEdgesListRequiresExactlyOneSelector(t *testing.T) {
 	}
 }
 
+func TestReadCommandsAcceptANXURLs(t *testing.T) {
+	t.Parallel()
+
+	var paths []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/cards/card_123":
+			_, _ = w.Write([]byte(`{"card":{"id":"card_123","title":"Card URL","summary":"body"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/docs/doc_123":
+			_, _ = w.Write([]byte(`{"document":{"id":"doc_123","title":"Doc URL"},"revision":{"id":"rev_123","content":"doc body"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/artifacts/art_123":
+			_, _ = w.Write([]byte(`{"artifact":{"id":"art_123","kind":"text/plain","summary":"Artifact URL"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/artifacts/art_123/content":
+			_, _ = w.Write([]byte(`artifact body`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	base := server.URL
+	cardURL := "https://anx.example/o/org/w/workspace/boards/board_123?card=card_123"
+	docURL := "https://anx.example/o/org/w/workspace/docs/doc_123"
+	artifactURL := "https://anx.example/o/org/w/workspace/artifacts/art_123"
+
+	assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{"--json", "--base-url", base, "cards", "get", cardURL}))
+	assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{"--json", "--base-url", base, "docs", "content", docURL}))
+	assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{"--json", "--base-url", base, "artifacts", "inspect", artifactURL}))
+
+	joined := strings.Join(paths, "\n")
+	for _, expected := range []string{"/cards/card_123", "/docs/doc_123", "/artifacts/art_123", "/artifacts/art_123/content"} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("expected request path %s, got:\n%s", expected, joined)
+		}
+	}
+}
+
+func TestReadDispatchesURLsAndTypedRefs(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/cards/card_123":
+			_, _ = w.Write([]byte(`{"card":{"id":"card_123","title":"Card URL","summary":"body"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/docs/doc_123":
+			_, _ = w.Write([]byte(`{"document":{"id":"doc_123","title":"Doc URL"},"revision":{"id":"rev_123","content":"doc body"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	cardURL := "https://anx.example/o/org/w/workspace/boards/board_123?card=card_123"
+
+	cardPayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{"--json", "--base-url", server.URL, "read", cardURL}))
+	if got := anyStringValue(cardPayload["command"]); got != "read" {
+		t.Fatalf("expected read command envelope, got %#v", cardPayload)
+	}
+
+	docPayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{"--json", "--base-url", server.URL, "read", "document:doc_123"}))
+	data := asMap(docPayload["data"])
+	if got := anyStringValue(data["content"]); got != "doc body" {
+		t.Fatalf("expected docs content body, got %#v", docPayload)
+	}
+}
+
+func TestReadRejectsAmbiguousPlainID(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	payload := assertEnvelopeError(t, runCLIForTest(t, home, nil, nil, []string{"--json", "read", "abc123"}))
+	errObj := asMap(payload["error"])
+	if got := anyStringValue(errObj["code"]); got != "invalid_request" {
+		t.Fatalf("expected invalid_request, got %#v", payload)
+	}
+	if got := anyStringValue(errObj["message"]); !strings.Contains(got, "requires an ANX URL or typed ref") {
+		t.Fatalf("expected URL or typed ref guidance, got %#v", payload)
+	}
+}
+
+func TestCreateCommandsAppendShareableURL(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/boards"):
+			_, _ = w.Write([]byte(`{"board":{"id":"board_123","title":"Board URL"}}`))
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/cards"):
+			_, _ = w.Write([]byte(`{"card":{"id":"card_123","board_ref":"board:board_123","title":"Card URL"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	hostedBase := server.URL + "/ws/david-zhang/personal"
+	boardOut := runCLIForTest(t, home, nil, nil, []string{"--base-url", hostedBase, "boards", "create", "--title", "Board URL"})
+	if !strings.Contains(boardOut, "URL: "+server.URL+"/o/david-zhang/w/personal/boards/board_123") {
+		t.Fatalf("expected board create URL, got:\n%s", boardOut)
+	}
+
+	contentFile := filepath.Join(home, "card.md")
+	if err := os.WriteFile(contentFile, []byte("body\n"), 0o600); err != nil {
+		t.Fatalf("write content file: %v", err)
+	}
+	cardOut := runCLIForTest(t, home, nil, nil, []string{"--base-url", hostedBase, "cards", "create", "--board", "board_123", "--title", "Card URL", "--content-file", contentFile})
+	if !strings.Contains(cardOut, "URL: "+server.URL+"/o/david-zhang/w/personal/boards/board_123?card=card_123") {
+		t.Fatalf("expected card create URL, got:\n%s", cardOut)
+	}
+
+	payload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{"--json", "--base-url", hostedBase, "boards", "create", "--title", "Board URL"}))
+	if got := anyStringValue(asMap(payload["data"])["url"]); got != server.URL+"/o/david-zhang/w/personal/boards/board_123" {
+		t.Fatalf("expected structured URL, got %#v", payload)
+	}
+}
+
+func TestURLCommandPrintsShareableURL(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/cards/card_123"):
+			_, _ = w.Write([]byte(`{"card":{"id":"card_123","board_ref":"board:board_123","title":"Card URL"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	hostedBase := server.URL + "/ws/david-zhang/personal"
+	out := strings.TrimSpace(runCLIForTest(t, home, nil, nil, []string{"--base-url", hostedBase, "url", "card", "card:card_123"}))
+	expected := server.URL + "/o/david-zhang/w/personal/boards/board_123?card=card_123"
+	if out != expected {
+		t.Fatalf("expected %q, got %q", expected, out)
+	}
+}
+
 func TestHumanAskCommandCreatesHumanAttentionRequestedEvent(t *testing.T) {
 	t.Parallel()
 
