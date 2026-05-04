@@ -1887,6 +1887,7 @@
           {workspaceId}
           {workspaceSlug}
           label="Discussion"
+          prefetchedMessageCount={derived?.timeline_message_count}
           storageKey={`card-discussion:${cardKey}`}
           resizeStorageKey={`card-discussion-v2:${cardKey}`}
           narrowEdgeToEdge

@@ -125,6 +125,7 @@ type PrimitiveStore interface {
 	PatchThread(ctx context.Context, actorID string, id string, patch map[string]any, ifUpdatedAt *string) (primitives.ThreadMutationResult, error)
 	ListThreads(ctx context.Context, filter primitives.ThreadListFilter) ([]map[string]any, string, error)
 	ListEventsByThread(ctx context.Context, threadID string) ([]map[string]any, error)
+	BatchCountMessagePostedEventsByThreadIDs(ctx context.Context, threadIDs []string) (map[string]int, error)
 	ListRecentEventsByThread(ctx context.Context, threadID string, limit int) ([]map[string]any, error)
 	ListEvents(ctx context.Context, filter primitives.EventListFilter) ([]map[string]any, error)
 	ListEventsPage(ctx context.Context, filter primitives.EventListFilter) (primitives.EventPage, error)

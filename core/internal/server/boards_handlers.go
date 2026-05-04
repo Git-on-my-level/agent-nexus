@@ -1269,6 +1269,21 @@ func buildBoardWorkspacePayload(ctx context.Context, opts handlerOptions, boardI
 }
 
 func buildBoardWorkspaceCardsSection(ctx context.Context, opts handlerOptions, board map[string]any, cards []map[string]any, states map[string]topicProjectionState) (map[string]any, []map[string]any, error) {
+	threadIDsForMsgs := make([]string, 0, len(cards))
+	for _, card := range cards {
+		if tid := strings.TrimSpace(anyString(card["thread_id"])); tid != "" {
+			threadIDsForMsgs = append(threadIDsForMsgs, tid)
+		}
+	}
+	msgCounts := map[string]int{}
+	if len(threadIDsForMsgs) > 0 {
+		var err error
+		msgCounts, err = opts.primitiveStore.BatchCountMessagePostedEventsByThreadIDs(ctx, threadIDsForMsgs)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
 	items := make([]map[string]any, 0, len(cards))
 	warnings := make([]map[string]any, 0)
 	for _, card := range cards {
@@ -1305,6 +1320,13 @@ func buildBoardWorkspaceCardsSection(ctx context.Context, opts handlerOptions, b
 		summary := boardCardDerivedSummary(card, threadID, states, time.Now().UTC())
 		freshness := boardCardDerivedFreshness(threadID, states)
 		pubCard := publicCardView(card)
+		derived := map[string]any{
+			"summary":   summary,
+			"freshness": freshness,
+		}
+		if threadID != "" {
+			derived["timeline_message_count"] = msgCounts[threadID]
+		}
 		items = append(items, map[string]any{
 			"board_ref":            "board:" + anyString(board["id"]),
 			"card":                 pubCard,
@@ -1317,10 +1339,7 @@ func buildBoardWorkspaceCardsSection(ctx context.Context, opts handlerOptions, b
 				"pinned_document_ref": nullableTypedRef("document", pinnedDocumentIDFromCard(card)),
 				"pinned_document":     pinnedDocument,
 			},
-			"derived": map[string]any{
-				"summary":   summary,
-				"freshness": freshness,
-			},
+			"derived": derived,
 		})
 	}
 

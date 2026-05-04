@@ -61,16 +61,29 @@ export function createTimelineContext(coreClient) {
 
   async function loadTimeline(scopeId, opts = {}) {
     const trimmed = String(scopeId ?? "").trim();
+    const previousScope = lastScopeId;
     if (trimmed) {
       lastScopeId = trimmed;
     }
     lastLoadOpts = opts && typeof opts === "object" ? { ...opts } : {};
 
     const seq = ++loadSeq;
+    const scopeChanged = Boolean(trimmed && trimmed !== previousScope);
     store.update((s) => ({
       ...s,
       timelineLoading: true,
       timelineError: "",
+      ...(scopeChanged
+        ? {
+            timeline: [],
+            timelineArtifacts: [],
+            timelineCards: [],
+            timelineDocuments: [],
+            timelineDocumentRevisions: [],
+            timelineThreads: [],
+            timelineNotificationReceipts: {},
+          }
+        : {}),
     }));
     try {
       let res;

@@ -141,6 +141,12 @@
      * secondary tab selected (e.g. load revision list). Errors are ignored.
      */
     prepareSecondaryPanel = undefined,
+    /**
+     * When the host already knows the non-trashed message_posted count for this
+     * thread (e.g. board workspace `derived.timeline_message_count`), pass it so
+     * the header badge can render before the timeline fetch completes.
+     */
+    prefetchedMessageCount = undefined,
   } = $props();
 
   let hasSecondaryPanel = $derived(typeof secondaryPanel === "function");
@@ -224,7 +230,6 @@
 
   let lsKey = $derived(storageKey ? `discussion-drawer:${storageKey}` : "");
   let open = $state(false);
-  let everLoaded = $state(false);
   let lastOpenSignal = $state(0);
 
   let showOpen = $derived(!collapsibleEff || open);
@@ -338,10 +343,6 @@
     if (collapsibleEff && lsKey && browser) {
       localStorage.setItem(lsKey, next ? "1" : "0");
     }
-    if (next && threadId && !everLoaded && !useParentTimelineContext) {
-      everLoaded = true;
-      void isolatedTimelineApi.loadTimeline(threadId);
-    }
   }
 
   function toggle() {
@@ -349,18 +350,20 @@
     setOpen(!open);
   }
 
+  // Load the backing thread timeline as soon as `threadId` is known so header
+  // badges stay accurate without requiring expand / tab focus first.
+  let lastIsolatedTimelineThreadId = $state("");
   $effect(() => {
-    if (
-      !collapsibleEff &&
-      threadId &&
-      !useParentTimelineContext &&
-      !everLoaded
-    ) {
-      everLoaded = true;
-      void isolatedTimelineApi.loadTimeline(threadId);
+    if (useParentTimelineContext) return;
+    const tid = String(threadId ?? "").trim();
+    if (!tid) {
+      lastIsolatedTimelineThreadId = "";
+      return;
     }
+    if (tid === lastIsolatedTimelineThreadId) return;
+    lastIsolatedTimelineThreadId = tid;
+    void isolatedTimelineApi.loadTimeline(tid);
   });
-
   // Hydrate open state from localStorage once the key is known.
   $effect(() => {
     if (!browser || !lsKey || !collapsibleEff) return;
@@ -380,33 +383,25 @@
     }
   });
 
-  /** Eager desktop rail load (matches legacy DocumentDiscussionRail). */
-  $effect(() => {
-    if (
-      !useParentTimelineContext &&
-      layout === "rail" &&
-      isRailViewport &&
-      threadId &&
-      !everLoaded
-    ) {
-      everLoaded = true;
-      void isolatedTimelineApi.loadTimeline(threadId);
-    }
-  });
-
   const timelineStore = $derived(
     useParentTimelineContext ? emptyTimelineStore : isolatedTimelineApi.store,
   );
   let allTimeline = $derived(
     Array.isArray($timelineStore.timeline) ? $timelineStore.timeline : [],
   );
+  let prefetchMsgCount = $derived.by(() => {
+    const n = Number(prefetchedMessageCount);
+    if (!Number.isFinite(n)) return 0;
+    return Math.max(0, Math.floor(n));
+  });
   let messageCount = $derived(
     allTimeline.filter(
       (e) => String(e?.type ?? "") === "message_posted" && !e?.trashed_at,
     ).length,
   );
+  let displayMessageCount = $derived(Math.max(messageCount, prefetchMsgCount));
   let railBadgeText = $derived(
-    messageCount > 0 ? String(Math.min(messageCount, 99)) : "",
+    displayMessageCount > 0 ? String(Math.min(displayMessageCount, 99)) : "",
   );
 
   async function handleMessagePost(routeScopeId, event) {
@@ -659,7 +654,7 @@
             <button
               type="button"
               class="flex min-h-0 flex-1 cursor-pointer flex-col items-center justify-center gap-2 px-2 py-3 text-fg-muted transition-colors hover:bg-panel-hover hover:text-fg"
-              aria-label={`Show ${label.toLowerCase()}${messageCount > 0 ? `, ${messageCount} ${messageCount === 1 ? "comment" : "comments"}` : ""}`}
+              aria-label={`Show ${label.toLowerCase()}${displayMessageCount > 0 ? `, ${displayMessageCount} ${displayMessageCount === 1 ? "comment" : "comments"}` : ""}`}
               title={label}
               onclick={() => openRailCollapsed("messages")}
             >
@@ -733,7 +728,7 @@
           <button
             type="button"
             class="hidden lg:flex lg:h-dvh lg:min-h-[20rem] lg:w-full lg:cursor-pointer lg:flex-col lg:items-center lg:justify-start lg:gap-3 lg:px-2 lg:py-4 lg:text-fg-muted lg:transition-colors lg:hover:bg-panel-hover lg:hover:text-fg"
-            aria-label={`Show ${label.toLowerCase()}${messageCount > 0 ? `, ${messageCount} ${messageCount === 1 ? "comment" : "comments"}` : ""}`}
+            aria-label={`Show ${label.toLowerCase()}${displayMessageCount > 0 ? `, ${displayMessageCount} ${displayMessageCount === 1 ? "comment" : "comments"}` : ""}`}
             title={`Show ${label.toLowerCase()}`}
             onclick={() => setOpen(true)}
           >
@@ -980,6 +975,9 @@
                 type="button"
                 role="tab"
                 aria-selected={sideTab === "messages"}
+                aria-label={displayMessageCount > 0
+                  ? `${label}, ${displayMessageCount} ${displayMessageCount === 1 ? "comment" : "comments"}`
+                  : label}
                 class="min-w-0 flex-1 rounded-md px-2 py-1.5 text-center text-micro font-medium transition-colors {sideTab ===
                 'messages'
                   ? 'bg-line-subtle text-fg'
@@ -989,7 +987,19 @@
                   pickSideTab("messages");
                 }}
               >
-                {label}
+                <span class="inline-flex items-center justify-center gap-1.5">
+                  <span>{label}</span>
+                  {#if displayMessageCount > 0}
+                    <span
+                      class="inline-flex min-h-[1.125rem] min-w-[1.125rem] shrink-0 items-center justify-center rounded-md bg-line px-1 py-0.5 text-[0.65rem] font-semibold tabular-nums text-fg"
+                      aria-hidden="true"
+                    >
+                      {displayMessageCount > 99
+                        ? "99+"
+                        : String(displayMessageCount)}
+                    </span>
+                  {/if}
+                </span>
               </button>
               <button
                 type="button"
@@ -1007,16 +1017,6 @@
                 {secondaryTabLabel}
               </button>
             </div>
-            <span
-              class="inline-flex min-h-8 min-w-[2.25rem] shrink-0 items-center justify-end tabular-nums text-micro text-fg-muted"
-              aria-label={sideTab === "messages" && messageCount > 0
-                ? `${messageCount} comments`
-                : undefined}
-            >
-              {#if sideTab === "messages" && messageCount > 0}
-                {messageCount > 99 ? "99+" : String(messageCount)}
-              {/if}
-            </span>
           </div>
         {:else}
           <!-- One bar: tap toggles; when expanded on fixed dock, vertical drag resizes. -->
@@ -1029,10 +1029,10 @@
               : ''}"
             aria-expanded={open}
             aria-label={showResizeGrip
-              ? `${label}. Tap to collapse, or drag vertically to resize.`
+              ? `${label}. Tap to collapse, or drag vertically to resize.${displayMessageCount > 0 ? ` ${displayMessageCount} comments.` : ""}`
               : open
-                ? `${label}. Tap to collapse.`
-                : `${label}. Tap to expand.`}
+                ? `${label}. Tap to collapse.${displayMessageCount > 0 ? ` ${displayMessageCount} comments.` : ""}`
+                : `${label}. Tap to expand.${displayMessageCount > 0 ? ` ${displayMessageCount} comments.` : ""}`}
             onclick={onHeaderClick}
             onpointerdown={onHeaderPointerDown}
             onpointermove={onHeaderPointerMove}
@@ -1055,14 +1055,21 @@
                 d="M19 9l-7 7-7-7"
               />
             </svg>
-            <span class="min-w-0 flex-1 truncate text-micro font-medium text-fg"
-              >{label}</span
-            >
-            {#if messageCount > 0}
-              <span class="shrink-0 text-micro text-fg-muted"
-                >{messageCount}</span
+            <span class="flex min-w-0 flex-1 items-center gap-2">
+              <span class="truncate text-micro font-medium text-fg"
+                >{label}</span
               >
-            {/if}
+              {#if displayMessageCount > 0}
+                <span
+                  class="inline-flex min-h-[1.125rem] min-w-[1.125rem] shrink-0 items-center justify-center rounded-md bg-line px-1 py-0.5 text-[0.65rem] font-semibold tabular-nums text-fg"
+                  aria-hidden="true"
+                >
+                  {displayMessageCount > 99
+                    ? "99+"
+                    : String(displayMessageCount)}
+                </span>
+              {/if}
+            </span>
           </button>
         {/if}
       {/if}

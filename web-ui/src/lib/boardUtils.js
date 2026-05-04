@@ -108,6 +108,20 @@ export function boardCardHeaderTitle(membership, thread) {
   return boardCardStableId(membership);
 }
 
+/**
+ * `message_posted` count for a board workspace card row (`/boards/{id}/workspace`).
+ * Core exposes `derived.timeline_message_count`. Missing or invalid values → 0.
+ */
+export function boardCardTimelineMessageCount(cardItem) {
+  const d = cardItem?.derived;
+  const raw =
+    d?.timeline_message_count ??
+    d?.timelineMessageCount ??
+    cardItem?.timeline_message_count;
+  const n = Math.floor(Number(raw ?? 0));
+  return Number.isFinite(n) ? Math.max(0, n) : 0;
+}
+
 export function groupBoardWorkspaceCards(cardsSection, columnSchema = []) {
   const groups = (columnSchema?.length ? columnSchema : CANONICAL_BOARD_COLUMNS)
     .map((column) => column.key)

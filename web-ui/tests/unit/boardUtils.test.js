@@ -5,6 +5,7 @@ import {
   boardBackingThreadId,
   boardCardHeaderTitle,
   boardCardStableId,
+  boardCardTimelineMessageCount,
   firstBoardDocumentId,
 } from "../../src/lib/boardUtils.js";
 
@@ -55,6 +56,25 @@ describe("boardUtils", () => {
           thread_id: "thread-execution",
         }),
       ).toBe("thread-execution");
+    });
+  });
+
+  describe("boardCardTimelineMessageCount", () => {
+    it("reads derived.timeline_message_count", () => {
+      expect(
+        boardCardTimelineMessageCount({
+          derived: { timeline_message_count: 4 },
+        }),
+      ).toBe(4);
+    });
+
+    it("tolerates camelCase and missing derived", () => {
+      expect(
+        boardCardTimelineMessageCount({
+          derived: { timelineMessageCount: 2 },
+        }),
+      ).toBe(2);
+      expect(boardCardTimelineMessageCount({})).toBe(0);
     });
   });
 

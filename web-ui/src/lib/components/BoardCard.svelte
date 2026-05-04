@@ -7,6 +7,7 @@
   import {
     boardCardHeaderTitle,
     boardCardStableId,
+    boardCardTimelineMessageCount,
     freshnessStatusLabel,
     freshnessStatusTone,
   } from "$lib/boardUtils";
@@ -37,6 +38,9 @@
   const rowStatus = $derived(boardCardRowStatus(membership, thread));
   const headerTitle = $derived(boardCardHeaderTitle(membership, thread));
   const cardFreshness = $derived(derived?.freshness);
+  const timelineMessageCount = $derived(
+    boardCardTimelineMessageCount(cardItem),
+  );
   const cardResolution = $derived(String(membership?.resolution ?? "").trim());
   const summaryText = $derived(String(membership?.summary ?? "").trim());
   const cardDueAt = $derived(String(membership?.due_at ?? "").trim());
@@ -67,21 +71,7 @@
     assigneeNames.length > 2 ? assigneeNames.length - 2 : 0,
   );
 
-  const statusDotClass = $derived(threadStatusDotClass(rowStatus));
   const titleColorClass = $derived(threadStatusColor(rowStatus));
-
-  function threadStatusDotClass(status) {
-    switch (status) {
-      case "done":
-        return "bg-ok-text";
-      case "canceled":
-        return "bg-fg-muted";
-      case "paused":
-        return "bg-warn-text";
-      default:
-        return "bg-accent-solid";
-    }
-  }
 
   function threadStatusColor(status) {
     switch (status) {
@@ -139,72 +129,75 @@
     role="button"
     tabindex="0"
   >
-    <div class="flex items-start gap-2">
+    <div class="min-w-0">
       <span
-        aria-hidden="true"
-        class="mt-[5px] h-2 w-2 shrink-0 rounded-full {statusDotClass}"
-      ></span>
-      <div class="min-w-0 flex-1">
+        class="block truncate text-meta font-medium leading-snug {titleColorClass}"
+      >
+        {headerTitle}
+      </span>
+
+      <div class="mt-1 flex flex-wrap items-center gap-1">
         <span
-          class="block truncate text-meta font-medium leading-snug {titleColorClass}"
+          class="rounded-md px-1 py-0.5 text-micro font-medium {cardResolutionTone(
+            cardResolution,
+          )}"
         >
-          {headerTitle}
+          {cardResolutionLabel(cardResolution)}
         </span>
 
-        <div class="mt-1 flex flex-wrap items-center gap-1">
+        {#if assigneeVisible.length > 0}
+          {#each assigneeVisible as name (name)}
+            <span
+              class="max-w-[7rem] truncate rounded-md bg-line px-1 py-0.5 text-micro text-fg-muted"
+              title={name}
+            >
+              {name}
+            </span>
+          {/each}
+          {#if assigneeMore > 0}
+            <span
+              class="rounded-md bg-line px-1 py-0.5 text-micro text-fg-muted"
+            >
+              +{assigneeMore} more
+            </span>
+          {/if}
+        {/if}
+
+        {#if cardDueAt}
           <span
-            class="rounded-md px-1 py-0.5 text-micro font-medium {cardResolutionTone(
-              cardResolution,
+            class="rounded-md px-1 py-0.5 text-micro {dueOverdue
+              ? 'bg-danger-soft text-danger-text'
+              : 'bg-line text-fg-muted'}"
+          >
+            Due {formatTimestamp(cardDueAt) || "—"}
+          </span>
+        {/if}
+
+        {#if cardFreshness}
+          <span
+            class="rounded-md px-1 py-0.5 text-micro {freshnessStatusTone(
+              cardFreshness.status,
             )}"
           >
-            {cardResolutionLabel(cardResolution)}
+            {freshnessStatusLabel(cardFreshness.status)}
           </span>
+        {/if}
 
-          {#if assigneeVisible.length > 0}
-            {#each assigneeVisible as name (name)}
-              <span
-                class="max-w-[7rem] truncate rounded-md bg-line px-1 py-0.5 text-micro text-fg-muted"
-                title={name}
-              >
-                {name}
-              </span>
-            {/each}
-            {#if assigneeMore > 0}
-              <span
-                class="rounded-md bg-line px-1 py-0.5 text-micro text-fg-muted"
-              >
-                +{assigneeMore} more
-              </span>
-            {/if}
-          {/if}
-
-          {#if cardDueAt}
-            <span
-              class="rounded-md px-1 py-0.5 text-micro {dueOverdue
-                ? 'bg-danger-soft text-danger-text'
-                : 'bg-line text-fg-muted'}"
-            >
-              Due {formatTimestamp(cardDueAt) || "—"}
-            </span>
-          {/if}
-
-          {#if cardFreshness}
-            <span
-              class="rounded-md px-1 py-0.5 text-micro {freshnessStatusTone(
-                cardFreshness.status,
-              )}"
-            >
-              {freshnessStatusLabel(cardFreshness.status)}
-            </span>
-          {/if}
-        </div>
-
-        {#if showSummary}
-          <p class="mt-1 truncate text-micro text-fg-muted">
-            {summaryText}
-          </p>
+        {#if timelineMessageCount > 0}
+          <span
+            class="rounded-md bg-line px-1 py-0.5 text-micro font-semibold tabular-nums text-fg-muted"
+            title={`${timelineMessageCount} message${timelineMessageCount === 1 ? "" : "s"} on card thread`}
+          >
+            {timelineMessageCount > 99 ? "99+" : timelineMessageCount}
+          </span>
         {/if}
       </div>
+
+      {#if showSummary}
+        <p class="mt-1 truncate text-micro text-fg-muted">
+          {summaryText}
+        </p>
+      {/if}
     </div>
   </div>
   {@render footer?.()}

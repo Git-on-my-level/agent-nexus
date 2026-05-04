@@ -799,7 +799,7 @@
               <div
                 class="flex min-w-[260px] flex-1 flex-col rounded-md bg-bg-soft"
               >
-                <div class="flex items-center justify-between px-3 py-2.5">
+                <div class="flex items-center gap-2 px-3 py-2.5">
                   <h3
                     class="text-micro font-semibold uppercase tracking-wide {isBlocked &&
                     cards.length > 0
@@ -810,7 +810,7 @@
                       boardColumnTitle(column.key, board.column_schema)}
                   </h3>
                   <span
-                    class="min-w-[1.25rem] rounded px-1.5 py-0.5 text-center text-micro {isBlocked &&
+                    class="min-w-[1.25rem] rounded px-1.5 py-0.5 text-center text-micro font-semibold tabular-nums {isBlocked &&
                     cards.length > 0
                       ? 'bg-warn-soft text-warn-text'
                       : 'bg-line text-fg-muted'}"
