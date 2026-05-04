@@ -15,13 +15,6 @@
 #
 version: 1
 endpoints:
-  - method: GET
-    path_pattern: /v1/usage/summary
-    owner: core
-    reason: >
-      Temporary route-parity exception while command metadata generation is being
-      re-aligned in this branch; route is documented in contracts/anx-openapi.yaml.
-    expected_clients: operator-cli
   - method: POST
     path_pattern: /agent-bridge/check-in
     owner: core
