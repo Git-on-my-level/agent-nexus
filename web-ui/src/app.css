@@ -1351,6 +1351,12 @@
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      /*
+       * The fixed wrapper includes bottom padding that visually clears the
+       * shell nav. Keep that padded, transparent region from stealing taps
+       * from the nav when a page-specific dock is elevated above shell chrome.
+       */
+      pointer-events: none;
     }
 
     .page-dock-layout--fixed-mobile-chat
@@ -1370,6 +1376,7 @@
       min-height: 0;
       flex: 0 1 auto;
       flex-direction: column;
+      pointer-events: auto;
     }
 
     .page-dock-layout--fixed-mobile-chat
