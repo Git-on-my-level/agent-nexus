@@ -637,7 +637,7 @@ func TestCreateDocumentRejectsBlobQuotaExceeded(t *testing.T) {
 	if !errors.As(err, &violation) {
 		t.Fatalf("expected quota violation, got %v", err)
 	}
-	if violation.Code != "workspace_quota_exceeded" || violation.Metric != "blob_bytes" {
+	if violation.Code != "workspace_quota_exceeded" || violation.Metric != "storage_bytes" {
 		t.Fatalf("unexpected quota violation: %#v", violation)
 	}
 }
