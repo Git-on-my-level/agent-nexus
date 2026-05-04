@@ -23,11 +23,13 @@ type messageTarget struct {
 func (a *App) parseTopicMessageInput(ctx context.Context, args []string, cfg config.Resolved, commandName string, replyToEventID string) (map[string]any, messageTarget, bool, error) {
 	leadingTopicID, args := popLeadingPositional(args)
 	fs := newSilentFlagSet(commandName)
-	var topicIDFlag, bodyFlag, bodyFileFlag, summaryFlag, actorIDFlag trackedString
+	var topicIDFlag, threadIDFlag, bodyFlag, bodyFileFlag, summaryFlag, actorIDFlag trackedString
 	var refFlags trackedStrings
 	var dryRunFlag trackedBool
 	fs.Var(&topicIDFlag, "topic", "Topic id to message")
 	fs.Var(&topicIDFlag, "topic-id", "Topic id to message")
+	fs.Var(&threadIDFlag, "thread", "Backing thread id to message")
+	fs.Var(&threadIDFlag, "thread-id", "Backing thread id to message")
 	fs.Var(&bodyFlag, "body", "Message body text")
 	fs.Var(&bodyFileFlag, "body-file", "Load message body text from a local file")
 	fs.Var(&summaryFlag, "summary", "Optional short event summary")
@@ -46,20 +48,36 @@ func (a *App) parseTopicMessageInput(ctx context.Context, args []string, cfg con
 	if len(positionals) > 0 {
 		return nil, messageTarget{}, false, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
 	}
-	if err := validateID(topicID, "topic id"); err != nil {
+	threadID := strings.TrimSpace(threadIDFlag.value)
+	if topicID != "" && threadID != "" {
+		return nil, messageTarget{}, false, errnorm.Usage("invalid_request", fmt.Sprintf("provide only one of --topic or --thread for `anx %s`", commandName))
+	}
+	if topicID == "" && threadID == "" {
+		return nil, messageTarget{}, false, errnorm.Usage("invalid_request", fmt.Sprintf("topic id is required for `anx %s`; pass --topic or --thread", commandName))
+	}
+	if topicID != "" {
+		if err := validateID(topicID, "topic id"); err != nil {
+			return nil, messageTarget{}, false, err
+		}
+	} else if err := validateID(threadID, "thread id"); err != nil {
 		return nil, messageTarget{}, false, err
 	}
 	message, err := a.readMessageText(bodyFlag.value, bodyFileFlag.value, commandName)
 	if err != nil {
 		return nil, messageTarget{}, false, err
 	}
-	topic, err := a.fetchTopicBody(ctx, cfg, topicID)
-	if err != nil {
-		return nil, messageTarget{}, false, err
-	}
-	target, err := topicMessageTarget(topic, topicID)
-	if err != nil {
-		return nil, messageTarget{}, false, err
+	var target messageTarget
+	if threadID != "" {
+		target = threadMessageTarget(threadID)
+	} else {
+		topic, err := a.fetchTopicBody(ctx, cfg, topicID)
+		if err != nil {
+			return nil, messageTarget{}, false, err
+		}
+		target, err = topicMessageTarget(topic, topicID)
+		if err != nil {
+			return nil, messageTarget{}, false, err
+		}
 	}
 	body, err := buildMessagePostedBody(cfg, actorIDFlag.value, target, message, summaryFlag.value, refFlags.values, replyToEventID)
 	if err != nil {
@@ -691,6 +709,17 @@ func cardMessageTarget(card map[string]any, fallbackCardID string) (messageTarge
 	}, nil
 }
 
+func threadMessageTarget(threadID string) messageTarget {
+	threadID = strings.TrimSpace(threadID)
+	return messageTarget{
+		SubjectKind: "thread",
+		SubjectID:   threadID,
+		SubjectRef:  "thread:" + threadID,
+		ThreadID:    threadID,
+		MessageKind: "thread_message",
+	}
+}
+
 func applyReplyToMessageBody(body map[string]any, replyToEventID string) {
 	event := asMap(body["event"])
 	if event == nil {
@@ -776,6 +805,29 @@ func (a *App) readMessageText(body string, bodyFile string, commandName string) 
 		return string(stdin), nil
 	}
 	return "", errnorm.Usage("invalid_request", fmt.Sprintf("message body is required for `anx %s`; use --body, --body-file, or pipe text on stdin", commandName))
+}
+
+func (a *App) readExplicitMessageText(body string, bodyFile string, commandName string) (string, error) {
+	body = strings.TrimSpace(body)
+	bodyFile = strings.TrimSpace(bodyFile)
+	if body != "" && bodyFile != "" {
+		return "", errnorm.Usage("invalid_request", fmt.Sprintf("provide only one of --body or --body-file for `anx %s`", commandName))
+	}
+	if body != "" {
+		return body, nil
+	}
+	if bodyFile != "" {
+		content, err := a.readRawFile(bodyFile)
+		if err != nil {
+			return "", err
+		}
+		text := string(content)
+		if strings.TrimSpace(text) == "" {
+			return "", errnorm.Usage("invalid_request", fmt.Sprintf("message body file is empty for `anx %s`", commandName))
+		}
+		return text, nil
+	}
+	return "", errnorm.Usage("invalid_request", fmt.Sprintf("message body is required for `anx %s`; use --body or --body-file", commandName))
 }
 
 func (a *App) decorateMessageWriteResult(result *commandResult, callErr error, cfg config.Resolved, commandID string, card map[string]any) *commandResult {

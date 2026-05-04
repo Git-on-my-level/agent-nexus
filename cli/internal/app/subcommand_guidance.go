@@ -165,7 +165,7 @@ var boardsSubcommandSpec = subcommandSpec{
 var boardsCardsSubcommandSpec = subcommandSpec{
 	command:  "boards cards",
 	valid:    []string{"list", "create", "create-batch", "get", "patch", "move", "archive"},
-	examples: []string{"anx cards create --board <board-id> --title \"Buy groceries\" --content-file card.md", "anx cards message <card-id> --body-file update.md", "anx cards move --card <card-id> --column review", "anx cards resolve --card <card-id> --resolution-ref event:<event-id>", "anx boards cards list <board-id>", "anx boards cards get <board-id> <card-id>", "anx boards cards create-batch --board-id <board-id> --from-file batch.json"},
+	examples: []string{"anx cards create --board <board-id> --title \"Buy groceries\" --content-file card.md", "anx cards message <card-id> --body-file update.md", "anx cards move --card <card-id> --column review", "anx cards resolve --card <card-id> --body-file evidence.md", "anx boards cards list <board-id>", "anx boards cards get <board-id> <card-id>", "anx boards cards create-batch --board-id <board-id> --from-file batch.json"},
 }
 
 var docsSubcommandSpec = subcommandSpec{

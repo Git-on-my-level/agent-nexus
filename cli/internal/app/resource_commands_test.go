@@ -2541,6 +2541,123 @@ func TestCardsFileFirstWorkflowCommands(t *testing.T) {
 	}
 }
 
+func TestCardsResolveBodyPostsEvidenceBeforeMove(t *testing.T) {
+	t.Parallel()
+
+	const (
+		cardID       = "card_resolve_body_123456"
+		boardID      = "board_resolve_body_123456"
+		threadID     = "thread_resolve_body_123456"
+		eventID      = "event_resolve_body_123456"
+		cardUpdated  = "2026-04-21T00:00:00Z"
+		boardUpdated = "2026-04-21T00:05:00Z"
+		profileActor = "actor_resolve_body"
+	)
+
+	var postedEvidence, moved bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/cards/"+cardID:
+			_, _ = w.Write([]byte(`{"card":{"id":"` + cardID + `","board_id":"` + boardID + `","board_ref":"board:` + boardID + `","title":"Resolve body","thread_id":"` + threadID + `","updated_at":"` + cardUpdated + `"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/boards/"+boardID:
+			_, _ = w.Write([]byte(`{"board":{"id":"` + boardID + `","updated_at":"` + boardUpdated + `"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/events":
+			if moved {
+				t.Fatalf("expected evidence event before card move")
+			}
+			var posted map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&posted); err != nil {
+				t.Fatalf("decode evidence body: %v", err)
+			}
+			assertMessagePostedMutation(t, posted, profileActor, threadID, []string{"card:" + cardID, "thread:" + threadID, "board:" + boardID}, "Evidence from disk.")
+			postedEvidence = true
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"event":{"id":"` + eventID + `","type":"message_posted","thread_id":"` + threadID + `"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/cards/"+cardID+"/move":
+			if !postedEvidence {
+				t.Fatalf("expected card resolve to post evidence before move")
+			}
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode move body: %v", err)
+			}
+			refs := asSlice(payload["resolution_refs"])
+			if len(refs) != 1 || anyStringValue(refs[0]) != "event:"+eventID {
+				t.Fatalf("expected posted evidence ref, got %#v", payload)
+			}
+			if got := anyStringValue(payload["if_board_updated_at"]); got != boardUpdated {
+				t.Fatalf("expected discovered board token %q, got %#v", boardUpdated, payload)
+			}
+			moved = true
+			_, _ = w.Write([]byte(`{"board":{"id":"` + boardID + `","updated_at":"2026-04-21T00:10:00Z"},"card":{"id":"` + cardID + `","board_id":"` + boardID + `","column_key":"done","resolution":"done","resolution_refs":["event:` + eventID + `"]}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-resolve-body", `{"agent":"agent-resolve-body","actor_id":"`+profileActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	evidenceFile := filepath.Join(home, "evidence.md")
+	if err := os.WriteFile(evidenceFile, []byte("Evidence from disk.\n"), 0o600); err != nil {
+		t.Fatalf("write evidence file: %v", err)
+	}
+
+	payload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
+		"--json", "--base-url", server.URL, "--agent", "agent-resolve-body",
+		"cards", "resolve", cardID, "--body-file", evidenceFile,
+	}))
+	if got := anyStringValue(payload["command_id"]); got != "cards.move" {
+		t.Fatalf("expected final cards.move command_id, got %#v", payload)
+	}
+	if !postedEvidence || !moved {
+		t.Fatalf("expected evidence post and move")
+	}
+}
+
+func TestTopicsMessageAcceptsBackingThreadAlias(t *testing.T) {
+	t.Parallel()
+
+	const (
+		threadID     = "thread_topic_alias_123456"
+		profileActor = "actor_topic_alias"
+	)
+
+	var posted bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/events":
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode topics thread message body: %v", err)
+			}
+			assertMessagePostedMutation(t, payload, profileActor, threadID, []string{"thread:" + threadID}, "Thread-scoped reply path.")
+			posted = true
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"event":{"id":"event_topic_alias_123456","type":"message_posted","thread_id":"` + threadID + `"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-topic-alias", `{"agent":"agent-topic-alias","actor_id":"`+profileActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+
+	payload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
+		"--json", "--base-url", server.URL, "--agent", "agent-topic-alias",
+		"topics", "message", "--thread", threadID, "--body", "Thread-scoped reply path.",
+	}))
+	if got := anyStringValue(payload["command_id"]); got != "events.create" {
+		t.Fatalf("expected events.create command_id, got %#v", payload)
+	}
+	if !posted {
+		t.Fatalf("expected event post")
+	}
+}
+
 func TestTopicsBoardsNoJSONAndMessageWorkflow(t *testing.T) {
 	t.Parallel()
 

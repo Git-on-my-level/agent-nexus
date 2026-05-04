@@ -1408,7 +1408,7 @@ Agent-facing Card workflow:
   cards revise             Revise card title/body from `--content-file`; discovers `if_base_revision` when omitted.
   cards move               Move workflow column; discovers the parent board concurrency token when omitted.
   cards assign             Replace or clear assignees.
-  cards resolve            Move to done with resolution evidence refs.
+  cards resolve            Move to done with resolution evidence refs or an evidence body.
   cards reopen             Move a resolved card back to active workflow.
   Tip: use `cards message <card-id> --body-file update.md` for ordinary status updates. Use raw `events create` only for contract-level writes or unusual integrations.
 
@@ -4038,6 +4038,8 @@ Local Help: topics message
 
 Flags:
   --topic <topic-id>           Topic id or unique prefix to message.
+  --thread <thread-id>         Backing thread id for thread-scoped message fallback.
+  --thread-id <thread-id>      Backing thread id for thread-scoped message fallback.
   --body <text>                Message body text.
   --body-file <path>           Load message body text from a local file.
   --summary <text>             Optional short event summary.
@@ -4098,6 +4100,8 @@ Local Help: topics reply
 
 Flags:
   --topic <topic-id>           Topic id or unique prefix to reply on.
+  --thread <thread-id>         Backing thread id for thread-scoped reply fallback.
+  --thread-id <thread-id>      Backing thread id for thread-scoped reply fallback.
   --to <message-id>            Message/event id or unique prefix being replied to.
   --body <text>                Reply body text.
   --body-file <path>           Load reply body text from a local file.
@@ -4467,17 +4471,21 @@ Local Help: cards resolve
 
 - Kind: `local helper`
 - Summary: Resolve a card into the done column with evidence refs.
-- Composition: Builds a focused `cards.move` request that both moves and records terminal resolution evidence.
+- Composition: With `--body` or `--body-file`, posts a card message first and passes its `event:<id>` as terminal resolution evidence.
 - JSON body: `{ column_key: "done", resolution, resolution_refs, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.
 - Examples:
-  - `anx cards resolve --card <card-id> --resolution-ref event:<event-id>`
+  - `anx cards resolve --card <card-id> --body-file evidence.md`
   - `anx cards resolve --card <card-id> --resolution-ref event:<event-id>`
 
 Flags:
   --card <card-id>             Card id or unique prefix to resolve.
   --resolution-ref <typed-ref> Evidence event/artifact typed ref, repeatable.
+  --body <text>                Post inline evidence to the card thread before resolving.
+  --body-file <path>           Load evidence text from a file before resolving.
+  --summary <text>             Optional short evidence event summary.
   --resolution <value>         Resolution value, default done.
   --if-board-updated-at <timestamp> Board optimistic concurrency token; discovered when omitted.
+  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
 
 
 Global flags:

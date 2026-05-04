@@ -78,6 +78,8 @@ var localHelperTopics = []localHelperTopic{
 		},
 		Flags: []localHelperFlag{
 			{Name: "--topic <topic-id>", Description: "Topic id or unique prefix to message."},
+			{Name: "--thread <thread-id>", Description: "Backing thread id for thread-scoped message fallback."},
+			{Name: "--thread-id <thread-id>", Description: "Backing thread id for thread-scoped message fallback."},
 			{Name: "--body <text>", Description: "Message body text."},
 			{Name: "--body-file <path>", Description: "Load message body text from a local file."},
 			{Name: "--summary <text>", Description: "Optional short event summary."},
@@ -114,6 +116,8 @@ var localHelperTopics = []localHelperTopic{
 		},
 		Flags: []localHelperFlag{
 			{Name: "--topic <topic-id>", Description: "Topic id or unique prefix to reply on."},
+			{Name: "--thread <thread-id>", Description: "Backing thread id for thread-scoped reply fallback."},
+			{Name: "--thread-id <thread-id>", Description: "Backing thread id for thread-scoped reply fallback."},
 			{Name: "--to <message-id>", Description: "Message/event id or unique prefix being replied to."},
 			{Name: "--body <text>", Description: "Reply body text."},
 			{Name: "--body-file <path>", Description: "Load reply body text from a local file."},
@@ -340,16 +344,20 @@ var localHelperTopics = []localHelperTopic{
 		Path:        "cards resolve",
 		Summary:     "Resolve a card into the done column with evidence refs.",
 		JSONShape:   "`{ column_key: \"done\", resolution, resolution_refs, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.",
-		Composition: "Builds a focused `cards.move` request that both moves and records terminal resolution evidence.",
+		Composition: "With `--body` or `--body-file`, posts a card message first and passes its `event:<id>` as terminal resolution evidence.",
 		Examples: []string{
-			"anx cards resolve --card <card-id> --resolution-ref event:<event-id>",
+			"anx cards resolve --card <card-id> --body-file evidence.md",
 			"anx cards resolve --card <card-id> --resolution-ref event:<event-id>",
 		},
 		Flags: []localHelperFlag{
 			{Name: "--card <card-id>", Description: "Card id or unique prefix to resolve."},
 			{Name: "--resolution-ref <typed-ref>", Description: "Evidence event/artifact typed ref, repeatable."},
+			{Name: "--body <text>", Description: "Post inline evidence to the card thread before resolving."},
+			{Name: "--body-file <path>", Description: "Load evidence text from a file before resolving."},
+			{Name: "--summary <text>", Description: "Optional short evidence event summary."},
 			{Name: "--resolution <value>", Description: "Resolution value, default done."},
 			{Name: "--if-board-updated-at <timestamp>", Description: "Board optimistic concurrency token; discovered when omitted."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
 		},
 	},
 	{
@@ -969,7 +977,7 @@ Read paths:
   cards revise             Revise card title/body from ` + "`--content-file`" + `; discovers ` + "`if_base_revision`" + ` when omitted.
   cards move               Move workflow column; discovers the parent board concurrency token when omitted.
   cards assign             Replace or clear assignees.
-  cards resolve            Move to done with resolution evidence refs.
+  cards resolve            Move to done with resolution evidence refs or an evidence body.
   cards reopen             Move a resolved card back to active workflow.
   Tip: use ` + "`cards message <card-id> --body-file update.md`" + ` for ordinary status updates. Use raw ` + "`events create`" + ` only for contract-level writes or unusual integrations.`)
 	case "auth":
