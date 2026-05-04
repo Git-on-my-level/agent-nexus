@@ -2,6 +2,11 @@ import { expect, test } from "@playwright/test";
 
 const WS_HOME = "/o/local/w/local";
 
+async function unlockShellWithActor(page, name) {
+  await page.getByLabel("Display name").fill(name);
+  await page.getByRole("button", { name: "Create and continue" }).click();
+}
+
 test("blocks shell with actor gate when no actor is selected", async ({
   page,
 }) => {
@@ -57,11 +62,11 @@ test("renders Home on workspace root and routes into inbox", async ({
   page,
 }) => {
   await page.addInitScript(() => {
-    window.localStorage.setItem("anx_ui_actor_id:local", "actor-ops-ai");
     window.localStorage.setItem("workspaceTourSeen.local", "1");
   });
 
   await page.goto(WS_HOME);
+  await unlockShellWithActor(page, `Home User ${Date.now()}`);
 
   await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
   await expect(
@@ -79,7 +84,6 @@ test("renders Home on workspace root and routes into inbox", async ({
 
 test("shows error when Home unread feed is unavailable", async ({ page }) => {
   await page.addInitScript(() => {
-    window.localStorage.setItem("anx_ui_actor_id:local", "actor-ops-ai");
     window.localStorage.setItem("workspaceTourSeen.local", "1");
   });
 
@@ -97,6 +101,7 @@ test("shows error when Home unread feed is unavailable", async ({ page }) => {
   });
 
   await page.goto(WS_HOME);
+  await unlockShellWithActor(page, `Outage User ${Date.now()}`);
 
   await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
   await expect(page.getByRole("alert")).toBeVisible();
@@ -105,11 +110,11 @@ test("shows error when Home unread feed is unavailable", async ({ page }) => {
 test("mobile bottom navigation switches workspace routes", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.addInitScript(() => {
-    window.localStorage.setItem("anx_ui_actor_id:local", "actor-ops-ai");
     window.localStorage.setItem("workspaceTourSeen.local", "1");
   });
 
   await page.goto(`${WS_HOME}/inbox`);
+  await unlockShellWithActor(page, `Mobile User ${Date.now()}`);
 
   const bottomNav = page.getByRole("navigation", {
     name: "Primary navigation",
@@ -119,5 +124,10 @@ test("mobile bottom navigation switches workspace routes", async ({ page }) => {
   await expect(page).toHaveURL(/\/o\/local\/w\/local\/topics$/);
   await expect(
     page.getByRole("heading", { name: "Topics", exact: true }),
+  ).toBeVisible();
+
+  await bottomNav.getByRole("button", { name: "Search workspace" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Command palette" }),
   ).toBeVisible();
 });
