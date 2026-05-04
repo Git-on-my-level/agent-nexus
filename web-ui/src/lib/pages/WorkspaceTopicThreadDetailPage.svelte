@@ -402,7 +402,7 @@
           {workspaceSlug}
           useParentTimelineContext={true}
           onMessagePost={handleMessagePost}
-          pinComposerAlignThreadEnd={true}
+          pinComposerAlignThreadEnd={false}
           narrowEdgeToEdge
           emptyMessage={`Everything about ${topic.title || "this topic"} lives here. Post a message to start the conversation. Docs and Boards you link to this topic appear in their tabs.`}
         />

@@ -87,9 +87,6 @@
 <HostedNarrowLayout>
   <div class="rounded-md border border-line bg-bg-soft px-6 py-6">
     <h1 class="text-display text-fg">Welcome back</h1>
-    <p class="mt-1.5 text-meta text-fg-subtle">
-      Hosted sign-in uses Google or GitHub only.
-    </p>
 
     <div class="mt-5 space-y-3">
       <Button
