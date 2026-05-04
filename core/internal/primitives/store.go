@@ -2549,6 +2549,12 @@ func (s *Store) ListHomeUnread(ctx context.Context, readerID string) ([]HomeUnre
 	}
 	sinceBoundOK, sinceTS, sinceExclusiveID := homeUnreadSinceLowerBound(lookup.groupByRef, cursorByGroup)
 
+	// NOTE: homeUnreadSinceLowerBound returns false when any group lacks a cursor.
+	// This is correct — groups without cursors need all their events scanned (all are
+	// unread), so no since-bound pruning is safe until every active group has been
+	// marked read at least once. The optimization activates after the first "Mark all
+	// read" for the current set of active groups.
+
 	groupByRef := map[string]*HomeUnreadGroup{}
 	for cursor := ""; ; {
 		f := EventListFilter{Preset: "home_feed", Limit: 200, Cursor: cursor}
@@ -2667,15 +2673,10 @@ func (s *Store) MarkHomeReadAt(ctx context.Context, readerID string, groupRefs [
 }
 
 func (s *Store) newestHomeEventForGroup(ctx context.Context, groupRef string) (map[string]any, error) {
-	f := EventListFilter{Preset: "home_feed", Limit: 1}
 	prefix, id, _ := schema.SplitTypedRef(groupRef)
 	switch prefix {
 	case "topic":
-		f.TopicID = id
-	case "thread":
-		f.ThreadID = id
-	default:
-		events, err := s.ListEvents(ctx, f)
+		events, err := s.ListEvents(ctx, EventListFilter{Preset: "home_feed", TopicID: id, Limit: 1})
 		if err != nil {
 			return nil, err
 		}
@@ -2683,15 +2684,76 @@ func (s *Store) newestHomeEventForGroup(ctx context.Context, groupRef string) (m
 			return nil, nil
 		}
 		return events[0], nil
+	case "thread":
+		events, err := s.ListEvents(ctx, EventListFilter{Preset: "home_feed", ThreadID: id, Limit: 1})
+		if err != nil {
+			return nil, err
+		}
+		if len(events) == 0 {
+			return nil, nil
+		}
+		return events[0], nil
+	default:
+		return s.newestHomeEventForRef(ctx, groupRef)
 	}
-	events, err := s.ListEvents(ctx, f)
+}
+
+func (s *Store) newestHomeEventForRef(ctx context.Context, ref string) (map[string]any, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json,
+			archived_at, archived_by, trashed_at, trashed_by, trash_reason
+		FROM events
+		WHERE COALESCE(trashed_at, '') = ''
+			AND type IN (`+homeFeedTypePlaceholders()+`)
+			AND EXISTS (SELECT 1 FROM json_each(events.refs_json) WHERE json_each.value = ?)
+		ORDER BY ts DESC, id DESC LIMIT 1`,
+		appendHomeFeedTypeArgs([]any{ref})...)
+	if err != nil {
+		return nil, fmt.Errorf("query newest home event for ref %s: %w", ref, err)
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		return nil, rows.Err()
+	}
+	var (
+		eventID     string
+		typeValue   string
+		ts          string
+		actorID     string
+		thread      sql.NullString
+		refsJSON    string
+		payloadJSON string
+		archivedAt  sql.NullString
+		archivedBy  sql.NullString
+		trashedAt   sql.NullString
+		trashedBy   sql.NullString
+		trashReason sql.NullString
+	)
+	if err := rows.Scan(&eventID, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON,
+		&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason); err != nil {
+		return nil, fmt.Errorf("scan newest home event for ref %s: %w", ref, err)
+	}
+	body, err := decodeEventBodyFromRow(eventID, typeValue, ts, actorID, thread, refsJSON, payloadJSON)
 	if err != nil {
 		return nil, err
 	}
-	if len(events) == 0 {
-		return nil, nil
+	overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, trashedAt, trashedBy, trashReason)
+	return body, rows.Err()
+}
+
+func homeFeedTypePlaceholders() string {
+	placeholders := make([]string, len(HomeFeedEventTypes))
+	for i := range HomeFeedEventTypes {
+		placeholders[i] = "?"
 	}
-	return events[0], nil
+	return strings.Join(placeholders, ",")
+}
+
+func appendHomeFeedTypeArgs(args []any) []any {
+	for _, t := range HomeFeedEventTypes {
+		args = append(args, t)
+	}
+	return args
 }
 
 type homeReadCursor struct {
@@ -2726,14 +2788,12 @@ type homeGroupMeta struct {
 type homeGroupLookup struct {
 	groupByRef       map[string]*homeGroupMeta
 	threadToGroupRef map[string]string
-	boardToGroupRef  map[string]string
 }
 
 func (s *Store) homeGroupLookup(ctx context.Context) (*homeGroupLookup, error) {
 	lookup := &homeGroupLookup{
 		groupByRef:       map[string]*homeGroupMeta{},
 		threadToGroupRef: map[string]string{},
-		boardToGroupRef:  map[string]string{},
 	}
 
 	if err := s.loadTopicGroups(ctx, lookup); err != nil {
@@ -2803,7 +2863,6 @@ func (s *Store) loadBoardGroups(ctx context.Context, lookup *homeGroupLookup) er
 		lookup.groupByRef[groupRef] = meta
 		threadID = strings.TrimSpace(threadID)
 		if threadID != "" {
-			lookup.boardToGroupRef[id] = groupRef
 			if _, exists := lookup.threadToGroupRef[threadID]; !exists {
 				lookup.threadToGroupRef[threadID] = groupRef
 			}
