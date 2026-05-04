@@ -217,6 +217,44 @@ func TestPrimitivesCRUDRoundTrip(t *testing.T) {
 	}
 }
 
+func TestWriteHandlersRejectTrailingJSONBody(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
+
+	createTrailingResp := postJSONExpectStatus(t, h.baseURL+"/topics", `{
+		"actor_id":"actor-1",
+		"topic":{"title":"Trailing JSON create","summary":"Create body","owner_refs":[],"document_refs":[],"board_refs":[],"related_refs":[],"provenance":{"sources":["inferred"]}}
+	}{"ignored":true}`, http.StatusBadRequest)
+	defer createTrailingResp.Body.Close()
+	assertErrorCode(t, createTrailingResp, "invalid_json")
+
+	createResp := postJSONExpectStatus(t, h.baseURL+"/topics", `{
+		"actor_id":"actor-1",
+		"topic":{"title":"Patch target","summary":"Patch target","owner_refs":[],"document_refs":[],"board_refs":[],"related_refs":[],"provenance":{"sources":["inferred"]}}
+	}`, http.StatusCreated)
+	defer createResp.Body.Close()
+
+	var created struct {
+		Topic map[string]any `json:"topic"`
+	}
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode created topic: %v", err)
+	}
+	topicID := asString(created.Topic["id"])
+	if topicID == "" {
+		t.Fatalf("expected created topic id, got %#v", created.Topic)
+	}
+
+	patchTrailingResp := requestJSONExpectStatus(t, http.MethodPatch, h.baseURL+"/topics/"+topicID, `{
+		"actor_id":"actor-1",
+		"patch":{"summary":"patched"}
+	}{"ignored":true}`, http.StatusBadRequest)
+	defer patchTrailingResp.Body.Close()
+	assertErrorCode(t, patchTrailingResp, "invalid_json")
+}
+
 func TestMarkdownHygieneNormalizesEventAndIdempotencyReplay(t *testing.T) {
 	t.Parallel()
 
