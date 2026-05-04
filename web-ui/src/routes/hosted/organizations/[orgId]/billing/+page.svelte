@@ -15,6 +15,7 @@
     billingSnapshotExpired,
     billingSnapshotMatchesSummary,
     clearBillingSnapshot,
+    pollBillingActivation,
     readBillingSnapshot,
     stripeSubscriptionManagedClient,
     writeBillingSnapshot,
@@ -41,6 +42,7 @@
   let activatingBanner = $state(false);
   let activationTimedOut = $state(false);
   let pollStop = $state(() => {});
+  let loadRunId = $state(0);
   let upgradeBusy = $state("");
   let roleRetryBusy = $state(false);
 
@@ -108,13 +110,23 @@
     }
   }
 
-  async function fetchBillingSummary() {
+  function stopActivationPoll() {
+    pollStop();
+    pollStop = () => {};
+  }
+
+  async function fetchBillingSummary(
+    targetOrgId = orgId,
+    { redirectUnauthorized = true } = {},
+  ) {
     const res = await hostedCpFetch(
-      `organizations/${encodeURIComponent(orgId)}/billing`,
+      `organizations/${encodeURIComponent(targetOrgId)}/billing`,
     );
     if (res.status === 401) {
-      await goto("/hosted/start");
-      return null;
+      if (redirectUnauthorized) {
+        await goto("/hosted/start");
+      }
+      return { unauthorized: true };
     }
     if (res.status === 403) {
       return { forbidden: true };
@@ -126,14 +138,14 @@
     return { summary: body.summary ?? null };
   }
 
-  async function loadManagers() {
+  async function loadManagers(targetOrgId = orgId) {
     const res = await hostedCpFetch(
-      `organizations/${encodeURIComponent(orgId)}/memberships?limit=200`,
+      `organizations/${encodeURIComponent(targetOrgId)}/memberships?limit=200`,
     );
-    if (!res.ok) return;
+    if (!res.ok) return [];
     const body = await res.json();
     const items = body.memberships ?? [];
-    managers = items.filter(
+    return items.filter(
       (m) =>
         String(m.status ?? "") === "active" &&
         (m.role === "owner" || m.role === "admin"),
@@ -141,18 +153,32 @@
   }
 
   async function load() {
+    const loadOrgId = orgId;
+    const runId = ++loadRunId;
+    const isCurrent = () => runId === loadRunId && orgId === loadOrgId;
+
     role = "loading";
     message = "";
     summary = null;
+    managers = [];
     activationTimedOut = false;
     activatingBanner = false;
-    pollStop();
+    stopActivationPoll();
 
-    const got = await fetchBillingSummary();
+    const got = await fetchBillingSummary(loadOrgId, {
+      redirectUnauthorized: false,
+    });
+    if (!isCurrent()) return;
+    if (got?.unauthorized) {
+      await goto("/hosted/start");
+      return;
+    }
     if (!got) return;
     if (got.forbidden) {
       role = "member";
-      await loadManagers();
+      const nextManagers = await loadManagers(loadOrgId);
+      if (!isCurrent()) return;
+      managers = nextManagers;
       return;
     }
     if (got.error) {
@@ -162,7 +188,7 @@
     }
     summary = got.summary;
     role = "manager";
-    await maybeRunActivationPoll(got.summary);
+    await maybeRunActivationPoll(got.summary, loadOrgId, isCurrent);
   }
 
   async function retryLoad() {
@@ -171,54 +197,61 @@
     roleRetryBusy = false;
   }
 
-  /** @param {any} initialSummary */
-  async function maybeRunActivationPoll(initialSummary) {
+  /**
+   * @param {any} initialSummary
+   * @param {string} loadOrgId
+   * @param {() => boolean} isCurrent
+   */
+  async function maybeRunActivationPoll(initialSummary, loadOrgId, isCurrent) {
     if (!browser) return;
     if (!isActivatingCheckoutFromUrl()) return;
-    const snap = readBillingSnapshot(orgId);
+    const snap = readBillingSnapshot(loadOrgId);
     if (!snap || billingSnapshotExpired(snap)) {
       stripActivatingQuery();
       return;
     }
     if (billingSnapshotMatchesSummary(snap, initialSummary)) {
-      clearBillingSnapshot(orgId);
+      clearBillingSnapshot(loadOrgId);
       activatingBanner = false;
       stripActivatingQuery();
       return;
     }
 
     activatingBanner = true;
-    let cancelled = false;
-    pollStop = () => {
-      cancelled = true;
-    };
+    const pollController = new AbortController();
+    pollStop = () => pollController.abort();
 
-    const delays = billingPollScheduleDelays();
-    for (let i = 0; i < delays.length && !cancelled; i++) {
-      await new Promise((r) => setTimeout(r, delays[i]));
-      if (
+    const pollResult = await pollBillingActivation({
+      snapshot: snap,
+      initialSummary,
+      signal: pollController.signal,
+      delays: billingPollScheduleDelays(),
+      fetchBillingSummary: () =>
+        fetchBillingSummary(loadOrgId, { redirectUnauthorized: false }),
+      documentHidden: () =>
         typeof document !== "undefined" &&
-        document.visibilityState === "hidden"
-      ) {
-        cancelled = true;
-        activatingBanner = false;
-        break;
-      }
-      const next = await fetchBillingSummary();
-      if (!next || next.forbidden || next.error || !next.summary) {
-        break;
-      }
-      summary = next.summary;
-      if (billingSnapshotMatchesSummary(snap, next.summary)) {
-        clearBillingSnapshot(orgId);
+        document.visibilityState === "hidden",
+      onSummary: (nextSummary) => {
+        if (!isCurrent()) return;
+        summary = nextSummary;
+      },
+      onMatched: () => {
+        if (!isCurrent()) return;
+        clearBillingSnapshot(loadOrgId);
         activatingBanner = false;
         stripActivatingQuery();
-        return;
-      }
-    }
-
-    if (!cancelled) {
-      activationTimedOut = true;
+      },
+      onHidden: () => {
+        if (!isCurrent()) return;
+        activatingBanner = false;
+      },
+      onTimeout: () => {
+        if (!isCurrent()) return;
+        activationTimedOut = true;
+      },
+    });
+    if (pollResult === "unauthorized" && isCurrent()) {
+      await goto("/hosted/start");
     }
   }
 
@@ -236,6 +269,10 @@
     untrack(() => {
       void load();
     });
+    return () => {
+      loadRunId += 1;
+      stopActivationPoll();
+    };
   });
 
   async function checkoutPlan(planTier) {

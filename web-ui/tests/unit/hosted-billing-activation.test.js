@@ -5,9 +5,18 @@ import {
   billingSnapshotExpired,
   billingSnapshotMatchesSummary,
   clearBillingSnapshot,
+  pollBillingActivation,
   readBillingSnapshot,
   writeBillingSnapshot,
 } from "../../src/lib/hosted/billingActivation.js";
+
+function deferred() {
+  let resolve;
+  const promise = new Promise((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
 
 describe("billing activation snapshot", () => {
   beforeEach(() => {
@@ -78,5 +87,87 @@ describe("billing poll schedule", () => {
     expect(billingPollScheduleDelays()).toEqual([
       2000, 3000, 4500, 6750, 10000, 10000,
     ]);
+  });
+});
+
+describe("billing activation poll", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("stops delayed polling when cleanup aborts the run", async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const fetchBillingSummary = vi.fn();
+    const onSummary = vi.fn();
+    const onTimeout = vi.fn();
+
+    const poll = pollBillingActivation({
+      snapshot: {
+        plan_tier: "starter",
+        stripe_subscription_status: "not_started",
+      },
+      initialSummary: {
+        plan_tier: "starter",
+        billing_account: { stripe_subscription_status: "not_started" },
+      },
+      fetchBillingSummary,
+      signal: controller.signal,
+      delays: [1000],
+      documentHidden: () => false,
+      onSummary,
+      onTimeout,
+    });
+
+    await vi.advanceTimersByTimeAsync(500);
+    controller.abort();
+    await vi.advanceTimersByTimeAsync(1000);
+
+    await expect(poll).resolves.toBe("aborted");
+    expect(fetchBillingSummary).not.toHaveBeenCalled();
+    expect(onSummary).not.toHaveBeenCalled();
+    expect(onTimeout).not.toHaveBeenCalled();
+  });
+
+  it("does not mutate summary when cleanup aborts an in-flight fetch", async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const slowFetch = deferred();
+    const onSummary = vi.fn();
+    const onTimeout = vi.fn();
+    const fetchBillingSummary = vi.fn(() => slowFetch.promise);
+
+    const poll = pollBillingActivation({
+      snapshot: {
+        plan_tier: "starter",
+        stripe_subscription_status: "not_started",
+      },
+      initialSummary: {
+        plan_tier: "starter",
+        billing_account: { stripe_subscription_status: "not_started" },
+      },
+      fetchBillingSummary,
+      signal: controller.signal,
+      delays: [1],
+      documentHidden: () => false,
+      onSummary,
+      onTimeout,
+    });
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetchBillingSummary).toHaveBeenCalledTimes(1);
+
+    controller.abort();
+    slowFetch.resolve({
+      summary: {
+        plan_tier: "team",
+        billing_account: { stripe_subscription_status: "active" },
+      },
+    });
+
+    await expect(poll).resolves.toBe("aborted");
+    expect(onSummary).not.toHaveBeenCalled();
+    expect(onTimeout).not.toHaveBeenCalled();
   });
 });
