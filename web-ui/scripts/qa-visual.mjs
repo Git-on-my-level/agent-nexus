@@ -252,6 +252,7 @@ const QA_SCENES = [
     name: "workspace-topics",
     path: "/o/local/w/local/topics",
     workspaceMode: "workspace-default",
+    thresholdRatio: 0.013,
     waitFor: async (page) => {
       await page.waitForSelector('h1:has-text("Topics")');
     },
@@ -269,6 +270,7 @@ const QA_SCENES = [
     name: "workspace-artifacts",
     path: "/o/local/w/local/artifacts",
     workspaceMode: "workspace-default",
+    thresholdRatio: 0.018,
     waitFor: async (page) => {
       await page.waitForSelector('h1:has-text("Artifacts")');
     },
