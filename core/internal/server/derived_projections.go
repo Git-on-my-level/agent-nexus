@@ -186,9 +186,6 @@ func listDerivedTopicProjections(ctx context.Context, opts handlerOptions, threa
 }
 
 func rebuildDerivedProjections(ctx context.Context, opts handlerOptions, now time.Time, actorID string) error {
-	if _, err := emitStaleThreadExceptions(ctx, opts, now, actorID); err != nil {
-		return err
-	}
 	threads, _, err := opts.primitiveStore.ListThreads(ctx, primitives.ThreadListFilter{})
 	if err != nil {
 		return err

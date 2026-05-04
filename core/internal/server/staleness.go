@@ -1,23 +1,9 @@
 package server
 
 import (
-	"context"
 	"strings"
 	"time"
 )
-
-func emitStaleThreadExceptions(ctx context.Context, opts handlerOptions, now time.Time, actorID string) ([]string, error) {
-	if opts.primitiveStore == nil {
-		return nil, nil
-	}
-	_ = ctx
-	_ = opts
-	_ = now
-	_ = actorID
-	// Dumb-thread model: do not infer staleness from cadence / next_check_in_at in thread JSON.
-	// Reminders belong in a future automation policy resource, not backing-thread bodies.
-	return nil, nil
-}
 
 func latestThreadActivityFromEvents(events []map[string]any) map[string]time.Time {
 	out := make(map[string]time.Time)

@@ -14,21 +14,19 @@ import (
 
 const (
 	defaultProjectionMaintenancePollInterval = 5 * time.Second
-	defaultProjectionStaleScanInterval       = 30 * time.Second
 	defaultProjectionMaintenanceBatchSize    = 50
 	ProjectionModeBackground                 = "background"
 	ProjectionModeManual                     = "manual"
 )
 
 type ProjectionMaintainerConfig struct {
-	PrimitiveStore    PrimitiveStore
-	Contract          *schema.Contract
-	InboxRiskHorizon  time.Duration
-	PollInterval      time.Duration
-	StaleScanInterval time.Duration
-	DirtyBatchSize    int
-	SystemActorID     string
-	Mode              string
+	PrimitiveStore   PrimitiveStore
+	Contract         *schema.Contract
+	InboxRiskHorizon time.Duration
+	PollInterval     time.Duration
+	DirtyBatchSize   int
+	SystemActorID    string
+	Mode             string
 }
 
 type ProjectionMaintenanceErrorSnapshot struct {
@@ -38,22 +36,20 @@ type ProjectionMaintenanceErrorSnapshot struct {
 }
 
 type ProjectionMaintenanceSnapshot struct {
-	Mode                      string                              `json:"mode"`
-	PendingDirtyCount         int                                 `json:"pending_dirty_count"`
-	OldestDirtyAt             string                              `json:"oldest_dirty_at,omitempty"`
-	OldestDirtyLagSeconds     int64                               `json:"oldest_dirty_lag_seconds,omitempty"`
-	LastSuccessfulStaleScanAt string                              `json:"last_successful_stale_scan_at,omitempty"`
-	LastError                 *ProjectionMaintenanceErrorSnapshot `json:"last_error,omitempty"`
+	Mode                  string                              `json:"mode"`
+	PendingDirtyCount     int                                 `json:"pending_dirty_count"`
+	OldestDirtyAt         string                              `json:"oldest_dirty_at,omitempty"`
+	OldestDirtyLagSeconds int64                               `json:"oldest_dirty_lag_seconds,omitempty"`
+	LastError             *ProjectionMaintenanceErrorSnapshot `json:"last_error,omitempty"`
 }
 
 type ProjectionMaintainer struct {
-	opts              handlerOptions
-	mode              string
-	pollInterval      time.Duration
-	staleScanInterval time.Duration
-	dirtyBatchSize    int
-	systemActorID     string
-	notifyCh          chan struct{}
+	opts           handlerOptions
+	mode           string
+	pollInterval   time.Duration
+	dirtyBatchSize int
+	systemActorID  string
+	notifyCh       chan struct{}
 
 	stepMu  sync.Mutex
 	stateMu sync.RWMutex
@@ -61,9 +57,7 @@ type ProjectionMaintainer struct {
 }
 
 type projectionMaintenanceState struct {
-	lastSuccessfulStaleScanAt time.Time
-	lastStaleScanAttemptAt    time.Time
-	lastError                 *ProjectionMaintenanceErrorSnapshot
+	lastError *ProjectionMaintenanceErrorSnapshot
 }
 
 func ParseProjectionMode(raw string) (string, error) {
@@ -90,10 +84,6 @@ func NewProjectionMaintainer(config ProjectionMaintainerConfig) *ProjectionMaint
 	if pollInterval <= 0 {
 		pollInterval = defaultProjectionMaintenancePollInterval
 	}
-	staleScanInterval := config.StaleScanInterval
-	if staleScanInterval <= 0 {
-		staleScanInterval = defaultProjectionStaleScanInterval
-	}
 	dirtyBatchSize := config.DirtyBatchSize
 	if dirtyBatchSize <= 0 {
 		dirtyBatchSize = defaultProjectionMaintenanceBatchSize
@@ -105,12 +95,11 @@ func NewProjectionMaintainer(config ProjectionMaintainerConfig) *ProjectionMaint
 			contract:         config.Contract,
 			inboxRiskHorizon: config.InboxRiskHorizon,
 		},
-		mode:              mode,
-		pollInterval:      pollInterval,
-		staleScanInterval: staleScanInterval,
-		dirtyBatchSize:    dirtyBatchSize,
-		systemActorID:     firstNonEmptyString(strings.TrimSpace(config.SystemActorID), actors.SystemActorID),
-		notifyCh:          make(chan struct{}, 1),
+		mode:           mode,
+		pollInterval:   pollInterval,
+		dirtyBatchSize: dirtyBatchSize,
+		systemActorID:  firstNonEmptyString(strings.TrimSpace(config.SystemActorID), actors.SystemActorID),
+		notifyCh:       make(chan struct{}, 1),
 	}
 }
 
@@ -157,22 +146,14 @@ func (m *ProjectionMaintainer) Step(ctx context.Context, now time.Time) error {
 	m.stepMu.Lock()
 	defer m.stepMu.Unlock()
 
-	var firstErr error
-	ranStaleScan := false
-	if m.shouldRunStaleScan(now) {
-		ranStaleScan = true
-		if err := m.runStaleScan(ctx, now); err != nil {
-			firstErr = err
-		}
-	}
 	processed, err := m.processDirtyQueue(ctx, now)
-	if err != nil && firstErr == nil {
-		firstErr = err
+	if err != nil {
+		return err
 	}
-	if firstErr == nil && (ranStaleScan || processed > 0) {
+	if processed > 0 {
 		m.clearError()
 	}
-	return firstErr
+	return nil
 }
 
 func (m *ProjectionMaintainer) RunFullRebuild(ctx context.Context, now time.Time, actorID string) error {
@@ -187,27 +168,15 @@ func (m *ProjectionMaintainer) RunFullRebuild(ctx context.Context, now time.Time
 	defer m.stepMu.Unlock()
 
 	actorID = firstNonEmptyString(actorID, m.systemActorID)
-	emittedThreadIDs, err := emitStaleThreadExceptions(ctx, m.opts, now, actorID)
-	if err != nil {
-		m.recordError("stale_scan", now, err)
-		return fmt.Errorf("run stale scan: %w", err)
-	}
-
 	allThreadIDs, err := m.loadAllThreadIDs(ctx)
 	if err != nil {
 		m.recordError("list_threads", now, err)
 		return fmt.Errorf("list threads for full rebuild: %w", err)
 	}
-	if err := markTopicProjectionsDirty(ctx, m.opts, now, append(allThreadIDs, emittedThreadIDs...)...); err != nil {
+	if err := markTopicProjectionsDirty(ctx, m.opts, now, allThreadIDs...); err != nil {
 		m.recordError("mark_dirty", now, err)
 		return fmt.Errorf("mark projections dirty for full rebuild: %w", err)
 	}
-
-	m.stateMu.Lock()
-	m.state.lastStaleScanAttemptAt = now
-	m.state.lastSuccessfulStaleScanAt = now
-	m.state.lastError = nil
-	m.stateMu.Unlock()
 
 	for {
 		processed, err := m.processDirtyQueue(ctx, now)
@@ -246,41 +215,11 @@ func (m *ProjectionMaintainer) Snapshot(ctx context.Context, now time.Time) Proj
 
 	m.stateMu.RLock()
 	defer m.stateMu.RUnlock()
-	snapshot.LastSuccessfulStaleScanAt = formatOptionalTime(m.state.lastSuccessfulStaleScanAt)
 	if m.state.lastError != nil {
 		copy := *m.state.lastError
 		snapshot.LastError = &copy
 	}
 	return snapshot
-}
-
-func (m *ProjectionMaintainer) shouldRunStaleScan(now time.Time) bool {
-	m.stateMu.RLock()
-	lastAttempt := m.state.lastStaleScanAttemptAt
-	m.stateMu.RUnlock()
-	return lastAttempt.IsZero() || now.Sub(lastAttempt) >= m.staleScanInterval
-}
-
-func (m *ProjectionMaintainer) runStaleScan(ctx context.Context, now time.Time) error {
-	m.stateMu.Lock()
-	m.state.lastStaleScanAttemptAt = now
-	m.stateMu.Unlock()
-
-	threadIDs, err := emitStaleThreadExceptions(ctx, m.opts, now, m.systemActorID)
-	if err != nil {
-		m.recordError("stale_scan", now, err)
-		return fmt.Errorf("run stale scan: %w", err)
-	}
-	if err := markTopicProjectionsDirty(ctx, m.opts, now, threadIDs...); err != nil {
-		m.recordError("mark_dirty", now, err)
-		return fmt.Errorf("mark stale threads dirty: %w", err)
-	}
-
-	m.stateMu.Lock()
-	m.state.lastSuccessfulStaleScanAt = now
-	m.state.lastError = nil
-	m.stateMu.Unlock()
-	return nil
 }
 
 func (m *ProjectionMaintainer) processDirtyQueue(ctx context.Context, now time.Time) (int, error) {

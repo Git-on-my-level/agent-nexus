@@ -22,13 +22,12 @@ Configuration:
 | Variable | Purpose | Default |
 |---|---|---|
 | `ANX_PROJECTION_MAINTENANCE_INTERVAL` | Loop tick | `5s` |
-| `ANX_PROJECTION_STALE_SCAN_INTERVAL` | Full stale scan | `30s` |
 | `ANX_PROJECTION_MAINTENANCE_BATCH_SIZE` | Projections per tick | `50` |
 
 Behavior:
 - Writes queue dirty projection records
 - Background loop picks up dirty work every interval
-- Stale scan catches projections that missed incremental updates
+- Explicit rebuild can repair projections that missed incremental dirty markers
 - Eventual consistency: projections may lag briefly behind canonical state
 
 Health monitoring via `/ops/health`:
@@ -40,7 +39,6 @@ Health monitoring via `/ops/health`:
     "pending_dirty_count": 3,
     "oldest_dirty_at": "2026-03-24T10:00:00Z",
     "oldest_dirty_lag_seconds": 12,
-    "last_successful_stale_scan_at": "2026-03-24T10:05:00Z",
     "last_error": null
   }
 }
@@ -189,12 +187,10 @@ High-write workloads may benefit from:
 
 - Lower `ANX_PROJECTION_MAINTENANCE_INTERVAL` (more frequent ticks)
 - Higher `ANX_PROJECTION_MAINTENANCE_BATCH_SIZE` (more work per tick)
-- Lower `ANX_PROJECTION_STALE_SCAN_INTERVAL` (more aggressive stale detection)
 
 Trade-offs:
 - Lower intervals = more CPU, faster catch-up
 - Higher batch size = longer tick duration, more memory per tick
-- Lower stale scan interval = more background work, fewer missed projections
 
 Monitor `/ops/health` after tuning. Target is steady-state with `pending_dirty_count` near zero.
 
