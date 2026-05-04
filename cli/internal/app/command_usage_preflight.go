@@ -390,6 +390,20 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 		"notifications dismiss": {
 			"wakeup-id": valueFlag,
 		},
+		"secret create": {
+			"from-stdin":  boolFlag,
+			"description": valueFlag,
+		},
+		"secret get": {
+			"reveal": boolFlag,
+		},
+		"secret update": {
+			"from-stdin":  boolFlag,
+			"description": valueFlag,
+		},
+		"secret exec": {
+			"secret": valueFlag,
+		},
 		"import scan": {
 			"input":                valueFlag,
 			"out":                  valueFlag,
