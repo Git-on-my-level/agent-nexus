@@ -17,3 +17,10 @@ repos:
         pass_filenames: false
         always_run: true
         stages: [pre-push]
+      - id: hosted-smoke-script-audit
+        name: Hosted smoke script audit
+        entry: make hosted-smoke-script-audit
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]

@@ -25,7 +25,7 @@ DEV_SEED_SCENARIO ?= game-dev-studio
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup check serve lint test format contract-gen contract-check contract-check-committed workflow-check version-sync version-check e2e-smoke hosted-smoke hosted-ops-test hosted-ops-smoke cli-check cli-build cli-integration-test scenario-validate dev-profile-homes http-record-test http-record-run http-record-compile http-record-replay bridge-setup bridge-doctor bridge-test release-check release-patch platform-constraints core-% bridge-% web-ui-% web-ui-static-ci
+.PHONY: help setup check serve lint test format contract-gen contract-check contract-check-committed workflow-check version-sync version-check e2e-smoke hosted-smoke hosted-smoke-script-audit hosted-ops-test hosted-ops-smoke cli-check cli-build cli-integration-test scenario-validate dev-profile-homes http-record-test http-record-run http-record-compile http-record-replay bridge-setup bridge-doctor bridge-test release-check release-patch platform-constraints core-% bridge-% web-ui-% web-ui-static-ci
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z0-9_.-]+:.*##/ {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -137,6 +137,8 @@ platform-constraints: ## Check for Unix-only syscalls without build constraints
 release-check: ## Validate release readiness (check + e2e + cross-platform build)
 	$(MAKE) check
 	$(MAKE) e2e-smoke
+	$(MAKE) hosted-smoke
+	$(MAKE) hosted-ops-test
 	./scripts/build-cli-release-artifacts.sh "$(./scripts/read-version.sh)" /tmp/release-test
 
 release-patch: ## Cut and publish a patch release from origin/main (optional: VERSION=vX.Y.Z RELEASE_ARGS='...')
@@ -144,6 +146,9 @@ release-patch: ## Cut and publish a patch release from origin/main (optional: VE
 
 hosted-smoke: ## Run hosted-v1 production smoke suite (auth gate, onboarding, workspace access, staleness)
 	./scripts/hosted-smoke
+
+hosted-smoke-script-audit: ## Fast audit for stale hosted smoke script write routes
+	./scripts/hosted/check-smoke-scripts.sh
 
 hosted-ops-test: ## Run hosted provisioning/backup/restore verification tests
 	./scripts/hosted/test-hosted-ops.sh

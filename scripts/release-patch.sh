@@ -12,8 +12,8 @@ Usage:
 
 Options:
   --version <version>  Override the computed next patch version.
-  --skip-checks        Skip `make check`, `make e2e-smoke`, and `make cli-check`.
-  --no-wait            Do not wait for the GitHub release workflow to finish.
+  --skip-checks        Skip local release checks.
+  --no-wait            Do not wait for GitHub main/release workflows to finish.
   --dry-run            Print the planned version and release base, then exit.
   -h, --help           Show this help text.
 EOF
@@ -70,6 +70,37 @@ find_release_run_id() {
     --json databaseId,headBranch,headSha \
     --jq ".[] | select(.headBranch == \"${target_version}\" and .headSha == \"${target_sha}\") | .databaseId" \
     | head -n1
+}
+
+find_main_workflow_run_id() {
+  local workflow_name="$1"
+  local target_sha="$2"
+
+  gh run list \
+    --workflow "${workflow_name}" \
+    --branch main \
+    --limit 20 \
+    --json databaseId,headSha \
+    --jq ".[] | select(.headSha == \"${target_sha}\") | .databaseId" \
+    | head -n1
+}
+
+wait_for_main_workflow() {
+  local workflow_name="$1"
+  local target_sha="$2"
+  local run_id=""
+
+  for _ in $(seq 1 30); do
+    run_id="$(find_main_workflow_run_id "${workflow_name}" "${target_sha}" || true)"
+    if [[ -n "${run_id}" ]]; then
+      break
+    fi
+    sleep 3
+  done
+
+  [[ -n "${run_id}" ]] || die "could not find ${workflow_name} workflow run on main for ${target_sha}"
+
+  gh run watch "${run_id}" --exit-status
 }
 
 wait_for_release() {
@@ -174,6 +205,8 @@ trap cleanup EXIT
 if [[ "${SKIP_CHECKS}" != "1" ]]; then
   make check
   make e2e-smoke
+  make hosted-smoke
+  make hosted-ops-test
 fi
 
 "${SCRIPT_DIR}/set-version.sh" "${TARGET_VERSION}"
@@ -193,6 +226,15 @@ fi
 "${SCRIPT_DIR}/build-cli-release-artifacts.sh" "${TARGET_VERSION}" ".tmp/release-artifacts-test"
 git commit -m "Prepare release ${TARGET_VERSION}"
 git push origin HEAD:main
+
+if [[ "${WAIT_FOR_RELEASE}" == "1" ]]; then
+  RELEASE_SHA="$(git rev-parse HEAD)"
+  wait_for_main_workflow "CI" "${RELEASE_SHA}"
+  wait_for_main_workflow "System Smokes" "${RELEASE_SHA}"
+else
+  echo "warning: --no-wait skips GitHub main workflow gates; a tag may be published before CI/System Smokes complete" >&2
+fi
+
 git tag -a "${TARGET_VERSION}" -m "Release ${TARGET_VERSION}"
 git push origin "${TARGET_VERSION}"
 
