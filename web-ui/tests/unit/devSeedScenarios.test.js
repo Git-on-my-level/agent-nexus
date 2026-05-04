@@ -119,6 +119,13 @@ describe("dev seed scenarios", () => {
     expect(seed.boards).toHaveLength(3);
     expect(seed.documents).toHaveLength(5);
     expect(seed.cards.length).toBeGreaterThanOrEqual(10);
+    expect(seed.cards.some((card) => card.column_key === "backlog")).toBe(true);
+    expect(seed.cards.some((card) => card.column_key === "done")).toBe(true);
+    expect(
+      Object.values(seed.documentRevisions).every(
+        (revisions) => revisions.length >= 2,
+      ),
+    ).toBe(true);
 
     const messageEvents = seed.events.filter(
       (event) => event.type === "message_posted",
@@ -126,7 +133,7 @@ describe("dev seed scenarios", () => {
     const surfaceCounts = countMessageSurfaces(messageEvents);
     expect(messageEvents.length).toBeGreaterThanOrEqual(100);
     expect(surfaceCounts.topic).toBeGreaterThan(0);
-    expect(surfaceCounts.document).toBeGreaterThan(0);
+    expect(surfaceCounts.document).toBeGreaterThanOrEqual(50);
     expect(surfaceCounts.card).toBeGreaterThan(0);
     expect(surfaceCounts.topicReplies).toBeGreaterThan(0);
     expect(surfaceCounts.documentReplies).toBeGreaterThan(0);

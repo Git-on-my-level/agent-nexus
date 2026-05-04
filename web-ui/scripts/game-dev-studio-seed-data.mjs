@@ -158,6 +158,11 @@ const documents = [
         "Release gate: producer accepts the scope only after QA has a clean smoke pass and all launch-board P0 cards are resolved.",
         "Demo target: 20 minutes, no debug console, capture-ready by Friday noon.",
       ].join("\n"),
+      [
+        "Vertical slice goal: prove tactical combat, hub navigation, one cinematic quest handoff, and capture-safe UI readability.",
+        "Release gate: producer accepts scope after QA has a clean smoke pass, launch-board P0 cards are resolved, and the trailer capture branch has a signed checklist.",
+        "Demo target: 20 minutes, no debug console, capture-ready by Friday noon, with fallback save data staged for demo-day recovery.",
+      ].join("\n"),
     ],
   },
   {
@@ -171,6 +176,11 @@ const documents = [
         "Player verbs: dash, light strike, heavy strike, parry, and tactical pause.",
         "Enemy scout: patrol, investigate, flank, retreat, and callout states.",
         "Feel target: input buffer 120ms, parry window 180ms, hitstop under 80ms.",
+      ].join("\n"),
+      [
+        "Player verbs: dash, light strike, heavy strike, parry, tactical pause, and quick item ping.",
+        "Enemy scout: patrol, investigate, flank, retreat, callout, and scripted capture-path fallback states.",
+        "Feel target: input buffer 120ms, parry window 180ms, hitstop under 80ms, and lock-on retarget under one frame spike.",
       ].join("\n"),
     ],
   },
@@ -186,6 +196,11 @@ const documents = [
         "Tone: grounded banter, precise sci-fi details, no lore monologues in combat.",
         "Audio note: hub ambience should duck under tactical alerts.",
       ].join("\n"),
+      [
+        "Quest premise: the courier must recover a stolen star chart from the old transit hall before the demo timer expires.",
+        "Tone: grounded banter, precise sci-fi details, no lore monologues in combat, and one optional hub line for accessibility pacing.",
+        "Audio note: hub ambience ducks under tactical alerts, while combat barks avoid masking parry confirmation.",
+      ].join("\n"),
     ],
   },
   {
@@ -199,6 +214,11 @@ const documents = [
         "Readability rule: enemies use warm silhouettes, allies use cooler rim light, interactables get a thin cyan edge.",
         "UI kit: compact command bar, card-like ability chips, and high contrast cooldown states.",
         "VFX budget: combat effects must preserve grid and hit direction readability.",
+      ].join("\n"),
+      [
+        "Readability rule: enemies use warm silhouettes, allies use cooler rim light, interactables get a thin cyan edge, and capture overlays stay below 80% opacity.",
+        "UI kit: compact command bar, card-like ability chips, high contrast cooldown states, and stronger focus rings for controller prompts.",
+        "VFX budget: combat effects must preserve grid, hit direction readability, and enemy telegraph timing in motion-blurred trailer shots.",
       ].join("\n"),
     ],
   },
@@ -218,6 +238,11 @@ const documents = [
         "P0 gates: no blocker crash, no broken save, no missing controller prompt, no capture-breaking visual artifact.",
         "Smoke pass now includes ultrawide, controller reconnect, and retry after failed combat encounter.",
         "Community assets: store capsule, short trailer, feature bullets, and known-issues note.",
+      ].join("\n"),
+      [
+        "P0 gates: no blocker crash, no broken save, no missing controller prompt, no capture-breaking visual artifact.",
+        "Smoke pass includes ultrawide, controller reconnect, retry after failed combat encounter, and branch-reset from the trailer checkpoint.",
+        "Community assets: store capsule, short trailer, feature bullets, known-issues note, and fallback support copy for demo-day build rollback.",
       ].join("\n"),
     ],
   },
@@ -359,6 +384,48 @@ const cards = [
     "actor-gds-narrative",
     "gds-narrative-bible",
   ),
+  card(
+    "card-gds-photo-mode-backlog",
+    "board-gds-launch",
+    "thread-gds-launch",
+    "backlog",
+    "Evaluate photo-mode toggle for post-demo wishlist",
+    "actor-gds-producer",
+    "gds-launch-checklist",
+  ),
+  card(
+    "card-gds-accessibility-backlog",
+    "board-gds-production",
+    "thread-gds-core-loop",
+    "backlog",
+    "Scope subtitle size and input-remap accessibility pass",
+    "actor-gds-qa",
+    "gds-studio-brief",
+  ),
+  card(
+    "card-gds-capsule-done",
+    "board-gds-launch",
+    "thread-gds-launch",
+    "done",
+    "Approve store capsule art for demo announcement",
+    "actor-gds-art",
+    "gds-launch-checklist",
+    {
+      resolutionRefs: ["event:evt-gds-launch-001"],
+    },
+  ),
+  card(
+    "card-gds-checkpoint-done",
+    "board-gds-production",
+    "thread-gds-vertical-slice",
+    "done",
+    "Stage demo checkpoint save for recovery testing",
+    "actor-gds-gameplay",
+    "gds-studio-brief",
+    {
+      resolutionRefs: ["event:evt-gds-vertical-slice-001"],
+    },
+  ),
 ];
 
 export function getGameDevStudioSeedData() {
@@ -397,6 +464,7 @@ function card(
   summary,
   assignee,
   pinnedDocumentID,
+  options = {},
 ) {
   return {
     id,
@@ -409,6 +477,7 @@ function card(
     assignee,
     pinned_document_id: pinnedDocumentID,
     related_refs: [`document:${pinnedDocumentID}`],
+    resolution_refs: options.resolutionRefs ?? [],
     created_by: assignee,
     updated_by: assignee,
   };
@@ -445,7 +514,7 @@ function buildEvents() {
       subjectKind: "document",
       subjectId: document.id,
       subjectRef: `document:${document.id}`,
-      count: 6,
+      count: 10,
       actors: [
         document.created_by,
         "actor-gds-producer",
