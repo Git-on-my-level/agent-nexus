@@ -75,6 +75,7 @@ func TestExactRegisterRoutesCoveredByOpenAPOrExceptions(t *testing.T) {
 	}
 
 	registerExact := regexp.MustCompile(`registerRoute\("(/[^"]*)",\s*exactRouteAccess\(([^)]*)\)`)
+	registerStreamExact := regexp.MustCompile(`registerStreamRoute\("([^"]+)",\s*exactRouteAccess\(([^)]*)\)`)
 	methodLiteral := regexp.MustCompile(`http\.Method([A-Za-z]+)`)
 
 	for _, m := range registerExact.FindAllSubmatch(handlerSrc, -1) {
@@ -117,6 +118,32 @@ func TestExactRegisterRoutesCoveredByOpenAPOrExceptions(t *testing.T) {
 				continue
 			}
 			t.Fatalf("handler exact route %s %s not found in contracts/gen/meta/commands.json and not listed in contracts/non-openapi-endpoints.yaml", method, pattern)
+		}
+	}
+	for _, m := range registerStreamExact.FindAllSubmatch(handlerSrc, -1) {
+		pattern := "/stream/" + string(m[1])
+		inner := string(m[2])
+		var methods []string
+		for _, mm := range methodLiteral.FindAllStringSubmatch(inner, -1) {
+			if len(mm) < 2 {
+				continue
+			}
+			switch mm[1] {
+			case "Get":
+				methods = append(methods, "GET")
+			default:
+				t.Fatalf("unsupported http method constant Method%s in exactRouteAccess for %q", mm[1], pattern)
+			}
+		}
+		if len(methods) == 0 {
+			t.Fatalf("exactRouteAccess for %q has no http.Method* literals (expand route_openapi_parity_test.go)", pattern)
+		}
+
+		for _, method := range methods {
+			if bestOpenAPICommandMatch(method, pattern, commands) != nil {
+				continue
+			}
+			t.Fatalf("handler stream route %s %s not found in contracts/gen/meta/commands.json", method, pattern)
 		}
 	}
 }

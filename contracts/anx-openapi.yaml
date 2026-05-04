@@ -2290,7 +2290,7 @@ paths:
         '401':
           $ref: '#/components/responses/ErrorResponse'
 
-  /events/stream:
+  /stream/events:
     get:
       operationId: streamEvents
       summary: Stream events (SSE)
@@ -4045,7 +4045,7 @@ paths:
         '404':
           $ref: '#/components/responses/ErrorResponse'
 
-  /inbox/stream:
+  /stream/inbox:
     get:
       operationId: streamInboxItems
       summary: Stream inbox items (SSE)
@@ -4089,7 +4089,7 @@ paths:
         '401':
           $ref: '#/components/responses/ErrorResponse'
 
-  /agent-notification-receipts/stream:
+  /stream/agent-notification-receipts:
     get:
       operationId: streamAgentNotificationReceipts
       summary: Stream agent notification receipts (SSE)

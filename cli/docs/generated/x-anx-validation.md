@@ -20,8 +20,8 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - `actors.create` `POST /actors` missing `x-anx-agent-notes`
 - `actors.list` `GET /actors` missing `x-anx-agent-notes`
-- `agent.notification-receipts.stream` `GET /agent-notification-receipts/stream` missing `x-anx-agent-notes`
-- `agent.notification-receipts.stream` `GET /agent-notification-receipts/stream` missing `x-anx-cli-path`
+- `agent.notification-receipts.stream` `GET /stream/agent-notification-receipts` missing `x-anx-agent-notes`
+- `agent.notification-receipts.stream` `GET /stream/agent-notification-receipts` missing `x-anx-cli-path`
 - `agent.notifications.dismiss` `POST /agent-notifications/dismiss` missing `x-anx-agent-notes`
 - `agent.notifications.list` `GET /agent-notifications` missing `x-anx-agent-notes`
 - `agent.notifications.read` `POST /agent-notifications/read` missing `x-anx-agent-notes`
@@ -99,7 +99,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - `events.get` `GET /events/{event_id}` missing `x-anx-agent-notes`
 - `events.list` `GET /events` missing `x-anx-agent-notes`
 - `events.restore` `POST /events/{event_id}/restore` missing `x-anx-agent-notes`
-- `events.stream` `GET /events/stream` missing `x-anx-agent-notes`
+- `events.stream` `GET /stream/events` missing `x-anx-agent-notes`
 - `events.trash` `POST /events/{event_id}/trash` missing `x-anx-agent-notes`
 - `events.unarchive` `POST /events/{event_id}/unarchive` missing `x-anx-agent-notes`
 - `home.read` `POST /home/read` missing `x-anx-agent-notes`
@@ -111,7 +111,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - `inbox.list` `GET /inbox` missing `x-anx-concepts`
 - `inbox.list` `GET /inbox` missing `x-anx-stability`
 - `inbox.respond` `POST /inbox/{inbox_id}/respond` missing `x-anx-agent-notes`
-- `inbox.stream` `GET /inbox/stream` missing `x-anx-agent-notes`
+- `inbox.stream` `GET /stream/inbox` missing `x-anx-agent-notes`
 - `meta.commands.get` `GET /meta/commands/{command_id}` missing `x-anx-agent-notes`
 - `meta.commands.list` `GET /meta/commands` missing `x-anx-agent-notes`
 - `meta.concepts.get` `GET /meta/concepts/{concept_name}` missing `x-anx-agent-notes`
@@ -149,7 +149,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - `actors.create` `POST /actors`
 - `actors.list` `GET /actors`
-- `agent.notification-receipts.stream` `GET /agent-notification-receipts/stream`
+- `agent.notification-receipts.stream` `GET /stream/agent-notification-receipts`
 - `agent.notifications.dismiss` `POST /agent-notifications/dismiss`
 - `agent.notifications.list` `GET /agent-notifications`
 - `agent.notifications.read` `POST /agent-notifications/read`
@@ -227,7 +227,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - `events.get` `GET /events/{event_id}`
 - `events.list` `GET /events`
 - `events.restore` `POST /events/{event_id}/restore`
-- `events.stream` `GET /events/stream`
+- `events.stream` `GET /stream/events`
 - `events.trash` `POST /events/{event_id}/trash`
 - `events.unarchive` `POST /events/{event_id}/unarchive`
 - `home.read` `POST /home/read`
@@ -235,7 +235,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - `inbox.get` `GET /inbox/{inbox_id}`
 - `inbox.list` `GET /inbox`
 - `inbox.respond` `POST /inbox/{inbox_id}/respond`
-- `inbox.stream` `GET /inbox/stream`
+- `inbox.stream` `GET /stream/inbox`
 - `meta.commands.get` `GET /meta/commands/{command_id}`
 - `meta.commands.list` `GET /meta/commands`
 - `meta.concepts.get` `GET /meta/concepts/{concept_name}`

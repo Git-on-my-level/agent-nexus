@@ -164,9 +164,9 @@ func streamPathForCommand(commandID string, query []queryParam, cursor string) s
 	if !ok {
 		switch strings.TrimSpace(commandID) {
 		case "events.stream":
-			spec = contractsclient.CommandSpec{Path: "/events/stream"}
+			spec = contractsclient.CommandSpec{Path: "/stream/events"}
 		case "inbox.stream":
-			spec = contractsclient.CommandSpec{Path: "/inbox/stream"}
+			spec = contractsclient.CommandSpec{Path: "/stream/inbox"}
 		default:
 			return "/"
 		}

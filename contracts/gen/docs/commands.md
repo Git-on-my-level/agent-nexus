@@ -33,7 +33,7 @@ Generated from `contracts/anx-openapi.yaml`.
 ## `agent.notification-receipts.stream`
 
 - CLI path: ``
-- HTTP: `GET /agent-notification-receipts/stream`
+- HTTP: `GET /stream/agent-notification-receipts`
 - Stability: `beta`
 - Surface: `projection`
 - Input mode: `query`
@@ -969,7 +969,7 @@ Generated from `contracts/anx-openapi.yaml`.
 ## `events.stream`
 
 - CLI path: `events stream`
-- HTTP: `GET /events/stream`
+- HTTP: `GET /stream/events`
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `none`
@@ -1063,7 +1063,7 @@ Generated from `contracts/anx-openapi.yaml`.
 ## `inbox.stream`
 
 - CLI path: `inbox stream`
-- HTTP: `GET /inbox/stream`
+- HTTP: `GET /stream/inbox`
 - Stability: `beta`
 - Surface: `projection`
 - Input mode: `none`

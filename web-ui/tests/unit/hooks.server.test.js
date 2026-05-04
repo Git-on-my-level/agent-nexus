@@ -597,7 +597,7 @@ describe("hooks proxy retry", () => {
     expect(payload.error.message).toMatch(/coreBaseUrl/);
   });
 
-  it("proxies GET /events/stream to core (SSE)", async () => {
+  it("proxies GET /stream/events to core (SSE)", async () => {
     const sseBody = new ReadableStream({
       start(controller) {
         controller.enqueue(new TextEncoder().encode(": ok\n\n"));
@@ -617,10 +617,10 @@ describe("hooks proxy retry", () => {
     const response = await handle({
       event: {
         url: new URL(
-          "https://anx.example.test/events/stream?thread_id=thread-1",
+          "https://anx.example.test/stream/events?thread_id=thread-1",
         ),
         request: new Request(
-          "https://anx.example.test/events/stream?thread_id=thread-1",
+          "https://anx.example.test/stream/events?thread_id=thread-1",
           {
             method: "GET",
             headers: {
@@ -634,7 +634,7 @@ describe("hooks proxy retry", () => {
 
     expect(response.status).toBe(200);
     expect(fetchMock).toHaveBeenCalledWith(
-      "https://core.example.test/events/stream?thread_id=thread-1",
+      "https://core.example.test/stream/events?thread_id=thread-1",
       expect.objectContaining({
         method: "GET",
       }),

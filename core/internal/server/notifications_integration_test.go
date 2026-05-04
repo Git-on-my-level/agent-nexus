@@ -447,7 +447,7 @@ func TestAgentNotificationReceiptsStreamTracksWakeupStatus(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, env.server.URL+"/agent-notification-receipts/stream?thread_id="+threadID, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, env.server.URL+"/stream/agent-notification-receipts?thread_id="+threadID, nil)
 	if err != nil {
 		t.Fatalf("build receipt stream request: %v", err)
 	}

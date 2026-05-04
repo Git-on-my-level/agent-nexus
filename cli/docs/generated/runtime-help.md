@@ -3113,7 +3113,7 @@ Generated Help: events stream
 
 - Command ID: `events.stream`
 - CLI path: `events stream`
-- HTTP: `GET /events/stream`
+- HTTP: `GET /stream/events`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Long-lived SSE feed of workspace events with optional thread/type filters and Last-Event-ID resume.
@@ -3138,7 +3138,7 @@ Generated Help: events tail
 
 - Command ID: `events.stream`
 - CLI path: `events stream`
-- HTTP: `GET /events/stream`
+- HTTP: `GET /stream/events`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Long-lived SSE feed of workspace events with optional thread/type filters and Last-Event-ID resume.
@@ -3391,7 +3391,7 @@ Generated Help: inbox stream
 
 - Command ID: `inbox.stream`
 - CLI path: `inbox stream`
-- HTTP: `GET /inbox/stream`
+- HTTP: `GET /stream/inbox`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Server-sent events feed of inbox projection updates.
@@ -3416,7 +3416,7 @@ Generated Help: inbox tail
 
 - Command ID: `inbox.stream`
 - CLI path: `inbox stream`
-- HTTP: `GET /inbox/stream`
+- HTTP: `GET /stream/inbox`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Server-sent events feed of inbox projection updates.

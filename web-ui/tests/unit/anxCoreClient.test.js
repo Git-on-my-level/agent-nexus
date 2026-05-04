@@ -271,7 +271,7 @@ describe("anxCoreClient error messaging", () => {
     });
 
     expect(seenUrls).toEqual([
-      "http://core.test/events/stream?thread_id=thread-1",
+      "http://core.test/stream/events?thread_id=thread-1",
     ]);
     expect(events).toEqual([
       {
