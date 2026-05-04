@@ -100,3 +100,63 @@ func TestValidateXAnxAuthoringFailsInvalidEnum(t *testing.T) {
 		t.Fatalf("error did not include invalid enum value:\n%v", err)
 	}
 }
+
+func TestValidateXAnxAuthoringFailsScalarStreamingMetadata(t *testing.T) {
+	doc := openAPIDocument{
+		Paths: map[string]pathItem{
+			"/widgets": {
+				Get: &operation{
+					CommandID:  "widgets.list",
+					CLIPath:    "widgets list",
+					Why:        "List widgets.",
+					InputMode:  "none",
+					Streaming:  "sse",
+					Output:     "Returns widgets.",
+					ErrorCodes: []string{"auth_required"},
+					Concepts:   []string{"widgets"},
+					Stability:  "beta",
+					Surface:    "canonical",
+					AgentNotes: "Safe to retry.",
+				},
+			},
+		},
+	}
+
+	_, err := validateXAnxAuthoring(doc, xAnxValidationBaseline{})
+	if err == nil {
+		t.Fatal("expected scalar streaming metadata to fail")
+	}
+	if !strings.Contains(err.Error(), "GET /widgets widgets.list (x-anx-streaming): must be an object with a string mode") {
+		t.Fatalf("error did not include streaming shape detail:\n%v", err)
+	}
+}
+
+func TestValidateXAnxAuthoringFailsStreamingMetadataMissingMode(t *testing.T) {
+	doc := openAPIDocument{
+		Paths: map[string]pathItem{
+			"/widgets": {
+				Get: &operation{
+					CommandID:  "widgets.list",
+					CLIPath:    "widgets list",
+					Why:        "List widgets.",
+					InputMode:  "none",
+					Streaming:  map[string]any{},
+					Output:     "Returns widgets.",
+					ErrorCodes: []string{"auth_required"},
+					Concepts:   []string{"widgets"},
+					Stability:  "beta",
+					Surface:    "canonical",
+					AgentNotes: "Safe to retry.",
+				},
+			},
+		},
+	}
+
+	_, err := validateXAnxAuthoring(doc, xAnxValidationBaseline{})
+	if err == nil {
+		t.Fatal("expected streaming metadata without mode to fail")
+	}
+	if !strings.Contains(err.Error(), "GET /widgets widgets.list (x-anx-streaming.mode): missing required string value") {
+		t.Fatalf("error did not include streaming mode detail:\n%v", err)
+	}
+}

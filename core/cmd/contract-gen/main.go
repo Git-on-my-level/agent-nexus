@@ -570,8 +570,16 @@ func validateXAnxAllowedValues(path, method string, op *operation) []xAnxValidat
 	if value := strings.TrimSpace(op.Surface); value != "" && !stringInSet(value, allowedXAnxSurfaceValues()) {
 		issues = append(issues, xAnxValidationIssue{CommandID: commandID, Method: method, Path: path, Field: "x-anx-surface", Detail: fmt.Sprintf("invalid value %q; expected one of %s", value, strings.Join(sortedSetValues(allowedXAnxSurfaceValues()), "|"))})
 	}
-	if mode, ok := xAnxStreamingMode(op.Streaming); ok && mode != "" && !stringInSet(mode, allowedXAnxStreamingModes()) {
-		issues = append(issues, xAnxValidationIssue{CommandID: commandID, Method: method, Path: path, Field: "x-anx-streaming.mode", Detail: fmt.Sprintf("invalid value %q; expected one of %s", mode, strings.Join(sortedSetValues(allowedXAnxStreamingModes()), "|"))})
+	if op.Streaming != nil {
+		mode, ok := xAnxStreamingMode(op.Streaming)
+		switch {
+		case !ok:
+			issues = append(issues, xAnxValidationIssue{CommandID: commandID, Method: method, Path: path, Field: "x-anx-streaming", Detail: "must be an object with a string mode"})
+		case mode == "":
+			issues = append(issues, xAnxValidationIssue{CommandID: commandID, Method: method, Path: path, Field: "x-anx-streaming.mode", Detail: "missing required string value"})
+		case !stringInSet(mode, allowedXAnxStreamingModes()):
+			issues = append(issues, xAnxValidationIssue{CommandID: commandID, Method: method, Path: path, Field: "x-anx-streaming.mode", Detail: fmt.Sprintf("invalid value %q; expected one of %s", mode, strings.Join(sortedSetValues(allowedXAnxStreamingModes()), "|"))})
+		}
 	}
 	return issues
 }
