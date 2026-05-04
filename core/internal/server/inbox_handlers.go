@@ -283,29 +283,7 @@ func handleGetInbox(w http.ResponseWriter, r *http.Request, opts handlerOptions)
 		return
 	}
 
-	horizon, ok := resolveInboxRiskHorizon(w, r, opts)
-	if !ok {
-		return
-	}
-	if strings.TrimSpace(r.URL.Query().Get("risk_horizon_days")) != "" {
-		items, err := deriveInboxItems(r.Context(), opts, now, horizon)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to derive inbox items")
-			return
-		}
-
-		payloadItems := make([]map[string]any, 0, len(items))
-		for _, item := range items {
-			payload := payloadFromLocalDerivedInboxItem(item)
-			enrichHumanAttentionNotificationStatus(r.Context(), opts, payload)
-			payloadItems = append(payloadItems, payload)
-		}
-
-		writeJSON(w, http.StatusOK, map[string]any{
-			"status":       "open",
-			"items":        payloadItems,
-			"generated_at": now.Format(time.RFC3339Nano),
-		})
+	if !validateInboxRiskHorizonParam(w, r) {
 		return
 	}
 
@@ -363,34 +341,7 @@ func handleGetInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		return
 	}
 
-	horizon, ok := resolveInboxRiskHorizon(w, r, opts)
-	if !ok {
-		return
-	}
-	if strings.TrimSpace(r.URL.Query().Get("risk_horizon_days")) != "" {
-		items, err := deriveInboxItems(r.Context(), opts, now, horizon)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to derive inbox items")
-			return
-		}
-
-		wantedIDs := make(map[string]struct{})
-		for _, id := range inboxItemIDVariants(inboxItemID) {
-			wantedIDs[id] = struct{}{}
-		}
-		for _, item := range items {
-			if _, ok := wantedIDs[item.ID]; !ok {
-				continue
-			}
-			payload := payloadFromLocalDerivedInboxItem(item)
-			enrichHumanAttentionNotificationStatus(r.Context(), opts, payload)
-			writeJSON(w, http.StatusOK, map[string]any{
-				"item":         payload,
-				"generated_at": now.Format(time.RFC3339Nano),
-			})
-			return
-		}
-		writeError(w, http.StatusNotFound, "not_found", "inbox item not found")
+	if !validateInboxRiskHorizonParam(w, r) {
 		return
 	}
 
@@ -500,62 +451,15 @@ func handleRebuildDerived(w http.ResponseWriter, r *http.Request, opts handlerOp
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
-func deriveInboxItems(ctx context.Context, opts handlerOptions, now time.Time, riskHorizon time.Duration) ([]derivedInboxItem, error) {
-	if _, err := emitStaleThreadExceptions(ctx, opts, now, ""); err != nil {
-		return nil, err
-	}
-
-	return deriveInboxItemsNoStaleEmission(ctx, opts, now, riskHorizon)
-}
-
-func resolveInboxRiskHorizon(w http.ResponseWriter, r *http.Request, opts handlerOptions) (time.Duration, bool) {
-	horizon := opts.inboxRiskHorizon
-	if horizon <= 0 {
-		horizon = defaultInboxRiskHorizon
-	}
-
+func validateInboxRiskHorizonParam(w http.ResponseWriter, r *http.Request) bool {
 	if rawDays := strings.TrimSpace(r.URL.Query().Get("risk_horizon_days")); rawDays != "" {
 		days, err := strconv.Atoi(rawDays)
 		if err != nil || days < 0 {
 			writeError(w, http.StatusBadRequest, "invalid_request", "risk_horizon_days must be a non-negative integer")
-			return 0, false
-		}
-		horizon = time.Duration(days) * 24 * time.Hour
-	}
-	return horizon, true
-}
-
-func deriveInboxItemsNoStaleEmission(ctx context.Context, opts handlerOptions, now time.Time, riskHorizon time.Duration) ([]derivedInboxItem, error) {
-	events, err := opts.primitiveStore.ListEvents(ctx, primitives.EventListFilter{
-		Types: []string{
-			humanAttentionRequestedEventType,
-			humanAttentionRespondedEventType,
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	decidedIDs := decidedInboxItemIDs(events)
-	items := make([]derivedInboxItem, 0)
-
-	for _, event := range events {
-		eventType, _ := event["type"].(string)
-		switch eventType {
-		case humanAttentionRequestedEventType:
-			item, ok := deriveHumanAttentionInboxItem(event)
-			if !ok {
-				continue
-			}
-			if _, decided := decidedIDs[item.ID]; decided {
-				continue
-			}
-			items = append(items, item)
+			return false
 		}
 	}
-
-	sortInboxItems(items)
-	return items, nil
+	return true
 }
 
 func isStaleTopicException(event map[string]any) bool {

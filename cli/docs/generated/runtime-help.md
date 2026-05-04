@@ -3287,7 +3287,7 @@ Generated Help: inbox list
 - HTTP: `GET /inbox`
 - Input mode: `none`
 - Why: Load the operator-only human attention queue derived from explicit human_attention_requested events.
-- Output: Returns `{ status, items, generated_at }`; completed adds `{ next_cursor }`; open projection adds `{ projection_freshness }` unless risk_horizon_days derivation path.
+- Output: Returns `{ status, items, generated_at }`; completed adds `{ next_cursor }`; open projection adds `{ projection_freshness }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Adjacent commands: `inbox get`, `inbox respond`, `inbox stream`
 
@@ -3322,7 +3322,7 @@ Generated Help: inbox get
 - Input mode: `none`
 - Why: Side-effect free read of one materialized inbox row.
 - Output: Returns `{ item, generated_at, projection_freshness }`.
-- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
 - Concepts: `inbox`
 - Adjacent commands: `inbox list`, `inbox respond`, `inbox stream`
 
@@ -3396,7 +3396,7 @@ Generated Help: inbox stream
 - Input mode: `none`
 - Why: Server-sent events feed of inbox projection updates.
 - Output: SSE `inbox_item` events with JSON payloads.
-- Error codes: `auth_required`, `invalid_token`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `inbox`
 - Adjacent commands: `inbox get`, `inbox list`, `inbox respond`
 
@@ -3421,7 +3421,7 @@ Generated Help: inbox tail
 - Input mode: `none`
 - Why: Server-sent events feed of inbox projection updates.
 - Output: SSE `inbox_item` events with JSON payloads.
-- Error codes: `auth_required`, `invalid_token`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `inbox`
 - Adjacent commands: `inbox get`, `inbox list`, `inbox respond`
 

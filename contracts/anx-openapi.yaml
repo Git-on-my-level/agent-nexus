@@ -2886,7 +2886,7 @@ paths:
       x-anx-why: Load the operator-only human attention queue derived from explicit human_attention_requested events.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ status, items, generated_at }`; completed adds `{ next_cursor }`; open projection adds `{ projection_freshness }` unless risk_horizon_days derivation path."
+      x-anx-output-envelope: "Returns `{ status, items, generated_at }`; completed adds `{ next_cursor }`; open projection adds `{ projection_freshness }`."
       x-anx-error-codes: [auth_required, invalid_request, invalid_token]
       parameters:
         - name: status
@@ -2902,7 +2902,10 @@ paths:
         - name: risk_horizon_days
           in: query
           required: false
-          description: Diagnostic derivation horizon for open-queue snapshots (ignored when status=completed).
+          description: >
+            Deprecated compatibility parameter. Open inbox reads always return the
+            configured materialized inbox projection; this value is validated but
+            does not trigger read-time recomputation. Ignored when status=completed.
           schema:
             type: integer
             minimum: 0
@@ -4015,11 +4018,21 @@ paths:
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ item, generated_at, projection_freshness }`."
-      x-anx-error-codes: [auth_required, invalid_token, not_found]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found]
       x-anx-concepts: [inbox]
       x-anx-stability: beta
       parameters:
         - $ref: '#/components/parameters/InboxID'
+        - name: risk_horizon_days
+          in: query
+          required: false
+          description: >
+            Deprecated compatibility parameter. Inbox item reads always return the
+            configured materialized inbox projection; this value is validated but
+            does not trigger read-time recomputation.
+          schema:
+            type: integer
+            minimum: 0
       responses:
         '200':
           description: Inbox item
@@ -4044,14 +4057,20 @@ paths:
       x-anx-input-mode: none
       x-anx-streaming: { mode: sse }
       x-anx-output-envelope: "SSE `inbox_item` events with JSON payloads."
-      x-anx-error-codes: [auth_required, invalid_token]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token]
       x-anx-concepts: [inbox]
       x-anx-stability: beta
       parameters:
         - name: risk_horizon_days
           in: query
           required: false
-          schema: { type: integer }
+          description: >
+            Deprecated compatibility parameter. Inbox streams emit changes from the
+            configured materialized inbox projection; this value is validated but
+            does not trigger read-time recomputation.
+          schema:
+            type: integer
+            minimum: 0
         - name: last_event_id
           in: query
           required: false

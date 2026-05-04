@@ -138,6 +138,87 @@ func TestHumanAttentionSupportsReviewAndEscalateKinds(t *testing.T) {
 	}`, http.StatusCreated).Body.Close()
 }
 
+func TestInboxRiskHorizonReadsMaterializedProjectionWithFreshness(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
+	threadID := integrationSeedThread(t, h, "actor-1", map[string]any{
+		"title":           "Risk horizon materialized projection",
+		"type":            "incident",
+		"status":          "active",
+		"priority":        "p1",
+		"tags":            []any{},
+		"cadence":         "daily",
+		"current_summary": "summary",
+		"next_actions":    []any{},
+		"key_artifacts":   []any{},
+		"provenance":      map[string]any{"sources": []any{"inferred"}},
+	})
+	created := createHumanAttentionEvent(t, h.baseURL, threadID, "ask", "Need materialized answer", "thread:"+threadID, nil, nil)
+	requestEventID := asString(created["id"])
+
+	standard := getInboxPayload(t, h.baseURL+"/inbox")
+	withRisk := getInboxPayload(t, h.baseURL+"/inbox?risk_horizon_days=30")
+	if asString(standard.ProjectionFreshness["status"]) != "current" || asString(withRisk.ProjectionFreshness["status"]) != "current" {
+		t.Fatalf("expected current freshness on both inbox reads, got standard=%#v risk=%#v", standard.ProjectionFreshness, withRisk.ProjectionFreshness)
+	}
+	if string(mustJSON(t, standard.Items)) != string(mustJSON(t, withRisk.Items)) {
+		t.Fatalf("expected risk_horizon_days read to return materialized inbox items, standard=%#v risk=%#v", standard.Items, withRisk.Items)
+	}
+
+	item, ok := findInboxItem(withRisk.Items, func(candidate map[string]any) bool {
+		return asString(candidate["kind"]) == "ask" && asString(candidate["source_event_id"]) == requestEventID
+	})
+	if !ok {
+		t.Fatalf("expected materialized inbox item for source_event_id=%s, got %#v", requestEventID, withRisk.Items)
+	}
+
+	itemResp, err := http.Get(h.baseURL + "/inbox/" + url.PathEscape(asString(item["id"])) + "?risk_horizon_days=30")
+	if err != nil {
+		t.Fatalf("GET /inbox/{id}: %v", err)
+	}
+	defer itemResp.Body.Close()
+	if itemResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected GET /inbox/{id} status: %d", itemResp.StatusCode)
+	}
+	var itemPayload struct {
+		Item                map[string]any `json:"item"`
+		ProjectionFreshness map[string]any `json:"projection_freshness"`
+	}
+	if err := json.NewDecoder(itemResp.Body).Decode(&itemPayload); err != nil {
+		t.Fatalf("decode /inbox/{id} response: %v", err)
+	}
+	if asString(itemPayload.Item["id"]) != asString(item["id"]) {
+		t.Fatalf("expected GET /inbox/{id} to load same materialized item, got %#v want %#v", itemPayload.Item, item)
+	}
+	if got := asString(itemPayload.ProjectionFreshness["status"]); got != "current" {
+		t.Fatalf("expected item projection freshness, got %#v", itemPayload.ProjectionFreshness)
+	}
+}
+
+func TestInboxRiskHorizonReadDoesNotRecomputePendingProjection(t *testing.T) {
+	t.Parallel()
+
+	h := newManualProjectionTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
+
+	threadID := createBoardThreadViaHTTP(t, h.primitivesTestHarness, "Pending risk horizon projection")
+	createHumanAttentionEvent(t, h.baseURL, threadID, "ask", "Do not recompute on read", "thread:"+threadID, nil, nil)
+
+	inboxBefore := countTableRows(t, h.workspace.DB(), "derived_inbox_items")
+	payload := getInboxPayload(t, h.baseURL+"/inbox?risk_horizon_days=30")
+	if got := asString(payload.ProjectionFreshness["status"]); got != "pending" {
+		t.Fatalf("expected pending freshness before worker runs, got %#v", payload.ProjectionFreshness)
+	}
+	if len(payload.Items) != 0 {
+		t.Fatalf("expected no read-time recomputed inbox items, got %#v", payload.Items)
+	}
+	if inboxAfter := countTableRows(t, h.workspace.DB(), "derived_inbox_items"); inboxAfter != inboxBefore {
+		t.Fatalf("expected risk-horizon read not to write derived inbox rows, got before=%d after=%d", inboxBefore, inboxAfter)
+	}
+}
+
 func TestHumanAttentionResponseRequiresResolvableTargetOrExplicitNone(t *testing.T) {
 	t.Parallel()
 
@@ -222,22 +303,39 @@ func createHumanAttentionEvent(t *testing.T, baseURL, threadID, kind, title, sub
 
 func getInboxItems(t *testing.T, baseURL string) []map[string]any {
 	t.Helper()
-	resp, err := http.Get(baseURL + "/inbox")
+	return getInboxPayload(t, baseURL+"/inbox").Items
+}
+
+type inboxPayloadForTest struct {
+	Items               []map[string]any `json:"items"`
+	ProjectionFreshness map[string]any   `json:"projection_freshness"`
+}
+
+func getInboxPayload(t *testing.T, rawURL string) inboxPayloadForTest {
+	t.Helper()
+	resp, err := http.Get(rawURL)
 	if err != nil {
-		t.Fatalf("GET /inbox: %v", err)
+		t.Fatalf("GET %s: %v", rawURL, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("unexpected GET /inbox status: %d", resp.StatusCode)
+		t.Fatalf("unexpected GET %s status: %d", rawURL, resp.StatusCode)
 	}
 
-	var payload struct {
-		Items []map[string]any `json:"items"`
-	}
+	var payload inboxPayloadForTest
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		t.Fatalf("decode /inbox response: %v", err)
+		t.Fatalf("decode %s response: %v", rawURL, err)
 	}
-	return payload.Items
+	return payload
+}
+
+func mustJSON(t *testing.T, value any) []byte {
+	t.Helper()
+	raw, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("marshal JSON: %v", err)
+	}
+	return raw
 }
 
 func findInboxItem(items []map[string]any, predicate func(map[string]any) bool) (map[string]any, bool) {

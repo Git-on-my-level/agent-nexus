@@ -4580,6 +4580,7 @@ export const commandRegistry = [
         "output_envelope": "Returns `{ item, generated_at, projection_freshness }`.",
         "error_codes": [
             "auth_required",
+            "invalid_request",
             "invalid_token",
             "not_found"
         ],
@@ -4612,7 +4613,7 @@ export const commandRegistry = [
         "streaming": {
             "mode": "none"
         },
-        "output_envelope": "Returns `{ status, items, generated_at }`; completed adds `{ next_cursor }`; open projection adds `{ projection_freshness }` unless risk_horizon_days derivation path.",
+        "output_envelope": "Returns `{ status, items, generated_at }`; completed adds `{ next_cursor }`; open projection adds `{ projection_freshness }`.",
         "error_codes": [
             "auth_required",
             "invalid_request",
@@ -4720,6 +4721,7 @@ export const commandRegistry = [
         "output_envelope": "SSE `inbox_item` events with JSON payloads.",
         "error_codes": [
             "auth_required",
+            "invalid_request",
             "invalid_token"
         ],
         "concepts": [
