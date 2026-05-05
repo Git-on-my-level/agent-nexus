@@ -184,7 +184,7 @@ func (a *App) runTopicsCommand(ctx context.Context, args []string, cfg config.Re
 		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "topics unarchive", "topics.unarchive", "topic_id", id, topicIDLookupSpec, nil, body)
 		return result, "topics unarchive", callErr
 	case "trash":
-		id, body, err := a.parseTopicIDAndBodyInput(args[1:], "topics trash")
+		id, body, err := a.parseTopicTrashInput(args[1:], "topics trash")
 		if err != nil {
 			return nil, "topics trash", err
 		}
@@ -1406,6 +1406,52 @@ func (a *App) parseTopicIDAndOptionalJSONBody(args []string, commandName string)
 	}
 	if len(payload) == 0 {
 		return id, map[string]any{}, nil
+	}
+	decoded, err := decodeJSONPayload(payload)
+	if err != nil {
+		return "", nil, err
+	}
+	bodyMap, ok := decoded.(map[string]any)
+	if !ok {
+		return "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object", commandName))
+	}
+	return id, bodyMap, nil
+}
+
+func (a *App) parseTopicTrashInput(args []string, commandName string) (string, map[string]any, error) {
+	leadingTopicID, args := popLeadingPositional(args)
+	fs := newSilentFlagSet(commandName)
+	var topicIDFlag, fromFile, reasonFlag trackedString
+	fs.Var(&topicIDFlag, "topic-id", "Topic id")
+	fs.Var(&fromFile, "from-file", "Load advanced JSON body from file path")
+	fs.Var(&reasonFlag, "reason", "Operator-visible trash reason")
+	if err := fs.Parse(args); err != nil {
+		return "", nil, errnorm.Usage("invalid_flags", err.Error())
+	}
+	positionals := fs.Args()
+	id := firstNonEmpty(strings.TrimSpace(topicIDFlag.value), leadingTopicID)
+	if id == "" && len(positionals) > 0 {
+		id = strings.TrimSpace(positionals[0])
+		positionals = positionals[1:]
+	}
+	if err := validateID(id, "topic id"); err != nil {
+		return "", nil, err
+	}
+	if len(positionals) > 0 {
+		return "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
+	}
+	if strings.TrimSpace(fromFile.value) != "" && strings.TrimSpace(reasonFlag.value) != "" {
+		return "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("field flags cannot be combined with JSON body input for `anx %s`", commandName))
+	}
+	if reason := strings.TrimSpace(reasonFlag.value); reason != "" {
+		return id, map[string]any{"reason": reason}, nil
+	}
+	payload, err := a.readBodyInput(strings.TrimSpace(fromFile.value))
+	if err != nil {
+		return "", nil, err
+	}
+	if len(payload) == 0 {
+		return "", nil, errnorm.Usage("invalid_request", "`anx topics trash` requires --reason or JSON body input")
 	}
 	decoded, err := decodeJSONPayload(payload)
 	if err != nil {

@@ -47,6 +47,7 @@ type operation struct {
 	Why         string       `yaml:"x-anx-why"`
 	Examples    []anxExample `yaml:"x-anx-examples"`
 	InputMode   string       `yaml:"x-anx-input-mode"`
+	CLIInput    *cliInput    `yaml:"x-anx-cli-input"`
 	Streaming   any          `yaml:"x-anx-streaming"`
 	Output      string       `yaml:"x-anx-output-envelope"`
 	ErrorCodes  []string     `yaml:"x-anx-error-codes"`
@@ -227,30 +228,45 @@ type anxExample struct {
 	Description string `yaml:"description,omitempty" json:"description,omitempty"`
 }
 
+type cliInput struct {
+	Mode         string         `yaml:"mode" json:"mode,omitempty"`
+	BodyOptional bool           `yaml:"body_optional" json:"body_optional,omitempty"`
+	Flags        []cliInputFlag `yaml:"flags" json:"flags,omitempty"`
+}
+
+type cliInputFlag struct {
+	Name        string `yaml:"name" json:"name"`
+	BodyPath    string `yaml:"body_path" json:"body_path,omitempty"`
+	Required    bool   `yaml:"required" json:"required,omitempty"`
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+}
+
 type command struct {
-	CommandID   string       `json:"command_id"`
-	CLIPath     string       `json:"cli_path"`
-	Group       string       `json:"group,omitempty"`
-	Method      string       `json:"method"`
-	Path        string       `json:"path"`
-	OperationID string       `json:"operation_id"`
-	Summary     string       `json:"summary,omitempty"`
-	Description string       `json:"description,omitempty"`
-	Why         string       `json:"why,omitempty"`
-	InputMode   string       `json:"input_mode,omitempty"`
-	Streaming   any          `json:"streaming,omitempty"`
-	Output      string       `json:"output_envelope,omitempty"`
-	ErrorCodes  []string     `json:"error_codes,omitempty"`
-	Concepts    []string     `json:"concepts,omitempty"`
-	Stability   string       `json:"stability,omitempty"`
-	Surface     string       `json:"surface,omitempty"`
-	AgentNotes  string       `json:"agent_notes,omitempty"`
-	Examples    []anxExample `json:"examples,omitempty"`
-	BodySchema  *bodySchema  `json:"body_schema,omitempty"`
-	PathParams  []string     `json:"path_params,omitempty"`
-	Adjacent    []string     `json:"adjacent_commands,omitempty"`
-	GoMethod    string       `json:"go_method"`
-	TSMethod    string       `json:"ts_method"`
+	CommandID     string       `json:"command_id"`
+	CLIPath       string       `json:"cli_path"`
+	Group         string       `json:"group,omitempty"`
+	Method        string       `json:"method"`
+	Path          string       `json:"path"`
+	OperationID   string       `json:"operation_id"`
+	Summary       string       `json:"summary,omitempty"`
+	Description   string       `json:"description,omitempty"`
+	Why           string       `json:"why,omitempty"`
+	InputMode     string       `json:"input_mode,omitempty"`
+	HTTPInputMode string       `json:"http_input_mode,omitempty"`
+	CLIInput      *cliInput    `json:"cli_input,omitempty"`
+	Streaming     any          `json:"streaming,omitempty"`
+	Output        string       `json:"output_envelope,omitempty"`
+	ErrorCodes    []string     `json:"error_codes,omitempty"`
+	Concepts      []string     `json:"concepts,omitempty"`
+	Stability     string       `json:"stability,omitempty"`
+	Surface       string       `json:"surface,omitempty"`
+	AgentNotes    string       `json:"agent_notes,omitempty"`
+	Examples      []anxExample `json:"examples,omitempty"`
+	BodySchema    *bodySchema  `json:"body_schema,omitempty"`
+	PathParams    []string     `json:"path_params,omitempty"`
+	Adjacent      []string     `json:"adjacent_commands,omitempty"`
+	GoMethod      string       `json:"go_method"`
+	TSMethod      string       `json:"ts_method"`
 }
 
 type bodySchema struct {
@@ -564,6 +580,16 @@ func validateXAnxAllowedValues(path, method string, op *operation) []xAnxValidat
 	if value := strings.TrimSpace(op.InputMode); value != "" && !stringInSet(value, allowedXAnxInputModes()) {
 		issues = append(issues, xAnxValidationIssue{CommandID: commandID, Method: method, Path: path, Field: "x-anx-input-mode", Detail: fmt.Sprintf("invalid value %q; expected one of %s", value, strings.Join(sortedSetValues(allowedXAnxInputModes()), "|"))})
 	}
+	if op.CLIInput != nil {
+		if value := strings.TrimSpace(op.CLIInput.Mode); value != "" && !stringInSet(value, allowedXAnxInputModes()) {
+			issues = append(issues, xAnxValidationIssue{CommandID: commandID, Method: method, Path: path, Field: "x-anx-cli-input.mode", Detail: fmt.Sprintf("invalid value %q; expected one of %s", value, strings.Join(sortedSetValues(allowedXAnxInputModes()), "|"))})
+		}
+		for i, flag := range op.CLIInput.Flags {
+			if strings.TrimSpace(flag.Name) == "" {
+				issues = append(issues, xAnxValidationIssue{CommandID: commandID, Method: method, Path: path, Field: fmt.Sprintf("x-anx-cli-input.flags[%d].name", i), Detail: "missing required string value"})
+			}
+		}
+	}
 	if value := strings.TrimSpace(op.Stability); value != "" && !stringInSet(value, allowedXAnxStabilityValues()) {
 		issues = append(issues, xAnxValidationIssue{CommandID: commandID, Method: method, Path: path, Field: "x-anx-stability", Detail: fmt.Sprintf("invalid value %q; expected one of %s", value, strings.Join(sortedSetValues(allowedXAnxStabilityValues()), "|"))})
 	}
@@ -589,10 +615,48 @@ func allowedXAnxInputModes() map[string]struct{} {
 		"none":           {},
 		"query":          {},
 		"json-body":      {},
+		"flags":          {},
+		"flags-or-json":  {},
 		"raw-stream":     {},
 		"file-and-body":  {},
 		"multipart-form": {},
 	}
+}
+
+func effectiveCLIInputMode(op *operation) string {
+	if op == nil {
+		return ""
+	}
+	if op.CLIInput != nil && strings.TrimSpace(op.CLIInput.Mode) != "" {
+		return strings.TrimSpace(op.CLIInput.Mode)
+	}
+	return strings.TrimSpace(op.InputMode)
+}
+
+func normalizeCLIInput(input *cliInput) *cliInput {
+	if input == nil {
+		return nil
+	}
+	out := &cliInput{
+		Mode:         strings.TrimSpace(input.Mode),
+		BodyOptional: input.BodyOptional,
+	}
+	for _, flag := range input.Flags {
+		name := strings.TrimSpace(flag.Name)
+		if name == "" {
+			continue
+		}
+		out.Flags = append(out.Flags, cliInputFlag{
+			Name:        name,
+			BodyPath:    strings.TrimSpace(flag.BodyPath),
+			Required:    flag.Required,
+			Description: strings.TrimSpace(flag.Description),
+		})
+	}
+	if out.Mode == "" && !out.BodyOptional && len(out.Flags) == 0 {
+		return nil
+	}
+	return out
 }
 
 func allowedXAnxStabilityValues() map[string]struct{} {
@@ -702,29 +766,36 @@ func collectCommands(doc openAPIDocument, schemaDoc anxSchemaDocument) []command
 			}
 
 			commandID := strings.TrimSpace(pair.op.CommandID)
+			httpInputMode := strings.TrimSpace(pair.op.InputMode)
+			inputMode := effectiveCLIInputMode(pair.op)
+			if httpInputMode == inputMode {
+				httpInputMode = ""
+			}
 			cmd := command{
-				CommandID:   commandID,
-				CLIPath:     strings.TrimSpace(pair.op.CLIPath),
-				Group:       commandGroup(strings.TrimSpace(pair.op.CLIPath)),
-				Method:      pair.method,
-				Path:        path,
-				OperationID: strings.TrimSpace(pair.op.OperationID),
-				Summary:     strings.TrimSpace(pair.op.Summary),
-				Description: strings.TrimSpace(pair.op.Description),
-				Why:         strings.TrimSpace(pair.op.Why),
-				InputMode:   strings.TrimSpace(pair.op.InputMode),
-				Streaming:   pair.op.Streaming,
-				Output:      strings.TrimSpace(pair.op.Output),
-				ErrorCodes:  compactStrings(pair.op.ErrorCodes),
-				Concepts:    compactStrings(pair.op.Concepts),
-				Stability:   strings.TrimSpace(pair.op.Stability),
-				Surface:     strings.TrimSpace(pair.op.Surface),
-				AgentNotes:  strings.TrimSpace(pair.op.AgentNotes),
-				Examples:    compactExamples(pair.op.Examples),
-				BodySchema:  deriveBodySchema(doc, schemaDoc, commandID, pair.op),
-				PathParams:  extractPathParams(path),
-				GoMethod:    toPascalCase(commandID),
-				TSMethod:    toCamelCase(commandID),
+				CommandID:     commandID,
+				CLIPath:       strings.TrimSpace(pair.op.CLIPath),
+				Group:         commandGroup(strings.TrimSpace(pair.op.CLIPath)),
+				Method:        pair.method,
+				Path:          path,
+				OperationID:   strings.TrimSpace(pair.op.OperationID),
+				Summary:       strings.TrimSpace(pair.op.Summary),
+				Description:   strings.TrimSpace(pair.op.Description),
+				Why:           strings.TrimSpace(pair.op.Why),
+				InputMode:     inputMode,
+				HTTPInputMode: httpInputMode,
+				CLIInput:      normalizeCLIInput(pair.op.CLIInput),
+				Streaming:     pair.op.Streaming,
+				Output:        strings.TrimSpace(pair.op.Output),
+				ErrorCodes:    compactStrings(pair.op.ErrorCodes),
+				Concepts:      compactStrings(pair.op.Concepts),
+				Stability:     strings.TrimSpace(pair.op.Stability),
+				Surface:       strings.TrimSpace(pair.op.Surface),
+				AgentNotes:    strings.TrimSpace(pair.op.AgentNotes),
+				Examples:      compactExamples(pair.op.Examples),
+				BodySchema:    deriveBodySchema(doc, schemaDoc, commandID, pair.op),
+				PathParams:    extractPathParams(path),
+				GoMethod:      toPascalCase(commandID),
+				TSMethod:      toCamelCase(commandID),
 			}
 			commands = append(commands, cmd)
 		}
@@ -1563,7 +1634,7 @@ Required now for every command operation:
 - `+"`x-anx-command-id`"+`: stable id (for example `+"`threads.list`"+`)
 - `+"`x-anx-cli-path`"+`: CLI path (for example `+"`threads list`"+`)
 - `+"`x-anx-why`"+`: non-empty purpose/decision boundary
-- `+"`x-anx-input-mode`"+`: one of `+"`none|query|json-body|raw-stream|file-and-body|multipart-form`"+`
+- `+"`x-anx-input-mode`"+`: HTTP/input-shape mode, one of `+"`none|query|json-body|flags|flags-or-json|raw-stream|file-and-body|multipart-form`"+`
 - `+"`x-anx-streaming`"+`: streaming metadata object
 - `+"`x-anx-output-envelope`"+`: output notes for CLI consumers
 - `+"`x-anx-error-codes`"+`: stable semantic error code list
@@ -1581,6 +1652,7 @@ Generator enforcement:
 Recommended/backlog:
 
 - include at least one `+"`x-anx-examples`"+` command per operation
+- use `+"`x-anx-cli-input`"+` when the agent-facing CLI affordance differs from the HTTP body shape; supported fields are `+"`mode`"+`, `+"`body_optional`"+`, and `+"`flags`"+` entries with `+"`name`"+`, `+"`body_path`"+`, `+"`required`"+`, and `+"`description`"+`
 - keep `+"`x-anx-command-id`"+` immutable once published
 - keep concept labels lower-case and dash-separated
 - use `+"`contracts/gen/docs/x-anx-validation.md`"+` to audit baseline debt and missing examples
@@ -1919,6 +1991,12 @@ func writeTSClient(tsOutDir string, commands []command, packageName string) erro
 	b.WriteString("  group?: string;\n")
 	b.WriteString("  path_params?: string[];\n")
 	b.WriteString("  input_mode?: string;\n")
+	b.WriteString("  http_input_mode?: string;\n")
+	b.WriteString("  cli_input?: {\n")
+	b.WriteString("    mode?: string;\n")
+	b.WriteString("    body_optional?: boolean;\n")
+	b.WriteString("    flags?: Array<{ name: string; body_path?: string; required?: boolean; description?: string }>;\n")
+	b.WriteString("  };\n")
 	b.WriteString("  streaming?: unknown;\n")
 	b.WriteString("  output_envelope?: string;\n")
 	b.WriteString("  error_codes?: string[];\n")

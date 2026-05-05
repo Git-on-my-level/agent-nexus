@@ -316,6 +316,9 @@ paths:
       x-anx-cli-path: topics archive
       x-anx-why: Soft-archive a topic and derive its lifecycle state from archived_at.
       x-anx-input-mode: json-body
+      x-anx-cli-input:
+        mode: none
+        body_optional: true
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ topic }`."
       x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
@@ -355,6 +358,9 @@ paths:
       x-anx-cli-path: topics unarchive
       x-anx-why: Clear archived_at on a topic (restore default list visibility).
       x-anx-input-mode: json-body
+      x-anx-cli-input:
+        mode: none
+        body_optional: true
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ topic }`."
       x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
@@ -394,6 +400,13 @@ paths:
       x-anx-cli-path: topics trash
       x-anx-why: Move topic to trash with an explicit operator reason.
       x-anx-input-mode: json-body
+      x-anx-cli-input:
+        mode: flags
+        flags:
+          - name: reason
+            body_path: reason
+            required: true
+            description: Operator-visible trash reason.
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ topic }`."
       x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
@@ -433,6 +446,9 @@ paths:
       x-anx-cli-path: topics restore
       x-anx-why: Clear trash lifecycle fields on a topic after an explicit restore action.
       x-anx-input-mode: json-body
+      x-anx-cli-input:
+        mode: none
+        body_optional: true
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ topic }`."
       x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]

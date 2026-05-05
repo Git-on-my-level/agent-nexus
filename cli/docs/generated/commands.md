@@ -1368,7 +1368,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - HTTP: `POST /topics/{topic_id}/archive`
 - Stability: `beta`
 - Surface: `canonical`
-- Input mode: `json-body`
+- Input mode: `none`
 - Why: Soft-archive a topic and derive its lifecycle state from archived_at.
 - Concepts: `topics`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
@@ -1429,7 +1429,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - HTTP: `POST /topics/{topic_id}/restore`
 - Stability: `beta`
 - Surface: `canonical`
-- Input mode: `json-body`
+- Input mode: `none`
 - Why: Clear trash lifecycle fields on a topic after an explicit restore action.
 - Concepts: `topics`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
@@ -1453,7 +1453,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - HTTP: `POST /topics/{topic_id}/trash`
 - Stability: `beta`
 - Surface: `canonical`
-- Input mode: `json-body`
+- Input mode: `flags`
 - Why: Move topic to trash with an explicit operator reason.
 - Concepts: `topics`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
@@ -1465,7 +1465,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - HTTP: `POST /topics/{topic_id}/unarchive`
 - Stability: `beta`
 - Surface: `canonical`
-- Input mode: `json-body`
+- Input mode: `none`
 - Why: Clear archived_at on a topic (restore default list visibility).
 - Concepts: `topics`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`

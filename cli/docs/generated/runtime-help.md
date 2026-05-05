@@ -1847,7 +1847,7 @@ Generated Help: topics archive
 - CLI path: `topics archive`
 - HTTP: `POST /topics/{topic_id}/archive`
 - Stability: `beta`
-- Input mode: `json-body`
+- Input mode: `none`
 - Why: Soft-archive a topic and derive its lifecycle state from archived_at.
 - Output: Returns `{ topic }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
@@ -1859,6 +1859,9 @@ Inputs:
   - path `topic_id`
   Optional:
   - body `actor_id` (string)
+
+CLI input:
+  - JSON body is optional; `--from-file` remains available for advanced request bodies.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1877,7 +1880,7 @@ Generated Help: topics unarchive
 - CLI path: `topics unarchive`
 - HTTP: `POST /topics/{topic_id}/unarchive`
 - Stability: `beta`
-- Input mode: `json-body`
+- Input mode: `none`
 - Why: Clear archived_at on a topic (restore default list visibility).
 - Output: Returns `{ topic }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
@@ -1889,6 +1892,9 @@ Inputs:
   - path `topic_id`
   Optional:
   - body `actor_id` (string)
+
+CLI input:
+  - JSON body is optional; `--from-file` remains available for advanced request bodies.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1907,7 +1913,7 @@ Generated Help: topics trash
 - CLI path: `topics trash`
 - HTTP: `POST /topics/{topic_id}/trash`
 - Stability: `beta`
-- Input mode: `json-body`
+- Input mode: `flags`
 - Why: Move topic to trash with an explicit operator reason.
 - Output: Returns `{ topic }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
@@ -1920,6 +1926,10 @@ Inputs:
   - body `reason` (string)
   Optional:
   - body `actor_id` (string)
+
+CLI input:
+  Flags:
+  - `--reason` required -> body `reason`: Operator-visible trash reason.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1938,7 +1948,7 @@ Generated Help: topics restore
 - CLI path: `topics restore`
 - HTTP: `POST /topics/{topic_id}/restore`
 - Stability: `beta`
-- Input mode: `json-body`
+- Input mode: `none`
 - Why: Clear trash lifecycle fields on a topic after an explicit restore action.
 - Output: Returns `{ topic }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
@@ -1950,6 +1960,9 @@ Inputs:
   - path `topic_id`
   Optional:
   - body `actor_id` (string)
+
+CLI input:
+  - JSON body is optional; `--from-file` remains available for advanced request bodies.
 
 Global flags:
   Global flags can appear before or after the command path.

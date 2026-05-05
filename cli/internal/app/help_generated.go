@@ -1081,6 +1081,10 @@ func formatGeneratedCommandHelp(topic string, cmd registry.Command) string {
 		b.WriteString("\n")
 		b.WriteString(schemaBlock)
 	}
+	if cliInputBlock := formatCLIInputBlock(cmd); strings.TrimSpace(cliInputBlock) != "" {
+		b.WriteString("\n\n")
+		b.WriteString(cliInputBlock)
+	}
 	if extra := formatCommandSpecificHelpBlock(cmd); strings.TrimSpace(extra) != "" {
 		b.WriteString("\n\n")
 		b.WriteString(extra)
@@ -1141,6 +1145,43 @@ func formatInputSchemaBlock(cmd registry.Command) string {
 	if schema != nil {
 		if enumLine := formatEnumFieldList(schema.Required, schema.Optional); enumLine != "" {
 			b.WriteString("  Enum values: " + enumLine + "\n")
+		}
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func formatCLIInputBlock(cmd registry.Command) string {
+	if cmd.CLIInput == nil {
+		return ""
+	}
+	var b strings.Builder
+	if cmd.CLIInput.BodyOptional {
+		b.WriteString("CLI input:\n")
+		b.WriteString("  - JSON body is optional; `--from-file` remains available for advanced request bodies.\n")
+	}
+	if len(cmd.CLIInput.Flags) > 0 {
+		if b.Len() == 0 {
+			b.WriteString("CLI input:\n")
+		}
+		b.WriteString("  Flags:\n")
+		for _, flag := range cmd.CLIInput.Flags {
+			name := strings.TrimSpace(flag.Name)
+			if name == "" {
+				continue
+			}
+			required := ""
+			if flag.Required {
+				required = " required"
+			}
+			target := strings.TrimSpace(flag.BodyPath)
+			if target != "" {
+				target = " -> body `" + target + "`"
+			}
+			desc := strings.TrimSpace(flag.Description)
+			if desc != "" {
+				desc = ": " + desc
+			}
+			b.WriteString(fmt.Sprintf("  - `--%s`%s%s%s\n", name, required, target, desc))
 		}
 	}
 	return strings.TrimSpace(b.String())

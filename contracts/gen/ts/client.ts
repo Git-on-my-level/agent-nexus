@@ -18,6 +18,12 @@ export interface CommandSpec {
   group?: string;
   path_params?: string[];
   input_mode?: string;
+  http_input_mode?: string;
+  cli_input?: {
+    mode?: string;
+    body_optional?: boolean;
+    flags?: Array<{ name: string; body_path?: string; required?: boolean; description?: string }>;
+  };
   streaming?: unknown;
   output_envelope?: string;
   error_codes?: string[];
@@ -5681,7 +5687,12 @@ export const commandRegistry: CommandSpec[] = [
     "operation_id": "archiveTopic",
     "summary": "Archive topic",
     "why": "Soft-archive a topic and derive its lifecycle state from archived_at.",
-    "input_mode": "json-body",
+    "input_mode": "none",
+    "http_input_mode": "json-body",
+    "cli_input": {
+      "mode": "none",
+      "body_optional": true
+    },
     "streaming": {
       "mode": "none"
     },
@@ -5984,7 +5995,12 @@ export const commandRegistry: CommandSpec[] = [
     "operation_id": "restoreTopic",
     "summary": "Restore topic from trash",
     "why": "Clear trash lifecycle fields on a topic after an explicit restore action.",
-    "input_mode": "json-body",
+    "input_mode": "none",
+    "http_input_mode": "json-body",
+    "cli_input": {
+      "mode": "none",
+      "body_optional": true
+    },
     "streaming": {
       "mode": "none"
     },
@@ -6078,7 +6094,19 @@ export const commandRegistry: CommandSpec[] = [
     "operation_id": "trashTopic",
     "summary": "Move topic to trash",
     "why": "Move topic to trash with an explicit operator reason.",
-    "input_mode": "json-body",
+    "input_mode": "flags",
+    "http_input_mode": "json-body",
+    "cli_input": {
+      "mode": "flags",
+      "flags": [
+        {
+          "name": "reason",
+          "body_path": "reason",
+          "required": true,
+          "description": "Operator-visible trash reason."
+        }
+      ]
+    },
     "streaming": {
       "mode": "none"
     },
@@ -6136,7 +6164,12 @@ export const commandRegistry: CommandSpec[] = [
     "operation_id": "unarchiveTopic",
     "summary": "Unarchive topic",
     "why": "Clear archived_at on a topic (restore default list visibility).",
-    "input_mode": "json-body",
+    "input_mode": "none",
+    "http_input_mode": "json-body",
+    "cli_input": {
+      "mode": "none",
+      "body_optional": true
+    },
     "streaming": {
       "mode": "none"
     },

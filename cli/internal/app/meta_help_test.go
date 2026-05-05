@@ -900,6 +900,34 @@ func TestGeneratedCommandHelpIncludesBodySchemaAndEnums(t *testing.T) {
 	}
 }
 
+func TestGeneratedCommandHelpIncludesCLIInputAffordance(t *testing.T) {
+	t.Parallel()
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	cli := New()
+	cli.Stdout = stdout
+	cli.Stderr = stderr
+	cli.Stdin = strings.NewReader("")
+	cli.StdinIsTTY = func() bool { return true }
+	cli.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	cli.ReadFile = func(path string) ([]byte, error) {
+		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
+	}
+
+	exitCode := cli.Run([]string{"help", "topics", "trash"})
+	if exitCode != 0 {
+		t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
+	}
+	output := stdout.String()
+	if !strings.Contains(output, "- Input mode: `flags`") {
+		t.Fatalf("expected effective CLI input mode output=%s", output)
+	}
+	if !strings.Contains(output, "`--reason` required -> body `reason`") {
+		t.Fatalf("expected generated reason flag affordance output=%s", output)
+	}
+}
+
 func TestRuntimeSupportedCommandIDsMatchGeneratedHelpSpecSurface(t *testing.T) {
 	t.Parallel()
 
