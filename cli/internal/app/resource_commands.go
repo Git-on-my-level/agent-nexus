@@ -1151,7 +1151,11 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 		fs.Var(&artifactIDFlag, "artifact-id", "Artifact id")
 		fs.StringVar(&outputPath, "o", "", "Write raw artifact bytes to file")
 		fs.StringVar(&outputPath, "output", "", "Write raw artifact bytes to file")
-		if err := fs.Parse(reorderArtifactContentFlags(args[1:])); err != nil {
+		contentArgs, reorderErr := reorderArtifactContentFlags(args[1:])
+		if reorderErr != nil {
+			return nil, "artifacts content", reorderErr
+		}
+		if err := fs.Parse(contentArgs); err != nil {
 			return nil, "artifacts content", errnorm.Usage("invalid_flags", err.Error())
 		}
 		positionals := fs.Args()
@@ -1373,7 +1377,7 @@ func artifactCreateUsesFileFlags(args []string) bool {
 	return false
 }
 
-func reorderArtifactContentFlags(args []string) []string {
+func reorderArtifactContentFlags(args []string) ([]string, error) {
 	knownValueFlags := map[string]struct{}{
 		"-o":            {},
 		"--output":      {},
@@ -1398,9 +1402,12 @@ func reorderArtifactContentFlags(args []string) []string {
 			}
 			continue
 		}
+		if strings.HasPrefix(arg, "-") {
+			return nil, errnorm.Usage("invalid_flags", fmt.Sprintf("flag provided but not defined: %s", arg))
+		}
 		positionals = append(positionals, arg)
 	}
-	return append(flags, positionals...)
+	return append(flags, positionals...), nil
 }
 
 func (a *App) runBoardsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {

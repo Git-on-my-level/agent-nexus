@@ -5404,6 +5404,59 @@ func TestArtifactsCreateFileRefUsesAttachmentEndpoint(t *testing.T) {
 	}
 }
 
+func TestArtifactsCreateFromFilePreservesAdvancedJSONPath(t *testing.T) {
+	t.Parallel()
+
+	bodyFile := filepath.Join(t.TempDir(), "artifact.json")
+	if err := os.WriteFile(bodyFile, []byte(`{"artifact":{"kind":"note","refs":["topic:topic_1"]},"content_type":"text","content":"hello"}`), 0o600); err != nil {
+		t.Fatalf("write body file: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/artifacts" {
+			http.NotFound(w, r)
+			return
+		}
+		var got map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if got["content"] != "hello" {
+			t.Fatalf("expected JSON artifact body, got %#v", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"artifact":{"id":"artifact_json","kind":"note"}}`))
+	}))
+	defer server.Close()
+
+	raw := runCLIForTest(t, t.TempDir(), map[string]string{}, nil, []string{
+		"--json", "--base-url", server.URL,
+		"artifacts", "create", "--from-file", bodyFile,
+	})
+	assertEnvelopeOK(t, raw)
+}
+
+func TestArtifactsContentUnknownFlagFailsBeforeNetwork(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+
+	raw := runCLIForTest(t, home, nil, nil, []string{
+		"--json",
+		"artifacts", "content", "--bogus",
+	})
+	payload := assertEnvelopeError(t, raw)
+	errObj, _ := payload["error"].(map[string]any)
+	if got := anyStringValue(errObj["code"]); got != "invalid_flags" {
+		t.Fatalf("expected invalid_flags, got %#v", payload)
+	}
+	if got := anyStringValue(errObj["message"]); !strings.Contains(got, "bogus") {
+		t.Fatalf("expected unknown flag in error message, got %#v", payload)
+	}
+}
+
 func TestArtifactsContentOutputDotUsesContentDispositionFilename(t *testing.T) {
 	expected := []byte("download body")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

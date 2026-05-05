@@ -442,6 +442,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--summary <text>", Description: "Optional attachment summary."},
 			{Name: "--artifact <json>", Description: "Optional JSON object merged into attachment metadata; refs and kind are ignored by the server."},
 			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--from-file <path>", Description: "Advanced JSON artifact create body from file; cannot be combined with --file."},
 		},
 	},
 	{

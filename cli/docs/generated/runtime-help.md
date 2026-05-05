@@ -4773,6 +4773,7 @@ Flags:
   --summary <text>             Optional attachment summary.
   --artifact <json>            Optional JSON object merged into attachment metadata; refs and kind are ignored by the server.
   --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --from-file <path>           Advanced JSON artifact create body from file; cannot be combined with --file.
 
 
 Global flags:
