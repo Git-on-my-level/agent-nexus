@@ -60,6 +60,38 @@ func (s *Store) ResolveResourceRef(ctx context.Context, input ResourceRefInput) 
 		return ResolvedResourceRef{}, fmt.Errorf("%w: unknown resource type %q", ErrInvalidResourceRef, typ)
 	}
 
+	normalized := handles.Normalize(value)
+	if normalized != "" {
+		resolved, err := resolveResourceByColumn(ctx, s.db, typ, table, "handle", normalized)
+		if err == nil {
+			return resolved, nil
+		}
+		if !errors.Is(err, ErrNotFound) {
+			return ResolvedResourceRef{}, err
+		}
+
+		var id, canonical string
+		aliasErr := s.db.QueryRowContext(ctx,
+			`SELECT resource_id, canonical_handle FROM resource_handle_aliases WHERE resource_type = ? AND alias_handle = ?`,
+			typ, normalized,
+		).Scan(&id, &canonical)
+		if aliasErr == nil {
+			resolved, err = resolveResourceByColumn(ctx, s.db, typ, table, "id", id)
+			if err != nil {
+				return ResolvedResourceRef{}, err
+			}
+			resolved.FromAlias = true
+			if strings.TrimSpace(canonical) != "" {
+				resolved.Handle = strings.TrimSpace(canonical)
+				resolved.CanonicalRef = typ + ":" + resolved.Handle
+			}
+			return resolved, nil
+		}
+		if !errors.Is(aliasErr, sql.ErrNoRows) {
+			return ResolvedResourceRef{}, fmt.Errorf("query resource handle alias: %w", aliasErr)
+		}
+	}
+
 	if handles.IsUUIDLike(value) || rowExistsByID(ctx, s.db, table, value) {
 		resolved, err := resolveResourceByColumn(ctx, s.db, typ, table, "id", value)
 		if err == nil {
@@ -69,40 +101,7 @@ func (s *Store) ResolveResourceRef(ctx context.Context, input ResourceRefInput) 
 			return ResolvedResourceRef{}, err
 		}
 	}
-
-	normalized := handles.Normalize(value)
-	if normalized == "" {
-		return ResolvedResourceRef{}, ErrNotFound
-	}
-	resolved, err := resolveResourceByColumn(ctx, s.db, typ, table, "handle", normalized)
-	if err == nil {
-		return resolved, nil
-	}
-	if !errors.Is(err, ErrNotFound) {
-		return ResolvedResourceRef{}, err
-	}
-
-	var id, canonical string
-	aliasErr := s.db.QueryRowContext(ctx,
-		`SELECT resource_id, canonical_handle FROM resource_handle_aliases WHERE resource_type = ? AND alias_handle = ?`,
-		typ, normalized,
-	).Scan(&id, &canonical)
-	if errors.Is(aliasErr, sql.ErrNoRows) {
-		return ResolvedResourceRef{}, ErrNotFound
-	}
-	if aliasErr != nil {
-		return ResolvedResourceRef{}, fmt.Errorf("query resource handle alias: %w", aliasErr)
-	}
-	resolved, err = resolveResourceByColumn(ctx, s.db, typ, table, "id", id)
-	if err != nil {
-		return ResolvedResourceRef{}, err
-	}
-	resolved.FromAlias = true
-	if strings.TrimSpace(canonical) != "" {
-		resolved.Handle = strings.TrimSpace(canonical)
-		resolved.CanonicalRef = typ + ":" + resolved.Handle
-	}
-	return resolved, nil
+	return ResolvedResourceRef{}, ErrNotFound
 }
 
 func resolveResourceByColumn(ctx context.Context, db *sql.DB, typ, table, column, value string) (ResolvedResourceRef, error) {
@@ -152,11 +151,15 @@ func uniqueHandleTx(ctx context.Context, q queryRower, typ, desired, fallbackSee
 		if err := q.QueryRowContext(ctx, `SELECT COUNT(1) FROM `+table+` WHERE handle = ?`, candidate).Scan(&n); err != nil {
 			return "", err
 		}
+		var idN int
+		if err := q.QueryRowContext(ctx, `SELECT COUNT(1) FROM `+table+` WHERE id = ?`, candidate).Scan(&idN); err != nil {
+			return "", err
+		}
 		var aliasN int
 		if err := q.QueryRowContext(ctx, `SELECT COUNT(1) FROM resource_handle_aliases WHERE resource_type = ? AND alias_handle = ?`, typ, candidate).Scan(&aliasN); err != nil {
 			return "", err
 		}
-		if n == 0 && aliasN == 0 {
+		if n == 0 && idN == 0 && aliasN == 0 {
 			return candidate, nil
 		}
 	}

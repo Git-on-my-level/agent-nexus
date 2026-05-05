@@ -35,6 +35,7 @@ func TestMigration25BackfillsResourceHandles(t *testing.T) {
 		t.Fatalf("create topics: %v", err)
 	}
 	if _, err := db.ExecContext(ctx, `INSERT INTO topics(id, title, created_at) VALUES
+		('duplicate-name', 'Legacy ID Collision', '2026-01-01T00:00:00Z'),
 		('t1', 'Duplicate Name', '2026-01-01T00:00:00Z'),
 		('t2', 'Duplicate Name', '2026-01-01T00:00:01Z'),
 		('t3', 'settings', '2026-01-01T00:00:02Z'),
@@ -65,8 +66,11 @@ func TestMigration25BackfillsResourceHandles(t *testing.T) {
 		}
 		got[id] = handle
 	}
-	if got["t1"] != "duplicate-name" || got["t2"] != "duplicate-name-2" {
+	if got["t1"] != "duplicate-name-2" || got["t2"] != "duplicate-name-3" {
 		t.Fatalf("duplicate handles not suffixed as expected: %#v", got)
+	}
+	if got["duplicate-name"] == "duplicate-name" {
+		t.Fatalf("handle should not collide with an existing storage id: %#v", got)
 	}
 	if got["t3"] == "settings" || got["t3"] == "" {
 		t.Fatalf("reserved title should receive fallback handle: %#v", got)

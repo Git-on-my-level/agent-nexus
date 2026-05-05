@@ -880,17 +880,25 @@ func migration25BackfillHandles(ctx context.Context, tx *sql.Tx, table, typ, tit
 		return fmt.Errorf("migration 25 iterate %s handles: %w", table, err)
 	}
 	used := map[string]struct{}{}
-	existing, err := tx.QueryContext(ctx, `SELECT handle FROM `+table+` WHERE COALESCE(trim(handle), '') <> ''`)
+	existing, err := tx.QueryContext(ctx, `SELECT id, handle FROM `+table)
 	if err != nil {
-		return fmt.Errorf("migration 25 select existing %s handles: %w", table, err)
+		return fmt.Errorf("migration 25 select existing %s identities: %w", table, err)
 	}
 	for existing.Next() {
-		var h string
-		if err := existing.Scan(&h); err != nil {
+		var id string
+		var h sql.NullString
+		if err := existing.Scan(&id, &h); err != nil {
 			_ = existing.Close()
 			return err
 		}
-		used[strings.TrimSpace(h)] = struct{}{}
+		if id = strings.TrimSpace(id); id != "" {
+			used[id] = struct{}{}
+		}
+		if h.Valid {
+			if handle := strings.TrimSpace(h.String); handle != "" {
+				used[handle] = struct{}{}
+			}
+		}
 	}
 	if err := existing.Close(); err != nil {
 		return err

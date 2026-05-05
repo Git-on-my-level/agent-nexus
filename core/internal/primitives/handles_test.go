@@ -28,6 +28,14 @@ func TestResolveResourceRef(t *testing.T) {
 		t.Fatalf("insert topic: %v", err)
 	}
 	if _, err := ws.DB().ExecContext(ctx,
+		`INSERT INTO topics(id, handle, title, thread_id, summary, extensions_json, provenance_json, created_at, created_by, updated_at, updated_by)
+		 VALUES ('legacy-id', 'legacy-source', 'Legacy Source', 'thread-legacy', '', '{}', '{}', ?, 'actor-1', ?, 'actor-1'),
+		        ('handle-target', 'legacy-id', 'Handle Target', 'thread-target', '', '{}', '{}', ?, 'actor-1', ?, 'actor-1')`,
+		now, now, now, now,
+	); err != nil {
+		t.Fatalf("insert legacy collision topics: %v", err)
+	}
+	if _, err := ws.DB().ExecContext(ctx,
 		`INSERT INTO resource_handle_aliases(id, resource_type, alias_handle, resource_id, canonical_handle, created_at, created_by, reason)
 		 VALUES ('alias-1', 'topic', 'old-roadmap', ?, 'caf-roadmap', ?, 'actor-1', 'rename')`,
 		uuidID, now,
@@ -60,5 +68,33 @@ func TestResolveResourceRef(t *testing.T) {
 				t.Fatalf("FromAlias = %v, want %v", got.FromAlias, tt.wantAlias)
 			}
 		})
+	}
+}
+
+func TestResolveResourceRefPrefersHandleBeforeLegacyIDFallback(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer ws.Close()
+	store := NewTestStore(ws.DB(), "")
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := ws.DB().ExecContext(ctx,
+		`INSERT INTO topics(id, handle, title, thread_id, summary, extensions_json, provenance_json, created_at, created_by, updated_at, updated_by)
+		 VALUES ('legacy-id', 'legacy-source', 'Legacy Source', 'thread-legacy', '', '{}', '{}', ?, 'actor-1', ?, 'actor-1'),
+		        ('handle-target', 'legacy-id', 'Handle Target', 'thread-target', '', '{}', '{}', ?, 'actor-1', ?, 'actor-1')`,
+		now, now, now, now,
+	); err != nil {
+		t.Fatalf("insert topics: %v", err)
+	}
+
+	got, err := store.ResolveResourceRef(ctx, ResourceRefInput{Type: "topic", Ref: "legacy-id"})
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if got.ID != "handle-target" || got.Handle != "legacy-id" || got.CanonicalRef != "topic:legacy-id" {
+		t.Fatalf("expected public handle target, got %#v", got)
 	}
 }
