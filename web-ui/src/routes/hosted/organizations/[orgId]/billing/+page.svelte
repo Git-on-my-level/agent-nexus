@@ -10,6 +10,7 @@
   import Skeleton from "$lib/components/state/Skeleton.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
 
+  import { formatStorageBytes } from "$lib/hosted/usageStats.js";
   import {
     billingPollScheduleDelays,
     billingSnapshotExpired,
@@ -342,6 +343,16 @@
     message = await readError(res);
   }
 
+  /** @param {any} w */
+  function workspaceAccessLabel(w) {
+    const st = String(w?.status ?? "").trim();
+    const mode = String(w?.access_mode ?? "").trim();
+    if (st === "suspended") return "Suspended";
+    if (mode === "read_only") return "Read-only";
+    if (mode === "read_write" || mode === "") return "Writable";
+    return mode;
+  }
+
   function managerDisplayName(m) {
     const dn = String(m.account_display_name ?? "").trim();
     const em = String(m.account_email ?? "").trim();
@@ -358,11 +369,10 @@
     <p class="text-micro text-fg-subtle">
       <a
         class="text-fg-subtle underline-offset-2 transition-colors hover:text-fg hover:underline"
-        href={`/hosted/organizations/${encodeURIComponent(orgId)}`}
-        >← Overview</a
+        href="/hosted/dashboard">← Dashboard</a
       >
     </p>
-    <h1 class="mt-1 text-display text-fg">Billing</h1>
+    <h1 class="mt-1 text-display text-fg">Billing &amp; Usage</h1>
   </div>
 
   {#if message}
@@ -509,6 +519,61 @@
         {/if}
       </div>
     </section>
+
+    {#if us.workspaces && us.workspaces.length > 0}
+      <section class="overflow-hidden rounded-md border border-line bg-bg-soft">
+        <div
+          class="flex items-center justify-between border-b border-line px-4 py-2.5"
+        >
+          <h2 class="text-subtitle text-fg">Workspace usage</h2>
+          <span class="text-micro text-fg-subtle">
+            Over plan limits, workspaces may go read-only until usage drops or
+            you upgrade.
+          </span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="min-w-full text-meta">
+            <thead>
+              <tr
+                class="border-b border-line text-left text-micro uppercase tracking-wide text-fg-subtle"
+              >
+                <th class="px-4 py-2">Workspace</th>
+                <th class="px-4 py-2">Access</th>
+                <th class="px-4 py-2">Artifacts</th>
+                <th class="px-4 py-2">Storage</th>
+                <th class="px-4 py-2">Launches (mo)</th>
+                <th class="px-4 py-2">Last active</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each us.workspaces as w (w.id)}
+                <tr class="border-b border-line last:border-b-0">
+                  <td class="px-4 py-2">
+                    <div class="text-fg">{w.display_name || w.slug}</div>
+                    <div class="font-mono text-micro text-fg-subtle">
+                      {w.slug}
+                    </div>
+                  </td>
+                  <td class="px-4 py-2 text-fg">{workspaceAccessLabel(w)}</td>
+                  <td class="px-4 py-2 tabular-nums text-fg"
+                    >{w.artifact_count ?? 0}</td
+                  >
+                  <td class="px-4 py-2 tabular-nums text-fg"
+                    >{formatStorageBytes(w.storage_bytes ?? 0)}</td
+                  >
+                  <td class="px-4 py-2 tabular-nums text-fg"
+                    >{w.monthly_launch_count ?? 0}</td
+                  >
+                  <td class="px-4 py-2 text-fg-subtle"
+                    >{w.last_active_at ?? "—"}</td
+                  >
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    {/if}
 
     <section>
       <h2 class="text-subtitle text-fg">Plans</h2>

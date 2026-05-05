@@ -61,10 +61,8 @@
     if (activeOrg) {
       const base = `/hosted/organizations/${encodeURIComponent(activeOrg.id)}`;
       items.push(
-        { href: base, label: "Overview" },
         { href: `${base}/team`, label: "Team" },
-        { href: `${base}/usage`, label: "Usage" },
-        { href: `${base}/billing`, label: "Billing" },
+        { href: `${base}/billing`, label: "Billing & Usage" },
       );
     } else {
       items.push({ href: "/hosted/organizations", label: "Organizations" });
@@ -276,7 +274,7 @@
                 account?.display_name ??
                 "Account menu"}
               onclick={() => (menuOpen = !menuOpen)}
-              class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-panel-hover text-micro text-fg transition-colors hover:bg-line-strong"
+              class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-panel-hover text-micro text-fg transition-colors hover:bg-line-strong"
               title={account?.email ?? account?.display_name ?? "Account"}
             >
               {initialsFor(account)}
@@ -305,25 +303,7 @@
                     {/if}
                   </div>
                 </div>
-                <ul class="py-1">
-                  <li>
-                    <a
-                      role="menuitem"
-                      href="/hosted/dashboard"
-                      class="block px-3 py-2 text-micro text-fg transition-colors hover:bg-panel-hover"
-                      >Dashboard</a
-                    >
-                  </li>
-                  <li>
-                    <a
-                      role="menuitem"
-                      href="/hosted/organizations"
-                      class="block px-3 py-2 text-micro text-fg transition-colors hover:bg-panel-hover"
-                      >Organizations</a
-                    >
-                  </li>
-                </ul>
-                <div class="border-t border-line py-1">
+                <div class="py-1">
                   <button
                     role="menuitem"
                     type="button"
@@ -417,21 +397,7 @@
         >
         <a
           class="transition-colors hover:text-fg inline-block py-1"
-          href="/hosted/legal/terms">Terms</a
-        >
-        <a
-          class="transition-colors hover:text-fg inline-block py-1"
           href="/hosted/legal/privacy">Privacy</a
-        >
-        <a
-          class="transition-colors hover:text-fg inline-block py-1"
-          href="/hosted/legal/cookies">Cookies</a
-        >
-        <a
-          class="transition-colors hover:text-fg inline-block py-1"
-          href="https://github.com/Git-on-my-level/agent-nexus"
-          rel="noreferrer"
-          target="_blank">GitHub</a
         >
         <a
           class="transition-colors hover:text-fg inline-block py-1"
