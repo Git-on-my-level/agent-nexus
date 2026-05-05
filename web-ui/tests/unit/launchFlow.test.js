@@ -32,6 +32,7 @@ describe("launchFlow helpers", () => {
       "workspace=Acme-Prod&workspace_id=ws_123&return_to=%2Ftopics%3Ftag%3Dhot",
     );
     expect(readHostedLaunchParams(params)).toEqual({
+      organizationSlug: "",
       workspaceSlug: "acme-prod",
       workspaceId: "ws_123",
       returnPath: "/topics?tag=hot",
@@ -42,12 +43,13 @@ describe("launchFlow helpers", () => {
   it("builds hosted sign-in path with launch continuation params", () => {
     expect(
       buildHostedSignInPath({
+        organizationSlug: "David Zhang",
         workspaceSlug: "Acme Prod",
         workspaceId: "ws_123",
         returnPath: "/topics",
       }),
     ).toBe(
-      "/hosted/signin?workspace=acme-prod&workspace_id=ws_123&return_path=%2Ftopics",
+      "/hosted/signin?organization=david-zhang&workspace=acme-prod&workspace_id=ws_123&return_path=%2Ftopics",
     );
 
     expect(

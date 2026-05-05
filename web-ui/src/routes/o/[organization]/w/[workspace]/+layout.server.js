@@ -152,6 +152,7 @@ export async function load(event) {
       resolved.outOfWorkspaceUnauthenticated
     ) {
       const signInUrl = provider.buildSignInUrl({
+        organizationSlug: event.params.organization,
         workspaceSlug: event.params.workspace,
         returnPath: workspaceRelativeReturnPath(
           event,
@@ -202,6 +203,7 @@ export async function load(event) {
     const instruction = await provider.beginLaunchSession({
       event,
       workspaceId,
+      organizationSlug: resolved.workspace.organizationSlug,
       workspaceSlug: resolved.workspace.slug,
       returnPath: workspaceRelativeReturnPath(
         event,

@@ -4,6 +4,10 @@ import {
   readHostedLaunchParams,
   sanitizeHostedReturnPath,
 } from "$lib/hosted/launchFlow.js";
+import {
+  normalizeOrganizationSlug,
+  normalizeWorkspaceSlug,
+} from "$lib/workspacePaths.js";
 
 const HOSTED_OAUTH_STORAGE_KEY = "anx_hosted_oauth_continuations_v1";
 const HOSTED_OAUTH_MAX_AGE_MS = 15 * 60 * 1000;
@@ -56,6 +60,7 @@ export function buildHostedOAuthContinuation(urlLike, options = {}) {
   return {
     mode: normalizeHostedOAuthMode(options.mode),
     next: normalizeHostedNextPath(url.searchParams.get("next")),
+    organizationSlug: launch.organizationSlug,
     workspaceSlug: launch.workspaceSlug,
     workspaceId: launch.workspaceId,
     returnPath: launch.returnPath,
@@ -118,6 +123,7 @@ export function storeHostedOAuthContinuation(state, continuation) {
   storage[normalizedState] = {
     mode: normalizeHostedOAuthMode(continuation?.mode),
     next: normalizeHostedNextPath(continuation?.next),
+    organizationSlug: String(continuation?.organizationSlug ?? "").trim(),
     workspaceSlug: String(continuation?.workspaceSlug ?? "").trim(),
     workspaceId: String(continuation?.workspaceId ?? "").trim(),
     returnPath: sanitizeHostedReturnPath(continuation?.returnPath, "/"),
@@ -140,6 +146,7 @@ export function readHostedOAuthContinuation(state) {
   return {
     mode: normalizeHostedOAuthMode(value.mode),
     next: normalizeHostedNextPath(value.next),
+    organizationSlug: String(value.organizationSlug ?? "").trim(),
     workspaceSlug: String(value.workspaceSlug ?? "").trim(),
     workspaceId: String(value.workspaceId ?? "").trim(),
     returnPath: sanitizeHostedReturnPath(value.returnPath, "/"),
@@ -173,6 +180,7 @@ export function buildHostedOAuthRecoveryPath(continuation) {
   const params = new URLSearchParams();
 
   const next = normalizeHostedNextPath(continuation?.next);
+  const organizationSlug = String(continuation?.organizationSlug ?? "").trim();
   const workspaceSlug = String(continuation?.workspaceSlug ?? "").trim();
   const workspaceId = String(continuation?.workspaceId ?? "").trim();
   const returnPath = sanitizeHostedReturnPath(continuation?.returnPath, "/");
@@ -180,6 +188,9 @@ export function buildHostedOAuthRecoveryPath(continuation) {
 
   if (next) {
     params.set("next", next);
+  }
+  if (organizationSlug) {
+    params.set("organization", organizationSlug);
   }
   if (workspaceSlug) {
     params.set("workspace", workspaceSlug);
@@ -275,10 +286,18 @@ export async function startHostedOAuthFlow({
 
 export async function createHostedLaunchSession({
   cpFetch,
+  organizationSlug,
   workspaceId,
+  workspaceSlug,
   returnPath,
 }) {
-  const normalizedWorkspaceId = String(workspaceId ?? "").trim();
+  const normalizedWorkspaceId =
+    String(workspaceId ?? "").trim() ||
+    (await resolveHostedWorkspaceId({
+      cpFetch,
+      organizationSlug,
+      workspaceSlug,
+    }));
   if (!normalizedWorkspaceId) {
     throw new Error("Workspace continuation is missing a workspace id.");
   }
@@ -298,4 +317,77 @@ export async function createHostedLaunchSession({
   }
 
   return response.json();
+}
+
+function normalizeWorkspaceRows(body) {
+  return Array.isArray(body?.workspaces) ? body.workspaces : [];
+}
+
+async function readHostedJSON(response) {
+  try {
+    return await response.json();
+  } catch {
+    return {};
+  }
+}
+
+export async function resolveHostedWorkspaceId({
+  cpFetch,
+  organizationSlug,
+  workspaceSlug,
+}) {
+  const normalizedWorkspaceSlug = normalizeWorkspaceSlug(workspaceSlug);
+  if (!normalizedWorkspaceSlug) {
+    return "";
+  }
+  const normalizedOrganizationSlug =
+    normalizeOrganizationSlug(organizationSlug);
+  const orgResponse = await cpFetch("organizations?limit=100");
+  if (!orgResponse.ok) {
+    throw new Error(await readHostedOAuthError(orgResponse));
+  }
+  const orgBody = await readHostedJSON(orgResponse);
+  const organizations = Array.isArray(orgBody?.organizations)
+    ? orgBody.organizations
+    : [];
+  const candidateOrgs = normalizedOrganizationSlug
+    ? organizations.filter(
+        (org) =>
+          normalizeOrganizationSlug(org?.slug) === normalizedOrganizationSlug,
+      )
+    : organizations;
+
+  if (normalizedOrganizationSlug && candidateOrgs.length === 0) {
+    throw new Error("Workspace organization could not be found.");
+  }
+
+  const matches = [];
+  for (const org of candidateOrgs) {
+    const organizationId = String(org?.id ?? "").trim();
+    if (!organizationId) {
+      continue;
+    }
+    const workspacesResponse = await cpFetch(
+      `workspaces?organization_id=${encodeURIComponent(organizationId)}&limit=200`,
+    );
+    if (!workspacesResponse.ok) {
+      throw new Error(await readHostedOAuthError(workspacesResponse));
+    }
+    const workspacesBody = await readHostedJSON(workspacesResponse);
+    for (const workspace of normalizeWorkspaceRows(workspacesBody)) {
+      if (normalizeWorkspaceSlug(workspace?.slug) === normalizedWorkspaceSlug) {
+        matches.push(workspace);
+      }
+    }
+  }
+
+  if (matches.length === 0) {
+    throw new Error("Workspace continuation could not find that workspace.");
+  }
+  if (matches.length > 1) {
+    throw new Error(
+      "Workspace continuation is ambiguous; include the organization slug.",
+    );
+  }
+  return String(matches[0]?.id ?? "").trim();
 }

@@ -54,7 +54,9 @@
     try {
       launchPayload = await createHostedLaunchSession({
         cpFetch: hostedCpFetch,
+        organizationSlug: launchParams.organizationSlug,
         workspaceId: launchParams.workspaceId,
+        workspaceSlug: launchParams.workspaceSlug,
         returnPath: launchParams.returnPath,
       });
     } catch (error) {

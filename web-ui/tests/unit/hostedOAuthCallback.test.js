@@ -75,6 +75,7 @@ describe("hosted oauth callback page", () => {
     storeHostedOAuthContinuation("state_1", {
       mode: "signup",
       next: "",
+      organizationSlug: "",
       workspaceSlug: "",
       workspaceId: "",
       returnPath: "/",
@@ -120,6 +121,7 @@ describe("hosted oauth callback page", () => {
     storeHostedOAuthContinuation("state_1", {
       mode: "signup",
       next: "",
+      organizationSlug: "",
       workspaceSlug: "",
       workspaceId: "",
       returnPath: "/",
@@ -154,6 +156,7 @@ describe("hosted oauth callback page", () => {
     storeHostedOAuthContinuation("state_1", {
       mode: "signup",
       next: "/hosted/dashboard",
+      organizationSlug: "david-zhang",
       workspaceSlug: "acme",
       workspaceId: "ws_123",
       returnPath: "/threads/1",
@@ -175,12 +178,13 @@ describe("hosted oauth callback page", () => {
     expect(container.textContent).toContain("Back to signup");
     const link = container.querySelector("a[href]");
     expect(link?.getAttribute("href")).toBe(
-      "/hosted/signup?next=%2Fhosted%2Fdashboard&workspace=acme&workspace_id=ws_123&return_path=%2Fthreads%2F1&invite=inv_signup_123",
+      "/hosted/signup?next=%2Fhosted%2Fdashboard&organization=david-zhang&workspace=acme&workspace_id=ws_123&return_path=%2Fthreads%2F1&invite=inv_signup_123",
     );
     expect(readHostedOAuthContinuation("state_1")).toEqual(
       expect.objectContaining({
         mode: "signup",
         next: "/hosted/dashboard",
+        organizationSlug: "david-zhang",
         workspaceSlug: "acme",
         workspaceId: "ws_123",
         returnPath: "/threads/1",

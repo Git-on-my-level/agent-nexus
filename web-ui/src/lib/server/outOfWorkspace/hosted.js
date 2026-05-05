@@ -65,8 +65,14 @@ function canonicalizeSessionExchangeError(httpStatus, cpCode, cpMessage) {
   return cpCode;
 }
 
-function defaultSignInPath({ workspaceSlug, workspaceId, returnPath }) {
+function defaultSignInPath({
+  organizationSlug,
+  workspaceSlug,
+  workspaceId,
+  returnPath,
+}) {
   return buildHostedSignInPath({
+    organizationSlug,
     workspaceSlug,
     workspaceId,
     returnPath,
@@ -138,6 +144,7 @@ export function createHostedProvider({ controlPlaneBaseUrl, env }) {
       event,
       workspaceId,
       returnPath,
+      organizationSlug,
       workspaceSlug,
     }) {
       const launch = await client.createLaunchSession({
@@ -149,6 +156,7 @@ export function createHostedProvider({ controlPlaneBaseUrl, env }) {
         return {
           kind: "needs_signin",
           signInUrl: defaultSignInPath({
+            organizationSlug,
             workspaceSlug,
             workspaceId,
             returnPath,
@@ -220,8 +228,14 @@ export function createHostedProvider({ controlPlaneBaseUrl, env }) {
       };
     },
 
-    buildSignInUrl({ workspaceSlug, workspaceId, returnPath } = {}) {
+    buildSignInUrl({
+      organizationSlug,
+      workspaceSlug,
+      workspaceId,
+      returnPath,
+    } = {}) {
       return defaultSignInPath({
+        organizationSlug,
         workspaceSlug,
         workspaceId,
         returnPath,

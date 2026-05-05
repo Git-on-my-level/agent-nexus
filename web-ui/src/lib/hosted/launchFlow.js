@@ -1,4 +1,7 @@
-import { normalizeWorkspaceSlug } from "$lib/workspacePaths.js";
+import {
+  normalizeOrganizationSlug,
+  normalizeWorkspaceSlug,
+} from "$lib/workspacePaths.js";
 
 function decodeForPathSegmentCheck(segment) {
   let current = String(segment ?? "");
@@ -60,6 +63,9 @@ export function readHostedLaunchParams(searchParams) {
     searchParams instanceof URLSearchParams
       ? searchParams
       : new URLSearchParams(searchParams ?? "");
+  const organizationSlug = normalizeOrganizationSlug(
+    params.get("organization") ?? params.get("org"),
+  );
   const workspaceSlug = normalizeWorkspaceSlug(params.get("workspace"));
   const workspaceId = String(params.get("workspace_id") ?? "").trim();
   const returnPath = sanitizeHostedReturnPath(
@@ -67,24 +73,31 @@ export function readHostedLaunchParams(searchParams) {
   );
 
   return {
+    organizationSlug,
     workspaceSlug,
     workspaceId,
     returnPath,
-    hasContinuation: workspaceId !== "",
+    hasContinuation: workspaceId !== "" || workspaceSlug !== "",
   };
 }
 
 export function buildHostedSignInPath({
+  organizationSlug,
   workspaceSlug,
   workspaceId,
   returnPath = "/",
   targetPath = "/hosted/signin",
 }) {
   const params = new URLSearchParams();
+  const normalizedOrganizationSlug =
+    normalizeOrganizationSlug(organizationSlug);
   const normalizedWorkspaceSlug = normalizeWorkspaceSlug(workspaceSlug);
   const normalizedWorkspaceID = String(workspaceId ?? "").trim();
   const sanitizedReturnPath = sanitizeHostedReturnPath(returnPath);
 
+  if (normalizedOrganizationSlug) {
+    params.set("organization", normalizedOrganizationSlug);
+  }
   if (normalizedWorkspaceSlug) {
     params.set("workspace", normalizedWorkspaceSlug);
   }

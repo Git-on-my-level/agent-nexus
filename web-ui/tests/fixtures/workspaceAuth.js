@@ -116,8 +116,14 @@ export function mockHostedProvider(overrides = {}) {
         message: "Could not reach control plane for session exchange.",
       };
     },
-    buildSignInUrl({ workspaceSlug, workspaceId, returnPath } = {}) {
+    buildSignInUrl({
+      organizationSlug,
+      workspaceSlug,
+      workspaceId,
+      returnPath,
+    } = {}) {
       const params = new URLSearchParams();
+      if (organizationSlug) params.set("organization", organizationSlug);
       if (workspaceSlug) params.set("workspace", workspaceSlug);
       if (workspaceId) params.set("workspace_id", workspaceId);
       if (returnPath && returnPath !== "/")

@@ -353,6 +353,7 @@
     );
     const destination = hostedMode
       ? buildHostedSignInPath({
+          organizationSlug: org,
           workspaceSlug: ws,
           workspaceId: $page.data?.workspace?.workspaceId,
           returnPath: returnTo,

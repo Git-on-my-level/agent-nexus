@@ -65,6 +65,8 @@
  *   beginLaunchSession(args: {
  *     event: import("@sveltejs/kit").RequestEvent,
  *     workspaceId: string,
+ *     organizationSlug?: string,
+ *     workspaceSlug?: string,
  *     returnPath: string,
  *   }): Promise<LaunchInstruction>,
  *   exchangeLaunchSession(args: {
@@ -72,6 +74,7 @@
  *     request: SessionExchangeRequest,
  *   }): Promise<SessionExchangeResult>,
  *   buildSignInUrl(args: {
+ *     organizationSlug?: string,
  *     workspaceSlug?: string,
  *     workspaceId?: string,
  *     returnPath?: string,

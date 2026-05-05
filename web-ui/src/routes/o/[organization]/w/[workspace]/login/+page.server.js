@@ -83,6 +83,7 @@ export async function load(event) {
   const instruction = await provider.beginLaunchSession({
     event,
     workspaceId: workspaceID,
+    organizationSlug: resolved.organizationSlug,
     workspaceSlug: resolved.workspaceSlug,
     returnPath,
   });

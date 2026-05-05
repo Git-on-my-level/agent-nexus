@@ -42,6 +42,7 @@ describe("hosted oauth flow helpers", () => {
     expect(continuation).toEqual({
       mode: "signup",
       next: "/hosted/dashboard",
+      organizationSlug: "",
       workspaceSlug: "acme",
       workspaceId: "ws_123",
       returnPath: "/threads/1",
@@ -59,6 +60,7 @@ describe("hosted oauth flow helpers", () => {
     storeHostedOAuthContinuation("oauth_state_1", {
       mode: "signup",
       next: "/hosted/dashboard",
+      organizationSlug: "david-zhang",
       workspaceSlug: "acme",
       workspaceId: "ws_123",
       returnPath: "/threads/1",
@@ -68,6 +70,7 @@ describe("hosted oauth flow helpers", () => {
     expect(readHostedOAuthContinuation("oauth_state_1")).toEqual({
       mode: "signup",
       next: "/hosted/dashboard",
+      organizationSlug: "david-zhang",
       workspaceSlug: "acme",
       workspaceId: "ws_123",
       returnPath: "/threads/1",
@@ -76,6 +79,7 @@ describe("hosted oauth flow helpers", () => {
     expect(readHostedOAuthContinuation("oauth_state_1")).toEqual({
       mode: "signup",
       next: "/hosted/dashboard",
+      organizationSlug: "david-zhang",
       workspaceSlug: "acme",
       workspaceId: "ws_123",
       returnPath: "/threads/1",
@@ -111,13 +115,14 @@ describe("hosted oauth flow helpers", () => {
       buildHostedOAuthRecoveryPath({
         mode: "signup",
         next: "/hosted/dashboard",
+        organizationSlug: "david-zhang",
         workspaceSlug: "acme",
         workspaceId: "ws_123",
         returnPath: "/threads/1",
         inviteToken: "inv_123",
       }),
     ).toBe(
-      "/hosted/signup?next=%2Fhosted%2Fdashboard&workspace=acme&workspace_id=ws_123&return_path=%2Fthreads%2F1&invite=inv_123",
+      "/hosted/signup?next=%2Fhosted%2Fdashboard&organization=david-zhang&workspace=acme&workspace_id=ws_123&return_path=%2Fthreads%2F1&invite=inv_123",
     );
     expect(
       buildHostedOAuthRecoveryPath({
@@ -185,6 +190,7 @@ describe("hosted oauth flow helpers", () => {
     expect(readHostedOAuthContinuation("state_2")).toEqual({
       mode: "signup",
       next: "",
+      organizationSlug: "",
       workspaceSlug: "acme",
       workspaceId: "ws_123",
       returnPath: "/threads/1",
@@ -220,6 +226,63 @@ describe("hosted oauth flow helpers", () => {
         return_path: "/",
       }),
     });
+  });
+
+  it("resolves slug-only launch continuations after sign-in", async () => {
+    const cpFetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          organizations: [
+            { id: "org_other", slug: "other" },
+            { id: "org_123", slug: "david-zhang" },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          workspaces: [{ id: "ws_123", slug: "personal" }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          launch_session: {
+            finish_url: "/workspaces/ws_123/launch-finish",
+          },
+        }),
+      });
+
+    await expect(
+      createHostedLaunchSession({
+        cpFetch,
+        organizationSlug: "david-zhang",
+        workspaceSlug: "personal",
+        returnPath: "/boards/board_1?card=card_1",
+      }),
+    ).resolves.toEqual({
+      launch_session: {
+        finish_url: "/workspaces/ws_123/launch-finish",
+      },
+    });
+
+    expect(cpFetch).toHaveBeenNthCalledWith(1, "organizations?limit=100");
+    expect(cpFetch).toHaveBeenNthCalledWith(
+      2,
+      "workspaces?organization_id=org_123&limit=200",
+    );
+    expect(cpFetch).toHaveBeenNthCalledWith(
+      3,
+      "workspaces/ws_123/launch-sessions",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          return_path: "/boards/board_1?card=card_1",
+        }),
+      },
+    );
   });
 
   it("formats provider cancellation copy from shared helper", () => {

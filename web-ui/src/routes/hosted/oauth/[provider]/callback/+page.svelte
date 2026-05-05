@@ -64,7 +64,9 @@
     try {
       launchPayload = await createHostedLaunchSession({
         cpFetch: hostedCpFetch,
+        organizationSlug: continuation.organizationSlug,
         workspaceId: continuation.workspaceId,
+        workspaceSlug: continuation.workspaceSlug,
         returnPath: continuation.returnPath,
       });
     } catch (error) {
@@ -155,7 +157,7 @@
       await loadHostedSession();
       sessionEstablished = true;
 
-      if (continuation?.workspaceId) {
+      if (continuation?.workspaceId || continuation?.workspaceSlug) {
         if (!(await continueWorkspaceLaunch())) {
           return;
         }
