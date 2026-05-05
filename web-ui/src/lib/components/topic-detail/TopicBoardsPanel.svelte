@@ -5,6 +5,10 @@
   import { workspacePath } from "$lib/workspacePaths";
   import { topicDetailStore } from "$lib/topicDetailStore";
   import { parseRef } from "$lib/typedRefs";
+  import {
+    resourceDisplayLabel,
+    resourceRouteSegment,
+  } from "$lib/resourceIdentity.js";
 
   let ownedBoards = $derived($topicDetailStore.ownedBoards);
   let boardMemberships = $derived($topicDetailStore.boardMemberships);
@@ -81,12 +85,12 @@
               href={workspacePath(
                 organizationSlug,
                 workspaceSlug,
-                `/boards/${board.id}`,
+                `/boards/${encodeURIComponent(resourceRouteSegment(board, "board"))}`,
               )}
             >
               <div class="flex min-w-0 items-center gap-2">
                 <span class="truncate text-meta font-medium text-fg">
-                  {board.title || board.id}
+                  {resourceDisplayLabel(board)}
                 </span>
                 {#if board.state}
                   <span
@@ -117,6 +121,10 @@
           </div>
           {#each boardMemberships as membership}
             {@const boardId = membership?.board?.id ?? membership?.board_id}
+            {@const boardRouteSegment = resourceRouteSegment(
+              membership?.board ?? { id: boardId },
+              "board",
+            )}
             {@const boardTitle =
               membership?.board?.title ?? membership?.board_title ?? boardId}
             {@const boardState =
@@ -128,13 +136,14 @@
             )}
             {@const cardMembership = membership?.card}
             {@const boardCardHref = cardMembership
-              ? `${workspacePath(organizationSlug, workspaceSlug, `/boards/${boardId}`)}?card=${encodeURIComponent(
-                  boardCardStableId(cardMembership),
+              ? `${workspacePath(organizationSlug, workspaceSlug, `/boards/${encodeURIComponent(boardRouteSegment)}`)}?card=${encodeURIComponent(
+                  resourceRouteSegment(cardMembership, "card") ||
+                    boardCardStableId(cardMembership),
                 )}`
               : workspacePath(
                   organizationSlug,
                   workspaceSlug,
-                  `/boards/${boardId}`,
+                  `/boards/${encodeURIComponent(boardRouteSegment)}`,
                 )}
             {#if boardId}
               <div class="px-4 py-2.5">

@@ -27,6 +27,10 @@
   import Button from "$lib/components/Button.svelte";
   import { createWorkspaceListSelection } from "$lib/workspaceListSelection.svelte.js";
   import { topicListLinkedMetricItems } from "$lib/workspaceRowMetrics.js";
+  import {
+    resourceDisplayLabel,
+    resourceRouteSegment,
+  } from "$lib/resourceIdentity.js";
 
   const defaultFilters = {
     states: ["active"],
@@ -218,7 +222,7 @@
   /** @param {number} i */
   function topicHrefAtVisibleIndex(i) {
     return workspaceHref(
-      `/topics/${encodeURIComponent(topicIdAtVisibleIndex(i))}`,
+      `/topics/${encodeURIComponent(resourceRouteSegment(topics[i], "topic"))}`,
     );
   }
 
@@ -719,7 +723,7 @@
       {@const selected = topicSel.selectedIds.has(topic.id)}
       {#if topicSel.selectMode}
         <div
-          aria-label={`${selected ? "Deselect" : "Select"} ${topic.title || topic.id}`}
+          aria-label={`${selected ? "Deselect" : "Select"} ${resourceDisplayLabel(topic)}`}
           aria-pressed={selected}
           class="flex cursor-pointer items-stretch outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-soft {showBorderTop
             ? 'border-t border-line'
@@ -785,7 +789,9 @@
         >
           <a
             class="flex min-w-0 flex-1 items-start gap-3 px-3 py-2.5 transition-colors hover:bg-line-subtle"
-            href={workspaceHref(`/topics/${encodeURIComponent(topic.id)}`)}
+            href={workspaceHref(
+              `/topics/${encodeURIComponent(resourceRouteSegment(topic, "topic"))}`,
+            )}
           >
             <div class="min-w-0 flex-1">
               <div class="flex min-w-0 items-start justify-between gap-3">
@@ -885,11 +891,13 @@
       <div class="flex items-stretch {i > 0 ? 'border-t border-line' : ''}">
         <a
           class="flex min-w-0 flex-1 flex-col gap-0.5 px-3 py-2.5 transition-colors hover:bg-line-subtle"
-          href={workspaceHref(`/threads/${encodeURIComponent(thread.id)}`)}
+          href={workspaceHref(
+            `/threads/${encodeURIComponent(resourceRouteSegment(thread, "thread"))}`,
+          )}
         >
           <div class="flex flex-wrap items-center gap-2">
             <p class="truncate text-meta font-medium text-fg">
-              {thread.title || thread.id}
+              {resourceDisplayLabel(thread)}
             </p>
             {#if thread.state === "archived"}
               <span
@@ -898,9 +906,11 @@
               >
             {/if}
           </div>
-          <p class="truncate font-mono text-micro text-fg-muted">
-            {thread.id}
-          </p>
+          {#if thread.ref || thread.handle}
+            <p class="truncate font-mono text-micro text-fg-muted">
+              {thread.ref || thread.handle}
+            </p>
+          {/if}
           {#if topicSeg}
             <p class="truncate text-micro text-fg-muted">
               Linked topic:

@@ -41,6 +41,11 @@
     sortedColumnPeersStableIds,
   } from "$lib/boardUtils";
   import { readEnumSearchParam, withUpdatedSearchParams } from "$lib/urlState";
+  import {
+    resourceCopyValue,
+    resourceDisplayLabel,
+    resourceRouteSegment,
+  } from "$lib/resourceIdentity.js";
 
   let { data } = $props();
 
@@ -89,6 +94,9 @@
   let workspaceHref = $derived(
     bindWorkspaceHref(organizationSlug, workspaceSlug),
   );
+  let boardRouteSegment = $derived(
+    resourceRouteSegment(workspace?.board, "board") || boardId,
+  );
 
   /** Keeps `$page.url` aligned with shallow card query-param changes (`replaceState` alone can leave `$page` stale). */
   let boardCardDetailTab = $derived(
@@ -116,12 +124,14 @@
   }
 
   function openCardDetailModal(cardItem) {
-    const id = boardCardStableId(cardItem?.membership);
+    const id =
+      resourceRouteSegment(cardItem?.membership, "card") ||
+      boardCardStableId(cardItem?.membership);
     if (!id) return;
     if (browser && window.matchMedia?.("(max-width: 1023px)")?.matches) {
       void goto(
         workspaceHref(
-          `/boards/${encodeURIComponent(boardId)}/cards/${encodeURIComponent(id)}`,
+          `/boards/${encodeURIComponent(boardRouteSegment)}/cards/${encodeURIComponent(id)}`,
         ),
       );
       return;
@@ -375,9 +385,13 @@
     const items = workspace?.cards?.items;
     if (!items) return;
 
-    const match = items.find(
-      (c) => boardCardStableId(c.membership) === cardParam,
-    );
+    const match = items.find((c) => {
+      const membership = c.membership;
+      return (
+        boardCardStableId(membership) === cardParam ||
+        resourceRouteSegment(membership, "card") === cardParam
+      );
+    });
     if (match) {
       detailModalCard = match;
     } else {
@@ -581,7 +595,7 @@
 
   {#snippet boardDesktop()}
     <h1 class="min-w-0 text-subtitle font-semibold text-fg">
-      {board.title || board.id}
+      {resourceDisplayLabel(board)}
     </h1>
     {#if String(board.summary ?? "").trim()}
       <p
@@ -654,7 +668,7 @@
             <div class="flex min-h-0 min-w-0 flex-1 items-center gap-1.5">
               <span
                 class="min-w-0 shrink truncate text-fg-muted"
-                aria-current="page">{board.title || boardId}</span
+                aria-current="page">{resourceDisplayLabel(board, boardId)}</span
               >
               {#if board.state}
                 <span
@@ -677,12 +691,18 @@
           {/snippet}
           {#snippet actions()}
             {#if !board.trashed_at}
-              <ResourceShareMenu resourceId={board.id} rawRecord={board} />
+              <ResourceShareMenu
+                resourceId={resourceCopyValue("board", board)}
+                resourceLabel="board ref"
+                rawRecord={board}
+              />
               <Button
                 variant="primary"
                 size="compact"
                 class="rounded-md"
-                href={workspaceHref(`/boards/${boardId}/cards/new`)}
+                href={workspaceHref(
+                  `/boards/${encodeURIComponent(boardRouteSegment)}/cards/new`,
+                )}
               >
                 Add card
               </Button>
@@ -715,7 +735,9 @@
                     <a
                       role="menuitem"
                       class="block w-full px-3 py-2 text-left text-micro text-fg hover:bg-line-subtle"
-                      href={workspaceHref(`/boards/${boardId}/edit`)}
+                      href={workspaceHref(
+                        `/boards/${encodeURIComponent(boardRouteSegment)}/edit`,
+                      )}
                       onclick={closeBoardMore}
                     >
                       Settings
@@ -795,7 +817,9 @@
             title="No cards on this board yet"
             helper="Cards appear here when topics are added to the board's columns."
             actionLabel="Create card"
-            actionHref={workspaceHref(`/boards/${boardId}/cards/new`)}
+            actionHref={workspaceHref(
+              `/boards/${encodeURIComponent(boardRouteSegment)}/cards/new`,
+            )}
             class="!border-dashed"
           />
         {:else}
@@ -935,11 +959,11 @@
                   <a
                     class="block rounded border border-line bg-bg-soft px-3 py-2 text-micro transition-colors hover:border-line-strong"
                     href={workspaceHref(
-                      `/docs/${encodeURIComponent(document.id)}`,
+                      `/docs/${encodeURIComponent(resourceRouteSegment(document, "document"))}`,
                     )}
                   >
                     <div class="font-medium text-fg">
-                      {document.title || document.id}
+                      {resourceDisplayLabel(document)}
                     </div>
                     <div class="mt-1 text-micro text-fg-muted">
                       Head v{document.head_revision_number ?? "—"} · Updated {formatTimestamp(
@@ -979,7 +1003,7 @@
                     formatInboxItemBoardPanelResourceLine(item)}
                   <div class="rounded border border-line bg-bg-soft px-3 py-2">
                     <div class="text-micro font-medium text-fg">
-                      {item.title || item.summary || item.id}
+                      {item.title || item.summary || item.ref || item.id}
                     </div>
                     <div class="mt-1 text-micro text-fg-muted">
                       <span
@@ -1010,9 +1034,9 @@
         <IdsIntegrityDisclosure
           rows={[
             {
-              label: "Board ID",
-              value: board.id,
-              copyLabel: "Copy board ID",
+              label: "Board ref",
+              value: resourceCopyValue("board", board),
+              copyLabel: "Copy board ref",
             },
           ]}
           rawJson={JSON.stringify(board, null, 2)}
