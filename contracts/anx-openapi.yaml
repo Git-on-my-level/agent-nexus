@@ -5,7 +5,12 @@ info:
   description: |
     Canonical workspace HTTP contract for Agent Nexus.
 
-    Topics and cards are the primary durable resources. Threads remain backing
+    Public workspace identity is ref/handle first. Durable resources expose a
+    typed `ref` (for cross-resource links) and kind-scoped `handle` (for URLs
+    and command arguments). Internal UUID/storage identifiers, when present, are
+    debug/admin fields and are not the primary public identity.
+
+    Topics and cards are primary durable resources. Threads remain backing
     infrastructure surfaced through read-only inspection and workspace views.
 servers:
   - url: http://127.0.0.1:8000
@@ -126,7 +131,7 @@ paths:
           in: query
           required: false
           schema: { type: string }
-          description: Search topics by id or title substring.
+          description: Search topics by public ref, handle, or title substring.
         - name: limit
           in: query
           required: false
@@ -554,7 +559,7 @@ paths:
           in: query
           required: false
           schema: { type: string }
-          description: Search threads by id or backing fields such as subject_ref.
+          description: Search threads by public ref, handle, or backing fields such as subject_ref.
         - name: limit
           in: query
           required: false
@@ -727,12 +732,12 @@ paths:
           in: query
           required: false
           schema: { type: string }
-          description: Search documents by id or title substring.
+          description: Search documents by public ref, handle, or title substring.
         - name: thread_id
           in: query
           required: false
           schema: { type: string }
-          description: Restrict results to documents bound to this thread id.
+          description: Restrict results to documents bound to this thread ref or handle.
         - name: cursor
           in: query
           required: false
@@ -1035,7 +1040,7 @@ paths:
       x-anx-why: Permanently delete a trashed document (human-gated).
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ purged, document_id }`."
+      x-anx-output-envelope: "Returns `{ purged, document_ref, document_handle }`; internal document_id may appear for admin/debug compatibility."
       x-anx-error-codes: [auth_required, human_only, invalid_token, not_found, conflict]
       x-anx-concepts: [docs, write]
       x-anx-stability: beta
@@ -1074,7 +1079,7 @@ paths:
       x-anx-why: Enumerate immutable revisions for one document lineage.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ document_id, revisions }`."
+      x-anx-output-envelope: "Returns `{ document_ref, document_handle, revisions }`; internal document_id may appear for admin/debug compatibility."
       x-anx-error-codes: [auth_required, invalid_token, not_found]
       x-anx-concepts: [docs, revisions]
       x-anx-stability: beta
@@ -1140,7 +1145,7 @@ paths:
       x-anx-why: Resolve one immutable document revision.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ document_id, revision }`."
+      x-anx-output-envelope: "Returns `{ document_ref, document_handle, revision }`; internal document_id may appear for admin/debug compatibility."
       x-anx-error-codes: [auth_required, invalid_token, not_found]
       x-anx-concepts: [docs, revisions]
       x-anx-stability: beta
@@ -1325,7 +1330,7 @@ paths:
       x-anx-why: Load the operator-facing board workspace with cards, docs, and inbox sections.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ board_id, board, primary_topic, cards, documents, inbox, board_summary, projection_freshness, board_summary_freshness, warnings, section_kinds, generated_at }`."
+      x-anx-output-envelope: "Returns `{ board, primary_topic, cards, documents, inbox, board_summary, projection_freshness, board_summary_freshness, warnings, section_kinds, generated_at }`."
       x-anx-error-codes: [auth_required, invalid_token, not_found]
       x-anx-concepts: [boards, workspace]
       x-anx-stability: beta
@@ -1510,7 +1515,7 @@ paths:
       x-anx-why: Permanently delete a trashed board (human-gated).
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ purged, board_id }`."
+      x-anx-output-envelope: "Returns `{ purged, board_ref, board_handle }`; internal board_id may appear for admin/debug compatibility."
       x-anx-error-codes: [auth_required, human_only, invalid_token, not_found, conflict]
       x-anx-concepts: [boards, write]
       x-anx-stability: beta
@@ -1549,7 +1554,7 @@ paths:
       x-anx-why: List cards on one board in canonical order.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ board_id, cards }`."
+      x-anx-output-envelope: "Returns `{ board_ref, board_handle, cards }`; internal board_id may appear for admin/debug compatibility."
       x-anx-error-codes: [auth_required, invalid_token, not_found]
       x-anx-concepts: [boards, cards]
       x-anx-stability: beta
@@ -1718,8 +1723,8 @@ paths:
       x-anx-command-id: cards.create
       x-anx-cli-path: cards create
       x-anx-why: >
-        Create a card with the same body as POST /boards/{board_id}/cards, but supply board_id or board_ref
-        here instead of a path segment. Interoperable with board-scoped create.
+        Create a card with the same body as POST /boards/{board_id}/cards, but supply board_ref or
+        board_handle here instead of a path segment. Interoperable with board-scoped create.
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ board, card }` (same as board-scoped create)."
@@ -1756,7 +1761,7 @@ paths:
       x-anx-surface: canonical
       x-anx-command-id: cards.get
       x-anx-cli-path: cards get
-      x-anx-why: Resolve one first-class card by id.
+      x-anx-why: Resolve one first-class card by public ref or handle.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ card }`."
@@ -1854,7 +1859,7 @@ paths:
       x-anx-why: Enumerate immutable content revisions for one card lineage.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ card_id, revisions }`."
+      x-anx-output-envelope: "Returns `{ card_ref, card_handle, revisions }`; internal card_id may appear for admin/debug compatibility."
       x-anx-error-codes: [auth_required, invalid_token, not_found]
       x-anx-concepts: [cards, revisions]
       x-anx-stability: beta
@@ -1920,7 +1925,7 @@ paths:
       x-anx-why: Resolve one immutable card content revision.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ card_id, revision }`."
+      x-anx-output-envelope: "Returns `{ card_ref, card_handle, revision }`; internal card_id may appear for admin/debug compatibility."
       x-anx-error-codes: [auth_required, invalid_token, not_found]
       x-anx-concepts: [cards, revisions]
       x-anx-stability: beta
@@ -2106,7 +2111,7 @@ paths:
       x-anx-why: Permanently delete an archived or trashed card (human-gated).
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ purged, card_id }`."
+      x-anx-output-envelope: "Returns `{ purged, card_ref, card_handle }`; internal card_id may appear for admin/debug compatibility."
       x-anx-error-codes: [auth_required, human_only, invalid_token, not_found, conflict]
       x-anx-concepts: [cards, write]
       x-anx-stability: beta
@@ -2547,7 +2552,7 @@ paths:
           required: false
           schema: { type: string }
           description: >
-            Comma-separated artifact UUIDs (deduped; capped server-side). When set,
+            Comma-separated artifact refs or handles (deduped; capped server-side). When set,
             thread-scoped listing and q/kind/backing_scope/date filters are ignored; lifecycle state filter still applies.
         - name: created_before
           in: query
@@ -2863,7 +2868,7 @@ paths:
       x-anx-why: Permanently delete a trashed artifact (human-gated).
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ purged, artifact_id }`."
+      x-anx-output-envelope: "Returns `{ purged, artifact_ref, artifact_handle }`; internal artifact_id may appear for admin/debug compatibility."
       x-anx-error-codes: [auth_required, human_only, invalid_token, not_found, conflict]
       x-anx-concepts: [artifacts, write]
       x-anx-stability: beta
@@ -3960,12 +3965,12 @@ paths:
   /events/{event_id}:
     get:
       operationId: getEventById
-      summary: Get event by id
+      summary: Get event
       tags: [events]
       x-anx-surface: canonical
       x-anx-command-id: events.get
       x-anx-cli-path: events get
-      x-anx-why: Fetch one append-only event record by stable id.
+      x-anx-why: Fetch one append-only event record by public ref or handle.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ event }`."
@@ -4123,7 +4128,7 @@ paths:
         - name: thread_id
           in: query
           required: true
-          description: Backing thread whose agent notification receipts should be streamed.
+          description: Backing thread ref or handle whose agent notification receipts should be streamed.
           schema: { type: string }
         - name: last_event_id
           in: query
@@ -4464,41 +4469,49 @@ components:
       name: topic_id
       required: true
       schema: { type: string }
+      description: Public topic ref (`topic:<handle>`) or topic handle. Internal UUID lookup is compatibility/debug-only.
     ThreadID:
       in: path
       name: thread_id
       required: true
       schema: { type: string }
+      description: Public thread ref (`thread:<handle>`) or thread handle. Internal UUID lookup is compatibility/debug-only.
     DocumentID:
       in: path
       name: document_id
       required: true
       schema: { type: string }
+      description: Public document ref (`document:<handle>`) or document handle. Internal UUID lookup is compatibility/debug-only.
     RevisionID:
       in: path
       name: revision_id
       required: true
       schema: { type: string }
+      description: Public revision ref (`document_revision:<handle>` or `card_revision:<handle>`) or revision handle. Internal UUID lookup is compatibility/debug-only.
     BoardID:
       in: path
       name: board_id
       required: true
       schema: { type: string }
+      description: Public board ref (`board:<handle>`) or board handle. Internal UUID lookup is compatibility/debug-only.
     CardID:
       in: path
       name: card_id
       required: true
       schema: { type: string }
+      description: Public card ref (`card:<handle>`) or card handle. Internal UUID lookup is compatibility/debug-only.
     ArtifactID:
       in: path
       name: artifact_id
       required: true
       schema: { type: string }
+      description: Public artifact ref (`artifact:<handle>`) or artifact handle. Internal UUID lookup is compatibility/debug-only.
     EventID:
       in: path
       name: event_id
       required: true
       schema: { type: string }
+      description: Public event ref (`event:<handle>`) or event handle. Internal UUID lookup is compatibility/debug-only.
     InboxID:
       in: path
       name: inbox_id
@@ -4563,7 +4576,28 @@ components:
 
     TypedRef:
       type: string
-      description: Typed ref string such as `topic:roadmap` or `artifact:art_123`.
+      description: Typed public ref string such as `topic:roadmap` or `artifact:art_123`.
+
+    ResourceRef:
+      allOf:
+        - $ref: '#/components/schemas/TypedRef'
+      description: >
+        Primary public identity for a durable resource. Format is
+        `<kind>:<handle>` and clients should use this value for links, refs,
+        command arguments, and cross-resource payloads.
+
+    ResourceHandle:
+      type: string
+      description: >
+        Public, kind-scoped resource handle. Handles are URL/CLI friendly and
+        resolve within the resource kind; carry `ref` when kind context is not
+        already known.
+
+    InternalResourceUUID:
+      type: string
+      description: >
+        Internal storage UUID/debug id. Exposed only for admin, verbose, or
+        compatibility diagnostics; do not use as primary public identity.
 
     Provenance:
       type: object
@@ -4595,7 +4629,12 @@ components:
     Event:
       type: object
       properties:
-        id: { type: string }
+        ref: { $ref: '#/components/schemas/ResourceRef' }
+        handle: { $ref: '#/components/schemas/ResourceHandle' }
+        id:
+          allOf:
+            - $ref: '#/components/schemas/InternalResourceUUID'
+          description: Internal event UUID/debug id; use `ref` or `handle` for public lookup.
         ts: { type: string, format: date-time }
         type: { type: string }
         actor_id: { type: string }
@@ -4608,12 +4647,17 @@ components:
           type: object
           additionalProperties: true
         provenance: { $ref: '#/components/schemas/Provenance' }
-      required: [id, ts, type, actor_id, refs, summary, provenance]
+      required: [ref, handle, ts, type, actor_id, refs, summary, provenance]
 
     Artifact:
       type: object
       properties:
-        id: { type: string }
+        ref: { $ref: '#/components/schemas/ResourceRef' }
+        handle: { $ref: '#/components/schemas/ResourceHandle' }
+        id:
+          allOf:
+            - $ref: '#/components/schemas/InternalResourceUUID'
+          description: Internal artifact UUID/debug id; use `ref` or `handle` for public lookup.
         kind: { type: string }
         content_type: { type: string }
         content_hash: { type: string }
@@ -4634,12 +4678,17 @@ components:
           description: Owning document_revision/card_revision ref for system-owned revision artifacts.
         created_at: { type: string, format: date-time }
         created_by: { type: string }
-      required: [id, kind, content_type, content_hash, refs, created_at, created_by]
+      required: [ref, handle, kind, content_type, content_hash, refs, created_at, created_by]
 
     Thread:
       type: object
       properties:
-        id: { type: string }
+        ref: { $ref: '#/components/schemas/ResourceRef' }
+        handle: { $ref: '#/components/schemas/ResourceHandle' }
+        id:
+          allOf:
+            - $ref: '#/components/schemas/InternalResourceUUID'
+          description: Internal thread UUID/debug id; use `ref` or `handle` for public lookup.
         topic_ref: { $ref: '#/components/schemas/TypedRef' }
         title: { type: string }
         state:
@@ -4657,12 +4706,17 @@ components:
         trashed_at: { type: string, format: date-time }
         trashed_by: { type: string }
         trash_reason: { type: string }
-      required: [id, state, created_at, created_by, updated_at, updated_by, provenance]
+      required: [ref, handle, state, created_at, created_by, updated_at, updated_by, provenance]
 
     Topic:
       type: object
       properties:
-        id: { type: string }
+        ref: { $ref: '#/components/schemas/ResourceRef' }
+        handle: { $ref: '#/components/schemas/ResourceHandle' }
+        id:
+          allOf:
+            - $ref: '#/components/schemas/InternalResourceUUID'
+          description: Internal topic UUID/debug id; use `ref` or `handle` for public lookup.
         state:
           type: string
           enum: [active, archived, trashed]
@@ -4700,13 +4754,18 @@ components:
             Derived GET /topics enrichment: count of timeline `message_posted` rows on `thread_id`
             excluding trashed events. Omitted on single-topic GET; clients treat absence as zero.
       required:
-        [id, state, title, summary, owner_refs, document_refs, board_refs, related_refs,
+        [ref, handle, state, title, summary, owner_refs, document_refs, board_refs, related_refs,
          created_at, created_by, updated_at, updated_by, provenance]
 
     Document:
       type: object
       properties:
-        id: { type: string }
+        ref: { $ref: '#/components/schemas/ResourceRef' }
+        handle: { $ref: '#/components/schemas/ResourceHandle' }
+        id:
+          allOf:
+            - $ref: '#/components/schemas/InternalResourceUUID'
+          description: Internal document UUID/debug id; use `ref` or `handle` for public lookup.
         title: { type: string }
         summary:
           type: string
@@ -4729,7 +4788,7 @@ components:
           type: integer
           description: >
             Derived GET /documents list enrichment: rows in revision lineage (`document_revisions`)
-            for this document id.
+            for this document handle.
         head_revision_character_count:
           type: integer
           description: >
@@ -4742,12 +4801,17 @@ components:
             List-only enrichment: timeline `message_posted` counts on backing `thread_id`,
             excluding trashed events (same derivation as `/topics`).
       required:
-        [id, title, subject_ref, head_revision_ref, state, refs, created_at, created_by, updated_at, updated_by, provenance]
+        [ref, handle, title, subject_ref, head_revision_ref, state, refs, created_at, created_by, updated_at, updated_by, provenance]
 
     DocumentRevision:
       type: object
       properties:
-        revision_id: { type: string }
+        ref: { $ref: '#/components/schemas/ResourceRef' }
+        handle: { $ref: '#/components/schemas/ResourceHandle' }
+        revision_id:
+          allOf:
+            - $ref: '#/components/schemas/InternalResourceUUID'
+          description: Internal document revision UUID/debug id; use `ref` or `handle` for public lookup.
         document_ref: { $ref: '#/components/schemas/TypedRef' }
         prev_revision_ref: { $ref: '#/components/schemas/TypedRef' }
         artifact_ref: { $ref: '#/components/schemas/TypedRef' }
@@ -4755,12 +4819,17 @@ components:
         summary: { type: string }
         created_at: { type: string, format: date-time }
         created_by: { type: string }
-      required: [revision_id, document_ref, artifact_ref, revision_number, created_at, created_by]
+      required: [ref, handle, document_ref, artifact_ref, revision_number, created_at, created_by]
 
     Board:
       type: object
       properties:
-        id: { type: string }
+        ref: { $ref: '#/components/schemas/ResourceRef' }
+        handle: { $ref: '#/components/schemas/ResourceHandle' }
+        id:
+          allOf:
+            - $ref: '#/components/schemas/InternalResourceUUID'
+          description: Internal board UUID/debug id; use `ref` or `handle` for public lookup.
         title: { type: string }
         summary:
           type: string
@@ -4793,12 +4862,17 @@ components:
         trashed_by: { type: string }
         trash_reason: { type: string }
       required:
-        [id, title, state, document_refs, card_refs, pinned_refs, created_at, created_by, updated_at, updated_by, provenance]
+        [ref, handle, title, state, document_refs, card_refs, pinned_refs, created_at, created_by, updated_at, updated_by, provenance]
 
     Card:
       type: object
       properties:
-        id: { type: string }
+        ref: { $ref: '#/components/schemas/ResourceRef' }
+        handle: { $ref: '#/components/schemas/ResourceHandle' }
+        id:
+          allOf:
+            - $ref: '#/components/schemas/InternalResourceUUID'
+          description: Internal card UUID/debug id; use `ref` or `handle` for public lookup.
         board_ref: { $ref: '#/components/schemas/TypedRef' }
         topic_ref: { $ref: '#/components/schemas/TypedRef' }
         thread_id:
@@ -4850,13 +4924,18 @@ components:
         trashed_by: { type: string }
         trash_reason: { type: string }
       required:
-        [id, board_ref, thread_id, head_revision_ref, head_revision_number, title, summary, column_key, rank, assignee_refs, risk, resolution_refs,
+        [ref, handle, board_ref, thread_id, head_revision_ref, head_revision_number, title, summary, column_key, rank, assignee_refs, risk, resolution_refs,
          related_refs, created_at, created_by, updated_at, updated_by, provenance]
 
     CardRevision:
       type: object
       properties:
-        revision_id: { type: string }
+        ref: { $ref: '#/components/schemas/ResourceRef' }
+        handle: { $ref: '#/components/schemas/ResourceHandle' }
+        revision_id:
+          allOf:
+            - $ref: '#/components/schemas/InternalResourceUUID'
+          description: Internal card revision UUID/debug id; use `ref` or `handle` for public lookup.
         card_ref: { $ref: '#/components/schemas/TypedRef' }
         prev_revision_ref: { $ref: '#/components/schemas/TypedRef' }
         artifact_ref: { $ref: '#/components/schemas/TypedRef' }
@@ -4864,7 +4943,7 @@ components:
         summary: { type: string }
         created_at: { type: string, format: date-time }
         created_by: { type: string }
-      required: [revision_id, card_ref, artifact_ref, revision_number, created_at, created_by]
+      required: [ref, handle, card_ref, artifact_ref, revision_number, created_at, created_by]
 
     BoardSummary:
       type: object
@@ -5059,7 +5138,12 @@ components:
     CardCreateInput:
       type: object
       properties:
-        id: { type: string }
+        handle:
+          $ref: '#/components/schemas/ResourceHandle'
+        id:
+          type: string
+          deprecated: true
+          description: Deprecated compatibility alias for `handle`; not an internal UUID field on create.
         topic_ref: { $ref: '#/components/schemas/TypedRef' }
         document_ref: { $ref: '#/components/schemas/TypedRef' }
         title: { type: string }
@@ -5069,10 +5153,10 @@ components:
           enum: [backlog, ready, in_progress, blocked, review, done]
         before_card_id:
           type: string
-          description: Optional neighbor card id for initial ordering within column_key.
+          description: Optional neighbor card ref or handle for initial ordering within column_key.
         after_card_id:
           type: string
-          description: Optional neighbor card id for initial ordering; mutually exclusive with before_card_id.
+          description: Optional neighbor card ref or handle for initial ordering; mutually exclusive with before_card_id.
         assignee_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
@@ -5151,10 +5235,10 @@ components:
           enum: [backlog, ready, in_progress, blocked, review, done]
         before_card_id:
           type: string
-          description: Insert immediately before this card id in column_key; mutually exclusive with after_card_id.
+          description: Insert immediately before this card ref or handle in column_key; mutually exclusive with after_card_id.
         after_card_id:
           type: string
-          description: Insert immediately after this card id in column_key; mutually exclusive with before_card_id.
+          description: Insert immediately after this card ref or handle in column_key; mutually exclusive with before_card_id.
         resolution:
           type: string
           enum: [done]
@@ -5238,7 +5322,7 @@ components:
       properties:
         if_base_revision:
           type: string
-          description: Base revision id for optimistic concurrency; must match the document head when appending from the current tip.
+          description: Base revision ref or handle for optimistic concurrency; must match the document head when appending from the current tip.
         actor_id: { type: string }
         document:
           type: object
@@ -5259,7 +5343,7 @@ components:
       properties:
         if_base_revision:
           type: string
-          description: Base card revision id for optimistic concurrency; must match the card head.
+          description: Base card revision ref or handle for optimistic concurrency; must match the card head.
         actor_id: { type: string }
         revision: { $ref: '#/components/schemas/CardRevisionCreateInput' }
       required: [if_base_revision, revision]
@@ -5286,13 +5370,16 @@ components:
         request_key: { type: string }
         board_id:
           type: string
+          deprecated: true
           description: >
-            Target board for POST /cards. Required unless board_ref is set. Ignored for
-            POST /boards/{board_id}/cards (path segment is authoritative).
+            Deprecated compatibility alias for board_handle. Prefer board_ref. Ignored for
+            POST /boards/{board_id}/cards (path segment resolves as public ref or handle).
+        board_handle:
+          $ref: '#/components/schemas/ResourceHandle'
         board_ref:
           allOf:
             - $ref: '#/components/schemas/TypedRef'
-          description: Alternative to board_id; MUST be board:<board_id> for POST /cards.
+          description: Preferred board identity for POST /cards; MUST be a board:<handle> public ref.
         card: { $ref: '#/components/schemas/CardCreateInput' }
         if_board_updated_at:
           type: string
@@ -5320,12 +5407,20 @@ components:
       description: >
         One card to create; same field conventions as POST /boards/{board_id}/cards for a single
         card (flat fields and optional nested `card`). Do not send actor_id, request_key,
-        if_board_updated_at, board_id, or board_ref on each item — use the batch envelope.
+        if_board_updated_at, board_id, board_handle, or board_ref on each item — use the batch envelope.
       additionalProperties: true
       properties:
         card: { $ref: '#/components/schemas/CardCreateInput' }
-        card_id: { type: string }
-        id: { type: string }
+        card_id:
+          type: string
+          deprecated: true
+          description: Deprecated compatibility alias for `handle`.
+        handle:
+          $ref: '#/components/schemas/ResourceHandle'
+        id:
+          type: string
+          deprecated: true
+          description: Deprecated compatibility alias for `handle`.
         title: { type: string }
         summary: { type: string }
         column_key:
@@ -5462,8 +5557,13 @@ components:
       type: object
       properties:
         purged: { type: boolean }
-        board_id: { type: string }
-      required: [purged, board_id]
+        board_ref: { $ref: '#/components/schemas/ResourceRef' }
+        board_handle: { $ref: '#/components/schemas/ResourceHandle' }
+        board_id:
+          allOf:
+            - $ref: '#/components/schemas/InternalResourceUUID'
+          description: Internal board UUID/debug id retained for admin/verbose compatibility.
+      required: [purged, board_ref, board_handle]
 
     DocumentLifecycleMutationRequest:
       type: object
@@ -5485,15 +5585,25 @@ components:
       type: object
       properties:
         purged: { type: boolean }
-        document_id: { type: string }
-      required: [purged, document_id]
+        document_ref: { $ref: '#/components/schemas/ResourceRef' }
+        document_handle: { $ref: '#/components/schemas/ResourceHandle' }
+        document_id:
+          allOf:
+            - $ref: '#/components/schemas/InternalResourceUUID'
+          description: Internal document UUID/debug id retained for admin/verbose compatibility.
+      required: [purged, document_ref, document_handle]
 
     PurgeArtifactResponse:
       type: object
       properties:
         purged: { type: boolean }
-        artifact_id: { type: string }
-      required: [purged, artifact_id]
+        artifact_ref: { $ref: '#/components/schemas/ResourceRef' }
+        artifact_handle: { $ref: '#/components/schemas/ResourceHandle' }
+        artifact_id:
+          allOf:
+            - $ref: '#/components/schemas/InternalResourceUUID'
+          description: Internal artifact UUID/debug id retained for admin/verbose compatibility.
+      required: [purged, artifact_ref, artifact_handle]
 
     RefEdge:
       type: object
@@ -5746,18 +5856,28 @@ components:
     DocumentRevisionsResponse:
       type: object
       properties:
-        document_id: { type: string }
+        document_ref: { $ref: '#/components/schemas/ResourceRef' }
+        document_handle: { $ref: '#/components/schemas/ResourceHandle' }
+        document_id:
+          allOf:
+            - $ref: '#/components/schemas/InternalResourceUUID'
+          description: Internal document UUID/debug id retained for admin/verbose compatibility.
         revisions:
           type: array
           items: { $ref: '#/components/schemas/DocumentRevision' }
-      required: [document_id, revisions]
+      required: [document_ref, document_handle, revisions]
 
     DocumentRevisionResponse:
       type: object
       properties:
-        document_id: { type: string }
+        document_ref: { $ref: '#/components/schemas/ResourceRef' }
+        document_handle: { $ref: '#/components/schemas/ResourceHandle' }
+        document_id:
+          allOf:
+            - $ref: '#/components/schemas/InternalResourceUUID'
+          description: Internal document UUID/debug id retained for admin/verbose compatibility.
         revision: { $ref: '#/components/schemas/DocumentRevision' }
-      required: [document_id, revision]
+      required: [document_ref, document_handle, revision]
 
     BoardsResponse:
       type: object
@@ -5786,11 +5906,16 @@ components:
     BoardCardsResponse:
       type: object
       properties:
-        board_id: { type: string }
+        board_ref: { $ref: '#/components/schemas/ResourceRef' }
+        board_handle: { $ref: '#/components/schemas/ResourceHandle' }
+        board_id:
+          allOf:
+            - $ref: '#/components/schemas/InternalResourceUUID'
+          description: Internal board UUID/debug id retained for admin/verbose compatibility.
         cards:
           type: array
           items: { $ref: '#/components/schemas/Card' }
-      required: [board_id, cards]
+      required: [board_ref, board_handle, cards]
 
     BoardWorkspaceResponse:
       type: object
@@ -5834,18 +5959,28 @@ components:
     CardRevisionsResponse:
       type: object
       properties:
-        card_id: { type: string }
+        card_ref: { $ref: '#/components/schemas/ResourceRef' }
+        card_handle: { $ref: '#/components/schemas/ResourceHandle' }
+        card_id:
+          allOf:
+            - $ref: '#/components/schemas/InternalResourceUUID'
+          description: Internal card UUID/debug id retained for admin/verbose compatibility.
         revisions:
           type: array
           items: { $ref: '#/components/schemas/CardRevision' }
-      required: [card_id, revisions]
+      required: [card_ref, card_handle, revisions]
 
     CardRevisionResponse:
       type: object
       properties:
-        card_id: { type: string }
+        card_ref: { $ref: '#/components/schemas/ResourceRef' }
+        card_handle: { $ref: '#/components/schemas/ResourceHandle' }
+        card_id:
+          allOf:
+            - $ref: '#/components/schemas/InternalResourceUUID'
+          description: Internal card UUID/debug id retained for admin/verbose compatibility.
         revision: { $ref: '#/components/schemas/CardRevision' }
-      required: [card_id, revision]
+      required: [card_ref, card_handle, revision]
 
     CardsResponse:
       type: object
@@ -5890,8 +6025,13 @@ components:
       type: object
       properties:
         purged: { type: boolean }
-        card_id: { type: string }
-      required: [purged, card_id]
+        card_ref: { $ref: '#/components/schemas/ResourceRef' }
+        card_handle: { $ref: '#/components/schemas/ResourceHandle' }
+        card_id:
+          allOf:
+            - $ref: '#/components/schemas/InternalResourceUUID'
+          description: Internal card UUID/debug id retained for admin/verbose compatibility.
+      required: [purged, card_ref, card_handle]
 
     EventResponse:
       type: object
@@ -5930,7 +6070,7 @@ components:
     HomeUnreadGroup:
       type: object
       properties:
-        group_ref: { type: string, description: "Typed ref identifying the group, e.g. topic:<id> or board:<id>." }
+        group_ref: { type: string, description: "Typed ref identifying the group, e.g. topic:<handle> or board:<handle>." }
         group_type: { type: string, description: "Group type: topic, board, document, or workspace." }
         display_name: { type: string }
         priority: { type: string, description: "Priority label for sorting (P0/P1/P2 or empty)." }
@@ -5950,7 +6090,7 @@ components:
         actor_id:
           type: string
           description: Development legacy actor-mode alias for reader_id.
-        group_ref: { type: string, description: "Single group typed ref, e.g. topic:<id> or board:<id>." }
+        group_ref: { type: string, description: "Single group typed ref, e.g. topic:<handle> or board:<handle>." }
         group_refs:
           type: array
           items: { type: string }

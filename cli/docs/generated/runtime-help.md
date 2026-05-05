@@ -86,7 +86,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `threads get` (command): Inspect backing thread
 - `threads timeline` (command): Get backing thread timeline
 - `threads context` (command): Get backing thread coordination context
-- `events get` (command): Get event by id
+- `events get` (command): Get event
 - `events create` (command): Create event
 - `events stream` (command): Stream events (SSE)
 - `events tail` (command): Stream events (SSE)
@@ -1592,7 +1592,7 @@ Generated Help: events
 Commands:
   events archive           Archive event
   events create            Create event
-  events get               Get event by id
+  events get               Get event
   events list              List events
   events restore           Restore event from trash
   events stream            Stream events (SSE)
@@ -2312,7 +2312,7 @@ Generated Help: boards purge
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Permanently delete a trashed board (human-gated).
-- Output: Returns `{ purged, board_id }`.
+- Output: Returns `{ purged, board_ref, board_handle }`; internal board_id may appear for admin/debug compatibility.
 - Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `boards`, `write`
 - Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
@@ -2374,6 +2374,7 @@ Inputs:
   - body `card.title` (string)
   Optional:
   - body `actor_id` (string)
+  - body `board_handle` (string)
   - body `board_id` (string)
   - body `board_ref` (any)
   - body `card.after_card_id` (string)
@@ -2383,6 +2384,7 @@ Inputs:
   - body `card.definition_of_done` (list<string>)
   - body `card.document_ref` (string)
   - body `card.due_at` (datetime)
+  - body `card.handle` (string)
   - body `card.id` (string)
   - body `card.provenance.by_field` (object)
   - body `card.provenance.notes` (string)
@@ -2539,7 +2541,7 @@ Generated Help: docs history
 - Stability: `beta`
 - Input mode: `none`
 - Why: Enumerate immutable revisions for one document lineage.
-- Output: Returns `{ document_id, revisions }`.
+- Output: Returns `{ document_ref, document_handle, revisions }`; internal document_id may appear for admin/debug compatibility.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `docs`, `revisions`
 - Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revise`, `docs revision get`, `docs trash`, `docs unarchive`
@@ -2707,7 +2709,7 @@ Generated Help: docs purge
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Permanently delete a trashed document (human-gated).
-- Output: Returns `{ purged, document_id }`.
+- Output: Returns `{ purged, document_ref, document_handle }`; internal document_id may appear for admin/debug compatibility.
 - Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `docs`, `write`
 - Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs restore`, `docs revise`, `docs revision get`, `docs trash`, `docs unarchive`
@@ -2737,7 +2739,7 @@ Generated Help: docs revision get
 - Stability: `beta`
 - Input mode: `none`
 - Why: Resolve one immutable document revision.
-- Output: Returns `{ document_id, revision }`.
+- Output: Returns `{ document_ref, document_handle, revision }`; internal document_id may appear for admin/debug compatibility.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `docs`, `revisions`
 - Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revise`, `docs trash`, `docs unarchive`
@@ -2790,7 +2792,7 @@ Generated Help: cards get
 - HTTP: `GET /cards/{card_id}`
 - Stability: `beta`
 - Input mode: `none`
-- Why: Resolve one first-class card by id.
+- Why: Resolve one first-class card by public ref or handle.
 - Output: Returns `{ card }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `cards`
@@ -2819,7 +2821,7 @@ Generated Help: cards history
 - Stability: `beta`
 - Input mode: `none`
 - Why: Enumerate immutable content revisions for one card lineage.
-- Output: Returns `{ card_id, revisions }`.
+- Output: Returns `{ card_ref, card_handle, revisions }`; internal card_id may appear for admin/debug compatibility.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `cards`, `revisions`
 - Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards revise`, `cards revision get`, `cards timeline`, `cards trash`
@@ -2953,7 +2955,7 @@ Generated Help: cards purge
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Permanently delete an archived or trashed card (human-gated).
-- Output: Returns `{ purged, card_id }`.
+- Output: Returns `{ purged, card_ref, card_handle }`; internal card_id may appear for admin/debug compatibility.
 - Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `cards`, `write`
 - Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards list`, `cards move`, `cards patch`, `cards restore`, `cards revise`, `cards revision get`, `cards timeline`, `cards trash`
@@ -3148,7 +3150,7 @@ Global flags:
 
 ## `events get`
 
-Get event by id
+Get event
 
 ```text
 Generated Help: events get
@@ -3158,7 +3160,7 @@ Generated Help: events get
 - HTTP: `GET /events/{event_id}`
 - Stability: `beta`
 - Input mode: `none`
-- Why: Fetch one append-only event record by stable id.
+- Why: Fetch one append-only event record by public ref or handle.
 - Output: Returns `{ event }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `events`
@@ -3200,9 +3202,11 @@ Inputs:
   - body `event.summary` (string)
   - body `event.type` (string)
   Optional:
+  - body `event.handle` (string)
   - body `event.payload` (object)
   - body `event.provenance.by_field` (object)
   - body `event.provenance.notes` (string)
+  - body `event.ref` (typed_ref)
   - body `event.thread_ref` (string)
   Enum values: event.type (strict): agent_notification_dismissed, agent_notification_read, board_created, board_updated, card_archived, card_created, card_moved, card_resolved, card_trashed, card_updated, document_created, document_restored, document_revised, document_trashed, exception_raised, human_attention_requested, human_attention_responded, message_posted, receipt_added, review_completed, topic_archived, topic_created, topic_restored, topic_trashed, topic_updated
 
@@ -3809,7 +3813,7 @@ Generated Help: artifacts purge
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Permanently delete a trashed artifact (human-gated).
-- Output: Returns `{ purged, artifact_id }`.
+- Output: Returns `{ purged, artifact_ref, artifact_handle }`; internal artifact_id may appear for admin/debug compatibility.
 - Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `artifacts`, `write`
 - Adjacent commands: `artifacts archive`, `artifacts attachments create`, `artifacts content`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`

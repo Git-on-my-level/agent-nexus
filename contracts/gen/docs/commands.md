@@ -209,7 +209,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Why: Permanently delete a trashed artifact (human-gated).
 - Concepts: `artifacts`, `write`
 - Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
-- Output: Returns `{ purged, artifact_id }`.
+- Output: Returns `{ purged, artifact_ref, artifact_handle }`; internal artifact_id may appear for admin/debug compatibility.
 
 ## `artifacts.restore`
 
@@ -484,7 +484,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Why: List cards on one board in canonical order.
 - Concepts: `boards`, `cards`
 - Error codes: `auth_required`, `invalid_token`, `not_found`
-- Output: Returns `{ board_id, cards }`.
+- Output: Returns `{ board_ref, board_handle, cards }`; internal board_id may appear for admin/debug compatibility.
 
 ## `boards.create`
 
@@ -544,7 +544,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Why: Permanently delete a trashed board (human-gated).
 - Concepts: `boards`, `write`
 - Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
-- Output: Returns `{ purged, board_id }`.
+- Output: Returns `{ purged, board_ref, board_handle }`; internal board_id may appear for admin/debug compatibility.
 
 ## `boards.restore`
 
@@ -592,7 +592,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Why: Load the operator-facing board workspace with cards, docs, and inbox sections.
 - Concepts: `boards`, `workspace`
 - Error codes: `auth_required`, `invalid_token`, `not_found`
-- Output: Returns `{ board_id, board, primary_topic, cards, documents, inbox, board_summary, projection_freshness, board_summary_freshness, warnings, section_kinds, generated_at }`.
+- Output: Returns `{ board, primary_topic, cards, documents, inbox, board_summary, projection_freshness, board_summary_freshness, warnings, section_kinds, generated_at }`.
 
 ## `cards.archive`
 
@@ -613,7 +613,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `json-body`
-- Why: Create a card with the same body as POST /boards/{board_id}/cards, but supply board_id or board_ref here instead of a path segment. Interoperable with board-scoped create.
+- Why: Create a card with the same body as POST /boards/{board_id}/cards, but supply board_ref or board_handle here instead of a path segment. Interoperable with board-scoped create.
 - Concepts: `cards`, `boards`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ board, card }` (same as board-scoped create).
@@ -625,7 +625,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `none`
-- Why: Resolve one first-class card by id.
+- Why: Resolve one first-class card by public ref or handle.
 - Concepts: `cards`
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Output: Returns `{ card }`.
@@ -676,7 +676,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Why: Permanently delete an archived or trashed card (human-gated).
 - Concepts: `cards`, `write`
 - Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
-- Output: Returns `{ purged, card_id }`.
+- Output: Returns `{ purged, card_ref, card_handle }`; internal card_id may appear for admin/debug compatibility.
 
 ## `cards.restore`
 
@@ -712,7 +712,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Why: Resolve one immutable card content revision.
 - Concepts: `cards`, `revisions`
 - Error codes: `auth_required`, `invalid_token`, `not_found`
-- Output: Returns `{ card_id, revision }`.
+- Output: Returns `{ card_ref, card_handle, revision }`; internal card_id may appear for admin/debug compatibility.
 
 ## `cards.revisions.list`
 
@@ -724,7 +724,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Why: Enumerate immutable content revisions for one card lineage.
 - Concepts: `cards`, `revisions`
 - Error codes: `auth_required`, `invalid_token`, `not_found`
-- Output: Returns `{ card_id, revisions }`.
+- Output: Returns `{ card_ref, card_handle, revisions }`; internal card_id may appear for admin/debug compatibility.
 
 ## `cards.timeline`
 
@@ -832,7 +832,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Why: Permanently delete a trashed document (human-gated).
 - Concepts: `docs`, `write`
 - Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
-- Output: Returns `{ purged, document_id }`.
+- Output: Returns `{ purged, document_ref, document_handle }`; internal document_id may appear for admin/debug compatibility.
 
 ## `docs.restore`
 
@@ -868,7 +868,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Why: Resolve one immutable document revision.
 - Concepts: `docs`, `revisions`
 - Error codes: `auth_required`, `invalid_token`, `not_found`
-- Output: Returns `{ document_id, revision }`.
+- Output: Returns `{ document_ref, document_handle, revision }`; internal document_id may appear for admin/debug compatibility.
 
 ## `docs.revisions.list`
 
@@ -880,7 +880,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Why: Enumerate immutable revisions for one document lineage.
 - Concepts: `docs`, `revisions`
 - Error codes: `auth_required`, `invalid_token`, `not_found`
-- Output: Returns `{ document_id, revisions }`.
+- Output: Returns `{ document_ref, document_handle, revisions }`; internal document_id may appear for admin/debug compatibility.
 
 ## `docs.trash`
 
@@ -937,7 +937,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `none`
-- Why: Fetch one append-only event record by stable id.
+- Why: Fetch one append-only event record by public ref or handle.
 - Concepts: `events`
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Output: Returns `{ event }`.

@@ -658,7 +658,7 @@ export const commandRegistry: CommandSpec[] = [
     "streaming": {
       "mode": "none"
     },
-    "output_envelope": "Returns `{ purged, artifact_id }`.",
+    "output_envelope": "Returns `{ purged, artifact_ref, artifact_handle }`; internal artifact_id may appear for admin/debug compatibility.",
     "error_codes": [
       "auth_required",
       "human_only",
@@ -1673,6 +1673,10 @@ export const commandRegistry: CommandSpec[] = [
           "type": "string"
         },
         {
+          "name": "board_handle",
+          "type": "string"
+        },
+        {
           "name": "board_id",
           "type": "string"
         },
@@ -1715,6 +1719,10 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "card.due_at",
           "type": "datetime"
+        },
+        {
+          "name": "card.handle",
+          "type": "string"
         },
         {
           "name": "card.id",
@@ -1856,7 +1864,7 @@ export const commandRegistry: CommandSpec[] = [
     "streaming": {
       "mode": "none"
     },
-    "output_envelope": "Returns `{ board_id, cards }`.",
+    "output_envelope": "Returns `{ board_ref, board_handle, cards }`; internal board_id may appear for admin/debug compatibility.",
     "error_codes": [
       "auth_required",
       "invalid_token",
@@ -2160,7 +2168,7 @@ export const commandRegistry: CommandSpec[] = [
     "streaming": {
       "mode": "none"
     },
-    "output_envelope": "Returns `{ purged, board_id }`.",
+    "output_envelope": "Returns `{ purged, board_ref, board_handle }`; internal board_id may appear for admin/debug compatibility.",
     "error_codes": [
       "auth_required",
       "human_only",
@@ -2390,7 +2398,7 @@ export const commandRegistry: CommandSpec[] = [
     "streaming": {
       "mode": "none"
     },
-    "output_envelope": "Returns `{ board_id, board, primary_topic, cards, documents, inbox, board_summary, projection_freshness, board_summary_freshness, warnings, section_kinds, generated_at }`.",
+    "output_envelope": "Returns `{ board, primary_topic, cards, documents, inbox, board_summary, projection_freshness, board_summary_freshness, warnings, section_kinds, generated_at }`.",
     "error_codes": [
       "auth_required",
       "invalid_token",
@@ -2491,7 +2499,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/cards",
     "operation_id": "createCard",
     "summary": "Create card (global path)",
-    "why": "Create a card with the same body as POST /boards/{board_id}/cards, but supply board_id or board_ref here instead of a path segment. Interoperable with board-scoped create.",
+    "why": "Create a card with the same body as POST /boards/{board_id}/cards, but supply board_ref or board_handle here instead of a path segment. Interoperable with board-scoped create.",
     "input_mode": "json-body",
     "streaming": {
       "mode": "none"
@@ -2521,6 +2529,10 @@ export const commandRegistry: CommandSpec[] = [
       "optional": [
         {
           "name": "actor_id",
+          "type": "string"
+        },
+        {
+          "name": "board_handle",
           "type": "string"
         },
         {
@@ -2566,6 +2578,10 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "card.due_at",
           "type": "datetime"
+        },
+        {
+          "name": "card.handle",
+          "type": "string"
         },
         {
           "name": "card.id",
@@ -2651,7 +2667,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/cards/{card_id}",
     "operation_id": "getCard",
     "summary": "Get card",
-    "why": "Resolve one first-class card by id.",
+    "why": "Resolve one first-class card by public ref or handle.",
     "input_mode": "none",
     "streaming": {
       "mode": "none"
@@ -2983,7 +2999,7 @@ export const commandRegistry: CommandSpec[] = [
     "streaming": {
       "mode": "none"
     },
-    "output_envelope": "Returns `{ purged, card_id }`.",
+    "output_envelope": "Returns `{ purged, card_ref, card_handle }`; internal card_id may appear for admin/debug compatibility.",
     "error_codes": [
       "auth_required",
       "human_only",
@@ -3187,7 +3203,7 @@ export const commandRegistry: CommandSpec[] = [
     "streaming": {
       "mode": "none"
     },
-    "output_envelope": "Returns `{ card_id, revision }`.",
+    "output_envelope": "Returns `{ card_ref, card_handle, revision }`; internal card_id may appear for admin/debug compatibility.",
     "error_codes": [
       "auth_required",
       "invalid_token",
@@ -3233,7 +3249,7 @@ export const commandRegistry: CommandSpec[] = [
     "streaming": {
       "mode": "none"
     },
-    "output_envelope": "Returns `{ card_id, revisions }`.",
+    "output_envelope": "Returns `{ card_ref, card_handle, revisions }`; internal card_id may appear for admin/debug compatibility.",
     "error_codes": [
       "auth_required",
       "invalid_token",
@@ -3712,7 +3728,7 @@ export const commandRegistry: CommandSpec[] = [
     "streaming": {
       "mode": "none"
     },
-    "output_envelope": "Returns `{ purged, document_id }`.",
+    "output_envelope": "Returns `{ purged, document_ref, document_handle }`; internal document_id may appear for admin/debug compatibility.",
     "error_codes": [
       "auth_required",
       "human_only",
@@ -3918,7 +3934,7 @@ export const commandRegistry: CommandSpec[] = [
     "streaming": {
       "mode": "none"
     },
-    "output_envelope": "Returns `{ document_id, revision }`.",
+    "output_envelope": "Returns `{ document_ref, document_handle, revision }`; internal document_id may appear for admin/debug compatibility.",
     "error_codes": [
       "auth_required",
       "invalid_token",
@@ -3963,7 +3979,7 @@ export const commandRegistry: CommandSpec[] = [
     "streaming": {
       "mode": "none"
     },
-    "output_envelope": "Returns `{ document_id, revisions }`.",
+    "output_envelope": "Returns `{ document_ref, document_handle, revisions }`; internal document_id may appear for admin/debug compatibility.",
     "error_codes": [
       "auth_required",
       "invalid_token",
@@ -4236,6 +4252,10 @@ export const commandRegistry: CommandSpec[] = [
       ],
       "optional": [
         {
+          "name": "event.handle",
+          "type": "string"
+        },
+        {
           "name": "event.payload",
           "type": "object"
         },
@@ -4246,6 +4266,10 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "event.provenance.notes",
           "type": "string"
+        },
+        {
+          "name": "event.ref",
+          "type": "typed_ref"
         },
         {
           "name": "event.thread_ref",
@@ -4272,8 +4296,8 @@ export const commandRegistry: CommandSpec[] = [
     "method": "GET",
     "path": "/events/{event_id}",
     "operation_id": "getEventById",
-    "summary": "Get event by id",
-    "why": "Fetch one append-only event record by stable id.",
+    "summary": "Get event",
+    "why": "Fetch one append-only event record by public ref or handle.",
     "input_mode": "none",
     "streaming": {
       "mode": "none"
