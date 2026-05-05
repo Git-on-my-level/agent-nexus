@@ -737,7 +737,7 @@ paths:
           in: query
           required: false
           schema: { type: string }
-          description: Restrict results to documents bound to this thread ref or handle.
+          description: Restrict results to documents bound to this backing thread public ref (`thread:<handle>`) or thread handle.
         - name: cursor
           in: query
           required: false
@@ -2185,9 +2185,11 @@ paths:
         - name: topic_id
           in: query
           schema: { type: string }
+          description: Filter by topic public ref (`topic:<handle>`), topic handle, or compatibility/debug UUID.
         - name: thread_id
           in: query
           schema: { type: string }
+          description: Filter by backing thread public ref (`thread:<handle>`), thread handle, or compatibility/debug UUID.
         - name: actor_id
           in: query
           schema: { type: string }
@@ -2330,7 +2332,7 @@ paths:
         - name: thread_id
           in: query
           required: false
-          description: Limit stream to events for this backing thread.
+          description: Limit stream to events for this backing thread public ref (`thread:<handle>`) or thread handle.
           schema: { type: string }
         - name: type
           in: query
@@ -2547,6 +2549,7 @@ paths:
           in: query
           required: false
           schema: { type: string }
+          description: Restrict results to artifacts linked to this backing thread public ref (`thread:<handle>`), thread handle, or compatibility/debug UUID.
         - name: ids
           in: query
           required: false
@@ -2629,7 +2632,7 @@ paths:
       x-anx-surface: canonical
       x-anx-command-id: artifacts.attachments.create
       x-anx-cli-path: artifacts attachments create
-      x-anx-why: Create kind=attachment via multipart form (efficient binary upload; previews use GET /artifacts/{id}/content).
+      x-anx-why: Create kind=attachment via multipart form (efficient binary upload; previews use GET /artifacts/{artifact_id}/content, where the path segment accepts artifact ref or handle).
       x-anx-agent-notes: Multipart/form-data upload; generated HTTP Invoke helpers JSON-encode bodies and are not suitable—use UI, curl -F, or a multipart-aware client.
       x-anx-input-mode: multipart-form
       x-anx-streaming: { mode: none }
@@ -4128,7 +4131,7 @@ paths:
         - name: thread_id
           in: query
           required: true
-          description: Backing thread ref or handle whose agent notification receipts should be streamed.
+          description: Backing thread public ref (`thread:<handle>`) or thread handle whose agent notification receipts should be streamed.
           schema: { type: string }
         - name: last_event_id
           in: query
@@ -5426,12 +5429,28 @@ components:
         column_key:
           type: string
           enum: [backlog, ready, in_progress, blocked, review, done]
-        before_card_id: { type: string }
-        after_card_id: { type: string }
-        before_thread_id: { type: string }
-        after_thread_id: { type: string }
-        parent_thread: { type: string }
-        thread_id: { type: string }
+        before_card_id:
+          type: string
+          description: Optional neighbor card ref or handle; compatibility field name retained for older clients.
+        after_card_id:
+          type: string
+          description: Optional neighbor card ref or handle; compatibility field name retained for older clients.
+        before_thread_id:
+          type: string
+          deprecated: true
+          description: Deprecated legacy neighbor thread selector; prefer card refs/handles for ordering.
+        after_thread_id:
+          type: string
+          deprecated: true
+          description: Deprecated legacy neighbor thread selector; prefer card refs/handles for ordering.
+        parent_thread:
+          type: string
+          deprecated: true
+          description: Deprecated legacy backing thread selector; card identity is public ref/handle based.
+        thread_id:
+          type: string
+          deprecated: true
+          description: Deprecated legacy backing thread selector; card identity is public ref/handle based.
         assignee_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }

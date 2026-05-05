@@ -145,7 +145,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `multipart-form`
-- Why: Create kind=attachment via multipart form (efficient binary upload; previews use GET /artifacts/{id}/content).
+- Why: Create kind=attachment via multipart form (efficient binary upload; previews use GET /artifacts/{artifact_id}/content, where the path segment accepts artifact ref or handle).
 - Concepts: `artifacts`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `conflict`, `unsupported_mime`, `payload_too_large`
 - Output: Returns `{ artifact }`.

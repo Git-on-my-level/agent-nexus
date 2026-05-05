@@ -615,7 +615,7 @@
       "path": "/artifacts/attachments",
       "operation_id": "createArtifactAttachment",
       "summary": "Upload a file attachment",
-      "why": "Create kind=attachment via multipart form (efficient binary upload; previews use GET /artifacts/{id}/content).",
+      "why": "Create kind=attachment via multipart form (efficient binary upload; previews use GET /artifacts/{artifact_id}/content, where the path segment accepts artifact ref or handle).",
       "input_mode": "multipart-form",
       "streaming": {
         "mode": "none"
