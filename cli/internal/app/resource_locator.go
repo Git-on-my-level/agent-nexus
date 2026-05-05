@@ -70,7 +70,7 @@ func normalizeResourceIDInput(raw string, expectedKind string, idLabel string) (
 		if !resourceKindMatches(kind, expectedKind) {
 			return "", errnorm.Usage("invalid_request", fmt.Sprintf("%s typed ref points to %s, not %s", idLabel, displayResourceKind(kind), displayResourceKind(expectedKind)))
 		}
-		return value, nil
+		return canonicalResourceKind(kind) + ":" + value, nil
 	}
 	return raw, nil
 }
@@ -283,49 +283,24 @@ func (a *App) runURLCommand(ctx context.Context, args []string, cfg config.Resol
 func (a *App) resolveLocatorForURL(ctx context.Context, cfg config.Resolved, loc resourceLocator) (resourceLocator, error) {
 	switch canonicalResourceKind(loc.Kind) {
 	case "board":
-		id, err := a.resolveResourceIDFromList(ctx, cfg, loc.ID, boardIDLookupSpec)
-		if err == nil {
-			loc.ID = id
-		} else if shouldResolveDisplayedShortID(loc.ID) {
-			return loc, err
-		}
+		return loc, nil
 	case "topic":
-		id, err := a.resolveResourceIDFromList(ctx, cfg, loc.ID, topicIDLookupSpec)
-		if err == nil {
-			loc.ID = id
-		} else if shouldResolveDisplayedShortID(loc.ID) {
-			return loc, err
-		}
+		return loc, nil
 	case "document":
-		id, err := a.resolveResourceIDFromList(ctx, cfg, loc.ID, documentIDLookupSpec)
-		if err == nil {
-			loc.ID = id
-		} else if shouldResolveDisplayedShortID(loc.ID) {
-			return loc, err
-		}
+		return loc, nil
 	case "artifact":
-		id, err := a.resolveResourceIDFromList(ctx, cfg, loc.ID, artifactIDLookupSpec)
-		if err == nil {
-			loc.ID = id
-		} else if shouldResolveDisplayedShortID(loc.ID) {
-			return loc, err
-		}
+		return loc, nil
 	case "card":
 		cardID := loc.ID
-		if shouldResolveDisplayedShortID(cardID) {
-			resolved, err := a.resolveResourceIDFromList(ctx, cfg, cardID, cardIDLookupSpec)
-			if err != nil {
-				return loc, err
-			}
-			cardID = resolved
-			loc.ID = resolved
-		}
 		if strings.TrimSpace(loc.BoardID) == "" {
 			result, err := a.invokeTypedJSON(ctx, cfg, "cards get", "cards.get", map[string]string{"card_id": cardID}, nil, nil)
 			if err != nil {
 				return loc, err
 			}
 			card := extractNestedMap(commandResultBody(result), "card")
+			if id := strings.TrimSpace(anyString(card["id"])); id != "" {
+				loc.ID = id
+			}
 			loc.BoardID = refID(anyString(card["board_ref"]))
 		}
 	}

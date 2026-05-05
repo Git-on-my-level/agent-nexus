@@ -29,22 +29,12 @@ type mutationFieldSpec struct {
 }
 
 func (a *App) resolveThreadIDFilters(ctx context.Context, cfg config.Resolved, rawIDs []string) ([]string, error) {
+	_ = ctx
+	_ = cfg
 	if len(rawIDs) == 0 {
 		return nil, nil
 	}
-	resolved := make([]string, 0, len(rawIDs))
-	for _, rawID := range normalizeIDFilters(rawIDs) {
-		resolvedID := rawID
-		if shouldResolveDisplayedShortID(rawID) {
-			var err error
-			resolvedID, err = a.resolveResourceIDFromList(ctx, cfg, rawID, threadIDLookupSpec)
-			if err != nil {
-				return nil, err
-			}
-		}
-		resolved = append(resolved, resolvedID)
-	}
-	return normalizeIDFilters(resolved), nil
+	return normalizeIDFilters(rawIDs), nil
 }
 
 func (a *App) normalizeMutationBodyIDs(ctx context.Context, cfg config.Resolved, commandID string, pathParams map[string]string, body any) (any, error) {
@@ -140,11 +130,13 @@ func (a *App) normalizeMutationFields(ctx context.Context, cfg config.Resolved, 
 }
 
 func (a *App) normalizeThreadIDValue(ctx context.Context, cfg config.Resolved, value any) (any, error) {
+	_ = ctx
+	_ = cfg
 	raw := strings.TrimSpace(anyString(value))
-	if raw == "" || !shouldResolveDisplayedShortID(raw) {
+	if raw == "" {
 		return value, nil
 	}
-	return a.resolveResourceIDFromList(ctx, cfg, raw, threadIDLookupSpec)
+	return raw, nil
 }
 
 func (a *App) normalizeTypedRefList(ctx context.Context, cfg config.Resolved, value any) (any, error) {
@@ -164,19 +156,18 @@ func (a *App) normalizeTypedRefList(ctx context.Context, cfg config.Resolved, va
 }
 
 func (a *App) normalizeTypedRef(ctx context.Context, cfg config.Resolved, raw string) (string, error) {
+	_ = ctx
+	_ = cfg
 	kind, value, _, err := parseTypedRef(raw)
 	if err != nil {
 		return raw, nil
 	}
 	spec, ok := typedRefLookupByPrefix[kind]
-	if !ok || !shouldResolveDisplayedShortID(value) {
+	if !ok {
 		return raw, nil
 	}
-	resolvedID, err := a.resolveResourceIDFromList(ctx, cfg, value, spec)
-	if err != nil {
-		return "", err
-	}
-	return kind + ":" + resolvedID, nil
+	_ = spec
+	return kind + ":" + value, nil
 }
 
 func (a *App) normalizeTypedRefValue(ctx context.Context, cfg config.Resolved, value any) (any, error) {

@@ -77,7 +77,7 @@ var localHelperTopics = []localHelperTopic{
 			"anx topics message <topic-id> --body \"Decision context\"",
 		},
 		Flags: []localHelperFlag{
-			{Name: "<topic-id>", Description: "Topic id or unique prefix to message."},
+			{Name: "<topic-id>", Description: "Topic id, typed ref, or handle to message."},
 			{Name: "--thread <thread-id>", Description: "Backing thread id for thread-scoped message fallback."},
 			{Name: "--thread-id <thread-id>", Description: "Backing thread id for thread-scoped message fallback."},
 			{Name: "--body <text>", Description: "Message body text."},
@@ -98,7 +98,7 @@ var localHelperTopics = []localHelperTopic{
 			"anx topics messages <topic-id> --max-events 5 --mine",
 		},
 		Flags: []localHelperFlag{
-			{Name: "<topic-id>", Description: "Topic id or unique prefix whose messages should be listed."},
+			{Name: "<topic-id>", Description: "Topic id, typed ref, or handle whose messages should be listed."},
 			{Name: "--max-events <n>", Description: "Return at most N most-recent matching messages."},
 			{Name: "--mine", Description: "Filter to messages authored by the active profile actor_id."},
 			{Name: "--actor-id <actor-id>", Description: "Filter to one actor id."},
@@ -115,10 +115,10 @@ var localHelperTopics = []localHelperTopic{
 			"anx topics reply <topic-id> --to <message-id> --body-file reply.md",
 		},
 		Flags: []localHelperFlag{
-			{Name: "<topic-id>", Description: "Topic id or unique prefix to reply on."},
+			{Name: "<topic-id>", Description: "Topic id, typed ref, or handle to reply on."},
 			{Name: "--thread <thread-id>", Description: "Backing thread id for thread-scoped reply fallback."},
 			{Name: "--thread-id <thread-id>", Description: "Backing thread id for thread-scoped reply fallback."},
-			{Name: "--to <message-id>", Description: "Message/event id or unique prefix being replied to."},
+			{Name: "--to <message-id>", Description: "Message/event id, typed ref, or handle being replied to."},
 			{Name: "--body <text>", Description: "Reply body text."},
 			{Name: "--body-file <path>", Description: "Load reply body text from a local file."},
 			{Name: "--summary <text>", Description: "Optional short event summary."},
@@ -204,7 +204,7 @@ var localHelperTopics = []localHelperTopic{
 			"cat update.md | anx cards message <card-id>",
 		},
 		Flags: []localHelperFlag{
-			{Name: "<card-id>", Description: "Card id or unique prefix to message."},
+			{Name: "<card-id>", Description: "Card id, typed ref, or handle to message."},
 			{Name: "--body <text>", Description: "Message body text."},
 			{Name: "--body-file <path>", Description: "Load message body text from a local file."},
 			{Name: "--summary <text>", Description: "Optional short event summary."},
@@ -224,7 +224,7 @@ var localHelperTopics = []localHelperTopic{
 			"anx cards messages <card-id> --full-id",
 		},
 		Flags: []localHelperFlag{
-			{Name: "<card-id>", Description: "Card id or unique prefix whose messages should be listed."},
+			{Name: "<card-id>", Description: "Card id, typed ref, or handle whose messages should be listed."},
 			{Name: "--max-events <n>", Description: "Return at most N most-recent matching messages."},
 			{Name: "--mine", Description: "Filter to messages authored by the active profile actor_id."},
 			{Name: "--actor-id <actor-id>", Description: "Filter to one actor id."},
@@ -241,8 +241,8 @@ var localHelperTopics = []localHelperTopic{
 			"anx cards reply <card-id> --to <message-id> --body-file reply.md",
 		},
 		Flags: []localHelperFlag{
-			{Name: "<card-id>", Description: "Card id or unique prefix to reply on."},
-			{Name: "--to <message-id>", Description: "Message/event id or unique prefix being replied to."},
+			{Name: "<card-id>", Description: "Card id, typed ref, or handle to reply on."},
+			{Name: "--to <message-id>", Description: "Message/event id, typed ref, or handle being replied to."},
 			{Name: "--body <text>", Description: "Reply body text."},
 			{Name: "--body-file <path>", Description: "Load reply body text from a local file."},
 			{Name: "--summary <text>", Description: "Optional short event summary."},
@@ -262,7 +262,7 @@ var localHelperTopics = []localHelperTopic{
 			"anx cards revise <card-id> --from-file card-revision.json",
 		},
 		Flags: []localHelperFlag{
-			{Name: "<card-id>", Description: "Card id or unique prefix to revise."},
+			{Name: "<card-id>", Description: "Card id, typed ref, or handle to revise."},
 			{Name: "--content-file <path>", Description: "Load revised card summary/body text from a local file."},
 			{Name: "--title <text>", Description: "Optional revised card title."},
 			{Name: "--if-base-revision <revision-id>", Description: "Base card revision id; discovered when omitted."},
@@ -279,7 +279,7 @@ var localHelperTopics = []localHelperTopic{
 			"anx threads message <thread-id> --body \"Diagnostic note\"",
 		},
 		Flags: []localHelperFlag{
-			{Name: "<thread-id>", Description: "Thread id or unique prefix to message."},
+			{Name: "<thread-id>", Description: "Thread id, typed ref, or handle to message."},
 			{Name: "--body <text>", Description: "Message body text."},
 			{Name: "--body-file <path>", Description: "Load message body text from a local file."},
 			{Name: "--summary <text>", Description: "Optional short event summary."},
@@ -298,8 +298,8 @@ var localHelperTopics = []localHelperTopic{
 			"anx threads reply <thread-id> --to <message-id> --body-file reply.md",
 		},
 		Flags: []localHelperFlag{
-			{Name: "<thread-id>", Description: "Thread id or unique prefix to reply on."},
-			{Name: "--to <message-id>", Description: "Message/event id or unique prefix being replied to."},
+			{Name: "<thread-id>", Description: "Thread id, typed ref, or handle to reply on."},
+			{Name: "--to <message-id>", Description: "Message/event id, typed ref, or handle being replied to."},
 			{Name: "--body <text>", Description: "Reply body text."},
 			{Name: "--body-file <path>", Description: "Load reply body text from a local file."},
 			{Name: "--summary <text>", Description: "Optional short event summary."},
@@ -318,7 +318,7 @@ var localHelperTopics = []localHelperTopic{
 			"anx cards move <card-id> --column blocked --if-board-updated-at <updated-at>",
 		},
 		Flags: []localHelperFlag{
-			{Name: "<card-id>", Description: "Card id or unique prefix to move."},
+			{Name: "<card-id>", Description: "Card id, typed ref, or handle to move."},
 			{Name: "--column <key>", Description: "Target board column."},
 			{Name: "--if-board-updated-at <timestamp>", Description: "Board optimistic concurrency token; discovered when omitted."},
 			{Name: "--from-file <path>", Description: "Advanced JSON move request body from file."},
@@ -334,7 +334,7 @@ var localHelperTopics = []localHelperTopic{
 			"anx cards assign <card-id> --clear",
 		},
 		Flags: []localHelperFlag{
-			{Name: "<card-id>", Description: "Card id or unique prefix to assign."},
+			{Name: "<card-id>", Description: "Card id, typed ref, or handle to assign."},
 			{Name: "--assignee-ref <typed-ref>", Description: "Assignee actor typed ref, repeatable."},
 			{Name: "--clear", Description: "Clear all assignees."},
 			{Name: "--if-updated-at <timestamp>", Description: "Card optimistic concurrency token; discovered when omitted."},
@@ -350,7 +350,7 @@ var localHelperTopics = []localHelperTopic{
 			"anx cards resolve <card-id> --resolution-ref event:<event-id>",
 		},
 		Flags: []localHelperFlag{
-			{Name: "<card-id>", Description: "Card id or unique prefix to resolve."},
+			{Name: "<card-id>", Description: "Card id, typed ref, or handle to resolve."},
 			{Name: "--resolution-ref <typed-ref>", Description: "Evidence event/artifact typed ref, repeatable."},
 			{Name: "--body <text>", Description: "Post inline evidence to the card thread before resolving."},
 			{Name: "--body-file <path>", Description: "Load evidence text from a file before resolving."},
@@ -370,7 +370,7 @@ var localHelperTopics = []localHelperTopic{
 			"anx cards reopen <card-id> --column backlog",
 		},
 		Flags: []localHelperFlag{
-			{Name: "<card-id>", Description: "Card id or unique prefix to reopen."},
+			{Name: "<card-id>", Description: "Card id, typed ref, or handle to reopen."},
 			{Name: "--column <key>", Description: "Target reopened column; defaults to ready."},
 			{Name: "--if-board-updated-at <timestamp>", Description: "Board optimistic concurrency token; discovered when omitted."},
 		},
@@ -482,7 +482,7 @@ var localHelperTopics = []localHelperTopic{
 			"anx boards workspace board_product_launch",
 		},
 		Flags: []localHelperFlag{
-			{Name: "<board-id>", Description: "Board id or unique prefix to load."},
+			{Name: "<board-id>", Description: "Board id, typed ref, or handle to load."},
 		},
 	},
 	{
@@ -495,7 +495,7 @@ var localHelperTopics = []localHelperTopic{
 			"anx boards cards list <board-id> --full-id",
 		},
 		Flags: []localHelperFlag{
-			{Name: "<board-id>", Description: "Board id or unique prefix to list cards for."},
+			{Name: "<board-id>", Description: "Board id, typed ref, or handle to list cards for."},
 			{Name: "--full-id", Description: "Render full card ids in default text output."},
 		},
 	},
@@ -593,7 +593,7 @@ var localHelperTopics = []localHelperTopic{
 		},
 		Flags: []localHelperFlag{
 			{Name: "<document-id>", Description: "Document id or unique alias to reply on."},
-			{Name: "--to <message-id>", Description: "Message/event id or unique prefix being replied to."},
+			{Name: "--to <message-id>", Description: "Message/event id, typed ref, or handle being replied to."},
 			{Name: "--body <text>", Description: "Reply body text."},
 			{Name: "--body-file <path>", Description: "Load reply body text from a local file."},
 			{Name: "--summary <text>", Description: "Optional short event summary."},
@@ -1227,7 +1227,7 @@ func fieldHelpText(commandID string, name string) string {
 	case strings.HasPrefix(name, "if_"):
 		return "Optimistic concurrency token. Read the latest value from the corresponding read command before mutating."
 	case commandID == "inbox.get" && name == "inbox_item_id":
-		return "Canonical inbox id, alias, or unique prefix from `anx inbox list`."
+		return "Canonical inbox id or alias from `anx inbox list`."
 	default:
 		return ""
 	}

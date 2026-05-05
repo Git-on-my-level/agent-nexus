@@ -3958,85 +3958,26 @@ func buildBoardCardCommandPathParams(cardID string) (map[string]string, error) {
 }
 
 func (a *App) normalizeBoardMutationCardAnchorField(ctx context.Context, cfg config.Resolved, boardID string, body map[string]any, field string) error {
+	_ = ctx
+	_ = cfg
+	_ = boardID
 	rawID := strings.TrimSpace(anyString(body[field]))
 	if rawID == "" {
 		return nil
 	}
-	resolvedID, err := a.resolveMaybeBoardCardID(ctx, cfg, boardID, rawID)
-	if err != nil {
-		return err
-	}
-	body[field] = resolvedID
+	body[field] = rawID
 	return nil
 }
 
 func (a *App) resolveMaybeBoardCardID(ctx context.Context, cfg config.Resolved, boardID, rawCardID string) (string, error) {
+	_ = ctx
+	_ = cfg
+	_ = boardID
 	rawCardID = strings.TrimSpace(rawCardID)
 	if rawCardID == "" {
 		return "", nil
 	}
-	if !shouldResolveDisplayedShortID(rawCardID) && !looksLikeThreadCardIdentifier(rawCardID) {
-		return rawCardID, nil
-	}
-	resolvedBoard, err := a.resolveMaybeBoardID(ctx, cfg, boardID)
-	if err != nil {
-		return "", err
-	}
-	result, err := a.invokeTypedJSON(ctx, cfg, "boards cards list", "boards.cards.list", map[string]string{"board_id": resolvedBoard}, nil, nil)
-	if err != nil {
-		return "", err
-	}
-	matches := listBoardCardIdentifierMatches(result)
-	if len(matches) == 0 {
-		return "", missingResourceIDError(rawCardID, boardCardIDLookupSpec)
-	}
-
-	for _, match := range matches {
-		if match.CardID == rawCardID {
-			return match.CardID, nil
-		}
-	}
-	for _, match := range matches {
-		if match.CardShortID != "" && match.CardShortID == rawCardID {
-			return match.CardID, nil
-		}
-	}
-	for _, match := range matches {
-		if match.ThreadID != "" && match.ThreadID == rawCardID {
-			return match.CardID, nil
-		}
-	}
-
-	cardMatches := make([]string, 0, len(matches))
-	for _, match := range matches {
-		if strings.HasPrefix(match.CardID, rawCardID) || (match.CardShortID != "" && strings.HasPrefix(match.CardShortID, rawCardID)) {
-			cardMatches = append(cardMatches, match.CardID)
-		}
-	}
-	cardMatches = uniqueStringsInOrder(cardMatches)
-	if len(cardMatches) == 1 {
-		return cardMatches[0], nil
-	}
-	if len(cardMatches) > 1 {
-		sort.Strings(cardMatches)
-		return "", ambiguousResourceIDError(rawCardID, boardCardIDLookupSpec, cardMatches)
-	}
-
-	threadMatches := make([]string, 0, len(matches))
-	for _, match := range matches {
-		if match.ThreadID != "" && strings.HasPrefix(match.ThreadID, rawCardID) {
-			threadMatches = append(threadMatches, match.CardID)
-		}
-	}
-	threadMatches = uniqueStringsInOrder(threadMatches)
-	if len(threadMatches) == 1 {
-		return threadMatches[0], nil
-	}
-	if len(threadMatches) > 1 {
-		sort.Strings(threadMatches)
-		return "", ambiguousResourceIDError(rawCardID, boardCardIDLookupSpec, threadMatches)
-	}
-	return "", missingResourceIDError(rawCardID, boardCardIDLookupSpec)
+	return rawCardID, nil
 }
 
 func looksLikeThreadCardIdentifier(raw string) bool {
@@ -4139,24 +4080,15 @@ func hasAnyBoardMutationFieldFlags(values ...any) bool {
 }
 
 func (a *App) resolveMaybeBoardID(ctx context.Context, cfg config.Resolved, rawID string) (string, error) {
-	if !shouldResolveDisplayedShortID(rawID) {
-		return rawID, nil
-	}
-	return a.resolveResourceIDFromList(ctx, cfg, rawID, boardIDLookupSpec)
+	_ = ctx
+	_ = cfg
+	return rawID, nil
 }
 
 func (a *App) resolveMaybeThreadID(ctx context.Context, cfg config.Resolved, rawID string) (string, error) {
-	if !shouldResolveDisplayedShortID(rawID) {
-		return rawID, nil
-	}
-	resolved, err := a.resolveThreadIDFilters(ctx, cfg, []string{rawID})
-	if err != nil {
-		return "", err
-	}
-	if len(resolved) == 0 {
-		return rawID, nil
-	}
-	return resolved[0], nil
+	_ = ctx
+	_ = cfg
+	return rawID, nil
 }
 
 func parseIDArg(args []string, idFlag string, idLabel string) (string, error) {
@@ -4786,19 +4718,19 @@ func enrichListBodyWithShortIDs(commandID string, body any) (any, bool) {
 	}
 	switch strings.TrimSpace(commandID) {
 	case "threads.list":
-		return body, addShortIDToListField(typedBody, "threads")
+		return body, addPublicIdentityToListField(typedBody, "threads", "thread")
 	case "topics.list":
-		return body, addShortIDToListField(typedBody, "topics")
+		return body, addPublicIdentityToListField(typedBody, "topics", "topic")
 	case "artifacts.list":
-		return body, addShortIDToListField(typedBody, "artifacts")
+		return body, addPublicIdentityToListField(typedBody, "artifacts", "artifact")
 	case "boards.list":
-		return body, addShortIDToNestedListField(typedBody, "boards", []string{"board"})
+		return body, addPublicIdentityToNestedListField(typedBody, "boards", []string{"board"}, "board")
 	case "boards.cards.list":
-		return body, addShortIDToListField(typedBody, "cards")
+		return body, addPublicIdentityToListField(typedBody, "cards", "card")
 	case "docs.list":
-		return body, addShortIDToListField(typedBody, "documents")
+		return body, addPublicIdentityToListField(typedBody, "documents", "document")
 	case "events.list":
-		return body, addShortIDToListField(typedBody, "events")
+		return body, addPublicIdentityToListField(typedBody, "events", "event")
 	case "inbox.list":
 		return body, addInboxAliasesToListField(typedBody, "items")
 	case "inbox.get":
@@ -4840,20 +4772,20 @@ func addShortIDsToObjectSlice(slice []any) bool {
 	return changed
 }
 
-// enrichThreadWorkspaceBodyWithShortIDs mirrors list-response short_id enrichment for GET /threads/{id}/workspace.
+// enrichThreadWorkspaceBodyWithShortIDs mirrors list-response public identity enrichment for GET /threads/{id}/workspace.
 func enrichThreadWorkspaceBodyWithShortIDs(body map[string]any) bool {
 	if body == nil {
 		return false
 	}
 	changed := false
 	if thread := asMap(body["thread"]); thread != nil {
-		changed = addShortIDToObjectIfPresent(thread) || changed
+		changed = addPublicIdentityToObjectIfPresent(thread, "thread") || changed
 	}
 	contextSliceKeys := []string{"recent_events", "key_artifacts", "open_cards", "documents"}
 	if ctx := asMap(body["context"]); ctx != nil {
 		for _, key := range contextSliceKeys {
 			if items, ok := ctx[key].([]any); ok {
-				changed = addShortIDsToObjectSlice(items) || changed
+				changed = addPublicIdentityToObjectSlice(items, resourceKindForWorkspaceSlice(key)) || changed
 			}
 		}
 	}
@@ -4861,7 +4793,7 @@ func enrichThreadWorkspaceBodyWithShortIDs(body map[string]any) bool {
 	if collab := asMap(body["collaboration"]); collab != nil {
 		for _, key := range collabSliceKeys {
 			if items, ok := collab[key].([]any); ok {
-				changed = addShortIDsToObjectSlice(items) || changed
+				changed = addPublicIdentityToObjectSlice(items, resourceKindForWorkspaceSlice(key)) || changed
 			}
 		}
 	}
@@ -4879,12 +4811,12 @@ func enrichThreadWorkspaceBodyWithShortIDs(body map[string]any) bool {
 					continue
 				}
 				if board := asMap(item["board"]); board != nil {
-					if addShortIDToObjectIfPresent(board) {
+					if addPublicIdentityToObjectIfPresent(board, "board") {
 						changed = true
 					}
 				}
 				if card := asMap(item["card"]); card != nil {
-					if addShortIDToObjectIfPresent(card) {
+					if addPublicIdentityToObjectIfPresent(card, "card") {
 						changed = true
 					}
 				}
@@ -4899,7 +4831,7 @@ func enrichThreadWorkspaceBodyWithShortIDs(body map[string]any) bool {
 					continue
 				}
 				if t := asMap(item["thread"]); t != nil {
-					if addShortIDToObjectIfPresent(t) {
+					if addPublicIdentityToObjectIfPresent(t, "thread") {
 						changed = true
 					}
 				}
@@ -4909,7 +4841,22 @@ func enrichThreadWorkspaceBodyWithShortIDs(body map[string]any) bool {
 	return changed
 }
 
-func addShortIDToListField(body map[string]any, field string) bool {
+func resourceKindForWorkspaceSlice(key string) string {
+	switch key {
+	case "recent_events":
+		return "event"
+	case "key_artifacts":
+		return "artifact"
+	case "open_cards":
+		return "card"
+	case "documents":
+		return "document"
+	default:
+		return ""
+	}
+}
+
+func addPublicIdentityToListField(body map[string]any, field string, kind string) bool {
 	items, _ := body[field].([]any)
 	if len(items) == 0 {
 		return false
@@ -4920,14 +4867,14 @@ func addShortIDToListField(body map[string]any, field string) bool {
 		if item == nil {
 			continue
 		}
-		if addShortIDToObjectIfPresent(item) {
+		if addPublicIdentityToObjectIfPresent(item, kind) {
 			changed = true
 		}
 	}
 	return changed
 }
 
-func addShortIDToNestedListField(body map[string]any, field string, path []string) bool {
+func addPublicIdentityToNestedListField(body map[string]any, field string, path []string, kind string) bool {
 	items, _ := body[field].([]any)
 	if len(items) == 0 {
 		return false
@@ -4950,11 +4897,71 @@ func addShortIDToNestedListField(body map[string]any, field string, path []strin
 		if target == nil {
 			continue
 		}
-		if addShortIDToObjectIfPresent(target) {
+		if addPublicIdentityToObjectIfPresent(target, kind) {
 			changed = true
 		}
 	}
 	return changed
+}
+
+func addPublicIdentityToObjectIfPresent(obj map[string]any, kind string) bool {
+	if obj == nil {
+		return false
+	}
+	changed := false
+	refKey := canonicalResourceKind(kind) + "_ref"
+	handleKey := canonicalResourceKind(kind) + "_handle"
+	if canonicalResourceKind(kind) == "document" {
+		refKey = "document_ref"
+		handleKey = "document_handle"
+	}
+	if strings.TrimSpace(anyString(obj["ref"])) == "" {
+		if ref := firstNonEmpty(strings.TrimSpace(anyString(obj[refKey])), publicRefFromID(kind, anyString(obj["id"]))); ref != "" {
+			obj["ref"] = ref
+			changed = true
+		}
+	}
+	if strings.TrimSpace(anyString(obj["handle"])) == "" {
+		if handle := firstNonEmpty(strings.TrimSpace(anyString(obj[handleKey])), publicHandleFromRef(anyString(obj["ref"]))); handle != "" {
+			obj["handle"] = handle
+			changed = true
+		}
+	}
+	return changed
+}
+
+func addPublicIdentityToObjectSlice(slice []any, kind string) bool {
+	changed := false
+	for _, raw := range slice {
+		item, _ := raw.(map[string]any)
+		if item == nil {
+			continue
+		}
+		if addPublicIdentityToObjectIfPresent(item, kind) {
+			changed = true
+		}
+	}
+	return changed
+}
+
+func publicRefFromID(kind string, id string) string {
+	id = strings.TrimSpace(id)
+	kind = canonicalResourceKind(kind)
+	if id == "" || kind == "" {
+		return ""
+	}
+	if strings.Contains(id, ":") {
+		return id
+	}
+	return kind + ":" + id
+}
+
+func publicHandleFromRef(ref string) string {
+	_, value, _, err := parseTypedRef(ref)
+	if err != nil {
+		return ""
+	}
+	return value
 }
 
 func addInboxAliasesToListField(body map[string]any, field string) bool {

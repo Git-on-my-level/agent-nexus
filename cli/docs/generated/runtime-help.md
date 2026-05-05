@@ -374,8 +374,8 @@ Use help output as the source of truth for exact flags, request shapes, enums, a
 Command habits
 
 - Use list/get/context/workspace commands to orient before editing.
-- Default text and JSON list payloads use a 10-character canonical `short_id` prefix; the CLI resolves that prefix to a canonical id when you pass it back into commands. Use `--full-id` when a value is ambiguous or you need the full id for copy/paste.
-- In default text resource lists (threads, boards, topics, etc.), the first column may show a short scan label derived after the type prefix (not the same as `short_id`); prefer the text output for reading, and use `--full-id` or JSON `id`/`short_id` when exact machine parsing is needed.
+- Default text and JSON list payloads lead with public typed refs and handles, for example `card:<handle>`. The CLI passes typed refs and bare handles through to core for resolution.
+- Prefer default text for reading and `--json` for scripts that need stable `ref` and `handle` fields. Internal `id` fields may still appear for debugging or compatibility, but they are not the normal copy/paste identity.
 - Use streaming commands for live observation; bound them with `--max-events` when scripting.
 - Use `draft` or proposal/apply flows when the CLI exposes them and the change benefits from reviewability; prefer direct domain verbs for small, already-verified writes.
 - Prefer narrow filters over broad listings when triaging large state.
@@ -4186,7 +4186,7 @@ Local Help: topics message
   - `anx topics message <topic-id> --body "Decision context"`
 
 Flags:
-  <topic-id>                   Topic id or unique prefix to message.
+  <topic-id>                   Topic id, typed ref, or handle to message.
   --thread <thread-id>         Backing thread id for thread-scoped message fallback.
   --thread-id <thread-id>      Backing thread id for thread-scoped message fallback.
   --body <text>                Message body text.
@@ -4219,7 +4219,7 @@ Local Help: topics messages
   - `anx topics messages <topic-id> --max-events 5 --mine`
 
 Flags:
-  <topic-id>                   Topic id or unique prefix whose messages should be listed.
+  <topic-id>                   Topic id, typed ref, or handle whose messages should be listed.
   --max-events <n>             Return at most N most-recent matching messages.
   --mine                       Filter to messages authored by the active profile actor_id.
   --actor-id <actor-id>        Filter to one actor id.
@@ -4248,10 +4248,10 @@ Local Help: topics reply
   - `anx topics reply <topic-id> --to <message-id> --body-file reply.md`
 
 Flags:
-  <topic-id>                   Topic id or unique prefix to reply on.
+  <topic-id>                   Topic id, typed ref, or handle to reply on.
   --thread <thread-id>         Backing thread id for thread-scoped reply fallback.
   --thread-id <thread-id>      Backing thread id for thread-scoped reply fallback.
-  --to <message-id>            Message/event id or unique prefix being replied to.
+  --to <message-id>            Message/event id, typed ref, or handle being replied to.
   --body <text>                Reply body text.
   --body-file <path>           Load reply body text from a local file.
   --summary <text>             Optional short event summary.
@@ -4385,7 +4385,7 @@ Local Help: cards message
   - `cat update.md | anx cards message <card-id>`
 
 Flags:
-  <card-id>                    Card id or unique prefix to message.
+  <card-id>                    Card id, typed ref, or handle to message.
   --body <text>                Message body text.
   --body-file <path>           Load message body text from a local file.
   --summary <text>             Optional short event summary.
@@ -4417,7 +4417,7 @@ Local Help: cards messages
   - `anx cards messages <card-id> --full-id`
 
 Flags:
-  <card-id>                    Card id or unique prefix whose messages should be listed.
+  <card-id>                    Card id, typed ref, or handle whose messages should be listed.
   --max-events <n>             Return at most N most-recent matching messages.
   --mine                       Filter to messages authored by the active profile actor_id.
   --actor-id <actor-id>        Filter to one actor id.
@@ -4446,8 +4446,8 @@ Local Help: cards reply
   - `anx cards reply <card-id> --to <message-id> --body-file reply.md`
 
 Flags:
-  <card-id>                    Card id or unique prefix to reply on.
-  --to <message-id>            Message/event id or unique prefix being replied to.
+  <card-id>                    Card id, typed ref, or handle to reply on.
+  --to <message-id>            Message/event id, typed ref, or handle being replied to.
   --body <text>                Reply body text.
   --body-file <path>           Load reply body text from a local file.
   --summary <text>             Optional short event summary.
@@ -4479,7 +4479,7 @@ Local Help: cards revise
   - `anx cards revise <card-id> --from-file card-revision.json`
 
 Flags:
-  <card-id>                    Card id or unique prefix to revise.
+  <card-id>                    Card id, typed ref, or handle to revise.
   --content-file <path>        Load revised card summary/body text from a local file.
   --title <text>               Optional revised card title.
   --if-base-revision <revision-id> Base card revision id; discovered when omitted.
@@ -4508,7 +4508,7 @@ Local Help: threads message
   - `anx threads message <thread-id> --body "Diagnostic note"`
 
 Flags:
-  <thread-id>                  Thread id or unique prefix to message.
+  <thread-id>                  Thread id, typed ref, or handle to message.
   --body <text>                Message body text.
   --body-file <path>           Load message body text from a local file.
   --summary <text>             Optional short event summary.
@@ -4539,8 +4539,8 @@ Local Help: threads reply
   - `anx threads reply <thread-id> --to <message-id> --body-file reply.md`
 
 Flags:
-  <thread-id>                  Thread id or unique prefix to reply on.
-  --to <message-id>            Message/event id or unique prefix being replied to.
+  <thread-id>                  Thread id, typed ref, or handle to reply on.
+  --to <message-id>            Message/event id, typed ref, or handle being replied to.
   --body <text>                Reply body text.
   --body-file <path>           Load reply body text from a local file.
   --summary <text>             Optional short event summary.
@@ -4571,7 +4571,7 @@ Local Help: cards move
   - `anx cards move <card-id> --column blocked --if-board-updated-at <updated-at>`
 
 Flags:
-  <card-id>                    Card id or unique prefix to move.
+  <card-id>                    Card id, typed ref, or handle to move.
   --column <key>               Target board column.
   --if-board-updated-at <timestamp> Board optimistic concurrency token; discovered when omitted.
   --from-file <path>           Advanced JSON move request body from file.
@@ -4599,7 +4599,7 @@ Local Help: cards assign
   - `anx cards assign <card-id> --clear`
 
 Flags:
-  <card-id>                    Card id or unique prefix to assign.
+  <card-id>                    Card id, typed ref, or handle to assign.
   --assignee-ref <typed-ref>   Assignee actor typed ref, repeatable.
   --clear                      Clear all assignees.
   --if-updated-at <timestamp>  Card optimistic concurrency token; discovered when omitted.
@@ -4627,7 +4627,7 @@ Local Help: cards resolve
   - `anx cards resolve <card-id> --resolution-ref event:<event-id>`
 
 Flags:
-  <card-id>                    Card id or unique prefix to resolve.
+  <card-id>                    Card id, typed ref, or handle to resolve.
   --resolution-ref <typed-ref> Evidence event/artifact typed ref, repeatable.
   --body <text>                Post inline evidence to the card thread before resolving.
   --body-file <path>           Load evidence text from a file before resolving.
@@ -4659,7 +4659,7 @@ Local Help: cards reopen
   - `anx cards reopen <card-id> --column backlog`
 
 Flags:
-  <card-id>                    Card id or unique prefix to reopen.
+  <card-id>                    Card id, typed ref, or handle to reopen.
   --column <key>               Target reopened column; defaults to ready.
   --if-board-updated-at <timestamp> Board optimistic concurrency token; discovered when omitted.
 
@@ -4855,7 +4855,7 @@ Local Help: boards workspace
   - `anx boards workspace board_product_launch`
 
 Flags:
-  <board-id>                   Board id or unique prefix to load.
+  <board-id>                   Board id, typed ref, or handle to load.
 
 
 Global flags:
@@ -4880,7 +4880,7 @@ Local Help: boards cards list
   - `anx boards cards list <board-id> --full-id`
 
 Flags:
-  <board-id>                   Board id or unique prefix to list cards for.
+  <board-id>                   Board id, typed ref, or handle to list cards for.
   --full-id                    Render full card ids in default text output.
 
 
@@ -5050,7 +5050,7 @@ Local Help: docs reply
 
 Flags:
   <document-id>                Document id or unique alias to reply on.
-  --to <message-id>            Message/event id or unique prefix being replied to.
+  --to <message-id>            Message/event id, typed ref, or handle being replied to.
   --body <text>                Reply body text.
   --body-file <path>           Load reply body text from a local file.
   --summary <text>             Optional short event summary.

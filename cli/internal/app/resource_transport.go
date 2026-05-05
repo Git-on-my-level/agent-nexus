@@ -227,23 +227,8 @@ func (a *App) invokeTypedJSONWithIDResolution(
 	query []queryParam,
 	body any,
 ) (*commandResult, error) {
-	pathParams := map[string]string{pathParamName: rawID}
-	result, err := a.invokeTypedJSON(ctx, cfg, commandName, commandID, pathParams, query, body)
-	if err == nil {
-		return result, nil
-	}
-	if !isResolvableResourceNotFoundError(err, lookupSpec) {
-		return nil, err
-	}
-
-	resolvedID, resolveErr := a.resolveResourceIDFromList(ctx, cfg, rawID, lookupSpec)
-	if resolveErr != nil {
-		return nil, resolveErr
-	}
-	if resolvedID == rawID {
-		return nil, missingResourceIDError(rawID, lookupSpec)
-	}
-	return a.invokeTypedJSON(ctx, cfg, commandName, commandID, map[string]string{pathParamName: resolvedID}, query, body)
+	_ = lookupSpec
+	return a.invokeTypedJSON(ctx, cfg, commandName, commandID, map[string]string{pathParamName: rawID}, query, body)
 }
 
 func (a *App) invokeArtifactContentWithIDResolution(
@@ -255,21 +240,8 @@ func (a *App) invokeArtifactContentWithIDResolution(
 	lookupSpec resourceIDLookupSpec,
 	outputPath string,
 ) (*commandResult, error) {
-	result, err := a.invokeArtifactContent(ctx, cfg, commandName, map[string]string{pathParamName: rawID}, outputPath)
-	if err == nil {
-		return result, nil
-	}
-	if !isResolvableResourceNotFoundError(err, lookupSpec) {
-		return nil, err
-	}
-	resolvedID, resolveErr := a.resolveResourceIDFromList(ctx, cfg, rawID, lookupSpec)
-	if resolveErr != nil {
-		return nil, resolveErr
-	}
-	if resolvedID == rawID {
-		return nil, missingResourceIDError(rawID, lookupSpec)
-	}
-	return a.invokeArtifactContent(ctx, cfg, commandName, map[string]string{pathParamName: resolvedID}, outputPath)
+	_ = lookupSpec
+	return a.invokeArtifactContent(ctx, cfg, commandName, map[string]string{pathParamName: rawID}, outputPath)
 }
 
 func (a *App) invokeArtifactAttachmentCreate(ctx context.Context, cfg config.Resolved, refsJSON, filePath, summary, artifactJSON, actorID string) (*commandResult, error) {

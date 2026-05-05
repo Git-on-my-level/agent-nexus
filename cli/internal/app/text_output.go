@@ -358,7 +358,7 @@ func formatTopicRecord(topic map[string]any) string {
 	if topic == nil {
 		return formatPrettyBody(topic)
 	}
-	lines := []string{"Topic " + displayID(topic)}
+	lines := []string{"Topic " + displayPublicIdentity(topic, "topic")}
 	lines = appendScalar(lines, "title", topic, "title")
 	lines = appendScalar(lines, "state", topic, "state")
 	lines = appendScalar(lines, "summary", topic, "summary")
@@ -375,7 +375,7 @@ func formatCardRecord(card map[string]any) string {
 	if card == nil {
 		return formatPrettyBody(card)
 	}
-	lines := []string{"Card " + displayID(card)}
+	lines := []string{"Card " + displayPublicIdentity(card, "card")}
 	lines = appendScalar(lines, "title", card, "title")
 	lines = appendScalar(lines, "summary", card, "summary")
 	lines = appendScalar(lines, "board_ref", card, "board_ref")
@@ -501,7 +501,7 @@ func formatThreadRecord(thread map[string]any) string {
 	if thread == nil {
 		return formatPrettyBody(thread)
 	}
-	lines := []string{"Thread " + displayID(thread)}
+	lines := []string{"Thread " + displayPublicIdentity(thread, "thread")}
 	lines = appendScalar(lines, "title", thread, "title")
 	lines = appendScalar(lines, "state", thread, "state")
 	lines = appendScalar(lines, "topic_ref", thread, "topic_ref")
@@ -583,7 +583,7 @@ func formatArtifactRecord(artifact map[string]any) string {
 		if badge := shortMimeBadgeFromContentType(anyString(artifact["content_type"])); badge != "" {
 			lines = append(lines, badge)
 		}
-		lines = append(lines, "Artifact "+displayID(artifact))
+		lines = append(lines, "Artifact "+displayPublicIdentity(artifact, "artifact"))
 		lines = appendScalar(lines, "kind", artifact, "kind")
 		lines = appendScalar(lines, "thread_id", artifact, "thread_id")
 		lines = appendScalar(lines, "created_at", artifact, "created_at")
@@ -603,7 +603,7 @@ func formatArtifactRecord(artifact map[string]any) string {
 		return strings.Join(lines, "\n")
 	}
 
-	lines = []string{"Artifact " + displayID(artifact)}
+	lines = []string{"Artifact " + displayPublicIdentity(artifact, "artifact")}
 	lines = appendScalar(lines, "kind", artifact, "kind")
 	lines = appendScalar(lines, "thread_id", artifact, "thread_id")
 	lines = appendScalar(lines, "content_type", artifact, "content_type")
@@ -628,7 +628,7 @@ func formatEventRecord(event map[string]any) string {
 	if event == nil {
 		return formatPrettyBody(event)
 	}
-	lines := []string{"Event " + displayID(event)}
+	lines := []string{"Event " + displayPublicIdentity(event, "event")}
 	lines = appendScalar(lines, "type", event, "type")
 	lines = appendScalar(lines, "thread_id", event, "thread_id")
 	lines = appendScalar(lines, "actor_id", event, "actor_id")
@@ -656,7 +656,7 @@ func formatDocumentRecord(body any) string {
 	root := asMap(body)
 	document := extractNestedMap(root, "document")
 	revision := extractNestedMap(root, "revision")
-	lines := []string{"Document " + displayID(document)}
+	lines := []string{"Document " + displayPublicIdentity(document, "document")}
 	lines = appendScalar(lines, "title", document, "title")
 	lines = appendScalar(lines, "kind", document, "kind")
 	lines = appendScalar(lines, "head_revision_id", document, "head_revision_id")
@@ -684,7 +684,7 @@ func formatDocumentContentRecord(body any) string {
 	root := asMap(body)
 	document := extractNestedMap(root, "document")
 	revision := extractNestedMap(root, "revision")
-	lines := []string{"Document " + displayID(document)}
+	lines := []string{"Document " + displayPublicIdentity(document, "document")}
 	lines = appendScalar(lines, "revision_id", revision, "revision_id")
 	lines = appendScalar(lines, "revision_number", revision, "revision_number")
 	lines = appendScalar(lines, "content_type", revision, "content_type")
@@ -777,7 +777,7 @@ func formatRevisionRecord(revision map[string]any) string {
 	if revision == nil {
 		return formatPrettyBody(revision)
 	}
-	lines := []string{"Revision " + displayID(revision)}
+	lines := []string{"Revision " + displayPublicIdentity(revision, "revision")}
 	lines = appendScalar(lines, "revision_number", revision, "revision_number")
 	lines = appendScalar(lines, "content_type", revision, "content_type")
 	lines = appendScalar(lines, "content_hash", revision, "content_hash")
@@ -873,14 +873,7 @@ func displayListScanID(item map[string]any, kind string, fullID bool) string {
 		}
 		return id
 	}
-	id := strings.TrimSpace(anyString(target["id"]))
-	if id == "" {
-		id = strings.TrimSpace(anyString(target["revision_id"]))
-	}
-	if tail, ok := stripListKindPrefix(kind, id); ok {
-		return truncateFirstRunes(tail, textListScanTailRunes)
-	}
-	return displayCompactIDWithMode(target, false)
+	return displayPublicIdentity(target, kind)
 }
 
 func disambiguateListScanIDs(items []map[string]any, kind string, fullID bool) []string {
@@ -1023,7 +1016,7 @@ func renderInboxListRow(item map[string]any, listID string) string {
 }
 
 func renderInboxItemWithMode(item map[string]any, fullID bool) string {
-	identifier := displayID(item)
+	identifier := displayPublicIdentity(item, "inbox")
 	if fullID {
 		if id := strings.TrimSpace(anyString(item["id"])); id != "" {
 			identifier = id
@@ -1143,7 +1136,7 @@ func appendDocumentListSection(lines []string, label string, items []any, fullID
 			continue
 		}
 		headRevision := asMap(item["head_revision"])
-		identifier := displayID(item)
+		identifier := displayPublicIdentity(item, "document")
 		if fullID {
 			if id := strings.TrimSpace(anyString(item["id"])); id != "" {
 				identifier = id
@@ -1303,6 +1296,11 @@ func displayEventID(item map[string]any, fullID bool) string {
 	if item == nil {
 		return ""
 	}
+	if !fullID {
+		if identity := displayPublicIdentity(item, "event"); identity != "" {
+			return identity
+		}
+	}
 	id := strings.TrimSpace(anyString(item["id"]))
 	short := strings.TrimSpace(anyString(item["short_id"]))
 	if short == "" && id != "" {
@@ -1321,6 +1319,11 @@ func displayCompactIDWithMode(item map[string]any, fullID bool) string {
 	if item == nil {
 		return ""
 	}
+	if !fullID {
+		if identity := displayPublicIdentity(item, ""); identity != "" {
+			return identity
+		}
+	}
 	id := strings.TrimSpace(anyString(item["id"]))
 	if id == "" {
 		id = strings.TrimSpace(anyString(item["revision_id"]))
@@ -1333,6 +1336,64 @@ func displayCompactIDWithMode(item map[string]any, fullID bool) string {
 		short = shortID(id)
 	}
 	return firstNonEmpty(short, id)
+}
+
+func displayPublicIdentity(item map[string]any, kind string) string {
+	if item == nil {
+		return ""
+	}
+	if ref := publicRef(item, kind); ref != "" {
+		return ref
+	}
+	if handle := publicHandle(item, kind); handle != "" {
+		if normalizedKind := canonicalResourceKind(kind); normalizedKind != "" {
+			return normalizedKind + ":" + handle
+		}
+		return handle
+	}
+	return publicIDFallback(item)
+}
+
+func publicRef(item map[string]any, kind string) string {
+	for _, key := range publicIdentityKeys(kind, "ref") {
+		if value := strings.TrimSpace(anyString(item[key])); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func publicHandle(item map[string]any, kind string) string {
+	for _, key := range publicIdentityKeys(kind, "handle") {
+		if value := strings.TrimSpace(anyString(item[key])); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func publicIdentityKeys(kind string, suffix string) []string {
+	normalizedKind := canonicalResourceKind(kind)
+	keys := []string{suffix}
+	switch normalizedKind {
+	case "document":
+		keys = append(keys, "document_"+suffix, "doc_"+suffix)
+	case "revision":
+		keys = append(keys, "revision_"+suffix)
+	case "inbox":
+		keys = append(keys, "inbox_"+suffix, "alias")
+	case "event", "topic", "card", "board", "artifact", "thread":
+		keys = append(keys, normalizedKind+"_"+suffix)
+	}
+	return keys
+}
+
+func publicIDFallback(item map[string]any) string {
+	id := strings.TrimSpace(anyString(item["id"]))
+	if id == "" {
+		id = strings.TrimSpace(anyString(item["revision_id"]))
+	}
+	return firstNonEmpty(id, "(unknown)")
 }
 
 func asBool(raw any) bool {
@@ -1506,7 +1567,7 @@ func formatBoardRecord(board map[string]any) string {
 	if board == nil {
 		return formatPrettyBody(board)
 	}
-	lines := []string{"Board " + displayID(board)}
+	lines := []string{"Board " + displayPublicIdentity(board, "board")}
 	lines = appendScalar(lines, "title", board, "title")
 	lines = appendScalar(lines, "state", board, "state")
 	lines = appendScalar(lines, "thread_id", board, "thread_id")
@@ -1537,7 +1598,7 @@ func formatBoardWorkspace(body any) string {
 
 	lines := make([]string, 0, 64)
 
-	lines = append(lines, "Board "+displayID(board))
+	lines = append(lines, "Board "+displayPublicIdentity(board, "board"))
 	lines = appendScalar(lines, "title", board, "title")
 	lines = appendScalar(lines, "state", board, "state")
 	lines = appendStringList(lines, "document_refs", stringList(board["document_refs"]))
@@ -1621,8 +1682,8 @@ func renderBoardCardItem(cardWrapper map[string]any) string {
 	summary := asMap(cardWrapper["summary"])
 	pinnedDoc := cardWrapper["pinned_document"]
 
-	cardID := displayID(card)
-	threadID := displayID(thread)
+	cardID := displayPublicIdentity(card, "card")
+	threadID := displayPublicIdentity(thread, "thread")
 	threadTitle := anyString(thread["title"])
 	if cardID == "" || cardID == "(empty)" {
 		cardID = threadID
@@ -1704,17 +1765,17 @@ func renderBoardCardListItem(card map[string]any) string {
 }
 
 func renderBoardCardListItemWithMode(card map[string]any, fullID bool) string {
-	threadID := anyString(card["thread_id"])
+	threadID := threadRefFromCard(card)
 	columnKey := anyString(card["column_key"])
 	rank := anyString(card["rank"])
 	documentRef := firstNonEmpty(anyString(card["document_ref"]), anyString(card["pinned_document_id"]))
 	cardID := strings.TrimSpace(anyString(card["id"]))
-	cardShortID := strings.TrimSpace(anyString(card["short_id"]))
+	cardIdentity := displayPublicIdentity(card, "card")
 	title := strings.TrimSpace(anyString(card["title"]))
 
-	lead := cardID
-	if !fullID && cardShortID != "" {
-		lead = cardShortID
+	lead := cardIdentity
+	if fullID && cardID != "" {
+		lead = cardID
 	}
 	if lead == "" {
 		if title != "" {
@@ -1740,6 +1801,23 @@ func renderBoardCardListItemWithMode(card map[string]any, fullID bool) string {
 		parts = append(parts, "document="+documentRef)
 	}
 	return strings.Join(parts, " :: ")
+}
+
+func threadRefFromCard(card map[string]any) string {
+	if card == nil {
+		return ""
+	}
+	if ref := strings.TrimSpace(anyString(card["thread_ref"])); ref != "" {
+		return ref
+	}
+	threadID := strings.TrimSpace(anyString(card["thread_id"]))
+	if threadID == "" {
+		return ""
+	}
+	if strings.Contains(threadID, ":") {
+		return threadID
+	}
+	return "thread:" + threadID
 }
 
 func formatBoardCardGetResult(body any) string {
@@ -1802,7 +1880,7 @@ func formatBoardCardCreateResult(body any) string {
 	if board != nil {
 		lines = appendScalar(lines, "board_updated_at", board, "updated_at")
 	}
-	cardID := shortID(anyString(card["id"]))
+	cardID := displayPublicIdentity(card, "card")
 	title := strings.TrimSpace(anyString(card["title"]))
 	subject := cardID
 	if title != "" && title != cardID {
@@ -1816,7 +1894,7 @@ func formatBoardCardCreateResult(body any) string {
 		subject = "card"
 	}
 	lines = append(lines, "- card: "+subject)
-	if threadID := shortID(anyString(card["thread_id"])); threadID != "" && threadID != cardID {
+	if threadID := threadRefFromCard(card); threadID != "" && threadID != cardID {
 		lines = append(lines, "  thread: "+threadID)
 	}
 	lines = append(lines, "  column: "+anyString(card["column_key"]))

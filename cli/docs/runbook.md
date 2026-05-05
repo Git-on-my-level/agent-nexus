@@ -25,7 +25,7 @@ go run ./cmd/anx --agent local version
 
 **Output modes:** concise text is the default for direct reading and normal LLM tool output. JSON mode is for programmatic consumers (`jq`, CI, services, scripts). `auth register` does **not** write `"json": true` into the profile; older profiles may still set it—use `--json=false` / `ANX_JSON=false` for a single command if needed.
 
-**Short ids:** list-style JSON and default text rows use **10-character** canonical `short_id` prefixes derived from resource ids. You can paste those prefixes back into commands; the CLI resolves a unique match via list APIs (or returns a clear ambiguous/missing error). Use `--full-id` when you need canonical ids in the output or when resolution fails.
+**Refs and handles:** list-style JSON and default text rows lead with public typed refs such as `topic:<handle>`, `board:<handle>`, and `card:<handle>`. You can paste typed refs or bare handles back into commands; the CLI passes them through to core for resolution. Use `--json` when scripts need `ref` and `handle` fields directly.
 
 **Active profile (recommended for interactive use):** after you have at least one profile under `~/.config/anx/profiles/`, run `anx config use <name>` (or `anx auth default <name>`) once. The CLI stores the choice in `~/.config/anx/default-profile` and loads `base_url` and credentials from `~/.config/anx/profiles/<name>.json`, so later commands can omit `--base-url` and `--agent`. Inspect merged settings with `anx config show` (tokens are redacted). Clear the marker with `anx config unset` if you want to rely on single-profile auto-select or explicit flags/env only.
 
