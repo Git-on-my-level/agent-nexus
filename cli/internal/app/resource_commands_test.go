@@ -2922,6 +2922,87 @@ func TestTopicsBoardsNoJSONAndMessageWorkflow(t *testing.T) {
 	}
 }
 
+func TestTopicLifecycleCommandsAvoidRequiredJSONBody(t *testing.T) {
+	t.Parallel()
+
+	const (
+		topicID      = "topic_lifecycle_123456"
+		profileActor = "actor_lifecycle_profile"
+	)
+
+	seen := map[string]bool{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/topics/"+topicID+"/archive":
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode topics archive body: %v", err)
+			}
+			if got := anyStringValue(payload["actor_id"]); got != profileActor {
+				t.Fatalf("expected archive actor_id %q, got %#v", profileActor, payload)
+			}
+			seen["archive"] = true
+			_, _ = w.Write([]byte(`{"topic":{"id":"` + topicID + `","title":"Lifecycle","updated_at":"2026-05-05T00:00:00Z"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/topics/"+topicID+"/unarchive":
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode topics unarchive body: %v", err)
+			}
+			if got := anyStringValue(payload["actor_id"]); got != profileActor {
+				t.Fatalf("expected unarchive actor_id %q, got %#v", profileActor, payload)
+			}
+			seen["unarchive"] = true
+			_, _ = w.Write([]byte(`{"topic":{"id":"` + topicID + `","title":"Lifecycle","updated_at":"2026-05-05T00:00:00Z"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/topics/"+topicID+"/restore":
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode topics restore body: %v", err)
+			}
+			if got := anyStringValue(payload["actor_id"]); got != profileActor {
+				t.Fatalf("expected restore actor_id %q, got %#v", profileActor, payload)
+			}
+			seen["restore"] = true
+			_, _ = w.Write([]byte(`{"topic":{"id":"` + topicID + `","title":"Lifecycle","updated_at":"2026-05-05T00:00:00Z"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/topics/"+topicID+"/trash":
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode topics trash body: %v", err)
+			}
+			if got := anyStringValue(payload["reason"]); got != "cleanup" {
+				t.Fatalf("expected trash reason, got %#v", payload)
+			}
+			if got := anyStringValue(payload["actor_id"]); got != profileActor {
+				t.Fatalf("expected trash actor_id %q, got %#v", profileActor, payload)
+			}
+			seen["trash"] = true
+			_, _ = w.Write([]byte(`{"topic":{"id":"` + topicID + `","title":"Lifecycle","updated_at":"2026-05-05T00:00:00Z"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-lifecycle", `{"agent":"agent-lifecycle","actor_id":"`+profileActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	for _, args := range [][]string{
+		{"topics", "archive", topicID},
+		{"topics", "unarchive", topicID},
+		{"topics", "restore", topicID},
+		{"topics", "trash", topicID, "--reason", "cleanup"},
+	} {
+		payload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, append([]string{"--json", "--base-url", server.URL, "--agent", "agent-lifecycle"}, args...)))
+		if got := anyStringValue(payload["command"]); got == "" {
+			t.Fatalf("expected command in payload %#v", payload)
+		}
+	}
+	for _, name := range []string{"archive", "unarchive", "restore", "trash"} {
+		if !seen[name] {
+			t.Fatalf("expected %s request", name)
+		}
+	}
+}
+
 func TestCardsMessageBuildsThreadScopedEvent(t *testing.T) {
 	t.Parallel()
 

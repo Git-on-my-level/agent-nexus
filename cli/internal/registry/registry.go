@@ -44,6 +44,19 @@ type BodySchema struct {
 	Optional []BodyField `json:"optional,omitempty"`
 }
 
+type CLIInputFlag struct {
+	Name        string `json:"name"`
+	BodyPath    string `json:"body_path,omitempty"`
+	Required    bool   `json:"required,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+type CLIInput struct {
+	Mode         string         `json:"mode,omitempty"`
+	BodyOptional bool           `json:"body_optional,omitempty"`
+	Flags        []CLIInputFlag `json:"flags,omitempty"`
+}
+
 type Command struct {
 	CommandID      string            `json:"command_id"`
 	CLIPath        string            `json:"cli_path"`
@@ -55,6 +68,8 @@ type Command struct {
 	Description    string            `json:"description,omitempty"`
 	Why            string            `json:"why,omitempty"`
 	InputMode      string            `json:"input_mode,omitempty"`
+	HTTPInputMode  string            `json:"http_input_mode,omitempty"`
+	CLIInput       *CLIInput         `json:"cli_input,omitempty"`
 	Streaming      map[string]any    `json:"streaming,omitempty"`
 	OutputEnvelope string            `json:"output_envelope,omitempty"`
 	ErrorCodes     []string          `json:"error_codes,omitempty"`
