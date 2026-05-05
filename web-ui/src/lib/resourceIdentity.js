@@ -4,6 +4,13 @@ function asText(value) {
   return String(value ?? "").trim();
 }
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isInternalUuid(value) {
+  return UUID_RE.test(asText(value));
+}
+
 export function resourceHandle(resource) {
   return asText(resource?.handle);
 }
@@ -44,24 +51,23 @@ export function typedResourceRef(kind, resource) {
   if (ref) return ref;
   const handle = resourceHandle(resource);
   if (kind && handle) return `${kind}:${handle}`;
-  const id = asText(resource?.id);
-  if (kind && id) return `${kind}:${id}`;
   return "";
 }
 
 export function resourceCopyValue(kind, resource) {
-  return (
-    typedResourceRef(kind, resource) || resourceRouteSegment(resource, kind)
-  );
+  return typedResourceRef(kind, resource);
 }
 
 export function resourceDisplayLabel(resource, fallback = "") {
+  const fallbackText = asText(fallback);
+  const id = asText(resource?.id);
   return (
     asText(resource?.title) ||
     asText(resource?.summary) ||
     resourceHandle(resource) ||
-    asText(fallback) ||
     asText(resource?.ref) ||
-    asText(resource?.id)
+    (fallbackText && !UUID_RE.test(fallbackText) ? fallbackText : "") ||
+    (id && !UUID_RE.test(id) ? id : "") ||
+    "Untitled resource"
   );
 }

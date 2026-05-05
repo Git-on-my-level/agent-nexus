@@ -7,7 +7,7 @@
   import { splitTypedRef } from "$lib/inboxUtils";
   import { buildTopicPatch } from "$lib/topicPatch";
   import { buildPrimitiveRefRoutes } from "$lib/refLinkModel";
-  import { resourceCopyValue } from "$lib/resourceIdentity.js";
+  import { isInternalUuid, resourceCopyValue } from "$lib/resourceIdentity.js";
 
   let { threadId, onSave, conflictWarning = "", editNotice = "" } = $props();
 
@@ -25,9 +25,14 @@
       });
     }
     if (topic.id) {
+      const topicThreadId = String(topic.id ?? "").trim();
       rows.push({
         label: "Thread ref",
-        value: String(topic.thread_ref ?? "").trim() || `thread:${topic.id}`,
+        value:
+          String(topic.thread_ref ?? "").trim() ||
+          (topicThreadId && !isInternalUuid(topicThreadId)
+            ? `thread:${topicThreadId}`
+            : ""),
         copyLabel: "Copy thread ref",
       });
     }

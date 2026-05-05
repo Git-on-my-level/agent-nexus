@@ -44,4 +44,13 @@ describe("resourceIdentity", () => {
       "product-constitution-v3",
     );
   });
+
+  it("does not synthesize copy refs from internal UUIDs", () => {
+    const topic = {
+      id: "42a2f537-894e-49ca-a167-a67059e89155",
+    };
+
+    expect(resourceCopyValue("topic", topic)).toBe("");
+    expect(resourceDisplayLabel(topic)).toBe("Untitled resource");
+  });
 });

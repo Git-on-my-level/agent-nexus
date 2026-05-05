@@ -57,7 +57,10 @@
     humanizeRevisionFieldKey,
   } from "$lib/textDiff.js";
   import {
+    isInternalUuid,
     resourceDisplayLabel,
+    resourceRef,
+    resourceRouteSegment,
     typedResourceRef,
   } from "$lib/resourceIdentity.js";
 
@@ -132,7 +135,18 @@
   let cardPublicRef = $derived(typedResourceRef("card", membership));
   let boardPublicRef = $derived(
     typedResourceRef("board", board) ||
-      (String(boardId ?? "").trim() ? `board:${String(boardId).trim()}` : ""),
+      (String(boardId ?? "").trim() && !isInternalUuid(boardId)
+        ? `board:${String(boardId).trim()}`
+        : ""),
+  );
+  let cardShareRef = $derived(
+    cardPublicRef ||
+      (cardKey && !isInternalUuid(cardKey) ? `card:${cardKey}` : ""),
+  );
+  let linkedThreadPublicRef = $derived(
+    linkedThreadId && !isInternalUuid(linkedThreadId)
+      ? `thread:${linkedThreadId}`
+      : "",
   );
 
   $effect(() => {
@@ -378,8 +392,8 @@
   async function searchDocumentOptions(query) {
     const documents = await searchDocumentRecords(query);
     return documents.map((document) => ({
-      id: document.id,
-      title: document.title || document.id,
+      id: resourceRouteSegment(document, "document"),
+      title: resourceDisplayLabel(document),
       subtitle: documentSearchPickerSubtitle(document),
       keywords: [],
     }));
@@ -603,7 +617,12 @@
   async function persistDocumentBlur() {
     if (!membership) return;
     const docDraft = editDocumentId.trim();
-    const nextDoc = docDraft ? `document:${docDraft}` : null;
+    const nextDoc = docDraft
+      ? resourceRef(
+          { ref: docDraft.startsWith("document:") ? docDraft : "" },
+          "document",
+        ) || `document:${docDraft}`
+      : null;
     const prevDocRaw = String(membership.document_ref ?? "").trim();
     const prevDoc = prevDocRaw || null;
     if (nextDoc === prevDoc) return;
@@ -870,7 +889,7 @@
     if (cid) {
       rows.push({
         label: "Card ref",
-        value: cardPublicRef || `card:${cid}`,
+        value: cardShareRef,
         copyLabel: "Copy card ref",
       });
     }
@@ -885,7 +904,7 @@
     if (linkedThreadId) {
       rows.push({
         label: "Thread ref",
-        value: `thread:${linkedThreadId}`,
+        value: linkedThreadPublicRef,
         copyLabel: "Copy thread ref",
       });
     }
@@ -1107,7 +1126,7 @@
         <div class="relative flex shrink-0 items-center gap-1">
           {#if cardKey}
             <ResourceShareMenu
-              resourceId={cardPublicRef || `card:${cardKey}`}
+              resourceId={cardShareRef}
               resourceLabel="card ref"
               rawRecord={cardItem}
             />
@@ -1494,7 +1513,7 @@
               >
                 <SearchableEntityPicker
                   bind:value={editThreadId}
-                  advancedLabel="Use a manual thread ID"
+                  advancedLabel="Use a manual thread ref"
                   disabledIds={[backingThreadId].filter(Boolean)}
                   helperText="Changing this updates the card threading context."
                   label="Topic or thread"

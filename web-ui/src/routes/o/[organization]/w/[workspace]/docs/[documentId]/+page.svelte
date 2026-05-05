@@ -29,6 +29,7 @@
     docCommentBodyHover,
   } from "$lib/stores/docCommentBodyRailSync.js";
   import {
+    isInternalUuid,
     resourceCopyValue,
     resourceDisplayLabel,
     resourceRouteSegment,
@@ -239,7 +240,9 @@
           String(rev?.ref ?? "").trim() ||
           (String(rev?.handle ?? "").trim()
             ? `document_revision:${String(rev.handle).trim()}`
-            : String(rev.revision_id ?? "").trim()),
+            : !isInternalUuid(rev?.revision_id)
+              ? `document_revision:${String(rev.revision_id ?? "").trim()}`
+              : ""),
         copyLabel: "Copy revision ref",
       });
     }
@@ -247,7 +250,9 @@
     if (threadId) {
       rows.push({
         label: "Thread ref",
-        value: String(d.thread_ref ?? "").trim() || `thread:${threadId}`,
+        value:
+          String(d.thread_ref ?? "").trim() ||
+          (threadId && !isInternalUuid(threadId) ? `thread:${threadId}` : ""),
         copyLabel: "Copy thread ref",
       });
     }

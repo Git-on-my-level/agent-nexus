@@ -22,6 +22,7 @@
   import { toActorPickerOptions } from "$lib/systemActor.js";
   import {
     resourceDisplayLabel,
+    resourceRef,
     resourceRouteSegment,
   } from "$lib/resourceIdentity.js";
   import { workspacePath } from "$lib/workspacePaths";
@@ -92,8 +93,8 @@
   async function searchDocumentOptions(query) {
     const documents = await searchDocumentRecords(query);
     return documents.map((document) => ({
-      id: document.id,
-      title: document.title || document.id,
+      id: resourceRouteSegment(document, "document"),
+      title: resourceDisplayLabel(document),
       subtitle: [document.state, document.ref || document.handle]
         .filter(Boolean)
         .join(" · "),
@@ -170,7 +171,7 @@
     }
     if (!resolvedTitle && !threadTrim) {
       saveError =
-        "Enter a card title, or link a topic or backing thread (timeline ID) under More options.";
+        "Enter a card title, or link a topic or backing thread ref under More options.";
       return;
     }
     if (!resolvedTitle) {
@@ -190,6 +191,13 @@
     }
 
     const summaryOut = summaryTrim || resolvedTitle;
+    const documentTrim = documentId.trim();
+    const documentRef = documentTrim
+      ? resourceRef(
+          { ref: documentTrim.startsWith("document:") ? documentTrim : "" },
+          "document",
+        ) || `document:${documentTrim}`
+      : null;
     saving = true;
     try {
       await coreClient.addBoardCard(boardId, {
@@ -197,9 +205,7 @@
         title: resolvedTitle,
         summary: summaryOut,
         column_key: columnKey,
-        document_ref: documentId.trim()
-          ? `document:${documentId.trim()}`
-          : null,
+        document_ref: documentRef,
         assignee_refs: [...assignees],
         risk,
         resolution: null,
@@ -358,7 +364,7 @@
                 bind:value={threadId}
                 advancedLabel="Use a manual thread ref"
                 disabledIds={[backingThreadId].filter(Boolean)}
-                helperText="Optional: pick a topic or paste a thread ID."
+                helperText="Optional: pick a topic or paste a thread ref."
                 label="Topic or thread"
                 manualLabel="Thread ref"
                 manualPlaceholder="thread-onboarding"
