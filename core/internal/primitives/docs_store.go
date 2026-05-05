@@ -22,6 +22,7 @@ import (
 
 type documentRow struct {
 	ID                       string
+	Handle                   sql.NullString
 	ThreadID                 sql.NullString
 	Title                    sql.NullString
 	Summary                  string
@@ -54,7 +55,7 @@ func documentResourceRefEdgeTargets(threadID string, refs []string) []refEdgeTar
 }
 
 func buildListDocumentsQuery(filter DocumentListFilter) (string, []any) {
-	inner := `SELECT d.id, d.thread_id, d.title, d.summary, d.slug, d.supersedes_json,
+	inner := `SELECT d.id, d.handle, d.thread_id, d.title, d.summary, d.slug, d.supersedes_json,
 		d.refs_json, d.provenance_json,
 		d.head_revision_id, d.head_revision_number, d.created_at, d.created_by, d.updated_at, d.updated_by,
 		d.trashed_at, d.trashed_by, d.trash_reason,
@@ -137,6 +138,7 @@ func (s *Store) ListDocuments(ctx context.Context, filter DocumentListFilter) ([
 		var row documentRow
 		if err := rows.Scan(
 			&row.ID,
+			&row.Handle,
 			&row.ThreadID,
 			&row.Title,
 			&row.Summary,
@@ -668,6 +670,7 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 
 	docMap, err := documentRow{
 		ID:              documentID,
+		Handle:          nullableString(documentHandle),
 		ThreadID:        nullableString(threadID),
 		Title:           nullableString(title),
 		Summary:         docSummary,
@@ -1155,6 +1158,7 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 
 	docMap, err := documentRow{
 		ID:              documentID,
+		Handle:          doc.Handle,
 		ThreadID:        nullableString(nextThreadID),
 		Title:           nullableString(nextTitle),
 		Summary:         nextSummary,
@@ -1693,7 +1697,7 @@ func (s *Store) loadDocumentRow(ctx context.Context, documentID string) (documen
 	var row documentRow
 	err := s.db.QueryRowContext(
 		ctx,
-		`SELECT id, thread_id, title, summary, slug, supersedes_json,
+		`SELECT id, handle, thread_id, title, summary, slug, supersedes_json,
 			 refs_json, provenance_json,
 			 head_revision_id, head_revision_number, created_at, created_by, updated_at, updated_by,
 			 trashed_at, trashed_by, trash_reason,
@@ -1702,6 +1706,7 @@ func (s *Store) loadDocumentRow(ctx context.Context, documentID string) (documen
 		documentID,
 	).Scan(
 		&row.ID,
+		&row.Handle,
 		&row.ThreadID,
 		&row.Title,
 		&row.Summary,
@@ -1856,6 +1861,8 @@ func (r documentRow) toMap() (map[string]any, error) {
 	state := canonicalLifecycleState(r.ArchivedAt, r.TrashedAt)
 	out := map[string]any{
 		"id":                   r.ID,
+		"ref":                  "document:" + firstNonEmpty(strings.TrimSpace(r.Handle.String), r.ID),
+		"handle":               firstNonEmpty(strings.TrimSpace(r.Handle.String), r.ID),
 		"state":                state,
 		"supersedes":           supersedes,
 		"head_revision_id":     r.HeadRevisionID,

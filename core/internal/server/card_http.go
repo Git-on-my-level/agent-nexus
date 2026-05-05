@@ -14,6 +14,16 @@ func canonicalCardView(card map[string]any) map[string]any {
 	out := make(map[string]any)
 
 	out["id"] = card["id"]
+	if ref := strings.TrimSpace(anyString(card["ref"])); ref != "" {
+		out["ref"] = ref
+	} else if id := strings.TrimSpace(anyString(card["id"])); id != "" {
+		out["ref"] = "card:" + id
+	}
+	if handle := strings.TrimSpace(anyString(card["handle"])); handle != "" {
+		out["handle"] = handle
+	} else if id := strings.TrimSpace(anyString(card["id"])); id != "" {
+		out["handle"] = id
+	}
 	out["title"] = card["title"]
 	out["summary"] = strings.TrimSpace(anyString(card["summary"]))
 

@@ -23,6 +23,7 @@ type TopicPatchResult struct {
 
 type topicRow struct {
 	ID             string
+	Handle         sql.NullString
 	Title          sql.NullString
 	Summary        sql.NullString
 	ThreadID       sql.NullString
@@ -263,6 +264,9 @@ func (r topicRow) toMap(buckets topicRefBuckets) (map[string]any, error) {
 
 	out := map[string]any{}
 	out["id"] = r.ID
+	handle := firstNonEmpty(strings.TrimSpace(r.Handle.String), r.ID)
+	out["handle"] = handle
+	out["ref"] = "topic:" + handle
 	title := ""
 	if r.Title.Valid {
 		title = r.Title.String
@@ -342,6 +346,7 @@ func (s *Store) ListTopics(ctx context.Context, filter TopicListFilter) ([]map[s
 		var row topicRow
 		if err := rows.Scan(
 			&row.ID,
+			&row.Handle,
 			&row.Title,
 			&row.Summary,
 			&row.ThreadID,
@@ -554,6 +559,8 @@ func (s *Store) CreateTopic(ctx context.Context, actorID string, topic map[strin
 
 	topicOut := cloneMap(topicBody)
 	topicOut["id"] = topicID
+	topicOut["handle"] = topicHandle
+	topicOut["ref"] = "topic:" + topicHandle
 	topicOut["thread_id"] = primaryThreadID
 	topicOut["state"] = "active"
 	topicOut["created_at"] = now
@@ -820,11 +827,11 @@ func (s *Store) getTopicRow(ctx context.Context, topicID string) (topicRow, erro
 	row := topicRow{}
 	err := s.db.QueryRowContext(
 		ctx,
-		`SELECT id, title, summary, thread_id, extensions_json, provenance_json,
+		`SELECT id, handle, title, summary, thread_id, extensions_json, provenance_json,
 			created_at, created_by, updated_at, updated_by, archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		 FROM topics WHERE id = ?`,
 		topicID,
-	).Scan(&row.ID, &row.Title, &row.Summary, &row.ThreadID, &row.ExtensionsJSON, &row.ProvenanceJSON,
+	).Scan(&row.ID, &row.Handle, &row.Title, &row.Summary, &row.ThreadID, &row.ExtensionsJSON, &row.ProvenanceJSON,
 		&row.CreatedAt, &row.CreatedBy, &row.UpdatedAt, &row.UpdatedBy, &row.ArchivedAt, &row.ArchivedBy, &row.TrashedAt, &row.TrashedBy, &row.TrashReason)
 	if errors.Is(err, sql.ErrNoRows) {
 		return topicRow{}, ErrNotFound
@@ -1085,7 +1092,7 @@ func topicLifecycleEventType(action string) string {
 }
 
 func buildListTopicsQuery(filter TopicListFilter) (string, []any) {
-	inner := `SELECT id, title, summary, thread_id, extensions_json, provenance_json, created_at, created_by, updated_at, updated_by, archived_at, archived_by, trashed_at, trashed_by, trash_reason FROM topics WHERE 1=1`
+	inner := `SELECT id, handle, title, summary, thread_id, extensions_json, provenance_json, created_at, created_by, updated_at, updated_by, archived_at, archived_by, trashed_at, trashed_by, trash_reason FROM topics WHERE 1=1`
 	args := make([]any, 0, 8)
 	inner += ` AND ` + LifecycleStatesOrGroup("archived_at", "trashed_at", filter.States)
 	if q := strings.TrimSpace(filter.Query); q != "" {
@@ -1107,7 +1114,7 @@ func buildListTopicsQuery(filter TopicListFilter) (string, []any) {
 
 	// Aggregate message_posted only for backing threads appearing on this page (avoids full-table scans).
 	query := `WITH topic_page AS (` + inner + `)
-SELECT tp.id, tp.title, tp.summary, tp.thread_id, tp.extensions_json, tp.provenance_json,
+SELECT tp.id, tp.handle, tp.title, tp.summary, tp.thread_id, tp.extensions_json, tp.provenance_json,
 	tp.created_at, tp.created_by, tp.updated_at, tp.updated_by, tp.archived_at, tp.archived_by,
 	tp.trashed_at, tp.trashed_by, tp.trash_reason,
 	COALESCE(mc.msg_cnt, 0) AS timeline_message_count

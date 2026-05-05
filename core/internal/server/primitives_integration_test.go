@@ -217,6 +217,152 @@ func TestPrimitivesCRUDRoundTrip(t *testing.T) {
 	}
 }
 
+func TestNamedResourceAPIsUsePublicRefsAndHandles(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
+
+	topicResp := postJSONExpectStatus(t, h.baseURL+"/topics", `{
+		"actor_id":"actor-1",
+		"topic":{
+			"title":"Public Ref Topic",
+			"summary":"Topic summary",
+			"owner_refs":[],
+			"document_refs":[],
+			"board_refs":[],
+			"related_refs":[],
+			"provenance":{"sources":["test:public-refs"]}
+		}
+	}`, http.StatusCreated)
+	defer topicResp.Body.Close()
+	var topicPayload struct {
+		Topic map[string]any `json:"topic"`
+	}
+	if err := json.NewDecoder(topicResp.Body).Decode(&topicPayload); err != nil {
+		t.Fatalf("decode topic create: %v", err)
+	}
+	topicRef := assertPublicResourceIdentity(t, topicPayload.Topic, "topic")
+
+	getTopicResp, err := http.Get(h.baseURL + "/topics/" + url.PathEscape(topicRef))
+	if err != nil {
+		t.Fatalf("GET topic by ref: %v", err)
+	}
+	defer getTopicResp.Body.Close()
+	if getTopicResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected GET topic by ref status: %d", getTopicResp.StatusCode)
+	}
+
+	boardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
+		"actor_id":"actor-1",
+		"board":{"title":"Public Ref Board","owners":["actor-1"],"refs":["`+topicRef+`"]}
+	}`, http.StatusCreated)
+	defer boardResp.Body.Close()
+	var boardPayload struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(boardResp.Body).Decode(&boardPayload); err != nil {
+		t.Fatalf("decode board create: %v", err)
+	}
+	boardRef := assertPublicResourceIdentity(t, boardPayload.Board, "board")
+	boardHandle := asString(boardPayload.Board["handle"])
+
+	getBoardResp, err := http.Get(h.baseURL + "/boards/" + url.PathEscape(boardRef))
+	if err != nil {
+		t.Fatalf("GET board by ref: %v", err)
+	}
+	defer getBoardResp.Body.Close()
+	if getBoardResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected GET board by ref status: %d", getBoardResp.StatusCode)
+	}
+
+	cardResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+url.PathEscape(boardHandle)+"/cards", `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+asString(boardPayload.Board["updated_at"])+`",
+		"title":"Public Ref Card",
+		"summary":"Card summary",
+		"related_refs":["`+topicRef+`"],
+		"column_key":"ready"
+	}`, http.StatusCreated)
+	defer cardResp.Body.Close()
+	var cardPayload struct {
+		Card map[string]any `json:"card"`
+	}
+	if err := json.NewDecoder(cardResp.Body).Decode(&cardPayload); err != nil {
+		t.Fatalf("decode card create: %v", err)
+	}
+	cardRef := assertPublicResourceIdentity(t, cardPayload.Card, "card")
+
+	getCardResp, err := http.Get(h.baseURL + "/cards/" + url.PathEscape(cardRef))
+	if err != nil {
+		t.Fatalf("GET card by ref: %v", err)
+	}
+	defer getCardResp.Body.Close()
+	if getCardResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected GET card by ref status: %d", getCardResp.StatusCode)
+	}
+
+	docResp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
+		"actor_id":"actor-1",
+		"document":{"title":"Public Ref Document","summary":"Doc summary","refs":["`+topicRef+`"],"provenance":{"sources":["test:public-refs"]}},
+		"content":"Initial document body",
+		"content_type":"text",
+		"refs":["`+topicRef+`"]
+	}`, http.StatusCreated)
+	defer docResp.Body.Close()
+	var docPayload struct {
+		Document map[string]any `json:"document"`
+		Revision map[string]any `json:"revision"`
+	}
+	if err := json.NewDecoder(docResp.Body).Decode(&docPayload); err != nil {
+		t.Fatalf("decode document create: %v", err)
+	}
+	docRef := assertPublicResourceIdentity(t, docPayload.Document, "document")
+
+	getDocResp, err := http.Get(h.baseURL + "/docs/" + url.PathEscape(docRef))
+	if err != nil {
+		t.Fatalf("GET document by ref: %v", err)
+	}
+	defer getDocResp.Body.Close()
+	if getDocResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected GET document by ref status: %d", getDocResp.StatusCode)
+	}
+
+	revResp := postJSONExpectStatus(t, h.baseURL+"/docs/"+url.PathEscape(docRef)+"/revisions", `{
+		"actor_id":"actor-1",
+		"if_base_revision":"`+asString(docPayload.Revision["revision_id"])+`",
+		"content":"Updated document body",
+		"content_type":"text",
+		"refs":["`+topicRef+`"],
+		"provenance":{"sources":["test:public-refs"]}
+	}`, http.StatusCreated)
+	defer revResp.Body.Close()
+}
+
+func assertPublicResourceIdentity(t *testing.T, resource map[string]any, kind string) string {
+	t.Helper()
+	handle := asString(resource["handle"])
+	ref := asString(resource["ref"])
+	if handle == "" {
+		t.Fatalf("%s response missing handle: %#v", kind, resource)
+	}
+	if ref != kind+":"+handle {
+		t.Fatalf("%s response ref = %q, want %q", kind, ref, kind+":"+handle)
+	}
+	if isUUIDLikeForTest(handle) || isUUIDLikeForTest(ref) {
+		t.Fatalf("%s response public identity should not be UUID-like: ref=%q handle=%q", kind, ref, handle)
+	}
+	return ref
+}
+
+func isUUIDLikeForTest(value string) bool {
+	value = strings.TrimSpace(strings.TrimPrefix(value, "topic:"))
+	value = strings.TrimPrefix(value, "board:")
+	value = strings.TrimPrefix(value, "card:")
+	value = strings.TrimPrefix(value, "document:")
+	return len(value) == 36 && strings.Count(value, "-") == 4
+}
+
 func TestWriteHandlersRejectTrailingJSONBody(t *testing.T) {
 	t.Parallel()
 

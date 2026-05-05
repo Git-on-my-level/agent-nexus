@@ -186,6 +186,11 @@ func handleGetTopic(w http.ResponseWriter, r *http.Request, opts handlerOptions,
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
+	var ok bool
+	topicID, ok = resolveHTTPResourceID(w, r, opts, "topic", topicID, "topic")
+	if !ok {
+		return
+	}
 
 	topic, err := opts.primitiveStore.GetTopic(r.Context(), topicID)
 	if err != nil {
@@ -207,6 +212,11 @@ func handlePatchTopic(w http.ResponseWriter, r *http.Request, opts handlerOption
 	}
 	if opts.contract == nil {
 		writeError(w, http.StatusServiceUnavailable, "schema_unavailable", "schema contract is not configured")
+		return
+	}
+	var ok bool
+	topicID, ok = resolveHTTPResourceID(w, r, opts, "topic", topicID, "topic")
+	if !ok {
 		return
 	}
 
@@ -291,6 +301,11 @@ func handleTopicLifecycleWithReason(w http.ResponseWriter, r *http.Request, opts
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
+	var ok bool
+	topicID, ok = resolveHTTPResourceID(w, r, opts, "topic", topicID, "topic")
+	if !ok {
+		return
+	}
 
 	var req struct {
 		ActorID string `json:"actor_id"`
@@ -342,6 +357,11 @@ func handleGetTopicTimeline(w http.ResponseWriter, r *http.Request, opts handler
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
+	var ok bool
+	topicID, ok = resolveHTTPResourceID(w, r, opts, "topic", topicID, "topic")
+	if !ok {
+		return
+	}
 
 	body, err := buildTopicTimelinePayload(r.Context(), opts, topicID)
 	if err != nil {
@@ -359,6 +379,11 @@ func handleGetTopicTimeline(w http.ResponseWriter, r *http.Request, opts handler
 func handleGetTopicWorkspace(w http.ResponseWriter, r *http.Request, opts handlerOptions, topicID string) {
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	var ok bool
+	topicID, ok = resolveHTTPResourceID(w, r, opts, "topic", topicID, "topic")
+	if !ok {
 		return
 	}
 
