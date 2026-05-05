@@ -361,11 +361,16 @@ func (s *Store) prepareCardRevisionInsert(ctx context.Context, actorID, cardID s
 }
 
 func (s *Store) insertCardRevisionTx(ctx context.Context, tx *sql.Tx, actorID, cardID, threadID string, revision cardRevisionInsert) error {
+	artifactHandle, err := uniqueHandleTx(ctx, tx, "artifact", "card-revision", "artifact-"+revision.ArtifactID)
+	if err != nil {
+		return fmt.Errorf("allocate card artifact handle: %w", err)
+	}
 	if _, err := tx.ExecContext(
 		ctx,
-		`INSERT INTO artifacts(id, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json)
-		 VALUES (?, 'card', ?, ?, ?, 'structured', ?, ?, ?)`,
+		`INSERT INTO artifacts(id, handle, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json)
+		 VALUES (?, ?, 'card', ?, ?, ?, 'structured', ?, ?, ?)`,
 		revision.ArtifactID,
+		artifactHandle,
 		nullableString(threadID),
 		revision.CreatedAt,
 		actorID,
@@ -583,15 +588,20 @@ func (s *Store) execBoardCardInsert(ctx context.Context, tx *sql.Tx, boardRow bo
 	if err != nil {
 		return boardRow, boardCardRow{}, nil, err
 	}
+	cardHandle, err := uniqueHandleTx(ctx, tx, "card", title, "card-"+cardID)
+	if err != nil {
+		return boardRow, boardCardRow{}, stagedContent, fmt.Errorf("allocate card handle: %w", err)
+	}
 
 	if _, err := tx.ExecContext(
 		ctx,
 		`INSERT INTO cards(
-			id, board_id, thread_id, title, summary, due_at, definition_of_done_json, column_key, rank, version, head_revision_id, head_revision_number,
+			id, handle, board_id, thread_id, title, summary, due_at, definition_of_done_json, column_key, rank, version, head_revision_id, head_revision_number,
 			parent_thread_id, pinned_document_id, assignee, risk, resolution, resolution_refs_json, refs_json,
 			created_at, created_by, updated_at, updated_by, provenance_json
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		cardID,
+		cardHandle,
 		boardID,
 		backingThreadID,
 		title,
@@ -810,14 +820,20 @@ func (s *Store) CreateBoard(ctx context.Context, actorID string, board map[strin
 		}
 		return nil, err
 	}
+	boardHandle, err := uniqueHandleTx(ctx, tx, "board", title, "board-"+boardID)
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, fmt.Errorf("allocate board handle: %w", err)
+	}
 
 	_, err = tx.ExecContext(
 		ctx,
 		`INSERT INTO boards(
-			id, title, summary, owners_json, thread_id, refs_json,
+			id, handle, title, summary, owners_json, thread_id, refs_json,
 			column_schema_json, created_at, created_by, updated_at, updated_by
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		boardID,
+		boardHandle,
 		title,
 		summary,
 		string(ownersJSON),
@@ -3858,11 +3874,16 @@ func ensureBoardBackingThreadTx(ctx context.Context, tx *sql.Tx, actorID, boardI
 		if marshalErr != nil {
 			return fmt.Errorf("marshal board backing thread: %w", marshalErr)
 		}
+		threadHandle, handleErr := uniqueHandleTx(ctx, tx, "thread", title, "thread-"+threadID)
+		if handleErr != nil {
+			return fmt.Errorf("allocate board backing thread handle: %w", handleErr)
+		}
 		if _, execErr := tx.ExecContext(
 			ctx,
-			`INSERT INTO threads(id, kind, thread_id, updated_at, updated_by, body_json, provenance_json)
-			 VALUES (?, 'thread', ?, ?, ?, ?, ?)`,
+			`INSERT INTO threads(id, handle, kind, thread_id, updated_at, updated_by, body_json, provenance_json)
+			 VALUES (?, ?, 'thread', ?, ?, ?, ?, ?)`,
 			threadID,
+			threadHandle,
 			threadID,
 			updatedAt,
 			actorID,
@@ -3938,11 +3959,16 @@ func ensureCardBackingThreadTx(ctx context.Context, tx *sql.Tx, actorID, cardID,
 		if marshalErr != nil {
 			return fmt.Errorf("marshal card backing thread: %w", marshalErr)
 		}
+		threadHandle, handleErr := uniqueHandleTx(ctx, tx, "thread", title, "thread-"+threadID)
+		if handleErr != nil {
+			return fmt.Errorf("allocate card backing thread handle: %w", handleErr)
+		}
 		if _, execErr := tx.ExecContext(
 			ctx,
-			`INSERT INTO threads(id, kind, thread_id, updated_at, updated_by, body_json, provenance_json)
-			 VALUES (?, 'thread', ?, ?, ?, ?, ?)`,
+			`INSERT INTO threads(id, handle, kind, thread_id, updated_at, updated_by, body_json, provenance_json)
+			 VALUES (?, ?, 'thread', ?, ?, ?, ?, ?)`,
 			threadID,
+			threadHandle,
 			threadID,
 			updatedAt,
 			actorID,

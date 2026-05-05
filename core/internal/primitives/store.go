@@ -171,6 +171,7 @@ type Store struct {
 
 type eventExec interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
 type queryRower interface {
@@ -405,12 +406,18 @@ func (s *Store) CreateArtifact(ctx context.Context, actorID string, artifact map
 	if err != nil {
 		return nil, fmt.Errorf("begin artifact transaction: %w", err)
 	}
+	artifactHandle, err := uniqueHandleTx(ctx, tx, "artifact", firstNonEmpty(anyStringValue(metadata["title"]), anyStringValue(metadata["summary"]), kind), "artifact-"+artifactID)
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, fmt.Errorf("allocate artifact handle: %w", err)
+	}
 
 	if _, err := tx.ExecContext(
 		ctx,
-		`INSERT INTO artifacts(id, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO artifacts(id, handle, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		metadata["id"],
+		artifactHandle,
 		kind,
 		nullableString(artifactThreadID),
 		metadata["created_at"],
@@ -537,12 +544,18 @@ func (s *Store) CreateArtifactAndEvent(ctx context.Context, actorID string, arti
 	if err != nil {
 		return nil, nil, fmt.Errorf("begin transaction: %w", err)
 	}
+	artifactHandle, err := uniqueHandleTx(ctx, tx, "artifact", firstNonEmpty(anyStringValue(metadata["title"]), anyStringValue(metadata["summary"]), kind), "artifact-"+artifactID)
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, nil, fmt.Errorf("allocate artifact handle: %w", err)
+	}
 
 	if _, err := tx.ExecContext(
 		ctx,
-		`INSERT INTO artifacts(id, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO artifacts(id, handle, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		metadata["id"],
+		artifactHandle,
 		kind,
 		nullableString(artifactThreadID),
 		metadata["created_at"],
@@ -1761,12 +1774,18 @@ func (s *Store) CreateThread(ctx context.Context, actorID string, thread map[str
 	if err != nil {
 		return ThreadMutationResult{}, fmt.Errorf("begin thread create transaction: %w", err)
 	}
+	handle, err := uniqueHandleTx(ctx, tx, "thread", anyStringValue(body["title"]), "thread-"+threadID)
+	if err != nil {
+		_ = tx.Rollback()
+		return ThreadMutationResult{}, fmt.Errorf("allocate thread handle: %w", err)
+	}
 
 	_, err = tx.ExecContext(
 		ctx,
-		`INSERT INTO threads(id, kind, thread_id, updated_at, updated_by, body_json, provenance_json)
-		 VALUES (?, 'thread', ?, ?, ?, ?, ?)`,
+		`INSERT INTO threads(id, handle, kind, thread_id, updated_at, updated_by, body_json, provenance_json)
+		 VALUES (?, ?, 'thread', ?, ?, ?, ?, ?)`,
 		threadID,
+		handle,
 		threadID,
 		updatedAt,
 		actorID,
@@ -2313,11 +2332,17 @@ func prepareEventForInsert(actorID string, event map[string]any) (preparedEvent,
 }
 
 func insertPreparedEvent(ctx context.Context, exec eventExec, prepared preparedEvent) error {
+	eventID := anyStringValue(prepared.Body["id"])
+	handle, err := uniqueHandleTx(ctx, exec, "event", prepared.Type, "event-"+eventID)
+	if err != nil {
+		return fmt.Errorf("allocate event handle: %w", err)
+	}
 	if _, err := exec.ExecContext(
 		ctx,
-		`INSERT INTO events(id, type, ts, actor_id, thread_id, refs_json, payload_json, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-		prepared.Body["id"],
+		`INSERT INTO events(id, handle, type, ts, actor_id, thread_id, refs_json, payload_json, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+		eventID,
+		handle,
 		prepared.Type,
 		prepared.Body["ts"],
 		prepared.Body["actor_id"],
@@ -2330,7 +2355,7 @@ func insertPreparedEvent(ctx context.Context, exec eventExec, prepared preparedE
 		}
 		return fmt.Errorf("insert event: %w", err)
 	}
-	if err := replaceRefEdges(ctx, exec, "event", anyStringValue(prepared.Body["id"]), prepared.RefTargets); err != nil {
+	if err := replaceRefEdges(ctx, exec, "event", eventID, prepared.RefTargets); err != nil {
 		return err
 	}
 

@@ -512,12 +512,23 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		}
 		return nil, nil, err
 	}
+	artifactHandle, err := uniqueHandleTx(ctx, tx, "artifact", "document-revision", "artifact-"+artifactID)
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, nil, fmt.Errorf("allocate document artifact handle: %w", err)
+	}
+	documentHandle, err := uniqueHandleTx(ctx, tx, "document", firstNonEmpty(slug, title), "document-"+documentID)
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, nil, fmt.Errorf("allocate document handle: %w", err)
+	}
 
 	if _, err := tx.ExecContext(
 		ctx,
-		`INSERT INTO artifacts(id, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO artifacts(id, handle, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		artifactID,
+		artifactHandle,
 		"doc",
 		nullableString(threadID),
 		now,
@@ -545,12 +556,13 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 	if _, err := tx.ExecContext(
 		ctx,
 		`INSERT INTO documents(
-			id, thread_id, title, summary, slug, supersedes_json,
+			id, handle, thread_id, title, summary, slug, supersedes_json,
 			refs_json, provenance_json,
 			head_revision_id, head_revision_number,
 			created_at, created_by, updated_at, updated_by
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		documentID,
+		documentHandle,
 		nullableString(threadID),
 		nullableString(title),
 		docSummary,
@@ -965,12 +977,18 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		}
 		return nil, nil, err
 	}
+	artifactHandle, err := uniqueHandleTx(ctx, tx, "artifact", "document-revision", "artifact-"+artifactID)
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, nil, fmt.Errorf("allocate document artifact handle: %w", err)
+	}
 
 	if _, err := tx.ExecContext(
 		ctx,
-		`INSERT INTO artifacts(id, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO artifacts(id, handle, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		artifactID,
+		artifactHandle,
 		"doc",
 		nullableString(nextThreadID),
 		now,
@@ -2020,11 +2038,16 @@ func ensureDocumentBackingThreadTx(ctx context.Context, tx *sql.Tx, actorID, doc
 		if marshalErr != nil {
 			return "", fmt.Errorf("marshal document backing thread: %w", marshalErr)
 		}
+		threadHandle, handleErr := uniqueHandleTx(ctx, tx, "thread", title, "thread-"+threadID)
+		if handleErr != nil {
+			return "", fmt.Errorf("allocate document backing thread handle: %w", handleErr)
+		}
 		if _, execErr := tx.ExecContext(
 			ctx,
-			`INSERT INTO threads(id, kind, thread_id, updated_at, updated_by, body_json, provenance_json)
-			 VALUES (?, 'thread', ?, ?, ?, ?, ?)`,
+			`INSERT INTO threads(id, handle, kind, thread_id, updated_at, updated_by, body_json, provenance_json)
+			 VALUES (?, ?, 'thread', ?, ?, ?, ?, ?)`,
 			threadID,
+			threadHandle,
 			threadID,
 			updatedAt,
 			actorID,

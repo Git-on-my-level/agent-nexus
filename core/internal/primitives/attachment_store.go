@@ -278,12 +278,18 @@ func (s *Store) CreateArtifactAttachment(ctx context.Context, actorID string, ar
 	if err != nil {
 		return nil, fmt.Errorf("begin attachment transaction: %w", err)
 	}
+	artifactHandle, err := uniqueHandleTx(ctx, tx, "artifact", firstNonEmpty(origName, "attachment"), "artifact-"+artifactID)
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, fmt.Errorf("allocate attachment handle: %w", err)
+	}
 
 	if _, err := tx.ExecContext(
 		ctx,
-		`INSERT INTO artifacts(id, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO artifacts(id, handle, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		metadata["id"],
+		artifactHandle,
 		"attachment",
 		nullableString(artifactThreadID),
 		metadata["created_at"],

@@ -469,14 +469,23 @@ func (s *Store) CreateTopic(ctx context.Context, actorID string, topic map[strin
 		return TopicPatchResult{}, fmt.Errorf("begin topic create transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	topicHandle, err := uniqueHandleTx(ctx, tx, "topic", title, "topic-"+topicID)
+	if err != nil {
+		return TopicPatchResult{}, fmt.Errorf("allocate topic handle: %w", err)
+	}
+	threadHandle, err := uniqueHandleTx(ctx, tx, "thread", title, "thread-"+primaryThreadID)
+	if err != nil {
+		return TopicPatchResult{}, fmt.Errorf("allocate topic thread handle: %w", err)
+	}
 
 	if _, err := tx.ExecContext(
 		ctx,
 		`INSERT INTO topics(
-			id, title, thread_id, summary, extensions_json, provenance_json,
+			id, handle, title, thread_id, summary, extensions_json, provenance_json,
 			created_at, created_by, updated_at, updated_by
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		topicID,
+		topicHandle,
 		title,
 		primaryThreadID,
 		topicSummaryCol,
@@ -495,9 +504,10 @@ func (s *Store) CreateTopic(ctx context.Context, actorID string, topic map[strin
 
 	if _, err := tx.ExecContext(
 		ctx,
-		`INSERT INTO threads(id, kind, thread_id, updated_at, updated_by, body_json, provenance_json)
-		 VALUES (?, 'thread', ?, ?, ?, ?, ?)`,
+		`INSERT INTO threads(id, handle, kind, thread_id, updated_at, updated_by, body_json, provenance_json)
+		 VALUES (?, ?, 'thread', ?, ?, ?, ?, ?)`,
 		primaryThreadID,
+		threadHandle,
 		primaryThreadID,
 		now,
 		actorID,
