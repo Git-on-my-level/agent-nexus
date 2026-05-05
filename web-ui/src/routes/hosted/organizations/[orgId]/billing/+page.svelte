@@ -29,6 +29,11 @@
     usagePlanLimitFeatureLines,
   } from "$lib/hosted/planCatalog.js";
   import { setActiveOrg } from "$lib/hosted/session.js";
+  import {
+    formatStorageBytes,
+    pct,
+    storageMetric,
+  } from "$lib/hosted/usageStats.js";
 
   const orgId = $derived(String($page.params.orgId ?? ""));
 
@@ -347,10 +352,32 @@
     const em = String(m.account_email ?? "").trim();
     return dn || em || "Member";
   }
+
+  function barColor(p) {
+    if (p >= 90) return "bg-danger";
+    if (p >= 75) return "bg-warn";
+    return "bg-accent-solid";
+  }
+
+  function headroomNote(p) {
+    if (p >= 90) return "Almost out — consider upgrading.";
+    if (p >= 75) return "Getting close to the limit.";
+    return "";
+  }
+
+  /** @param {any} w */
+  function workspaceAccessLabel(w) {
+    const st = String(w?.status ?? "").trim();
+    const mode = String(w?.access_mode ?? "").trim();
+    if (st === "suspended") return "Suspended";
+    if (mode === "read_only") return "Read-only";
+    if (mode === "read_write" || mode === "") return "Writable";
+    return mode;
+  }
 </script>
 
 <svelte:head>
-  <title>Billing — ANX</title>
+  <title>Plan &amp; usage — ANX</title>
 </svelte:head>
 
 <div class="space-y-5">
@@ -358,11 +385,10 @@
     <p class="text-micro text-fg-subtle">
       <a
         class="text-fg-subtle underline-offset-2 transition-colors hover:text-fg hover:underline"
-        href={`/hosted/organizations/${encodeURIComponent(orgId)}`}
-        >← Overview</a
+        href="/hosted/dashboard">← Workspaces</a
       >
     </p>
-    <h1 class="mt-1 text-display text-fg">Billing</h1>
+    <h1 class="mt-1 text-display text-fg">Plan &amp; usage</h1>
   </div>
 
   {#if message}
@@ -450,6 +476,8 @@
     {@const ba = summary.billing_account ?? {}}
     {@const us = summary.usage_summary ?? {}}
     {@const plan = us.plan ?? {}}
+    {@const usage = us.usage ?? {}}
+    {@const quota = us.quota ?? {}}
     {@const currentTier = String(summary.plan_tier ?? "starter").toLowerCase()}
     {@const managed = stripeSubscriptionManagedClient(ba)}
 
@@ -508,6 +536,96 @@
           >
         {/if}
       </div>
+    </section>
+
+    <section class="grid gap-3 sm:grid-cols-3">
+      {#each [{ label: "Workspaces", used: usage.workspace_count, total: plan.workspace_limit, remaining: quota.workspaces_remaining }, { label: "Artifacts (org total)", used: usage.artifact_count, total: plan.artifact_capacity, remaining: quota.artifacts_remaining }, storageMetric(usage, plan, quota)] as metric}
+        {@const p = pct(metric.used, metric.total)}
+        {@const usedText = metric.displayUsed ?? Number(metric.used ?? 0)}
+        {@const totalText = metric.displayTotal ?? metric.total ?? "—"}
+        <div class="rounded-md border border-line bg-bg-soft px-4 py-3">
+          <div
+            class="flex items-center justify-between text-micro uppercase tracking-wide text-fg-subtle"
+          >
+            <span>{metric.label}</span>
+            <span class="tabular-nums">{p}%</span>
+          </div>
+          <div class="mt-2 text-subtitle tabular-nums text-fg">
+            {usedText}<span class="text-meta text-fg-subtle"
+              >{" / "}{totalText}</span
+            >
+          </div>
+          <div class="mt-2 h-1 overflow-hidden rounded-full bg-panel-hover">
+            <div
+              class="h-full {barColor(p)} transition-all"
+              style="width: {p}%"
+            ></div>
+          </div>
+          <p class="mt-2 text-micro text-fg-subtle">
+            {metric.displayRemaining ?? Number(metric.remaining ?? 0)} remaining
+            {#if headroomNote(p)}
+              · <span class="text-warn-text">{headroomNote(p)}</span>
+            {/if}
+          </p>
+        </div>
+      {/each}
+    </section>
+
+    <section class="overflow-hidden rounded-md border border-line bg-bg-soft">
+      <div
+        class="flex items-center justify-between border-b border-line px-4 py-2.5"
+      >
+        <h2 class="text-subtitle text-fg">Workspace breakdown</h2>
+      </div>
+      {#if !us.workspaces || us.workspaces.length === 0}
+        <p class="px-4 py-4 text-meta text-fg-subtle">
+          No workspaces in this organization yet.
+        </p>
+      {:else}
+        <div class="overflow-x-auto">
+          <table class="min-w-full text-meta">
+            <thead>
+              <tr
+                class="border-b border-line text-left text-micro uppercase tracking-wide text-fg-subtle"
+              >
+                <th class="px-4 py-2">Workspace</th>
+                <th class="px-4 py-2">Access</th>
+                <th class="px-4 py-2">Artifacts</th>
+                <th class="px-4 py-2">Storage</th>
+                <th class="px-4 py-2">Launches (mo)</th>
+                <th class="px-4 py-2">Last active</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each us.workspaces as w (w.id)}
+                <tr class="border-b border-line last:border-b-0">
+                  <td class="px-4 py-2">
+                    <div class="text-fg">
+                      {w.display_name || w.slug}
+                    </div>
+                    <div class="font-mono text-micro text-fg-subtle">
+                      {w.slug}
+                    </div>
+                  </td>
+                  <td class="px-4 py-2 text-fg">{workspaceAccessLabel(w)}</td>
+                  <td class="px-4 py-2 tabular-nums text-fg"
+                    >{w.artifact_count ?? 0}</td
+                  >
+                  <td class="px-4 py-2 tabular-nums text-fg"
+                    >{formatStorageBytes(w.storage_bytes ?? 0)}</td
+                  >
+                  <td class="px-4 py-2 tabular-nums text-fg"
+                    >{w.monthly_launch_count ?? 0}</td
+                  >
+                  <td class="px-4 py-2 text-fg-subtle"
+                    >{w.last_active_at ?? "—"}</td
+                  >
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      {/if}
     </section>
 
     <section>

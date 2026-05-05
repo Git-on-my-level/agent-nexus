@@ -57,14 +57,12 @@
 
   /** Primary nav for signed-in users — anchored to the active org. */
   const primaryNav = $derived.by(() => {
-    const items = [{ href: "/hosted/dashboard", label: "Dashboard" }];
+    const items = [{ href: "/hosted/dashboard", label: "Workspaces" }];
     if (activeOrg) {
       const base = `/hosted/organizations/${encodeURIComponent(activeOrg.id)}`;
       items.push(
-        { href: base, label: "Overview" },
         { href: `${base}/team`, label: "Team" },
-        { href: `${base}/usage`, label: "Usage" },
-        { href: `${base}/billing`, label: "Billing" },
+        { href: `${base}/billing`, label: "Plan & usage" },
       );
     } else {
       items.push({ href: "/hosted/organizations", label: "Organizations" });
@@ -311,7 +309,7 @@
                       role="menuitem"
                       href="/hosted/dashboard"
                       class="block px-3 py-2 text-micro text-fg transition-colors hover:bg-panel-hover"
-                      >Dashboard</a
+                      >Workspaces</a
                     >
                   </li>
                   <li>

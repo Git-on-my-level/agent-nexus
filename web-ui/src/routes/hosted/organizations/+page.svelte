@@ -39,7 +39,7 @@
       const params = new URLSearchParams(window.location.search);
       if (params.get("billing_error") === "1") {
         message =
-          "We could not confirm your checkout session. Open Billing from your organization when ready.";
+          "We could not confirm your checkout session. Open Plan & usage from your organization when ready.";
       }
       phase = "ready";
     } catch (e) {

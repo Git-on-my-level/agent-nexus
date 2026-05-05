@@ -111,7 +111,7 @@
 <div class="mx-auto max-w-lg py-6">
   <p class="text-micro text-fg-subtle">
     <a class="text-accent-text hover:text-accent-text" href="/hosted/dashboard"
-      >← Dashboard</a
+      >← Workspaces</a
     >
   </p>
   <h1 class="mt-2 text-display text-fg">Create a workspace</h1>

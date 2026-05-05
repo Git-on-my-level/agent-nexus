@@ -130,7 +130,7 @@
 </script>
 
 <svelte:head>
-  <title>Dashboard — Agent Nexus (ANX)</title>
+  <title>Workspaces — Agent Nexus (ANX)</title>
 </svelte:head>
 
 <div class="space-y-6">

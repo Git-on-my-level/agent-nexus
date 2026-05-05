@@ -127,7 +127,18 @@ test.describe("hosted billing routes (mocked CP API)", () => {
                   storage_bytes_remaining: 256 * 1024 * 1024 - 9_400_000,
                   storage_gb_remaining: 0,
                 },
-                workspaces: [],
+                workspaces: [
+                  {
+                    id: "ws_test_123",
+                    slug: "personal",
+                    display_name: "Personal",
+                    artifact_count: 42,
+                    storage_bytes: 9_400_000,
+                    storage_gb: 1,
+                    monthly_launch_count: 0,
+                    summary_stale: false,
+                  },
+                ],
               },
               configuration: {
                 provider: "stripe",
@@ -231,16 +242,24 @@ test.describe("hosted billing routes (mocked CP API)", () => {
     await expect(
       page.getByRole("heading", { name: "Organizations" }),
     ).toBeVisible();
-    await expect(page.getByRole("link", { name: "Billing" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Usage" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Workspaces" })).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Plan & usage" }),
+    ).toBeVisible();
   });
 
-  test("usage page renders meters", async ({ page }) => {
+  test("usage route redirects to plan and usage", async ({ page }) => {
     await page.goto(`/hosted/organizations/${encodeURIComponent(orgId)}/usage`);
-    await expect(page.getByRole("heading", { name: "Usage" })).toBeVisible();
+    await expect(page).toHaveURL(
+      `/hosted/organizations/${encodeURIComponent(orgId)}/billing`,
+    );
+    await expect(
+      page.getByRole("heading", { name: "Plan & usage" }),
+    ).toBeVisible();
     await expect(page.getByText("Free")).toBeVisible();
     await expect(page.getByText("9.0 MB / 256 MB")).toBeVisible();
     await expect(page.getByText("247 MB remaining")).toBeVisible();
+    await expect(page.getByRole("cell", { name: "Personal" })).toBeVisible();
   });
 
   test("billing page shows configuration panel when Stripe incomplete", async ({
@@ -249,7 +268,9 @@ test.describe("hosted billing routes (mocked CP API)", () => {
     await page.goto(
       `/hosted/organizations/${encodeURIComponent(orgId)}/billing`,
     );
-    await expect(page.getByRole("heading", { name: "Billing" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Plan & usage" }),
+    ).toBeVisible();
     await expect(page.getByText("Billing not yet configured.")).toBeVisible();
     await expect(page.getByText("Up to 1 workspaces")).toBeVisible();
     await expect(page.getByText("1,000 artifacts included")).toBeVisible();
