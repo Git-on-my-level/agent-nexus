@@ -88,6 +88,40 @@ func TestRunMetaDocPrintsAgentGuideMarkdown(t *testing.T) {
 	}
 }
 
+func TestRunMetaDocPrintsProfileAndEnvDocs(t *testing.T) {
+	t.Parallel()
+
+	profiles := runHelpCommand(t, "meta", "doc", "profiles")
+	if !strings.Contains(profiles, "## `profiles`") || !strings.Contains(profiles, "Active profile resolution") {
+		t.Fatalf("expected profiles docs output=%s", profiles)
+	}
+	if !strings.Contains(profiles, "command flags > environment variables") {
+		t.Fatalf("expected precedence guidance output=%s", profiles)
+	}
+
+	env := runHelpCommand(t, "meta", "doc", "environment")
+	if !strings.Contains(env, "## `env`") || !strings.Contains(env, "ANX_PROFILE_PATH") || !strings.Contains(env, "ANX_JSON") {
+		t.Fatalf("expected env docs via alias output=%s", env)
+	}
+}
+
+func TestRunMetaDocsListAndSearch(t *testing.T) {
+	t.Parallel()
+
+	listOutput := runHelpCommand(t, "meta", "docs", "--list")
+	if !strings.Contains(listOutput, "# ANX Runtime Help Topics") || !strings.Contains(listOutput, "`profiles`") {
+		t.Fatalf("expected topic list output=%s", listOutput)
+	}
+
+	searchOutput := runHelpCommand(t, "meta", "docs", "--search", "profile")
+	if !strings.Contains(searchOutput, "`profiles`") || !strings.Contains(searchOutput, "`config show`") {
+		t.Fatalf("expected profile search output=%s", searchOutput)
+	}
+	if strings.Contains(searchOutput, "## `threads`") {
+		t.Fatalf("expected search index, not full docs output=%s", searchOutput)
+	}
+}
+
 func TestRunMetaDocPrintsAgentBridgeMarkdown(t *testing.T) {
 	t.Parallel()
 

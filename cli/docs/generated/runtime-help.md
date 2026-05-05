@@ -7,6 +7,8 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `onboarding` (manual): Offline quick-start mental model and first command flow.
 - `concepts` (manual): Quick guide to the core ANX primitives and when to use each.
 - `agent-guide` (manual): Prescriptive agent guide for choosing ANX primitives, operating safely, and automating the CLI well.
+- `profiles` (manual): CLI profile resolution, same-machine multi-agent setup, and active profile inspection.
+- `env` (manual): Supported ANX_* environment variables and precedence.
 - `agent-bridge` (manual): Install, configure, and operate the preferred per-agent `anx-agent-bridge` runtime (local adapter + check-in); workspace wake routing still lives in `anx-core`.
 - `wake-routing` (manual): How `@handle` wake routing works, including self-registration, verification, and troubleshooting.
 - `draft` (manual): Local draft staging, listing, commit, and discard workflow.
@@ -15,7 +17,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `auth list` (manual): List local CLI profiles and the active profile.
 - `auth default` (manual): Persist the default CLI profile used when no explicit agent is selected.
 - `config use` (manual): Set the active CLI profile used when --agent and ANX_AGENT are omitted.
-- `config show` (manual): Print effective CLI settings and per-field sources (tokens redacted).
+- `config show` (manual): Print effective CLI profile settings, per-field sources, precedence, and env var hints (tokens redacted).
 - `config unset` (manual): Clear the persisted default profile marker (~/.config/anx/default-profile).
 - `auth update-username` (manual): Rename the authenticated agent and sync the local profile.
 - `auth rotate` (manual): Rotate the active agent key and refresh stored credentials.
@@ -273,6 +275,11 @@ Inbox categories:
 - `risk_exception`: Exceptions or at-risk work items that need follow-up.
 - `attention`: Review or lighter operator focus (for example document attention).
 
+Configuration and profiles:
+- Use profiles for local CLI identity and auth material; use `ANX_AGENT` as a per-process default for multi-agent machines.
+- Precedence is command flags > environment variables > profile/default marker/autodiscovery > built-in defaults.
+- Read next: anx meta doc profiles ; anx meta doc env ; anx config show
+
 For the fuller operating model, read `anx meta doc agent-guide`.
 ```
 
@@ -344,10 +351,9 @@ Configuration
 - On a durable workstation, set the active profile once with `anx config use <profile>` (equivalent to `anx auth default <profile>`). Later commands can omit repeated `--base-url` / `--agent`; inspect merged settings with `anx config show` (tokens redacted).
 - Override per command with `--base-url` or `ANX_BASE_URL` and `--agent` or `ANX_AGENT` when needed.
 - Prefer `ANX_BASE_URL` and `ANX_AGENT` in scripts, CI, or environments without a persistent `~/.config/anx`.
+- Config precedence is command flags > environment variables > profile/default marker/autodiscovery > built-in defaults. Read `anx meta doc profiles` and `anx meta doc env` for details.
 - If available, run `anx doctor` when config or connectivity is unclear.
 - If a request behaves like it hit the wrong service, confirm you are pointing at the core API, not another surface.
-
-Config precedence is typically: flags -> environment -> profile -> defaults.
 
 
 Discovery first
@@ -406,6 +412,93 @@ Maintenance rule
 - Describe roles and decision rules, not exhaustive command inventories.
 - Prefer `anx help` and `anx meta docs` over embedding fragile schemas.
 - Mention examples of primitives and abstractions, but avoid implying the list is closed.
+```
+
+## `profiles`
+
+CLI profile resolution, same-machine multi-agent setup, and active profile inspection.
+
+```text
+ANX CLI profiles
+
+A profile is a local identity file with the base URL, token material, key metadata, and agent identity used by the CLI. Profiles normally live under:
+
+  ~/.config/anx/profiles/<profile>.json
+
+Active profile resolution:
+
+  1. --agent <profile>       Explicit command flag for one invocation
+  2. ANX_AGENT=<profile>     Per-process default for shells, scripts, services
+  3. default-profile marker  ~/.config/anx/default-profile written by config use/auth default
+  4. single profile          Auto-selected only when exactly one profile exists
+  5. none                    Multiple profiles without selection fail config resolution
+
+Precedence:
+
+  command flags > environment variables > profile/default marker/autodiscovery > built-in defaults
+
+Use anx config use <profile> for a durable workstation default. It writes ~/.config/anx/default-profile.
+
+Use ANX_AGENT=<profile> for multi-agent machines, launchd/systemd services, CI jobs, or any process that should not mutate a shared default marker:
+
+  ANX_AGENT=engineering anx auth whoami
+  ANX_AGENT=reviewer anx cards list
+
+Use --agent <profile> for a one-off command that should override both the process environment and the persisted default:
+
+  ANX_AGENT=engineering anx --agent reviewer auth whoami
+
+Inspect the effective profile, base URL, token redaction status, and per-field sources with:
+
+  anx config show
+
+Switch or clear the persisted default with:
+
+  anx config use <profile>
+  anx config unset
+  anx auth list
+
+Bridge isolation:
+
+Bridge configs are agent-isolated by their own handle/config path and imported auth material. Multiple bridges can coexist on one machine; prefer explicit bridge configs plus ANX_AGENT or --agent during setup so the CLI default profile does not become hidden shared state.
+
+Related docs:
+  anx meta doc env
+  anx help config
+  anx auth list
+```
+
+## `env`
+
+Supported ANX_* environment variables and precedence.
+
+```text
+ANX environment variables
+
+Use environment variables as per-process defaults for shells, scripts, services, and same-machine multi-agent setups. Explicit command flags still win for one command.
+
+Precedence:
+  command flags > environment variables > profile/default marker/autodiscovery > built-in defaults
+
+Supported variables:
+
+Variable          Overrides                 Example
+--------          ---------                 -------
+ANX_AGENT         active profile selection  ANX_AGENT=engineering
+ANX_BASE_URL      core API base URL         ANX_BASE_URL=https://anx.example.com/ws/org/workspace
+ANX_TIMEOUT       request timeout           ANX_TIMEOUT=30s
+ANX_NO_COLOR      color output              ANX_NO_COLOR=1
+ANX_JSON          JSON output mode          ANX_JSON=true
+ANX_PROFILE_PATH  profile file path         ANX_PROFILE_PATH=/path/to/profile.json
+ANX_ACCESS_TOKEN  bearer access token       ANX_ACCESS_TOKEN=<token>
+
+Notes:
+- Prefer `ANX_AGENT` in long-running agent services so each process has its own identity without rewriting `~/.config/anx/default-profile`.
+- Prefer `ANX_BASE_URL` in CI and scripts when the target workspace is known outside the profile file.
+- Use `ANX_PROFILE_PATH` for isolated launch contexts that should not read the normal profile directory.
+- Treat `ANX_ACCESS_TOKEN` as secret material. Profile-backed auth is usually easier to refresh and audit.
+
+Inspect effective values and sources with `anx config show`.
 ```
 
 ## `agent-bridge`
@@ -997,7 +1090,7 @@ Global flags:
 
 ## `config show`
 
-Print effective CLI settings and per-field sources (tokens redacted).
+Print effective CLI profile settings, per-field sources, precedence, and env var hints (tokens redacted).
 
 ```text
 Local Help: config show

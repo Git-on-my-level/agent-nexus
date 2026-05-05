@@ -37,6 +37,8 @@ var runtimeHelpManualDocTopics = []runtimeHelpDocTopic{
 	{Path: "onboarding", Kind: "manual", Summary: "Offline quick-start mental model and first command flow."},
 	{Path: "concepts", Kind: "manual", Summary: "Quick guide to the core ANX primitives and when to use each."},
 	{Path: "agent-guide", Kind: "manual", Summary: "Prescriptive agent guide for choosing ANX primitives, operating safely, and automating the CLI well."},
+	{Path: "profiles", Kind: "manual", Summary: "CLI profile resolution, same-machine multi-agent setup, and active profile inspection."},
+	{Path: "env", Kind: "manual", Summary: "Supported ANX_* environment variables and precedence."},
 	{Path: "agent-bridge", Kind: "manual", Summary: "Install, configure, and operate the preferred per-agent `anx-agent-bridge` runtime (local adapter + check-in); workspace wake routing still lives in `anx-core`."},
 	{Path: "wake-routing", Kind: "manual", Summary: "How `@handle` wake routing works, including self-registration, verification, and troubleshooting."},
 	{Path: "draft", Kind: "manual", Summary: "Local draft staging, listing, commit, and discard workflow."},
@@ -45,7 +47,7 @@ var runtimeHelpManualDocTopics = []runtimeHelpDocTopic{
 	{Path: "auth list", Kind: "manual", Summary: "List local CLI profiles and the active profile."},
 	{Path: "auth default", Kind: "manual", Summary: "Persist the default CLI profile used when no explicit agent is selected."},
 	{Path: "config use", Kind: "manual", Summary: "Set the active CLI profile used when --agent and ANX_AGENT are omitted."},
-	{Path: "config show", Kind: "manual", Summary: "Print effective CLI settings and per-field sources (tokens redacted)."},
+	{Path: "config show", Kind: "manual", Summary: "Print effective CLI profile settings, per-field sources, precedence, and env var hints (tokens redacted)."},
 	{Path: "config unset", Kind: "manual", Summary: "Clear the persisted default profile marker (~/.config/anx/default-profile)."},
 	{Path: "auth update-username", Kind: "manual", Summary: "Rename the authenticated agent and sync the local profile."},
 	{Path: "auth rotate", Kind: "manual", Summary: "Rotate the active agent key and refresh stored credentials."},
@@ -191,12 +193,26 @@ func runtimeHelpDocTopics() []runtimeHelpDocTopic {
 
 func runtimeHelpDocTopicByPath(path string) (runtimeHelpDocTopic, bool) {
 	path = strings.Join(strings.Fields(strings.TrimSpace(path)), " ")
+	path = canonicalRuntimeHelpDocTopic(path)
 	for _, topic := range runtimeHelpDocTopics() {
 		if strings.Join(strings.Fields(strings.TrimSpace(topic.Path)), " ") == path {
 			return topic, true
 		}
 	}
 	return runtimeHelpDocTopic{}, false
+}
+
+func canonicalRuntimeHelpDocTopic(path string) string {
+	switch strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(path)), " ")) {
+	case "environment", "environments", "environment variables", "env vars", "env var":
+		return "env"
+	case "profile", "profiles", "config profiles", "configuration profiles":
+		return "profiles"
+	case "configuration":
+		return "config"
+	default:
+		return strings.Join(strings.Fields(strings.TrimSpace(path)), " ")
+	}
 }
 
 func RuntimeHelpDocMarkdown(topic string) (string, error) {
@@ -225,6 +241,44 @@ func RuntimeHelpDocsMarkdown() (string, error) {
 		b.WriteString(section)
 	}
 	return strings.TrimSpace(b.String()) + "\n", nil
+}
+
+func RuntimeHelpDocsIndexMarkdown(topics []runtimeHelpDocTopic) string {
+	if topics == nil {
+		topics = runtimeHelpDocTopics()
+	}
+	var b strings.Builder
+	b.WriteString("# ANX Runtime Help Topics\n\n")
+	for _, topic := range topics {
+		b.WriteString(fmt.Sprintf("- `%s` (%s): %s\n", topic.Path, topic.Kind, topic.Summary))
+	}
+	return strings.TrimSpace(b.String()) + "\n"
+}
+
+func SearchRuntimeHelpDocTopics(query string) []runtimeHelpDocTopic {
+	terms := strings.Fields(strings.ToLower(strings.TrimSpace(query)))
+	if len(terms) == 0 {
+		return nil
+	}
+	matches := []runtimeHelpDocTopic{}
+	for _, topic := range runtimeHelpDocTopics() {
+		haystackParts := []string{topic.Path, topic.Kind, topic.Summary}
+		if text, ok := helpTopicText(topic.Path); ok {
+			haystackParts = append(haystackParts, text)
+		}
+		haystack := strings.ToLower(strings.Join(haystackParts, "\n"))
+		matched := true
+		for _, term := range terms {
+			if !strings.Contains(haystack, term) {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			matches = append(matches, topic)
+		}
+	}
+	return matches
 }
 
 func WriteRuntimeHelpDocs(dir string) (string, error) {

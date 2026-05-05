@@ -706,6 +706,12 @@ func helpTopicText(topic string) (string, bool) {
 	if topic == "concepts" || topic == "primitives" || topic == "primitives guide" {
 		return conceptsGuideText() + "\n", true
 	}
+	if topic == "profiles" {
+		return profilesDocText() + "\n", true
+	}
+	if topic == "env" {
+		return envDocText() + "\n", true
+	}
 	if topic == "config" {
 		return strings.TrimSpace(`Config surface for the active CLI profile
 
@@ -718,7 +724,11 @@ Core commands:
 
 Related:
   auth list              List profiles and which is active.
-  auth default <profile> Same selection as config use.`) + "\n", true
+  auth default <profile> Same selection as config use.
+
+Docs:
+  anx meta doc profiles
+  anx meta doc env`) + "\n", true
 	}
 	if topic == "auth" {
 		return strings.TrimSpace(`Auth lifecycle and registration surface

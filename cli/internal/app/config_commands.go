@@ -51,14 +51,38 @@ func (a *App) runConfigUse(args []string) (*commandResult, error) {
 		}
 		return nil, errnorm.Wrap(errnorm.KindLocal, "profile_read_failed", "failed to read profile", err)
 	}
+	agents, err := profile.ListAgents(homeDir)
+	if err != nil {
+		return nil, errnorm.Wrap(errnorm.KindLocal, "profile_list_failed", "failed to inspect local profiles", err)
+	}
+	otherProfiles := make([]string, 0, len(agents))
+	for _, agent := range agents {
+		if agent != agentName {
+			otherProfiles = append(otherProfiles, agent)
+		}
+	}
+	lines := []string{"Active profile: " + agentName}
+	warnings := []string{}
+	if len(otherProfiles) > 0 {
+		lines = append(lines, "Other profiles on this machine: "+strings.Join(otherProfiles, ", "))
+		warning := "For agent services or multi-agent shells, prefer ANX_AGENT=<profile> over config use so you do not change the shared default profile."
+		lines = append(lines, warning)
+		lines = append(lines, "Docs: anx meta doc profiles ; anx meta doc env")
+		warnings = append(warnings, warning)
+	}
+	data := map[string]any{
+		"agent":             agentName,
+		"active_profile":    agentName,
+		"default_file_path": profile.DefaultAgentPath(homeDir),
+		"profile_path":      profilePath,
+	}
+	if len(otherProfiles) > 0 {
+		data["other_profiles"] = otherProfiles
+		data["warnings"] = warnings
+	}
 	return &commandResult{
-		Text: "Active profile: " + agentName,
-		Data: map[string]any{
-			"agent":             agentName,
-			"active_profile":    agentName,
-			"default_file_path": profile.DefaultAgentPath(homeDir),
-			"profile_path":      profilePath,
-		},
+		Text: strings.Join(lines, "\n"),
+		Data: data,
 	}, nil
 }
 
@@ -110,6 +134,16 @@ func (a *App) runConfigShow(cfg config.Resolved) *commandResult {
 	for _, k := range keys {
 		lines = append(lines, fmt.Sprintf("  Source %s: %s", k, cfg.Sources[k]))
 	}
+	lines = append(lines, "")
+	lines = append(lines, "Precedence:")
+	lines = append(lines, "  command flags > environment variables > profile/default marker/autodiscovery > built-in defaults")
+	lines = append(lines, "")
+	lines = append(lines, "Environment overrides available:")
+	for _, envVar := range cliEnvironmentVariables() {
+		lines = append(lines, fmt.Sprintf("  %-16s %s", envVar.Name, envVar.Summary))
+	}
+	lines = append(lines, "")
+	lines = append(lines, "Docs: anx meta doc profiles ; anx meta doc env")
 	return &commandResult{
 		Text: strings.Join(lines, "\n"),
 		Data: data,
@@ -166,6 +200,17 @@ func redactedConfigShowData(cfg config.Resolved) map[string]any {
 		out["private_key_path"] = cfg.PrivateKeyPath
 	}
 	out["revoked"] = cfg.Revoked
+	envVars := make([]map[string]any, 0, len(cliEnvironmentVariables()))
+	for _, envVar := range cliEnvironmentVariables() {
+		envVars = append(envVars, map[string]any{
+			"name":      envVar.Name,
+			"summary":   envVar.Summary,
+			"overrides": envVar.Overrides,
+			"example":   envVar.Example,
+		})
+	}
+	out["precedence"] = []string{"flags", "environment", "profile/default/autodiscovery", "built-in defaults"}
+	out["environment_overrides_available"] = envVars
 	if strings.TrimSpace(cfg.CoreInstanceID) != "" {
 		out["core_instance_id"] = cfg.CoreInstanceID
 	}
