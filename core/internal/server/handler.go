@@ -2056,15 +2056,6 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 		handleEventsStream(w, r, opts)
 	})
-	registerRoute("/events/stream", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
-			return
-		}
-		stream.Wrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			handleEventsStream(w, r, opts)
-		})).ServeHTTP(w, r)
-	})
 
 	registerRoute("/events/", func(r *http.Request) routeAccessRequirement {
 		remainder := strings.TrimPrefix(r.URL.Path, "/events/")
@@ -2368,15 +2359,6 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 		handleInboxStream(w, r, opts)
 	})
-	registerRoute("/inbox/stream", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
-			return
-		}
-		stream.Wrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			handleInboxStream(w, r, opts)
-		})).ServeHTTP(w, r)
-	})
 
 	registerStreamRoute("agent-notification-receipts", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -2384,15 +2366,6 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			return
 		}
 		handleAgentNotificationReceiptsStream(w, r, opts)
-	})
-	registerRoute("/agent-notification-receipts/stream", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
-			return
-		}
-		stream.Wrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			handleAgentNotificationReceiptsStream(w, r, opts)
-		})).ServeHTTP(w, r)
 	})
 
 	registerRoute("/agent-notifications", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {

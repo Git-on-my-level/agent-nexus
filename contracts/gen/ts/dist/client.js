@@ -64,7 +64,7 @@ export const commandRegistry = [
         "command_id": "agent.notification-receipts.stream",
         "cli_path": "",
         "method": "GET",
-        "path": "/agent-notification-receipts/stream",
+        "path": "/stream/agent-notification-receipts",
         "operation_id": "streamAgentNotificationReceipts",
         "summary": "Stream agent notification receipts (SSE)",
         "why": "Server-sent events feed of sender/operator-visible agent wake receipt updates for a backing thread.",
@@ -4343,7 +4343,7 @@ export const commandRegistry = [
         "cli_path": "events stream",
         "group": "events",
         "method": "GET",
-        "path": "/events/stream",
+        "path": "/stream/events",
         "operation_id": "streamEvents",
         "summary": "Stream events (SSE)",
         "why": "Long-lived SSE feed of workspace events with optional thread/type filters and Last-Event-ID resume.",
@@ -4580,6 +4580,7 @@ export const commandRegistry = [
         "output_envelope": "Returns `{ item, generated_at, projection_freshness }`.",
         "error_codes": [
             "auth_required",
+            "invalid_request",
             "invalid_token",
             "not_found"
         ],
@@ -4612,7 +4613,7 @@ export const commandRegistry = [
         "streaming": {
             "mode": "none"
         },
-        "output_envelope": "Returns `{ status, items, generated_at }`; completed adds `{ next_cursor }`; open projection adds `{ projection_freshness }` unless risk_horizon_days derivation path.",
+        "output_envelope": "Returns `{ status, items, generated_at }`; completed adds `{ next_cursor }`; open projection adds `{ projection_freshness }`.",
         "error_codes": [
             "auth_required",
             "invalid_request",
@@ -4709,7 +4710,7 @@ export const commandRegistry = [
         "cli_path": "inbox stream",
         "group": "inbox",
         "method": "GET",
-        "path": "/inbox/stream",
+        "path": "/stream/inbox",
         "operation_id": "streamInboxItems",
         "summary": "Stream inbox items (SSE)",
         "why": "Server-sent events feed of inbox projection updates.",
@@ -4720,6 +4721,7 @@ export const commandRegistry = [
         "output_envelope": "SSE `inbox_item` events with JSON payloads.",
         "error_codes": [
             "auth_required",
+            "invalid_request",
             "invalid_token"
         ],
         "concepts": [

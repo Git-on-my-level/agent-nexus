@@ -2,6 +2,29 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+clean_dir() {
+  local dir="$1"
+  rm -rf "$ROOT_DIR/$dir"
+  mkdir -p "$ROOT_DIR/$dir"
+}
+
+clean_matching_files() {
+  local dir="$1"
+  shift
+  mkdir -p "$ROOT_DIR/$dir"
+  find "$ROOT_DIR/$dir" -maxdepth 1 -type f "$@" -delete
+}
+
+clean_dir contracts/gen/go
+clean_dir contracts/gen/ts
+clean_dir contracts/gen/meta
+clean_dir contracts/gen/docs
+
+clean_matching_files cli/internal/registry -name '*.json'
+clean_matching_files web-ui/src/lib/generated -name '*.json'
+clean_matching_files cli/docs/generated -name '*.md' ! -name 'runtime-help.md'
+
 cd "$ROOT_DIR/core"
 
 go run ./cmd/contract-gen \
@@ -34,3 +57,4 @@ cp contracts/gen/docs/commands.md cli/docs/generated/commands.md
 cp contracts/gen/docs/command-groups.md cli/docs/generated/command-groups.md
 cp contracts/gen/docs/concepts.md cli/docs/generated/concepts.md
 cp contracts/gen/docs/x-anx-authoring.md cli/docs/generated/x-anx-authoring.md
+cp contracts/gen/docs/x-anx-validation.md cli/docs/generated/x-anx-validation.md

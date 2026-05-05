@@ -105,7 +105,6 @@ func refreshDerivedTopicProjection(ctx context.Context, opts handlerOptions, thr
 		"due_soon_work_item_count":   workItemSummary.DueSoonCount,
 		"overdue_work_item_count":    workItemSummary.OverdueCount,
 		"blocked_work_item_count":    workItemSummary.BlockedCount,
-		"stale_work_item_count":      workItemSummary.StaleCount,
 		"document_count":             len(documents),
 		"last_activity_at":           formatOptionalTime(activityAt),
 		"last_work_item_activity_at": formatOptionalTime(latestWorkItemActivity),
@@ -187,9 +186,6 @@ func listDerivedTopicProjections(ctx context.Context, opts handlerOptions, threa
 }
 
 func rebuildDerivedProjections(ctx context.Context, opts handlerOptions, now time.Time, actorID string) error {
-	if _, err := emitStaleThreadExceptions(ctx, opts, now, actorID); err != nil {
-		return err
-	}
 	threads, _, err := opts.primitiveStore.ListThreads(ctx, primitives.ThreadListFilter{})
 	if err != nil {
 		return err
@@ -226,7 +222,6 @@ func defaultDerivedTopicProjection(threadID string) primitives.DerivedTopicProje
 			"due_soon_work_item_count":   0,
 			"overdue_work_item_count":    0,
 			"blocked_work_item_count":    0,
-			"stale_work_item_count":      0,
 			"document_count":             0,
 			"last_activity_at":           "",
 			"last_work_item_activity_at": "",
@@ -243,7 +238,6 @@ type threadWorkItemSummary struct {
 	DueSoonCount int
 	OverdueCount int
 	BlockedCount int
-	StaleCount   int
 }
 
 func summarizeThreadWorkItems(ctx context.Context, opts handlerOptions, threadID string, now time.Time, riskHorizon time.Duration) ([]map[string]any, threadWorkItemSummary, time.Time, error) {
@@ -259,7 +253,6 @@ func summarizeThreadWorkItems(ctx context.Context, opts handlerOptions, threadID
 	workItems := make([]map[string]any, 0, len(memberships))
 	summary := threadWorkItemSummary{}
 	latestActivity := time.Time{}
-	windowStart, hasWindow := threadFreshnessWindowStart(ctx, opts, threadID, now)
 	for _, membership := range memberships {
 		card := cloneWorkspaceMap(membership.Card)
 		if card == nil {
@@ -285,11 +278,6 @@ func summarizeThreadWorkItems(ctx context.Context, opts handlerOptions, threadID
 			summary.AtRiskCount++
 			summary.BlockedCount++
 		}
-		if hasWindow {
-			if updatedAt, ok := parseTimestamp(card["updated_at"]); !ok || updatedAt.Before(windowStart) {
-				summary.StaleCount++
-			}
-		}
 	}
 	return workItems, summary, latestActivity, nil
 }
@@ -302,14 +290,6 @@ func resolvedInboxRiskHorizon(opts handlerOptions) time.Duration {
 	return horizon
 }
 
-func threadFreshnessWindowStart(ctx context.Context, opts handlerOptions, threadID string, now time.Time) (time.Time, bool) {
-	_ = ctx
-	_ = opts
-	_ = threadID
-	_ = now
-	// Card "staleness" windows were tied to thread cadence JSON; dumb threads do not define that.
-	return time.Time{}, false
-}
 func formatOptionalTime(value time.Time) string {
 	if value.IsZero() {
 		return ""

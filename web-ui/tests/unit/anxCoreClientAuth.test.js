@@ -115,7 +115,7 @@ describe("anxCoreClient auth behavior", () => {
     });
 
     expect(requestedUrl).toBe(
-      "http://core.test/agent-notification-receipts/stream?thread_id=thread-1&last_event_id=receipt%3Awake-1%40old",
+      "http://core.test/stream/agent-notification-receipts?thread_id=thread-1&last_event_id=receipt%3Awake-1%40old",
     );
     expect(seenReceipts).toEqual([
       {

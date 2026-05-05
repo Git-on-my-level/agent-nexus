@@ -176,3 +176,19 @@ def test_stream_events_http_error_reads_body_before_decode(monkeypatch):
     assert caught.value.status_code == 400
     assert caught.value.code == "forbidden"
     assert "nope" in str(caught.value)
+
+
+def test_decode_response_reads_nested_core_error_code():
+    client = ANXClient("http://anx.test", auth_manager=DummyAuthManager())
+    response = httpx.Response(
+        401,
+        json={"error": {"code": "invalid_token", "message": "token is invalid"}},
+        headers={"content-type": "application/json"},
+    )
+
+    with pytest.raises(ANXClientError) as caught:
+        client._decode_response(response)
+
+    assert caught.value.status_code == 401
+    assert caught.value.code == "invalid_token"
+    assert "token is invalid" in str(caught.value)

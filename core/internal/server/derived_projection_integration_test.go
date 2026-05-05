@@ -104,6 +104,9 @@ func TestRefreshDerivedTopicProjectionBasicFlow(t *testing.T) {
 	if projection.InboxCount != 1 || projection.DecisionRequestCount != 0 || workspaceIntValue(projection.Data["open_work_item_count"]) != 1 || projection.DocumentCount != 1 {
 		t.Fatalf("unexpected derived thread projection: %#v", projection)
 	}
+	if _, ok := projection.Data["stale_work_item_count"]; ok {
+		t.Fatalf("expected derived thread projection to omit unsupported stale_work_item_count, got %#v", projection.Data)
+	}
 	if inboxRowCount := countDerivedInboxItemsForThread(t, h.workspace.DB(), threadID); inboxRowCount != 1 {
 		t.Fatalf("expected one derived inbox row, got %d", inboxRowCount)
 	}

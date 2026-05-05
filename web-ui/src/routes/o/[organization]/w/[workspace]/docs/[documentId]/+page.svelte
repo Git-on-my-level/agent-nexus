@@ -81,6 +81,8 @@
    */
   let moreActionsOpen = $state(false);
   let moreActionsRoot = $state(null);
+  let documentLoadRequestId = 0;
+  let documentHistoryRequestId = 0;
   /** Selection stash + discussion rail for document text comments */
   let docBodyMarkdownRoot = $state(null);
   let docStashedSelection = $state("");
@@ -318,11 +320,33 @@
     void loadSelectedRevision(documentId, revisionId, cachedRevision ?? null);
   });
 
+  function documentRouteKey(id = documentId) {
+    return [organizationSlug, workspaceSlug, id].map((v) => String(v ?? ""));
+  }
+
+  function isCurrentDocumentLoad(requestId, routeKey) {
+    const current = documentRouteKey();
+    return (
+      requestId === documentLoadRequestId &&
+      routeKey.every((segment, index) => segment === current[index])
+    );
+  }
+
+  function isCurrentDocumentRoute(routeKey) {
+    const current = documentRouteKey();
+    return routeKey.every((segment, index) => segment === current[index]);
+  }
+
   async function loadDocument(targetId) {
     if (!targetId) return;
+    const requestId = ++documentLoadRequestId;
+    const routeKey = documentRouteKey(targetId);
     loading = true;
     loadError = "";
     loadedDocumentId = targetId;
+    documentHistoryRequestId++;
+    document = null;
+    headRevision = null;
     revisions = [];
     selectedRevision = null;
     historyLoading = false;
@@ -331,17 +355,21 @@
     editOpen = false;
     try {
       const result = await coreClient.getDocument(targetId);
+      if (!isCurrentDocumentLoad(requestId, routeKey)) return;
       document = result.document ?? null;
       headRevision = result.revision ?? null;
       if (!document) {
         loadError = "Document not found.";
       }
     } catch (e) {
+      if (!isCurrentDocumentLoad(requestId, routeKey)) return;
       loadError = `Failed to load document: ${e instanceof Error ? e.message : String(e)}`;
       document = null;
       headRevision = null;
     } finally {
-      loading = false;
+      if (isCurrentDocumentLoad(requestId, routeKey)) {
+        loading = false;
+      }
     }
   }
 
@@ -353,13 +381,30 @@
     }
     historyOpen = true;
     historyLoading = true;
+    const requestId = ++documentHistoryRequestId;
+    const routeKey = documentRouteKey(documentId);
     try {
       const result = await coreClient.getDocumentHistory(documentId);
+      if (
+        requestId !== documentHistoryRequestId ||
+        !isCurrentDocumentRoute(routeKey)
+      )
+        return;
       revisions = (result.revisions ?? []).slice().reverse();
     } catch {
+      if (
+        requestId !== documentHistoryRequestId ||
+        !isCurrentDocumentRoute(routeKey)
+      )
+        return;
       revisions = [];
     } finally {
-      historyLoading = false;
+      if (
+        requestId === documentHistoryRequestId &&
+        isCurrentDocumentRoute(routeKey)
+      ) {
+        historyLoading = false;
+      }
     }
   }
 
@@ -367,13 +412,30 @@
   async function ensureRevisionHistoryForRail() {
     if (!documentId || revisions.length > 0) return;
     historyLoading = true;
+    const requestId = ++documentHistoryRequestId;
+    const routeKey = documentRouteKey(documentId);
     try {
       const result = await coreClient.getDocumentHistory(documentId);
+      if (
+        requestId !== documentHistoryRequestId ||
+        !isCurrentDocumentRoute(routeKey)
+      )
+        return;
       revisions = (result.revisions ?? []).slice().reverse();
     } catch {
+      if (
+        requestId !== documentHistoryRequestId ||
+        !isCurrentDocumentRoute(routeKey)
+      )
+        return;
       revisions = [];
     } finally {
-      historyLoading = false;
+      if (
+        requestId === documentHistoryRequestId &&
+        isCurrentDocumentRoute(routeKey)
+      ) {
+        historyLoading = false;
+      }
     }
   }
 

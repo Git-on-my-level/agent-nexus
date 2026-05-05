@@ -48,12 +48,11 @@ func newProjectionMaintenanceTestServerWithMode(t *testing.T, mode string) proje
 	registry := actors.NewStore(workspace.DB())
 	primitiveStore := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
 	maintainer := NewProjectionMaintainer(ProjectionMaintainerConfig{
-		PrimitiveStore:    primitiveStore,
-		Contract:          contract,
-		Mode:              mode,
-		StaleScanInterval: time.Second,
-		DirtyBatchSize:    20,
-		SystemActorID:     actors.SystemActorID,
+		PrimitiveStore: primitiveStore,
+		Contract:       contract,
+		Mode:           mode,
+		DirtyBatchSize: 20,
+		SystemActorID:  actors.SystemActorID,
 	})
 	handler := NewHandler(
 		contract.Version,
@@ -289,9 +288,6 @@ func TestOpsHealthEndpointReportsProjectionMaintenanceLag(t *testing.T) {
 	if after.PendingDirtyCount != 0 {
 		t.Fatalf("expected pending dirty count to clear after maintainer step, got %#v", after)
 	}
-	if after.LastSuccessfulStaleScanAt == "" {
-		t.Fatalf("expected last successful stale scan after maintainer step, got %#v", after)
-	}
 	if after.LastError != nil {
 		t.Fatalf("did not expect maintenance error after successful step, got %#v", after)
 	}
@@ -417,11 +413,10 @@ func TestProjectionMaintainerKeepsProjectionPendingForConcurrentWrites(t *testin
 		release:        make(chan struct{}),
 	}
 	maintainer := NewProjectionMaintainer(ProjectionMaintainerConfig{
-		PrimitiveStore:    store,
-		Contract:          contract,
-		StaleScanInterval: time.Hour,
-		DirtyBatchSize:    20,
-		SystemActorID:     actors.SystemActorID,
+		PrimitiveStore: store,
+		Contract:       contract,
+		DirtyBatchSize: 20,
+		SystemActorID:  actors.SystemActorID,
 	})
 	handler := NewHandler(
 		contract.Version,
@@ -583,12 +578,11 @@ func TestProjectionMaintainerNotifyWakesRunLoopPromptly(t *testing.T) {
 	registry := actors.NewStore(workspace.DB())
 	store := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
 	maintainer := NewProjectionMaintainer(ProjectionMaintainerConfig{
-		PrimitiveStore:    store,
-		Contract:          contract,
-		PollInterval:      time.Minute,
-		StaleScanInterval: time.Hour,
-		DirtyBatchSize:    20,
-		SystemActorID:     actors.SystemActorID,
+		PrimitiveStore: store,
+		Contract:       contract,
+		PollInterval:   time.Minute,
+		DirtyBatchSize: 20,
+		SystemActorID:  actors.SystemActorID,
 	})
 	handler := NewHandler(
 		contract.Version,
@@ -676,11 +670,10 @@ func TestOpsHealthEndpointReportsProjectionMaintenanceErrors(t *testing.T) {
 		failErr:        errors.New("synthetic projection failure"),
 	}
 	maintainer := NewProjectionMaintainer(ProjectionMaintainerConfig{
-		PrimitiveStore:    primitiveStore,
-		Contract:          contract,
-		StaleScanInterval: time.Second,
-		DirtyBatchSize:    20,
-		SystemActorID:     actors.SystemActorID,
+		PrimitiveStore: primitiveStore,
+		Contract:       contract,
+		DirtyBatchSize: 20,
+		SystemActorID:  actors.SystemActorID,
 	})
 	handler := NewHandler(
 		contract.Version,
@@ -749,11 +742,10 @@ func TestOpsHealthEndpointKeepsDiagnosticsWhenReadinessFails(t *testing.T) {
 	registry := actors.NewStore(workspace.DB())
 	primitiveStore := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
 	maintainer := NewProjectionMaintainer(ProjectionMaintainerConfig{
-		PrimitiveStore:    primitiveStore,
-		Contract:          contract,
-		StaleScanInterval: time.Second,
-		DirtyBatchSize:    20,
-		SystemActorID:     actors.SystemActorID,
+		PrimitiveStore: primitiveStore,
+		Contract:       contract,
+		DirtyBatchSize: 20,
+		SystemActorID:  actors.SystemActorID,
 	})
 	handler := NewHandler(
 		contract.Version,

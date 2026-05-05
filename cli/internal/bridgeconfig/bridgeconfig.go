@@ -4,17 +4,28 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
-	"strconv"
 	"strings"
-)
 
-var sectionHeaderPattern = regexp.MustCompile(`^\s*\[([A-Za-z0-9_-]+)\]\s*(?:#.*)?$`)
+	toml "github.com/pelletier/go-toml/v2"
+)
 
 type Config struct {
 	Path    string
 	BaseURL string
+}
+
+type bridgeConfigFile struct {
+	AgentHome string `toml:"agent_home"`
+	ANX       struct {
+		BaseURL string `toml:"base_url"`
+	} `toml:"anx"`
+}
+
+type agentManifestFile struct {
+	Identity struct {
+		BaseURL string `toml:"base_url"`
+	} `toml:"identity"`
 }
 
 func RootDir(homeDir string) string {
@@ -44,10 +55,14 @@ func Discover(homeDir string) ([]Config, error) {
 }
 
 func bridgeConfigBaseURL(configPath string, content string) string {
-	if baseURL := strings.TrimSpace(configStringValue(content, "anx", "base_url")); baseURL != "" {
+	var config bridgeConfigFile
+	if err := toml.Unmarshal([]byte(content), &config); err != nil {
+		return ""
+	}
+	if baseURL := strings.TrimSpace(config.ANX.BaseURL); baseURL != "" {
 		return baseURL
 	}
-	agentHome := strings.TrimSpace(configStringValue(content, "", "agent_home"))
+	agentHome := strings.TrimSpace(config.AgentHome)
 	if agentHome == "" {
 		return ""
 	}
@@ -57,7 +72,11 @@ func bridgeConfigBaseURL(configPath string, content string) string {
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(configStringValue(string(manifestContent), "identity", "base_url"))
+	var manifest agentManifestFile
+	if err := toml.Unmarshal(manifestContent, &manifest); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(manifest.Identity.BaseURL)
 }
 
 func expandConfigPath(baseDir string, raw string) string {
@@ -108,52 +127,4 @@ func discoverConfigPaths(rootDir string) ([]string, error) {
 	}
 	sort.Strings(paths)
 	return paths, nil
-}
-
-func configStringValue(content string, section string, key string) string {
-	currentSection := ""
-	for _, line := range strings.Split(content, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			continue
-		}
-		if matches := sectionHeaderPattern.FindStringSubmatch(line); len(matches) == 2 {
-			currentSection = matches[1]
-			continue
-		}
-		if currentSection != section {
-			continue
-		}
-		name, rawValue, ok := parseAssignment(line)
-		if !ok || name != key {
-			continue
-		}
-		return rawValue
-	}
-	return ""
-}
-
-func parseAssignment(line string) (string, string, bool) {
-	trimmed := strings.TrimSpace(line)
-	if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-		return "", "", false
-	}
-	idx := strings.Index(trimmed, "=")
-	if idx <= 0 {
-		return "", "", false
-	}
-	name := strings.TrimSpace(trimmed[:idx])
-	rawValue := strings.TrimSpace(trimmed[idx+1:])
-	if commentIdx := strings.Index(rawValue, "#"); commentIdx >= 0 {
-		rawValue = strings.TrimSpace(rawValue[:commentIdx])
-	}
-	if len(rawValue) >= 2 && strings.HasPrefix(rawValue, "\"") && strings.HasSuffix(rawValue, "\"") {
-		if unquoted, err := strconv.Unquote(rawValue); err == nil {
-			rawValue = unquoted
-		}
-	}
-	if name == "" || rawValue == "" {
-		return "", "", false
-	}
-	return name, rawValue, true
 }

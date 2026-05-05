@@ -68,6 +68,7 @@
   });
 
   let backingThreads = $state([]);
+  let activeListLoadToken = 0;
 
   let topicDraft = $state({
     title: "",
@@ -85,22 +86,31 @@
     return s.slice("topic:".length).trim();
   }
 
-  async function loadBackingThreads(isRetry = false) {
+  async function loadBackingThreadsFromState(state, isRetry = false) {
+    const loadToken = ++activeListLoadToken;
     loading = true;
     error = "";
     retrying = isRetry;
     try {
-      const query = buildThreadFilterQueryParamsFromThreadListState(filters);
+      const query = buildThreadFilterQueryParamsFromThreadListState(state);
       const response = await coreClient.listThreads(query);
+      if (loadToken !== activeListLoadToken) return;
       backingThreads = response.threads ?? [];
     } catch (loadError) {
+      if (loadToken !== activeListLoadToken) return;
       const reason =
         loadError instanceof Error ? loadError.message : String(loadError);
       error = `Failed to load threads: ${reason}`;
     } finally {
-      loading = false;
-      retrying = false;
+      if (loadToken === activeListLoadToken) {
+        loading = false;
+        retrying = false;
+      }
     }
+  }
+
+  async function loadBackingThreads(isRetry = false) {
+    await loadBackingThreadsFromState(filters, isRetry);
   }
 
   $effect(() => {
@@ -112,7 +122,7 @@
       if ([...$page.url.searchParams.keys()].length > 0) {
         filtersOpen = true;
       }
-      void loadBackingThreads();
+      void loadBackingThreadsFromState(parsed);
       return;
     }
 
@@ -125,6 +135,7 @@
   });
 
   async function loadTopicsFromState(state, isRetry = false) {
+    const loadToken = ++activeListLoadToken;
     loading = true;
     error = "";
     retrying = isRetry;
@@ -132,14 +143,18 @@
     try {
       const query = buildTopicListApiQueryParams(state);
       const response = await coreClient.listTopics(query);
+      if (loadToken !== activeListLoadToken) return;
       topics = response.topics ?? [];
     } catch (loadError) {
+      if (loadToken !== activeListLoadToken) return;
       const reason =
         loadError instanceof Error ? loadError.message : String(loadError);
       error = `Failed to load topics: ${reason}`;
     } finally {
-      loading = false;
-      retrying = false;
+      if (loadToken === activeListLoadToken) {
+        loading = false;
+        retrying = false;
+      }
     }
   }
 

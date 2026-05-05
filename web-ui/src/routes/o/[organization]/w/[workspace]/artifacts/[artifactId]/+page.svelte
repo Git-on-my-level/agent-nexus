@@ -38,6 +38,7 @@
   let loadedArtifactId = $state("");
   let confirmModal = $state({ open: false, action: "" });
   let lifecycleBusy = $state(false);
+  let artifactLoadRequestId = 0;
 
   $effect(() => {
     const id = artifactId;
@@ -176,18 +177,36 @@
     return hints;
   }
 
+  function artifactRouteKey(id = artifactId) {
+    return [organizationSlug, workspaceSlug, id].map((v) => String(v ?? ""));
+  }
+
+  function isCurrentArtifactLoad(requestId, routeKey) {
+    const current = artifactRouteKey();
+    return (
+      requestId === artifactLoadRequestId &&
+      routeKey.every((segment, index) => segment === current[index])
+    );
+  }
+
   async function loadArtifact(targetId) {
     if (!targetId) return;
+    const requestId = ++artifactLoadRequestId;
+    const routeKey = artifactRouteKey(targetId);
     loading = true;
     loadError = "";
     contentLoadError = "";
     loadedArtifactId = targetId;
+    artifact = null;
+    artifactContent = null;
+    artifactContentType = "";
 
     let loadedArtifact = null;
     try {
       loadedArtifact =
         (await coreClient.getArtifact(targetId)).artifact ?? null;
     } catch (e) {
+      if (!isCurrentArtifactLoad(requestId, routeKey)) return;
       loadError = `Failed to load artifact: ${e instanceof Error ? e.message : String(e)}`;
       artifact = null;
       artifactContent = null;
@@ -195,6 +214,7 @@
       loading = false;
       return;
     }
+    if (!isCurrentArtifactLoad(requestId, routeKey)) return;
 
     if (!loadedArtifact) {
       loadError = "Artifact not found.";
@@ -208,14 +228,18 @@
     artifact = loadedArtifact;
     try {
       const contentResponse = await coreClient.getArtifactContent(targetId);
+      if (!isCurrentArtifactLoad(requestId, routeKey)) return;
       artifactContent = contentResponse.content ?? null;
       artifactContentType = contentResponse.contentType ?? "";
     } catch (e) {
+      if (!isCurrentArtifactLoad(requestId, routeKey)) return;
       artifactContent = null;
       artifactContentType = "";
       contentLoadError = `Content unavailable: ${e instanceof Error ? e.message : String(e)}`;
     }
-    loading = false;
+    if (isCurrentArtifactLoad(requestId, routeKey)) {
+      loading = false;
+    }
   }
 
   async function handleArchiveArtifact() {

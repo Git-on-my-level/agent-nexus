@@ -33,6 +33,8 @@
   });
   let markingGroupRef = $state("");
   let pollTimer;
+  let homeRefreshInFlight = false;
+  let homeRefreshRequestId = 0;
 
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
@@ -187,6 +189,8 @@
   }
 
   async function loadHome() {
+    const requestId = ++homeRefreshRequestId;
+    homeRefreshInFlight = true;
     const initial = !feed.generated_at;
     if (initial) loading = true;
     error = "";
@@ -198,15 +202,28 @@
           authDriver: "home-unread",
         });
       }
-      feed = await coreClient.getHomeUnread();
+      const nextFeed = await coreClient.getHomeUnread();
+      if (requestId === homeRefreshRequestId) {
+        feed = nextFeed;
+      }
     } catch (err) {
-      error =
-        err instanceof Error
-          ? err.message
-          : String(err ?? "Failed to load Home.");
+      if (requestId === homeRefreshRequestId) {
+        error =
+          err instanceof Error
+            ? err.message
+            : String(err ?? "Failed to load Home.");
+      }
     } finally {
-      loading = false;
+      if (requestId === homeRefreshRequestId) {
+        loading = false;
+        homeRefreshInFlight = false;
+      }
     }
+  }
+
+  function pollHome() {
+    if (homeRefreshInFlight) return;
+    void loadHome();
   }
 
   async function markGroupRead(groupRef) {
@@ -310,7 +327,7 @@
 
   onMount(async () => {
     await loadHome();
-    pollTimer = setInterval(() => loadHome(), POLL_INTERVAL_MS);
+    pollTimer = setInterval(pollHome, POLL_INTERVAL_MS);
   });
 
   onDestroy(() => {

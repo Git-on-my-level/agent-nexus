@@ -3208,6 +3208,34 @@ func TestPreConfigUsagePreflightBeatsAmbiguousProfileResolution(t *testing.T) {
 			code:        "invalid_flags",
 			messagePart: "unknown",
 		},
+		{
+			name:        "notifications list unknown flag",
+			args:        []string{"notifications", "list", "--unknown"},
+			command:     "notifications list",
+			code:        "invalid_flags",
+			messagePart: "unknown",
+		},
+		{
+			name:        "notifications list missing status value",
+			args:        []string{"notifications", "list", "--status"},
+			command:     "notifications list",
+			code:        "invalid_flags",
+			messagePart: "status",
+		},
+		{
+			name:        "notifications read missing wakeup id value",
+			args:        []string{"notifications", "read", "--wakeup-id"},
+			command:     "notifications read",
+			code:        "invalid_flags",
+			messagePart: "wakeup-id",
+		},
+		{
+			name:        "notifications dismiss missing wakeup id value",
+			args:        []string{"notifications", "dismiss", "--wakeup-id"},
+			command:     "notifications dismiss",
+			code:        "invalid_flags",
+			messagePart: "wakeup-id",
+		},
 	}
 
 	for _, tt := range tests {
@@ -3226,6 +3254,25 @@ func TestPreConfigUsagePreflightBeatsAmbiguousProfileResolution(t *testing.T) {
 				t.Fatalf("expected message to contain %q, got %#v", tt.messagePart, payload)
 			}
 		})
+	}
+}
+
+func TestPreConfigUsagePreflightAcceptsBridgeRestartParserFlags(t *testing.T) {
+	t.Parallel()
+
+	command, err := preflightConfigIndependentUsage([]string{
+		"bridge", "restart",
+		"--config", "./bridge.toml",
+		"--install-dir", "/tmp/anx-bridge",
+		"--bin-dir", "/tmp/anx-bin",
+		"--timeout-seconds", "5",
+		"--force",
+	})
+	if err != nil {
+		t.Fatalf("expected bridge restart parser flags to pass preflight, got %v", err)
+	}
+	if command != "bridge restart" {
+		t.Fatalf("expected bridge restart command, got %q", command)
 	}
 }
 
@@ -5275,7 +5322,7 @@ func TestEventsTailReconnect(t *testing.T) {
 	var mu sync.Mutex
 	requests := make([]string, 0, 4)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/events/stream" {
+		if r.URL.Path != "/stream/events" {
 			http.NotFound(w, r)
 			return
 		}
@@ -5426,7 +5473,7 @@ func TestInboxTailReconnect(t *testing.T) {
 
 	var calls int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/inbox/stream" {
+		if r.URL.Path != "/stream/inbox" {
 			http.NotFound(w, r)
 			return
 		}
@@ -5456,7 +5503,7 @@ func TestEventsStreamDefaultNoFollow(t *testing.T) {
 
 	var calls int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/events/stream" {
+		if r.URL.Path != "/stream/events" {
 			http.NotFound(w, r)
 			return
 		}
@@ -5613,10 +5660,10 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 					{"id":"inbox:action_needed:thread_other:none:event_other","thread_id":"thread_other","type":"action_needed","summary":"ignore other thread"}
 				]
 			}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/events/stream":
+		case r.Method == http.MethodGet && r.URL.Path == "/stream/events":
 			w.Header().Set("Content-Type", "text/event-stream")
 			_, _ = io.WriteString(w, "id: es_1\nevent: event\ndata: {\"event\":{\"id\":\"event_stream_1\",\"type\":\"message_posted\"}}\n\n")
-		case r.Method == http.MethodGet && r.URL.Path == "/inbox/stream":
+		case r.Method == http.MethodGet && r.URL.Path == "/stream/inbox":
 			w.Header().Set("Content-Type", "text/event-stream")
 			_, _ = io.WriteString(w, "id: ibx_1\nevent: inbox_item\ndata: {\"item\":{\"id\":\"inbox:1\",\"thread_id\":\"thread_123\"}}\n\n")
 		default:
@@ -5786,10 +5833,10 @@ func TestStreamAliasCommandsUseCanonicalMachineIdentity(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/events/stream":
+		case "/stream/events":
 			w.Header().Set("Content-Type", "text/event-stream")
 			_, _ = io.WriteString(w, "id: e-1\nevent: event\ndata: {\"event\":{\"id\":\"event_1\"}}\n\n")
-		case "/inbox/stream":
+		case "/stream/inbox":
 			w.Header().Set("Content-Type", "text/event-stream")
 			_, _ = io.WriteString(w, "id: i-1\nevent: inbox_item\ndata: {\"item\":{\"id\":\"inbox:1\"}}\n\n")
 		default:
@@ -5940,7 +5987,7 @@ func TestEventsStreamFallbackPayloadForNonWrapperJSON(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/events/stream" {
+		if r.URL.Path != "/stream/events" {
 			http.NotFound(w, r)
 			return
 		}

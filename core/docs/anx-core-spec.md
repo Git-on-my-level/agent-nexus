@@ -71,7 +71,8 @@ anx-core does **not**:
 A durable record that something happened or that an actor claims something happened.
 
 **Behavior:**
-- Events MUST be append-only. Never edited or deleted.
+- Event identity, ordering, refs, and payload content MUST be append-only. Corrections MUST NOT edit existing event content.
+- Event lifecycle visibility fields (`archived_at`, `archived_by`, `trashed_at`, `trashed_by`, `trash_reason`) are the bounded mutable exception on event rows. They model list/timeline visibility, not corrections to the event fact.
 - Corrections MUST be new events.
 - The system MUST reject event types outside the strict `event_type` enum.
 - All values in `refs` MUST use typed reference strings (see `anx-schema.yaml` → `ref_format`).

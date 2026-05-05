@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/sha1"
 	"encoding/json"
 	"errors"
@@ -204,18 +205,8 @@ func handleInboxStream(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		return
 	}
 
-	horizon := opts.inboxRiskHorizon
-	if horizon <= 0 {
-		horizon = defaultInboxRiskHorizon
-	}
-
-	if rawDays := strings.TrimSpace(r.URL.Query().Get("risk_horizon_days")); rawDays != "" {
-		days, err := strconv.Atoi(rawDays)
-		if err != nil || days < 0 {
-			writeError(w, http.StatusBadRequest, "invalid_request", "risk_horizon_days must be a non-negative integer")
-			return
-		}
-		horizon = time.Duration(days) * 24 * time.Hour
+	if !validateInboxRiskHorizonParam(w, r) {
+		return
 	}
 
 	lastEventID := resolveLastEventID(r)
@@ -231,12 +222,12 @@ func handleInboxStream(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	defer ticker.Stop()
 
 	for {
-		items, err := deriveInboxItemsNoStaleEmission(r.Context(), opts, time.Now().UTC(), horizon)
+		items, err := opts.primitiveStore.ListDerivedInboxItems(r.Context(), primitives.DerivedInboxListFilter{})
 		if err != nil {
-			writeSSEErrorEvent(controller, w, flusher, "internal_error", "failed to derive inbox items for stream")
+			writeSSEErrorEvent(controller, w, flusher, "internal_error", "failed to load inbox projections for stream")
 			return
 		}
-		allRecords := buildInboxStreamRecords(items)
+		allRecords := buildInboxStreamRecords(r.Context(), opts, items)
 		records := allRecords
 		if firstPoll {
 			records = inboxRecordsAfterID(records, lastEventID)
@@ -360,10 +351,10 @@ type inboxStreamRecord struct {
 	data    map[string]any
 }
 
-func buildInboxStreamRecords(items []derivedInboxItem) []inboxStreamRecord {
+func buildInboxStreamRecords(ctx context.Context, opts handlerOptions, items []primitives.DerivedInboxItem) []inboxStreamRecord {
 	records := make([]inboxStreamRecord, 0, len(items))
 	for _, item := range items {
-		payload := payloadFromLocalDerivedInboxItem(item)
+		payload := enrichHumanAttentionNotificationStatus(ctx, opts, payloadFromDerivedInboxItem(item))
 		itemID := strings.TrimSpace(anyString(payload["id"]))
 		if itemID == "" {
 			continue

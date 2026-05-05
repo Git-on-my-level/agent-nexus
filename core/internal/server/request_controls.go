@@ -413,7 +413,7 @@ func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
 		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
 		return false
 	}
-	return true
+	return ensureJSONBodyEOF(w, decoder)
 }
 
 func decodeJSONBodyAllowEmpty(w http.ResponseWriter, r *http.Request, dst any) bool {
@@ -431,7 +431,23 @@ func decodeJSONBodyAllowEmpty(w http.ResponseWriter, r *http.Request, dst any) b
 		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
 		return false
 	}
-	return true
+	return ensureJSONBodyEOF(w, decoder)
+}
+
+func ensureJSONBodyEOF(w http.ResponseWriter, decoder *json.Decoder) bool {
+	var trailing json.RawMessage
+	if err := decoder.Decode(&trailing); err != nil {
+		if errors.Is(err, io.EOF) {
+			return true
+		}
+		if writeRequestTooLargeError(w, err) {
+			return false
+		}
+		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+		return false
+	}
+	writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	return false
 }
 
 func writeRequestTooLargeError(w http.ResponseWriter, err error) bool {

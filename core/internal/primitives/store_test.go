@@ -510,6 +510,94 @@ func TestArchiveEventDoesNotCascadeNonMessagePosted(t *testing.T) {
 	}
 }
 
+func TestEventLifecycleMutatesOnlyVisibilityColumns(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	store := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+
+	event, err := store.AppendEvent(ctx, "actor-1", map[string]any{
+		"type":      "message_posted",
+		"thread_id": "thread-lifecycle",
+		"refs":      []any{"thread:thread-lifecycle"},
+		"summary":   "original summary",
+		"payload":   map[string]any{"text": "original text"},
+	})
+	if err != nil {
+		t.Fatalf("append event: %v", err)
+	}
+	eventID, _ := event["id"].(string)
+	if eventID == "" {
+		t.Fatalf("append event returned no id: %#v", event)
+	}
+
+	type immutableEventRow struct {
+		id          string
+		typeValue   string
+		ts          string
+		actorID     string
+		threadID    string
+		refsJSON    string
+		payloadJSON string
+		createdAt   string
+	}
+	loadImmutable := func() immutableEventRow {
+		t.Helper()
+		var row immutableEventRow
+		if err := workspace.DB().QueryRowContext(ctx,
+			`SELECT id, type, ts, actor_id, COALESCE(thread_id, ''), refs_json, payload_json, created_at
+			 FROM events WHERE id = ?`,
+			eventID,
+		).Scan(&row.id, &row.typeValue, &row.ts, &row.actorID, &row.threadID, &row.refsJSON, &row.payloadJSON, &row.createdAt); err != nil {
+			t.Fatalf("load immutable event columns: %v", err)
+		}
+		return row
+	}
+	assertStillSingleRow := func(step string) {
+		t.Helper()
+		var count int
+		if err := workspace.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM events WHERE id = ?`, eventID).Scan(&count); err != nil {
+			t.Fatalf("%s count event rows: %v", step, err)
+		}
+		if count != 1 {
+			t.Fatalf("%s event row count=%d want 1", step, count)
+		}
+	}
+
+	before := loadImmutable()
+	assertStillSingleRow("before lifecycle")
+
+	if _, err := store.ArchiveEvent(ctx, "actor-2", eventID); err != nil {
+		t.Fatalf("archive event: %v", err)
+	}
+	assertStillSingleRow("after archive")
+	if after := loadImmutable(); !reflect.DeepEqual(after, before) {
+		t.Fatalf("archive mutated append-only event columns:\nbefore=%#v\nafter=%#v", before, after)
+	}
+
+	if _, err := store.TrashEvent(ctx, "actor-3", eventID, "hide from active timelines"); err != nil {
+		t.Fatalf("trash event: %v", err)
+	}
+	assertStillSingleRow("after trash")
+	if after := loadImmutable(); !reflect.DeepEqual(after, before) {
+		t.Fatalf("trash mutated append-only event columns:\nbefore=%#v\nafter=%#v", before, after)
+	}
+
+	if _, err := store.RestoreEvent(ctx, "actor-4", eventID); err != nil {
+		t.Fatalf("restore event: %v", err)
+	}
+	assertStillSingleRow("after restore")
+	if after := loadImmutable(); !reflect.DeepEqual(after, before) {
+		t.Fatalf("restore mutated append-only event columns:\nbefore=%#v\nafter=%#v", before, after)
+	}
+}
+
 func TestCreateArtifactAcceptsSafeIDAndRejectsUnsafeIDs(t *testing.T) {
 	t.Parallel()
 
@@ -740,6 +828,38 @@ func TestListDocumentsEmbedsListOnlyMetrics(t *testing.T) {
 	}
 	if got["head_revision_character_count"] != 3 {
 		t.Fatalf("head_revision_character_count=%#v want 3", got["head_revision_character_count"])
+	}
+}
+
+func TestDocumentRefsCorruptionReturnsError(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	store := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+	document, _, err := store.CreateDocument(ctx, "actor-1", map[string]any{
+		"id":    "doc-corrupt-refs",
+		"title": "Corrupt refs",
+	}, "body", "text", []string{"thread:thread-corrupt-refs"})
+	if err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+	documentID := document["id"].(string)
+
+	if _, err := workspace.DB().ExecContext(ctx, `UPDATE documents SET refs_json = ? WHERE id = ?`, `{not-json`, documentID); err != nil {
+		t.Fatalf("corrupt document refs_json: %v", err)
+	}
+
+	if _, _, err := store.GetDocument(ctx, documentID); err == nil || !strings.Contains(err.Error(), "decode document.refs") {
+		t.Fatalf("expected get document refs decode error, got %v", err)
+	}
+	if _, _, err := store.ListDocuments(ctx, primitives.DocumentListFilter{States: []string{"active"}}); err == nil || !strings.Contains(err.Error(), "decode document.refs") {
+		t.Fatalf("expected list document refs decode error, got %v", err)
 	}
 }
 

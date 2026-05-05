@@ -40,6 +40,7 @@
   let retrying = $state(false);
   let confirmModal = $state(emptyConfirmModal());
   let bulkBusy = $state(false);
+  let activeArtifactListLoadToken = 0;
 
   const artifactSel = createWorkspaceListSelection({
     bulkBusy: () => bulkBusy,
@@ -84,17 +85,41 @@
   });
 
   async function loadArtifactsFromState(state, isRetry = false) {
+    const loadToken = ++activeArtifactListLoadToken;
+    const loadWorkspaceSlug = workspaceSlug;
+    const loadSearch = $page.url.search;
     loading = true;
     error = "";
     retrying = isRetry;
     try {
       const query = { ...buildArtifactListQuery(state) };
-      artifacts = (await coreClient.listArtifacts(query)).artifacts ?? [];
+      const data = await coreClient.listArtifacts(query);
+      if (
+        loadToken !== activeArtifactListLoadToken ||
+        loadWorkspaceSlug !== workspaceSlug ||
+        loadSearch !== $page.url.search
+      ) {
+        return;
+      }
+      artifacts = data.artifacts ?? [];
     } catch (e) {
+      if (
+        loadToken !== activeArtifactListLoadToken ||
+        loadWorkspaceSlug !== workspaceSlug ||
+        loadSearch !== $page.url.search
+      ) {
+        return;
+      }
       error = `Failed to load artifacts: ${e instanceof Error ? e.message : String(e)}`;
     } finally {
-      loading = false;
-      retrying = false;
+      if (
+        loadToken === activeArtifactListLoadToken &&
+        loadWorkspaceSlug === workspaceSlug &&
+        loadSearch === $page.url.search
+      ) {
+        loading = false;
+        retrying = false;
+      }
     }
   }
 

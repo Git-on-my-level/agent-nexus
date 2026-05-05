@@ -33,7 +33,7 @@ Generated from `contracts/anx-openapi.yaml`.
 ## `agent.notification-receipts.stream`
 
 - CLI path: ``
-- HTTP: `GET /agent-notification-receipts/stream`
+- HTTP: `GET /stream/agent-notification-receipts`
 - Stability: `beta`
 - Surface: `projection`
 - Input mode: `query`
@@ -969,7 +969,7 @@ Generated from `contracts/anx-openapi.yaml`.
 ## `events.stream`
 
 - CLI path: `events stream`
-- HTTP: `GET /events/stream`
+- HTTP: `GET /stream/events`
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `none`
@@ -1035,7 +1035,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `none`
 - Why: Side-effect free read of one materialized inbox row.
 - Concepts: `inbox`
-- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
 - Output: Returns `{ item, generated_at, projection_freshness }`.
 
 ## `inbox.list`
@@ -1046,7 +1046,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `none`
 - Why: Load the operator-only human attention queue derived from explicit human_attention_requested events.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
-- Output: Returns `{ status, items, generated_at }`; completed adds `{ next_cursor }`; open projection adds `{ projection_freshness }` unless risk_horizon_days derivation path.
+- Output: Returns `{ status, items, generated_at }`; completed adds `{ next_cursor }`; open projection adds `{ projection_freshness }`.
 
 ## `inbox.respond`
 
@@ -1063,13 +1063,13 @@ Generated from `contracts/anx-openapi.yaml`.
 ## `inbox.stream`
 
 - CLI path: `inbox stream`
-- HTTP: `GET /inbox/stream`
+- HTTP: `GET /stream/inbox`
 - Stability: `beta`
 - Surface: `projection`
 - Input mode: `none`
 - Why: Server-sent events feed of inbox projection updates.
 - Concepts: `inbox`
-- Error codes: `auth_required`, `invalid_token`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Output: SSE `inbox_item` events with JSON payloads.
 
 ## `meta.commands.get`

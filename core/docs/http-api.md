@@ -88,12 +88,12 @@ Drift from the live router is gated in CI: `core` runs `TestExactRegisterRoutesC
 - **List-only canonical enrichments**: `GET /topics` may include `timeline_message_count`; `GET /documents` may include `revision_count`, `timeline_message_count`, and `head_revision_character_count`. These are derived read hints for list rows, not writable fields. Message counts include non-trashed `message_posted` events on the backing `thread_id`. Character counts are best-effort UTF-8 rune counts of the decoded head revision body and may be omitted for large or unavailable blobs.
 - **Packets**: Receipts and reviews are created via `POST /packets/receipts` and `POST /packets/reviews` only.
 - **Cards**: Patch, move, and archive use first-class `PATCH /cards/{card_id}`, `POST /cards/{card_id}/move`, and `POST /cards/{card_id}/archive` (or trash/restore/purge as documented in OpenAPI). Board-scoped duplicate paths have been removed. **Batch card create** is `POST /boards/{board_id}/cards/batch` (`boards.cards.batch_add`): one `if_board_updated_at`, many `items`, single transaction. Assigning a registered **agent** as the card assignee (via `assignee_refs`) enqueues an **agent wakeup**, visible to that agent as an **agent notification** (`GET /agent-notifications`).
-- **SSE**: `GET /stream/events` and `GET /stream/inbox` use `text/event-stream`; see OpenAPI `x-anx-input-mode` / streaming metadata.
+- **SSE**: `GET /stream/events`, `GET /stream/inbox`, and `GET /stream/agent-notification-receipts` use `text/event-stream`; see OpenAPI `x-anx-input-mode` / streaming metadata.
 
 ## Derived projections (materialized views)
 
 - Materialized derived projections used by the common read path:
-  - `derived_inbox_items`: asynchronously maintained inbox items keyed by deterministic `inbox_item_id`, with per-thread rows used by `GET /inbox`, `GET /inbox/{id}`, and thread workspace inbox sections.
+  - `derived_inbox_items`: asynchronously maintained inbox items keyed by deterministic `inbox_item_id`, with per-thread rows used by `GET /inbox`, `GET /inbox/{id}`, `GET /stream/inbox`, and thread workspace inbox sections. The deprecated `risk_horizon_days` query parameter is validated for compatibility but does not trigger read-time recomputation; risk horizon semantics are defined by the configured projection maintainer.
   - `agent_notification` is a derived per-target-agent view built from the `agent_wakeups` queue table and per-wakeup notification status.
   - `derived_topic_views`: asynchronously maintained per-thread stale/workspace summaries used by thread list stale indicators and thread workspace summary surfaces.
   - `topic_projection_refresh_status`: durable per-thread refresh state used to expose `current`, `pending`, `missing`, or `error` freshness metadata without mutating projections inside GET handlers.

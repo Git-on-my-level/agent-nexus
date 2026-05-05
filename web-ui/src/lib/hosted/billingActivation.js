@@ -39,6 +39,110 @@ export function billingPollScheduleDelays() {
   return out;
 }
 
+function abortError() {
+  return new DOMException("Billing activation poll aborted", "AbortError");
+}
+
+/**
+ * @param {number} ms
+ * @param {AbortSignal | undefined} signal
+ */
+function waitForBillingPollDelay(ms, signal) {
+  if (signal?.aborted) {
+    return Promise.reject(abortError());
+  }
+  return new Promise((resolve, reject) => {
+    const cleanup = () => signal?.removeEventListener("abort", abort);
+    const timeout = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, ms);
+    const abort = () => {
+      cleanup();
+      clearTimeout(timeout);
+      reject(abortError());
+    };
+    signal?.addEventListener("abort", abort, { once: true });
+  });
+}
+
+/**
+ * Runs the delayed hosted billing activation polls and skips every callback once aborted.
+ *
+ * @param {{
+ *   snapshot: { plan_tier: string, stripe_subscription_status: string },
+ *   initialSummary: { plan_tier: string, billing_account?: { stripe_subscription_status?: string }},
+ *   fetchBillingSummary: () => Promise<any>,
+ *   signal?: AbortSignal,
+ *   delays?: number[],
+ *   documentHidden?: () => boolean,
+ *   onSummary?: (summary: any) => void,
+ *   onMatched?: (summary: any) => void,
+ *   onHidden?: () => void,
+ *   onTimeout?: () => void,
+ * }} options
+ * @returns {Promise<'matched'|'hidden'|'timeout'|'stopped'|'unauthorized'|'aborted'>}
+ */
+export async function pollBillingActivation(options) {
+  const {
+    snapshot,
+    initialSummary,
+    fetchBillingSummary,
+    signal,
+    delays = billingPollScheduleDelays(),
+    documentHidden = () =>
+      typeof document !== "undefined" && document.visibilityState === "hidden",
+    onSummary = () => {},
+    onMatched = () => {},
+    onHidden = () => {},
+    onTimeout = () => {},
+  } = options;
+
+  const aborted = () => signal?.aborted === true;
+  if (aborted()) return "aborted";
+
+  if (billingSnapshotMatchesSummary(snapshot, initialSummary)) {
+    onMatched(initialSummary);
+    return "matched";
+  }
+
+  for (const delay of delays) {
+    try {
+      await waitForBillingPollDelay(delay, signal);
+    } catch (err) {
+      if (err?.name === "AbortError") {
+        return "aborted";
+      }
+      throw err;
+    }
+    if (aborted()) return "aborted";
+
+    if (documentHidden()) {
+      onHidden();
+      return "hidden";
+    }
+
+    const next = await fetchBillingSummary();
+    if (aborted()) return "aborted";
+    if (next?.unauthorized) {
+      return "unauthorized";
+    }
+    if (!next || next.forbidden || next.error || !next.summary) {
+      return "stopped";
+    }
+
+    onSummary(next.summary);
+    if (billingSnapshotMatchesSummary(snapshot, next.summary)) {
+      onMatched(next.summary);
+      return "matched";
+    }
+  }
+
+  if (aborted()) return "aborted";
+  onTimeout();
+  return "timeout";
+}
+
 /**
  * @param {string} orgId
  * @param {{ plan_tier: string, stripe_subscription_status: string }} summaryLike from BillingSummary

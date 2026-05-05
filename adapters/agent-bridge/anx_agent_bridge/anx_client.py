@@ -84,8 +84,13 @@ class ANXClient:
             try:
                 payload = response.json()
                 if isinstance(payload, dict):
-                    code = str(payload.get("code", code))
-                    message = str(payload.get("message", message))
+                    error_payload = payload.get("error")
+                    if isinstance(error_payload, dict):
+                        code = str(error_payload.get("code", code))
+                        message = str(error_payload.get("message", message))
+                    else:
+                        code = str(payload.get("code", code))
+                        message = str(payload.get("message", message))
             except Exception:
                 pass
             raise ANXClientError(response.status_code, code, message, payload)

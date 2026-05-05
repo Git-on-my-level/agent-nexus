@@ -31,7 +31,7 @@ const samples = /** @type {Sample[]} */ ([
   { method: "POST", path: "/auth/invites" },
   { method: "GET", path: "/auth/principals" },
   { method: "GET", path: "/auth/audit" },
-  { method: "GET", path: "/events/stream" },
+  { method: "GET", path: "/stream/events" },
   { method: "POST", path: "/topics/t-1/archive" },
   { method: "POST", path: "/topics/t-1/unarchive" },
   { method: "POST", path: "/topics/t-1/trash" },

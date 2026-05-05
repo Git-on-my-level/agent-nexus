@@ -371,7 +371,23 @@ func TestInboxStreamSuppressesDuplicateItems(t *testing.T) {
 		"provenance":       map[string]any{"sources": []any{"inferred"}},
 	})
 
-	createHumanAttentionEvent(t, h.baseURL, threadID, "escalate", "At risk work item", "thread:"+threadID, nil, map[string]any{"severity": "high"})
+	event := createHumanAttentionEvent(t, h.baseURL, threadID, "escalate", "At risk work item", "thread:"+threadID, nil, map[string]any{"severity": "high"})
+	item, ok := deriveHumanAttentionInboxItem(event)
+	if !ok {
+		t.Fatalf("expected human attention event to derive an inbox item: %#v", event)
+	}
+	generatedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	if err := h.primitiveStore.ReplaceDerivedInboxItems(context.Background(), threadID, []primitives.DerivedInboxItem{{
+		ID:            item.ID,
+		ThreadID:      threadID,
+		Category:      item.Category,
+		TriggerAt:     item.TriggerAt.Format(time.RFC3339Nano),
+		SourceEventID: asString(item.Data["source_event_id"]),
+		GeneratedAt:   generatedAt,
+		Data:          item.Data,
+	}}); err != nil {
+		t.Fatalf("materialize inbox item: %v", err)
+	}
 
 	resp := openSSEStream(t, h.baseURL+"/stream/inbox", "")
 	reader, stop := startSSEReader(resp.Body)

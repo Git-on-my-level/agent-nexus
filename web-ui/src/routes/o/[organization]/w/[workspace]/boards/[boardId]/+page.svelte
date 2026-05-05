@@ -63,6 +63,8 @@
 
   let previousBoardId = $state("");
   let previousCardUrlParam = $state("");
+  let boardLoadRequestId = 0;
+  let loadedBoardRouteKey = $state("");
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
   let boardId = $derived($page.params.boardId);
@@ -133,16 +135,54 @@
     navigateBoardCardParam({ card: "", tab: "" });
   }
 
-  async function loadWorkspace() {
+  function boardRouteKey(id = boardId) {
+    return [organizationSlug, workspaceSlug, id].map((v) => String(v ?? ""));
+  }
+
+  function serializeBoardRouteKey(routeKey) {
+    return routeKey.join("\u001f");
+  }
+
+  function isCurrentBoardLoad(requestId, routeKey) {
+    const current = boardRouteKey();
+    return (
+      requestId === boardLoadRequestId &&
+      routeKey.every((segment, index) => segment === current[index])
+    );
+  }
+
+  async function loadWorkspace(targetBoardId = boardId) {
+    if (!targetBoardId) return;
+    const requestId = ++boardLoadRequestId;
+    const routeKey = boardRouteKey(targetBoardId);
+    const serializedRouteKey = serializeBoardRouteKey(routeKey);
+    const routeChanged =
+      loadedBoardRouteKey && loadedBoardRouteKey !== serializedRouteKey;
     loading = true;
     error = "";
+    loadedBoardRouteKey = serializedRouteKey;
+    if (
+      routeChanged ||
+      String(workspace?.board?.id ?? "") !== String(targetBoardId)
+    ) {
+      workspace = null;
+      detailModalCard = null;
+      mutationNotice = "";
+      mutationError = "";
+      conflictWarning = "";
+    }
     try {
-      workspace = await coreClient.getBoardWorkspace(boardId);
+      const loadedWorkspace = await coreClient.getBoardWorkspace(targetBoardId);
+      if (!isCurrentBoardLoad(requestId, routeKey)) return;
+      workspace = loadedWorkspace;
     } catch (e) {
+      if (!isCurrentBoardLoad(requestId, routeKey)) return;
       error = `Failed to load board: ${e instanceof Error ? e.message : String(e)}`;
       workspace = null;
     } finally {
-      loading = false;
+      if (isCurrentBoardLoad(requestId, routeKey)) {
+        loading = false;
+      }
     }
   }
 
@@ -163,7 +203,7 @@
       "Board was updated elsewhere. Reloaded latest board state. Reapply your change.";
     mutationNotice = "";
     mutationError = "";
-    await loadWorkspace();
+    await loadWorkspace(boardId);
   }
 
   async function runBoardMutation(action, successMessage) {
@@ -171,7 +211,7 @@
 
     try {
       await action();
-      await loadWorkspace();
+      await loadWorkspace(boardId);
 
       mutationNotice = successMessage;
     } catch (e) {
@@ -291,7 +331,10 @@
 
   $effect(() => {
     if (workspaceSlug && boardId) {
-      void loadWorkspace();
+      const routeKey = serializeBoardRouteKey(boardRouteKey(boardId));
+      if (routeKey !== loadedBoardRouteKey) {
+        void loadWorkspace(boardId);
+      }
     }
   });
 
@@ -348,7 +391,7 @@
     boardLifecycleBusy = true;
     try {
       await coreClient.archiveBoard(boardId, {});
-      await loadWorkspace();
+      await loadWorkspace(boardId);
     } finally {
       boardLifecycleBusy = false;
     }
@@ -360,7 +403,7 @@
     boardLifecycleBusy = true;
     try {
       await coreClient.unarchiveBoard(boardId, {});
-      await loadWorkspace();
+      await loadWorkspace(boardId);
     } finally {
       boardLifecycleBusy = false;
     }
@@ -391,7 +434,7 @@
     boardLifecycleBusy = true;
     try {
       await coreClient.restoreBoard(boardId, {});
-      await loadWorkspace();
+      await loadWorkspace(boardId);
     } finally {
       boardLifecycleBusy = false;
     }

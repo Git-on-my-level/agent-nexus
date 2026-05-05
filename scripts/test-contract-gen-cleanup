@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+STALE_FILES=(
+  contracts/gen/go/stale-contract-gen-cleanup.txt
+  contracts/gen/ts/stale-contract-gen-cleanup.txt
+  contracts/gen/meta/stale-contract-gen-cleanup.txt
+  contracts/gen/docs/stale-contract-gen-cleanup.txt
+  cli/internal/registry/stale-contract-gen-cleanup.json
+  web-ui/src/lib/generated/stale-contract-gen-cleanup.json
+  cli/docs/generated/stale-contract-gen-cleanup.md
+)
+
+cleanup_stale_files() {
+  for stale_file in "${STALE_FILES[@]}"; do
+    rm -f "$ROOT_DIR/$stale_file"
+  done
+}
+
+trap cleanup_stale_files EXIT
+
+for stale_file in "${STALE_FILES[@]}"; do
+  mkdir -p "$ROOT_DIR/$(dirname "$stale_file")"
+  printf 'stale\n' > "$ROOT_DIR/$stale_file"
+done
+
+"$ROOT_DIR/scripts/contract-gen"
+
+failed=false
+for stale_file in "${STALE_FILES[@]}"; do
+  if [[ -e "$ROOT_DIR/$stale_file" ]]; then
+    echo "stale generated artifact was not removed: $stale_file" >&2
+    failed=true
+  fi
+done
+
+if [[ "$failed" == true ]]; then
+  exit 1
+fi

@@ -935,6 +935,46 @@ func TestBoardCardRiskPersistAndUpdate(t *testing.T) {
 	}
 }
 
+func TestBoardCardRefsCorruptionReturnsError(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	store := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+	board, err := store.CreateBoard(ctx, "actor-1", map[string]any{
+		"title": "Corrupt refs board",
+	})
+	if err != nil {
+		t.Fatalf("create board: %v", err)
+	}
+	boardID := board["id"].(string)
+	added, err := store.AddBoardCard(ctx, "actor-2", boardID, primitives.AddBoardCardInput{
+		ParentThreadID: createBoardTestThread(t, ctx, store, "Corrupt refs card thread"),
+		ColumnKey:      "ready",
+		Refs:           []string{"document:doc-corrupt-card-refs"},
+	})
+	if err != nil {
+		t.Fatalf("add card: %v", err)
+	}
+	cardID := added.Card["id"].(string)
+
+	if _, err := workspace.DB().ExecContext(ctx, `UPDATE cards SET refs_json = ? WHERE id = ?`, `{not-json`, cardID); err != nil {
+		t.Fatalf("corrupt card refs_json: %v", err)
+	}
+
+	if _, err := store.GetBoardCard(ctx, boardID, cardID); err == nil || !strings.Contains(err.Error(), "decode card.refs") {
+		t.Fatalf("expected get card refs decode error, got %v", err)
+	}
+	if _, err := store.ListBoardCards(ctx, boardID); err == nil || !strings.Contains(err.Error(), "decode card.refs") {
+		t.Fatalf("expected list card refs decode error, got %v", err)
+	}
+}
+
 func createBoardTestThread(t *testing.T, ctx context.Context, store *primitives.Store, title string) string {
 	t.Helper()
 

@@ -4,9 +4,9 @@ import { isProxyableCommand } from "../../src/lib/coreRouteCatalog.js";
 import { isDirectCoreProxyPath } from "../../src/lib/server/directCoreProxyPaths.js";
 
 describe("directCoreProxyParity", () => {
-  it("covers GET /events/stream via the generated catalog (not hook-only)", () => {
-    expect(isProxyableCommand("GET", "/events/stream")).toBe(true);
-    expect(isDirectCoreProxyPath("GET", "/events/stream")).toBe(false);
+  it("covers GET /stream/events via the generated catalog (not hook-only)", () => {
+    expect(isProxyableCommand("GET", "/stream/events")).toBe(true);
+    expect(isDirectCoreProxyPath("GET", "/stream/events")).toBe(false);
   });
 
   it("covers GET /meta/handshake via OpenAPI (not hook-only)", () => {

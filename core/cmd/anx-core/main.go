@@ -86,7 +86,6 @@ func main() {
 		streamPollInterval          = envDuration("ANX_STREAM_POLL_INTERVAL", time.Second)
 		projectionMode              = envString("ANX_PROJECTION_MODE", server.ProjectionModeBackground)
 		projectionPollInterval      = envDuration("ANX_PROJECTION_MAINTENANCE_INTERVAL", 5*time.Second)
-		staleScanInterval           = envDuration("ANX_PROJECTION_STALE_SCAN_INTERVAL", 30*time.Second)
 		projectionBatchSize         = envInt("ANX_PROJECTION_MAINTENANCE_BATCH_SIZE", 50)
 		devRegisterLinkedActors     = envBool("ANX_DEV_REGISTER_LINKED_ACTORS", false)
 		enableDevActorMode          = envBool("ANX_ENABLE_DEV_ACTOR_MODE", false)
@@ -149,7 +148,6 @@ func main() {
 	flag.DurationVar(&streamPollInterval, "stream-poll-interval", streamPollInterval, "poll interval used by SSE stream endpoints")
 	flag.StringVar(&projectionMode, "projection-mode", projectionMode, "projection maintenance mode (background|manual)")
 	flag.DurationVar(&projectionPollInterval, "projection-maintenance-interval", projectionPollInterval, "poll interval used by background projection maintenance")
-	flag.DurationVar(&staleScanInterval, "projection-stale-scan-interval", staleScanInterval, "interval used by background stale-thread scanning")
 	flag.IntVar(&projectionBatchSize, "projection-maintenance-batch-size", projectionBatchSize, "max dirty thread projections refreshed per maintenance pass")
 	flag.BoolVar(&enforceLocalQuotas, "enforce-local-quotas", enforceLocalQuotas, "enforce workspace-local write quotas")
 	flag.StringVar(&workspaceAccessMode, "workspace-access-mode", workspaceAccessMode, "workspace HTTP API mode: read_write or read_only (hosted quota enforcement)")
@@ -358,13 +356,12 @@ func main() {
 		primitives.WithDatabasePath(workspace.Layout().DatabasePath),
 	)
 	projectionMaintainer := server.NewProjectionMaintainer(server.ProjectionMaintainerConfig{
-		PrimitiveStore:    primitiveStore,
-		Contract:          contract,
-		Mode:              projectionMode,
-		PollInterval:      projectionPollInterval,
-		StaleScanInterval: staleScanInterval,
-		DirtyBatchSize:    projectionBatchSize,
-		SystemActorID:     actors.SystemActorID,
+		PrimitiveStore: primitiveStore,
+		Contract:       contract,
+		Mode:           projectionMode,
+		PollInterval:   projectionPollInterval,
+		DirtyBatchSize: projectionBatchSize,
+		SystemActorID:  actors.SystemActorID,
 	})
 	sidecarHost := sidecar.NewHost()
 	if sidecarRouterEnabled {

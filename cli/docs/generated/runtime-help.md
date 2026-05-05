@@ -3113,7 +3113,7 @@ Generated Help: events stream
 
 - Command ID: `events.stream`
 - CLI path: `events stream`
-- HTTP: `GET /events/stream`
+- HTTP: `GET /stream/events`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Long-lived SSE feed of workspace events with optional thread/type filters and Last-Event-ID resume.
@@ -3138,7 +3138,7 @@ Generated Help: events tail
 
 - Command ID: `events.stream`
 - CLI path: `events stream`
-- HTTP: `GET /events/stream`
+- HTTP: `GET /stream/events`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Long-lived SSE feed of workspace events with optional thread/type filters and Last-Event-ID resume.
@@ -3287,7 +3287,7 @@ Generated Help: inbox list
 - HTTP: `GET /inbox`
 - Input mode: `none`
 - Why: Load the operator-only human attention queue derived from explicit human_attention_requested events.
-- Output: Returns `{ status, items, generated_at }`; completed adds `{ next_cursor }`; open projection adds `{ projection_freshness }` unless risk_horizon_days derivation path.
+- Output: Returns `{ status, items, generated_at }`; completed adds `{ next_cursor }`; open projection adds `{ projection_freshness }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Adjacent commands: `inbox get`, `inbox respond`, `inbox stream`
 
@@ -3322,7 +3322,7 @@ Generated Help: inbox get
 - Input mode: `none`
 - Why: Side-effect free read of one materialized inbox row.
 - Output: Returns `{ item, generated_at, projection_freshness }`.
-- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
 - Concepts: `inbox`
 - Adjacent commands: `inbox list`, `inbox respond`, `inbox stream`
 
@@ -3391,12 +3391,12 @@ Generated Help: inbox stream
 
 - Command ID: `inbox.stream`
 - CLI path: `inbox stream`
-- HTTP: `GET /inbox/stream`
+- HTTP: `GET /stream/inbox`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Server-sent events feed of inbox projection updates.
 - Output: SSE `inbox_item` events with JSON payloads.
-- Error codes: `auth_required`, `invalid_token`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `inbox`
 - Adjacent commands: `inbox get`, `inbox list`, `inbox respond`
 
@@ -3416,12 +3416,12 @@ Generated Help: inbox tail
 
 - Command ID: `inbox.stream`
 - CLI path: `inbox stream`
-- HTTP: `GET /inbox/stream`
+- HTTP: `GET /stream/inbox`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Server-sent events feed of inbox projection updates.
 - Output: SSE `inbox_item` events with JSON payloads.
-- Error codes: `auth_required`, `invalid_token`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `inbox`
 - Adjacent commands: `inbox get`, `inbox list`, `inbox respond`
 
@@ -5177,7 +5177,10 @@ Local Help: bridge restart
 
 Flags:
   --config <path>              Managed config to restart.
+  --install-dir <dir>          Root directory for the managed bridge virtualenv.
+  --bin-dir <dir>              Directory where the managed `anx-agent-bridge` wrapper should exist.
   --force                      Force-kill during the stop phase if needed.
+  --timeout-seconds <n>        How long to wait after SIGTERM before failing or force-killing.
 
 
 Global flags:

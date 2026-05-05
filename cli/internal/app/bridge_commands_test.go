@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -17,6 +18,7 @@ import (
 
 	"agent-nexus-cli/internal/buildinfo"
 	"agent-nexus-cli/internal/config"
+	"agent-nexus-cli/internal/errnorm"
 	"agent-nexus-cli/internal/profile"
 )
 
@@ -192,6 +194,40 @@ func TestLoadBridgeManagedConfigDetectsAgentConfigWithHeaderComment(t *testing.T
 	}
 }
 
+func TestLoadBridgeManagedConfigParsesQuotedHashInAgentHome(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "bridge.toml")
+	if err := os.WriteFile(configPath, []byte(`"agent_home" = ".anx#prod"
+`), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	cfg, err := loadBridgeManagedConfig(configPath)
+	if err != nil {
+		t.Fatalf("loadBridgeManagedConfig: %v", err)
+	}
+	if cfg.RuntimeKind != "agent" || cfg.RunCommand != "bridge" {
+		t.Fatalf("unexpected managed config: %#v", cfg)
+	}
+}
+
+func TestLoadBridgeManagedConfigParsesDottedBridgeSection(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "bridge.toml")
+	if err := os.WriteFile(configPath, []byte(`
+agent_home = ".anx"
+bridge.managed_package_auto_update = true
+`), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	cfg, err := loadBridgeManagedConfig(configPath)
+	if err != nil {
+		t.Fatalf("loadBridgeManagedConfig: %v", err)
+	}
+	if !cfg.ManagedPackageAutoUpdate {
+		t.Fatalf("managed auto flag parsing failed: %#v", cfg)
+	}
+}
+
 func TestBridgeStartPersistsManagedRuntimeState(t *testing.T) {
 	home := t.TempDir()
 	configPath := filepath.Join(t.TempDir(), "bridge.toml")
@@ -271,6 +307,24 @@ func TestLoadBridgeManagedConfigRejectsNonAgentConfig(t *testing.T) {
 	}
 	if _, err := loadBridgeManagedConfig(configPath); err == nil {
 		t.Fatal("expected non-agent config to be rejected")
+	}
+}
+
+func TestLoadBridgeManagedConfigRejectsInvalidTOML(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "bridge.toml")
+	if err := os.WriteFile(configPath, []byte("agent_home = \".anx\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	_, err := loadBridgeManagedConfig(configPath)
+	if err == nil {
+		t.Fatal("expected invalid TOML to be rejected")
+	}
+	var typed *errnorm.Error
+	if !errors.As(err, &typed) {
+		t.Fatalf("expected errnorm.Error, got %T: %v", err, err)
+	}
+	if typed.Code != "bridge_config_toml_invalid" {
+		t.Fatalf("expected bridge_config_toml_invalid, got %#v", typed)
 	}
 }
 

@@ -26,6 +26,13 @@ export const HOME_FEED_EVENT_TYPES = new Set([
   "document_restored",
 ]);
 
+const CARD_LIFECYCLE_LABELS = {
+  card_closed: "Card closed",
+  card_resolved: "Card resolved",
+  card_archived: "Card archived",
+  card_trashed: "Card trashed",
+};
+
 function asText(value) {
   return String(value ?? "").trim();
 }
@@ -131,12 +138,8 @@ export function normalizeEventRow(
     detail = firstText(payload.title, payload.card_title, event?.summary);
     sourceLabel = firstText(payload.title, payload.card_title, cardId);
     href = cardHref || href;
-  } else if (
-    ["card_closed", "card_resolved", "card_archived", "card_trashed"].includes(
-      type,
-    )
-  ) {
-    label = "Card closed";
+  } else if (CARD_LIFECYCLE_LABELS[type]) {
+    label = CARD_LIFECYCLE_LABELS[type];
     detail = firstText(payload.title, payload.card_title, event?.summary);
     sourceLabel = firstText(payload.title, payload.card_title, cardId);
     href = cardHref || href;

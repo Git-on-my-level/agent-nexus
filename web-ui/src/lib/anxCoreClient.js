@@ -604,7 +604,7 @@ export function createAnxCoreClient(options = {}) {
         ),
       ),
     streamThreadEvents: async ({ threadId, lastEventId, signal, onEvent }) => {
-      const response = await invokeDirectRaw("/events/stream", {
+      const response = await invokeDirectRaw("/stream/events", {
         query: {
           thread_id: String(threadId),
           last_event_id: lastEventId,
@@ -621,7 +621,7 @@ export function createAnxCoreClient(options = {}) {
       onReceipt,
     }) => {
       const response = await invokeDirectRaw(
-        "/agent-notification-receipts/stream",
+        "/stream/agent-notification-receipts",
         {
           query: {
             thread_id: String(threadId),

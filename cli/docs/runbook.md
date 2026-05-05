@@ -344,8 +344,8 @@ Actions:
 1. Validate core stream endpoints directly:
 
 ```bash
-curl -N -H 'Accept: text/event-stream' http://127.0.0.1:8000/events/stream
-curl -N -H 'Accept: text/event-stream' http://127.0.0.1:8000/inbox/stream
+curl -N -H 'Accept: text/event-stream' http://127.0.0.1:8000/stream/events
+curl -N -H 'Accept: text/event-stream' http://127.0.0.1:8000/stream/inbox
 ```
 
 1. Use explicit cursor controls:

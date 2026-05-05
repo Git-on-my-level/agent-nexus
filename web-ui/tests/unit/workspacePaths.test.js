@@ -42,11 +42,11 @@ describe("parseWorkspaceRouteSlugs", () => {
   it("parses stream-style paths: URL segments parse, but the control plane may still reject the route", () => {
     // The web-ui path parser is structural only; it treats everything after
     // /ws/{org}/{ws}/ as an opaque subpath. Core SSE paths like
-    // /events/stream are not necessarily supported through the CP workspace
+    // /stream/events are not necessarily supported through the CP workspace
     // proxy — that is a separate product/contract check.
     expect(
       parseWorkspaceRouteSlugs(
-        "/ws/scaling-forever/personal/events/stream",
+        "/ws/scaling-forever/personal/stream/events",
         "",
       ),
     ).toEqual({
