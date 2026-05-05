@@ -86,10 +86,9 @@ func agentGuideSections() []guideSection {
 				"- On a durable workstation, set the active profile once with `anx config use <profile>` (equivalent to `anx auth default <profile>`). Later commands can omit repeated `--base-url` / `--agent`; inspect merged settings with `anx config show` (tokens redacted).",
 				"- Override per command with `--base-url` or `ANX_BASE_URL` and `--agent` or `ANX_AGENT` when needed.",
 				"- Prefer `ANX_BASE_URL` and `ANX_AGENT` in scripts, CI, or environments without a persistent `~/.config/anx`.",
+				"- Config precedence is command flags > environment variables > profile/default marker/autodiscovery > built-in defaults. Read `anx meta doc profiles` and `anx meta doc env` for details.",
 				"- If available, run `anx doctor` when config or connectivity is unclear.",
 				"- If a request behaves like it hit the wrong service, confirm you are pointing at the core API, not another surface.",
-				"",
-				"Config precedence is typically: flags -> environment -> profile -> defaults.",
 			},
 		},
 		{

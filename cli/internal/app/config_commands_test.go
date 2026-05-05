@@ -28,6 +28,9 @@ func TestConfigUseSetsActiveProfile(t *testing.T) {
 	if strings.TrimSpace(anyStr(data["active_profile"])) != "beta" {
 		t.Fatalf("unexpected config use payload: %#v", payload)
 	}
+	if warnings, _ := data["warnings"].([]any); len(warnings) == 0 {
+		t.Fatalf("expected multi-profile warning: %#v", payload)
+	}
 
 	versionRaw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "version"})
 	versionPayload := assertEnvelopeOK(t, versionRaw)
@@ -37,6 +40,48 @@ func TestConfigUseSetsActiveProfile(t *testing.T) {
 	}
 	if strings.TrimSpace(anyStr(versionData["base_url"])) != "http://beta:8000" {
 		t.Fatalf("unexpected version base url: %#v", versionPayload)
+	}
+}
+
+func TestConfigUseOmitsMultiProfileWarningForSingleProfile(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	if err := profile.Save(profile.ProfilePath(home, "solo"), profile.Profile{Agent: "solo", BaseURL: "http://solo:8000"}); err != nil {
+		t.Fatalf("save solo profile: %v", err)
+	}
+
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "config", "use", "solo"})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+	if _, exists := data["warnings"]; exists {
+		t.Fatalf("did not expect warning for one profile: %#v", payload)
+	}
+}
+
+func TestConfigUseStillSucceedsWhenProfileListAdvisoryFails(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	if err := profile.Save(profile.ProfilePath(home, "solo"), profile.Profile{Agent: "solo", BaseURL: "http://solo:8000"}); err != nil {
+		t.Fatalf("save solo profile: %v", err)
+	}
+	profilesDir := profile.ProfilesDir(home)
+	if err := os.Chmod(profilesDir, 0o111); err != nil {
+		t.Fatalf("chmod profiles dir: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chmod(profilesDir, 0o700)
+	})
+
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "config", "use", "solo"})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+	if strings.TrimSpace(anyStr(data["active_profile"])) != "solo" {
+		t.Fatalf("unexpected config use payload: %#v", payload)
+	}
+	if _, exists := data["warnings"]; exists {
+		t.Fatalf("did not expect warning when advisory profile listing fails: %#v", payload)
 	}
 }
 
@@ -134,6 +179,33 @@ func TestConfigShowRedactsTokens(t *testing.T) {
 	rawJSON, _ := json.Marshal(data)
 	if strings.Contains(string(rawJSON), "super-secret") {
 		t.Fatalf("secret leaked in JSON: %s", rawJSON)
+	}
+	envVars, _ := data["environment_overrides_available"].([]any)
+	if len(envVars) == 0 {
+		t.Fatalf("expected env var discovery data: %#v", data)
+	}
+	if !strings.Contains(string(rawJSON), "ANX_AGENT") || !strings.Contains(string(rawJSON), "ANX_JSON") {
+		t.Fatalf("expected supported env vars in config show data: %s", rawJSON)
+	}
+}
+
+func TestConfigShowTextIncludesPrecedenceAndEnvHints(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	if err := profile.Save(profile.ProfilePath(home, "sec"), profile.Profile{
+		Agent:   "sec",
+		BaseURL: "http://sec:8000",
+	}); err != nil {
+		t.Fatalf("save profile: %v", err)
+	}
+
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--agent", "sec", "config", "show"})
+	if !strings.Contains(raw, "command flags > environment variables > profile/default marker/autodiscovery > built-in defaults") {
+		t.Fatalf("expected precedence in text output: %s", raw)
+	}
+	if !strings.Contains(raw, "ANX_AGENT") || !strings.Contains(raw, "anx meta doc profiles") {
+		t.Fatalf("expected env hints and docs links in text output: %s", raw)
 	}
 }
 
